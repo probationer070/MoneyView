@@ -1,0 +1,5 @@
+__pycache__
+apikey*
+filtered_stocks.csv
+*.code-workspace
+.vscode

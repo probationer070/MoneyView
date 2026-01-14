@@ -54,7 +54,7 @@ class ECOSCollector:
         self.api_key = api_key
         self.base_url = "http://ecos.bok.or.kr/api/StatisticSearch"
 
-    def fetch_indicator(self, stat_code: str, item_code: str, name: str, unit: str, cycle: str = "M", year: Optional[int] = None) -> Optional[EconomicIndicator]:
+    def fetch_indicator(self, stat_code: str, item_code: str, name: str, unit: str, cycle: str = "M", year: Optional[int] = None) -> List[EconomicIndicator]:
         """ECOS API를 호출하여 최신 지표 하나를 가져옵니다."""
         # URL 포맷: /인증키/json/kr/1/1/통계표코드/주기/검색시작일자/검색종료일자/항목코드
         # 편의상 최근 데이터 1건만 조회하도록 설정
@@ -62,8 +62,8 @@ class ECOSCollector:
         # now = datetime.now()
         
         if cycle == "D":
-            # 일별 데이터는 너무 긴 기간을 요청하면 페이징 제한(100건)에 걸릴 수 있으므로 최근 2주만 조회
-            start_date = (datetime.now() - timedelta(days=30)).strftime("%Y%m%d")
+            # 일별 데이터 1년치 조회 (페이징 제한 고려하여 1000건 요청)
+            start_date = (datetime.now() - timedelta(days=365)).strftime("%Y%m%d")
             end_date = datetime.now().strftime("%Y%m%d")
         elif cycle == "A":
             start_date = f"{year - 1}"
@@ -72,30 +72,31 @@ class ECOSCollector:
             start_date = f"{year - 1}01"
             end_date = f"{year}12"
             
-        url = f"{self.base_url}/{self.api_key}/json/kr/1/1/{stat_code}/{cycle}/{start_date}/{end_date}/{item_code}"
+        url = f"{self.base_url}/{self.api_key}/json/kr/1/1000/{stat_code}/{cycle}/{start_date}/{end_date}/{item_code}"
         
         try:
             response = requests.get(url)
             data = response.json()
             
+            results = []
             if 'StatisticSearch' in data and 'row' in data['StatisticSearch']:
-                # API는 오름차순(과거->최신)으로 데이터를 반환하므로 마지막 요소([-1])가 최신 데이터임
-                row = data['StatisticSearch']['row'][-1]
-                return EconomicIndicator(
-                    category="한국 내부 요인",
-                    name=name,
-                    code=item_code,
-                    value=float(row['DATA_VALUE']),
-                    unit=unit,
-                    date=row['TIME'],
-                    source="ECOS"
-                )
+                for row in data['StatisticSearch']['row']:
+                    results.append(EconomicIndicator(
+                        category="한국 내부 요인",
+                        name=name,
+                        code=item_code,
+                        value=float(row['DATA_VALUE']),
+                        unit=unit,
+                        date=row['TIME'],
+                        source="ECOS"
+                    ))
+                return results
             else:
                 logger.warning(f"ECOS 데이터 없음: {name} ({item_code}) URL: {url}")
-                return None
+                return []
         except Exception as e:
             logger.error(f"ECOS API 오류 ({name}): {e}")
-            return None
+            return []
 
 
 class GlobalMacroCollector:
@@ -119,22 +120,23 @@ class GlobalMacroCollector:
             try:
                 # yfinance를 사용하여 데이터 가져오기
                 stock = yf.Ticker(ticker)
-                # 최근 1일치 데이터
-                hist = stock.history(period="1d")
+                # 최근 1년치 데이터
+                hist = stock.history(period="1y")
                 
                 if not hist.empty:
-                    last_price = hist['Close'].iloc[-1]
-                    last_date = hist.index[-1].strftime('%Y-%m-%d')
-                    
-                    results.append(EconomicIndicator(
-                        category=category,
-                        name=name,
-                        code=ticker,
-                        value=round(last_price, 2),
-                        unit="Point/Price",
-                        date=last_date,
-                        source="Yahoo Finance"
-                    ))
+                    for date, row in hist.iterrows():
+                        price = row['Close']
+                        date_str = date.strftime('%Y-%m-%d')
+                        
+                        results.append(EconomicIndicator(
+                            category=category,
+                            name=name,
+                            code=ticker,
+                            value=round(price, 2),
+                            unit="Point/Price",
+                            date=date_str,
+                            source="Yahoo Finance"
+                        ))
                 else:
                     logger.warning(f"Yahoo Finance 데이터 없음: {name} ({ticker})")
             except Exception as e:
@@ -305,9 +307,9 @@ def run_dashboard_collection():
     
     if ecos_key != "YOUR_ECOS_API_KEY":
         for stat, item, name, unit, cycle in ecos_targets:
-            data = ecos.fetch_indicator(stat, item, name, unit, cycle, year=2025)
-            if data:
-                all_indicators.append(data)
+            data_list = ecos.fetch_indicator(stat, item, name, unit, cycle, year=2025)
+            if data_list:
+                all_indicators.extend(data_list)
     else:
         logger.warning("ECOS API Key가 설정되지 않아 한국은행 데이터를 건너뜁니다.")
 

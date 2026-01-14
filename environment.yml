@@ -1,0 +1,17 @@
+name: money          # 가상환경의 이름
+channels:                     # 패키지를 다운로드할 저장소 순서
+  - defaults
+  - conda-forge
+  - https://repo.anaconda.com/pkgs/main
+  - https://repo.anaconda.com/pkgs/r
+  - https://repo.anaconda.com/pkgs/msys2
+dependencies:                 # 설치할 패키지 목록
+  - python=3.9                # 파이썬 버전 지정 가능
+  - pandas
+  - numpy
+  - plotly
+  - pip:                      # conda에 없는 패키지는 pip로 설치
+      - requests
+      - yfinance
+      - beautifulsoup4
+      - streamlit

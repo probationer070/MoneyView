@@ -2,7 +2,7 @@ import pandas as pd
 import os
 
 from typing import Dict, Optional
-from core.tools.webscrap.nasdaq import single_snapshot
+from webscrap.nasdaq import single_snapshot
 from favor import STOCK_LIST
 
 def d_format(stock_kr, stock_code):
