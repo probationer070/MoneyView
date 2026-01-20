@@ -13,7 +13,7 @@ def render(df):
         if not reserves.empty:
             fig_res = px.area(reserves, x='date', y='value', color='name',
                               title="외환보유액 구성 (유동성 확인)", labels={'value': '천달러'})
-            st.plotly_chart(fig_res, use_container_width=True)
+            st.plotly_chart(fig_res, width="stretch")
             st.caption("💡 위기 시 즉시 쓸 수 있는 '예치금(Deposits)' 비중이 중요합니다.")
             
     with col2:
@@ -26,5 +26,5 @@ def render(df):
             fig_spread = px.line(spread, title="국가 리스크 프리미엄 (한-미 국채 10년 스프레드)",
                                  labels={'value': 'Spread (bp)'})
             fig_spread.add_hline(y=0, line_dash="dash", line_color="red")
-            st.plotly_chart(fig_spread, use_container_width=True)
+            st.plotly_chart(fig_spread, width="stretch")
             st.caption("💡 금리차가 역전(음수)되거나 급격히 벌어지는 구간은 자본 유출 위험 구간입니다.")

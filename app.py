@@ -31,16 +31,17 @@ def load_data():
     """saved_data 폴더의 모든 CSV 파일을 로드하여 병합합니다."""
     if not os.path.exists(DATA_DIR):
         os.makedirs(DATA_DIR)
-        return pd.DataFrame(columns=["category", "name", "code", "value", "unit", "date", "source"])
+        return pd.DataFrame(columns=["category", "name", "code", "value", "unit", "date", "source", "cycle"])
     
-    all_files = [os.path.join(DATA_DIR, f) for f in os.listdir(DATA_DIR) if f.endswith('.csv')]
     df_list = []
-    
-    for f in all_files:
-        try:
-            df_list.append(pd.read_csv(f, dtype={'date': str, 'code': str}))
-        except Exception as e:
-            st.error(f"파일 로드 오류 ({f}): {e}")
+    # 하위 폴더까지 검색 (os.walk)
+    for root, dirs, files in os.walk(DATA_DIR):
+        for f in files:
+            if f.endswith('.csv'):
+                try:
+                    df_list.append(pd.read_csv(os.path.join(root, f), dtype={'date': str, 'code': str, 'cycle': str}))
+                except Exception as e:
+                    st.error(f"파일 로드 오류 ({f}): {e}")
             
     if df_list:
         combined_df = pd.concat(df_list, ignore_index=True)
@@ -48,10 +49,10 @@ def load_data():
             combined_df.sort_values(by='date', inplace=True)
         return combined_df
         
-    return pd.DataFrame(columns=["category", "name", "code", "value", "unit", "date", "source"])
+    return pd.DataFrame(columns=["category", "name", "code", "value", "unit", "date", "source", "cycle"])
 
 def save_data(new_data: list[EconomicIndicator]):
-    """새로운 데이터를 카테고리별로 나누어 CSV 파일에 저장합니다."""
+    """새로운 데이터를 카테고리별 폴더에 개별 CSV 파일로 저장합니다."""
     if not new_data:
         return
 
@@ -61,21 +62,28 @@ def save_data(new_data: list[EconomicIndicator]):
     # Dataclass List -> DataFrame 변환
     new_df = pd.DataFrame([vars(d) for d in new_data])
     
-    # 카테고리별 그룹화 및 저장
-    for category, group in new_df.groupby('category'):
-        # 파일명 안전하게 변환 (공백 -> 언더바)
+    # 카테고리별 그룹화
+    for category, cat_group in new_df.groupby('category'):
+        # 카테고리 폴더 생성
         safe_cat = str(category).replace(" ", "_").replace("/", "_")
-        file_path = os.path.join(DATA_DIR, f"{safe_cat}.csv")
+        cat_dir = os.path.join(DATA_DIR, safe_cat)
+        if not os.path.exists(cat_dir):
+            os.makedirs(cat_dir)
         
-        if os.path.exists(file_path):
-            old_df = pd.read_csv(file_path, dtype={'date': str, 'code': str})
-            combined_df = pd.concat([old_df, group]).drop_duplicates(subset=['code', 'date'], keep='last')
-        else:
-            combined_df = group
+        # 지표별(name) 개별 저장
+        for name, item_group in cat_group.groupby('name'):
+            safe_name = str(name).replace("/", "_").replace(" ", "_").replace("(", "").replace(")", "")
+            file_path = os.path.join(cat_dir, f"{safe_name}.csv")
             
-        combined_df['date'] = combined_df['date'].astype(str)
-        combined_df.sort_values(by='date', inplace=True)
-        combined_df.to_csv(file_path, index=False, encoding='utf-8-sig')
+            if os.path.exists(file_path):
+                old_df = pd.read_csv(file_path, dtype={'date': str, 'code': str, 'cycle': str})
+                combined_df = pd.concat([old_df, item_group]).drop_duplicates(subset=['code', 'date'], keep='last')
+            else:
+                combined_df = item_group
+                
+            combined_df['date'] = combined_df['date'].astype(str)
+            combined_df.sort_values(by='date', inplace=True)
+            combined_df.to_csv(file_path, index=False, encoding='utf-8-sig')
         
     return new_df
 
@@ -112,17 +120,29 @@ with st.sidebar:
     ecos_api_key = st.text_input("ECOS API Key", value=default_ecos_key, type="password")
     fred_api_key = st.text_input("FRED API Key", value=default_fred_key, type="password")
     
-    st.subheader("📅 데이터 수집 기간 설정")
-    # 기본값: 오늘로부터 1년 전 ~ 오늘
+    st.subheader("📅 데이터 수집 설정")
+    
+    # 수집 대상 선택 (Selective Crawling)
+    available_sources = ["ECOS (한국은행)", "FRED (미 연준)", "Yahoo Finance (글로벌)"]
+    selected_labels = st.multiselect("수집 대상 선택", available_sources, default=available_sources)
+    
+    source_map = {
+        "ECOS (한국은행)": "ECOS",
+        "FRED (미 연준)": "FRED",
+        "Yahoo Finance (글로벌)": "Yahoo"
+    }
+    selected_keys = [source_map[label] for label in selected_labels]
+    
+    # 기본값: 오늘로부터 6년 전 ~ 오늘
     default_end = datetime.now()
-    default_start = default_end - timedelta(days=365)
+    default_start = default_end - timedelta(days=365 * 6)
     
     start_dt = st.date_input("시작일", default_start)
     end_dt = st.date_input("종료일", default_end)
     
     if st.button("🔄 데이터 업데이트 (Scraping)"):
         with st.spinner('데이터를 수집하고 있습니다...'):
-            new_data = fetch_latest_data(ecos_api_key, fred_api_key, start_dt, end_dt)
+            new_data = fetch_latest_data(ecos_api_key, fred_api_key, start_dt, end_dt, sources=selected_keys)
             if new_data:
                 save_data(new_data)
                 st.rerun() # 화면 새로고침

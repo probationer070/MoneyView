@@ -30,9 +30,42 @@ def render(df):
             
             fig_fail = px.line(failure_df, title="정부 실패 지수 (달러 강세 vs 원화 약세 괴리)",
                                labels={'value': '지수 (Start=100)', 'date': '날짜'})
-            st.plotly_chart(fig_fail, use_container_width=True)
+            st.plotly_chart(fig_fail, width="stretch")
             st.caption("💡 Gap이 커질수록 외부 요인(달러 강세)보다 내부 요인(원화 가치 훼손)이 크다는 뜻입니다.")
 
     with col2:
-        plot_metric(df, "실질실효환율", "실질실효환율 (REER)")
-        st.caption("💡 100 아래라면 한국의 구매력이 과거 평균보다 낮아졌음을 의미합니다.")
+        # 실질실효환율 (REER) Proxy 계산
+        # REER Proxy = (한국CPI / (미국CPI * 환율)) * 100
+        krw_usd = df[df['name'] == "원/미국달러"].copy()
+        kr_cpi = df[df['name'] == "CPI(총지수)"].copy()
+        us_cpi = df[df['name'] == "미국 CPI"].copy()
+
+        if not krw_usd.empty and not kr_cpi.empty and not us_cpi.empty:
+            krw_usd['date'] = pd.to_datetime(krw_usd['date'])
+            kr_cpi['date'] = pd.to_datetime(kr_cpi['date'])
+            us_cpi['date'] = pd.to_datetime(us_cpi['date'])
+
+            # 환율 월평균 (일별 -> 월별)
+            krw_usd = krw_usd.set_index('date').resample('MS')['value'].mean().reset_index()
+
+            # 데이터 병합
+            merged = pd.merge(krw_usd, kr_cpi[['date', 'value']], on='date', suffixes=('_rate', '_kr'))
+            merged = pd.merge(merged, us_cpi[['date', 'value']], on='date') # value는 us_cpi
+            
+            if not merged.empty:
+                # 2020년=100 기준 지수화: (한국CPI / (미국CPI * 환율))
+                merged['raw_reer'] = merged['value_kr'] / (merged['value'] * merged['value_rate'])
+                base_val = merged[merged['date'].dt.year == 2020]['raw_reer'].mean()
+                if pd.isna(base_val): base_val = merged['raw_reer'].iloc[0]
+                
+                merged['REER'] = (merged['raw_reer'] / base_val) * 100
+                
+                fig_reer = px.line(merged, x='date', y='REER', title="실질실효환율 (REER) Proxy (2020=100)",
+                                   labels={'REER': '지수', 'date': '날짜'})
+                fig_reer.add_hline(y=100, line_dash="dash", line_color="gray")
+                st.plotly_chart(fig_reer, width="stretch")
+                st.caption("💡 (한국CPI / (미국CPI × 환율))로 추산한 구매력 지수입니다. 100 이하는 2020년 대비 대외 구매력 약화를 의미합니다.")
+            else:
+                st.info("실질실효환율 계산을 위한 데이터(날짜 교집합)가 부족합니다.")
+        else:
+            st.info("실질실효환율 계산을 위한 데이터(환율, 한국CPI, 미국CPI)가 부족합니다.")

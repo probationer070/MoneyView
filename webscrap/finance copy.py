@@ -94,7 +94,8 @@ class ECOSCollector:
                         value=float(row['DATA_VALUE']),
                         unit=unit,
                         date=row['TIME'],
-                        source="ECOS"
+                        source="ECOS",
+                        cycle=cycle
                     ))
                 return results
             else:
@@ -144,7 +145,8 @@ class GlobalMacroCollector:
                             value=round(price, 2),
                             unit="Point/Price",
                             date=date_str,
-                            source="Yahoo Finance"
+                            source="Yahoo Finance",
+                            cycle='D'
                         ))
                 else:
                     logger.warning(f"Yahoo Finance 데이터 없음: {name} ({ticker})")
@@ -163,7 +165,7 @@ class FREDCollector:
         self.api_key = api_key
         self.base_url = "https://api.stlouisfed.org/fred/series/observations"
 
-    def fetch_indicator(self, series_id: str, name: str, category: str, unit: str = "") -> List[EconomicIndicator]:
+    def fetch_indicator(self, series_id: str, name: str, category: str, unit: str = "", cycle: str = "M") -> List[EconomicIndicator]:
         params = {
             "series_id": series_id,
             "api_key": self.api_key,
@@ -188,7 +190,8 @@ class FREDCollector:
                         value=float(val),
                         unit=unit,
                         date=obs['date'],
-                        source="FRED"
+                        source="FRED",
+                        cycle=cycle
                     ))
             return results
         except Exception as e:

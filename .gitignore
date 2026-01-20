@@ -1,5 +1,7 @@
 __pycache__
 apikey*
 filtered_stocks.csv
+finance copy*.py
 *.code-workspace
 .vscode
+saved_data

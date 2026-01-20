@@ -14,6 +14,7 @@ class EconomicIndicator:
     unit: str              # 단위 (예: 십억원, %, pt)
     date: str              # 기준 일자 (YYYY-MM-DD)
     source: str            # 출처 (예: ECOS, Yahoo, FRED)
+    cycle: str = ""        # 데이터 주기 (D, M, Q, A)
     description: str = ""  # 추가 설명
 
 @dataclass

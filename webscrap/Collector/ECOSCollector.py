@@ -16,7 +16,7 @@ class ECOSCollector(BaseCollector):
         self.api_key = api_key
         self.base_url = "http://ecos.bok.or.kr/api/StatisticSearch"
 
-    def fetch_indicator(self, stat_code: str, item_code: str, name: str, unit: str, cycle: str = "M", year: Optional[int] = None, start_date: Optional[str] = None, end_date: Optional[str] = None) -> List[EconomicIndicator]:
+    def fetch_indicator(self, stat_code: str, item_code: str, name: str, unit: str, cycle: str = "M", year: Optional[int] = None, start_date: Optional[str] = None, end_date: Optional[str] = None, category: str = "한국 내부 요인") -> List[EconomicIndicator]:
         """ECOS API를 호출하여 최신 지표 하나를 가져옵니다."""
         # URL 포맷: /인증키/json/kr/1/1/통계표코드/주기/검색시작일자/검색종료일자/항목코드
         # 편의상 최근 데이터 1건만 조회하도록 설정
@@ -50,7 +50,7 @@ class ECOSCollector(BaseCollector):
             if 'StatisticSearch' in data and 'row' in data['StatisticSearch']:
                 for row in data['StatisticSearch']['row']:
                     results.append(EconomicIndicator(
-                        category="한국 내부 요인",
+                        category=category,
                         name=name,
                         code=item_code,
                         value=float(row['DATA_VALUE']),
