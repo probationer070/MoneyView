@@ -53,18 +53,18 @@ def render(df):
             merged = pd.merge(merged, us_cpi[['date', 'value']], on='date') # value는 us_cpi
             
             if not merged.empty:
-                # 2020년=100 기준 지수화: (한국CPI / (미국CPI * 환율))
+                # 2000년=100 기준 지수화: (한국CPI / (미국CPI * 환율))
                 merged['raw_reer'] = merged['value_kr'] / (merged['value'] * merged['value_rate'])
-                base_val = merged[merged['date'].dt.year == 2020]['raw_reer'].mean()
+                base_val = merged[merged['date'].dt.year == 2000]['raw_reer'].mean()
                 if pd.isna(base_val): base_val = merged['raw_reer'].iloc[0]
                 
                 merged['REER'] = (merged['raw_reer'] / base_val) * 100
                 
-                fig_reer = px.line(merged, x='date', y='REER', title="실질실효환율 (REER) Proxy (2020=100)",
+                fig_reer = px.line(merged, x='date', y='REER', title="실질실효환율 (REER) Proxy (2000=100)",
                                    labels={'REER': '지수', 'date': '날짜'})
                 fig_reer.add_hline(y=100, line_dash="dash", line_color="gray")
                 st.plotly_chart(fig_reer, width="stretch")
-                st.caption("💡 (한국CPI / (미국CPI × 환율))로 추산한 구매력 지수입니다. 100 이하는 2020년 대비 대외 구매력 약화를 의미합니다.")
+                st.caption("💡 (한국CPI / (미국CPI × 환율))로 추산한 구매력 지수입니다. 100 이하는 2000년 대비 대외 구매력 약화를 의미합니다.")
             else:
                 st.info("실질실효환율 계산을 위한 데이터(날짜 교집합)가 부족합니다.")
         else:

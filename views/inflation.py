@@ -76,22 +76,22 @@ def render(df):
     
     # 2. 통화 유통속도 (Velocity of Money) = GDP / M2
     gdp_data = df[df['name'].str.contains("명목") & df['name'].str.contains("국내총생산")].copy()
-    m2_data = df[df['name'].str.contains("M2") & df['name'].str.contains("평잔")].copy()
-
-    gdp_data['date'] = gdp_data['date'].dt.to_period('Q').dt.to_timestamp('Q')
-    m2_data['date'] = m2_data['date'].dt.to_period('Q').dt.to_timestamp('Q')
+    m2_data = df[df['name'].str.contains("M2") & df['name'].str.contains("평잔") & df['name'].str.contains("Q")].copy()
 
 
     ## DEBUG
-    st.write(f"GDP 데이터 개수: {len(gdp_data)}")
-    st.write(f"M2 데이터 개수: {len(m2_data)}")   
+    # df의 종류
+    # st.write(f"{df['name'].unique()}")
+    # st.write(f"{len(df['name'].unique())}")
+    # st.write(f"GDP 데이터 개수: {len(gdp_data)}")
+    # st.write(f"M2 데이터 개수: {len(m2_data)}")   
     
     if not gdp_data.empty or not m2_data.empty:
         # GDP와 M2 모두 분기(Q) 데이터여야 계산 가능
         gdp_data['date'] = gdp_data['date'].apply(parse_quarterly_date)
         m2_data['date'] = m2_data['date'].apply(parse_quarterly_date)
 
-        # # 날짜 매칭을 위해 둘 다 분기 말(QuarterEnd)로 통일
+        # 날짜 매칭을 위해 둘 다 분기 말(QuarterEnd)로 통일
         # gdp_data['date'] = gdp_data['date'] + pd.tseries.offsets.QuarterEnd(0)
         # m2_quarterly = m2_data.set_index('date')['value'].resample('Q').mean().reset_index() # 월별 데이터일 경우 분기 평균
         # m2_quarterly['date'] = m2_quarterly['date'] + pd.tseries.offsets.QuarterEnd(0)

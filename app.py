@@ -40,6 +40,11 @@ def load_data():
             if f.endswith('.csv'):
                 try:
                     df_list.append(pd.read_csv(os.path.join(root, f), dtype={'date': str, 'code': str, 'cycle': str}))
+                except UnicodeDecodeError:
+                    try:
+                        df_list.append(pd.read_csv(os.path.join(root, f), dtype={'date': str, 'code': str, 'cycle': str}, encoding='cp949'))
+                    except Exception as e:
+                        st.error(f"파일 로드 오류 ({f}) - 인코딩 실패: {e}")
                 except Exception as e:
                     st.error(f"파일 로드 오류 ({f}): {e}")
             
@@ -133,12 +138,16 @@ with st.sidebar:
     }
     selected_keys = [source_map[label] for label in selected_labels]
     
-    # 기본값: 오늘로부터 6년 전 ~ 오늘
+    # 기본값: 오늘로부터 2000년 ~ 오늘
     default_end = datetime.now()
-    default_start = default_end - timedelta(days=365 * 6)
+    default_start = datetime(2000, 1, 1)
     
-    start_dt = st.date_input("시작일", default_start)
-    end_dt = st.date_input("종료일", default_end)
+    # 날짜 선택 범위 확장 (기본값은 value 기준 +/- 10년으로 제한됨)
+    min_date = datetime(2000, 1, 1)
+    max_date = datetime.now() + timedelta(days=365)
+
+    start_dt = st.date_input("시작일", default_start, min_value=min_date, max_value=max_date)
+    end_dt = st.date_input("종료일", default_end, min_value=min_date, max_value=max_date)
     
     if st.button("🔄 데이터 업데이트 (Scraping)"):
         with st.spinner('데이터를 수집하고 있습니다...'):
@@ -162,7 +171,12 @@ df = load_data()
 def parse_date(date_str):
     s = str(date_str).strip()
     try:
-        if "-" in s: # YYYY-MM-DD (Yahoo)
+        if "Q" in s: # YYYYQn (ECOS Quarterly) - 가장 먼저 체크
+            year = s[:4]
+            quarter = int(s.split('Q')[1])
+            month = quarter * 3
+            return datetime.strptime(f"{year}{month:02d}", "%Y%m")
+        elif "-" in s: # YYYY-MM-DD (Yahoo)
             return datetime.strptime(s, "%Y-%m-%d")
         elif len(s) == 8: # YYYYMMDD (ECOS Daily)
             return datetime.strptime(s, "%Y%m%d")
@@ -170,8 +184,6 @@ def parse_date(date_str):
             return datetime.strptime(s, "%Y%m")
         elif len(s) == 4: # YYYY (ECOS Annual)
             return datetime.strptime(s, "%Y")
-        elif "Q" in s: # YYYYQn (ECOS Quarterly)
-            return datetime.strptime(s[:4] + str(int(s[-1])*3), "%Y%m") # 분기 마지막 월로 근사
     except:
         return None
     return None
@@ -183,20 +195,60 @@ if not df.empty:
 if df.empty:
     st.warning("저장된 데이터가 없습니다. 사이드바에서 '데이터 업데이트'를 눌러주세요.")
 else:
-    # 탭 구성
-    tab1, tab2, tab3, tab4, tab5 = st.tabs(["🔥 인플레이션 본질", "⚖️ 환율/정부실패", "🛡️ 대외 건전성", "💸 자본 유출/전략", "📋 전체 데이터"])
+    # 탭 구조 정의 (카테고리 -> {세부항목: 렌더링함수})
+    tabs_structure = {
+        "📈 물가/인플레이션": {
+            "🔥 인플레이션 본질": inflation,
+            "🏭 비용/인플레": cost_inflation,
+            "💸 통화 살포/부메랑": currency_boomerang,
+            "🛑 공급측/규제 인플레": supply_regulation,
+            "📉 스태그플레이션": stagflation
+        },
+        "🌍 환율/대외건전성": {
+            "⚖️ 환율/정부실패": exchange,
+            "🛡️ 대외 건전성": external,
+            "🌊 자금 이동/환율": capital_flow,
+            "🚫 금융 억압/자본 통제": financial_repression
+        },
+        "💰 자본/부채/금리": {
+            "💸 자본 유출/전략": capital,
+            "💣 부채/금리": debt_crisis,
+            "🏛️ 공공 개입/부채": public_intervention,
+            "🏦 은행/배드뱅크": bank_risk,
+            "📈 국채 폭등/구축 효과": bond_spike
+        },
+        "👥 사회/구조": {
+            "🏚️ 세대/세금": generation_wealth,
+            "🏗️ 주택 공급/붕괴": supply_collapse,
+            "💼 고용/유동성 구축": employment_crisis
+        },
+        "📋 전체 데이터": {
+            "📋 전체 데이터": rawdata
+        }
+    }
 
-    with tab1:
-        inflation.render(df)
+    # 상위 탭 생성
+    main_tab_names = list(tabs_structure.keys())
+    main_tabs = st.tabs(main_tab_names)
 
-    with tab2:
-        exchange.render(df)
-
-    with tab3:
-        external.render(df)
-
-    with tab4:
-        capital.render(df)
-
-    with tab5:
-        rawdata.render(df)
+    # 각 탭 내부 구성
+    for tab, category in zip(main_tabs, main_tab_names):
+        with tab:
+            sub_views = tabs_structure[category]
+            sub_view_names = list(sub_views.keys())
+            
+            # 하위 탭이 여러 개일 경우 드롭다운 제공
+            if len(sub_view_names) > 1:
+                col_sel, _ = st.columns([1, 3])
+                with col_sel:
+                    selected_sub = st.selectbox(
+                        "세부 주제 선택", 
+                        sub_view_names, 
+                        key=f"sel_{category}", 
+                        label_visibility="collapsed"
+                    )
+            else:
+                selected_sub = sub_view_names[0]
+            
+            # 선택된 뷰 렌더링
+            sub_views[selected_sub].render(df)

@@ -40,7 +40,7 @@ class ECOSCollector(BaseCollector):
             s_date = f"{year - 1}01"
             e_date = f"{year}12"
             
-        url = f"{self.base_url}/{self.api_key}/json/kr/1/1000/{stat_code}/{cycle}/{s_date}/{e_date}/{item_code}"
+        url = f"{self.base_url}/{self.api_key}/json/kr/1/100000/{stat_code}/{cycle}/{s_date}/{e_date}/{item_code}"
         
         try:
             response = requests.get(url)

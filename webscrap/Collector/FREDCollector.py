@@ -14,14 +14,18 @@ class FREDCollector(BaseCollector):
         self.api_key = api_key
         self.base_url = "https://api.stlouisfed.org/fred/series/observations"
 
-    def fetch_indicator(self, series_id: str, name: str, category: str, unit: str = "") -> List[EconomicIndicator]:
+    def fetch_indicator(self, series_id: str, name: str, category: str, unit: str = "", start_date: Optional[str] = None, end_date: Optional[str] = None) -> List[EconomicIndicator]:
         params = {
             "series_id": series_id,
             "api_key": self.api_key,
             "file_type": "json",
-            "sort_order": "desc",
-            "limit": 100  # 최근 데이터 100건
+            "sort_order": "desc"
         }
+        if start_date:
+            params["observation_start"] = start_date
+        if end_date:
+            params["observation_end"] = end_date
+            
         try:
             response = requests.get(self.base_url, params=params)
             data = response.json()

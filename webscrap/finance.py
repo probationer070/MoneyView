@@ -156,14 +156,18 @@ def fetch_latest_data(ecos_api_key, fred_api_key, start_date=None, end_date=None
     if "FRED" in sources and fred_api_key:
         status_text.info("FRED 데이터 수집 중...")
         fred = FREDCollector(fred_api_key)
+        
+        f_start = start_date.strftime("%Y-%m-%d") if start_date else None
+        f_end = end_date.strftime("%Y-%m-%d") if end_date else None
+        
         # 미국 M2 통화량 (M2SL)
-        indicators.extend(fred.fetch_indicator("M2SL", "미국 M2 통화량", "통화", "십억달러"))
+        indicators.extend(fred.fetch_indicator("M2SL", "미국 M2 통화량", "통화", "십억달러", start_date=f_start, end_date=f_end))
         # 미국 CPI (CPIAUCSL)
-        indicators.extend(fred.fetch_indicator("CPIAUCSL", "미국 CPI", "물가", "Index"))
+        indicators.extend(fred.fetch_indicator("CPIAUCSL", "미국 CPI", "물가", "Index", start_date=f_start, end_date=f_end))
         # 미국 기준금리 (FEDFUNDS)
-        indicators.extend(fred.fetch_indicator("FEDFUNDS", "미국 기준금리", "금리", "%"))
+        indicators.extend(fred.fetch_indicator("FEDFUNDS", "미국 기준금리", "금리", "%", start_date=f_start, end_date=f_end))
         # 일본 국채 10년물 (IRLTLT01JPM156N)
-        indicators.extend(fred.fetch_indicator("IRLTLT01JPM156N", "일본 국채 10년물", "금리", "%"))
+        indicators.extend(fred.fetch_indicator("IRLTLT01JPM156N", "일본 국채 10년물", "금리", "%", start_date=f_start, end_date=f_end))
     
     # 3. 글로벌 매크로 (Yahoo Finance)
     if "Yahoo" in sources:
