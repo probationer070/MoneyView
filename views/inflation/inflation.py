@@ -91,11 +91,6 @@ def render(df):
         gdp_data['date'] = gdp_data['date'].apply(parse_quarterly_date)
         m2_data['date'] = m2_data['date'].apply(parse_quarterly_date)
 
-        # 날짜 매칭을 위해 둘 다 분기 말(QuarterEnd)로 통일
-        # gdp_data['date'] = gdp_data['date'] + pd.tseries.offsets.QuarterEnd(0)
-        # m2_quarterly = m2_data.set_index('date')['value'].resample('Q').mean().reset_index() # 월별 데이터일 경우 분기 평균
-        # m2_quarterly['date'] = m2_quarterly['date'] + pd.tseries.offsets.QuarterEnd(0)
-
         merged_vel = pd.merge(gdp_data, m2_data, on='date', how='inner', suffixes=('_GDP', '_M2'))
         
         if not merged_vel.empty:
@@ -120,15 +115,15 @@ def render(df):
     
     with col1:
         st.subheader("🇰🇷 한국 금리와 물가")
-        # 한국 국고채 10년물 & CPI YoY 비교
-        kr_rate = df[df['name'].str.contains("국고채\(10년")].copy()
+        # 한국 국고채 3년물 & CPI YoY 비교
+        kr_rate = df[df['name'].str.contains("국고채\(3년")].copy()
         kr_cpi = calculate_yoy(df, "CPI(총지수)")
         
         dfs_to_merge_kr = []
         y_cols_kr = []
         if not kr_rate.empty:
-            dfs_to_merge_kr.append(kr_rate[['date', 'value']].rename(columns={'value': '국고채 10년(%)'}))
-            y_cols_kr.append('국고채 10년(%)')
+            dfs_to_merge_kr.append(kr_rate[['date', 'value']].rename(columns={'value': '국고채 3년(%)'}))
+            y_cols_kr.append('국고채 3년(%)')
         if not kr_cpi.empty:
             dfs_to_merge_kr.append(kr_cpi[['date', 'value']].rename(columns={'value': 'CPI 상승률(YoY %)'}))
             y_cols_kr.append('CPI 상승률(YoY %)')
@@ -145,8 +140,8 @@ def render(df):
 
     with col2:
         st.subheader("🇺🇸 미국 매크로 (금리 & 인플레)")
-        # 미국 데이터: 10년물 국채, 기준금리, CPI
-        us_10y = df[df['name'].str.contains("미국 10년물")].copy()
+        # 미국 데이터: 3년물 국채, 기준금리, CPI
+        us_10y = df[df['name'].str.contains("미국 3년물")].copy()
         us_base = df[df['name'].str.contains("미국 기준금리")].copy()
         us_cpi = calculate_yoy(df, "미국 CPI") # CPI Index -> YoY 변환 필요
         
@@ -156,7 +151,7 @@ def render(df):
             us_10y['date'] = pd.to_datetime(us_10y['date'])
             # 일별 데이터를 월 평균으로 리샘플링 (월초 기준 정렬)
             us_10y = us_10y.set_index('date').resample('MS')['value'].mean().reset_index()
-            us_10y = us_10y.rename(columns={'value': '미국 10년물(%)'})
+            us_10y = us_10y.rename(columns={'value': '미국 3년물(%)'})
             dfs_to_merge.append(us_10y)
         if not us_base.empty:
             us_base['date'] = pd.to_datetime(us_base['date'])

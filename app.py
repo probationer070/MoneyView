@@ -4,6 +4,7 @@ import plotly.express as px
 import os
 import json
 
+from pandas.errors import ParserError
 from datetime import datetime, timedelta
 from WebScrap.DAO import *
 from WebScrap.Collector import *
@@ -38,16 +39,23 @@ def load_data():
     for root, dirs, files in os.walk(DATA_DIR):
         for f in files:
             if f.endswith('.csv'):
+                file_path = os.path.join(root, f)
                 try:
-                    df_list.append(pd.read_csv(os.path.join(root, f), dtype={'date': str, 'code': str, 'cycle': str}))
+                    df_list.append(pd.read_csv(file_path, dtype={'date': str, 'code': str, 'cycle': str}, sep=',', quotechar='"', on_bad_lines='warn'))
                 except UnicodeDecodeError:
                     try:
-                        df_list.append(pd.read_csv(os.path.join(root, f), dtype={'date': str, 'code': str, 'cycle': str}, encoding='cp949'))
+                        df_list.append(pd.read_csv(file_path, dtype={'date': str, 'code': str, 'cycle': str}, encoding='cp949', sep=',', quotechar='"', on_bad_lines='warn'))
                     except Exception as e:
                         st.error(f"파일 로드 오류 ({f}) - 인코딩 실패: {e}")
+                except ParserError as e:
+                    st.warning(f"파일 파싱 경고 ({f}): {e}. Python 엔진으로 재시도합니다.")
+                    try:
+                        # Python 엔진은 C 엔진보다 유연하지만 느립니다.
+                        df_list.append(pd.read_csv(file_path, dtype={'date': str, 'code': str, 'cycle': str}, engine='python', sep=',', quotechar='"', on_bad_lines='warn'))
+                    except Exception as e2:
+                        st.error(f"파일 로드 재시도 실패 ({f}): {e2}")
                 except Exception as e:
                     st.error(f"파일 로드 오류 ({f}): {e}")
-            
     if df_list:
         combined_df = pd.concat(df_list, ignore_index=True)
         if 'date' in combined_df.columns:
@@ -220,7 +228,8 @@ else:
         "👥 사회/구조": {
             "🏚️ 세대/세금": generation_wealth,
             "🏗️ 주택 공급/붕괴": supply_collapse,
-            "💼 고용/유동성 구축": employment_crisis
+            "💼 고용/유동성 구축": employment_crisis,
+            "💸 사회적 비용": social_cost
         },
         "📋 전체 데이터": {
             "📋 전체 데이터": rawdata
