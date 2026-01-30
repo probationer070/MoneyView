@@ -3,6 +3,7 @@ import pandas as pd
 import plotly.express as px
 import os
 import json
+import re
 
 from pandas.errors import ParserError
 from datetime import datetime, timedelta
@@ -85,7 +86,10 @@ def save_data(new_data: list[EconomicIndicator]):
         
         # 지표별(name) 개별 저장
         for name, item_group in cat_group.groupby('name'):
-            safe_name = str(name).replace("/", "_").replace(" ", "_").replace("(", "").replace(")", "")
+            # 1. 슬래시와 공백을 언더바로 치환
+            safe_name = str(name).replace("/", "_").replace(" ", "_")
+            # 2. 윈도우 파일명 금지 문자(< > : " \ | ? *) 및 괄호 제거
+            safe_name = re.sub(r'[\\*?:"<>|()]', "", safe_name)
             file_path = os.path.join(cat_dir, f"{safe_name}.csv")
             
             if os.path.exists(file_path):
@@ -123,12 +127,12 @@ with st.sidebar:
     default_fred_key = ""
     if os.path.exists(API_KEY_FILE):
         try:
-            with open(API_KEY_FILE, "r") as f:
+            with open(API_KEY_FILE, "r", encoding="utf-8") as f:
                 keys = json.load(f)
                 default_ecos_key = keys.get("ECOS_API_KEY", "")
                 default_fred_key = keys.get("FRED", "")
-        except:
-            pass
+        except Exception as e:
+            st.error(f"⚠️ apikey.json 로드 오류: {e}")
             
     ecos_api_key = st.text_input("ECOS API Key", value=default_ecos_key, type="password")
     fred_api_key = st.text_input("FRED API Key", value=default_fred_key, type="password")

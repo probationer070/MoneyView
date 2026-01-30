@@ -168,6 +168,8 @@ def fetch_latest_data(ecos_api_key, fred_api_key, start_date=None, end_date=None
         indicators.extend(fred.fetch_indicator("FEDFUNDS", "미국 기준금리", "금리", "%", start_date=f_start, end_date=f_end))
         # 일본 국채 10년물 (IRLTLT01JPM156N)
         indicators.extend(fred.fetch_indicator("IRLTLT01JPM156N", "일본 국채 10년물", "금리", "%", start_date=f_start, end_date=f_end))
+        # 미국 10년물 TIPs 수익률
+        indicators.extend(fred.fetch_indicator("DFII10", "미국 10년물 TIPS 수익률", "금리", "%", start_date=f_start, end_date=f_end))
     
     # 3. 글로벌 매크로 (Yahoo Finance)
     if "Yahoo" in sources:

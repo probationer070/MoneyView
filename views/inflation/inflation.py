@@ -144,6 +144,7 @@ def render(df):
         us_10y = df[df['name'].str.contains("미국 3년물")].copy()
         us_base = df[df['name'].str.contains("미국 기준금리")].copy()
         us_cpi = calculate_yoy(df, "미국 CPI") # CPI Index -> YoY 변환 필요
+        us_tips = df[df['name'].str.contains("미국 10년물 TIPS")].copy()
         
         # 데이터 병합을 위한 준비
         dfs_to_merge = []
@@ -161,6 +162,11 @@ def render(df):
             us_cpi['date'] = pd.to_datetime(us_cpi['date'])
             us_cpi = us_cpi[['date', 'value']].rename(columns={'value': '미국 CPI(YoY %)'})
             dfs_to_merge.append(us_cpi)
+        if not us_tips.empty:
+            us_tips['date'] = pd.to_datetime(us_tips['date'])
+            us_tips = us_tips.set_index('date').resample('MS')['value'].mean().reset_index()
+            us_tips = us_tips.rename(columns={'value': '미국 10년물 TIPs(%)'})
+            dfs_to_merge.append(us_tips)
             
         if dfs_to_merge:
             merged_us = reduce(lambda left, right: pd.merge(left, right, on='date', how='outer'), dfs_to_merge).sort_values('date')
