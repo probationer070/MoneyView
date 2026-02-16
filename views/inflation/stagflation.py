@@ -16,7 +16,7 @@ def render(df):
         
         if not trade_balance.empty:
             fig1 = px.bar(trade_balance, x='date', y='value', title="무역/경상수지 추이", labels={'value': '금액'})
-            st.plotly_chart(fig1, width="stretch")
+            st.plotly_chart(fig1, use_container_width=True)
         else:
             st.info("무역수지 데이터가 없습니다. (수집 필요)")
 
@@ -53,7 +53,7 @@ def render(df):
                 })
                 
                 fig2 = px.line(merged, x='date', y=['물가(CPI)', '금리(국고3년)', '환율(원/달러)'], title="3고 지표 추이 (Start=100)", labels={'value': '지수'})
-                st.plotly_chart(fig2, width="stretch")
+                st.plotly_chart(fig2, use_container_width=True)
             else:
                 st.info("날짜 교집합이 부족합니다.")
         else:
@@ -64,4 +64,4 @@ def render(df):
     cpi_yoy = calculate_yoy(df, "CPI(총지수)")
     if not cpi_yoy.empty:
         fig3 = px.area(cpi_yoy, x='date', y='value', title="인플레이션(CPI YoY) - 기본 착취율", labels={'value': '%'})
-        st.plotly_chart(fig3, width="stretch")
+        st.plotly_chart(fig3, use_container_width=True)

@@ -4,6 +4,7 @@ import plotly.express as px
 import os
 import json
 import re
+import warnings
 
 from pandas.errors import ParserError
 from datetime import datetime, timedelta
@@ -13,6 +14,8 @@ from WebScrap.finance import fetch_latest_data
 
 from views import *
 
+# Pandas의 to_pydatetime 관련 Future Warning 무시 (라이브러리 내부 동작 관련)
+warnings.filterwarnings("ignore", category=FutureWarning, message="The behavior of DatetimeProperties.to_pydatetime is deprecated")
 
 # ==========================================
 # 1. 설정 및 상수 정의

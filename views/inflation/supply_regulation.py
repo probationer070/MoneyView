@@ -22,7 +22,7 @@ def render(df):
             
             merged = pd.merge(ppi[['date', 'value', 'name']], cpi[['date', 'value']], on='date', suffixes=('_ppi', '_cpi'))
             fig1 = px.line(merged, x='date', y=['value_ppi', 'value'], title="비용(PPI/수입물가) vs 가격(CPI)", labels={'value': '상승률(%)'})
-            st.plotly_chart(fig1, width="stretch")
+            st.plotly_chart(fig1, use_container_width=True)
         else:
             st.info("PPI(또는 수입물가) 및 CPI 데이터가 부족합니다.")
 
@@ -33,6 +33,6 @@ def render(df):
         
         if not yen_usd.empty:
             fig2 = px.line(yen_usd, x='date', y='value', title="엔화 환율 추이", labels={'value': '환율'})
-            st.plotly_chart(fig2, width="stretch")
+            st.plotly_chart(fig2, use_container_width=True)
         else:
             st.info("엔화 환율 데이터가 없습니다.")

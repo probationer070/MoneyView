@@ -15,7 +15,7 @@ def render(df):
         cpi = df[df['name'].str.contains("CPI")].copy()
         if not cpi.empty:
             fig1 = px.line(cpi, x='date', y='value', color='name', title="소비자물가지수 추이", labels={'value': '지수'})
-            st.plotly_chart(fig1, width="stretch")
+            st.plotly_chart(fig1, use_container_width=True)
         else:
             st.info("CPI 데이터가 없습니다.")
 
@@ -32,12 +32,12 @@ def render(df):
                 merged['spread'] = merged['value_market'] - merged['value_base']
                 fig2 = px.line(merged, x='date', y='spread', title="시장금리 - 기준금리 스프레드", labels={'spread': '차이(%p)'})
                 fig2.add_hline(y=0, line_dash="dash", line_color="gray")
-                st.plotly_chart(fig2, width="stretch")
+                st.plotly_chart(fig2, use_container_width=True)
                 st.caption("💡 스프레드가 확대되면 중앙은행의 통제력이 약화되고 있다는 신호입니다.")
             else:
                 # 기준금리 없으면 국채만 표시
                 fig2 = px.line(market_rate, x='date', y='value', title="시장 금리 (국고채 3년)", labels={'value': '금리(%)'})
-                st.plotly_chart(fig2, width="stretch")
+                st.plotly_chart(fig2, use_container_width=True)
                 st.caption("💡 기준금리 데이터가 없어 시장 금리만 표시합니다.")
         else:
             st.info("금리 데이터가 없습니다.")
@@ -47,6 +47,6 @@ def render(df):
     ex_rate = df[df['name'] == "원/미국달러"].copy()
     if not ex_rate.empty:
         fig3 = px.line(ex_rate, x='date', y='value', title="원/미국달러 환율 추이", labels={'value': '환율(원)'})
-        st.plotly_chart(fig3, width="stretch")
+        st.plotly_chart(fig3, use_container_width=True)
     else:
         st.info("환율 데이터가 없습니다.")

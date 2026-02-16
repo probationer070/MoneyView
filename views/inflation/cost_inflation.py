@@ -19,7 +19,7 @@ def render(df):
         if not combined_1.empty:
             fig1 = px.line(combined_1, x='date', y='value', color='name',
                            title="원자재 수입 물가 및 공공요금 추이", labels={'value': '지수/가격'})
-            st.plotly_chart(fig1, width="stretch")
+            st.plotly_chart(fig1, use_container_width=True)
         else:
             st.info("수입 물가 또는 공공요금 데이터가 없습니다.")
 
@@ -31,7 +31,7 @@ def render(df):
         if not rent_trend.empty:
             fig2 = px.line(rent_trend, x='date', y='value', color='name',
                            title="부동산 임대료 추이", labels={'value': '가격지수'})
-            st.plotly_chart(fig2, width="stretch")
+            st.plotly_chart(fig2, use_container_width=True)
         else:
             st.info("부동산 임대료 관련 데이터가 없습니다.")
 
@@ -42,7 +42,7 @@ def render(df):
     if not social_cost.empty:
         fig3 = px.bar(social_cost, x='date', y='value', color='name',
                       title="최저임금 및 사회적 비용 증가 추이", labels={'value': '금액/비율'})
-        st.plotly_chart(fig3, width="stretch")
+        st.plotly_chart(fig3, use_container_width=True)
     else:
         plot_metric(df, "임금", "임금 및 사회적 비용 데이터")
         st.caption("💡 최저임금 및 정년 연장 관련 비용 데이터가 수집되면 이곳에 표시됩니다.")
