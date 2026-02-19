@@ -1,6 +1,6 @@
 from typing import List, Optional, Dict
-from WebScrap.DAO import EconomicIndicator
-from WebScrap.Collector.BaseCollector import BaseCollector
+from ..DAO import EconomicIndicator
+from ..Collector.BaseCollector import BaseCollector
 import requests
 import logging
 from datetime import datetime

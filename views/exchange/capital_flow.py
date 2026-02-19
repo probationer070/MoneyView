@@ -2,6 +2,7 @@ import streamlit as st
 import plotly.express as px
 import pandas as pd
 from utils import plot_metric
+from functools import reduce
 
 def render(df):
     st.subheader("환율 변동의 책임 소재 및 자금 유출")
@@ -24,19 +25,36 @@ def render(df):
             st.info("거주자 외화예금 또는 해외 주식 결제 데이터가 없습니다.")
 
     with col2:
-        # 외국인 자금의 국가별 이동 (한국 vs 일본)
-        st.markdown("##### 2. 외국인 자금 이동 (Korea vs Japan)")
-        foreign_kr = df[df['name'].str.contains("외국인 순매수") & df['name'].str.contains("코스피")].copy()
-        foreign_jp = df[df['name'].str.contains("외국인 순매수") & (df['name'].str.contains("닛케이") | df['name'].str.contains("일본"))].copy()
+        st.markdown("##### 2. 투자자별 순매수 동향")
         
-        combined_2 = pd.concat([foreign_kr, foreign_jp])
-        if not combined_2.empty:
-            fig2 = px.bar(combined_2, x='date', y='value', color='name', barmode='group',
-                          title="외국인 순매수 비교 (코스피 vs 닛케이)", labels={'value': '순매수 대금'})
+        # 1. 데이터 필터링
+        foreign = df[df['name'].str.contains("외국인") & df['name'].str.contains("순매수")].copy()
+        institution = df[df['name'].str.contains("기관") & df['name'].str.contains("순매수")].copy()
+        individual = df[df['name'].str.contains("개인") & df['name'].str.contains("순매수")].copy()
+
+        # 2. 월별 데이터 집계
+        if not foreign.empty and not institution.empty and not individual.empty:
+            foreign_monthly = foreign.groupby('date')['value'].sum().reset_index()
+            institution_monthly = institution.groupby('date')['value'].sum().reset_index()
+            individual_monthly = individual.groupby('date')['value'].sum().reset_index()
+
+            # 3. 데이터 병합
+            dfs = [
+                foreign_monthly.rename(columns={'value': '외국인'}),
+                institution_monthly.rename(columns={'value': '기관'}),
+                individual_monthly.rename(columns={'value': '개인'})
+            ]
+            merged = reduce(lambda left, right: pd.merge(left, right, on='date', how='outer'), dfs).fillna(0)
+            
+            melted = merged.melt(id_vars=['date'], value_vars=['외국인', '기관', '개인'],
+                                 var_name='투자자', value_name='순매수액(십억원)')
+            
+            fig2 = px.bar(melted, x='date', y='순매수액(십억원)', color='투자자', title="투자자별 순매수 동향")
+            fig2.add_hline(y=0, line_dash="dash", line_color="gray")
             st.plotly_chart(fig2, width="stretch")
-            st.caption("💡 신뢰도 격차를 보여주는 외국인 자금의 흐름입니다.")
+            st.caption("💡 외국인 순매수(파랑)가 음수(-)이면 자본 유출을 의미합니다.")
         else:
-            st.info("외국인 순매수(코스피/닛케이) 데이터가 없습니다.")
+            st.info("투자자별 순매수 데이터(외국인, 기관, 개인) 중 일부가 부족합니다.")
 
     # 원/달러 환율 vs 주요국 통화 가치 변동률
     st.markdown("##### 3. 원화 vs 주요국 통화 가치 변동률")

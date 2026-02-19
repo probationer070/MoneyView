@@ -3,8 +3,8 @@ import logging
 
 from typing import List, Optional, Dict
 from datetime import datetime, timedelta
-from WebScrap.DAO import EconomicIndicator
-from WebScrap.Collector.BaseCollector import BaseCollector
+from ..DAO import EconomicIndicator
+from ..Collector.BaseCollector import BaseCollector
 
 logger = logging.getLogger(__name__)
 

@@ -7,21 +7,21 @@ def render(df):
     st.subheader("국채 금리와 대출 금리의 동조화")
     st.markdown("**정부의 국채 발행 폭주가 주담대 6% 시대를 여는 과정**")
 
-    # 1. 국고채 10년물 (실시간/일별)
-    st.markdown("##### 1. 국고채 10년물 금리 (기준점)")
-    gov_bond = df[df['name'].str.contains("국고채") & df['name'].str.contains("10년")].copy()
+    # 1. 국고채 3년물 (실시간/일별)
+    st.markdown("##### 1. 국고채 3년물 금리 (기준점)")
+    gov_bond = df[df['name'].str.contains("국고채") & df['name'].str.contains("3년")].copy()
     
     if not gov_bond.empty:
         fig1 = px.line(gov_bond, x='date', y='value', markers=True,
-                       title="국고채 10년물 금리 추이", labels={'value': '금리(%)'})
+                       title="국고채 3년물 금리 추이", labels={'value': '금리(%)'})
         st.plotly_chart(fig1, width="stretch")
     else:
-        st.info("국고채 10년물 데이터가 없습니다.")
+        st.info("국고채 3년물 데이터가 없습니다.")
 
     col1, col2 = st.columns(2)
     
     with col1:
-        # COFIX 지수
+        # COFIX 지수 TODO: No Data
         st.markdown("##### 2. COFIX 지수 (은행 조달 비용)")
         cofix = df[df['name'].str.contains("COFIX") | df['name'].str.contains("코픽스")].copy()
         

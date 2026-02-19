@@ -10,7 +10,7 @@ def render(df):
     col1, col2 = st.columns(2)
 
     with col1:
-        # 연령대별 자산 구성비
+        # 연령대별 자산 구성비 TODO: No Data
         st.markdown("##### 1. 연령대별 자산 구성 (부동산 vs 금융)")
         asset_comp = df[df['name'].str.contains("자산 구성") | df['name'].str.contains("연령별 자산")].copy()
         
@@ -24,7 +24,7 @@ def render(df):
             st.info("연령대별 자산 구성 데이터가 없습니다.")
 
     with col2:
-        # 사회보험료 인상 추이
+        # 사회보험료 인상 추이 TODO: No Data
         st.markdown("##### 2. 사회보험료(국민연금/건강보험) 요율")
         insurance = df[df['name'].str.contains("국민연금") | df['name'].str.contains("건강보험") | df['name'].str.contains("보험료")].copy()
         

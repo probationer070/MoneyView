@@ -36,11 +36,11 @@ def render(df):
         else:
             st.info("기업 대출 금리 데이터가 부족합니다.")
 
-    # 법인 파산 및 연체율
-    st.markdown("##### 3. 법인 파산 및 건전성 지표")
-    risk_data = df[df['category'] == "시스템 리스크"].copy()
-    if not risk_data.empty:
-        fig3 = px.bar(risk_data, x='date', y='value', color='name', title="시스템 리스크 지표", labels={'value': '건수/비율'})
-        st.plotly_chart(fig3, width="stretch")
-    else:
-        st.info("법인 파산 또는 연체율 데이터가 없습니다.")
+    # 법인 파산 및 연체율 TODO: 어떻게 정보 해결할지 모르겠음
+    # st.markdown("##### 3. 법인 파산 및 건전성 지표")
+    # risk_data = df[df['category'] == "시스템 리스크"].copy()
+    # if not risk_data.empty:
+    #     fig3 = px.bar(risk_data, x='date', y='value', color='name', title="시스템 리스크 지표", labels={'value': '건수/비율'})
+    #     st.plotly_chart(fig3, width="stretch")
+    # else:
+    #     st.info("법인 파산 또는 연체율 데이터가 없습니다.")

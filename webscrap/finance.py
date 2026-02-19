@@ -1,6 +1,7 @@
 import json
 import requests
 import os
+import re
 # import yfinance as yf
 import streamlit as st
 from bs4 import BeautifulSoup
@@ -19,55 +20,6 @@ logger = logging.getLogger(__name__)
 
 from .DAO import EconomicIndicator, RiskNews
 from .Collector import ECOSCollector, GlobalMacroCollector, FREDCollector
-
-class RegulationCrawler:
-    """
-    3. 금융 억압 및 규제 감시: 금융감독원/금융위원회 크롤러
-    """
-    def __init__(self):
-        self.targets = [
-            {
-                "name": "금융감독원 보도자료",
-                "url": "https://www.fss.or.kr/fss/bbs/B0000188/list.do?menuNo=200218",
-                "base_url": "https://www.fss.or.kr"
-            },
-        ]
-        self.keywords = ["해외 송금 제한", "서학개미 규제", "환전 증거금", "외화 스트레스 테스트", "자본 유출"]
-
-    def crawl(self) -> List[RiskNews]:
-        results = []
-        for target in self.targets:
-            try:
-                response = requests.get(target['url'], timeout=10)
-                soup = BeautifulSoup(response.text, 'html.parser')
-                
-                rows = soup.select('table tbody tr')
-                
-                for row in rows:
-                    title_tag = row.select_one('.subject a')
-                    date_tag = row.select_one('td:nth-child(4)')
-                    
-                    if title_tag:
-                        title = title_tag.text.strip()
-                        link = target['base_url'] + title_tag['href'] if title_tag['href'].startswith('/') else title_tag['href']
-                        date = date_tag.text.strip() if date_tag else datetime.now().strftime('%Y-%m-%d')
-                        
-                        matched = [k for k in self.keywords if k in title]
-                        
-                        if matched:
-                            results.append(RiskNews(
-                                source=target['name'],
-                                title=title,
-                                url=link,
-                                date=date,
-                                matched_keywords=matched
-                            ))
-            except Exception as e:
-                logger.error(f"크롤링 오류 ({target['name']}): {e}")
-        
-        return results
-
-
 
 # ==========================================
 # 2. 데이터 수집기 (Collectors)
@@ -115,12 +67,21 @@ def fetch_latest_data(ecos_api_key, fred_api_key, start_date=None, end_date=None
     indicators = []
     status_text = st.empty()
     
+    def check_file_exists(category, name):
+        safe_cat = str(category).replace(" ", "_").replace("/", "_")
+        safe_name = str(name).replace("/", "_").replace(" ", "_")
+        safe_name = re.sub(r'[\\*?:"<>|()]', "", safe_name)
+        return os.path.exists(os.path.join("saved_data", safe_cat, f"{safe_name}.csv"))
+
     # 1. ECOS 수집기 초기화
     if "ECOS" in sources:
         if not ecos_api_key:
             st.error("ECOS API 키가 필요합니다.")
         else:
-            ecos = ECOSCollector(ecos_api_key)
+            try:
+                ecos = ECOSCollector(ecos_api_key)
+            except TypeError:
+                ecos = ECOSCollector.ECOSCollector(ecos_api_key)
             
             # JSON 파일에서 수집 대상 로드
             try:
@@ -142,6 +103,9 @@ def fetch_latest_data(ecos_api_key, fred_api_key, start_date=None, end_date=None
                 unit = target.get('unit')
                 cycle = target.get('cycle')
                 category = target.get('category')
+                
+                if check_file_exists(category, name):
+                    continue
 
                 s_str, e_str = None, None
                 if start_date and end_date:
@@ -155,26 +119,37 @@ def fetch_latest_data(ecos_api_key, fred_api_key, start_date=None, end_date=None
     # 2. FRED 데이터 수집
     if "FRED" in sources and fred_api_key:
         status_text.info("FRED 데이터 수집 중...")
-        fred = FREDCollector(fred_api_key)
+        try:
+            fred = FREDCollector(fred_api_key)
+        except TypeError:
+            fred = FREDCollector.FREDCollector(fred_api_key)
         
         f_start = start_date.strftime("%Y-%m-%d") if start_date else None
         f_end = end_date.strftime("%Y-%m-%d") if end_date else None
         
         # 미국 M2 통화량 (M2SL)
-        indicators.extend(fred.fetch_indicator("M2SL", "미국 M2 통화량", "통화", "십억달러", start_date=f_start, end_date=f_end))
+        if not check_file_exists("통화", "미국 M2 통화량"):
+            indicators.extend(fred.fetch_indicator("M2SL", "미국 M2 통화량", "통화", "십억달러", start_date=f_start, end_date=f_end))
         # 미국 CPI (CPIAUCSL)
-        indicators.extend(fred.fetch_indicator("CPIAUCSL", "미국 CPI", "물가", "Index", start_date=f_start, end_date=f_end))
+        if not check_file_exists("물가", "미국 CPI"):
+            indicators.extend(fred.fetch_indicator("CPIAUCSL", "미국 CPI", "물가", "Index", start_date=f_start, end_date=f_end))
         # 미국 기준금리 (FEDFUNDS)
-        indicators.extend(fred.fetch_indicator("FEDFUNDS", "미국 기준금리", "금리", "%", start_date=f_start, end_date=f_end))
+        if not check_file_exists("금리", "미국 기준금리"):
+            indicators.extend(fred.fetch_indicator("FEDFUNDS", "미국 기준금리", "금리", "%", start_date=f_start, end_date=f_end))
         # 일본 국채 10년물 (IRLTLT01JPM156N)
-        indicators.extend(fred.fetch_indicator("IRLTLT01JPM156N", "일본 국채 10년물", "금리", "%", start_date=f_start, end_date=f_end))
+        if not check_file_exists("금리", "일본 국채 10년물"):
+            indicators.extend(fred.fetch_indicator("IRLTLT01JPM156N", "일본 국채 10년물", "금리", "%", start_date=f_start, end_date=f_end))
         # 미국 10년물 TIPs 수익률
-        indicators.extend(fred.fetch_indicator("DFII10", "미국 10년물 TIPS 수익률", "금리", "%", start_date=f_start, end_date=f_end))
+        if not check_file_exists("금리", "미국 10년물 TIPS 수익률"):
+            indicators.extend(fred.fetch_indicator("DFII10", "미국 10년물 TIPS 수익률", "금리", "%", start_date=f_start, end_date=f_end))
     
     # 3. 글로벌 매크로 (Yahoo Finance)
     if "Yahoo" in sources:
         status_text.info("글로벌 매크로 데이터 수집 중...")
-        macro = GlobalMacroCollector()
+        try:
+            macro = GlobalMacroCollector()
+        except TypeError:
+            macro = GlobalMacroCollector.GlobalMacroCollector()
         # Yahoo Finance는 YYYY-MM-DD 형식을 사용
         y_start = start_date.strftime("%Y-%m-%d") if start_date else None
         y_end = end_date.strftime("%Y-%m-%d") if end_date else None

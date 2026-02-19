@@ -1,59 +1,73 @@
 from typing import List, Optional, Dict
-from DAO import EconomicIndicator, RiskNews
-import requests
-from bs4 import BeautifulSoup
+import feedparser
+import urllib.parse
 from datetime import datetime
+from ..DAO.Economic import RiskNews
 import logging
+import os
+import csv
 
 logger = logging.getLogger(__name__)
 
 class RegulationCrawler:
     """
-    3. 금융 억압 및 규제 감시: 금융감독원/금융위원회 크롤러
+    3. 금융 억압 및 규제 감시: Google News RSS 크롤러
     """
     def __init__(self):
-        self.targets = [
-            {
-                "name": "금융감독원 보도자료",
-                "url": "https://www.fss.or.kr/fss/bbs/B0000188/list.do?menuNo=200218",
-                "base_url": "https://www.fss.or.kr"
-            },
-            # 금융위원회 등 추가 가능
-        ]
+        self.log_file = "crawling_log.csv"
         self.keywords = ["해외 송금 제한", "서학개미 규제", "환전 증거금", "외화 스트레스 테스트", "자본 유출"]
 
-    def crawl(self) -> List[RiskNews]:
+    def crawl(self, query: Optional[str] = None, limit: int = 5) -> List[RiskNews]:
         results = []
-        for target in self.targets:
+        # 쿼리가 있으면 해당 쿼리만, 없으면 기본 키워드 리스트 사용
+        search_targets = [query] if query else self.keywords
+        
+        for keyword in search_targets:
             try:
-                response = requests.get(target['url'], timeout=10)
-                soup = BeautifulSoup(response.text, 'html.parser')
+                # 검색어를 URL 인코딩 (한글 검색 대응)
+                encoded_search = urllib.parse.quote(keyword)
+                # 구글 뉴스 RSS URL (hl=ko: 한국어, gl=KR: 한국 지역)
+                url = f"https://news.google.com/rss/search?q={encoded_search}&hl=ko&gl=KR&ceid=KR:ko"
                 
-                # FSS 보도자료 게시판 구조에 맞춘 파싱 (구조 변경 시 수정 필요)
-                # 통상적으로 게시판은 table > tbody > tr 구조를 가짐
-                rows = soup.select('table tbody tr')
+                # RSS 피드 파싱
+                feed = feedparser.parse(url)
                 
-                for row in rows:
-                    title_tag = row.select_one('.subject a') # 제목 태그
-                    date_tag = row.select_one('td:nth-child(4)') # 날짜 태그 (인덱스 확인 필요)
+                # 키워드별 상위 limit개만 수집
+                for entry in feed.entries[:limit]:
+                    title = entry.title
+                    link = entry.link
+                    pub_date = entry.published if hasattr(entry, 'published') else datetime.now().strftime('%Y-%m-%d')
                     
-                    if title_tag:
-                        title = title_tag.text.strip()
-                        link = target['base_url'] + title_tag['href'] if title_tag['href'].startswith('/') else title_tag['href']
-                        date = date_tag.text.strip() if date_tag else datetime.now().strftime('%Y-%m-%d')
-                        
-                        # 키워드 매칭 확인
-                        matched = [k for k in self.keywords if k in title]
-                        
-                        if matched:
-                            results.append(RiskNews(
-                                source=target['name'],
-                                title=title,
-                                url=link,
-                                date=date,
-                                matched_keywords=matched
-                            ))
+                    news = RiskNews(
+                        source="Google News",
+                        title=title,
+                        url=link,
+                        date=pub_date,
+                        matched_keywords=[keyword]
+                    )
+                    results.append(news)
+                    self._save_log(news, keyword)
+                    
             except Exception as e:
-                logger.error(f"크롤링 오류 ({target['name']}): {e}")
+                logger.error(f"RSS 크롤링 오류 ({keyword}): {e}")
         
         return results
+
+    def _save_log(self, news: RiskNews, keyword: str):
+        """크롤링 로그를 CSV 파일에 저장"""
+        file_exists = os.path.exists(self.log_file)
+        try:
+            with open(self.log_file, 'a', newline='', encoding='utf-8-sig') as f:
+                writer = csv.writer(f)
+                if not file_exists:
+                    writer.writerow(['Timestamp', 'Keyword', 'Title', 'URL', 'Date'])
+                
+                writer.writerow([
+                    datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    keyword,
+                    news.title,
+                    news.url,
+                    news.date
+                ])
+        except Exception as e:
+            logger.error(f"로그 저장 실패: {e}")

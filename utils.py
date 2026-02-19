@@ -26,8 +26,18 @@ def calculate_yoy(df, target_name):
     sub_df = sub_df.dropna(subset=['value'])
     return sub_df
 
+def calculate_mom(df, target_name):
+        """월별 증감률(MoM) 계산"""
+        sub_df = df[df['name'] == target_name].copy()
+        if sub_df.empty:
+            return pd.DataFrame()
+        sub_df = sub_df.sort_values('date')
+        sub_df['value'] = sub_df['value'].pct_change(periods=1) * 100
+        sub_df = sub_df.dropna(subset=['value'])
+        return sub_df
+
 def plot_metric(df, category_filter, title):
-    # 카테고리나 이름으로 필터링
+    """카테고리나 이름으로 필터링"""
     filtered_df = df[df['name'].str.contains(category_filter) | df['category'].str.contains(category_filter)]
     if not filtered_df.empty:
         fig = px.line(filtered_df, x='date', y='value', color='name', markers=True,

@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import List
-from WebScrap.DAO import EconomicIndicator
+from ..DAO import EconomicIndicator
 
 class BaseCollector(ABC):
     """

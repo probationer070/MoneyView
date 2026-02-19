@@ -181,6 +181,6 @@ def render(df):
             st.markdown("**최근 데이터 (Table)**")
             display_df = merged_us.sort_values('date', ascending=False).head(10).copy()
             display_df['date'] = display_df['date'].dt.strftime('%Y-%m-%d')
-            st.dataframe(display_df.style.format("{:.2f}", subset=display_df.columns.drop('date')), use_container_width=True)
+            st.dataframe(display_df.style.format("{:.2f}", subset=display_df.columns.drop('date')), width="stretch")
         else:
             st.info("미국 매크로 데이터가 부족합니다. (데이터 업데이트 필요)")

@@ -1,7 +1,8 @@
 import streamlit as st
 import plotly.express as px
 import pandas as pd
-from utils import calculate_yoy
+from utils import calculate_mom
+from WebScrap.Crawler.RegulationCrawler import RegulationCrawler
 
 def render(df):
     st.subheader("공공 자금의 시장 개입 및 부채 전가")
@@ -10,15 +11,28 @@ def render(df):
     col1, col2 = st.columns(2)
     
     with col1:
-        # 국민연금 국내 주식 순매수 (데이터 부재 시 안내)
-        st.markdown("##### 1. 국민연금 국내 주식 순매수 추이")
-        nps_buying = df[df['name'].str.contains("국민연금") & df['name'].str.contains("순매수")].copy()
+        st.markdown("##### 1. 공공 부채 및 연금 관련 뉴스")
         
-        if not nps_buying.empty:
-            fig1 = px.bar(nps_buying, x='date', y='value', title="국민연금 코스피 순매수", labels={'value': '금액'})
-            st.plotly_chart(fig1, width="stretch")
+        # 검색 기능 (기본 키워드: 국민연금 국채)
+        search_keyword = st.text_input("키워드 검색", value="국민연금 국채", key="public_news_search")
+        
+        if st.button("뉴스 검색", key="public_news_btn"):
+            if search_keyword:
+                with st.spinner(f"'{search_keyword}' 관련 뉴스 검색 중..."):
+                    crawler = RegulationCrawler()
+                    news_list = crawler.crawl(query=search_keyword)
+                    
+                    if news_list:
+                        for news in news_list:
+                            # 날짜 포맷 정리
+                            display_date = news.date[:16] if len(news.date) > 16 else news.date
+                            st.markdown(f"- **[{display_date}]** [{news.title}]({news.url})")
+                    else:
+                        st.warning("검색 결과가 없습니다.")
+            else:
+                st.warning("검색어를 입력해주세요.")
         else:
-            st.info("국민연금 순매수 데이터가 없습니다. (수집 필요)")
+            st.info("키워드를 입력하고 검색하면 구글 뉴스 RSS 결과를 보여줍니다.")
 
     with col2:
         # 국가 채무 및 이자 부담 (국고채 금리로 시뮬레이션)
@@ -36,8 +50,8 @@ def render(df):
 
     # 통화량(M2) vs 실질 구매력
     st.markdown("##### 3. 통화량(M2) 증가율 vs 실질 구매력")
-    m2_yoy = calculate_yoy(df, "M2(평잔)")
-    cpi_yoy = calculate_yoy(df, "CPI(총지수)")
+    m2_yoy = calculate_mom(df, "M2(평잔)M")
+    cpi_yoy = calculate_mom(df, "CPI(총지수)")
     
     if not m2_yoy.empty and not cpi_yoy.empty:
         # 데이터 병합

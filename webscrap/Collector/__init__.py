@@ -1,7 +1,7 @@
-from .BaseCollector import BaseCollector
-from .ECOSCollector import ECOSCollector
-from .GlobalMacroCollector import GlobalMacroCollector
-from .FREDCollector import FREDCollector
+from . import BaseCollector
+from . import ECOSCollector
+from . import GlobalMacroCollector
+from . import FREDCollector
 
 __all__ = [
     "BaseCollector",

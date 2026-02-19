@@ -9,7 +9,7 @@ def render(df):
     col1, col2 = st.columns(2)
 
     with col1:
-        # LH/HUG 부채 관련 (데이터 부재 시 안내)
+        # LH/HUG 부채 관련 (데이터 부재 시 안내) TODO: No Data
         st.markdown("##### 1. LH/HUG 재무 건전성")
         public_debt = df[df['name'].str.contains("LH") | df['name'].str.contains("HUG")].copy()
         
@@ -20,7 +20,7 @@ def render(df):
             st.info("LH/HUG 부채 데이터가 없습니다. (별도 수집 필요)")
 
     with col2:
-        # 주택 인허가/착공 (데이터 부재 시 안내)
+        # 주택 인허가/착공 (데이터 부재 시 안내) TODO: No Data
         st.markdown("##### 2. 주택 인허가 및 착공 실적")
         housing_supply = df[df['name'].str.contains("인허가") | df['name'].str.contains("착공")].copy()
         

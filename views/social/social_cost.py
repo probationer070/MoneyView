@@ -59,7 +59,7 @@ def render(df):
                       title=f"사회적 비용 관련 지수 변화 ({start_year}년=100)",
                       labels={'year': '연도', '지수 값': '지수 (기준=100)'})
         fig.update_layout(legend_title_text='지표 구분')
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
         
         with st.expander("데이터 테이블 보기"):
             st.dataframe(merged_df.set_index('year'))

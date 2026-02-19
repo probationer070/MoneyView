@@ -12,7 +12,7 @@ def render(df):
     col1, col2 = st.columns(2)
     
     with col1:
-        # 해외 VC 투자 규모 (데이터 부재 시 안내)
+        # 해외 VC 투자 규모 (데이터 부재 시 안내) TODO: No Data
         st.markdown("##### 1. 벤처투자(VC) 및 스타트업 자금")
         vc_data = df[df['name'].str.contains("벤처") | df['name'].str.contains("VC")].copy()
         
@@ -23,7 +23,7 @@ def render(df):
             st.info("VC 투자 규모 데이터가 없습니다. (별도 수집 필요)")
 
     with col2:
-        # 채용 공고 수 (데이터 부재 시 안내)
+        # 채용 공고 수 (데이터 부재 시 안내) TODO: No Data
         st.markdown("##### 2. 주요 기업 채용 공고 추이")
         hiring_data = df[df['name'].str.contains("채용") | df['name'].str.contains("구인")].copy()
         

@@ -1,5 +1,7 @@
 import streamlit as st
 import pandas as pd
+import plotly.express as px
+from WebScrap.Crawler.RegulationCrawler import RegulationCrawler
 
 def render(df):
     st.subheader("금융 억압 및 자본 통제 지표")
@@ -18,17 +20,44 @@ def render(df):
         else:
             st.info("외화 예금 데이터가 없습니다.")
 
-    with col2:
-        # 해외 송금/투자 규제 뉴스 (RiskNews 활용)
-        st.markdown("##### 2. 자본 통제 관련 뉴스/규제")
-        # RiskNews 데이터는 df에 없으므로, 여기서는 안내 문구만 표시
-        st.info("금융감독원/금융위원회 보도자료 크롤링 결과가 이곳에 표시됩니다. (현재 데이터 연동 필요)")
+    # TODO: 데이터 크롤링 필요
+    with col2: 
+        # 해외 송금/투자 규제 뉴스 (Google News RSS 활용)
+        st.markdown("##### 2. 자본 통제 관련 뉴스/규제 (Google News)")
         
-    # 서학개미 규제 모니터링
-    st.markdown("##### 3. 개인 해외 투자(서학개미) 자금 추이")
-    retail_foreign = df[df['name'].str.contains("해외주식") | df['name'].str.contains("외화증권")].copy()
-    
-    if not retail_foreign.empty:
-        st.bar_chart(retail_foreign.set_index('date')['value'])
+        # 검색 기능 추가
+        search_keyword = st.text_input("키워드 검색", placeholder="예: 해외 송금, 자본 통제")
+        
+        if st.button("뉴스 검색"):
+            if search_keyword:
+                with st.spinner(f"'{search_keyword}' 관련 뉴스 검색 중..."):
+                    crawler = RegulationCrawler()
+                    news_list = crawler.crawl(query=search_keyword, limit=10)
+                    
+                    if news_list:
+                        for news in news_list:
+                            # 날짜 포맷 정리 (Tue, 03 Dec 2024 ... -> 앞부분만)
+                            display_date = news.date[:16] if len(news.date) > 16 else news.date
+                            st.markdown(f"- **[{display_date}]** [{news.title}]({news.url})")
+                    else:
+                        st.warning("검색 결과가 없습니다.")
+            else:
+                st.warning("검색어를 입력해주세요.")
+        else:
+            st.info("키워드를 입력하고 검색하면 구글 뉴스 RSS 결과를 보여줍니다.")
+        
+    # 해외 투자 자금 추이
+    st.markdown("##### 3. 해외 투자 자금 추이 (직접/증권)")
+    securities_inv = df[df['name'] == "증권투자"].copy()
+    direct_inv = df[df['name'] == "직접투자"].copy()
+
+    combined_inv = pd.concat([securities_inv, direct_inv])
+
+    if not combined_inv.empty:
+        fig3 = px.line(combined_inv, x='date', y='value', color='name',
+                       title="해외 직접투자 및 증권투자 추이",
+                       labels={'value': '금액(백만달러)', 'date': '날짜', 'name': '투자 유형'})
+        st.plotly_chart(fig3, width="stretch")
+        st.caption("💡 국제투자대조표 기준 해외 직접투자 및 증권투자 잔액 추이입니다.")
     else:
-        st.info("해외 주식 결제/보유 데이터가 없습니다.")
+        st.info("해외 직접투자 또는 증권투자 데이터가 없습니다.")
