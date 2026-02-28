@@ -101,7 +101,12 @@ def download_subtitles(url):
                 video_id = info.get('id')
                 video_title = info.get('fulltitle') or info.get('title') or video_id
                 print(f"단일 영상 처리 중: '{video_title}' (ID: {video_id})")
-                _download_and_save_transcript(video_id, video_title, playlist_title)
+                
+                # 단일 영상인 경우 저장할 폴더 지정
+                single_output_dir = "Single_Videos"
+                if not os.path.exists(single_output_dir):
+                    os.makedirs(single_output_dir)
+                _download_and_save_transcript(video_id, video_title, single_output_dir)
             
             else:
                 print("오류: 제공된 URL에서 영상 정보를 추출할 수 없습니다.")
