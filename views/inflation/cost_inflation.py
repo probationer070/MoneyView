@@ -10,15 +10,13 @@ def render(df):
     col1, col2 = st.columns(2)
 
     with col1:
-        # 원자재 수입 물가 지수 및 공공요금
-        st.markdown("##### 1. 수입 물가 & 공공요금(전기/가스)")
-        import_price = df[df['name'].str.contains("수입물가") | df['name'].str.contains("원자재")].copy()   # TODO: 자료 재구성 필요
+        # 공공요금(전기/가스)
+        st.markdown("##### 1. 공공요금(전기/가스)")
         utility_price = df[df['name'].str.contains("전기") | df['name'].str.contains("가스") | df['name'].str.contains("공공요금")].copy()
         
-        combined_1 = pd.concat([import_price, utility_price])
-        if not combined_1.empty:
-            fig1 = px.line(combined_1, x='date', y='value', color='name',
-                           title="원자재 수입 물가 및 공공요금 추이", labels={'value': '지수/가격'})
+        if not utility_price.empty:
+            fig1 = px.line(utility_price, x='date', y='value', color='name',
+                           title="공공요금 추이", labels={'value': '지수/가격'})
             st.plotly_chart(fig1, width="stretch")
         else:
             st.info("수입 물가 또는 공공요금 데이터가 없습니다.")
@@ -34,16 +32,3 @@ def render(df):
             st.plotly_chart(fig2, width="stretch")
         else:
             st.info("부동산 임대료 관련 데이터가 없습니다.")
-
-    # 사회적 비용 (최저임금 등)
-    st.markdown("##### 3. 사회적 비용 (최저임금/정년연장)")
-    st.caption("🛠️ MEN WORKING ⚙️")
-    # social_cost = df[df['name'].str.contains("최저임금") | df['name'].str.contains("사회보험")].copy()
-    
-    # if not social_cost.empty:
-    #     fig3 = px.bar(social_cost, x='date', y='value', color='name',
-    #                   title="최저임금 및 사회적 비용 증가 추이", labels={'value': '금액/비율'})
-    #     st.plotly_chart(fig3, width="stretch")
-    # else:
-    #     plot_metric(df, "임금", "임금 및 사회적 비용 데이터")
-    #     st.caption("💡 최저임금 및 정년 연장 관련 비용 데이터가 수집되면 이곳에 표시됩니다.")

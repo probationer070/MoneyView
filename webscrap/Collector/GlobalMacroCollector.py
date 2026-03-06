@@ -19,7 +19,9 @@ class GlobalMacroCollector(BaseCollector):
             "GC=F": ("금 선물", "글로벌 매크로"),
             "HG=F": ("구리 선물", "글로벌 매크로"),
             "URA": ("Global X Uranium ETF", "글로벌 매크로"),
-            "BTC-USD": ("비트코인", "글로벌 매크로")
+            "BTC-USD": ("비트코인", "글로벌 매크로"),
+            "EWY": ("MSCI South Korea iShares", "글로벌 매크로"),
+            "TTF=F": ("EU 천연가스 (Euro/MWh)", "글로벌 매크로") # Dutch TTF Gas
         }
 
     def fetch_indicator(self, *args, **kwargs) -> List[EconomicIndicator]:

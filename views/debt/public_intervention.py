@@ -37,7 +37,7 @@ def render(df):
     with col2:
         # 국가 채무 및 이자 부담 (국고채 금리로 시뮬레이션)
         st.markdown("##### 2. 국채 금리 상승에 따른 이자 부담")
-        gov_bond = df[df['name'].str.contains("국고채") & df['name'].str.contains("10년")].copy()
+        gov_bond = df[df['name'].str.contains("국고채") & df['name'].str.contains("3년")].copy()
         
         if not gov_bond.empty:
             # 가상의 부채 규모(예: 1000조)에 대한 이자 비용 시뮬레이션
@@ -51,15 +51,27 @@ def render(df):
     # 통화량(M2) vs 실질 구매력
     st.markdown("##### 3. 통화량(M2) 증가율 vs 실질 구매력")
     m2_yoy = calculate_mom(df, "M2(평잔)M")
-    cpi_yoy = calculate_mom(df, "CPI(총지수)")
+    cpi_yoy = calculate_mom(df, "CPI한국")
     
     if not m2_yoy.empty and not cpi_yoy.empty:
-        # 데이터 병합
-        merged = pd.merge(m2_yoy[['date', 'value']], cpi_yoy[['date', 'value']], on='date', suffixes=('_m2', '_cpi'))
+        # 데이터 병합 (최신 데이터 유지를 위해 outer join 후 ffill)
+        merged = pd.merge(m2_yoy[['date', 'value']], cpi_yoy[['date', 'value']], on='date', how='outer', suffixes=('_m2', '_cpi'))
+        merged = merged.sort_values('date').ffill().dropna()
         
-        fig3 = px.line(merged, x='date', y=['value_m2', 'value_cpi'], 
-                       title="M2 증가율 vs CPI 상승률", labels={'value': '증가율(%)', 'variable': '지표'})
+        # 구매력 하락 압력 (초과 유동성) 계산
+        merged['초과 유동성(M2증가율 - CPI증가율)'] = merged['value_m2'] - merged['value_cpi']
+        
+        # 그래프를 더 직관적으로 표현 (Barmode 활용)
+        fig3 = px.bar(merged, x='date', y='초과 유동성(M2증가율 - CPI증가율)', 
+                       title="초과 유동성 (M2 증가율 - CPI 상승률) = 실질 구매력 하락 압력",
+                       labels={'초과 유동성(M2증가율 - CPI증가율)': 'Gap(%)', 'date': '날짜'},
+                       color='초과 유동성(M2증가율 - CPI증가율)', color_continuous_scale='Reds')
+        
+        # 라인 추가 (M2, CPI)
+        fig3.add_scatter(x=merged['date'], y=merged['value_m2'], mode='lines', name='M2 증가율(%)', line=dict(color='blue'))
+        fig3.add_scatter(x=merged['date'], y=merged['value_cpi'], mode='lines', name='CPI 상승률(%)', line=dict(color='orange'))
+        
         st.plotly_chart(fig3, width="stretch")
-        st.caption("💡 통화량이 물가보다 빠르게 늘어나면 화폐 가치는 하락합니다.")
+        st.caption("💡 빨간 막대(초과 유동성)가 양수(+)로 높을수록 시중에 돈이 실물 경제보다 빠르게 풀려 화폐 가치(구매력)가 하락하고 있음을 뜻합니다.")
     else:
         st.info("M2 또는 CPI 데이터가 부족합니다.")

@@ -49,7 +49,7 @@ def render(df):
         y_cols_1.append('한국은행 기준금리(%)')
 
     if dfs_to_merge_1:
-        merged_inf = reduce(lambda left, right: pd.merge(left, right, on='date', how='outer'), dfs_to_merge_1).sort_values('date')
+        merged_inf = reduce(lambda left, right: pd.merge(left, right, on='date', how='outer'), dfs_to_merge_1).sort_values('date').ffill()
         
         if not merged_inf.dropna(how='all', subset=y_cols_1).empty:
             # 이중 축 그래프 생성 (M2: 좌측, CPI/금리: 우측)
@@ -129,8 +129,8 @@ def render(df):
             y_cols_kr.append('CPI 상승률(YoY %)')
 
         if dfs_to_merge_kr:
-            merged_kr = reduce(lambda left, right: pd.merge(left, right, on='date', how='outer'), dfs_to_merge_kr).sort_values('date')
-            if not merged_kr.dropna(how='all', subset=y_cols_kr).empty:
+            merged_kr = reduce(lambda left, right: pd.merge(left, right, on='date', how='outer'), dfs_to_merge_kr).sort_values('date').ffill().dropna()
+            if not merged_kr.empty:
                 fig_kr = px.line(merged_kr, x='date', y=y_cols_kr,
                                  title="한국 국채 금리 vs 물가 상승률",
                                  labels={'value': '지표 값', 'date': '날짜', 'variable': '구분'})
@@ -169,7 +169,7 @@ def render(df):
             dfs_to_merge.append(us_tips)
             
         if dfs_to_merge:
-            merged_us = reduce(lambda left, right: pd.merge(left, right, on='date', how='outer'), dfs_to_merge).sort_values('date')
+            merged_us = reduce(lambda left, right: pd.merge(left, right, on='date', how='outer'), dfs_to_merge).sort_values('date').ffill().dropna()
             
             # 차트
             fig_us = px.line(merged_us, x='date', y=merged_us.columns.drop('date'),
@@ -184,3 +184,26 @@ def render(df):
             st.dataframe(display_df.style.format("{:.2f}", subset=display_df.columns.drop('date')), width="stretch")
         else:
             st.info("미국 매크로 데이터가 부족합니다. (데이터 업데이트 필요)")
+
+    st.markdown("---")
+    st.subheader("🌍 주요국 소비자물가(CPI) 상승률 비교")
+    st.markdown("**미국 CPI가 단연 높은 이유**: M2 살포량과 서비스 물가 비중 차이 (데이터 검증용)")
+    
+    cpi_countries = ["CPI한국", "CPI미국", "CPI일본", "CPI중국", "CPI영국", "CPI캐나다"]
+    dfs_cpi = []
+    for c_name in cpi_countries:
+        df_c = calculate_yoy(df, c_name)
+        if not df_c.empty:
+            df_c = df_c[['date', 'value']].rename(columns={'value': c_name})
+            dfs_cpi.append(df_c)
+            
+    if dfs_cpi:
+        merged_cpi = reduce(lambda l, r: pd.merge(l, r, on='date', how='outer'), dfs_cpi).sort_values('date').ffill().dropna(how='all')
+        
+        # Melt to plot appropriately
+        melted_cpi = merged_cpi.melt(id_vars=['date'], value_name='YoY(%)', var_name='국가')
+        fig_global_cpi = px.line(melted_cpi, x='date', y='YoY(%)', color='국가', title="주요 6개국 CPI 전년비 상승률",
+                                 labels={'date': '날짜', 'YoY(%)': '상승률(YoY %)'}, markers=True)
+        st.plotly_chart(fig_global_cpi, width="stretch")
+    else:
+        st.info("국가별 CPI 데이터가 없습니다.")

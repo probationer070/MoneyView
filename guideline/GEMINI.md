@@ -36,9 +36,11 @@
 - **Plan**: For multi-step tasks, state a brief plan with verification steps.
 
 ## 4. Current Work Status (Context)
-- [ ] Initial project structure setup and guideline establishment.
+- [x] Initial project structure setup and guideline establishment.
 - [ ] Modularization and stabilization of data collector (WebScrap).
-- [ ] Dashboard UI (views) improvement.
+- [x] Dashboard UI (views) improvement (Added Research & Analysis views, improved data intuition).
+- [x] Implementation of Stock & News Data Analysis System (Fundamentals, Sentiment, Stock Trends).
+- [x] Automated News Scraping on startup for predefined stocks.
 
 ## 5. User Preferences
 - Prefers non-developer-friendly explanations and code structures.

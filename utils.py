@@ -41,7 +41,12 @@ def plot_metric(df, category_filter, title):
     filtered_df = df[df['name'].str.contains(category_filter) | df['category'].str.contains(category_filter)]
     if not filtered_df.empty:
         fig = px.line(filtered_df, x='date', y='value', color='name', markers=True,
-                      title=title, labels={'value': '값', 'date': '날짜'})
+                      title=title, labels={'value': '값', 'date': '날짜'},
+                      hover_data={'date': '|%Y-%m-%d', 'value': ':.2f', 'name': True})
+        # Add basic tooltips for any source or description if available
+        if 'source' in filtered_df.columns:
+            fig.update_traces(hovertemplate='<b>%{hovertext}</b><br>날짜: %{x|%Y-%m-%d}<br>값: %{y:.2f}<br>출처: %{customdata[0]}<extra></extra>',
+                              customdata=filtered_df[['source']])
         st.plotly_chart(fig, width="stretch")
     else:
         st.info(f"{title} 관련 데이터가 아직 없습니다.")

@@ -143,13 +143,14 @@ with st.sidebar:
     st.subheader("📅 데이터 수집 설정")
     
     # 수집 대상 선택 (Selective Crawling)
-    available_sources = ["ECOS (한국은행)", "FRED (미 연준)", "Yahoo Finance (글로벌)"]
+    available_sources = ["ECOS (한국은행)", "FRED (미 연준)", "Yahoo Finance (글로벌)", "Investpy (기타 매크로)"]
     selected_labels = st.multiselect("수집 대상 선택", available_sources, default=available_sources)
     
     source_map = {
         "ECOS (한국은행)": "ECOS",
         "FRED (미 연준)": "FRED",
-        "Yahoo Finance (글로벌)": "Yahoo"
+        "Yahoo Finance (글로벌)": "Yahoo",
+        "Investpy (기타 매크로)": "Investpy"
     }
     selected_keys = [source_map[label] for label in selected_labels]
     
@@ -172,15 +173,26 @@ with st.sidebar:
                 st.rerun() # 화면 새로고침
 
     st.markdown("---")
-    st.markdown("**Data Sources:**\n- 한국은행 ECOS\n- Yahoo Finance")
-    st.markdown("- FRED (St. Louis Fed)")
+    st.markdown("**Data Sources:**\n- 한국은행 ECOS\n- Yahoo Finance\n- FRED (St. Louis Fed)")
+    st.info("이 대시보드의 모든 데이터는 🇰🇷 ECOS(한국은행), 🇺🇸 FRED(세인트루이스 연준), 🌍 Yahoo Finance에서 수집되었습니다.")
 
 # 메인 화면
 st.title("📊 MoneyView 경제 지표 대시보드")
 st.markdown("통화량, 재정(국채), 물가 데이터를 추적하여 경제 리스크를 모니터링합니다.")
 
+# 표시 주기 토글
+sub_col1, sub_col2 = st.columns([1, 3])
+with sub_col1:
+    date_unit = st.radio("📅 표시 주기 토글", ["Daily", "Weekly", "Monthly", "Yearly"], index=0, horizontal=True)
+
 # 데이터 로드
 df = load_data()
+
+# 지표 자동 수집 (세션당 1회)
+if 'auto_scraped' not in st.session_state:
+    from views.stocks_news import auto_scrape_predefined_stocks
+    auto_scrape_predefined_stocks()
+    st.session_state.auto_scraped = True
 
 # 날짜 컬럼 전처리 (그래프 가독성 향상)
 def parse_date(date_str):
@@ -206,12 +218,33 @@ def parse_date(date_str):
 if not df.empty:
     df['date'] = df['date'].apply(parse_date)
     df = df.dropna(subset=['date']) # 날짜 변환 실패 데이터 제거
+    
+    # 선택된 주기에 맞춰 데이터 리샘플링 (평균값 사용)
+    if date_unit == "Yearly":
+        df['date'] = df['date'].dt.to_period('Y').dt.to_timestamp()
+        df = df.groupby(['category', 'name', 'code', 'unit', 'source', 'cycle', 'date'])['value'].mean().reset_index()
+    elif date_unit == "Monthly":
+        df['date'] = df['date'].dt.to_period('M').dt.to_timestamp()
+        df = df.groupby(['category', 'name', 'code', 'unit', 'source', 'cycle', 'date'])['value'].mean().reset_index()
+    elif date_unit == "Weekly":
+        df['date'] = df['date'].dt.to_period('W').dt.to_timestamp()
+        df = df.groupby(['category', 'name', 'code', 'unit', 'source', 'cycle', 'date'])['value'].mean().reset_index()
+    # Daily는 원본 그대로 유지
 
 if df.empty:
     st.warning("저장된 데이터가 없습니다. 사이드바에서 '데이터 업데이트'를 눌러주세요.")
 else:
     # 탭 구조 정의 (카테고리 -> {세부항목: 렌더링함수})
     tabs_structure = {
+        "📈 개별 주식 & 뉴스": {
+            "📈 개별 주식 & 뉴스": stocks_news
+        },
+        "📈 기초 지표 (Fundamentals)": {
+            "📈 글로벌 메크로": fundamentals
+        },
+        "😨 공포/탐욕 지수": {
+            "😨 공포/탐욕 지수": sentiment
+        },
         "📈 물가/인플레이션": {
             "🔥 인플레이션 본질": inflation,
             "🏭 비용/인플레": cost_inflation,
@@ -229,14 +262,14 @@ else:
             "💸 자본 유출/전략": capital,
             "💣 부채/금리": debt_crisis,
             "🏛️ 공공 개입/부채": public_intervention,
-            "🏦 은행/배드뱅크": bank_risk,
+            "🏦 은행/신용(예대마진)": banking_credit,
             "📈 국채 폭등/구축 효과": bond_spike
         },
         "👥 사회/구조": {
-            "🏚️ 세대/세금": generation_wealth,
-            "🏗️ 주택 공급/붕괴": supply_collapse,
-            "💼 고용/유동성 구축": employment_crisis,
-            "💸 사회적 비용": social_cost
+            "💸 실질 사회적 비용": real_social_cost,
+            "🏢 투자 및 고용": investment_employment,
+            "🏗️ 주택 공급/LH": housing_public_debt,
+            "💼 노동 가치": labor_value
         },
         "📋 전체 데이터": {
             "📋 전체 데이터": rawdata

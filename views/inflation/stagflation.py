@@ -75,10 +75,3 @@ def render(df):
             st.plotly_chart(fig2, width="stretch")
         else:
             st.info("3고 관련 데이터가 없습니다.")
-
-    # 실질 착취율 (인플레이션 + 세금/비용)
-    st.markdown("##### 3. 실질 착취율 (인플레이션 + 비용)")
-    cpi_yoy = calculate_yoy(df, "CPI(총지수)")
-    if not cpi_yoy.empty:
-        fig3 = px.area(cpi_yoy, x='date', y='value', title="인플레이션(CPI YoY) - 기본 착취율", labels={'value': '%'})
-        st.plotly_chart(fig3, width="stretch")

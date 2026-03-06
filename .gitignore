@@ -6,3 +6,4 @@ finance copy*.py
 .vscode
 saved_data
 Single_Videos
+crawling_log.csv

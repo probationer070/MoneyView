@@ -11,20 +11,20 @@ def render(df):
         # 외환보유액 구성 (현금 vs 유가증권)
         reserves = df[df['name'].str.contains("외환보유액")].copy()
         if not reserves.empty:
-            fig_res = px.area(reserves, x='date', y='value', color='name',
+            fig_res = px.line(reserves, x='date', y='value', color='name',
                               title="외환보유액 구성 (유동성 확인)", labels={'value': '천달러'})
             st.plotly_chart(fig_res, width="stretch")
             st.caption("💡 위기 시 즉시 쓸 수 있는 '예치금(Deposits)' 비중이 중요합니다.")
             
     with col2:
-        # CDS 프리미엄 대체: 한-미 금리 스프레드
-        kr_10y = df[df['name'].str.contains("국고채\(10년")].set_index('date')['value']
-        us_10y = df[df['name'].str.contains("미국 10년물")].set_index('date')['value']
+        # CDS 프리미엄 (InvestpyCollector로 수집됨)
+        cds_kr = df[df['name'].str.contains("5년물 CDS") | df['name'].str.contains("CDS 프리미엄")].copy()
         
-        if not kr_10y.empty and not us_10y.empty:
-            spread = (kr_10y - us_10y).dropna().rename("한-미 금리차(bp)") * 100 # bp 단위
-            fig_spread = px.line(spread, title="국가 리스크 프리미엄 (한-미 국채 10년 스프레드)",
-                                 labels={'value': 'Spread (bp)'})
-            fig_spread.add_hline(y=0, line_dash="dash", line_color="red")
-            st.plotly_chart(fig_spread, width="stretch")
-            st.caption("💡 금리차가 역전(음수)되거나 급격히 벌어지는 구간은 자본 유출 위험 구간입니다.")
+        if not cds_kr.empty:
+            fig_cds = px.line(cds_kr, x='date', y='value', color='name',
+                              title="한국 5년물 CDS 프리미엄", labels={'value': 'bp (Basic Point)'})
+            st.plotly_chart(fig_cds, width="stretch")
+            st.caption("💡 외국 자본 이탈 위험 및 부도 위험을 나타내는 핵심 지표입니다.")
+        else:
+            # Fallback
+            st.info("CDS 프리미엄 관련 데이터가 없습니다.")

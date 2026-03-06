@@ -12,7 +12,7 @@ def render(df):
     with col1:
         st.markdown("##### 1. 한국 생산자물가(PPI) vs 소비자물가(CPI)")
         kr_ppi_df = df[df['name'].str.contains("PPI") & df['name'].str.contains("한국")].copy()
-        kr_cpi_df = df[df['name'] == "CPI(총지수)"].copy()
+        kr_cpi_df = df[df['name'] == "CPI한국"].copy()
 
         if not kr_ppi_df.empty and not kr_cpi_df.empty:
             kr_ppi_name = kr_ppi_df['name'].iloc[0]

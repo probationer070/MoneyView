@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 
 from .DAO import EconomicIndicator, RiskNews
 from .Collector import ECOSCollector, GlobalMacroCollector, FREDCollector
+from .Collector.InvestpyCollector import InvestpyCollector
 
 # ==========================================
 # 2. 데이터 수집기 (Collectors)
@@ -62,7 +63,7 @@ def format_ecos_date(dt, cycle):
 def fetch_latest_data(ecos_api_key, fred_api_key, start_date=None, end_date=None, sources=None):
     """ECOS 및 Yahoo Finance에서 최신 데이터를 수집합니다."""
     if sources is None:
-        sources = ["ECOS", "FRED", "Yahoo"]
+        sources = ["ECOS", "FRED", "Yahoo", "Investpy"]
         
     indicators = []
     status_text = st.empty()
@@ -142,6 +143,13 @@ def fetch_latest_data(ecos_api_key, fred_api_key, start_date=None, end_date=None
         # 미국 10년물 TIPs 수익률
         if not check_file_exists("금리", "미국 10년물 TIPS 수익률"):
             indicators.extend(fred.fetch_indicator("DFII10", "미국 10년물 TIPS 수익률", "금리", "%", start_date=f_start, end_date=f_end))
+
+        # 한국 M2 통화량
+        if not check_file_exists("통화", "한국 M2 통화량"):
+            indicators.extend(fred.fetch_indicator("MYAGM2KRM189S", "한국 M2 통화량", "통화", "%", start_date=f_start, end_date=f_end))
+        # 한국 CPI
+        if not check_file_exists("물가", "한국 CPI"):
+            indicators.extend(fred.fetch_indicator("CPALTT01KRQ657N", "한국 CPI", "물가", "Index", start_date=f_start, end_date=f_end))
     
     # 3. 글로벌 매크로 (Yahoo Finance)
     if "Yahoo" in sources:
@@ -163,6 +171,16 @@ def fetch_latest_data(ecos_api_key, fred_api_key, start_date=None, end_date=None
             else: ind.category = "글로벌 매크로"
         indicators.extend(yahoo_data)
     
+    # 4. 기타 외부 자료 (InvestpyCollector - CDS 프리미엄 등)
+    if "Investpy" in sources:
+        status_text.info("기타 매크로 데이터 (CDS 등) 수집 중...")
+        try:
+            inv = InvestpyCollector()
+            inv_data = inv.fetch_all()
+            indicators.extend(inv_data)
+        except Exception as e:
+            logger.error(f"InvestpyCollector 오류: {e}")
+        
     status_text.success(f"수집 완료! 총 {len(indicators)}건의 데이터가 업데이트되었습니다.")
     return indicators
 

@@ -1,0 +1,9 @@
+{
+    "targets": [
+        {"name": "Samsung Electronics", "ticker": "005930.KS"},
+        {"name": "Apple", "ticker": "AAPL"},
+        {"name": "Tesla", "ticker": "TSLA"},
+        {"name": "Nvidia", "ticker": "NVDA"},
+        {"name": "Microsoft", "ticker": "MSFT"}
+    ]
+}

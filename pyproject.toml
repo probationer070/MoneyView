@@ -15,6 +15,9 @@ dependencies = [
     "yt-dlp",
     "feedparser",
     "youtube-transcript-api",
+    "investiny",
+    "newspaper3k",
+    "lxml[html_clean]"
 ]
 
 [build-system]
