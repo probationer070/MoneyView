@@ -16,7 +16,6 @@ dependencies = [
     "feedparser",
     "youtube-transcript-api",
     "investiny",
-    "newspaper3k",
     "lxml[html_clean]"
 ]
 

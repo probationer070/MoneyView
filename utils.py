@@ -1,6 +1,22 @@
 import pandas as pd
 import plotly.express as px
 import streamlit as st
+import hashlib
+import json
+import csv
+import os
+
+HIGH_PRIORITY_KEYWORDS = ["President", "White House", "Fed", "FOMC", "Interest Rate", "BOK", "한국은행", "대통령", "연준", "금리"]
+
+def get_hash(text):
+    return hashlib.md5(text.encode('utf-8')).hexdigest()
+
+def get_importance(text):
+    text_lower = text.lower()
+    for kw in HIGH_PRIORITY_KEYWORDS:
+        if kw.lower() in text_lower:
+            return 5
+    return 1
 
 def calculate_yoy(df, target_name):
     """전년 동기 대비 증가율(YoY) 계산"""
@@ -66,3 +82,30 @@ def parse_quarterly_date(date_str):
     except Exception:
         # 파싱 실패 시 기본 pd.to_datetime 시도
         return pd.to_datetime(date_str, errors='coerce')
+    
+def load_json(filepath):
+    if os.path.exists(filepath):
+        with open(filepath, 'r', encoding='utf-8') as f:
+            try:
+                return json.load(f)
+            except:
+                return []
+    return []
+
+def save_json(filepath, data):
+    os.makedirs(os.path.dirname(filepath), exist_ok=True)
+    with open(filepath, 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=4)
+
+def load_articles_from_csv(filepath):
+    if not os.path.exists(filepath):
+        return []
+    articles = []
+    try:
+        with open(filepath, 'r', encoding='utf-8-sig') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                articles.append(row)
+    except Exception:
+        return []
+    return articles

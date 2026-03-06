@@ -5,36 +5,9 @@ import plotly.graph_objects as go
 from datetime import datetime
 import os
 import json
-import hashlib
-import urllib
-import feedparser
-from newspaper import Article
 
-HIGH_PRIORITY_KEYWORDS = ["President", "White House", "Fed", "FOMC", "Interest Rate", "BOK", "한국은행", "대통령", "연준", "금리"]
-
-def get_hash(text):
-    return hashlib.md5(text.encode('utf-8')).hexdigest()
-
-def get_importance(text):
-    text_lower = text.lower()
-    for kw in HIGH_PRIORITY_KEYWORDS:
-        if kw.lower() in text_lower:
-            return 5
-    return 1
-
-def load_json(filepath):
-    if os.path.exists(filepath):
-        with open(filepath, 'r', encoding='utf-8') as f:
-            try:
-                return json.load(f)
-            except:
-                return []
-    return []
-
-def save_json(filepath, data):
-    os.makedirs(os.path.dirname(filepath), exist_ok=True)
-    with open(filepath, 'w', encoding='utf-8') as f:
-        json.dump(data, f, ensure_ascii=False, indent=4)
+from WebScrap.Crawler.RegulationCrawler import RegulationCrawler
+from utils import load_articles_from_csv
 
 def fetch_stock_prices(ticker, period="1y"):
     save_dir = f"saved_data/stocks/{ticker}"
@@ -49,11 +22,13 @@ def fetch_stock_prices(ticker, period="1y"):
             if 'Date' not in df.columns and 'Datetime' in df.columns:
                 df.rename(columns={'Datetime': 'Date'}, inplace=True)
             if 'Date' in df.columns:
-                df['Date'] = pd.to_datetime(df['Date']).dt.tz_localize(None)
+                df['Date'] = pd.to_datetime(df['Date'])
+                if df['Date'].dt.tz is not None:
+                    df['Date'] = df['Date'].dt.tz_localize(None)
             df.to_csv(save_path, index=False)
             return df
     except Exception as e:
-        pass
+        print(f"Warning: yfinance fetch failed for {ticker}: {e}")
         
     if os.path.exists(save_path):
         try:
@@ -61,52 +36,6 @@ def fetch_stock_prices(ticker, period="1y"):
         except:
             return pd.DataFrame()
     return pd.DataFrame()
-
-def scrape_and_save_article(url, ticker=None, is_macro=False, rss_title=None):
-    if is_macro:
-        filepath = "saved_data/macro/events.json"
-    else:
-        filepath = f"saved_data/stocks/{ticker}/articles.json"
-        
-    articles = load_json(filepath)
-    
-    # Deduplication check
-    for a in articles:
-        if a.get('url') == url:
-            return False, "이미 스크랩된 URL입니다.", a
-            
-    try:
-        article = Article(url)
-        article.download()
-        article.parse()
-        
-        # Determine date
-        pub_date = article.publish_date
-        if pub_date:
-            date_str = pub_date.strftime("%Y-%m-%d %H:%M:%S")
-        else:
-            date_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            
-        headline = article.title if article.title else rss_title
-        
-        full_text = f"{headline} {article.text}"
-        importance = get_importance(full_text)
-        
-        new_entry = {
-            "id": get_hash(url),
-            "headline": headline,
-            "scraped_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "publication_date": date_str,
-            "url": url,
-            "cleaned_content": article.text,
-            "importance": importance
-        }
-        
-        articles.append(new_entry)
-        save_json(filepath, articles)
-        return True, "스크랩 성공", new_entry
-    except Exception as e:
-        return False, f"스크랩 실패: {e}", None
 
 def render_chart(df, articles, title):
     if df is None or df.empty:
@@ -168,7 +97,9 @@ def render_chart(df, articles, title):
 def render(df_global=None):
     st.markdown("### 📊 개별 주식 & 뉴스 (Stocks & News)")
     
-    tab1, tab2 = st.tabs(["기업 지표 및 종목 뉴스", "거시 경제 (Macro) 이벤트 수동 입력"])
+    crawler = RegulationCrawler()
+    
+    tab1, tab2 = st.tabs(["기업 지표 및 종목 뉴스", "거시 경제 (Macro) 이벤트"])
     
     with tab1:
         ticker = st.text_input("종목 티커 입력 (예: AAPL, TSLA, 005930.KS)", value="AAPL")
@@ -180,26 +111,34 @@ def render(df_global=None):
             new_url = st.text_input("추가할 뉴스 URL", key="news_url")
             if st.button("뉴스 스크랩 및 저장"):
                 if new_url:
+                    filepath = f"saved_data/stocks/{ticker}/articles.csv"
                     with st.spinner("스크랩 중..."):
-                        success, msg, entry = scrape_and_save_article(new_url, ticker=ticker, is_macro=False)
+                        success, msg, entry = crawler.scrape_and_save_article(
+                            url=new_url,
+                            filepath=filepath,
+                            keyword=ticker
+                        )
                     if success:
                         st.success(msg)
                         st.rerun()
                     else:
                         st.error(msg)
-                        
+
         with col1:
             if ticker:
                 df = fetch_stock_prices(ticker)
-                articles = load_json(f"saved_data/stocks/{ticker}/articles.json")
+                articles = load_articles_from_csv(f"saved_data/stocks/{ticker}/articles.csv")
+                
+                # 최신순 정렬 및 상위 5개 필터링
+                if articles:
+                    articles = sorted(articles, key=lambda x: x.get('publication_date', ''), reverse=True)[:5]
+
                 render_chart(df, articles, f"{ticker} 주가 및 뉴스 이벤트")
                 
                 if articles:
-                    st.markdown("#### 등록된 뉴스 목록")
-                    for a in reversed(articles):
-                        with st.expander(f"[{a['publication_date'][:10]}] {a['headline']} (중요도: {a['importance']})"):
-                            st.markdown(f"**URL:** [{a['url']}]({a['url']})")
-                            st.write(a['cleaned_content'])
+                    st.markdown("#### 등록된 뉴스 목록 (최신 5개)")
+                    for a in articles:
+                        st.markdown(f"- [{a.get('publication_date', '')[:10]}] [{a.get('headline', '제목 없음')}]({a.get('url', '#')})")
 
     with tab2:
         st.markdown("#### 매크로 이벤트 수동 추가")
@@ -207,8 +146,13 @@ def render(df_global=None):
         macro_url = st.text_input("매크로 뉴스 URL", key="macro_url")
         if st.button("매크로 이벤트 저장"):
             if macro_url:
+                filepath = "saved_data/macro/events.csv"
                 with st.spinner("스크랩 중..."):
-                    success, msg, entry = scrape_and_save_article(macro_url, is_macro=True)
+                    success, msg, entry = crawler.scrape_and_save_article(
+                        url=macro_url,
+                        filepath=filepath,
+                        keyword="macro_manual"
+                    )
                 if success:
                     st.success(msg)
                     st.rerun()
@@ -216,36 +160,18 @@ def render(df_global=None):
                     st.error(msg)
                     
         st.markdown("---")
-        macro_events = load_json("saved_data/macro/events.json")
+        macro_events = load_articles_from_csv("saved_data/macro/events.csv")
         if macro_events:
             st.markdown("#### 저장된 매크로 이벤트")
-            for a in reversed(macro_events):
-                with st.expander(f"[{a['publication_date'][:10]}] {a['headline']} (중요도: {a['importance']})"):
-                    st.markdown(f"**URL:** [{a['url']}]({a['url']})")
-                    st.write(a['cleaned_content'])
-
-def fetch_news_from_rss(ticker, limit=3):
-    """Google News RSS에서 최신 뉴스 URL과 제목을 가져옵니다."""
-    query = ticker.replace('.', ' ')
-    encoded_ticker = urllib.parse.quote(query)
-    rss_url = f"https://news.google.com/rss/search?q={encoded_ticker}&hl=en-US&gl=US&ceid=US:en"
-    if ".KS" in ticker or ".KQ" in ticker:
-        rss_url = f"https://news.google.com/rss/search?q={encoded_ticker}&hl=ko&gl=KR&ceid=KR:ko"
-    
-    feed = feedparser.parse(rss_url)
-    news_items = []
-    for entry in feed.entries[:limit]:
-        news_items.append({"url": entry.link, "title": entry.title})
-    return news_items
 
 def auto_scrape_predefined_stocks():
     """정의된 종목들에 대해 자동으로 최신 뉴스를 스크랩합니다."""
+    crawler = RegulationCrawler()
     target_path = "c:\\Learn\\Economy\\MoneyView\\WebScrap\\stock_targets.json"
     if not os.path.exists(target_path):
         target_path = os.path.join("WebScrap", "stock_targets.json")
         if not os.path.exists(target_path):
             return
-        
     try:
         with open(target_path, 'r', encoding='utf-8') as f:
             targets = json.load(f).get('targets', [])
@@ -257,11 +183,5 @@ def auto_scrape_predefined_stocks():
         name = target['name']
         ticker = target['ticker']
         status_placeholder.info(f"[{name}] 최신 뉴스 수집 중...")
-        
-        fetch_stock_prices(ticker)
-        
-        news_items = fetch_news_from_rss(ticker)
-        for item in news_items:
-            scrape_and_save_article(item['url'], ticker=ticker, rss_title=item['title'])
-            
+        crawler.crawl(query=f"{name} 뉴스", limit=5, filepath=f"saved_data/stocks/{ticker}/articles.csv")
     status_placeholder.empty()

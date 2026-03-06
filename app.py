@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px
 import os
 import json
 import re
@@ -180,11 +179,6 @@ with st.sidebar:
 st.title("📊 MoneyView 경제 지표 대시보드")
 st.markdown("통화량, 재정(국채), 물가 데이터를 추적하여 경제 리스크를 모니터링합니다.")
 
-# 표시 주기 토글
-sub_col1, sub_col2 = st.columns([1, 3])
-with sub_col1:
-    date_unit = st.radio("📅 표시 주기 토글", ["Daily", "Weekly", "Monthly", "Yearly"], index=0, horizontal=True)
-
 # 데이터 로드
 df = load_data()
 
@@ -218,28 +212,16 @@ def parse_date(date_str):
 if not df.empty:
     df['date'] = df['date'].apply(parse_date)
     df = df.dropna(subset=['date']) # 날짜 변환 실패 데이터 제거
-    
-    # 선택된 주기에 맞춰 데이터 리샘플링 (평균값 사용)
-    if date_unit == "Yearly":
-        df['date'] = df['date'].dt.to_period('Y').dt.to_timestamp()
-        df = df.groupby(['category', 'name', 'code', 'unit', 'source', 'cycle', 'date'])['value'].mean().reset_index()
-    elif date_unit == "Monthly":
-        df['date'] = df['date'].dt.to_period('M').dt.to_timestamp()
-        df = df.groupby(['category', 'name', 'code', 'unit', 'source', 'cycle', 'date'])['value'].mean().reset_index()
-    elif date_unit == "Weekly":
-        df['date'] = df['date'].dt.to_period('W').dt.to_timestamp()
-        df = df.groupby(['category', 'name', 'code', 'unit', 'source', 'cycle', 'date'])['value'].mean().reset_index()
-    # Daily는 원본 그대로 유지
 
 if df.empty:
     st.warning("저장된 데이터가 없습니다. 사이드바에서 '데이터 업데이트'를 눌러주세요.")
 else:
     # 탭 구조 정의 (카테고리 -> {세부항목: 렌더링함수})
     tabs_structure = {
-        "� 리서치 & 분석": {
+        "🔬 리서치 & 분석": {
             "🔬 리서치 & 분석": research
         },
-        "�📈 개별 주식 & 뉴스": {
+        "📈 개별 주식 & 뉴스": {
             "📈 개별 주식 & 뉴스": stocks_news
         },
         "📈 기초 지표 (Fundamentals)": {

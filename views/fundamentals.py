@@ -3,7 +3,6 @@ import yfinance as yf
 import pandas as pd
 import plotly.graph_objects as go
 import os
-from datetime import datetime, timedelta
 
 INDICES = {
     "S&P 500": "^GSPC",
@@ -31,7 +30,9 @@ def load_or_fetch_index_data(name, ticker, period="1y"):
             if 'Date' not in df.columns and 'Datetime' in df.columns:
                 df.rename(columns={'Datetime': 'Date'}, inplace=True)
             if 'Date' in df.columns:
-                df['Date'] = pd.to_datetime(df['Date']).dt.tz_localize(None)
+                df['Date'] = pd.to_datetime(df['Date'])
+                if df['Date'].dt.tz is not None:
+                    df['Date'] = df['Date'].dt.tz_localize(None)
             df.to_csv(save_path, index=False)
             return df
     except Exception as e:

@@ -1,9 +1,9 @@
 import streamlit as st
-import pandas as pd
 import plotly.graph_objects as go
 
 # Import necessary functions from other modules
-from views.stocks_news import fetch_stock_prices, scrape_and_save_article, load_json
+from views.stocks_news import fetch_stock_prices
+from utils import load_articles_from_csv
 from WebScrap.Crawler.RegulationCrawler import RegulationCrawler
 
 def render(df=None):
@@ -56,37 +56,26 @@ def render(df=None):
     if st.button("뉴스 검색", key="search_macro_news"):
         if search_query:
             with st.spinner(f"'{search_query}' 관련 뉴스를 검색 중입니다..."):
-                st.session_state.macro_search_results = crawler.crawl(query=search_query, limit=10)
+                st.session_state.macro_search_results = crawler.crawl(query=search_query, limit=10, filepath=f"saved_data/macro/events.csv")
         else:
             st.warning("검색어를 입력해주세요.")
             st.session_state.macro_search_results = [] # Clear previous results
 
     if 'macro_search_results' in st.session_state and st.session_state.macro_search_results:
         st.markdown("##### 검색 결과")
-        results = st.session_state.macro_search_results
-        
-        for i, news in enumerate(results):
-            col1, col2 = st.columns([4, 1])
-            with col1:
-                st.markdown(f"[{news.title}]({news.url}) <br> <span style='color:gray; font-size:0.8em;'>{news.date[:10]}</span>", unsafe_allow_html=True)
-            with col2:
-                if st.button("이벤트로 저장", key=f"save_macro_{i}"):
-                    with st.spinner(f"'{news.title}' 스크랩 및 저장 중..."):
-                        success, msg, _ = scrape_and_save_article(news.url, is_macro=True, rss_title=news.title)
-                        if success:
-                            st.success(f"저장 완료")
-                        else:
-                            st.error(f"저장 실패: {msg}")
-    
+        st.session_state.macro_search_results
+
     st.markdown("---")
     
     # Display saved macro events
     st.markdown("#### 저장된 매크로 이벤트 목록")
-    macro_events = load_json("saved_data/macro/events.json")
-    if macro_events:
-        for a in reversed(macro_events):
-            with st.expander(f"[{a['publication_date'][:10]}] {a['headline']} (중요도: {a['importance']})"):
-                st.markdown(f"**URL:** [{a['url']}]({a['url']})")
-                st.write(a['cleaned_content'])
-    else:
-        st.info("저장된 매크로 이벤트가 없습니다.")
+    articles = load_articles_from_csv(f"saved_data/macro/events.csv")
+    # 최신순 정렬 및 상위 5개 필터링
+    if articles:
+        articles = sorted(articles, key=lambda x: x.get('Timestamp', ''), reverse=True)[:5]
+    
+    if articles:
+        st.markdown("#### 등록된 뉴스 목록 (최신 5개)")
+        for a in articles:
+            st.markdown(f"- [{a.get('Date', '')[:-1]}] [{a.get('Title', '제목 없음')}]({a.get('URL', '#')})")
+    
