@@ -236,7 +236,10 @@ if df.empty:
 else:
     # 탭 구조 정의 (카테고리 -> {세부항목: 렌더링함수})
     tabs_structure = {
-        "📈 개별 주식 & 뉴스": {
+        "� 리서치 & 분석": {
+            "🔬 리서치 & 분석": research
+        },
+        "�📈 개별 주식 & 뉴스": {
             "📈 개별 주식 & 뉴스": stocks_news
         },
         "📈 기초 지표 (Fundamentals)": {
