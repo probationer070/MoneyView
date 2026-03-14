@@ -16,7 +16,7 @@ def render(df):
         
         with st.spinner("뉴스 검색 중..."):
             news_list1 = crawler.crawl(query="최저임금 건강보험료 인상", limit=5)
-            
+            print(f"최저임금 vs 사회보험료 뉴스 검색 결과: {len(news_list1)}건")
         if news_list1:
             for news in news_list1:
                 st.markdown(f"- [{news.title}]({news.url}) <span style='color:gray; font-size:0.8em;'>({news.date[:10]})</span>", unsafe_allow_html=True)

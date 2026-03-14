@@ -92,7 +92,7 @@
         {"name": "New Pacific Metals", "ticker": "NUAG", "sector": "Materials"},
         {"name": "Fury Gold Mines", "ticker": "FURY", "sector": "Materials"},
         {"name": "Critical Metals", "ticker": "CRML", "sector": "Materials"},
-        {"name": "Lithium Argentina", "ticker": "LAAC", "sector": "Materials"},
+        {"name": "Lithium Argentina", "ticker": "LAR", "sector": "Materials"},
         {"name": "Largo", "ticker": "LGO", "sector": "Materials"},
         {"name": "Uranium Royalty", "ticker": "UROY", "sector": "Uranium"},
         {"name": "Standard Lithium", "ticker": "SLI", "sector": "Materials"},

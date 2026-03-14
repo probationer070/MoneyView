@@ -45,6 +45,26 @@ class RegulationCrawler:
         except Exception as e:
             logger.error(f"크롤링 로그 로드 실패 ({log_path}): {e}")
         return crawled
+    
+    def load_csv_log(self, filepath: Optional[str] = None) -> List[RiskNews]:
+        """CSV 로그 파일에서 크롤링된 뉴스를 로드하여 반환합니다."""
+        log_path = filepath if filepath else self.log_file
+        news_list = []
+        if os.path.exists(log_path):
+            try:
+                with open(log_path, 'r', newline='', encoding='utf-8-sig') as f:
+                    reader = csv.DictReader(f)
+                    for row in reader:
+                        news_list.append(RiskNews(
+                            source=row.get('Source', 'Unknown'),
+                            title=row.get('Title', 'No Title'),
+                            url=row.get('URL', ''),
+                            date=row.get('Date', ''),
+                            matched_keywords=[row.get('Keyword', '')]
+                        ))
+            except Exception as e:
+                logger.error(f"로그 파일에서 뉴스 로드 실패 ({log_path}): {e}")
+        return news_list
 
     def crawl(self, query: Optional[str] = None, limit: int = 5, filepath: Optional[str] = None, save_log: bool = True) -> List[RiskNews]:
         results = []
@@ -86,6 +106,16 @@ class RegulationCrawler:
                     
             except Exception as e:
                 logger.error(f"RSS 크롤링 오류 ({keyword}): {e}")
+        
+        # 만약 크롤링한 데이터가 없는 경우 csv에서 가장 최신 데이터 5개를 로드하여 반환
+        if not results:
+            logger.info("새로운 뉴스가 없습니다. 기존 로그에서 최신 뉴스 5개를 로드합니다.")
+            log_path = filepath if filepath else self.log_file
+            if os.path.exists(log_path):
+                try:
+                    results = self.load_csv_log(log_path)[:5]
+                except Exception as e:
+                    logger.error(f"로그 파일에서 뉴스 로드 실패 ({log_path}): {e}")
         
         return results
 

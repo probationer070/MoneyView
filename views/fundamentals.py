@@ -5,15 +5,15 @@ import plotly.graph_objects as go
 import os
 
 INDICES = {
-    "S&P 500": "^GSPC",
-    "Dow Jones": "^DJI",
-    "Nasdaq": "^IXIC",
-    "KOSPI 200": "^KS200",
-    "Gold": "GC=F",
-    "Oil (WTI)": "CL=F",
-    "Natural Gas": "NG=F",
-    "USD/KRW": "KRW=X",
-    "Bitcoin": "BTC-USD"
+    "S&P 500 🇺🇸": "^GSPC",
+    "Dow Jones 📈": "^DJI",
+    "Nasdaq 💻": "^IXIC",
+    "KOSPI 200 🇰🇷": "^KS200",
+    "Gold 💡": "GC=F",
+    "Oil (WTI) 🛢️": "CL=F",
+    "Natural Gas 🔥": "NG=F",
+    "USD/KRW 💵": "KRW=X",
+    "Bitcoin ₿": "BTC-USD"
 }
 
 def load_or_fetch_index_data(name, ticker, period="1y"):
