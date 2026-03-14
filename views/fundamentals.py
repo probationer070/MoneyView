@@ -17,7 +17,7 @@ INDICES = {
 }
 
 def load_or_fetch_index_data(name, ticker, period="1y"):
-    save_dir = "saved_data/indices"
+    save_dir = "src/indices"
     os.makedirs(save_dir, exist_ok=True)
     save_path = os.path.join(save_dir, f"{name.replace('/', '_')}.csv")
     

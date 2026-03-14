@@ -11,11 +11,40 @@ logger = logging.getLogger(__name__)
 
 class RegulationCrawler:
     """
-    3. 금융 억압 및 규제 감시: Google News RSS 크롤러
+    Google News RSS 크롤러
     """
     def __init__(self):
-        self.log_file = "crawling_log.csv"
+        self.log_file = "src/crawling_log.csv"
+        self.crawled_urls = self._load_crawled_urls()
         self.keywords = ["해외 송금 제한", "서학개미 규제", "환전 증거금", "외화 스트레스 테스트", "자본 유출"]
+
+    def _load_crawled_urls(self) -> set:
+        """로그 파일에서 이미 크롤링된 URL을 로드합니다."""
+        crawled = set()
+        log_path = self.log_file
+        if not os.path.exists(log_path):
+            return crawled
+        
+        try:
+            with open(log_path, 'r', newline='', encoding='utf-8-sig') as f:
+                reader = csv.reader(f)
+                try:
+                    header = [h.strip() for h in next(reader)]
+                    url_index = -1
+                    if 'URL' in header:
+                        url_index = header.index('URL')
+                    elif 'url' in header:
+                        url_index = header.index('url')
+                    
+                    if url_index != -1:
+                        for row in reader:
+                            if len(row) > url_index and row[url_index]:
+                                crawled.add(row[url_index])
+                except StopIteration: # 파일이 비어있는 경우
+                    pass
+        except Exception as e:
+            logger.error(f"크롤링 로그 로드 실패 ({log_path}): {e}")
+        return crawled
 
     def crawl(self, query: Optional[str] = None, limit: int = 5, filepath: Optional[str] = None, save_log: bool = True) -> List[RiskNews]:
         results = []
@@ -37,6 +66,11 @@ class RegulationCrawler:
                     title = entry.title
                     link = entry.link
                     pub_date = entry.published if hasattr(entry, 'published') else datetime.now().strftime('%Y-%m-%d')
+
+                    # 이미 크롤링된 URL인지 확인
+                    if link in self.crawled_urls:
+                        # logger.info(f"중복 URL 발견: {link}")
+                        continue
                     
                     news = RiskNews(
                         source="Google News",
@@ -46,6 +80,7 @@ class RegulationCrawler:
                         matched_keywords=[keyword]
                     )
                     results.append(news)
+                    self.crawled_urls.add(link)  # Add URL to the set
                     if save_log:
                         self._save_log(news, keyword, filepath)
                     

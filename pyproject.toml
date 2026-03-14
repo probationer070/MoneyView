@@ -16,7 +16,8 @@ dependencies = [
     "feedparser",
     "youtube-transcript-api",
     "investiny",
-    "lxml[html_clean]"
+    "lxml[html_clean]",
+    "asyncio",
 ]
 
 [build-system]

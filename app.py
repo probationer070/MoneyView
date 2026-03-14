@@ -4,6 +4,7 @@ import os
 import json
 import re
 import warnings
+import utils
 
 from pandas.errors import ParserError
 from datetime import datetime, timedelta
@@ -19,7 +20,7 @@ warnings.filterwarnings("ignore", category=FutureWarning, message="The behavior 
 # ==========================================
 # 1. 설정 및 상수 정의
 # ==========================================
-DATA_DIR = "saved_data"
+DATA_DIR = "src"
 API_KEY_FILE = "apikey.json"  # 상위 폴더에 있다고 가정하거나 경로 수정 필요
 
 st.set_page_config(
@@ -32,7 +33,7 @@ st.set_page_config(
 # 2. 데이터 관리 함수
 # ==========================================
 def load_data():
-    """saved_data 폴더의 모든 CSV 파일을 로드하여 병합합니다."""
+    """src 폴더의 모든 CSV 파일을 로드하여 병합합니다."""
     if not os.path.exists(DATA_DIR):
         os.makedirs(DATA_DIR)
         return pd.DataFrame(columns=["category", "name", "code", "value", "unit", "date", "source", "cycle"])
@@ -121,23 +122,33 @@ def format_ecos_date(dt, cycle):
 # ==========================================
 
 # 사이드바: 설정 및 업데이트
+if 'page_initialized' not in st.session_state or not st.session_state['page_initialized']:
+    st.session_state.auto_scraped = False   # 자동 스크래핑 상태 초기화 - 페이지 새로고침 시 다시 실행 가능하도록
+    st.session_state['page_initialized'] = True
+
 with st.sidebar:
     st.header("⚙️ 설정")
     
     # API 키 로드 시도
     default_ecos_key = ""
     default_fred_key = ""
+    default_cmc_key = ""
     if os.path.exists(API_KEY_FILE):
         try:
             with open(API_KEY_FILE, "r", encoding="utf-8") as f:
                 keys = json.load(f)
                 default_ecos_key = keys.get("ECOS_API_KEY", "")
                 default_fred_key = keys.get("FRED", "")
+                default_cmc_key = keys.get("CMC_API_KEY", "")
         except Exception as e:
             st.error(f"⚠️ apikey.json 로드 오류: {e}")
             
     ecos_api_key = st.text_input("ECOS API Key", value=default_ecos_key, type="password")
     fred_api_key = st.text_input("FRED API Key", value=default_fred_key, type="password")
+    cmc_api_key = st.text_input("CMC API Key (CoinMarketCap)", value=default_cmc_key, type="password")
+    
+    # 뷰에서 사용할 수 있도록 세션 상태에 저장
+    st.session_state['cmc_api_key'] = cmc_api_key
     
     st.subheader("📅 데이터 수집 설정")
     
@@ -185,32 +196,26 @@ df = load_data()
 # 지표 자동 수집 (세션당 1회)
 if 'auto_scraped' not in st.session_state:
     from views.stocks_news import auto_scrape_predefined_stocks
-    auto_scrape_predefined_stocks()
-    st.session_state.auto_scraped = True
+    import asyncio 
 
-# 날짜 컬럼 전처리 (그래프 가독성 향상)
-def parse_date(date_str):
-    s = str(date_str).strip()
-    try:
-        if "Q" in s: # YYYYQn (ECOS Quarterly) - 가장 먼저 체크
-            year = s[:4]
-            quarter = int(s.split('Q')[1])
-            month = quarter * 3
-            return datetime.strptime(f"{year}{month:02d}", "%Y%m")
-        elif "-" in s: # YYYY-MM-DD (Yahoo)
-            return datetime.strptime(s, "%Y-%m-%d")
-        elif len(s) == 8: # YYYYMMDD (ECOS Daily)
-            return datetime.strptime(s, "%Y%m%d")
-        elif len(s) == 6: # YYYYMM (ECOS Monthly)
-            return datetime.strptime(s, "%Y%m")
-        elif len(s) == 4: # YYYY (ECOS Annual)
-            return datetime.strptime(s, "%Y")
-    except:
-        return None
-    return None
+    st.session_state.auto_scraped = False
+    @st.cache_resource
+    async def run_auto_scrape():
+        try:
+            st.success("자동 스크래핑 완료")
+        except Exception as e:
+            st.error(f"자동 스크래핑 중 오류 발생: {e}")
+
+    asyncio.create_task(run_auto_scrape())
+    
+    st.success("자동 스크래핑 완료")
+    st.session_state.auto_scraped = True
+else:
+    st.success("자동 스크래핑이 이미 완료되었습니다.")
+
 
 if not df.empty:
-    df['date'] = df['date'].apply(parse_date)
+    df['date'] = df['date'].apply(utils.parse_date)
     df = df.dropna(subset=['date']) # 날짜 변환 실패 데이터 제거
 
 if df.empty:
@@ -255,9 +260,6 @@ else:
             "🏢 투자 및 고용": investment_employment,
             "🏗️ 주택 공급/LH": housing_public_debt,
             "💼 노동 가치": labor_value
-        },
-        "📋 전체 데이터": {
-            "📋 전체 데이터": rawdata
         }
     }
 

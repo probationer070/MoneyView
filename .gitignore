@@ -1,9 +1,13 @@
 __pycache__
-apikey*
-filtered_stocks.csv
-finance copy*.py
 *.code-workspace
 .vscode
+
+apikey*
+filtered_stocks.csv
+crawling_log.csv
+finance copy*.py
+stock_target*.json
+
 saved_data
 Single_Videos
-crawling_log.csv
+src

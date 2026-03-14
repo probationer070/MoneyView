@@ -1,7 +1,7 @@
 # # import pandas as pd
 
 # # # 1. 데이터 불러오기 (보유하신 CSV 파일명)
-# # df = pd.read_csv('saved_data/시군구_연령별_취업자_및_고용률_전체.csv')
+# # df = pd.read_csv('src/시군구_연령별_취업자_및_고용률_전체.csv')
 
 # # # 2. '취업자 (천명)' 컬럼만 추출하여 합계 계산
 # # # 데이터 구조상 숫자에 콤마(,)가 있을 수 있으므로 처리 필요
@@ -24,7 +24,7 @@
 
 # # 1. CSV 로드 (숫자 데이터의 콤마 제거)
 # # 실제 파일명으로 수정하세요.
-# df_raw = pd.read_csv('saved_data/시군구_연령별_취업자_및_고용률_전체.csv', header=None)
+# df_raw = pd.read_csv('src/시군구_연령별_취업자_및_고용률_전체.csv', header=None)
 
 # # 2. 헤더 정보 추출 (행 위치에 주의!)
 # # 행 0: 연도 (2021.1/2, NaN, NaN...) -> ffill로 채움

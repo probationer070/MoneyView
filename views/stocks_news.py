@@ -10,7 +10,7 @@ from WebScrap.Crawler.RegulationCrawler import RegulationCrawler
 from utils import load_articles_from_csv
 
 def fetch_stock_prices(ticker, period="1y"):
-    save_dir = f"saved_data/stocks/{ticker}"
+    save_dir = f"src/stocks/{ticker}"
     os.makedirs(save_dir, exist_ok=True)
     save_path = os.path.join(save_dir, "prices.csv")
     
@@ -111,7 +111,7 @@ def render(df_global=None):
             new_url = st.text_input("추가할 뉴스 URL", key="news_url")
             if st.button("뉴스 스크랩 및 저장"):
                 if new_url:
-                    filepath = f"saved_data/stocks/{ticker}/articles.csv"
+                    filepath = f"src/stocks/{ticker}/articles.csv"
                     with st.spinner("스크랩 중..."):
                         success, msg, entry = crawler.scrape_and_save_article(
                             url=new_url,
@@ -127,7 +127,7 @@ def render(df_global=None):
         with col1:
             if ticker:
                 df = fetch_stock_prices(ticker)
-                articles = load_articles_from_csv(f"saved_data/stocks/{ticker}/articles.csv")
+                articles = load_articles_from_csv(f"src/stocks/{ticker}/articles.csv")
                 
                 # 최신순 정렬 및 상위 5개 필터링
                 if articles:
@@ -146,7 +146,7 @@ def render(df_global=None):
         macro_url = st.text_input("매크로 뉴스 URL", key="macro_url")
         if st.button("매크로 이벤트 저장"):
             if macro_url:
-                filepath = "saved_data/macro/events.csv"
+                filepath = "src/macro/events.csv"
                 with st.spinner("스크랩 중..."):
                     success, msg, entry = crawler.scrape_and_save_article(
                         url=macro_url,
@@ -160,14 +160,14 @@ def render(df_global=None):
                     st.error(msg)
                     
         st.markdown("---")
-        macro_events = load_articles_from_csv("saved_data/macro/events.csv")
+        macro_events = load_articles_from_csv("src/macro/events.csv")
         if macro_events:
             st.markdown("#### 저장된 매크로 이벤트")
 
-def auto_scrape_predefined_stocks():
+async def auto_scrape_predefined_stocks():
     """정의된 종목들에 대해 자동으로 최신 뉴스를 스크랩합니다."""
     crawler = RegulationCrawler()
-    target_path = "c:\\Learn\\Economy\\MoneyView\\WebScrap\\stock_targets.json"
+    target_path = "WebScrap/stock_targets.json"
     if not os.path.exists(target_path):
         target_path = os.path.join("WebScrap", "stock_targets.json")
         if not os.path.exists(target_path):
@@ -183,5 +183,5 @@ def auto_scrape_predefined_stocks():
         name = target['name']
         ticker = target['ticker']
         status_placeholder.info(f"[{name}] 최신 뉴스 수집 중...")
-        crawler.crawl(query=f"{name} 뉴스", limit=5, filepath=f"saved_data/stocks/{ticker}/articles.csv")
+        await crawler.crawl(query=f"{name} 뉴스", limit=5, filepath=f"src/stocks/{ticker}/articles.csv")
     status_placeholder.empty()

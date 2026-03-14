@@ -22,7 +22,7 @@ print("Scrape 2 Success (Expected False):", not success2, "| Msg:", msg2)
 
 # Ensure file contains exactly one copy of this article
 import json
-with open("saved_data/macro/events.json", "r", encoding="utf-8") as f:
+with open("src/macro/events.json", "r", encoding="utf-8") as f:
     data = json.load(f)
     count = sum(1 for item in data if item.get('url') == test_url)
     print("Deduplication count (Expected 1):", count)

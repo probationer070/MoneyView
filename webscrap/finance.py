@@ -72,7 +72,7 @@ def fetch_latest_data(ecos_api_key, fred_api_key, start_date=None, end_date=None
         safe_cat = str(category).replace(" ", "_").replace("/", "_")
         safe_name = str(name).replace("/", "_").replace(" ", "_")
         safe_name = re.sub(r'[\\*?:"<>|()]', "", safe_name)
-        return os.path.exists(os.path.join("saved_data", safe_cat, f"{safe_name}.csv"))
+        return os.path.exists(os.path.join("src", safe_cat, f"{safe_name}.csv"))
 
     # 1. ECOS 수집기 초기화
     if "ECOS" in sources:
@@ -150,6 +150,9 @@ def fetch_latest_data(ecos_api_key, fred_api_key, start_date=None, end_date=None
         # 한국 CPI
         if not check_file_exists("물가", "한국 CPI"):
             indicators.extend(fred.fetch_indicator("CPALTT01KRQ657N", "한국 CPI", "물가", "Index", start_date=f_start, end_date=f_end))
+        # 한국 국고채 3년물 금리
+        if not check_file_exists("금리", "한국 국고채 3년물 금리"):
+            indicators.extend(fred.fetch_indicator("KR3YT", "한국 국고채 3년물 금리", "금리", "%", start_date=f_start, end_date=f_end))
     
     # 3. 글로벌 매크로 (Yahoo Finance)
     if "Yahoo" in sources:

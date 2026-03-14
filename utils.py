@@ -6,6 +6,8 @@ import json
 import csv
 import os
 
+from datetime import datetime
+
 HIGH_PRIORITY_KEYWORDS = ["President", "White House", "Fed", "FOMC", "Interest Rate", "BOK", "한국은행", "대통령", "연준", "금리"]
 
 def get_hash(text):
@@ -82,6 +84,28 @@ def parse_quarterly_date(date_str):
     except Exception:
         # 파싱 실패 시 기본 pd.to_datetime 시도
         return pd.to_datetime(date_str, errors='coerce')
+    
+# 날짜 컬럼 전처리 (그래프 가독성 향상)
+def parse_date(date_str):
+    s = str(date_str).strip()
+    try:
+        if "Q" in s: # YYYYQn (ECOS Quarterly) - 가장 먼저 체크
+            year = s[:4]
+            quarter = int(s.split('Q')[1])
+            month = quarter * 3
+            return datetime.strptime(f"{year}{month:02d}", "%Y%m")
+        elif "-" in s: # YYYY-MM-DD (Yahoo)
+            return datetime.strptime(s, "%Y-%m-%d")
+        elif len(s) == 8: # YYYYMMDD (ECOS Daily)
+            return datetime.strptime(s, "%Y%m%d")
+        elif len(s) == 6: # YYYYMM (ECOS Monthly)
+            return datetime.strptime(s, "%Y%m")
+        elif len(s) == 4: # YYYY (ECOS Annual)
+            return datetime.strptime(s, "%Y")
+    except:
+        return None
+    return None
+
     
 def load_json(filepath):
     if os.path.exists(filepath):
