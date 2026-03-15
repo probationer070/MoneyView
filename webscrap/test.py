@@ -2,6 +2,7 @@ import pandas as pd
 import os
 
 from typing import Dict, Optional
+from WebScrap.Crawler import YoutubeCrawler
 from nasdaq import single_snapshot
 from favor import STOCK_LIST
 
@@ -103,11 +104,11 @@ if __name__ == "__main__":
     # --- 사용 방법 ---
     # 단, 멤버쉽 영상의 자막은 불러올 수 없음
     # 1. 재생목록 URL 또는 단일 영상 URL 중 하나를 입력하세요.
-    # single_url = "https://www.youtube.com/watch?v=anhvdbjx5YQ&list=PLBNdLLaRx_rLUcipD2RgJjyh9K7CfWv7S&index=1" # 예: "https://www.youtube.com/watch?v=..."
+    single_url = "https://www.youtube.com/watch?v=70uORDj3Lzc" # 예: "https://www.youtube.com/watch?v=..."
 
     # 3. 스크립트를 실행하면 `output_folder`에 자막이 저장됩니다.
-    # YoutubeCrawler.download_subtitles(single_url)
+    YoutubeCrawler.download_subtitles(single_url)
 
 # TODO: 각종 경제 지표 수집 테스트
     # 특정 종목의 개수 확인
-    calc_num()
+    # calc_num()

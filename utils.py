@@ -121,6 +121,7 @@ def save_json(filepath, data):
     with open(filepath, 'w', encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False, indent=4)
 
+@st.cache_data
 def load_articles_from_csv(filepath):
     if not os.path.exists(filepath):
         return []

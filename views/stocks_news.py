@@ -9,6 +9,7 @@ import json
 from WebScrap.Crawler.RegulationCrawler import RegulationCrawler
 from utils import load_articles_from_csv
 
+@st.cache_data(ttl=3600) # 캐시를 1시간(3600초) 동안 유지
 def fetch_stock_prices(ticker, period="1y"):
     save_dir = f"src/stocks/{ticker}"
     os.makedirs(save_dir, exist_ok=True)

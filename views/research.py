@@ -2,6 +2,8 @@ import streamlit as st
 import plotly.graph_objects as go
 import json
 import math
+import os
+import re
 
 from typing import Optional
 from collections import defaultdict
@@ -17,6 +19,7 @@ def render(df=None):
     def clean_tickers(input_str):
         return list(input_str.values())
     
+    @st.cache_data
     def get_ticker_mapping(
             section: Optional[str]=["all", "sector", "name", "ticker"],
             mode: Optional[str]=["custom", "total"]
@@ -49,6 +52,7 @@ def render(df=None):
         # print(f"get_ticker_mapping(section='{section}', mode='{mode}') -> {result}")
         return result
 
+    @st.cache_data
     def balance_num(json_file: str):
         """
         *.json: [formats]
@@ -67,11 +71,11 @@ def render(df=None):
             if num % i == 0:
                 return i, num // i
     
-    def render_stock_chart(ticker):
+    def render_stock_chart(target):
         """개별 종목의 캔들스틱 차트를 렌더링하는 함수"""
         with st.container(border=True):
-            st.markdown(f"##### {ticker}")
-            price_df = fetch_stock_prices(ticker, period="1y")
+            st.markdown(f"##### {target['name']}({target['ticker']})")
+            price_df = fetch_stock_prices(target['ticker'], period="1y")
             
             if price_df is not None and not price_df.empty:
                 fig = go.Figure(data=[go.Candlestick(
@@ -80,7 +84,7 @@ def render(df=None):
                     high=price_df['High'],
                     low=price_df['Low'],
                     close=price_df['Close'],
-                    name=ticker
+                    name=target['ticker']
                 )])
                 fig.update_layout(
                     height=250,
@@ -88,16 +92,21 @@ def render(df=None):
                     xaxis_rangeslider_visible=False,
                     showlegend=False
                 )
-                st.plotly_chart(fig, width="stretch", config={'displayModeBar': False})
+                st.plotly_chart(
+                fig, 
+                width="stretch", 
+                config={'displayModeBar': False},
+                key=f"chart_{target['ticker']}" # generate unique key for each chart
+                )
             else:
-                st.warning(f"{ticker} 데이터 없음")
+                st.warning(f"{target['ticker']} 데이터 없음")
 
-    def display_ticker_grid(tickers, num_cols, key_suffix=""):
+    def display_ticker_grid(targets, num_cols, key_suffix=""):
         """티커 리스트를 받아 지정된 컬럼 수대로 그리드에 표시하는 함수"""
         cols = st.columns(num_cols)
-        for i, ticker in enumerate(tickers):
+        for i, target in enumerate(targets):
             with cols[i % num_cols]:
-                render_stock_chart(ticker)
+                render_stock_chart(target)
 
 
 
@@ -116,21 +125,51 @@ def render(df=None):
     selection = st.pills("보기 모드", ["종합", "섹터별"], selection_mode="single", default="종합")
     st.session_state.view_mode = selection
 
-    # --- 1. Multi-Stock Grid Chart ---
     if st.session_state.view_mode == '종합':
         st.markdown("#### 멀티 종목 차트")
-    # =============================
-
-
+        targets = get_ticker_mapping(mode="custom", section="all")  # JSON 파일에서 티커 목록을 가져오는 함수
     
-    targets = get_ticker_mapping(mode="custom", section="ticker")  # JSON 파일에서 티커 목록을 가져오는 함수  
-    tickers = [t for t in targets if t]  # 유효한 티커만 필터링
-    st.text_area("비교할 종목 티커를 입력하세요 (쉼표, 공백, 줄바꿈으로 구분)", tickers)
-    if st.session_state.view_mode == '종합':
-        if tickers:
+        # 텍스트 에어리어용 문자열 생성
+        current_tickers_list = []
+        if targets:
+            current_tickers_list = [t.get('ticker') for t in targets if t.get('ticker')]
+        
+        default_text = ", ".join(current_tickers_list)
+        input_text = st.text_area("비교할 종목 티커를 입력하세요 (쉼표, 공백, 줄바꿈으로 구분)", value=default_text)
+        
+        if input_text != default_text:
+            new_tickers = [t.strip().upper() for t in re.split(r'[,\s\n]+', input_text) if t.strip()]
+            
+            json_path = "WebScrap/stock_targets.json"
+            try:
+                if os.path.exists(json_path):
+                    with open(json_path, 'r', encoding='utf-8') as f:
+                        data = json.load(f)
+                else:
+                    data = {}
+
+                if "custom" not in data:
+                    data["custom"] = {}
+
+                # 기존 이름 정보 유지
+                existing_names = {t['ticker']: t.get('name', t['ticker']) for t in targets} if targets else {}
+                new_targets_data = [{"ticker": t, "name": existing_names.get(t, t)} for t in new_tickers]
+
+                data["custom"]["targets"] = new_targets_data
+                
+                with open(json_path, 'w', encoding='utf-8') as f:
+                    json.dump(data, f, ensure_ascii=False, indent=4)
+                
+                st.success("티커 목록이 업데이트되었습니다.")
+                st.rerun()
+                
+            except Exception as e:
+                st.error(f"설정 저장 중 오류가 발생했습니다: {e}")
+
+        if targets:
             default_cols = balance_num("WebScrap/stock_targets.json")[0]
             num_cols = st.number_input("한 줄에 표시할 차트 수", min_value=1, max_value=5, value=default_cols)
-            display_ticker_grid(tickers, num_cols)
+            display_ticker_grid(targets, num_cols)
 
     elif st.session_state.view_mode == '섹터별':
         st.markdown("#### 섹터별 종목 차트")
@@ -140,17 +179,17 @@ def render(df=None):
         sector_mapping = defaultdict(list)
         for target in fixed_targets:
             sector = target.get("sector", "else")
-            sector_mapping[sector].append(target["ticker"])
+            sector_mapping[sector].append(target)
 
         # 섹터별 출력
-        for sector, s_tickers in sector_mapping.items():
+        for sector, s_targets in sector_mapping.items():
             st.markdown(f"##### 섹터: {sector}")
             # 각 섹터별로 고유한 key를 위해 sector 이름을 label에 포함
             num_cols = st.number_input(f"'{sector}' 한 줄에 표시할 차트 수", 
                                     min_value=1, max_value=5, 
-                                    value=min(3, len(s_tickers)),
+                                    value=min(3, len(s_targets)),
                                     key=f"input_{sector}")
-            display_ticker_grid(s_tickers, num_cols)
+            display_ticker_grid(s_targets, num_cols)
 
 
 
@@ -180,7 +219,8 @@ def render(df=None):
 
     if 'macro_search_results' in st.session_state and st.session_state.macro_search_results:
         st.markdown("##### 검색 결과")
-        st.session_state.macro_search_results
+        for news in st.session_state.macro_search_results:
+            st.markdown(f"- [{news.title}]({news.url}) <span style='color:gray; font-size:0.8em;'>({news.date})</span>", unsafe_allow_html=True)
 
 
 

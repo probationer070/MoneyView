@@ -18,6 +18,7 @@ dependencies = [
     "investiny",
     "lxml[html_clean]",
     "asyncio",
+    "youtube-transcript-api"
 ]
 
 [build-system]

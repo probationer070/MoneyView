@@ -1,8 +1,10 @@
 import os
 import re
 import time
+import json
 import yt_dlp
 from youtube_transcript_api import YouTubeTranscriptApi, NoTranscriptFound, TranscriptsDisabled
+from youtube_transcript_api.proxies import WebshareProxyConfig
 
 def clean_filename(title):
     """
@@ -11,6 +13,13 @@ def clean_filename(title):
     """
     # Windows 파일명 금지 문자: < > : " / \ | ? *
     return re.sub(r'[\\/*?:"<>|]', "", title)
+def get_data_proxy():
+    with open("./pest.json", "r", encoding="utf-8") as f:
+        data = json.load(f)
+    return WebshareProxyConfig(
+        proxy_username=data.get("user"),
+        proxy_password=data.get("password")
+    )
 
 def text_reform(file_path):
     try:
@@ -27,30 +36,44 @@ def _download_and_save_transcript(video_id, video_title, output_dir):
     """
     내부 함수: 자막 다운로드 및 저장 로직 (중복 제거)
     """
-    try:
-        # 3. 자막을 가져옵니다.
-        # 한국어 자막을 우선으로 시도하고, 없으면 영어 자막을 가져옵니다.
-        transcript_data = YouTubeTranscriptApi().fetch(video_id, languages=['ko', 'en'])
-        
-        # 4. 자막 조각들을 하나의 문자열로 합칩니다.
-        # fetch의 결과는 dict가 아닌 객체의 리스트이므로, .text로 접근합니다.
-        full_transcript = " ".join([item.text for item in transcript_data])
-        full_transcript = full_transcript.replace('. ', '.\n')
+    max_retries = 10
+    for attempt in range(max_retries):
+        try:
+            # 3. 자막을 가져옵니다.
+            # 한국어 자막을 우선으로 시도하고, 없으면 영어 자막을 가져옵니다.
+            ytt_api = YouTubeTranscriptApi(
+                proxy_config=get_data_proxy()
+            )
+            transcript_data = ytt_api.fetch(video_id, languages=['ko', 'en'])
+            
+            # 4. 자막 조각들을 하나의 문자열로 합칩니다.
+            # 반환값은 딕셔너리 리스트입니다.
+            full_transcript = " ".join([item['text'] for item in transcript_data])
+            full_transcript = full_transcript.replace('. ', '.\n')
 
-        # 5. .txt 파일로 저장합니다.
-        safe_title = clean_filename(video_title)
-        # 파일명을 '영상제목_영상ID.txt' 형식으로 하여 고유성을 보장합니다.
-        file_path = os.path.join(output_dir, f"{safe_title}.txt")
-        
-        with open(file_path, 'w', encoding='utf-8') as f:
-            f.write(full_transcript)
-        
-        print(f"  -> 자막을 '{file_path}' 파일로 저장했습니다.")
+            # 5. .txt 파일로 저장합니다.
+            safe_title = clean_filename(video_title)
+            # 파일명을 '영상제목_영상ID.txt' 형식으로 하여 고유성을 보장합니다.
+            file_path = os.path.join(output_dir, f"{safe_title}.txt")
+            
+            with open(file_path, 'w', encoding='utf-8') as f:
+                f.write(full_transcript)
+            
+            print(f"  -> 자막을 '{file_path}' 파일로 저장했습니다.")
+            return
 
-    except (NoTranscriptFound, TranscriptsDisabled):
-        print(f"  -> 오류: 이 영상에는 자막이 없거나 비활성화되어 있습니다.")
-    except Exception as e:
-        print(f"  -> 처리 중 예상치 못한 오류가 발생했습니다: {e}")
+        except (NoTranscriptFound, TranscriptsDisabled):
+            print(f"  -> 오류: 이 영상에는 자막이 없거나 비활성화되어 있습니다.")
+            return
+        except Exception as e:
+            if attempt < max_retries - 1:
+                if "429" in str(e):
+                    print(f"  -> YouTube IP 차단(429) 감지. 새 IP 할당을 위해 대기 및 재시도합니다.")
+                wait_time = 10 * (attempt + 1)
+                print(f"  -> 오류 발생 (재시도 {attempt+1}/{max_retries}, {wait_time}초 대기): {e}")
+                time.sleep(wait_time)
+            else:
+                print(f"  -> 실패: {e}")
 
 def download_subtitles(url):
     """
@@ -94,7 +117,7 @@ def download_subtitles(url):
                         
                     print(f"\n[{i}/{len(video_entries)}] 처리 중: '{video_title}' (ID: {video_id})")
                     _download_and_save_transcript(video_id, video_title, playlist_title)
-                    time.sleep(1) # 서버에 부담을 주지 않도록 잠시 대기
+                    time.sleep(30) # 서버에 부담을 주지 않도록 잠시 대기
 
             # Case 2: 단일 영상 URL
             elif 'id' in info:
@@ -117,7 +140,7 @@ def download_subtitles(url):
 if __name__ == '__main__':
     # --- 사용 방법 ---
     # 1. 재생목록 URL 또는 단일 영상 URL 중 하나를 입력하세요.
-    single_url = "https://www.youtube.com/watch?v=k0jOzg6t8rA&list=PLBNdLLaRx_rJ0TIZyL8EQe2-fhV1qsmGn" # 예: "https://www.youtube.com/watch?v=..."
+    single_url = "https://www.youtube.com/watch?v=70uORDj3Lzc" # 예: "https://www.youtube.com/watch?v=..."
 
     # 3. 스크립트를 실행하면 `output_folder`에 자막이 저장됩니다.
     download_subtitles(single_url)

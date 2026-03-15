@@ -7,6 +7,7 @@ filtered_stocks.csv
 crawling_log.csv
 finance copy*.py
 stock_target*.json
+pest.json
 
 saved_data
 Single_Videos

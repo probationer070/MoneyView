@@ -1,5 +1,16 @@
 # Analysis and Visualization of Korean Economic Indicators
 
+> [!NOTE]
+> plz, check the `[!]` section, if u haven't do this it didn't worked
+
+## Show Stock Price
+
+![원하는 주식 트래킹](views/gif/stock-view.gif)
+
+## Show Economy Index + Macro Events + Fear & Greed Index...
+
+![각종 경제지표](views/gif/eco-view.gif)
+
 ## Quick start
 the codebase prooven with conda
 
@@ -13,7 +24,40 @@ conda activate [any]
 ```
 uv pip install -e .
 ```
+### [!] Configuration File with Required Declarations
 
+#### Define `#1 apikey.json` Format
+file location: `./apikey.json`
+```
+{
+    "ECOS_API_KEY": "",
+    "FRED": "",
+    "nasdaq": "",
+    "REB부동산원": "",
+    "KOSIS": "",
+    "CMC_API_KEY": ""
+}
+```
+
+#### Define `#2 stock_targets.json` Format
+file location: `./WebScrap/stock_targets.json`
+```
+{
+"custom":{
+    "targets": [
+        {"name": "Apple", "ticker": "AAPL", "sector": "Consumer Electronics"},
+        {"name": "Tesla", "ticker": "TSLA", "sector": "Automotive"},
+        {"name": "Centrus Energy", "ticker": "LEU", "sector": "Nuclear Energy"}
+    ]
+},
+"total": {
+    "targets": [
+        {"name": "Plug Power", "ticker": "PLUG", "sector": "Clean Energy"},
+        ...
+    ]
+}
+}
+```
 
 ### Error
 ```

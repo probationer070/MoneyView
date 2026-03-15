@@ -14,14 +14,11 @@ class RegulationCrawler:
     Google News RSS 크롤러
     """
     def __init__(self):
-        self.log_file = "src/crawling_log.csv"
-        self.crawled_urls = self._load_crawled_urls()
         self.keywords = ["해외 송금 제한", "서학개미 규제", "환전 증거금", "외화 스트레스 테스트", "자본 유출"]
 
-    def _load_crawled_urls(self) -> set:
+    def _load_crawled_urls(self, log_path: str) -> set:
         """로그 파일에서 이미 크롤링된 URL을 로드합니다."""
         crawled = set()
-        log_path = self.log_file
         if not os.path.exists(log_path):
             return crawled
         
@@ -48,7 +45,7 @@ class RegulationCrawler:
     
     def load_csv_log(self, filepath: Optional[str] = None) -> List[RiskNews]:
         """CSV 로그 파일에서 크롤링된 뉴스를 로드하여 반환합니다."""
-        log_path = filepath if filepath else self.log_file
+        log_path = filepath if filepath else "src/crawling_log.csv"
         news_list = []
         if os.path.exists(log_path):
             try:
@@ -71,6 +68,9 @@ class RegulationCrawler:
         # 쿼리가 있으면 해당 쿼리만, 없으면 기본 키워드 리스트 사용
         search_targets = [query] if query else self.keywords
         
+        log_path = filepath if filepath else "src/crawling_log.csv"
+        crawled_urls = self._load_crawled_urls(log_path)
+        
         for keyword in search_targets:
             try:
                 # 검색어를 URL 인코딩 (한글 검색 대응)
@@ -88,8 +88,7 @@ class RegulationCrawler:
                     pub_date = entry.published if hasattr(entry, 'published') else datetime.now().strftime('%Y-%m-%d')
 
                     # 이미 크롤링된 URL인지 확인
-                    if link in self.crawled_urls:
-                        # logger.info(f"중복 URL 발견: {link}")
+                    if link in crawled_urls:
                         continue
                     
                     news = RiskNews(
@@ -100,7 +99,7 @@ class RegulationCrawler:
                         matched_keywords=[keyword]
                     )
                     results.append(news)
-                    self.crawled_urls.add(link)  # Add URL to the set
+                    crawled_urls.add(link)  # Add URL to the set
                     if save_log:
                         self._save_log(news, keyword, filepath)
                     
@@ -109,8 +108,8 @@ class RegulationCrawler:
         
         # 만약 크롤링한 데이터가 없는 경우 csv에서 가장 최신 데이터 5개를 로드하여 반환
         if not results:
-            logger.info("새로운 뉴스가 없습니다. 기존 로그에서 최신 뉴스 5개를 로드합니다.")
-            log_path = filepath if filepath else self.log_file
+            # logger.info("새로운 뉴스가 없습니다. 기존 로그에서 최신 뉴스 5개를 로드합니다.")
+            log_path = filepath if filepath else "src/crawling_log.csv"
             if os.path.exists(log_path):
                 try:
                     results = self.load_csv_log(log_path)[:5]
@@ -121,7 +120,7 @@ class RegulationCrawler:
 
     def _save_log(self, news: RiskNews, keyword: str, filepath: Optional[str] = None):
         """크롤링 로그 또는 수집된 기사를 CSV 파일에 저장합니다."""
-        log_path = filepath if filepath else self.log_file
+        log_path = filepath if filepath else "src/crawling_log.csv"
         try:
             # 파일이 저장될 디렉토리가 없으면 생성합니다.
             log_dir = os.path.dirname(log_path)

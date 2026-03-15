@@ -32,6 +32,7 @@ st.set_page_config(
 # ==========================================
 # 2. 데이터 관리 함수
 # ==========================================
+@st.cache_data
 def load_data():
     """src 폴더의 모든 CSV 파일을 로드하여 병합합니다."""
     if not os.path.exists(DATA_DIR):
@@ -194,25 +195,19 @@ st.markdown("통화량, 재정(국채), 물가 데이터를 추적하여 경제 
 df = load_data()
 
 # 지표 자동 수집 (세션당 1회)
-if 'auto_scraped' not in st.session_state:
+if not st.session_state.get('auto_scraped', False):
     from views.stocks_news import auto_scrape_predefined_stocks
     import asyncio 
 
-    st.session_state.auto_scraped = False
-    @st.cache_resource
-    async def run_auto_scrape():
+    # 이 블록은 세션당 한 번만 실행됩니다.
+    with st.spinner("초기 관심 종목 뉴스를 자동으로 수집합니다..."):
         try:
-            st.success("자동 스크래핑 완료")
+            # Streamlit의 이벤트 루프와의 충돌을 피하기 위해 asyncio.run() 사용
+            asyncio.run(auto_scrape_predefined_stocks())
+            st.success("자동 스크래핑 완료.")
+            st.session_state.auto_scraped = True
         except Exception as e:
             st.error(f"자동 스크래핑 중 오류 발생: {e}")
-
-    asyncio.create_task(run_auto_scrape())
-    
-    st.success("자동 스크래핑 완료")
-    st.session_state.auto_scraped = True
-else:
-    st.success("자동 스크래핑이 이미 완료되었습니다.")
-
 
 if not df.empty:
     df['date'] = df['date'].apply(utils.parse_date)
