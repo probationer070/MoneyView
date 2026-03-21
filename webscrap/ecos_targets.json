@@ -87,16 +87,19 @@
     
     { "stat_code": "901Y013", "item_code": "C", "name": "통합재정수지", "unit": "십억원", "cycle": "M", "category": "재정" },
     
-    { "stat_code": "091Y124", "item_code": "MO3AA", "name": "은행대출 연체율(기업대출)1개월이상", "unit": "%", "cycle": "M", "category": "시스템 리스크" },
-    { "stat_code": "091Y124", "item_code": "MO3AB", "name": "은행대출 연체율(가계대출)1개월이상", "unit": "%", "cycle": "M", "category": "시스템 리스크" },
-    { "stat_code": "091Y124", "item_code": "MO3AC", "name": "은행대출 연체율(카드대출)1개월이상", "unit": "%", "cycle": "M", "category": "시스템 리스크" },
+    { "stat_code": "901Y124", "item_code": "MO3AA", "name": "은행대출 연체율(기업대출)1개월이상", "unit": "%", "cycle": "M", "category": "시스템 리스크" },
+    { "stat_code": "901Y124", "item_code": "MO3AB", "name": "은행대출 연체율(가계대출)1개월이상", "unit": "%", "cycle": "M", "category": "시스템 리스크" },
+    { "stat_code": "901Y124", "item_code": "MO3AC", "name": "은행대출 연체율(카드대출)1개월이상", "unit": "%", "cycle": "M", "category": "시스템 리스크" },
     
-    { "stat_code": "901Y093", "item_code": "H69A", "name": "전국주택매매가격지수(21.06)", "unit": "2021.06=100", "cycle": "M", "category": "주택" },
-    { "stat_code": "901Y113", "item_code": "H69A", "name": "전국주택매매가격지수(25.03)", "unit": "2025.03=100", "cycle": "M", "category": "주택" },
-    { "stat_code": "161Y002", "item_code": "100", "name": "아파트 매매 실거래가격지수", "unit": "2017.11=100", "cycle": "M", "category": "주택" },
+    { "stat_code": "901Y113", "item_code": "H69B", "name": "주택매매가격지수 종합 아파트(25.03)", "unit": "2025.03=100", "cycle": "M", "category": "주택" },
+    { "stat_code": "901Y113", "item_code": "R70B", "name": "주택매매가격지수 수도권(25.03)", "unit": "2025.03=100", "cycle": "M", "category": "주택" },
+    { "stat_code": "901Y113", "item_code": "R70F", "name": "주택매매가격지수 서울(25.03)", "unit": "2025.03=100", "cycle": "M", "category": "주택" },
     
-    { "stat_code": "200Y113", "item_code": "10106", "name": "국내총생산(GDP)", "unit": "십억원", "cycle": "A", "category": "경기" },
-    { "stat_code": "200Y161", "item_code": "6014", "name": "명목 국내총생산(분기)", "unit": "십억원", "cycle": "Q", "category": "경기" },
+    { "stat_code": "901Y089", "item_code": "200", "name": "아파트 매매 실거래가격지수(서울)", "unit": "2017.11=100", "cycle": "M", "category": "주택" },
+    { "stat_code": "901Y089", "item_code": "300", "name": "아파트 매매 실거래가격지수(수도권)", "unit": "2017.11=100", "cycle": "M", "category": "주택" },
+    
+    { "stat_code": "200Y113", "item_code": "10106", "name": "국내총생산(GDP)", "unit": "십억원", "cycle": "M", "category": "경기" },
+    { "stat_code": "200Y161", "item_code": "6014", "name": "명목 국내총생산(분기)", "unit": "십억원", "cycle": "M", "category": "경기" },
     
     { "stat_code": "901Y055", "item_code": "S22AA", "name": "(매도)기관투자자", "unit": "십억원", "cycle": "M", "category": "투자자별주식거래" },
     { "stat_code": "901Y055", "item_code": "S22AB", "name": "(매도)개인", "unit": "십억원", "cycle": "M", "category": "투자자별주식거래" },
