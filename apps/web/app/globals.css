@@ -1,0 +1,40 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --bg-primary: #FBFBFB;
+    --bg-secondary: #E0E4D6;
+    --accent: #60CAAD;
+    --text-primary: #444444;
+    --text-muted: #9DA5A2;
+    --border: #B6CCBB;
+    --surface: #A7C7AF;
+    --surface-panel: #FFFFFF;
+    --surface-muted: #F3F5EF;
+    --chart-1: #60CAAD;
+    --chart-2: #A7C7AF;
+    --chart-3: #B6CCBB;
+    --chart-4: #E0E4D6;
+    --chart-5: #9DA5A2;
+    --chart-6: #444444;
+
+    --delta-up: #E54545;
+    --delta-down: #4589E5;
+    
+    --radius: 0.5rem;
+  }
+
+  body {
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-family: var(--font-inter), sans-serif;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}

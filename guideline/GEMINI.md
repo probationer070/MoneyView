@@ -1,47 +1,43 @@
-# GEMINI.md - Project Context and Rules
+# Agent Operating Guide
 
-> **Purpose**: This file serves as a landmark for the AI to understand the project's overall structure, rules, and current status, ensuring "context is maintained." Update this file after every task to keep it current.
+Purpose: define how AI agents should work in MoneyView.
 
-## 1. Project Overview
-- **Project Name**: MoneyView
-- **Description**: Economic indicator collection, analysis, and visualization dashboard project.
-- **Tech Stack**: Python, Streamlit, Plotly, Pandas
+## Role
 
-## 2. Folder Structure and Roles
-- `guideline/`: Stores AI coding rules, workflows, and review checklists.
-- `WebScrap/`: Data collection scripts (ECOS, Yahoo Finance, etc.).
-- `views/`: Streamlit frontend screen configuration.
-- `Single_Videos/`: Reference video summaries and text data.
+Act as a pragmatic senior engineer with financial-domain discipline. Prefer small, verified changes over broad rewrites.
 
-## 3. Behavioral Guidelines (AI Compliance)
-> **Tradeoff**: These guidelines bias toward caution over speed.
+## Required Reading
 
-### 1. Think Before Coding
-- **Don't assume**: State assumptions explicitly. If uncertain, ask.
-- **Surface tradeoffs**: If multiple interpretations exist, present them.
-- **Stop if unclear**: If something is confusing, stop and ask.
+Before non-trivial work, consult the relevant files:
 
-### 2. Simplicity First
-- **Minimum code**: No features beyond what was asked.
-- **No over-engineering**: No abstractions for single-use code.
-- **Refactor**: If you write 200 lines and it could be 50, rewrite it.
+- `guideline/file-structure.md`
+- `guideline/architect.md`
+- `guideline/finance-logic.md`
+- `guideline/security-reviewer.md`
+- `guideline/code-reviewer.md`
 
-### 3. Surgical Changes
-- **Touch only what you must**: Don't "improve" adjacent code unless necessary.
-- **Clean up your own mess**: Remove imports/variables/functions that YOUR changes made unused.
-- **Legacy code**: Don't remove pre-existing dead code unless asked (mention it instead).
+## Engineering Rules
 
-### 4. Goal-Driven Execution
-- **Define success**: Transform tasks into verifiable goals (e.g., "Write tests for invalid inputs").
-- **Plan**: For multi-step tasks, state a brief plan with verification steps.
+- Read existing code before designing a change.
+- Preserve user changes and do not revert unrelated files.
+- Use `rg` for search.
+- Use `apply_patch` for manual edits.
+- Keep finance logic out of the frontend.
+- Add tests proportional to risk and blast radius.
+- Run targeted verification after edits.
 
-## 4. Current Work Status (Context)
-- [x] Initial project structure setup and guideline establishment.
-- [ ] Modularization and stabilization of data collector (WebScrap).
-- [x] Dashboard UI (views) improvement (Added Research & Analysis views, improved data intuition).
-- [x] Implementation of Stock & News Data Analysis System (Fundamentals, Sentiment, Stock Trends).
-- [x] Automated News Scraping on startup for predefined stocks.
+## Communication Rules
 
-## 5. User Preferences
-- Prefers non-developer-friendly explanations and code structures.
-- Aims for stable and easy-to-understand implementations rather than complex ones.
+- Be concise and concrete.
+- State blockers and assumptions directly.
+- Mention commands that passed or failed.
+- Do not over-explain rules already documented in `guideline/`.
+
+## Handoff Rules
+
+For larger work, include:
+
+- files changed
+- behavior changed
+- tests run
+- known residual risks

@@ -1,0 +1,1623 @@
+{
+  "$defs": {
+    "AttributionRequest": {
+      "$defs": {
+        "AttributionMethodEnum": {
+          "enum": [
+            "brinson_fachler_arithmetic"
+          ],
+          "title": "AttributionMethodEnum",
+          "type": "string"
+        },
+        "PeriodEnum": {
+          "enum": [
+            "1w",
+            "1mo",
+            "3mo",
+            "6mo",
+            "1y",
+            "2y",
+            "5y"
+          ],
+          "title": "PeriodEnum",
+          "type": "string"
+        },
+        "RebalancingEnum": {
+          "enum": [
+            "bop",
+            "eop"
+          ],
+          "title": "RebalancingEnum",
+          "type": "string"
+        },
+        "ReturnFrequencyEnum": {
+          "enum": [
+            "daily",
+            "monthly"
+          ],
+          "title": "ReturnFrequencyEnum",
+          "type": "string"
+        },
+        "RiskMethodEnum": {
+          "enum": [
+            "historical"
+          ],
+          "title": "RiskMethodEnum",
+          "type": "string"
+        },
+        "RiskProfileInput": {
+          "properties": {
+            "beta_rolling_window": {
+              "default": 252,
+              "maximum": 756,
+              "minimum": 20,
+              "title": "Beta Rolling Window",
+              "type": "integer"
+            },
+            "es_confidence_level": {
+              "default": 0.95,
+              "exclusiveMaximum": 0.999,
+              "exclusiveMinimum": 0.5,
+              "title": "Es Confidence Level",
+              "type": "number"
+            },
+            "es_horizon_days": {
+              "default": 1,
+              "maximum": 30,
+              "minimum": 1,
+              "title": "Es Horizon Days",
+              "type": "integer"
+            },
+            "es_method": {
+              "$ref": "#/$defs/RiskMethodEnum",
+              "default": "historical"
+            },
+            "var_confidence_level": {
+              "default": 0.95,
+              "exclusiveMaximum": 0.999,
+              "exclusiveMinimum": 0.5,
+              "title": "Var Confidence Level",
+              "type": "number"
+            },
+            "var_horizon_days": {
+              "default": 1,
+              "maximum": 30,
+              "minimum": 1,
+              "title": "Var Horizon Days",
+              "type": "integer"
+            },
+            "var_method": {
+              "$ref": "#/$defs/RiskMethodEnum",
+              "default": "historical"
+            }
+          },
+          "title": "RiskProfileInput",
+          "type": "object"
+        }
+      },
+      "properties": {
+        "allow_benchmark_proxy": {
+          "default": false,
+          "title": "Allow Benchmark Proxy",
+          "type": "boolean"
+        },
+        "allow_cash": {
+          "default": true,
+          "title": "Allow Cash",
+          "type": "boolean"
+        },
+        "allow_short": {
+          "default": false,
+          "title": "Allow Short",
+          "type": "boolean"
+        },
+        "allow_synthetic_fallback": {
+          "default": false,
+          "title": "Allow Synthetic Fallback",
+          "type": "boolean"
+        },
+        "as_of_date": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "As Of Date"
+        },
+        "attribution_method": {
+          "$ref": "#/$defs/AttributionMethodEnum",
+          "default": "brinson_fachler_arithmetic"
+        },
+        "benchmark": {
+          "default": "^GSPC",
+          "title": "Benchmark",
+          "type": "string"
+        },
+        "benchmark_weights": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Benchmark Weights"
+        },
+        "currency": {
+          "default": "USD",
+          "title": "Currency",
+          "type": "string"
+        },
+        "period": {
+          "$ref": "#/$defs/PeriodEnum",
+          "default": "1y"
+        },
+        "rebalancing": {
+          "$ref": "#/$defs/RebalancingEnum",
+          "default": "bop"
+        },
+        "return_frequency": {
+          "$ref": "#/$defs/ReturnFrequencyEnum",
+          "default": "daily"
+        },
+        "risk_profile": {
+          "$ref": "#/$defs/RiskProfileInput"
+        },
+        "tickers": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Tickers",
+          "type": "array"
+        },
+        "weights": {
+          "items": {
+            "type": "number"
+          },
+          "title": "Weights",
+          "type": "array"
+        }
+      },
+      "required": [
+        "tickers",
+        "weights"
+      ],
+      "title": "AttributionRequest",
+      "type": "object"
+    },
+    "AttributionResult": {
+      "$defs": {
+        "AttributionDataContract": {
+          "properties": {
+            "benchmark_source": {
+              "default": "yfinance_via_sqlite_cache",
+              "title": "Benchmark Source",
+              "type": "string"
+            },
+            "corporate_actions": {
+              "default": "split_and_dividend_adjusted_total_return",
+              "title": "Corporate Actions",
+              "type": "string"
+            },
+            "currency": {
+              "default": "USD",
+              "title": "Currency",
+              "type": "string"
+            },
+            "fx_handling": {
+              "default": "none_usd_only",
+              "title": "Fx Handling",
+              "type": "string"
+            },
+            "missing_data_fallback": {
+              "default": "fail_closed_unless_allow_synthetic_fallback_true",
+              "title": "Missing Data Fallback",
+              "type": "string"
+            },
+            "rebalancing_assumption": {
+              "$ref": "#/$defs/RebalancingEnum"
+            },
+            "return_frequency": {
+              "$ref": "#/$defs/ReturnFrequencyEnum"
+            },
+            "sector_taxonomy": {
+              "default": "watchlist_sector_gics_like",
+              "title": "Sector Taxonomy",
+              "type": "string"
+            },
+            "timezone": {
+              "default": "UTC",
+              "title": "Timezone",
+              "type": "string"
+            },
+            "timezone_cutoff": {
+              "default": "16:00:00",
+              "title": "Timezone Cutoff",
+              "type": "string"
+            }
+          },
+          "required": [
+            "return_frequency",
+            "rebalancing_assumption"
+          ],
+          "title": "AttributionDataContract",
+          "type": "object"
+        },
+        "AttributionDataQuality": {
+          "properties": {
+            "benchmark_proxy_method": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Benchmark Proxy Method"
+            },
+            "benchmark_proxy_used": {
+              "default": false,
+              "title": "Benchmark Proxy Used",
+              "type": "boolean"
+            },
+            "limitations": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Limitations",
+              "type": "array"
+            },
+            "synthetic_data_used": {
+              "default": false,
+              "title": "Synthetic Data Used",
+              "type": "boolean"
+            },
+            "synthetic_tickers": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Synthetic Tickers",
+              "type": "array"
+            }
+          },
+          "title": "AttributionDataQuality",
+          "type": "object"
+        },
+        "AttributionEffects": {
+          "properties": {
+            "allocation": {
+              "title": "Allocation",
+              "type": "number"
+            },
+            "interaction": {
+              "title": "Interaction",
+              "type": "number"
+            },
+            "selection": {
+              "title": "Selection",
+              "type": "number"
+            }
+          },
+          "required": [
+            "allocation",
+            "selection",
+            "interaction"
+          ],
+          "title": "AttributionEffects",
+          "type": "object"
+        },
+        "AttributionMetadata": {
+          "properties": {
+            "benchmark": {
+              "title": "Benchmark",
+              "type": "string"
+            },
+            "benchmark_weights_source": {
+              "$ref": "#/$defs/BenchmarkWeightsSourceEnum"
+            },
+            "cache_hit": {
+              "default": false,
+              "title": "Cache Hit",
+              "type": "boolean"
+            },
+            "cache_key": {
+              "title": "Cache Key",
+              "type": "string"
+            },
+            "data_contract": {
+              "$ref": "#/$defs/AttributionDataContract"
+            },
+            "data_quality": {
+              "$ref": "#/$defs/AttributionDataQuality"
+            },
+            "generated_at": {
+              "title": "Generated At",
+              "type": "string"
+            },
+            "method": {
+              "$ref": "#/$defs/AttributionMethodEnum"
+            },
+            "period": {
+              "$ref": "#/$defs/PeriodEnum"
+            },
+            "portfolio_hash": {
+              "title": "Portfolio Hash",
+              "type": "string"
+            },
+            "schema_version": {
+              "default": "1.0.0",
+              "title": "Schema Version",
+              "type": "string"
+            }
+          },
+          "required": [
+            "method",
+            "benchmark",
+            "benchmark_weights_source",
+            "period",
+            "generated_at",
+            "portfolio_hash",
+            "cache_key",
+            "data_contract"
+          ],
+          "title": "AttributionMetadata",
+          "type": "object"
+        },
+        "AttributionMethodEnum": {
+          "enum": [
+            "brinson_fachler_arithmetic"
+          ],
+          "title": "AttributionMethodEnum",
+          "type": "string"
+        },
+        "AttributionTotals": {
+          "properties": {
+            "benchmark_return": {
+              "title": "Benchmark Return",
+              "type": "number"
+            },
+            "portfolio_return": {
+              "title": "Portfolio Return",
+              "type": "number"
+            }
+          },
+          "required": [
+            "portfolio_return",
+            "benchmark_return"
+          ],
+          "title": "AttributionTotals",
+          "type": "object"
+        },
+        "BenchmarkWeightsSourceEnum": {
+          "enum": [
+            "provider_derived",
+            "user_provided"
+          ],
+          "title": "BenchmarkWeightsSourceEnum",
+          "type": "string"
+        },
+        "PeriodEnum": {
+          "enum": [
+            "1w",
+            "1mo",
+            "3mo",
+            "6mo",
+            "1y",
+            "2y",
+            "5y"
+          ],
+          "title": "PeriodEnum",
+          "type": "string"
+        },
+        "RebalancingEnum": {
+          "enum": [
+            "bop",
+            "eop"
+          ],
+          "title": "RebalancingEnum",
+          "type": "string"
+        },
+        "ReturnFrequencyEnum": {
+          "enum": [
+            "daily",
+            "monthly"
+          ],
+          "title": "ReturnFrequencyEnum",
+          "type": "string"
+        },
+        "RiskMethodEnum": {
+          "enum": [
+            "historical"
+          ],
+          "title": "RiskMethodEnum",
+          "type": "string"
+        },
+        "RiskMetrics": {
+          "properties": {
+            "beta": {
+              "title": "Beta",
+              "type": "number"
+            },
+            "beta_rolling_window": {
+              "title": "Beta Rolling Window",
+              "type": "integer"
+            },
+            "es_95_1d": {
+              "title": "Es 95 1D",
+              "type": "number"
+            },
+            "es_method": {
+              "$ref": "#/$defs/RiskMethodEnum",
+              "default": "historical"
+            },
+            "var_95_1d": {
+              "title": "Var 95 1D",
+              "type": "number"
+            },
+            "var_method": {
+              "$ref": "#/$defs/RiskMethodEnum",
+              "default": "historical"
+            }
+          },
+          "required": [
+            "beta",
+            "beta_rolling_window",
+            "var_95_1d",
+            "es_95_1d"
+          ],
+          "title": "RiskMetrics",
+          "type": "object"
+        },
+        "SectorAttribution": {
+          "properties": {
+            "active_contribution": {
+              "title": "Active Contribution",
+              "type": "number"
+            },
+            "allocation_effect": {
+              "title": "Allocation Effect",
+              "type": "number"
+            },
+            "benchmark_return": {
+              "title": "Benchmark Return",
+              "type": "number"
+            },
+            "benchmark_weight": {
+              "title": "Benchmark Weight",
+              "type": "number"
+            },
+            "interaction_effect": {
+              "title": "Interaction Effect",
+              "type": "number"
+            },
+            "portfolio_return": {
+              "title": "Portfolio Return",
+              "type": "number"
+            },
+            "portfolio_weight": {
+              "title": "Portfolio Weight",
+              "type": "number"
+            },
+            "sector": {
+              "title": "Sector",
+              "type": "string"
+            },
+            "selection_effect": {
+              "title": "Selection Effect",
+              "type": "number"
+            }
+          },
+          "required": [
+            "sector",
+            "portfolio_weight",
+            "benchmark_weight",
+            "portfolio_return",
+            "benchmark_return",
+            "allocation_effect",
+            "selection_effect",
+            "interaction_effect",
+            "active_contribution"
+          ],
+          "title": "SectorAttribution",
+          "type": "object"
+        }
+      },
+      "properties": {
+        "active_return": {
+          "title": "Active Return",
+          "type": "number"
+        },
+        "effects": {
+          "$ref": "#/$defs/AttributionEffects"
+        },
+        "metadata": {
+          "$ref": "#/$defs/AttributionMetadata"
+        },
+        "risk_metrics": {
+          "$ref": "#/$defs/RiskMetrics"
+        },
+        "sector_breakdowns": {
+          "items": {
+            "$ref": "#/$defs/SectorAttribution"
+          },
+          "title": "Sector Breakdowns",
+          "type": "array"
+        },
+        "totals": {
+          "$ref": "#/$defs/AttributionTotals"
+        }
+      },
+      "required": [
+        "totals",
+        "active_return",
+        "effects",
+        "sector_breakdowns",
+        "risk_metrics",
+        "metadata"
+      ],
+      "title": "AttributionResult",
+      "type": "object"
+    },
+    "ReportExportRequest": {
+      "$defs": {
+        "AttributionMethodEnum": {
+          "enum": [
+            "brinson_fachler_arithmetic"
+          ],
+          "title": "AttributionMethodEnum",
+          "type": "string"
+        },
+        "PeriodEnum": {
+          "enum": [
+            "1w",
+            "1mo",
+            "3mo",
+            "6mo",
+            "1y",
+            "2y",
+            "5y"
+          ],
+          "title": "PeriodEnum",
+          "type": "string"
+        },
+        "ReportExportFormatEnum": {
+          "enum": [
+            "html",
+            "pdf",
+            "markdown",
+            "csv",
+            "json"
+          ],
+          "title": "ReportExportFormatEnum",
+          "type": "string"
+        },
+        "ReportFilters": {
+          "properties": {
+            "benchmark": {
+              "default": "^GSPC",
+              "title": "Benchmark",
+              "type": "string"
+            },
+            "currency": {
+              "default": "USD",
+              "title": "Currency",
+              "type": "string"
+            },
+            "date_from": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Date From"
+            },
+            "date_to": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Date To"
+            },
+            "period": {
+              "$ref": "#/$defs/PeriodEnum",
+              "default": "1y"
+            }
+          },
+          "title": "ReportFilters",
+          "type": "object"
+        },
+        "ReportOptions": {
+          "properties": {
+            "formats": {
+              "items": {
+                "$ref": "#/$defs/ReportExportFormatEnum"
+              },
+              "title": "Formats",
+              "type": "array"
+            },
+            "include_methodology": {
+              "default": true,
+              "title": "Include Methodology",
+              "type": "boolean"
+            },
+            "include_risk_metrics": {
+              "default": true,
+              "title": "Include Risk Metrics",
+              "type": "boolean"
+            },
+            "include_sector_table": {
+              "default": true,
+              "title": "Include Sector Table",
+              "type": "boolean"
+            }
+          },
+          "title": "ReportOptions",
+          "type": "object"
+        },
+        "ReportSummaryRequest": {
+          "properties": {
+            "allow_benchmark_proxy": {
+              "default": false,
+              "title": "Allow Benchmark Proxy",
+              "type": "boolean"
+            },
+            "allow_cash": {
+              "default": true,
+              "title": "Allow Cash",
+              "type": "boolean"
+            },
+            "allow_short": {
+              "default": false,
+              "title": "Allow Short",
+              "type": "boolean"
+            },
+            "allow_synthetic_fallback": {
+              "default": false,
+              "title": "Allow Synthetic Fallback",
+              "type": "boolean"
+            },
+            "attribution_method": {
+              "$ref": "#/$defs/AttributionMethodEnum",
+              "default": "brinson_fachler_arithmetic"
+            },
+            "benchmark_weights": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "number"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Benchmark Weights"
+            },
+            "filters": {
+              "$ref": "#/$defs/ReportFilters"
+            },
+            "report_options": {
+              "$ref": "#/$defs/ReportOptions"
+            },
+            "risk_profile": {
+              "$ref": "#/$defs/RiskProfileInput"
+            },
+            "tickers": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Tickers",
+              "type": "array"
+            },
+            "version": {
+              "default": "phase5-v1",
+              "title": "Version",
+              "type": "string"
+            },
+            "weights": {
+              "items": {
+                "type": "number"
+              },
+              "title": "Weights",
+              "type": "array"
+            }
+          },
+          "required": [
+            "tickers",
+            "weights"
+          ],
+          "title": "ReportSummaryRequest",
+          "type": "object"
+        },
+        "RiskMethodEnum": {
+          "enum": [
+            "historical"
+          ],
+          "title": "RiskMethodEnum",
+          "type": "string"
+        },
+        "RiskProfileInput": {
+          "properties": {
+            "beta_rolling_window": {
+              "default": 252,
+              "maximum": 756,
+              "minimum": 20,
+              "title": "Beta Rolling Window",
+              "type": "integer"
+            },
+            "es_confidence_level": {
+              "default": 0.95,
+              "exclusiveMaximum": 0.999,
+              "exclusiveMinimum": 0.5,
+              "title": "Es Confidence Level",
+              "type": "number"
+            },
+            "es_horizon_days": {
+              "default": 1,
+              "maximum": 30,
+              "minimum": 1,
+              "title": "Es Horizon Days",
+              "type": "integer"
+            },
+            "es_method": {
+              "$ref": "#/$defs/RiskMethodEnum",
+              "default": "historical"
+            },
+            "var_confidence_level": {
+              "default": 0.95,
+              "exclusiveMaximum": 0.999,
+              "exclusiveMinimum": 0.5,
+              "title": "Var Confidence Level",
+              "type": "number"
+            },
+            "var_horizon_days": {
+              "default": 1,
+              "maximum": 30,
+              "minimum": 1,
+              "title": "Var Horizon Days",
+              "type": "integer"
+            },
+            "var_method": {
+              "$ref": "#/$defs/RiskMethodEnum",
+              "default": "historical"
+            }
+          },
+          "title": "RiskProfileInput",
+          "type": "object"
+        }
+      },
+      "properties": {
+        "format": {
+          "$ref": "#/$defs/ReportExportFormatEnum"
+        },
+        "request": {
+          "$ref": "#/$defs/ReportSummaryRequest"
+        }
+      },
+      "required": [
+        "request",
+        "format"
+      ],
+      "title": "ReportExportRequest",
+      "type": "object"
+    },
+    "ReportExportResponse": {
+      "$defs": {
+        "ReportExportFormatEnum": {
+          "enum": [
+            "html",
+            "pdf",
+            "markdown",
+            "csv",
+            "json"
+          ],
+          "title": "ReportExportFormatEnum",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "content": {
+          "title": "Content",
+          "type": "string"
+        },
+        "content_type": {
+          "title": "Content Type",
+          "type": "string"
+        },
+        "filename": {
+          "title": "Filename",
+          "type": "string"
+        },
+        "format": {
+          "$ref": "#/$defs/ReportExportFormatEnum"
+        }
+      },
+      "required": [
+        "format",
+        "content_type",
+        "filename",
+        "content"
+      ],
+      "title": "ReportExportResponse",
+      "type": "object"
+    },
+    "ReportPayload": {
+      "$defs": {
+        "AttributionDataContract": {
+          "properties": {
+            "benchmark_source": {
+              "default": "yfinance_via_sqlite_cache",
+              "title": "Benchmark Source",
+              "type": "string"
+            },
+            "corporate_actions": {
+              "default": "split_and_dividend_adjusted_total_return",
+              "title": "Corporate Actions",
+              "type": "string"
+            },
+            "currency": {
+              "default": "USD",
+              "title": "Currency",
+              "type": "string"
+            },
+            "fx_handling": {
+              "default": "none_usd_only",
+              "title": "Fx Handling",
+              "type": "string"
+            },
+            "missing_data_fallback": {
+              "default": "fail_closed_unless_allow_synthetic_fallback_true",
+              "title": "Missing Data Fallback",
+              "type": "string"
+            },
+            "rebalancing_assumption": {
+              "$ref": "#/$defs/RebalancingEnum"
+            },
+            "return_frequency": {
+              "$ref": "#/$defs/ReturnFrequencyEnum"
+            },
+            "sector_taxonomy": {
+              "default": "watchlist_sector_gics_like",
+              "title": "Sector Taxonomy",
+              "type": "string"
+            },
+            "timezone": {
+              "default": "UTC",
+              "title": "Timezone",
+              "type": "string"
+            },
+            "timezone_cutoff": {
+              "default": "16:00:00",
+              "title": "Timezone Cutoff",
+              "type": "string"
+            }
+          },
+          "required": [
+            "return_frequency",
+            "rebalancing_assumption"
+          ],
+          "title": "AttributionDataContract",
+          "type": "object"
+        },
+        "AttributionDataQuality": {
+          "properties": {
+            "benchmark_proxy_method": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Benchmark Proxy Method"
+            },
+            "benchmark_proxy_used": {
+              "default": false,
+              "title": "Benchmark Proxy Used",
+              "type": "boolean"
+            },
+            "limitations": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Limitations",
+              "type": "array"
+            },
+            "synthetic_data_used": {
+              "default": false,
+              "title": "Synthetic Data Used",
+              "type": "boolean"
+            },
+            "synthetic_tickers": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Synthetic Tickers",
+              "type": "array"
+            }
+          },
+          "title": "AttributionDataQuality",
+          "type": "object"
+        },
+        "AttributionEffects": {
+          "properties": {
+            "allocation": {
+              "title": "Allocation",
+              "type": "number"
+            },
+            "interaction": {
+              "title": "Interaction",
+              "type": "number"
+            },
+            "selection": {
+              "title": "Selection",
+              "type": "number"
+            }
+          },
+          "required": [
+            "allocation",
+            "selection",
+            "interaction"
+          ],
+          "title": "AttributionEffects",
+          "type": "object"
+        },
+        "AttributionMetadata": {
+          "properties": {
+            "benchmark": {
+              "title": "Benchmark",
+              "type": "string"
+            },
+            "benchmark_weights_source": {
+              "$ref": "#/$defs/BenchmarkWeightsSourceEnum"
+            },
+            "cache_hit": {
+              "default": false,
+              "title": "Cache Hit",
+              "type": "boolean"
+            },
+            "cache_key": {
+              "title": "Cache Key",
+              "type": "string"
+            },
+            "data_contract": {
+              "$ref": "#/$defs/AttributionDataContract"
+            },
+            "data_quality": {
+              "$ref": "#/$defs/AttributionDataQuality"
+            },
+            "generated_at": {
+              "title": "Generated At",
+              "type": "string"
+            },
+            "method": {
+              "$ref": "#/$defs/AttributionMethodEnum"
+            },
+            "period": {
+              "$ref": "#/$defs/PeriodEnum"
+            },
+            "portfolio_hash": {
+              "title": "Portfolio Hash",
+              "type": "string"
+            },
+            "schema_version": {
+              "default": "1.0.0",
+              "title": "Schema Version",
+              "type": "string"
+            }
+          },
+          "required": [
+            "method",
+            "benchmark",
+            "benchmark_weights_source",
+            "period",
+            "generated_at",
+            "portfolio_hash",
+            "cache_key",
+            "data_contract"
+          ],
+          "title": "AttributionMetadata",
+          "type": "object"
+        },
+        "AttributionMethodEnum": {
+          "enum": [
+            "brinson_fachler_arithmetic"
+          ],
+          "title": "AttributionMethodEnum",
+          "type": "string"
+        },
+        "AttributionResult": {
+          "properties": {
+            "active_return": {
+              "title": "Active Return",
+              "type": "number"
+            },
+            "effects": {
+              "$ref": "#/$defs/AttributionEffects"
+            },
+            "metadata": {
+              "$ref": "#/$defs/AttributionMetadata"
+            },
+            "risk_metrics": {
+              "$ref": "#/$defs/RiskMetrics"
+            },
+            "sector_breakdowns": {
+              "items": {
+                "$ref": "#/$defs/SectorAttribution"
+              },
+              "title": "Sector Breakdowns",
+              "type": "array"
+            },
+            "totals": {
+              "$ref": "#/$defs/AttributionTotals"
+            }
+          },
+          "required": [
+            "totals",
+            "active_return",
+            "effects",
+            "sector_breakdowns",
+            "risk_metrics",
+            "metadata"
+          ],
+          "title": "AttributionResult",
+          "type": "object"
+        },
+        "AttributionTotals": {
+          "properties": {
+            "benchmark_return": {
+              "title": "Benchmark Return",
+              "type": "number"
+            },
+            "portfolio_return": {
+              "title": "Portfolio Return",
+              "type": "number"
+            }
+          },
+          "required": [
+            "portfolio_return",
+            "benchmark_return"
+          ],
+          "title": "AttributionTotals",
+          "type": "object"
+        },
+        "BenchmarkWeightsSourceEnum": {
+          "enum": [
+            "provider_derived",
+            "user_provided"
+          ],
+          "title": "BenchmarkWeightsSourceEnum",
+          "type": "string"
+        },
+        "PeriodEnum": {
+          "enum": [
+            "1w",
+            "1mo",
+            "3mo",
+            "6mo",
+            "1y",
+            "2y",
+            "5y"
+          ],
+          "title": "PeriodEnum",
+          "type": "string"
+        },
+        "RebalancingEnum": {
+          "enum": [
+            "bop",
+            "eop"
+          ],
+          "title": "RebalancingEnum",
+          "type": "string"
+        },
+        "ReportExportFormatEnum": {
+          "enum": [
+            "html",
+            "pdf",
+            "markdown",
+            "csv",
+            "json"
+          ],
+          "title": "ReportExportFormatEnum",
+          "type": "string"
+        },
+        "ReportFilters": {
+          "properties": {
+            "benchmark": {
+              "default": "^GSPC",
+              "title": "Benchmark",
+              "type": "string"
+            },
+            "currency": {
+              "default": "USD",
+              "title": "Currency",
+              "type": "string"
+            },
+            "date_from": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Date From"
+            },
+            "date_to": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Date To"
+            },
+            "period": {
+              "$ref": "#/$defs/PeriodEnum",
+              "default": "1y"
+            }
+          },
+          "title": "ReportFilters",
+          "type": "object"
+        },
+        "ReportOptions": {
+          "properties": {
+            "formats": {
+              "items": {
+                "$ref": "#/$defs/ReportExportFormatEnum"
+              },
+              "title": "Formats",
+              "type": "array"
+            },
+            "include_methodology": {
+              "default": true,
+              "title": "Include Methodology",
+              "type": "boolean"
+            },
+            "include_risk_metrics": {
+              "default": true,
+              "title": "Include Risk Metrics",
+              "type": "boolean"
+            },
+            "include_sector_table": {
+              "default": true,
+              "title": "Include Sector Table",
+              "type": "boolean"
+            }
+          },
+          "title": "ReportOptions",
+          "type": "object"
+        },
+        "ReturnFrequencyEnum": {
+          "enum": [
+            "daily",
+            "monthly"
+          ],
+          "title": "ReturnFrequencyEnum",
+          "type": "string"
+        },
+        "RiskMethodEnum": {
+          "enum": [
+            "historical"
+          ],
+          "title": "RiskMethodEnum",
+          "type": "string"
+        },
+        "RiskMetrics": {
+          "properties": {
+            "beta": {
+              "title": "Beta",
+              "type": "number"
+            },
+            "beta_rolling_window": {
+              "title": "Beta Rolling Window",
+              "type": "integer"
+            },
+            "es_95_1d": {
+              "title": "Es 95 1D",
+              "type": "number"
+            },
+            "es_method": {
+              "$ref": "#/$defs/RiskMethodEnum",
+              "default": "historical"
+            },
+            "var_95_1d": {
+              "title": "Var 95 1D",
+              "type": "number"
+            },
+            "var_method": {
+              "$ref": "#/$defs/RiskMethodEnum",
+              "default": "historical"
+            }
+          },
+          "required": [
+            "beta",
+            "beta_rolling_window",
+            "var_95_1d",
+            "es_95_1d"
+          ],
+          "title": "RiskMetrics",
+          "type": "object"
+        },
+        "SectorAttribution": {
+          "properties": {
+            "active_contribution": {
+              "title": "Active Contribution",
+              "type": "number"
+            },
+            "allocation_effect": {
+              "title": "Allocation Effect",
+              "type": "number"
+            },
+            "benchmark_return": {
+              "title": "Benchmark Return",
+              "type": "number"
+            },
+            "benchmark_weight": {
+              "title": "Benchmark Weight",
+              "type": "number"
+            },
+            "interaction_effect": {
+              "title": "Interaction Effect",
+              "type": "number"
+            },
+            "portfolio_return": {
+              "title": "Portfolio Return",
+              "type": "number"
+            },
+            "portfolio_weight": {
+              "title": "Portfolio Weight",
+              "type": "number"
+            },
+            "sector": {
+              "title": "Sector",
+              "type": "string"
+            },
+            "selection_effect": {
+              "title": "Selection Effect",
+              "type": "number"
+            }
+          },
+          "required": [
+            "sector",
+            "portfolio_weight",
+            "benchmark_weight",
+            "portfolio_return",
+            "benchmark_return",
+            "allocation_effect",
+            "selection_effect",
+            "interaction_effect",
+            "active_contribution"
+          ],
+          "title": "SectorAttribution",
+          "type": "object"
+        }
+      },
+      "properties": {
+        "attribution": {
+          "$ref": "#/$defs/AttributionResult"
+        },
+        "executive_summary": {
+          "title": "Executive Summary",
+          "type": "string"
+        },
+        "filters": {
+          "$ref": "#/$defs/ReportFilters"
+        },
+        "generated_at": {
+          "title": "Generated At",
+          "type": "string"
+        },
+        "markdown_content": {
+          "title": "Markdown Content",
+          "type": "string"
+        },
+        "portfolio_hash": {
+          "title": "Portfolio Hash",
+          "type": "string"
+        },
+        "report_options": {
+          "$ref": "#/$defs/ReportOptions"
+        },
+        "schema_version": {
+          "default": "1.0.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "version": {
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "version",
+        "generated_at",
+        "portfolio_hash",
+        "filters",
+        "report_options",
+        "attribution",
+        "executive_summary",
+        "markdown_content"
+      ],
+      "title": "ReportPayload",
+      "type": "object"
+    },
+    "ReportSummaryRequest": {
+      "$defs": {
+        "AttributionMethodEnum": {
+          "enum": [
+            "brinson_fachler_arithmetic"
+          ],
+          "title": "AttributionMethodEnum",
+          "type": "string"
+        },
+        "PeriodEnum": {
+          "enum": [
+            "1w",
+            "1mo",
+            "3mo",
+            "6mo",
+            "1y",
+            "2y",
+            "5y"
+          ],
+          "title": "PeriodEnum",
+          "type": "string"
+        },
+        "ReportExportFormatEnum": {
+          "enum": [
+            "html",
+            "pdf",
+            "markdown",
+            "csv",
+            "json"
+          ],
+          "title": "ReportExportFormatEnum",
+          "type": "string"
+        },
+        "ReportFilters": {
+          "properties": {
+            "benchmark": {
+              "default": "^GSPC",
+              "title": "Benchmark",
+              "type": "string"
+            },
+            "currency": {
+              "default": "USD",
+              "title": "Currency",
+              "type": "string"
+            },
+            "date_from": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Date From"
+            },
+            "date_to": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Date To"
+            },
+            "period": {
+              "$ref": "#/$defs/PeriodEnum",
+              "default": "1y"
+            }
+          },
+          "title": "ReportFilters",
+          "type": "object"
+        },
+        "ReportOptions": {
+          "properties": {
+            "formats": {
+              "items": {
+                "$ref": "#/$defs/ReportExportFormatEnum"
+              },
+              "title": "Formats",
+              "type": "array"
+            },
+            "include_methodology": {
+              "default": true,
+              "title": "Include Methodology",
+              "type": "boolean"
+            },
+            "include_risk_metrics": {
+              "default": true,
+              "title": "Include Risk Metrics",
+              "type": "boolean"
+            },
+            "include_sector_table": {
+              "default": true,
+              "title": "Include Sector Table",
+              "type": "boolean"
+            }
+          },
+          "title": "ReportOptions",
+          "type": "object"
+        },
+        "RiskMethodEnum": {
+          "enum": [
+            "historical"
+          ],
+          "title": "RiskMethodEnum",
+          "type": "string"
+        },
+        "RiskProfileInput": {
+          "properties": {
+            "beta_rolling_window": {
+              "default": 252,
+              "maximum": 756,
+              "minimum": 20,
+              "title": "Beta Rolling Window",
+              "type": "integer"
+            },
+            "es_confidence_level": {
+              "default": 0.95,
+              "exclusiveMaximum": 0.999,
+              "exclusiveMinimum": 0.5,
+              "title": "Es Confidence Level",
+              "type": "number"
+            },
+            "es_horizon_days": {
+              "default": 1,
+              "maximum": 30,
+              "minimum": 1,
+              "title": "Es Horizon Days",
+              "type": "integer"
+            },
+            "es_method": {
+              "$ref": "#/$defs/RiskMethodEnum",
+              "default": "historical"
+            },
+            "var_confidence_level": {
+              "default": 0.95,
+              "exclusiveMaximum": 0.999,
+              "exclusiveMinimum": 0.5,
+              "title": "Var Confidence Level",
+              "type": "number"
+            },
+            "var_horizon_days": {
+              "default": 1,
+              "maximum": 30,
+              "minimum": 1,
+              "title": "Var Horizon Days",
+              "type": "integer"
+            },
+            "var_method": {
+              "$ref": "#/$defs/RiskMethodEnum",
+              "default": "historical"
+            }
+          },
+          "title": "RiskProfileInput",
+          "type": "object"
+        }
+      },
+      "properties": {
+        "allow_benchmark_proxy": {
+          "default": false,
+          "title": "Allow Benchmark Proxy",
+          "type": "boolean"
+        },
+        "allow_cash": {
+          "default": true,
+          "title": "Allow Cash",
+          "type": "boolean"
+        },
+        "allow_short": {
+          "default": false,
+          "title": "Allow Short",
+          "type": "boolean"
+        },
+        "allow_synthetic_fallback": {
+          "default": false,
+          "title": "Allow Synthetic Fallback",
+          "type": "boolean"
+        },
+        "attribution_method": {
+          "$ref": "#/$defs/AttributionMethodEnum",
+          "default": "brinson_fachler_arithmetic"
+        },
+        "benchmark_weights": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Benchmark Weights"
+        },
+        "filters": {
+          "$ref": "#/$defs/ReportFilters"
+        },
+        "report_options": {
+          "$ref": "#/$defs/ReportOptions"
+        },
+        "risk_profile": {
+          "$ref": "#/$defs/RiskProfileInput"
+        },
+        "tickers": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Tickers",
+          "type": "array"
+        },
+        "version": {
+          "default": "phase5-v1",
+          "title": "Version",
+          "type": "string"
+        },
+        "weights": {
+          "items": {
+            "type": "number"
+          },
+          "title": "Weights",
+          "type": "array"
+        }
+      },
+      "required": [
+        "tickers",
+        "weights"
+      ],
+      "title": "ReportSummaryRequest",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Generated from backend Pydantic models. Do not edit by hand.",
+  "title": "MoneyView Portfolio API Schemas"
+}

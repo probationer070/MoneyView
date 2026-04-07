@@ -1,0 +1,23 @@
+# 프로젝트 루트에 .geminiignore 파일 생성
+# 민감 정보 파일
+.env
+.env.*
+*.pem
+*.key
+credentials.json
+secrets.yaml
+config/secrets/
+
+# 의존성 디렉토리 (수정 방지)
+node_modules/
+vendor/
+.venv/
+__pycache__/
+
+# 빌드 결과물
+dist/
+build/
+*.min.js
+
+# Git 내부 파일
+.git/

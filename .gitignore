@@ -12,3 +12,14 @@ pest.json
 saved_data
 Single_Videos
 src
+
+# Local environment secrets
+.env
+*.env
+config/.env
+config/*.local.env
+
+# Local data/runtime artifacts
+data/cache/
+data/raw/
+data/processed/
