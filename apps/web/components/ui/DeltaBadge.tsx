@@ -23,7 +23,7 @@ export function DeltaBadge({ value, className }: DeltaBadgeProps) {
       {isPositive && <ArrowUpRight className="h-4 w-4" />}
       {isNegative && <ArrowDownRight className="h-4 w-4" />}
       {!isPositive && !isNegative && <Minus className="h-4 w-4" />}
-      <span>{isPositive ? "+" : ""}{value.toFixed(2)}%</span>
+      <span>{isPositive ? "+" : ""}{value.toFixed(1)}%</span>
     </div>
   );
 }

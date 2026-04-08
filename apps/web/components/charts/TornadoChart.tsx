@@ -27,7 +27,7 @@ export const TornadoChart: React.FC<{ data: TornadoEntry[] }> = ({ data }) => {
                     <XAxis type="number" tickFormatter={(v) => `$${v}`} tick={{fill: "var(--text-muted)"}} />
                     <YAxis dataKey="name" type="category" tick={{fill: "var(--text-primary)", fontWeight: 600}} axisLine={false} tickLine={false} />
                     <Tooltip 
-                        formatter={(value) => [`$${Number(value ?? 0).toFixed(2)}`, "Implied Target"]}
+                        formatter={(value) => [`$${Number(value ?? 0).toFixed(1)}`, "Implied Target"]}
                         cursor={{fill: "rgba(0,0,0,0.05)"}}
                         contentStyle={{ borderRadius: "8px", border: "1px solid var(--border)" }}
                     />

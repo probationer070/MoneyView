@@ -54,7 +54,7 @@ class GlobalMacroCollector(BaseCollector):
                     params["period1"] = int(dt_start.timestamp())
                     params["period2"] = int(dt_end.timestamp())
                 else:
-                    params["range"] = "1y"
+                    params["range"] = "5y"
                 
                 response = requests.get(url, headers=headers, params=params, timeout=10)
                 response.raise_for_status()

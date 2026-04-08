@@ -102,7 +102,7 @@ async def get_watchlist():
 
 
 @router.get("/stock/{ticker}", response_model=dict)
-async def get_stock_detail(ticker: str, period: str = "1y"):
+async def get_stock_detail(ticker: str, period: str = "5y"):
     """Return prices + recent news for a single stock."""
     bars  = _mkt.get_stock_ohlcv(ticker.upper(), period=period)
     news  = _news.get_news(ticker=ticker.upper(), limit=10)

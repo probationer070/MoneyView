@@ -52,12 +52,16 @@ class DataProvider:
         self,
         ticker: str,
         period: PeriodEnum,
+        date_from: date | None = None,
         as_of_date: date | None = None,
     ) -> np.ndarray:
-        limit = PERIOD_TO_DAYS.get(period, 365)
+        limit = PERIOD_TO_DAYS.get(period, PERIOD_TO_DAYS[PeriodEnum.five_year])
         table = self.table_for_ticker(ticker)
         where_clause = "WHERE ticker = ?"
         params: list = [ticker]
+        if date_from is not None:
+            where_clause += " AND date >= ?"
+            params.append(date_from.isoformat())
         if as_of_date is not None:
             where_clause += " AND date <= ?"
             params.append(as_of_date.isoformat())
@@ -81,19 +85,20 @@ class DataProvider:
         self,
         ticker: str,
         period: PeriodEnum,
+        date_from: date | None = None,
         as_of_date: date | None = None,
         allow_synthetic_fallback: bool = False,
     ) -> tuple[float, bool]:
         if ticker == "CASH":
             return 0.0, False
 
-        prices = self.load_close_series(ticker, period, as_of_date=as_of_date)
+        prices = self.load_close_series(ticker, period, date_from=date_from, as_of_date=as_of_date)
         if len(prices) < 2:
             synthetic = self._synthetic_or_raise(
                 ticker,
                 "fewer than two close prices",
                 allow_synthetic_fallback,
-                f"scalar:{ticker}:{period.value}:{as_of_date or ''}",
+                f"scalar:{ticker}:{period.value}:{date_from or ''}:{as_of_date or ''}",
                 20,
             )
             return float(np.sum(synthetic)), True
@@ -105,7 +110,7 @@ class DataProvider:
                 ticker,
                 "non-positive close prices",
                 allow_synthetic_fallback,
-                f"scalar:{ticker}:{period.value}:{as_of_date or ''}",
+                f"scalar:{ticker}:{period.value}:{date_from or ''}:{as_of_date or ''}",
                 20,
             )
             return float(np.sum(synthetic)), True
@@ -116,19 +121,20 @@ class DataProvider:
         ticker: str,
         period: PeriodEnum,
         min_len: int,
+        date_from: date | None = None,
         as_of_date: date | None = None,
         allow_synthetic_fallback: bool = False,
     ) -> tuple[np.ndarray, bool]:
         if ticker == "CASH":
             return np.zeros(min_len, dtype=float), False
 
-        prices = self.load_close_series(ticker, period, as_of_date=as_of_date)
+        prices = self.load_close_series(ticker, period, date_from=date_from, as_of_date=as_of_date)
         if len(prices) < 3:
             synthetic = self._synthetic_or_raise(
                 ticker,
                 "fewer than three close prices",
                 allow_synthetic_fallback,
-                f"series:{ticker}:{period.value}:{as_of_date or ''}",
+                f"series:{ticker}:{period.value}:{date_from or ''}:{as_of_date or ''}",
                 min_len,
             )
             return synthetic, True
@@ -137,7 +143,7 @@ class DataProvider:
                 ticker,
                 "non-positive close prices",
                 allow_synthetic_fallback,
-                f"series:{ticker}:{period.value}:{as_of_date or ''}",
+                f"series:{ticker}:{period.value}:{date_from or ''}:{as_of_date or ''}",
                 min_len,
             )
             return synthetic, True
@@ -148,7 +154,7 @@ class DataProvider:
                 ticker,
                 f"fewer than {min_len} return observations",
                 allow_synthetic_fallback,
-                f"series:{ticker}:{period.value}:{as_of_date or ''}",
+                f"series:{ticker}:{period.value}:{date_from or ''}:{as_of_date or ''}",
                 min_len,
             )
             return synthetic, True

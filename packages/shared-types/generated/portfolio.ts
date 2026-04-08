@@ -34,6 +34,7 @@ export interface AttributionRequest {
   allow_short?: boolean;
   allow_synthetic_fallback?: boolean;
   allow_benchmark_proxy?: boolean;
+  date_from?: string | null;
   as_of_date?: string | null;
   benchmark_weights?: number[] | null;
   risk_profile?: RiskProfileInput;

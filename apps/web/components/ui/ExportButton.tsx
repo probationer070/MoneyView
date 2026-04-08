@@ -10,6 +10,8 @@ interface ExportButtonProps {
   benchmark?: string;
   period?: "1w" | "1mo" | "3mo" | "6mo" | "1y" | "2y" | "5y";
   currency?: string;
+  dateFrom?: string;
+  asOfDate?: string;
 }
 
 function downloadBlob(filename: string, type: string, content: string) {
@@ -27,8 +29,10 @@ export function ExportButton({
   tickers,
   weights,
   benchmark = "^GSPC",
-  period = "1y",
+  period = "5y",
   currency = "USD",
+  dateFrom = "",
+  asOfDate = "",
 }: ExportButtonProps) {
   const [isLoading, setIsLoading] = useState(false);
   const canExport = useMemo(() => tickers.length > 0 && weights.length > 0, [tickers, weights]);
@@ -41,6 +45,8 @@ export function ExportButton({
         period,
         benchmark,
         currency,
+        date_from: dateFrom || null,
+        date_to: asOfDate || null,
       },
       report_options: {
         formats: ["html", "pdf", "markdown", "csv", "json"],
@@ -53,7 +59,7 @@ export function ExportButton({
       allow_benchmark_proxy: true,
       version: "phase5-v1",
     }),
-    [benchmark, currency, period, tickers, weights]
+    [asOfDate, benchmark, currency, dateFrom, period, tickers, weights]
   );
 
   async function fetchExport(format: ReportExportFormatEnum): Promise<ReportExportResponse> {
@@ -154,7 +160,7 @@ export function ExportButton({
       <button
         onClick={exportPdf}
         disabled={isLoading}
-        className="px-3 py-2 text-sm rounded-md border border-[var(--border)] bg-[var(--accent)] text-white hover:opacity-90"
+        className="px-3 py-2 text-sm rounded-md border border-[var(--border)] bg-[var(--surface)] text-white hover:opacity-90"
       >
         Print PDF
       </button>

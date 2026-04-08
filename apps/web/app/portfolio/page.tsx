@@ -22,6 +22,7 @@ import { ExportButton } from "@/components/ui/ExportButton";
 import { ViewToggle, type ViewMode } from "@/components/ui/ViewToggle";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
 
+// Domain models returned by the portfolio, detail, and news endpoints.
 interface WatchlistDelta {
   delta_pct: number;
 }
@@ -53,6 +54,7 @@ interface StockDetail {
   news: NewsArticle[];
 }
 
+// Loading placeholders keep the attribution dashboard stable while API requests resolve.
 function KpiSkeletonCard() {
   return (
     <div className="rounded-[var(--radius)] border border-[var(--border)] bg-white p-4 animate-pulse">
@@ -97,6 +99,7 @@ function WatchlistSkeletonGrid() {
   );
 }
 
+// Shared empty/error state panel for watchlist and attribution engine failures.
 function StatusPanel({
   title,
   message,
@@ -119,6 +122,7 @@ function StatusPanel({
   );
 }
 
+// Compact identity block reused by holding cards and table rows.
 function StockIdentity({ stock }: { stock: PortfolioStock }) {
   return (
     <div>
@@ -130,6 +134,7 @@ function StockIdentity({ stock }: { stock: PortfolioStock }) {
   );
 }
 
+// Table layout for holdings when the user switches away from card view.
 function HoldingsTable({
   watchlist,
   onSelect,
@@ -163,8 +168,8 @@ function HoldingsTable({
                 <td className="px-4 py-3 text-[var(--text-muted)]">{stock.sector || "UNCLASSIFIED"}</td>
                 <td className="px-4 py-3 text-right tabular-nums">
                   {stock.last_close.toLocaleString(undefined, {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
+                    minimumFractionDigits: 1,
+                    maximumFractionDigits: 1,
                   })}
                 </td>
                 <td className="px-4 py-3 text-right">
@@ -179,6 +184,7 @@ function HoldingsTable({
   );
 }
 
+// Small interpretation helpers keep tooltip copy and status labels consistent.
 function isToday(dateText: string) {
   const today = new Date().toISOString().slice(0, 10);
   return dateText?.slice(0, 10) === today;
@@ -192,6 +198,12 @@ function portfolioStatus(label: string, value: number) {
   return "Review in context.";
 }
 
+function benchmarkMethodLabel(method?: string | null) {
+  if (method === "equal_sector_proxy") return "Equal-sector proxy";
+  return method ?? "Direct benchmark profile";
+}
+
+// Detail modal loads OHLCV history and paginated ticker news for the selected holding.
 function StockDetailModal({
   stock,
   onClose,
@@ -202,9 +214,10 @@ function StockDetailModal({
   const newsContainerRef = useRef<HTMLDivElement | null>(null);
   const newsPageSize = 5;
 
+  // Price history powers the TradingView chart; news is fetched lazily and crawled if needed.
   const detailQuery = useQuery<StockDetail>({
     queryKey: ["portfolio-stock-detail", stock.ticker],
-    queryFn: () => fetchApi<StockDetail>(`/portfolio/stock/${stock.ticker}?period=6mo`),
+    queryFn: () => fetchApi<StockDetail>(`/portfolio/stock/${stock.ticker}?period=5y`),
   });
 
   const newsQuery = useInfiniteQuery<NewsArticle[]>({
@@ -243,6 +256,7 @@ function StockDetailModal({
   const priceChangePct = previousPrice ? ((currentPrice - previousPrice) / previousPrice) * 100 : 0;
   const priceTone = priceChangePct >= 0 ? "text-[var(--delta-up)]" : "text-[var(--delta-down)]";
 
+  // Lock background scrolling while the modal is open and allow Escape to close it.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose();
@@ -273,10 +287,10 @@ function StockDetailModal({
           </div>
           <div className="ml-auto mr-4 text-right">
             <p className={`text-2xl font-black tabular-nums ${priceTone}`}>
-              ${currentPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              ${currentPrice.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
             </p>
             <p className={`text-sm font-bold ${priceTone}`}>
-              {priceChangePct >= 0 ? "+" : ""}{priceChangePct.toFixed(2)}%
+              {priceChangePct >= 0 ? "+" : ""}{priceChangePct.toFixed(1)}%
             </p>
           </div>
           <button
@@ -289,6 +303,7 @@ function StockDetailModal({
           </button>
         </div>
 
+        {/* Modal body: price/volume chart on the left, stock-specific news feed on the right. */}
         <div className="grid max-h-[calc(92vh-82px)] grid-cols-1 gap-4 overflow-y-auto p-5 lg:grid-cols-3">
           <section className="lg:col-span-2 rounded-[var(--radius)] border border-[var(--border)] bg-white p-4 shadow-sm">
             <h3 className="mb-3 text-sm font-bold text-[var(--text-primary)]">
@@ -370,8 +385,13 @@ function StockDetailModal({
 }
 
 export default function PortfolioPage() {
+  // Page state tracks the holdings presentation mode and the currently opened detail modal.
   const [holdingsView, setHoldingsView] = useState<ViewMode>("chart");
   const [selectedStock, setSelectedStock] = useState<PortfolioStock | null>(null);
+  const [holdingStartDate, setHoldingStartDate] = useState("");
+  const [attributionAsOfDate, setAttributionAsOfDate] = useState("");
+
+  // Watchlist query is the source for holdings, attribution inputs, and detail entry points.
   const watchlistQuery = useQuery<PortfolioStock[]>({
     queryKey: ["portfolio-watchlist"],
     queryFn: () => fetchApi<PortfolioStock[]>("/portfolio/watchlist"),
@@ -387,8 +407,9 @@ export default function PortfolioPage() {
     [tickers],
   );
 
+  // Attribution query posts an equal-weight portfolio against the S&P 500 benchmark.
   const attributionQuery = useQuery<AttributionResult>({
-    queryKey: ["portfolio-attribution", tickers.join(","), "1y", "^GSPC", "USD"],
+    queryKey: ["portfolio-attribution", tickers.join(","), "5y", "^GSPC", "USD", holdingStartDate, attributionAsOfDate],
     enabled: tickers.length > 0,
     queryFn: () =>
       fetchApi<AttributionResult>("/portfolio/attribution", {
@@ -397,8 +418,10 @@ export default function PortfolioPage() {
           tickers,
           weights,
           benchmark: "^GSPC",
-          period: "1y",
+          period: "5y",
           currency: "USD",
+          date_from: holdingStartDate || null,
+          as_of_date: attributionAsOfDate || null,
           attribution_method: "brinson_fachler_arithmetic",
           allow_synthetic_fallback: true,
           allow_benchmark_proxy: true,
@@ -408,6 +431,7 @@ export default function PortfolioPage() {
   });
 
   const watchlist = watchlistQuery.data ?? [];
+  // Chart adapters convert domain attribution data into display-ready allocation/effects datasets.
   const allocationData = attributionQuery.data ? toAllocationDonutData(attributionQuery.data) : [];
   const waterfallData = attributionQuery.data ? toAttributionWaterfallData(attributionQuery.data) : [];
   const hasHoldings = tickers.length > 0;
@@ -419,16 +443,49 @@ export default function PortfolioPage() {
       fallbackMessage="Portfolio attribution UI failed to render safely."
     >
       <div className="space-y-6 animate-in fade-in duration-500">
-        <header className="flex justify-between items-end">
+        {/* Header: page identity plus attribution date range and export controls. */}
+        <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <h1 className="text-3xl font-bold tracking-tight text-[var(--text-primary)]">Portfolio</h1>
             <p className="text-[var(--text-muted)] mt-1">
               Attribution-focused portfolio command center
             </p>
           </div>
-          <ExportButton tickers={tickers} weights={weights} benchmark="^GSPC" period="1y" currency="USD" />
+          <div className="flex flex-col gap-3 lg:items-end">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <label className="flex flex-col gap-1 text-xs font-semibold text-[var(--text-muted)]">
+                <InfoTooltip
+                  label="Holding Start Date"
+                  description="Sets the starting point for return, attribution, and beta calculations. Use the date the stock was added or the position was first held; this prevents multi-year winners from showing inflated returns when the actual holding period is shorter."
+                />
+                <input
+                  type="date"
+                  value={holdingStartDate}
+                  onChange={(event) => setHoldingStartDate(event.target.value)}
+                  max={attributionAsOfDate || new Date().toISOString().slice(0, 10)}
+                  className="rounded-[var(--radius)] border border-[var(--border)] bg-white px-3 py-2 text-sm text-[var(--text-primary)]"
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-xs font-semibold text-[var(--text-muted)]">
+                <InfoTooltip
+                  label="Return End Date"
+                  description="Sets the ending date for return, attribution, and beta calculations. Leave blank to use the latest available cached market date."
+                />
+                <input
+                  type="date"
+                  value={attributionAsOfDate}
+                  onChange={(event) => setAttributionAsOfDate(event.target.value)}
+                  min={holdingStartDate || undefined}
+                  max={new Date().toISOString().slice(0, 10)}
+                  className="rounded-[var(--radius)] border border-[var(--border)] bg-white px-3 py-2 text-sm text-[var(--text-primary)]"
+                />
+              </label>
+            </div>
+            <ExportButton tickers={tickers} weights={weights} benchmark="^GSPC" period="5y" currency="USD" dateFrom={holdingStartDate} asOfDate={attributionAsOfDate} />
+          </div>
         </header>
 
+        {/* Attribution loading state: skeleton KPI cards and chart panels while results calculate. */}
         {attributionQuery.isLoading && hasHoldings && (
           <>
             <section className="grid grid-cols-1 md:grid-cols-4 gap-3">
@@ -444,6 +501,7 @@ export default function PortfolioPage() {
           </>
         )}
 
+        {/* Attribution results: KPI summary, benchmark methodology, allocation, and effects charts. */}
         {attributionQuery.data && shouldShowAttribution && (
           <>
             <section className="grid grid-cols-1 md:grid-cols-4 gap-3">
@@ -451,55 +509,89 @@ export default function PortfolioPage() {
                 <p className="text-xs text-[var(--text-muted)]">
                   <InfoTooltip
                     label="Portfolio Return"
-                    description={`Weighted return of selected holdings over the attribution period. Benchmark/ideal: above 0% and above benchmark. Current status: ${portfolioStatus("return", attributionQuery.data.totals.portfolio_return)}.`}
+                    description={`Definition: total weighted return earned by the selected holdings over the attribution period. Formula: Portfolio Return = sum(weight_i x holding return_i). Step 1: calculate each holding's period return from its start and end prices. Step 2: multiply each holding return by its portfolio weight. Step 3: sum the weighted holding returns. Current status: ${portfolioStatus("return", attributionQuery.data.totals.portfolio_return)}.`}
                   />
                 </p>
                 <p className="text-xl font-bold mt-1">
-                  {(attributionQuery.data.totals.portfolio_return * 100).toFixed(2)}%
+                  {(attributionQuery.data.totals.portfolio_return * 100).toFixed(1)}%
                 </p>
               </div>
               <div className="rounded-[var(--radius)] border border-[var(--border)] bg-white p-4">
                 <p className="text-xs text-[var(--text-muted)]">
                   <InfoTooltip
                     label="Benchmark Return"
-                    description="Reference index return used for comparison. It is not good or bad by itself; it is the hurdle for active return."
+                    description="Definition: return of the benchmark used as the comparison hurdle for the portfolio. Formula: Benchmark Return = sum(benchmark weight_i x benchmark/sector return_i), or direct benchmark index return when constituent weights are available. Step 1: identify the benchmark and period. Step 2: use direct benchmark returns or mapped proxy sector returns. Step 3: aggregate benchmark-weighted returns into one comparison return."
                   />
                 </p>
                 <p className="text-xl font-bold mt-1">
-                  {(attributionQuery.data.totals.benchmark_return * 100).toFixed(2)}%
+                  {(attributionQuery.data.totals.benchmark_return * 100).toFixed(1)}%
                 </p>
               </div>
               <div className="rounded-[var(--radius)] border border-[var(--border)] bg-white p-4">
                 <p className="text-xs text-[var(--text-muted)]">
                   <InfoTooltip
                     label="Active Return"
-                    description={`Portfolio return minus benchmark return. Benchmark/ideal: above 0%. Current status: ${portfolioStatus("active", attributionQuery.data.active_return)}.`}
+                    description={`Definition: excess return produced by the portfolio versus the benchmark. Formula: Active Return = Portfolio Return - Benchmark Return. Step 1: compute the portfolio weighted return. Step 2: compute the benchmark return over the same period and currency. Step 3: subtract benchmark return from portfolio return; positive means outperformance and negative means underperformance. Current status: ${portfolioStatus("active", attributionQuery.data.active_return)}.`}
                   />
                 </p>
                 <p className="text-xl font-bold mt-1">
-                  {(attributionQuery.data.active_return * 100).toFixed(2)}%
+                  {(attributionQuery.data.active_return * 100).toFixed(1)}%
                 </p>
               </div>
               <div className="rounded-[var(--radius)] border border-[var(--border)] bg-white p-4">
                 <p className="text-xs text-[var(--text-muted)]">
                   <InfoTooltip
                     label="Beta"
-                    description={`Sensitivity to benchmark movement. Ideal range depends on mandate; 0.8-1.2 is market-like, above 1.2 is higher risk. Current status: ${portfolioStatus("beta", attributionQuery.data.risk_metrics.beta)}.`}
+                    description={`Definition: sensitivity of portfolio returns to benchmark returns. Formula: Beta = covariance(portfolio returns, benchmark returns) / variance(benchmark returns). Step 1: align portfolio and benchmark return observations over the same dates. Step 2: measure how the portfolio co-moves with the benchmark. Step 3: divide that co-movement by benchmark variance. Around 1.0 is market-like; above 1.2 is higher benchmark sensitivity. Current status: ${portfolioStatus("beta", attributionQuery.data.risk_metrics.beta)}.`}
                   />
                 </p>
                 <p className="text-xl font-bold mt-1">
-                  {attributionQuery.data.risk_metrics.beta.toFixed(3)}
+                  {attributionQuery.data.risk_metrics.beta.toFixed(1)}
                 </p>
+              </div>
+            </section>
+
+            <section className="rounded-[var(--radius)] border border-[var(--border)] bg-white p-4 shadow-sm">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                <div className="max-w-3xl">
+                  <h2 className="text-sm font-bold text-[var(--text-primary)]">
+                    <InfoTooltip
+                      label="Benchmark Selection Criteria"
+                      description="The current portfolio view selects ^GSPC as the broad-market benchmark because the watchlist is modeled as a diversified equity basket and the S&P 500 offers market-cap-weighted US large-cap breadth. Sector matching is handled through attribution sectors and an explicit proxy when true benchmark constituent weights are unavailable."
+                    />
+                  </h2>
+                  <p className="mt-2 text-sm text-[var(--text-muted)]">
+                    Benchmark: {attributionQuery.data.metadata.benchmark}. Return window: {holdingStartDate || "5-year lookback start"} to {attributionAsOfDate || "latest available market date"}. Methodology: portfolio holdings are equal-weighted in this view, then compared against benchmark return over the selected period. If user-provided benchmark weights exist, the engine uses them directly; otherwise it uses the opted-in provider-derived sector proxy and labels the limitation in the data quality metadata.
+                  </p>
+                  <p className="mt-2 text-sm text-[var(--text-muted)]">
+                    Calculation basis: Brinson-Fachler arithmetic attribution decomposes active return into allocation, selection, and interaction effects. Sector correlation is reviewed through the sector attribution mapping; this build does not run a live correlation optimizer for benchmark selection.
+                  </p>
+                </div>
+                <div className="grid min-w-56 grid-cols-2 gap-2 text-xs">
+                  <div className="rounded-[var(--radius)] bg-[var(--surface-muted)] p-3">
+                    <div className="text-[var(--text-muted)]">Weight Source</div>
+                    <div className="mt-1 font-bold text-[var(--text-primary)]">
+                      {attributionQuery.data.metadata.benchmark_weights_source.replace("_", " ")}
+                    </div>
+                  </div>
+                  <div className="rounded-[var(--radius)] bg-[var(--surface-muted)] p-3">
+                    <div className="text-[var(--text-muted)]">Proxy Method</div>
+                    <div className="mt-1 font-bold text-[var(--text-primary)]">
+                      {benchmarkMethodLabel(attributionQuery.data.metadata.data_quality?.benchmark_proxy_method)}
+                    </div>
+                  </div>
+                </div>
               </div>
             </section>
 
             <section className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               <AllocationDonut data={allocationData} />
-              <AttributionWaterfall data={waterfallData} />
+              <AttributionWaterfall data={waterfallData} sectorBreakdowns={attributionQuery.data.sector_breakdowns} />
             </section>
           </>
         )}
 
+        {/* Portfolio and attribution request states shown before the holdings section. */}
         {!watchlistQuery.isLoading && watchlistQuery.isError && (
           <StatusPanel
             title="Portfolio Data Unavailable"
@@ -530,6 +622,7 @@ export default function PortfolioPage() {
           />
         )}
 
+        {/* Holdings toolbar: section title, explanatory tooltip, and card/table view toggle. */}
         <section className="flex items-center justify-between gap-4">
           <div>
             <h2 className="text-lg font-bold text-[var(--text-primary)]">
@@ -543,6 +636,7 @@ export default function PortfolioPage() {
           <ViewToggle value={holdingsView} onChange={setHoldingsView} />
         </section>
 
+        {/* Holdings body: skeleton, card grid, table, or empty state depending on data and view mode. */}
         {watchlistQuery.isLoading ? (
           <WatchlistSkeletonGrid />
         ) : watchlist.length > 0 && holdingsView === "chart" ? (
@@ -561,8 +655,8 @@ export default function PortfolioPage() {
                     <div className="text-right">
                       <div className="font-semibold tabular-nums">
                         {stock.last_close.toLocaleString(undefined, {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
+                          minimumFractionDigits: 1,
+                          maximumFractionDigits: 1,
                         })}
                       </div>
                       <DeltaBadge value={deltaPct} className="mt-1" />
@@ -585,6 +679,7 @@ export default function PortfolioPage() {
           <HoldingsTable watchlist={watchlist} onSelect={setSelectedStock} />
         ) : null}
 
+        {/* Stock detail modal renders on demand when a holding is selected. */}
         {selectedStock && (
           <StockDetailModal stock={selectedStock} onClose={() => setSelectedStock(null)} />
         )}

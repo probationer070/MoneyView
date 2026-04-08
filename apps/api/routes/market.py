@@ -27,7 +27,7 @@ async def get_all_indices():
 @router.get("/index/{ticker}", response_model=List[StockOHLCV])
 async def get_index_history(
     ticker: str,
-    period: str = Query(default="1y", description="1w | 1mo | 3mo | 6mo | 1y | 2y | 5y"),
+    period: str = Query(default="5y", description="1w | 1mo | 3mo | 6mo | 1y | 2y | 5y"),
 ):
     """Return full OHLCV history for a single market index."""
     return _svc.get_stock_ohlcv(ticker, period=period, table="indices")

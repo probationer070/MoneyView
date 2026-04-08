@@ -24,6 +24,7 @@ class CacheService:
                 request.currency.upper(),
                 request.return_frequency.value,
                 request.rebalancing.value,
+                str(request.date_from or ""),
                 str(request.as_of_date or ""),
                 request.attribution_method.value,
                 str(request.allow_synthetic_fallback),

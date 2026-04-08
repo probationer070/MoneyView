@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, PieChart, Newspaper, Activity, Building2 } from "lucide-react";
+import { LayoutDashboard, PieChart, Newspaper, Activity, Building2, Orbit } from "lucide-react";
 import clsx from "clsx";
 
 const navItems = [
@@ -10,6 +10,7 @@ const navItems = [
   { href: "/portfolio", label: "Portfolio", icon: PieChart },
   { href: "/news", label: "News Feed", icon: Newspaper },
   { href: "/corporate", label: "Corporate Analysis", icon: Building2 },
+  { href: "/monte-carlo", label: "Monte Carlo", icon: Orbit },
 ];
 
 export function Sidebar() {
@@ -18,7 +19,7 @@ export function Sidebar() {
   return (
     <aside className="fixed left-0 top-0 h-screen w-64 bg-[var(--bg-secondary)] border-r border-[var(--border)] p-4 flex flex-col">
       <div className="flex items-center gap-2 mb-8 px-2">
-        <Activity className="h-6 w-6 text-[var(--accent)]" />
+        <Activity className="h-6 w-6 text-[var(--surface)]" />
         <h1 className="font-bold text-xl text-[var(--text-primary)]">MoneyView</h1>
       </div>
 
@@ -34,7 +35,7 @@ export function Sidebar() {
               className={clsx(
                 "flex items-center gap-3 px-3 py-2 rounded-[var(--radius)] transition-colors",
                 isActive
-                  ? "bg-[var(--accent)] text-white font-medium shadow-sm"
+                  ? "bg-[var(--surface)] text-white font-medium shadow-sm"
                   : "text-[var(--text-muted)] hover:bg-[var(--surface)] hover:text-[var(--text-primary)]"
               )}
             >
@@ -44,7 +45,7 @@ export function Sidebar() {
           );
         })}
       </nav>
-      
+
       <div className="mt-auto px-2 pb-4 text-xs text-center text-[var(--text-muted)]">
         Powered by FastAPI & Next.js
       </div>

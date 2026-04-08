@@ -27,7 +27,7 @@ _mkt   = MarketDataService()
 @router.get("/{ticker}/ohlcv", response_model=List[StockOHLCV])
 async def get_ohlcv(
     ticker: str,
-    period: str = Query(default="1y"),
+    period: str = Query(default="5y"),
 ):
     return _mkt.get_stock_ohlcv(ticker.upper(), period=period)
 
@@ -86,7 +86,7 @@ def _sma(closes: np.ndarray, period: int) -> Optional[float]:
 
 
 @router.get("/{ticker}/technicals", response_model=TechnicalIndicators)
-async def get_technicals(ticker: str, period: str = Query(default="1y")):
+async def get_technicals(ticker: str, period: str = Query(default="5y")):
     """Compute RSI-14, MACD, Bollinger Bands, and MAs using pure NumPy."""
     bars = _mkt.get_stock_ohlcv(ticker.upper(), period=period)
     if not bars:
@@ -140,7 +140,7 @@ async def get_monte_carlo(
 
     NumPy implementation. Rust will be substituted when paths ≥ 100_000.
     """
-    bars = _mkt.get_stock_ohlcv(ticker.upper(), period="2y")
+    bars = _mkt.get_stock_ohlcv(ticker.upper(), period="5y")
     if len(bars) < 30:
         return MonteCarloResult(
             ticker=ticker.upper(), paths=paths, horizon_days=horizon_days,

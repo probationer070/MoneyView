@@ -1,0 +1,54 @@
+"use client";
+
+import { Area, AreaChart, CartesianGrid, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { InfoTooltip } from "@/components/ui/InfoTooltip";
+import { CHART_INITIAL_DIMENSION, type DetailKey, type RiskReturnPoint, numberText, pct2 } from "./shared";
+
+export function RiskReturnMinardGraph({
+  derivedSpread,
+  successProbability,
+  riskReturn,
+  onOpenDetail,
+}: {
+  derivedSpread: number;
+  successProbability: number;
+  riskReturn: RiskReturnPoint[];
+  onOpenDetail: (key: DetailKey) => void;
+}) {
+  return (
+    <div className="lg:col-span-4 rounded-[var(--radius)] border border-[var(--border)] bg-white p-5 shadow-sm">
+      <div className="flex flex-col gap-1 md:flex-row md:items-baseline md:justify-between">
+        <button
+          type="button"
+          onClick={() => onOpenDetail("riskReturnMinard")}
+          className="text-left text-sm font-bold text-[var(--text-primary)] underline decoration-dotted underline-offset-4 hover:text-[var(--surface)]"
+        >
+          <InfoTooltip
+            label="Risk-Return Minard Chart"
+            description="X-axis moves across risk exposure segments: Inflation, FX, Demand, and Margin. The NPV path approximates expected return under each exposure; stroke thickness represents success probability, and the area layer indicates failure probability."
+          />
+        </button>
+        <button
+          type="button"
+          onClick={() => onOpenDetail("failureProbability")}
+          className="text-left text-xs text-[var(--text-muted)] underline decoration-dotted underline-offset-4 transition hover:text-[var(--surface)]"
+        >
+          Line thickness proxy: success probability. Area: failure distribution.
+        </button>
+      </div>
+      <div className="h-80 min-h-80 min-w-0">
+        <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1} initialDimension={CHART_INITIAL_DIMENSION}>
+          <AreaChart data={riskReturn} margin={{ top: 20, right: 24, bottom: 0, left: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+            <XAxis dataKey="risk" tick={{ fill: "var(--text-muted)" }} />
+            <YAxis tick={{ fill: "var(--text-muted)" }} />
+            <Tooltip formatter={(value, name) => (name === "Failure probability" ? pct2(Number(value)) : numberText(Number(value)))} />
+            <ReferenceLine y={0} stroke="#444444" />
+            <Area type="monotone" dataKey="fail" name="Failure probability" stroke="#9DA5A2" fill="#9DA5A2" fillOpacity={0.22} />
+            <Line type="monotone" dataKey="npv" name="NPV path" stroke={derivedSpread >= 0 ? "var(--accent)" : "var(--delta-down)"} strokeWidth={Math.max(2, successProbability / 18)} dot={{ r: 4 }} />
+          </AreaChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}

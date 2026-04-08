@@ -26,6 +26,9 @@ from apps.api.services.db import get_db
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_OHLCV_PERIOD = "5y"
+DEFAULT_OHLCV_DAYS = 1825
+
 MARKET_INDICES = {
     "S&P 500": "^GSPC",
     "Dow Jones": "^DJI",
@@ -115,9 +118,27 @@ class MarketDataService:
                 continue
         return None
 
+    @staticmethod
+    def _oldest_row_date(rows) -> date | None:
+        for row in reversed(rows):
+            raw = str(row["date"])[:10]
+            try:
+                return datetime.strptime(raw, "%Y-%m-%d").date()
+            except ValueError:
+                continue
+        return None
+
     def _rows_are_fresh(self, rows) -> bool:
         latest = self._latest_row_date(rows)
         return latest is not None and latest >= self._previous_trading_day()
+
+    def _rows_cover_period(self, rows, period_days: int) -> bool:
+        latest = self._latest_row_date(rows)
+        oldest = self._oldest_row_date(rows)
+        if latest is None or oldest is None:
+            return False
+        required_span_days = int(period_days * 0.9)
+        return (latest - oldest).days >= required_span_days
 
     @staticmethod
     def _query_tickers(ticker: str, table: str) -> List[str]:
@@ -185,7 +206,7 @@ class MarketDataService:
                         ),
                     )
 
-    def _fetch_yahoo_chart_ohlcv(self, ticker: str, period: str = "1y") -> List[StockOHLCV]:
+    def _fetch_yahoo_chart_ohlcv(self, ticker: str, period: str = DEFAULT_OHLCV_PERIOD) -> List[StockOHLCV]:
         """Direct Yahoo chart API fallback, mirroring GlobalMacroCollector."""
         range_value = {
             "1w": "7d",
@@ -195,7 +216,7 @@ class MarketDataService:
             "1y": "1y",
             "2y": "2y",
             "5y": "5y",
-        }.get(period, "1y")
+        }.get(period, DEFAULT_OHLCV_PERIOD)
         response = requests.get(
             f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}",
             headers={
@@ -239,7 +260,7 @@ class MarketDataService:
         self._save_ohlcv_rows(ticker, rows)
         return rows
 
-    def _fetch_live_ohlcv(self, ticker: str, period: str = "1y") -> List[StockOHLCV]:
+    def _fetch_live_ohlcv(self, ticker: str, period: str = DEFAULT_OHLCV_PERIOD) -> List[StockOHLCV]:
         """Fetch from yfinance first; fall back to Yahoo chart API."""
         try:
             import yfinance as yf
@@ -280,7 +301,7 @@ class MarketDataService:
     def get_stock_ohlcv(
         self,
         ticker: str,
-        period: str = "1y",
+        period: str = DEFAULT_OHLCV_PERIOD,
         table: str = "stocks",
     ) -> List[StockOHLCV]:
         """Read OHLCV from SQLite and refresh live data if locally stale."""
@@ -293,7 +314,7 @@ class MarketDataService:
             "1y": 365,
             "2y": 730,
             "5y": 1825,
-        }.get(period, 365)
+        }.get(period, DEFAULT_OHLCV_DAYS)
 
         with get_db() as conn:
             tickers = self._query_tickers(ticker, table)
@@ -310,12 +331,17 @@ class MarketDataService:
             logger.info("OHLCV cache miss for %s; fetching live data", ticker)
             return self._fetch_live_ohlcv(ticker, period)
 
-        if not self._rows_are_fresh(rows):
+        rows_fresh = self._rows_are_fresh(rows)
+        rows_cover_period = self._rows_cover_period(rows, period_days)
+        if not rows_fresh or not rows_cover_period:
             latest = self._latest_row_date(rows)
+            oldest = self._oldest_row_date(rows)
             logger.info(
-                "OHLCV data for %s is stale at %s; refreshing live data",
+                "OHLCV data for %s needs refresh; latest=%s oldest=%s requested_period=%s",
                 ticker,
                 latest.isoformat() if latest else "unknown",
+                oldest.isoformat() if oldest else "unknown",
+                period,
             )
             live_rows = self._fetch_live_ohlcv(ticker, period)
             if live_rows:
@@ -327,9 +353,9 @@ class MarketDataService:
         """Return summary card for every market index."""
         quotes: List[IndexQuote] = []
         for name, ticker in MARKET_INDICES.items():
-            bars = self.get_stock_ohlcv(ticker, period="1y", table="indices")
+            bars = self.get_stock_ohlcv(ticker, period=DEFAULT_OHLCV_PERIOD, table="indices")
             if len(bars) < 2:
-                bars = self._fetch_live_ohlcv(ticker, "1y")
+                bars = self._fetch_live_ohlcv(ticker, DEFAULT_OHLCV_PERIOD)
             if not bars:
                 continue
 

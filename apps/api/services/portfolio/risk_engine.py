@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 
 from apps.api.core.maths import calculate_portfolio_beta, historical_expected_shortfall, historical_var
-from apps.api.models.schemas import AttributionRequest, RiskMetrics
+from apps.api.models.schemas import AttributionRequest, PeriodEnum, RiskMetrics
 from apps.api.services.portfolio.data_provider import DataProvider, PERIOD_TO_DAYS
 
 
@@ -14,7 +14,7 @@ class RiskEngine:
         self.data_provider = data_provider
 
     def _portfolio_and_benchmark_series(self, request: AttributionRequest) -> tuple[np.ndarray, np.ndarray, set[str]]:
-        period_days = PERIOD_TO_DAYS.get(request.period, 365)
+        period_days = PERIOD_TO_DAYS.get(request.period, PERIOD_TO_DAYS[PeriodEnum.five_year])
         min_len = min(max(60, period_days // 2), 400)
         weights = np.array(request.weights, dtype=float)
         synthetic_tickers: set[str] = set()
@@ -25,6 +25,7 @@ class RiskEngine:
                 ticker,
                 request.period,
                 min_len=min_len,
+                date_from=request.date_from,
                 as_of_date=request.as_of_date,
                 allow_synthetic_fallback=request.allow_synthetic_fallback,
             )
@@ -49,6 +50,7 @@ class RiskEngine:
             request.benchmark.upper(),
             request.period,
             min_len=aligned_len,
+            date_from=request.date_from,
             as_of_date=request.as_of_date,
             allow_synthetic_fallback=request.allow_synthetic_fallback,
         )

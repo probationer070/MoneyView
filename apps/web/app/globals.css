@@ -4,15 +4,15 @@
   :root {
     --bg-primary: #FBFBFB;
     --bg-secondary: #E0E4D6;
-    --accent: #60CAAD;
+    --accent: #a7c7af;
     --text-primary: #444444;
     --text-muted: #9DA5A2;
     --border: #B6CCBB;
-    --surface: #A7C7AF;
+    --surface: #60caad;
     --surface-panel: #FFFFFF;
     --surface-muted: #F3F5EF;
-    --chart-1: #60CAAD;
-    --chart-2: #A7C7AF;
+    --chart-1: #39f1c0;
+    --chart-2: #60CAAD;
     --chart-3: #B6CCBB;
     --chart-4: #E0E4D6;
     --chart-5: #9DA5A2;
@@ -20,7 +20,7 @@
 
     --delta-up: #E54545;
     --delta-down: #4589E5;
-    
+
     --radius: 0.5rem;
   }
 

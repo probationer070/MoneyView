@@ -1,6 +1,7 @@
 __pycache__
 *.code-workspace
 .vscode
+.pytest_cache
 
 apikey*
 filtered_stocks.csv

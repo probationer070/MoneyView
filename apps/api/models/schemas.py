@@ -102,7 +102,7 @@ class IndexQuote(BaseModel):
     last_close:     float
     delta:          DeltaBadge
     sparkline:      List[float] = Field(default_factory=list)
-    period:         str = "1y"
+    period:         str = "5y"
 
 
 # ---------------------------------------------------------------------------
@@ -242,7 +242,7 @@ class CorporateMetrics(BaseModel):
     wacc: float = 10.0
     debt_ratio: float = 18.0
     unlevered_beta: float = 1.05
-    crp: float = 1.1
+    crp: float = 0.8
     reinvestment: float = 34.0
     fcff: float = 92.0
     innovation: float = 82.0
@@ -303,10 +303,14 @@ class PortfolioInput(BaseModel):
     weights: List[float]
     allow_cash: bool = True
     allow_short: bool = False
+    date_from: Optional[date] = None
     as_of_date: Optional[date] = None
 
     @model_validator(mode="after")
     def validate_and_normalize(self) -> "PortfolioInput":
+        if self.date_from is not None and self.as_of_date is not None and self.date_from > self.as_of_date:
+            raise ValueError("date_from must be on or before as_of_date")
+
         if not self.tickers:
             raise ValueError("tickers must not be empty")
         if len(self.tickers) != len(self.weights):
@@ -350,7 +354,13 @@ class PortfolioInput(BaseModel):
 
     def portfolio_hash(self) -> str:
         pairs = sorted(zip(self.tickers, self.weights), key=lambda x: x[0])
-        digest_input = "|".join(f"{ticker}:{weight:.10f}" for ticker, weight in pairs)
+        digest_input = "|".join(
+            [
+                *(f"{ticker}:{weight:.10f}" for ticker, weight in pairs),
+                f"date_from:{self.date_from or ''}",
+                f"as_of_date:{self.as_of_date or ''}",
+            ]
+        )
         return sha256(digest_input.encode("utf-8")).hexdigest()[:16]
 
 
@@ -375,7 +385,7 @@ class AttributionRequest(BaseModel):
     tickers: List[str]
     weights: List[float]
     benchmark: str = "^GSPC"
-    period: PeriodEnum = PeriodEnum.one_year
+    period: PeriodEnum = PeriodEnum.five_year
     currency: str = "USD"
     return_frequency: ReturnFrequencyEnum = ReturnFrequencyEnum.daily
     rebalancing: RebalancingEnum = RebalancingEnum.bop
@@ -384,6 +394,7 @@ class AttributionRequest(BaseModel):
     allow_short: bool = False
     allow_synthetic_fallback: bool = False
     allow_benchmark_proxy: bool = False
+    date_from: Optional[date] = None
     as_of_date: Optional[date] = None
     benchmark_weights: Optional[List[float]] = None
     risk_profile: RiskProfileInput = Field(default_factory=RiskProfileInput)
@@ -395,6 +406,8 @@ class AttributionRequest(BaseModel):
             weights=self.weights,
             allow_cash=self.allow_cash,
             allow_short=self.allow_short,
+            date_from=self.date_from,
+            as_of_date=self.as_of_date,
         )
         self.tickers = normalized.tickers
         self.weights = normalized.weights
@@ -423,6 +436,7 @@ class AttributionRequest(BaseModel):
             weights=self.weights,
             allow_cash=self.allow_cash,
             allow_short=self.allow_short,
+            date_from=self.date_from,
             as_of_date=self.as_of_date,
         )
 
@@ -539,7 +553,7 @@ class AttributionResult(BaseModel):
 
 
 class ReportFilters(BaseModel):
-    period: PeriodEnum = PeriodEnum.one_year
+    period: PeriodEnum = PeriodEnum.five_year
     date_from: Optional[date] = None
     date_to: Optional[date] = None
     benchmark: str = "^GSPC"
@@ -592,6 +606,7 @@ class ReportSummaryRequest(BaseModel):
             benchmark=self.filters.benchmark,
             period=self.filters.period,
             currency=self.filters.currency,
+            date_from=self.filters.date_from,
             as_of_date=self.filters.date_to,
             attribution_method=self.attribution_method,
             allow_cash=self.allow_cash,

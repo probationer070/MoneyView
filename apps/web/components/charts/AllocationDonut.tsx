@@ -38,7 +38,7 @@ export function AllocationDonut({ data }: AllocationDonutProps) {
             ))}
           </Pie>
           <Tooltip
-            formatter={(value) => `${(Number(value ?? 0) * 100).toFixed(2)}%`}
+            formatter={(value) => `${(Number(value ?? 0) * 100).toFixed(1)}%`}
             contentStyle={{ borderRadius: 8, border: "1px solid var(--border)" }}
           />
         </PieChart>

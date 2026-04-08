@@ -27,6 +27,7 @@ from apps.api.routes import (
     news_router,
     corporate_router,
     report_router,
+    monte_carlo_router,
 )
 
 logger = setup_logger(__name__)
@@ -120,6 +121,7 @@ app.include_router(detail_router,    prefix="/api/v1/detail",    tags=["Detail"]
 app.include_router(news_router,      prefix="/api/v1/news",      tags=["News"])
 app.include_router(corporate_router, prefix="/api/v1/corporate", tags=["Corporate"])
 app.include_router(report_router,    prefix="/api/v1/report",    tags=["Report"])
+app.include_router(monte_carlo_router, prefix="/api/v1/monte-carlo", tags=["Monte Carlo"])
 
 @app.get("/api/v1/health", tags=["Health"])
 async def health():

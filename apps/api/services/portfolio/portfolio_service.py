@@ -66,6 +66,7 @@ class PortfolioAnalyticsService:
             ticker_return, synthetic_used = self.data.scalar_return(
                 ticker,
                 request.period,
+                date_from=request.date_from,
                 as_of_date=request.as_of_date,
                 allow_synthetic_fallback=request.allow_synthetic_fallback,
             )
@@ -84,6 +85,7 @@ class PortfolioAnalyticsService:
             benchmark_return, benchmark_synthetic = self.data.scalar_return(
                 request.benchmark.upper(),
                 request.period,
+                date_from=request.date_from,
                 as_of_date=request.as_of_date,
                 allow_synthetic_fallback=request.allow_synthetic_fallback,
             )

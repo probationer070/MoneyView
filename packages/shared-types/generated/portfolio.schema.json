@@ -160,7 +160,7 @@
         },
         "period": {
           "$ref": "#/$defs/PeriodEnum",
-          "default": "1y"
+          "default": "5y"
         },
         "rebalancing": {
           "$ref": "#/$defs/RebalancingEnum",
@@ -643,7 +643,7 @@
             },
             "period": {
               "$ref": "#/$defs/PeriodEnum",
-              "default": "1y"
+              "default": "5y"
             }
           },
           "title": "ReportFilters",
@@ -1188,7 +1188,7 @@
             },
             "period": {
               "$ref": "#/$defs/PeriodEnum",
-              "default": "1y"
+              "default": "5y"
             }
           },
           "title": "ReportFilters",
@@ -1449,7 +1449,7 @@
             },
             "period": {
               "$ref": "#/$defs/PeriodEnum",
-              "default": "1y"
+              "default": "5y"
             }
           },
           "title": "ReportFilters",

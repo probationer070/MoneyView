@@ -41,8 +41,8 @@ export default async function TickerDetailPage({ params }: PageProps) {
 
   // Parallel fetching from FastAPI
   const [ohlcv, technicals] = await Promise.all([
-    fetchApi<StockOHLCV[]>(`/detail/${ticker}/ohlcv?period=6mo`, { baseUrl: apiBaseUrl }).catch(() => []),
-    fetchApi<Technicals>(`/detail/${ticker}/technicals?period=1y`, { baseUrl: apiBaseUrl }).catch(() => null),
+    fetchApi<StockOHLCV[]>(`/detail/${ticker}/ohlcv?period=5y`, { baseUrl: apiBaseUrl }).catch(() => []),
+    fetchApi<Technicals>(`/detail/${ticker}/technicals?period=5y`, { baseUrl: apiBaseUrl }).catch(() => null),
   ]);
 
   if (ohlcv.length === 0) {
@@ -75,7 +75,7 @@ export default async function TickerDetailPage({ params }: PageProps) {
         </div>
         <div className="text-right">
           <div className="text-3xl font-bold tabular-nums">
-            {current.close.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+            {current.close.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
           </div>
           <DeltaBadge value={deltaPct} className="mt-2 text-base px-3 py-1" />
         </div>
@@ -84,7 +84,7 @@ export default async function TickerDetailPage({ params }: PageProps) {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <ErrorBoundary fallbackTitle="Price Matrix Offline" fallbackMessage="The TradingView webGL engine failed to boot due to extreme data scaling.">
           <div className="lg:col-span-2 bg-white rounded-[var(--radius)] border border-[var(--border)] p-6 shadow-sm overflow-hidden">
-            <h2 className="text-lg font-bold mb-4">Price Trend & Matrix (6M)</h2>
+            <h2 className="text-lg font-bold mb-4">Price Trend & Matrix (5Y)</h2>
             <div className="border-t border-[var(--border)]/50 pt-4 -mx-2 h-[450px]">
                <TVChart 
                  data={tvCandles}

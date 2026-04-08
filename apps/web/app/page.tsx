@@ -61,7 +61,7 @@ export default async function MarketOverview() {
                 </div>
                 <div className="text-right">
                   <div className="font-bold text-xl tabular-nums">
-                    {idx.last_close.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    {idx.last_close.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
                   </div>
                   <DeltaBadge value={idx.delta.delta_pct} className="mt-1" />
                 </div>
