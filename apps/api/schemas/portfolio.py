@@ -15,6 +15,11 @@ from apps.api.models.schemas import (
     AttributionTotals,
     BenchmarkDefinition,
     BenchmarkWeightsSourceEnum,
+    CorporateComparisonResponse,
+    CorporateComparisonHistoryPoint,
+    CorporateComparisonHistoryResponse,
+    CorporateComparisonRow,
+    CorporateComparisonSnapshotMeta,
     PortfolioInput,
     ReportExportFormatEnum,
     ReportExportRequest,
@@ -26,6 +31,8 @@ from apps.api.models.schemas import (
     RiskMetrics,
     RiskProfileInput,
     SectorAttribution,
+    WatchlistSyncResult,
+    WatchlistSyncStatus,
 )
 
 __all__ = [
@@ -38,6 +45,11 @@ __all__ = [
     "AttributionTotals",
     "BenchmarkDefinition",
     "BenchmarkWeightsSourceEnum",
+    "CorporateComparisonResponse",
+    "CorporateComparisonHistoryPoint",
+    "CorporateComparisonHistoryResponse",
+    "CorporateComparisonRow",
+    "CorporateComparisonSnapshotMeta",
     "PortfolioInput",
     "ReportExportFormatEnum",
     "ReportExportRequest",
@@ -49,5 +61,7 @@ __all__ = [
     "RiskMetrics",
     "RiskProfileInput",
     "SectorAttribution",
+    "WatchlistSyncResult",
+    "WatchlistSyncStatus",
 ]
 

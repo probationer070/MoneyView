@@ -20,6 +20,11 @@ from .hurdle_rate import (
     wacc_sensitivity,
 )
 from .risk_analysis import payback_period, sensitivity_analysis, monte_carlo_npv
+from .expected_return import (
+    calculate_market_expected_return,
+    calculate_dcf_implied_return,
+    calculate_expected_return_spread,
+)
 
 __all__ = [
     "calculate_fcff", "calculate_growth_rate", "calculate_terminal_value",
@@ -27,4 +32,5 @@ __all__ = [
     "unlever_beta", "relever_beta", "bottom_up_beta",
     "calculate_crp", "calculate_wacc", "decompose_hurdle_rate", "wacc_sensitivity",
     "payback_period", "sensitivity_analysis", "monte_carlo_npv",
+    "calculate_market_expected_return", "calculate_dcf_implied_return", "calculate_expected_return_spread",
 ]

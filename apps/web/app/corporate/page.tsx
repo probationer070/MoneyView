@@ -2,7 +2,13 @@
 
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
 import { fetchApi } from "@/lib/api";
+import {
+  benchmarkPresetIdForTicker,
+  DEFAULT_KOREAN_BENCHMARK_TICKER,
+  KOREAN_BENCHMARK_PRESETS,
+} from "@/lib/benchmarkPresets";
 import { useDebounce } from "@/hooks/useDebounce";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import {
@@ -149,6 +155,55 @@ interface QuarterlyStatementsApi {
   source: string;
   rows: QuarterlyStatementRow[];
 }
+
+interface CorporateComparisonRowApi {
+  ticker: string;
+  name: string;
+  sector: string;
+  group_name: string;
+  weight: number;
+  roic: number;
+  wacc: number;
+  roic_minus_wacc: number;
+  dcf_value: number;
+  current_price: number;
+  dcf_implied_return: number;
+  capm_expected_return: number;
+  stock_expected_return: number;
+  market_expected_return: number;
+  expected_return_spread: number;
+  stock_expected_return_source: string;
+  has_price_data: boolean;
+}
+
+interface CorporateComparisonSnapshotApi {
+  mode: "snapshot" | "live";
+  as_of_date: string;
+  generated_at: string;
+  snapshot_version: string;
+  snapshot_versions_for_day: number;
+  snapshot_available: boolean;
+  snapshot_source: string;
+  comparison_universe: "portfolio_plus_benchmark" | "watchlist_plus_benchmark" | "custom";
+  benchmark_ticker: string;
+  custom_tickers: string[];
+  snapshot_cadence: string;
+  snapshot_retention_days: number;
+  snapshot_is_stale: boolean;
+}
+
+interface CorporateComparisonApi {
+  market_expected_return: number;
+  risk_free_rate: number;
+  equity_risk_premium: number;
+  stock_expected_return_method: string;
+  comparison_reference_return_method: string;
+  snapshot: CorporateComparisonSnapshotApi;
+  rows: CorporateComparisonRowApi[];
+}
+
+type ComparisonSortKey = "roic_minus_wacc" | "dcf_value" | "expected_return_spread";
+type ComparisonUniverse = "watchlist_plus_benchmark" | "custom";
 
 type CalculationDetailKey =
   | "realtime"
@@ -325,6 +380,24 @@ function numberText2(value: number) {
 
 function moneyText(value: number) {
   return `$${value.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}`;
+}
+
+function dateTimeText(value: string) {
+  if (!value) return "N/A";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleString();
+}
+
+function comparisonUniverseLabel(value: ComparisonUniverse) {
+  switch (value) {
+    case "watchlist_plus_benchmark":
+      return "Watchlist + Benchmark";
+    case "custom":
+      return "Custom Universe";
+    default:
+      return value;
+  }
 }
 
 // CSV export helpers power the raw data download controls inside the detail modal.
@@ -855,6 +928,7 @@ function CalculationDetailModal({
 export default function CorporateAnalysisPage() {
   // Local UI state: selected ticker assumptions, search input, add-company form, and active modal.
   const queryClient = useQueryClient();
+  const router = useRouter();
   const hydratingTickerRef = useRef<string | null>(initialAssumptions.ticker);
   const [assumptions, setAssumptions] = useState<CorporateAssumptions>(() => {
     if (typeof window === "undefined") return initialAssumptions;
@@ -876,6 +950,11 @@ export default function CorporateAnalysisPage() {
   const [roicBasis, setRoicBasis] = useState<RoicBasis>("recent_average");
   const [roicYear, setRoicYear] = useState("2025");
   const [includeSubjectiveHealth, setIncludeSubjectiveHealth] = useState(false);
+  const [comparisonSortKey, setComparisonSortKey] = useState<ComparisonSortKey>("expected_return_spread");
+  const [comparisonSortDirection, setComparisonSortDirection] = useState<"desc" | "asc">("desc");
+  const [comparisonUniverse, setComparisonUniverse] = useState<ComparisonUniverse>("watchlist_plus_benchmark");
+  const [comparisonBenchmarkTicker, setComparisonBenchmarkTicker] = useState(DEFAULT_KOREAN_BENCHMARK_TICKER);
+  const [comparisonCustomTickersInput, setComparisonCustomTickersInput] = useState("AAPL, MSFT");
   const debounced = useDebounce(assumptions, 250);
   const selectedMetricParams = useMemo(
     () => metricBasisParams(growthBasis, growthYear, roicBasis, roicYear),
@@ -1132,6 +1211,30 @@ export default function CorporateAnalysisPage() {
     placeholderData: (previous) => previous,
     staleTime: 0,
   });
+
+  const comparisonQuery = useQuery<CorporateComparisonApi>({
+    queryKey: ["corporate-comparison", "live", comparisonUniverse, comparisonBenchmarkTicker, comparisonCustomTickersInput],
+    queryFn: ({ signal }) =>
+      fetchApi<CorporateComparisonApi>("/corporate/comparison", {
+        signal,
+        params: {
+          mode: "live",
+          comparison_universe: comparisonUniverse,
+          benchmark_ticker: comparisonBenchmarkTicker.trim().toUpperCase() || DEFAULT_KOREAN_BENCHMARK_TICKER,
+          custom_tickers: comparisonCustomTickersInput,
+        },
+      }),
+    placeholderData: (previous) => previous,
+    staleTime: 60_000,
+  });
+  const sortedComparisonRows = useMemo(() => {
+    const rows = [...(comparisonQuery.data?.rows ?? [])];
+    rows.sort((left, right) => {
+      const delta = Number(left[comparisonSortKey]) - Number(right[comparisonSortKey]);
+      return comparisonSortDirection === "asc" ? delta : -delta;
+    });
+    return rows;
+  }, [comparisonQuery.data?.rows, comparisonSortDirection, comparisonSortKey]);
 
   const historicalPricesQuery = useQuery<StockPriceRow[]>({
     queryKey: ["corporate-ohlcv", assumptions.ticker, "5y"],
@@ -2077,9 +2180,15 @@ export default function CorporateAnalysisPage() {
                 <label htmlFor="company-search">Company Search</label>
                 <input
                   id="company-search"
+                  name="company-search-no-history"
+                  type="text"
                   value={companySearch}
                   onChange={(event) => setCompanySearch(event.target.value)}
                   placeholder="Type a company name"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="none"
+                  spellCheck={false}
                   className="rounded-[var(--radius)] border border-[var(--border)] bg-white px-3 py-2 text-sm"
                 />
                 {showCompanyResults && (
@@ -2363,6 +2472,201 @@ export default function CorporateAnalysisPage() {
             onOpenDetail={setActiveCalculation}
           />
         </div>
+
+        <section className="mt-4 rounded-[var(--radius)] border border-[var(--border)] bg-white p-4 shadow-sm">
+          <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <h2 className="text-sm font-bold text-[var(--text-primary)]">
+                <InfoTooltip
+                  label="Target Stock Comparison"
+                  description="Lightweight watchlist comparison for tracked names and ad-hoc custom universes. Weighted portfolio testing, implied cash, snapshots, and saved history live on the Portfolio page."
+                />
+              </h2>
+              <p className="mt-1 text-sm text-[var(--text-muted)]">
+                Market expected return formula: risk-free rate + equity risk premium = {comparisonQuery.data ? pct2(comparisonQuery.data.market_expected_return) : "Loading"}.
+              </p>
+              <p className="mt-2 text-sm text-[var(--text-muted)]">
+                This screen stays in live comparison mode. If you need saved weights, implied cash, persisted snapshots, or snapshot history, continue in the Portfolio workflow.
+              </p>
+            </div>
+            {comparisonQuery.data && (
+              <div className="flex flex-col gap-2 lg:items-end">
+                <div className="grid grid-cols-2 gap-2 text-xs md:grid-cols-3 xl:grid-cols-5">
+                  <div className="rounded-[var(--radius)] bg-[var(--surface-muted)] p-3">
+                    <div className="text-[var(--text-muted)]">Risk-free</div>
+                    <div className="mt-1 font-bold text-[var(--text-primary)]">{pct2(comparisonQuery.data.risk_free_rate)}</div>
+                  </div>
+                  <div className="rounded-[var(--radius)] bg-[var(--surface-muted)] p-3">
+                    <div className="text-[var(--text-muted)]">ERP</div>
+                    <div className="mt-1 font-bold text-[var(--text-primary)]">{pct2(comparisonQuery.data.equity_risk_premium)}</div>
+                  </div>
+                  <div className="rounded-[var(--radius)] bg-[var(--surface-muted)] p-3">
+                    <div className="text-[var(--text-muted)]">Stock Return Method</div>
+                    <div className="mt-1 font-bold text-[var(--text-primary)]">{comparisonQuery.data.stock_expected_return_method.replaceAll("_", " ")}</div>
+                  </div>
+                  <div className="rounded-[var(--radius)] bg-[var(--surface-muted)] p-3">
+                    <div className="text-[var(--text-muted)]">Reference Method</div>
+                    <div className="mt-1 font-bold text-[var(--text-primary)]">{comparisonQuery.data.comparison_reference_return_method.replaceAll("_", " ")}</div>
+                  </div>
+                  <div className="rounded-[var(--radius)] bg-[var(--surface-muted)] p-3">
+                    <div className="text-[var(--text-muted)]">Comparison Type</div>
+                    <div className="mt-1 font-bold text-[var(--text-primary)]">Live watchlist comparison</div>
+                  </div>
+                  <div className="rounded-[var(--radius)] bg-[var(--surface-muted)] p-3">
+                    <div className="text-[var(--text-muted)]">Portfolio Tools</div>
+                    <button
+                      type="button"
+                      onClick={() => router.push("/portfolio")}
+                      className="mt-1 text-left font-bold text-[var(--surface)] underline decoration-dotted underline-offset-4"
+                    >
+                      Open Portfolio Testing
+                    </button>
+                  </div>
+                  <div className="rounded-[var(--radius)] bg-[var(--surface-muted)] p-3">
+                    <div className="text-[var(--text-muted)]">Universe</div>
+                    <div className="mt-1 font-bold text-[var(--text-primary)]">
+                      {comparisonUniverseLabel(comparisonQuery.data.snapshot.comparison_universe)}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <label className="flex items-center gap-2 text-xs font-semibold text-[var(--text-muted)]">
+                    Universe
+                    <select
+                      aria-label="Comparison universe"
+                      value={comparisonUniverse}
+                      onChange={(event) => setComparisonUniverse(event.target.value as ComparisonUniverse)}
+                      className="rounded-[var(--radius)] border border-[var(--border)] bg-white px-3 py-2 text-xs text-[var(--text-primary)]"
+                    >
+                      <option value="watchlist_plus_benchmark">Watchlist + Benchmark</option>
+                      <option value="custom">Custom Universe</option>
+                    </select>
+                  </label>
+                  <label className="flex items-center gap-2 text-xs font-semibold text-[var(--text-muted)]">
+                    Benchmark
+                    <input
+                      aria-label="Benchmark ticker"
+                      value={comparisonBenchmarkTicker}
+                      onChange={(event) => setComparisonBenchmarkTicker(event.target.value.toUpperCase())}
+                      className="w-24 rounded-[var(--radius)] border border-[var(--border)] bg-white px-3 py-2 text-xs text-[var(--text-primary)]"
+                    />
+                  </label>
+                  <label className="flex items-center gap-2 text-xs font-semibold text-[var(--text-muted)]">
+                    Korea preset
+                    <select
+                      aria-label="Comparison benchmark preset"
+                      value={benchmarkPresetIdForTicker(comparisonBenchmarkTicker)}
+                      onChange={(event) => {
+                        const selectedPreset = KOREAN_BENCHMARK_PRESETS.find((preset) => preset.id === event.target.value);
+                        if (selectedPreset) {
+                          setComparisonBenchmarkTicker(selectedPreset.ticker);
+                        }
+                      }}
+                      className="rounded-[var(--radius)] border border-[var(--border)] bg-white px-3 py-2 text-xs text-[var(--text-primary)]"
+                    >
+                      {KOREAN_BENCHMARK_PRESETS.map((preset) => (
+                        <option key={preset.id} value={preset.id}>
+                          {preset.label}
+                        </option>
+                      ))}
+                      <option value="custom">Manual ticker</option>
+                    </select>
+                  </label>
+                  {comparisonUniverse === "custom" && (
+                    <label className="flex items-center gap-2 text-xs font-semibold text-[var(--text-muted)]">
+                      Custom tickers
+                      <input
+                        aria-label="Custom tickers"
+                        value={comparisonCustomTickersInput}
+                        onChange={(event) => setComparisonCustomTickersInput(event.target.value.toUpperCase())}
+                        placeholder="AAPL, MSFT, NVDA"
+                        className="w-48 rounded-[var(--radius)] border border-[var(--border)] bg-white px-3 py-2 text-xs text-[var(--text-primary)]"
+                      />
+                    </label>
+                  )}
+                  <label className="flex items-center gap-2 text-xs font-semibold text-[var(--text-muted)]">
+                    Sort by
+                    <select
+                      value={comparisonSortKey}
+                      onChange={(event) => setComparisonSortKey(event.target.value as ComparisonSortKey)}
+                      className="rounded-[var(--radius)] border border-[var(--border)] bg-white px-3 py-2 text-xs text-[var(--text-primary)]"
+                    >
+                      <option value="expected_return_spread">Expected return spread</option>
+                      <option value="roic_minus_wacc">ROIC - WACC</option>
+                      <option value="dcf_value">DCF value</option>
+                    </select>
+                  </label>
+                  <label className="flex items-center gap-2 text-xs font-semibold text-[var(--text-muted)]">
+                    Direction
+                    <select
+                      value={comparisonSortDirection}
+                      onChange={(event) => setComparisonSortDirection(event.target.value as "desc" | "asc")}
+                      className="rounded-[var(--radius)] border border-[var(--border)] bg-white px-3 py-2 text-xs text-[var(--text-primary)]"
+                    >
+                      <option value="desc">High to low</option>
+                      <option value="asc">Low to high</option>
+                    </select>
+                  </label>
+                </div>
+                <div className="text-xs text-[var(--text-muted)]">
+                  Benchmark: {comparisonQuery.data.snapshot.benchmark_ticker}. Generated live at {dateTimeText(comparisonQuery.data.snapshot.generated_at)}. Portfolio snapshots and saved history are managed from the Portfolio page only.
+                </div>
+                {comparisonQuery.data.snapshot.comparison_universe === "custom" && (
+                  <div className="text-xs text-[var(--text-muted)]">
+                    Custom tickers: {comparisonQuery.data.snapshot.custom_tickers.join(", ") || "None"}.
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {comparisonQuery.isLoading && (
+            <div className="mt-4 text-sm text-[var(--text-muted)]">Loading comparison rows...</div>
+          )}
+
+          {comparisonQuery.isError && (
+            <div className="mt-4 rounded-[var(--radius)] border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+              Target stock comparison is currently unavailable.
+            </div>
+          )}
+
+          {comparisonQuery.data && sortedComparisonRows.length > 0 && (
+            <div className="mt-4 overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-[var(--surface-muted)] text-left text-[var(--text-muted)]">
+                  <tr>
+                    <th className="px-4 py-3 font-semibold">Ticker</th>
+                    <th className="px-4 py-3 font-semibold">Company</th>
+                    <th className="px-4 py-3 text-right font-semibold">Weight</th>
+                    <th className="px-4 py-3 text-right font-semibold">ROIC - WACC</th>
+                    <th className="px-4 py-3 text-right font-semibold">DCF Value</th>
+                    <th className="px-4 py-3 text-right font-semibold">Current Price</th>
+                    <th className="px-4 py-3 text-right font-semibold">DCF Return</th>
+                    <th className="px-4 py-3 text-right font-semibold">CAPM Return</th>
+                    <th className="px-4 py-3 text-right font-semibold">Market Return</th>
+                    <th className="px-4 py-3 text-right font-semibold">Spread</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[var(--border)]/60">
+                  {sortedComparisonRows.map((row) => (
+                    <tr key={`comparison-${row.ticker}`} className={row.ticker === assumptions.ticker ? "bg-[var(--surface-muted)]/50" : ""}>
+                      <td className="px-4 py-3 font-bold text-[var(--text-primary)]">{row.ticker}</td>
+                      <td className="px-4 py-3 text-[var(--text-muted)]">{row.name || row.ticker}</td>
+                      <td className="px-4 py-3 text-right tabular-nums">{pct2(row.weight * 100)}</td>
+                      <td className={`px-4 py-3 text-right font-bold tabular-nums ${row.roic_minus_wacc >= 0 ? "text-[var(--surface)]" : "text-[var(--delta-down)]"}`}>{pct2(row.roic_minus_wacc)}</td>
+                      <td className="px-4 py-3 text-right font-bold tabular-nums">{moneyText(row.dcf_value)}</td>
+                      <td className="px-4 py-3 text-right tabular-nums">{row.has_price_data ? moneyText(row.current_price) : "N/A"}</td>
+                      <td className="px-4 py-3 text-right tabular-nums">{pct2(row.dcf_implied_return)}</td>
+                      <td className="px-4 py-3 text-right tabular-nums">{pct2(row.capm_expected_return)}</td>
+                      <td className="px-4 py-3 text-right tabular-nums">{pct2(row.market_expected_return)}</td>
+                      <td className={`px-4 py-3 text-right font-bold tabular-nums ${row.expected_return_spread >= 0 ? "text-[var(--surface)]" : "text-[var(--delta-down)]"}`}>{pct2(row.expected_return_spread)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
       </section>
       {/* Calculation detail modal is mounted only when a metric or chart title is selected. */}
       {activeCalculationDetail && (

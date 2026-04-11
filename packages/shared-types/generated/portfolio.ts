@@ -9,6 +9,7 @@ export type ReturnFrequencyEnum = "daily" | "monthly";
 export type RebalancingEnum = "bop" | "eop";
 export type RiskMethodEnum = "historical";
 export type BenchmarkWeightsSourceEnum = "provider_derived" | "user_provided";
+export type ComparisonUniverseEnum = "portfolio_plus_benchmark" | "watchlist_plus_benchmark" | "custom";
 export type ReportExportFormatEnum = "html" | "pdf" | "markdown" | "csv" | "json";
 
 export interface RiskProfileInput {
@@ -114,6 +115,89 @@ export interface AttributionResult {
   sector_breakdowns: SectorAttribution[];
   risk_metrics: RiskMetrics;
   metadata: AttributionMetadata;
+}
+
+export interface CorporateComparisonRow {
+  ticker: string;
+  name?: string;
+  sector?: string;
+  group_name?: string;
+  weight?: number;
+  roic: number;
+  wacc: number;
+  roic_minus_wacc: number;
+  dcf_value: number;
+  current_price: number;
+  dcf_implied_return?: number;
+  capm_expected_return?: number;
+  stock_expected_return: number;
+  market_expected_return: number;
+  expected_return_spread: number;
+  stock_expected_return_source?: string;
+  has_price_data?: boolean;
+}
+
+export interface CorporateComparisonSnapshotMeta {
+  mode?: string;
+  as_of_date?: string;
+  generated_at?: string;
+  snapshot_version?: string;
+  snapshot_versions_for_day?: number;
+  snapshot_available?: boolean;
+  snapshot_source?: string;
+  comparison_universe?: ComparisonUniverseEnum;
+  benchmark_ticker?: string;
+  custom_tickers?: string[];
+  snapshot_cadence?: string;
+  snapshot_retention_days?: number;
+  snapshot_is_stale?: boolean;
+}
+
+export interface CorporateComparisonResponse {
+  market_expected_return: number;
+  risk_free_rate: number;
+  equity_risk_premium: number;
+  stock_expected_return_method?: string;
+  comparison_reference_return_method?: string;
+  snapshot?: CorporateComparisonSnapshotMeta;
+  rows?: CorporateComparisonRow[];
+}
+
+export interface CorporateComparisonHistoryPoint {
+  as_of_date: string;
+  generated_at?: string;
+  snapshot_version?: string;
+  snapshot_versions_for_day?: number;
+  snapshot_source?: string;
+  comparison_universe?: ComparisonUniverseEnum;
+  benchmark_ticker?: string;
+  stock_count?: number;
+  average_expected_return_spread?: number;
+  average_roic_minus_wacc?: number;
+  average_dcf_value?: number;
+  market_expected_return?: number;
+}
+
+export interface CorporateComparisonHistoryResponse {
+  comparison_universe?: ComparisonUniverseEnum;
+  benchmark_ticker?: string;
+  custom_tickers?: string[];
+  points?: CorporateComparisonHistoryPoint[];
+}
+
+export interface WatchlistSyncResult {
+  item_count: number;
+  tickers?: string[];
+  source: string;
+  json_path: string;
+  preserved_weights?: boolean;
+  last_updated_at?: string;
+}
+
+export interface WatchlistSyncStatus {
+  source?: string;
+  last_updated_at?: string;
+  json_path?: string;
 }
 
 export interface ReportFilters {

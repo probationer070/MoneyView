@@ -42,7 +42,7 @@ Real-time style cards for indices, commodities, FX, and crypto.
 
 ### Portfolio Command Center
 
-Holdings grid, sector allocation, attribution effects, and portfolio monitoring in one workspace.
+Holdings tracking, weighted portfolio testing, snapshot comparison, attribution effects, and drill-down detail in one workspace.
 
 <table>
   <tr>
@@ -132,7 +132,11 @@ powershell.exe -ExecutionPolicy Bypass -File scripts\start_local.ps1 -OpenBrowse
 The launcher:
 - starts the FastAPI backend
 - starts the Next.js frontend
+- auto-installs missing backend/frontend dependencies when needed
+- prefers the active Conda env, or the `moneyview` Conda env when available
 - writes the backend discovery file
+- writes startup logs under `data/cache/logs`
+- stops with an explicit backend or frontend startup error if a process does not complete
 - opens the app in the browser
 
 Useful URLs:
@@ -146,10 +150,29 @@ Useful URLs:
 
 To stop the app, close the spawned PowerShell windows.
 
+## Watchlist Bootstrap
+
+Portfolio holdings are stored in the local SQLite `watchlist` table and that table is the source of truth.
+
+On first run:
+- if the DB watchlist already has rows, MoneyView uses those rows
+- if the DB watchlist is empty and `apps/api/services/webscrap/stock_targets.json` exists, MoneyView seeds from that file once
+- if the DB watchlist is empty and that JSON file is missing, MoneyView seeds a small built-in default watchlist once
+
+After you add or delete holdings from the Portfolio page, those DB changes become authoritative and automatic bootstrap seeding does not overwrite them.
+
+The current Portfolio page uses saved positive watchlist weights when they exist. If no positive saved weights exist, it falls back to an equal-weight basket. If saved weights total less than `100%`, the remaining balance is treated as implied cash in the attribution flow.
+
+See [`docs/portfolio-tab.md`](./docs/portfolio-tab.md) for the full Portfolio screen breakdown.
+
+See [`docs/corporate-analysis-tab.md`](./docs/corporate-analysis-tab.md) for the full Corporate Analysis screen breakdown.
+
+See [`docs/monte-carlo-tab.md`](./docs/monte-carlo-tab.md) for the full Monte Carlo screen breakdown.
+
 ## First-Time Setup
 
 ```powershell
-conda create -n moneyview python=3.12 -y
+conda create -n moneyview python=3.13 -y
 conda activate moneyview
 python -m pip install -U uv
 uv pip install -e ".[dev]"
@@ -169,6 +192,9 @@ If frontend dependencies are missing, the launcher can install them:
 ```powershell
 powershell.exe -ExecutionPolicy Bypass -File scripts\start_local.ps1 -InstallDeps -OpenBrowser
 ```
+
+Normal Quick Start also attempts that install automatically when dependencies are missing.
+For backend packages, the launcher installs into the active Conda env or the `moneyview` env when that env exists.
 
 ## Run Backend
 
@@ -289,6 +315,10 @@ Reference:
 
 ## Key API Endpoints
 
+Reference:
+
+- [`docs/api-usage.md`](./docs/api-usage.md)
+
 ### Portfolio Attribution
 
 `POST /api/v1/portfolio/attribution`
@@ -298,9 +328,9 @@ Example request:
 ```json
 {
   "tickers": ["AAPL", "MSFT", "TSLA"],
-  "weights": [0.4, 0.4, 0.2],
+  "weights": [0.3333, 0.3333, 0.3333],
   "benchmark": "^GSPC",
-  "period": "1y",
+  "period": "5y",
   "currency": "USD",
   "attribution_method": "brinson_fachler_arithmetic",
   "allow_synthetic_fallback": true,
@@ -311,6 +341,26 @@ Example request:
 ### Report Summary
 
 `POST /api/v1/report/summary`
+
+### Watchlist
+
+`GET /api/v1/portfolio/watchlist`
+
+`POST /api/v1/portfolio/watchlist`
+
+Example request:
+
+```json
+{
+  "ticker": "AAPL",
+  "name": "Apple Inc.",
+  "sector": "Information Technology",
+  "group_name": "core",
+  "weight": 0.0
+}
+```
+
+`DELETE /api/v1/portfolio/watchlist/{ticker}`
 
 ## Repository Layout
 

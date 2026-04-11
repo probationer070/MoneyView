@@ -1,0 +1,36 @@
+TypeScript nullability issue summary
+
+Date: 2026-04-11
+
+Problem:
+- The homepage market overview assumed `last_close` was always a number.
+- Real API data can return missing values, so Playwright and SSR could crash when the UI called `toLocaleString()` on `null`.
+- The same trust issue also applied to delta rendering if badge values were nullish.
+
+Root cause:
+- Backend contract reality allowed missing market values.
+- Frontend types and rendering logic treated those values as always present.
+
+Resolution:
+- `apps/web/app/page.tsx`
+  - changed the homepage `IndexQuote.last_close` type to `number | null`
+  - added a null-safe render path so missing closes display as `N/A`
+- `apps/web/components/ui/DeltaBadge.tsx`
+  - hardened the badge to accept nullable values safely
+- `apps/api/models/schemas.py`
+  - updated `IndexQuote.last_close` to optional so the API contract matches runtime data
+- `apps/api/services/market_data.py`
+  - added backend safeguards to avoid emitting obviously malformed market rows
+
+Why Playwright exposed it:
+- Playwright exercised the real startup path with real API payloads.
+- That surfaced nullable market data that local happy-path UI assumptions did not handle.
+
+Verification used:
+- `npm.cmd run lint -- app/page.tsx components/ui/DeltaBadge.tsx`
+- `pytest tests/api/test_corporate_comparison.py tests/api/test_watchlist_resync.py tests/core_finance/test_expected_return.py`
+- `npm.cmd run test:e2e -- tests/e2e/corporate-comparison.spec.ts`
+
+Current status:
+- The TypeScript/runtime nullability crash is resolved.
+- Missing market values now degrade safely instead of crashing the page.

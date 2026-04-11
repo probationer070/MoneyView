@@ -133,7 +133,8 @@ CREATE TABLE IF NOT EXISTS watchlist (
     ticker     TEXT NOT NULL UNIQUE,
     name       TEXT DEFAULT '',
     sector     TEXT DEFAULT '',
-    group_name TEXT DEFAULT 'custom'
+    group_name TEXT DEFAULT 'custom',
+    weight     REAL DEFAULT 0.0
 );
 
 -- ============================================================
@@ -170,6 +171,98 @@ CREATE TABLE IF NOT EXISTS corporate_companies (
     source     TEXT DEFAULT 'manual',
     updated_at TEXT NOT NULL DEFAULT ''
 );
+
+CREATE TABLE IF NOT EXISTS corporate_comparison_snapshots (
+    snapshot_date              TEXT NOT NULL,
+    snapshot_taken_at          TEXT NOT NULL,
+    snapshot_source            TEXT DEFAULT 'auto_daily',
+    risk_free_rate             REAL NOT NULL DEFAULT 0.0,
+    equity_risk_premium        REAL NOT NULL DEFAULT 0.0,
+    stock_expected_return_method TEXT DEFAULT 'dcf_implied_upside',
+    ticker                     TEXT NOT NULL,
+    name                       TEXT DEFAULT '',
+    sector                     TEXT DEFAULT '',
+    group_name                 TEXT DEFAULT 'custom',
+    weight                     REAL DEFAULT 0.0,
+    roic                       REAL NOT NULL DEFAULT 0.0,
+    wacc                       REAL NOT NULL DEFAULT 0.0,
+    roic_minus_wacc            REAL NOT NULL DEFAULT 0.0,
+    dcf_value                  REAL NOT NULL DEFAULT 0.0,
+    current_price              REAL NOT NULL DEFAULT 0.0,
+    stock_expected_return      REAL NOT NULL DEFAULT 0.0,
+    market_expected_return     REAL NOT NULL DEFAULT 0.0,
+    expected_return_spread     REAL NOT NULL DEFAULT 0.0,
+    stock_expected_return_source TEXT DEFAULT 'dcf_implied_upside',
+    has_price_data             INTEGER NOT NULL DEFAULT 1,
+    PRIMARY KEY (snapshot_date, ticker)
+);
+CREATE INDEX IF NOT EXISTS idx_corporate_comparison_snapshots_date
+    ON corporate_comparison_snapshots(snapshot_date DESC, ticker);
+
+CREATE TABLE IF NOT EXISTS corporate_comparison_snapshots_v2 (
+    snapshot_date                TEXT NOT NULL,
+    universe_key                 TEXT NOT NULL,
+    comparison_universe          TEXT NOT NULL DEFAULT 'portfolio_plus_benchmark',
+    benchmark_ticker             TEXT DEFAULT '^GSPC',
+    custom_tickers               TEXT DEFAULT '',
+    snapshot_taken_at            TEXT NOT NULL,
+    snapshot_source              TEXT DEFAULT 'auto_daily',
+    risk_free_rate               REAL NOT NULL DEFAULT 0.0,
+    equity_risk_premium          REAL NOT NULL DEFAULT 0.0,
+    stock_expected_return_method TEXT DEFAULT 'dcf_implied_upside',
+    ticker                       TEXT NOT NULL,
+    name                         TEXT DEFAULT '',
+    sector                       TEXT DEFAULT '',
+    group_name                   TEXT DEFAULT 'custom',
+    weight                       REAL DEFAULT 0.0,
+    roic                         REAL NOT NULL DEFAULT 0.0,
+    wacc                         REAL NOT NULL DEFAULT 0.0,
+    roic_minus_wacc              REAL NOT NULL DEFAULT 0.0,
+    dcf_value                    REAL NOT NULL DEFAULT 0.0,
+    current_price                REAL NOT NULL DEFAULT 0.0,
+    stock_expected_return        REAL NOT NULL DEFAULT 0.0,
+    market_expected_return       REAL NOT NULL DEFAULT 0.0,
+    expected_return_spread       REAL NOT NULL DEFAULT 0.0,
+    stock_expected_return_source TEXT DEFAULT 'dcf_implied_upside',
+    has_price_data               INTEGER NOT NULL DEFAULT 1,
+    PRIMARY KEY (snapshot_date, universe_key, ticker)
+);
+CREATE INDEX IF NOT EXISTS idx_corporate_comparison_snapshots_v2_date
+    ON corporate_comparison_snapshots_v2(snapshot_date DESC, universe_key, ticker);
+
+CREATE TABLE IF NOT EXISTS corporate_comparison_snapshots_v3 (
+    snapshot_version             TEXT NOT NULL,
+    snapshot_date                TEXT NOT NULL,
+    universe_key                 TEXT NOT NULL,
+    comparison_universe          TEXT NOT NULL DEFAULT 'portfolio_plus_benchmark',
+    benchmark_ticker             TEXT DEFAULT '^GSPC',
+    custom_tickers               TEXT DEFAULT '',
+    snapshot_taken_at            TEXT NOT NULL,
+    snapshot_source              TEXT DEFAULT 'auto_daily',
+    risk_free_rate               REAL NOT NULL DEFAULT 0.0,
+    equity_risk_premium          REAL NOT NULL DEFAULT 0.0,
+    stock_expected_return_method TEXT DEFAULT 'dcf_implied_upside',
+    ticker                       TEXT NOT NULL,
+    name                         TEXT DEFAULT '',
+    sector                       TEXT DEFAULT '',
+    group_name                   TEXT DEFAULT 'custom',
+    weight                       REAL DEFAULT 0.0,
+    roic                         REAL NOT NULL DEFAULT 0.0,
+    wacc                         REAL NOT NULL DEFAULT 0.0,
+    roic_minus_wacc              REAL NOT NULL DEFAULT 0.0,
+    dcf_value                    REAL NOT NULL DEFAULT 0.0,
+    current_price                REAL NOT NULL DEFAULT 0.0,
+    dcf_implied_return           REAL NOT NULL DEFAULT 0.0,
+    capm_expected_return         REAL NOT NULL DEFAULT 0.0,
+    stock_expected_return        REAL NOT NULL DEFAULT 0.0,
+    market_expected_return       REAL NOT NULL DEFAULT 0.0,
+    expected_return_spread       REAL NOT NULL DEFAULT 0.0,
+    stock_expected_return_source TEXT DEFAULT 'dcf_implied_upside',
+    has_price_data               INTEGER NOT NULL DEFAULT 1,
+    PRIMARY KEY (snapshot_version, ticker)
+);
+CREATE INDEX IF NOT EXISTS idx_corporate_comparison_snapshots_v3_lookup
+    ON corporate_comparison_snapshots_v3(snapshot_date DESC, universe_key, snapshot_taken_at DESC, ticker);
 """
 
 
@@ -179,7 +272,12 @@ def init_db() -> None:
     conn = sqlite3.connect(str(_DB_PATH), check_same_thread=False)
     _configure(conn)
     try:
-        conn.executescript(_CREATE_SCHEMA_SQL)
+        try:
+            conn.executescript(_CREATE_SCHEMA_SQL)
+        except sqlite3.OperationalError as exc:
+            if "no such column: universe_key" not in str(exc):
+                raise
+            logger.info("DB bootstrap detected legacy snapshot tables without universe columns; applying compatibility migrations.")
         _ensure_schema_compatibility(conn)
         conn.commit()
         logger.info("DB initialised at %s", _DB_PATH.resolve())
@@ -203,6 +301,195 @@ def _ensure_schema_compatibility(conn: sqlite3.Connection) -> None:
             updated_at TEXT NOT NULL DEFAULT ''
         )"""
     )
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS corporate_comparison_snapshots (
+            snapshot_date                TEXT NOT NULL,
+            snapshot_taken_at            TEXT NOT NULL,
+            snapshot_source              TEXT DEFAULT 'auto_daily',
+            risk_free_rate               REAL NOT NULL DEFAULT 0.0,
+            equity_risk_premium          REAL NOT NULL DEFAULT 0.0,
+            stock_expected_return_method TEXT DEFAULT 'dcf_implied_upside',
+            ticker                       TEXT NOT NULL,
+            name                         TEXT DEFAULT '',
+            sector                       TEXT DEFAULT '',
+            group_name                   TEXT DEFAULT 'custom',
+            weight                       REAL DEFAULT 0.0,
+            roic                         REAL NOT NULL DEFAULT 0.0,
+            wacc                         REAL NOT NULL DEFAULT 0.0,
+            roic_minus_wacc              REAL NOT NULL DEFAULT 0.0,
+            dcf_value                    REAL NOT NULL DEFAULT 0.0,
+            current_price                REAL NOT NULL DEFAULT 0.0,
+            stock_expected_return        REAL NOT NULL DEFAULT 0.0,
+            market_expected_return       REAL NOT NULL DEFAULT 0.0,
+            expected_return_spread       REAL NOT NULL DEFAULT 0.0,
+            stock_expected_return_source TEXT DEFAULT 'dcf_implied_upside',
+            has_price_data               INTEGER NOT NULL DEFAULT 1,
+            PRIMARY KEY (snapshot_date, ticker)
+        )"""
+    )
+    conn.execute(
+        """CREATE INDEX IF NOT EXISTS idx_corporate_comparison_snapshots_date
+           ON corporate_comparison_snapshots(snapshot_date DESC, ticker)"""
+    )
+    snapshot_columns = {row["name"] for row in conn.execute("PRAGMA table_info(corporate_comparison_snapshots)")}
+    if "comparison_universe" not in snapshot_columns:
+        conn.execute(
+            "ALTER TABLE corporate_comparison_snapshots ADD COLUMN comparison_universe TEXT NOT NULL DEFAULT 'portfolio_plus_benchmark'"
+        )
+    if "risk_free_rate" not in snapshot_columns:
+        conn.execute("ALTER TABLE corporate_comparison_snapshots ADD COLUMN risk_free_rate REAL NOT NULL DEFAULT 0.0")
+    if "equity_risk_premium" not in snapshot_columns:
+        conn.execute("ALTER TABLE corporate_comparison_snapshots ADD COLUMN equity_risk_premium REAL NOT NULL DEFAULT 0.0")
+    if "stock_expected_return_method" not in snapshot_columns:
+        conn.execute(
+            "ALTER TABLE corporate_comparison_snapshots ADD COLUMN stock_expected_return_method TEXT DEFAULT 'dcf_implied_upside'"
+        )
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS corporate_comparison_snapshots_v2 (
+            snapshot_date                TEXT NOT NULL,
+            universe_key                 TEXT NOT NULL,
+            comparison_universe          TEXT NOT NULL DEFAULT 'portfolio_plus_benchmark',
+            benchmark_ticker             TEXT DEFAULT '^GSPC',
+            custom_tickers               TEXT DEFAULT '',
+            snapshot_taken_at            TEXT NOT NULL,
+            snapshot_source              TEXT DEFAULT 'auto_daily',
+            risk_free_rate               REAL NOT NULL DEFAULT 0.0,
+            equity_risk_premium          REAL NOT NULL DEFAULT 0.0,
+            stock_expected_return_method TEXT DEFAULT 'dcf_implied_upside',
+            ticker                       TEXT NOT NULL,
+            name                         TEXT DEFAULT '',
+            sector                       TEXT DEFAULT '',
+            group_name                   TEXT DEFAULT 'custom',
+            weight                       REAL DEFAULT 0.0,
+            roic                         REAL NOT NULL DEFAULT 0.0,
+            wacc                         REAL NOT NULL DEFAULT 0.0,
+            roic_minus_wacc              REAL NOT NULL DEFAULT 0.0,
+            dcf_value                    REAL NOT NULL DEFAULT 0.0,
+            current_price                REAL NOT NULL DEFAULT 0.0,
+            stock_expected_return        REAL NOT NULL DEFAULT 0.0,
+            market_expected_return       REAL NOT NULL DEFAULT 0.0,
+            expected_return_spread       REAL NOT NULL DEFAULT 0.0,
+            stock_expected_return_source TEXT DEFAULT 'dcf_implied_upside',
+            has_price_data               INTEGER NOT NULL DEFAULT 1,
+            PRIMARY KEY (snapshot_date, universe_key, ticker)
+        )"""
+    )
+    v2_columns = {row["name"] for row in conn.execute("PRAGMA table_info(corporate_comparison_snapshots_v2)")}
+    if "universe_key" not in v2_columns:
+        conn.execute("ALTER TABLE corporate_comparison_snapshots_v2 ADD COLUMN universe_key TEXT NOT NULL DEFAULT ''")
+    if "comparison_universe" not in v2_columns:
+        conn.execute(
+            "ALTER TABLE corporate_comparison_snapshots_v2 ADD COLUMN comparison_universe TEXT NOT NULL DEFAULT 'portfolio_plus_benchmark'"
+        )
+    if "benchmark_ticker" not in v2_columns:
+        conn.execute("ALTER TABLE corporate_comparison_snapshots_v2 ADD COLUMN benchmark_ticker TEXT DEFAULT '^GSPC'")
+    if "custom_tickers" not in v2_columns:
+        conn.execute("ALTER TABLE corporate_comparison_snapshots_v2 ADD COLUMN custom_tickers TEXT DEFAULT ''")
+    conn.execute(
+        """CREATE INDEX IF NOT EXISTS idx_corporate_comparison_snapshots_v2_date
+           ON corporate_comparison_snapshots_v2(snapshot_date DESC, universe_key, ticker)"""
+    )
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS corporate_comparison_snapshots_v3 (
+            snapshot_version             TEXT NOT NULL,
+            snapshot_date                TEXT NOT NULL,
+            universe_key                 TEXT NOT NULL,
+            comparison_universe          TEXT NOT NULL DEFAULT 'portfolio_plus_benchmark',
+            benchmark_ticker             TEXT DEFAULT '^GSPC',
+            custom_tickers               TEXT DEFAULT '',
+            snapshot_taken_at            TEXT NOT NULL,
+            snapshot_source              TEXT DEFAULT 'auto_daily',
+            risk_free_rate               REAL NOT NULL DEFAULT 0.0,
+            equity_risk_premium          REAL NOT NULL DEFAULT 0.0,
+            stock_expected_return_method TEXT DEFAULT 'dcf_implied_upside',
+            ticker                       TEXT NOT NULL,
+            name                         TEXT DEFAULT '',
+            sector                       TEXT DEFAULT '',
+            group_name                   TEXT DEFAULT 'custom',
+            weight                       REAL DEFAULT 0.0,
+            roic                         REAL NOT NULL DEFAULT 0.0,
+            wacc                         REAL NOT NULL DEFAULT 0.0,
+            roic_minus_wacc              REAL NOT NULL DEFAULT 0.0,
+            dcf_value                    REAL NOT NULL DEFAULT 0.0,
+            current_price                REAL NOT NULL DEFAULT 0.0,
+            dcf_implied_return           REAL NOT NULL DEFAULT 0.0,
+            capm_expected_return         REAL NOT NULL DEFAULT 0.0,
+            stock_expected_return        REAL NOT NULL DEFAULT 0.0,
+            market_expected_return       REAL NOT NULL DEFAULT 0.0,
+            expected_return_spread       REAL NOT NULL DEFAULT 0.0,
+            stock_expected_return_source TEXT DEFAULT 'dcf_implied_upside',
+            has_price_data               INTEGER NOT NULL DEFAULT 1,
+            PRIMARY KEY (snapshot_version, ticker)
+        )"""
+    )
+    v3_columns = {row["name"] for row in conn.execute("PRAGMA table_info(corporate_comparison_snapshots_v3)")}
+    if "universe_key" not in v3_columns:
+        conn.execute("ALTER TABLE corporate_comparison_snapshots_v3 ADD COLUMN universe_key TEXT NOT NULL DEFAULT ''")
+    if "comparison_universe" not in v3_columns:
+        conn.execute(
+            "ALTER TABLE corporate_comparison_snapshots_v3 ADD COLUMN comparison_universe TEXT NOT NULL DEFAULT 'portfolio_plus_benchmark'"
+        )
+    if "benchmark_ticker" not in v3_columns:
+        conn.execute("ALTER TABLE corporate_comparison_snapshots_v3 ADD COLUMN benchmark_ticker TEXT DEFAULT '^GSPC'")
+    if "custom_tickers" not in v3_columns:
+        conn.execute("ALTER TABLE corporate_comparison_snapshots_v3 ADD COLUMN custom_tickers TEXT DEFAULT ''")
+    conn.execute(
+        """CREATE INDEX IF NOT EXISTS idx_corporate_comparison_snapshots_v3_lookup
+           ON corporate_comparison_snapshots_v3(snapshot_date DESC, universe_key, snapshot_taken_at DESC, ticker)"""
+    )
+    if "dcf_implied_return" not in v3_columns:
+        conn.execute("ALTER TABLE corporate_comparison_snapshots_v3 ADD COLUMN dcf_implied_return REAL NOT NULL DEFAULT 0.0")
+    if "capm_expected_return" not in v3_columns:
+        conn.execute("ALTER TABLE corporate_comparison_snapshots_v3 ADD COLUMN capm_expected_return REAL NOT NULL DEFAULT 0.0")
+    v3_row = conn.execute("SELECT 1 FROM corporate_comparison_snapshots_v3 LIMIT 1").fetchone()
+    if v3_row is None:
+        conn.execute(
+            """INSERT OR IGNORE INTO corporate_comparison_snapshots_v3 (
+                   snapshot_version, snapshot_date, universe_key, comparison_universe, benchmark_ticker,
+                   custom_tickers, snapshot_taken_at, snapshot_source, risk_free_rate, equity_risk_premium,
+                   stock_expected_return_method, ticker, name, sector, group_name, weight, roic, wacc,
+                   roic_minus_wacc, dcf_value, current_price, dcf_implied_return, capm_expected_return,
+                   stock_expected_return, market_expected_return, expected_return_spread,
+                   stock_expected_return_source, has_price_data
+               )
+               SELECT
+                   snapshot_date || '|' || universe_key || '|' || snapshot_taken_at,
+                   snapshot_date,
+                   universe_key,
+                   comparison_universe,
+                   benchmark_ticker,
+                   custom_tickers,
+                   snapshot_taken_at,
+                   snapshot_source,
+                   risk_free_rate,
+                   equity_risk_premium,
+                   stock_expected_return_method,
+                   ticker,
+                   name,
+                   sector,
+                   group_name,
+                   weight,
+                   roic,
+                   wacc,
+                   roic_minus_wacc,
+                   dcf_value,
+                   current_price,
+                   stock_expected_return,
+                   market_expected_return,
+                   stock_expected_return,
+                   market_expected_return,
+                   expected_return_spread,
+                   stock_expected_return_source,
+                   has_price_data
+               FROM corporate_comparison_snapshots_v2"""
+        )
+    watchlist_columns = {row["name"] for row in conn.execute("PRAGMA table_info(watchlist)")}
+    if "weight" not in watchlist_columns:
+        conn.execute("ALTER TABLE watchlist ADD COLUMN weight REAL DEFAULT 0.0")
+        watchlist_rows = conn.execute("SELECT ticker FROM watchlist ORDER BY ticker").fetchall()
+        count = len(watchlist_rows)
+        if count > 0:
+            conn.execute("UPDATE watchlist SET weight = ?", (1.0 / count,))
 
 
 def get_db_path() -> Path:

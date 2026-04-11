@@ -39,7 +39,7 @@ apps/web Next.js UI
 Runtime components:
 
 - `apps/api`: FastAPI backend, service orchestration, schemas, validation, reporting.
-- `apps/web`: Next.js frontend, chart rendering, table rendering, browser downloads.
+- `apps/web`: Next.js frontend, chart rendering, table rendering, browser downloads, and web-worker simulation flows.
 - `packages/core_finance`: reusable Python finance calculations.
 - `packages/shared-types`: generated TypeScript contracts from backend Pydantic schemas.
 - `data/raw`: raw source extracts and downloaded vendor data.
@@ -276,6 +276,11 @@ Benchmark before rewriting:
 - Brinson-Fachler attribution
 - historical VaR and expected shortfall
 - local SQLite query patterns
+
+Current implementation note:
+
+- Portfolio attribution and corporate comparison are backend/API-driven.
+- Monte Carlo `Simulation Lab` is currently frontend worker-driven and stays local to the browser session unless an export path is used.
 
 Rust/PyO3 or WASM remains a future optimization path, not a default implementation choice.
 

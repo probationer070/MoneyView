@@ -2,13 +2,14 @@ import clsx from "clsx";
 import { ArrowDownRight, ArrowUpRight, Minus } from "lucide-react";
 
 interface DeltaBadgeProps {
-  value: number;
+  value: number | null | undefined;
   className?: string;
 }
 
 export function DeltaBadge({ value, className }: DeltaBadgeProps) {
-  const isPositive = value > 0;
-  const isNegative = value < 0;
+  const numericValue = typeof value === "number" && Number.isFinite(value) ? value : null;
+  const isPositive = (numericValue ?? 0) > 0;
+  const isNegative = (numericValue ?? 0) < 0;
 
   return (
     <div
@@ -23,7 +24,9 @@ export function DeltaBadge({ value, className }: DeltaBadgeProps) {
       {isPositive && <ArrowUpRight className="h-4 w-4" />}
       {isNegative && <ArrowDownRight className="h-4 w-4" />}
       {!isPositive && !isNegative && <Minus className="h-4 w-4" />}
-      <span>{isPositive ? "+" : ""}{value.toFixed(1)}%</span>
+      <span>
+        {numericValue == null ? "N/A" : `${isPositive ? "+" : ""}${numericValue.toFixed(1)}%`}
+      </span>
     </div>
   );
 }

@@ -37,7 +37,8 @@ project-root/
 - `apps/api/services`: API-specific orchestration, cache behavior, report generation, data access.
 - `apps/api/models`: Pydantic request/response schemas.
 - `apps/api/core`: middleware, logging, and backend-local math helpers. Prefer `packages/core_finance` for reusable finance formulas.
-- `apps/web`: interaction, rendering, chart adapters, and export UI. No core financial formulas.
+- `apps/web`: interaction, rendering, chart adapters, mutation controls, and export UI. No core financial formulas.
+- `apps/web/app/portfolio/page.tsx`: Portfolio screen composition, local UI state, and React Query invalidation/refetch wiring for holdings and attribution.
 - `packages/core_finance`: reusable finance calculations with focused tests.
 - `packages/shared-types`: TypeScript contracts that mirror public API payloads.
 
@@ -48,4 +49,5 @@ project-root/
 - Data paths must come from environment variables or safe relative defaults.
 - Update `docs/architecture/` for substantial architecture changes.
 - Update `packages/shared-types` when frontend-consumed API schemas change.
+- Keep endpoint-trigger buttons and similar UI refresh controls near the page-level query ownership instead of burying them in presentational chart components.
 - Heavy simulations or time-series regressions should remain vectorized Python until profiling proves Rust is needed.

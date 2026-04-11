@@ -7,7 +7,7 @@ apikey*
 filtered_stocks.csv
 crawling_log.csv
 finance copy*.py
-stock_target*.json
+stock_target *.json
 pest.json
 
 saved_data
@@ -24,3 +24,4 @@ config/*.local.env
 data/cache/
 data/raw/
 data/processed/
+yt_extractor/

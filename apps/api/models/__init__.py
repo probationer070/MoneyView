@@ -1,11 +1,18 @@
 from .schemas import (
-    IndexQuote, StockOHLCV, DeltaBadge, NewsArticle,
-    WatchlistItem, IndicatorRecord, TechnicalIndicators,
-    MonteCarloResult, PortfolioStock,
+    DeltaBadge,
+    IndicatorRecord,
+    IndexQuote,
+    MonteCarloResult,
+    NewsArticle,
+    PortfolioStock,
+    StockOHLCV,
+    TechnicalIndicators,
+    WatchlistItem,
+    WatchlistResyncResult,
 )
 
 __all__ = [
     "IndexQuote", "StockOHLCV", "DeltaBadge", "NewsArticle",
-    "WatchlistItem", "IndicatorRecord", "TechnicalIndicators",
+    "WatchlistItem", "WatchlistResyncResult", "IndicatorRecord", "TechnicalIndicators",
     "MonteCarloResult", "PortfolioStock",
 ]

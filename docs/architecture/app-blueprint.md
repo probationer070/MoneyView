@@ -302,16 +302,17 @@ Target scope:
 
 Current status:
 
-- Backend corporate route and financial workbench components exist in partial form.
-- DCF and diagnostic workbenches are present in frontend components.
-- Full Tab 1 composition is not complete.
+- `apps/web/app/corporate/page.tsx` is the canonical Corporate tab route.
+- The page now includes ticker search, manual company add, realtime assumption controls, backend DCF integration, KPI cards, diagnostic graph modules, and a calculation-detail modal.
+- Corporate metrics persist through SQLite `corporate_metrics` with API-backed company and metric history endpoints.
+- The lower section includes a live target-stock comparison workflow with benchmark and custom-universe controls.
 
 Next updates:
 
-1. Define the Corporate page route as the canonical Tab 1 entry.
-2. Add Graph/Table toggle for its first completed section.
-3. Reuse existing workbenches before adding new chart primitives.
-4. Add local SQLite-backed fixtures for corporate metrics.
+1. Add visible data-quality warnings when statement-derived or generated-default assumptions are in use.
+2. Add Graph/Table toggle to the first mature corporate section where the table materially improves reviewability.
+3. Keep calculation-detail lineage and CSV exports aligned with backend metric endpoints.
+4. Extend comparison and diagnostics only after preserving the current ticker-centric workflow.
 
 ### View Toggle System (All Tabs)
 
@@ -371,6 +372,13 @@ Current status:
 - Allocation donut and attribution waterfall exist.
 - Export button uses backend report/export path.
 - Holdings support Graph/Table toggle.
+- Portfolio page now supports add/delete watchlist mutations.
+- Portfolio page includes snapshot summary controls, snapshot-history access, watchlist JSON export/import, and allocation editing.
+- Portfolio uses saved positive watchlist weights when present and falls back to an equal-weight basket only when no positive saved weights exist.
+- If saved weights sum to less than 100%, the remainder is treated as implied cash in attribution/export flows.
+- The SQLite `watchlist` table is the source of truth for holdings.
+- Watchlist bootstrap seeds once from `stock_targets.json` when present, otherwise from a built-in default list when the DB is empty.
+- Automatic bootstrap must not overwrite user-managed watchlist state after add/delete mutations.
 
 Next updates:
 
@@ -378,6 +386,47 @@ Next updates:
 2. Improve benchmark input UX for explicit benchmark weights.
 3. Add visible data-quality warnings for synthetic/proxy behavior.
 4. Add local report preview state separate from interactive dashboard state.
+
+### Watchlist Bootstrap Policy
+
+Current rule:
+
+- The local SQLite `watchlist` table is authoritative.
+- Each watchlist row stores `ticker`, `name`, `sector`, `group_name`, and `weight`.
+- `apps/api/services/webscrap/stock_targets.json` is optional bootstrap input, not a runtime dependency.
+- If both the DB watchlist and JSON seed are absent, the backend seeds a small built-in default watchlist once.
+- Once the user mutates the watchlist, bootstrap seeding must not repopulate deleted defaults automatically.
+- The current portfolio UI reads saved positive watchlist weights when present.
+- If no positive saved weights exist, the UI falls back to equal-weight assumptions.
+- If positive saved weights total less than 100%, the remainder is modeled as implied cash.
+
+### Monte Carlo View (Tab 4)
+
+Target scope:
+
+- Browser-local scenario analysis and simulation workflows.
+- Shared path simulation reused by risk and distribution analysis.
+- Separate valuation uncertainty and correlation-model experiments.
+
+Current status:
+
+- `apps/web/app/monte-carlo/page.tsx` is the canonical Monte Carlo route.
+- The page is implemented as a five-tab workflow:
+  path simulation
+  risk analysis
+  return distribution
+  corporate valuation
+  correlation model
+- A shared web worker owns path, valuation, and correlation jobs so the UI remains responsive.
+- Path, Risk, and Return Distribution share one simulation result; valuation and correlation run as separate worker jobs.
+- The current Monte Carlo implementation is frontend-compute-first and does not depend on a dedicated backend simulation API.
+
+Next updates:
+
+1. Add durable presets and import/export for simulation assumptions when that improves repeatability.
+2. Introduce backend or Rust acceleration only after benchmark evidence shows the current worker engines are insufficient.
+3. Keep output schemas stable if future report/export flows consume Monte Carlo results.
+4. Add richer validation and explanatory data-quality labels before expanding model complexity.
 
 ### Detail Popup (On Click)
 
@@ -478,6 +527,8 @@ npm.cmd run build
 - SQLite and finance benchmark scripts: implemented.
 - Windows local launcher: implemented.
 - UI palette normalization and first ViewToggle pilot: implemented.
+- Corporate Analysis route and diagnostics dashboard: implemented.
+- Monte Carlo five-tab worker workflow: implemented.
 
 ## Next Update Schedule
 
@@ -491,14 +542,14 @@ npm.cmd run build
 ### Short Term
 
 1. Extend `ViewToggle` to Corporate sections.
-2. Add route/table click-through to the detail route.
+2. Add route/table click-through to the detail route where it improves market and corporate review flows.
 3. Repair or replace any legacy ingestion script that does not match the dry-run/reconstruction policy.
 4. Add report preview mode that is clearly separate from interactive dashboard state.
 
 ### Medium Term
 
-1. Finish Corporate Health Dashboard Tab 1 composition.
-2. Add local fixtures for corporate lifecycle, governance, WACC, and DCF data.
+1. Add local fixtures and explicit quality labels for corporate lifecycle, governance, WACC, and DCF data.
+2. Decide whether Corporate sections need table views in addition to the current graph-first layout.
 3. Decide desktop packaging path: Tauri, Electron, or PyInstaller/local web build.
 4. Build a local executable proof of concept only after launcher and schema workflows remain stable.
 

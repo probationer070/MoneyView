@@ -1,0 +1,38 @@
+Issue
+- Playwright startup logs showed:
+  `SyntaxWarning: invalid escape sequence '\M'`
+
+Root Cause
+- The warning came from the module docstring in `apps/api/main.py`.
+- It contained a Windows-style example path:
+  `e:\MoneyView`
+- In Python string literals, backslashes start escape sequences.
+- `\M` is not a valid escape sequence, so Python emitted a warning when `apps.api.main` was imported by uvicorn.
+
+Why It Appeared In E2E Logs
+- Playwright starts the FastAPI server through uvicorn.
+- uvicorn imports `apps.api.main` during startup.
+- That import caused Python to parse the docstring and emit the warning into the webServer logs.
+
+Fix Applied
+- Rewrote `apps/api/main.py` cleanly.
+- Escaped the Windows example path in the docstring:
+  `e:\\MoneyView`
+- Also cleaned two unrelated corrupted strings in the same file:
+  startup log message
+  FastAPI description text
+
+How To Solve This Class Of Problem
+- For Windows paths inside Python string literals:
+  - escape backslashes: `C:\\path\\to\\file`
+  - or use raw strings when appropriate
+  - or prefer forward slashes in examples
+- Avoid leaving malformed or encoding-corrupted string literals in startup modules, because they surface during import and pollute server logs.
+
+Verification
+- `python -Wall -m py_compile apps/api/main.py`
+- `pytest tests/api/test_corporate_comparison.py tests/api/test_watchlist_resync.py tests/core_finance/test_expected_return.py`
+- `npm.cmd run test:e2e -- tests/e2e/corporate-comparison.spec.ts`
+
+Result
+- The `invalid escape sequence '\M'` warning no longer appears in Playwright startup logs.

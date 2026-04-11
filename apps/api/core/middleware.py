@@ -1,11 +1,13 @@
 import time
 import uuid
+import logging
 from typing import Dict
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
-import logging
 
-logger = logging.getLogger(__name__)
+from apps.api.core.logger import setup_logger
+
+logger = setup_logger(__name__)
 
 class RateLimiter:
     """In-memory Token Bucket rate limiter per IP/Client."""
@@ -62,12 +64,48 @@ class StructuralMiddleware(BaseHTTPMiddleware):
 
         # 3. Execution mapping
         start_time = time.time()
-        response = await call_next(request)
+        try:
+            response = await call_next(request)
+        except Exception:
+            process_time = time.time() - start_time
+            logger.exception(
+                "request.failed method=%s path=%s duration_ms=%.1f client_ip=%s",
+                request.method,
+                request.url.path,
+                process_time * 1000,
+                client_ip,
+                extra={
+                    "request_id": request_id,
+                    "method": request.method,
+                    "path": request.url.path,
+                    "status_code": 500,
+                    "duration_ms": round(process_time * 1000, 1),
+                    "client_ip": client_ip,
+                },
+            )
+            raise
+
         process_time = time.time() - start_time
-        
-        # Log heavy requests (e.g., Monte Carlo)
-        if process_time > 1.0:
-            logger.warning(f"Heavy request detected: {request.url.path} took {process_time:.2f}s")
-            
+        duration_ms = round(process_time * 1000, 1)
+
+        log_level = logging.WARNING if process_time > 1.0 else logging.INFO
+        logger.log(
+            log_level,
+            "request.completed method=%s path=%s status=%s duration_ms=%.1f client_ip=%s",
+            request.method,
+            request.url.path,
+            response.status_code,
+            duration_ms,
+            client_ip,
+            extra={
+                "request_id": request_id,
+                "method": request.method,
+                "path": request.url.path,
+                "status_code": response.status_code,
+                "duration_ms": duration_ms,
+                "client_ip": client_ip,
+            },
+        )
+
         response.headers["X-Request-ID"] = request_id
         return response

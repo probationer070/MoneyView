@@ -1,191 +1,239 @@
 import json
-import requests
-import os
-import re
-# import yfinance as yf
-import streamlit as st
-from bs4 import BeautifulSoup
-from dataclasses import dataclass, field
-from datetime import datetime, timedelta
-from typing import List, Optional, Dict
 import logging
+import re
+from dataclasses import dataclass
+from datetime import date, datetime
+from pathlib import Path
+from typing import Any, List, Optional, Sequence
 
-# 로깅 설정
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+from .Collector import ECOSCollector, FREDCollector, GlobalMacroCollector
+from .Collector.InvestpyCollector import InvestpyCollector
+from .DAO import EconomicIndicator
+
 logger = logging.getLogger(__name__)
 
-# ==========================================
-# 1. 데이터 형식 정의 (Data Transfer Objects)
-# ==========================================
+DEFAULT_SOURCES: Sequence[str] = ("ECOS", "FRED", "Yahoo", "Investpy")
+TARGETS_PATH = Path(__file__).with_name("ecos_targets.json")
+LOCAL_EXPORT_ROOT = Path("src")
+DEFAULT_YAHOO_CATEGORY = "글로벌 매크로"
 
-from .DAO import EconomicIndicator, RiskNews
-from .Collector import ECOSCollector, GlobalMacroCollector, FREDCollector
-from .Collector.InvestpyCollector import InvestpyCollector
 
-# ==========================================
-# 2. 데이터 수집기 (Collectors)
-# ==========================================
+@dataclass(frozen=True)
+class FredSeriesTarget:
+    series_id: str
+    name: str
+    category: str
+    unit: str
 
-class SystemRiskFetcher:
-    """
-    5. 시스템 리스크: 공공 데이터 및 파산 건수
-    (API가 없는 경우 크롤링 로직이 복잡하므로 구조만 예시로 작성)
-    """
-    def fetch_risk_metrics(self) -> List[EconomicIndicator]:
-        # 예시: 법인 파산 건수 (실제로는 대법원 통계 사이트 크롤링 필요)
-        # 여기서는 더미 데이터를 반환하거나 구현이 필요함을 알림
-        return [
-            EconomicIndicator(
-                category="시스템 리스크",
-                name="법인 파산 건수 (예시)",
-                code="COURT_BANKRUPTCY",
-                value=0.0, # 구현 필요
-                unit="건",
-                date=datetime.now().strftime('%Y-%m-%d'),
-                source="대법원/FISIS",
-                description="구현 필요: 대법원 통계 월별 업데이트 크롤링"
+
+FRED_SERIES_TARGETS: Sequence[FredSeriesTarget] = (
+    FredSeriesTarget("M2SL", "미국 M2 통화량", "통화", "십억달러"),
+    FredSeriesTarget("CPIAUCSL", "미국 CPI", "물가", "Index"),
+    FredSeriesTarget("FEDFUNDS", "미국 기준금리", "금리", "%"),
+    FredSeriesTarget("IRLTLT01JPM156N", "일본 국채 10년물", "금리", "%"),
+    FredSeriesTarget("DFII10", "미국 10년물 TIPS 수익률", "금리", "%"),
+    FredSeriesTarget("MYAGM2KRM189S", "한국 M2 통화량", "통화", "%"),
+    FredSeriesTarget("CPALTT01KRQ657N", "한국 CPI", "물가", "Index"),
+    FredSeriesTarget("KR3YT", "한국 국고채 3년물 금리", "금리", "%"),
+)
+
+YAHOO_CATEGORY_OVERRIDES = {
+    "DX-Y.NYB": "환율",
+    "^TNX": "금리",
+    "GC=F": "자산",
+    "HG=F": "자산",
+    "URA": "자산",
+    "BTC-USD": "자산",
+}
+
+
+def format_ecos_date(value: date, cycle: str) -> str:
+    """Convert a Python date into the ECOS API date format."""
+    if cycle == "D":
+        return value.strftime("%Y%m%d")
+    if cycle == "M":
+        return value.strftime("%Y%m")
+    if cycle == "Q":
+        quarter = ((value.month - 1) // 3) + 1
+        return f"{value.year}Q{quarter}"
+    if cycle == "A":
+        return value.strftime("%Y")
+    return value.strftime("%Y%m")
+
+
+def fetch_latest_data(
+    ecos_api_key: Optional[str],
+    fred_api_key: Optional[str],
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
+    sources: Optional[Sequence[str]] = None,
+) -> List[EconomicIndicator]:
+    """Collect the latest macro and market indicators from configured sources."""
+    enabled_sources = list(sources or DEFAULT_SOURCES)
+    indicators: List[EconomicIndicator] = []
+
+    if "ECOS" in enabled_sources:
+        indicators.extend(
+            _fetch_ecos_data(
+                ecos_api_key=ecos_api_key,
+                start_date=start_date,
+                end_date=end_date,
             )
-        ]
+        )
 
+    if "FRED" in enabled_sources:
+        indicators.extend(
+            _fetch_fred_data(
+                fred_api_key=fred_api_key,
+                start_date=start_date,
+                end_date=end_date,
+            )
+        )
 
-# ==========================================
-# 3. 메인 실행 컨트롤러
-# ==========================================
+    if "Yahoo" in enabled_sources:
+        indicators.extend(
+            _fetch_yahoo_data(
+                start_date=start_date,
+                end_date=end_date,
+            )
+        )
 
-def format_ecos_date(dt, cycle):
-    """ECOS API 요청용 날짜 포맷 변환"""
-    if cycle == 'D': return dt.strftime("%Y%m%d")
-    if cycle == 'M': return dt.strftime("%Y%m")
-    if cycle == 'Q': return f"{dt.year}Q{(dt.month-1)//3 + 1}"
-    if cycle == 'A': return dt.strftime("%Y")
-    return dt.strftime("%Y%m")
+    if "Investpy" in enabled_sources:
+        indicators.extend(_fetch_investpy_data())
 
-def fetch_latest_data(ecos_api_key, fred_api_key, start_date=None, end_date=None, sources=None):
-    """ECOS 및 Yahoo Finance에서 최신 데이터를 수집합니다."""
-    if sources is None:
-        sources = ["ECOS", "FRED", "Yahoo", "Investpy"]
-        
-    indicators = []
-    status_text = st.empty()
-    
-    def check_file_exists(category, name):
-        safe_cat = str(category).replace(" ", "_").replace("/", "_")
-        safe_name = str(name).replace("/", "_").replace(" ", "_")
-        safe_name = re.sub(r'[\\*?:"<>|()]', "", safe_name)
-        return os.path.exists(os.path.join("src", safe_cat, f"{safe_name}.csv"))
-
-    # 1. ECOS 수집기 초기화
-    if "ECOS" in sources:
-        if not ecos_api_key:
-            st.error("ECOS API 키가 필요합니다.")
-        else:
-            try:
-                ecos = ECOSCollector(ecos_api_key)
-            except TypeError:
-                ecos = ECOSCollector.ECOSCollector(ecos_api_key)
-            
-            # JSON 파일에서 수집 대상 로드
-            try:
-                target_file_path = os.path.join(os.path.dirname(__file__), 'ecos_targets.json')
-                with open(target_file_path, 'r', encoding='utf-8') as f:
-                    targets = json.load(f)
-            except FileNotFoundError:
-                st.error("`ecos_targets.json` 파일을 찾을 수 없습니다.")
-                targets = []
-            except json.JSONDecodeError:
-                st.error("`ecos_targets.json` 파일의 형식이 잘못되었습니다.")
-                targets = []
-
-            status_text.info("한국은행(ECOS) 데이터 수집 중...")
-            for target in targets:
-                stat = target.get('stat_code')
-                item = target.get('item_code')
-                name = target.get('name')
-                unit = target.get('unit')
-                cycle = target.get('cycle')
-                category = target.get('category')
-                
-                if check_file_exists(category, name):
-                    continue
-
-                s_str, e_str = None, None
-                if start_date and end_date:
-                    s_str = format_ecos_date(start_date, cycle)
-                    e_str = format_ecos_date(end_date, cycle)
-
-                data_list = ecos.fetch_indicator(stat, item, name, unit, cycle, year=datetime.now().year, start_date=s_str, end_date=e_str, category=category)
-                if data_list:
-                    indicators.extend(data_list)
-    
-    # 2. FRED 데이터 수집
-    if "FRED" in sources and fred_api_key:
-        status_text.info("FRED 데이터 수집 중...")
-        try:
-            fred = FREDCollector(fred_api_key)
-        except TypeError:
-            fred = FREDCollector.FREDCollector(fred_api_key)
-        
-        f_start = start_date.strftime("%Y-%m-%d") if start_date else None
-        f_end = end_date.strftime("%Y-%m-%d") if end_date else None
-        
-        # 미국 M2 통화량 (M2SL)
-        if not check_file_exists("통화", "미국 M2 통화량"):
-            indicators.extend(fred.fetch_indicator("M2SL", "미국 M2 통화량", "통화", "십억달러", start_date=f_start, end_date=f_end))
-        # 미국 CPI (CPIAUCSL)
-        if not check_file_exists("물가", "미국 CPI"):
-            indicators.extend(fred.fetch_indicator("CPIAUCSL", "미국 CPI", "물가", "Index", start_date=f_start, end_date=f_end))
-        # 미국 기준금리 (FEDFUNDS)
-        if not check_file_exists("금리", "미국 기준금리"):
-            indicators.extend(fred.fetch_indicator("FEDFUNDS", "미국 기준금리", "금리", "%", start_date=f_start, end_date=f_end))
-        # 일본 국채 10년물 (IRLTLT01JPM156N)
-        if not check_file_exists("금리", "일본 국채 10년물"):
-            indicators.extend(fred.fetch_indicator("IRLTLT01JPM156N", "일본 국채 10년물", "금리", "%", start_date=f_start, end_date=f_end))
-        # 미국 10년물 TIPs 수익률
-        if not check_file_exists("금리", "미국 10년물 TIPS 수익률"):
-            indicators.extend(fred.fetch_indicator("DFII10", "미국 10년물 TIPS 수익률", "금리", "%", start_date=f_start, end_date=f_end))
-
-        # 한국 M2 통화량
-        if not check_file_exists("통화", "한국 M2 통화량"):
-            indicators.extend(fred.fetch_indicator("MYAGM2KRM189S", "한국 M2 통화량", "통화", "%", start_date=f_start, end_date=f_end))
-        # 한국 CPI
-        if not check_file_exists("물가", "한국 CPI"):
-            indicators.extend(fred.fetch_indicator("CPALTT01KRQ657N", "한국 CPI", "물가", "Index", start_date=f_start, end_date=f_end))
-        # 한국 국고채 3년물 금리
-        if not check_file_exists("금리", "한국 국고채 3년물 금리"):
-            indicators.extend(fred.fetch_indicator("KR3YT", "한국 국고채 3년물 금리", "금리", "%", start_date=f_start, end_date=f_end))
-    
-    # 3. 글로벌 매크로 (Yahoo Finance)
-    if "Yahoo" in sources:
-        status_text.info("글로벌 매크로 데이터 수집 중...")
-        try:
-            macro = GlobalMacroCollector()
-        except TypeError:
-            macro = GlobalMacroCollector.GlobalMacroCollector()
-        # Yahoo Finance는 YYYY-MM-DD 형식을 사용
-        y_start = start_date.strftime("%Y-%m-%d") if start_date else None
-        y_end = end_date.strftime("%Y-%m-%d") if end_date else None
-        
-        yahoo_data = macro.fetch_yahoo_data(start_date=y_start, end_date=y_end)
-        # Yahoo 데이터 카테고리 후처리
-        for ind in yahoo_data:
-            if ind.code == "DX-Y.NYB": ind.category = "환율"
-            elif ind.code == "^TNX": ind.category = "금리"
-            elif ind.code in ["GC=F", "HG=F", "URA", "BTC-USD"]: ind.category = "자산"
-            else: ind.category = "글로벌 매크로"
-        indicators.extend(yahoo_data)
-    
-    # 4. 기타 외부 자료 (InvestpyCollector - CDS 프리미엄 등)
-    if "Investpy" in sources:
-        status_text.info("기타 매크로 데이터 (CDS 등) 수집 중...")
-        try:
-            inv = InvestpyCollector()
-            inv_data = inv.fetch_all()
-            indicators.extend(inv_data)
-        except Exception as e:
-            logger.error(f"InvestpyCollector 오류: {e}")
-        
-    status_text.success(f"수집 완료! 총 {len(indicators)}건의 데이터가 업데이트되었습니다.")
+    logger.info("Collected %d indicators from %s", len(indicators), ", ".join(enabled_sources))
     return indicators
 
-# if __name__ == "__main__":
-#     run_dashboard_collection()
+
+def _fetch_ecos_data(
+    ecos_api_key: Optional[str],
+    start_date: Optional[date],
+    end_date: Optional[date],
+) -> List[EconomicIndicator]:
+    if not ecos_api_key:
+        logger.warning("Skipping ECOS collection because no ECOS API key was provided.")
+        return []
+
+    targets = _load_ecos_targets()
+    if not targets:
+        return []
+
+    logger.info("Collecting ECOS indicators.")
+    collector = _build_collector(ECOSCollector, ecos_api_key)
+    indicators: List[EconomicIndicator] = []
+
+    for target in targets:
+        category = target.get("category")
+        name = target.get("name")
+        if _indicator_file_exists(category, name):
+            continue
+
+        cycle = target.get("cycle")
+        start_value = format_ecos_date(start_date, cycle) if start_date and end_date else None
+        end_value = format_ecos_date(end_date, cycle) if start_date and end_date else None
+
+        indicators.extend(
+            collector.fetch_indicator(
+                target.get("stat_code"),
+                target.get("item_code"),
+                name,
+                target.get("unit"),
+                cycle,
+                year=datetime.now().year,
+                start_date=start_value,
+                end_date=end_value,
+                category=category,
+            )
+        )
+
+    return indicators
+
+
+def _fetch_fred_data(
+    fred_api_key: Optional[str],
+    start_date: Optional[date],
+    end_date: Optional[date],
+) -> List[EconomicIndicator]:
+    if not fred_api_key:
+        logger.warning("Skipping FRED collection because no FRED API key was provided.")
+        return []
+
+    logger.info("Collecting FRED indicators.")
+    collector = _build_collector(FREDCollector, fred_api_key)
+    indicators: List[EconomicIndicator] = []
+    start_value = start_date.strftime("%Y-%m-%d") if start_date else None
+    end_value = end_date.strftime("%Y-%m-%d") if end_date else None
+
+    for target in FRED_SERIES_TARGETS:
+        if _indicator_file_exists(target.category, target.name):
+            continue
+
+        indicators.extend(
+            collector.fetch_indicator(
+                target.series_id,
+                target.name,
+                target.category,
+                target.unit,
+                start_date=start_value,
+                end_date=end_value,
+            )
+        )
+
+    return indicators
+
+
+def _fetch_yahoo_data(
+    start_date: Optional[date],
+    end_date: Optional[date],
+) -> List[EconomicIndicator]:
+    logger.info("Collecting Yahoo macro indicators.")
+    collector = _build_collector(GlobalMacroCollector)
+    start_value = start_date.strftime("%Y-%m-%d") if start_date else None
+    end_value = end_date.strftime("%Y-%m-%d") if end_date else None
+    indicators = collector.fetch_yahoo_data(start_date=start_value, end_date=end_value)
+
+    for indicator in indicators:
+        indicator.category = YAHOO_CATEGORY_OVERRIDES.get(indicator.code, DEFAULT_YAHOO_CATEGORY)
+
+    return indicators
+
+
+def _fetch_investpy_data() -> List[EconomicIndicator]:
+    logger.info("Collecting Investpy indicators.")
+    try:
+        return InvestpyCollector().fetch_all()
+    except Exception as exc:
+        logger.exception("InvestpyCollector failed: %s", exc)
+        return []
+
+
+def _load_ecos_targets() -> List[dict]:
+    try:
+        with TARGETS_PATH.open("r", encoding="utf-8") as file:
+            return json.load(file)
+    except FileNotFoundError:
+        logger.error("ecos_targets.json was not found at %s", TARGETS_PATH)
+    except json.JSONDecodeError:
+        logger.error("ecos_targets.json is not valid JSON: %s", TARGETS_PATH)
+    return []
+
+
+def _indicator_file_exists(category: Optional[str], name: Optional[str]) -> bool:
+    if not category or not name:
+        return False
+
+    category_slug = _sanitize_path_part(category)
+    name_slug = _sanitize_path_part(name)
+    return (LOCAL_EXPORT_ROOT / category_slug / f"{name_slug}.csv").exists()
+
+
+def _sanitize_path_part(value: str) -> str:
+    sanitized = str(value).replace(" ", "_").replace("/", "_")
+    return re.sub(r'[\\*?:"<>|()]', "", sanitized)
+
+
+def _build_collector(collector_ref: Any, *args):
+    try:
+        return collector_ref(*args)
+    except TypeError:
+        return getattr(collector_ref, collector_ref.__name__)(*args)

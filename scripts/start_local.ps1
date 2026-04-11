@@ -98,6 +98,207 @@ function Wait-HttpOk {
     return $false
 }
 
+function Get-LogTail {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [int]$LineCount = 20
+    )
+
+    if (-not (Test-Path $Path)) {
+        return "No log file was created."
+    }
+
+    return ((Get-Content -Path $Path -Tail $LineCount) -join [Environment]::NewLine)
+}
+
+function Invoke-ExternalCapture {
+    param(
+        [Parameter(Mandatory = $true)][string]$FilePath,
+        [string[]]$ArgumentList = @()
+    )
+
+    $output = $null
+    $exitCode = 0
+    $previousErrorActionPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = "Continue"
+        $output = & $FilePath @ArgumentList 2>&1
+        $exitCode = $LASTEXITCODE
+    }
+    catch {
+        $output = $_.Exception.Message
+        $exitCode = 1
+    }
+    finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+
+    return [pscustomobject]@{
+        Success = ($exitCode -eq 0)
+        Output = (($output | ForEach-Object { "$_" }) -join [Environment]::NewLine).Trim()
+        ExitCode = $exitCode
+    }
+}
+
+function Test-PythonImportCommand {
+    param(
+        [Parameter(Mandatory = $true)][string]$PythonFilePath,
+        [string[]]$PythonArgumentList = @(),
+        [Parameter(Mandatory = $true)][string]$ImportCommand
+    )
+
+    return Invoke-ExternalCapture -FilePath $PythonFilePath -ArgumentList ($PythonArgumentList + @("-c", $ImportCommand))
+}
+
+function Invoke-CheckedCommand {
+    param(
+        [Parameter(Mandatory = $true)][string]$FilePath,
+        [Parameter(Mandatory = $true)][string[]]$ArgumentList,
+        [Parameter(Mandatory = $true)][string]$WorkingDirectory,
+        [Parameter(Mandatory = $true)][string]$FailureMessage
+    )
+
+    Push-Location $WorkingDirectory
+    try {
+        & $FilePath @ArgumentList
+        if ($LASTEXITCODE -ne 0) {
+            throw "$FailureMessage Exit code: $LASTEXITCODE"
+        }
+    }
+    finally {
+        Pop-Location
+    }
+}
+
+function Get-BackendRuntime {
+    if (-not (Test-CommandExists -Name "conda")) {
+        return [pscustomobject]@{
+            Name = "python"
+            Description = "system python"
+            PythonFilePath = "python"
+            PythonArgumentList = @()
+            Preferred = $false
+        }
+    }
+
+    $condaInfoRaw = Invoke-ExternalCapture -FilePath "conda" -ArgumentList @("info", "--json")
+    if (-not $condaInfoRaw.Success) {
+        return [pscustomobject]@{
+            Name = "python"
+            Description = "system python"
+            PythonFilePath = "python"
+            PythonArgumentList = @()
+            Preferred = $false
+        }
+    }
+
+    $condaInfo = $condaInfoRaw.Output | ConvertFrom-Json
+    $activeEnvName = $env:CONDA_DEFAULT_ENV
+    if ([string]::IsNullOrWhiteSpace($activeEnvName)) {
+        $activeEnvName = $condaInfo.active_prefix_name
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($activeEnvName)) {
+        return [pscustomobject]@{
+            Name = $activeEnvName
+            Description = "Conda env '$activeEnvName'"
+            PythonFilePath = "conda"
+            PythonArgumentList = @("run", "-n", $activeEnvName, "python")
+            Preferred = $true
+        }
+    }
+
+    $preferredEnvName = "moneyview"
+    $envNames = @($condaInfo.envs | ForEach-Object { Split-Path -Leaf $_ })
+    if ($envNames -contains $preferredEnvName) {
+        return [pscustomobject]@{
+            Name = $preferredEnvName
+            Description = "Conda env '$preferredEnvName'"
+            PythonFilePath = "conda"
+            PythonArgumentList = @("run", "-n", $preferredEnvName, "python")
+            Preferred = $true
+        }
+    }
+
+    return [pscustomobject]@{
+        Name = "python"
+        Description = "system python"
+        PythonFilePath = "python"
+        PythonArgumentList = @()
+        Preferred = $false
+    }
+}
+
+function Ensure-BackendDependencies {
+    param(
+        [Parameter(Mandatory = $true)][string]$RepoRoot,
+        [Parameter(Mandatory = $true)]$Runtime,
+        [switch]$AutoInstall
+    )
+
+    $pythonVersion = Invoke-ExternalCapture -FilePath $Runtime.PythonFilePath -ArgumentList ($Runtime.PythonArgumentList + @("--version"))
+    if (-not $pythonVersion.Success) {
+        throw "Quick Start backend preflight failed. Unable to query Python from $($Runtime.Description).`n$($pythonVersion.Output)"
+    }
+
+    $backendImport = Test-PythonImportCommand -PythonFilePath $Runtime.PythonFilePath -PythonArgumentList $Runtime.PythonArgumentList -ImportCommand "import sys; assert sys.version_info >= (3, 12), f'Python {sys.version.split()[0]} is too old'; import uvicorn, fastapi, httpx, pydantic; import apps.api.main"
+    if ($backendImport.Success) {
+        return
+    }
+
+    if ($AutoInstall -and $backendImport.Output -match "ModuleNotFoundError|No module named") {
+        Write-Warning "Backend packages are incomplete in $($Runtime.Description). Attempting automatic install."
+        Invoke-CheckedCommand -FilePath $Runtime.PythonFilePath -ArgumentList ($Runtime.PythonArgumentList + @("-m", "pip", "install", "-e", ".[dev]")) -WorkingDirectory $RepoRoot -FailureMessage "Automatic backend dependency install failed."
+
+        $backendImport = Test-PythonImportCommand -PythonFilePath $Runtime.PythonFilePath -PythonArgumentList $Runtime.PythonArgumentList -ImportCommand "import sys; assert sys.version_info >= (3, 12), f'Python {sys.version.split()[0]} is too old'; import uvicorn, fastapi, httpx, pydantic; import apps.api.main"
+        if ($backendImport.Success) {
+            return
+        }
+    }
+
+    $detail = if ([string]::IsNullOrWhiteSpace($backendImport.Output)) {
+        "No backend import diagnostics were captured."
+    }
+    else {
+        $backendImport.Output
+    }
+
+    throw "Quick Start backend preflight failed in $($Runtime.Description). The backend process cannot start.`nPython: $($pythonVersion.Output)`n$detail"
+}
+
+function Ensure-FrontendDependencies {
+    param(
+        [Parameter(Mandatory = $true)][string]$WebRoot,
+        [switch]$ForceInstall,
+        [switch]$AutoInstall
+    )
+
+    $nodeModulesPath = Join-Path $WebRoot "node_modules"
+    $needsInstall = $ForceInstall -or (-not (Test-Path $nodeModulesPath))
+
+    if (-not $needsInstall) {
+        Push-Location $WebRoot
+        try {
+            & npm.cmd exec -- next --version *> $null
+            $needsInstall = ($LASTEXITCODE -ne 0)
+        }
+        finally {
+            Pop-Location
+        }
+    }
+
+    if (-not $needsInstall) {
+        return
+    }
+
+    if (-not $AutoInstall) {
+        throw "Frontend dependencies are incomplete. Run Quick Start without -CheckOnly or run npm.cmd install in apps\web."
+    }
+
+    Write-Warning "Frontend dependencies are incomplete. Attempting automatic install."
+    Invoke-CheckedCommand -FilePath "npm.cmd" -ArgumentList @("install") -WorkingDirectory $WebRoot -FailureMessage "Automatic frontend dependency install failed."
+}
+
 function ConvertTo-SingleQuotedPowerShellLiteral {
     param([Parameter(Mandatory = $true)][string]$Value)
     return "'" + ($Value -replace "'", "''") + "'"
@@ -107,26 +308,76 @@ function Start-LocalProcessWindow {
     param(
         [Parameter(Mandatory = $true)][string]$Title,
         [Parameter(Mandatory = $true)][string]$WorkingDirectory,
-        [Parameter(Mandatory = $true)][string]$Command
+        [Parameter(Mandatory = $true)][string]$Command,
+        [Parameter(Mandatory = $true)][string]$LogPath
     )
 
     $quotedDir = ConvertTo-SingleQuotedPowerShellLiteral -Value $WorkingDirectory
+    $quotedLog = ConvertTo-SingleQuotedPowerShellLiteral -Value $LogPath
+    $quotedCommand = ConvertTo-SingleQuotedPowerShellLiteral -Value $Command
     $windowTitle = $Title -replace "'", "''"
-    $wrappedCommand = "`$Host.UI.RawUI.WindowTitle = '$windowTitle'; Set-Location -LiteralPath $quotedDir; $Command"
+    $wrappedCommand = @"
+`$Host.UI.RawUI.WindowTitle = '$windowTitle'
+Set-Location -LiteralPath $quotedDir
+`$logPath = $quotedLog
+`$commandToRun = $quotedCommand
+try {
+    Invoke-Expression `$commandToRun 2>&1 | Tee-Object -FilePath `$logPath -Append
+    if (`$LASTEXITCODE -ne 0) {
+        exit `$LASTEXITCODE
+    }
+}
+catch {
+    (`$_ | Out-String) | Tee-Object -FilePath `$logPath -Append
+    exit 1
+}
+"@
 
-    Start-Process -FilePath "powershell.exe" -ArgumentList @(
+    return Start-Process -FilePath "powershell.exe" -ArgumentList @(
         "-NoExit",
         "-ExecutionPolicy",
         "Bypass",
         "-Command",
         $wrappedCommand
-    ) | Out-Null
+    ) -PassThru
+}
+
+function Wait-StartupTarget {
+    param(
+        [Parameter(Mandatory = $true)]$Process,
+        [Parameter(Mandatory = $true)][string]$Name,
+        [Parameter(Mandatory = $true)][string]$Url,
+        [Parameter(Mandatory = $true)][string]$LogPath,
+        [int]$TimeoutSeconds = 30
+    )
+
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    while ((Get-Date) -lt $deadline) {
+        if (Test-HttpOk -Url $Url) {
+            return
+        }
+
+        $Process.Refresh()
+        if ($Process.HasExited) {
+            $logTail = Get-LogTail -Path $LogPath
+            throw "Quick Start failed. The $Name process did not complete startup for $Url.`nLog: $LogPath`n$logTail"
+        }
+
+        Start-Sleep -Milliseconds 500
+    }
+
+    $logTail = Get-LogTail -Path $LogPath
+    throw "Quick Start failed. The $Name process did not become healthy within $TimeoutSeconds seconds for $Url.`nLog: $LogPath`n$logTail"
 }
 
 $repoRoot = Resolve-RepoRoot
 $webRoot = Join-Path $repoRoot "apps\web"
 $cacheDir = Join-Path $repoRoot "data\cache"
+$logDir = Join-Path $cacheDir "logs"
 $portFile = Join-Path $cacheDir "moneyview_port.json"
+$backendLog = Join-Path $logDir "quickstart-backend.log"
+$frontendLog = Join-Path $logDir "quickstart-frontend.log"
+$backendRuntime = $null
 $apiHealthUrl = "http://127.0.0.1:$ApiPort/api/v1/health"
 $frontendUrl = "http://localhost:$WebPort"
 
@@ -166,6 +417,16 @@ elseif (-not (Test-TcpPortFree -Port $ApiPort)) {
 $apiHealthUrl = "http://127.0.0.1:$ApiPort/api/v1/health"
 
 New-Item -ItemType Directory -Path $cacheDir -Force | Out-Null
+New-Item -ItemType Directory -Path $logDir -Force | Out-Null
+Remove-Item -LiteralPath $backendLog -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath $frontendLog -ErrorAction SilentlyContinue
+
+$backendRuntime = Get-BackendRuntime
+Write-Host "Backend runtime: $($backendRuntime.Description)"
+
+Ensure-BackendDependencies -RepoRoot $repoRoot -Runtime $backendRuntime -AutoInstall:(-not $CheckOnly)
+Ensure-FrontendDependencies -WebRoot $webRoot -ForceInstall:$InstallDeps -AutoInstall:(-not $CheckOnly)
+
 $portPayload = [ordered]@{
     port = $ApiPort
     host = "127.0.0.1"
@@ -187,51 +448,39 @@ if ($CheckOnly) {
     exit 0
 }
 
-if ($InstallDeps) {
-    Write-Host "Installing frontend dependencies..." -ForegroundColor Yellow
-    Push-Location $webRoot
-    try {
-        npm.cmd install
-    }
-    finally {
-        Pop-Location
-    }
-}
-
 if ($BuildWeb) {
     Write-Host "Building frontend..." -ForegroundColor Yellow
-    Push-Location $webRoot
-    try {
-        npm.cmd run build
-    }
-    finally {
-        Pop-Location
-    }
+    Invoke-CheckedCommand -FilePath "npm.cmd" -ArgumentList @("run", "build") -WorkingDirectory $webRoot -FailureMessage "Frontend build failed."
 }
 
 if (-not (Test-HttpOk -Url $apiHealthUrl)) {
-    $backendCommand = "python -m uvicorn apps.api.main:app --host 127.0.0.1 --port $ApiPort --reload"
-    Start-LocalProcessWindow -Title "MoneyView API :$ApiPort" -WorkingDirectory $repoRoot -Command $backendCommand
-
-    if (-not (Wait-HttpOk -Url $apiHealthUrl -TimeoutSeconds 30)) {
-        Write-Warning "Backend did not pass health check within 30 seconds: $apiHealthUrl"
+    $backendCommand = if ($backendRuntime.PythonFilePath -eq "conda") {
+        "conda run -n $($backendRuntime.Name) python -m uvicorn apps.api.main:app --host 127.0.0.1 --port $ApiPort --reload"
     }
+    else {
+        "python -m uvicorn apps.api.main:app --host 127.0.0.1 --port $ApiPort --reload"
+    }
+    $backendProcess = Start-LocalProcessWindow -Title "MoneyView API :$ApiPort" -WorkingDirectory $repoRoot -Command $backendCommand -LogPath $backendLog
+    Wait-StartupTarget -Process $backendProcess -Name "backend" -Url $apiHealthUrl -LogPath $backendLog -TimeoutSeconds 30
 }
 
 $webCommand = if ($ProductionWeb) {
-    "npm.cmd run start -- -p $WebPort"
+    "npm.cmd exec -- next start --port $WebPort"
 }
 else {
-    "npm.cmd run dev -- -p $WebPort"
+    "npm.cmd exec -- next dev --port $WebPort"
 }
 
-Start-LocalProcessWindow -Title "MoneyView Web :$WebPort" -WorkingDirectory $webRoot -Command $webCommand
+$frontendProcess = Start-LocalProcessWindow -Title "MoneyView Web :$WebPort" -WorkingDirectory $webRoot -Command $webCommand -LogPath $frontendLog
+Wait-StartupTarget -Process $frontendProcess -Name "frontend" -Url $frontendUrl -LogPath $frontendLog -TimeoutSeconds 45
 
 Write-Host ""
 Write-Host "MoneyView local runtime requested." -ForegroundColor Green
 Write-Host "Backend health: $apiHealthUrl"
 Write-Host "Frontend:       $frontendUrl"
 Write-Host "Portfolio:      $frontendUrl/portfolio"
+Write-Host "Backend log:    $backendLog"
+Write-Host "Frontend log:   $frontendLog"
 Write-Host ""
 Write-Host "Close the spawned PowerShell windows to stop the local runtime."
 

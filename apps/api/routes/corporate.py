@@ -11,9 +11,27 @@ from typing import Literal, Optional
 from fastapi import APIRouter, Body, Query
 
 from apps.api.core.logger import setup_logger
-from apps.api.models.schemas import APIResponse, APIMeta, CorporateCompany, CorporateMetrics, ValuationAssumptions
+from apps.api.models.schemas import (
+    APIResponse,
+    APIMeta,
+    CorporateCompany,
+    CorporateComparisonHistoryResponse,
+    CorporateComparisonResponse,
+    CorporateMetrics,
+    ValuationAssumptions,
+)
+from apps.api.services.corporate_comparison import (
+    DEFAULT_BENCHMARK_TICKER,
+    DEFAULT_COMPARISON_UNIVERSE,
+    DEFAULT_SNAPSHOT_MODE,
+    build_corporate_comparison_response,
+    load_corporate_comparison_history,
+    ensure_daily_snapshot_current,
+    save_corporate_comparison_snapshot,
+)
 from apps.api.services.db import get_db
 from apps.api.services.market_data import MarketDataService
+from apps.api.services.watchlist_seed import ensure_watchlist_bootstrapped
 
 router = APIRouter()
 logger = setup_logger(__name__)
@@ -781,34 +799,22 @@ def _latest_market_price(ticker: str) -> float:
 
 def _seed_watchlist_from_json_if_empty() -> None:
     """Populate watchlist-backed companies without requiring Portfolio tab first."""
-    if not _WATCHLIST_JSON.exists():
-        return
+    ensure_watchlist_bootstrapped(_WATCHLIST_JSON)
 
-    with get_db() as conn:
-        existing = conn.execute("""SELECT COUNT(*) AS count FROM watchlist""").fetchone()
-        if existing and int(existing["count"]) > 0:
-            return
 
-        try:
-            data = json.loads(_WATCHLIST_JSON.read_text(encoding="utf-8"))
-        except Exception:
-            return
-
-        for group_name, group in data.items():
-            for target in group.get("targets", []):
-                ticker = str(target.get("ticker", "")).upper().strip()
-                if not ticker:
-                    continue
-                conn.execute(
-                    """INSERT OR IGNORE INTO watchlist (ticker, name, sector, group_name)
-                       VALUES (?, ?, ?, ?)""",
-                    (
-                        ticker,
-                        target.get("name", ticker),
-                        target.get("sector", ""),
-                        group_name,
-                    ),
-                )
+def ensure_corporate_comparison_daily_snapshot() -> CorporateComparisonResponse | None:
+    """Ensure the current KST business-date snapshot exists."""
+    _seed_watchlist_from_json_if_empty()
+    return ensure_daily_snapshot_current(
+        comparison_universe=DEFAULT_COMPARISON_UNIVERSE,
+        benchmark_ticker=DEFAULT_BENCHMARK_TICKER,
+        custom_tickers=[],
+        metrics_loader=_metrics_for_ticker,
+        price_loader=_latest_market_price,
+        default_companies=DEFAULT_COMPANIES,
+        risk_free_rate=DEFAULT_RISK_FREE_RATE,
+        equity_risk_premium=DEFAULT_EQUITY_RISK_PREMIUM,
+    )
 
 
 @router.get("/companies", response_model=list[CorporateCompany])
@@ -840,7 +846,7 @@ async def get_corporate_companies():
             ticker=ticker,
             name=name,
             sector=row["sector"] or DEFAULT_COMPANIES.get(ticker, {}).get("sector", ""),
-            source="portfolio",
+            source="watchlist",
         )
 
     for row in manual_rows:
@@ -900,6 +906,84 @@ async def add_corporate_company(company: CorporateCompany = Body(...)):
             ),
         )
     return payload
+
+
+@router.get("/comparison", response_model=APIResponse[CorporateComparisonResponse])
+async def get_corporate_comparison(
+    mode: Literal["snapshot", "live"] = Query(default=DEFAULT_SNAPSHOT_MODE),
+    comparison_universe: Literal["portfolio_plus_benchmark", "watchlist_plus_benchmark", "custom"] = Query(
+        default=DEFAULT_COMPARISON_UNIVERSE
+    ),
+    benchmark_ticker: str = Query(default=DEFAULT_BENCHMARK_TICKER),
+    custom_tickers: str = Query(default=""),
+):
+    """Return cross-stock comparison rows for the current target-stock universe."""
+    _seed_watchlist_from_json_if_empty()
+    response = build_corporate_comparison_response(
+        mode=mode,
+        comparison_universe=comparison_universe,
+        benchmark_ticker=benchmark_ticker,
+        custom_tickers=[ticker for ticker in custom_tickers.split(",") if ticker.strip()],
+        metrics_loader=_metrics_for_ticker,
+        price_loader=_latest_market_price,
+        default_companies=DEFAULT_COMPANIES,
+        risk_free_rate=DEFAULT_RISK_FREE_RATE,
+        equity_risk_premium=DEFAULT_EQUITY_RISK_PREMIUM,
+    )
+    return APIResponse(
+        data=response,
+        meta=APIMeta(last_updated_at=datetime.now(timezone.utc).isoformat(), request_id=""),
+    )
+
+
+@router.post("/comparison/snapshot", response_model=APIResponse[CorporateComparisonResponse])
+async def refresh_corporate_comparison_snapshot(
+    comparison_universe: Literal["portfolio_plus_benchmark", "watchlist_plus_benchmark", "custom"] = Query(
+        default=DEFAULT_COMPARISON_UNIVERSE
+    ),
+    benchmark_ticker: str = Query(default=DEFAULT_BENCHMARK_TICKER),
+    custom_tickers: str = Query(default=""),
+):
+    """Recompute and persist today's comparison snapshot."""
+    _seed_watchlist_from_json_if_empty()
+    response = save_corporate_comparison_snapshot(
+        snapshot_source="manual_refresh",
+        comparison_universe=comparison_universe,
+        benchmark_ticker=benchmark_ticker,
+        custom_tickers=[ticker for ticker in custom_tickers.split(",") if ticker.strip()],
+        metrics_loader=_metrics_for_ticker,
+        price_loader=_latest_market_price,
+        default_companies=DEFAULT_COMPANIES,
+        risk_free_rate=DEFAULT_RISK_FREE_RATE,
+        equity_risk_premium=DEFAULT_EQUITY_RISK_PREMIUM,
+    )
+    return APIResponse(
+        data=response,
+        meta=APIMeta(last_updated_at=datetime.now(timezone.utc).isoformat(), request_id=""),
+    )
+
+
+@router.get("/comparison/history", response_model=APIResponse[CorporateComparisonHistoryResponse])
+async def get_corporate_comparison_history(
+    comparison_universe: Literal["portfolio_plus_benchmark", "watchlist_plus_benchmark", "custom"] = Query(
+        default=DEFAULT_COMPARISON_UNIVERSE
+    ),
+    benchmark_ticker: str = Query(default=DEFAULT_BENCHMARK_TICKER),
+    custom_tickers: str = Query(default=""),
+    limit: int = Query(default=30, ge=1, le=365),
+):
+    """Return persisted snapshot-history summaries for the selected comparison universe."""
+    _seed_watchlist_from_json_if_empty()
+    response = load_corporate_comparison_history(
+        comparison_universe=comparison_universe,
+        benchmark_ticker=benchmark_ticker,
+        custom_tickers=[ticker for ticker in custom_tickers.split(",") if ticker.strip()],
+        limit=limit,
+    )
+    return APIResponse(
+        data=response,
+        meta=APIMeta(last_updated_at=datetime.now(timezone.utc).isoformat(), request_id=""),
+    )
 
 
 @router.post("/dcf/{ticker}")

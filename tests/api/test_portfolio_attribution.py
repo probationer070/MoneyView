@@ -128,6 +128,28 @@ def test_post_portfolio_attribution_returns_domain_contract():
     assert payload["metadata"]["method"] == "brinson_fachler_arithmetic"
 
 
+def test_post_portfolio_attribution_includes_cash_sector_when_weights_are_partial():
+    client = TestClient(app)
+    response = client.post(
+        "/api/v1/portfolio/attribution",
+        json={
+            "tickers": ["AAPL", "MSFT"],
+            "weights": [0.35, 0.25],
+            "benchmark": "^GSPC",
+            "period": "1y",
+            "currency": "USD",
+            "attribution_method": "brinson_fachler_arithmetic",
+            "allow_synthetic_fallback": True,
+            "allow_benchmark_proxy": True,
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    sectors = [row["sector"] for row in payload["sector_breakdowns"]]
+    assert "CASH" in sectors
+
+
 def test_missing_sector_contract_with_explicit_synthetic_fallback():
     client = TestClient(app)
     response = client.post(

@@ -35,3 +35,5 @@ Prevention:
 - Do not mark work complete while required commands are still failing.
 - Do not hide failures by weakening tests or disabling lint rules without a documented reason.
 - Prefer targeted verification first, then broader verification.
+- In this Windows workspace, prefer `npm.cmd` over `npm` when PowerShell execution policy blocks `npm.ps1`.
+- When frontend changes touch React Query hooks, treat hook dependency warnings as real issues and resolve them before closing the task.

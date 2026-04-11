@@ -1,0 +1,29 @@
+Playwright port-collision resolution
+
+Date: 2026-04-11
+
+What was changed:
+- The Playwright API startup script now checks whether the target API port is already in use before starting uvicorn.
+- The Playwright web startup script now checks whether the target Next.js port is already in use before starting next dev.
+- If a listener is already bound to the target port, the scripts capture the owning PID/process details, write that information to a log, force-kill the listener, and wait for the port to become free.
+- If startup still fails after cleanup, the scripts log the failure reason before exiting with an error.
+
+Files updated:
+- apps/web/tests/e2e/start-playwright-api.ps1
+- apps/web/tests/e2e/start-playwright-web.ps1
+
+Runtime log files:
+- data/error/playwright-port-collision-api.txt
+- data/error/playwright-port-collision-web.txt
+
+How the issue is resolved:
+1. Detect stale listener on the intended port.
+2. Record which process owned the port.
+3. Kill the stale listener.
+4. Wait until the port is actually free.
+5. Start the new Playwright-managed server.
+6. Log startup failures if the port still cannot be used.
+
+Verification:
+- npm.cmd run test:e2e -- tests/e2e/portfolio-snapshot-history.spec.ts
+- Result: passed with the updated harness.

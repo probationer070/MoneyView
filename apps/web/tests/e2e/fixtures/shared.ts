@@ -1,0 +1,202 @@
+export type PortfolioStockFixture = {
+  ticker: string;
+  name: string;
+  sector: string;
+  group_name: string;
+  weight: number;
+  last_close: number;
+  delta: { delta_pct: number };
+  sparkline: number[];
+};
+
+export const marketOverviewFixture = [
+  {
+    name: "S&P 500",
+    ticker: "^GSPC",
+    last_close: 5110.4,
+    delta: {
+      value: 5110.4,
+      prev_value: 5080.1,
+      delta_abs: 30.3,
+      delta_pct: 0.6,
+      direction: "up",
+      color: "red",
+    },
+    sparkline: [5030, 5050, 5075, 5090, 5110.4],
+    period: "5y",
+  },
+  {
+    name: "Nasdaq",
+    ticker: "^IXIC",
+    last_close: 18240.8,
+    delta: {
+      value: 18240.8,
+      prev_value: 18110.2,
+      delta_abs: 130.6,
+      delta_pct: 0.7,
+      direction: "up",
+      color: "red",
+    },
+    sparkline: [17920, 18010, 18110, 18195, 18240.8],
+    period: "5y",
+  },
+] as const;
+
+export const portfolioPartialWeightsFixture: PortfolioStockFixture[] = [
+  {
+    ticker: "AAPL",
+    name: "Apple",
+    sector: "Technology",
+    group_name: "built_in",
+    weight: 0.2,
+    last_close: 210.4,
+    delta: { delta_pct: 1.2 },
+    sparkline: [200, 202, 204, 208, 210.4],
+  },
+  {
+    ticker: "MSFT",
+    name: "Microsoft",
+    sector: "Technology",
+    group_name: "built_in",
+    weight: 0.2,
+    last_close: 415.3,
+    delta: { delta_pct: 0.7 },
+    sparkline: [406, 408, 410, 412, 415.3],
+  },
+  {
+    ticker: "NVDA",
+    name: "NVIDIA",
+    sector: "Semiconductors",
+    group_name: "built_in",
+    weight: 0.2,
+    last_close: 119.2,
+    delta: { delta_pct: 2.4 },
+    sparkline: [111, 113, 116, 118, 119.2],
+  },
+  {
+    ticker: "GOOGL",
+    name: "Alphabet",
+    sector: "Communication Services",
+    group_name: "built_in",
+    weight: 0.2,
+    last_close: 172.1,
+    delta: { delta_pct: -0.3 },
+    sparkline: [170, 171, 173, 172.5, 172.1],
+  },
+  {
+    ticker: "AMZN",
+    name: "Amazon",
+    sector: "Consumer Discretionary",
+    group_name: "built_in",
+    weight: 0.2,
+    last_close: 189.6,
+    delta: { delta_pct: 0.5 },
+    sparkline: [184, 186, 187, 188, 189.6],
+  },
+];
+
+export const benchmarkUniverseFixture = {
+  market_expected_return: 9.7,
+  risk_free_rate: 4.2,
+  equity_risk_premium: 5.5,
+  stock_expected_return_method: "dcf_implied_upside",
+  comparison_reference_return_method: "capm_beta_reference",
+  snapshot: {
+    mode: "snapshot",
+    as_of_date: "2026-04-11",
+    generated_at: "2026-04-11T12:00:00Z",
+    snapshot_version: "2026-04-11|portfolio_plus_benchmark|^GSPC||2026-04-11T12:00:00Z",
+    snapshot_versions_for_day: 1,
+    snapshot_available: true,
+    snapshot_source: "scheduled_kst_daily",
+    comparison_universe: "portfolio_plus_benchmark",
+    benchmark_ticker: "^GSPC",
+    custom_tickers: [] as string[],
+    snapshot_cadence: "daily_kst_0000",
+    snapshot_retention_days: 365,
+    snapshot_is_stale: false,
+  },
+  rows: [
+    {
+      ticker: "^GSPC",
+      name: "S&P 500",
+      sector: "Benchmark",
+      group_name: "benchmark",
+      weight: 0,
+      roic_minus_wacc: 2,
+      dcf_value: 110,
+      current_price: 100,
+      dcf_implied_return: 10,
+      capm_expected_return: 9.7,
+      stock_expected_return: 10,
+      market_expected_return: 9.7,
+      expected_return_spread: 0.3,
+    },
+    {
+      ticker: "AAPL",
+      name: "Apple",
+      sector: "Technology",
+      group_name: "core",
+      weight: 0.35,
+      roic_minus_wacc: 8,
+      dcf_value: 240.5,
+      current_price: 210.4,
+      dcf_implied_return: 14.31,
+      capm_expected_return: 11.26,
+      stock_expected_return: 14.31,
+      market_expected_return: 9.7,
+      expected_return_spread: 4.61,
+    },
+    {
+      ticker: "MSFT",
+      name: "Microsoft",
+      sector: "Technology",
+      group_name: "core",
+      weight: 0.25,
+      roic_minus_wacc: 13,
+      dcf_value: 460.2,
+      current_price: 415.3,
+      dcf_implied_return: 10.81,
+      capm_expected_return: 10.39,
+      stock_expected_return: 10.81,
+      market_expected_return: 9.7,
+      expected_return_spread: 1.11,
+    },
+  ],
+};
+
+export const snapshotHistoryFixture = {
+  comparison_universe: "portfolio_plus_benchmark",
+  benchmark_ticker: "^GSPC",
+  custom_tickers: [] as string[],
+  points: [
+    {
+      as_of_date: "2026-04-11",
+      generated_at: "2026-04-11T12:00:00Z",
+      snapshot_version: "2026-04-11|portfolio_plus_benchmark|^GSPC||2026-04-11T12:00:00Z",
+      snapshot_versions_for_day: 2,
+      snapshot_source: "manual_refresh",
+      comparison_universe: "portfolio_plus_benchmark",
+      benchmark_ticker: "^GSPC",
+      stock_count: 2,
+      average_expected_return_spread: 2.86,
+      average_roic_minus_wacc: 10.5,
+      average_dcf_value: 350.35,
+      market_expected_return: 9.7,
+    },
+    {
+      as_of_date: "2026-04-10",
+      generated_at: "2026-04-10T12:00:00Z",
+      snapshot_version: "2026-04-10|portfolio_plus_benchmark|^GSPC||2026-04-10T12:00:00Z",
+      snapshot_versions_for_day: 1,
+      snapshot_source: "scheduled_kst_daily",
+      comparison_universe: "portfolio_plus_benchmark",
+      benchmark_ticker: "^GSPC",
+      stock_count: 2,
+      average_expected_return_spread: 2.4,
+      average_roic_minus_wacc: 9.8,
+      average_dcf_value: 340.1,
+      market_expected_return: 9.7,
+    },
+  ],
+};

@@ -20,10 +20,17 @@ if str(ROOT) not in sys.path:
 from apps.api.schemas.portfolio import (
     AttributionRequest,
     AttributionResult,
+    CorporateComparisonResponse,
+    CorporateComparisonHistoryPoint,
+    CorporateComparisonHistoryResponse,
+    CorporateComparisonRow,
+    CorporateComparisonSnapshotMeta,
     ReportExportRequest,
     ReportExportResponse,
     ReportPayload,
     ReportSummaryRequest,
+    WatchlistSyncResult,
+    WatchlistSyncStatus,
 )
 
 
@@ -40,10 +47,17 @@ def main() -> None:
         "$defs": {
             "AttributionRequest": AttributionRequest.model_json_schema(),
             "AttributionResult": AttributionResult.model_json_schema(),
+            "CorporateComparisonRow": CorporateComparisonRow.model_json_schema(),
+            "CorporateComparisonSnapshotMeta": CorporateComparisonSnapshotMeta.model_json_schema(),
+            "CorporateComparisonResponse": CorporateComparisonResponse.model_json_schema(),
+            "CorporateComparisonHistoryPoint": CorporateComparisonHistoryPoint.model_json_schema(),
+            "CorporateComparisonHistoryResponse": CorporateComparisonHistoryResponse.model_json_schema(),
             "ReportSummaryRequest": ReportSummaryRequest.model_json_schema(),
             "ReportPayload": ReportPayload.model_json_schema(),
             "ReportExportRequest": ReportExportRequest.model_json_schema(),
             "ReportExportResponse": ReportExportResponse.model_json_schema(),
+            "WatchlistSyncResult": WatchlistSyncResult.model_json_schema(),
+            "WatchlistSyncStatus": WatchlistSyncStatus.model_json_schema(),
         },
     }
     SCHEMA_PATH.write_text(json.dumps(schema, indent=2, sort_keys=True), encoding="utf-8")

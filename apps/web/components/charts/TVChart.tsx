@@ -1,12 +1,19 @@
 "use client";
 
 import React, { useEffect, useRef } from "react";
-import { createChart, IChartApi, ISeriesApi, ColorType, CrosshairMode, CandlestickSeries, HistogramSeries } from "lightweight-charts";
+import { createChart, IChartApi, ISeriesApi, ColorType, CrosshairMode, CandlestickSeries, HistogramSeries, LineSeries } from "lightweight-charts";
 import { TVCandle, TVVolume, sanitizeTooltip } from "@/lib/transformers";
+
+export interface TVLineSeries {
+    title: string;
+    color: string;
+    data: Array<{ time: string; value: number }>;
+}
 
 interface TVChartProps {
     data: TVCandle[];
     volumeData?: TVVolume[];
+    lineSeriesData?: TVLineSeries[];
     height?: number;
     colorAccent?: string;
     upColor?: string;
@@ -17,6 +24,7 @@ interface TVChartProps {
 const TVChart: React.FC<TVChartProps> = ({
     data,
     volumeData,
+    lineSeriesData = [],
     height = 500,
     colorAccent = "#EF5350",
     upColor,
@@ -27,6 +35,7 @@ const TVChart: React.FC<TVChartProps> = ({
     const chartRef = useRef<IChartApi | null>(null);
     const candleSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
     const volumeSeriesRef = useRef<ISeriesApi<"Histogram"> | null>(null);
+    const lineSeriesRefs = useRef<Array<ISeriesApi<"Line">>>([]);
     const safeTickerName = sanitizeTooltip(tickerName);
 
     useEffect(() => {
@@ -83,6 +92,15 @@ const TVChart: React.FC<TVChartProps> = ({
         chartRef.current = chart;
         candleSeriesRef.current = candleSeries;
         volumeSeriesRef.current = volumeSeries;
+        lineSeriesRefs.current = lineSeriesData.map((series) =>
+            chart.addSeries(LineSeries, {
+                color: series.color,
+                lineWidth: 2,
+                priceLineVisible: false,
+                lastValueVisible: false,
+                crosshairMarkerVisible: false,
+            })
+        );
 
         // Dynamic Resize Observer with requestAnimationFrame Throttling (P1 Risk Block)
         let animationFrameId: number;
@@ -104,7 +122,7 @@ const TVChart: React.FC<TVChartProps> = ({
             cancelAnimationFrame(animationFrameId);
             chart.remove();
         };
-    }, [colorAccent, downColor, height, upColor]); // Explicit rigid dependency bounds
+    }, [colorAccent, downColor, height, lineSeriesData, upColor]); // Explicit rigid dependency bounds
 
     // ----------------------------------------------------
     // Execute Data Updates seamlessly off main render
@@ -116,12 +134,15 @@ const TVChart: React.FC<TVChartProps> = ({
         if (volumeSeriesRef.current && volumeData?.length) {
             volumeSeriesRef.current.setData(volumeData);
         }
+        lineSeriesRefs.current.forEach((series, index) => {
+            series.setData(lineSeriesData[index]?.data ?? []);
+        });
         
         if (chartRef.current) {
             // Auto fit all updated data smoothly
             chartRef.current.timeScale().fitContent();
         }
-    }, [data, volumeData]); // Only recompute on strict data matrix swaps
+    }, [data, lineSeriesData, volumeData]); // Only recompute on strict data matrix swaps
 
     return (
         <div 
@@ -137,5 +158,5 @@ const TVChart: React.FC<TVChartProps> = ({
 // or unrelated DCF Slider parameter toggles (Step B).
 export default React.memo(TVChart, (prevProps, nextProps) => {
     // Only repaint if raw OHLCV fundamentally shifts.
-    return prevProps.data === nextProps.data && prevProps.volumeData === nextProps.volumeData;
+    return prevProps.data === nextProps.data && prevProps.volumeData === nextProps.volumeData && prevProps.lineSeriesData === nextProps.lineSeriesData;
 });

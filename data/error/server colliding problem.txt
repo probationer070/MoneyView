@@ -1,0 +1,57 @@
+Server collision issue summary
+
+Date: 2026-04-11
+
+Problem:
+- Playwright startup could fail because the API or Next.js e2e port was already occupied by a stale local process.
+- Earlier harness versions depended on inline startup commands and did not consistently clean old listeners before launching a new server.
+- That produced startup timeouts, flaky `webServer` failures, and port reuse conflicts across repeated runs.
+
+Root cause:
+- Fixed e2e ports were reused without reliable listener cleanup.
+- Startup logic was too brittle and partially mixed with local dev state.
+- Failures did not leave clear diagnostics in `data/error`.
+
+Resolution implemented:
+- `apps/web/playwright.config.ts`
+  - uses dedicated e2e ports:
+    - API: `8110`
+    - Web: `3101`
+  - delegates startup to dedicated PowerShell scripts instead of long inline commands
+- `apps/web/tests/e2e/start-playwright-api.ps1`
+  - checks whether the API port is already listening
+  - logs the owning PID/process
+  - kills the stale listener
+  - waits for the port to become free
+  - starts uvicorn with the direct interpreter path when available
+  - logs startup failures to `data/error/playwright-port-collision-api.txt`
+- `apps/web/tests/e2e/start-playwright-web.ps1`
+  - checks whether the web port is already listening
+  - logs the owning PID/process
+  - kills the stale listener
+  - waits for the port to become free
+  - starts `next dev` on the dedicated e2e port
+  - logs startup failures to `data/error/playwright-port-collision-web.txt`
+
+How the collision issue is resolved now:
+1. Detect stale listener on the intended e2e port.
+2. Record which process owns that port.
+3. Force-kill the stale listener.
+4. Wait until the port is actually free.
+5. Start the Playwright-managed API or web server.
+6. If startup still fails, write a plain-text failure entry to `data/error`.
+
+Related improvements:
+- Added lightweight readiness endpoints so Playwright health checks no longer depend on expensive business routes.
+- Added port-scoped e2e DB startup for the API harness.
+- Added explicit resolution note at `data/error/playwright-port-collision-resolution.txt`.
+
+Verification used:
+- `npm.cmd run lint -- playwright.config.ts`
+- `npm.cmd run test:e2e -- tests/e2e/portfolio-snapshot-history.spec.ts`
+- `npm.cmd run test:e2e -- tests/e2e/portfolio-watchlist.spec.ts tests/e2e/portfolio-snapshot-history.spec.ts tests/e2e/corporate-comparison.spec.ts tests/e2e/market-overview.spec.ts`
+- `npm.cmd run test:e2e -- tests/e2e/market-overview.live.spec.ts`
+
+Current status:
+- The Playwright server-collision issue is resolved in the shared harness.
+- Future collisions are automatically cleaned up and logged to plain-text files under `data/error`.

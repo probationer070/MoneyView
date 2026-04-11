@@ -1,0 +1,38 @@
+Slow request issue summary
+
+Date: 2026-04-11
+
+Problem:
+- Playwright startup used a readiness path that could trigger expensive homepage SSR work.
+- The homepage fetches `/api/v1/market/indices`, and that path can fan out into multi-index market data refresh logic.
+- On a cold e2e database, startup could log heavy requests before tests even began.
+
+Root cause:
+- The readiness check was too close to business logic.
+- Server startup and health probing should only confirm process availability, not force a market-data render path.
+
+Resolution implemented:
+- Added cheap readiness endpoints:
+  - `apps/web/app/healthz/route.ts`
+  - `apps/api/main.py` at `/api/v1/healthz`
+- Updated `apps/web/playwright.config.ts` to wait on those health endpoints instead of an expensive app path.
+- Added `scripts/seed_e2e_market_cache.py` and wired it into the Playwright API startup so the market overview path starts warm in e2e.
+- Reworked the Playwright harness startup into explicit scripts:
+  - `apps/web/tests/e2e/start-playwright-api.ps1`
+  - `apps/web/tests/e2e/start-playwright-web.ps1`
+
+Related stabilization:
+- The harness now cleans stale listeners before startup.
+- Port-collision details are logged to:
+  - `data/error/playwright-port-collision-api.txt`
+  - `data/error/playwright-port-collision-web.txt`
+
+Verification used:
+- `npm.cmd run lint -- playwright.config.ts app/healthz/route.ts`
+- `npm.cmd run test:e2e -- tests/e2e/portfolio-snapshot-history.spec.ts`
+- `npm.cmd run test:e2e -- tests/e2e/portfolio-watchlist.spec.ts tests/e2e/portfolio-snapshot-history.spec.ts tests/e2e/corporate-comparison.spec.ts tests/e2e/market-overview.spec.ts`
+- `npm.cmd run test:e2e -- tests/e2e/market-overview.live.spec.ts`
+
+Current status:
+- The readiness-path slow-request problem is resolved.
+- Occasional heavy-request logs can still appear during real market overview work, but not as part of Playwright readiness orchestration.

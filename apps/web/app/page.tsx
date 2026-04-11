@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 interface IndexQuote {
   name: string;
   ticker: string;
-  last_close: number;
+  last_close: number | null;
   delta: {
     delta_pct: number;
   };
@@ -61,7 +61,12 @@ export default async function MarketOverview() {
                 </div>
                 <div className="text-right">
                   <div className="font-bold text-xl tabular-nums">
-                    {idx.last_close.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+                    {idx.last_close == null
+                      ? "N/A"
+                      : idx.last_close.toLocaleString(undefined, {
+                          minimumFractionDigits: 1,
+                          maximumFractionDigits: 1,
+                        })}
                   </div>
                   <DeltaBadge value={idx.delta.delta_pct} className="mt-1" />
                 </div>

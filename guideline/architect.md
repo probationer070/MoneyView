@@ -28,5 +28,8 @@ Each design note should include:
 - Keep route handlers thin; business logic belongs in services or packages.
 - Keep reusable financial primitives in `packages/core_finance` when they are not API-specific.
 - Keep frontend chart adapters separate from backend domain models.
+- For frontend mutation controls that trigger backend endpoints, design the cache refresh path explicitly.
+- If one user action affects multiple Portfolio panels or tabs, define which React Query keys must refetch immediately after success.
+- Prefer using the existing API envelope shape (`APIResponse[data]`) and document any TypeScript contract fields the UI depends on.
 - Update `packages/shared-types` when API contracts are consumed directly by TypeScript.
 - Document any deliberate deviation from the canonical structure.

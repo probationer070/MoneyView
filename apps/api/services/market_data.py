@@ -360,9 +360,11 @@ class MarketDataService:
                 continue
 
             last = bars[-1].close
-            prev = bars[-2].close if len(bars) >= 2 else last
+            if last is None:
+                continue
+            prev = bars[-2].close if len(bars) >= 2 and bars[-2].close is not None else last
             delta = DeltaBadge.compute(last, prev)
-            sparkline = [b.close for b in bars[-30:]]
+            sparkline = [b.close for b in bars[-30:] if b.close is not None]
 
             quotes.append(
                 IndexQuote(

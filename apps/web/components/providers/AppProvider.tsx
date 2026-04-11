@@ -39,7 +39,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
 
       try {
-        const port = await discoverBackendPort();
+        const explicitBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
+        const port = explicitBaseUrl
+          ? Number(new URL(explicitBaseUrl).port || "8000")
+          : await discoverBackendPort();
         setDynamicPort(port);
 
         const res = await fetch(`http://127.0.0.1:${port}/api/v1/health`);

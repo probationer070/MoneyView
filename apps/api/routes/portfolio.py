@@ -1,16 +1,11 @@
 """
-Portfolio routes — Tab 3: Portfolio View.
-
-GET  /api/portfolio/watchlist           → all watchlist items with spark + delta
-GET  /api/portfolio/stock/{ticker}      → detailed stock data
-POST /api/portfolio/watchlist           → add / update watchlist entry
+Portfolio routes for the portfolio view.
 """
 
-import json
 from pathlib import Path
-from typing import List, Optional
+from typing import List
 
-from fastapi import APIRouter, HTTPException, Body
+from fastapi import APIRouter, Body, HTTPException
 
 from apps.api.models.schemas import (
     APIResponse,
@@ -18,111 +13,146 @@ from apps.api.models.schemas import (
     AttributionResult,
     DeltaBadge,
     PortfolioStock,
-    StockOHLCV,
     WatchlistItem,
+    WatchlistResyncResult,
+    WatchlistSyncStatus,
+    WatchlistSyncResult,
 )
 from apps.api.services.db import get_db
 from apps.api.services.market_data import MarketDataService
 from apps.api.services.news_service import NewsService
 from apps.api.services.portfolio_service import PortfolioAnalyticsService
+from apps.api.services.watchlist_seed import (
+    ensure_watchlist_bootstrapped,
+    get_watchlist_sync_status,
+    mark_watchlist_state,
+    resync_watchlist_from_json,
+    sync_watchlist_to_json,
+)
 
 _API_ROOT = Path(__file__).resolve().parents[1]
 _WATCHLIST_JSON = _API_ROOT / "services" / "webscrap" / "stock_targets.json"
+
 router = APIRouter()
-_mkt   = MarketDataService()
-_news  = NewsService()
+_mkt = MarketDataService()
+_news = NewsService()
 _portfolio_analytics = PortfolioAnalyticsService(_mkt)
-
-
-def _load_watchlist_from_json() -> List[WatchlistItem]:
-    """Fallback: read stock_targets.json if DB watchlist is empty."""
-    if not _WATCHLIST_JSON.exists():
-        return []
-    try:
-        data = json.loads(_WATCHLIST_JSON.read_text(encoding="utf-8"))
-        items = []
-        for group_name, group in data.items():
-            for t in group.get("targets", []):
-                items.append(WatchlistItem(
-                    ticker=t.get("ticker", ""),
-                    name=t.get("name", t.get("ticker", "")),
-                    sector=t.get("sector", ""),
-                    group_name=group_name,
-                ))
-        return items
-    except Exception:
-        return []
-
-
-def _sync_watchlist_to_db(items: List[WatchlistItem]) -> None:
-    with get_db() as conn:
-        for item in items:
-            conn.execute(
-                """INSERT OR IGNORE INTO watchlist (ticker, name, sector, group_name)
-                   VALUES (?, ?, ?, ?)""",
-                (item.ticker, item.name, item.sector, item.group_name),
-            )
 
 
 @router.get("/watchlist", response_model=List[PortfolioStock])
 async def get_watchlist():
     """
     Return all watchlist stocks with latest close, delta badge, and sparkline.
-    Seeds from stock_targets.json on first run.
+    Seed once from JSON or built-in defaults when local state is empty.
     """
+    ensure_watchlist_bootstrapped(_WATCHLIST_JSON)
+
     with get_db() as conn:
         rows = conn.execute("SELECT * FROM watchlist ORDER BY group_name, ticker").fetchall()
 
-    if not rows:
-        items = _load_watchlist_from_json()
-        _sync_watchlist_to_db(items)
-        rows_fresh = []
-        with get_db() as conn:
-            rows_fresh = conn.execute("SELECT * FROM watchlist").fetchall()
-        rows = rows_fresh
-
     result: List[PortfolioStock] = []
-    for r in rows:
-        ticker = r["ticker"]
-        bars   = _mkt.get_stock_ohlcv(ticker, period="1mo")
-        if len(bars) < 2:
-            continue
-        last   = bars[-1].close
-        prev   = bars[-2].close
-        result.append(PortfolioStock(
-            ticker=ticker,
-            name=r["name"] or ticker,
-            sector=r["sector"] or "",
-            group_name=r["group_name"] or "custom",
-            last_close=last,
-            delta=DeltaBadge.compute(last, prev),
-            sparkline=[b.close for b in bars[-20:]],
-        ))
+    for row in rows:
+        ticker = str(row["ticker"]).upper()
+        bars = _mkt.get_stock_ohlcv(ticker, period="1mo")
+        if len(bars) >= 2:
+            last_close = bars[-1].close
+            previous_close = bars[-2].close
+            sparkline = [bar.close for bar in bars[-20:]]
+        elif len(bars) == 1:
+            last_close = bars[-1].close
+            previous_close = bars[-1].close
+            sparkline = [bars[-1].close]
+        else:
+            last_close = 0.0
+            previous_close = 0.0
+            sparkline = []
+
+        result.append(
+            PortfolioStock(
+                ticker=ticker,
+                name=row["name"] or ticker,
+                sector=row["sector"] or "",
+                group_name=row["group_name"] or "custom",
+                weight=float(row["weight"] or 0.0),
+                last_close=last_close,
+                delta=DeltaBadge.compute(last_close, previous_close),
+                sparkline=sparkline,
+            )
+        )
     return result
 
 
 @router.get("/stock/{ticker}", response_model=dict)
 async def get_stock_detail(ticker: str, period: str = "5y"):
-    """Return prices + recent news for a single stock."""
-    bars  = _mkt.get_stock_ohlcv(ticker.upper(), period=period)
-    news  = _news.get_news(ticker=ticker.upper(), limit=10)
+    """Return prices and recent news for a single stock."""
+    normalized_ticker = ticker.upper().strip()
+    bars = _mkt.get_stock_ohlcv(normalized_ticker, period=period)
+    news = _news.get_news(ticker=normalized_ticker, limit=10)
     return {
-        "ticker": ticker.upper(),
-        "prices": [b.model_dump() for b in bars],
-        "news":   [n.model_dump() for n in news],
+        "ticker": normalized_ticker,
+        "prices": [bar.model_dump() for bar in bars],
+        "news": [item.model_dump() for item in news],
     }
 
 
 @router.post("/watchlist", response_model=WatchlistItem)
 async def upsert_watchlist_item(item: WatchlistItem = Body(...)):
     """Add or update a watchlist entry."""
+    normalized = WatchlistItem(
+        ticker=item.ticker.upper().strip(),
+        name=item.name.strip() or item.ticker.upper().strip(),
+        sector=item.sector.strip(),
+        group_name=item.group_name.strip() or "custom",
+        weight=float(item.weight),
+    )
+
     with get_db() as conn:
         conn.execute(
-            """INSERT OR REPLACE INTO watchlist (ticker, name, sector, group_name)
-               VALUES (?, ?, ?, ?)""",
-            (item.ticker.upper(), item.name, item.sector, item.group_name),
+            """INSERT OR REPLACE INTO watchlist (ticker, name, sector, group_name, weight)
+               VALUES (?, ?, ?, ?, ?)""",
+            (normalized.ticker, normalized.name, normalized.sector, normalized.group_name, normalized.weight),
         )
-    return item
+    mark_watchlist_state("user_mutation")
+    return normalized
+
+
+@router.post("/watchlist/resync", response_model=APIResponse[WatchlistResyncResult])
+async def resync_watchlist():
+    """Explicitly replace the watchlist table with the current stock_targets.json contents."""
+    try:
+        result = resync_watchlist_from_json(_WATCHLIST_JSON)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return APIResponse(data=result)
+
+
+@router.post("/watchlist/sync", response_model=APIResponse[WatchlistSyncResult])
+async def sync_watchlist():
+    """Safely export the current DB-backed watchlist into stock_targets.json."""
+    try:
+        result = sync_watchlist_to_json(_WATCHLIST_JSON)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return APIResponse(data=result)
+
+
+@router.get("/watchlist/sync-status", response_model=APIResponse[WatchlistSyncStatus])
+async def get_watchlist_sync_metadata():
+    """Return the last explicit watchlist sync/import metadata."""
+    return APIResponse(data=WatchlistSyncStatus(**get_watchlist_sync_status(_WATCHLIST_JSON)))
+
+
+@router.delete("/watchlist/{ticker}")
+async def delete_watchlist_item(ticker: str):
+    """Delete a watchlist entry by ticker."""
+    normalized_ticker = ticker.upper().strip()
+    with get_db() as conn:
+        row = conn.execute("SELECT ticker FROM watchlist WHERE ticker = ?", (normalized_ticker,)).fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail=f"watchlist ticker not found: {normalized_ticker}")
+        conn.execute("DELETE FROM watchlist WHERE ticker = ?", (normalized_ticker,))
+    mark_watchlist_state("user_mutation")
+    return {"status": "ok", "ticker": normalized_ticker}
 
 
 @router.post("/attribution", response_model=APIResponse[AttributionResult])
@@ -130,8 +160,7 @@ async def get_portfolio_attribution(payload: AttributionRequest = Body(...)):
     """
     Portfolio-level arithmetic Brinson-Fachler attribution.
 
-    Returns domain schemas only (totals/effects/sector breakdown/risk/metadata)
-    and intentionally avoids chart-library-specific payload shaping.
+    Returns domain schemas only and avoids chart-specific shaping in the API layer.
     """
     try:
         result = _portfolio_analytics.build_attribution(payload)
