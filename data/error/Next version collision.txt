@@ -1,0 +1,158 @@
+````markdown
+# Next.js Version Alignment (Fix for Potential RAM / Tooling Issues)
+
+## Problem
+Your current setup has a version mismatch:
+
+- next: ^16.2.3 (auto-updating range)
+- eslint-config-next: 16.2.2 (fixed)
+
+This can cause:
+- Memory issues (Node / dev server)
+- VSCode TypeScript server overload
+- ESLint conflicts
+- Unstable dev behavior
+
+---
+
+## Recommended Fix
+
+### Option A (Most Stable)
+Pin both to the same exact version (recommended):
+
+```bash
+npm install next@16.2.2 eslint-config-next@16.2.2
+````
+
+---
+
+### Option B (Upgrade Both)
+
+If you want latest:
+
+```bash
+npm install next@16.2.3 eslint-config-next@16.2.3
+```
+
+---
+
+## Important: Remove `^` from package.json
+
+### ❌ Bad (auto-updates unexpectedly)
+
+```json
+"next": "^16.2.3"
+```
+
+### ✅ Good (locked version)
+
+```json
+"next": "16.2.2"
+```
+
+---
+
+## Clean Reinstall Steps (Highly Recommended)
+
+1. Update `package.json`:
+
+```json
+"next": "16.2.2",
+"eslint-config-next": "16.2.2"
+```
+
+2. Remove dependencies:
+
+```bash
+rm -rf node_modules package-lock.json
+```
+
+(Windows)
+
+```bash
+rmdir /s /q node_modules
+del package-lock.json
+```
+
+3. Reinstall:
+
+```bash
+npm install
+```
+
+4. Verify versions:
+
+```bash
+npm list next eslint-config-next
+```
+
+Both should match exactly.
+
+---
+
+## Why This Matters
+
+Next.js tightly couples:
+
+* ESLint config
+* Dev server
+* SWC compiler
+
+Version mismatch can lead to:
+
+* Memory leaks
+* Dev server instability
+* Hot reload issues
+* Tooling performance degradation
+
+---
+
+## Conclusion
+
+The most likely cause of your issue is:
+
+1. Next.js version mismatch
+2. TypeScript + large file pressure (secondary)
+
+👉 Always keep `next` and `eslint-config-next` on the exact same version and avoid using `^`.
+
+```
+```
+>>>
+
+NextJS 16.2.3 으로 통일 결과 = 불가능
+NextJS 16.2.2 으로 통일 결과 = 가능
+```
+"next": "16.2.2", 
+"eslint-config-next": "16.2.2",
+```
+
+
+
+
+
+It didn’t work because the launcher was failing on a real backend dependency error, not on Conda env selection anymore.
+                                                                                                                                                     
+  The exact failure was:                                                                                                                             
+                                                                                                                                                     
+  - apps.api.main imports apps/api/services/portfolio/cache_service.py:5                                                                             
+  - that file uses from cachetools import TTLCache                                                                                                   
+  - but cachetools was not declared in pyproject.toml, so the moneyview env did not have it installed                                                
+                                                                                                                                                     
+  I fixed that by adding cachetools to pyproject.toml and reinstalling the project into moneyview. I then re-ran the same backend import check the   
+  launcher uses, and it passed:                                                                                                                      
+                                                                                                                                                     
+  - conda run -n moneyview python -c "import uvicorn, fastapi, httpx, pydantic, cachetools; import apps.api.main"                                    
+                                                                                                                                                     
+  Why auto-install didn’t save it:                                                                                                                   
+                                                                                                                                                     
+  - the launcher can auto-run pip install -e ".[dev]"                                                                                                
+  - but since cachetools was missing from the project dependency list, that install still would not have installed it before the fix                 
+                                                                                                                                                     
+  You can rerun the launcher now:                                                                                                                    
+                                                                                                                                                     
+  powershell.exe -ExecutionPolicy Bypass -File scripts\start_local.ps1 -OpenBrowser                                                                  
+                                                                                                                                                     
+  If it fails again, it should now be a different error, not the moneyview env selection or cachetools issue.
+
+

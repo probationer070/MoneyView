@@ -21,7 +21,7 @@ export function AllocationDonut({ data }: AllocationDonutProps) {
   const safeData = data.filter((d) => Number.isFinite(d.value) && d.value > 0);
 
   return (
-    <div className="bg-[var(--surface-panel)] rounded-[var(--radius)] border border-[var(--border)] p-4 shadow-sm h-[320px] min-h-[320px] min-w-0">
+    <div className="bg-[var(--surface-panel)] rounded-[var(--radius)] border border-[var(--border)] p-8 shadow-sm h-[320px] min-h-[320px] min-w-0">
       <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-3">Sector Allocation</h3>
       <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1} initialDimension={CHART_INITIAL_DIMENSION}>
         <PieChart>

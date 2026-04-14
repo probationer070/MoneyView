@@ -10,6 +10,8 @@ from apps.api.models.schemas import (
     CorporateComparisonResponse,
     CorporateComparisonRow,
     CorporateComparisonSnapshotMeta,
+    CorporateComparisonStockHistoryPoint,
+    CorporateComparisonStockHistoryResponse,
     CorporateMetrics,
 )
 from apps.api.services.db import get_db
@@ -667,6 +669,112 @@ def load_corporate_comparison_history(
         for row in rows
     ]
     return CorporateComparisonHistoryResponse(
+        comparison_universe=comparison_universe,
+        benchmark_ticker=normalized_benchmark,
+        custom_tickers=normalized_custom_tickers,
+        points=points,
+    )
+
+
+def load_corporate_comparison_snapshot_version(*, snapshot_version: str) -> CorporateComparisonResponse | None:
+    with get_db() as conn:
+        rows = conn.execute(
+            """SELECT snapshot_version, snapshot_date, snapshot_taken_at, snapshot_source, comparison_universe,
+                      benchmark_ticker, custom_tickers, ticker, name, sector, group_name,
+                      risk_free_rate, equity_risk_premium, stock_expected_return_method,
+                      weight, roic, wacc, roic_minus_wacc, dcf_value, current_price,
+                      dcf_implied_return, capm_expected_return, stock_expected_return,
+                      market_expected_return, expected_return_spread, stock_expected_return_source,
+                      has_price_data
+               FROM corporate_comparison_snapshots_v3
+               WHERE snapshot_version = ?
+               ORDER BY group_name, ticker""",
+            (snapshot_version,),
+        ).fetchall()
+        if not rows:
+            return None
+        first = rows[0]
+        snapshot_versions_for_day = _count_snapshot_versions_for_day(
+            conn,
+            snapshot_date=str(first["snapshot_date"]),
+            universe_key=_comparison_universe_key(
+                comparison_universe=str(first["comparison_universe"] or DEFAULT_COMPARISON_UNIVERSE),
+                benchmark_ticker=str(first["benchmark_ticker"] or DEFAULT_BENCHMARK_TICKER),
+                custom_tickers=_normalize_custom_tickers(str(first["custom_tickers"] or "").split(",")),
+            ),
+        )
+    return _rows_to_response(rows, snapshot_versions_for_day=snapshot_versions_for_day)
+
+
+def load_corporate_comparison_stock_history(
+    *,
+    ticker: str,
+    comparison_universe: str,
+    benchmark_ticker: str,
+    custom_tickers: list[str],
+    limit: int = 30,
+) -> CorporateComparisonStockHistoryResponse:
+    normalized_ticker = ticker.upper().strip()
+    normalized_benchmark = _normalize_benchmark_ticker(benchmark_ticker)
+    normalized_custom_tickers = _normalize_custom_tickers(custom_tickers)
+    universe_key = _comparison_universe_key(
+        comparison_universe=comparison_universe,
+        benchmark_ticker=normalized_benchmark,
+        custom_tickers=normalized_custom_tickers,
+    )
+    with get_db() as conn:
+        rows = conn.execute(
+            """WITH versions AS (
+                   SELECT snapshot_date,
+                          snapshot_version,
+                          snapshot_taken_at,
+                          ROW_NUMBER() OVER (
+                              PARTITION BY snapshot_date
+                              ORDER BY snapshot_taken_at DESC, snapshot_version DESC
+                          ) AS version_rank
+                   FROM corporate_comparison_snapshots_v3
+                   WHERE universe_key = ?
+               ),
+               latest_versions AS (
+                   SELECT snapshot_date, snapshot_version
+                   FROM versions
+                   WHERE version_rank = 1
+               )
+               SELECT s.snapshot_date,
+                      s.snapshot_taken_at,
+                      s.snapshot_version,
+                      s.snapshot_source,
+                      s.benchmark_ticker,
+                      s.current_price,
+                      s.roic_minus_wacc,
+                      s.dcf_implied_return,
+                      s.expected_return_spread,
+                      s.market_expected_return
+               FROM latest_versions lv
+               JOIN corporate_comparison_snapshots_v3 s
+                 ON s.snapshot_version = lv.snapshot_version
+               WHERE s.ticker = ?
+               ORDER BY s.snapshot_date DESC
+               LIMIT ?""",
+            (universe_key, normalized_ticker, limit),
+        ).fetchall()
+    points = [
+        CorporateComparisonStockHistoryPoint(
+            as_of_date=str(row["snapshot_date"]),
+            generated_at=str(row["snapshot_taken_at"] or ""),
+            snapshot_version=str(row["snapshot_version"] or ""),
+            snapshot_source=str(row["snapshot_source"] or ""),
+            benchmark_ticker=str(row["benchmark_ticker"] or normalized_benchmark),
+            current_price=round(float(row["current_price"] or 0.0), 2),
+            roic_minus_wacc=round(float(row["roic_minus_wacc"] or 0.0), 2),
+            dcf_implied_return=round(float(row["dcf_implied_return"] or 0.0), 2),
+            expected_return_spread=round(float(row["expected_return_spread"] or 0.0), 2),
+            market_expected_return=round(float(row["market_expected_return"] or 0.0), 2),
+        )
+        for row in rows
+    ]
+    return CorporateComparisonStockHistoryResponse(
+        ticker=normalized_ticker,
         comparison_universe=comparison_universe,
         benchmark_ticker=normalized_benchmark,
         custom_tickers=normalized_custom_tickers,

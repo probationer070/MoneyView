@@ -110,7 +110,8 @@ This is intentionally not the safe path. It is an explicit replace-from-file ope
 12. A CAPM-style reference return is also exposed using:
   `risk_free_rate + levered_beta x equity_risk_premium`
 13. Snapshot metadata includes the resolved `comparison_universe`, `benchmark_ticker`, and `custom_tickers` so historical comparisons stay reproducible.
-14. The frontend sorts and compares those rows, but the formulas remain backend-owned.
+14. When the user selects a saved snapshot version from history, the frontend routes table rows and stock-modal drill-down requests through that saved snapshot context instead of the transient current controls.
+15. The frontend sorts and compares those rows, but the formulas remain backend-owned.
 
 ## Corporate Comparison Snapshots
 
@@ -131,6 +132,8 @@ This is intentionally not the safe path. It is an explicit replace-from-file ope
 - Manual refresh now creates a new intraday snapshot version for the same KST business date instead of overwriting the prior version.
 - Default snapshot reads still resolve to the latest saved version for that date and universe.
 - If snapshot refresh fails and an older snapshot exists, snapshot mode may fall back to the latest saved snapshot and mark it stale in response metadata.
+- The portfolio UI shows a visible calculating state while debounced benchmark/custom-ticker inputs settle so live recalculation does not feel stale.
+- Extreme per-stock comparison values are rendered as `N/A` in the table and called out explicitly in the stock modal so snapshot review does not imply invalid values are trustworthy.
 
 ## Corporate Analysis Flow
 

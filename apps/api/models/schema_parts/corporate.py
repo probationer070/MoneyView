@@ -134,3 +134,28 @@ class CorporateComparisonHistoryResponse(BaseModel):
     benchmark_ticker: str = "^GSPC"
     custom_tickers: List[str] = Field(default_factory=list)
     points: List[CorporateComparisonHistoryPoint] = Field(default_factory=list)
+
+
+class CorporateComparisonStockHistoryPoint(BaseModel):
+    """Per-stock timeline row for saved comparison snapshots."""
+
+    as_of_date: str
+    generated_at: str = ""
+    snapshot_version: str = ""
+    snapshot_source: str = ""
+    benchmark_ticker: str = "^GSPC"
+    current_price: float = 0.0
+    roic_minus_wacc: float = 0.0
+    dcf_implied_return: float = 0.0
+    expected_return_spread: float = 0.0
+    market_expected_return: float = 0.0
+
+
+class CorporateComparisonStockHistoryResponse(BaseModel):
+    """Saved snapshot trend payload for one stock inside a comparison universe."""
+
+    ticker: str
+    comparison_universe: ComparisonUniverseEnum = ComparisonUniverseEnum.portfolio_plus_benchmark
+    benchmark_ticker: str = "^GSPC"
+    custom_tickers: List[str] = Field(default_factory=list)
+    points: List[CorporateComparisonStockHistoryPoint] = Field(default_factory=list)

@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal, Optional
 
-from fastapi import APIRouter, Body, Query
+from fastapi import APIRouter, Body, HTTPException, Query
 
 from apps.api.core.logger import setup_logger
 from apps.api.models.schemas import (
@@ -17,6 +17,7 @@ from apps.api.models.schemas import (
     CorporateCompany,
     CorporateComparisonHistoryResponse,
     CorporateComparisonResponse,
+    CorporateComparisonStockHistoryResponse,
     CorporateMetrics,
     ValuationAssumptions,
 )
@@ -25,8 +26,10 @@ from apps.api.services.corporate_comparison import (
     DEFAULT_COMPARISON_UNIVERSE,
     DEFAULT_SNAPSHOT_MODE,
     build_corporate_comparison_response,
-    load_corporate_comparison_history,
     ensure_daily_snapshot_current,
+    load_corporate_comparison_history,
+    load_corporate_comparison_snapshot_version,
+    load_corporate_comparison_stock_history,
     save_corporate_comparison_snapshot,
 )
 from apps.api.services.db import get_db
@@ -978,6 +981,43 @@ async def get_corporate_comparison_history(
         comparison_universe=comparison_universe,
         benchmark_ticker=benchmark_ticker,
         custom_tickers=[ticker for ticker in custom_tickers.split(",") if ticker.strip()],
+        limit=limit,
+    )
+    return APIResponse(
+        data=response,
+        meta=APIMeta(last_updated_at=datetime.now(timezone.utc).isoformat(), request_id=""),
+    )
+
+
+@router.get("/comparison/snapshot-version", response_model=APIResponse[CorporateComparisonResponse])
+async def get_corporate_comparison_snapshot_version(snapshot_version: str = Query(..., min_length=1)):
+    """Return one persisted comparison snapshot version by id."""
+    response = load_corporate_comparison_snapshot_version(snapshot_version=snapshot_version)
+    if response is None:
+        raise HTTPException(status_code=404, detail="Snapshot version not found")
+    return APIResponse(
+        data=response,
+        meta=APIMeta(last_updated_at=datetime.now(timezone.utc).isoformat(), request_id=""),
+    )
+
+
+@router.get("/comparison/stock-history", response_model=APIResponse[CorporateComparisonStockHistoryResponse])
+async def get_corporate_comparison_stock_history(
+    ticker: str = Query(..., min_length=1),
+    comparison_universe: Literal["portfolio_plus_benchmark", "watchlist_plus_benchmark", "custom"] = Query(
+        default=DEFAULT_COMPARISON_UNIVERSE
+    ),
+    benchmark_ticker: str = Query(default=DEFAULT_BENCHMARK_TICKER),
+    custom_tickers: str = Query(default=""),
+    limit: int = Query(default=30, ge=1, le=365),
+):
+    """Return per-stock saved snapshot metrics across the selected snapshot timeline."""
+    _seed_watchlist_from_json_if_empty()
+    response = load_corporate_comparison_stock_history(
+        ticker=ticker,
+        comparison_universe=comparison_universe,
+        benchmark_ticker=benchmark_ticker,
+        custom_tickers=[raw_ticker for raw_ticker in custom_tickers.split(",") if raw_ticker.strip()],
         limit=limit,
     )
     return APIResponse(

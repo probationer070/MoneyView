@@ -133,6 +133,27 @@ interface CorporateComparisonHistoryResponse {
   points: CorporateComparisonHistoryPoint[];
 }
 
+interface CorporateComparisonStockHistoryPoint {
+  as_of_date: string;
+  generated_at: string;
+  snapshot_version: string;
+  snapshot_source: string;
+  benchmark_ticker: string;
+  current_price: number;
+  roic_minus_wacc: number;
+  dcf_implied_return: number;
+  expected_return_spread: number;
+  market_expected_return: number;
+}
+
+interface CorporateComparisonStockHistoryResponse {
+  ticker: string;
+  comparison_universe: string;
+  benchmark_ticker: string;
+  custom_tickers: string[];
+  points: CorporateComparisonStockHistoryPoint[];
+}
+
 type PortfolioComparisonUniverse = "portfolio_plus_benchmark" | "custom";
 
 interface NewsArticle {
@@ -163,6 +184,43 @@ interface PortfolioComparisonMetrics {
   expectedVsMarket: number | null;
   currentPrice: number | null;
   volatility: number | null;
+}
+
+const PORTFOLIO_DATE_FILTERS_STORAGE_KEY = "moneyview.portfolio.dateFilters.v1";
+
+function readStoredPortfolioDateFilters() {
+  if (typeof window === "undefined") {
+    return {
+      holdingStartDate: "",
+      attributionAsOfDate: "",
+    };
+  }
+
+  try {
+    const rawValue = window.localStorage.getItem(PORTFOLIO_DATE_FILTERS_STORAGE_KEY);
+    if (!rawValue) {
+      return {
+        holdingStartDate: "",
+        attributionAsOfDate: "",
+      };
+    }
+
+    const parsed = JSON.parse(rawValue) as { holdingStartDate?: string; attributionAsOfDate?: string };
+    const holdingStartDate = parsed.holdingStartDate ?? "";
+    const attributionAsOfDate = parsed.attributionAsOfDate ?? "";
+    return {
+      holdingStartDate,
+      attributionAsOfDate: holdingStartDate && attributionAsOfDate && holdingStartDate > attributionAsOfDate
+        ? ""
+        : attributionAsOfDate,
+    };
+  } catch {
+    window.localStorage.removeItem(PORTFOLIO_DATE_FILTERS_STORAGE_KEY);
+    return {
+      holdingStartDate: "",
+      attributionAsOfDate: "",
+    };
+  }
 }
 
 const EMPTY_WATCHLIST: PortfolioStock[] = [];
@@ -271,19 +329,23 @@ function HoldingsTable({
 }) {
   return (
     <section className="overflow-x-auto rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-panel)] shadow-sm">
-      <table className="min-w-[1120px] w-full text-sm">
+      <div className="border-b border-[var(--border)] bg-[var(--surface-muted)] px-4 py-2 text-xs text-[var(--text-muted)] sm:hidden">
+        Mobile view keeps the core comparison columns visible first. Open a stock row for the full detail workflow.
+      </div>
+      <table className="min-w-[760px] w-full text-sm lg:min-w-[1120px]">
         <thead className="sticky top-0 z-10 bg-[var(--surface-muted)] text-left text-[var(--text-muted)]">
           <tr>
             <th className="px-4 py-3 font-semibold">Ticker</th>
-            <th className="px-4 py-3 font-semibold">Sector</th>
+            <th className="hidden px-4 py-3 font-semibold lg:table-cell">Sector</th>
             <th className="px-4 py-3 text-right font-semibold">Current Price</th>
+            <th className="hidden px-4 py-3 text-right font-semibold md:table-cell">Trend</th>
             <th className="px-4 py-3 text-right font-semibold">ROIC - WACC</th>
             <th className="px-4 py-3 text-right font-semibold">DCF Upside</th>
             <th className="px-4 py-3 text-right font-semibold">Expected vs Market</th>
-            <th className="px-4 py-3 text-right font-semibold">Volatility</th>
-            <th className="px-4 py-3 text-right font-semibold">Allocation</th>
-            <th className="px-4 py-3 text-right font-semibold">Change</th>
-            <th className="px-4 py-3 text-right font-semibold">Action</th>
+            <th className="hidden px-4 py-3 text-right font-semibold md:table-cell">Volatility</th>
+            <th className="hidden px-4 py-3 text-right font-semibold lg:table-cell">Allocation</th>
+            <th className="hidden px-4 py-3 text-right font-semibold xl:table-cell">Change</th>
+            <th className="hidden px-4 py-3 text-right font-semibold xl:table-cell">Action</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-[var(--border)]/60">
@@ -299,9 +361,19 @@ function HoldingsTable({
                 <td className="px-4 py-3">
                   <div className="font-bold text-[var(--text-primary)]">{stock.ticker}</div>
                   <div className="text-xs font-light tracking-wide text-[var(--text-muted)]">{stock.name || stock.ticker}</div>
+                  <div className="mt-1 text-[11px] text-[var(--text-muted)] lg:hidden">{sectorLabel(stock.sector)}</div>
                 </td>
-                <td className="px-4 py-3 text-[var(--text-muted)]">{sectorLabel(stock.sector)}</td>
+                <td className="hidden px-4 py-3 text-[var(--text-muted)] lg:table-cell">{sectorLabel(stock.sector)}</td>
                 <td className="px-4 py-3 text-right tabular-nums">{formatCurrencyCompact(metrics.currentPrice ?? stock.last_close)}</td>
+                <td className="hidden px-4 py-3 md:table-cell">
+                  <div className="ml-auto w-24">
+                    <Sparkline
+                      data={stock.sparkline}
+                      height={24}
+                      color={deltaPct >= 0 ? "var(--delta-up)" : "var(--delta-down)"}
+                    />
+                  </div>
+                </td>
                 <td className={`px-4 py-3 text-right font-semibold tabular-nums ${metricToneClass(metrics.roicMinusWacc)}`}>
                   {formatMetricPercent(metrics.roicMinusWacc)}
                 </td>
@@ -311,16 +383,16 @@ function HoldingsTable({
                 <td className={`px-4 py-3 text-right font-semibold tabular-nums ${metricToneClass(metrics.expectedVsMarket)}`}>
                   {formatMetricPercent(metrics.expectedVsMarket)}
                 </td>
-                <td className={`px-4 py-3 text-right font-semibold tabular-nums ${volatilityToneClass(metrics.volatility)}`}>
+                <td className={`hidden px-4 py-3 text-right font-semibold tabular-nums md:table-cell ${volatilityToneClass(metrics.volatility)}`}>
                   {formatMetricPercent(metrics.volatility)}
                 </td>
-                <td className="px-4 py-3 text-right tabular-nums">
+                <td className="hidden px-4 py-3 text-right tabular-nums lg:table-cell">
                   {formatWeightPercent(stock.weight)}
                 </td>
-                <td className="px-4 py-3 text-right">
+                <td className="hidden px-4 py-3 text-right xl:table-cell">
                   <DeltaBadge value={deltaPct} />
                 </td>
-                <td className="px-4 py-3 text-right">
+                <td className="hidden px-4 py-3 text-right xl:table-cell">
                   <button
                     type="button"
                     onClick={(event) => {
@@ -409,6 +481,14 @@ function estimateVolatilityFromSparkline(sparkline: number[]) {
   return Math.sqrt(variance) * Math.sqrt(252) * 100;
 }
 
+function summarizeSparklineTrend(sparkline: number[]) {
+  if (sparkline.length < 2) return null;
+  const first = sparkline[0];
+  const last = sparkline.at(-1) ?? first;
+  if (!Number.isFinite(first) || !Number.isFinite(last) || first === 0) return null;
+  return ((last - first) / first) * 100;
+}
+
 const EMPTY_COMPARISON_METRICS: PortfolioComparisonMetrics = {
   roicMinusWacc: null,
   dcfUpside: null,
@@ -443,6 +523,17 @@ function formatDateLabel(value: string) {
 function portfolioComparisonUniverseLabel(value: string) {
   if (value === "custom") return "Custom Universe";
   return "Portfolio + Benchmark";
+}
+
+function portfolioComparisonUniverseHelpText(value: PortfolioComparisonUniverse) {
+  if (value === "custom") {
+    return "Custom Universe compares the selected benchmark against only the tickers you enter below. Use it when you want to test a short candidate list without changing the tracked watchlist.";
+  }
+  return "Portfolio + Benchmark uses the current tracked holdings as the stock comparison set and keeps the benchmark as the external hurdle rate.";
+}
+
+function benchmarkPresetLabelForTicker(ticker: string) {
+  return PORTFOLIO_BENCHMARK_PRESETS.find((preset) => preset.ticker === ticker.trim().toUpperCase())?.label ?? "Manual ticker";
 }
 
 function sectorLabel(value: string) {
@@ -496,11 +587,15 @@ function SnapshotHistoryModal({
   history,
   loading,
   error,
+  activeSnapshotVersion,
+  onSelectSnapshot,
   onClose,
 }: {
   history: CorporateComparisonHistoryResponse | undefined;
   loading: boolean;
   error: boolean;
+  activeSnapshotVersion: string;
+  onSelectSnapshot: (point: CorporateComparisonHistoryPoint) => void;
   onClose: () => void;
 }) {
   useEffect(() => {
@@ -553,11 +648,14 @@ function SnapshotHistoryModal({
                     <th className="px-4 py-3 text-right font-semibold">Avg ROIC - WACC</th>
                     <th className="px-4 py-3 text-right font-semibold">Avg DCF</th>
                     <th className="px-4 py-3 text-right font-semibold">Market Return</th>
+                    <th className="px-4 py-3 text-right font-semibold">Review</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[var(--border)]/60">
-                  {history?.points.map((point) => (
-                    <tr key={`history-${point.as_of_date}`}>
+                  {history?.points.map((point) => {
+                    const isActive = point.snapshot_version === activeSnapshotVersion;
+                    return (
+                    <tr key={`history-${point.snapshot_version}`} className={isActive ? "bg-[var(--surface-muted)]/60" : undefined}>
                       <td className="px-4 py-3 font-bold text-[var(--text-primary)]">{formatDateLabel(point.as_of_date)}</td>
                       <td className="px-4 py-3 text-[var(--text-muted)]">{point.snapshot_source}</td>
                       <td className="px-4 py-3 text-right tabular-nums">{point.snapshot_versions_for_day}</td>
@@ -566,8 +664,21 @@ function SnapshotHistoryModal({
                       <td className={`px-4 py-3 text-right font-bold tabular-nums ${point.average_roic_minus_wacc >= 0 ? "text-[var(--surface)]" : "text-[var(--delta-down)]"}`}>{point.average_roic_minus_wacc.toFixed(2)}%</td>
                       <td className="px-4 py-3 text-right font-bold tabular-nums">${point.average_dcf_value.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}</td>
                       <td className="px-4 py-3 text-right tabular-nums">{point.market_expected_return.toFixed(2)}%</td>
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          type="button"
+                          onClick={() => onSelectSnapshot(point)}
+                          className={`inline-flex items-center justify-center rounded-[var(--radius)] border px-3 py-1 text-xs font-semibold ${
+                            isActive
+                              ? "border-[var(--accent)] bg-[var(--surface-muted)] text-[var(--text-primary)]"
+                              : "border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                          }`}
+                        >
+                          {isActive ? "Selected" : "Review Snapshot"}
+                        </button>
+                      </td>
                     </tr>
-                  ))}
+                  )})}
                 </tbody>
               </table>
             </div>
@@ -582,12 +693,22 @@ function SnapshotHistoryModal({
 function StockDetailModal({
   stock,
   comparisonMetrics,
+  snapshotMeta,
+  comparisonUniverse,
+  comparisonBenchmarkTicker,
+  comparisonCustomTickersInput,
+  activeSnapshotVersion,
   onAddToPortfolio,
   onRemoveFromWatchlist,
   onClose,
 }: {
   stock: PortfolioStock;
   comparisonMetrics: PortfolioComparisonMetrics;
+  snapshotMeta: CorporateComparisonSnapshotMeta | null;
+  comparisonUniverse: PortfolioComparisonUniverse;
+  comparisonBenchmarkTicker: string;
+  comparisonCustomTickersInput: string;
+  activeSnapshotVersion: string;
   onAddToPortfolio: (stock: PortfolioStock) => void;
   onRemoveFromWatchlist: (stock: PortfolioStock) => void;
   onClose: () => void;
@@ -595,6 +716,10 @@ function StockDetailModal({
   const newsContainerRef = useRef<HTMLDivElement | null>(null);
   const newsPageSize = 5;
   const [timeframe, setTimeframe] = useState<"daily" | "monthly">("daily");
+  const [snapshotTrendOpen, setSnapshotTrendOpen] = useState(false);
+  const effectiveComparisonUniverse = snapshotMeta?.comparison_universe ?? comparisonUniverse;
+  const effectiveComparisonBenchmarkTicker = snapshotMeta?.benchmark_ticker ?? comparisonBenchmarkTicker;
+  const effectiveComparisonCustomTickersInput = snapshotMeta?.custom_tickers.join(", ") ?? comparisonCustomTickersInput;
 
   // Price history powers the TradingView chart; news is fetched lazily and crawled if needed.
   const detailQuery = useQuery<StockDetail>({
@@ -628,6 +753,29 @@ function StockDetailModal({
     ),
     staleTime: 1000 * 60 * 10,
   });
+  const stockSnapshotHistoryQuery = useQuery<CorporateComparisonStockHistoryResponse>({
+    queryKey: [
+      "portfolio-stock-snapshot-history",
+      stock.ticker,
+      effectiveComparisonUniverse,
+      effectiveComparisonBenchmarkTicker,
+      effectiveComparisonCustomTickersInput,
+      snapshotMeta?.snapshot_version ?? "",
+    ],
+    enabled: snapshotTrendOpen,
+    queryFn: ({ signal }) =>
+      fetchApi<CorporateComparisonStockHistoryResponse>("/corporate/comparison/stock-history", {
+        signal,
+        params: {
+          ticker: stock.ticker,
+          comparison_universe: effectiveComparisonUniverse,
+          benchmark_ticker: effectiveComparisonBenchmarkTicker,
+          custom_tickers: effectiveComparisonUniverse === "custom" ? effectiveComparisonCustomTickersInput : "",
+          limit: 30,
+        },
+      }),
+    staleTime: 60_000,
+  });
 
   const prices = useMemo(() => detailQuery.data?.prices ?? [], [detailQuery.data?.prices]);
   const chartPrices = useMemo(
@@ -650,6 +798,21 @@ function StockDetailModal({
   const previousPrice = prices.length > 1 ? prices[prices.length - 2].close : currentPrice;
   const priceChangePct = previousPrice ? ((currentPrice - previousPrice) / previousPrice) * 100 : 0;
   const priceTone = priceChangePct >= 0 ? "text-[var(--delta-up)]" : "text-[var(--delta-down)]";
+  const sparklineTrendPct = summarizeSparklineTrend(stock.sparkline);
+  const snapshotContextLabel = snapshotMeta?.mode === "snapshot"
+    ? `Saved snapshot metrics from ${formatDateLabel(snapshotMeta.as_of_date)}`
+    : "Live comparison metrics";
+  const snapshotTrendPoints = stockSnapshotHistoryQuery.data?.points ?? [];
+  const flaggedComparisonMetricCount = [
+    comparisonMetrics.roicMinusWacc,
+    comparisonMetrics.dcfUpside,
+    comparisonMetrics.expectedVsMarket,
+  ].filter((value) => isMetricOutlier(value)).length;
+  const earliestSnapshotTrendPoint = snapshotTrendPoints.at(-1) ?? null;
+  const latestSnapshotTrendPoint = snapshotTrendPoints[0] ?? null;
+  const expectedSpreadTrendDelta = latestSnapshotTrendPoint && earliestSnapshotTrendPoint
+    ? latestSnapshotTrendPoint.expected_return_spread - earliestSnapshotTrendPoint.expected_return_spread
+    : null;
 
   // Lock background scrolling while the modal is open and allow Escape to close it.
   useEffect(() => {
@@ -740,6 +903,13 @@ function StockDetailModal({
                 </div>
                 <button
                   type="button"
+                  onClick={() => setSnapshotTrendOpen((current) => !current)}
+                  className="inline-flex items-center justify-center rounded-[var(--radius)] border border-[var(--border)] px-3 py-2 text-xs font-semibold text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                >
+                  {snapshotTrendOpen ? "Hide Snapshot History" : "Open Snapshot History"}
+                </button>
+                <button
+                  type="button"
                   onClick={() => onAddToPortfolio(stock)}
                   className="inline-flex items-center justify-center rounded-[var(--radius)] border border-[var(--border)] px-3 py-2 text-xs font-semibold text-[var(--text-muted)] hover:text-[var(--text-primary)]"
                 >
@@ -800,6 +970,108 @@ function StockDetailModal({
                     </p>
                   </div>
                 </div>
+                <div className="mt-3 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-panel)] p-3 text-sm text-[var(--text-muted)]">
+                  <span className="font-semibold text-[var(--text-primary)]">Metric source:</span> {snapshotContextLabel}.
+                  {snapshotMeta?.snapshot_source && ` Source: ${snapshotMeta.snapshot_source}.`}
+                  {activeSnapshotVersion && ` Version: ${activeSnapshotVersion}.`}
+                  {sparklineTrendPct != null && ` Recent price trend: ${sparklineTrendPct >= 0 ? "+" : ""}${sparklineTrendPct.toFixed(2)}%.`}
+                </div>
+                {flaggedComparisonMetricCount > 0 && (
+                  <div className="mt-3 rounded-[var(--radius)] border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                    {flaggedComparisonMetricCount} stock metric value{flaggedComparisonMetricCount === 1 ? "" : "s"} for {stock.ticker} {flaggedComparisonMetricCount === 1 ? "is" : "are"} currently flagged as outlier data and rendered as <span className="font-semibold">N/A</span>. Treat the price chart and saved snapshot history as the primary review context until fresher fundamentals are available.
+                  </div>
+                )}
+                {snapshotTrendOpen && (
+                  <div className="mt-4 rounded-[var(--radius)] border border-[var(--border)] bg-white p-4">
+                    <div className="flex flex-col gap-1">
+                      <h4 className="text-sm font-bold text-[var(--text-primary)]">Snapshot History Drill-down</h4>
+                      <p className="text-xs text-[var(--text-muted)]">
+                        Review how saved comparison metrics changed across the latest persisted daily snapshots for {stock.ticker}. The currently selected snapshot row stays highlighted.
+                      </p>
+                      {snapshotMeta?.mode === "snapshot" && (
+                        <p className="text-xs text-[var(--text-muted)]">
+                          Review context: {formatDateLabel(snapshotMeta.as_of_date)} snapshot, {portfolioComparisonUniverseLabel(effectiveComparisonUniverse)}, benchmark {effectiveComparisonBenchmarkTicker}.
+                        </p>
+                      )}
+                    </div>
+                    {stockSnapshotHistoryQuery.isLoading && (
+                      <p className="mt-3 text-sm text-[var(--text-muted)]">Loading snapshot trend...</p>
+                    )}
+                    {stockSnapshotHistoryQuery.isError && (
+                      <div className="mt-3">
+                        <StatusPanel
+                          title="Snapshot Trend Unavailable"
+                          message="Could not load saved snapshot trend data for this stock."
+                          tone="warning"
+                        />
+                      </div>
+                    )}
+                    {!stockSnapshotHistoryQuery.isLoading && !stockSnapshotHistoryQuery.isError && snapshotTrendPoints.length === 0 && (
+                      <p className="mt-3 text-sm text-[var(--text-muted)]">No saved snapshot trend data is available for this stock yet.</p>
+                    )}
+                    {!stockSnapshotHistoryQuery.isLoading && !stockSnapshotHistoryQuery.isError && snapshotTrendPoints.length > 0 && (
+                      <div className="mt-3 space-y-3">
+                        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                          <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-muted)] p-3">
+                            <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Saved Snapshots</div>
+                            <div className="mt-1 text-lg font-black text-[var(--text-primary)]">{snapshotTrendPoints.length}</div>
+                            <p className="mt-1 text-xs text-[var(--text-muted)]">
+                              Persisted comparison rows currently available for {stock.ticker}.
+                            </p>
+                          </div>
+                          <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-muted)] p-3">
+                            <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Expected Spread Trend</div>
+                            <div className={`mt-1 text-lg font-black ${metricToneClass(expectedSpreadTrendDelta)}`}>
+                              {formatMetricPercent(expectedSpreadTrendDelta)}
+                            </div>
+                            <p className="mt-1 text-xs text-[var(--text-muted)]">
+                              Latest versus oldest saved expected-return spread in this drill-down.
+                            </p>
+                          </div>
+                          <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-muted)] p-3">
+                            <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Recent Price Sparkline</div>
+                            <div className="mt-2 h-10">
+                              <Sparkline
+                                data={stock.sparkline}
+                                height={40}
+                                color={priceChangePct >= 0 ? "var(--delta-up)" : "var(--delta-down)"}
+                              />
+                            </div>
+                            <p className="mt-1 text-xs text-[var(--text-muted)]">
+                              Watchlist-side price path shown next to the saved comparison history.
+                            </p>
+                          </div>
+                        </div>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-sm">
+                          <thead className="bg-[var(--surface-muted)] text-left text-[var(--text-muted)]">
+                            <tr>
+                              <th className="px-3 py-2 font-semibold">As Of</th>
+                              <th className="px-3 py-2 font-semibold">Source</th>
+                              <th className="px-3 py-2 text-right font-semibold">Price</th>
+                              <th className="px-3 py-2 text-right font-semibold">ROIC - WACC</th>
+                              <th className="px-3 py-2 text-right font-semibold">DCF Upside</th>
+                              <th className="px-3 py-2 text-right font-semibold">Expected vs Market</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-[var(--border)]/60">
+                            {snapshotTrendPoints.map((point) => (
+                              <tr key={`${stock.ticker}-${point.snapshot_version}`} className={point.snapshot_version === activeSnapshotVersion ? "bg-[var(--surface-muted)]/60" : undefined}>
+                                <td className="px-3 py-2 font-semibold text-[var(--text-primary)]">{formatDateLabel(point.as_of_date)}</td>
+                                <td className="px-3 py-2 text-[var(--text-muted)]">{point.snapshot_source}</td>
+                                <td className="px-3 py-2 text-right tabular-nums">{formatCurrencyCompact(point.current_price)}</td>
+                                <td className={`px-3 py-2 text-right font-semibold tabular-nums ${metricToneClass(point.roic_minus_wacc)}`}>{formatMetricPercent(point.roic_minus_wacc)}</td>
+                                <td className={`px-3 py-2 text-right font-semibold tabular-nums ${metricToneClass(point.dcf_implied_return)}`}>{formatMetricPercent(point.dcf_implied_return)}</td>
+                                <td className={`px-3 py-2 text-right font-semibold tabular-nums ${metricToneClass(point.expected_return_spread)}`}>{formatMetricPercent(point.expected_return_spread)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </>
             ) : (
               <StatusPanel title="No Price Data" message="No OHLC history is available for this ticker yet." tone="warning" />
@@ -839,11 +1111,10 @@ function StockDetailModal({
                     href={item.url || "#"}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className={`block rounded-[var(--radius)] border border-[var(--border)] bg-white p-3 text-sm shadow-sm transition-colors hover:border-[var(--accent)] ${
-                      today
-                        ? "border-l-4 border-l-transparent [border-image:linear-gradient(to_bottom,#60CAAD,#444444)_1]"
-                        : "border-l-4 border-l-[var(--border)]"
-                    }`}
+                    className={`block rounded-[var(--radius)] border border-[var(--border)] bg-white p-3 text-sm shadow-sm transition-colors hover:border-[var(--accent)] ${today
+                      ? "border-l-4 border-l-transparent [border-image:linear-gradient(to_bottom,#60CAAD,#444444)_1]"
+                      : "border-l-4 border-l-[var(--border)]"
+                      }`}
                   >
                     <p className="font-semibold leading-snug text-[var(--text-primary)]">{item.headline}</p>
                     <p className="mt-2 text-xs text-[var(--text-muted)]">{item.published_date || "Unknown date"}</p>
@@ -865,13 +1136,16 @@ export default function PortfolioPage() {
   // Page state tracks the holdings presentation mode and the currently opened detail modal.
   const queryClient = useQueryClient();
   const router = useRouter();
+  const initialDateFilters = readStoredPortfolioDateFilters();
   const [holdingsView, setHoldingsView] = useState<ViewMode>("chart");
   const [selectedStock, setSelectedStock] = useState<PortfolioStock | null>(null);
-  const [holdingStartDate, setHoldingStartDate] = useState("");
-  const [attributionAsOfDate, setAttributionAsOfDate] = useState("");
+  const [holdingStartDate, setHoldingStartDate] = useState(initialDateFilters.holdingStartDate);
+  const [attributionAsOfDate, setAttributionAsOfDate] = useState(initialDateFilters.attributionAsOfDate);
   const [newTicker, setNewTicker] = useState("");
   const [newName, setNewName] = useState("");
   const [newSector, setNewSector] = useState("");
+  const [addToWatchlistOnly, setAddToWatchlistOnly] = useState(true);
+  const [newWeightPercent, setNewWeightPercent] = useState("");
   const [weightDrafts, setWeightDrafts] = useState<Record<string, string>>({});
   const [importJsonArmed, setImportJsonArmed] = useState(false);
   const [mutationMessage, setMutationMessage] = useState<string | null>(null);
@@ -881,6 +1155,7 @@ export default function PortfolioPage() {
   const [portfolioComparisonCustomTickersInput, setPortfolioComparisonCustomTickersInput] = useState("NVDA, TSLA");
   const [portfolioComparisonMessage, setPortfolioComparisonMessage] = useState<string | null>(null);
   const [snapshotHistoryOpen, setSnapshotHistoryOpen] = useState(false);
+  const [selectedHistoryPoint, setSelectedHistoryPoint] = useState<CorporateComparisonHistoryPoint | null>(null);
   const [allocationModelOpen, setAllocationModelOpen] = useState(false);
   const [applyAllocationToSnapshot, setApplyAllocationToSnapshot] = useState(false);
   const [sectorFilter, setSectorFilter] = useState("All Sectors");
@@ -891,6 +1166,16 @@ export default function PortfolioPage() {
   const normalizedCustomTickersInput = portfolioComparisonCustomTickersInput.toUpperCase();
   const debouncedBenchmarkTicker = useDebounce(normalizedBenchmarkTicker, 400);
   const debouncedCustomTickersInput = useDebounce(normalizedCustomTickersInput, 400);
+
+  useEffect(() => {
+    window.localStorage.setItem(
+      PORTFOLIO_DATE_FILTERS_STORAGE_KEY,
+      JSON.stringify({
+        holdingStartDate,
+        attributionAsOfDate,
+      }),
+    );
+  }, [holdingStartDate, attributionAsOfDate]);
 
   // Watchlist query is the source for holdings, attribution inputs, and detail entry points.
   const watchlistQuery = useQuery<PortfolioStock[]>({
@@ -968,7 +1253,7 @@ export default function PortfolioPage() {
   });
   const portfolioComparisonHistoryQuery = useQuery<CorporateComparisonHistoryResponse>({
     queryKey: ["portfolio-comparison-history", portfolioComparisonUniverse, debouncedBenchmarkTicker, debouncedCustomTickersInput],
-    enabled: hasHoldings && snapshotHistoryOpen,
+    enabled: hasHoldings,
     queryFn: ({ signal }) =>
       fetchApi<CorporateComparisonHistoryResponse>("/corporate/comparison/history", {
         signal,
@@ -978,7 +1263,19 @@ export default function PortfolioPage() {
           custom_tickers: portfolioComparisonUniverse === "custom" ? debouncedCustomTickersInput : "",
           limit: 30,
         },
-      }),
+    }),
+    staleTime: 60_000,
+  });
+  const selectedSnapshotQuery = useQuery<CorporateComparisonResponse>({
+    queryKey: ["portfolio-comparison-snapshot-version", selectedHistoryPoint?.snapshot_version ?? ""],
+    enabled: hasHoldings && portfolioComparisonMode === "snapshot" && Boolean(selectedHistoryPoint?.snapshot_version),
+    queryFn: ({ signal }) =>
+      fetchApi<CorporateComparisonResponse>("/corporate/comparison/snapshot-version", {
+        signal,
+        params: {
+          snapshot_version: selectedHistoryPoint?.snapshot_version ?? "",
+        },
+    }),
     staleTime: 60_000,
   });
 
@@ -1009,11 +1306,17 @@ export default function PortfolioPage() {
   const allocationData = attributionQuery.data ? toAllocationDonutData(attributionQuery.data) : [];
   const waterfallData = attributionQuery.data ? toAttributionWaterfallData(attributionQuery.data) : [];
   const shouldShowAttribution = hasHoldings && !attributionQuery.isError;
+  const activeComparisonData = portfolioComparisonMode === "snapshot" && selectedSnapshotQuery.data
+    ? selectedSnapshotQuery.data
+    : portfolioComparisonQuery.data;
+  const activeSnapshotMeta = activeComparisonData?.snapshot ?? null;
+  const recentSnapshotPoints = portfolioComparisonHistoryQuery.data?.points.slice(0, 3) ?? [];
   const portfolioComparisonCalculating = normalizedBenchmarkTicker !== debouncedBenchmarkTicker
     || (portfolioComparisonUniverse === "custom" && normalizedCustomTickersInput !== debouncedCustomTickersInput)
-    || portfolioComparisonQuery.isFetching;
+    || portfolioComparisonQuery.isFetching
+    || selectedSnapshotQuery.isFetching;
   const comparisonMetricsByTicker = useMemo<Record<string, PortfolioComparisonMetrics>>(() => {
-    const portfolioComparisonRows = portfolioComparisonQuery.data?.rows ?? [];
+    const portfolioComparisonRows = activeComparisonData?.rows ?? [];
     return portfolioComparisonRows
       .filter((row) => row.group_name !== "benchmark")
       .reduce<Record<string, PortfolioComparisonMetrics>>((acc, row) => {
@@ -1028,10 +1331,10 @@ export default function PortfolioPage() {
         };
         return acc;
       }, {});
-  }, [portfolioComparisonQuery.data?.rows, watchlist]);
+  }, [activeComparisonData?.rows, watchlist]);
 
   const portfolioSnapshotSummary = useMemo(() => {
-    const stockRows = portfolioComparisonQuery.data?.rows.filter((row) => row.group_name !== "benchmark") ?? [];
+    const stockRows = activeComparisonData?.rows.filter((row) => row.group_name !== "benchmark") ?? [];
     if (stockRows.length === 0) return null;
     const flaggedMetricsCount = stockRows.reduce((sum, row) => (
       sum
@@ -1054,7 +1357,7 @@ export default function PortfolioPage() {
       highestSpreadTicker: highestSpreadRow?.ticker ?? "N/A",
       highestSpreadValue: highestSpreadRow?.expected_return_spread ?? null,
     };
-  }, [portfolioComparisonQuery.data?.rows]);
+  }, [activeComparisonData?.rows]);
 
   const refreshPortfolioQueries = async () => {
     const refreshedWatchlist = await watchlistQuery.refetch();
@@ -1079,6 +1382,8 @@ export default function PortfolioPage() {
       setNewTicker("");
       setNewName("");
       setNewSector("");
+      setAddToWatchlistOnly(true);
+      setNewWeightPercent("");
       await refreshPortfolioQueries();
     },
     onError: (error) => {
@@ -1157,6 +1462,12 @@ export default function PortfolioPage() {
       return;
     }
 
+    const parsedWeightPercent = Number(newWeightPercent.trim() || "0");
+    if (!addToWatchlistOnly && (!Number.isFinite(parsedWeightPercent) || parsedWeightPercent < 0 || parsedWeightPercent > 100)) {
+      setMutationMessage("Initial allocation must be between 0 and 100%.");
+      return;
+    }
+
     setMutationMessage(null);
     const existing = watchlist.find((stock) => stock.ticker === ticker);
     await addWatchlistMutation.mutateAsync({
@@ -1164,7 +1475,7 @@ export default function PortfolioPage() {
       name: newName.trim() || existing?.name || ticker,
       sector: newSector.trim() || existing?.sector || "",
       group_name: existing?.group_name || "custom",
-      weight: existing?.weight ?? 0,
+      weight: addToWatchlistOnly ? (existing?.weight ?? 0) : parsedWeightPercent / 100,
     });
   };
 
@@ -1187,6 +1498,7 @@ export default function PortfolioPage() {
       try {
         const refreshed = await savePortfolioSnapshot();
         await queryClient.invalidateQueries({ queryKey: ["portfolio-comparison-summary"] });
+        setSelectedHistoryPoint(null);
         setPortfolioComparisonMode("snapshot");
         setPortfolioComparisonMessage(`Saved allocation for ${stock.ticker} and updated the ${formatDateLabel(refreshed.snapshot.as_of_date)} snapshot.`);
       } catch (error) {
@@ -1217,6 +1529,7 @@ export default function PortfolioPage() {
       try {
         const refreshed = await savePortfolioSnapshot();
         await queryClient.invalidateQueries({ queryKey: ["portfolio-comparison-summary"] });
+        setSelectedHistoryPoint(null);
         setPortfolioComparisonMode("snapshot");
         setPortfolioComparisonMessage(`Normalized weights and updated the ${formatDateLabel(refreshed.snapshot.as_of_date)} snapshot.`);
       } catch (error) {
@@ -1255,6 +1568,7 @@ export default function PortfolioPage() {
     try {
       const refreshed = await savePortfolioSnapshot();
       await queryClient.invalidateQueries({ queryKey: ["portfolio-comparison-summary"] });
+      setSelectedHistoryPoint(null);
       setPortfolioComparisonMode("snapshot");
       setPortfolioComparisonMessage(`Saved portfolio snapshot for ${formatDateLabel(refreshed.snapshot.as_of_date)}.`);
     } catch (error) {
@@ -1287,7 +1601,7 @@ export default function PortfolioPage() {
       <div className="space-y-6 animate-in fade-in duration-500">
         {/* Header: page identity plus attribution date range and export controls. */}
         <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div>
+          <div className="flex flex-col self-start">
             <h1 className="text-3xl font-bold tracking-tight text-[var(--text-primary)]">Portfolio</h1>
             <p className="text-[var(--text-muted)] mt-1">
               Volatility-first portfolio command center for expected return comparison and investment testing
@@ -1329,12 +1643,12 @@ export default function PortfolioPage() {
 
         {hasHoldings && (
           <section className="rounded-[var(--radius)] border border-[var(--border)] bg-white p-4 shadow-sm">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="flex flex-col gap-4 min-[1450px]:flex-row lg:items-start lg:justify-between">
               <div>
                 <h2 className="text-lg font-bold text-[var(--text-primary)]">
                   <InfoTooltip
                     label="Latest Snapshot Summary"
-                    description="Daily comparison snapshot summary for the selected portfolio-side universe. This surfaces average expected return spread, average ROIC minus WACC, and average DCF value from the backend-owned comparison engine."
+                    description="Daily comparison snapshot summary for the selected portfolio-side universe. This keeps the latest persisted stock-comparison record visible on the Portfolio page and points you back to the per-stock table for the meaningful comparison metrics."
                   />
                 </h2>
                 <p className="mt-1 text-sm text-[var(--text-muted)]">
@@ -1344,11 +1658,17 @@ export default function PortfolioPage() {
               <div className="flex flex-col gap-2">
                 <div className="flex flex-col gap-2 sm:flex-row">
                   <label className="flex items-center gap-2 text-xs font-semibold text-[var(--text-muted)]">
-                    Universe
+                    <InfoTooltip
+                      label="Universe"
+                      description="Portfolio + Benchmark uses the tracked holdings already on this page. Custom Universe keeps the same benchmark but lets you compare only the manual ticker list you provide, without rewriting the watchlist."
+                    />
                     <select
                       aria-label="Portfolio comparison universe"
                       value={portfolioComparisonUniverse}
-                      onChange={(event) => setPortfolioComparisonUniverse(event.target.value as PortfolioComparisonUniverse)}
+                      onChange={(event) => {
+                        setSelectedHistoryPoint(null);
+                        setPortfolioComparisonUniverse(event.target.value as PortfolioComparisonUniverse);
+                      }}
                       className="rounded-[var(--radius)] border border-[var(--border)] bg-white px-3 py-2 text-xs text-[var(--text-primary)]"
                     >
                       <option value="portfolio_plus_benchmark">Portfolio + Benchmark</option>
@@ -1358,23 +1678,30 @@ export default function PortfolioPage() {
                   <label className="flex items-center gap-2 text-xs font-semibold text-[var(--text-muted)]">
                     <InfoTooltip
                       label="Benchmark"
-                      description="Portfolio benchmark defaults to the S&P 500 for broader comparability. Korea presets remain available as explicit opt-in alternatives. The selected benchmark is stored with each saved snapshot for historical consistency."
+                      description="Manual benchmark ticker input always wins. Presets are just fast selectors for common baselines. Whatever benchmark is active when you save a snapshot is stored with that snapshot for historical consistency."
                     />
                     <input
                       aria-label="Portfolio benchmark ticker"
                       value={portfolioComparisonBenchmarkTicker}
-                      onChange={(event) => setPortfolioComparisonBenchmarkTicker(event.target.value.toUpperCase())}
+                      onChange={(event) => {
+                        setSelectedHistoryPoint(null);
+                        setPortfolioComparisonBenchmarkTicker(event.target.value.toUpperCase());
+                      }}
                       className="w-24 rounded-[var(--radius)] border border-[var(--border)] bg-white px-3 py-2 text-xs text-[var(--text-primary)]"
                     />
                   </label>
                   <label className="flex items-center gap-2 text-xs font-semibold text-[var(--text-muted)]">
-                    Benchmark preset
+                    <InfoTooltip
+                      label="Benchmark preset"
+                      description="Use presets for the common S&P 500 or Korea-market baselines. Selecting Manual ticker means the current benchmark symbol does not match one of the preset shortcuts."
+                    />
                     <select
                       aria-label="Portfolio benchmark preset"
                       value={benchmarkPresetIdForTicker(portfolioComparisonBenchmarkTicker)}
                       onChange={(event) => {
                         const selectedPreset = PORTFOLIO_BENCHMARK_PRESETS.find((preset) => preset.id === event.target.value);
                         if (selectedPreset) {
+                          setSelectedHistoryPoint(null);
                           setPortfolioComparisonBenchmarkTicker(selectedPreset.ticker);
                         }
                       }}
@@ -1390,11 +1717,17 @@ export default function PortfolioPage() {
                   </label>
                   {portfolioComparisonUniverse === "custom" && (
                     <label className="flex items-center gap-2 text-xs font-semibold text-[var(--text-muted)]">
-                      Custom tickers
+                      <InfoTooltip
+                        label="Custom tickers"
+                        description="Comma-separated tickers for the temporary comparison universe. These affect the comparison rows and saved snapshot payload only; they do not add holdings to the tracked watchlist."
+                      />
                       <input
                         aria-label="Portfolio custom tickers"
                         value={portfolioComparisonCustomTickersInput}
-                        onChange={(event) => setPortfolioComparisonCustomTickersInput(event.target.value.toUpperCase())}
+                        onChange={(event) => {
+                          setSelectedHistoryPoint(null);
+                          setPortfolioComparisonCustomTickersInput(event.target.value.toUpperCase());
+                        }}
                         placeholder="NVDA, TSLA"
                         className="w-48 rounded-[var(--radius)] border border-[var(--border)] bg-white px-3 py-2 text-xs text-[var(--text-primary)]"
                       />
@@ -1407,7 +1740,10 @@ export default function PortfolioPage() {
                     <button
                       key={preset.id}
                       type="button"
-                      onClick={() => setPortfolioComparisonBenchmarkTicker(preset.ticker)}
+                      onClick={() => {
+                        setSelectedHistoryPoint(null);
+                        setPortfolioComparisonBenchmarkTicker(preset.ticker);
+                      }}
                       className={`rounded-full border px-3 py-1 font-semibold ${normalizedBenchmarkTicker === preset.ticker ? "border-[var(--accent)] bg-[var(--surface-muted)] text-[var(--text-primary)]" : "border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text-primary)]"}`}
                     >
                       {preset.label}
@@ -1420,38 +1756,143 @@ export default function PortfolioPage() {
                   )}
                 </div>
                 <div className="flex flex-col gap-2 sm:flex-row">
-                <label className="flex items-center gap-2 text-xs font-semibold text-[var(--text-muted)]">
-                  Source
-                  <select
-                    aria-label="Portfolio comparison source"
-                    value={portfolioComparisonMode}
-                    onChange={(event) => setPortfolioComparisonMode(event.target.value as "snapshot" | "live")}
-                    className="rounded-[var(--radius)] border border-[var(--border)] bg-white px-3 py-2 text-xs text-[var(--text-primary)]"
+                  <label className="flex items-center gap-2 text-xs font-semibold text-[var(--text-muted)]">
+                    <InfoTooltip
+                      label="Source"
+                      description="Persisted snapshot shows the latest saved daily record. Live calculation recomputes the comparison with the current controls and holdings but does not replace saved history until you explicitly use Save Current As Snapshot."
+                    />
+                    <select
+                      aria-label="Portfolio comparison source"
+                      value={portfolioComparisonMode}
+                      onChange={(event) => {
+                        const nextMode = event.target.value as "snapshot" | "live";
+                        if (nextMode !== "snapshot") {
+                          setSelectedHistoryPoint(null);
+                        }
+                        setPortfolioComparisonMode(nextMode);
+                      }}
+                      className="rounded-[var(--radius)] border border-[var(--border)] bg-white px-3 py-2 text-xs text-[var(--text-primary)]"
+                    >
+                      <option value="snapshot">Persisted snapshot</option>
+                      <option value="live">Live calculation</option>
+                    </select>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => void handleRefreshPortfolioSnapshot()}
+                    className="inline-flex items-center justify-center rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs font-semibold text-black hover:border-[var(--surface)]"
                   >
-                    <option value="snapshot">Persisted snapshot</option>
-                    <option value="live">Live calculation</option>
-                  </select>
-                </label>
-                <button
-                  type="button"
-                  onClick={() => void handleRefreshPortfolioSnapshot()}
-                  className="inline-flex items-center justify-center rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs font-semibold text-black hover:border-[var(--surface)]"
-                >
-                  Save Current As Snapshot
-                </button>
-                <button
-                  type="button"
-                  onClick={() => router.push("/corporate")}
-                  className="inline-flex items-center justify-center rounded-[var(--radius)] border border-[var(--border)] px-3 py-2 text-xs font-semibold text-[var(--text-muted)] hover:text-[var(--text-primary)]"
-                >
-                  View Full Comparison
-                </button>
+                    Save Current As Snapshot
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => router.push("/corporate")}
+                    className="inline-flex items-center justify-center rounded-[var(--radius)] border border-[var(--border)] px-3 py-2 text-xs font-semibold text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                  >
+                    View Full Comparison
+                  </button>
                 </div>
               </div>
             </div>
 
+            <div className="mt-3 grid grid-cols-1 gap-2 lg:grid-cols-3">
+              <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-muted)] p-3 text-sm text-[var(--text-muted)]">
+                <span className="font-semibold text-[var(--text-primary)]">Universe:</span> {portfolioComparisonUniverseHelpText(portfolioComparisonUniverse)}
+              </div>
+              <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-muted)] p-3 text-sm text-[var(--text-muted)]">
+                <span className="font-semibold text-[var(--text-primary)]">Benchmark workflow:</span> Preset is currently {benchmarkPresetLabelForTicker(normalizedBenchmarkTicker)}. Manual ticker input stays available for index symbols or ETFs outside the preset list.
+              </div>
+              <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-muted)] p-3 text-sm text-[var(--text-muted)]">
+                <span className="font-semibold text-[var(--text-primary)]">Snapshot workflow:</span> Live mode is review-only. Saved history updates only when you press <span className="font-semibold text-[var(--text-primary)]">Save Current As Snapshot</span> or opt in from allocation changes below.
+              </div>
+            </div>
+            <div className="mt-3 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-panel)] p-4">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <h3 className="text-sm font-bold text-[var(--text-primary)]">Saved Snapshot List</h3>
+                  <p className="mt-1 text-xs text-[var(--text-muted)]">
+                    Review the most recent persisted portfolio comparison snapshots directly from the page, then open the full history modal when you need the full timeline.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSnapshotHistoryOpen(true)}
+                  className="inline-flex items-center justify-center rounded-[var(--radius)] border border-[var(--border)] px-3 py-2 text-xs font-semibold text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                >
+                  View All Saved Snapshots
+                </button>
+              </div>
+              {portfolioComparisonHistoryQuery.isLoading && (
+                <p className="mt-3 text-sm text-[var(--text-muted)]">Loading saved snapshots...</p>
+              )}
+              {portfolioComparisonHistoryQuery.isError && (
+                <div className="mt-3">
+                  <StatusPanel
+                    title="Saved Snapshot List Unavailable"
+                    message="Could not load the saved snapshot list for this benchmark and universe."
+                    tone="warning"
+                  />
+                </div>
+              )}
+              {!portfolioComparisonHistoryQuery.isLoading && !portfolioComparisonHistoryQuery.isError && recentSnapshotPoints.length === 0 && (
+                <p className="mt-3 text-sm text-[var(--text-muted)]">No saved snapshots are available yet for the current review context.</p>
+              )}
+              {!portfolioComparisonHistoryQuery.isLoading && !portfolioComparisonHistoryQuery.isError && recentSnapshotPoints.length > 0 && (
+                <div className="mt-3 space-y-2">
+                  {recentSnapshotPoints.map((point) => {
+                    const isActive = point.snapshot_version === (selectedHistoryPoint?.snapshot_version ?? activeSnapshotMeta?.snapshot_version ?? "");
+                    return (
+                      <div
+                        key={`snapshot-list-${point.snapshot_version}`}
+                        className={`flex flex-col gap-2 rounded-[var(--radius)] border p-3 text-sm sm:flex-row sm:items-center sm:justify-between ${
+                          isActive ? "border-[var(--accent)]/50 bg-[var(--surface-muted)]" : "border-[var(--border)] bg-white"
+                        }`}
+                      >
+                        <div className="space-y-1">
+                          <p className="font-semibold text-[var(--text-primary)]">
+                            {formatDateLabel(point.as_of_date)} · {point.snapshot_source}
+                          </p>
+                          <p className="text-xs text-[var(--text-muted)]">
+                            Benchmark {point.benchmark_ticker}. Versions that day: {point.snapshot_versions_for_day}. Stocks summarized: {point.stock_count}.
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedHistoryPoint(point);
+                            setPortfolioComparisonMode("snapshot");
+                          }}
+                          className={`inline-flex items-center justify-center rounded-[var(--radius)] border px-3 py-2 text-xs font-semibold ${
+                            isActive
+                              ? "border-[var(--accent)] bg-[var(--surface-muted)] text-[var(--text-primary)]"
+                              : "border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                          }`}
+                        >
+                          {isActive ? "Selected Snapshot" : "Review Snapshot"}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
             {portfolioComparisonMessage && (
               <p className="mt-3 text-sm text-[var(--text-muted)]">{portfolioComparisonMessage}</p>
+            )}
+            {selectedHistoryPoint && selectedSnapshotQuery.isLoading && (
+              <p className="mt-3 text-sm text-[var(--text-muted)]">
+                Loading selected snapshot for {formatDateLabel(selectedHistoryPoint.as_of_date)}...
+              </p>
+            )}
+            {selectedHistoryPoint && selectedSnapshotQuery.isError && (
+              <div className="mt-3">
+                <StatusPanel
+                  title="Selected Snapshot Unavailable"
+                  message="Could not load the selected saved snapshot version. Clearing the history selection will return to the latest snapshot."
+                  tone="warning"
+                />
+              </div>
             )}
 
             {portfolioComparisonQuery.isLoading && (
@@ -1468,31 +1909,46 @@ export default function PortfolioPage() {
               </div>
             )}
 
-            {portfolioComparisonQuery.data && portfolioSnapshotSummary && (
+            {activeComparisonData && portfolioSnapshotSummary && (
               <>
+                {selectedHistoryPoint && (
+                  <div className="mt-4 flex flex-col gap-2 rounded-[var(--radius)] border border-[var(--accent)]/40 bg-[var(--surface-muted)] p-3 text-sm text-[var(--text-muted)] lg:flex-row lg:items-center lg:justify-between">
+                    <p>
+                      Reviewing saved snapshot from <span className="font-semibold text-[var(--text-primary)]">{formatDateLabel(selectedHistoryPoint.as_of_date)}</span>.
+                      Stock modal metrics and table values now follow that selected snapshot until you clear it. The saved benchmark and universe from that snapshot stay locked for review even if you change the current controls.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedHistoryPoint(null)}
+                      className="inline-flex items-center justify-center rounded-[var(--radius)] border border-[var(--border)] px-3 py-2 text-xs font-semibold text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                    >
+                      Clear History Selection
+                    </button>
+                  </div>
+                )}
                 <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-7">
                   <div className="rounded-[var(--radius)] bg-[var(--surface-muted)] p-3 text-xs">
                     <div className="text-[var(--text-muted)]">As Of</div>
                     <div className="mt-1 font-bold text-[var(--text-primary)]">
-                      {formatDateLabel(portfolioComparisonQuery.data.snapshot.as_of_date)}
+                      {formatDateLabel(activeComparisonData.snapshot.as_of_date)}
                     </div>
                   </div>
                   <div className="rounded-[var(--radius)] bg-[var(--surface-muted)] p-3 text-xs">
                     <div className="text-[var(--text-muted)]">Source</div>
                     <div className="mt-1 font-bold capitalize text-[var(--text-primary)]">
-                      {portfolioComparisonQuery.data.snapshot.mode}
+                      {activeComparisonData.snapshot.mode}
                     </div>
                   </div>
                   <div className="rounded-[var(--radius)] bg-[var(--surface-muted)] p-3 text-xs">
                     <div className="text-[var(--text-muted)]">Universe</div>
                     <div className="mt-1 font-bold text-[var(--text-primary)]">
-                      {portfolioComparisonUniverseLabel(portfolioComparisonQuery.data.snapshot.comparison_universe)}
+                      {portfolioComparisonUniverseLabel(activeComparisonData.snapshot.comparison_universe)}
                     </div>
                   </div>
                   <div className="rounded-[var(--radius)] bg-[var(--surface-muted)] p-3 text-xs">
                     <div className="text-[var(--text-muted)]">Benchmark</div>
                     <div className="mt-1 font-bold text-[var(--text-primary)]">
-                      {portfolioComparisonQuery.data.snapshot.benchmark_ticker}
+                      {activeComparisonData.snapshot.benchmark_ticker}
                     </div>
                   </div>
                   <div className="rounded-[var(--radius)] bg-[var(--surface-muted)] p-3 text-xs">
@@ -1516,10 +1972,10 @@ export default function PortfolioPage() {
                 </div>
                 <div className="mt-3 flex flex-col gap-2 text-sm text-[var(--text-muted)] lg:flex-row lg:items-center lg:justify-between">
                   <p>
-                    Market expected return: {portfolioComparisonQuery.data.market_expected_return.toFixed(2)}%. Primary stock return: {portfolioComparisonQuery.data.stock_expected_return_method.replaceAll("_", " ")}. Reference return: {portfolioComparisonQuery.data.comparison_reference_return_method.replaceAll("_", " ")}.
+                    Market expected return: {activeComparisonData.market_expected_return.toFixed(2)}%. Primary stock return: {activeComparisonData.stock_expected_return_method.replaceAll("_", " ")}. Reference return: {activeComparisonData.comparison_reference_return_method.replaceAll("_", " ")}.
                   </p>
                   <p>
-                    Generated: {formatSyncTimestamp(portfolioComparisonQuery.data.snapshot.generated_at)}. Versions for this KST day: {portfolioComparisonQuery.data.snapshot.snapshot_versions_for_day}. Holdings summarized: {portfolioSnapshotSummary.stockCount}.
+                    Generated: {formatSyncTimestamp(activeComparisonData.snapshot.generated_at)}. Versions for this KST day: {activeComparisonData.snapshot.snapshot_versions_for_day}. Holdings summarized: {portfolioSnapshotSummary.stockCount}.
                   </p>
                 </div>
                 <div className="mt-3 rounded-[var(--radius)] border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
@@ -1531,12 +1987,12 @@ export default function PortfolioPage() {
                     <span className="font-semibold text-[var(--text-primary)]">Benchmark context:</span> `S&P 500` is the default portfolio reference because it is the clearest broad-market baseline for cross-market comparison. Korea presets remain available when you want local-market benchmarking.
                   </p>
                 </div>
-                {portfolioComparisonQuery.data.snapshot.comparison_universe === "custom" && (
+                {activeComparisonData.snapshot.comparison_universe === "custom" && (
                   <p className="mt-2 text-sm text-[var(--text-muted)]">
-                    Custom tickers: {portfolioComparisonQuery.data.snapshot.custom_tickers.join(", ") || "None"}.
+                    Custom tickers: {activeComparisonData.snapshot.custom_tickers.join(", ") || "None"}.
                   </p>
                 )}
-                {portfolioComparisonQuery.data.snapshot.snapshot_is_stale && (
+                {activeComparisonData.snapshot.snapshot_is_stale && (
                   <p className="mt-2 text-sm text-amber-800">
                     Current view is using the latest available saved snapshot because the current daily snapshot was not available.
                   </p>
@@ -1725,7 +2181,7 @@ export default function PortfolioPage() {
 
         <section className="rounded-[var(--radius)] border border-[var(--border)] bg-white p-4 shadow-sm">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-            <form onSubmit={handleAddHolding} className="grid flex-1 grid-cols-1 gap-3 md:grid-cols-4">
+            <form onSubmit={handleAddHolding} className="grid flex-1 grid-cols-1 gap-3 md:grid-cols-5">
               <label className="flex flex-col gap-1 text-xs font-semibold text-[var(--text-muted)]">
                 Ticker
                 <input
@@ -1754,6 +2210,38 @@ export default function PortfolioPage() {
                   onChange={(event) => setNewSector(event.target.value)}
                   placeholder="Technology"
                   className="rounded-[var(--radius)] border border-[var(--border)] bg-white px-3 py-2 text-sm text-[var(--text-primary)]"
+                />
+              </label>
+              <div className="flex flex-col justify-end gap-2 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2">
+                <label className="flex items-start gap-2 text-xs font-semibold text-[var(--text-muted)]">
+                  <input
+                    type="checkbox"
+                    checked={addToWatchlistOnly}
+                    onChange={(event) => setAddToWatchlistOnly(event.target.checked)}
+                    aria-label="Add to Watchlist only"
+                    className="mt-0.5"
+                  />
+                  <span>
+                    Add to Watchlist only
+                    <span className="mt-1 block text-[11px] font-normal text-[var(--text-muted)]">
+                      Default keeps this name tracked at 0.0% until you opt into the portfolio model.
+                    </span>
+                  </span>
+                </label>
+              </div>
+              <label className={`flex flex-col gap-1 text-xs font-semibold text-[var(--text-muted)] ${addToWatchlistOnly ? "opacity-60" : ""}`}>
+                Initial Allocation %
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.1"
+                  value={newWeightPercent}
+                  onChange={(event) => setNewWeightPercent(event.target.value)}
+                  placeholder={addToWatchlistOnly ? "0.0" : "25.0"}
+                  disabled={addToWatchlistOnly}
+                  aria-label="Initial allocation percent"
+                  className="rounded-[var(--radius)] border border-[var(--border)] bg-white px-3 py-2 text-sm text-[var(--text-primary)] disabled:cursor-not-allowed disabled:bg-[var(--surface-muted)]"
                 />
               </label>
               <div className="flex items-end">
@@ -1804,7 +2292,7 @@ export default function PortfolioPage() {
             </div>
           </div>
           <p className="mt-3 text-sm text-[var(--text-muted)]">
-            Manual add is now explicit. Saving a ticker creates or updates a tracked holding and preserves any existing saved weight. New names default to <span className="font-semibold text-[var(--text-primary)]">0.0%</span> portfolio allocation until you opt into the testing model below.
+            Manual add is now explicit. Saving a ticker creates or updates a tracked holding and preserves any existing saved weight when <span className="font-semibold text-[var(--text-primary)]">Add to Watchlist only</span> stays on. Turn it off only when you want to seed an initial portfolio allocation immediately.
           </p>
           {existingTicker && (
             <div className="mt-2 inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-800">
@@ -1994,58 +2482,58 @@ export default function PortfolioPage() {
                   <h3 className="text-sm font-bold text-[var(--text-primary)]">{group.sector}</h3>
                   <p className="text-xs text-[var(--text-muted)]">{group.holdings.length} holding{group.holdings.length === 1 ? "" : "s"}</p>
                 </div>
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-6">
                   {group.holdings.map((stock) => {
-              const deltaPct = stock.delta?.delta_pct ?? 0;
-              return (
-                <div
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => setSelectedStock(stock)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") {
-                      event.preventDefault();
-                      setSelectedStock(stock);
-                    }
-                  }}
-                  key={stock.ticker}
-                  className="group relative block bg-[var(--surface-panel)] rounded-[var(--radius)] border border-[var(--border)] p-4 text-left shadow-sm hover:shadow-md transition-all hover:border-[var(--accent)]"
-                >
-                  <button
-                    type="button"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      void handleDeleteHolding(stock);
-                    }}
-                    disabled={deleteWatchlistMutation.isPending && deleteWatchlistMutation.variables === stock.ticker}
-                    className="absolute right-3 top-3 z-10 inline-flex items-center gap-1 rounded-[var(--radius)] border border-[var(--border)] bg-white px-2 py-1 text-xs font-semibold text-[var(--text-muted)] hover:text-[var(--delta-down)] disabled:opacity-50"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                    {deleteWatchlistMutation.isPending && deleteWatchlistMutation.variables === stock.ticker ? "Removing" : "Remove"}
-                  </button>
-                  <div className="flex justify-between items-start mb-2">
-                    <StockIdentity stock={stock} />
-                    <div className="text-right">
-                      <div className="font-semibold tabular-nums">
-                        {stock.last_close.toLocaleString(undefined, {
-                          minimumFractionDigits: 1,
-                          maximumFractionDigits: 1,
-                        })}
-                      </div>
-                      <DeltaBadge value={deltaPct} className="mt-1" />
-                      <p className="sr-only">{portfolioStatus("change", deltaPct)}</p>
-                    </div>
-                  </div>
+                    const deltaPct = stock.delta?.delta_pct ?? 0;
+                    return (
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => setSelectedStock(stock)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            setSelectedStock(stock);
+                          }
+                        }}
+                        key={stock.ticker}
+                        className="group relative block bg-[var(--surface-panel)] rounded-[var(--radius)] border border-[var(--border)] p-4 text-left shadow-sm hover:shadow-md transition-all hover:border-[var(--accent)]"
+                      >
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void handleDeleteHolding(stock);
+                          }}
+                          disabled={deleteWatchlistMutation.isPending && deleteWatchlistMutation.variables === stock.ticker}
+                          className="absolute right-3 top-3 z-10 inline-flex items-center gap-1 rounded-[var(--radius)] border border-[var(--border)] bg-white px-2 py-1 text-xs font-semibold text-[var(--text-muted)] hover:text-[var(--delta-down)] disabled:opacity-50"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                          {deleteWatchlistMutation.isPending && deleteWatchlistMutation.variables === stock.ticker ? "Removing" : "Remove"}
+                        </button>
+                        <div className="flex justify-between items-start mb-2">
+                          <StockIdentity stock={stock} />
+                          <div className="text-right">
+                            <div className="font-semibold tabular-nums">
+                              {stock.last_close.toLocaleString(undefined, {
+                                minimumFractionDigits: 1,
+                                maximumFractionDigits: 1,
+                              })}
+                            </div>
+                            <DeltaBadge value={deltaPct} className="mt-1" />
+                            <p className="sr-only">{portfolioStatus("change", deltaPct)}</p>
+                          </div>
+                        </div>
 
-                  <div className="mt-4 pt-2 border-t border-[var(--border)]/40">
-                    <Sparkline
-                      data={stock.sparkline}
-                      height={30}
-                      color={deltaPct >= 0 ? "var(--delta-up)" : "var(--delta-down)"}
-                    />
-                  </div>
-                </div>
-              );
+                        <div className="mt-4 pt-2 border-t border-[var(--border)]/40">
+                          <Sparkline
+                            data={stock.sparkline}
+                            height={30}
+                            color={deltaPct >= 0 ? "var(--delta-up)" : "var(--delta-down)"}
+                          />
+                        </div>
+                      </div>
+                    );
                   })}
                 </div>
               </div>
@@ -2090,6 +2578,11 @@ export default function PortfolioPage() {
           <StockDetailModal
             stock={selectedStock}
             comparisonMetrics={comparisonMetricsByTicker[selectedStock.ticker] ?? EMPTY_COMPARISON_METRICS}
+            snapshotMeta={activeSnapshotMeta}
+            comparisonUniverse={portfolioComparisonUniverse}
+            comparisonBenchmarkTicker={debouncedBenchmarkTicker}
+            comparisonCustomTickersInput={debouncedCustomTickersInput}
+            activeSnapshotVersion={activeSnapshotMeta?.snapshot_version ?? ""}
             onAddToPortfolio={handleFocusAllocationForStock}
             onRemoveFromWatchlist={(stock) => void handleDeleteHolding(stock)}
             onClose={() => setSelectedStock(null)}
@@ -2100,6 +2593,12 @@ export default function PortfolioPage() {
             history={portfolioComparisonHistoryQuery.data}
             loading={portfolioComparisonHistoryQuery.isLoading}
             error={portfolioComparisonHistoryQuery.isError}
+            activeSnapshotVersion={activeSnapshotMeta?.snapshot_version ?? ""}
+            onSelectSnapshot={(point) => {
+              setSelectedHistoryPoint(point);
+              setPortfolioComparisonMode("snapshot");
+              setSnapshotHistoryOpen(false);
+            }}
             onClose={() => setSnapshotHistoryOpen(false)}
           />
         )}

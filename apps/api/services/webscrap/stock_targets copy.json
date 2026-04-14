@@ -1,0 +1,196 @@
+{
+    "targets": [
+        {"name": "Oklo", "ticker": "OKLO", "sector": "Nuclear Energy"},
+        {"name": "Centrus Energy", "ticker": "LEU", "sector": "Nuclear Energy"},
+        {"name": "Plug Power", "ticker": "PLUG", "sector": "Clean Energy"},
+        {"name": "AES Corp", "ticker": "AES", "sector": "Utilities"},
+        {"name": "Power Solutions International", "ticker": "PSIX", "sector": "Industrial Machinery"},
+        {"name": "Twin Disc", "ticker": "TWIN", "sector": "Industrial Machinery"},
+        {"name": "Ideal Power", "ticker": "IPWR", "sector": "Electrical Equipment"},
+        {"name": "Evergy", "ticker": "EVRG", "sector": "Utilities"},
+        {"name": "Vicor", "ticker": "VICR", "sector": "Electrical Equipment"},
+        {"name": "Aris Water Solutions", "ticker": "ARIS", "sector": "Utilities"},
+        {"name": "SkyX Platforms", "ticker": "SKYX", "sector": "Electrical Equipment"},
+        {"name": "nVent Electric", "ticker": "NVT", "sector": "Electrical Equipment"},
+        {"name": "Ondas Holdings", "ticker": "ONDS", "sector": "Communication Equipment"},
+        {"name": "GE Aerospace", "ticker": "GE", "sector": "Aerospace & Defense"},
+        {"name": "SentinelOne", "ticker": "S", "sector": "Cybersecurity"},
+        {"name": "Telos", "ticker": "TLS", "sector": "Cybersecurity"},
+        {"name": "Gen Digital", "ticker": "GEN", "sector": "Cybersecurity"},
+        {"name": "L3Harris Technologies", "ticker": "LHX", "sector": "Aerospace & Defense"},
+        {"name": "Palo Alto Networks", "ticker": "PANW", "sector": "Cybersecurity"},
+        {"name": "OSI Systems", "ticker": "OSIS", "sector": "Aerospace & Defense"},
+        {"name": "Allegion", "ticker": "ALLE", "sector": "Security & Protection"},
+        {"name": "Verisign", "ticker": "VRSN", "sector": "IT Services"},
+        {"name": "NetScout Systems", "ticker": "NTCT", "sector": "IT Services"},
+        {"name": "Palantir Technologies", "ticker": "PLTR", "sector": "Software"},
+        {"name": "IonQ", "ticker": "IONQ", "sector": "Quantum Computing"},
+        {"name": "Rigetti Computing", "ticker": "RGTI", "sector": "Quantum Computing"},
+        {"name": "TC Energy", "ticker": "TRP", "sector": "Energy Infrastructure"},
+        {"name": "Fluor", "ticker": "FLR", "sector": "Engineering & Construction"},
+        {"name": "American Water Works", "ticker": "AWK", "sector": "Utilities"},
+        {"name": "Stem", "ticker": "STEM", "sector": "Renewable Energy"},
+        {"name": "Southern Company", "ticker": "SO", "sector": "Utilities"},
+        {"name": "Fortis", "ticker": "FTS", "sector": "Utilities"},
+        {"name": "Exelon", "ticker": "EXC", "sector": "Utilities"},
+        {"name": "Qualcomm", "ticker": "QCOM", "sector": "Semiconductors"},
+        {"name": "Enerflex", "ticker": "EFXT", "sector": "Energy Equipment"},
+        {"name": "KEPCO", "ticker": "015760", "sector": "Utilities"},
+        {"name": "KEPCO ADR", "ticker": "KEP", "sector": "Utilities"},
+        {"name": "American Electric Power", "ticker": "AEP", "sector": "Utilities"},
+        {"name": "Lightbridge", "ticker": "LTBR", "sector": "Nuclear Energy"},
+        {"name": "FirstEnergy", "ticker": "FE", "sector": "Utilities"},
+        {"name": "NextEra Energy", "ticker": "NEE", "sector": "Utilities"},
+        {"name": "Bloom Energy", "ticker": "BE", "sector": "Renewable Energy"},
+        {"name": "Energy Fuels", "ticker": "UUUU", "sector": "Uranium"},
+        {"name": "Enersys", "ticker": "ENS", "sector": "Electrical Equipment"},
+        {"name": "Fluence Energy", "ticker": "FLNC", "sector": "Renewable Energy"},
+        {"name": "Sigma Lithium", "ticker": "SGML", "sector": "Materials"},
+        {"name": "Lithium Americas", "ticker": "LAC", "sector": "Materials"},
+        {"name": "Ero Copper", "ticker": "ERO", "sector": "Materials"},
+        {"name": "Centerra Gold", "ticker": "CGAU", "sector": "Materials"},
+        {"name": "Avino Silver & Gold Mines", "ticker": "ASM", "sector": "Materials"},
+        {"name": "Northern Dynasty Minerals", "ticker": "NAK", "sector": "Materials"},
+        {"name": "Western Copper and Gold", "ticker": "WRN", "sector": "Materials"},
+        {"name": "Nova Minerals ADR", "ticker": "NVA", "sector": "Materials"},
+        {"name": "Uranium Energy Corp", "ticker": "UEC", "sector": "Uranium"},
+        {"name": "Trilogy Metals", "ticker": "TMQ", "sector": "Materials"},
+        {"name": "Taseko Mines", "ticker": "TGB", "sector": "Materials"},
+        {"name": "New Pacific Metals", "ticker": "NUAG", "sector": "Materials"},
+        {"name": "Fury Gold Mines", "ticker": "FURY", "sector": "Materials"},
+        {"name": "Critical Metals", "ticker": "CRML", "sector": "Materials"},
+        {"name": "Lithium Argentina", "ticker": "LAAC", "sector": "Materials"},
+        {"name": "Largo", "ticker": "LGO", "sector": "Materials"},
+        {"name": "Uranium Royalty", "ticker": "UROY", "sector": "Uranium"},
+        {"name": "Standard Lithium", "ticker": "SLI", "sector": "Materials"},
+        {"name": "Nexa Resources", "ticker": "NEXA", "sector": "Materials"},
+        {"name": "Denison Mines", "ticker": "DNN", "sector": "Uranium"},
+        {"name": "Coinbase", "ticker": "COIN", "sector": "Financial Services"},
+        {"name": "MicroStrategy", "ticker": "MSTR", "sector": "Software/Crypto"},
+        {"name": "Iren", "ticker": "IREN", "sector": "Bitcoin Mining"},
+        {"name": "Super Micro Computer", "ticker": "SMCI", "sector": "Technology Hardware"},
+        {"name": "Anterix", "ticker": "ATEX", "sector": "Communication Services"},
+        {"name": "Western Digital", "ticker": "WDC", "sector": "Technology Hardware"},
+        {"name": "Broadcom", "ticker": "AVGO", "sector": "Semiconductors"},
+        {"name": "Fortinet", "ticker": "FTNT", "sector": "Cybersecurity"},
+        {"name": "Seagate Technology", "ticker": "STX", "sector": "Technology Hardware"},
+        {"name": "Cisco Systems", "ticker": "CSCO", "sector": "Communication Equipment"},
+        {"name": "Arista Networks", "ticker": "ANET", "sector": "Communication Equipment"},
+        {"name": "Pure Storage", "ticker": "PSTG", "sector": "Technology Hardware"},
+        {"name": "Fastly", "ticker": "FSLY", "sector": "Software"},
+        {"name": "Nebius Group", "ticker": "NBIS", "sector": "IT Services"},
+        {"name": "Open Text", "ticker": "OTEX", "sector": "Software"},
+        {"name": "Amazon", "ticker": "AMZN", "sector": "Consumer Discretionary"},
+        {"name": "Microsoft", "ticker": "MSFT", "sector": "Software"},
+        {"name": "Meta Platforms", "ticker": "META", "sector": "Communication Services"},
+        {"name": "Alphabet Class A", "ticker": "GOOGL", "sector": "Communication Services"},
+        {"name": "MongoDB", "ticker": "MDB", "sector": "Software"},
+        {"name": "Reddit", "ticker": "RDDT", "sector": "Communication Services"},
+        {"name": "Unity Software", "ticker": "U", "sector": "Software"},
+        {"name": "Elastic", "ticker": "ESTC", "sector": "Software"},
+        {"name": "Datadog", "ticker": "DDOG", "sector": "Software"},
+        {"name": "Resideo Technologies", "ticker": "REZI", "sector": "Industrial Tech"},
+        {"name": "Serve Robotics", "ticker": "SERV", "sector": "Robotics"},
+        {"name": "Oracle", "ticker": "ORCL", "sector": "Software"},
+        {"name": "Tesla", "ticker": "TSLA", "sector": "Automotive"},
+        {"name": "ADT Inc", "ticker": "ADT", "sector": "Security Services"},
+        {"name": "Apple", "ticker": "AAPL", "sector": "Consumer Electronics"},
+        {"name": "Micron Technology", "ticker": "MU", "sector": "Semiconductors"},
+        {"name": "Semtech", "ticker": "SMTC", "sector": "Semiconductors"},
+        {"name": "Allegro MicroSystems", "ticker": "ALGM", "sector": "Semiconductors"},
+        {"name": "CEVA Inc", "ticker": "CEVA", "sector": "Semiconductors"},
+        {"name": "MaxLinear", "ticker": "MXL", "sector": "Semiconductors"},
+        {"name": "Coherent", "ticker": "COHR", "sector": "Semiconductors"},
+        {"name": "Poet Technologies", "ticker": "POET", "sector": "Semiconductors"},
+        {"name": "FormFactor", "ticker": "FORM", "sector": "Semiconductors"},
+        {"name": "Marvell Technology", "ticker": "MRVL", "sector": "Semiconductors"},
+        {"name": "AMD", "ticker": "AMD", "sector": "Semiconductors"},
+        {"name": "TSMC ADR", "ticker": "TSM", "sector": "Semiconductors"},
+        {"name": "Synopsys", "ticker": "SNPS", "sector": "Software/Design"},
+        {"name": "NVIDIA", "ticker": "NVDA", "sector": "Semiconductors"},
+        {"name": "Intel", "ticker": "INTC", "sector": "Semiconductors"},
+        {"name": "Texas Instruments", "ticker": "TXN", "sector": "Semiconductors"},
+        {"name": "Bank of America", "ticker": "BAC", "sector": "Financial Services"},
+        {"name": "Merck & Co", "ticker": "MRK", "sector": "Healthcare"},
+        {"name": "CrowdStrike", "ticker": "CRWD", "sector": "Cybersecurity"},
+        {"name": "DigitalOcean", "ticker": "DOCN", "sector": "IT Services"},
+        {"name": "Cadence Design Systems", "ticker": "CDNS", "sector": "Software/Design"},
+        {"name": "Wesco International", "ticker": "WCC", "sector": "Industrial Distribution"},
+        {"name": "Entergy", "ticker": "ETR", "sector": "Utilities"},
+        {"name": "Teradyne", "ticker": "TER", "sector": "Semiconductors"},
+        {"name": "Toll Brothers", "ticker": "TOL", "sector": "Homebuilding"},
+        {"name": "UPS", "ticker": "UPS", "sector": "Logistics"},
+        {"name": "FedEx", "ticker": "FDX", "sector": "Logistics"},
+        {"name": "American Express", "ticker": "AXP", "sector": "Financial Services"},
+        {"name": "Visa", "ticker": "V", "sector": "Financial Services"},
+        {"name": "Powell Industries", "ticker": "POWL", "sector": "Electrical Equipment"},
+        {"name": "Iridium Communications", "ticker": "IRDM", "sector": "Communication Services"},
+        {"name": "Berkshire Hathaway B", "ticker": "BRK.B", "sector": "Financial Services"},
+        {"name": "Coca-Cola", "ticker": "KO", "sector": "Consumer Goods"},
+        {"name": "Occidental Petroleum", "ticker": "OXY", "sector": "Energy"},
+        {"name": "Targa Resources", "ticker": "TRGP", "sector": "Energy Infrastructure"},
+        {"name": "Chevron", "ticker": "CVX", "sector": "Energy"},
+        {"name": "Exxon Mobil", "ticker": "XOM", "sector": "Energy"},
+        {"name": "Constellation Energy", "ticker": "CEG", "sector": "Utilities"},
+        {"name": "Vistra Corp", "ticker": "VST", "sector": "Utilities"},
+        {"name": "BWX Technologies", "ticker": "BWXT", "sector": "Aerospace & Defense"},
+        {"name": "Cameco", "ticker": "CCJ", "sector": "Uranium"},
+        {"name": "Centrus Energy", "ticker": "LEU", "sector": "Uranium"},
+        {"name": "Nano Nuclear Energy", "ticker": "NNE", "sector": "Nuclear Energy"},
+        {"name": "NuScale Power", "ticker": "SMR", "sector": "Nuclear Energy"},
+        {"name": "Oklo", "ticker": "OKLO", "sector": "Nuclear Energy"}
+]
+}
+
+
+//  ,플러그 파워 ,AES ,파워 솔루션스 인터내셔널 ,트윈 디스크 ,아이디얼 파워 ,에버지 ,바이코 ,에베루스 컨스트럭션 그룹 ,스카이 X 플랫폼스 ,엔벤트 일렉트릭
+//  ,온다스 ,제너럴 일렉트릭 (에어로스페이스) ,센티넬원 ,텔로스 ,젠 디지털 ,L3 해리스 ,팔로알토 네트웍스 ,OSI 시스템즈 ,얼리젼 ,베리사인 ,넷스카우트 시스템즈 ,GPGI INC ,PALU ,PLTU ,PLTZ ,팔란티어
+
+
+//  ,IONZ ,RGTZ ,리게티 컴퓨팅 ,GPGI INC ,아이온큐
+
+
+//  ,TC 에너지 ,플루오르 ,아메리칸 워터 웍스 ,스템 ,서던 ,포르티스 ,엑셀론 ,퀄컴 ,에너플렉스 ,한국전력 ,한국전력(ADR) ,아메리칸 일렉트릭 파워 ,라이트브리지 ,퍼스트에너지 ,넥스트에라 에너지 ,블룸 에너지 ,에너지 퓨얼스 ,에너시스 ,플루언스 에너지
+
+
+
+//  ,시그마 리튬 코퍼레이션 ,리튬 아메리카스 ,에로 코퍼 ,센테라 골드 ,아비노 실버 앤 골드 마인스 ,노던 다이너스티 미네랄스 ,웨스턴 코퍼 앤 골드 ,노바 미네랄스(ADR) ,우라늄 에너지 ,트릴로지 메탈스 ,타세코 마인스 ,뉴 퍼시픽 메탈스 ,퓨리 골드 마인스 ,크리티컬 메탈스 ,리튬 아르헨티나 AG ,라르고 ,우라늄 로열티 ,스탠더드 리튬 ,넥사 리소시스 ,데니슨 마인스
+
+
+
+//  ,코인베이스 ,써클 인터넷 그룹 ,ETHA ,BTC ,SMST ,스트래티지 ,WGMI ,XXRP ,아이렌 ,비트마인 이머션 테크놀로지스 ,ETHD ,ETHU ,BTCZ ,BITX ,BMNG ,CONL
+
+
+
+
+
+
+//  ,슈퍼 마이크로 컴퓨터 ,안테릭스 ,샌디스크 ,웨스턴 디지털 ,브로드컴 ,포티넷 ,씨게이트 ,시스코 시스템즈 ,코어위브
+
+
+
+
+
+//  ,퍼펙트 ,아리스타 네트웍스 ,퓨어 스토리지 ,패스틀리 ,네비우스 그룹 ,오픈 텍스트 ,아마존 ,마이크로소프트 ,메타 ,알파벳 A ,몽고DB ,레딧 ,유니티 소프트웨어 ,엘라스틱 ,피그마 ,데이터독 ,레지디오 테크놀로지스 ,서브 로보틱스 ,오라클 ,테슬라 ,ADT ,애플
+
+
+
+
+
+//  ,마이크론 테크놀로지 ,셈텍 ,알레그로 마이크로시스템즈 ,세바 ,맥스리니어 ,코히런트 ,포엣 테크놀로지스 ,큐니티 일렉트로닉스 ,폼팩터 ,마벨 테크놀로지 ,AMD ,AMDL ,TSMC(ADR) ,시놉시스 ,엔비디아 ,NVDL ,NVD ,퀄컴 ,인텔 ,텍사스 인스트루먼츠
+
+
+
+
+//  ,뱅크오브아메리카 ,머크 ,크라우드스트라이크 홀딩스 ,디지털오션 홀딩스 ,케이던스 디자인 시스템즈 ,웨스코 인터내셔널 ,엔터지 ,테라다인 ,CMB테크 ,유니버설 시큐리티 인스트루먼츠 ,톨 브라더스 ,유나이티드 파셀 서비스 ,페덱스 ,아메리칸 익스프레스 ,비자 ,AXIA 에너지아(ADR) ,파월 인더스트리스 ,이리디움 커뮤니케이션스 ,골드만삭스 BDC ,에어 리스 ,AMTD 디지털(ADR) ,버크셔 해서웨이 B ,코카콜라
+
+
+
+
+//  ,KODEX 국채선물3년인버스 ,KODEX 미국달러선물레버리지 ,KODEX 200선물인버스2X ,VPU ,XLU ,GGLL ,SGOL ,GLD ,IAUM ,IAU ,SLV ,ZSL ,XLV ,VDC ,SOXS ,SOXL ,MSFU ,TQQQ ,SQQQ ,SPXU ,FXY ,SPDV ,FIAT
+
+
+
+//  ,옥시덴탈 페트롤리움 ,BOIL ,UNG ,타르가 리소시스 ,셰브론 ,엑슨 모빌
+
+//  ,컨스털레이션 에너지 ,비스트라 에너지 ,BWX 테크놀로지스 ,카메코 ,센트러스 에너지 ,나노 뉴클리어 에너지 ,뉴스케일파워 ,오클로

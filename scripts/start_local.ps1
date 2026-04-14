@@ -198,7 +198,11 @@ function Get-BackendRuntime {
         $activeEnvName = $condaInfo.active_prefix_name
     }
 
-    if (-not [string]::IsNullOrWhiteSpace($activeEnvName)) {
+    $preferredEnvName = "moneyview"
+    $envNames = @($condaInfo.envs | ForEach-Object { Split-Path -Leaf $_ })
+    $hasPreferredEnv = $envNames -contains $preferredEnvName
+
+    if (-not [string]::IsNullOrWhiteSpace($activeEnvName) -and ($activeEnvName -ne "base" -or -not $hasPreferredEnv)) {
         return [pscustomobject]@{
             Name = $activeEnvName
             Description = "Conda env '$activeEnvName'"
@@ -208,9 +212,7 @@ function Get-BackendRuntime {
         }
     }
 
-    $preferredEnvName = "moneyview"
-    $envNames = @($condaInfo.envs | ForEach-Object { Split-Path -Leaf $_ })
-    if ($envNames -contains $preferredEnvName) {
+    if ($hasPreferredEnv) {
         return [pscustomobject]@{
             Name = $preferredEnvName
             Description = "Conda env '$preferredEnvName'"
@@ -375,11 +377,12 @@ $webRoot = Join-Path $repoRoot "apps\web"
 $cacheDir = Join-Path $repoRoot "data\cache"
 $logDir = Join-Path $cacheDir "logs"
 $portFile = Join-Path $cacheDir "moneyview_port.json"
-$backendLog = Join-Path $logDir "quickstart-backend.log"
-$frontendLog = Join-Path $logDir "quickstart-frontend.log"
+$backendLog = Join-Path $logDir "api-server.log"
+$frontendLog = Join-Path $logDir "next-server.log"
 $backendRuntime = $null
 $apiHealthUrl = "http://127.0.0.1:$ApiPort/api/v1/health"
 $frontendUrl = "http://localhost:$WebPort"
+$nextVersion = ""
 
 Write-Host "MoneyView local launcher" -ForegroundColor Cyan
 Write-Host "Repo: $repoRoot"
@@ -427,12 +430,22 @@ Write-Host "Backend runtime: $($backendRuntime.Description)"
 Ensure-BackendDependencies -RepoRoot $repoRoot -Runtime $backendRuntime -AutoInstall:(-not $CheckOnly)
 Ensure-FrontendDependencies -WebRoot $webRoot -ForceInstall:$InstallDeps -AutoInstall:(-not $CheckOnly)
 
+$webPackage = Get-Content (Join-Path $webRoot "package.json") | ConvertFrom-Json
+$nextVersion = [string]$webPackage.dependencies.next
+if ([string]::IsNullOrWhiteSpace($nextVersion)) {
+    $nextVersion = "unknown"
+}
+
 $portPayload = [ordered]@{
     port = $ApiPort
     host = "127.0.0.1"
     apiBaseUrl = "http://127.0.0.1:$ApiPort"
     generatedAt = (Get-Date).ToUniversalTime().ToString("o")
     generatedBy = "scripts/start_local.ps1"
+    logs = [ordered]@{
+        apiServer = $backendLog
+        nextServer = $frontendLog
+    }
 }
 [System.IO.File]::WriteAllText(
     $portFile,
@@ -460,7 +473,7 @@ if (-not (Test-HttpOk -Url $apiHealthUrl)) {
     else {
         "python -m uvicorn apps.api.main:app --host 127.0.0.1 --port $ApiPort --reload"
     }
-    $backendProcess = Start-LocalProcessWindow -Title "MoneyView API :$ApiPort" -WorkingDirectory $repoRoot -Command $backendCommand -LogPath $backendLog
+    $backendProcess = Start-LocalProcessWindow -Title "MoneyView API Server :$ApiPort" -WorkingDirectory $repoRoot -Command $backendCommand -LogPath $backendLog
     Wait-StartupTarget -Process $backendProcess -Name "backend" -Url $apiHealthUrl -LogPath $backendLog -TimeoutSeconds 30
 }
 
@@ -471,7 +484,7 @@ else {
     "npm.cmd exec -- next dev --port $WebPort"
 }
 
-$frontendProcess = Start-LocalProcessWindow -Title "MoneyView Web :$WebPort" -WorkingDirectory $webRoot -Command $webCommand -LogPath $frontendLog
+$frontendProcess = Start-LocalProcessWindow -Title "MoneyView next-server v$nextVersion :$WebPort" -WorkingDirectory $webRoot -Command $webCommand -LogPath $frontendLog
 Wait-StartupTarget -Process $frontendProcess -Name "frontend" -Url $frontendUrl -LogPath $frontendLog -TimeoutSeconds 45
 
 Write-Host ""
@@ -479,10 +492,10 @@ Write-Host "MoneyView local runtime requested." -ForegroundColor Green
 Write-Host "Backend health: $apiHealthUrl"
 Write-Host "Frontend:       $frontendUrl"
 Write-Host "Portfolio:      $frontendUrl/portfolio"
-Write-Host "Backend log:    $backendLog"
-Write-Host "Frontend log:   $frontendLog"
+Write-Host "API log:        $backendLog"
+Write-Host "next-server log:$frontendLog"
 Write-Host ""
-Write-Host "Close the spawned PowerShell windows to stop the local runtime."
+Write-Host "Two PowerShell windows were opened for the API Server and next-server. Close those windows to stop the local runtime."
 
 if ($OpenBrowser) {
     Start-Process $frontendUrl | Out-Null

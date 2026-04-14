@@ -1,0 +1,12 @@
+
+> web@0.1.0 dev
+> next dev --port 3011
+
+▲ Next.js 16.2.3 (Turbopack)
+- Local:         http://localhost:3011
+- Network:       http://192.168.219.106:3011
+✓ Ready in 249ms
+
+○ Compiling /portfolio ...
+✓ Finished writing to filesystem cache in 12.1s
+[?25h

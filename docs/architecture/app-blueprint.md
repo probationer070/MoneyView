@@ -374,11 +374,14 @@ Current status:
 - Holdings support Graph/Table toggle.
 - Portfolio page now supports add/delete watchlist mutations.
 - Portfolio page includes snapshot summary controls, snapshot-history access, watchlist JSON export/import, and allocation editing.
+- Portfolio page keeps saved snapshot benchmark/universe context locked during history review and surfaces saved per-stock metric drill-down inside the stock modal.
 - Portfolio uses saved positive watchlist weights when present and falls back to an equal-weight basket only when no positive saved weights exist.
 - If saved weights sum to less than 100%, the remainder is treated as implied cash in attribution/export flows.
 - The SQLite `watchlist` table is the source of truth for holdings.
 - Watchlist bootstrap seeds once from `stock_targets.json` when present, otherwise from a built-in default list when the DB is empty.
 - Automatic bootstrap must not overwrite user-managed watchlist state after add/delete mutations.
+- Comparison controls show visible recalculation feedback while debounced benchmark/custom-ticker changes settle.
+- Per-stock comparison outliers are filtered to `N/A` and explained in the snapshot review UI instead of being colored as valid metrics.
 
 Next updates:
 

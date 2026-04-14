@@ -242,6 +242,116 @@ def test_corporate_comparison_history_returns_timeline_points(tmp_path, monkeypa
     assert payload["points"][0]["market_expected_return"] == 9.7
 
 
+def test_corporate_comparison_snapshot_version_returns_selected_saved_rows(tmp_path, monkeypatch):
+    db_path = tmp_path / "moneyview.db"
+    monkeypatch.setattr(db_service, "_DB_PATH", db_path)
+    db_service.init_db()
+    _seed_watchlist()
+    _patch_comparison_sources(monkeypatch)
+
+    from apps.api.services import corporate_comparison as comparison_service
+
+    first_now = datetime(2026, 4, 9, 15, 1, tzinfo=timezone.utc)
+    second_now = datetime(2026, 4, 10, 15, 1, tzinfo=timezone.utc)
+    monkeypatch.setattr(comparison_service, "_now_utc", lambda: first_now)
+    first = comparison_service.save_corporate_comparison_snapshot(
+        snapshot_source="scheduled_kst_daily",
+        comparison_universe="portfolio_plus_benchmark",
+        benchmark_ticker="^GSPC",
+        custom_tickers=[],
+        metrics_loader=lambda ticker: {
+            "AAPL": CorporateMetrics(ticker="AAPL", growth=6, roic=18, wacc=10, debt_ratio=18, unlevered_beta=1.05, crp=0.8, reinvestment=34, fcff=92, innovation=82, market_share=64, governance=74, esg_penalty=22),
+            "MSFT": CorporateMetrics(ticker="MSFT", growth=7, roic=22, wacc=9, debt_ratio=15, unlevered_beta=0.95, crp=0.8, reinvestment=34, fcff=92, innovation=82, market_share=64, governance=74, esg_penalty=22),
+            "^GSPC": CorporateMetrics(ticker="^GSPC", growth=5, roic=10, wacc=8, debt_ratio=0, unlevered_beta=1.0, crp=0.0, reinvestment=20, fcff=92, innovation=40, market_share=100, governance=70, esg_penalty=10),
+        }[ticker],
+        price_loader=lambda _ticker: 100.0,
+        default_companies={"AAPL": {"name": "Apple", "sector": "Technology"}, "MSFT": {"name": "Microsoft", "sector": "Technology"}},
+        risk_free_rate=0.042,
+        equity_risk_premium=0.055,
+    )
+    monkeypatch.setattr(comparison_service, "_now_utc", lambda: second_now)
+    comparison_service.save_corporate_comparison_snapshot(
+        snapshot_source="manual_refresh",
+        comparison_universe="portfolio_plus_benchmark",
+        benchmark_ticker="^GSPC",
+        custom_tickers=[],
+        metrics_loader=lambda ticker: {
+            "AAPL": CorporateMetrics(ticker="AAPL", growth=6, roic=18, wacc=10, debt_ratio=18, unlevered_beta=1.05, crp=0.8, reinvestment=34, fcff=92, innovation=82, market_share=64, governance=74, esg_penalty=22),
+            "MSFT": CorporateMetrics(ticker="MSFT", growth=7, roic=22, wacc=9, debt_ratio=15, unlevered_beta=0.95, crp=0.8, reinvestment=34, fcff=92, innovation=82, market_share=64, governance=74, esg_penalty=22),
+            "^GSPC": CorporateMetrics(ticker="^GSPC", growth=5, roic=10, wacc=8, debt_ratio=0, unlevered_beta=1.0, crp=0.0, reinvestment=20, fcff=92, innovation=40, market_share=100, governance=70, esg_penalty=10),
+        }[ticker],
+        price_loader=lambda _ticker: 100.0,
+        default_companies={"AAPL": {"name": "Apple", "sector": "Technology"}, "MSFT": {"name": "Microsoft", "sector": "Technology"}},
+        risk_free_rate=0.042,
+        equity_risk_premium=0.055,
+    )
+
+    client = TestClient(app)
+    response = client.get(f"/api/v1/corporate/comparison/snapshot-version?snapshot_version={first.snapshot.snapshot_version}")
+
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert payload["snapshot"]["snapshot_version"] == first.snapshot.snapshot_version
+    assert payload["snapshot"]["as_of_date"] == "2026-04-10"
+    assert [row["ticker"] for row in payload["rows"]] == ["^GSPC", "AAPL", "MSFT"]
+
+
+def test_corporate_comparison_stock_history_returns_saved_metric_timeline(tmp_path, monkeypatch):
+    db_path = tmp_path / "moneyview.db"
+    monkeypatch.setattr(db_service, "_DB_PATH", db_path)
+    db_service.init_db()
+    _seed_watchlist()
+    _patch_comparison_sources(monkeypatch)
+
+    from apps.api.services import corporate_comparison as comparison_service
+
+    first_now = datetime(2026, 4, 9, 15, 1, tzinfo=timezone.utc)
+    second_now = datetime(2026, 4, 10, 15, 1, tzinfo=timezone.utc)
+    monkeypatch.setattr(comparison_service, "_now_utc", lambda: first_now)
+    comparison_service.save_corporate_comparison_snapshot(
+        snapshot_source="scheduled_kst_daily",
+        comparison_universe="portfolio_plus_benchmark",
+        benchmark_ticker="^GSPC",
+        custom_tickers=[],
+        metrics_loader=lambda ticker: {
+            "AAPL": CorporateMetrics(ticker="AAPL", growth=6, roic=18, wacc=10, debt_ratio=18, unlevered_beta=1.05, crp=0.8, reinvestment=34, fcff=92, innovation=82, market_share=64, governance=74, esg_penalty=22),
+            "MSFT": CorporateMetrics(ticker="MSFT", growth=7, roic=22, wacc=9, debt_ratio=15, unlevered_beta=0.95, crp=0.8, reinvestment=34, fcff=92, innovation=82, market_share=64, governance=74, esg_penalty=22),
+            "^GSPC": CorporateMetrics(ticker="^GSPC", growth=5, roic=10, wacc=8, debt_ratio=0, unlevered_beta=1.0, crp=0.0, reinvestment=20, fcff=92, innovation=40, market_share=100, governance=70, esg_penalty=10),
+        }[ticker],
+        price_loader=lambda _ticker: 100.0,
+        default_companies={"AAPL": {"name": "Apple", "sector": "Technology"}, "MSFT": {"name": "Microsoft", "sector": "Technology"}},
+        risk_free_rate=0.042,
+        equity_risk_premium=0.055,
+    )
+    monkeypatch.setattr(comparison_service, "_now_utc", lambda: second_now)
+    comparison_service.save_corporate_comparison_snapshot(
+        snapshot_source="manual_refresh",
+        comparison_universe="portfolio_plus_benchmark",
+        benchmark_ticker="^GSPC",
+        custom_tickers=[],
+        metrics_loader=lambda ticker: {
+            "AAPL": CorporateMetrics(ticker="AAPL", growth=6, roic=18, wacc=10, debt_ratio=18, unlevered_beta=1.05, crp=0.8, reinvestment=34, fcff=92, innovation=82, market_share=64, governance=74, esg_penalty=22),
+            "MSFT": CorporateMetrics(ticker="MSFT", growth=7, roic=22, wacc=9, debt_ratio=15, unlevered_beta=0.95, crp=0.8, reinvestment=34, fcff=92, innovation=82, market_share=64, governance=74, esg_penalty=22),
+            "^GSPC": CorporateMetrics(ticker="^GSPC", growth=5, roic=10, wacc=8, debt_ratio=0, unlevered_beta=1.0, crp=0.0, reinvestment=20, fcff=92, innovation=40, market_share=100, governance=70, esg_penalty=10),
+        }[ticker],
+        price_loader=lambda _ticker: 100.0,
+        default_companies={"AAPL": {"name": "Apple", "sector": "Technology"}, "MSFT": {"name": "Microsoft", "sector": "Technology"}},
+        risk_free_rate=0.042,
+        equity_risk_premium=0.055,
+    )
+
+    client = TestClient(app)
+    response = client.get("/api/v1/corporate/comparison/stock-history?ticker=AAPL&comparison_universe=portfolio_plus_benchmark&limit=10")
+
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert payload["ticker"] == "AAPL"
+    assert len(payload["points"]) == 2
+    assert payload["points"][0]["as_of_date"] == "2026-04-11"
+    assert payload["points"][0]["snapshot_source"] == "manual_refresh"
+    assert payload["points"][0]["roic_minus_wacc"] == 8.0
+
+
 def test_corporate_comparison_snapshot_uses_kst_business_date_and_365_day_retention(tmp_path, monkeypatch):
     db_path = tmp_path / "moneyview.db"
     monkeypatch.setattr(db_service, "_DB_PATH", db_path)

@@ -17,8 +17,8 @@ interface AttributionWaterfallProps {
 
 const CHART_INITIAL_DIMENSION = { width: 1, height: 1 };
 
-function bpsText(value: number) {
-  return `${(value * 10000).toFixed(1)} bps`;
+function percentText(value: number) {
+  return `${(value * 100).toFixed(2)}%`;
 }
 
 function topSectorDriver(
@@ -29,14 +29,14 @@ function topSectorDriver(
     .filter((row) => Number.isFinite(row[key]))
     .sort((a, b) => Math.abs(b[key]) - Math.abs(a[key]))[0];
   if (!top || Math.abs(top[key]) < 0.00005) return "No single sector materially dominated this effect.";
-  return `Largest sector driver: ${top.sector} contributed ${bpsText(top[key])}.`;
+  return `Largest sector driver: ${top.sector} contributed ${percentText(top[key])}.`;
 }
 
 export function AttributionWaterfall({ data, sectorBreakdowns = [] }: AttributionWaterfallProps) {
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const formatted = data.map((row) => ({
     ...row,
-    bps: row.value * 10000,
+    percentage: row.value * 100,
   }));
 
   const effectDetails = useMemo(() => {
@@ -87,8 +87,8 @@ export function AttributionWaterfall({ data, sectorBreakdowns = [] }: Attributio
       <div className="mb-3 flex items-center justify-between gap-3">
         <h3 className="text-sm font-semibold text-[var(--text-primary)]">
           <InfoTooltip
-            label="Attribution Effects (bps)"
-            description="Brinson-style attribution decomposes active return into allocation, selection, and interaction effects. Positive bps add value versus the benchmark; negative bps detract. One basis point equals 0.01 percentage points."
+            label="Attribution Effects (%)"
+            description="Brinson-style attribution decomposes active return into allocation, selection, and interaction effects. Positive percentages add value versus the benchmark; negative percentages detract."
           />
         </h3>
         <button
@@ -105,11 +105,11 @@ export function AttributionWaterfall({ data, sectorBreakdowns = [] }: Attributio
           <XAxis dataKey="name" tick={{ fontSize: 12 }} />
           <YAxis tick={{ fontSize: 12 }} />
           <Tooltip
-            formatter={(value) => `${Number(value ?? 0).toFixed(1)} bps`}
+            formatter={(value) => `${Number(value ?? 0).toFixed(2)}%`}
             contentStyle={{ borderRadius: 8, border: "1px solid var(--border)" }}
           />
           <Bar
-            dataKey="bps"
+            dataKey="percentage"
             radius={[6, 6, 0, 0]}
             fill="var(--accent)"
           />
@@ -149,7 +149,7 @@ export function AttributionWaterfall({ data, sectorBreakdowns = [] }: Attributio
                   <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between">
                     <h3 className="text-sm font-bold text-[var(--text-primary)]">{effect.name}</h3>
                     <div className={`text-sm font-black tabular-nums ${effect.value >= 0 ? "text-[var(--delta-up)]" : "text-[var(--delta-down)]"}`}>
-                      {bpsText(effect.value)}
+                      {percentText(effect.value)}
                     </div>
                   </div>
                   <p className="mt-2 text-sm text-[var(--text-primary)]">{effect.represents}</p>

@@ -132,10 +132,11 @@ powershell.exe -ExecutionPolicy Bypass -File scripts\start_local.ps1 -OpenBrowse
 The launcher:
 - starts the FastAPI backend
 - starts the Next.js frontend
+- opens two dedicated PowerShell windows: one for the API Server and one for `next-server`
 - auto-installs missing backend/frontend dependencies when needed
-- prefers the active Conda env, or the `moneyview` Conda env when available
+- prefers the active Conda env, but treats `base` as a fallback and uses the `moneyview` Conda env when available
 - writes the backend discovery file
-- writes startup logs under `data/cache/logs`
+- writes persistent runtime logs under `data/cache/logs`
 - stops with an explicit backend or frontend startup error if a process does not complete
 - opens the app in the browser
 
@@ -147,6 +148,11 @@ Useful URLs:
 - Monte Carlo Lab: `http://localhost:3000/monte-carlo`
 - API health: `http://127.0.0.1:8000/api/v1/health`
 - API docs: `http://127.0.0.1:8000/docs`
+
+Saved runtime logs:
+
+- API Server: `data/cache/logs/api-server.log`
+- next-server: `data/cache/logs/next-server.log`
 
 To stop the app, close the spawned PowerShell windows.
 
@@ -194,7 +200,7 @@ powershell.exe -ExecutionPolicy Bypass -File scripts\start_local.ps1 -InstallDep
 ```
 
 Normal Quick Start also attempts that install automatically when dependencies are missing.
-For backend packages, the launcher installs into the active Conda env or the `moneyview` env when that env exists.
+For backend packages, the launcher installs into the selected runtime env. If your active env is `base` and a `moneyview` env exists, the launcher now prefers `moneyview`.
 
 ## Run Backend
 

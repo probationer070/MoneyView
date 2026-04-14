@@ -1,55 +1,95 @@
 # Portfolio Tab
 
-The Portfolio tab is the main holdings and attribution workspace at `http://localhost:3000/portfolio`.
+The Portfolio tab is the main local-first holdings, snapshot-review, and attribution workspace at `http://localhost:3000/portfolio`.
 
 ## What It Shows
 
-### 1. Header Controls
+### 1. Comparison Snapshot Summary
 
-- `Holding Start Date`
-  Sets the start date for return, attribution, and beta calculations.
-- `Return End Date`
-  Sets the end date for the same calculations. If blank, the latest cached market date is used.
-- `Export`
-  Exports the current attribution/report payload for the active holdings, weights, benchmark, and date range.
-
-### 2. Latest Snapshot Summary
-
-This is the portfolio-side corporate comparison summary. It is separate from the attribution engine.
+The top section is the portfolio-side corporate comparison surface. It is intentionally separate from attribution.
 
 It shows:
 
 - snapshot `as of` date
-- source mode: persisted snapshot or live calculation
+- snapshot source mode
 - comparison universe
-- benchmark ticker
-- average expected return spread
-- average `ROIC - WACC`
-- average DCF value
-- generated timestamp and snapshot count for the day
+- saved benchmark ticker
+- positive spread counts
+- positive `ROIC - WACC` counts
+- highest expected-return spread
+- generated timestamp and version count for the KST day
+
+Important interpretation rules:
+
+- portfolio-level averages are intentionally demoted because outliers can make them misleading
+- per-stock rows are the primary comparison surface
+- flagged extreme values render as `N/A` instead of receiving valid-looking colors
+- when a saved snapshot is selected from history, the page keeps that snapshot's benchmark and universe context locked for review until the selection is cleared
 
 Controls in this block:
 
-- `Universe`
+- `Portfolio comparison universe`
   Switches between `portfolio_plus_benchmark` and `custom`
-- `Benchmark`
-  Lets the user change the comparison benchmark ticker
-- `Korea preset`
-  Quick-select preset benchmark tickers
-- `Custom tickers`
-  Available when the universe is `custom`
-- `Source`
+- `Portfolio benchmark preset`
+  Quick-selects common benchmark tickers
+- `Portfolio benchmark ticker`
+  Manual ticker entry always wins over presets
+- `Portfolio custom tickers`
+  Available only in `custom`
+- `Portfolio comparison source`
   Switches between persisted snapshot and live calculation
 - `Save Current As Snapshot`
   Persists the current comparison result as the day snapshot
-- `View Full Comparison` / `Open Full Comparison View`
+- `Open Full Comparison View`
   Opens the Corporate tab
 - `Open Snapshot History`
-  Opens the historical snapshot timeline modal
+  Opens the saved snapshot timeline modal
+
+Comparison control UX:
+
+- snapshot mode is the default portfolio review path
+- live mode is review-only and does not overwrite history
+- the page shows a visible `Calculating` chip while debounced benchmark or custom-ticker updates are still settling
+
+### 2. Snapshot History Review
+
+The history modal and stock modal drill-down both use persisted snapshot data.
+
+The page-level history modal provides:
+
+- one row per saved day/version group
+- source label
+- per-day version count
+- average summary metrics
+- explicit `Review Snapshot` action
+
+When a saved snapshot is selected:
+
+- the summary banner states that the snapshot is being reviewed
+- table values and stock modal comparison metrics follow the saved snapshot
+- benchmark/universe review context stays locked to the selected saved snapshot even if current controls change
+
+The stock detail modal includes:
+
+- TradingView-style OHLCV chart
+- three key metric cards
+- metric source banner with snapshot version
+- recent price-trend summary from the holding sparkline
+- saved snapshot drill-down with:
+  saved snapshot count
+  expected-spread trend delta
+  saved per-day metric table
+  watchlist-side sparkline context
+
+If one or more stock comparison metrics are extreme or invalid:
+
+- the modal shows an explicit outlier warning
+- affected values render as `N/A`
+- the price chart and saved snapshot history become the preferred review path
 
 ### 3. Attribution Summary
 
-When the watchlist has holdings and the weights are valid, the Portfolio tab shows attribution KPIs:
+When the watchlist has holdings and the saved weights are valid, the Portfolio tab shows attribution KPIs:
 
 - `Portfolio Return`
 - `Benchmark Return`
@@ -58,11 +98,10 @@ When the watchlist has holdings and the weights are valid, the Portfolio tab sho
 
 It also shows:
 
-- benchmark selection and methodology notes
-- benchmark weight source
-- benchmark proxy method
+- benchmark methodology notes
+- benchmark proxy status
 - allocation donut chart
-- attribution waterfall chart with allocation, selection, interaction, and active return effects
+- attribution waterfall chart
 
 The attribution request uses:
 
@@ -88,15 +127,17 @@ The holdings section supports:
 
 - card view
 - table view
+- sector grouping
+- mobile-priority column collapse
 - add holding
 - remove holding
 - click-through stock detail modal
 
-The stock detail modal shows:
+Manual add behavior:
 
-- TradingView-style price chart from `/portfolio/stock/{ticker}`
-- paginated ticker news from `/news/feed`
-- crawl-on-demand stock news fallback through `/news/crawl/stock`
+- `Add to Watchlist only` is the default and preserves watchlist/portfolio separation
+- turning it off seeds an initial allocation intentionally
+- saving a manual ticker should not silently couple tracking and weighted-portfolio ownership
 
 ### 5. Watchlist Sync Controls
 
@@ -127,6 +168,7 @@ It also provides:
 - editable allocation percentage input
 - `Save` per holding
 - `Normalize To 100%`
+- `Apply to Snapshot`
 
 Behavior:
 
@@ -134,6 +176,7 @@ Behavior:
 - if the total saved weight is below `100%`, the remainder is treated as explicit cash
 - zero-weight names remain visible in the watchlist but do not affect the weighted portfolio
 - if no positive saved weights exist, the page falls back to equal stock weights with no explicit cash row
+- `Apply to Snapshot` is default `OFF` so allocation editing remains separate from snapshot history unless the user opts in
 
 ## Error And Empty States
 
@@ -145,6 +188,9 @@ The Portfolio tab can also show:
 - `Allocation Weights Exceed 100%`
 - `Attribution Engine Unavailable`
 - `Portfolio Snapshot Summary Unavailable`
+- `Snapshot History Unavailable`
+- `Selected Snapshot Unavailable`
+- `Snapshot Trend Unavailable`
 
 ## Data Sources
 
@@ -162,5 +208,13 @@ The Portfolio tab can also show:
   Stored news for a ticker
 - `POST /api/v1/news/crawl/stock`
   Crawl fallback for ticker news
-- corporate comparison endpoints
-  Used for the snapshot summary and snapshot history shown at the top of the page
+- `GET /api/v1/corporate/comparison`
+  Latest snapshot summary or live comparison
+- `POST /api/v1/corporate/comparison/snapshot`
+  Manual snapshot save
+- `GET /api/v1/corporate/comparison/history`
+  Snapshot timeline modal
+- `GET /api/v1/corporate/comparison/snapshot-version`
+  Selected saved snapshot review path
+- `GET /api/v1/corporate/comparison/stock-history`
+  Stock modal saved metric drill-down
