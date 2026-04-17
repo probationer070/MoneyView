@@ -4,6 +4,8 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
+from .news import TechnicalIndicators
+
 
 class StockOHLCV(BaseModel):
     """Single OHLCV bar in financial-asset schema format."""
@@ -72,6 +74,7 @@ class IndexQuote(BaseModel):
 
     name: str
     ticker: str
+    instrument_type: str = "index"
     last_close: Optional[float] = None
     delta: DeltaBadge
     sparkline: List[float] = Field(default_factory=list)
@@ -105,3 +108,61 @@ class IndicatorRecord(BaseModel):
                 "description": "",
             }
         }
+
+
+class MarketVolumeSummary(BaseModel):
+    """Daily volume summary for the selected market instrument."""
+
+    latest_volume: Optional[int] = None
+    average_20d_volume: Optional[float] = None
+    average_60d_volume: Optional[float] = None
+    volume_vs_20d_pct: Optional[float] = None
+    as_of_date: Optional[str] = None
+
+
+class MarketDataQuality(BaseModel):
+    """Freshness and fallback metadata for a market detail response."""
+
+    source: str = ""
+    freshness_status: str = ""
+    used_live_refresh: bool = False
+    used_stale_cache_fallback: bool = False
+    requested_period: str = "5y"
+    last_updated: Optional[str] = None
+    latest_trading_date: Optional[str] = None
+    detail_note: str = ""
+
+
+class MarketRegimeContext(BaseModel):
+    """Breadth and regime context for index-style market instruments."""
+
+    regime_label: str = ""
+    regime_summary: str = ""
+    equity_advancers: int = 0
+    equity_decliners: int = 0
+    breadth_ratio: Optional[float] = None
+    equity_index_count: int = 0
+    risk_on_signals: int = 0
+    risk_off_signals: int = 0
+    signal_count: int = 0
+
+
+class MarketIndexDetail(BaseModel):
+    """Expanded Market Overview detail payload for a single instrument."""
+
+    name: str
+    ticker: str
+    instrument_type: str = "index"
+    unit_label: Optional[str] = None
+    base_asset: Optional[str] = None
+    quote_asset: Optional[str] = None
+    period: str = "5y"
+    as_of_date: Optional[str] = None
+    last_close: Optional[float] = None
+    daily_history: List[StockOHLCV] = Field(default_factory=list)
+    monthly_history: List[StockOHLCV] = Field(default_factory=list)
+    daily_indicators: TechnicalIndicators
+    monthly_indicators: TechnicalIndicators
+    volume_summary: MarketVolumeSummary
+    data_quality: MarketDataQuality
+    market_regime: Optional[MarketRegimeContext] = None

@@ -281,8 +281,8 @@ function Ensure-FrontendDependencies {
     if (-not $needsInstall) {
         Push-Location $WebRoot
         try {
-            & npm.cmd exec -- next --version *> $null
-            $needsInstall = ($LASTEXITCODE -ne 0)
+            $nextVersionCheck = Invoke-ExternalCapture -FilePath "npm.cmd" -ArgumentList @("exec", "--", "next", "--version")
+            $needsInstall = (-not $nextVersionCheck.Success)
         }
         finally {
             Pop-Location

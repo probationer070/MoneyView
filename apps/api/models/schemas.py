@@ -25,7 +25,7 @@ from .schema_parts.corporate import (
     RiskAssumptions,
     ValuationAssumptions,
 )
-from .schema_parts.market import DeltaBadge, IndicatorRecord, IndexQuote, StockOHLCV
+from .schema_parts.market import DeltaBadge, IndicatorRecord, IndexQuote, MarketDataQuality, MarketIndexDetail, MarketRegimeContext, MarketVolumeSummary, StockOHLCV
 from .schema_parts.news import MonteCarloResult, NewsArticle, TechnicalIndicators
 from .schema_parts.portfolio_reporting import (
     RECONCILIATION_TOLERANCE,
@@ -83,6 +83,10 @@ __all__ = [
     "DeltaBadge",
     "IndicatorRecord",
     "IndexQuote",
+    "MarketDataQuality",
+    "MarketIndexDetail",
+    "MarketRegimeContext",
+    "MarketVolumeSummary",
     "StockOHLCV",
     "MonteCarloResult",
     "NewsArticle",

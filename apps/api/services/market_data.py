@@ -13,6 +13,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import List
 
+import numpy as np
 import pandas as pd
 import requests
 
@@ -21,7 +22,7 @@ _ROOT = Path(__file__).resolve().parents[3]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-from apps.api.models.schemas import DeltaBadge, IndexQuote, StockOHLCV
+from apps.api.models.schemas import DeltaBadge, IndexQuote, MarketDataQuality, MarketIndexDetail, MarketRegimeContext, MarketVolumeSummary, StockOHLCV, TechnicalIndicators
 from apps.api.services.db import get_db
 
 logger = logging.getLogger(__name__)
@@ -40,6 +41,20 @@ MARKET_INDICES = {
     "USD/KRW": "KRW=X",
     "Bitcoin": "BTC-USD",
 }
+
+INSTRUMENT_METADATA = {
+    "^GSPC": {"instrument_type": "index", "unit_label": "index points"},
+    "^DJI": {"instrument_type": "index", "unit_label": "index points"},
+    "^IXIC": {"instrument_type": "index", "unit_label": "index points"},
+    "^KS200": {"instrument_type": "index", "unit_label": "index points"},
+    "GC=F": {"instrument_type": "commodity", "unit_label": "USD per ounce"},
+    "CL=F": {"instrument_type": "commodity", "unit_label": "USD per barrel"},
+    "NG=F": {"instrument_type": "commodity", "unit_label": "USD per MMBtu"},
+    "KRW=X": {"instrument_type": "fx", "base_asset": "USD", "quote_asset": "KRW", "unit_label": "KRW per USD"},
+    "BTC-USD": {"instrument_type": "crypto", "base_asset": "BTC", "quote_asset": "USD", "unit_label": "USD per BTC"},
+}
+
+EQUITY_INDEX_TICKERS = ("^GSPC", "^DJI", "^IXIC", "^KS200")
 
 INDEX_DB_ALIASES = {
     "^GSPC": ["^GSPC", "S&P 500"],
@@ -102,6 +117,223 @@ class MarketDataService:
         return df
 
     @staticmethod
+    def _aggregate_monthly_bars(bars: List[StockOHLCV]) -> List[StockOHLCV]:
+        monthly: dict[str, StockOHLCV] = {}
+        for bar in sorted(bars, key=lambda item: item.date):
+            month_key = bar.date[:7]
+            existing = monthly.get(month_key)
+            if existing is None:
+                monthly[month_key] = StockOHLCV(**bar.model_dump())
+                continue
+            existing.high = max(existing.high, bar.high)
+            existing.low = min(existing.low, bar.low)
+            existing.close = bar.close
+            existing.volume += bar.volume
+        return list(monthly.values())
+
+    @staticmethod
+    def _sma(closes: np.ndarray, period: int) -> float | None:
+        if len(closes) < period:
+            return None
+        return round(float(closes[-period:].mean()), 4)
+
+    @staticmethod
+    def _ema(closes: np.ndarray, span: int) -> np.ndarray:
+        alpha = 2.0 / (span + 1)
+        result = np.empty_like(closes, dtype=float)
+        result[0] = closes[0]
+        for index in range(1, len(closes)):
+            result[index] = alpha * closes[index] + (1 - alpha) * result[index - 1]
+        return result
+
+    @staticmethod
+    def _rsi(closes: np.ndarray, period: int = 14) -> float | None:
+        if len(closes) < period + 1:
+            return None
+        delta = np.diff(closes)
+        gains = np.where(delta > 0, delta, 0.0)
+        losses = np.where(delta < 0, -delta, 0.0)
+        avg_gain = gains[-period:].mean()
+        avg_loss = losses[-period:].mean()
+        if avg_loss == 0:
+            return 100.0
+        rs = avg_gain / avg_loss
+        return round(100 - (100 / (1 + rs)), 2)
+
+    @classmethod
+    def _macd(cls, closes: np.ndarray) -> tuple[float | None, float | None, float | None]:
+        if len(closes) < 26:
+            return None, None, None
+        ema12 = cls._ema(closes, 12)
+        ema26 = cls._ema(closes, 26)
+        line = ema12 - ema26
+        signal = cls._ema(line, 9)
+        histogram = line - signal
+        return round(float(line[-1]), 4), round(float(signal[-1]), 4), round(float(histogram[-1]), 4)
+
+    @staticmethod
+    def _bollinger(closes: np.ndarray, period: int = 20) -> tuple[float | None, float | None, float | None]:
+        if len(closes) < period:
+            return None, None, None
+        window = closes[-period:]
+        middle = window.mean()
+        std = window.std()
+        return round(float(middle + 2 * std), 4), round(float(middle), 4), round(float(middle - 2 * std), 4)
+
+    @classmethod
+    def _compute_technicals(cls, ticker: str, bars: List[StockOHLCV]) -> TechnicalIndicators:
+        if not bars:
+            return TechnicalIndicators(ticker=ticker)
+        closes = np.array([bar.close for bar in bars], dtype=float)
+        macd, macd_signal, macd_hist = cls._macd(closes)
+        bb_upper, bb_mid, bb_lower = cls._bollinger(closes)
+        return TechnicalIndicators(
+            ticker=ticker,
+            rsi_14=cls._rsi(closes),
+            macd=macd,
+            macd_signal=macd_signal,
+            macd_hist=macd_hist,
+            bb_upper=bb_upper,
+            bb_mid=bb_mid,
+            bb_lower=bb_lower,
+            ma_20=cls._sma(closes, 20),
+            ma_50=cls._sma(closes, 50),
+            ma_200=cls._sma(closes, 200),
+            as_of_date=bars[-1].date,
+        )
+
+    @staticmethod
+    def _compute_volume_summary(bars: List[StockOHLCV]) -> MarketVolumeSummary:
+        if not bars:
+            return MarketVolumeSummary()
+        latest = bars[-1]
+        trailing_20 = [bar.volume for bar in bars[-20:]]
+        trailing_60 = [bar.volume for bar in bars[-60:]]
+        avg_20 = float(np.mean(trailing_20)) if trailing_20 else None
+        avg_60 = float(np.mean(trailing_60)) if trailing_60 else None
+        volume_vs_20d = None
+        if avg_20 and avg_20 > 0:
+            volume_vs_20d = round(((latest.volume - avg_20) / avg_20) * 100, 2)
+        return MarketVolumeSummary(
+            latest_volume=latest.volume,
+            average_20d_volume=round(avg_20, 2) if avg_20 is not None else None,
+            average_60d_volume=round(avg_60, 2) if avg_60 is not None else None,
+            volume_vs_20d_pct=volume_vs_20d,
+            as_of_date=latest.date,
+        )
+
+    @staticmethod
+    def _build_data_quality(
+        *,
+        source: str,
+        freshness_status: str,
+        requested_period: str,
+        latest_trading_date: str | None,
+        used_live_refresh: bool,
+        used_stale_cache_fallback: bool,
+        detail_note: str,
+    ) -> MarketDataQuality:
+        return MarketDataQuality(
+            source=source,
+            freshness_status=freshness_status,
+            used_live_refresh=used_live_refresh,
+            used_stale_cache_fallback=used_stale_cache_fallback,
+            requested_period=requested_period,
+            last_updated=datetime.utcnow().replace(microsecond=0).isoformat() + "Z",
+            latest_trading_date=latest_trading_date,
+            detail_note=detail_note,
+        )
+
+    def _get_stock_ohlcv_with_metadata(
+        self,
+        ticker: str,
+        period: str = DEFAULT_OHLCV_PERIOD,
+        table: str = "stocks",
+    ) -> tuple[List[StockOHLCV], MarketDataQuality]:
+        ticker = ticker.upper()
+        period_days = {
+            "1w": 7,
+            "1mo": 30,
+            "3mo": 90,
+            "6mo": 180,
+            "1y": 365,
+            "2y": 730,
+            "5y": 1825,
+        }.get(period, DEFAULT_OHLCV_DAYS)
+
+        with get_db() as conn:
+            tickers = self._query_tickers(ticker, table)
+            placeholders = ",".join("?" for _ in tickers)
+            rows = conn.execute(
+                f"""SELECT * FROM {table}
+                    WHERE ticker IN ({placeholders})
+                    ORDER BY date DESC
+                    LIMIT ?""",
+                (*tickers, period_days),
+            ).fetchall()
+
+        if not rows:
+            logger.info("OHLCV cache miss for %s; fetching live data", ticker)
+            live_rows = self._fetch_live_ohlcv(ticker, period)
+            latest_date = live_rows[-1].date if live_rows else None
+            return live_rows, self._build_data_quality(
+                source="live_fetch",
+                freshness_status="live_refresh",
+                requested_period=period,
+                latest_trading_date=latest_date,
+                used_live_refresh=True,
+                used_stale_cache_fallback=False,
+                detail_note="Cache miss; the service fetched live data for this detail request.",
+            )
+
+        rows_fresh = self._rows_are_fresh(rows)
+        rows_cover_period = self._rows_cover_period(rows, period_days)
+        cached_rows = list(reversed(self._rows_to_ohlcv(rows)))
+        latest_cached_date = cached_rows[-1].date if cached_rows else None
+        if not rows_fresh or not rows_cover_period:
+            latest = self._latest_row_date(rows)
+            oldest = self._oldest_row_date(rows)
+            logger.info(
+                "OHLCV data for %s needs refresh; latest=%s oldest=%s requested_period=%s",
+                ticker,
+                latest.isoformat() if latest else "unknown",
+                oldest.isoformat() if oldest else "unknown",
+                period,
+            )
+            live_rows = self._fetch_live_ohlcv(ticker, period)
+            if live_rows:
+                live_rows = live_rows[-period_days:]
+                latest_live_date = live_rows[-1].date if live_rows else latest_cached_date
+                return live_rows, self._build_data_quality(
+                    source="live_refresh",
+                    freshness_status="live_refresh",
+                    requested_period=period,
+                    latest_trading_date=latest_live_date,
+                    used_live_refresh=True,
+                    used_stale_cache_fallback=False,
+                    detail_note="Local cache was incomplete or stale, so the service refreshed this detail payload from the live provider.",
+                )
+            return cached_rows, self._build_data_quality(
+                source="cache_fallback",
+                freshness_status="stale_cache",
+                requested_period=period,
+                latest_trading_date=latest_cached_date,
+                used_live_refresh=False,
+                used_stale_cache_fallback=True,
+                detail_note="Live refresh was unavailable, so this detail payload fell back to the latest cached history.",
+            )
+
+        return cached_rows, self._build_data_quality(
+            source="cache",
+            freshness_status="fresh_cache",
+            requested_period=period,
+            latest_trading_date=latest_cached_date,
+            used_live_refresh=False,
+            used_stale_cache_fallback=False,
+            detail_note="This detail payload was served from local cached history that passed freshness and coverage checks.",
+        )
+
+    @staticmethod
     def _previous_trading_day(today: date | None = None) -> date:
         day = (today or date.today()) - timedelta(days=1)
         while day.weekday() >= 5:
@@ -153,6 +385,81 @@ class MarketDataService:
             if ticker == yahoo_ticker or ticker in INDEX_DB_ALIASES.get(yahoo_ticker, []):
                 return name
         return ticker
+
+    @staticmethod
+    def _instrument_metadata_for_ticker(ticker: str) -> dict[str, str]:
+        return INSTRUMENT_METADATA.get(ticker, {"instrument_type": "index", "unit_label": "index points"})
+
+    def _build_market_regime_context(self) -> MarketRegimeContext:
+        latest_quotes: dict[str, IndexQuote] = {}
+        for name, ticker in MARKET_INDICES.items():
+            bars = self.get_stock_ohlcv(ticker, period="1mo", table="indices")
+            if len(bars) < 2:
+                continue
+            last = bars[-1].close
+            prev = bars[-2].close
+            if last is None or prev is None:
+                continue
+            latest_quotes[ticker] = IndexQuote(
+                name=name,
+                ticker=ticker,
+                instrument_type=self._instrument_metadata_for_ticker(ticker)["instrument_type"],
+                last_close=last,
+                delta=DeltaBadge.compute(last, prev),
+                sparkline=[bar.close for bar in bars[-30:] if bar.close is not None],
+            )
+
+        equity_quotes = [latest_quotes[ticker] for ticker in EQUITY_INDEX_TICKERS if ticker in latest_quotes]
+        equity_advancers = sum(1 for quote in equity_quotes if quote.delta.delta_pct > 0)
+        equity_decliners = sum(1 for quote in equity_quotes if quote.delta.delta_pct < 0)
+        breadth_ratio = round(equity_advancers / len(equity_quotes), 2) if equity_quotes else None
+
+        risk_on_signals = 0
+        risk_off_signals = 0
+
+        def score_signal(condition: bool):
+            nonlocal risk_on_signals, risk_off_signals
+            if condition:
+                risk_on_signals += 1
+            else:
+                risk_off_signals += 1
+
+        if "^GSPC" in latest_quotes:
+            score_signal(latest_quotes["^GSPC"].delta.delta_pct >= 0)
+        if "^IXIC" in latest_quotes:
+            score_signal(latest_quotes["^IXIC"].delta.delta_pct >= 0)
+        if "GC=F" in latest_quotes:
+            score_signal(latest_quotes["GC=F"].delta.delta_pct <= 0)
+        if "KRW=X" in latest_quotes:
+            score_signal(latest_quotes["KRW=X"].delta.delta_pct <= 0)
+        if "BTC-USD" in latest_quotes:
+            score_signal(latest_quotes["BTC-USD"].delta.delta_pct >= 0)
+
+        signal_count = risk_on_signals + risk_off_signals
+        if breadth_ratio is None or signal_count == 0:
+            regime_label = "unknown"
+            regime_summary = "Regime context is unavailable because there were not enough current market signals."
+        elif breadth_ratio >= 0.75 and risk_on_signals >= risk_off_signals + 2:
+            regime_label = "risk_on"
+            regime_summary = "Most tracked equity indices are advancing and cross-asset signals lean toward pro-cyclical risk appetite."
+        elif breadth_ratio <= 0.25 and risk_off_signals >= risk_on_signals + 2:
+            regime_label = "risk_off"
+            regime_summary = "Equity breadth is weak and cross-asset signals lean defensive, indicating a risk-off market regime."
+        else:
+            regime_label = "mixed"
+            regime_summary = "Breadth and cross-asset signals are mixed, so the market backdrop is not giving a clean risk-on or risk-off read."
+
+        return MarketRegimeContext(
+            regime_label=regime_label,
+            regime_summary=regime_summary,
+            equity_advancers=equity_advancers,
+            equity_decliners=equity_decliners,
+            breadth_ratio=breadth_ratio,
+            equity_index_count=len(equity_quotes),
+            risk_on_signals=risk_on_signals,
+            risk_off_signals=risk_off_signals,
+            signal_count=signal_count,
+        )
 
     def _save_ohlcv_rows(self, ticker: str, rows: List[StockOHLCV]) -> None:
         table = "indices" if ticker in MARKET_INDICES.values() else "stocks"
@@ -305,49 +612,8 @@ class MarketDataService:
         table: str = "stocks",
     ) -> List[StockOHLCV]:
         """Read OHLCV from SQLite and refresh live data if locally stale."""
-        ticker = ticker.upper()
-        period_days = {
-            "1w": 7,
-            "1mo": 30,
-            "3mo": 90,
-            "6mo": 180,
-            "1y": 365,
-            "2y": 730,
-            "5y": 1825,
-        }.get(period, DEFAULT_OHLCV_DAYS)
-
-        with get_db() as conn:
-            tickers = self._query_tickers(ticker, table)
-            placeholders = ",".join("?" for _ in tickers)
-            rows = conn.execute(
-                f"""SELECT * FROM {table}
-                    WHERE ticker IN ({placeholders})
-                    ORDER BY date DESC
-                    LIMIT ?""",
-                (*tickers, period_days),
-            ).fetchall()
-
-        if not rows:
-            logger.info("OHLCV cache miss for %s; fetching live data", ticker)
-            return self._fetch_live_ohlcv(ticker, period)
-
-        rows_fresh = self._rows_are_fresh(rows)
-        rows_cover_period = self._rows_cover_period(rows, period_days)
-        if not rows_fresh or not rows_cover_period:
-            latest = self._latest_row_date(rows)
-            oldest = self._oldest_row_date(rows)
-            logger.info(
-                "OHLCV data for %s needs refresh; latest=%s oldest=%s requested_period=%s",
-                ticker,
-                latest.isoformat() if latest else "unknown",
-                oldest.isoformat() if oldest else "unknown",
-                period,
-            )
-            live_rows = self._fetch_live_ohlcv(ticker, period)
-            if live_rows:
-                return live_rows[-period_days:]
-
-        return list(reversed(self._rows_to_ohlcv(rows)))
+        bars, _ = self._get_stock_ohlcv_with_metadata(ticker, period=period, table=table)
+        return bars
 
     def get_all_indices(self) -> List[IndexQuote]:
         """Return summary card for every market index."""
@@ -370,6 +636,7 @@ class MarketDataService:
                 IndexQuote(
                     name=name,
                     ticker=ticker,
+                    instrument_type=self._instrument_metadata_for_ticker(ticker)["instrument_type"],
                     last_close=last,
                     delta=delta,
                     sparkline=sparkline,
@@ -380,3 +647,31 @@ class MarketDataService:
     def get_sparkline(self, ticker: str, days: int = 30) -> List[float]:
         bars = self.get_stock_ohlcv(ticker)
         return [b.close for b in bars[-days:]]
+
+    def get_index_detail(self, ticker: str, period: str = DEFAULT_OHLCV_PERIOD) -> MarketIndexDetail:
+        normalized_ticker = ticker.upper()
+        daily_history, data_quality = self._get_stock_ohlcv_with_metadata(normalized_ticker, period=period, table="indices")
+        monthly_history = self._aggregate_monthly_bars(daily_history)
+        reverse_lookup = {value: key for key, value in MARKET_INDICES.items()}
+        name = reverse_lookup.get(normalized_ticker, normalized_ticker)
+        instrument_metadata = self._instrument_metadata_for_ticker(normalized_ticker)
+        last_close = daily_history[-1].close if daily_history else None
+
+        return MarketIndexDetail(
+            name=name,
+            ticker=normalized_ticker,
+            instrument_type=instrument_metadata["instrument_type"],
+            unit_label=instrument_metadata.get("unit_label"),
+            base_asset=instrument_metadata.get("base_asset"),
+            quote_asset=instrument_metadata.get("quote_asset"),
+            period=period,
+            as_of_date=daily_history[-1].date if daily_history else None,
+            last_close=last_close,
+            daily_history=daily_history,
+            monthly_history=monthly_history,
+            daily_indicators=self._compute_technicals(normalized_ticker, daily_history),
+            monthly_indicators=self._compute_technicals(normalized_ticker, monthly_history),
+            volume_summary=self._compute_volume_summary(daily_history),
+            data_quality=data_quality,
+            market_regime=self._build_market_regime_context() if instrument_metadata["instrument_type"] == "index" else None,
+        )

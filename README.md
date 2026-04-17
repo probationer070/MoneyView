@@ -123,10 +123,30 @@ Monte Carlo workflows for path simulation, risk analysis, valuation uncertainty,
 
 ## Quick Start
 
-Start both backend and frontend from the project root with the Windows launcher:
+Install the global command once:
 
 ```powershell
-powershell.exe -ExecutionPolicy Bypass -File scripts\start_local.ps1 -OpenBrowser
+powershell.exe -ExecutionPolicy Bypass -File scripts\install_run_command.ps1
+```
+
+Then from `cmd.exe` or PowerShell in any folder, start MoneyView with one command:
+
+```cmd
+run MoneyView
+```
+
+The global `run` command delegates to the repo-root `run.cmd` wrapper, which forwards to the canonical launcher at `scripts\start_local.ps1`.
+
+If you do not want the global command, you can still run from the project root with:
+
+```cmd
+run MoneyView
+```
+
+From PowerShell in the project root:
+
+```powershell
+.\run.cmd MoneyView
 ```
 
 The launcher:
@@ -139,6 +159,12 @@ The launcher:
 - writes persistent runtime logs under `data/cache/logs`
 - stops with an explicit backend or frontend startup error if a process does not complete
 - opens the app in the browser
+
+Direct launcher fallback:
+
+```powershell
+powershell.exe -ExecutionPolicy Bypass -File scripts\start_local.ps1 -OpenBrowser
+```
 
 Useful URLs:
 
@@ -195,8 +221,14 @@ Copy-Item config\.env.example config\.env
 
 If frontend dependencies are missing, the launcher can install them:
 
+```cmd
+run MoneyView -InstallDeps
+```
+
+From PowerShell:
+
 ```powershell
-powershell.exe -ExecutionPolicy Bypass -File scripts\start_local.ps1 -InstallDeps -OpenBrowser
+.\run.cmd MoneyView -InstallDeps
 ```
 
 Normal Quick Start also attempts that install automatically when dependencies are missing.
@@ -232,16 +264,22 @@ npm.cmd run dev
 
 Check prerequisites without starting processes:
 
+```cmd
+run MoneyView -CheckOnly
+```
+
+From PowerShell:
+
 ```powershell
-powershell.exe -ExecutionPolicy Bypass -File scripts\start_local.ps1 -CheckOnly
+.\run.cmd MoneyView -CheckOnly
 ```
 
 Other useful launcher options:
 
-```powershell
-powershell.exe -ExecutionPolicy Bypass -File scripts\start_local.ps1 -AutoPort -OpenBrowser
-powershell.exe -ExecutionPolicy Bypass -File scripts\start_local.ps1 -InstallDeps
-powershell.exe -ExecutionPolicy Bypass -File scripts\start_local.ps1 -BuildWeb -ProductionWeb
+```cmd
+run MoneyView -AutoPort
+run MoneyView -InstallDeps
+run MoneyView -BuildWeb -ProductionWeb
 ```
 
 ## Tests and Validation
