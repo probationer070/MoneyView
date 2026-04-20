@@ -1,5 +1,5 @@
-import { discoverBackendPort } from "@/app/actions/discovery";
 import { apiBaseUrlForPort, fetchApi } from "@/lib/api";
+import { readBackendPort } from "@/lib/server/backendPort";
 import { DeltaBadge } from "@/components/ui/DeltaBadge";
 import TVChart from "@/components/charts/TVChart";
 import { transformToTVCandles, transformToTVVolume } from "@/lib/transformers";
@@ -36,7 +36,7 @@ interface Technicals {
 
 export default async function TickerDetailPage({ params }: PageProps) {
   const ticker = decodeURIComponent(params.ticker).toUpperCase();
-  const backendPort = await discoverBackendPort();
+  const backendPort = readBackendPort();
   const apiBaseUrl = apiBaseUrlForPort(backendPort);
 
   // Parallel fetching from FastAPI

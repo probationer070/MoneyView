@@ -172,6 +172,13 @@ CREATE TABLE IF NOT EXISTS corporate_companies (
     updated_at TEXT NOT NULL DEFAULT ''
 );
 
+CREATE TABLE IF NOT EXISTS portfolio_preferences (
+    singleton_id            INTEGER PRIMARY KEY CHECK (singleton_id = 1),
+    total_investment_amount REAL NOT NULL DEFAULT 10000.0,
+    transaction_fee_rate    REAL NOT NULL DEFAULT 0.002,
+    updated_at              TEXT NOT NULL DEFAULT ''
+);
+
 CREATE TABLE IF NOT EXISTS corporate_comparison_snapshots (
     snapshot_date              TEXT NOT NULL,
     snapshot_taken_at          TEXT NOT NULL,
@@ -490,6 +497,11 @@ def _ensure_schema_compatibility(conn: sqlite3.Connection) -> None:
         count = len(watchlist_rows)
         if count > 0:
             conn.execute("UPDATE watchlist SET weight = ?", (1.0 / count,))
+    conn.execute(
+        """INSERT OR IGNORE INTO portfolio_preferences
+           (singleton_id, total_investment_amount, transaction_fee_rate, updated_at)
+           VALUES (1, 10000.0, 0.002, '')"""
+    )
 
 
 def get_db_path() -> Path:

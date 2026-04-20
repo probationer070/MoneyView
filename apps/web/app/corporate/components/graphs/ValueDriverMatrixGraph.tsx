@@ -1,8 +1,9 @@
 "use client";
 
-import { CartesianGrid, Cell, ReferenceLine, ResponsiveContainer, Scatter, ScatterChart, Tooltip, XAxis, YAxis, ZAxis } from "recharts";
+import { CartesianGrid, Cell, ReferenceLine, Scatter, ScatterChart, Tooltip, XAxis, YAxis, ZAxis } from "recharts";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
-import { CHART_INITIAL_DIMENSION, type DetailKey, type ValueMatrixPoint } from "./shared";
+import { ResponsiveChart } from "@/components/ui/ResponsiveChart";
+import { type DetailKey, type ValueMatrixPoint } from "./shared";
 
 export function ValueDriverMatrixGraph({
   companyName,
@@ -26,7 +27,7 @@ export function ValueDriverMatrixGraph({
         />
       </button>
       <div className="h-72 min-h-72 min-w-0">
-        <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1} initialDimension={CHART_INITIAL_DIMENSION}>
+        <ResponsiveChart minWidth={1} minHeight={1}>
           <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
             <XAxis type="number" dataKey="growth" name="Growth" tick={{ fill: "var(--text-muted)" }} />
@@ -40,7 +41,7 @@ export function ValueDriverMatrixGraph({
               ))}
             </Scatter>
           </ScatterChart>
-        </ResponsiveContainer>
+        </ResponsiveChart>
       </div>
     </div>
   );

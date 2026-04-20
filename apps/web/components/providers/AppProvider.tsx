@@ -4,7 +4,6 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import { useState, useEffect, ReactNode } from "react";
 import { Activity, AlertTriangle } from "lucide-react";
-import { discoverBackendPort } from "@/app/actions/discovery";
 import { setDynamicPort } from "@/lib/api";
 
 export function AppProvider({ children }: { children: ReactNode }) {
@@ -42,7 +41,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const explicitBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
         const port = explicitBaseUrl
           ? Number(new URL(explicitBaseUrl).port || "8000")
-          : await discoverBackendPort();
+          : await fetch("/api/runtime/backend-port", { cache: "no-store" })
+              .then(async (response) => {
+                if (!response.ok) {
+                  throw new Error(`Runtime backend port lookup failed: ${response.status}`);
+                }
+                const payload = await response.json() as { port?: number };
+                if (typeof payload.port !== "number") {
+                  throw new Error("Runtime backend port lookup returned an invalid payload.");
+                }
+                return payload.port;
+              });
         setDynamicPort(port);
 
         const res = await fetch(`http://127.0.0.1:${port}/api/v1/health`);

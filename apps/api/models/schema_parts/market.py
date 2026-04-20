@@ -133,6 +133,19 @@ class MarketDataQuality(BaseModel):
     detail_note: str = ""
 
 
+class StockPriceLookup(BaseModel):
+    """Cache-first latest-price lookup payload for interactive stock inputs."""
+
+    ticker: str
+    status: str = "ok"
+    price: Optional[float] = None
+    as_of_date: Optional[str] = None
+    source: str = ""
+    freshness_status: str = ""
+    retry_after_seconds: Optional[int] = None
+    detail_note: str = ""
+
+
 class MarketRegimeContext(BaseModel):
     """Breadth and regime context for index-style market instruments."""
 

@@ -2,8 +2,9 @@
 
 import type { CorrelationInput, CorrelationResult } from "../lib/types";
 import { AlertTriangle, Loader2, Play } from "lucide-react";
-import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Scatter, ScatterChart, Tooltip, XAxis, YAxis, ZAxis } from "recharts";
-import { CHART_INITIAL_DIMENSION, MetricCard, numberText, pct } from "./shared";
+import { Bar, BarChart, CartesianGrid, Cell, Scatter, ScatterChart, Tooltip, XAxis, YAxis, ZAxis } from "recharts";
+import { ResponsiveChart } from "@/components/ui/ResponsiveChart";
+import { MetricCard, numberText, pct } from "./shared";
 
 type Props = {
   correlationInput: CorrelationInput;
@@ -148,7 +149,7 @@ export function CorrelationModelSection({
                 <h2 className="text-lg font-black text-[var(--text-primary)]">Efficient Frontier</h2>
                 <p className="text-xs text-[var(--text-muted)]">Scatter plot of 400 random portfolios. Purple points show sampled portfolios and the brightest green point marks the highest Sharpe ratio.</p>
                 <div className="mt-4 h-80">
-                  <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1} initialDimension={CHART_INITIAL_DIMENSION}>
+                  <ResponsiveChart minWidth={1} minHeight={1}>
                     <ScatterChart>
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="risk" name="Risk sigma" tickFormatter={(value) => `${Number(value).toFixed(0)}%`} />
@@ -164,7 +165,7 @@ export function CorrelationModelSection({
                       <Scatter data={correlationResult.efficient_frontier.filter((point) => !point.is_optimal)} fill="#7c3aed" />
                       <Scatter data={correlationResult.efficient_frontier.filter((point) => point.is_optimal)} fill="#22c55e" />
                     </ScatterChart>
-                  </ResponsiveContainer>
+                  </ResponsiveChart>
                 </div>
               </section>
 
@@ -174,7 +175,7 @@ export function CorrelationModelSection({
                   <h2 className="text-lg font-black text-[var(--text-primary)]">Spearman rho Sensitivity</h2>
                   <p className="text-xs text-[var(--text-muted)]">Rank correlation between each asset return and the portfolio return, with positive exposures in green and negative exposures in red.</p>
                   <div className="mt-4 h-80">
-                    <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1} initialDimension={CHART_INITIAL_DIMENSION}>
+                    <ResponsiveChart minWidth={1} minHeight={1}>
                       <BarChart data={correlationResult.spearman_sensitivity} layout="vertical">
                         <CartesianGrid strokeDasharray="3 3" />
                         <XAxis type="number" domain={[-1, 1]} />
@@ -189,7 +190,7 @@ export function CorrelationModelSection({
                           })}
                         </Bar>
                       </BarChart>
-                    </ResponsiveContainer>
+                    </ResponsiveChart>
                   </div>
                 </div>
 

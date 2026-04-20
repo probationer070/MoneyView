@@ -706,6 +706,21 @@ def load_corporate_comparison_snapshot_version(*, snapshot_version: str) -> Corp
     return _rows_to_response(rows, snapshot_versions_for_day=snapshot_versions_for_day)
 
 
+def delete_corporate_comparison_snapshot_version(*, snapshot_version: str) -> int:
+    with get_db() as conn:
+        existing = conn.execute(
+            "SELECT COUNT(*) AS row_count FROM corporate_comparison_snapshots_v3 WHERE snapshot_version = ?",
+            (snapshot_version,),
+        ).fetchone()
+        deleted_rows = int(existing["row_count"] or 0) if existing else 0
+        if deleted_rows > 0:
+            conn.execute(
+                "DELETE FROM corporate_comparison_snapshots_v3 WHERE snapshot_version = ?",
+                (snapshot_version,),
+            )
+    return deleted_rows
+
+
 def load_corporate_comparison_stock_history(
     *,
     ticker: str,

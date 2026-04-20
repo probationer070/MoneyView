@@ -1,7 +1,8 @@
 "use client";
 
 import React from "react";
-import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
+import { Cell, Pie, PieChart, Tooltip } from "recharts";
+import { ResponsiveChart } from "@/components/ui/ResponsiveChart";
 
 interface AllocationDonutProps {
   data: Array<{ name: string; value: number }>;
@@ -15,15 +16,13 @@ const COLORS = [
   "var(--chart-5)",
   "var(--chart-6)",
 ];
-const CHART_INITIAL_DIMENSION = { width: 1, height: 1 };
-
 export function AllocationDonut({ data }: AllocationDonutProps) {
   const safeData = data.filter((d) => Number.isFinite(d.value) && d.value > 0);
 
   return (
     <div className="bg-[var(--surface-panel)] rounded-[var(--radius)] border border-[var(--border)] p-8 shadow-sm h-[320px] min-h-[320px] min-w-0">
       <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-3">Sector Allocation</h3>
-      <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1} initialDimension={CHART_INITIAL_DIMENSION}>
+      <ResponsiveChart minWidth={1} minHeight={1}>
         <PieChart>
           <Pie
             data={safeData}
@@ -42,7 +41,7 @@ export function AllocationDonut({ data }: AllocationDonutProps) {
             contentStyle={{ borderRadius: 8, border: "1px solid var(--border)" }}
           />
         </PieChart>
-      </ResponsiveContainer>
+      </ResponsiveChart>
     </div>
   );
 }

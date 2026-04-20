@@ -1,0 +1,21 @@
+{
+  "tests/api/test_watchlist_resync.py::test_watchlist_resync_replaces_existing_rows_from_json": true,
+  "tests/api/test_watchlist_resync.py::test_watchlist_resync_updates_corporate_companies_source_from_portfolio": true,
+  "tests/api/test_watchlist_resync.py::test_corporate_companies_includes_all_stock_targets_json_entries": true,
+  "tests/api/test_watchlist_resync.py::test_watchlist_resync_rejects_empty_json": true,
+  "tests/api/test_watchlist_resync.py::test_watchlist_sync_exports_db_weights_to_json": true,
+  "tests/api/test_watchlist_resync.py::test_watchlist_sync_status_tracks_last_explicit_action": true,
+  "tests/api/test_watchlist_resync.py::test_portfolio_preferences_round_trip_total_investment_amount": true,
+  "tests/api/test_corporate_comparison.py::test_corporate_comparison_defaults_to_portfolio_plus_benchmark_snapshot": true,
+  "tests/api/test_corporate_comparison.py::test_corporate_comparison_watchlist_plus_benchmark_includes_zero_weight_watchlist_rows": true,
+  "tests/api/test_corporate_comparison.py::test_corporate_comparison_custom_universe_persists_snapshot_metadata": true,
+  "tests/api/test_corporate_comparison.py::test_corporate_comparison_live_mode_returns_live_rows_without_overwriting_snapshot": true,
+  "tests/api/test_corporate_comparison.py::test_corporate_comparison_history_returns_timeline_points": true,
+  "tests/api/test_corporate_comparison.py::test_corporate_comparison_snapshot_version_returns_selected_saved_rows": true,
+  "tests/api/test_corporate_comparison.py::test_corporate_comparison_snapshot_version_can_be_deleted": true,
+  "tests/api/test_corporate_comparison.py::test_corporate_comparison_stock_history_returns_saved_metric_timeline": true,
+  "tests/api/test_corporate_comparison.py::test_corporate_bulk_dcf_reports_returns_full_reports_for_requested_tickers": true,
+  "tests/api/test_corporate_comparison.py::test_corporate_comparison_snapshot_uses_kst_business_date_and_365_day_retention": true,
+  "tests/api/test_corporate_comparison.py::test_manual_refresh_keeps_multiple_intraday_versions_for_same_kst_day": true,
+  "tests/api/test_corporate_comparison.py::test_init_db_adds_comparison_universe_columns_for_legacy_snapshot_tables": true
+}

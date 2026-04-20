@@ -1,9 +1,9 @@
-"use server";
-
 import fs from "fs";
 import path from "path";
 
-export async function discoverBackendPort(): Promise<number> {
+const DEFAULT_BACKEND_PORT = 8000;
+
+export function readBackendPort(): number {
   const target = path.join(process.cwd(), "../../data/cache/moneyview_port.json");
   try {
     if (fs.existsSync(target)) {
@@ -16,5 +16,7 @@ export async function discoverBackendPort(): Promise<number> {
   } catch (error) {
     console.error("Failed to read dynamic port file, falling back to 8000", error);
   }
-  return 8000;
+  return DEFAULT_BACKEND_PORT;
 }
+
+export { DEFAULT_BACKEND_PORT };

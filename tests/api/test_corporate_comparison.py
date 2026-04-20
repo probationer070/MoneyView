@@ -296,6 +296,48 @@ def test_corporate_comparison_snapshot_version_returns_selected_saved_rows(tmp_p
     assert [row["ticker"] for row in payload["rows"]] == ["^GSPC", "AAPL", "MSFT"]
 
 
+def test_corporate_comparison_snapshot_version_can_be_deleted(tmp_path, monkeypatch):
+    db_path = tmp_path / "moneyview.db"
+    monkeypatch.setattr(db_service, "_DB_PATH", db_path)
+    db_service.init_db()
+    _seed_watchlist()
+    _patch_comparison_sources(monkeypatch)
+
+    from apps.api.services import corporate_comparison as comparison_service
+
+    saved = comparison_service.save_corporate_comparison_snapshot(
+        snapshot_source="manual_refresh",
+        comparison_universe="portfolio_plus_benchmark",
+        benchmark_ticker="^GSPC",
+        custom_tickers=[],
+        metrics_loader=lambda ticker: {
+            "AAPL": CorporateMetrics(ticker="AAPL", growth=6, roic=18, wacc=10, debt_ratio=18, unlevered_beta=1.05, crp=0.8, reinvestment=34, fcff=92, innovation=82, market_share=64, governance=74, esg_penalty=22),
+            "MSFT": CorporateMetrics(ticker="MSFT", growth=7, roic=22, wacc=9, debt_ratio=15, unlevered_beta=0.95, crp=0.8, reinvestment=34, fcff=92, innovation=82, market_share=64, governance=74, esg_penalty=22),
+            "^GSPC": CorporateMetrics(ticker="^GSPC", growth=5, roic=10, wacc=8, debt_ratio=0, unlevered_beta=1.0, crp=0.0, reinvestment=20, fcff=92, innovation=40, market_share=100, governance=70, esg_penalty=10),
+        }[ticker],
+        price_loader=lambda _ticker: 100.0,
+        default_companies={"AAPL": {"name": "Apple", "sector": "Technology"}, "MSFT": {"name": "Microsoft", "sector": "Technology"}},
+        risk_free_rate=0.042,
+        equity_risk_premium=0.055,
+    )
+
+    client = TestClient(app)
+    response = client.delete(
+        f"/api/v1/corporate/comparison/snapshot-version?snapshot_version={saved.snapshot.snapshot_version}"
+    )
+
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert payload["snapshot_version"] == saved.snapshot.snapshot_version
+    assert payload["deleted_rows"] == 3
+
+    with db_service.get_db() as conn:
+        remaining = conn.execute(
+            "SELECT COUNT(*) AS count FROM corporate_comparison_snapshots_v3"
+        ).fetchone()
+    assert remaining["count"] == 0
+
+
 def test_corporate_comparison_stock_history_returns_saved_metric_timeline(tmp_path, monkeypatch):
     db_path = tmp_path / "moneyview.db"
     monkeypatch.setattr(db_service, "_DB_PATH", db_path)
@@ -350,6 +392,75 @@ def test_corporate_comparison_stock_history_returns_saved_metric_timeline(tmp_pa
     assert payload["points"][0]["as_of_date"] == "2026-04-11"
     assert payload["points"][0]["snapshot_source"] == "manual_refresh"
     assert payload["points"][0]["roic_minus_wacc"] == 8.0
+
+
+def test_corporate_bulk_dcf_reports_returns_full_reports_for_requested_tickers(tmp_path, monkeypatch):
+    db_path = tmp_path / "moneyview.db"
+    monkeypatch.setattr(db_service, "_DB_PATH", db_path)
+    db_service.init_db()
+    _seed_watchlist()
+    _patch_comparison_sources(monkeypatch)
+
+    from apps.api.routes import corporate as corporate_route
+
+    def fake_full_report(*, metrics, current_price, assumptions):
+        ticker = metrics.ticker
+        report_id = f"bulk-{ticker.lower()}"
+        return {
+            "summary": {
+                "report_id": report_id,
+                "ticker": ticker,
+                "estimated_value": current_price + 25.0,
+                "current_price": current_price,
+                "upside_pct": 25.0,
+                "status": "Undervalued",
+                "generated_at": "2026-04-11T12:00:00Z",
+            },
+            "assumptions": {
+                "report_id": report_id,
+                "ticker": ticker,
+                "generated_at": "2026-04-11T12:00:00Z",
+                "wacc_used": assumptions.wacc,
+                "margin_used": 0.18,
+                "growth_used": assumptions.revenue_growth_rate,
+                "fcff_used": assumptions.fcff,
+                "esg_penalty_used": assumptions.esg_penalty,
+                "terminal_growth_used": assumptions.terminal_growth_rate,
+                "enterprise_value_index": 250.0,
+            },
+            "projection_rows": [
+                {"year": 1, "projected_fcff": 97.5, "discount_factor": 1.1, "present_value": 88.6},
+            ],
+            "wacc_breakdown": {
+                "risk_free_rate": 0.042,
+                "unlevered_beta": metrics.unlevered_beta,
+                "debt_ratio": metrics.debt_ratio,
+                "tax_rate": 0.25,
+                "equity_risk_premium": 0.055,
+                "country_risk_premium": metrics.crp,
+            },
+            "terminal_cash_flow": 133.2,
+            "terminal_value": 1665.0,
+            "present_value_of_terminal": 1034.1,
+            "present_value_of_fcff": 428.3,
+            "enterprise_value": 1462.4,
+            "agency_discount": 0.945,
+            "dcf_multiple": 15.9,
+            "baseline_multiple": 12.5,
+            "fcff_scale": 1.0,
+        }
+
+    monkeypatch.setattr(corporate_route, "build_dcf_full_report", fake_full_report)
+
+    client = TestClient(app)
+    response = client.post("/api/v1/corporate/dcf/reports/bulk", json={"tickers": ["AAPL", "MSFT"]})
+
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert [report["summary"]["ticker"] for report in payload] == ["AAPL", "MSFT"]
+    assert payload[0]["summary"]["report_id"] == "bulk-aapl"
+    assert payload[1]["summary"]["report_id"] == "bulk-msft"
+    assert payload[0]["summary"]["estimated_value"] == 125.0
 
 
 def test_corporate_comparison_snapshot_uses_kst_business_date_and_365_day_retention(tmp_path, monkeypatch):

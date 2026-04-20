@@ -1,0 +1,24 @@
+API Transport Progress Samples
+
+Purpose
+- Record representative transport-progress log lines for both known-size and SSE responses.
+- These samples mirror the new observability behavior added in task 6.
+
+Known-size response example
+```text
+2026-04-19 20:22:23 | INFO     | apps.api.core.transport_progress | transport.progress method=GET path=/api/v1/stock/aapl/price status=200 bytes_sent=272 total_bytes=272 progress_pct=100.0 elapsed_ms=0.8 completed=False request_id=transport-known-size
+2026-04-19 20:22:23 | INFO     | apps.api.core.transport_progress | transport.progress method=GET path=/api/v1/stock/aapl/price status=200 bytes_sent=272 total_bytes=272 progress_pct=100.0 chunk_count=1 elapsed_ms=9.5 completed=True request_id=transport-known-size
+```
+
+SSE / phase-based response example
+```text
+2026-04-19 20:22:23 | INFO     | apps.api.core.transport_progress | transport.phase method=POST path=/api/v1/corporate/dcf/AAPL/stream phase=phase1 elapsed_ms=0.1 bytes_sent=238 chunk_count=1 completed=False request_id=transport-stream
+2026-04-19 20:22:23 | INFO     | apps.api.core.transport_progress | transport.phase method=POST path=/api/v1/corporate/dcf/AAPL/stream phase=phase2 elapsed_ms=0.9 bytes_sent=547 chunk_count=2 completed=False request_id=transport-stream
+2026-04-19 20:22:23 | INFO     | apps.api.core.transport_progress | transport.phase method=POST path=/api/v1/corporate/dcf/AAPL/stream phase=complete elapsed_ms=1.0 bytes_sent=672 chunk_count=3 completed=True request_id=transport-stream
+2026-04-19 20:22:23 | INFO     | apps.api.core.transport_progress | transport.progress method=POST path=/api/v1/corporate/dcf/AAPL/stream status=200 bytes_sent=672 chunk_count=3 elapsed_ms=2.6 completed=True request_id=transport-stream
+```
+
+Interpretation
+- Known-size responses can report `progress_pct` because `total_bytes` is known.
+- SSE progress should rely on phase and chunk visibility, not fabricated percentages.
+- Both kinds of events are intended to appear in the live console and in the JSON file log.

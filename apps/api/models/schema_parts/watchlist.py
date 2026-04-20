@@ -45,6 +45,14 @@ class WatchlistSyncStatus(BaseModel):
     json_path: str = ""
 
 
+class PortfolioPreferences(BaseModel):
+    """Persisted portfolio workspace preferences shared by allocation tools."""
+
+    total_investment_amount: float = Field(default=10_000.0, ge=0.0)
+    transaction_fee_rate: float = Field(default=0.002, ge=0.0)
+    updated_at: str = ""
+
+
 class PortfolioStock(BaseModel):
     """Portfolio watchlist card row."""
 

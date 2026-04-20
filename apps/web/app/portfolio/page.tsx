@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { type FormEvent, type KeyboardEvent as ReactKeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, ChevronRight, Plus, RefreshCw, Trash2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -69,6 +69,24 @@ interface WatchlistSyncStatus {
   source: string;
   last_updated_at: string;
   json_path: string;
+}
+
+interface PortfolioPreferences {
+  total_investment_amount: number;
+  transaction_fee_rate: number;
+  updated_at: string;
+}
+
+interface CorporateCompany {
+  ticker: string;
+  name: string;
+  sector?: string;
+  source?: string;
+}
+
+interface SelectedStockContext {
+  ticker: string;
+  fallbackStock: PortfolioStock;
 }
 
 interface CorporateComparisonRow {
@@ -187,6 +205,57 @@ interface PortfolioComparisonMetrics {
 }
 
 const PORTFOLIO_DATE_FILTERS_STORAGE_KEY = "moneyview.portfolio.dateFilters.v1";
+const PORTFOLIO_COMPARISON_CACHE_KEY = "moneyview.portfolio.comparison-cache.v1";
+const PORTFOLIO_COMPARISON_HISTORY_CACHE_KEY = "moneyview.portfolio.comparison-history-cache.v1";
+const PORTFOLIO_ATTRIBUTION_CACHE_KEY = "moneyview.portfolio.attribution-cache.v1";
+const DEFAULT_TOTAL_INVESTMENT_AMOUNT = 10_000;
+const DEFAULT_TRANSACTION_FEE_RATE = 0.002;
+
+type CachedCalculation<TSnapshot, TResult> = {
+  snapshot: TSnapshot;
+  result: TResult;
+  lastUpdatedAt: string;
+};
+
+type PortfolioComparisonRequestSnapshot = {
+  mode: "snapshot" | "live";
+  comparisonUniverse: PortfolioComparisonUniverse;
+  benchmarkTicker: string;
+  customTickersInput: string;
+  holdingsSignature: string;
+};
+
+type PortfolioComparisonHistoryRequestSnapshot = {
+  comparisonUniverse: PortfolioComparisonUniverse;
+  benchmarkTicker: string;
+  customTickersInput: string;
+  holdingsSignature: string;
+};
+
+type AttributionRequestSnapshot = {
+  tickers: string[];
+  weights: number[];
+  benchmarkTicker: string;
+  holdingStartDate: string;
+  attributionAsOfDate: string;
+};
+
+function readSessionCache<T>(key: string): T | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const rawValue = window.sessionStorage.getItem(key);
+    if (!rawValue) return null;
+    return JSON.parse(rawValue) as T;
+  } catch {
+    window.sessionStorage.removeItem(key);
+    return null;
+  }
+}
+
+function writeSessionCache<T>(key: string, value: T) {
+  if (typeof window === "undefined") return;
+  window.sessionStorage.setItem(key, JSON.stringify(value));
+}
 
 function readStoredPortfolioDateFilters() {
   if (typeof window === "undefined") {
@@ -313,6 +382,44 @@ function StockIdentity({ stock }: { stock: PortfolioStock }) {
   );
 }
 
+function mergePortfolioCompanies(companies: CorporateCompany[] | undefined, watchlist: PortfolioStock[]) {
+  const merged = new Map<string, CorporateCompany>();
+  for (const company of companies ?? []) {
+    merged.set(company.ticker.toUpperCase(), {
+      ticker: company.ticker.toUpperCase(),
+      name: company.name,
+      sector: company.sector,
+      source: company.source,
+    });
+  }
+  for (const stock of watchlist) {
+    merged.set(stock.ticker.toUpperCase(), {
+      ticker: stock.ticker.toUpperCase(),
+      name: stock.name || stock.ticker,
+      sector: stock.sector,
+      source: "watchlist",
+    });
+  }
+  return Array.from(merged.values()).sort((left, right) => left.name.localeCompare(right.name));
+}
+
+function buildBrowserPortfolioStock(company: CorporateCompany, existingStock?: PortfolioStock | null): PortfolioStock {
+  if (existingStock) {
+    return existingStock;
+  }
+
+  return {
+    ticker: company.ticker.toUpperCase(),
+    name: company.name || company.ticker.toUpperCase(),
+    sector: company.sector ?? "",
+    group_name: "browser",
+    weight: 0,
+    last_close: 0,
+    delta: { delta_pct: 0 },
+    sparkline: [],
+  };
+}
+
 // Table layout for holdings when the user switches away from card view.
 function HoldingsTable({
   watchlist,
@@ -343,7 +450,7 @@ function HoldingsTable({
             <th className="px-4 py-3 text-right font-semibold">DCF Upside</th>
             <th className="px-4 py-3 text-right font-semibold">Expected vs Market</th>
             <th className="hidden px-4 py-3 text-right font-semibold md:table-cell">Volatility</th>
-            <th className="hidden px-4 py-3 text-right font-semibold lg:table-cell">Allocation</th>
+            <th className="hidden px-4 py-3 text-right font-semibold lg:table-cell">Weight</th>
             <th className="hidden px-4 py-3 text-right font-semibold xl:table-cell">Change</th>
             <th className="hidden px-4 py-3 text-right font-semibold xl:table-cell">Action</th>
           </tr>
@@ -450,6 +557,22 @@ function formatMetricPercent(value: number | null | undefined) {
 function formatCurrencyCompact(value: number | null | undefined) {
   if (value == null || !Number.isFinite(value)) return "N/A";
   return `$${Number(value).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}`;
+}
+
+function formatCurrencyInput(value: number) {
+  if (!Number.isFinite(value)) return `${DEFAULT_TOTAL_INVESTMENT_AMOUNT}`;
+  return value.toFixed(2).replace(/\.00$/, "");
+}
+
+function clampAllocationPercent(value: number) {
+  if (!Number.isFinite(value)) return 0;
+  return Math.min(Math.max(value, 0), 100);
+}
+
+function parseAllocationPercent(value: string, fallbackPercent: number) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return clampAllocationPercent(fallbackPercent);
+  return clampAllocationPercent(parsed);
 }
 
 function metricToneClass(value: number | null | undefined) {
@@ -588,14 +711,18 @@ function SnapshotHistoryModal({
   loading,
   error,
   activeSnapshotVersion,
+  deletingSnapshotVersion,
   onSelectSnapshot,
+  onDeleteSnapshot,
   onClose,
 }: {
   history: CorporateComparisonHistoryResponse | undefined;
   loading: boolean;
   error: boolean;
   activeSnapshotVersion: string;
+  deletingSnapshotVersion: string | null;
   onSelectSnapshot: (point: CorporateComparisonHistoryPoint) => void;
+  onDeleteSnapshot: (point: CorporateComparisonHistoryPoint) => void;
   onClose: () => void;
 }) {
   useEffect(() => {
@@ -649,6 +776,7 @@ function SnapshotHistoryModal({
                     <th className="px-4 py-3 text-right font-semibold">Avg DCF</th>
                     <th className="px-4 py-3 text-right font-semibold">Market Return</th>
                     <th className="px-4 py-3 text-right font-semibold">Review</th>
+                    <th className="px-4 py-3 text-right font-semibold">Delete</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[var(--border)]/60">
@@ -677,6 +805,16 @@ function SnapshotHistoryModal({
                           {isActive ? "Selected" : "Review Snapshot"}
                         </button>
                       </td>
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          type="button"
+                          onClick={() => onDeleteSnapshot(point)}
+                          disabled={deletingSnapshotVersion === point.snapshot_version}
+                          className="inline-flex items-center justify-center rounded-[var(--radius)] border border-[var(--border)] px-3 py-1 text-xs font-semibold text-[var(--text-muted)] hover:text-[var(--delta-down)] disabled:opacity-50"
+                        >
+                          {deletingSnapshotVersion === point.snapshot_version ? "Deleting..." : "Delete"}
+                        </button>
+                      </td>
                     </tr>
                   )})}
                 </tbody>
@@ -692,6 +830,7 @@ function SnapshotHistoryModal({
 // Detail modal loads OHLCV history and paginated ticker news for the selected holding.
 function StockDetailModal({
   stock,
+  isInWatchlist,
   comparisonMetrics,
   snapshotMeta,
   comparisonUniverse,
@@ -699,10 +838,12 @@ function StockDetailModal({
   comparisonCustomTickersInput,
   activeSnapshotVersion,
   onAddToPortfolio,
+  onUpdateSector,
   onRemoveFromWatchlist,
   onClose,
 }: {
   stock: PortfolioStock;
+  isInWatchlist: boolean;
   comparisonMetrics: PortfolioComparisonMetrics;
   snapshotMeta: CorporateComparisonSnapshotMeta | null;
   comparisonUniverse: PortfolioComparisonUniverse;
@@ -710,13 +851,18 @@ function StockDetailModal({
   comparisonCustomTickersInput: string;
   activeSnapshotVersion: string;
   onAddToPortfolio: (stock: PortfolioStock) => void;
+  onUpdateSector: (stock: PortfolioStock, nextSector: string) => Promise<void>;
   onRemoveFromWatchlist: (stock: PortfolioStock) => void;
   onClose: () => void;
 }) {
   const newsContainerRef = useRef<HTMLDivElement | null>(null);
+  const previousTickerRef = useRef(stock.ticker);
   const newsPageSize = 5;
   const [timeframe, setTimeframe] = useState<"daily" | "monthly">("daily");
   const [snapshotTrendOpen, setSnapshotTrendOpen] = useState(false);
+  const [sectorDraft, setSectorDraft] = useState(stock.sector);
+  const [savingSector, setSavingSector] = useState(false);
+  const [sectorMessage, setSectorMessage] = useState<string | null>(null);
   const effectiveComparisonUniverse = snapshotMeta?.comparison_universe ?? comparisonUniverse;
   const effectiveComparisonBenchmarkTicker = snapshotMeta?.benchmark_ticker ?? comparisonBenchmarkTicker;
   const effectiveComparisonCustomTickersInput = snapshotMeta?.custom_tickers.join(", ") ?? comparisonCustomTickersInput;
@@ -827,6 +973,33 @@ function StockDetailModal({
     };
   }, [onClose]);
 
+  useEffect(() => {
+    const tickerChanged = previousTickerRef.current !== stock.ticker;
+    previousTickerRef.current = stock.ticker;
+    setSectorDraft(stock.sector);
+    if (tickerChanged) {
+      setSectorMessage(null);
+    }
+  }, [stock.sector, stock.ticker]);
+
+  const handleSaveSector = async () => {
+    const normalizedSector = sectorDraft.trim();
+    if (normalizedSector === stock.sector.trim()) {
+      setSectorMessage("Sector is already up to date.");
+      return;
+    }
+    setSavingSector(true);
+    setSectorMessage(null);
+    try {
+      await onUpdateSector(stock, normalizedSector);
+      setSectorMessage(`Saved sector for ${stock.ticker}.`);
+    } catch (error) {
+      setSectorMessage(error instanceof Error ? error.message : "Failed to save sector.");
+    } finally {
+      setSavingSector(false);
+    }
+  };
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
@@ -842,6 +1015,27 @@ function StockDetailModal({
           <div>
             <h2 className="text-2xl font-bold text-[var(--text-primary)]">{stock.name || stock.ticker}</h2>
             <p className="text-sm font-light tracking-wide text-[var(--text-muted)]">{stock.ticker}</p>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <span className="rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-1 text-xs font-semibold text-[var(--text-muted)]">
+                Sector
+              </span>
+              <input
+                type="text"
+                value={sectorDraft}
+                onChange={(event) => setSectorDraft(event.target.value)}
+                aria-label="Stock sector"
+                className="rounded-[var(--radius)] border border-[var(--border)] bg-white px-3 py-2 text-sm text-[var(--text-primary)]"
+              />
+              <button
+                type="button"
+                onClick={() => void handleSaveSector()}
+                disabled={savingSector}
+                className="inline-flex items-center justify-center rounded-[var(--radius)] border border-[var(--border)] px-3 py-2 text-xs font-semibold text-[var(--text-muted)] hover:text-[var(--text-primary)] disabled:opacity-50"
+              >
+                {savingSector ? "Saving sector..." : "Save Sector"}
+              </button>
+            </div>
+            {sectorMessage && <p className="mt-2 text-xs text-[var(--text-muted)]">{sectorMessage}</p>}
           </div>
           <div className="ml-auto mr-4 text-right">
             <p className={`text-2xl font-black tabular-nums ${priceTone}`}>
@@ -862,7 +1056,7 @@ function StockDetailModal({
         </div>
 
         {/* Modal body: price/volume chart on the left, stock-specific news feed on the right. */}
-        <div className="grid max-h-[calc(92vh-82px)] grid-cols-1 gap-4 overflow-y-auto p-5 lg:grid-cols-3">
+        <div className="grid max-h-[calc(92vh-82px)] grid-cols-1 gap-4 overflow-y-auto p-5 lg:grid-cols-[minmax(0,2fr)_minmax(22rem,1fr)]">
           <section className="lg:col-span-2 rounded-[var(--radius)] border border-[var(--border)] bg-white p-4 shadow-sm">
             <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
@@ -913,18 +1107,24 @@ function StockDetailModal({
                   onClick={() => onAddToPortfolio(stock)}
                   className="inline-flex items-center justify-center rounded-[var(--radius)] border border-[var(--border)] px-3 py-2 text-xs font-semibold text-[var(--text-muted)] hover:text-[var(--text-primary)]"
                 >
-                  {stock.weight > 0 ? "Review Portfolio Weight" : "Add To Portfolio Test"}
+                  {isInWatchlist
+                    ? stock.weight > 0
+                      ? "Review Portfolio Weight"
+                      : "Add To Portfolio"
+                    : "Add To Portfolio"}
                 </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    onRemoveFromWatchlist(stock);
-                    onClose();
-                  }}
-                  className="inline-flex items-center justify-center rounded-[var(--radius)] border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-100"
-                >
-                  Remove From Watchlist
-                </button>
+                {isInWatchlist && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onRemoveFromWatchlist(stock);
+                      onClose();
+                    }}
+                    className="inline-flex items-center justify-center rounded-[var(--radius)] border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-100"
+                  >
+                    Remove From Watchlist
+                  </button>
+                )}
               </div>
             </div>
             {detailQuery.isLoading ? (
@@ -1078,7 +1278,7 @@ function StockDetailModal({
             )}
           </section>
 
-          <section className="rounded-[var(--radius)] border border-[var(--border)] bg-white p-4 shadow-sm">
+          <section className="flex min-h-[24rem] flex-col rounded-[var(--radius)] border border-[var(--border)] bg-white p-4 shadow-sm">
             <h3 className="text-sm font-bold text-[var(--text-primary)]">
               <InfoTooltip
                 label="Stock News"
@@ -1097,7 +1297,7 @@ function StockDetailModal({
                   newsQuery.fetchNextPage();
                 }
               }}
-              className="mt-4 max-h-[500px] space-y-3 overflow-y-auto pr-1"
+              className="mt-4 min-h-0 flex-1 space-y-3 overflow-y-auto pr-1"
             >
               {newsQuery.isLoading && <p className="text-sm text-[var(--text-muted)]">Loading news...</p>}
               {!newsQuery.isLoading && news.length === 0 && (
@@ -1138,15 +1338,18 @@ export default function PortfolioPage() {
   const router = useRouter();
   const initialDateFilters = readStoredPortfolioDateFilters();
   const [holdingsView, setHoldingsView] = useState<ViewMode>("chart");
-  const [selectedStock, setSelectedStock] = useState<PortfolioStock | null>(null);
+  const [selectedStockContext, setSelectedStockContext] = useState<SelectedStockContext | null>(null);
   const [holdingStartDate, setHoldingStartDate] = useState(initialDateFilters.holdingStartDate);
   const [attributionAsOfDate, setAttributionAsOfDate] = useState(initialDateFilters.attributionAsOfDate);
   const [newTicker, setNewTicker] = useState("");
   const [newName, setNewName] = useState("");
   const [newSector, setNewSector] = useState("");
+  const [portfolioBrowserSearch, setPortfolioBrowserSearch] = useState("");
   const [addToWatchlistOnly, setAddToWatchlistOnly] = useState(true);
   const [newWeightPercent, setNewWeightPercent] = useState("");
   const [weightDrafts, setWeightDrafts] = useState<Record<string, string>>({});
+  const [editingAllocationTicker, setEditingAllocationTicker] = useState<string | null>(null);
+  const [totalInvestmentInput, setTotalInvestmentInput] = useState(`${DEFAULT_TOTAL_INVESTMENT_AMOUNT}`);
   const [importJsonArmed, setImportJsonArmed] = useState(false);
   const [mutationMessage, setMutationMessage] = useState<string | null>(null);
   const [portfolioComparisonMode, setPortfolioComparisonMode] = useState<"snapshot" | "live">("snapshot");
@@ -1154,18 +1357,61 @@ export default function PortfolioPage() {
   const [portfolioComparisonBenchmarkTicker, setPortfolioComparisonBenchmarkTicker] = useState(DEFAULT_PORTFOLIO_BENCHMARK_TICKER);
   const [portfolioComparisonCustomTickersInput, setPortfolioComparisonCustomTickersInput] = useState("NVDA, TSLA");
   const [portfolioComparisonMessage, setPortfolioComparisonMessage] = useState<string | null>(null);
+  const [portfolioAnalysisMessage, setPortfolioAnalysisMessage] = useState<string | null>(null);
   const [snapshotHistoryOpen, setSnapshotHistoryOpen] = useState(false);
   const [selectedHistoryPoint, setSelectedHistoryPoint] = useState<CorporateComparisonHistoryPoint | null>(null);
-  const [allocationModelOpen, setAllocationModelOpen] = useState(false);
   const [applyAllocationToSnapshot, setApplyAllocationToSnapshot] = useState(false);
   const [sectorFilter, setSectorFilter] = useState("All Sectors");
   const [collapsedSectors, setCollapsedSectors] = useState<Record<string, boolean>>({});
+  const [portfolioComparisonRequestedSnapshot, setPortfolioComparisonRequestedSnapshot] = useState<PortfolioComparisonRequestSnapshot | null>(
+    () => readSessionCache<CachedCalculation<PortfolioComparisonRequestSnapshot, CorporateComparisonResponse>>(PORTFOLIO_COMPARISON_CACHE_KEY)?.snapshot ?? null,
+  );
+  const [portfolioComparisonHistoryRequestedSnapshot, setPortfolioComparisonHistoryRequestedSnapshot] = useState<PortfolioComparisonHistoryRequestSnapshot | null>(
+    () => readSessionCache<CachedCalculation<PortfolioComparisonHistoryRequestSnapshot, CorporateComparisonHistoryResponse>>(PORTFOLIO_COMPARISON_HISTORY_CACHE_KEY)?.snapshot ?? null,
+  );
+  const [portfolioAttributionRequestedSnapshot, setPortfolioAttributionRequestedSnapshot] = useState<AttributionRequestSnapshot | null>(
+    () => readSessionCache<CachedCalculation<AttributionRequestSnapshot, AttributionResult>>(PORTFOLIO_ATTRIBUTION_CACHE_KEY)?.snapshot ?? null,
+  );
+  const [portfolioAnalysisRefreshToken, setPortfolioAnalysisRefreshToken] = useState<string | null>(null);
+  const [savingAllocationTickers, setSavingAllocationTickers] = useState<string[]>([]);
+  const [savingTotalInvestment, setSavingTotalInvestment] = useState(false);
+  const [cachedPortfolioComparison] = useState<CorporateComparisonResponse | null>(
+    () => readSessionCache<CachedCalculation<PortfolioComparisonRequestSnapshot, CorporateComparisonResponse>>(PORTFOLIO_COMPARISON_CACHE_KEY)?.result ?? null,
+  );
+  const [cachedPortfolioComparisonHistory] = useState<CorporateComparisonHistoryResponse | null>(
+    () => readSessionCache<CachedCalculation<PortfolioComparisonHistoryRequestSnapshot, CorporateComparisonHistoryResponse>>(PORTFOLIO_COMPARISON_HISTORY_CACHE_KEY)?.result ?? null,
+  );
+  const [cachedPortfolioAttribution] = useState<AttributionResult | null>(
+    () => readSessionCache<CachedCalculation<AttributionRequestSnapshot, AttributionResult>>(PORTFOLIO_ATTRIBUTION_CACHE_KEY)?.result ?? null,
+  );
+  const [cachedPortfolioAnalysisUpdatedAt] = useState<string | null>(() =>
+    readSessionCache<CachedCalculation<PortfolioComparisonRequestSnapshot, CorporateComparisonResponse>>(PORTFOLIO_COMPARISON_CACHE_KEY)?.lastUpdatedAt
+    ?? readSessionCache<CachedCalculation<PortfolioComparisonHistoryRequestSnapshot, CorporateComparisonHistoryResponse>>(PORTFOLIO_COMPARISON_HISTORY_CACHE_KEY)?.lastUpdatedAt
+    ?? readSessionCache<CachedCalculation<AttributionRequestSnapshot, AttributionResult>>(PORTFOLIO_ATTRIBUTION_CACHE_KEY)?.lastUpdatedAt
+    ?? null,
+  );
+  const allocationAutoSaveInFlightRef = useRef(false);
+  const totalInvestmentAutoSaveInFlightRef = useRef(false);
   const allocationSectionRef = useRef<HTMLElement | null>(null);
   const weightInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const normalizedBenchmarkTicker = portfolioComparisonBenchmarkTicker.trim().toUpperCase() || DEFAULT_PORTFOLIO_BENCHMARK_TICKER;
   const normalizedCustomTickersInput = portfolioComparisonCustomTickersInput.toUpperCase();
   const debouncedBenchmarkTicker = useDebounce(normalizedBenchmarkTicker, 400);
   const debouncedCustomTickersInput = useDebounce(normalizedCustomTickersInput, 400);
+  const debouncedWeightDraftsKey = useDebounce(JSON.stringify(weightDrafts), 450);
+  const debouncedTotalInvestmentInput = useDebounce(totalInvestmentInput, 500);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const syncHoldingsViewForViewport = () => {
+      setHoldingsView((current) => (window.innerWidth < 1024 ? "table" : current));
+    };
+
+    syncHoldingsViewForViewport();
+    window.addEventListener("resize", syncHoldingsViewForViewport);
+    return () => window.removeEventListener("resize", syncHoldingsViewForViewport);
+  }, []);
 
   useEffect(() => {
     window.localStorage.setItem(
@@ -1183,13 +1429,46 @@ export default function PortfolioPage() {
     queryFn: () => fetchApi<PortfolioStock[]>("/portfolio/watchlist"),
     staleTime: 1000 * 60,
   });
+  const companiesQuery = useQuery<CorporateCompany[]>({
+    queryKey: ["portfolio-browser-companies"],
+    queryFn: () => fetchApi<CorporateCompany[]>("/corporate/companies"),
+    staleTime: 1000 * 60 * 5,
+  });
   const syncStatusQuery = useQuery<WatchlistSyncStatus>({
     queryKey: ["portfolio-watchlist-sync-status"],
     queryFn: () => fetchApi<WatchlistSyncStatus>("/portfolio/watchlist/sync-status"),
     staleTime: 1000 * 30,
   });
+  const portfolioPreferencesQuery = useQuery<PortfolioPreferences>({
+    queryKey: ["portfolio-preferences"],
+    queryFn: () => fetchApi<PortfolioPreferences>("/portfolio/preferences"),
+    staleTime: 1000 * 60,
+  });
 
   const watchlist = watchlistQuery.data ?? EMPTY_WATCHLIST;
+  const portfolioPreferences = useMemo(() => (
+    portfolioPreferencesQuery.data ?? {
+      total_investment_amount: DEFAULT_TOTAL_INVESTMENT_AMOUNT,
+      transaction_fee_rate: DEFAULT_TRANSACTION_FEE_RATE,
+      updated_at: "",
+    }
+  ), [portfolioPreferencesQuery.data]);
+
+  useEffect(() => {
+    if (savingTotalInvestment || totalInvestmentAutoSaveInFlightRef.current) return;
+    setTotalInvestmentInput((current) => {
+      const normalizedCurrent = current.trim();
+      const nextValue = formatCurrencyInput(portfolioPreferences.total_investment_amount);
+      if (!normalizedCurrent || Number(normalizedCurrent) === portfolioPreferences.total_investment_amount) {
+        return nextValue;
+      }
+      return current;
+    });
+  }, [portfolioPreferences.total_investment_amount, savingTotalInvestment]);
+  const browserCompanies = useMemo(
+    () => mergePortfolioCompanies(companiesQuery.data, watchlist),
+    [companiesQuery.data, watchlist],
+  );
   const tickers = useMemo(() => watchlist.map((row) => row.ticker), [watchlist]);
   const storedWeights = useMemo(() => watchlist.map((row) => row.weight), [watchlist]);
   const totalStoredWeight = useMemo(
@@ -1199,6 +1478,10 @@ export default function PortfolioPage() {
   const usingStoredWeights = useMemo(
     () => storedWeights.some((weight) => weight > 0),
     [storedWeights],
+  );
+  const holdingsSignature = useMemo(
+    () => watchlist.map((stock) => `${stock.ticker}:${stock.weight.toFixed(6)}`).join("|"),
+    [watchlist],
   );
   const weights = useMemo(() => {
     if (tickers.length === 0) return [];
@@ -1236,31 +1519,98 @@ export default function PortfolioPage() {
     () => watchlist.find((stock) => stock.ticker === newTicker.trim().toUpperCase()) ?? null,
     [newTicker, watchlist],
   );
+  const selectedWatchlistStock = useMemo(
+    () => (
+      selectedStockContext
+        ? watchlist.find((stock) => stock.ticker === selectedStockContext.ticker) ?? null
+        : null
+    ),
+    [selectedStockContext, watchlist],
+  );
+  const selectedStock = selectedWatchlistStock ?? selectedStockContext?.fallbackStock ?? null;
+  const selectedStockIsInWatchlist = Boolean(selectedWatchlistStock);
+  const browserSearchResults = useMemo(() => {
+    const query = portfolioBrowserSearch.trim().toUpperCase();
+    if (!query) return browserCompanies.slice(0, 12);
+    const startsWith = browserCompanies.filter((company) =>
+      company.ticker.startsWith(query) || company.name.toUpperCase().startsWith(query),
+    );
+    const contains = browserCompanies.filter((company) =>
+      !startsWith.some((entry) => entry.ticker === company.ticker)
+      && (
+        company.ticker.includes(query)
+        || company.name.toUpperCase().includes(query)
+        || (company.sector ?? "").toUpperCase().includes(query)
+      ),
+    );
+    return [...startsWith, ...contains].slice(0, 16);
+  }, [browserCompanies, portfolioBrowserSearch]);
+  const totalDraftWeightPercent = useMemo(
+    () => watchlist.reduce((sum, stock) => sum + Math.max(Number(weightDrafts[stock.ticker] ?? (stock.weight * 100).toFixed(1)), 0), 0),
+    [watchlist, weightDrafts],
+  );
+  const draftWeightsOverflow = totalDraftWeightPercent > 100 + (WEIGHT_SUM_TOLERANCE * 100);
+  const totalInvestmentAmount = Math.max(portfolioPreferences.total_investment_amount, 0);
+  const comparisonCurrentSnapshot = useMemo<PortfolioComparisonRequestSnapshot>(() => ({
+    mode: portfolioComparisonMode,
+    comparisonUniverse: portfolioComparisonUniverse,
+    benchmarkTicker: debouncedBenchmarkTicker,
+    customTickersInput: portfolioComparisonUniverse === "custom" ? debouncedCustomTickersInput : "",
+    holdingsSignature,
+  }), [debouncedBenchmarkTicker, debouncedCustomTickersInput, holdingsSignature, portfolioComparisonMode, portfolioComparisonUniverse]);
+  const comparisonHistoryCurrentSnapshot = useMemo<PortfolioComparisonHistoryRequestSnapshot>(() => ({
+    comparisonUniverse: portfolioComparisonUniverse,
+    benchmarkTicker: debouncedBenchmarkTicker,
+    customTickersInput: portfolioComparisonUniverse === "custom" ? debouncedCustomTickersInput : "",
+    holdingsSignature,
+  }), [debouncedBenchmarkTicker, debouncedCustomTickersInput, holdingsSignature, portfolioComparisonUniverse]);
+  const attributionCurrentSnapshot = useMemo<AttributionRequestSnapshot>(() => ({
+    tickers,
+    weights,
+    benchmarkTicker: debouncedBenchmarkTicker,
+    holdingStartDate,
+    attributionAsOfDate,
+  }), [attributionAsOfDate, debouncedBenchmarkTicker, holdingStartDate, tickers, weights]);
   const portfolioComparisonQuery = useQuery<CorporateComparisonResponse>({
-    queryKey: ["portfolio-comparison-summary", portfolioComparisonMode, portfolioComparisonUniverse, debouncedBenchmarkTicker, debouncedCustomTickersInput],
-    enabled: hasHoldings,
+    queryKey: [
+      "portfolio-comparison-summary",
+      portfolioComparisonRequestedSnapshot?.mode ?? "idle",
+      portfolioComparisonRequestedSnapshot?.comparisonUniverse ?? "idle",
+      portfolioComparisonRequestedSnapshot?.benchmarkTicker ?? "idle",
+      portfolioComparisonRequestedSnapshot?.customTickersInput ?? "",
+      portfolioComparisonRequestedSnapshot?.holdingsSignature ?? "idle",
+      portfolioAnalysisRefreshToken ?? "idle",
+    ],
+    enabled: Boolean(hasHoldings && portfolioComparisonRequestedSnapshot && portfolioAnalysisRefreshToken),
     queryFn: ({ signal }) =>
       fetchApi<CorporateComparisonResponse>("/corporate/comparison", {
         signal,
         params: {
-          mode: portfolioComparisonMode,
-          comparison_universe: portfolioComparisonUniverse,
-          benchmark_ticker: debouncedBenchmarkTicker,
-          custom_tickers: portfolioComparisonUniverse === "custom" ? debouncedCustomTickersInput : "",
+          mode: portfolioComparisonRequestedSnapshot?.mode ?? "snapshot",
+          comparison_universe: portfolioComparisonRequestedSnapshot?.comparisonUniverse ?? "portfolio_plus_benchmark",
+          benchmark_ticker: portfolioComparisonRequestedSnapshot?.benchmarkTicker ?? DEFAULT_PORTFOLIO_BENCHMARK_TICKER,
+          custom_tickers: portfolioComparisonRequestedSnapshot?.customTickersInput ?? "",
         },
       }),
     staleTime: 60_000,
   });
   const portfolioComparisonHistoryQuery = useQuery<CorporateComparisonHistoryResponse>({
-    queryKey: ["portfolio-comparison-history", portfolioComparisonUniverse, debouncedBenchmarkTicker, debouncedCustomTickersInput],
-    enabled: hasHoldings,
+    queryKey: [
+      "portfolio-comparison-history",
+      portfolioComparisonHistoryRequestedSnapshot?.comparisonUniverse ?? "idle",
+      portfolioComparisonHistoryRequestedSnapshot?.benchmarkTicker ?? "idle",
+      portfolioComparisonHistoryRequestedSnapshot?.customTickersInput ?? "",
+      portfolioComparisonHistoryRequestedSnapshot?.holdingsSignature ?? "idle",
+      portfolioAnalysisRefreshToken ?? "idle",
+    ],
+    enabled: Boolean(hasHoldings && portfolioComparisonHistoryRequestedSnapshot && portfolioAnalysisRefreshToken),
     queryFn: ({ signal }) =>
       fetchApi<CorporateComparisonHistoryResponse>("/corporate/comparison/history", {
         signal,
         params: {
-          comparison_universe: portfolioComparisonUniverse,
-          benchmark_ticker: debouncedBenchmarkTicker,
-          custom_tickers: portfolioComparisonUniverse === "custom" ? debouncedCustomTickersInput : "",
+          comparison_universe: portfolioComparisonHistoryRequestedSnapshot?.comparisonUniverse ?? "portfolio_plus_benchmark",
+          benchmark_ticker: portfolioComparisonHistoryRequestedSnapshot?.benchmarkTicker ?? DEFAULT_PORTFOLIO_BENCHMARK_TICKER,
+          custom_tickers: portfolioComparisonHistoryRequestedSnapshot?.customTickersInput ?? "",
           limit: 30,
         },
     }),
@@ -1281,19 +1631,29 @@ export default function PortfolioPage() {
 
   // Attribution uses saved watchlist weights when present, otherwise falls back to equal weight.
   const attributionQuery = useQuery<AttributionResult>({
-    queryKey: ["portfolio-attribution", tickers.join(","), weights.join(","), "5y", debouncedBenchmarkTicker, "USD", holdingStartDate, attributionAsOfDate],
-    enabled: canRunAttribution,
+    queryKey: [
+      "portfolio-attribution",
+      portfolioAttributionRequestedSnapshot?.tickers.join(",") ?? "idle",
+      portfolioAttributionRequestedSnapshot?.weights.join(",") ?? "idle",
+      "5y",
+      portfolioAttributionRequestedSnapshot?.benchmarkTicker ?? "idle",
+      "USD",
+      portfolioAttributionRequestedSnapshot?.holdingStartDate ?? "",
+      portfolioAttributionRequestedSnapshot?.attributionAsOfDate ?? "",
+      portfolioAnalysisRefreshToken ?? "idle",
+    ],
+    enabled: Boolean(canRunAttribution && portfolioAttributionRequestedSnapshot && portfolioAnalysisRefreshToken),
     queryFn: () =>
       fetchApi<AttributionResult>("/portfolio/attribution", {
         method: "POST",
         body: JSON.stringify({
-          tickers,
-          weights,
-          benchmark: debouncedBenchmarkTicker,
+          tickers: portfolioAttributionRequestedSnapshot?.tickers ?? [],
+          weights: portfolioAttributionRequestedSnapshot?.weights ?? [],
+          benchmark: portfolioAttributionRequestedSnapshot?.benchmarkTicker ?? DEFAULT_PORTFOLIO_BENCHMARK_TICKER,
           period: "5y",
           currency: "USD",
-          date_from: holdingStartDate || null,
-          as_of_date: attributionAsOfDate || null,
+          date_from: portfolioAttributionRequestedSnapshot?.holdingStartDate || null,
+          as_of_date: portfolioAttributionRequestedSnapshot?.attributionAsOfDate || null,
           attribution_method: "brinson_fachler_arithmetic",
           allow_synthetic_fallback: true,
           allow_benchmark_proxy: true,
@@ -1303,18 +1663,71 @@ export default function PortfolioPage() {
   });
 
   // Chart adapters convert domain attribution data into display-ready allocation/effects datasets.
-  const allocationData = attributionQuery.data ? toAllocationDonutData(attributionQuery.data) : [];
-  const waterfallData = attributionQuery.data ? toAttributionWaterfallData(attributionQuery.data) : [];
-  const shouldShowAttribution = hasHoldings && !attributionQuery.isError;
+  const comparisonData = portfolioComparisonQuery.data ?? cachedPortfolioComparison;
+  const comparisonHistoryData = portfolioComparisonHistoryQuery.data ?? cachedPortfolioComparisonHistory;
+  const attributionData = attributionQuery.data ?? cachedPortfolioAttribution;
+  const allocationData = attributionData ? toAllocationDonutData(attributionData) : [];
+  const waterfallData = attributionData ? toAttributionWaterfallData(attributionData) : [];
+  const shouldShowAttribution = hasHoldings && !attributionQuery.isError && Boolean(attributionData);
   const activeComparisonData = portfolioComparisonMode === "snapshot" && selectedSnapshotQuery.data
     ? selectedSnapshotQuery.data
-    : portfolioComparisonQuery.data;
+    : comparisonData;
   const activeSnapshotMeta = activeComparisonData?.snapshot ?? null;
-  const recentSnapshotPoints = portfolioComparisonHistoryQuery.data?.points.slice(0, 3) ?? [];
+  const recentSnapshotPoints = comparisonHistoryData?.points.slice(0, 3) ?? [];
   const portfolioComparisonCalculating = normalizedBenchmarkTicker !== debouncedBenchmarkTicker
     || (portfolioComparisonUniverse === "custom" && normalizedCustomTickersInput !== debouncedCustomTickersInput)
     || portfolioComparisonQuery.isFetching
+    || portfolioComparisonHistoryQuery.isFetching
+    || attributionQuery.isFetching
     || selectedSnapshotQuery.isFetching;
+  const portfolioAnalysisDisplayLastUpdatedAt = useMemo(() => {
+    const candidates = [
+      portfolioComparisonQuery.data ? new Date(portfolioComparisonQuery.dataUpdatedAt).toISOString() : null,
+      portfolioComparisonHistoryQuery.data ? new Date(portfolioComparisonHistoryQuery.dataUpdatedAt).toISOString() : null,
+      attributionQuery.data ? new Date(attributionQuery.dataUpdatedAt).toISOString() : null,
+      cachedPortfolioAnalysisUpdatedAt,
+    ].filter((value): value is string => Boolean(value));
+    if (candidates.length === 0) return null;
+    return candidates.sort((left, right) => new Date(right).getTime() - new Date(left).getTime())[0];
+  }, [
+    attributionQuery.data,
+    attributionQuery.dataUpdatedAt,
+    cachedPortfolioAnalysisUpdatedAt,
+    portfolioComparisonHistoryQuery.data,
+    portfolioComparisonHistoryQuery.dataUpdatedAt,
+    portfolioComparisonQuery.data,
+    portfolioComparisonQuery.dataUpdatedAt,
+  ]);
+  const portfolioComparisonIsStale = Boolean(
+    portfolioComparisonRequestedSnapshot
+    && (
+      portfolioComparisonRequestedSnapshot.mode !== comparisonCurrentSnapshot.mode
+      || portfolioComparisonRequestedSnapshot.comparisonUniverse !== comparisonCurrentSnapshot.comparisonUniverse
+      || portfolioComparisonRequestedSnapshot.benchmarkTicker !== comparisonCurrentSnapshot.benchmarkTicker
+      || portfolioComparisonRequestedSnapshot.customTickersInput !== comparisonCurrentSnapshot.customTickersInput
+      || portfolioComparisonRequestedSnapshot.holdingsSignature !== comparisonCurrentSnapshot.holdingsSignature
+    ),
+  );
+  const portfolioComparisonHistoryIsStale = Boolean(
+    portfolioComparisonHistoryRequestedSnapshot
+    && (
+      portfolioComparisonHistoryRequestedSnapshot.comparisonUniverse !== comparisonHistoryCurrentSnapshot.comparisonUniverse
+      || portfolioComparisonHistoryRequestedSnapshot.benchmarkTicker !== comparisonHistoryCurrentSnapshot.benchmarkTicker
+      || portfolioComparisonHistoryRequestedSnapshot.customTickersInput !== comparisonHistoryCurrentSnapshot.customTickersInput
+      || portfolioComparisonHistoryRequestedSnapshot.holdingsSignature !== comparisonHistoryCurrentSnapshot.holdingsSignature
+    ),
+  );
+  const portfolioAttributionIsStale = Boolean(
+    portfolioAttributionRequestedSnapshot
+    && (
+      portfolioAttributionRequestedSnapshot.benchmarkTicker !== attributionCurrentSnapshot.benchmarkTicker
+      || portfolioAttributionRequestedSnapshot.holdingStartDate !== attributionCurrentSnapshot.holdingStartDate
+      || portfolioAttributionRequestedSnapshot.attributionAsOfDate !== attributionCurrentSnapshot.attributionAsOfDate
+      || portfolioAttributionRequestedSnapshot.tickers.join(",") !== attributionCurrentSnapshot.tickers.join(",")
+      || portfolioAttributionRequestedSnapshot.weights.join(",") !== attributionCurrentSnapshot.weights.join(",")
+    ),
+  );
+  const portfolioAnalysisIsStale = portfolioComparisonIsStale || portfolioComparisonHistoryIsStale || portfolioAttributionIsStale;
   const comparisonMetricsByTicker = useMemo<Record<string, PortfolioComparisonMetrics>>(() => {
     const portfolioComparisonRows = activeComparisonData?.rows ?? [];
     return portfolioComparisonRows
@@ -1332,6 +1745,58 @@ export default function PortfolioPage() {
         return acc;
       }, {});
   }, [activeComparisonData?.rows, watchlist]);
+  const allocationRows = useMemo(() => watchlist.map((stock) => {
+    const allocationPercent = parseAllocationPercent(
+      weightDrafts[stock.ticker] ?? (stock.weight * 100).toFixed(1),
+      stock.weight * 100,
+    );
+    const allocatedAmount = totalInvestmentAmount * (allocationPercent / 100);
+    const metrics = comparisonMetricsByTicker[stock.ticker] ?? EMPTY_COMPARISON_METRICS;
+    const projectedUpsidePercent = isMetricOutlier(metrics.dcfUpside) ? null : Number(metrics.dcfUpside);
+    const grossProjectedValue = projectedUpsidePercent == null
+      ? allocatedAmount
+      : allocatedAmount * (1 + (projectedUpsidePercent / 100));
+    const transactionFeeAmount = projectedUpsidePercent == null
+      ? 0
+      : grossProjectedValue * portfolioPreferences.transaction_fee_rate;
+    const netProjectedValue = projectedUpsidePercent == null
+      ? allocatedAmount
+      : grossProjectedValue - transactionFeeAmount;
+    const finalProfit = projectedUpsidePercent == null
+      ? 0
+      : netProjectedValue - allocatedAmount;
+    return {
+      stock,
+      allocationPercent,
+      allocatedAmount,
+      grossProjectedValue,
+      netProjectedValue,
+      transactionFeeAmount,
+      finalProfit,
+      projectedUpsidePercent,
+      isSaving: savingAllocationTickers.includes(stock.ticker),
+    };
+  }), [
+    comparisonMetricsByTicker,
+    portfolioPreferences.transaction_fee_rate,
+    savingAllocationTickers,
+    totalInvestmentAmount,
+    watchlist,
+    weightDrafts,
+  ]);
+  const allocationSummary = useMemo(() => allocationRows.reduce((summary, row) => ({
+    allocatedAmount: summary.allocatedAmount + row.allocatedAmount,
+    grossProjectedValue: summary.grossProjectedValue + row.grossProjectedValue,
+    netProjectedValue: summary.netProjectedValue + row.netProjectedValue,
+    transactionFeeAmount: summary.transactionFeeAmount + row.transactionFeeAmount,
+    finalProfit: summary.finalProfit + row.finalProfit,
+  }), {
+    allocatedAmount: 0,
+    grossProjectedValue: 0,
+    netProjectedValue: 0,
+    transactionFeeAmount: 0,
+    finalProfit: 0,
+  }), [allocationRows]);
 
   const portfolioSnapshotSummary = useMemo(() => {
     const stockRows = activeComparisonData?.rows.filter((row) => row.group_name !== "benchmark") ?? [];
@@ -1359,13 +1824,81 @@ export default function PortfolioPage() {
     };
   }, [activeComparisonData?.rows]);
 
-  const refreshPortfolioQueries = async () => {
+  useEffect(() => {
+    if (!portfolioComparisonQuery.data || !portfolioComparisonRequestedSnapshot) return;
+    writeSessionCache(PORTFOLIO_COMPARISON_CACHE_KEY, {
+      snapshot: portfolioComparisonRequestedSnapshot,
+      result: portfolioComparisonQuery.data,
+      lastUpdatedAt: new Date(portfolioComparisonQuery.dataUpdatedAt).toISOString(),
+    } satisfies CachedCalculation<PortfolioComparisonRequestSnapshot, CorporateComparisonResponse>);
+  }, [portfolioComparisonQuery.data, portfolioComparisonQuery.dataUpdatedAt, portfolioComparisonRequestedSnapshot]);
+
+  useEffect(() => {
+    if (!portfolioComparisonHistoryQuery.data || !portfolioComparisonHistoryRequestedSnapshot) return;
+    writeSessionCache(PORTFOLIO_COMPARISON_HISTORY_CACHE_KEY, {
+      snapshot: portfolioComparisonHistoryRequestedSnapshot,
+      result: portfolioComparisonHistoryQuery.data,
+      lastUpdatedAt: new Date(portfolioComparisonHistoryQuery.dataUpdatedAt).toISOString(),
+    } satisfies CachedCalculation<PortfolioComparisonHistoryRequestSnapshot, CorporateComparisonHistoryResponse>);
+  }, [portfolioComparisonHistoryQuery.data, portfolioComparisonHistoryQuery.dataUpdatedAt, portfolioComparisonHistoryRequestedSnapshot]);
+
+  useEffect(() => {
+    if (!attributionQuery.data || !portfolioAttributionRequestedSnapshot) return;
+    writeSessionCache(PORTFOLIO_ATTRIBUTION_CACHE_KEY, {
+      snapshot: portfolioAttributionRequestedSnapshot,
+      result: attributionQuery.data,
+      lastUpdatedAt: new Date(attributionQuery.dataUpdatedAt).toISOString(),
+    } satisfies CachedCalculation<AttributionRequestSnapshot, AttributionResult>);
+  }, [attributionQuery.data, attributionQuery.dataUpdatedAt, portfolioAttributionRequestedSnapshot]);
+
+  const refreshPortfolioQueries = useCallback(async () => {
     const refreshedWatchlist = await watchlistQuery.refetch();
     await syncStatusQuery.refetch();
+    await queryClient.invalidateQueries({ queryKey: ["portfolio-browser-companies"] });
+    await queryClient.invalidateQueries({ queryKey: ["corporate-companies"] });
     await queryClient.invalidateQueries({ queryKey: ["portfolio-attribution"] });
     await queryClient.refetchQueries({ queryKey: ["portfolio-attribution"], type: "active" });
     return refreshedWatchlist.data ?? [];
-  };
+  }, [queryClient, syncStatusQuery, watchlistQuery]);
+
+  const patchWatchlistCache = useCallback((payload: WatchlistItemPayload) => {
+    queryClient.setQueryData<PortfolioStock[]>(["portfolio-watchlist"], (current) => (
+      (current ?? EMPTY_WATCHLIST).map((stock) => (
+        stock.ticker === payload.ticker
+          ? {
+            ...stock,
+            name: payload.name,
+            sector: payload.sector,
+            group_name: payload.group_name,
+            weight: payload.weight,
+          }
+          : stock
+      ))
+    ));
+  }, [queryClient]);
+
+  const persistWatchlistItem = useCallback(async (payload: WatchlistItemPayload) => {
+    const response = await fetchApi<WatchlistItemPayload>("/portfolio/watchlist", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    patchWatchlistCache(response);
+    await queryClient.invalidateQueries({ queryKey: ["corporate-companies"] });
+    return response;
+  }, [patchWatchlistCache, queryClient]);
+
+  const persistPortfolioPreferences = useCallback(async (nextAmount: number) => {
+    const response = await fetchApi<PortfolioPreferences>("/portfolio/preferences", {
+      method: "PUT",
+      body: JSON.stringify({
+        total_investment_amount: Math.max(nextAmount, 0),
+        transaction_fee_rate: DEFAULT_TRANSACTION_FEE_RATE,
+        updated_at: portfolioPreferences.updated_at,
+      } satisfies PortfolioPreferences),
+    });
+    queryClient.setQueryData<PortfolioPreferences>(["portfolio-preferences"], response);
+    return response;
+  }, [portfolioPreferences.updated_at, queryClient]);
 
   const addWatchlistMutation = useMutation({
     mutationFn: async (payload: WatchlistItemPayload) =>
@@ -1398,9 +1931,6 @@ export default function PortfolioPage() {
       }),
     onSuccess: async ({ ticker }) => {
       setMutationMessage(`Removed ${ticker} from the watchlist.`);
-      if (selectedStock?.ticker === ticker) {
-        setSelectedStock(null);
-      }
       await refreshPortfolioQueries();
     },
     onError: (error) => {
@@ -1414,11 +1944,8 @@ export default function PortfolioPage() {
         method: "POST",
       }),
     onSuccess: async (result) => {
-      const refreshedWatchlist = await refreshPortfolioQueries();
+      await refreshPortfolioQueries();
       setMutationMessage(`Imported ${result.item_count} holdings from stock_targets.json into the DB watchlist.`);
-      if (selectedStock && !refreshedWatchlist.some((stock) => stock.ticker === selectedStock.ticker)) {
-        setSelectedStock(null);
-      }
     },
     onError: (error) => {
       setMutationMessage(error instanceof Error ? error.message : "Failed to resync watchlist.");
@@ -1438,20 +1965,12 @@ export default function PortfolioPage() {
       setMutationMessage(error instanceof Error ? error.message : "Failed to sync watchlist to JSON.");
     },
   });
-
-  const updateWeightMutation = useMutation({
-    mutationFn: async (payload: WatchlistItemPayload) =>
-      fetchApi<WatchlistItemPayload>("/portfolio/watchlist", {
-        method: "POST",
-        body: JSON.stringify(payload),
+  const deleteSnapshotMutation = useMutation({
+    mutationFn: async (snapshotVersion: string) =>
+      fetchApi<{ snapshot_version: string; deleted_rows: number }>("/corporate/comparison/snapshot-version", {
+        method: "DELETE",
+        params: { snapshot_version: snapshotVersion },
       }),
-    onSuccess: async (payload) => {
-      setMutationMessage(`Saved allocation for ${payload.ticker}.`);
-      await refreshPortfolioQueries();
-    },
-    onError: (error) => {
-      setMutationMessage(error instanceof Error ? error.message : "Failed to save allocation.");
-    },
   });
 
   const handleAddHolding = async (event: FormEvent<HTMLFormElement>) => {
@@ -1479,56 +1998,116 @@ export default function PortfolioPage() {
     });
   };
 
+  const handleAddCandidate = async (company: CorporateCompany) => {
+    const ticker = company.ticker.trim().toUpperCase();
+    if (!ticker || watchlist.some((stock) => stock.ticker === ticker)) return;
+    setMutationMessage(null);
+    await addWatchlistMutation.mutateAsync({
+      ticker,
+      name: company.name || ticker,
+      sector: company.sector ?? "",
+      group_name: "browser",
+      weight: 0,
+    });
+    setPortfolioBrowserSearch("");
+  };
+
+  const handleOpenCompanyDetail = (company: CorporateCompany) => {
+    const existingStock = watchlist.find((stock) => stock.ticker === company.ticker) ?? null;
+    setSelectedStockContext({
+      ticker: company.ticker,
+      fallbackStock: buildBrowserPortfolioStock(company, existingStock),
+    });
+  };
+
   const handleDeleteHolding = async (stock: PortfolioStock) => {
     setMutationMessage(null);
     await deleteWatchlistMutation.mutateAsync(stock.ticker);
   };
 
-  const handleSaveWeight = async (stock: PortfolioStock) => {
-    const nextPercent = Math.max(Number(weightDrafts[stock.ticker] ?? "0"), 0);
-    setMutationMessage(null);
-    await updateWeightMutation.mutateAsync({
-      ticker: stock.ticker,
-      name: stock.name,
-      sector: stock.sector,
-      group_name: stock.group_name,
-      weight: nextPercent / 100,
-    });
-    if (applyAllocationToSnapshot) {
-      try {
-        const refreshed = await savePortfolioSnapshot();
-        await queryClient.invalidateQueries({ queryKey: ["portfolio-comparison-summary"] });
-        setSelectedHistoryPoint(null);
-        setPortfolioComparisonMode("snapshot");
-        setPortfolioComparisonMessage(`Saved allocation for ${stock.ticker} and updated the ${formatDateLabel(refreshed.snapshot.as_of_date)} snapshot.`);
-      } catch (error) {
-        setPortfolioComparisonMessage(error instanceof Error ? error.message : "Failed to update the snapshot after saving allocation.");
-      }
+  const handleUpdateStockSector = async (stock: PortfolioStock, nextSector: string) => {
+    const normalizedSector = nextSector.trim();
+    if (selectedWatchlistStock?.ticker === stock.ticker) {
+      await persistWatchlistItem({
+        ticker: stock.ticker,
+        name: stock.name || stock.ticker,
+        sector: normalizedSector,
+        group_name: stock.group_name,
+        weight: selectedWatchlistStock.weight,
+      });
+    } else {
+      await fetchApi<CorporateCompany>("/corporate/companies", {
+        method: "POST",
+        body: JSON.stringify({
+          ticker: stock.ticker,
+          name: stock.name || stock.ticker,
+          sector: normalizedSector,
+          source: "manual",
+        } satisfies CorporateCompany),
+      });
+      await queryClient.invalidateQueries({ queryKey: ["portfolio-browser-companies"] });
+      await queryClient.invalidateQueries({ queryKey: ["corporate-companies"] });
     }
+
+    setSelectedStockContext((current) => (
+      current && current.ticker === stock.ticker
+        ? {
+          ...current,
+          fallbackStock: {
+            ...current.fallbackStock,
+            sector: normalizedSector,
+          },
+        }
+        : current
+    ));
+    setMutationMessage(`Updated sector for ${stock.ticker}.`);
+  };
+
+  const handleAllocationDraftChange = (stock: PortfolioStock, nextValue: string) => {
+    setWeightDrafts((current) => ({
+      ...current,
+      [stock.ticker]: `${clampAllocationPercent(Number(nextValue || "0"))}`,
+    }));
   };
 
   const handleNormalizeWeights = async () => {
-    const normalized = normalizeWeightsToOne(watchlist.filter((stock) => stock.weight > 0));
+    const normalized = normalizeWeightsToOne(
+      watchlist
+        .map((stock) => ({
+          ...stock,
+          weight: parseAllocationPercent(weightDrafts[stock.ticker] ?? (stock.weight * 100).toFixed(1), stock.weight * 100) / 100,
+        }))
+        .filter((stock) => stock.weight > 0),
+    );
     if (normalized.length === 0) {
       setMutationMessage("Assign positive weights before normalizing.");
       return;
     }
 
     setMutationMessage(null);
-    for (const stock of normalized) {
-      await updateWeightMutation.mutateAsync({
-        ticker: stock.ticker,
-        name: stock.name,
-        sector: stock.sector,
-        group_name: stock.group_name,
-        weight: stock.weight,
-      });
+    setSavingAllocationTickers(normalized.map((stock) => stock.ticker));
+    allocationAutoSaveInFlightRef.current = true;
+    try {
+      for (const stock of normalized) {
+        await persistWatchlistItem({
+          ticker: stock.ticker,
+          name: stock.name,
+          sector: stock.sector,
+          group_name: stock.group_name,
+          weight: stock.weight,
+        });
+      }
+    } finally {
+      allocationAutoSaveInFlightRef.current = false;
+      setSavingAllocationTickers([]);
     }
+    setWeightDrafts({});
     setMutationMessage("Normalized saved stock weights to 100.0% invested.");
     if (applyAllocationToSnapshot) {
       try {
         const refreshed = await savePortfolioSnapshot();
         await queryClient.invalidateQueries({ queryKey: ["portfolio-comparison-summary"] });
+        await queryClient.invalidateQueries({ queryKey: ["portfolio-comparison-history"] });
         setSelectedHistoryPoint(null);
         setPortfolioComparisonMode("snapshot");
         setPortfolioComparisonMessage(`Normalized weights and updated the ${formatDateLabel(refreshed.snapshot.as_of_date)} snapshot.`);
@@ -1552,7 +2131,7 @@ export default function PortfolioPage() {
     setImportJsonArmed(false);
   };
 
-  const savePortfolioSnapshot = async () => (
+  const savePortfolioSnapshot = useCallback(async () => (
     fetchApi<CorporateComparisonResponse>("/corporate/comparison/snapshot", {
       method: "POST",
       params: {
@@ -1561,13 +2140,118 @@ export default function PortfolioPage() {
         custom_tickers: portfolioComparisonUniverse === "custom" ? normalizedCustomTickersInput : "",
       },
     })
-  );
+  ), [normalizedBenchmarkTicker, normalizedCustomTickersInput, portfolioComparisonUniverse]);
+
+  useEffect(() => {
+    if (allocationAutoSaveInFlightRef.current || watchlist.length === 0) return;
+    const debouncedWeightDrafts = JSON.parse(debouncedWeightDraftsKey) as Record<string, string>;
+
+    const pendingChanges = watchlist
+      .map((stock) => {
+        const rawDraft = debouncedWeightDrafts[stock.ticker];
+        if (rawDraft == null) return null;
+        const nextPercent = parseAllocationPercent(rawDraft, stock.weight * 100);
+        const currentPercent = Number((stock.weight * 100).toFixed(1));
+        if (Math.abs(nextPercent - currentPercent) < 0.05) return null;
+        return { stock, nextPercent };
+      })
+      .filter((entry): entry is { stock: PortfolioStock; nextPercent: number } => Boolean(entry));
+
+    if (pendingChanges.length === 0) return;
+
+    allocationAutoSaveInFlightRef.current = true;
+    setSavingAllocationTickers(pendingChanges.map(({ stock }) => stock.ticker));
+    void (async () => {
+      try {
+        for (const entry of pendingChanges) {
+          await persistWatchlistItem({
+            ticker: entry.stock.ticker,
+            name: entry.stock.name,
+            sector: entry.stock.sector,
+            group_name: entry.stock.group_name,
+            weight: entry.nextPercent / 100,
+          });
+        }
+        setWeightDrafts((current) => {
+          const nextDrafts = { ...current };
+          for (const entry of pendingChanges) {
+            delete nextDrafts[entry.stock.ticker];
+          }
+          return nextDrafts;
+        });
+        setMutationMessage(
+          pendingChanges.length === 1
+            ? `Saved allocation for ${pendingChanges[0].stock.ticker}.`
+            : `Saved ${pendingChanges.length} allocation changes automatically.`,
+        );
+        if (applyAllocationToSnapshot) {
+          try {
+            const refreshed = await savePortfolioSnapshot();
+            await queryClient.invalidateQueries({ queryKey: ["portfolio-comparison-summary"] });
+            await queryClient.invalidateQueries({ queryKey: ["portfolio-comparison-history"] });
+            setSelectedHistoryPoint(null);
+            setPortfolioComparisonMode("snapshot");
+            setPortfolioComparisonMessage(
+              `Saved allocation changes and updated the ${formatDateLabel(refreshed.snapshot.as_of_date)} snapshot.`,
+            );
+          } catch (error) {
+            setPortfolioComparisonMessage(error instanceof Error ? error.message : "Failed to update the snapshot after saving allocation changes.");
+          }
+        }
+      } catch (error) {
+        setMutationMessage(error instanceof Error ? error.message : "Failed to save allocation changes.");
+      } finally {
+        allocationAutoSaveInFlightRef.current = false;
+        setSavingAllocationTickers([]);
+      }
+    })();
+  }, [applyAllocationToSnapshot, debouncedWeightDraftsKey, persistWatchlistItem, queryClient, savePortfolioSnapshot, watchlist]);
+
+  useEffect(() => {
+    if (!portfolioPreferencesQuery.data || totalInvestmentAutoSaveInFlightRef.current) return;
+    const parsedAmount = Number(debouncedTotalInvestmentInput.trim());
+    if (!Number.isFinite(parsedAmount) || parsedAmount < 0) return;
+    if (Math.abs(parsedAmount - portfolioPreferences.total_investment_amount) < 0.01) return;
+
+    totalInvestmentAutoSaveInFlightRef.current = true;
+    setSavingTotalInvestment(true);
+    void persistPortfolioPreferences(parsedAmount)
+      .then((response) => {
+        setMutationMessage(`Saved total investment amount (${formatCurrencyCompact(response.total_investment_amount)}).`);
+      })
+      .catch((error: unknown) => {
+        setMutationMessage(error instanceof Error ? error.message : "Failed to save total investment amount.");
+      })
+      .finally(() => {
+        totalInvestmentAutoSaveInFlightRef.current = false;
+        setSavingTotalInvestment(false);
+      });
+  }, [debouncedTotalInvestmentInput, persistPortfolioPreferences, portfolioPreferences, portfolioPreferencesQuery.data]);
+
+  const handleAllocationValueDoubleClick = (stock: PortfolioStock) => {
+    setEditingAllocationTicker(stock.ticker);
+    window.requestAnimationFrame(() => {
+      weightInputRefs.current[stock.ticker]?.focus();
+      weightInputRefs.current[stock.ticker]?.select();
+    });
+  };
+
+  const handleAllocationInputBlur = () => {
+    setEditingAllocationTicker(null);
+  };
+
+  const handleAllocationInputKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Enter" || event.key === "Escape") {
+      event.currentTarget.blur();
+    }
+  };
 
   const handleRefreshPortfolioSnapshot = async () => {
     setPortfolioComparisonMessage(null);
     try {
       const refreshed = await savePortfolioSnapshot();
       await queryClient.invalidateQueries({ queryKey: ["portfolio-comparison-summary"] });
+      await queryClient.invalidateQueries({ queryKey: ["portfolio-comparison-history"] });
       setSelectedHistoryPoint(null);
       setPortfolioComparisonMode("snapshot");
       setPortfolioComparisonMessage(`Saved portfolio snapshot for ${formatDateLabel(refreshed.snapshot.as_of_date)}.`);
@@ -1576,16 +2260,63 @@ export default function PortfolioPage() {
     }
   };
 
+  const handleDeleteSnapshotVersion = async (snapshotVersion: string) => {
+    setPortfolioComparisonMessage(null);
+    try {
+      await deleteSnapshotMutation.mutateAsync(snapshotVersion);
+      if (selectedHistoryPoint?.snapshot_version === snapshotVersion) {
+        setSelectedHistoryPoint(null);
+      }
+      await queryClient.invalidateQueries({ queryKey: ["portfolio-comparison-history"] });
+      await queryClient.invalidateQueries({ queryKey: ["portfolio-comparison-summary"] });
+      await queryClient.invalidateQueries({ queryKey: ["portfolio-comparison-snapshot-version", snapshotVersion] });
+      setPortfolioComparisonMessage("Deleted the selected saved snapshot.");
+    } catch (error) {
+      setPortfolioComparisonMessage(error instanceof Error ? error.message : "Failed to delete the saved snapshot.");
+    }
+  };
+
+  const handleRefreshPortfolioAnalysis = () => {
+    if (!hasHoldings) {
+      setPortfolioAnalysisMessage("Add holdings before refreshing portfolio analysis.");
+      return;
+    }
+
+    setSelectedHistoryPoint(null);
+    setPortfolioComparisonRequestedSnapshot(comparisonCurrentSnapshot);
+    setPortfolioComparisonHistoryRequestedSnapshot(comparisonHistoryCurrentSnapshot);
+    setPortfolioAttributionRequestedSnapshot(canRunAttribution ? attributionCurrentSnapshot : null);
+    setPortfolioAnalysisRefreshToken(`${Date.now()}`);
+    setPortfolioAnalysisMessage(
+      canRunAttribution
+        ? "Refreshing portfolio comparison, snapshot history, and attribution."
+        : "Refreshing portfolio comparison and snapshot history. Attribution stays paused until saved weights are 100% or below.",
+    );
+  };
+
   const handleFocusAllocationForStock = (stock: PortfolioStock) => {
-    setAllocationModelOpen(true);
+    const watchlistStock = watchlist.find((entry) => entry.ticker === stock.ticker) ?? null;
+    if (!watchlistStock) {
+      setNewTicker(stock.ticker);
+      setNewName(stock.name);
+      setNewSector(stock.sector);
+      setAddToWatchlistOnly(false);
+      setNewWeightPercent(stock.weight > 0 ? (stock.weight * 100).toFixed(1) : "5");
+      setMutationMessage(`Prepared ${stock.ticker} in Manual Add so you can save it back into the portfolio with an allocation.`);
+      requestAnimationFrame(() => {
+        allocationSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+      return;
+    }
+
     setMutationMessage(
-      stock.weight > 0
-        ? `${stock.ticker} already has a saved allocation. Adjust the weight below if needed.`
-        : `Allocation controls opened for ${stock.ticker}. Set a positive weight to include it in portfolio testing.`,
+      watchlistStock.weight > 0
+        ? `${watchlistStock.ticker} already has a saved allocation. Adjust the weight below if needed.`
+        : `Allocation controls opened for ${watchlistStock.ticker}. Set a positive weight to include it in portfolio testing.`,
     );
     requestAnimationFrame(() => {
       allocationSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-      const input = weightInputRefs.current[stock.ticker];
+      const input = weightInputRefs.current[watchlistStock.ticker];
       input?.focus();
       input?.select();
     });
@@ -1598,7 +2329,7 @@ export default function PortfolioPage() {
       fallbackTitle="Portfolio Command Center Failure"
       fallbackMessage="Portfolio attribution UI failed to render safely."
     >
-      <div className="space-y-6 animate-in fade-in duration-500">
+      <div className="space-y-6 animate-in fade-in duration-500 max-w-7xl mx-auto px-4 py-6">
         {/* Header: page identity plus attribution date range and export controls. */}
         <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div className="flex flex-col self-start">
@@ -1779,6 +2510,14 @@ export default function PortfolioPage() {
                   </label>
                   <button
                     type="button"
+                    onClick={handleRefreshPortfolioAnalysis}
+                    className="inline-flex items-center justify-center gap-2 rounded-[var(--radius)] border border-[var(--border)] px-3 py-2 text-xs font-semibold text-[var(--text-primary)] hover:border-[var(--surface)]"
+                  >
+                    <RefreshCw className={`h-3.5 w-3.5 ${portfolioComparisonCalculating ? "animate-spin" : ""}`} />
+                    Refresh Analysis
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => void handleRefreshPortfolioSnapshot()}
                     className="inline-flex items-center justify-center rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs font-semibold text-black hover:border-[var(--surface)]"
                   >
@@ -1793,6 +2532,18 @@ export default function PortfolioPage() {
                   </button>
                 </div>
               </div>
+            </div>
+
+            <div className="mt-3 flex flex-col gap-2 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-panel)] p-4 text-sm text-[var(--text-muted)] sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-col gap-1">
+                <span>{portfolioAnalysisDisplayLastUpdatedAt ? `Last updated ${formatSyncTimestamp(portfolioAnalysisDisplayLastUpdatedAt)}` : "Portfolio analysis stays idle on first load until refreshed."}</span>
+                {portfolioAnalysisMessage && <span>{portfolioAnalysisMessage}</span>}
+              </div>
+              {portfolioAnalysisIsStale && (
+                <span className="inline-flex items-center rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-900">
+                  Showing stale analysis for prior inputs
+                </span>
+              )}
             </div>
 
             <div className="mt-3 grid grid-cols-1 gap-2 lg:grid-cols-3">
@@ -1822,10 +2573,10 @@ export default function PortfolioPage() {
                   View All Saved Snapshots
                 </button>
               </div>
-              {portfolioComparisonHistoryQuery.isLoading && (
+              {portfolioComparisonHistoryQuery.isLoading && !comparisonHistoryData && (
                 <p className="mt-3 text-sm text-[var(--text-muted)]">Loading saved snapshots...</p>
               )}
-              {portfolioComparisonHistoryQuery.isError && (
+              {portfolioComparisonHistoryQuery.isError && !comparisonHistoryData && (
                 <div className="mt-3">
                   <StatusPanel
                     title="Saved Snapshot List Unavailable"
@@ -1834,10 +2585,13 @@ export default function PortfolioPage() {
                   />
                 </div>
               )}
-              {!portfolioComparisonHistoryQuery.isLoading && !portfolioComparisonHistoryQuery.isError && recentSnapshotPoints.length === 0 && (
+              {!comparisonHistoryData && !portfolioComparisonHistoryQuery.isLoading && !portfolioComparisonHistoryQuery.isError && (
+                <p className="mt-3 text-sm text-[var(--text-muted)]">Saved snapshot history stays idle until you refresh portfolio analysis.</p>
+              )}
+              {comparisonHistoryData && !portfolioComparisonHistoryQuery.isLoading && !portfolioComparisonHistoryQuery.isError && recentSnapshotPoints.length === 0 && (
                 <p className="mt-3 text-sm text-[var(--text-muted)]">No saved snapshots are available yet for the current review context.</p>
               )}
-              {!portfolioComparisonHistoryQuery.isLoading && !portfolioComparisonHistoryQuery.isError && recentSnapshotPoints.length > 0 && (
+              {comparisonHistoryData && !portfolioComparisonHistoryQuery.isLoading && !portfolioComparisonHistoryQuery.isError && recentSnapshotPoints.length > 0 && (
                 <div className="mt-3 space-y-2">
                   {recentSnapshotPoints.map((point) => {
                     const isActive = point.snapshot_version === (selectedHistoryPoint?.snapshot_version ?? activeSnapshotMeta?.snapshot_version ?? "");
@@ -1850,26 +2604,36 @@ export default function PortfolioPage() {
                       >
                         <div className="space-y-1">
                           <p className="font-semibold text-[var(--text-primary)]">
-                            {formatDateLabel(point.as_of_date)} · {point.snapshot_source}
+                            {formatDateLabel(point.as_of_date)} - {point.snapshot_source}
                           </p>
                           <p className="text-xs text-[var(--text-muted)]">
                             Benchmark {point.benchmark_ticker}. Versions that day: {point.snapshot_versions_for_day}. Stocks summarized: {point.stock_count}.
                           </p>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSelectedHistoryPoint(point);
-                            setPortfolioComparisonMode("snapshot");
-                          }}
-                          className={`inline-flex items-center justify-center rounded-[var(--radius)] border px-3 py-2 text-xs font-semibold ${
-                            isActive
-                              ? "border-[var(--accent)] bg-[var(--surface-muted)] text-[var(--text-primary)]"
-                              : "border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text-primary)]"
-                          }`}
-                        >
-                          {isActive ? "Selected Snapshot" : "Review Snapshot"}
-                        </button>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedHistoryPoint(point);
+                              setPortfolioComparisonMode("snapshot");
+                            }}
+                            className={`inline-flex items-center justify-center rounded-[var(--radius)] border px-3 py-2 text-xs font-semibold ${
+                              isActive
+                                ? "border-[var(--accent)] bg-[var(--surface-muted)] text-[var(--text-primary)]"
+                                : "border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                            }`}
+                          >
+                            {isActive ? "Selected Snapshot" : "Review Snapshot"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void handleDeleteSnapshotVersion(point.snapshot_version)}
+                            disabled={deleteSnapshotMutation.isPending && deleteSnapshotMutation.variables === point.snapshot_version}
+                            className="inline-flex items-center justify-center rounded-[var(--radius)] border border-[var(--border)] px-3 py-2 text-xs font-semibold text-[var(--text-muted)] hover:text-[var(--delta-down)] disabled:opacity-50"
+                          >
+                            {deleteSnapshotMutation.isPending && deleteSnapshotMutation.variables === point.snapshot_version ? "Removing..." : "Remove Snapshot"}
+                          </button>
+                        </div>
                       </div>
                     );
                   })}
@@ -1895,17 +2659,23 @@ export default function PortfolioPage() {
               </div>
             )}
 
-            {portfolioComparisonQuery.isLoading && (
+            {portfolioComparisonQuery.isLoading && !comparisonData && (
               <p className="mt-4 text-sm text-[var(--text-muted)]">Loading portfolio snapshot summary...</p>
             )}
 
-            {portfolioComparisonQuery.isError && (
+            {portfolioComparisonQuery.isError && !comparisonData && (
               <div className="mt-4">
                 <StatusPanel
                   title="Portfolio Snapshot Summary Unavailable"
                   message="Could not load the latest portfolio comparison snapshot."
                   tone="warning"
                 />
+              </div>
+            )}
+
+            {!activeComparisonData && !portfolioComparisonQuery.isLoading && !portfolioComparisonQuery.isError && !selectedSnapshotQuery.isLoading && (
+              <div className="mt-4 rounded-[var(--radius)] border border-dashed border-[var(--border)] bg-[var(--surface-muted)] px-4 py-6 text-sm text-[var(--text-muted)]">
+                Portfolio comparison stays idle on first load. Adjust the review controls if needed, then click `Refresh Analysis` to calculate.
               </div>
             )}
 
@@ -2019,7 +2789,7 @@ export default function PortfolioPage() {
         )}
 
         {/* Attribution loading state: skeleton KPI cards and chart panels while results calculate. */}
-        {attributionQuery.isLoading && hasHoldings && (
+        {attributionQuery.isLoading && hasHoldings && !attributionData && (
           <>
             <section className="grid grid-cols-1 md:grid-cols-4 gap-3">
               <KpiSkeletonCard />
@@ -2035,18 +2805,18 @@ export default function PortfolioPage() {
         )}
 
         {/* Attribution results: KPI summary, benchmark methodology, allocation, and effects charts. */}
-        {attributionQuery.data && shouldShowAttribution && (
+        {attributionData && shouldShowAttribution && (
           <>
             <section className="grid grid-cols-1 md:grid-cols-4 gap-3">
               <div className="rounded-[var(--radius)] border border-[var(--border)] bg-white p-4">
                 <p className="text-xs text-[var(--text-muted)]">
                   <InfoTooltip
                     label="Portfolio Return"
-                    description={`Definition: total weighted return earned by the selected holdings over the attribution period. Formula: Portfolio Return = sum(weight_i x holding return_i). Step 1: calculate each holding's period return from its start and end prices. Step 2: multiply each holding return by its portfolio weight. Step 3: sum the weighted holding returns. Current status: ${portfolioStatus("return", attributionQuery.data.totals.portfolio_return)}.`}
+                    description={`Definition: total weighted return earned by the selected holdings over the attribution period. Formula: Portfolio Return = sum(weight_i x holding return_i). Step 1: calculate each holding's period return from its start and end prices. Step 2: multiply each holding return by its portfolio weight. Step 3: sum the weighted holding returns. Current status: ${portfolioStatus("return", attributionData.totals.portfolio_return)}.`}
                   />
                 </p>
                 <p className="text-xl font-bold mt-1">
-                  {(attributionQuery.data.totals.portfolio_return * 100).toFixed(1)}%
+                  {(attributionData.totals.portfolio_return * 100).toFixed(1)}%
                 </p>
               </div>
               <div className="rounded-[var(--radius)] border border-[var(--border)] bg-white p-4">
@@ -2057,29 +2827,29 @@ export default function PortfolioPage() {
                   />
                 </p>
                 <p className="text-xl font-bold mt-1">
-                  {(attributionQuery.data.totals.benchmark_return * 100).toFixed(1)}%
+                  {(attributionData.totals.benchmark_return * 100).toFixed(1)}%
                 </p>
               </div>
               <div className="rounded-[var(--radius)] border border-[var(--border)] bg-white p-4">
                 <p className="text-xs text-[var(--text-muted)]">
                   <InfoTooltip
                     label="Active Return"
-                    description={`Definition: excess return produced by the portfolio versus the benchmark. Formula: Active Return = Portfolio Return - Benchmark Return. Step 1: compute the portfolio weighted return. Step 2: compute the benchmark return over the same period and currency. Step 3: subtract benchmark return from portfolio return; positive means outperformance and negative means underperformance. Current status: ${portfolioStatus("active", attributionQuery.data.active_return)}.`}
+                    description={`Definition: excess return produced by the portfolio versus the benchmark. Formula: Active Return = Portfolio Return - Benchmark Return. Step 1: compute the portfolio weighted return. Step 2: compute the benchmark return over the same period and currency. Step 3: subtract benchmark return from portfolio return; positive means outperformance and negative means underperformance. Current status: ${portfolioStatus("active", attributionData.active_return)}.`}
                   />
                 </p>
                 <p className="text-xl font-bold mt-1">
-                  {(attributionQuery.data.active_return * 100).toFixed(1)}%
+                  {(attributionData.active_return * 100).toFixed(1)}%
                 </p>
               </div>
               <div className="rounded-[var(--radius)] border border-[var(--border)] bg-white p-4">
                 <p className="text-xs text-[var(--text-muted)]">
                   <InfoTooltip
                     label="Beta"
-                    description={`Definition: sensitivity of portfolio returns to benchmark returns. Formula: Beta = covariance(portfolio returns, benchmark returns) / variance(benchmark returns). Step 1: align portfolio and benchmark return observations over the same dates. Step 2: measure how the portfolio co-moves with the benchmark. Step 3: divide that co-movement by benchmark variance. Around 1.0 is market-like; above 1.2 is higher benchmark sensitivity. Current status: ${portfolioStatus("beta", attributionQuery.data.risk_metrics.beta)}.`}
+                    description={`Definition: sensitivity of portfolio returns to benchmark returns. Formula: Beta = covariance(portfolio returns, benchmark returns) / variance(benchmark returns). Step 1: align portfolio and benchmark return observations over the same dates. Step 2: measure how the portfolio co-moves with the benchmark. Step 3: divide that co-movement by benchmark variance. Around 1.0 is market-like; above 1.2 is higher benchmark sensitivity. Current status: ${portfolioStatus("beta", attributionData.risk_metrics.beta)}.`}
                   />
                 </p>
                 <p className="text-xl font-bold mt-1">
-                  {attributionQuery.data.risk_metrics.beta.toFixed(1)}
+                  {attributionData.risk_metrics.beta.toFixed(1)}
                 </p>
               </div>
             </section>
@@ -2094,7 +2864,7 @@ export default function PortfolioPage() {
                     />
                   </h2>
                   <p className="mt-2 text-sm text-[var(--text-muted)]">
-                    Benchmark: {attributionQuery.data.metadata.benchmark}. Return window: {holdingStartDate || "5-year lookback start"} to {attributionAsOfDate || "latest available market date"}. Methodology: this portfolio view uses saved watchlist allocations when any positive weights exist; otherwise it falls back to an equal-weight basket. If user-provided benchmark weights exist, the engine uses them directly; otherwise it uses the opted-in provider-derived sector proxy and labels the limitation in the data quality metadata.
+                    Benchmark: {attributionData.metadata.benchmark}. Return window: {holdingStartDate || "5-year lookback start"} to {attributionAsOfDate || "latest available market date"}. Methodology: this portfolio view uses saved watchlist allocations when any positive weights exist; otherwise it falls back to an equal-weight basket. If user-provided benchmark weights exist, the engine uses them directly; otherwise it uses the opted-in provider-derived sector proxy and labels the limitation in the data quality metadata.
                   </p>
                   <p className="mt-2 text-sm text-[var(--text-muted)]">
                     Calculation basis: Brinson-Fachler arithmetic attribution decomposes active return into allocation, selection, and interaction effects. Sector correlation is reviewed through the sector attribution mapping; this build does not run a live correlation optimizer for benchmark selection.
@@ -2104,13 +2874,13 @@ export default function PortfolioPage() {
                   <div className="rounded-[var(--radius)] bg-[var(--surface-muted)] p-3">
                     <div className="text-[var(--text-muted)]">Weight Source</div>
                     <div className="mt-1 font-bold text-[var(--text-primary)]">
-                      {attributionQuery.data.metadata.benchmark_weights_source.replace("_", " ")}
+                      {attributionData.metadata.benchmark_weights_source.replace("_", " ")}
                     </div>
                   </div>
                   <div className="rounded-[var(--radius)] bg-[var(--surface-muted)] p-3">
                     <div className="text-[var(--text-muted)]">Proxy Method</div>
                     <div className="mt-1 font-bold text-[var(--text-primary)]">
-                      {benchmarkMethodLabel(attributionQuery.data.metadata.data_quality?.benchmark_proxy_method)}
+                      {benchmarkMethodLabel(attributionData.metadata.data_quality?.benchmark_proxy_method)}
                     </div>
                   </div>
                 </div>
@@ -2119,7 +2889,7 @@ export default function PortfolioPage() {
 
             <section className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               <AllocationDonut data={allocationData} />
-              <AttributionWaterfall data={waterfallData} sectorBreakdowns={attributionQuery.data.sector_breakdowns} />
+              <AttributionWaterfall data={waterfallData} sectorBreakdowns={attributionData.sector_breakdowns} />
             </section>
           </>
         )}
@@ -2147,6 +2917,13 @@ export default function PortfolioPage() {
           />
         )}
 
+        {!attributionData && canRunAttribution && !attributionQuery.isLoading && !attributionQuery.isError && (
+          <StatusPanel
+            title="Attribution Idle"
+            message="Attribution stays idle on first load. Click Refresh Analysis when you want current portfolio attribution."
+          />
+        )}
+
         {weightsOverflow && (
           <StatusPanel
             title="Allocation Weights Exceed 100%"
@@ -2155,7 +2932,7 @@ export default function PortfolioPage() {
           />
         )}
 
-        {!attributionQuery.isLoading && attributionQuery.isError && hasHoldings && (
+        {!attributionQuery.isLoading && attributionQuery.isError && hasHoldings && !attributionData && (
           <StatusPanel
             title="Attribution Engine Unavailable"
             message="Attribution request failed. Check API health or input constraints and retry."
@@ -2179,139 +2956,403 @@ export default function PortfolioPage() {
           <ViewToggle value={holdingsView} onChange={setHoldingsView} />
         </section>
 
-        <section className="rounded-[var(--radius)] border border-[var(--border)] bg-white p-4 shadow-sm">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-            <form onSubmit={handleAddHolding} className="grid flex-1 grid-cols-1 gap-3 md:grid-cols-5">
-              <label className="flex flex-col gap-1 text-xs font-semibold text-[var(--text-muted)]">
-                Ticker
-                <input
-                  type="text"
-                  value={newTicker}
-                  onChange={(event) => setNewTicker(event.target.value)}
-                  placeholder="AAPL"
-                  className="rounded-[var(--radius)] border border-[var(--border)] bg-white px-3 py-2 text-sm text-[var(--text-primary)]"
-                />
-              </label>
-              <label className="flex flex-col gap-1 text-xs font-semibold text-[var(--text-muted)]">
-                Name
-                <input
-                  type="text"
-                  value={newName}
-                  onChange={(event) => setNewName(event.target.value)}
-                  placeholder="Apple"
-                  className="rounded-[var(--radius)] border border-[var(--border)] bg-white px-3 py-2 text-sm text-[var(--text-primary)]"
-                />
-              </label>
-              <label className="flex flex-col gap-1 text-xs font-semibold text-[var(--text-muted)]">
-                Sector
-                <input
-                  type="text"
-                  value={newSector}
-                  onChange={(event) => setNewSector(event.target.value)}
-                  placeholder="Technology"
-                  className="rounded-[var(--radius)] border border-[var(--border)] bg-white px-3 py-2 text-sm text-[var(--text-primary)]"
-                />
-              </label>
-              <div className="flex flex-col justify-end gap-2 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2">
-                <label className="flex items-start gap-2 text-xs font-semibold text-[var(--text-muted)]">
+        <section ref={allocationSectionRef} className="rounded-[var(--radius)] border border-[var(--border)] bg-white p-4 shadow-sm">
+          <div className="flex flex-col gap-2">
+            <h2 className="text-lg font-bold text-[var(--text-primary)]">Portfolio Allocation Workspace</h2>
+            <p className="text-sm text-[var(--text-muted)]">
+              Use the stock browser on the left to add names, then adjust allocation percentages inline on the right. Slider moves and double-click manual edits save automatically, and the total investment amount drives the money-based summaries below.
+            </p>
+          </div>
+
+          <div className="mt-4 grid min-w-72 grid-cols-1 gap-2 sm:grid-cols-5">
+            <div className="rounded-[var(--radius)] bg-[var(--surface-muted)] p-3 text-xs">
+              <div className="text-[var(--text-muted)]">Tracked Names</div>
+              <div className="mt-1 font-bold text-[var(--text-primary)]">{watchlist.length}</div>
+            </div>
+            <div className="rounded-[var(--radius)] bg-[var(--surface-muted)] p-3 text-xs">
+              <div className="text-[var(--text-muted)]">Allocated Names</div>
+              <div className="mt-1 font-bold text-[var(--text-primary)]">{allocatedHoldingsCount}</div>
+            </div>
+            <div className="rounded-[var(--radius)] bg-[var(--surface-muted)] p-3 text-xs">
+              <div className="text-[var(--text-muted)]">Total Investment</div>
+              <div className="mt-1 font-bold text-[var(--text-primary)]">{formatCurrencyCompact(totalInvestmentAmount)}</div>
+            </div>
+            <div className="rounded-[var(--radius)] bg-[var(--surface-muted)] p-3 text-xs">
+              <div className="text-[var(--text-muted)]">Invested Capital</div>
+              <div className="mt-1 font-bold text-[var(--text-primary)]">{formatCurrencyCompact(allocationSummary.allocatedAmount)}</div>
+              <div className="mt-1 text-[11px] text-[var(--text-muted)]">{formatWeightPercent(investedWeight)} allocated</div>
+            </div>
+            <div className="rounded-[var(--radius)] bg-[var(--surface-muted)] p-3 text-xs">
+              <div className="text-[var(--text-muted)]">Implied Cash</div>
+              <div className="mt-1 font-bold text-[var(--text-primary)]">{formatCurrencyCompact(totalInvestmentAmount * impliedCashWeight)}</div>
+              <div className="mt-1 text-[11px] text-[var(--text-muted)]">{formatWeightPercent(impliedCashWeight)} unallocated</div>
+            </div>
+            <div className="rounded-[var(--radius)] bg-[var(--surface-muted)] p-3 text-xs">
+              <div className="text-[var(--text-muted)]">Final Profit</div>
+              <div className={`mt-1 font-bold ${metricToneClass(allocationSummary.finalProfit)}`}>
+                {formatCurrencyCompact(allocationSummary.finalProfit)}
+              </div>
+              <div className="mt-1 text-[11px] text-[var(--text-muted)]">
+                Fee-aware using {(portfolioPreferences.transaction_fee_rate * 100).toFixed(1)}% exit fee
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.25fr)]">
+            <section className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-panel)] p-4">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <h3 className="text-sm font-bold text-[var(--text-primary)]">Stock Search Panel</h3>
+                  <p className="mt-1 text-sm text-[var(--text-muted)]">
+                    Search the saved company registry and watchlist-backed company set. You can open stock detail from here even when a ticker is not currently in the Portfolio Table.
+                  </p>
+                </div>
+                <span className="rounded-full border border-[var(--border)] bg-white px-3 py-1 text-xs font-semibold text-[var(--text-muted)]">
+                  {browserSearchResults.length} result{browserSearchResults.length === 1 ? "" : "s"}
+                </span>
+              </div>
+
+              <div className="mt-4">
+                <label className="flex flex-col gap-1 text-xs font-semibold text-[var(--text-muted)]">
+                  Search
                   <input
-                    type="checkbox"
-                    checked={addToWatchlistOnly}
-                    onChange={(event) => setAddToWatchlistOnly(event.target.checked)}
-                    aria-label="Add to Watchlist only"
-                    className="mt-0.5"
+                    type="text"
+                    value={portfolioBrowserSearch}
+                    onChange={(event) => setPortfolioBrowserSearch(event.target.value)}
+                    placeholder="Search ticker, name, or sector"
+                    aria-label="Stock browser search"
+                    className="rounded-[var(--radius)] border border-[var(--border)] bg-white px-3 py-2 text-sm text-[var(--text-primary)]"
                   />
-                  <span>
-                    Add to Watchlist only
-                    <span className="mt-1 block text-[11px] font-normal text-[var(--text-muted)]">
-                      Default keeps this name tracked at 0.0% until you opt into the portfolio model.
-                    </span>
-                  </span>
                 </label>
               </div>
-              <label className={`flex flex-col gap-1 text-xs font-semibold text-[var(--text-muted)] ${addToWatchlistOnly ? "opacity-60" : ""}`}>
-                Initial Allocation %
-                <input
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="0.1"
-                  value={newWeightPercent}
-                  onChange={(event) => setNewWeightPercent(event.target.value)}
-                  placeholder={addToWatchlistOnly ? "0.0" : "25.0"}
-                  disabled={addToWatchlistOnly}
-                  aria-label="Initial allocation percent"
-                  className="rounded-[var(--radius)] border border-[var(--border)] bg-white px-3 py-2 text-sm text-[var(--text-primary)] disabled:cursor-not-allowed disabled:bg-[var(--surface-muted)]"
-                />
-              </label>
-              <div className="flex items-end">
-                <button
-                  type="submit"
-                  disabled={addWatchlistMutation.isPending}
-                  className="inline-flex w-full items-center justify-center gap-2 rounded-[var(--radius)] bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
-                >
-                  <Plus className="h-4 w-4" />
-                  {addWatchlistMutation.isPending ? "Saving..." : "Save Manual Ticker"}
-                </button>
+
+              <div className="mt-4 max-h-96 space-y-2 overflow-y-auto pr-1">
+                {browserSearchResults.map((company) => {
+                  const alreadyAdded = watchlist.some((stock) => stock.ticker === company.ticker);
+                  return (
+                    <div
+                      key={`browser-${company.ticker}`}
+                      className={`flex items-center justify-between gap-3 rounded-[var(--radius)] border px-3 py-3 ${
+                        alreadyAdded ? "border-[var(--border)] bg-[var(--surface-muted)] opacity-70" : "border-[var(--border)] bg-white"
+                      }`}
+                    >
+                      <div className="min-w-0">
+                        <div className="font-bold text-[var(--text-primary)]">{company.ticker}</div>
+                        <div className="truncate text-sm text-[var(--text-muted)]">{company.name}</div>
+                        <div className="text-xs text-[var(--text-muted)]">{sectorLabel(company.sector ?? "")}</div>
+                      </div>
+                      <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenCompanyDetail(company)}
+                          className="inline-flex items-center justify-center rounded-[var(--radius)] border border-[var(--border)] bg-white px-3 py-2 text-xs font-semibold text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                        >
+                          Open Detail
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void handleAddCandidate(company)}
+                          disabled={alreadyAdded || addWatchlistMutation.isPending}
+                          className={`inline-flex items-center justify-center rounded-[var(--radius)] border px-3 py-2 text-xs font-semibold ${
+                            alreadyAdded
+                              ? "border-[var(--border)] bg-[var(--surface-muted)] text-[var(--text-muted)]"
+                              : "border-[var(--accent)] bg-[var(--accent)] text-white"
+                          } disabled:opacity-60`}
+                        >
+                          {alreadyAdded ? "Added" : "+ Add"}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+                {browserSearchResults.length === 0 && (
+                  <div className="rounded-[var(--radius)] border border-dashed border-[var(--border)] bg-white px-4 py-6 text-sm text-[var(--text-muted)]">
+                    No matching stocks found in the current company registry. Use the manual add form below for a custom ticker.
+                  </div>
+                )}
               </div>
-            </form>
-            <div className="flex flex-col gap-2 lg:min-w-72">
-              <button
-                type="button"
-                onClick={() => {
-                  setMutationMessage(null);
-                  void syncWatchlistMutation.mutateAsync();
-                }}
-                disabled={syncWatchlistMutation.isPending}
-                className="inline-flex items-center justify-center gap-2 self-start rounded-[var(--radius)] border border-[var(--border)] px-3 py-2 text-xs font-semibold text-[var(--text-muted)] hover:text-[var(--text-primary)] disabled:opacity-50"
+
+              <div className="mt-5 border-t border-[var(--border)] pt-4">
+                <div className="flex flex-col gap-2">
+                  <h4 className="text-sm font-bold text-[var(--text-primary)]">Manual Add</h4>
+                  <p className="text-sm text-[var(--text-muted)]">
+                    Use manual add when the stock browser does not include the ticker you want. Saving preserves any existing weight when <span className="font-semibold text-[var(--text-primary)]">Add to Watchlist only</span> stays on.
+                  </p>
+                </div>
+                <form onSubmit={handleAddHolding} className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+                  <label className="flex flex-col gap-1 text-xs font-semibold text-[var(--text-muted)]">
+                    Ticker
+                    <input
+                      type="text"
+                      value={newTicker}
+                      onChange={(event) => setNewTicker(event.target.value)}
+                      placeholder="AAPL"
+                      className="rounded-[var(--radius)] border border-[var(--border)] bg-white px-3 py-2 text-sm text-[var(--text-primary)]"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1 text-xs font-semibold text-[var(--text-muted)]">
+                    Name
+                    <input
+                      type="text"
+                      value={newName}
+                      onChange={(event) => setNewName(event.target.value)}
+                      placeholder="Apple"
+                      className="rounded-[var(--radius)] border border-[var(--border)] bg-white px-3 py-2 text-sm text-[var(--text-primary)]"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1 text-xs font-semibold text-[var(--text-muted)]">
+                    Sector
+                    <input
+                      type="text"
+                      value={newSector}
+                      onChange={(event) => setNewSector(event.target.value)}
+                      placeholder="Technology"
+                      className="rounded-[var(--radius)] border border-[var(--border)] bg-white px-3 py-2 text-sm text-[var(--text-primary)]"
+                    />
+                  </label>
+                  <label className={`flex flex-col gap-1 text-xs font-semibold text-[var(--text-muted)] ${addToWatchlistOnly ? "opacity-60" : ""}`}>
+                    Initial Allocation %
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.1"
+                      value={newWeightPercent}
+                      onChange={(event) => setNewWeightPercent(event.target.value)}
+                      placeholder={addToWatchlistOnly ? "0.0" : "25.0"}
+                      disabled={addToWatchlistOnly}
+                      aria-label="Initial allocation percent"
+                      className="rounded-[var(--radius)] border border-[var(--border)] bg-white px-3 py-2 text-sm text-[var(--text-primary)] disabled:cursor-not-allowed disabled:bg-[var(--surface-muted)]"
+                    />
+                  </label>
+                  <div className="md:col-span-2 flex flex-col gap-3 rounded-[var(--radius)] border border-[var(--border)] bg-white p-3">
+                    <label className="flex items-start gap-2 text-xs font-semibold text-[var(--text-muted)]">
+                      <input
+                        type="checkbox"
+                        checked={addToWatchlistOnly}
+                        onChange={(event) => setAddToWatchlistOnly(event.target.checked)}
+                        aria-label="Add to Watchlist only"
+                        className="mt-0.5"
+                      />
+                      <span>
+                        Add to Watchlist only
+                        <span className="mt-1 block text-[11px] font-normal text-[var(--text-muted)]">
+                          Default keeps this name tracked at 0.0% until you opt into the portfolio model.
+                        </span>
+                      </span>
+                    </label>
+                    <button
+                      type="submit"
+                      disabled={addWatchlistMutation.isPending}
+                      className="inline-flex items-center justify-center gap-2 rounded-[var(--radius)] bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                    >
+                      <Plus className="h-4 w-4" />
+                      {addWatchlistMutation.isPending ? "Saving..." : "Save Manual Ticker"}
+                    </button>
+                  </div>
+                </form>
+                {existingTicker && (
+                  <div className="mt-3 inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-800">
+                    Already in Watchlist
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-5 border-t border-[var(--border)] pt-4">
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMutationMessage(null);
+                      void syncWatchlistMutation.mutateAsync();
+                    }}
+                    disabled={syncWatchlistMutation.isPending}
+                    className="inline-flex items-center justify-center gap-2 rounded-[var(--radius)] border border-[var(--border)] px-3 py-2 text-xs font-semibold text-[var(--text-muted)] hover:text-[var(--text-primary)] disabled:opacity-50"
+                  >
+                    <RefreshCw className={`h-3.5 w-3.5 ${syncWatchlistMutation.isPending ? "animate-spin" : ""}`} />
+                    {syncWatchlistMutation.isPending ? "Exporting..." : "Export Watchlist To JSON"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void handleImportJson();
+                    }}
+                    disabled={resyncWatchlistMutation.isPending || !importJsonArmed}
+                    className="inline-flex items-center justify-center gap-2 rounded-[var(--radius)] border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900 hover:bg-amber-100 disabled:opacity-50"
+                  >
+                    <RefreshCw className={`h-3.5 w-3.5 ${resyncWatchlistMutation.isPending ? "animate-spin" : ""}`} />
+                    {resyncWatchlistMutation.isPending ? "Importing..." : "Import JSON Into DB"}
+                  </button>
+                </div>
+                <label className="mt-3 flex items-start gap-2 rounded-[var(--radius)] border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                  <input
+                    type="checkbox"
+                    checked={importJsonArmed}
+                    onChange={(event) => setImportJsonArmed(event.target.checked)}
+                    aria-label="Arm destructive JSON import"
+                    className="mt-0.5"
+                  />
+                  <span>I understand Import JSON replaces the DB watchlist from file and can overwrite saved weights.</span>
+                </label>
+                <p className="mt-3 text-sm text-[var(--text-muted)]">
+                  Export writes the current DB-backed watchlist, including weights, into `stock_targets.json`. Import is the explicit replace-from-file path and stays intentionally destructive.
+                </p>
+                <div className="mt-3 rounded-[var(--radius)] bg-white p-3 text-sm text-[var(--text-muted)]">
+                  <div>Last sync/import source: {syncStatusQuery.data?.source || "None recorded"}</div>
+                  <div>Last sync/import time: {formatSyncTimestamp(syncStatusQuery.data?.last_updated_at ?? "")}</div>
+                  <div>JSON path: {syncStatusQuery.data?.json_path || "Loading..."}</div>
+                </div>
+              </div>
+            </section>
+
+            <section className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-panel)] p-4">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <h3 className="text-sm font-bold text-[var(--text-primary)]">Portfolio Table</h3>
+                  <p className="mt-1 text-sm text-[var(--text-muted)]">
+                    Drag the slider for quick weight changes or double-click the Allocation value for exact manual input. Allocation and investment-amount changes save automatically, and watchlist removal stays in the holdings area instead of this table.
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className="inline-flex items-center gap-2 rounded-[var(--radius)] border border-[var(--border)] bg-white px-3 py-2 text-xs font-semibold text-[var(--text-muted)]">
+                    Total Investment
+                    <input
+                      type="number"
+                      min="0"
+                      step="100"
+                      value={totalInvestmentInput}
+                      onChange={(event) => setTotalInvestmentInput(event.target.value)}
+                      aria-label="Total investment amount"
+                      className="w-32 rounded-[var(--radius)] border border-[var(--border)] bg-white px-2 py-1 text-right text-xs text-[var(--text-primary)]"
+                    />
+                  </label>
+                  <label className="inline-flex items-center gap-2 rounded-[var(--radius)] border border-[var(--border)] bg-white px-3 py-2 text-xs font-semibold text-[var(--text-muted)]">
+                    <input
+                      type="checkbox"
+                      checked={applyAllocationToSnapshot}
+                      onChange={(event) => setApplyAllocationToSnapshot(event.target.checked)}
+                      aria-label="Apply allocation changes to snapshot"
+                    />
+                    Apply To Snapshot
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => void handleNormalizeWeights()}
+                    disabled={savingAllocationTickers.length > 0 || !usingStoredWeights || totalStoredWeight <= 0}
+                    className="inline-flex items-center justify-center rounded-[var(--radius)] border border-[var(--border)] px-3 py-2 text-xs font-semibold text-[var(--text-muted)] hover:text-[var(--text-primary)] disabled:opacity-50"
+                  >
+                    Normalize To 100%
+                  </button>
+                </div>
+              </div>
+
+              <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-4">
+                <div className="rounded-[var(--radius)] border border-[var(--border)] bg-white p-3 text-sm text-[var(--text-muted)]">
+                  Draft total: <span className="font-semibold text-[var(--text-primary)]">{totalDraftWeightPercent.toFixed(1)}%</span>
+                </div>
+                <div className="rounded-[var(--radius)] border border-[var(--border)] bg-white p-3 text-sm text-[var(--text-muted)]">
+                  Projected net value: <span className="font-semibold text-[var(--text-primary)]">{formatCurrencyCompact(allocationSummary.netProjectedValue)}</span>
+                </div>
+                <div className="rounded-[var(--radius)] border border-[var(--border)] bg-white p-3 text-sm text-[var(--text-muted)]">
+                  Transaction fee reserve: <span className="font-semibold text-[var(--text-primary)]">{formatCurrencyCompact(allocationSummary.transactionFeeAmount)}</span>
+                </div>
+                <div className="rounded-[var(--radius)] border border-[var(--border)] bg-white p-3 text-sm text-[var(--text-muted)]">
+                  Auto-save status: <span className="font-semibold text-[var(--text-primary)]">{savingAllocationTickers.length > 0 || savingTotalInvestment ? "Saving..." : "Synced"}</span>
+                </div>
+              </div>
+
+              {draftWeightsOverflow && (
+                <div className="mt-4 rounded-[var(--radius)] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                  Warning: draft allocation totals currently sum to {totalDraftWeightPercent.toFixed(1)}%. You can keep editing, but attribution will stay paused until saved weights are 100.0% or below.
+                </div>
+              )}
+
+              <p className="mt-3 text-xs text-[var(--text-muted)]">
+                `Final Profit` uses the current DCF upside metric for each stock and subtracts a `0.2%` transaction fee from the projected exit value. `Apply To Snapshot` keeps auto-saved allocation changes tied to today&apos;s saved comparison snapshot only when you opt in.
+              </p>
+
+              <div
+                aria-label="Portfolio table scroll region"
+                className="mt-4 max-h-[min(60vh,36rem)] overflow-auto rounded-[var(--radius)] border border-[var(--border)] bg-white"
               >
-                <RefreshCw className={`h-3.5 w-3.5 ${syncWatchlistMutation.isPending ? "animate-spin" : ""}`} />
-                {syncWatchlistMutation.isPending ? "Exporting..." : "Export Watchlist To JSON"}
-              </button>
-              <label className="flex items-start gap-2 rounded-[var(--radius)] border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-                <input
-                  type="checkbox"
-                  checked={importJsonArmed}
-                  onChange={(event) => setImportJsonArmed(event.target.checked)}
-                  aria-label="Arm destructive JSON import"
-                  className="mt-0.5"
-                />
-                <span>I understand Import JSON replaces the DB watchlist from file and can overwrite saved weights.</span>
-              </label>
-              <button
-                type="button"
-                onClick={() => {
-                  void handleImportJson();
-                }}
-                disabled={resyncWatchlistMutation.isPending || !importJsonArmed}
-                className="inline-flex items-center justify-center gap-2 self-start rounded-[var(--radius)] border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900 hover:bg-amber-100 disabled:opacity-50"
-              >
-                <RefreshCw className={`h-3.5 w-3.5 ${resyncWatchlistMutation.isPending ? "animate-spin" : ""}`} />
-                {resyncWatchlistMutation.isPending ? "Importing..." : "Import JSON Into DB"}
-              </button>
-            </div>
+                <table className="w-full min-w-[1120px] text-sm">
+                  <thead className="sticky top-0 z-10 bg-[var(--surface-muted)] text-left text-[var(--text-muted)]">
+                    <tr>
+                      <th className="px-4 py-3 font-semibold">Ticker</th>
+                      <th className="px-4 py-3 font-semibold">Name</th>
+                      <th className="px-4 py-3 text-right font-semibold">Allocation</th>
+                      <th className="px-4 py-3 font-semibold">Adjust</th>
+                      <th className="px-4 py-3 text-right font-semibold">Invested Amount</th>
+                      <th className="px-4 py-3 text-right font-semibold">Projected Net Value</th>
+                      <th className="px-4 py-3 text-right font-semibold">Final Profit</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[var(--border)]/60">
+                    {allocationRows.map((row) => (
+                      <tr key={`weight-${row.stock.ticker}`}>
+                        <td className="px-4 py-3 font-bold text-[var(--text-primary)]">{row.stock.ticker}</td>
+                        <td className="px-4 py-3 text-[var(--text-muted)]">{row.stock.name || row.stock.ticker}</td>
+                        <td className="px-4 py-3 text-right tabular-nums">
+                          {editingAllocationTicker === row.stock.ticker ? (
+                            <input
+                              type="number"
+                              min="0"
+                              max="100"
+                              step="0.1"
+                              ref={(element) => {
+                                weightInputRefs.current[row.stock.ticker] = element;
+                              }}
+                              value={weightDrafts[row.stock.ticker] ?? row.allocationPercent.toFixed(1)}
+                              onChange={(event) => handleAllocationDraftChange(row.stock, event.target.value)}
+                              onBlur={handleAllocationInputBlur}
+                              onKeyDown={handleAllocationInputKeyDown}
+                              className="w-24 rounded-[var(--radius)] border border-[var(--border)] bg-white px-2 py-1 text-right text-sm text-[var(--text-primary)]"
+                            />
+                          ) : (
+                            <button
+                              type="button"
+                              onDoubleClick={() => handleAllocationValueDoubleClick(row.stock)}
+                              className="ml-auto inline-flex rounded-[var(--radius)] border border-transparent px-2 py-1 font-semibold text-[var(--text-primary)] hover:border-[var(--border)]"
+                            >
+                              {row.allocationPercent.toFixed(1)}%
+                            </button>
+                          )}
+                          {row.isSaving && <div className="text-[11px] text-[var(--text-muted)]">Saving...</div>}
+                        </td>
+                        <td className="px-4 py-3">
+                          <input
+                            type="range"
+                            min="0"
+                            max="100"
+                            step="0.1"
+                            value={weightDrafts[row.stock.ticker] ?? row.allocationPercent.toFixed(1)}
+                            onChange={(event) => handleAllocationDraftChange(row.stock, event.target.value)}
+                            aria-label={`${row.stock.ticker} allocation slider`}
+                            className="w-full accent-[var(--accent)]"
+                          />
+                        </td>
+                        <td className="px-4 py-3 text-right tabular-nums">{formatCurrencyCompact(row.allocatedAmount)}</td>
+                        <td className="px-4 py-3 text-right tabular-nums">{formatCurrencyCompact(row.netProjectedValue)}</td>
+                        <td className={`px-4 py-3 text-right font-semibold tabular-nums ${metricToneClass(row.finalProfit)}`}>
+                          {formatCurrencyCompact(row.finalProfit)}
+                        </td>
+                      </tr>
+                    ))}
+                    {watchlist.length === 0 && (
+                      <tr>
+                        <td colSpan={7} className="px-4 py-6 text-center text-sm text-[var(--text-muted)]">
+                          Add a stock from the search panel to start building the portfolio table.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </section>
           </div>
-          <p className="mt-3 text-sm text-[var(--text-muted)]">
-            Manual add is now explicit. Saving a ticker creates or updates a tracked holding and preserves any existing saved weight when <span className="font-semibold text-[var(--text-primary)]">Add to Watchlist only</span> stays on. Turn it off only when you want to seed an initial portfolio allocation immediately.
-          </p>
-          {existingTicker && (
-            <div className="mt-2 inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-800">
-              Already in Watchlist
-            </div>
-          )}
-          <p className="mt-2 text-sm text-[var(--text-muted)]">
-            Export writes the current DB-backed watchlist, including weights, into `stock_targets.json`. Import is the explicit replace-from-file path and stays intentionally destructive.
-          </p>
-          <p className="mt-2 text-sm text-amber-800">
-            Warning: use `Export Watchlist To JSON` for the safe DB-to-file path. `Import JSON Into DB` is only for explicit file-driven replacement.
-          </p>
-          <div className="mt-3 rounded-[var(--radius)] bg-[var(--surface-muted)] p-3 text-sm text-[var(--text-muted)]">
-            <div>Last sync/import source: {syncStatusQuery.data?.source || "None recorded"}</div>
-            <div>Last sync/import time: {formatSyncTimestamp(syncStatusQuery.data?.last_updated_at ?? "")}</div>
-            <div>JSON path: {syncStatusQuery.data?.json_path || "Loading..."}</div>
-          </div>
+
           {mutationMessage && (
-            <p className="mt-3 text-sm text-[var(--text-muted)]">{mutationMessage}</p>
+            <p className="mt-4 text-sm text-[var(--text-muted)]">{mutationMessage}</p>
           )}
         </section>
 
@@ -2345,132 +3386,6 @@ export default function PortfolioPage() {
           </section>
         )}
 
-        {watchlist.length > 0 && (
-          <section ref={allocationSectionRef} className="rounded-[var(--radius)] border border-[var(--border)] bg-white p-4 shadow-sm">
-            <button
-              type="button"
-              onClick={() => setAllocationModelOpen((current) => !current)}
-              className="flex w-full items-start justify-between gap-4 text-left"
-              aria-expanded={allocationModelOpen}
-            >
-              <div>
-                <h3 className="text-sm font-bold text-[var(--text-primary)]">
-                  Portfolio Allocation (Cash & Weight Control, Testing Purpose)
-                </h3>
-                <p className="mt-1 text-sm text-[var(--text-muted)]">
-                  This is a secondary testing tool. Keep it collapsed when you only want to review price volatility, expected returns, and the latest snapshot.
-                </p>
-              </div>
-              <span className="mt-0.5 inline-flex items-center rounded-[var(--radius)] border border-[var(--border)] px-2 py-1 text-xs font-semibold text-[var(--text-muted)]">
-                {allocationModelOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-              </span>
-            </button>
-            <div className="mt-4 grid min-w-72 grid-cols-1 gap-2 sm:grid-cols-5">
-              <div className="rounded-[var(--radius)] bg-[var(--surface-muted)] p-3 text-xs">
-                <div className="text-[var(--text-muted)]">Tracked Names</div>
-                <div className="mt-1 font-bold text-[var(--text-primary)]">{watchlist.length}</div>
-              </div>
-              <div className="rounded-[var(--radius)] bg-[var(--surface-muted)] p-3 text-xs">
-                <div className="text-[var(--text-muted)]">Allocated Names</div>
-                <div className="mt-1 font-bold text-[var(--text-primary)]">{allocatedHoldingsCount}</div>
-              </div>
-              <div className="rounded-[var(--radius)] bg-[var(--surface-muted)] p-3 text-xs">
-                <div className="text-[var(--text-muted)]">Invested</div>
-                <div className="mt-1 font-bold text-[var(--text-primary)]">{formatWeightPercent(investedWeight)}</div>
-              </div>
-              <div className="rounded-[var(--radius)] bg-[var(--surface-muted)] p-3 text-xs">
-                <div className="text-[var(--text-muted)]">Implied Cash</div>
-                <div className="mt-1 font-bold text-[var(--text-primary)]">{formatWeightPercent(impliedCashWeight)}</div>
-              </div>
-              <div className="rounded-[var(--radius)] bg-[var(--surface-muted)] p-3 text-xs">
-                <div className="text-[var(--text-muted)]">Cash Treatment</div>
-                <div className="mt-1 font-bold text-[var(--text-primary)]">0.0% return</div>
-              </div>
-            </div>
-            {allocationModelOpen && (
-              <>
-                <div className="mt-4 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-                  <p className="text-sm text-[var(--text-muted)]">
-                    {usingStoredWeights
-                      ? "Positive saved weights are active for portfolio testing. If total assigned is below 100.0%, the remaining balance is sent as an explicit CASH row."
-                      : "No positive saved weights yet, so the portfolio test falls back to equal stock weights and no explicit cash row is used."}
-                  </p>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <label className="inline-flex items-center gap-2 rounded-[var(--radius)] border border-[var(--border)] bg-white px-3 py-2 text-xs font-semibold text-[var(--text-muted)]">
-                      <input
-                        type="checkbox"
-                        checked={applyAllocationToSnapshot}
-                        onChange={(event) => setApplyAllocationToSnapshot(event.target.checked)}
-                        aria-label="Apply allocation changes to snapshot"
-                      />
-                      Apply To Snapshot
-                    </label>
-                    <span className="rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-1 text-xs font-semibold text-[var(--text-muted)]">
-                      Testing-purpose controls
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => void handleNormalizeWeights()}
-                      disabled={updateWeightMutation.isPending || !usingStoredWeights || totalStoredWeight <= 0}
-                      className="inline-flex items-center justify-center rounded-[var(--radius)] border border-[var(--border)] px-3 py-2 text-xs font-semibold text-[var(--text-muted)] hover:text-[var(--text-primary)] disabled:opacity-50"
-                    >
-                      Normalize To 100%
-                    </button>
-                  </div>
-                </div>
-                <p className="mt-2 text-xs text-[var(--text-muted)]">
-                  When enabled, saving an allocation or normalizing weights will also persist today&apos;s comparison snapshot using the current benchmark and universe settings. Default is OFF to keep testing edits separate from snapshot history.
-                </p>
-                <div className="mt-4 overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead className="bg-[var(--surface-muted)] text-left text-[var(--text-muted)]">
-                      <tr>
-                        <th className="px-4 py-3 font-semibold">Ticker</th>
-                        <th className="px-4 py-3 font-semibold">Name</th>
-                        <th className="px-4 py-3 text-right font-semibold">Saved Weight</th>
-                        <th className="px-4 py-3 text-right font-semibold">Allocation %</th>
-                        <th className="px-4 py-3 text-right font-semibold">Action</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[var(--border)]/60">
-                      {watchlist.map((stock) => (
-                        <tr key={`weight-${stock.ticker}`}>
-                          <td className="px-4 py-3 font-bold text-[var(--text-primary)]">{stock.ticker}</td>
-                          <td className="px-4 py-3 text-[var(--text-muted)]">{stock.name || stock.ticker}</td>
-                          <td className="px-4 py-3 text-right tabular-nums">{formatWeightPercent(stock.weight)}</td>
-                          <td className="px-4 py-3 text-right">
-                            <input
-                              type="number"
-                              min="0"
-                              step="0.1"
-                              ref={(element) => {
-                                weightInputRefs.current[stock.ticker] = element;
-                              }}
-                              value={weightDrafts[stock.ticker] ?? (stock.weight * 100).toFixed(1)}
-                              onChange={(event) => setWeightDrafts((current) => ({ ...current, [stock.ticker]: event.target.value }))}
-                              className="w-28 rounded-[var(--radius)] border border-[var(--border)] bg-white px-3 py-2 text-right text-sm text-[var(--text-primary)]"
-                            />
-                          </td>
-                          <td className="px-4 py-3 text-right">
-                            <button
-                              type="button"
-                              onClick={() => void handleSaveWeight(stock)}
-                              disabled={updateWeightMutation.isPending}
-                              className="inline-flex items-center justify-center rounded-[var(--radius)] border border-[var(--border)] px-3 py-2 text-xs font-semibold text-[var(--text-muted)] hover:text-[var(--text-primary)] disabled:opacity-50"
-                            >
-                              {updateWeightMutation.isPending ? "Saving..." : "Save"}
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </>
-            )}
-          </section>
-        )}
-
         {/* Holdings body: skeleton, card grid, table, or empty state depending on data and view mode. */}
         {watchlistQuery.isLoading ? (
           <WatchlistSkeletonGrid />
@@ -2489,11 +3404,11 @@ export default function PortfolioPage() {
                       <div
                         role="button"
                         tabIndex={0}
-                        onClick={() => setSelectedStock(stock)}
+                        onClick={() => setSelectedStockContext({ ticker: stock.ticker, fallbackStock: stock })}
                         onKeyDown={(event) => {
                           if (event.key === "Enter" || event.key === " ") {
                             event.preventDefault();
-                            setSelectedStock(stock);
+                            setSelectedStockContext({ ticker: stock.ticker, fallbackStock: stock });
                           }
                         }}
                         key={stock.ticker}
@@ -2561,7 +3476,7 @@ export default function PortfolioPage() {
                       <HoldingsTable
                         watchlist={group.holdings}
                         comparisonMetricsByTicker={comparisonMetricsByTicker}
-                        onSelect={setSelectedStock}
+                        onSelect={(stock) => setSelectedStockContext({ ticker: stock.ticker, fallbackStock: stock })}
                         onDelete={(stock) => void handleDeleteHolding(stock)}
                         deletingTicker={deleteWatchlistMutation.isPending ? deleteWatchlistMutation.variables ?? null : null}
                       />
@@ -2577,6 +3492,7 @@ export default function PortfolioPage() {
         {selectedStock && (
           <StockDetailModal
             stock={selectedStock}
+            isInWatchlist={selectedStockIsInWatchlist}
             comparisonMetrics={comparisonMetricsByTicker[selectedStock.ticker] ?? EMPTY_COMPARISON_METRICS}
             snapshotMeta={activeSnapshotMeta}
             comparisonUniverse={portfolioComparisonUniverse}
@@ -2584,21 +3500,24 @@ export default function PortfolioPage() {
             comparisonCustomTickersInput={debouncedCustomTickersInput}
             activeSnapshotVersion={activeSnapshotMeta?.snapshot_version ?? ""}
             onAddToPortfolio={handleFocusAllocationForStock}
+            onUpdateSector={(stock, nextSector) => handleUpdateStockSector(stock, nextSector)}
             onRemoveFromWatchlist={(stock) => void handleDeleteHolding(stock)}
-            onClose={() => setSelectedStock(null)}
+            onClose={() => setSelectedStockContext(null)}
           />
         )}
         {snapshotHistoryOpen && (
           <SnapshotHistoryModal
-            history={portfolioComparisonHistoryQuery.data}
-            loading={portfolioComparisonHistoryQuery.isLoading}
-            error={portfolioComparisonHistoryQuery.isError}
+            history={comparisonHistoryData ?? undefined}
+            loading={portfolioComparisonHistoryQuery.isLoading && !comparisonHistoryData}
+            error={portfolioComparisonHistoryQuery.isError && !comparisonHistoryData}
             activeSnapshotVersion={activeSnapshotMeta?.snapshot_version ?? ""}
+            deletingSnapshotVersion={deleteSnapshotMutation.isPending ? deleteSnapshotMutation.variables ?? null : null}
             onSelectSnapshot={(point) => {
               setSelectedHistoryPoint(point);
               setPortfolioComparisonMode("snapshot");
               setSnapshotHistoryOpen(false);
             }}
+            onDeleteSnapshot={(point) => void handleDeleteSnapshotVersion(point.snapshot_version)}
             onClose={() => setSnapshotHistoryOpen(false)}
           />
         )}

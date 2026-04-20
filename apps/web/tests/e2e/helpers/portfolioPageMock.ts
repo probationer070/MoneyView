@@ -10,6 +10,14 @@ import { API_PREFIX, cloneFixture, json, nowIso } from "./mockUtils";
 
 type PortfolioStock = PortfolioStockFixture;
 
+export type PortfolioPageMockStats = {
+  comparisonRequests: number;
+  comparisonHistoryRequests: number;
+  attributionRequests: number;
+  stockDetailRequests: number;
+  stockSnapshotHistoryRequests: number;
+};
+
 function buildAttribution(weights: number[], tickers: string[]) {
   const normalizedWeights = tickers.map((_, index) => weights[index] ?? 0);
   const portfolioReturn = normalizedWeights.reduce((sum, weight, index) => sum + weight * (0.08 + index * 0.02), 0);
@@ -79,8 +87,20 @@ function buildAttribution(weights: number[], tickers: string[]) {
   };
 }
 
-export async function mockPortfolioPageApi(page: Page) {
+export async function mockPortfolioPageApi(page: Page, stats?: PortfolioPageMockStats) {
   let watchlist: PortfolioStock[] = cloneFixture(portfolioPartialWeightsFixture);
+  let companyRegistry = [
+    { ticker: "AAPL", name: "Apple Inc.", sector: "Technology", source: "portfolio" },
+    { ticker: "MSFT", name: "Microsoft Corp.", sector: "Technology", source: "portfolio" },
+    { ticker: "NVDA", name: "NVIDIA", sector: "Semiconductors", source: "portfolio" },
+    { ticker: "TSLA", name: "Tesla", sector: "Automotive", source: "portfolio" },
+    { ticker: "AMZN", name: "Amazon", sector: "Consumer", source: "portfolio" },
+  ];
+  let portfolioPreferences = {
+    total_investment_amount: 10000,
+    transaction_fee_rate: 0.002,
+    updated_at: nowIso(),
+  };
 
   let syncStatus = {
     source: "",
@@ -107,6 +127,7 @@ export async function mockPortfolioPageApi(page: Page) {
     benchmarkTicker: "^GSPC",
     customTickers: [] as string[],
   };
+  let snapshotHistory = cloneFixture(snapshotHistoryFixture);
   const snapshotRowsByVersion: Record<string, Array<(typeof benchmarkUniverseFixture.rows)[number]>> = {
     "2026-04-11|portfolio_plus_benchmark|^GSPC||2026-04-11T12:00:00Z": cloneFixture(benchmarkUniverseFixture.rows),
     "2026-04-10|portfolio_plus_benchmark|^GSPC||2026-04-10T12:00:00Z": [
@@ -218,12 +239,47 @@ export async function mockPortfolioPageApi(page: Page) {
       return json(route, { status: "ok", data: syncStatus });
     }
 
+    if (pathname === `${API_PREFIX}/portfolio/preferences` && method === "GET") {
+      return json(route, { status: "ok", data: portfolioPreferences });
+    }
+
+    if (pathname === `${API_PREFIX}/portfolio/preferences` && method === "PUT") {
+      const payload = JSON.parse(route.request().postData() ?? "{}");
+      portfolioPreferences = {
+        total_investment_amount: Number(payload.total_investment_amount ?? portfolioPreferences.total_investment_amount),
+        transaction_fee_rate: 0.002,
+        updated_at: nowIso(),
+      };
+      return json(route, { status: "ok", data: portfolioPreferences });
+    }
+
+    if (pathname === `${API_PREFIX}/corporate/companies` && method === "GET") {
+      return json(route, companyRegistry);
+    }
+
+    if (pathname === `${API_PREFIX}/corporate/companies` && method === "POST") {
+      const payload = JSON.parse(route.request().postData() ?? "{}");
+      const normalized = {
+        ticker: String(payload.ticker ?? "").toUpperCase(),
+        name: payload.name,
+        sector: payload.sector ?? "",
+        source: payload.source ?? "manual",
+      };
+      companyRegistry = [
+        ...companyRegistry.filter((company) => company.ticker !== normalized.ticker),
+        normalized,
+      ];
+      return json(route, normalized);
+    }
+
     if (pathname === `${API_PREFIX}/portfolio/attribution` && method === "POST") {
+      if (stats) stats.attributionRequests += 1;
       const payload = JSON.parse(route.request().postData() ?? "{}");
       return json(route, { status: "ok", data: buildAttribution(payload.weights ?? [], payload.tickers ?? []) });
     }
 
     if (pathname === `${API_PREFIX}/corporate/comparison` && method === "GET") {
+      if (stats) stats.comparisonRequests += 1;
       const mode = (url.searchParams.get("mode") ?? "snapshot") as "snapshot" | "live";
       const comparisonUniverse = url.searchParams.get("comparison_universe") ?? "portfolio_plus_benchmark";
       const benchmarkTicker = (url.searchParams.get("benchmark_ticker") ?? "^GSPC").toUpperCase();
@@ -284,6 +340,7 @@ export async function mockPortfolioPageApi(page: Page) {
     }
 
     if (pathname === `${API_PREFIX}/corporate/comparison/history` && method === "GET") {
+      if (stats) stats.comparisonHistoryRequests += 1;
       const comparisonUniverse = url.searchParams.get("comparison_universe") ?? "portfolio_plus_benchmark";
       const benchmarkTicker = (url.searchParams.get("benchmark_ticker") ?? "^GSPC").toUpperCase();
       const customTickers = (url.searchParams.get("custom_tickers") ?? "")
@@ -293,7 +350,7 @@ export async function mockPortfolioPageApi(page: Page) {
       return json(route, {
         status: "ok",
         data: {
-          ...cloneFixture(snapshotHistoryFixture),
+          ...cloneFixture(snapshotHistory),
           comparison_universe: comparisonUniverse,
           benchmark_ticker: benchmarkTicker,
           custom_tickers: customTickers,
@@ -304,10 +361,10 @@ export async function mockPortfolioPageApi(page: Page) {
     if (pathname === `${API_PREFIX}/corporate/comparison/snapshot-version` && method === "GET") {
       const snapshotVersion = url.searchParams.get("snapshot_version") ?? portfolioComparisonSnapshot.snapshot_version;
       const rows = cloneFixture(snapshotRowsByVersion[snapshotVersion] ?? benchmarkUniverseFixture.rows);
-      const point = snapshotHistoryFixture.points.find((entry) => entry.snapshot_version === snapshotVersion);
+      const point = snapshotHistory.points.find((entry) => entry.snapshot_version === snapshotVersion);
       selectedSnapshotUniverse.comparisonUniverse = point?.comparison_universe ?? portfolioComparisonSnapshot.comparison_universe;
       selectedSnapshotUniverse.benchmarkTicker = (point?.benchmark_ticker ?? portfolioComparisonSnapshot.benchmark_ticker).toUpperCase();
-      selectedSnapshotUniverse.customTickers = cloneFixture(snapshotHistoryFixture.custom_tickers ?? portfolioComparisonSnapshot.custom_tickers);
+      selectedSnapshotUniverse.customTickers = cloneFixture(snapshotHistory.custom_tickers ?? portfolioComparisonSnapshot.custom_tickers);
       return json(route, {
         status: "ok",
         data: {
@@ -330,6 +387,7 @@ export async function mockPortfolioPageApi(page: Page) {
     }
 
     if (pathname === `${API_PREFIX}/corporate/comparison/stock-history` && method === "GET") {
+      if (stats) stats.stockSnapshotHistoryRequests += 1;
       const ticker = (url.searchParams.get("ticker") ?? "AAPL").toUpperCase();
       const comparisonUniverse = url.searchParams.get("comparison_universe") ?? "portfolio_plus_benchmark";
       const benchmarkTicker = (url.searchParams.get("benchmark_ticker") ?? "^GSPC").toUpperCase();
@@ -340,7 +398,7 @@ export async function mockPortfolioPageApi(page: Page) {
       const matchesSelectedSnapshotContext = comparisonUniverse === selectedSnapshotUniverse.comparisonUniverse
         && benchmarkTicker === selectedSnapshotUniverse.benchmarkTicker
         && customTickers.join(",") === selectedSnapshotUniverse.customTickers.join(",");
-      const points = snapshotHistoryFixture.points.map((point) => {
+      const points = snapshotHistory.points.map((point) => {
         const row = (snapshotRowsByVersion[point.snapshot_version] ?? benchmarkUniverseFixture.rows).find((entry) => entry.ticker === ticker);
         return {
           as_of_date: point.as_of_date,
@@ -380,6 +438,15 @@ export async function mockPortfolioPageApi(page: Page) {
         sparkline: watchlist.find((item) => item.ticker === payload.ticker)?.sparkline ?? [95, 97, 99, 100],
       };
       watchlist = [...watchlist.filter((item) => item.ticker !== payload.ticker), nextRow];
+      companyRegistry = [
+        ...companyRegistry.filter((company) => company.ticker !== nextRow.ticker),
+        {
+          ticker: nextRow.ticker,
+          name: nextRow.name,
+          sector: nextRow.sector,
+          source: "watchlist",
+        },
+      ];
       return json(route, payload);
     }
 
@@ -387,6 +454,29 @@ export async function mockPortfolioPageApi(page: Page) {
       const ticker = pathname.split("/").at(-1) ?? "";
       watchlist = watchlist.filter((item) => item.ticker !== ticker);
       return json(route, { status: "ok", ticker });
+    }
+
+    if (pathname === `${API_PREFIX}/corporate/comparison/snapshot-version` && method === "DELETE") {
+      const snapshotVersion = url.searchParams.get("snapshot_version") ?? "";
+      if (!snapshotVersion || !snapshotHistory.points.some((point) => point.snapshot_version === snapshotVersion)) {
+        return route.fulfill({
+          status: 404,
+          contentType: "application/json",
+          body: JSON.stringify({ detail: `snapshot version not found: ${snapshotVersion}` }),
+        });
+      }
+      snapshotHistory = {
+        ...snapshotHistory,
+        points: snapshotHistory.points.filter((point) => point.snapshot_version !== snapshotVersion),
+      };
+      delete snapshotRowsByVersion[snapshotVersion];
+      return json(route, {
+        status: "ok",
+        data: {
+          snapshot_version: snapshotVersion,
+          deleted_rows: 1,
+        },
+      });
     }
 
     if (pathname === `${API_PREFIX}/portfolio/watchlist/sync` && method === "POST") {
@@ -434,6 +524,7 @@ export async function mockPortfolioPageApi(page: Page) {
     }
 
     if (pathname.startsWith(`${API_PREFIX}/portfolio/stock/`) && method === "GET") {
+      if (stats) stats.stockDetailRequests += 1;
       const ticker = pathname.split("/").at(-1) ?? "AAPL";
       return json(route, {
         ticker,

@@ -1,0 +1,126 @@
+Issue
+
+The Playwright spec `apps/web/tests/e2e/portfolio-snapshot-history.spec.ts` was still failing after the Recharts warning fix.
+
+This failure was not caused by charts. It came from stale assumptions in the test.
+
+What Failed
+
+The spec originally assumed all of the following:
+
+- saved snapshot history was already visible on first load
+- the saved snapshot row would always use the date format `Apr 11, 2026`
+- the benchmark ticker would be `^KS11`
+- the list separator could safely use a non-ASCII middle dot-like glyph
+
+Those assumptions did not match the actual page behavior and mocked fixture data.
+
+Root Cause
+
+1. Idle-on-load workflow
+
+The portfolio page intentionally keeps snapshot history idle on first load.
+The page only hydrates the saved snapshot list after the user presses:
+
+- `Refresh Analysis`
+
+The original spec asserted snapshot rows before triggering that action.
+
+2. Locale-sensitive date formatting
+
+The UI date formatter rendered numeric dates in the Playwright environment:
+
+- `4/11/2026`
+
+The spec expected:
+
+- `Apr 11, 2026`
+
+That made the assertion brittle across environments.
+
+3. Wrong benchmark expectation
+
+The mocked fixture for this test uses:
+
+- `^GSPC`
+
+The spec expected:
+
+- `^KS11`
+
+That assertion was simply out of sync with the fixture.
+
+4. Separator encoding brittleness
+
+The snapshot list label used a non-ASCII separator that had already shown encoding problems in terminal and Playwright output.
+
+Resolution
+
+The fix had two parts.
+
+UI change
+
+In:
+
+- `apps/web/app/portfolio/page.tsx`
+
+The snapshot row label was changed from a non-ASCII separator to a plain ASCII separator:
+
+- from: `date · source`
+- to: `date - source`
+
+This makes the rendered text stable in browser snapshots, test output, and terminals.
+
+Spec change
+
+In:
+
+- `apps/web/tests/e2e/portfolio-snapshot-history.spec.ts`
+
+The test was updated to:
+
+- click `Refresh Analysis` before asserting snapshot history rows
+- wait for the refresh status message
+- accept either locale output for the date text:
+  - `4/11/2026`
+  - `Apr 11, 2026`
+- assert the correct benchmark ticker from the fixture:
+  - `^GSPC`
+- accept either locale output for the review banner date:
+  - `4/10/2026`
+  - `Apr 10, 2026`
+
+Why This Is Correct
+
+The updated spec now matches the page contract:
+
+- first load is idle
+- refresh populates comparison and snapshot history
+- displayed dates can vary by runtime locale
+- fixture-backed benchmark state is `^GSPC`
+
+This makes the test deterministic without hard-coding assumptions that are not guaranteed by the UI.
+
+Verification
+
+Lint:
+
+- `npm.cmd run lint -- app/portfolio/page.tsx tests/e2e/portfolio-snapshot-history.spec.ts`
+
+Playwright:
+
+- `npm.cmd run test:e2e -- tests/e2e/portfolio-snapshot-history.spec.ts`
+
+Result:
+
+- 1 passed
+
+Note
+
+The PowerShell `profile.ps1` execution-policy warning still appears after the Playwright command in this environment, but it does not affect the actual test result.
+
+Cross-reference
+
+The earlier chart-rendering warning and its container-sizing fix are documented in:
+
+- `data/error/recharts-hidden-mobile-chart-warning-resolution.txt`

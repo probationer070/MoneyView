@@ -1,8 +1,9 @@
 "use client";
 
-import { Bar, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis, ZAxis } from "recharts";
+import { Bar, CartesianGrid, ComposedChart, Line, Tooltip, XAxis, YAxis, ZAxis } from "recharts";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
-import { CHART_INITIAL_DIMENSION, type DetailKey, type HurdleBarPoint, type RegionalHurdlePoint, pct, pct2 } from "./shared";
+import { ResponsiveChart } from "@/components/ui/ResponsiveChart";
+import { type DetailKey, type HurdleBarPoint, type RegionalHurdlePoint, pct, pct2 } from "./shared";
 
 export function HurdleRateDecompositionGraph({
   hurdleBars,
@@ -26,7 +27,7 @@ export function HurdleRateDecompositionGraph({
         />
       </button>
       <div className="h-72 min-h-72 min-w-0">
-        <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1} initialDimension={CHART_INITIAL_DIMENSION}>
+        <ResponsiveChart minWidth={1} minHeight={1}>
           <ComposedChart data={regionalMinard} margin={{ top: 20, right: 20, left: 0, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
             <XAxis dataKey="region" tick={{ fill: "var(--text-muted)" }} />
@@ -36,7 +37,7 @@ export function HurdleRateDecompositionGraph({
             <Bar dataKey="crp" name="CRP" fill="#444444" radius={[4, 4, 0, 0]} />
             <Line dataKey="erp" name="Implied ERP" stroke="var(--accent)" strokeWidth={3} dot={{ r: 4 }} />
           </ComposedChart>
-        </ResponsiveContainer>
+        </ResponsiveChart>
       </div>
       <div className="mt-2 grid grid-cols-3 gap-2 text-xs text-[var(--text-muted)]">
         {hurdleBars.map((item) => (

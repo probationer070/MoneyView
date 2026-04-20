@@ -1,8 +1,9 @@
 "use client";
 
-import { PolarAngleAxis, PolarGrid, PolarRadiusAxis, Radar, RadarChart, ResponsiveContainer, Tooltip } from "recharts";
+import { PolarAngleAxis, PolarGrid, PolarRadiusAxis, Radar, RadarChart, Tooltip } from "recharts";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
-import { CHART_INITIAL_DIMENSION, type DetailKey, type HealthRadarPoint, numberText } from "./shared";
+import { ResponsiveChart } from "@/components/ui/ResponsiveChart";
+import { type DetailKey, type HealthRadarPoint, numberText } from "./shared";
 
 export function CompanyStatusGraph({
   companyName,
@@ -52,7 +53,7 @@ export function CompanyStatusGraph({
         Include subjective Innovation, Governance, and ESG/Agency inputs
       </label>
       <div className="h-72 min-h-72 min-w-0">
-        <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1} initialDimension={CHART_INITIAL_DIMENSION}>
+        <ResponsiveChart minWidth={1} minHeight={1}>
           <RadarChart data={healthRadar}>
             <PolarGrid stroke="var(--border)" />
             <PolarAngleAxis dataKey="subject" tick={{ fill: "var(--text-muted)", fontSize: 11 }} />
@@ -61,7 +62,7 @@ export function CompanyStatusGraph({
             <Radar name="Peer" dataKey="peer" stroke="var(--text-muted)" fill="var(--text-muted)" fillOpacity={0.16} />
             <Tooltip />
           </RadarChart>
-        </ResponsiveContainer>
+        </ResponsiveChart>
       </div>
     </div>
   );

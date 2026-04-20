@@ -1,5 +1,5 @@
-import { discoverBackendPort } from "@/app/actions/discovery";
 import { apiBaseUrlForPort, fetchApi } from "@/lib/api";
+import { readBackendPort } from "@/lib/server/backendPort";
 import { MarketOverviewClient, type MarketIndexQuote } from "@/components/market/MarketOverviewClient";
 
 export const dynamic = "force-dynamic";
@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 export default async function MarketOverview() {
   // SSR Fetch from FastAPI backend
   let indices: MarketIndexQuote[] = [];
-  const backendPort = await discoverBackendPort();
+  const backendPort = readBackendPort();
   const apiBaseUrl = apiBaseUrlForPort(backendPort);
 
   try {
@@ -17,7 +17,7 @@ export default async function MarketOverview() {
   }
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
+    <div className="max-w-7xl mx-auto px-4 py-6">
       <header>
         <h1 className="text-3xl font-bold tracking-tight text-[var(--text-primary)]">
           Market Overview

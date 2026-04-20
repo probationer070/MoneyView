@@ -1,79 +1,130 @@
-# Portfolio Comparison Todo
+# Development Todo
 
-Purpose: track the active follow-up work for the Portfolio comparison surface and keep the next implementation slice clear.
+Purpose: track the active implementation plan for performance, portfolio UX, valuation streaming, and stock-price reliability work across `apps/web` and `apps/api`.
 
-Status snapshot: as of 2026-04-12, the core Portfolio comparison foundation is in place: snapshots, partial weights, sector grouping, benchmark controls, table-first comparison metrics, modal chart upgrades, and E2E coverage. The remaining work is focused on smaller UX and persistence follow-ups from `guideline/suggestion.md`.
+Status snapshot: as of 2026-04-19, the next delivery slice is centered on stock-price autofill, API transport-progress visibility, and closing the remaining observability gaps around live server execution.
 
-Latest requested follow-up context:
-- open two PowerShell windows and display logs for both the API server and Next.js server (`next-server` v`16.2.3`), and make sure those logs are also saved
-- persist `Holding Start Date` and `Return End Date`
-- display Attribution Effects (`bps`) as percentages
-- provide a clearer way to review the list of saved snapshots
-- reduce startup friction so the app can be run with one short command instead of the current long Quick Start invocation
-- expand Market Overview so it has drill-down detail comparable to the Portfolio page's per-stock detail experience
+## Active Tracks
 
-Selected product direction from `guideline/suggestion.md`:
-- comparison: persisted snapshots by default plus live calculation option
-- portfolio weights: partial weights with implied cash
-- watchlist and portfolio should continue separating tracking concerns from investment-testing concerns
-- target snapshot policy: auto-generate daily at `00:00 KST`, keep manual refresh, and retain about `1 year` of history by default
-- comparison universe: expand beyond current watchlist holdings
-- deterministic e2e mocking: extend beyond current high-churn pages toward all major pages
-- Portfolio page: surface the latest comparison snapshot directly on the page
-- Portfolio page focus: stock price volatility and actual investment-testing workflow, with allocation controls demoted to a secondary testing tool
-- remove or strongly demote portfolio-level average metrics when they are distorted by extreme outliers
-- make table view the core stock-comparison dashboard using persisted per-stock snapshot metrics
-- validate extreme per-stock values and replace nonsensical outputs with `N/A` or explicit data warnings
+Legend:
+- `[ ]` not started
+- `[x]` completed
+- Track status should be updated as implementation progresses
 
-## Active Next
+### Local Server Log Clarity And API Log Visibility
 
-- None currently tracked for Market Overview detail.
+Problem:
+- The local Next.js dev server output is currently mixing framework request lines with server-action noise such as `discoverBackendPort()`, which makes the console harder to scan.
+- The API already writes structured logs to `data/cache/logs/api-server.log`, but when the realtime API console is not visible there is no simple plain-text fallback surface for day-to-day debugging.
+- API transport observability exists in JSON form today, but the human-readable console format does not yet guarantee short, scan-friendly summaries for route lifecycle, transport phase, and failure states.
 
-## Completed This Sprint
+Target outcome:
+- Local development logs clearly separate `web` and `api` sources so a developer can tell which process emitted each line at a glance.
+- Routine noise from `apps/web/app/actions/discovery.ts` is removed or downgraded so `discoverBackendPort()` does not clutter the Next.js server log during normal page loads.
+- The API keeps structured JSON logs for persistence, while also producing concise human-readable console summaries for request start, request finish, SSE phase progress, and warnings/errors.
+- When the realtime API console cannot be seen, a developer can still inspect recent API activity through a plain-text tail/read view backed by `data/cache/logs/api-server.log`.
 
-- [x] Priority 1: remove or demote misleading portfolio-level averages from the snapshot summary
-- [x] Priority 2: add per-stock `ROIC - WACC`, `DCF Upside %`, and `Expected Return vs Market` columns to table view
-- [x] Priority 3: apply color rules and extreme-value validation to the new comparison metrics
-- [x] Priority 4: make table view the primary comparison surface with sticky headers and responsive overflow handling
-- [x] Priority 5: add key metric cards inside the stock modal
-- [x] Portfolio UI: add `Apply to Snapshot` toggle in the allocation section with default `OFF`.
-- [x] Stock modal: add large metric cards for `ROIC - WACC`, `DCF Upside %`, and `Expected Return vs Market`.
-- [x] Market Overview detail: make market cards and table rows open a shared detail modal from both graph and table views.
-- [x] Market Overview detail: keep the root route thin by moving market detail rendering into `apps/web/components/market/MarketOverviewClient.tsx`.
-- [x] Market Overview detail: add a frontend detail surface with headline metrics, trend sections, metadata, and interpretation notes.
-- [x] Market Overview detail: extend backend payloads with index detail history, daily volume summary, daily indicators, and monthly indicators.
-- [x] Market Overview tests: add deterministic mocked coverage for market detail open and close flows in both card and table views.
-- [x] Market Overview detail payload: add explicit freshness status and fallback metadata so the modal can distinguish fresh cached data, refreshed live data, and degraded or stale data.
-- [x] Market Overview detail payload: expose a true backend `last_updated` timestamp instead of relying only on the latest OHLCV date.
-- [x] Market Overview detail model: deepen the index-specific context with breadth, participation, or market-regime signals when those backend inputs become available.
-- [x] Market Overview detail model: extend beyond indices so FX, commodity, and crypto detail sections are instrument-aware instead of reusing the current index-first interpretation copy.
-- [x] Market Overview detail model: validate whether FX, commodity, and crypto need dedicated indicator sets or whether the current shared technical block is sufficient.
-- [x] Market Overview live verification: run the upgraded market detail flow against the real local API and confirm instrument-aware detail behaves correctly outside deterministic mocks.
-- [x] Market Overview chart UX: replace the sparkline-only detail charts with fuller OHLCV plus volume charting comparable in depth to the Portfolio stock modal.
-- [x] Market Overview verification: confirm the new detail flow works on mobile width and that missing, partial, or stale data degrades to explicit warnings instead of empty fields.
-- [x] Market Overview backend tests: add focused service tests for market detail freshness metadata, fallback paths, and instrument metadata shaping.
+Execution checklist:
+- [x] Audit the current local log sources across `apps/web` dev server output, `apps/api/core/logger.py`, `apps/api/core/transport_progress.py`, and the web-side backend-port discovery path
+- [ ] Define a readable console log format for API request lifecycle lines, including source, method, path, status, elapsed time, and request id when available
+- [x] Reduce or gate routine `discoverBackendPort()` logging so the web server does not emit low-signal lines on every request in normal development
+- [x] Add an API-side plain-text log tail/read contract that exposes recent `api-server.log` lines without replacing the existing JSON file logging
+- [x] Add a lightweight web-side developer surface or documented local workflow for viewing the recent API log tail when the realtime API console is unavailable
+- [ ] Verify the resulting local experience with one normal page load and one streaming DCF request, confirming the emitted text is easy to scan
 
-## Deferred
+Engineering notes:
+- Keep log formatting ownership inside `apps/api/core`; route handlers should emit facts, not hand-build presentation strings everywhere.
+- Preserve the structured JSON log file as the durable source of truth; the readable plain-text view should be derived from it, not maintained as a second independent logging pipeline.
+- Avoid adding browser-only polling noise just to surface logs; prefer an explicit developer-only read/tail action or endpoint.
+- Keep any web-side log viewer clearly development-scoped so it does not become a user-facing production feature by accident.
+
+### Portfolio Allocation UX, Snapshot Controls, And Corporate Comparison Expansion
+
+Problem:
+- The current Portfolio Allocation table still assumes per-row save and delete controls, a separate saved-weight display, and percentage-only editing without an explicit investment amount model.
+- The allocation workflow does not currently support range-slider adjustment, double-click manual percentage editing, automatic persistence, or a saved total investment amount that can drive money-based allocation summaries.
+- The allocation workspace also lacks a fee-aware final-profit view, so projected portfolio outcome numbers can overstate results by ignoring the requested `0.2%` transaction fee.
+- Saved Snapshot List review is read-only today, so stale snapshot versions cannot be cleaned up directly from the Portfolio workflow.
+- The stock detail modal does not yet expose editable sector metadata and the Stock News column does not stretch to the full available modal height.
+- Corporate Analysis currently leans on table-only comparison for peer review, exposes only the single-stock `View Full Report` action, and needs an explicit verification pass for synchronization with Watchlist Holdings.
+
+Target outcome:
+- Portfolio Allocation replaces row-level save and delete controls with automatic persistence, an `input[type="range"]` adjustment path, and double-click manual editing on the Allocation value itself.
+- Users can enter a total investment amount, have it saved automatically, and see amount-based allocation summaries driven by that persisted value.
+- Final profit in the allocation workspace reflects the requested `0.2%` transaction fee instead of showing a fee-free figure.
+- Saved Snapshot List supports direct deletion of individual saved snapshot versions.
+- The stock detail modal shows the stock sector, allows editing it, and lets Stock News expand to the full usable height of the modal column.
+- Corporate Analysis adds visual peer-comparison tooling for similar stocks plus a bulk “calculate all reports” action instead of only the single-stock `View Full Report`.
+- Corporate Analysis and Watchlist Holdings are explicitly verified for synchronization behavior so watchlist-backed comparison inputs remain trustworthy.
+
+Preferred UX:
+1. Allocation percentages can be changed with a slider for quick adjustment.
+2. Double-clicking the Allocation value switches to manual numeric entry for exact percentages.
+3. Allocation edits save automatically after the user stops adjusting rather than requiring per-row save buttons.
+4. Total investment amount behaves like a portfolio-level preference and persists automatically.
+5. Amount-based summaries make invested capital, implied cash, and fee-aware projected profit visible without extra clicks.
+6. Snapshot cleanup happens directly from the Saved Snapshot List rather than forcing backend-only cleanup.
+7. Similar-stock comparison in Corporate Analysis is visual first, with the current ticker clearly highlighted against peers.
+8. Bulk report calculation for all compared stocks is available from the Corporate Analysis workflow itself.
+
+Execution checklist:
+- [x] Identify the current ownership points across `apps/web/app/portfolio/page.tsx`, `apps/web/app/corporate/page.tsx`, `apps/api/routes/portfolio.py`, `apps/api/routes/corporate.py`, and the related backend services/models
+- [x] Add or extend backend contracts needed for persisted portfolio preferences, snapshot deletion, sector editing, and bulk corporate report calculation
+- [x] Replace row-level save/delete allocation controls with slider-based auto-save allocation editing in the Portfolio table
+- [x] Add double-click manual allocation editing and remove the separate Saved Weight requirement from the Portfolio table UI
+- [x] Persist a portfolio-level total investment amount and wire it into amount-based allocation summaries
+- [x] Calculate fee-aware final profit using the requested `0.2%` transaction fee
+- [x] Add delete controls to the Saved Snapshot List and full snapshot-history modal flows
+- [x] Expand Stock News to full modal height and add editable Sector handling inside the stock detail modal
+- [x] Add similar-stock comparison visualizations in Corporate Analysis
+- [x] Add a bulk “calculate reports for all stocks” action in Corporate Analysis
+- [x] Verify Corporate Analysis and Watchlist Holdings synchronization with focused API and/or frontend coverage
+- [ ] Run narrow verification for changed frontend and backend areas
+
+Engineering notes:
+- Keep watchlist ownership in the portfolio backend and avoid duplicating allocation truth in browser-only state.
+- Portfolio auto-save should be debounced enough to avoid wasteful request storms while still feeling immediate.
+- Similar-stock comparison visuals should reuse existing charting patterns where practical instead of introducing a second visualization stack.
+- Watchlist/corporate synchronization verification should check both the company-registry path and the comparison-universe path.
+
+Acceptance criteria:
+- Portfolio allocation editing no longer requires row-level Save/Delete buttons in the Portfolio table.
+- Users can adjust allocations with a range slider and double-click the Allocation value for exact manual entry.
+- Total investment amount persists and drives amount-based allocation summaries.
+- Fee-aware final profit is visible and reflects a `0.2%` transaction fee.
+- Saved snapshot versions can be deleted from the Portfolio snapshot-review workflow.
+- Stock modal shows editable sector metadata and a full-height Stock News section.
+- Corporate Analysis includes a visual peer-comparison surface and a bulk all-stocks report calculation action.
+- Corporate Analysis remains aligned with current Watchlist Holdings for synchronized comparison inputs.
+
+Definition of done:
+- [x] Verified allocation auto-save, slider input, and double-click manual input work together without row-level save buttons
+- [x] Verified total investment amount persists across reloads
+- [x] Verified projected/final profit includes the `0.2%` fee logic
+- [x] Verified snapshot deletion removes the saved version from list and modal history
+- [x] Verified sector edits persist and Stock News uses full modal height
+- [x] Verified similar-stock visuals and bulk report calculation on Corporate Analysis
+- [x] Verified Corporate Analysis reflects current Watchlist Holdings in the intended synchronized paths
+
+Verification note:
+- Targeted Playwright coverage passed on 2026-04-20 for `tests/e2e/portfolio-watchlist.spec.ts`, `tests/e2e/portfolio-snapshot-history.spec.ts`, and `tests/e2e/corporate-comparison.spec.ts`.
+- Targeted backend pytest coverage for `tests/api/test_watchlist_resync.py` and `tests/api/test_corporate_comparison.py` remains blocked in this environment because `pytest` cannot create or clean its temp directories under `C:\Users\VIP\AppData\Local\Temp\pytest-of-VIP`.
+- Re-run attempts on 2026-04-20 with explicit `--basetemp` and `cache_dir` under both `E:\MoneyView\.tmp\...` and `C:\Users\VIP\.codex\memories\...` still failed with `PermissionError: [WinError 5] Access is denied` during pytest temp-directory setup/cleanup, so the backend verification item cannot be marked complete from this session.
 
 
-## Risks
-
-- A wrapper that hides PowerShell execution-policy details may still fail on some Windows setups if it is not implemented as a compatible `.cmd` or npm entry point.
-- Duplicating startup logic across multiple launchers will drift quickly; the short command should delegate into one canonical script.
-- If dependency installation, auto-port selection, and browser opening are bundled unclearly, the short command may become convenient but less predictable for debugging.
-- Market instruments do not all behave like stocks, so a copied Portfolio modal may mislead users unless the copy and fields are instrument-aware.
-- If the market detail payload does not carry explicit freshness and fallback metadata, the frontend may show polished detail with weak explanatory value.
-- A modal that becomes too dense may hurt the scan-first purpose of Market Overview; summary cards must remain the primary surface.
 
 
-## Verification
 
-- [x] `npm.cmd run test:e2e -- tests/e2e/market-overview.live.spec.ts`
-- [x] `npm.cmd run test:e2e -- tests/e2e/portfolio-watchlist.spec.ts tests/e2e/portfolio-snapshot-history.spec.ts tests/e2e/corporate-comparison.spec.ts`
-- [x] Run the new short startup command from repo root in a fresh PowerShell session.
-- [x] Confirm backend and frontend both start successfully through the wrapper and that the wrapper does not fork startup logic away from `scripts/start_local.ps1`.
-- [x] Confirm `README.md` instructions match the actual command surface and fallback guidance.
-- [x] `npm.cmd run test:e2e -- tests/e2e/market-overview.spec.ts`
-- [x] Add targeted mocked coverage for Market Overview detail open and close flows in both card and table modes.
-- [x] Add deterministic mocked coverage for mobile-width market detail rendering and explicit warnings for stale or partial detail payloads.
-- [x] `pytest -q tests/api/test_market_index_detail.py`
+
+
+
+## Cross-Cutting Follow-ups
+
+Checklist:
+- [x] Update `docs/architecture/` if DCF transport, cache strategy, page-level refresh ownership, or API transport observability changes materially
+
+
+## Verification Targets
+
+Checklist:
+- [x] `apps/web`: targeted component and page tests for refresh-gated loading states and portfolio allocation interactions

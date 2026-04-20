@@ -38,6 +38,17 @@ export type ValuationInput = {
   seed: number;
 };
 
+export type StockPriceLookup = {
+  ticker: string;
+  status: "ok" | "fetching" | "not_found";
+  price: number | null;
+  as_of_date: string | null;
+  source: string;
+  freshness_status: string;
+  retry_after_seconds: number | null;
+  detail_note: string;
+};
+
 export type ValuationResult = {
   ticker: string;
   model: string;

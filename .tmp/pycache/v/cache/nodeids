@@ -1,0 +1,21 @@
+[
+  "tests/api/test_corporate_comparison.py::test_corporate_bulk_dcf_reports_returns_full_reports_for_requested_tickers",
+  "tests/api/test_corporate_comparison.py::test_corporate_comparison_custom_universe_persists_snapshot_metadata",
+  "tests/api/test_corporate_comparison.py::test_corporate_comparison_defaults_to_portfolio_plus_benchmark_snapshot",
+  "tests/api/test_corporate_comparison.py::test_corporate_comparison_history_returns_timeline_points",
+  "tests/api/test_corporate_comparison.py::test_corporate_comparison_live_mode_returns_live_rows_without_overwriting_snapshot",
+  "tests/api/test_corporate_comparison.py::test_corporate_comparison_snapshot_uses_kst_business_date_and_365_day_retention",
+  "tests/api/test_corporate_comparison.py::test_corporate_comparison_snapshot_version_can_be_deleted",
+  "tests/api/test_corporate_comparison.py::test_corporate_comparison_snapshot_version_returns_selected_saved_rows",
+  "tests/api/test_corporate_comparison.py::test_corporate_comparison_stock_history_returns_saved_metric_timeline",
+  "tests/api/test_corporate_comparison.py::test_corporate_comparison_watchlist_plus_benchmark_includes_zero_weight_watchlist_rows",
+  "tests/api/test_corporate_comparison.py::test_init_db_adds_comparison_universe_columns_for_legacy_snapshot_tables",
+  "tests/api/test_corporate_comparison.py::test_manual_refresh_keeps_multiple_intraday_versions_for_same_kst_day",
+  "tests/api/test_watchlist_resync.py::test_corporate_companies_includes_all_stock_targets_json_entries",
+  "tests/api/test_watchlist_resync.py::test_portfolio_preferences_round_trip_total_investment_amount",
+  "tests/api/test_watchlist_resync.py::test_watchlist_resync_rejects_empty_json",
+  "tests/api/test_watchlist_resync.py::test_watchlist_resync_replaces_existing_rows_from_json",
+  "tests/api/test_watchlist_resync.py::test_watchlist_resync_updates_corporate_companies_source_from_portfolio",
+  "tests/api/test_watchlist_resync.py::test_watchlist_sync_exports_db_weights_to_json",
+  "tests/api/test_watchlist_resync.py::test_watchlist_sync_status_tracks_last_explicit_action"
+]

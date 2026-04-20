@@ -22,6 +22,71 @@ class ValuationAssumptions(BaseModel):
     debt_ratio: float | None = Field(default=None, ge=0.0, le=100.0)
 
 
+class DCFSummary(BaseModel):
+    """Phase 1 DCF payload suitable for live streaming and lightweight UI rendering."""
+
+    report_id: str
+    ticker: str
+    estimated_value: float
+    current_price: float
+    upside_pct: float
+    status: str
+    generated_at: str
+
+
+class DCFAssumptionSummary(BaseModel):
+    """Phase 2 DCF payload containing only the high-level assumption recap."""
+
+    report_id: str
+    ticker: str
+    generated_at: str
+    wacc_used: float
+    margin_used: float
+    growth_used: float
+    fcff_used: float
+    esg_penalty_used: float
+    terminal_growth_used: float
+    enterprise_value_index: float
+
+
+class DCFProjectionRow(BaseModel):
+    """One projected FCFF row for the full DCF report."""
+
+    year: int
+    projected_fcff: float
+    discount_factor: float
+    present_value: float
+
+
+class DCFWaccBreakdown(BaseModel):
+    """Expanded WACC inputs reserved for the full report retrieval path."""
+
+    risk_free_rate: float
+    unlevered_beta: float
+    debt_ratio: float
+    tax_rate: float
+    equity_risk_premium: float
+    country_risk_premium: float
+
+
+class DCFFullReport(BaseModel):
+    """Phase 3 DCF report containing the full backend valuation breakdown."""
+
+    summary: DCFSummary
+    assumptions: DCFAssumptionSummary
+    projection_rows: List[DCFProjectionRow] = Field(default_factory=list)
+    wacc_breakdown: DCFWaccBreakdown
+    terminal_cash_flow: float
+    terminal_value: float
+    present_value_of_terminal: float
+    present_value_of_fcff: float
+    enterprise_value: float
+    agency_discount: float
+    dcf_multiple: float
+    baseline_multiple: float
+    fcff_scale: float
+
+
 class RiskAssumptions(BaseModel):
     """Bounds for Monte Carlo risk logic."""
 
@@ -159,3 +224,16 @@ class CorporateComparisonStockHistoryResponse(BaseModel):
     benchmark_ticker: str = "^GSPC"
     custom_tickers: List[str] = Field(default_factory=list)
     points: List[CorporateComparisonStockHistoryPoint] = Field(default_factory=list)
+
+
+class CorporateComparisonSnapshotDeleteResult(BaseModel):
+    """Deletion summary for one persisted comparison snapshot version."""
+
+    snapshot_version: str
+    deleted_rows: int = 0
+
+
+class CorporateDcfBatchRequest(BaseModel):
+    """Tickers selected for bulk DCF report calculation."""
+
+    tickers: List[str] = Field(default_factory=list)

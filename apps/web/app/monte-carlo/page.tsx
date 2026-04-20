@@ -6,6 +6,7 @@ import type {
   MonteCarloResult,
   PathSimulationInput,
   SharedSimulationResult,
+  StockPriceLookup,
   SimulationWorkerResponse,
   ValuationInput,
   ValuationResult,
@@ -19,6 +20,7 @@ import {
   TabButton,
 } from "./components";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { getApiBaseUrl } from "@/lib/api";
 
 type SimulationTab = "path" | "risk" | "distribution" | "valuation" | "correlation";
 
@@ -75,6 +77,29 @@ const defaultCorrelationInput: CorrelationInput = {
   seed: 42,
 };
 
+const STOCK_PRICE_LOOKUP_MAX_ATTEMPTS = 6;
+
+async function fetchStockPriceLookup(
+  ticker: string,
+  signal?: AbortSignal,
+): Promise<{ statusCode: number; data: StockPriceLookup }> {
+  const requestId = typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `req-${Date.now()}`;
+  const response = await fetch(`${getApiBaseUrl()}/api/v1/stock/${encodeURIComponent(ticker)}/price`, {
+    method: "GET",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Request-ID": requestId,
+    },
+    signal,
+  });
+
+  const payload = (await response.json()) as { data: StockPriceLookup };
+  return {
+    statusCode: response.status,
+    data: payload.data,
+  };
+}
+
 // CSV export helpers keep data serialization out of the tab components.
 function csvCell(value: string | number) {
   const text = String(value);
@@ -116,6 +141,8 @@ export default function MonteCarloPage() {
   const [status, setStatus] = useState<"idle" | "loading" | "error" | "cancelled">("idle");
   const [valuationStatus, setValuationStatus] = useState<"idle" | "loading" | "error" | "cancelled">("idle");
   const [correlationStatus, setCorrelationStatus] = useState<"idle" | "loading" | "error" | "cancelled">("idle");
+  const [valuationPriceLookupStatus, setValuationPriceLookupStatus] = useState<"idle" | "loading" | "fetching" | "success" | "not_found" | "error">("idle");
+  const [valuationPriceLookupMessage, setValuationPriceLookupMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
   const [valuationProgress, setValuationProgress] = useState(0);
@@ -123,6 +150,10 @@ export default function MonteCarloPage() {
   const workerRef = useRef<Worker | null>(null);
   const activeRequestIdRef = useRef<string | null>(null);
   const activeRequestKindRef = useRef<"path" | "valuation" | "correlation" | null>(null);
+  const priceLookupRequestSeqRef = useRef(0);
+  const priceLookupTickerRef = useRef(defaultValuationInput.ticker);
+  const priceLookupAbortRef = useRef<AbortController | null>(null);
+  const priceLookupManualEditSeqRef = useRef(0);
 
   // One shared worker handles path, valuation, and correlation jobs.
   useEffect(() => {
@@ -182,7 +213,107 @@ export default function MonteCarloPage() {
   };
 
   const updateValuation = <K extends keyof ValuationInput>(key: K, value: ValuationInput[K]) => {
+    if (key === "ticker") {
+      priceLookupTickerRef.current = String(value).trim().toUpperCase();
+      setValuationPriceLookupStatus("idle");
+      setValuationPriceLookupMessage(null);
+    }
+    if (key === "currentPrice") {
+      priceLookupManualEditSeqRef.current += 1;
+      if (valuationPriceLookupStatus === "success") {
+        setValuationPriceLookupMessage("Price can still be manually overridden after auto-fill.");
+      }
+    }
     setValuationInput((current) => ({ ...current, [key]: value }));
+  };
+
+  useEffect(() => () => {
+    priceLookupAbortRef.current?.abort();
+  }, []);
+
+  const runStockPriceLookup = async () => {
+    const ticker = valuationInput.ticker.trim().toUpperCase();
+    if (!ticker) {
+      setValuationPriceLookupStatus("idle");
+      setValuationPriceLookupMessage(null);
+      return;
+    }
+
+    priceLookupAbortRef.current?.abort();
+    const abortController = new AbortController();
+    priceLookupAbortRef.current = abortController;
+
+    const requestSeq = ++priceLookupRequestSeqRef.current;
+    const lookupTicker = ticker;
+    const lookupManualEditSeq = priceLookupManualEditSeqRef.current;
+    setValuationPriceLookupStatus("loading");
+    setValuationPriceLookupMessage(`Looking up ${lookupTicker} price from the cache-first API...`);
+
+    for (let attempt = 1; attempt <= STOCK_PRICE_LOOKUP_MAX_ATTEMPTS; attempt += 1) {
+      try {
+        const { statusCode, data } = await fetchStockPriceLookup(lookupTicker, abortController.signal);
+        const isLatestRequest = requestSeq === priceLookupRequestSeqRef.current;
+        const tickerUnchanged = lookupTicker === priceLookupTickerRef.current;
+        if (!isLatestRequest || !tickerUnchanged) {
+          return;
+        }
+
+        if (statusCode === 202 || data.status === "fetching") {
+          setValuationPriceLookupStatus("fetching");
+          setValuationPriceLookupMessage(data.detail_note || `${lookupTicker} is being fetched. Waiting for cache hydration...`);
+          const retryAfterMs = Math.max(1, data.retry_after_seconds ?? 2) * 1000;
+          await new Promise<void>((resolve, reject) => {
+            const timer = window.setTimeout(resolve, retryAfterMs);
+            const onAbort = () => {
+              window.clearTimeout(timer);
+              reject(new DOMException("Aborted", "AbortError"));
+            };
+            abortController.signal.addEventListener("abort", onAbort, { once: true });
+          });
+          continue;
+        }
+
+        if (data.status === "ok" && data.price !== null) {
+          setValuationPriceLookupStatus("success");
+          setValuationPriceLookupMessage(
+            data.source === "cache_fallback"
+              ? `${lookupTicker} price loaded from stale cache while background refresh continues.`
+              : `${lookupTicker} price loaded from cache.`,
+          );
+          if (lookupManualEditSeq === priceLookupManualEditSeqRef.current) {
+            setValuationInput((current) => (current.ticker.trim().toUpperCase() === lookupTicker
+              ? { ...current, currentPrice: Math.round(data.price ?? current.currentPrice) }
+              : current));
+          }
+          return;
+        }
+
+        if (statusCode === 404 || data.status === "not_found") {
+          setValuationPriceLookupStatus("not_found");
+          setValuationPriceLookupMessage("Ticker not found.");
+          return;
+        }
+
+        setValuationPriceLookupStatus("error");
+        setValuationPriceLookupMessage(data.detail_note || "Stock price lookup failed.");
+        return;
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") {
+          return;
+        }
+        if (requestSeq !== priceLookupRequestSeqRef.current || lookupTicker !== priceLookupTickerRef.current) {
+          return;
+        }
+        setValuationPriceLookupStatus("error");
+        setValuationPriceLookupMessage(error instanceof Error ? error.message : "Stock price lookup failed.");
+        return;
+      }
+    }
+
+    if (requestSeq === priceLookupRequestSeqRef.current && lookupTicker === priceLookupTickerRef.current) {
+      setValuationPriceLookupStatus("error");
+      setValuationPriceLookupMessage(`Price lookup for ${lookupTicker} timed out while waiting for cache hydration.`);
+    }
   };
 
   const updateCorrelation = <K extends keyof CorrelationInput>(key: K, value: CorrelationInput[K]) => {
@@ -389,7 +520,7 @@ export default function MonteCarloPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-7xl mx-auto px-4 py-6">
       {/* Page header and tab navigation */}
       <header className="rounded-[var(--radius)] border border-[var(--border)] bg-white p-6 shadow-sm">
         <p className="text-xs font-bold uppercase tracking-wide text-[var(--text-muted)]">Monte Carlo investment analysis</p>
@@ -438,7 +569,10 @@ export default function MonteCarloPage() {
           valuationResult={valuationResult}
           valuationStatus={valuationStatus}
           valuationProgress={valuationProgress}
+          valuationPriceLookupStatus={valuationPriceLookupStatus}
+          valuationPriceLookupMessage={valuationPriceLookupMessage}
           updateValuation={updateValuation}
+          onValuationTickerBlur={() => void runStockPriceLookup()}
           runValuationSimulation={runValuationSimulation}
           cancelValuationSimulation={cancelValuationSimulation}
         />

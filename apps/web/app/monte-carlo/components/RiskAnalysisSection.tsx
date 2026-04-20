@@ -1,8 +1,9 @@
 "use client";
 
 import type { SharedSimulationResult } from "../lib/types";
-import { Bar, BarChart, CartesianGrid, Cell, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { CHART_INITIAL_DIMENSION, LegendItem, MetricCard, SummaryRow, TEN_THOUSAND_KRW, krwLossFromPercent, numberText, pct } from "./shared";
+import { Bar, BarChart, CartesianGrid, Cell, ReferenceLine, Tooltip, XAxis, YAxis } from "recharts";
+import { ResponsiveChart } from "@/components/ui/ResponsiveChart";
+import { LegendItem, MetricCard, SummaryRow, TEN_THOUSAND_KRW, krwLossFromPercent, numberText, pct } from "./shared";
 
 type Props = {
   sharedSimulation: SharedSimulationResult | null;
@@ -42,7 +43,7 @@ export function RiskAnalysisSection({ sharedSimulation, initialInvestment }: Pro
           <LegendItem label="CVaR 95" lineClass="bg-black" />
         </div>
         <div className="mt-4 h-80">
-          <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1} initialDimension={CHART_INITIAL_DIMENSION}>
+          <ResponsiveChart minWidth={1} minHeight={1}>
             <BarChart data={sharedSimulation.raw.histogram}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="return" tickFormatter={(value) => `${Math.round(Number(value))}%`} />
@@ -58,7 +59,7 @@ export function RiskAnalysisSection({ sharedSimulation, initialInvestment }: Pro
                 ))}
               </Bar>
             </BarChart>
-          </ResponsiveContainer>
+          </ResponsiveChart>
         </div>
       </div>
 
@@ -68,7 +69,7 @@ export function RiskAnalysisSection({ sharedSimulation, initialInvestment }: Pro
           <h2 className="text-lg font-black text-[var(--text-primary)]">Terminal Value Percentiles</h2>
           <p className="text-xs text-[var(--text-muted)]">Each percentile is shown as its own terminal-value bar in 10,000 KRW units.</p>
           <div className="mt-4 h-80">
-            <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1} initialDimension={CHART_INITIAL_DIMENSION}>
+            <ResponsiveChart minWidth={1} minHeight={1}>
               <BarChart
                 data={[
                   { percentile: "P5", value: Number((sharedSimulation.terminalP05 / TEN_THOUSAND_KRW).toFixed(2)) },
@@ -90,7 +91,7 @@ export function RiskAnalysisSection({ sharedSimulation, initialInvestment }: Pro
                   ))}
                 </Bar>
               </BarChart>
-            </ResponsiveContainer>
+            </ResponsiveChart>
           </div>
         </div>
 

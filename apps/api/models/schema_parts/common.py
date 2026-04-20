@@ -19,6 +19,12 @@ class APIResponse(BaseModel, Generic[T]):
     meta: APIMeta = Field(default_factory=APIMeta)
 
 
+class LogTailResponse(BaseModel):
+    log_path: str
+    line_count: int
+    lines: list[str] = Field(default_factory=list)
+
+
 class SentimentEnum(str, Enum):
     positive = "positive"
     neutral = "neutral"

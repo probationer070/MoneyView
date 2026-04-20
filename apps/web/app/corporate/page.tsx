@@ -3,7 +3,15 @@
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { fetchApi } from "@/lib/api";
+import { RefreshCw } from "lucide-react";
+import { Bar, BarChart, CartesianGrid, Cell, Scatter, ScatterChart, Tooltip, XAxis, YAxis, ZAxis } from "recharts";
+import { fetchApi, getApiBaseUrl } from "@/lib/api";
+import type {
+  CorporateDcfBatchRequest,
+  DcfAssumptionSummary as DCFAssumptionSummary,
+  DcfFullReport as DCFFullReport,
+  DcfSummaryResponse as DCFResult,
+} from "../../../../packages/shared-types";
 import {
   benchmarkPresetIdForTicker,
   DEFAULT_KOREAN_BENCHMARK_TICKER,
@@ -11,6 +19,7 @@ import {
 } from "@/lib/benchmarkPresets";
 import { useDebounce } from "@/hooks/useDebounce";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
+import { ResponsiveChart } from "@/components/ui/ResponsiveChart";
 import {
   BetaWaccCurveGraph,
   CompanyStatusGraph,
@@ -35,6 +44,14 @@ interface CorporateCompany {
   };
 }
 
+interface WatchlistHolding {
+  ticker: string;
+  name: string;
+  sector: string;
+  group_name: string;
+  weight: number;
+}
+
 // Built-in company presets are used before API data or user-added companies load.
 const COMPANIES: CorporateCompany[] = [
   { ticker: "AAPL", name: "Apple", preset: { growth: 6, roic: 18, wacc: 10, debtRatio: 18, unleveredBeta: 1.05 } },
@@ -53,6 +70,7 @@ const COMPANIES: CorporateCompany[] = [
   { ticker: "XOM", name: "Exxon Mobil", preset: { growth: 3, roic: 12, wacc: 9.25, debtRatio: 20, unleveredBeta: 0.95 } },
   { ticker: "LEU", name: "Centrus Energy", preset: { growth: 14, roic: 14, wacc: 14, debtRatio: 30, unleveredBeta: 1.8 } },
 ];
+const EMPTY_WATCHLIST_HOLDINGS: WatchlistHolding[] = [];
 const TAX_RATE = 0.25;
 const RISK_FREE_RATE = 4.2;
 const KOREA_COUNTRY_RISK_PREMIUM = 0.8;
@@ -76,16 +94,6 @@ interface CorporateAssumptions {
   marketShare: number;
   governance: number;
   esgPenalty: number;
-}
-
-interface DCFResult {
-  estimated_value: number;
-  current_price: number;
-  upside_pct: number;
-  wacc_used: number;
-  margin_used: number;
-  growth_used: number;
-  status: string;
 }
 
 interface StockPriceRow {
@@ -275,6 +283,36 @@ const initialAssumptions: CorporateAssumptions = {
 };
 
 const STORAGE_KEY = "moneyview:corporate-assumptions:v2";
+const DCF_CACHE_KEY = "moneyview:corporate-dcf-cache:v1";
+const COMPARISON_CACHE_KEY = "moneyview:corporate-comparison-cache:v1";
+const METRIC_HISTORY_CACHE_KEY = "moneyview:corporate-metric-history-cache:v1";
+const QUARTERLY_STATEMENTS_CACHE_KEY = "moneyview:corporate-quarterly-statements-cache:v1";
+const PRICE_HISTORY_CACHE_KEY = "moneyview:corporate-price-history-cache:v1";
+
+interface DcfRequestSnapshot {
+  ticker: string;
+  growth: number;
+  roic: number;
+  wacc: number;
+  debtRatio: number;
+  unleveredBeta: number;
+  crp: number;
+  reinvestment: number;
+  fcff: number;
+  esgPenalty: number;
+}
+
+interface ComparisonRequestSnapshot {
+  comparisonUniverse: ComparisonUniverse;
+  comparisonBenchmarkTicker: string;
+  comparisonCustomTickersInput: string;
+}
+
+interface CachedCalculation<TSnapshot, TResult> {
+  snapshot: TSnapshot;
+  result: TResult;
+  lastUpdatedAt: string;
+}
 
 // Company registry helpers merge static presets, API companies, and deterministic fallbacks.
 function mergeCompanies(apiCompanies: CorporateCompany[] = []) {
@@ -295,6 +333,75 @@ function mergeCompanies(apiCompanies: CorporateCompany[] = []) {
 
 function companyForTicker(ticker: string, companies: CorporateCompany[] = COMPANIES) {
   return companies.find((company) => company.ticker === ticker) ?? { ticker, name: ticker, source: "manual" };
+}
+
+function dcfRequestBody(snapshot: DcfRequestSnapshot) {
+  return {
+    revenue_growth_rate: snapshot.growth / 100,
+    operating_margin: clamp(snapshot.roic / 100, -1, 1),
+    wacc: snapshot.wacc / 100,
+    tax_rate: TAX_RATE,
+    terminal_growth_rate: clamp(snapshot.growth / 100, -0.1, 0.1),
+    fcff: snapshot.fcff,
+    esg_penalty: snapshot.esgPenalty,
+    reinvestment: snapshot.reinvestment,
+    unlevered_beta: snapshot.unleveredBeta,
+    debt_ratio: snapshot.debtRatio,
+  };
+}
+
+function mergeDcfSummary(summary: DCFResult, assumptions: DCFAssumptionSummary | null): DCFResult {
+  return {
+    ...summary,
+    wacc_used: assumptions?.wacc_used ?? summary.wacc_used ?? 0,
+    margin_used: assumptions?.margin_used ?? summary.margin_used ?? 0,
+    growth_used: assumptions?.growth_used ?? summary.growth_used ?? 0,
+    fcff_used: assumptions?.fcff_used ?? summary.fcff_used ?? 0,
+    esg_penalty_used: assumptions?.esg_penalty_used ?? summary.esg_penalty_used ?? 0,
+    terminal_growth_used: assumptions?.terminal_growth_used ?? summary.terminal_growth_used ?? 0,
+    enterprise_value_index: assumptions?.enterprise_value_index ?? summary.enterprise_value_index ?? 0,
+  };
+}
+
+async function streamCorporateDcfSummary(
+  snapshot: DcfRequestSnapshot,
+  signal: AbortSignal,
+  onEvent: (payload: Record<string, unknown>) => void,
+) {
+  const response = await fetch(`${getApiBaseUrl()}/api/v1/corporate/dcf/${snapshot.ticker}/stream`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(dcfRequestBody(snapshot)),
+    signal,
+  });
+
+  if (!response.ok || !response.body) {
+    throw new Error(`DCF stream failed: ${response.status}`);
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const messages = buffer.split("\n\n");
+    buffer = messages.pop() ?? "";
+
+    for (const message of messages) {
+      const dataLines = message
+        .split("\n")
+        .filter((line) => line.startsWith("data:"))
+        .map((line) => line.slice(5).trim());
+      if (dataLines.length === 0) continue;
+      onEvent(JSON.parse(dataLines.join("\n")) as Record<string, unknown>);
+    }
+  }
 }
 
 function stableSeed(value: string) {
@@ -389,14 +496,35 @@ function dateTimeText(value: string) {
   return parsed.toLocaleString();
 }
 
-function comparisonUniverseLabel(value: ComparisonUniverse) {
+function comparisonUniverseLabel(value: ComparisonUniverse | "portfolio_plus_benchmark") {
   switch (value) {
+    case "portfolio_plus_benchmark":
+      return "Portfolio + Benchmark";
     case "watchlist_plus_benchmark":
       return "Watchlist + Benchmark";
     case "custom":
       return "Custom Universe";
     default:
       return value;
+  }
+}
+
+function readSessionCache<T>(key: string): T | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeSessionCache<T>(key: string, value: T) {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // Session cache is an optional optimization layer.
   }
 }
 
@@ -626,6 +754,9 @@ function CalculationDetailModal({
   historicalStatus,
   quarterlyStatementRows,
   quarterlyStatementStatus,
+  dcfFullReport,
+  dcfFullReportStatus,
+  onRequestDcfFullReport,
   onClose,
 }: {
   detail: CalculationDetail;
@@ -635,6 +766,9 @@ function CalculationDetailModal({
   historicalStatus: string;
   quarterlyStatementRows: QuarterlyStatementRow[];
   quarterlyStatementStatus: string;
+  dcfFullReport: DCFFullReport | null;
+  dcfFullReportStatus: string | null;
+  onRequestDcfFullReport?: (() => void) | null;
   onClose: () => void;
 }) {
   useEffect(() => {
@@ -669,6 +803,7 @@ function CalculationDetailModal({
       source: `${row.source}; Data Period: ${detail.timeHorizon}`,
     })),
   ];
+  const showDcfFullReport = detail.title.includes("Backend DCF");
 
   return (
     <div
@@ -803,6 +938,87 @@ function CalculationDetailModal({
               </table>
             </div>
           </section>
+
+          {showDcfFullReport && (
+            <section>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h3 className="text-sm font-bold text-[var(--text-primary)]">Full DCF Report</h3>
+                  <p className="mt-1 text-xs text-[var(--text-muted)]">
+                    Phase 3 loads only when you explicitly request the detailed projection and WACC breakdown.
+                  </p>
+                </div>
+                {onRequestDcfFullReport ? (
+                  <button
+                    type="button"
+                    onClick={onRequestDcfFullReport}
+                    className="rounded-[var(--radius)] border border-[var(--border)] px-3 py-1 text-sm text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                  >
+                    View Full Report
+                  </button>
+                ) : null}
+              </div>
+              {dcfFullReportStatus && (
+                <p className="mt-2 text-xs text-[var(--text-muted)]">{dcfFullReportStatus}</p>
+              )}
+              {dcfFullReport ? (
+                <>
+                  <div className="mt-3 overflow-x-auto rounded-[var(--radius)] border border-[var(--border)]">
+                    <table className="w-full min-w-[42rem] table-fixed text-left text-sm">
+                      <thead className="bg-[var(--surface)] text-xs font-bold uppercase text-black">
+                        <tr>
+                          <th className="px-3 py-2">Year</th>
+                          <th className="px-3 py-2">Projected FCFF</th>
+                          <th className="px-3 py-2">Discount Factor</th>
+                          <th className="px-3 py-2">Present Value</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {dcfFullReport.projection_rows.map((row) => (
+                          <tr key={`${ticker}-projection-${row.year}`} className="border-t border-[var(--border)]">
+                            <td className="px-3 py-2 font-bold text-black">{row.year}</td>
+                            <td className="px-3 py-2 font-bold tabular-nums text-black">{numberText(row.projected_fcff)}</td>
+                            <td className="px-3 py-2 font-bold tabular-nums text-black">{numberText2(row.discount_factor)}</td>
+                            <td className="px-3 py-2 font-bold tabular-nums text-black">{numberText(row.present_value)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="mt-3 overflow-x-auto rounded-[var(--radius)] border border-[var(--border)]">
+                    <table className="w-full min-w-[42rem] table-fixed text-left text-sm">
+                      <thead className="bg-[var(--surface)] text-xs font-bold uppercase text-black">
+                        <tr>
+                          <th className="px-3 py-2">Breakdown</th>
+                          <th className="px-3 py-2">Value</th>
+                          <th className="px-3 py-2">Context</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {[
+                          ["Terminal Cash Flow", numberText(dcfFullReport.terminal_cash_flow), "Year 5 FCFF grown by terminal growth"],
+                          ["Terminal Value", numberText(dcfFullReport.terminal_value), "Gordon growth terminal value"],
+                          ["PV of Terminal", numberText(dcfFullReport.present_value_of_terminal), "Discounted terminal value"],
+                          ["PV of FCFF", numberText(dcfFullReport.present_value_of_fcff), "Discounted phase-one FCFF rows"],
+                          ["Enterprise Value", numberText(dcfFullReport.enterprise_value), "PV of FCFF plus PV of terminal value"],
+                          ["Agency Discount", numberText2(dcfFullReport.agency_discount), "ESG penalty adjustment"],
+                          ["Risk-free Rate", pct(dcfFullReport.wacc_breakdown.risk_free_rate * 100), "Full-report WACC breakdown"],
+                          ["Equity Risk Premium", pct(dcfFullReport.wacc_breakdown.equity_risk_premium * 100), "Full-report WACC breakdown"],
+                          ["Country Risk Premium", pct(dcfFullReport.wacc_breakdown.country_risk_premium * 100), "Full-report WACC breakdown"],
+                        ].map(([label, value, source]) => (
+                          <tr key={`${ticker}-dcf-breakdown-${label}`} className="border-t border-[var(--border)]">
+                            <td className="px-3 py-2 font-bold text-black">{label}</td>
+                            <td className="px-3 py-2 font-bold tabular-nums text-black">{value}</td>
+                            <td className="px-3 py-2 font-bold text-black">{source}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              ) : null}
+            </section>
+          )}
 
           <section>
             <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between">
@@ -955,20 +1171,74 @@ export default function CorporateAnalysisPage() {
   const [comparisonUniverse, setComparisonUniverse] = useState<ComparisonUniverse>("watchlist_plus_benchmark");
   const [comparisonBenchmarkTicker, setComparisonBenchmarkTicker] = useState(DEFAULT_KOREAN_BENCHMARK_TICKER);
   const [comparisonCustomTickersInput, setComparisonCustomTickersInput] = useState("AAPL, MSFT");
+  const [sourceDataRequestedTicker, setSourceDataRequestedTicker] = useState<string | null>(() => readSessionCache<CachedCalculation<string, CorporateMetricHistoryApi>>(METRIC_HISTORY_CACHE_KEY)?.snapshot ?? null);
+  const [sourceDataRefreshToken, setSourceDataRefreshToken] = useState<string | null>(null);
+  const [cachedMetricsHistory] = useState<CorporateMetricHistoryApi | null>(() => readSessionCache<CachedCalculation<string, CorporateMetricHistoryApi>>(METRIC_HISTORY_CACHE_KEY)?.result ?? null);
+  const [cachedQuarterlyStatements] = useState<QuarterlyStatementsApi | null>(() => readSessionCache<CachedCalculation<string, QuarterlyStatementsApi>>(QUARTERLY_STATEMENTS_CACHE_KEY)?.result ?? null);
+  const [cachedHistoricalPrices] = useState<StockPriceRow[] | null>(() => readSessionCache<CachedCalculation<string, StockPriceRow[]>>(PRICE_HISTORY_CACHE_KEY)?.result ?? null);
+  const [cachedSourceDataUpdatedAt] = useState<string | null>(() =>
+    readSessionCache<CachedCalculation<string, CorporateMetricHistoryApi>>(METRIC_HISTORY_CACHE_KEY)?.lastUpdatedAt
+    ?? readSessionCache<CachedCalculation<string, QuarterlyStatementsApi>>(QUARTERLY_STATEMENTS_CACHE_KEY)?.lastUpdatedAt
+    ?? readSessionCache<CachedCalculation<string, StockPriceRow[]>>(PRICE_HISTORY_CACHE_KEY)?.lastUpdatedAt
+    ?? null,
+  );
+  const [dcfRequestedSnapshot, setDcfRequestedSnapshot] = useState<DcfRequestSnapshot | null>(() => readSessionCache<CachedCalculation<DcfRequestSnapshot, DCFResult>>(DCF_CACHE_KEY)?.snapshot ?? null);
+  const [dcfCachedResult] = useState<DCFResult | null>(() => readSessionCache<CachedCalculation<DcfRequestSnapshot, DCFResult>>(DCF_CACHE_KEY)?.result ?? null);
+  const [dcfLastUpdatedAt] = useState<string | null>(() => readSessionCache<CachedCalculation<DcfRequestSnapshot, DCFResult>>(DCF_CACHE_KEY)?.lastUpdatedAt ?? null);
+  const [dcfRefreshToken, setDcfRefreshToken] = useState<string | null>(null);
+  const [dcfStreamResult, setDcfStreamResult] = useState<DCFResult | null>(null);
+  const [dcfFullReport, setDcfFullReport] = useState<DCFFullReport | null>(null);
+  const [dcfStreamStatus, setDcfStreamStatus] = useState<"idle" | "streaming" | "complete" | "error">("idle");
+  const [dcfFullReportLoading, setDcfFullReportLoading] = useState(false);
+  const [dcfStreamError, setDcfStreamError] = useState<string | null>(null);
+  const [bulkDcfReports, setBulkDcfReports] = useState<DCFFullReport[]>([]);
+  const [bulkDcfReportsLoading, setBulkDcfReportsLoading] = useState(false);
+  const [bulkDcfReportsError, setBulkDcfReportsError] = useState<string | null>(null);
+  const [bulkDcfReportsLastUpdatedAt, setBulkDcfReportsLastUpdatedAt] = useState<string | null>(null);
+  const [comparisonRequestedSnapshot, setComparisonRequestedSnapshot] = useState<ComparisonRequestSnapshot | null>(() => readSessionCache<CachedCalculation<ComparisonRequestSnapshot, CorporateComparisonApi>>(COMPARISON_CACHE_KEY)?.snapshot ?? null);
+  const [comparisonCachedResult] = useState<CorporateComparisonApi | null>(() => readSessionCache<CachedCalculation<ComparisonRequestSnapshot, CorporateComparisonApi>>(COMPARISON_CACHE_KEY)?.result ?? null);
+  const [comparisonLastUpdatedAt] = useState<string | null>(() => readSessionCache<CachedCalculation<ComparisonRequestSnapshot, CorporateComparisonApi>>(COMPARISON_CACHE_KEY)?.lastUpdatedAt ?? null);
+  const [comparisonRefreshToken, setComparisonRefreshToken] = useState<string | null>(null);
   const debounced = useDebounce(assumptions, 250);
   const selectedMetricParams = useMemo(
     () => metricBasisParams(growthBasis, growthYear, roicBasis, roicYear),
     [growthBasis, growthYear, roicBasis, roicYear],
   );
+  const activeDcfSnapshot = useMemo<DcfRequestSnapshot>(() => ({
+    ticker: debounced.ticker,
+    growth: debounced.growth,
+    roic: debounced.roic,
+    wacc: debounced.wacc,
+    debtRatio: debounced.debtRatio,
+    unleveredBeta: debounced.unleveredBeta,
+    crp: debounced.crp,
+    reinvestment: debounced.reinvestment,
+    fcff: debounced.fcff,
+    esgPenalty: debounced.esgPenalty,
+  }), [debounced]);
+  const activeComparisonSnapshot = useMemo<ComparisonRequestSnapshot>(() => ({
+    comparisonUniverse,
+    comparisonBenchmarkTicker: comparisonBenchmarkTicker.trim().toUpperCase() || DEFAULT_KOREAN_BENCHMARK_TICKER,
+    comparisonCustomTickersInput,
+  }), [comparisonBenchmarkTicker, comparisonCustomTickersInput, comparisonUniverse]);
+  const sourceDataTicker = assumptions.ticker.trim().toUpperCase();
 
   // Company search data combines server-side saved companies with local presets.
   const companiesQuery = useQuery<CorporateCompany[]>({
     queryKey: ["corporate-companies"],
     queryFn: () => fetchApi<CorporateCompany[]>("/corporate/companies"),
-    staleTime: 30_000,
+    staleTime: 10_000,
+    refetchOnWindowFocus: true,
+  });
+  const watchlistQuery = useQuery<WatchlistHolding[]>({
+    queryKey: ["corporate-watchlist-holdings"],
+    queryFn: () => fetchApi<WatchlistHolding[]>("/portfolio/watchlist"),
+    staleTime: 10_000,
+    refetchOnWindowFocus: true,
   });
 
   const companies = useMemo(() => mergeCompanies(companiesQuery.data), [companiesQuery.data]);
+  const watchlistHoldings = watchlistQuery.data ?? EMPTY_WATCHLIST_HOLDINGS;
   const activeCompany = companyForTicker(assumptions.ticker, companies);
   const showCompanyResults = companySearch.trim().length > 0;
   const filteredCompanies = useMemo(() => {
@@ -982,19 +1252,21 @@ export default function CorporateAnalysisPage() {
 
   // Hydrate and persist assumption state across backend storage and browser fallback storage.
   const metricsHistoryQuery = useQuery<CorporateMetricHistoryApi>({
-    queryKey: ["corporate-metric-history", assumptions.ticker],
+    queryKey: ["corporate-metric-history", sourceDataRequestedTicker ?? "idle", sourceDataRefreshToken ?? "idle"],
     queryFn: ({ signal }) =>
-      fetchApi<CorporateMetricHistoryApi>(`/corporate/metrics/${assumptions.ticker}/history`, { signal }),
+      fetchApi<CorporateMetricHistoryApi>(`/corporate/metrics/${sourceDataRequestedTicker}/history`, { signal }),
     placeholderData: (previous) => previous,
     staleTime: 5 * 60_000,
+    enabled: Boolean(sourceDataRequestedTicker && sourceDataRefreshToken),
   });
 
   const quarterlyStatementsQuery = useQuery<QuarterlyStatementsApi>({
-    queryKey: ["corporate-quarterly-statements", assumptions.ticker],
+    queryKey: ["corporate-quarterly-statements", sourceDataRequestedTicker ?? "idle", sourceDataRefreshToken ?? "idle"],
     queryFn: ({ signal }) =>
-      fetchApi<QuarterlyStatementsApi>(`/corporate/metrics/${assumptions.ticker}/quarterly-statements`, { signal }),
+      fetchApi<QuarterlyStatementsApi>(`/corporate/metrics/${sourceDataRequestedTicker}/quarterly-statements`, { signal }),
     placeholderData: (previous) => previous,
     staleTime: 5 * 60_000,
+    enabled: Boolean(sourceDataRequestedTicker && sourceDataRefreshToken),
   });
 
   useEffect(() => {
@@ -1052,7 +1324,7 @@ export default function CorporateAnalysisPage() {
     nextRoicBasis?: RoicBasis;
     nextRoicYear?: string;
   }) => {
-    const history = metricsHistoryQuery.data;
+    const history = metricsHistoryData;
     if (!history || history.ticker !== assumptions.ticker) return;
 
     const growthValue = nextGrowthBasis === "cagr"
@@ -1177,75 +1449,309 @@ export default function CorporateAnalysisPage() {
     };
   }, [assumptions, impliedErp, includeSubjectiveHealth]);
 
-  const dcfQuery = useQuery<DCFResult>({
-    queryKey: [
-      "corporate-dcf",
-      debounced.ticker,
-      debounced.growth,
-      debounced.wacc,
-      debounced.roic,
-      debounced.debtRatio,
-      debounced.unleveredBeta,
-      debounced.crp,
-      debounced.reinvestment,
-      debounced.fcff,
-      debounced.esgPenalty,
-    ],
-    queryFn: ({ signal }) =>
-      fetchApi<DCFResult>(`/corporate/dcf/${debounced.ticker}`, {
-        method: "POST",
-        signal,
-        body: JSON.stringify({
-          revenue_growth_rate: debounced.growth / 100,
-          operating_margin: clamp(debounced.roic / 100, -1, 1),
-          wacc: debounced.wacc / 100,
-          tax_rate: TAX_RATE,
-          terminal_growth_rate: clamp(debounced.growth / 100, -0.1, 0.1),
-          fcff: debounced.fcff,
-          esg_penalty: debounced.esgPenalty,
-          reinvestment: debounced.reinvestment,
-          unlevered_beta: debounced.unleveredBeta,
-          debt_ratio: debounced.debtRatio,
-        }),
-      }),
-    placeholderData: (previous) => previous,
-    staleTime: 0,
-  });
-
   const comparisonQuery = useQuery<CorporateComparisonApi>({
-    queryKey: ["corporate-comparison", "live", comparisonUniverse, comparisonBenchmarkTicker, comparisonCustomTickersInput],
+    queryKey: [
+      "corporate-comparison",
+      "live",
+      comparisonRequestedSnapshot?.comparisonUniverse ?? "idle",
+      comparisonRequestedSnapshot?.comparisonBenchmarkTicker ?? "idle",
+      comparisonRequestedSnapshot?.comparisonCustomTickersInput ?? "idle",
+      comparisonRefreshToken ?? "idle",
+    ],
     queryFn: ({ signal }) =>
       fetchApi<CorporateComparisonApi>("/corporate/comparison", {
         signal,
         params: {
           mode: "live",
-          comparison_universe: comparisonUniverse,
-          benchmark_ticker: comparisonBenchmarkTicker.trim().toUpperCase() || DEFAULT_KOREAN_BENCHMARK_TICKER,
-          custom_tickers: comparisonCustomTickersInput,
+          comparison_universe: comparisonRequestedSnapshot?.comparisonUniverse ?? "watchlist_plus_benchmark",
+          benchmark_ticker: comparisonRequestedSnapshot?.comparisonBenchmarkTicker ?? DEFAULT_KOREAN_BENCHMARK_TICKER,
+          custom_tickers: comparisonRequestedSnapshot?.comparisonCustomTickersInput ?? "",
         },
       }),
     placeholderData: (previous) => previous,
     staleTime: 60_000,
+    enabled: Boolean(comparisonRequestedSnapshot && comparisonRefreshToken),
   });
-  const sortedComparisonRows = useMemo(() => {
-    const rows = [...(comparisonQuery.data?.rows ?? [])];
-    rows.sort((left, right) => {
-      const delta = Number(left[comparisonSortKey]) - Number(right[comparisonSortKey]);
-      return comparisonSortDirection === "asc" ? delta : -delta;
-    });
-    return rows;
-  }, [comparisonQuery.data?.rows, comparisonSortDirection, comparisonSortKey]);
-
   const historicalPricesQuery = useQuery<StockPriceRow[]>({
-    queryKey: ["corporate-ohlcv", assumptions.ticker, "5y"],
+    queryKey: ["corporate-ohlcv", sourceDataRequestedTicker ?? "idle", "5y", sourceDataRefreshToken ?? "idle"],
     queryFn: ({ signal }) =>
-      fetchApi<StockPriceRow[]>(`/detail/${assumptions.ticker}/ohlcv`, {
+      fetchApi<StockPriceRow[]>(`/detail/${sourceDataRequestedTicker}/ohlcv`, {
         params: { period: "5y" },
         signal,
       }),
     placeholderData: (previous) => previous,
     staleTime: 5 * 60_000,
+    enabled: Boolean(sourceDataRequestedTicker && sourceDataRefreshToken),
   });
+  const dcfDisplayData = dcfStreamResult ?? dcfCachedResult;
+  const comparisonDisplayData = comparisonQuery.data ?? comparisonCachedResult;
+  const metricsHistoryData = metricsHistoryQuery.data ?? cachedMetricsHistory;
+  const quarterlyStatementsData = quarterlyStatementsQuery.data ?? cachedQuarterlyStatements;
+  const historicalPricesData = historicalPricesQuery.data ?? cachedHistoricalPrices ?? [];
+  const dcfData = dcfDisplayData;
+  const comparisonData = comparisonDisplayData;
+  const dcfDisplayLastUpdatedAt = dcfStreamResult?.generated_at ?? dcfLastUpdatedAt;
+  const comparisonDisplayLastUpdatedAt = comparisonQuery.data ? new Date(comparisonQuery.dataUpdatedAt).toISOString() : comparisonLastUpdatedAt;
+  const sourceDataDisplayLastUpdatedAt = metricsHistoryQuery.data
+    ? new Date(metricsHistoryQuery.dataUpdatedAt).toISOString()
+    : quarterlyStatementsQuery.data
+      ? new Date(quarterlyStatementsQuery.dataUpdatedAt).toISOString()
+      : historicalPricesQuery.data
+        ? new Date(historicalPricesQuery.dataUpdatedAt).toISOString()
+        : cachedSourceDataUpdatedAt;
+  const dcfIsStale = Boolean(
+    dcfDisplayData
+    && dcfRequestedSnapshot
+    && JSON.stringify(dcfRequestedSnapshot) !== JSON.stringify(activeDcfSnapshot),
+  );
+  const comparisonIsStale = Boolean(
+    comparisonDisplayData
+    && comparisonRequestedSnapshot
+    && JSON.stringify(comparisonRequestedSnapshot) !== JSON.stringify(activeComparisonSnapshot),
+  );
+  const sourceDataIsStale = Boolean(
+    (metricsHistoryData || quarterlyStatementsData || historicalPricesData.length > 0)
+    && sourceDataRequestedTicker
+    && sourceDataRequestedTicker !== sourceDataTicker,
+  );
+
+  useEffect(() => {
+    if (!dcfRequestedSnapshot || !dcfRefreshToken) return;
+
+    const abortController = new AbortController();
+    let streamedSummary: DCFResult | null = null;
+    let streamedAssumptions: DCFAssumptionSummary | null = null;
+    setDcfStreamStatus("streaming");
+    setDcfStreamError(null);
+    setDcfFullReport(null);
+
+    void streamCorporateDcfSummary(dcfRequestedSnapshot, abortController.signal, (payload) => {
+      const phase = payload.phase;
+      if (phase === "phase1" && payload.summary && typeof payload.summary === "object") {
+        streamedSummary = payload.summary as DCFResult;
+        setDcfStreamResult(mergeDcfSummary(streamedSummary, streamedAssumptions));
+        return;
+      }
+      if (phase === "phase2" && payload.assumptions && typeof payload.assumptions === "object") {
+        streamedAssumptions = payload.assumptions as DCFAssumptionSummary;
+        if (streamedSummary) {
+          const merged = mergeDcfSummary(streamedSummary, streamedAssumptions);
+          setDcfStreamResult(merged);
+          writeSessionCache(DCF_CACHE_KEY, {
+            snapshot: dcfRequestedSnapshot,
+            result: merged,
+            lastUpdatedAt: merged.generated_at,
+          } satisfies CachedCalculation<DcfRequestSnapshot, DCFResult>);
+        }
+        return;
+      }
+      if (phase === "complete") {
+        setDcfStreamStatus("complete");
+      }
+    }).catch((error: unknown) => {
+      if (abortController.signal.aborted) return;
+      setDcfStreamStatus("error");
+      setDcfStreamError(error instanceof Error ? error.message : "DCF summary stream failed.");
+    }).finally(() => {
+      if (!abortController.signal.aborted) {
+        setDcfStreamStatus((current) => (current === "streaming" ? "complete" : current));
+      }
+    });
+
+    return () => abortController.abort();
+  }, [dcfRefreshToken, dcfRequestedSnapshot]);
+
+  useEffect(() => {
+    if (!comparisonQuery.data || !comparisonRequestedSnapshot) return;
+    const lastUpdatedAt = new Date(comparisonQuery.dataUpdatedAt).toISOString();
+    const cacheValue: CachedCalculation<ComparisonRequestSnapshot, CorporateComparisonApi> = {
+      snapshot: comparisonRequestedSnapshot,
+      result: comparisonQuery.data,
+      lastUpdatedAt,
+    };
+    writeSessionCache(COMPARISON_CACHE_KEY, cacheValue);
+  }, [comparisonQuery.data, comparisonQuery.dataUpdatedAt, comparisonRequestedSnapshot]);
+
+  useEffect(() => {
+    if (JSON.stringify(comparisonRequestedSnapshot) === JSON.stringify(activeComparisonSnapshot) && comparisonRefreshToken) {
+      return;
+    }
+
+    setComparisonRequestedSnapshot(activeComparisonSnapshot);
+    setComparisonRefreshToken(`${Date.now()}`);
+  }, [activeComparisonSnapshot, comparisonRefreshToken, comparisonRequestedSnapshot]);
+
+  useEffect(() => {
+    if (!metricsHistoryQuery.data || !sourceDataRequestedTicker) return;
+    writeSessionCache(METRIC_HISTORY_CACHE_KEY, {
+      snapshot: sourceDataRequestedTicker,
+      result: metricsHistoryQuery.data,
+      lastUpdatedAt: new Date(metricsHistoryQuery.dataUpdatedAt).toISOString(),
+    } satisfies CachedCalculation<string, CorporateMetricHistoryApi>);
+  }, [metricsHistoryQuery.data, metricsHistoryQuery.dataUpdatedAt, sourceDataRequestedTicker]);
+
+  useEffect(() => {
+    if (!quarterlyStatementsQuery.data || !sourceDataRequestedTicker) return;
+    writeSessionCache(QUARTERLY_STATEMENTS_CACHE_KEY, {
+      snapshot: sourceDataRequestedTicker,
+      result: quarterlyStatementsQuery.data,
+      lastUpdatedAt: new Date(quarterlyStatementsQuery.dataUpdatedAt).toISOString(),
+    } satisfies CachedCalculation<string, QuarterlyStatementsApi>);
+  }, [quarterlyStatementsQuery.data, quarterlyStatementsQuery.dataUpdatedAt, sourceDataRequestedTicker]);
+
+  useEffect(() => {
+    if (!historicalPricesQuery.data || !sourceDataRequestedTicker) return;
+    writeSessionCache(PRICE_HISTORY_CACHE_KEY, {
+      snapshot: sourceDataRequestedTicker,
+      result: historicalPricesQuery.data,
+      lastUpdatedAt: new Date(historicalPricesQuery.dataUpdatedAt).toISOString(),
+    } satisfies CachedCalculation<string, StockPriceRow[]>);
+  }, [historicalPricesQuery.data, historicalPricesQuery.dataUpdatedAt, sourceDataRequestedTicker]);
+
+  const handleRefreshDcf = () => {
+    setDcfRequestedSnapshot(activeDcfSnapshot);
+    setDcfRefreshToken(`${Date.now()}`);
+  };
+
+  const handleViewFullDcfReport = async () => {
+    const snapshot = dcfRequestedSnapshot ?? activeDcfSnapshot;
+    setDcfFullReportLoading(true);
+    setDcfStreamError(null);
+    try {
+      const report = await fetchApi<DCFFullReport>(`/corporate/dcf/${snapshot.ticker}/report`, {
+        method: "POST",
+        body: JSON.stringify(dcfRequestBody(snapshot)),
+      });
+      setDcfFullReport(report);
+      setActiveCalculation("backendDcf");
+    } catch (error) {
+      setDcfStreamError(error instanceof Error ? error.message : "Failed to load the full DCF report.");
+    } finally {
+      setDcfFullReportLoading(false);
+    }
+  };
+
+  const handleCalculateAllDcfReports = async () => {
+    const tickers = Array.from(new Set((comparisonData?.rows ?? [])
+      .filter((row) => row.group_name !== "benchmark")
+      .map((row) => row.ticker)));
+    if (tickers.length === 0) {
+      setBulkDcfReports([]);
+      setBulkDcfReportsLastUpdatedAt(null);
+      setBulkDcfReportsError("Refresh comparison first so there are non-benchmark stocks to calculate.");
+      return;
+    }
+
+    setBulkDcfReportsLoading(true);
+    setBulkDcfReportsError(null);
+    try {
+      const reports = await fetchApi<DCFFullReport[]>("/corporate/dcf/reports/bulk", {
+        method: "POST",
+        body: JSON.stringify({ tickers } satisfies CorporateDcfBatchRequest),
+      });
+      setBulkDcfReports(reports);
+      setBulkDcfReportsLastUpdatedAt(new Date().toISOString());
+    } catch (error) {
+      setBulkDcfReportsError(error instanceof Error ? error.message : "Failed to calculate reports for the current comparison universe.");
+    } finally {
+      setBulkDcfReportsLoading(false);
+    }
+  };
+
+  const handleRefreshComparison = () => {
+    setComparisonRequestedSnapshot(activeComparisonSnapshot);
+    setComparisonRefreshToken(`${Date.now()}`);
+  };
+
+  const handleRefreshSourceData = () => {
+    setSourceDataRequestedTicker(sourceDataTicker);
+    setSourceDataRefreshToken(`${Date.now()}`);
+  };
+
+  const sortedComparisonRows = useMemo(() => {
+    const rows = [...(comparisonDisplayData?.rows ?? [])];
+    rows.sort((left, right) => {
+      const delta = Number(left[comparisonSortKey]) - Number(right[comparisonSortKey]);
+      return comparisonSortDirection === "asc" ? delta : -delta;
+    });
+    return rows;
+  }, [comparisonDisplayData?.rows, comparisonSortDirection, comparisonSortKey]);
+  const nonBenchmarkComparisonRows = useMemo(
+    () => sortedComparisonRows.filter((row) => row.group_name !== "benchmark"),
+    [sortedComparisonRows],
+  );
+  const selectedComparisonRow = useMemo(
+    () => nonBenchmarkComparisonRows.find((row) => row.ticker === assumptions.ticker) ?? nonBenchmarkComparisonRows[0] ?? null,
+    [assumptions.ticker, nonBenchmarkComparisonRows],
+  );
+  const selectedComparisonSector = (selectedComparisonRow?.sector ?? activeCompany.sector ?? "").trim();
+  const similarComparisonRows = useMemo(() => {
+    if (nonBenchmarkComparisonRows.length === 0) return [];
+
+    const normalizedSector = selectedComparisonSector.toLowerCase();
+    const sameSectorRows = normalizedSector
+      ? nonBenchmarkComparisonRows.filter((row) => row.sector.trim().toLowerCase() === normalizedSector)
+      : [];
+    const baseRows = sameSectorRows.length >= 2 ? sameSectorRows : nonBenchmarkComparisonRows;
+    const prioritizedRows = selectedComparisonRow
+      ? [selectedComparisonRow, ...baseRows.filter((row) => row.ticker !== selectedComparisonRow.ticker)]
+      : baseRows;
+    return prioritizedRows
+      .filter((row, index, rows) => rows.findIndex((entry) => entry.ticker === row.ticker) === index)
+      .slice(0, 6);
+  }, [nonBenchmarkComparisonRows, selectedComparisonRow, selectedComparisonSector]);
+  const similarComparisonBarData = useMemo(() => similarComparisonRows.map((row) => ({
+    ticker: row.ticker,
+    sector: row.sector,
+    roic_minus_wacc: Number(row.roic_minus_wacc.toFixed(2)),
+    expected_return_spread: Number(row.expected_return_spread.toFixed(2)),
+    isSelected: row.ticker === selectedComparisonRow?.ticker,
+  })), [selectedComparisonRow?.ticker, similarComparisonRows]);
+  const similarComparisonScatterPeers = useMemo(
+    () => similarComparisonRows
+      .filter((row) => row.ticker !== selectedComparisonRow?.ticker)
+      .map((row) => ({
+        ticker: row.ticker,
+        current_price: Number(row.current_price.toFixed(2)),
+        dcf_value: Number(row.dcf_value.toFixed(2)),
+        expected_return_spread: Number(row.expected_return_spread.toFixed(2)),
+        bubble_size: Math.max(Math.abs(row.expected_return_spread) * 5, 80),
+      })),
+    [selectedComparisonRow?.ticker, similarComparisonRows],
+  );
+  const similarComparisonScatterSelected = useMemo(
+    () => selectedComparisonRow
+      ? [{
+        ticker: selectedComparisonRow.ticker,
+        current_price: Number(selectedComparisonRow.current_price.toFixed(2)),
+        dcf_value: Number(selectedComparisonRow.dcf_value.toFixed(2)),
+        expected_return_spread: Number(selectedComparisonRow.expected_return_spread.toFixed(2)),
+        bubble_size: Math.max(Math.abs(selectedComparisonRow.expected_return_spread) * 5, 120),
+      }]
+      : [],
+    [selectedComparisonRow],
+  );
+  const watchlistCoverage = useMemo(() => {
+    const liveWatchlistTickers = watchlistHoldings.map((row) => row.ticker.toUpperCase());
+    const registryTickers = new Set(companies.map((company) => company.ticker.toUpperCase()));
+    const missingTickers = liveWatchlistTickers.filter((ticker) => !registryTickers.has(ticker));
+    return {
+      liveWatchlistCount: liveWatchlistTickers.length,
+      registryCount: companies.length,
+      missingTickers,
+      isSynchronized: missingTickers.length === 0,
+    };
+  }, [companies, watchlistHoldings]);
+  const bulkDcfReportUniverseKey = useMemo(
+    () => nonBenchmarkComparisonRows.map((row) => row.ticker).join(","),
+    [nonBenchmarkComparisonRows],
+  );
+
+  useEffect(() => {
+    setBulkDcfReports([]);
+    setBulkDcfReportsError(null);
+    setBulkDcfReportsLastUpdatedAt(null);
+  }, [bulkDcfReportUniverseKey]);
 
   // Chart datasets keep each visualization declarative and reuse the same derived model.
   const healthRadar = [
@@ -1346,7 +1852,7 @@ export default function CorporateAnalysisPage() {
       expectedMarketReturnIrr: pct(impliedMarketReturn),
       impliedErp: pct(impliedErp),
     }, "S&P 500 implied ERP model: price from market API; cash-flow yields and consensus growth path are model assumptions until constituent-level estimates are wired");
-    if (dcfQuery.data) pushRecord("backend_dcf", dcfQuery.data, "FastAPI /corporate/dcf response");
+    if (dcfData) pushRecord("backend_dcf", dcfData, "FastAPI /corporate/dcf response");
     pushSeries("company_status_radar", healthRadar, "Company Status Diagnosis chart dataset");
     pushSeries("hurdle_rate_decomposition", regionalMinard, "Hurdle Rate Decomposition chart dataset");
     pushSeries("hurdle_bar_components", hurdleBars, "Bottom-up Ke component dataset");
@@ -1357,8 +1863,8 @@ export default function CorporateAnalysisPage() {
     return rows;
   })();
 
-  const annualGrowthRates = annualMetricRows(metricsHistoryQuery.data?.annual_growth_rates ?? []);
-  const annualRoicValues = annualMetricRows(metricsHistoryQuery.data?.annual_roic ?? []);
+  const annualGrowthRates = annualMetricRows(metricsHistoryData?.annual_growth_rates ?? []);
+  const annualRoicValues = annualMetricRows(metricsHistoryData?.annual_roic ?? []);
   const selectedGrowthYearValue = annualGrowthRates.find((point) => String(point.year) === growthYear)?.value;
   const selectedRoicYearValue = annualRoicValues.find((point) => String(point.year) === roicYear)?.value;
   const growthYearUnavailableMessage = growthBasis === "annual" && selectedGrowthYearValue == null
@@ -1447,7 +1953,7 @@ export default function CorporateAnalysisPage() {
         { label: "Company Name", value: companyName, source: "Corporate company registry / Portfolio watchlist" },
         { label: "Financial assumptions", value: "Yahoo annual statements from 2021 onward", source: "Primary source for statement-derived metrics" },
         { label: "Generated defaults", value: "Deterministic company/sector model", source: "Used only when Yahoo statements or saved ticker metrics are unavailable" },
-        { label: "Market price for DCF", value: dcfQuery.data ? moneyText(dcfQuery.data.current_price) : "Loading", source: "Yahoo Finance / local OHLCV cache" },
+        { label: "Market price for DCF", value: dcfData ? moneyText(dcfData.current_price) : "Loading", source: "Yahoo Finance / local OHLCV cache" },
       ],
       simulation: [
         { label: "1", value: `Read ${assumptions.ticker} Yahoo annual statements from 2021 onward`, source: "FastAPI corporate metrics endpoint" },
@@ -1467,8 +1973,8 @@ export default function CorporateAnalysisPage() {
       ],
       components: [
         { label: "User growth input", value: pct(assumptions.growth), source: "Realtime Assumptions control" },
-        { label: "5-year CAGR", value: metricsHistoryQuery.data?.growth_cagr == null ? "Unavailable" : pct(metricsHistoryQuery.data.growth_cagr), source: "Yahoo annual revenue from 2021 onward" },
-        { label: "Recent average", value: metricsHistoryQuery.data?.growth_recent_average == null ? "Unavailable" : pct(metricsHistoryQuery.data.growth_recent_average), source: "Average of the most recent annual growth rates" },
+        { label: "5-year CAGR", value: metricsHistoryData?.growth_cagr == null ? "Unavailable" : pct(metricsHistoryData.growth_cagr), source: "Yahoo annual revenue from 2021 onward" },
+        { label: "Recent average", value: metricsHistoryData?.growth_recent_average == null ? "Unavailable" : pct(metricsHistoryData.growth_recent_average), source: "Average of the most recent annual growth rates" },
         ...annualGrowthRates.map((point) => ({ label: `${point.year} annual growth`, value: point.value == null ? "Unavailable" : pct(point.value), source: "Yahoo annual revenue YoY growth" })),
         { label: "Display override", value: "Slider/local browser value may override", source: "Realtime assumptions UI" },
       ],
@@ -1807,10 +2313,10 @@ export default function CorporateAnalysisPage() {
       title: `${companyName} Backend DCF`,
       timeHorizon: "Current realtime assumption set sent to the backend DCF endpoint; market price uses the latest available quote/cache point.",
       summary: [
-        { label: "Estimated Fair Value", value: dcfQuery.data ? moneyText(dcfQuery.data.estimated_value) : "Calculating", source: "Backend DCF engine" },
-        { label: "Current Price", value: dcfQuery.data ? moneyText(dcfQuery.data.current_price) : "Loading", source: "Yahoo Finance / local OHLCV cache" },
-        { label: "Upside / Downside", value: dcfQuery.data ? pct(dcfQuery.data.upside_pct) : "Loading", source: "Realtime calculation" },
-        { label: "Status", value: dcfQuery.data?.status ?? "Calculating", source: "DCF value-vs-price rule" },
+        { label: "Estimated Fair Value", value: dcfData ? moneyText(dcfData.estimated_value) : "Calculating", source: "Backend DCF engine" },
+        { label: "Current Price", value: dcfData ? moneyText(dcfData.current_price) : "Loading", source: "Yahoo Finance / local OHLCV cache" },
+        { label: "Upside / Downside", value: dcfData ? pct(dcfData.upside_pct) : "Loading", source: "Realtime calculation" },
+        { label: "Status", value: dcfData?.status ?? "Calculating", source: "DCF value-vs-price rule" },
       ],
       components: [
         { label: "Revenue Growth", value: pct(assumptions.growth), source: "Realtime Assumptions control" },
@@ -1820,16 +2326,16 @@ export default function CorporateAnalysisPage() {
         { label: "FCFF", value: `${moneyText(assumptions.fcff)}B`, source: "Realtime Assumptions control" },
       ],
       formula: `Backend DCF request = growth ${pct(assumptions.growth)}, WACC ${pct(assumptions.wacc)}, terminal growth ${pct(clamp(assumptions.growth, -10, 10))}, FCFF ${moneyText(assumptions.fcff)}B`,
-      result: dcfQuery.data ? `${moneyText(dcfQuery.data.estimated_value)} fair value, ${pct(dcfQuery.data.upside_pct)} versus current price` : "Calculating",
+      result: dcfData ? `${moneyText(dcfData.estimated_value)} fair value, ${pct(dcfData.upside_pct)} versus current price` : "Calculating",
       sourcing: [
         { label: "DCF endpoint", value: `/corporate/dcf/${assumptions.ticker}`, source: "FastAPI backend" },
         { label: "Assumptions", value: "Debounced ticker inputs", source: "Corporate Analysis UI" },
-        { label: "Market price", value: dcfQuery.data ? moneyText(dcfQuery.data.current_price) : "Loading", source: "Yahoo Finance / local OHLCV cache" },
+        { label: "Market price", value: dcfData ? moneyText(dcfData.current_price) : "Loading", source: "Yahoo Finance / local OHLCV cache" },
       ],
       simulation: [
         { label: "1", value: `Send growth ${pct(assumptions.growth)}, WACC ${pct(assumptions.wacc)}, FCFF ${moneyText(assumptions.fcff)}B`, source: "DCF request payload" },
-        { label: "2", value: dcfQuery.data ? `${moneyText(dcfQuery.data.estimated_value)} / ${moneyText(dcfQuery.data.current_price)} - 1` : "Waiting for backend result", source: dcfQuery.data ? pct(dcfQuery.data.upside_pct) : "Loading" },
-        { label: "3", value: dcfQuery.data ? `${moneyText(dcfQuery.data.estimated_value)} fair value` : "Calculating", source: "Final Backend DCF result" },
+        { label: "2", value: dcfData ? `${moneyText(dcfData.estimated_value)} / ${moneyText(dcfData.current_price)} - 1` : "Waiting for backend result", source: dcfData ? pct(dcfData.upside_pct) : "Loading" },
+        { label: "3", value: dcfData ? `${moneyText(dcfData.estimated_value)} fair value` : "Calculating", source: "Final Backend DCF result" },
       ],
     },
     sustainableGrowth: {
@@ -2050,7 +2556,7 @@ export default function CorporateAnalysisPage() {
         { label: "Sustainable Growth", value: pct(derived.sustainableGrowth), source: "Reinvestment x ROIC" },
         { label: "Terminal Value Share", value: pct(derived.terminalValueShare), source: "Growth and WACC scenario formula" },
         { label: "FCFF Magnitude", value: `${moneyText(assumptions.fcff)}B`, source: sourceLabel },
-        { label: "Backend Fair Value", value: dcfQuery.data ? moneyText(dcfQuery.data.estimated_value) : "N/A", source: "Backend DCF engine" },
+        { label: "Backend Fair Value", value: dcfData ? moneyText(dcfData.estimated_value) : "N/A", source: "Backend DCF engine" },
       ],
       components: [
         { label: "Reinvestment Rate", value: pct(assumptions.reinvestment), source: "Sustainable growth component" },
@@ -2064,12 +2570,12 @@ export default function CorporateAnalysisPage() {
       sourcing: [
         { label: "FCFF", value: `${moneyText(assumptions.fcff)}B`, source: "Yahoo annual free cash flow values averaged from 2021 onward when available" },
         { label: "DCF endpoint", value: `/corporate/dcf/${assumptions.ticker}`, source: "FastAPI backend" },
-        { label: "Current Price", value: dcfQuery.data ? moneyText(dcfQuery.data.current_price) : "Loading", source: "Yahoo Finance / local OHLCV cache" },
+        { label: "Current Price", value: dcfData ? moneyText(dcfData.current_price) : "Loading", source: "Yahoo Finance / local OHLCV cache" },
       ],
       simulation: [
         { label: "1", value: `${pct(assumptions.reinvestment)} x ${pct(assumptions.roic)} / 100`, source: pct(derived.sustainableGrowth) },
         { label: "2", value: `62.0 + ${numberText(assumptions.growth)} x 1.8 - ${numberText(assumptions.wacc)} x 1.2`, source: pct(derived.terminalValueShare) },
-        { label: "3", value: dcfQuery.data ? `${moneyText(dcfQuery.data.estimated_value)} vs ${moneyText(dcfQuery.data.current_price)}` : "Waiting for backend result", source: dcfQuery.data ? pct(dcfQuery.data.upside_pct) : "Loading" },
+        { label: "3", value: dcfData ? `${moneyText(dcfData.estimated_value)} vs ${moneyText(dcfData.current_price)}` : "Waiting for backend result", source: dcfData ? pct(dcfData.upside_pct) : "Loading" },
       ],
     },
     terminalValueShare: {
@@ -2130,10 +2636,10 @@ export default function CorporateAnalysisPage() {
       title: `${companyName} Backend Fair Value`,
       timeHorizon: "Current backend DCF response using debounced realtime assumptions and the latest available market price/cache point.",
       summary: [
-        { label: "Backend Fair Value", value: dcfQuery.data ? moneyText(dcfQuery.data.estimated_value) : "N/A", source: "Backend DCF engine | Period: current debounced request" },
-        { label: "Current Price", value: dcfQuery.data ? moneyText(dcfQuery.data.current_price) : "Loading", source: "Yahoo Finance / local OHLCV cache | Period: latest available quote/cache point" },
-        { label: "Upside / Downside", value: dcfQuery.data ? pct(dcfQuery.data.upside_pct) : "Loading", source: "Fair value vs current price | Period: current backend response" },
-        { label: "Status", value: dcfQuery.data?.status ?? "Calculating", source: "Backend valuation classification | Period: current backend response" },
+        { label: "Backend Fair Value", value: dcfData ? moneyText(dcfData.estimated_value) : "N/A", source: "Backend DCF engine | Period: current debounced request" },
+        { label: "Current Price", value: dcfData ? moneyText(dcfData.current_price) : "Loading", source: "Yahoo Finance / local OHLCV cache | Period: latest available quote/cache point" },
+        { label: "Upside / Downside", value: dcfData ? pct(dcfData.upside_pct) : "Loading", source: "Fair value vs current price | Period: current backend response" },
+        { label: "Status", value: dcfData?.status ?? "Calculating", source: "Backend valuation classification | Period: current backend response" },
       ],
       components: [
         { label: "Revenue Growth", value: pct(assumptions.growth), source: "DCF payload | Period: 5-year normalized or current override" },
@@ -2143,16 +2649,16 @@ export default function CorporateAnalysisPage() {
         { label: "FCFF", value: `${moneyText(assumptions.fcff)}B`, source: "DCF payload | Period: LTM or normalized annual report" },
       ],
       formula: "Backend Fair Value = backend DCF endpoint output; Upside = estimated value / current price - 1",
-      result: dcfQuery.data ? moneyText(dcfQuery.data.estimated_value) : "N/A",
+      result: dcfData ? moneyText(dcfData.estimated_value) : "N/A",
       sourcing: [
         { label: "DCF endpoint", value: `/corporate/dcf/${assumptions.ticker}`, source: "FastAPI backend" },
-        { label: "Current Price", value: dcfQuery.data ? moneyText(dcfQuery.data.current_price) : "Loading", source: "Yahoo Finance / local OHLCV cache | Period: latest available quote/cache point" },
+        { label: "Current Price", value: dcfData ? moneyText(dcfData.current_price) : "Loading", source: "Yahoo Finance / local OHLCV cache | Period: latest available quote/cache point" },
         { label: "Assumptions", value: "Debounced realtime UI state", source: "Corporate Analysis controls | Period: current session" },
       ],
       simulation: [
         { label: "1", value: `POST growth ${pct(assumptions.growth)}, WACC ${pct(assumptions.wacc)}, terminal growth ${pct(clamp(assumptions.growth, -10, 10))}`, source: "Backend DCF request" },
-        { label: "2", value: dcfQuery.data ? `${moneyText(dcfQuery.data.estimated_value)} / ${moneyText(dcfQuery.data.current_price)} - 1` : "Waiting for backend result", source: dcfQuery.data ? pct(dcfQuery.data.upside_pct) : "Loading" },
-        { label: "3", value: dcfQuery.data ? moneyText(dcfQuery.data.estimated_value) : "N/A", source: "Final Backend Fair Value" },
+        { label: "2", value: dcfData ? `${moneyText(dcfData.estimated_value)} / ${moneyText(dcfData.current_price)} - 1` : "Waiting for backend result", source: dcfData ? pct(dcfData.upside_pct) : "Loading" },
+        { label: "3", value: dcfData ? moneyText(dcfData.estimated_value) : "N/A", source: "Final Backend Fair Value" },
       ],
     },
   };
@@ -2160,7 +2666,7 @@ export default function CorporateAnalysisPage() {
   const activeCalculationDetail = activeCalculation ? calculationDetails[activeCalculation] : null;
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
+    <div className="space-y-6 max-w-7xl mx-auto px-4 py-6">
       {/* Page header: title plus ticker navigation, backend DCF shortcut, and add-company form. */}
       <header className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
         <div>
@@ -2225,10 +2731,51 @@ export default function CorporateAnalysisPage() {
                   />
                 </div>
                 <div className="font-bold text-[var(--text-primary)]">
-                  {dcfQuery.data ? moneyText(dcfQuery.data.estimated_value) : "Calculating"}
-                  {dcfQuery.isFetching ? " ..." : ""}
+                  {dcfData ? moneyText(dcfData.estimated_value) : "Refresh to calculate"}
+                  {dcfStreamStatus === "streaming" ? " ..." : ""}
                 </div>
               </button>
+              <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--text-muted)]">
+                <button
+                  type="button"
+                  onClick={handleRefreshDcf}
+                  disabled={dcfStreamStatus === "streaming"}
+                  className="inline-flex items-center gap-2 rounded-[var(--radius)] border border-[var(--border)] bg-white px-3 py-2 font-bold text-[var(--text-primary)] shadow-sm disabled:opacity-60"
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 ${dcfStreamStatus === "streaming" ? "animate-spin" : ""}`} />
+                  Refresh DCF
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleViewFullDcfReport()}
+                  disabled={dcfFullReportLoading || (!dcfData && dcfStreamStatus === "idle")}
+                  className="inline-flex items-center gap-2 rounded-[var(--radius)] border border-[var(--border)] bg-white px-3 py-2 font-bold text-[var(--text-primary)] shadow-sm disabled:opacity-60"
+                >
+                  {dcfFullReportLoading ? "Loading report..." : "View Full Report"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleCalculateAllDcfReports()}
+                  disabled={bulkDcfReportsLoading || nonBenchmarkComparisonRows.length === 0}
+                  className="inline-flex items-center gap-2 rounded-[var(--radius)] border border-[var(--border)] bg-white px-3 py-2 font-bold text-[var(--text-primary)] shadow-sm disabled:opacity-60"
+                >
+                  {bulkDcfReportsLoading ? "Calculating all reports..." : "Calculate All Reports"}
+                </button>
+                <span>{dcfDisplayLastUpdatedAt ? `Last updated ${dateTimeText(dcfDisplayLastUpdatedAt)}` : "Not calculated yet"}</span>
+                {dcfIsStale && (
+                  <span className="rounded-full bg-amber-100 px-2 py-1 text-[11px] font-bold text-amber-800">
+                    Stale
+                  </span>
+                )}
+                {!dcfData && dcfStreamStatus !== "streaming" && (
+                  <span>DCF stays idle on first load until you refresh it.</span>
+                )}
+                {dcfStreamError && (
+                  <span className="rounded-full bg-red-100 px-2 py-1 text-[11px] font-bold text-red-800">
+                    {dcfStreamError}
+                  </span>
+                )}
+              </div>
             </div>
             {/* Add Company: persists a manual ticker and immediately selects it for analysis. */}
             <form onSubmit={addCompany} className="max-[1300px]:w-full grid min-w-72 grid-cols-2 gap-2 rounded-[var(--radius)] border border-[var(--border)] bg-white p-3 text-sm shadow-sm">
@@ -2274,6 +2821,28 @@ export default function CorporateAnalysisPage() {
             />
           </button>
           <div className="mb-4 grid grid-cols-1 gap-3 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface)] p-3 text-xs md:grid-cols-2 xl:grid-cols-1">
+            <div className="flex flex-wrap items-center gap-2 md:col-span-2 xl:col-span-1">
+              <button
+                type="button"
+                onClick={handleRefreshSourceData}
+                disabled={metricsHistoryQuery.isFetching || quarterlyStatementsQuery.isFetching || historicalPricesQuery.isFetching}
+                className="inline-flex items-center gap-2 rounded-[var(--radius)] border border-[var(--border)] bg-white px-3 py-2 text-xs font-bold text-[var(--text-primary)] shadow-sm disabled:opacity-60"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${(metricsHistoryQuery.isFetching || quarterlyStatementsQuery.isFetching || historicalPricesQuery.isFetching) ? "animate-spin" : ""}`} />
+                Refresh source data
+              </button>
+              <span className="text-[var(--text-muted)]">
+                {sourceDataDisplayLastUpdatedAt ? `Last updated ${dateTimeText(sourceDataDisplayLastUpdatedAt)}` : "Not loaded yet"}
+              </span>
+              {sourceDataIsStale && (
+                <span className="rounded-full bg-amber-100 px-2 py-1 text-[11px] font-bold text-amber-800">
+                  Stale
+                </span>
+              )}
+              {!metricsHistoryData && !quarterlyStatementsData && historicalPricesData.length === 0 && !(metricsHistoryQuery.isFetching || quarterlyStatementsQuery.isFetching || historicalPricesQuery.isFetching) && (
+                <span className="text-[var(--text-muted)]">Source data stays idle on first load until refreshed.</span>
+              )}
+            </div>
             <label className="grid gap-1 font-bold text-[var(--text-primary)]">
               Growth Basis
               <select
@@ -2468,7 +3037,7 @@ export default function CorporateAnalysisPage() {
             sustainableGrowth={derived.sustainableGrowth}
             terminalValueShare={derived.terminalValueShare}
             fcff={assumptions.fcff}
-            dcfResult={dcfQuery.data}
+            dcfResult={dcfData ?? undefined}
             onOpenDetail={setActiveCalculation}
           />
         </div>
@@ -2483,30 +3052,66 @@ export default function CorporateAnalysisPage() {
                 />
               </h2>
               <p className="mt-1 text-sm text-[var(--text-muted)]">
-                Market expected return formula: risk-free rate + equity risk premium = {comparisonQuery.data ? pct2(comparisonQuery.data.market_expected_return) : "Loading"}.
+                Market expected return formula: risk-free rate + equity risk premium = {comparisonData ? pct2(comparisonData.market_expected_return) : "Refresh to calculate"}.
               </p>
               <p className="mt-2 text-sm text-[var(--text-muted)]">
                 This screen stays in live comparison mode. If you need saved weights, implied cash, persisted snapshots, or snapshot history, continue in the Portfolio workflow.
               </p>
+              <p className="mt-2 text-sm text-[var(--text-muted)]">
+                Corporate Analysis now checks the live Watchlist Holdings feed against the company registry on each refresh so mismatches are visible before you compare names.
+              </p>
             </div>
-            {comparisonQuery.data && (
-              <div className="flex flex-col gap-2 lg:items-end">
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={handleRefreshComparison}
+                disabled={comparisonQuery.isFetching}
+                className="inline-flex items-center gap-2 rounded-[var(--radius)] border border-[var(--border)] bg-white px-3 py-2 text-xs font-bold text-[var(--text-primary)] shadow-sm disabled:opacity-60"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${comparisonQuery.isFetching ? "animate-spin" : ""}`} />
+                Refresh comparison
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  void companiesQuery.refetch();
+                  void watchlistQuery.refetch();
+                }}
+                disabled={companiesQuery.isFetching || watchlistQuery.isFetching}
+                className="inline-flex items-center gap-2 rounded-[var(--radius)] border border-[var(--border)] bg-white px-3 py-2 text-xs font-bold text-[var(--text-primary)] shadow-sm disabled:opacity-60"
+              >
+                Verify Watchlist Sync
+              </button>
+              <span className="text-xs text-[var(--text-muted)]">
+                {comparisonDisplayLastUpdatedAt ? `Last updated ${dateTimeText(comparisonDisplayLastUpdatedAt)}` : "Not calculated yet"}
+              </span>
+              {comparisonIsStale && (
+                <span className="rounded-full bg-amber-100 px-2 py-1 text-[11px] font-bold text-amber-800">
+                  Stale
+                </span>
+              )}
+            </div>
+            <div className="flex flex-col gap-2 lg:items-end">
                 <div className="grid grid-cols-2 gap-2 text-xs md:grid-cols-3 xl:grid-cols-5">
                   <div className="rounded-[var(--radius)] bg-[var(--surface-muted)] p-3">
                     <div className="text-[var(--text-muted)]">Risk-free</div>
-                    <div className="mt-1 font-bold text-[var(--text-primary)]">{pct2(comparisonQuery.data.risk_free_rate)}</div>
+                    <div className="mt-1 font-bold text-[var(--text-primary)]">{comparisonData ? pct2(comparisonData.risk_free_rate) : "Refresh to calculate"}</div>
                   </div>
                   <div className="rounded-[var(--radius)] bg-[var(--surface-muted)] p-3">
                     <div className="text-[var(--text-muted)]">ERP</div>
-                    <div className="mt-1 font-bold text-[var(--text-primary)]">{pct2(comparisonQuery.data.equity_risk_premium)}</div>
+                    <div className="mt-1 font-bold text-[var(--text-primary)]">{comparisonData ? pct2(comparisonData.equity_risk_premium) : "Refresh to calculate"}</div>
                   </div>
                   <div className="rounded-[var(--radius)] bg-[var(--surface-muted)] p-3">
                     <div className="text-[var(--text-muted)]">Stock Return Method</div>
-                    <div className="mt-1 font-bold text-[var(--text-primary)]">{comparisonQuery.data.stock_expected_return_method.replaceAll("_", " ")}</div>
+                    <div className="mt-1 font-bold text-[var(--text-primary)]">
+                      {comparisonData ? comparisonData.stock_expected_return_method.replaceAll("_", " ") : "Refresh to calculate"}
+                    </div>
                   </div>
                   <div className="rounded-[var(--radius)] bg-[var(--surface-muted)] p-3">
                     <div className="text-[var(--text-muted)]">Reference Method</div>
-                    <div className="mt-1 font-bold text-[var(--text-primary)]">{comparisonQuery.data.comparison_reference_return_method.replaceAll("_", " ")}</div>
+                    <div className="mt-1 font-bold text-[var(--text-primary)]">
+                      {comparisonData ? comparisonData.comparison_reference_return_method.replaceAll("_", " ") : "Refresh to calculate"}
+                    </div>
                   </div>
                   <div className="rounded-[var(--radius)] bg-[var(--surface-muted)] p-3">
                     <div className="text-[var(--text-muted)]">Comparison Type</div>
@@ -2525,7 +3130,7 @@ export default function CorporateAnalysisPage() {
                   <div className="rounded-[var(--radius)] bg-[var(--surface-muted)] p-3">
                     <div className="text-[var(--text-muted)]">Universe</div>
                     <div className="mt-1 font-bold text-[var(--text-primary)]">
-                      {comparisonUniverseLabel(comparisonQuery.data.snapshot.comparison_universe)}
+                      {comparisonData ? comparisonUniverseLabel(comparisonData.snapshot.comparison_universe) : comparisonUniverseLabel(comparisonUniverse)}
                     </div>
                   </div>
                 </div>
@@ -2587,6 +3192,7 @@ export default function CorporateAnalysisPage() {
                   <label className="flex items-center gap-2 text-xs font-semibold text-[var(--text-muted)]">
                     Sort by
                     <select
+                      aria-label="Sort by"
                       value={comparisonSortKey}
                       onChange={(event) => setComparisonSortKey(event.target.value as ComparisonSortKey)}
                       className="rounded-[var(--radius)] border border-[var(--border)] bg-white px-3 py-2 text-xs text-[var(--text-primary)]"
@@ -2599,6 +3205,7 @@ export default function CorporateAnalysisPage() {
                   <label className="flex items-center gap-2 text-xs font-semibold text-[var(--text-muted)]">
                     Direction
                     <select
+                      aria-label="Direction"
                       value={comparisonSortDirection}
                       onChange={(event) => setComparisonSortDirection(event.target.value as "desc" | "asc")}
                       className="rounded-[var(--radius)] border border-[var(--border)] bg-white px-3 py-2 text-xs text-[var(--text-primary)]"
@@ -2609,18 +3216,40 @@ export default function CorporateAnalysisPage() {
                   </label>
                 </div>
                 <div className="text-xs text-[var(--text-muted)]">
-                  Benchmark: {comparisonQuery.data.snapshot.benchmark_ticker}. Generated live at {dateTimeText(comparisonQuery.data.snapshot.generated_at)}. Portfolio snapshots and saved history are managed from the Portfolio page only.
+                  Benchmark: {comparisonData?.snapshot.benchmark_ticker ?? comparisonBenchmarkTicker}. {comparisonData ? `Generated live at ${dateTimeText(comparisonData.snapshot.generated_at)}.` : "Refresh comparison to calculate the live peer set."} Portfolio snapshots and saved history are managed from the Portfolio page only.
                 </div>
-                {comparisonQuery.data.snapshot.comparison_universe === "custom" && (
+                {(comparisonData?.snapshot.comparison_universe ?? comparisonUniverse) === "custom" && (
                   <div className="text-xs text-[var(--text-muted)]">
-                    Custom tickers: {comparisonQuery.data.snapshot.custom_tickers.join(", ") || "None"}.
+                    Custom tickers: {(comparisonData?.snapshot.custom_tickers ?? comparisonCustomTickersInput.split(",").map((ticker) => ticker.trim()).filter(Boolean)).join(", ") || "None"}.
                   </div>
                 )}
               </div>
-            )}
           </div>
 
-          {comparisonQuery.isLoading && (
+          <div className={`mt-4 rounded-[var(--radius)] border px-4 py-3 text-sm ${
+            watchlistCoverage.isSynchronized
+              ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+              : "border-amber-200 bg-amber-50 text-amber-900"
+          }`}>
+            <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <div className="font-bold">Watchlist Holdings Sync</div>
+                <div className="mt-1">
+                  Checked {watchlistCoverage.liveWatchlistCount} live watchlist holding{watchlistCoverage.liveWatchlistCount === 1 ? "" : "s"} against {watchlistCoverage.registryCount} corporate registry name{watchlistCoverage.registryCount === 1 ? "" : "s"}.
+                </div>
+                <div className="mt-1">
+                  {watchlistCoverage.isSynchronized
+                    ? "All live watchlist tickers are available inside Corporate Analysis."
+                    : `Missing from Corporate Analysis: ${watchlistCoverage.missingTickers.join(", ")}.`}
+                </div>
+              </div>
+              <div className="text-xs font-semibold">
+                {watchlistQuery.isFetching || companiesQuery.isFetching ? "Verifying..." : watchlistCoverage.isSynchronized ? "Synchronized" : "Needs refresh"}
+              </div>
+            </div>
+          </div>
+
+          {comparisonQuery.isLoading && !comparisonData && (
             <div className="mt-4 text-sm text-[var(--text-muted)]">Loading comparison rows...</div>
           )}
 
@@ -2630,41 +3259,197 @@ export default function CorporateAnalysisPage() {
             </div>
           )}
 
-          {comparisonQuery.data && sortedComparisonRows.length > 0 && (
-            <div className="mt-4 overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-[var(--surface-muted)] text-left text-[var(--text-muted)]">
-                  <tr>
-                    <th className="px-4 py-3 font-semibold">Ticker</th>
-                    <th className="px-4 py-3 font-semibold">Company</th>
-                    <th className="px-4 py-3 text-right font-semibold">Weight</th>
-                    <th className="px-4 py-3 text-right font-semibold">ROIC - WACC</th>
-                    <th className="px-4 py-3 text-right font-semibold">DCF Value</th>
-                    <th className="px-4 py-3 text-right font-semibold">Current Price</th>
-                    <th className="px-4 py-3 text-right font-semibold">DCF Return</th>
-                    <th className="px-4 py-3 text-right font-semibold">CAPM Return</th>
-                    <th className="px-4 py-3 text-right font-semibold">Market Return</th>
-                    <th className="px-4 py-3 text-right font-semibold">Spread</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[var(--border)]/60">
-                  {sortedComparisonRows.map((row) => (
-                    <tr key={`comparison-${row.ticker}`} className={row.ticker === assumptions.ticker ? "bg-[var(--surface-muted)]/50" : ""}>
-                      <td className="px-4 py-3 font-bold text-[var(--text-primary)]">{row.ticker}</td>
-                      <td className="px-4 py-3 text-[var(--text-muted)]">{row.name || row.ticker}</td>
-                      <td className="px-4 py-3 text-right tabular-nums">{pct2(row.weight * 100)}</td>
-                      <td className={`px-4 py-3 text-right font-bold tabular-nums ${row.roic_minus_wacc >= 0 ? "text-[var(--surface)]" : "text-[var(--delta-down)]"}`}>{pct2(row.roic_minus_wacc)}</td>
-                      <td className="px-4 py-3 text-right font-bold tabular-nums">{moneyText(row.dcf_value)}</td>
-                      <td className="px-4 py-3 text-right tabular-nums">{row.has_price_data ? moneyText(row.current_price) : "N/A"}</td>
-                      <td className="px-4 py-3 text-right tabular-nums">{pct2(row.dcf_implied_return)}</td>
-                      <td className="px-4 py-3 text-right tabular-nums">{pct2(row.capm_expected_return)}</td>
-                      <td className="px-4 py-3 text-right tabular-nums">{pct2(row.market_expected_return)}</td>
-                      <td className={`px-4 py-3 text-right font-bold tabular-nums ${row.expected_return_spread >= 0 ? "text-[var(--surface)]" : "text-[var(--delta-down)]"}`}>{pct2(row.expected_return_spread)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          {!comparisonData && !comparisonQuery.isFetching && !comparisonQuery.isError && (
+            <div className="mt-4 rounded-[var(--radius)] border border-dashed border-[var(--border)] bg-[var(--surface-muted)] px-4 py-6 text-sm text-[var(--text-muted)]">
+              Comparison stays idle on first load. Adjust the universe if needed, then click `Refresh comparison` to calculate.
             </div>
+          )}
+
+          {comparisonData && sortedComparisonRows.length > 0 && (
+            <>
+              <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+                <section className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-panel)] p-4">
+                  <div className="flex flex-col gap-1">
+                    <h3 className="text-sm font-bold text-[var(--text-primary)]">Similar Stocks Spread View</h3>
+                    <p className="text-sm text-[var(--text-muted)]">
+                      Compares {selectedComparisonRow?.ticker ?? assumptions.ticker} with {selectedComparisonSector || "the current comparison universe"}. When there are not enough same-sector names, the chart falls back to the active comparison rows.
+                    </p>
+                  </div>
+                  <ResponsiveChart className="mt-4 h-[320px]" minWidth={1} minHeight={1}>
+                    <BarChart data={similarComparisonBarData} margin={{ top: 8, right: 16, bottom: 8, left: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(148, 163, 184, 0.35)" />
+                      <XAxis dataKey="ticker" tick={{ fontSize: 12 }} />
+                      <YAxis tickFormatter={(value) => `${Number(value).toFixed(0)}%`} width={52} />
+                      <Tooltip
+                        formatter={(value, name) => {
+                          const numericValue = typeof value === "number" ? value : Number(value ?? 0);
+                          return [`${numericValue.toFixed(2)}%`, name === "roic_minus_wacc" ? "ROIC - WACC" : "Expected return spread"];
+                        }}
+                      />
+                      <Bar dataKey="roic_minus_wacc" name="roic_minus_wacc" radius={[6, 6, 0, 0]}>
+                        {similarComparisonBarData.map((row) => (
+                          <Cell key={`${row.ticker}-roic`} fill={row.isSelected ? "#0F766E" : "#60CAAD"} />
+                        ))}
+                      </Bar>
+                      <Bar dataKey="expected_return_spread" name="expected_return_spread" radius={[6, 6, 0, 0]}>
+                        {similarComparisonBarData.map((row) => (
+                          <Cell key={`${row.ticker}-spread`} fill={row.isSelected ? "#1D4ED8" : "#94A3B8"} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveChart>
+                </section>
+
+                <section className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-panel)] p-4">
+                  <div className="flex flex-col gap-1">
+                    <h3 className="text-sm font-bold text-[var(--text-primary)]">Price Vs Fair Value Map</h3>
+                    <p className="text-sm text-[var(--text-muted)]">
+                      DCF fair value sits on the vertical axis and current price sits on the horizontal axis. Bubble size expands with the expected-return spread so outliers stand out quickly.
+                    </p>
+                  </div>
+                  <ResponsiveChart className="mt-4 h-[320px]" minWidth={1} minHeight={1}>
+                    <ScatterChart margin={{ top: 8, right: 16, bottom: 12, left: 8 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(148, 163, 184, 0.35)" />
+                      <XAxis
+                        type="number"
+                        dataKey="current_price"
+                        name="Current price"
+                        tickFormatter={(value) => moneyText(Number(value))}
+                        domain={["auto", "auto"]}
+                      />
+                      <YAxis
+                        type="number"
+                        dataKey="dcf_value"
+                        name="DCF value"
+                        tickFormatter={(value) => moneyText(Number(value))}
+                        width={76}
+                        domain={["auto", "auto"]}
+                      />
+                      <ZAxis type="number" dataKey="bubble_size" range={[80, 260]} />
+                      <Tooltip
+                        cursor={{ strokeDasharray: "3 3" }}
+                        formatter={(value, name) => {
+                          const numericValue = typeof value === "number" ? value : Number(value ?? 0);
+                          if (name === "expected_return_spread") return [`${numericValue.toFixed(2)}%`, "Expected return spread"];
+                          return [moneyText(numericValue), name === "current_price" ? "Current price" : "DCF value"];
+                        }}
+                      />
+                      <Scatter data={similarComparisonScatterPeers} fill="#94A3B8" name="Peer set" />
+                      <Scatter data={similarComparisonScatterSelected} fill="#0F766E" name="Selected ticker" />
+                    </ScatterChart>
+                  </ResponsiveChart>
+                </section>
+              </div>
+
+              <div className="mt-4 overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-[var(--surface-muted)] text-left text-[var(--text-muted)]">
+                    <tr>
+                      <th className="px-4 py-3 font-semibold">Ticker</th>
+                      <th className="px-4 py-3 font-semibold">Company</th>
+                      <th className="px-4 py-3 font-semibold">Sector</th>
+                      <th className="px-4 py-3 text-right font-semibold">Weight</th>
+                      <th className="px-4 py-3 text-right font-semibold">ROIC - WACC</th>
+                      <th className="px-4 py-3 text-right font-semibold">DCF Value</th>
+                      <th className="px-4 py-3 text-right font-semibold">Current Price</th>
+                      <th className="px-4 py-3 text-right font-semibold">DCF Return</th>
+                      <th className="px-4 py-3 text-right font-semibold">CAPM Return</th>
+                      <th className="px-4 py-3 text-right font-semibold">Market Return</th>
+                      <th className="px-4 py-3 text-right font-semibold">Spread</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[var(--border)]/60">
+                    {sortedComparisonRows.map((row) => (
+                      <tr key={`comparison-${row.ticker}`} className={row.ticker === assumptions.ticker ? "bg-[var(--surface-muted)]/50" : ""}>
+                        <td className="px-4 py-3 font-bold text-[var(--text-primary)]">
+                          {row.group_name !== "benchmark" ? (
+                            <button
+                              type="button"
+                              onClick={() => selectTicker(row.ticker)}
+                              className="rounded underline decoration-dotted underline-offset-4"
+                            >
+                              {row.ticker}
+                            </button>
+                          ) : row.ticker}
+                        </td>
+                        <td className="px-4 py-3 text-[var(--text-muted)]">{row.name || row.ticker}</td>
+                        <td className="px-4 py-3 text-[var(--text-muted)]">{row.sector || "N/A"}</td>
+                        <td className="px-4 py-3 text-right tabular-nums">{pct2(row.weight * 100)}</td>
+                        <td className={`px-4 py-3 text-right font-bold tabular-nums ${row.roic_minus_wacc >= 0 ? "text-[var(--surface)]" : "text-[var(--delta-down)]"}`}>{pct2(row.roic_minus_wacc)}</td>
+                        <td className="px-4 py-3 text-right font-bold tabular-nums">{moneyText(row.dcf_value)}</td>
+                        <td className="px-4 py-3 text-right tabular-nums">{row.has_price_data ? moneyText(row.current_price) : "N/A"}</td>
+                        <td className="px-4 py-3 text-right tabular-nums">{pct2(row.dcf_implied_return)}</td>
+                        <td className="px-4 py-3 text-right tabular-nums">{pct2(row.capm_expected_return)}</td>
+                        <td className="px-4 py-3 text-right tabular-nums">{pct2(row.market_expected_return)}</td>
+                        <td className={`px-4 py-3 text-right font-bold tabular-nums ${row.expected_return_spread >= 0 ? "text-[var(--surface)]" : "text-[var(--delta-down)]"}`}>{pct2(row.expected_return_spread)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {(bulkDcfReportsLoading || bulkDcfReportsError || bulkDcfReports.length > 0) && (
+                <section className="mt-4 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-panel)] p-4">
+                  <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
+                    <div>
+                      <h3 className="text-sm font-bold text-[var(--text-primary)]">Batch DCF Reports</h3>
+                      <p className="mt-1 text-sm text-[var(--text-muted)]">
+                        Calculates backend full reports for every non-benchmark stock currently shown in Target Stock Comparison.
+                      </p>
+                    </div>
+                    <div className="text-xs text-[var(--text-muted)]">
+                      {bulkDcfReportsLastUpdatedAt ? `Last calculated ${dateTimeText(bulkDcfReportsLastUpdatedAt)}` : "No batch reports calculated yet"}
+                    </div>
+                  </div>
+                  {bulkDcfReportsLoading && (
+                    <div className="mt-4 text-sm text-[var(--text-muted)]">Calculating full reports for the current comparison universe...</div>
+                  )}
+                  {bulkDcfReportsError && (
+                    <div className="mt-4 rounded-[var(--radius)] border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+                      {bulkDcfReportsError}
+                    </div>
+                  )}
+                  {!bulkDcfReportsLoading && bulkDcfReports.length > 0 && (
+                    <div className="mt-4 overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead className="bg-[var(--surface-muted)] text-left text-[var(--text-muted)]">
+                          <tr>
+                            <th className="px-4 py-3 font-semibold">Ticker</th>
+                            <th className="px-4 py-3 font-semibold">Report ID</th>
+                            <th className="px-4 py-3 text-right font-semibold">Fair Value</th>
+                            <th className="px-4 py-3 text-right font-semibold">Current Price</th>
+                            <th className="px-4 py-3 text-right font-semibold">Upside</th>
+                            <th className="px-4 py-3 font-semibold">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-[var(--border)]/60">
+                          {bulkDcfReports.map((report) => (
+                            <tr key={report.summary.report_id}>
+                              <td className="px-4 py-3 font-bold text-[var(--text-primary)]">
+                                <button
+                                  type="button"
+                                  onClick={() => selectTicker(report.summary.ticker)}
+                                  className="rounded underline decoration-dotted underline-offset-4"
+                                >
+                                  {report.summary.ticker}
+                                </button>
+                              </td>
+                              <td className="px-4 py-3 text-[var(--text-muted)]">{report.summary.report_id}</td>
+                              <td className="px-4 py-3 text-right font-semibold tabular-nums">{moneyText(report.summary.estimated_value)}</td>
+                              <td className="px-4 py-3 text-right tabular-nums">{moneyText(report.summary.current_price)}</td>
+                              <td className={`px-4 py-3 text-right font-semibold tabular-nums ${report.summary.upside_pct >= 0 ? "text-[var(--surface)]" : "text-[var(--delta-down)]"}`}>
+                                {pct2(report.summary.upside_pct)}
+                              </td>
+                              <td className="px-4 py-3 text-[var(--text-muted)]">{report.summary.status}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </section>
+              )}
+            </>
           )}
         </section>
       </section>
@@ -2674,22 +3459,35 @@ export default function CorporateAnalysisPage() {
           detail={activeCalculationDetail}
           ticker={assumptions.ticker}
           rawDatasetRows={rawDatasetRows}
-          historicalPrices={historicalPricesQuery.data ?? []}
+          historicalPrices={historicalPricesData}
           historicalStatus={
-            historicalPricesQuery.isLoading
+            historicalPricesQuery.isLoading && historicalPricesData.length === 0
               ? "Loading 5-year historical price data"
-              : historicalPricesQuery.isError
+              : historicalPricesQuery.isError && historicalPricesData.length === 0
                 ? "5-year historical price data unavailable"
-                : `${historicalPricesQuery.data?.length ?? 0} daily rows from the 5-year OHLCV endpoint`
+                : historicalPricesData.length === 0
+                  ? "Refresh source data to load 5-year historical price data"
+                  : `${historicalPricesData.length} daily rows from the 5-year OHLCV endpoint`
           }
-          quarterlyStatementRows={quarterlyStatementsQuery.data?.rows ?? []}
+          quarterlyStatementRows={quarterlyStatementsData?.rows ?? []}
           quarterlyStatementStatus={
-            quarterlyStatementsQuery.isLoading
+            quarterlyStatementsQuery.isLoading && !quarterlyStatementsData
               ? "Loading Yahoo quarterly financial statements"
-              : quarterlyStatementsQuery.isError
+              : quarterlyStatementsQuery.isError && !quarterlyStatementsData
                 ? "Yahoo quarterly financial statements unavailable"
-                : `${quarterlyStatementsQuery.data?.rows.length ?? 0} rows from ${quarterlyStatementsQuery.data?.source ?? "Yahoo quarterly financial statements"}`
+                : !quarterlyStatementsData
+                  ? "Refresh source data to load Yahoo quarterly financial statements"
+                  : `${quarterlyStatementsData.rows.length} rows from ${quarterlyStatementsData.source ?? "Yahoo quarterly financial statements"}`
           }
+          dcfFullReport={dcfFullReport}
+          dcfFullReportStatus={
+            dcfFullReportLoading
+              ? "Loading full DCF report..."
+              : dcfFullReport
+                ? `Full report loaded for ${dcfFullReport.summary.ticker} (${dcfFullReport.summary.report_id}).`
+                : "Full report not loaded yet."
+          }
+          onRequestDcfFullReport={() => void handleViewFullDcfReport()}
           onClose={() => setActiveCalculation(null)}
         />
       )}

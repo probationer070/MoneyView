@@ -25,7 +25,7 @@ export default function RootLayout({
       <body className={`${inter.variable} font-sans flex min-h-screen`}>
         <AppProvider>
           <Sidebar />
-          <main className="flex-1 ml-64 p-20">
+          <main className="flex-1 ml-64 p-20 ">
             {children}
           </main>
         </AppProvider>

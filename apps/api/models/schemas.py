@@ -9,11 +9,18 @@ from .schema_parts.common import (
     APIMeta,
     APIResponse,
     ComparisonUniverseEnum,
+    LogTailResponse,
     PeriodEnum,
     SentimentEnum,
 )
 from .schema_parts.corporate import (
+    DCFAssumptionSummary,
+    DCFFullReport,
+    DCFProjectionRow,
+    DCFSummary,
+    DCFWaccBreakdown,
     CorporateCompany,
+    CorporateComparisonSnapshotDeleteResult,
     CorporateComparisonHistoryPoint,
     CorporateComparisonHistoryResponse,
     CorporateComparisonResponse,
@@ -21,11 +28,12 @@ from .schema_parts.corporate import (
     CorporateComparisonSnapshotMeta,
     CorporateComparisonStockHistoryPoint,
     CorporateComparisonStockHistoryResponse,
+    CorporateDcfBatchRequest,
     CorporateMetrics,
     RiskAssumptions,
     ValuationAssumptions,
 )
-from .schema_parts.market import DeltaBadge, IndicatorRecord, IndexQuote, MarketDataQuality, MarketIndexDetail, MarketRegimeContext, MarketVolumeSummary, StockOHLCV
+from .schema_parts.market import DeltaBadge, IndicatorRecord, IndexQuote, MarketDataQuality, MarketIndexDetail, MarketRegimeContext, MarketVolumeSummary, StockOHLCV, StockPriceLookup
 from .schema_parts.news import MonteCarloResult, NewsArticle, TechnicalIndicators
 from .schema_parts.portfolio_reporting import (
     RECONCILIATION_TOLERANCE,
@@ -56,6 +64,7 @@ from .schema_parts.portfolio_reporting import (
     SectorAttribution,
 )
 from .schema_parts.watchlist import (
+    PortfolioPreferences,
     PortfolioStock,
     WatchlistItem,
     WatchlistResyncResult,
@@ -67,9 +76,16 @@ __all__ = [
     "APIMeta",
     "APIResponse",
     "ComparisonUniverseEnum",
+    "LogTailResponse",
     "PeriodEnum",
     "SentimentEnum",
     "CorporateCompany",
+    "CorporateComparisonSnapshotDeleteResult",
+    "DCFAssumptionSummary",
+    "DCFFullReport",
+    "DCFProjectionRow",
+    "DCFSummary",
+    "DCFWaccBreakdown",
     "CorporateComparisonHistoryPoint",
     "CorporateComparisonHistoryResponse",
     "CorporateComparisonResponse",
@@ -77,6 +93,7 @@ __all__ = [
     "CorporateComparisonSnapshotMeta",
     "CorporateComparisonStockHistoryPoint",
     "CorporateComparisonStockHistoryResponse",
+    "CorporateDcfBatchRequest",
     "CorporateMetrics",
     "RiskAssumptions",
     "ValuationAssumptions",
@@ -88,6 +105,7 @@ __all__ = [
     "MarketRegimeContext",
     "MarketVolumeSummary",
     "StockOHLCV",
+    "StockPriceLookup",
     "MonteCarloResult",
     "NewsArticle",
     "TechnicalIndicators",
@@ -117,6 +135,7 @@ __all__ = [
     "RiskMetrics",
     "RiskProfileInput",
     "SectorAttribution",
+    "PortfolioPreferences",
     "PortfolioStock",
     "WatchlistItem",
     "WatchlistResyncResult",

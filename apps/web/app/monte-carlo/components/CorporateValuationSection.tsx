@@ -2,15 +2,19 @@
 
 import type { ValuationInput, ValuationResult } from "../lib/types";
 import { AlertTriangle, Loader2, Play, Square } from "lucide-react";
-import { Bar, BarChart, CartesianGrid, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { CHART_INITIAL_DIMENSION, MetricCard, NumericField, SummaryRow, krw, numberText, pct } from "./shared";
+import { Bar, BarChart, CartesianGrid, ReferenceLine, Tooltip, XAxis, YAxis } from "recharts";
+import { ResponsiveChart } from "@/components/ui/ResponsiveChart";
+import { MetricCard, NumericField, SummaryRow, krw, numberText, pct } from "./shared";
 
 type Props = {
   valuationInput: ValuationInput;
   valuationResult: ValuationResult | null;
   valuationStatus: "idle" | "loading" | "error" | "cancelled";
   valuationProgress: number;
+  valuationPriceLookupStatus: "idle" | "loading" | "fetching" | "success" | "not_found" | "error";
+  valuationPriceLookupMessage: string | null;
   updateValuation: <K extends keyof ValuationInput>(key: K, value: ValuationInput[K]) => void;
+  onValuationTickerBlur: () => void;
   runValuationSimulation: () => void;
   cancelValuationSimulation: () => void;
 };
@@ -20,7 +24,10 @@ export function CorporateValuationSection({
   valuationResult,
   valuationStatus,
   valuationProgress,
+  valuationPriceLookupStatus,
+  valuationPriceLookupMessage,
   updateValuation,
+  onValuationTickerBlur,
   runValuationSimulation,
   cancelValuationSimulation,
 }: Props) {
@@ -33,10 +40,38 @@ export function CorporateValuationSection({
           <input
             value={valuationInput.ticker}
             onChange={(event) => updateValuation("ticker", event.target.value.toUpperCase())}
+            onBlur={onValuationTickerBlur}
             className="rounded-[var(--radius)] border border-[var(--border)] bg-white px-3 py-2 text-sm font-bold outline-none"
           />
         </label>
-        <NumericField label="Current stock price" value={valuationInput.currentPrice} onChange={(value) => updateValuation("currentPrice", value)} step={100} min={1000} suffix="KRW" />
+        <label className="grid gap-1 text-xs font-bold text-[var(--text-primary)]">
+          Current stock price
+          <div className="flex items-center gap-2 rounded-[var(--radius)] border border-[var(--border)] bg-white px-3 py-2">
+            <input
+              type="number"
+              value={valuationInput.currentPrice}
+              min={1000}
+              step={100}
+              onChange={(event) => updateValuation("currentPrice", Number(event.target.value))}
+              className="w-full bg-transparent text-sm font-bold outline-none"
+            />
+            <span className="text-[var(--text-muted)]">KRW</span>
+            {valuationPriceLookupStatus === "loading" || valuationPriceLookupStatus === "fetching" ? (
+              <Loader2 className="h-4 w-4 animate-spin text-[var(--text-muted)]" />
+            ) : null}
+          </div>
+          {valuationPriceLookupMessage ? (
+            <span
+              className={
+                valuationPriceLookupStatus === "not_found" || valuationPriceLookupStatus === "error"
+                  ? "text-[11px] text-red-600"
+                  : "text-[11px] text-[var(--text-muted)]"
+              }
+            >
+              {valuationPriceLookupMessage}
+            </span>
+          ) : null}
+        </label>
         <NumericField label="Base EPS" value={valuationInput.baseEps} onChange={(value) => updateValuation("baseEps", value)} step={50} min={100} suffix="KRW" />
         <NumericField label="Average growth rate" value={valuationInput.averageGrowthRate} onChange={(value) => updateValuation("averageGrowthRate", value)} step={0.5} suffix="%" />
         <NumericField label="Growth uncertainty" value={valuationInput.growthUncertainty} onChange={(value) => updateValuation("growthUncertainty", value)} step={0.25} suffix="%" />
@@ -114,7 +149,7 @@ export function CorporateValuationSection({
               <h2 className="text-lg font-black text-[var(--text-primary)]">Fair Value Distribution</h2>
               <p className="text-xs text-[var(--text-muted)]">Single-stock Monte Carlo fair value distribution using EPS growth, discount-rate uncertainty, and target PER uncertainty.</p>
               <div className="mt-4 h-80">
-                <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1} initialDimension={CHART_INITIAL_DIMENSION}>
+                <ResponsiveChart minWidth={1} minHeight={1}>
                   <BarChart data={valuationResult.valuation_distribution}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="fair_value" tickFormatter={(value) => `${Math.round(Number(value) / 1000)}k`} />
@@ -123,7 +158,7 @@ export function CorporateValuationSection({
                     <ReferenceLine x={valuationResult.fair_value_summary.current_price} stroke="#111827" label="Current Price" />
                     <Bar dataKey="frequency" fill="#60caad" />
                   </BarChart>
-                </ResponsiveContainer>
+                </ResponsiveChart>
               </div>
             </div>
 

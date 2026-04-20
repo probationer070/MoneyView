@@ -2,9 +2,9 @@
 
 import type { PathSimulationInput, SharedSimulationResult } from "../lib/types";
 import { AlertTriangle, Download, Loader2, Play, Square } from "lucide-react";
-import { Area, AreaChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Area, AreaChart, CartesianGrid, Line, LineChart, Tooltip, XAxis, YAxis } from "recharts";
+import { ResponsiveChart } from "@/components/ui/ResponsiveChart";
 import {
-  CHART_INITIAL_DIMENSION,
   LegendItem,
   MetricCard,
   NumericField,
@@ -186,7 +186,7 @@ export function PathSimulationSection({
             <LegendItem label="Principal Line" lineClass="bg-amber-500" />
           </div>
           <div className="mt-4 h-80">
-            <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1} initialDimension={CHART_INITIAL_DIMENSION}>
+            <ResponsiveChart minWidth={1} minHeight={1}>
               <LineChart data={sharedSimulation?.pathChartData ?? []}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="time" type="number" domain={[0, input.investmentHorizonYears]} ticks={yearlyTicks} tickFormatter={(value) => `${value}Y`} />
@@ -198,7 +198,7 @@ export function PathSimulationSection({
                 <Line type="monotone" dataKey="average_path" stroke="#111827" strokeWidth={2} dot={false} />
                 <Line type="monotone" dataKey="principal_line" stroke="#f59e0b" strokeDasharray="6 4" dot={false} />
               </LineChart>
-            </ResponsiveContainer>
+            </ResponsiveChart>
           </div>
         </div>
 
@@ -212,7 +212,7 @@ export function PathSimulationSection({
             <LegendItem label="Median" lineClass="bg-black" />
           </div>
           <div className="mt-4 h-80">
-            <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1} initialDimension={CHART_INITIAL_DIMENSION}>
+            <ResponsiveChart minWidth={1} minHeight={1}>
               <AreaChart data={sharedSimulation?.pathSummary ?? []}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="time" type="number" domain={[0, input.investmentHorizonYears]} ticks={yearlyTicks} tickFormatter={(value) => `${value}Y`} />
@@ -232,7 +232,7 @@ export function PathSimulationSection({
                 <Line type="monotone" dataKey="p90" stroke="#14b8a6" dot={false} />
                 <Line type="monotone" dataKey="p95" stroke="#16a34a" dot={false} />
               </AreaChart>
-            </ResponsiveContainer>
+            </ResponsiveChart>
           </div>
         </div>
       </section>

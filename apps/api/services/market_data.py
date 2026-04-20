@@ -8,7 +8,10 @@ when the newest stored bar is older than the previous trading day.
 from __future__ import annotations
 
 import logging
+import os
 import sys
+import threading
+import time
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import List
@@ -22,7 +25,7 @@ _ROOT = Path(__file__).resolve().parents[3]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-from apps.api.models.schemas import DeltaBadge, IndexQuote, MarketDataQuality, MarketIndexDetail, MarketRegimeContext, MarketVolumeSummary, StockOHLCV, TechnicalIndicators
+from apps.api.models.schemas import DeltaBadge, IndexQuote, MarketDataQuality, MarketIndexDetail, MarketRegimeContext, MarketVolumeSummary, StockOHLCV, StockPriceLookup, TechnicalIndicators
 from apps.api.services.db import get_db
 
 logger = logging.getLogger(__name__)
@@ -71,6 +74,10 @@ INDEX_DB_ALIASES = {
 
 class MarketDataService:
     """Fetch and persist market index / stock OHLCV data."""
+
+    _refresh_lock = threading.Lock()
+    _inflight_refreshes: set[str] = set()
+    _refresh_failures: dict[str, dict[str, str]] = {}
 
     @staticmethod
     def _row_get(row, key: str, default=0):
@@ -378,6 +385,177 @@ class MarketDataService:
             return [ticker]
         aliases = INDEX_DB_ALIASES.get(ticker, [ticker])
         return list(dict.fromkeys(aliases))
+
+    @staticmethod
+    def _table_for_ticker(ticker: str) -> str:
+        return "indices" if ticker.upper() in MARKET_INDICES.values() else "stocks"
+
+    @classmethod
+    def _refresh_key(cls, ticker: str, period: str, table: str) -> str:
+        return f"{table}:{ticker.upper()}:{period}"
+
+    def _read_cached_rows(
+        self,
+        ticker: str,
+        *,
+        period: str = DEFAULT_OHLCV_PERIOD,
+        table: str = "stocks",
+    ):
+        period_days = {
+            "1w": 7,
+            "1mo": 30,
+            "3mo": 90,
+            "6mo": 180,
+            "1y": 365,
+            "2y": 730,
+            "5y": 1825,
+        }.get(period, DEFAULT_OHLCV_DAYS)
+        with get_db() as conn:
+            tickers = self._query_tickers(ticker.upper(), table)
+            placeholders = ",".join("?" for _ in tickers)
+            return conn.execute(
+                f"""SELECT * FROM {table}
+                    WHERE ticker IN ({placeholders})
+                    ORDER BY date DESC
+                    LIMIT ?""",
+                (*tickers, period_days),
+            ).fetchall()
+
+    def _fetch_live_ohlcv_with_retry(
+        self,
+        ticker: str,
+        *,
+        period: str = DEFAULT_OHLCV_PERIOD,
+        attempts: int | None = None,
+        base_backoff_seconds: float | None = None,
+    ) -> List[StockOHLCV]:
+        max_attempts = attempts or max(1, int(os.getenv("MONEYVIEW_PRICE_FETCH_RETRIES", "3")))
+        backoff_seconds = base_backoff_seconds or float(os.getenv("MONEYVIEW_PRICE_FETCH_BACKOFF_SECONDS", "0.5"))
+        last_rows: List[StockOHLCV] = []
+        for attempt in range(1, max_attempts + 1):
+            last_rows = self._fetch_live_ohlcv(ticker, period)
+            if last_rows:
+                if attempt > 1:
+                    logger.info("Recovered live OHLCV fetch for %s on retry %d", ticker, attempt)
+                return last_rows
+            if attempt < max_attempts:
+                sleep_seconds = backoff_seconds * (2 ** (attempt - 1))
+                logger.warning(
+                    "Live OHLCV fetch retry scheduled for %s after failed attempt %d/%d; sleeping %.2fs",
+                    ticker,
+                    attempt,
+                    max_attempts,
+                    sleep_seconds,
+                )
+                time.sleep(sleep_seconds)
+        return last_rows
+
+    def _refresh_ohlcv_in_background(
+        self,
+        ticker: str,
+        *,
+        period: str = DEFAULT_OHLCV_PERIOD,
+        table: str = "stocks",
+    ) -> None:
+        key = self._refresh_key(ticker, period, table)
+
+        def runner() -> None:
+            try:
+                rows = self._fetch_live_ohlcv_with_retry(ticker, period=period)
+                if rows:
+                    logger.info("Completed background OHLCV hydration for %s with %d bars", ticker, len(rows))
+                    with self._refresh_lock:
+                        self._refresh_failures.pop(key, None)
+                    return
+                logger.warning("Background OHLCV hydration failed for %s after all retries", ticker)
+                with self._refresh_lock:
+                    self._refresh_failures[key] = {
+                        "failed_at": datetime.utcnow().replace(microsecond=0).isoformat() + "Z",
+                        "detail_note": "Live provider fetch failed after all retries for this cold cache miss.",
+                    }
+            finally:
+                with self._refresh_lock:
+                    self._inflight_refreshes.discard(key)
+
+        with self._refresh_lock:
+            if key in self._inflight_refreshes:
+                return
+            self._inflight_refreshes.add(key)
+        threading.Thread(
+            target=runner,
+            name=f"moneyview-ohlcv-refresh-{ticker.lower()}",
+            daemon=True,
+        ).start()
+
+    def prewarm_configured_tickers(self, *, period: str = "1mo") -> list[str]:
+        raw_tickers = os.getenv("MONEYVIEW_PREWARM_TICKERS", "")
+        unique_tickers = list(dict.fromkeys(ticker.strip().upper() for ticker in raw_tickers.split(",") if ticker.strip()))
+        for ticker in unique_tickers:
+            self._refresh_ohlcv_in_background(
+                ticker,
+                period=period,
+                table=self._table_for_ticker(ticker),
+            )
+        if unique_tickers:
+            logger.info("Scheduled startup stock prewarm for tickers: %s", ", ".join(unique_tickers))
+        return unique_tickers
+
+    def get_stock_price_lookup(
+        self,
+        ticker: str,
+        *,
+        period: str = "1mo",
+    ) -> StockPriceLookup:
+        normalized_ticker = ticker.upper().strip()
+        table = self._table_for_ticker(normalized_ticker)
+        rows = self._read_cached_rows(normalized_ticker, period=period, table=table)
+        key = self._refresh_key(normalized_ticker, period, table)
+
+        if rows:
+            cached_rows = list(reversed(self._rows_to_ohlcv(rows)))
+            latest_bar = cached_rows[-1]
+            rows_fresh = self._rows_are_fresh(rows)
+            if not rows_fresh:
+                logger.info("Price lookup served stale cache for %s and scheduled background refresh", normalized_ticker)
+                self._refresh_ohlcv_in_background(normalized_ticker, period=period, table=table)
+            return StockPriceLookup(
+                ticker=normalized_ticker,
+                status="ok",
+                price=latest_bar.close,
+                as_of_date=latest_bar.date,
+                source="cache" if rows_fresh else "cache_fallback",
+                freshness_status="fresh_cache" if rows_fresh else "stale_cache",
+                detail_note=(
+                    "Latest price served from local cache."
+                    if rows_fresh
+                    else "Latest cached price served immediately while a background refresh is in progress."
+                ),
+            )
+
+        logger.info("Price lookup cold miss for %s; no cached bars available", normalized_ticker)
+        with self._refresh_lock:
+            failure = self._refresh_failures.get(key)
+            inflight = key in self._inflight_refreshes
+
+        if failure and not inflight:
+            return StockPriceLookup(
+                ticker=normalized_ticker,
+                status="not_found",
+                source="live_fetch_failed",
+                freshness_status="cache_miss",
+                detail_note=failure["detail_note"],
+            )
+
+        self._refresh_ohlcv_in_background(normalized_ticker, period=period, table=table)
+
+        return StockPriceLookup(
+            ticker=normalized_ticker,
+            status="fetching",
+            source="cache_miss",
+            freshness_status="cache_miss",
+            retry_after_seconds=2,
+            detail_note="No cached price was available, so a background fetch has been started.",
+        )
 
     @staticmethod
     def _index_name_for_ticker(ticker: str) -> str:

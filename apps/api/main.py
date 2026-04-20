@@ -20,16 +20,20 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from apps.api.core.logger import configure_logging, setup_logger
 from apps.api.core.middleware import StructuralMiddleware
+from apps.api.core.transport_progress import TransportProgressMiddleware
 from apps.api.routes import (
     corporate_router,
+    diagnostic_router,
     detail_router,
     market_router,
     monte_carlo_router,
     news_router,
     portfolio_router,
     report_router,
+    stock_router,
 )
 from apps.api.services.db import get_db, init_db
+from apps.api.services.market_data import MarketDataService
 
 configure_logging()
 logger = setup_logger(__name__)
@@ -87,6 +91,16 @@ async def corporate_snapshot_cycle() -> None:
         await asyncio.sleep(seconds_until_next_kst_midnight())
 
 
+async def stock_prewarm_cycle() -> None:
+    """Schedule background cache hydration for configured tickers on startup."""
+    try:
+        tickers = await asyncio.to_thread(MarketDataService().prewarm_configured_tickers)
+        if tickers:
+            logger.info("Configured stock prewarm scheduled for %d tickers.", len(tickers))
+    except Exception as exc:
+        logger.warning("Non-fatal stock prewarm startup error: %s", exc)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup and shutdown lifecycle."""
@@ -96,11 +110,13 @@ async def lifespan(app: FastAPI):
 
     task_wal = asyncio.create_task(wal_flush_cycle())
     task_corporate_snapshot = asyncio.create_task(corporate_snapshot_cycle())
+    task_stock_prewarm = asyncio.create_task(stock_prewarm_cycle())
 
     yield
 
     task_wal.cancel()
     task_corporate_snapshot.cancel()
+    task_stock_prewarm.cancel()
 
     logger.info("Tearing down SQLite connections and WAL truncate.")
     try:
@@ -121,6 +137,7 @@ app = FastAPI(
 )
 
 app.add_middleware(StructuralMiddleware)
+app.add_middleware(TransportProgressMiddleware)
 
 app.add_middleware(
     CORSMiddleware,
@@ -143,8 +160,10 @@ app.include_router(portfolio_router, prefix="/api/v1/portfolio", tags=["Portfoli
 app.include_router(detail_router, prefix="/api/v1/detail", tags=["Detail"])
 app.include_router(news_router, prefix="/api/v1/news", tags=["News"])
 app.include_router(corporate_router, prefix="/api/v1/corporate", tags=["Corporate"])
+app.include_router(diagnostic_router, prefix="/api/v1/diagnostic", tags=["Diagnostic"])
 app.include_router(report_router, prefix="/api/v1/report", tags=["Report"])
 app.include_router(monte_carlo_router, prefix="/api/v1/monte-carlo", tags=["Monte Carlo"])
+app.include_router(stock_router, prefix="/api/v1/stock", tags=["Stock"])
 
 
 @app.get("/api/v1/health", tags=["Health"])

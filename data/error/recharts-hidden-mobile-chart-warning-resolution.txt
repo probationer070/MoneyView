@@ -1,0 +1,92 @@
+Issue
+
+Playwright runs were still logging Recharts browser warnings about `width(0)` and `height(0)` during hidden or mobile chart rendering. The suite was not failing on those warnings, but the warnings indicated that some charts were mounting before their parent container had a measurable size.
+
+Root Cause
+
+The problem was not bad chart data and it was not a missing `minWidth` or `initialDimension` setting by itself.
+
+Several Recharts components were still using `ResponsiveContainer` directly inside UI regions that can temporarily render at zero size:
+
+- mobile-hidden table cells
+- breakpoint-driven layouts
+- temporarily collapsed or hidden panels
+
+When those parents reported `0 x 0`, Recharts emitted browser warnings during mount.
+
+Resolution
+
+A shared wrapper was added at:
+
+- `apps/web/components/ui/ResponsiveChart.tsx`
+
+What it does:
+
+- measures the parent node with `ResizeObserver`
+- stores the current width and height
+- mounts `ResponsiveContainer` only after the parent size is at least `minWidth` and `minHeight`
+
+This changes the render timing so Recharts does not initialize against a zero-sized container.
+
+Files Updated
+
+The warning-prone chart surfaces were migrated from raw `ResponsiveContainer` usage to `ResponsiveChart`, including:
+
+- `apps/web/components/ui/Sparkline.tsx`
+- `apps/web/components/charts/AllocationDonut.tsx`
+- `apps/web/components/charts/AttributionWaterfall.tsx`
+- `apps/web/components/charts/DiagnosticRadar.tsx`
+- `apps/web/components/charts/TornadoChart.tsx`
+- `apps/web/app/monte-carlo/components/CorrelationModelSection.tsx`
+- `apps/web/app/monte-carlo/components/CorporateValuationSection.tsx`
+- `apps/web/app/monte-carlo/components/PathSimulationSection.tsx`
+- `apps/web/app/monte-carlo/components/ReturnDistributionSection.tsx`
+- `apps/web/app/monte-carlo/components/RiskAnalysisSection.tsx`
+- `apps/web/app/corporate/components/graphs/BetaWaccCurveGraph.tsx`
+- `apps/web/app/corporate/components/graphs/CompanyStatusGraph.tsx`
+- `apps/web/app/corporate/components/graphs/HurdleRateDecompositionGraph.tsx`
+- `apps/web/app/corporate/components/graphs/RiskReturnMinardGraph.tsx`
+- `apps/web/app/corporate/components/graphs/ValueDriverMatrixGraph.tsx`
+
+Why Sparkline mattered
+
+`Sparkline` is used in the portfolio table and card views. In the table layout, some columns are hidden at mobile breakpoints. That made `Sparkline` one of the most likely sources of the Recharts warning because the chart could mount while its cell was hidden.
+
+Verification
+
+1. Narrow frontend lint passed:
+   `npm.cmd run lint -- ...touched files`
+
+2. Narrow Playwright rerun was executed for:
+   - `tests/e2e/portfolio-watchlist.spec.ts`
+   - `tests/e2e/portfolio-snapshot-history.spec.ts`
+
+3. Result:
+   - 5 tests passed
+   - 1 test failed for a separate text assertion mismatch
+
+Residual Failure
+
+The remaining failing assertion is in:
+
+- `apps/web/tests/e2e/portfolio-snapshot-history.spec.ts:12`
+
+Current expectation:
+
+- `/Apr 11, 2026 쨌 manual_refresh/`
+
+Observed failure from the Playwright run:
+
+- the expected separator/encoding in the snapshot label does not match the rendered text
+
+This failure is unrelated to the Recharts warning fix. It is a snapshot-label text expectation problem in the spec itself, not a chart sizing regression.
+
+Conclusion
+
+The Recharts hidden/mobile warning was resolved by preventing chart mount until the container had a real measured size. The remaining Playwright failure is a separate deterministic text-matching issue in the snapshot history spec.
+
+Cross-reference
+
+The follow-up fix for the remaining Playwright snapshot-history assertion is documented in:
+
+- `data/error/portfolio-snapshot-history-spec-resolution.txt`

@@ -106,6 +106,50 @@ def test_watchlist_resync_updates_corporate_companies_source_from_portfolio(tmp_
     assert xom["source"] == "portfolio"
 
 
+def test_corporate_companies_includes_all_stock_targets_json_entries(tmp_path, monkeypatch):
+    db_path = tmp_path / "moneyview.db"
+    json_path = tmp_path / "stock_targets.json"
+    _write_watchlist_json(
+        json_path,
+        {
+            "custom": {
+                "targets": [
+                    {"ticker": "AAPL", "name": "Apple", "sector": "Technology"},
+                ]
+            },
+            "total": {
+                "targets": [
+                    {"ticker": "IONQ", "name": "IonQ", "sector": "Quantum"},
+                    {"ticker": "RGTI", "name": "Rigetti", "sector": "Quantum"},
+                ]
+            },
+        },
+    )
+
+    monkeypatch.setattr(db_service, "_DB_PATH", db_path)
+    db_service.init_db()
+
+    from apps.api.routes import corporate as corporate_route
+
+    monkeypatch.setattr(corporate_route, "_WATCHLIST_JSON", json_path)
+
+    client = TestClient(app)
+    response = client.get("/api/v1/corporate/companies")
+
+    assert response.status_code == 200
+    companies = response.json()
+    tickers = {company["ticker"] for company in companies}
+
+    assert "AAPL" in tickers
+    assert "IONQ" in tickers
+    assert "RGTI" in tickers
+
+    ionq = next(company for company in companies if company["ticker"] == "IONQ")
+    assert ionq["name"] == "IonQ"
+    assert ionq["sector"] == "Quantum"
+    assert ionq["source"] == "portfolio"
+
+
 def test_watchlist_resync_rejects_empty_json(tmp_path, monkeypatch):
     db_path = tmp_path / "moneyview.db"
     json_path = tmp_path / "stock_targets.json"
@@ -212,3 +256,35 @@ def test_watchlist_sync_status_tracks_last_explicit_action(tmp_path, monkeypatch
     assert import_payload["source"] == "manual_json_resync"
     assert import_payload["json_path"] == str(json_path)
     assert import_payload["last_updated_at"]
+
+
+def test_portfolio_preferences_round_trip_total_investment_amount(tmp_path, monkeypatch):
+    db_path = tmp_path / "moneyview.db"
+    monkeypatch.setattr(db_service, "_DB_PATH", db_path)
+    db_service.init_db()
+
+    client = TestClient(app)
+
+    initial = client.get("/api/v1/portfolio/preferences")
+    assert initial.status_code == 200
+    initial_payload = initial.json()["data"]
+    assert initial_payload["total_investment_amount"] == 10000.0
+    assert initial_payload["transaction_fee_rate"] == 0.002
+
+    updated = client.put(
+        "/api/v1/portfolio/preferences",
+        json={
+            "total_investment_amount": 27500,
+            "transaction_fee_rate": 0.5,
+            "updated_at": "",
+        },
+    )
+    assert updated.status_code == 200
+    updated_payload = updated.json()["data"]
+    assert updated_payload["total_investment_amount"] == 27500.0
+    assert updated_payload["transaction_fee_rate"] == 0.002
+    assert updated_payload["updated_at"]
+
+    round_trip = client.get("/api/v1/portfolio/preferences")
+    assert round_trip.status_code == 200
+    assert round_trip.json()["data"]["total_investment_amount"] == 27500.0

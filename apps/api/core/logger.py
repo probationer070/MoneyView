@@ -36,10 +36,32 @@ def _build_file_handler(log_path: Path) -> logging.Handler:
     handler.setLevel(logging.INFO)
     handler.setFormatter(
         jsonlogger.JsonFormatter(
-            "%(asctime)s %(levelname)s %(name)s %(message)s %(request_id)s %(method)s %(path)s %(status_code)s %(duration_ms)s %(client_ip)s"
+            "%(asctime)s %(levelname)s %(name)s %(message)s %(request_id)s %(method)s %(path)s %(status_code)s %(duration_ms)s %(client_ip)s %(bytes_sent)s %(total_bytes)s %(progress_pct)s %(chunk_count)s %(phase)s %(transport_kind)s %(completed)s %(elapsed_ms)s"
         )
     )
     return handler
+
+
+def get_log_path() -> Path:
+    """Return the configured persistent API log file path."""
+    return Path(os.getenv("API_LOG_PATH", str(_DEFAULT_LOG_PATH)))
+
+
+def read_log_tail(*, max_lines: int = 200) -> list[str]:
+    """Read the most recent lines from the persistent API log file."""
+    log_path = get_log_path()
+    if max_lines <= 0:
+        return []
+    if not log_path.exists():
+        return []
+
+    try:
+        with log_path.open("r", encoding="utf-8") as handle:
+            lines = handle.readlines()
+    except OSError:
+        return []
+
+    return [line.rstrip("\r\n") for line in lines[-max_lines:]]
 
 
 def configure_logging() -> None:

@@ -1,8 +1,9 @@
 "use client";
 
-import { Bar, BarChart, CartesianGrid, Cell, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Bar, BarChart, CartesianGrid, Cell, Line, LineChart, ReferenceLine, Tooltip, XAxis, YAxis } from "recharts";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
-import { CHART_INITIAL_DIMENSION, type BetaPoint, type DetailKey, type WaccCurvePoint, pct } from "./shared";
+import { ResponsiveChart } from "@/components/ui/ResponsiveChart";
+import { type BetaPoint, type DetailKey, type WaccCurvePoint, pct } from "./shared";
 
 export function BetaWaccCurveGraph({
   assumptionsDebtRatio,
@@ -28,7 +29,7 @@ export function BetaWaccCurveGraph({
         />
       </button>
       <div className="grid h-72 min-h-72 min-w-0 grid-cols-1 gap-4 md:grid-cols-2">
-        <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1} initialDimension={CHART_INITIAL_DIMENSION}>
+        <ResponsiveChart minWidth={1} minHeight={1}>
           <BarChart data={betaTreemapProxy}>
             <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
             <XAxis dataKey="name" tick={{ fill: "var(--text-muted)", fontSize: 11 }} />
@@ -40,8 +41,8 @@ export function BetaWaccCurveGraph({
               ))}
             </Bar>
           </BarChart>
-        </ResponsiveContainer>
-        <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1} initialDimension={CHART_INITIAL_DIMENSION}>
+        </ResponsiveChart>
+        <ResponsiveChart minWidth={1} minHeight={1}>
           <LineChart data={waccCurve}>
             <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
             <XAxis dataKey="debt" tick={{ fill: "var(--text-muted)", fontSize: 11 }} />
@@ -50,7 +51,7 @@ export function BetaWaccCurveGraph({
             <Line type="monotone" dataKey="wacc" stroke="var(--accent)" strokeWidth={3} dot={false} />
             <ReferenceLine x={assumptionsDebtRatio} stroke="#444444" strokeDasharray="4 4" />
           </LineChart>
-        </ResponsiveContainer>
+        </ResponsiveChart>
       </div>
     </div>
   );

@@ -1,8 +1,9 @@
 "use client";
 
-import { Area, AreaChart, CartesianGrid, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Area, AreaChart, CartesianGrid, Line, ReferenceLine, Tooltip, XAxis, YAxis } from "recharts";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
-import { CHART_INITIAL_DIMENSION, type DetailKey, type RiskReturnPoint, numberText, pct2 } from "./shared";
+import { ResponsiveChart } from "@/components/ui/ResponsiveChart";
+import { type DetailKey, type RiskReturnPoint, numberText, pct2 } from "./shared";
 
 export function RiskReturnMinardGraph({
   derivedSpread,
@@ -37,7 +38,7 @@ export function RiskReturnMinardGraph({
         </button>
       </div>
       <div className="h-80 min-h-80 min-w-0">
-        <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1} initialDimension={CHART_INITIAL_DIMENSION}>
+        <ResponsiveChart minWidth={1} minHeight={1}>
           <AreaChart data={riskReturn} margin={{ top: 20, right: 24, bottom: 0, left: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
             <XAxis dataKey="risk" tick={{ fill: "var(--text-muted)" }} />
@@ -47,7 +48,7 @@ export function RiskReturnMinardGraph({
             <Area type="monotone" dataKey="fail" name="Failure probability" stroke="#9DA5A2" fill="#9DA5A2" fillOpacity={0.22} />
             <Line type="monotone" dataKey="npv" name="NPV path" stroke={derivedSpread >= 0 ? "var(--accent)" : "var(--delta-down)"} strokeWidth={Math.max(2, successProbability / 18)} dot={{ r: 4 }} />
           </AreaChart>
-        </ResponsiveContainer>
+        </ResponsiveChart>
       </div>
     </div>
   );

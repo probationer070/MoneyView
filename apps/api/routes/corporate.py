@@ -4,20 +4,26 @@ Corporate analysis routes.
 
 import json
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal, Optional
 
-from fastapi import APIRouter, Body, HTTPException, Query
+from fastapi import APIRouter, Body, HTTPException, Query, Request
+from fastapi.responses import StreamingResponse
 
 from apps.api.core.logger import setup_logger
+from apps.api.core.transport_progress import log_transport_phase
 from apps.api.models.schemas import (
     APIResponse,
     APIMeta,
+    DCFFullReport,
+    CorporateComparisonSnapshotDeleteResult,
     CorporateCompany,
     CorporateComparisonHistoryResponse,
     CorporateComparisonResponse,
     CorporateComparisonStockHistoryResponse,
+    CorporateDcfBatchRequest,
     CorporateMetrics,
     ValuationAssumptions,
 )
@@ -26,15 +32,17 @@ from apps.api.services.corporate_comparison import (
     DEFAULT_COMPARISON_UNIVERSE,
     DEFAULT_SNAPSHOT_MODE,
     build_corporate_comparison_response,
+    delete_corporate_comparison_snapshot_version,
     ensure_daily_snapshot_current,
     load_corporate_comparison_history,
     load_corporate_comparison_snapshot_version,
     load_corporate_comparison_stock_history,
     save_corporate_comparison_snapshot,
 )
+from apps.api.services.corporate_dcf import build_dcf_full_report, build_dcf_summary
 from apps.api.services.db import get_db
 from apps.api.services.market_data import MarketDataService
-from apps.api.services.watchlist_seed import ensure_watchlist_bootstrapped
+from apps.api.services.watchlist_seed import ensure_watchlist_bootstrapped, load_watchlist_seed
 
 router = APIRouter()
 logger = setup_logger(__name__)
@@ -86,6 +94,10 @@ DEFAULT_EQUITY_RISK_PREMIUM = 0.055
 KOREA_COUNTRY_RISK_PREMIUM = 0.8
 YAHOO_STATEMENT_CACHE_TTL_SECONDS = 300
 _YAHOO_STATEMENT_CACHE: dict[str, dict[str, object]] = {}
+
+
+def _sse_event(event: str, payload: dict[str, object]) -> str:
+    return f"event: {event}\ndata: {json.dumps(payload, separators=(',', ':'))}\n\n"
 
 
 def _frame_shape(frame) -> tuple[int, int]:
@@ -820,6 +832,25 @@ def ensure_corporate_comparison_daily_snapshot() -> CorporateComparisonResponse 
     )
 
 
+def _valuation_params_from_metrics(metrics: CorporateMetrics) -> ValuationAssumptions:
+    growth_rate = float(metrics.growth) / 100
+    wacc = max(float(metrics.wacc) / 100, 0.001)
+    terminal_growth_rate = min(growth_rate, wacc - 0.005)
+    terminal_growth_rate = max(terminal_growth_rate, -0.1)
+    return ValuationAssumptions(
+        revenue_growth_rate=growth_rate,
+        operating_margin=max(min(float(metrics.roic) / 100, 1.0), -1.0),
+        tax_rate=DEFAULT_TAX_RATE,
+        wacc=wacc,
+        terminal_growth_rate=terminal_growth_rate,
+        fcff=max(float(metrics.fcff), 0.0),
+        esg_penalty=max(min(float(metrics.esg_penalty), 100.0), 0.0),
+        reinvestment=max(min(float(metrics.reinvestment), 100.0), 0.0),
+        unlevered_beta=max(min(float(metrics.unlevered_beta), 5.0), 0.0),
+        debt_ratio=max(min(float(metrics.debt_ratio), 100.0), 0.0),
+    )
+
+
 @router.get("/companies", response_model=list[CorporateCompany])
 async def get_corporate_companies():
     """Return company-name-first corporate analysis universe."""
@@ -833,6 +864,15 @@ async def get_corporate_companies():
         )
         for ticker, payload in DEFAULT_COMPANIES.items()
     }
+    seeded_items, _ = load_watchlist_seed(_WATCHLIST_JSON)
+    for item in seeded_items:
+        ticker = item.ticker.upper()
+        companies[ticker] = CorporateCompany(
+            ticker=ticker,
+            name=item.name or ticker,
+            sector=item.sector,
+            source="portfolio",
+        )
 
     with get_db() as conn:
         watchlist_rows = conn.execute(
@@ -1001,6 +1041,21 @@ async def get_corporate_comparison_snapshot_version(snapshot_version: str = Quer
     )
 
 
+@router.delete("/comparison/snapshot-version", response_model=APIResponse[CorporateComparisonSnapshotDeleteResult])
+async def delete_corporate_comparison_snapshot(snapshot_version: str = Query(..., min_length=1)):
+    """Delete one persisted comparison snapshot version by id."""
+    deleted_rows = delete_corporate_comparison_snapshot_version(snapshot_version=snapshot_version)
+    if deleted_rows == 0:
+        raise HTTPException(status_code=404, detail="Snapshot version not found")
+    return APIResponse(
+        data=CorporateComparisonSnapshotDeleteResult(
+            snapshot_version=snapshot_version,
+            deleted_rows=deleted_rows,
+        ),
+        meta=APIMeta(last_updated_at=datetime.now(timezone.utc).isoformat(), request_id=""),
+    )
+
+
 @router.get("/comparison/stock-history", response_model=APIResponse[CorporateComparisonStockHistoryResponse])
 async def get_corporate_comparison_stock_history(
     ticker: str = Query(..., min_length=1),
@@ -1029,56 +1084,140 @@ async def get_corporate_comparison_stock_history(
 @router.post("/dcf/{ticker}")
 async def dynamic_dcf_model(ticker: str, params: ValuationAssumptions):
     """
-    Ticker-aware DCF recalculation bound to the Next.js Debouncer.
+    Lightweight non-streaming DCF summary response kept for compatibility paths.
     """
-    ticker = ticker.upper()
-    current_price = _latest_market_price(ticker)
-    metrics = _metrics_for_ticker(ticker) if params.fcff is None or params.esg_penalty is None else None
-    base_fcff = max(float(params.fcff if params.fcff is not None else metrics.fcff), 1.0)
-    esg_penalty = params.esg_penalty if params.esg_penalty is not None else metrics.esg_penalty
-    wacc = max(params.wacc, 0.001)
-    terminal_growth = min(params.terminal_growth_rate, wacc - 0.005)
-    terminal_growth = max(terminal_growth, -0.1)
-
-    projected_fcff = [
-        base_fcff * ((1 + params.revenue_growth_rate) ** year)
-        for year in range(1, 6)
-    ]
-    pv_fcff = sum(
-        cash_flow / ((1 + wacc) ** year)
-        for year, cash_flow in enumerate(projected_fcff, start=1)
+    summary, assumption_summary = build_dcf_summary(
+        ticker=ticker,
+        params=params,
+        current_price_loader=_latest_market_price,
+        metrics_loader=_metrics_for_ticker,
+        risk_free_rate=DEFAULT_RISK_FREE_RATE,
+        equity_risk_premium=DEFAULT_EQUITY_RISK_PREMIUM,
+        country_risk_premium=KOREA_COUNTRY_RISK_PREMIUM,
     )
-    terminal_cash_flow = projected_fcff[-1] * (1 + terminal_growth)
-    terminal_value = terminal_cash_flow / max(wacc - terminal_growth, 0.005)
-    pv_terminal = terminal_value / ((1 + wacc) ** 5)
-    enterprise_value = pv_fcff + pv_terminal
-    agency_discount = 1 - min(max(esg_penalty, 0), 80) / 400
-    dcf_multiple = enterprise_value / base_fcff
-    baseline_multiple = 1 / max(wacc - terminal_growth, 0.005)
-    fcff_scale = base_fcff / 92.0
-    if current_price > 0:
-        estimated_value = current_price * (dcf_multiple / baseline_multiple) * agency_discount * fcff_scale
-    else:
-        estimated_value = enterprise_value * agency_discount
-    upside_pct = ((estimated_value - current_price) / current_price) * 100 if current_price > 0 else 0.0
+    return APIResponse(
+        status="ok",
+        data={**summary.model_dump(), **assumption_summary.model_dump(exclude={"report_id", "ticker", "generated_at"})},
+        meta=APIMeta(last_updated_at=datetime.now(timezone.utc).isoformat(), request_id=""),
+    )
+
+
+@router.post("/dcf/{ticker}/report", response_model=APIResponse[DCFFullReport])
+async def get_dcf_full_report(ticker: str, params: ValuationAssumptions):
+    """Return the full DCF report only on explicit request."""
+    report = build_dcf_full_report(
+        ticker=ticker,
+        params=params,
+        current_price_loader=_latest_market_price,
+        metrics_loader=_metrics_for_ticker,
+        risk_free_rate=DEFAULT_RISK_FREE_RATE,
+        equity_risk_premium=DEFAULT_EQUITY_RISK_PREMIUM,
+        country_risk_premium=KOREA_COUNTRY_RISK_PREMIUM,
+    )
+    return APIResponse(
+        status="ok",
+        data=report,
+        meta=APIMeta(last_updated_at=datetime.now(timezone.utc).isoformat(), request_id=""),
+    )
+
+
+@router.post("/dcf/reports/bulk", response_model=APIResponse[list[DCFFullReport]])
+async def get_bulk_dcf_reports(request: CorporateDcfBatchRequest):
+    """Calculate full DCF reports for a list of comparison tickers."""
+    tickers = []
+    for raw_ticker in request.tickers:
+        ticker = raw_ticker.upper().strip()
+        if ticker and ticker not in tickers:
+            tickers.append(ticker)
+
+    reports: list[DCFFullReport] = []
+    for ticker in tickers:
+        metrics = _metrics_for_ticker(ticker)
+        report = build_dcf_full_report(
+            ticker=ticker,
+            params=_valuation_params_from_metrics(metrics),
+            current_price_loader=_latest_market_price,
+            metrics_loader=_metrics_for_ticker,
+            risk_free_rate=DEFAULT_RISK_FREE_RATE,
+            equity_risk_premium=DEFAULT_EQUITY_RISK_PREMIUM,
+            country_risk_premium=KOREA_COUNTRY_RISK_PREMIUM,
+        )
+        reports.append(report)
 
     return APIResponse(
         status="ok",
-        data={
-            "estimated_value": round(estimated_value, 2),
-            "current_price": round(current_price, 2),
-            "upside_pct": round(upside_pct, 2),
-            "wacc_used": params.wacc,
-            "margin_used": params.operating_margin,
-            "growth_used": params.revenue_growth_rate,
-            "fcff_used": base_fcff,
-            "esg_penalty_used": esg_penalty,
-            "terminal_growth_used": terminal_growth,
-            "enterprise_value_index": round(enterprise_value * agency_discount, 2),
-            "status": "Undervalued" if current_price > 0 and estimated_value > current_price else "Overvalued",
-        },
+        data=reports,
         meta=APIMeta(last_updated_at=datetime.now(timezone.utc).isoformat(), request_id=""),
     )
+
+
+@router.post("/dcf/{ticker}/stream")
+async def stream_dcf_summary(request: Request, ticker: str, params: ValuationAssumptions = Body(...)):
+    """Stream the phase 1 and phase 2 DCF payloads without shipping the full report."""
+
+    async def event_stream():
+        started_at = time.perf_counter()
+        request_id = getattr(request.state, "request_id", "")
+        bytes_sent = 0
+        chunk_count = 0
+        summary, assumption_summary = build_dcf_summary(
+            ticker=ticker,
+            params=params,
+            current_price_loader=_latest_market_price,
+            metrics_loader=_metrics_for_ticker,
+            risk_free_rate=DEFAULT_RISK_FREE_RATE,
+            equity_risk_premium=DEFAULT_EQUITY_RISK_PREMIUM,
+            country_risk_premium=KOREA_COUNTRY_RISK_PREMIUM,
+        )
+        phase1_event = _sse_event("phase1", {"phase": "phase1", "summary": summary.model_dump()})
+        bytes_sent += len(phase1_event.encode("utf-8"))
+        chunk_count += 1
+        log_transport_phase(
+            request_id=request_id,
+            method=request.method,
+            path=request.url.path,
+            phase="phase1",
+            elapsed_ms=(time.perf_counter() - started_at) * 1000,
+            bytes_sent=bytes_sent,
+            chunk_count=chunk_count,
+        )
+        yield phase1_event
+        phase2_event = _sse_event("phase2", {"phase": "phase2", "assumptions": assumption_summary.model_dump()})
+        bytes_sent += len(phase2_event.encode("utf-8"))
+        chunk_count += 1
+        log_transport_phase(
+            request_id=request_id,
+            method=request.method,
+            path=request.url.path,
+            phase="phase2",
+            elapsed_ms=(time.perf_counter() - started_at) * 1000,
+            bytes_sent=bytes_sent,
+            chunk_count=chunk_count,
+        )
+        yield phase2_event
+        complete_event = _sse_event(
+            "complete",
+            {
+                "phase": "complete",
+                "report_id": summary.report_id,
+                "generated_at": summary.generated_at,
+            },
+        )
+        bytes_sent += len(complete_event.encode("utf-8"))
+        chunk_count += 1
+        log_transport_phase(
+            request_id=request_id,
+            method=request.method,
+            path=request.url.path,
+            phase="complete",
+            elapsed_ms=(time.perf_counter() - started_at) * 1000,
+            bytes_sent=bytes_sent,
+            chunk_count=chunk_count,
+            completed=True,
+        )
+        yield complete_event
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
 @router.get("/metrics/{ticker}", response_model=CorporateMetrics)

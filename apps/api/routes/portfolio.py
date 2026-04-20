@@ -12,6 +12,7 @@ from apps.api.models.schemas import (
     AttributionRequest,
     AttributionResult,
     DeltaBadge,
+    PortfolioPreferences,
     PortfolioStock,
     WatchlistItem,
     WatchlistResyncResult,
@@ -80,6 +81,50 @@ async def get_watchlist():
             )
         )
     return result
+
+
+@router.get("/preferences", response_model=APIResponse[PortfolioPreferences])
+async def get_portfolio_preferences():
+    """Return persisted portfolio workspace preferences."""
+    with get_db() as conn:
+        row = conn.execute(
+            """SELECT total_investment_amount, transaction_fee_rate, updated_at
+               FROM portfolio_preferences
+               WHERE singleton_id = 1"""
+        ).fetchone()
+
+    preferences = PortfolioPreferences(
+        total_investment_amount=float(row["total_investment_amount"] or 0.0) if row else 10_000.0,
+        transaction_fee_rate=float(row["transaction_fee_rate"] or 0.002) if row else 0.002,
+        updated_at=str(row["updated_at"] or "") if row else "",
+    )
+    return APIResponse(data=preferences)
+
+
+@router.put("/preferences", response_model=APIResponse[PortfolioPreferences])
+async def save_portfolio_preferences(preferences: PortfolioPreferences = Body(...)):
+    """Persist portfolio workspace preferences used by allocation tools."""
+    payload = preferences.model_copy(update={"transaction_fee_rate": 0.002})
+    with get_db() as conn:
+        conn.execute(
+            """INSERT OR REPLACE INTO portfolio_preferences
+               (singleton_id, total_investment_amount, transaction_fee_rate, updated_at)
+               VALUES (1, ?, ?, CURRENT_TIMESTAMP)""",
+            (payload.total_investment_amount, payload.transaction_fee_rate),
+        )
+        row = conn.execute(
+            """SELECT total_investment_amount, transaction_fee_rate, updated_at
+               FROM portfolio_preferences
+               WHERE singleton_id = 1"""
+        ).fetchone()
+
+    return APIResponse(
+        data=PortfolioPreferences(
+            total_investment_amount=float(row["total_investment_amount"] or 0.0),
+            transaction_fee_rate=float(row["transaction_fee_rate"] or 0.002),
+            updated_at=str(row["updated_at"] or ""),
+        )
+    )
 
 
 @router.get("/stock/{ticker}", response_model=dict)

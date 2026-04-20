@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Bar, BarChart, CartesianGrid, Tooltip, XAxis, YAxis } from "recharts";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
+import { ResponsiveChart } from "@/components/ui/ResponsiveChart";
 
 interface AttributionWaterfallProps {
   data: Array<{ name: string; value: number }>;
@@ -14,8 +15,6 @@ interface AttributionWaterfallProps {
     active_contribution: number;
   }>;
 }
-
-const CHART_INITIAL_DIMENSION = { width: 1, height: 1 };
 
 function percentText(value: number) {
   return `${(value * 100).toFixed(2)}%`;
@@ -99,7 +98,7 @@ export function AttributionWaterfall({ data, sectorBreakdowns = [] }: Attributio
           Details
         </button>
       </div>
-      <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1} initialDimension={CHART_INITIAL_DIMENSION}>
+      <ResponsiveChart minWidth={1} minHeight={1}>
         <BarChart data={formatted}>
           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
           <XAxis dataKey="name" tick={{ fontSize: 12 }} />
@@ -114,7 +113,7 @@ export function AttributionWaterfall({ data, sectorBreakdowns = [] }: Attributio
             fill="var(--accent)"
           />
         </BarChart>
-      </ResponsiveContainer>
+      </ResponsiveChart>
       {isDetailOpen && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4"

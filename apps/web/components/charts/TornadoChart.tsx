@@ -1,14 +1,13 @@
 "use client";
 
 import React from "react";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, Cell, CartesianGrid } from "recharts";
+import { ResponsiveChart } from "@/components/ui/ResponsiveChart";
 
 interface TornadoEntry {
     name: string;
     target: number;
 }
-
-const CHART_INITIAL_DIMENSION = { width: 1, height: 1 };
 
 export const TornadoChart: React.FC<{ data: TornadoEntry[] }> = ({ data }) => {
     // Dynamic logic rendering standard distributions (Bear is red, Base is gray, Bull is green)
@@ -21,7 +20,7 @@ export const TornadoChart: React.FC<{ data: TornadoEntry[] }> = ({ data }) => {
     return (
         <div className="bg-[var(--surface-panel)] rounded-[var(--radius)] border border-[var(--border)] p-6 shadow-sm w-full h-[400px] min-h-[400px] min-w-0">
             <h2 className="text-lg font-bold mb-4">Monte Carlo Sensitivity Bounds</h2>
-            <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1} initialDimension={CHART_INITIAL_DIMENSION}>
+            <ResponsiveChart minWidth={1} minHeight={1}>
                 <BarChart data={data} layout="vertical" margin={{ top: 20, right: 30, left: 40, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="var(--border)" />
                     <XAxis type="number" tickFormatter={(v) => `$${v}`} tick={{fill: "var(--text-muted)"}} />
@@ -37,7 +36,7 @@ export const TornadoChart: React.FC<{ data: TornadoEntry[] }> = ({ data }) => {
                         ))}
                     </Bar>
                 </BarChart>
-            </ResponsiveContainer>
+            </ResponsiveChart>
         </div>
     );
 };

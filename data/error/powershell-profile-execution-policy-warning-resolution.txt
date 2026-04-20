@@ -1,0 +1,48 @@
+Issue
+PowerShell printed this warning after Playwright and similar commands:
+
+File C:\Users\VIP\OneDrive\문서\WindowsPowerShell\profile.ps1 cannot be loaded because running scripts is disabled on this system.
+
+Root cause
+- PowerShell was trying to load the user profile script at:
+  `C:\Users\VIP\OneDrive\문서\WindowsPowerShell\profile.ps1`
+- That profile contains a normal `conda init` block.
+- The warning happened because PowerShell started in a restricted state and refused to execute the profile script.
+- A direct `Set-ExecutionPolicy` attempt from a normal shell did not work first, because PowerShell tried to load the blocked profile before applying the policy change.
+
+Correct fix
+Run the execution-policy update without loading the profile first:
+
+```powershell
+powershell.exe -NoProfile -Command "Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned -Force"
+```
+
+Why this fix is appropriate
+- `CurrentUser` scope affects only the current Windows account.
+- `RemoteSigned` allows trusted local scripts such as the local profile.
+- Downloaded scripts still require signing or explicit unblocking.
+- No admin rights are required.
+
+Prevention guidance
+1. For automation and agent-driven commands, prefer:
+   `powershell.exe -NoProfile -Command ...`
+   when the task does not depend on personal shell startup behavior.
+
+2. Keep `profile.ps1` minimal and defensive.
+   The current profile is acceptable because it already guards the conda initialization with `Test-Path`.
+
+3. If a downloaded script is trusted but blocked, explicitly unblock it:
+
+```powershell
+Unblock-File path\to\script.ps1
+```
+
+4. If the same warning returns later, inspect policy precedence:
+
+```powershell
+Get-ExecutionPolicy -List
+```
+
+Notes
+- If `MachinePolicy` or `UserPolicy` is later set by domain policy or security tooling, that higher-precedence policy can override `CurrentUser`.
+- The goal is to keep the logging/test environment clean and prevent recurring PowerShell profile warnings during normal app and Playwright runs.
