@@ -1,9 +1,12 @@
 "use client";
 
 import type { DcfFullReport } from "../../../../../packages/shared-types";
+import type { BenchmarkPreset } from "@/lib/benchmarkPresets";
 import { Bar, BarChart, CartesianGrid, Cell, Scatter, ScatterChart, Tooltip, XAxis, YAxis, ZAxis } from "recharts";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { ResponsiveChart } from "@/components/ui/ResponsiveChart";
+import { CorporateComparisonTable } from "./CorporateComparisonTable";
+import type { CalculationDetailKey } from "./calculationDetailTypes";
 
 type ComparisonSortKey = "roic_minus_wacc" | "dcf_value" | "expected_return_spread";
 type ComparisonUniverse = "watchlist_plus_benchmark" | "custom";
@@ -67,10 +70,12 @@ export function TargetStockComparisonSection({
   comparisonIsStale,
   comparisonUniverse,
   comparisonBenchmarkTicker,
+  comparisonBenchmarkOptions,
   comparisonCustomTickersInput,
   comparisonSortKey,
   comparisonSortDirection,
   onComparisonUniverseChange,
+  onComparisonBenchmarkTickerChange,
   onComparisonCustomTickersInputChange,
   onComparisonSortKeyChange,
   onComparisonSortDirectionChange,
@@ -90,6 +95,7 @@ export function TargetStockComparisonSection({
   similarComparisonScatterSelected,
   currentTicker,
   onSelectTicker,
+  onOpenCalculationForTicker,
   bulkDcfReportsLoading,
   bulkDcfReportsError,
   bulkDcfReports,
@@ -105,10 +111,12 @@ export function TargetStockComparisonSection({
   comparisonIsStale: boolean;
   comparisonUniverse: ComparisonUniverse;
   comparisonBenchmarkTicker: string;
+  comparisonBenchmarkOptions: BenchmarkPreset[];
   comparisonCustomTickersInput: string;
   comparisonSortKey: ComparisonSortKey;
   comparisonSortDirection: "desc" | "asc";
   onComparisonUniverseChange: (value: ComparisonUniverse) => void;
+  onComparisonBenchmarkTickerChange: (value: string) => void;
   onComparisonCustomTickersInputChange: (value: string) => void;
   onComparisonSortKeyChange: (value: ComparisonSortKey) => void;
   onComparisonSortDirectionChange: (value: "desc" | "asc") => void;
@@ -128,6 +136,7 @@ export function TargetStockComparisonSection({
   similarComparisonScatterSelected: ComparisonScatterRow[];
   currentTicker: string;
   onSelectTicker: (ticker: string) => void;
+  onOpenCalculationForTicker: (ticker: string, key: CalculationDetailKey) => void;
   bulkDcfReportsLoading: boolean;
   bulkDcfReportsError: string | null;
   bulkDcfReports: DcfFullReport[];
@@ -138,8 +147,10 @@ export function TargetStockComparisonSection({
   formatDateTime: (value: string) => string;
   formatComparisonUniverseLabel: (value: ComparisonUniverse | "portfolio_plus_benchmark") => string;
 }) {
+  const selectedBenchmarkLabel = comparisonBenchmarkOptions.find((preset) => preset.ticker === comparisonBenchmarkTicker)?.label ?? comparisonBenchmarkTicker;
+
   return (
-    <section className="mt-4 col-span-6 rounded-[var(--radius)] border border-[var(--border)] bg-white p-4 shadow-sm">
+    <section className="mt-4 col-span-6 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4 shadow-sm">
       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
         <div className="min-w-0 xl:max-w-2xl">
           <h2 className="text-sm font-bold text-[var(--text-primary)]">
@@ -163,7 +174,7 @@ export function TargetStockComparisonSection({
             type="button"
             onClick={onRefreshComparison}
             disabled={comparisonIsFetching}
-            className="inline-flex items-center gap-2 rounded-[var(--radius)] border border-[var(--border)] bg-white px-3 py-2 text-xs font-bold text-[var(--text-primary)] shadow-sm disabled:opacity-60"
+            className="inline-flex items-center gap-2 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-xs font-bold text-[var(--text-primary)] shadow-sm disabled:opacity-60"
           >
             Refresh comparison
           </button>
@@ -171,7 +182,7 @@ export function TargetStockComparisonSection({
             type="button"
             onClick={onVerifyWatchlistSync}
             disabled={watchlistSyncLoading}
-            className="inline-flex items-center gap-2 rounded-[var(--radius)] border border-[var(--border)] bg-white px-3 py-2 text-xs font-bold text-[var(--text-primary)] shadow-sm disabled:opacity-60"
+            className="inline-flex items-center gap-2 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-xs font-bold text-[var(--text-primary)] shadow-sm disabled:opacity-60"
           >
             Verify Watchlist Sync
           </button>
@@ -234,7 +245,7 @@ export function TargetStockComparisonSection({
                 aria-label="Comparison universe"
                 value={comparisonUniverse}
                 onChange={(event) => onComparisonUniverseChange(event.target.value as ComparisonUniverse)}
-                className="w-full rounded-[var(--radius)] border border-[var(--border)] bg-white px-3 py-2 text-xs text-[var(--text-primary)] sm:w-auto"
+                className="w-full rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-xs text-[var(--text-primary)] sm:w-auto"
               >
                 <option value="watchlist_plus_benchmark">Watchlist + Benchmark</option>
                 <option value="custom">Custom Universe</option>
@@ -242,9 +253,18 @@ export function TargetStockComparisonSection({
             </label>
             <label className="flex w-full min-w-0 flex-col items-start gap-1 text-xs font-semibold text-[var(--text-muted)] sm:w-auto sm:flex-row sm:items-center">
               Benchmark
-              <span className="inline-flex w-full items-center justify-center rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2 text-xs font-bold text-[var(--text-primary)] sm:min-w-[8.5rem] sm:w-auto">
-                S&amp;P 500 ({comparisonBenchmarkTicker})
-              </span>
+              <select
+                aria-label="Comparison benchmark"
+                value={comparisonBenchmarkTicker}
+                onChange={(event) => onComparisonBenchmarkTickerChange(event.target.value)}
+                className="w-full rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-xs text-[var(--text-primary)] sm:w-auto"
+              >
+                {comparisonBenchmarkOptions.map((preset) => (
+                  <option key={preset.id} value={preset.ticker}>
+                    {preset.label}
+                  </option>
+                ))}
+              </select>
             </label>
             {comparisonUniverse === "custom" && (
               <label className="flex w-full min-w-0 flex-col items-start gap-1 text-xs font-semibold text-[var(--text-muted)] sm:w-auto sm:flex-row sm:items-center">
@@ -254,7 +274,7 @@ export function TargetStockComparisonSection({
                   value={comparisonCustomTickersInput}
                   onChange={(event) => onComparisonCustomTickersInputChange(event.target.value.toUpperCase())}
                   placeholder="AAPL, MSFT, NVDA"
-                  className="w-full rounded-[var(--radius)] border border-[var(--border)] bg-white px-3 py-2 text-xs text-[var(--text-primary)] sm:w-48"
+                  className="w-full rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-xs text-[var(--text-primary)] sm:w-48"
                 />
               </label>
             )}
@@ -264,7 +284,7 @@ export function TargetStockComparisonSection({
                 aria-label="Sort by"
                 value={comparisonSortKey}
                 onChange={(event) => onComparisonSortKeyChange(event.target.value as ComparisonSortKey)}
-                className="w-full rounded-[var(--radius)] border border-[var(--border)] bg-white px-3 py-2 text-xs text-[var(--text-primary)] sm:w-auto"
+                className="w-full rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-xs text-[var(--text-primary)] sm:w-auto"
               >
                 <option value="expected_return_spread">Expected return spread</option>
                 <option value="roic_minus_wacc">ROIC - WACC</option>
@@ -277,7 +297,7 @@ export function TargetStockComparisonSection({
                 aria-label="Direction"
                 value={comparisonSortDirection}
                 onChange={(event) => onComparisonSortDirectionChange(event.target.value as "desc" | "asc")}
-                className="w-full rounded-[var(--radius)] border border-[var(--border)] bg-white px-3 py-2 text-xs text-[var(--text-primary)] sm:w-auto"
+                className="w-full rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-xs text-[var(--text-primary)] sm:w-auto"
               >
                 <option value="desc">High to low</option>
                 <option value="asc">Low to high</option>
@@ -286,6 +306,9 @@ export function TargetStockComparisonSection({
           </div>
           <div className="text-xs text-[var(--text-muted)]">
             Benchmark: {comparisonData?.snapshot.benchmark_ticker ?? comparisonBenchmarkTicker}. {comparisonData ? `Generated live at ${formatDateTime(comparisonData.snapshot.generated_at)}.` : "Refresh comparison to calculate the live peer set."} Portfolio snapshots and saved history are managed from the Portfolio page only.
+          </div>
+          <div className="text-xs text-[var(--text-muted)]">
+            Selected benchmark preset: {selectedBenchmarkLabel} ({comparisonBenchmarkTicker}).
           </div>
           {(comparisonData?.snapshot.comparison_universe ?? comparisonUniverse) === "custom" && (
             <div className="text-xs text-[var(--text-muted)]">
@@ -409,59 +432,21 @@ export function TargetStockComparisonSection({
             </section>
           </div>
 
-          <div className="mt-4 overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-[var(--surface-muted)] text-left text-[var(--text-muted)]">
-                <tr>
-                  <th className="px-4 py-3 font-semibold">Ticker</th>
-                  <th className="px-4 py-3 font-semibold">Company</th>
-                  <th className="px-4 py-3 font-semibold">Sector</th>
-                  <th className="px-4 py-3 text-right font-semibold">Weight</th>
-                  <th className="px-4 py-3 text-right font-semibold">ROIC - WACC</th>
-                  <th className="px-4 py-3 text-right font-semibold">DCF Value</th>
-                  <th className="px-4 py-3 text-right font-semibold">Current Price</th>
-                  <th className="px-4 py-3 text-right font-semibold">DCF Return</th>
-                  <th className="px-4 py-3 text-right font-semibold">CAPM Return</th>
-                  <th className="px-4 py-3 text-right font-semibold">Market Return</th>
-                  <th className="px-4 py-3 text-right font-semibold">Spread</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[var(--border)]/60">
-                {sortedComparisonRows.map((row) => (
-                  <tr key={`comparison-${row.ticker}`} className={row.ticker === currentTicker ? "bg-[var(--surface-muted)]/50" : ""}>
-                    <td className="px-4 py-3 font-bold text-[var(--text-primary)]">
-                      {row.group_name !== "benchmark" ? (
-                        <button
-                          type="button"
-                          onClick={() => onSelectTicker(row.ticker)}
-                          className="rounded underline decoration-dotted underline-offset-4"
-                        >
-                          {row.ticker}
-                        </button>
-                      ) : row.ticker}
-                    </td>
-                    <td className="px-4 py-3 text-[var(--text-muted)]">{row.name || row.ticker}</td>
-                    <td className="px-4 py-3 text-[var(--text-muted)]">{row.sector || "N/A"}</td>
-                    <td className="px-4 py-3 text-right tabular-nums">{formatPct2(row.weight * 100)}</td>
-                    <td className={`px-4 py-3 text-right font-bold tabular-nums ${row.roic_minus_wacc >= 0 ? "text-[var(--surface)]" : "text-[var(--delta-down)]"}`}>{formatPct2(row.roic_minus_wacc)}</td>
-                    <td className="px-4 py-3 text-right font-bold tabular-nums">{formatMoney(row.dcf_value)}</td>
-                    <td className="px-4 py-3 text-right tabular-nums">{row.has_price_data ? formatMoney(row.current_price) : "N/A"}</td>
-                    <td className="px-4 py-3 text-right tabular-nums">{formatPct2(row.dcf_implied_return)}</td>
-                    <td className="px-4 py-3 text-right tabular-nums">{formatPct2(row.capm_expected_return)}</td>
-                    <td className="px-4 py-3 text-right tabular-nums">{formatPct2(row.market_expected_return)}</td>
-                    <td className={`px-4 py-3 text-right font-bold tabular-nums ${row.expected_return_spread >= 0 ? "text-[var(--surface)]" : "text-[var(--delta-down)]"}`}>{formatPct2(row.expected_return_spread)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <CorporateComparisonTable
+            rows={sortedComparisonRows}
+            currentTicker={currentTicker}
+            onSelectTicker={onSelectTicker}
+            onOpenCalculationForTicker={onOpenCalculationForTicker}
+            formatPct2={formatPct2}
+            formatMoney={formatMoney}
+          />
 
           <div className="mt-4">
             <button
               type="button"
               onClick={onCalculateAllDcfReports}
               disabled={bulkDcfReportsLoading || sortedComparisonRows.filter((row) => row.group_name !== "benchmark").length === 0}
-              className="rounded-[var(--radius)] border border-[var(--border)] bg-white px-3 py-2 text-xs font-bold text-[var(--text-primary)] shadow-sm disabled:opacity-60"
+              className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-xs font-bold text-[var(--text-primary)] shadow-sm disabled:opacity-60"
             >
               {bulkDcfReportsLoading ? "Calculating all reports..." : "Calculate All Reports"}
             </button>

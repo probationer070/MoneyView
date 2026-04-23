@@ -2,6 +2,7 @@
 
 @layer base {
   :root {
+    /* ── Legacy variables (preserved for backward compat) ── */
     --bg-primary: #FBFBFB;
     --bg-secondary: #E0E4D6;
     --accent: #a7c7af;
@@ -17,19 +18,97 @@
     --chart-4: #E0E4D6;
     --chart-5: #9DA5A2;
     --chart-6: #444444;
-
     --delta-up: #E54545;
     --delta-down: #4589E5;
-
     --radius: 0.5rem;
+
+    /* ── Background tokens ── */
+    --bg-canvas: #FBFBFB;
+    --bg-subtle: #F3F5EF;
+    --bg-surface: #FFFFFF;
+    --bg-elevated: #FFFFFF;
+    --bg-sidebar: #E0E4D6;
+
+    /* ── Text tokens ── */
+    --text-secondary: #6B7370;
+    --text-disabled: #C4C9C6;
+    --text-inverse: #FFFFFF;
+
+    /* ── Border tokens ── */
+    --border-default: #B6CCBB;
+    --border-soft: #E0E4D6;
+    --border-strong: #9DA5A2;
+    --border-accent: #60CAAD;
+
+    /* ── State tokens ── */
+    --state-positive: #E54545;
+    --state-negative: #4589E5;
+    --state-warning: #E5A545;
+    --state-info: #60CAAD;
+    --state-success: #4BAF6E;
+    --state-error: #D93025;
+
+    /* ── Chart tokens ── */
+    --chart-primary: #39F1C0;
+    --chart-secondary: #60CAAD;
+    --chart-tertiary: #B6CCBB;
+    --chart-muted: #E0E4D6;
+    --chart-label: #9DA5A2;
+    --chart-ink: #444444;
+    --chart-grid: #F0F2EC;
+    --chart-positive: #E54545;
+    --chart-negative: #4589E5;
+
+    /* ── Heat scale (heatmap / correlation matrix) ── */
+    --chart-heat-1: #4589E5;
+    --chart-heat-2: #89B5E5;
+    --chart-heat-3: #C4D9F2;
+    --chart-heat-4: #F0F2EC;
+    --chart-heat-5: #F2D9C4;
+    --chart-heat-6: #E5A589;
+    --chart-heat-7: #E54545;
+
+    /* ── Spacing tokens ── */
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 24px;
+    --space-6: 32px;
+    --space-7: 48px;
+    --space-8: 64px;
+
+    /* ── Shape tokens ── */
+    --radius-sm: 4px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+
+    /* ── Shadow tokens ── */
+    --shadow-card-hover: 0 1px 3px rgba(0, 0, 0, 0.04);
+    --shadow-modal: 0 4px 24px rgba(0, 0, 0, 0.08);
+    --shadow-popover: 0 2px 12px rgba(0, 0, 0, 0.06);
+    --shadow-sidebar: 4px 0 24px rgba(0, 0, 0, 0.08);
+
+    /* ── Motion tokens ── */
+    --duration-fast: 100ms;
+    --duration-normal: 200ms;
+    --duration-slow: 350ms;
+    --easing-default: cubic-bezier(0.4, 0, 0.2, 1);
+    --easing-enter: cubic-bezier(0, 0, 0.2, 1);
+    --easing-exit: cubic-bezier(0.4, 0, 1, 1);
   }
 
   body {
-    background-color: var(--bg-primary);
+    background-color: var(--bg-canvas);
     color: var(--text-primary);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     font-family: var(--font-inter), sans-serif;
+  }
+
+  /* Numeric display alignment */
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
   }
 }
 

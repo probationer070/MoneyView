@@ -1,14 +1,19 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { X } from "lucide-react";
 import { fetchApi } from "@/lib/api";
 import TVChart from "@/components/charts/TVChart";
 import { DeltaBadge } from "@/components/ui/DeltaBadge";
-import { Sparkline } from "@/components/ui/Sparkline";
 import { ViewToggle, type ViewMode } from "@/components/ui/ViewToggle";
 import { type RawOHLCV, transformToTVCandles, transformToTVVolume } from "@/lib/transformers";
+import { Card } from "@/components/ui/Card";
+import { SectionHeader } from "@/components/ui/SectionHeader";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { ModalShell } from "@/components/ui/ModalShell";
+import { LoadingState } from "@/components/ui/LoadingState";
+import { SparklineCard } from "@/components/data/SparklineCard";
 
 export interface MarketIndexQuote {
   name: string;
@@ -322,7 +327,7 @@ function IndicatorGrid({
   const section = buildIndicatorSection(instrumentType, timeframe, indicators);
 
   return (
-    <section className="rounded-[var(--radius)] border border-[var(--border)] bg-white p-4 shadow-sm">
+    <section className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4 shadow-sm">
       <div className="flex items-start justify-between gap-4">
         <div>
           <h3 className="text-lg font-bold text-[var(--text-primary)]">{section.title}</h3>
@@ -393,70 +398,52 @@ function MarketDetailModal({ item, onClose }: { item: MarketIndexQuote; onClose:
     return warnings;
   }, [detail, volumeSummary?.latest_volume]);
 
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    document.body.style.overflow = "hidden";
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.body.style.overflow = "";
-      document.removeEventListener("keydown", onKeyDown);
-    };
-  }, [onClose]);
+  // Escape key and scroll-lock are handled by ModalShell.
+
+  const modalSubtitle = `${item.ticker} · ${instrumentLabel(detail?.instrument_type ?? item.instrument_type)}${detail?.unit_label ? ` · ${detail.unit_label}` : ""}`;
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="market-detail-title"
-      onMouseDown={onClose}
+    <ModalShell
+      open
+      onClose={onClose}
+      title={item.name}
+      subtitle={modalSubtitle}
+      size="xl"
     >
-      <div
-        className="max-h-[92vh] w-full max-w-6xl overflow-hidden rounded-[var(--radius)] bg-[var(--bg-primary)] shadow-2xl"
-        onMouseDown={(event) => event.stopPropagation()}
-      >
-        <div className="flex items-start justify-between border-b border-[var(--border)] bg-white p-5">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--text-muted)]">Market Detail</p>
-            <h2 id="market-detail-title" className="mt-1 text-2xl font-bold text-[var(--text-primary)]">
-              {item.name}
-            </h2>
-            <p className="text-sm tracking-wide text-[var(--text-muted)]">
-              {item.ticker} · {instrumentLabel(detail?.instrument_type ?? item.instrument_type)}
-              {detail?.unit_label ? ` · ${detail.unit_label}` : ""}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-[var(--radius)] border border-[var(--border)] p-2 text-[var(--text-muted)] hover:text-[var(--text-primary)]"
-            aria-label="Close market detail"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
+      <div className="space-y-5">
+          <section className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4 shadow-sm">
+            <div>
+              <h3 className="text-sm font-semibold text-[var(--text-primary)]">Quick market detail</h3>
+              <p className="mt-1 text-sm text-[var(--text-muted)]">
+                Stay in the overview workflow here, or open the canonical detail route for a standalone deep-dive view.
+              </p>
+            </div>
+            <Link
+              href={`/detail/${encodeURIComponent(item.ticker)}`}
+              className="inline-flex min-h-9 items-center justify-center rounded-[var(--radius-md)] border border-[var(--border-default)] px-[var(--space-4)] text-[13px] font-medium text-[var(--text-primary)] transition-colors duration-[var(--duration-fast)] hover:bg-[var(--bg-subtle)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--state-info)] focus-visible:ring-offset-1"
+            >
+              View Full Detail
+            </Link>
+          </section>
 
-        <div className="max-h-[calc(92vh-82px)] space-y-5 overflow-y-auto p-5">
           <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <div className="rounded-[var(--radius)] border border-[var(--border)] bg-white p-4 shadow-sm">
+            <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4 shadow-sm">
               <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Current Value</p>
               <p className="mt-2 text-3xl font-black tabular-nums text-[var(--text-primary)]">{formatNumber(item.last_close)}</p>
             </div>
-            <div className="rounded-[var(--radius)] border border-[var(--border)] bg-white p-4 shadow-sm">
+            <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4 shadow-sm">
               <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Absolute Change</p>
               <p className={`mt-2 text-3xl font-black tabular-nums ${(item.delta.delta_abs ?? 0) >= 0 ? "text-[var(--delta-up)]" : "text-[var(--delta-down)]"}`}>
                 {formatSignedNumber(item.delta.delta_abs)}
               </p>
             </div>
-            <div className="rounded-[var(--radius)] border border-[var(--border)] bg-white p-4 shadow-sm">
+            <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4 shadow-sm">
               <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Percent Change</p>
               <div className="mt-3">
                 <DeltaBadge value={item.delta.delta_pct} />
               </div>
             </div>
-            <div className="rounded-[var(--radius)] border border-[var(--border)] bg-white p-4 shadow-sm">
+            <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4 shadow-sm">
               <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Observed Trend</p>
               <p className="mt-2 text-lg font-bold text-[var(--text-primary)]">
                 {trendSummary.direction === "up" ? "Uptrend" : trendSummary.direction === "down" ? "Downtrend" : "Flat trend"}
@@ -467,20 +454,13 @@ function MarketDetailModal({ item, onClose }: { item: MarketIndexQuote; onClose:
             </div>
           </section>
 
-          {detailQuery.isLoading ? (
-            <section className="rounded-[var(--radius)] border border-[var(--border)] bg-white p-4 shadow-sm">
-              <p className="text-sm text-[var(--text-muted)]">Loading daily volume and indicator detail...</p>
-            </section>
-          ) : null}
+          {detailQuery.isLoading && (
+            <Card><LoadingState variant="skeleton" label="Loading indicator detail..." /></Card>
+          )}
 
-          {detailQuery.isError ? (
-            <section className="rounded-[var(--radius)] border border-amber-300 bg-amber-50 p-4 shadow-sm">
-              <h3 className="text-lg font-bold text-amber-950">Detail Unavailable</h3>
-              <p className="mt-2 text-sm text-amber-950">
-                The index summary loaded, but the expanded daily and monthly detail request failed.
-              </p>
-            </section>
-          ) : null}
+          {detailQuery.isError && (
+            <Card><p className="text-[13px] text-[var(--state-warning)] py-2">The index summary loaded, but the expanded detail request failed.</p></Card>
+          )}
 
           {warningMessages.length > 0 ? (
             <section className="rounded-[var(--radius)] border border-amber-300 bg-amber-50 p-4 shadow-sm">
@@ -495,7 +475,7 @@ function MarketDetailModal({ item, onClose }: { item: MarketIndexQuote; onClose:
 
           <section className="grid gap-5 lg:grid-cols-[1.7fr_1fr]">
             <div className="space-y-5">
-              <section className="rounded-[var(--radius)] border border-[var(--border)] bg-white p-4 shadow-sm">
+              <section className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4 shadow-sm">
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <h3 className="text-lg font-bold text-[var(--text-primary)]">OHLCV Chart</h3>
@@ -508,14 +488,14 @@ function MarketDetailModal({ item, onClose }: { item: MarketIndexQuote; onClose:
                       <button
                         type="button"
                         onClick={() => setChartTimeframe("daily")}
-                        className={`rounded-[calc(var(--radius)-4px)] px-3 py-1 font-semibold ${chartTimeframe === "daily" ? "bg-white text-[var(--text-primary)] shadow-sm" : "text-[var(--text-muted)]"}`}
+                        className={`rounded-[calc(var(--radius)-4px)] px-3 py-1 font-semibold ${chartTimeframe === "daily" ? "bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-sm" : "text-[var(--text-muted)]"}`}
                       >
                         Daily
                       </button>
                       <button
                         type="button"
                         onClick={() => setChartTimeframe("monthly")}
-                        className={`rounded-[calc(var(--radius)-4px)] px-3 py-1 font-semibold ${chartTimeframe === "monthly" ? "bg-white text-[var(--text-primary)] shadow-sm" : "text-[var(--text-muted)]"}`}
+                        className={`rounded-[calc(var(--radius)-4px)] px-3 py-1 font-semibold ${chartTimeframe === "monthly" ? "bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-sm" : "text-[var(--text-muted)]"}`}
                       >
                         Monthly
                       </button>
@@ -570,7 +550,7 @@ function MarketDetailModal({ item, onClose }: { item: MarketIndexQuote; onClose:
             </div>
 
             <div className="space-y-5">
-              <section className="rounded-[var(--radius)] border border-[var(--border)] bg-white p-4 shadow-sm">
+              <section className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4 shadow-sm">
                 <h3 className="text-lg font-bold text-[var(--text-primary)]">Daily Volume</h3>
                 <p className="mt-2 text-sm text-[var(--text-muted)]">
                   Volume is shown on the daily series only. Monthly context remains price-first to avoid hiding turnover spikes inside long aggregates.
@@ -597,7 +577,7 @@ function MarketDetailModal({ item, onClose }: { item: MarketIndexQuote; onClose:
                 </div>
               </section>
 
-              <section className="rounded-[var(--radius)] border border-[var(--border)] bg-white p-4 shadow-sm">
+              <section className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4 shadow-sm">
                 <h3 className="text-lg font-bold text-[var(--text-primary)]">{contextBlock.title}</h3>
                 <p className="mt-2 text-sm text-[var(--text-muted)]">{contextBlock.description}</p>
                 {detail?.instrument_type === "index" && detail.market_regime ? (
@@ -665,9 +645,8 @@ function MarketDetailModal({ item, onClose }: { item: MarketIndexQuote; onClose:
               </section>
             </div>
           </section>
-        </div>
       </div>
-    </div>
+    </ModalShell>
   );
 }
 
@@ -677,59 +656,41 @@ export function MarketOverviewClient({ indices }: { indices: MarketIndexQuote[] 
 
   if (indices.length === 0) {
     return (
-      <div className="rounded-[var(--radius)] border border-dashed border-[var(--border)] p-8 text-center text-[var(--text-muted)]">
-        No market data available. Ensure FastAPI backend is running and discoverable.
-      </div>
+      <EmptyState
+        title="No market data available"
+        description="Ensure the FastAPI backend is running and discoverable."
+      />
     );
   }
 
   return (
     <>
       <section className="space-y-4">
-        <div className="flex flex-col gap-3 rounded-[var(--radius)] border border-[var(--border)] bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="text-lg font-bold text-[var(--text-primary)]">Market Dashboard</h2>
-            <p className="mt-1 text-sm text-[var(--text-muted)]">
-              Scan the market in graph view, switch to table view for fast comparison, then open any item for a deeper read.
-            </p>
-          </div>
-          <ViewToggle value={viewMode} onChange={setViewMode} />
-        </div>
+        <Card>
+          <SectionHeader
+            title="Market Dashboard"
+            description="Scan the market in graph view, switch to table view for fast comparison, then open any item for a deeper read."
+            actions={<ViewToggle value={viewMode} onChange={setViewMode} />}
+          />
+        </Card>
 
         {viewMode === "chart" ? (
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
             {indices.map((idx) => (
-              <button
+              <SparklineCard
                 key={idx.ticker}
-                type="button"
-                onClick={() => setSelectedIndex(idx)}
-                className="rounded-[var(--radius)] border border-[var(--border)] bg-white p-5 text-left shadow-sm transition-shadow hover:shadow-md"
-                aria-label={`Open detail for ${idx.name}`}
-              >
-                <div className="mb-4 flex items-start justify-between">
-                  <div>
-                    <h3 className="text-lg font-semibold text-[var(--text-primary)]">{idx.name}</h3>
-                    <span className="text-xs uppercase text-[var(--text-muted)]">{idx.ticker}</span>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-xl font-bold tabular-nums">
-                      {idx.last_close == null ? "N/A" : formatNumber(idx.last_close)}
-                    </div>
-                    <DeltaBadge value={idx.delta.delta_pct} className="mt-1" />
-                  </div>
-                </div>
-                <div className="mt-4 border-t border-[var(--border)]/50 pt-4">
-                  <Sparkline data={idx.sparkline} color={idx.delta.delta_pct >= 0 ? "var(--delta-up)" : "var(--delta-down)"} />
-                </div>
-                <div className="mt-4 flex items-center justify-between text-xs text-[var(--text-muted)]">
-                  <span>Detail available</span>
-                  <span>{idx.period ?? "Snapshot"}</span>
-                </div>
-              </button>
+                title={idx.name}
+                ticker={idx.ticker}
+                value={idx.last_close == null ? "N/A" : formatNumber(idx.last_close)}
+                deltaPct={idx.delta.delta_pct}
+                sparkline={idx.sparkline}
+                periodLabel={idx.period}
+                onOpen={() => setSelectedIndex(idx)}
+              />
             ))}
           </div>
         ) : (
-          <div className="overflow-hidden rounded-[var(--radius)] border border-[var(--border)] bg-white shadow-sm">
+          <div className="overflow-hidden rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] shadow-sm">
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-[var(--border)] text-sm">
                 <thead className="bg-[var(--surface-muted)]">

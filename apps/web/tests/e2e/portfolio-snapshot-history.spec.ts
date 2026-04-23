@@ -17,14 +17,18 @@ test("portfolio snapshot history modal renders timeline data deterministically",
   await expect(page.getByLabel("Portfolio benchmark ticker")).toHaveValue("^GSPC");
 
   await page.getByRole("button", { name: "Open Snapshot History" }).click();
-  await expect(page.getByRole("dialog")).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Snapshot History" })).toBeVisible();
-  await expect(page.getByRole("cell", { name: "manual_refresh" })).toBeVisible();
-  await expect(page.getByRole("cell", { name: "scheduled_kst_daily" })).toBeVisible();
-  await expect(page.getByRole("cell", { name: "2.86%" })).toBeVisible();
-  await page.getByRole("button", { name: "Delete" }).first().click();
+  const snapshotHistoryDialog = page.getByRole("dialog");
+  await expect(snapshotHistoryDialog).toBeVisible();
+  await expect(snapshotHistoryDialog.getByRole("heading", { name: "Snapshot History" })).toBeVisible();
+  await expect(snapshotHistoryDialog.getByRole("heading", { name: "Locked Context" })).toBeVisible();
+  await expect(snapshotHistoryDialog.getByText("Read-only review context")).toBeVisible();
+  await expect(snapshotHistoryDialog.getByRole("heading", { name: "Grouped By Date" })).toBeVisible();
+  await expect(snapshotHistoryDialog.getByText("manual_refresh snapshot")).toBeVisible();
+  await expect(snapshotHistoryDialog.getByText("scheduled_kst_daily snapshot")).toBeVisible();
+  await expect(snapshotHistoryDialog.getByText("2.86%").first()).toBeVisible();
+  await snapshotHistoryDialog.getByRole("button", { name: "Delete" }).first().click();
   await expect(page.getByText("Deleted the selected saved snapshot.")).toBeVisible();
-  await page.getByRole("button", { name: "Review Snapshot" }).nth(1).click();
+  await snapshotHistoryDialog.getByRole("button", { name: "Review Snapshot" }).first().click();
   await expect(page.getByText(/Reviewing saved snapshot from (4\/10\/2026|Apr 10, 2026)/)).toBeVisible();
   await page.getByRole("button", { name: "Clear History Selection" }).click();
 });

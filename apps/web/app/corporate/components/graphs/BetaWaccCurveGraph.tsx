@@ -17,7 +17,7 @@ export function BetaWaccCurveGraph({
   onOpenDetail: (key: DetailKey) => void;
 }) {
   return (
-    <div className="lg:col-span-2 rounded-[var(--radius)] border border-[var(--border)] bg-white p-5 shadow-sm">
+    <div className="lg:col-span-2 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-5 shadow-sm">
       <button
         type="button"
         onClick={() => onOpenDetail("betaWaccCurve")}

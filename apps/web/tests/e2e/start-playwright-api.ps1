@@ -82,8 +82,8 @@ $python = if (Test-Path $preferredPython) { $preferredPython } else { "python" }
 Stop-ListenerProcess -Port $ApiPort
 Wait-PortFree -Port $ApiPort
 
-if (Test-Path $dbPath) {
-    Remove-Item -LiteralPath $dbPath -Force
+if (Test-Path -LiteralPath $dbPath) {
+    Remove-Item -LiteralPath $dbPath -Force -ErrorAction SilentlyContinue
 }
 
 New-Item -ItemType Directory -Force -Path (Split-Path $portFile) | Out-Null

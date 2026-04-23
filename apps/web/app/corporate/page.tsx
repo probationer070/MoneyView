@@ -13,15 +13,17 @@ import type {
 } from "../../../../packages/shared-types";
 import {
   DEFAULT_PORTFOLIO_BENCHMARK_TICKER,
+  PORTFOLIO_BENCHMARK_PRESETS,
 } from "@/lib/benchmarkPresets";
 import { useDebounce } from "@/hooks/useDebounce";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
+import { PageHeader } from "@/components/ui/PageHeader";
 import {
 } from "./components/CorporateGraphs";
 import { CalculationDetailModal } from "./components/CalculationDetailModal";
 import { CorporateDiagnosticsSection } from "./components/CorporateDiagnosticsSection";
-import { RangeControl } from "./components/RangeControl";
 import { TargetStockComparisonSection } from "./components/TargetStockComparisonSection";
+import { CorporateAssumptionsPanel } from "./components/CorporateAssumptionsPanel";
 import { buildCalculationDetails } from "./buildCalculationDetails";
 import type { CalculationDetailKey } from "./components/calculationDetailTypes";
 import {
@@ -126,7 +128,7 @@ export default function CorporateAnalysisPage() {
   const [comparisonSortKey, setComparisonSortKey] = useState<ComparisonSortKey>("expected_return_spread");
   const [comparisonSortDirection, setComparisonSortDirection] = useState<"desc" | "asc">("desc");
   const [comparisonUniverse, setComparisonUniverse] = useState<ComparisonUniverse>("watchlist_plus_benchmark");
-  const comparisonBenchmarkTicker = DEFAULT_PORTFOLIO_BENCHMARK_TICKER;
+  const [comparisonBenchmarkTicker, setComparisonBenchmarkTicker] = useState(DEFAULT_PORTFOLIO_BENCHMARK_TICKER);
   const [comparisonCustomTickersInput, setComparisonCustomTickersInput] = useState("AAPL, MSFT");
   const [sourceDataRequestedTicker, setSourceDataRequestedTicker] = useState<string | null>(() => readSessionCache<CachedCalculation<string, CorporateMetricHistoryApi>>(METRIC_HISTORY_CACHE_KEY)?.snapshot ?? null);
   const [sourceDataRefreshToken, setSourceDataRefreshToken] = useState<string | null>(null);
@@ -328,6 +330,11 @@ export default function CorporateAnalysisPage() {
     } catch {
       setAssumptions(defaultAssumptionsFor(normalizedTicker, companies));
     }
+  };
+
+  const selectTickerAndOpenCalculation = (ticker: string, key: CalculationDetailKey) => {
+    selectTicker(ticker);
+    setActiveCalculation(key);
   };
 
   const addCompany = async (event: FormEvent<HTMLFormElement>) => {
@@ -891,14 +898,10 @@ export default function CorporateAnalysisPage() {
     <div className="space-y-6 max-w-7xl mx-auto px-4 py-6">
       {/* Page header: title plus ticker navigation, backend DCF shortcut, and add-company form. */}
       <header className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight text-[var(--text-primary)]">
-            Corporate Analysis
-          </h1>
-          <p className="text-[var(--text-muted)] mt-1">
-            {companyName}: life cycle, hurdle rate, bottom-up beta, DCF, and project risk
-          </p>
-        </div>
+        <PageHeader
+          title="Corporate Analysis"
+          subtitle={`${companyName}: life cycle, hurdle rate, bottom-up beta, DCF, and project risk`}
+        />
 
         <div className="flex w-full flex-col gap-2 min-[1300px]:items-end">
           <div id="company-search-container" className="flex w-full flex-col gap-2 min-[1300px]:flex-row min-[1300px]:justify-end">
@@ -917,10 +920,10 @@ export default function CorporateAnalysisPage() {
                   autoCorrect="off"
                   autoCapitalize="none"
                   spellCheck={false}
-                  className="rounded-[var(--radius)] border border-[var(--border)] bg-white px-3 py-2 text-sm"
+                  className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-sm"
                 />
                 {showCompanyResults && (
-                  <div className="absolute left-0 right-0 top-full z-30 mt-1 max-h-28 overflow-auto rounded-[var(--radius)] border border-[var(--border)] bg-white p-1 shadow-lg">
+                  <div className="absolute left-0 right-0 top-full z-30 mt-1 max-h-28 overflow-auto rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-1 shadow-lg">
                     {filteredCompanies.map((company) => (
                       <button
                         key={company.ticker}
@@ -944,7 +947,7 @@ export default function CorporateAnalysisPage() {
               <button
                 type="button"
                 onClick={() => setActiveCalculation("backendDcf")}
-                className="rounded-[var(--radius)] border border-[var(--border)] bg-white px-4 py-3 text-left text-sm shadow-sm transition hover:border-[var(--surface)]"
+                className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-4 py-3 text-left text-sm shadow-sm transition hover:border-[var(--surface)]"
               >
                 <div className="text-xs text-[var(--text-muted)]">
                   <InfoTooltip
@@ -962,7 +965,7 @@ export default function CorporateAnalysisPage() {
                   type="button"
                   onClick={handleRefreshDcf}
                   disabled={dcfStreamStatus === "streaming"}
-                  className="inline-flex items-center gap-2 rounded-[var(--radius)] border border-[var(--border)] bg-white px-3 py-2 font-bold text-[var(--text-primary)] shadow-sm disabled:opacity-60"
+                  className="inline-flex items-center gap-2 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 font-bold text-[var(--text-primary)] shadow-sm disabled:opacity-60"
                 >
                   <RefreshCw className={`h-3.5 w-3.5 ${dcfStreamStatus === "streaming" ? "animate-spin" : ""}`} />
                   Refresh DCF
@@ -971,7 +974,7 @@ export default function CorporateAnalysisPage() {
                   type="button"
                   onClick={() => void handleViewFullDcfReport()}
                   disabled={dcfFullReportLoading || (!dcfData && dcfStreamStatus === "idle")}
-                  className="inline-flex items-center gap-2 rounded-[var(--radius)] border border-[var(--border)] bg-white px-3 py-2 font-bold text-[var(--text-primary)] shadow-sm disabled:opacity-60"
+                  className="inline-flex items-center gap-2 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 font-bold text-[var(--text-primary)] shadow-sm disabled:opacity-60"
                 >
                   {dcfFullReportLoading ? "Loading report..." : "View Full Report"}
                 </button>
@@ -979,9 +982,9 @@ export default function CorporateAnalysisPage() {
                   type="button"
                   onClick={() => void handleCalculateAllDcfReports()}
                   disabled={bulkDcfReportsLoading || nonBenchmarkComparisonRows.length === 0}
-                  className="inline-flex items-center gap-2 rounded-[var(--radius)] border border-[var(--border)] bg-white px-3 py-2 font-bold text-[var(--text-primary)] shadow-sm disabled:opacity-60"
+                  className="inline-flex items-center gap-2 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 font-bold text-[var(--text-primary)] shadow-sm disabled:opacity-60"
                 >
-                  {bulkDcfReportsLoading ? "Calculating all reports..." : "Calculate All Reports"}
+                  {bulkDcfReportsLoading ? "Calculating all DCF reports..." : "Calculate All DCF Reports"}
                 </button>
                 <span>{dcfDisplayLastUpdatedAt ? `Last updated ${dateTimeText(dcfDisplayLastUpdatedAt)}` : "Not calculated yet"}</span>
                 {dcfIsStale && (
@@ -1000,7 +1003,7 @@ export default function CorporateAnalysisPage() {
               </div>
             </div>
             {/* Add Company: persists a manual ticker and immediately selects it for analysis. */}
-            <form onSubmit={addCompany} className="grid w-full min-w-0 grid-cols-1 gap-2 rounded-[var(--radius)] border border-[var(--border)] bg-white p-3 text-sm shadow-sm sm:grid-cols-2 min-[1300px]:max-w-sm">
+            <form onSubmit={addCompany} className="grid w-full min-w-0 grid-cols-1 gap-2 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-3 text-sm shadow-sm sm:grid-cols-2 min-[1300px]:max-w-sm">
               <div className="text-xs font-semibold text-[var(--text-muted)] sm:col-span-2">Add Company</div>
               <input
                 value={newCompanyName}
@@ -1022,144 +1025,42 @@ export default function CorporateAnalysisPage() {
                 Add for Analysis
               </button>
             </form>
-
           </div>
-
         </div>
       </header>
 
       {/* Main analysis grid: assumption controls on the left, valuation cards and charts on the right. */}
       <section className="grid grid-cols-1 gap-4 xl:grid-cols-6">
-        {/* Realtime assumption controls drive the frontend model and debounced backend DCF request. */}
-        <div id="realtime-assumptions-container" className="hidden rounded-[var(--radius)] border border-[var(--border)] bg-white p-5 shadow-sm xl:col-span-2 xl:block">
-          <button
-            type="button"
-            onClick={() => setActiveCalculation("realtime")}
-            className="mb-4 text-left text-sm font-bold text-[var(--text-primary)] underline decoration-dotted underline-offset-4 hover:text-[var(--surface)]"
-          >
-            <InfoTooltip
-              label="Realtime Assumptions"
-              description="Yahoo Finance annual statements from fiscal years 2021+ are the primary source where available. WACC and debt ratio use the most recent statement data."
-            />
-          </button>
-          <div className="mb-4 grid grid-cols-1 gap-3 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface)] p-3 text-xs md:grid-cols-2 xl:grid-cols-1">
-            <div className="flex flex-wrap items-center gap-2 md:col-span-2 xl:col-span-1">
-              <button
-                type="button"
-                onClick={handleRefreshSourceData}
-                disabled={metricsHistoryQuery.isFetching || quarterlyStatementsQuery.isFetching || historicalPricesQuery.isFetching}
-                className="inline-flex items-center gap-2 rounded-[var(--radius)] border border-[var(--border)] bg-white px-3 py-2 text-xs font-bold text-[var(--text-primary)] shadow-sm disabled:opacity-60"
-              >
-                <RefreshCw className={`h-3.5 w-3.5 ${(metricsHistoryQuery.isFetching || quarterlyStatementsQuery.isFetching || historicalPricesQuery.isFetching) ? "animate-spin" : ""}`} />
-                Refresh source data
-              </button>
-              <span className="text-[var(--text-muted)]">
-                {sourceDataDisplayLastUpdatedAt ? `Last updated ${dateTimeText(sourceDataDisplayLastUpdatedAt)}` : "Not loaded yet"}
-              </span>
-              {sourceDataIsStale && (
-                <span className="rounded-full bg-amber-100 px-2 py-1 text-[11px] font-bold text-amber-800">
-                  {sourceDataStaleMessage}
-                </span>
-              )}
-              {!metricsHistoryData && !quarterlyStatementsData && historicalPricesData.length === 0 && !(metricsHistoryQuery.isFetching || quarterlyStatementsQuery.isFetching || historicalPricesQuery.isFetching) && (
-                <span className="text-[var(--text-muted)]">Source data stays idle on first load until refreshed.</span>
-              )}
-            </div>
-            <label className="grid gap-1 font-bold text-[var(--text-primary)]">
-              Growth Basis
-              <select
-                value={growthBasis}
-                onChange={(event) => {
-                  const next = event.target.value as GrowthBasis;
-                  setGrowthBasis(next);
-                  applyMetricHistorySelection({ nextGrowthBasis: next, nextGrowthYear: growthYear });
-                }}
-                className="rounded-[var(--radius)] border border-[var(--border)] bg-white px-2 py-2 text-sm font-bold text-[var(--text-primary)]"
-              >
-                <option value="cagr">5-year CAGR</option>
-                <option value="recent_average">Recent multi-year average</option>
-                <option value="annual">Select annual value</option>
-              </select>
-            </label>
-            {growthBasis === "annual" && (
-              <label className="grid gap-1 font-bold text-[var(--text-primary)]">
-                Growth Year
-                <select
-                  value={growthYear}
-                  onChange={(event) => {
-                    const nextYear = event.target.value;
-                    setGrowthYear(nextYear);
-                    applyMetricHistorySelection({ nextGrowthYear: nextYear });
-                  }}
-                  className="rounded-[var(--radius)] border border-[var(--border)] bg-white px-2 py-2 text-sm font-bold text-[var(--text-primary)]"
-                >
-                  {annualGrowthRates.map((point) => (
-                    <option key={point.year} value={point.year}>{point.year}: {point.value == null ? "Unavailable" : pct(point.value)}</option>
-                  ))}
-                </select>
-                {growthYearUnavailableMessage && (
-                  <span className="text-xs font-bold text-red-700">{growthYearUnavailableMessage}</span>
-                )}
-              </label>
-            )}
-            <label className="grid gap-1 font-bold text-[var(--text-primary)]">
-              ROIC Basis
-              <select
-                value={roicBasis}
-                onChange={(event) => {
-                  const next = event.target.value as RoicBasis;
-                  setRoicBasis(next);
-                  applyMetricHistorySelection({ nextRoicBasis: next, nextRoicYear: roicYear });
-                }}
-                className="rounded-[var(--radius)] border border-[var(--border)] bg-white px-2 py-2 text-sm font-bold text-[var(--text-primary)]"
-              >
-                <option value="recent_average">Recent multi-year average</option>
-                <option value="all_year_average">All available years average</option>
-                <option value="annual">Select annual value</option>
-              </select>
-            </label>
-            {roicBasis === "annual" && (
-              <label className="grid gap-1 font-bold text-[var(--text-primary)]">
-                ROIC Year
-                <select
-                  value={roicYear}
-                  onChange={(event) => {
-                    const nextYear = event.target.value;
-                    setRoicYear(nextYear);
-                    applyMetricHistorySelection({ nextRoicYear: nextYear });
-                  }}
-                  className="rounded-[var(--radius)] border border-[var(--border)] bg-white px-2 py-2 text-sm font-bold text-[var(--text-primary)]"
-                >
-                  {annualRoicValues.map((point) => (
-                    <option key={point.year} value={point.year}>{point.year}: {point.value == null ? "Unavailable" : pct(point.value)}</option>
-                  ))}
-                </select>
-                {roicYearUnavailableMessage && (
-                  <span className="text-xs font-bold text-red-700">{roicYearUnavailableMessage}</span>
-                )}
-              </label>
-            )}
-          </div>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-1">
-            <RangeControl label="Growth Rate" description={`Yahoo annual revenue from 2021+. Current basis: ${growthBasisLabel}; annual rates are available in details.`} value={assumptions.growth} min={-5} max={20} step={0.5} onDetailClick={() => setActiveCalculation("growth")} onChange={(value) => update("growth", value)} />
-            <RangeControl label="ROIC" description={`Yahoo annual NOPAT / invested capital from 2021+. Current basis: ${roicBasisLabel}.`} value={assumptions.roic} min={-5} max={45} step={0.5} onDetailClick={() => setActiveCalculation("roic")} onChange={(value) => update("roic", value)} />
-            <RangeControl label="WACC" description="Derived from Yahoo beta and the most recent Yahoo annual statement capital structure, tax rate, and cost of debt; not directly reported by Yahoo statements." value={assumptions.wacc} min={2} max={24} step={0.25} onDetailClick={() => setActiveCalculation("wacc")} onChange={(value) => update("wacc", value)} />
-            <RangeControl label="Debt Ratio" description="Uses the most recent Yahoo annual debt / (debt + equity), not a 5-year average." value={assumptions.debtRatio} min={0} max={90} step={1} onDetailClick={() => setActiveCalculation("debtRatio")} onChange={(value) => update("debtRatio", value)} />
-            <RangeControl label="Unlevered Beta" description="Yahoo levered beta de-levered with the most recent annual D/E and tax rate from Yahoo statements; not directly reported in statements." value={assumptions.unleveredBeta} min={0.4} max={2.5} step={0.05} suffix="" onDetailClick={() => setActiveCalculation("unleveredBeta")} onChange={(value) => update("unleveredBeta", value)} />
-            <button
-              type="button"
-              onClick={() => setActiveCalculation("crp")}
-              className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface)] p-3 text-left transition hover:border-[var(--surface)]"
-            >
-              <div className="text-xs font-bold text-black">Country Risk Premium</div>
-              <div className="mt-1 text-xl font-black text-[var(--text-primary)]">{pct(KOREA_COUNTRY_RISK_PREMIUM)}</div>
-            </button>
-            <RangeControl label="Reinvestment Rate" description="Yahoo annual max(capex - D&A, 0) / NOPAT from 2021+: calculate each year, then average annual rates." value={assumptions.reinvestment} min={0} max={90} step={1} onDetailClick={() => setActiveCalculation("reinvestment")} onChange={(value) => update("reinvestment", value)} />
-            <RangeControl label="Innovation Index" description="Yahoo annual R&D / revenue intensity from 2021+, scaled to a 0-100 proxy and averaged; Yahoo does not report a direct innovation score." value={assumptions.innovation} min={0} max={100} step={1} onDetailClick={() => setActiveCalculation("innovation")} onChange={(value) => update("innovation", value)} />
-            <RangeControl label="Governance Quality" description="Proxy for ownership alignment, voting structure, disclosure quality, and management accountability." value={assumptions.governance} min={0} max={100} step={1} onDetailClick={() => setActiveCalculation("governance")} onChange={(value) => update("governance", value)} />
-            <RangeControl label="ESG / Agency Penalty" description="Penalty score for agency costs, governance friction, and ESG-related execution risk." value={assumptions.esgPenalty} min={0} max={100} step={1} onDetailClick={() => setActiveCalculation("esgPenalty")} onChange={(value) => update("esgPenalty", value)} />
-          </div>
-        </div>
+        <CorporateAssumptionsPanel
+          setActiveCalculation={setActiveCalculation}
+          handleRefreshSourceData={handleRefreshSourceData}
+          metricsHistoryQueryIsFetching={metricsHistoryQuery.isFetching}
+          quarterlyStatementsQueryIsFetching={quarterlyStatementsQuery.isFetching}
+          historicalPricesQueryIsFetching={historicalPricesQuery.isFetching}
+          sourceDataDisplayLastUpdatedAt={sourceDataDisplayLastUpdatedAt}
+          sourceDataIsStale={sourceDataIsStale}
+          sourceDataStaleMessage={sourceDataStaleMessage}
+          hasMetricsHistoryData={Boolean(metricsHistoryData)}
+          hasQuarterlyStatementsData={Boolean(quarterlyStatementsData)}
+          hasHistoricalPricesData={historicalPricesData.length > 0}
+          growthBasis={growthBasis}
+          setGrowthBasis={setGrowthBasis}
+          growthYear={growthYear}
+          setGrowthYear={setGrowthYear}
+          applyMetricHistorySelection={applyMetricHistorySelection}
+          annualGrowthRates={annualGrowthRates}
+          growthBasisLabel={growthBasisLabel}
+          growthYearUnavailableMessage={growthYearUnavailableMessage}
+          roicBasis={roicBasis}
+          setRoicBasis={setRoicBasis}
+          roicYear={roicYear}
+          setRoicYear={setRoicYear}
+          annualRoicValues={annualRoicValues}
+          roicBasisLabel={roicBasisLabel}
+          roicYearUnavailableMessage={roicYearUnavailableMessage}
+          assumptions={assumptions}
+          update={update}
+        />
 
         {/* Dashboard surface: KPI cards first, then the diagnostic chart suite as a clearly visible section. */}
         <div className="space-y-4 xl:col-span-4">
@@ -1167,7 +1068,7 @@ export default function CorporateAnalysisPage() {
             <button
               type="button"
               onClick={() => setActiveCalculation("spread")}
-              className="rounded-[var(--radius)] border border-[var(--border)] bg-white p-4 text-left shadow-sm transition hover:border-[var(--surface)]"
+              className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4 text-left shadow-sm transition hover:border-[var(--surface)]"
             >
               <div className="text-xs font-semibold text-[var(--text-muted)]">
                 <InfoTooltip
@@ -1185,7 +1086,7 @@ export default function CorporateAnalysisPage() {
             <button
               type="button"
               onClick={() => setActiveCalculation("bottomUpKe")}
-              className="rounded-[var(--radius)] border border-[var(--border)] bg-white p-4 text-left shadow-sm transition hover:border-[var(--surface)]"
+              className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4 text-left shadow-sm transition hover:border-[var(--surface)]"
             >
               <div className="text-xs font-semibold text-[var(--text-muted)]">
                 <InfoTooltip
@@ -1199,7 +1100,7 @@ export default function CorporateAnalysisPage() {
             <button
               type="button"
               onClick={() => setActiveCalculation("leveredBeta")}
-              className="rounded-[var(--radius)] border border-[var(--border)] bg-white p-4 text-left shadow-sm transition hover:border-[var(--surface)]"
+              className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4 text-left shadow-sm transition hover:border-[var(--surface)]"
             >
               <div className="text-xs font-semibold text-[var(--text-muted)]">
                 <InfoTooltip
@@ -1210,7 +1111,11 @@ export default function CorporateAnalysisPage() {
               <div className="mt-1 text-3xl font-black text-[var(--text-primary)]">{numberText2(derived.leveredBeta)}</div>
               <div className="mt-2 text-xs text-[var(--text-muted)]">Hamada adjusted</div>
             </button>
-            <div className="rounded-[var(--radius)] border border-[var(--border)] bg-white p-4 shadow-sm">
+            <button
+              type="button"
+              onClick={() => setActiveCalculation("failureProbability")}
+              className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4 text-left shadow-sm transition hover:border-[var(--surface)]"
+            >
               <div className="text-xs font-semibold text-[var(--text-muted)]">
                 <InfoTooltip
                   label="Success Probability"
@@ -1219,7 +1124,7 @@ export default function CorporateAnalysisPage() {
               </div>
               <div className="mt-1 text-3xl font-black text-[var(--surface)]">{pct(derived.successProbability)}</div>
               <div className="mt-2 text-xs text-[var(--text-muted)]">Risk-return scenario</div>
-            </div>
+            </button>
           </div>
 
           <CorporateDiagnosticsSection
@@ -1251,10 +1156,12 @@ export default function CorporateAnalysisPage() {
           comparisonIsStale={comparisonIsStale}
           comparisonUniverse={comparisonUniverse}
           comparisonBenchmarkTicker={comparisonBenchmarkTicker}
+          comparisonBenchmarkOptions={PORTFOLIO_BENCHMARK_PRESETS}
           comparisonCustomTickersInput={comparisonCustomTickersInput}
           comparisonSortKey={comparisonSortKey}
           comparisonSortDirection={comparisonSortDirection}
           onComparisonUniverseChange={setComparisonUniverse}
+          onComparisonBenchmarkTickerChange={setComparisonBenchmarkTicker}
           onComparisonCustomTickersInputChange={setComparisonCustomTickersInput}
           onComparisonSortKeyChange={setComparisonSortKey}
           onComparisonSortDirectionChange={setComparisonSortDirection}
@@ -1277,6 +1184,7 @@ export default function CorporateAnalysisPage() {
           similarComparisonScatterSelected={similarComparisonScatterSelected}
           currentTicker={assumptions.ticker}
           onSelectTicker={selectTicker}
+          onOpenCalculationForTicker={selectTickerAndOpenCalculation}
           bulkDcfReportsLoading={bulkDcfReportsLoading}
           bulkDcfReportsError={bulkDcfReportsError}
           bulkDcfReports={bulkDcfReports}

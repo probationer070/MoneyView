@@ -1,9 +1,12 @@
 "use client";
 
 import type { ValuationInput, ValuationResult } from "../lib/types";
-import { AlertTriangle, Loader2, Play, Square } from "lucide-react";
+import { Download, Loader2, Play, Square } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, ReferenceLine, Tooltip, XAxis, YAxis } from "recharts";
 import { ResponsiveChart } from "@/components/ui/ResponsiveChart";
+import { ActionButton } from "@/components/ui/ActionButton";
+import { MonteCarloRunPanel } from "./MonteCarloRunPanel";
+import { MonteCarloTabSummary } from "./MonteCarloTabSummary";
 import { MetricCard, NumericField, SummaryRow, krw, numberText, pct } from "./shared";
 
 type Props = {
@@ -17,6 +20,8 @@ type Props = {
   onValuationTickerBlur: () => void;
   runValuationSimulation: () => void;
   cancelValuationSimulation: () => void;
+  exportValuationSummaryCsv: () => void;
+  exportValuationDistributionCsv: () => void;
 };
 
 export function CorporateValuationSection({
@@ -30,110 +35,132 @@ export function CorporateValuationSection({
   onValuationTickerBlur,
   runValuationSimulation,
   cancelValuationSimulation,
+  exportValuationSummaryCsv,
+  exportValuationDistributionCsv,
 }: Props) {
+  const summaryStatus = valuationStatus === "loading"
+    ? "in-progress"
+    : valuationStatus === "error"
+      ? "error"
+      : valuationStatus === "cancelled"
+        ? "canceled"
+        : valuationResult
+          ? "live"
+          : "idle";
+  const summaryLabel = valuationStatus === "loading"
+    ? "Running valuation"
+    : valuationStatus === "error"
+      ? "Run failed"
+      : valuationStatus === "cancelled"
+        ? "Run canceled"
+        : valuationResult
+          ? "Results ready"
+          : "No analysis run yet";
+
   return (
-    <div className="space-y-6">
-      {/* Valuation assumptions and worker controls */}
-      <section className="grid grid-cols-1 gap-4 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface)] p-4 lg:grid-cols-5">
-        <label className="grid gap-1 text-xs font-bold text-[var(--text-primary)]">
-          Ticker
-          <input
-            value={valuationInput.ticker}
-            onChange={(event) => updateValuation("ticker", event.target.value.toUpperCase())}
-            onBlur={onValuationTickerBlur}
-            className="rounded-[var(--radius)] border border-[var(--border)] bg-white px-3 py-2 text-sm font-bold outline-none"
-          />
-        </label>
-        <label className="grid gap-1 text-xs font-bold text-[var(--text-primary)]">
-          Current stock price
-          <div className="flex items-center gap-2 rounded-[var(--radius)] border border-[var(--border)] bg-white px-3 py-2">
+    <MonteCarloRunPanel
+      controls={(
+        <section className="grid grid-cols-1 gap-4 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface)] p-4 lg:grid-cols-5">
+          <label className="grid gap-1 text-xs font-bold text-[var(--text-primary)]">
+            Ticker
             <input
-              type="number"
-              value={valuationInput.currentPrice}
-              min={1000}
-              step={100}
-              onChange={(event) => updateValuation("currentPrice", Number(event.target.value))}
-              className="w-full bg-transparent text-sm font-bold outline-none"
+              value={valuationInput.ticker}
+              onChange={(event) => updateValuation("ticker", event.target.value.toUpperCase())}
+              onBlur={onValuationTickerBlur}
+              className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-sm font-bold outline-none"
             />
-            <span className="text-[var(--text-muted)]">KRW</span>
-            {valuationPriceLookupStatus === "loading" || valuationPriceLookupStatus === "fetching" ? (
-              <Loader2 className="h-4 w-4 animate-spin text-[var(--text-muted)]" />
+          </label>
+          <label className="grid gap-1 text-xs font-bold text-[var(--text-primary)]">
+            Current stock price
+            <div className="flex items-center gap-2 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2">
+              <input
+                type="number"
+                value={valuationInput.currentPrice}
+                min={1000}
+                step={100}
+                onChange={(event) => updateValuation("currentPrice", Number(event.target.value))}
+                className="w-full bg-transparent text-sm font-bold outline-none"
+              />
+              <span className="text-[var(--text-muted)]">KRW</span>
+              {valuationPriceLookupStatus === "loading" || valuationPriceLookupStatus === "fetching" ? (
+                <Loader2 className="h-4 w-4 animate-spin text-[var(--text-muted)]" />
+              ) : null}
+            </div>
+            {valuationPriceLookupMessage ? (
+              <span
+                className={
+                  valuationPriceLookupStatus === "not_found" || valuationPriceLookupStatus === "error"
+                    ? "text-[11px] text-red-600"
+                    : "text-[11px] text-[var(--text-muted)]"
+                }
+              >
+                {valuationPriceLookupMessage}
+              </span>
             ) : null}
-          </div>
-          {valuationPriceLookupMessage ? (
-            <span
-              className={
-                valuationPriceLookupStatus === "not_found" || valuationPriceLookupStatus === "error"
-                  ? "text-[11px] text-red-600"
-                  : "text-[11px] text-[var(--text-muted)]"
-              }
+          </label>
+          <NumericField label="Base EPS" value={valuationInput.baseEps} onChange={(value) => updateValuation("baseEps", value)} step={50} min={100} suffix="KRW" />
+          <NumericField label="Average growth rate" value={valuationInput.averageGrowthRate} onChange={(value) => updateValuation("averageGrowthRate", value)} step={0.5} suffix="%" />
+          <NumericField label="Growth uncertainty" value={valuationInput.growthUncertainty} onChange={(value) => updateValuation("growthUncertainty", value)} step={0.25} suffix="%" />
+          <NumericField label="Discount rate (WACC)" value={valuationInput.discountRate} onChange={(value) => updateValuation("discountRate", value)} step={0.25} suffix="%" />
+          <NumericField label="WACC uncertainty" value={valuationInput.discountRateUncertainty} onChange={(value) => updateValuation("discountRateUncertainty", value)} step={0.25} suffix="%" />
+          <NumericField label="Terminal growth rate" value={valuationInput.terminalGrowthRate} onChange={(value) => updateValuation("terminalGrowthRate", value)} step={0.25} suffix="%" />
+          <NumericField label="Forecast period" value={valuationInput.forecastPeriodYears} onChange={(value) => updateValuation("forecastPeriodYears", value)} step={1} min={1} suffix="years" />
+          <NumericField label="Target PER uncertainty" value={valuationInput.targetPerUncertainty} onChange={(value) => updateValuation("targetPerUncertainty", value)} step={0.25} min={0.25} suffix="x" />
+          <NumericField label="Simulation Count" value={valuationInput.simulationCount} onChange={(value) => updateValuation("simulationCount", value)} step={100} min={500} />
+          <div className="flex flex-col justify-end gap-2">
+            <button
+              type="button"
+              onClick={runValuationSimulation}
+              disabled={valuationStatus === "loading"}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-[var(--radius)] bg-[var(--accent)] px-5 py-3 text-sm font-black text-white shadow-sm disabled:opacity-60"
             >
-              {valuationPriceLookupMessage}
-            </span>
-          ) : null}
-        </label>
-        <NumericField label="Base EPS" value={valuationInput.baseEps} onChange={(value) => updateValuation("baseEps", value)} step={50} min={100} suffix="KRW" />
-        <NumericField label="Average growth rate" value={valuationInput.averageGrowthRate} onChange={(value) => updateValuation("averageGrowthRate", value)} step={0.5} suffix="%" />
-        <NumericField label="Growth uncertainty" value={valuationInput.growthUncertainty} onChange={(value) => updateValuation("growthUncertainty", value)} step={0.25} suffix="%" />
-        <NumericField label="Discount rate (WACC)" value={valuationInput.discountRate} onChange={(value) => updateValuation("discountRate", value)} step={0.25} suffix="%" />
-        <NumericField label="WACC uncertainty" value={valuationInput.discountRateUncertainty} onChange={(value) => updateValuation("discountRateUncertainty", value)} step={0.25} suffix="%" />
-        <NumericField label="Terminal growth rate" value={valuationInput.terminalGrowthRate} onChange={(value) => updateValuation("terminalGrowthRate", value)} step={0.25} suffix="%" />
-        <NumericField label="Forecast period" value={valuationInput.forecastPeriodYears} onChange={(value) => updateValuation("forecastPeriodYears", value)} step={1} min={1} suffix="years" />
-        <NumericField label="Target PER uncertainty" value={valuationInput.targetPerUncertainty} onChange={(value) => updateValuation("targetPerUncertainty", value)} step={0.25} min={0.25} suffix="x" />
-        <NumericField label="Simulation Count" value={valuationInput.simulationCount} onChange={(value) => updateValuation("simulationCount", value)} step={100} min={500} />
-        <div className="flex flex-col justify-end gap-2">
-          <button
-            type="button"
-            onClick={runValuationSimulation}
-            disabled={valuationStatus === "loading"}
-            className="inline-flex w-full items-center justify-center gap-2 rounded-[var(--radius)] bg-[var(--accent)] px-5 py-3 text-sm font-black text-white shadow-sm disabled:opacity-60"
-          >
-            {valuationStatus === "loading" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-            Run Valuation
-          </button>
-          <button
-            type="button"
-            onClick={cancelValuationSimulation}
-            disabled={valuationStatus !== "loading"}
-            className="inline-flex w-full items-center justify-center gap-2 rounded-[var(--radius)] border border-[var(--border)] bg-white px-5 py-3 text-sm font-black text-[var(--text-primary)] shadow-sm disabled:opacity-50"
-          >
-            <Square className="h-4 w-4" />
-            Cancel
-          </button>
-        </div>
-      </section>
-
-      {valuationStatus === "loading" && (
-        <div className="rounded-[var(--radius)] border border-[var(--border)] bg-white p-4 shadow-sm">
-          <div className="flex items-center justify-between text-sm font-bold text-[var(--text-primary)]">
-            <span>Valuation worker progress</span>
-            <span>{valuationProgress}%</span>
+              {valuationStatus === "loading" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+              Run Valuation
+            </button>
+            <button
+              type="button"
+              onClick={cancelValuationSimulation}
+              disabled={valuationStatus !== "loading"}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-5 py-3 text-sm font-black text-[var(--text-primary)] shadow-sm disabled:opacity-50"
+            >
+              <Square className="h-4 w-4" />
+              Cancel
+            </button>
           </div>
-          <div className="mt-3 h-3 rounded-full bg-slate-100">
-            <div className="h-3 rounded-full bg-[var(--accent)] transition-all" style={{ width: `${valuationProgress}%` }} />
-          </div>
-        </div>
+        </section>
       )}
-
-      {valuationStatus === "error" && (
-        <div className="flex items-center gap-2 rounded-[var(--radius)] border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700">
-          <AlertTriangle className="h-4 w-4" />
-          Valuation simulation failed.
-        </div>
+      status={valuationStatus}
+      progress={valuationProgress}
+      progressLabel="Valuation worker progress"
+      errorFallbackMessage="Valuation simulation failed."
+      cancelledMessage="Valuation simulation cancelled."
+      summary={(
+        <MonteCarloTabSummary
+          title="Corporate Valuation Summary"
+          description="Run controls stay above, while valuation summary and exports stay anchored here before the distribution and statistics cards."
+          status={summaryStatus}
+          statusLabel={summaryLabel}
+          items={[
+            { label: "Ticker", value: valuationInput.ticker || "No ticker" },
+            { label: "Current price", value: krw(valuationInput.currentPrice) },
+            { label: "Simulations", value: valuationInput.simulationCount.toLocaleString() },
+            { label: "Median fair value", value: valuationResult ? krw(valuationResult.fair_value_summary.fair_value_median) : "Pending" },
+          ]}
+          actions={valuationResult ? (
+            <>
+              <ActionButton label="Export Summary CSV" size="sm" onClick={exportValuationSummaryCsv} icon={<Download className="h-4 w-4" />} />
+              <ActionButton label="Export Distribution CSV" size="sm" onClick={exportValuationDistributionCsv} icon={<Download className="h-4 w-4" />} />
+            </>
+          ) : undefined}
+        />
       )}
-
-      {valuationStatus === "cancelled" && (
-        <div className="flex items-center gap-2 rounded-[var(--radius)] border border-amber-200 bg-amber-50 p-4 text-sm font-bold text-amber-700">
-          <AlertTriangle className="h-4 w-4" />
-          Valuation simulation cancelled.
-        </div>
-      )}
-
-      {!valuationResult ? (
-        <div className="rounded-[var(--radius)] border border-dashed border-[var(--border)] bg-white p-10 text-center text-sm text-[var(--text-muted)]">
+      hasResult={Boolean(valuationResult)}
+      emptyState={(
+        <div className="rounded-[var(--radius)] border border-dashed border-[var(--border)] bg-[var(--bg-surface)] p-10 text-center text-sm text-[var(--text-muted)]">
           Run the valuation engine to generate fair value distribution, undervaluation probability, z-score, and DCF uncertainty summaries.
         </div>
-      ) : (
+      )}
+      resultContent={valuationResult ? (
         <div className="space-y-6">
           {/* Top-line valuation outputs */}
           <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -145,7 +172,7 @@ export function CorporateValuationSection({
 
           {/* Distribution chart and tabular valuation summary */}
           <section className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-            <div className="rounded-[var(--radius)] border border-[var(--border)] bg-white p-5 shadow-sm xl:col-span-2">
+            <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-5 shadow-sm xl:col-span-2">
               <h2 className="text-lg font-black text-[var(--text-primary)]">Fair Value Distribution</h2>
               <p className="text-xs text-[var(--text-muted)]">Single-stock Monte Carlo fair value distribution using EPS growth, discount-rate uncertainty, and target PER uncertainty.</p>
               <div className="mt-4 h-80">
@@ -162,7 +189,7 @@ export function CorporateValuationSection({
               </div>
             </div>
 
-            <div className="rounded-[var(--radius)] border border-[var(--border)] bg-white p-5 shadow-sm">
+            <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-5 shadow-sm">
               <h2 className="text-lg font-black text-[var(--text-primary)]">Valuation Statistics</h2>
               <div className="mt-4 overflow-hidden rounded-[var(--radius)] border border-[var(--border)]">
                 <table className="w-full text-sm">
@@ -185,7 +212,7 @@ export function CorporateValuationSection({
             </div>
           </section>
         </div>
-      )}
-    </div>
+      ) : null}
+    />
   );
 }

@@ -47,7 +47,7 @@ export function TabButton({
         "rounded-[var(--radius)] border px-4 py-3 text-left transition",
         active
           ? "border-[var(--accent)] bg-[var(--surface)] text-white shadow-sm"
-          : "border-[var(--border)] bg-white text-[var(--text-primary)] hover:border-[var(--accent)]",
+          : "border-[var(--border)] bg-[var(--bg-surface)] text-[var(--text-primary)] hover:border-[var(--accent)]",
       )}
     >
       <div className="text-sm font-black">{label}</div>
@@ -74,7 +74,7 @@ export function NumericField({
   return (
     <label className="grid gap-1 text-xs font-bold text-[var(--text-primary)]">
       {label}
-      <div className="flex items-center gap-2 rounded-[var(--radius)] border border-[var(--border)] bg-white px-3 py-2">
+      <div className="flex items-center gap-2 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2">
         <input
           type="number"
           value={value}
@@ -106,7 +106,7 @@ export function SelectField({
       <select
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="rounded-[var(--radius)] border border-[var(--border)] bg-white px-3 py-2 text-sm font-bold outline-none"
+        className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-sm font-bold outline-none"
       >
         {options.map((option) => (
           <option key={option.value} value={option.value}>
@@ -120,7 +120,7 @@ export function SelectField({
 
 export function MetricCard({ label, value, detail }: { label: string; value: string; detail: string }) {
   return (
-    <div className="rounded-[var(--radius)] border border-[var(--border)] bg-white p-4 shadow-sm">
+    <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4 shadow-sm">
       <div className="text-xs font-bold uppercase tracking-wide text-[var(--text-muted)]">{label}</div>
       <div className="mt-2 text-2xl font-black text-[var(--text-primary)]">{value}</div>
       <div className="mt-1 text-xs text-[var(--text-muted)]">{detail}</div>
@@ -140,7 +140,7 @@ export function PercentileIndicator({
   description: string;
 }) {
   return (
-    <div className="rounded-[var(--radius)] border border-[var(--border)] bg-white p-3 shadow-sm">
+    <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-3 shadow-sm">
       <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-[var(--text-muted)]">
         <span className={clsx("inline-block h-2.5 w-2.5 rounded-full", colorClass)} />
         <InfoTooltip label={label} description={description} />

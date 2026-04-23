@@ -1,0 +1,94 @@
+StockDetailModal typing resolution
+Date: 2026-04-24
+Scope: apps/web/app/portfolio/components/StockDetailModal.tsx
+
+Problem summary
+- Frontend verification failed in StockDetailModal during lint and typecheck.
+- ESLint reported an explicit `any` in the moving-average legend render path.
+- TypeScript reported that a `number` was being used where only the literal moving-average window keys `5 | 20 | 60 | 120` were allowed.
+
+Observed errors
+1. ESLint
+- Command: `npm.cmd run lint -- .`
+- Error:
+  - `apps/web/app/portfolio/components/StockDetailModal.tsx`
+  - line 259
+  - `Unexpected any. Specify a different type`
+  - rule: `@typescript-eslint/no-explicit-any`
+
+2. TypeScript
+- Command: `npx.cmd tsc --noEmit`
+- Errors:
+  - `app/portfolio/components/StockDetailModal.tsx(148,16): error TS7053: Element implicitly has an 'any' type because expression of type 'number' can't be used to index type 'Record<5 | 60 | 20 | 120, string>'.`
+  - `app/portfolio/components/StockDetailModal.tsx(149,53): error TS2345: Argument of type 'number' is not assignable to parameter of type '5 | 60 | 20 | 120'.`
+
+Root cause
+- In `apps/web/app/portfolio/page.tsx`, the moving-average constants are intentionally typed narrowly:
+  - `MOVING_AVERAGE_WINDOWS = [5, 20, 60, 120] as const`
+  - `MOVING_AVERAGE_COLORS: Record<(typeof MOVING_AVERAGE_WINDOWS)[number], string>`
+  - `buildMovingAverageSeries(..., windowSize)` only accepts `(typeof MOVING_AVERAGE_WINDOWS)[number]`
+- In `StockDetailModal.tsx`, the `map` callback was annotated as `windowSize: number`.
+- That widened the type from the literal union `5 | 20 | 60 | 120` to plain `number`.
+- Once widened, TypeScript could no longer prove that:
+  - `MOVING_AVERAGE_COLORS[windowSize]` is a valid indexed lookup
+  - `buildMovingAverageSeries(chartPrices, windowSize)` receives an allowed window size
+- The render loop also explicitly annotated `series.data` as `any[]`, which triggered the ESLint rule.
+
+Fix applied
+1. Imported the real chart line-series type from `apps/web/components/charts/TVChart.tsx`
+- Added:
+  - `import TVChart, { type TVLineSeries } from "@/components/charts/TVChart";`
+
+2. Preserved the literal moving-average window type
+- Added a local alias:
+  - `type MovingAverageWindow = (typeof MOVING_AVERAGE_WINDOWS)[number];`
+
+3. Typed the memoized moving-average series with the chart contract
+- Changed:
+  - `const movingAverageSeries = useMemo(...)`
+- To:
+  - `const movingAverageSeries = useMemo<TVLineSeries[]>(...)`
+
+4. Stopped widening the window size in the `map` callback
+- Changed:
+  - `MOVING_AVERAGE_WINDOWS.map((windowSize: number) => ({ ... }))`
+- To:
+  - `MOVING_AVERAGE_WINDOWS.map((windowSize: MovingAverageWindow) => ({ ... }))`
+
+5. Removed the inline `any[]` annotation from the render loop
+- Changed:
+  - `movingAverageSeries.map((series: { title: string; color: string; data: any[] }) => ... )`
+- To:
+  - `movingAverageSeries.map((series) => ... )`
+- Type inference now comes from `TVLineSeries[]`, which is the correct shared contract.
+
+Why this fix is correct
+- It uses the existing source-of-truth types instead of adding casts.
+- It keeps `StockDetailModal` aligned with `TVChart` rather than duplicating a looser local type.
+- It preserves strict indexing for `MOVING_AVERAGE_COLORS`.
+- It removes the `any` without weakening the type system.
+
+Files changed
+- `apps/web/app/portfolio/components/StockDetailModal.tsx`
+
+Verification after the fix
+1. Lint
+- Command: `npm.cmd run lint -- .`
+- Result: passed
+
+2. Typecheck
+- Command: `npx.cmd tsc --noEmit`
+- Result: passed
+
+3. Narrow regression test
+- Command: `npm.cmd run test:e2e -- tests/e2e/portfolio-snapshot-history.spec.ts`
+- Result: passed
+- Summary:
+  - `1 passed`
+  - runtime about `15.4s`
+
+Practical rule to avoid this class of error
+- When a shared constant is defined with `as const`, do not re-annotate its values as `number` or `string` unless widening is intentional.
+- Prefer deriving local types from the shared constant:
+  - `type X = (typeof SOME_CONST)[number]`
+- When rendering typed collections, prefer inference from the collection type over inline object annotations that introduce `any`.

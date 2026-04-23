@@ -26,7 +26,7 @@ export const Sliders: React.FC<SlidersProps> = ({
   }, [wacc, margin, growth, onChange]);
 
   return (
-    <div className="bg-white rounded-[var(--radius)] border border-[var(--border)] p-6 shadow-sm">
+    <div className="bg-[var(--bg-surface)] rounded-[var(--radius)] border border-[var(--border)] p-6 shadow-sm">
       <h2 className="text-lg font-bold mb-4">Interactive DCF Scenarios</h2>
       <div className="space-y-6">
 

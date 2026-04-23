@@ -123,7 +123,7 @@ export function AttributionWaterfall({ data, sectorBreakdowns = [] }: Attributio
           onMouseDown={() => setIsDetailOpen(false)}
         >
           <div
-            className="max-h-[88vh] w-full max-w-3xl overflow-y-auto rounded-[var(--radius)] bg-white p-5 shadow-2xl"
+            className="max-h-[88vh] w-full max-w-3xl overflow-y-auto rounded-[var(--radius)] bg-[var(--bg-surface)] p-5 shadow-2xl"
             onMouseDown={(event) => event.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-4 border-b border-[var(--border)] pb-4">

@@ -139,21 +139,21 @@ export function ExportButton({
       <button
         onClick={exportJson}
         disabled={isLoading}
-        className="px-3 py-2 text-sm rounded-md border border-[var(--border)] bg-white hover:bg-gray-50"
+        className="px-3 py-2 text-sm rounded-md border border-[var(--border)] bg-[var(--bg-surface)] hover:bg-[var(--bg-subtle)]"
       >
         Export JSON
       </button>
       <button
         onClick={exportCsv}
         disabled={isLoading}
-        className="px-3 py-2 text-sm rounded-md border border-[var(--border)] bg-white hover:bg-gray-50"
+        className="px-3 py-2 text-sm rounded-md border border-[var(--border)] bg-[var(--bg-surface)] hover:bg-[var(--bg-subtle)]"
       >
         Export CSV
       </button>
       <button
         onClick={exportMarkdown}
         disabled={isLoading}
-        className="px-3 py-2 text-sm rounded-md border border-[var(--border)] bg-white hover:bg-gray-50"
+        className="px-3 py-2 text-sm rounded-md border border-[var(--border)] bg-[var(--bg-surface)] hover:bg-[var(--bg-subtle)]"
       >
         Export Markdown
       </button>

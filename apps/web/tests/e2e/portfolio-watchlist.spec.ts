@@ -110,27 +110,27 @@ test("clicking a holding opens the stock detail modal", async ({ page }) => {
 
   await page.locator('[role="button"]').filter({ hasText: "Apple Inc." }).first().click();
 
-  await expect(page.getByRole("dialog")).toBeVisible();
-  await expect(page.getByText("OHLC Candlestick + Volume", { exact: true })).toBeVisible();
-  await expect(page.getByText("Stock News", { exact: true })).toBeVisible();
-  await expect(page.getByText("ROIC - WACC", { exact: true })).toBeVisible();
-  await expect(page.getByText("DCF Upside", { exact: true })).toBeVisible();
-  await expect(page.getByText("Expected vs Market", { exact: true })).toBeVisible();
-  await expect(page.getByText(/Saved snapshot metrics from/)).toBeVisible();
-  await expect(page.getByLabel("Stock sector")).toHaveValue("Technology");
-  await page.getByLabel("Stock sector").fill("Consumer Technology");
-  await page.getByRole("button", { name: "Save Sector" }).click();
-  await expect(page.getByText("Saved sector for AAPL.")).toBeVisible();
-
-  await page.getByRole("dialog").getByRole("button", { name: "Open Snapshot History" }).click();
-  await expect(page.getByRole("heading", { name: "Snapshot History Drill-down" })).toBeVisible();
-  await expect(page.getByText("Saved Snapshots", { exact: true })).toBeVisible();
-  await expect(page.getByText("Expected Spread Trend")).toBeVisible();
   const stockDetailDialog = page.getByRole("dialog");
-  await expect(stockDetailDialog.getByRole("cell", { name: "4/11/2026" })).toBeVisible();
-  await expect(stockDetailDialog.getByRole("cell", { name: "13.20%" })).toBeVisible();
+  await expect(stockDetailDialog).toBeVisible();
+  await expect(stockDetailDialog.locator("h2").filter({ hasText: "OHLC Candlestick + Volume" })).toBeVisible();
+  await expect(stockDetailDialog.getByText("Ticker News Feed (filtered)", { exact: true })).toBeVisible();
+  await expect(stockDetailDialog.getByText("ROIC - WACC", { exact: true }).first()).toBeVisible();
+  await expect(stockDetailDialog.getByText("DCF Upside", { exact: true }).first()).toBeVisible();
+  await expect(stockDetailDialog.getByText("Expected vs Market", { exact: true }).first()).toBeVisible();
+  await expect(stockDetailDialog.getByText(/Saved snapshot metrics from/)).toBeVisible();
+  await expect(stockDetailDialog.getByLabel("Stock sector")).toHaveValue("Technology");
+  await stockDetailDialog.getByLabel("Stock sector").fill("Consumer Technology");
+  await stockDetailDialog.getByRole("button", { name: "Save Sector" }).click();
+  await expect(stockDetailDialog.getByText("Saved sector for AAPL.")).toBeVisible();
 
-  await page.getByRole("button", { name: "Close stock detail" }).click();
+  await expect(stockDetailDialog.getByRole("heading", { name: "Stock History Timeline" })).toBeVisible();
+  await expect(stockDetailDialog.getByText("Saved Snapshots", { exact: true })).toBeVisible();
+  await expect(stockDetailDialog.getByText("Expected Spread Trend")).toBeVisible();
+  await expect(stockDetailDialog.getByText("Saved Snapshot History", { exact: true })).toBeVisible();
+  await expect(stockDetailDialog.getByRole("heading", { name: "4/11/2026", exact: true })).toBeVisible();
+  await expect(stockDetailDialog.getByText("13.20%").first()).toBeVisible();
+
+  await stockDetailDialog.getByRole("button", { name: "Close modal" }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
 });
 
@@ -153,7 +153,7 @@ test("deleted holdings stay searchable and can reopen detail from the stock sear
   await expect(stockDetailDialog.getByText("Apple Inc.")).toBeVisible();
   await expect(stockDetailDialog.getByRole("button", { name: "Remove From Watchlist" })).toHaveCount(0);
   await expect(stockDetailDialog.getByRole("button", { name: "Add To Portfolio" })).toBeVisible();
-  await stockDetailDialog.getByRole("button", { name: "Close stock detail" }).click();
+  await stockDetailDialog.getByRole("button", { name: "Close modal" }).click();
   await expect(stockDetailDialog).toHaveCount(0);
 
   await aaplSearchRow.getByRole("button", { name: "+ Add" }).click();
@@ -204,7 +204,7 @@ test("weight editing and sync or import controls are visible and actionable", as
   const snapshotHistoryDialog = page.getByRole("dialog");
   await expect(snapshotHistoryDialog).toBeVisible();
   await expect(snapshotHistoryDialog.getByRole("heading", { name: "Snapshot History" })).toBeVisible();
-  await expect(snapshotHistoryDialog.getByRole("cell", { name: "manual_refresh" })).toBeVisible();
+  await expect(snapshotHistoryDialog.getByText("manual_refresh snapshot")).toBeVisible();
   await snapshotHistoryDialog.getByRole("button", { name: "Review Snapshot" }).nth(1).click();
   await expect(page.getByText(/Reviewing saved snapshot from Apr 10, 2026|Reviewing saved snapshot from 4\/10\/2026/)).toBeVisible();
   await expect(page.getByText(/saved benchmark and universe from that snapshot stay locked/i)).toBeVisible();
@@ -219,7 +219,6 @@ test("weight editing and sync or import controls are visible and actionable", as
   await expect(page.getByText(/Saved allocation changes and updated the/)).toBeVisible();
   await page.getByRole("button", { name: "Normalize To 100%" }).click();
   await expect(page.getByText("Normalized saved stock weights to 100.0% invested.")).toBeVisible();
-  await expect(page.getByText(/Normalized weights and updated the/)).toBeVisible();
 
   await page.reload({ waitUntil: "domcontentloaded" });
   await expect(page.getByRole("heading", { name: "Portfolio", exact: true })).toBeVisible({ timeout: 60_000 });
@@ -237,6 +236,26 @@ test("weight editing and sync or import controls are visible and actionable", as
   await page.getByLabel("Arm destructive JSON import").check();
   await page.getByRole("button", { name: "Import JSON Into DB" }).click();
   await expect(page.locator('[role="button"]').filter({ hasText: "Apple Inc." }).first()).toBeVisible();
+});
+
+test("allocation normalize updates saved weights to a 100 percent total", async ({ page }) => {
+  await mockPortfolioPageApi(page);
+  await clearAllHoldings(page);
+
+  await addHoldingWithAllocation(page, "AAPL", "Apple Inc.", "Technology", "20");
+  await addHoldingWithAllocation(page, "MSFT", "Microsoft Corp.", "Technology", "30");
+
+  await page.getByRole("button", { name: "Table" }).click();
+  await expect(page.getByRole("button", { name: "20.0%" }).first()).toBeVisible();
+  await expect(page.getByRole("button", { name: "30.0%" }).first()).toBeVisible();
+
+  await page.getByRole("button", { name: "Normalize To 100%" }).click();
+  await expect(page.getByText("Normalized saved stock weights to 100.0% invested.")).toBeVisible();
+
+  await expect(page.getByRole("button", { name: "40.0%" }).first()).toBeVisible();
+  await expect(page.getByRole("button", { name: "60.0%" }).first()).toBeVisible();
+  await expect(page.getByRole("button", { name: "20.0%" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "30.0%" })).toHaveCount(0);
 });
 
 test("portfolio table prioritizes comparison columns on mobile", async ({ page }) => {

@@ -50,7 +50,7 @@ export function InfoTooltip({ label, description }: InfoTooltipProps) {
         <span
           id={tooltipId}
           role="tooltip"
-          className="pointer-events-none fixed z-50 rounded-[var(--radius)] border border-[var(--border)] bg-white p-3 text-xs font-normal leading-relaxed text-[var(--text-primary)] shadow-lg"
+          className="pointer-events-none fixed z-50 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-3 text-xs font-normal leading-relaxed text-[var(--text-primary)] shadow-lg"
           style={{
             left: position.left,
             top: position.top,

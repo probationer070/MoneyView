@@ -1,7 +1,7 @@
 import { apiBaseUrlForPort, fetchApi } from "@/lib/api";
 import { readBackendPort } from "@/lib/server/backendPort";
+import { OHLCVChartCard } from "@/components/charts/OHLCVChartCard";
 import { DeltaBadge } from "@/components/ui/DeltaBadge";
-import TVChart from "@/components/charts/TVChart";
 import { transformToTVCandles, transformToTVVolume } from "@/lib/transformers";
 import { DCFWorkbench } from "@/components/workbenches/DCFWorkbench";
 import { DiagnosticWorkbench } from "@/components/workbenches/DiagnosticWorkbench";
@@ -64,7 +64,7 @@ export default async function TickerDetailPage({ params }: PageProps) {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <header className="flex justify-between items-end bg-white p-6 rounded-[var(--radius)] border border-[var(--border)] shadow-sm">
+      <header className="flex justify-between items-end bg-[var(--bg-surface)] p-6 rounded-[var(--radius)] border border-[var(--border)] shadow-sm">
         <div>
           <h1 className="text-4xl font-black text-[var(--text-primary)] tracking-tight">
             {ticker}
@@ -83,22 +83,22 @@ export default async function TickerDetailPage({ params }: PageProps) {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <ErrorBoundary fallbackTitle="Price Matrix Offline" fallbackMessage="The TradingView webGL engine failed to boot due to extreme data scaling.">
-          <div className="lg:col-span-2 bg-white rounded-[var(--radius)] border border-[var(--border)] p-6 shadow-sm overflow-hidden">
-            <h2 className="text-lg font-bold mb-4">Price Trend & Matrix (5Y)</h2>
-            <div className="border-t border-[var(--border)]/50 pt-4 -mx-2 h-[450px]">
-               <TVChart 
-                 data={tvCandles}
-                 volumeData={tvVolume}
-                 height={400}
-                 tickerName={ticker}
-                 colorAccent={deltaPct >= 0 ? "#60CAAD" : "#EF5350"}
-               />
-            </div>
+          <div className="lg:col-span-2 overflow-hidden">
+            <OHLCVChartCard
+              title="Price Trend & Matrix (5Y)"
+              description="OHLCV candlesticks and volume rendered through the shared lightweight-charts wrapper used across detail and portfolio drill-down surfaces."
+              data={tvCandles}
+              volumeData={tvVolume}
+              height={400}
+              tickerName={ticker}
+              colorAccent={deltaPct >= 0 ? "#60CAAD" : "#EF5350"}
+              emptyDescription={`No OHLCV history is available for ${ticker}.`}
+            />
           </div>
         </ErrorBoundary>
 
         {/* Technical Indicators */}
-        <div className="bg-white rounded-[var(--radius)] border border-[var(--border)] p-6 shadow-sm">
+        <div className="bg-[var(--bg-surface)] rounded-[var(--radius)] border border-[var(--border)] p-6 shadow-sm">
           <h2 className="text-lg font-bold mb-4">Technicals (NumPy)</h2>
           {technicals ? (
             <div className="space-y-4 text-sm">

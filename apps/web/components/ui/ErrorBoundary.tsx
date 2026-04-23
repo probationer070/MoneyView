@@ -44,7 +44,7 @@ export class ErrorBoundary extends React.Component<BoundaryProps, BoundaryState>
                     <p className="text-sm text-red-600 mt-2">
                         {this.props.fallbackMessage || "An unexpected error broke the layout context for this graphic. Logs have been traced locally."}
                     </p>
-                    <p className="text-xs text-red-400 font-mono mt-4 truncate max-w-sm mx-auto bg-white p-2 rounded-md shadow-inner border border-red-100">
+                    <p className="text-xs text-red-400 font-mono mt-4 truncate max-w-sm mx-auto bg-[var(--bg-surface)] p-2 rounded-md shadow-inner border border-red-100">
                         {this.state.error?.message}
                     </p>
                 </div>

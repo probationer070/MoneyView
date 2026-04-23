@@ -102,7 +102,7 @@ export const DiagnosticWorkbench: React.FC<{ ticker: string }> = ({ ticker }) =>
 
     return (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
-            <div className="md:col-span-2 flex flex-col gap-3 rounded-[var(--radius)] border border-[var(--border)] bg-white p-4 shadow-sm sm:flex-row sm:items-start sm:justify-between">
+            <div className="md:col-span-2 flex flex-col gap-3 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4 shadow-sm sm:flex-row sm:items-start sm:justify-between">
                 <div>
                     <h2 className="text-lg font-bold text-[var(--text-primary)]">Corporate Diagnostics</h2>
                     <p className="mt-1 text-sm text-[var(--text-muted)]">
@@ -131,28 +131,28 @@ export const DiagnosticWorkbench: React.FC<{ ticker: string }> = ({ ticker }) =>
 
             <div className="relative">
                 {radarLoading && (
-                    <div className="absolute inset-0 bg-white z-10 rounded-[var(--radius)] border border-gray-100 p-6 flex flex-col shadow-sm">
+                    <div className="absolute inset-0 bg-[var(--bg-surface)] z-10 rounded-[var(--radius)] border border-gray-100 p-6 flex flex-col shadow-sm">
                         <div className="h-6 w-48 bg-gray-200 rounded animate-pulse mb-6"></div>
                         <div className="flex-1 w-full flex items-center justify-center">
                             <div className="w-[80%] aspect-square rounded-full border-[20px] border-gray-100 animate-pulse"></div>
                         </div>
                     </div>
                 )}
-                {displayRadarData ? <DiagnosticRadar data={displayRadarData} /> : <div className="h-[400px] bg-white rounded-lg border border-dashed border-gray-200"></div>}
+                {displayRadarData ? <DiagnosticRadar data={displayRadarData} /> : <div className="h-[400px] bg-[var(--bg-surface)] rounded-lg border border-dashed border-[var(--border-default)]"></div>}
             </div>
 
             <div className="relative">
                 {tornadoLoading && (
-                    <div className="absolute inset-0 bg-white z-10 rounded-[var(--radius)] border border-gray-100 p-6 flex flex-col shadow-sm">
+                    <div className="absolute inset-0 bg-[var(--bg-surface)] z-10 rounded-[var(--radius)] border border-gray-100 p-6 flex flex-col shadow-sm">
                         <div className="h-6 w-64 bg-gray-200 rounded animate-pulse mb-10"></div>
                         <div className="space-y-8 mt-4 w-full px-6">
-                            <div className="h-10 w-full bg-gray-100 rounded animate-pulse relative"><div className="absolute left-0 top-0 h-full w-[25%] bg-gray-200 rounded-l"></div></div>
-                            <div className="h-10 w-full bg-gray-100 rounded animate-pulse relative"><div className="absolute left-0 top-0 h-full w-[60%] bg-gray-200 rounded-l"></div></div>
-                            <div className="h-10 w-full bg-gray-100 rounded animate-pulse relative"><div className="absolute left-0 top-0 h-full w-[85%] bg-gray-200 rounded-l"></div></div>
+                            <div className="h-10 w-full bg-[var(--bg-subtle)] rounded animate-pulse relative"><div className="absolute left-0 top-0 h-full w-[25%] bg-gray-200 rounded-l"></div></div>
+                            <div className="h-10 w-full bg-[var(--bg-subtle)] rounded animate-pulse relative"><div className="absolute left-0 top-0 h-full w-[60%] bg-gray-200 rounded-l"></div></div>
+                            <div className="h-10 w-full bg-[var(--bg-subtle)] rounded animate-pulse relative"><div className="absolute left-0 top-0 h-full w-[85%] bg-gray-200 rounded-l"></div></div>
                         </div>
                     </div>
                 )}
-                {displayTornadoData ? <TornadoChart data={displayTornadoData} /> : <div className="h-[400px] bg-white rounded-lg border border-dashed border-gray-200"></div>}
+                {displayTornadoData ? <TornadoChart data={displayTornadoData} /> : <div className="h-[400px] bg-[var(--bg-surface)] rounded-lg border border-dashed border-[var(--border-default)]"></div>}
             </div>
         </div>
     );

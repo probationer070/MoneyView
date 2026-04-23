@@ -130,7 +130,7 @@ export const DCFWorkbench: React.FC<DCFWorkbenchProps> = ({ ticker }) => {
         />
       </div>
 
-      <div className="lg:col-span-2 bg-white rounded-[var(--radius)] border border-[var(--border)] p-6 shadow-sm relative">
+      <div className="lg:col-span-2 bg-[var(--bg-surface)] rounded-[var(--radius)] border border-[var(--border)] p-6 shadow-sm relative">
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h2 className="text-lg font-bold">Discounted Cash Flow (DCF) Diagnostics</h2>
@@ -159,14 +159,14 @@ export const DCFWorkbench: React.FC<DCFWorkbenchProps> = ({ ticker }) => {
 
         {/* Network Loader Ghost UI Mapping (Full Structural Skeleton) */}
         {isFetching && (
-          <div className="absolute inset-0 bg-white/90 backdrop-blur-sm z-10 p-6 flex flex-col justify-center rounded-[var(--radius)]">
+          <div className="absolute inset-0 bg-[var(--bg-surface)]/90 backdrop-blur-sm z-10 p-6 flex flex-col justify-center rounded-[var(--radius)]">
             <div className="flex space-x-3 mb-6 items-center">
               <div className="h-4 w-4 bg-[var(--surface)] rounded-full animate-bounce"></div>
               <div className="h-4 w-48 bg-gray-200 rounded animate-pulse"></div>
             </div>
             <div className="grid grid-cols-2 gap-4 flex-1">
-              <div className="bg-gray-100 rounded-lg animate-pulse w-full h-24"></div>
-              <div className="bg-gray-100 rounded-lg animate-pulse w-full h-24"></div>
+              <div className="bg-[var(--bg-subtle)] rounded-lg animate-pulse w-full h-24"></div>
+              <div className="bg-[var(--bg-subtle)] rounded-lg animate-pulse w-full h-24"></div>
             </div>
           </div>
         )}
@@ -180,13 +180,13 @@ export const DCFWorkbench: React.FC<DCFWorkbenchProps> = ({ ticker }) => {
         {!isError && displayData && (
           <div className="space-y-6">
             <div className="grid grid-cols-2 gap-4">
-              <div className="bg-gray-50 border border-gray-100 rounded-lg p-4">
+              <div className="bg-[var(--bg-subtle)] border border-gray-100 rounded-lg p-4">
                 <span className="text-xs text-[var(--text-muted)] font-semibold uppercase tracking-wider">Implied Fair Value</span>
                 <div className="text-3xl font-black mt-1 tabular-nums text-[var(--text-primary)]">
                   ${Number.isFinite(displayData.estimated_value) ? (displayData.estimated_value).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : "N/A"}
                 </div>
               </div>
-              <div className="bg-gray-50 border border-gray-100 rounded-lg p-4">
+              <div className="bg-[var(--bg-subtle)] border border-gray-100 rounded-lg p-4">
                 <span className="text-xs text-[var(--text-muted)] font-semibold uppercase tracking-wider">Market Dislocation</span>
                 <div className={`text-3xl font-black mt-1 tabular-nums ${displayData.upside_pct >= 0 ? "text-[var(--surface)]" : "text-[var(--delta-down)]"}`}>
                   {displayData.upside_pct > 0 ? "+" : ""}{Number.isFinite(displayData.upside_pct) ? displayData.upside_pct.toFixed(1) : "0.0"}%

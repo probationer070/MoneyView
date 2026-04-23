@@ -15,7 +15,7 @@ export function ValueDriverMatrixGraph({
   onOpenDetail: (key: DetailKey) => void;
 }) {
   return (
-    <div className="lg:col-span-2 rounded-[var(--radius)] border border-[var(--border)] bg-white p-5 shadow-sm">
+    <div className="lg:col-span-2 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-5 shadow-sm">
       <div className="min-w-0">
         <h3 className="text-sm font-bold text-[var(--text-primary)]">4-Quadrant Value Driver Matrix</h3>
         <button

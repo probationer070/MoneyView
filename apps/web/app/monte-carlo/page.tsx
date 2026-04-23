@@ -21,6 +21,7 @@ import {
 } from "./components";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getApiBaseUrl } from "@/lib/api";
+import { PageHeader } from "@/components/ui/PageHeader";
 
 type SimulationTab = "path" | "risk" | "distribution" | "valuation" | "correlation";
 
@@ -519,16 +520,64 @@ export default function MonteCarloPage() {
     downloadCsv("terminal_distribution.csv", sharedSimulation.raw.histogram);
   };
 
+  const exportRiskSummaryCsv = () => {
+    if (!sharedSimulation) return;
+    downloadCsv("risk_summary.csv", Object.entries(sharedSimulation.raw.risk_metrics).map(([metric, value]) => ({
+      metric,
+      value,
+    })));
+  };
+
+  const exportRiskHistogramCsv = () => {
+    if (!sharedSimulation) return;
+    downloadCsv("risk_histogram.csv", sharedSimulation.raw.histogram);
+  };
+
+  const exportReturnHistogramCsv = () => {
+    if (!sharedSimulation) return;
+    downloadCsv("return_histogram.csv", sharedSimulation.returnDistributionChartData);
+  };
+
+  const exportReturnCdfCsv = () => {
+    if (!sharedSimulation) return;
+    downloadCsv("return_cdf.csv", sharedSimulation.raw.cdf_comparison);
+  };
+
+  const exportValuationSummaryCsv = () => {
+    if (!valuationResult) return;
+    downloadCsv("valuation_summary.csv", Object.entries(valuationResult.fair_value_summary).map(([metric, value]) => ({
+      metric,
+      value,
+    })));
+  };
+
+  const exportValuationDistributionCsv = () => {
+    if (!valuationResult) return;
+    downloadCsv("valuation_distribution.csv", valuationResult.valuation_distribution);
+  };
+
+  const exportCorrelationFrontierCsv = () => {
+    if (!correlationResult) return;
+    downloadCsv("correlation_frontier.csv", correlationResult.efficient_frontier);
+  };
+
+  const exportCorrelationSensitivityCsv = () => {
+    if (!correlationResult) return;
+    downloadCsv("correlation_sensitivity.csv", correlationResult.spearman_sensitivity);
+  };
+
+  const exportCorrelationHeatmapCsv = () => {
+    if (!correlationResult) return;
+    downloadCsv("correlation_heatmap.csv", correlationResult.heatmap);
+  };
+
   return (
     <div className="space-y-6 max-w-7xl mx-auto px-4 py-6">
-      {/* Page header and tab navigation */}
-      <header className="rounded-[var(--radius)] border border-[var(--border)] bg-white p-6 shadow-sm">
-        <p className="text-xs font-bold uppercase tracking-wide text-[var(--text-muted)]">Monte Carlo investment analysis</p>
-        <h1 className="mt-2 text-3xl font-black text-[var(--text-primary)]">Simulation Lab</h1>
-        <p className="mt-2 max-w-3xl text-sm text-[var(--text-muted)]">
-          Five-tab workflow for path simulation, risk analysis, return distribution, valuation uncertainty, and correlation structure.
-        </p>
-      </header>
+      <PageHeader
+        eyebrow="Monte Carlo investment analysis"
+        title="Simulation Lab"
+        subtitle="Five-tab workflow for path simulation, risk analysis, return distribution, valuation uncertainty, and correlation structure."
+      />
 
       <section className="grid grid-cols-1 gap-3 lg:grid-cols-5">
         {tabs.map((tab) => (
@@ -560,9 +609,18 @@ export default function MonteCarloPage() {
           exportTerminalDistributionCsv={exportTerminalDistributionCsv}
         />
       ) : activeTab === "risk" ? (
-        <RiskAnalysisSection sharedSimulation={sharedSimulation} initialInvestment={input.initialInvestment} />
+        <RiskAnalysisSection
+          sharedSimulation={sharedSimulation}
+          initialInvestment={input.initialInvestment}
+          exportRiskSummaryCsv={exportRiskSummaryCsv}
+          exportRiskHistogramCsv={exportRiskHistogramCsv}
+        />
       ) : activeTab === "distribution" ? (
-        <ReturnDistributionSection sharedSimulation={sharedSimulation} />
+        <ReturnDistributionSection
+          sharedSimulation={sharedSimulation}
+          exportReturnHistogramCsv={exportReturnHistogramCsv}
+          exportReturnCdfCsv={exportReturnCdfCsv}
+        />
       ) : activeTab === "valuation" ? (
         <CorporateValuationSection
           valuationInput={valuationInput}
@@ -575,6 +633,8 @@ export default function MonteCarloPage() {
           onValuationTickerBlur={() => void runStockPriceLookup()}
           runValuationSimulation={runValuationSimulation}
           cancelValuationSimulation={cancelValuationSimulation}
+          exportValuationSummaryCsv={exportValuationSummaryCsv}
+          exportValuationDistributionCsv={exportValuationDistributionCsv}
         />
       ) : (
         <CorrelationModelSection
@@ -586,6 +646,9 @@ export default function MonteCarloPage() {
           updateCorrelationAsset={updateCorrelationAsset}
           updateCorrelationCell={updateCorrelationCell}
           runCorrelationSimulation={runCorrelationSimulation}
+          exportCorrelationFrontierCsv={exportCorrelationFrontierCsv}
+          exportCorrelationHeatmapCsv={exportCorrelationHeatmapCsv}
+          exportCorrelationSensitivityCsv={exportCorrelationSensitivityCsv}
         />
       )}
     </div>

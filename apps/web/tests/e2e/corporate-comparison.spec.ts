@@ -1,5 +1,13 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { mockCorporatePageApi } from "./helpers/corporatePageMock";
+
+async function tickerY(page: Page, ticker: string) {
+  const box = await page.getByRole("button", { name: ticker, exact: true }).first().boundingBox();
+  if (!box) {
+    throw new Error(`Could not find comparison button for ${ticker}`);
+  }
+  return box.y;
+}
 
 test("corporate comparison table renders and exposes sorting controls", async ({ page }) => {
   await mockCorporatePageApi(page);
@@ -45,4 +53,39 @@ test("corporate comparison table renders and exposes sorting controls", async ({
   await expect(page.getByRole("columnheader", { name: "ROIC - WACC" })).toBeVisible();
   await expect(page.getByRole("columnheader", { name: "Spread" })).toBeVisible();
   await expect(page.getByRole("columnheader", { name: "Sector" })).toBeVisible();
+});
+
+test("corporate comparison sorting reorders non-benchmark rows and metric clicks open calculation detail modal", async ({ page }) => {
+  await mockCorporatePageApi(page);
+  await page.goto("/corporate", { waitUntil: "domcontentloaded" });
+
+  await expect(page.getByRole("heading", { name: /Corporate Analysis/i })).toBeVisible({ timeout: 60_000 });
+  await page.getByLabel("Comparison universe").selectOption("watchlist_plus_benchmark");
+  await page.getByRole("button", { name: "Refresh comparison" }).click();
+  await expect(page.getByRole("cell", { name: "GOOGL" }).first()).toBeVisible();
+
+  await page.getByLabel("Sort by").selectOption("roic_minus_wacc");
+  await page.getByLabel("Direction").selectOption("asc");
+
+  const ascAaplY = await tickerY(page, "AAPL");
+  const ascGooglY = await tickerY(page, "GOOGL");
+  const ascMsftY = await tickerY(page, "MSFT");
+  expect(ascAaplY).toBeLessThan(ascGooglY);
+  expect(ascGooglY).toBeLessThan(ascMsftY);
+
+  await page.getByLabel("Direction").selectOption("desc");
+  const descAaplY = await tickerY(page, "AAPL");
+  const descGooglY = await tickerY(page, "GOOGL");
+  const descMsftY = await tickerY(page, "MSFT");
+  expect(descMsftY).toBeLessThan(descGooglY);
+  expect(descGooglY).toBeLessThan(descAaplY);
+
+  await page.getByRole("button", { name: "240.5" }).click();
+  const calculationDialog = page.getByRole("dialog");
+  await expect(calculationDialog).toBeVisible();
+  await expect(calculationDialog.getByRole("heading", { name: /Apple Backend Fair Value/i })).toBeVisible();
+  await expect(calculationDialog.getByText("Calculation Formula")).toBeVisible();
+  await expect(calculationDialog.getByText("Result Summary: value, inputs used")).toBeVisible();
+  await expect(calculationDialog.getByText("Calculation transparency and data lineage")).toBeVisible();
+  await expect(calculationDialog.getByRole("button", { name: "Download CSV: Analysis" }).first()).toBeVisible();
 });

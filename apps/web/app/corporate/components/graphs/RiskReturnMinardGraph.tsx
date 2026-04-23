@@ -17,7 +17,7 @@ export function RiskReturnMinardGraph({
   onOpenDetail: (key: DetailKey) => void;
 }) {
   return (
-    <div className="lg:col-span-4 rounded-[var(--radius)] border border-[var(--border)] bg-white p-5 shadow-sm">
+    <div className="lg:col-span-4 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-5 shadow-sm">
       <div className="flex flex-col gap-1 md:flex-row md:items-baseline md:justify-between">
         <div className="min-w-0">
           <h3 className="text-sm font-bold text-[var(--text-primary)]">Risk-Return Minard Chart</h3>

@@ -1,10 +1,23 @@
 "use client";
 
 import type { CorrelationInput, CorrelationResult } from "../lib/types";
-import { AlertTriangle, Loader2, Play } from "lucide-react";
+import { Download, Loader2, Play } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Cell, Scatter, ScatterChart, Tooltip, XAxis, YAxis, ZAxis } from "recharts";
 import { ResponsiveChart } from "@/components/ui/ResponsiveChart";
+import { ActionButton } from "@/components/ui/ActionButton";
+import {
+  AXIS_LINE_STYLE,
+  AXIS_TICK_STYLE,
+  CHART_COLORS,
+  CHART_MARGIN,
+  DEFAULT_TOOLTIP_PROPS,
+  GRID_STYLE,
+  fmtPctTick,
+} from "@/lib/chartConfig";
 import { MetricCard, numberText, pct } from "./shared";
+import { MonteCarloRunPanel } from "./MonteCarloRunPanel";
+import { MonteCarloTabSummary } from "./MonteCarloTabSummary";
+import { HeatmapPanel } from "@/components/charts/HeatmapPanel";
 
 type Props = {
   correlationInput: CorrelationInput;
@@ -15,6 +28,9 @@ type Props = {
   updateCorrelationAsset: (assetIndex: number, field: "name" | "expectedReturn" | "volatility", value: string | number) => void;
   updateCorrelationCell: (rowIndex: number, columnIndex: number, value: number) => void;
   runCorrelationSimulation: () => void;
+  exportCorrelationFrontierCsv: () => void;
+  exportCorrelationHeatmapCsv: () => void;
+  exportCorrelationSensitivityCsv: () => void;
 };
 
 export function CorrelationModelSection({
@@ -26,40 +42,63 @@ export function CorrelationModelSection({
   updateCorrelationAsset,
   updateCorrelationCell,
   runCorrelationSimulation,
+  exportCorrelationFrontierCsv,
+  exportCorrelationHeatmapCsv,
+  exportCorrelationSensitivityCsv,
 }: Props) {
+  const summaryStatus = correlationStatus === "loading"
+    ? "in-progress"
+    : correlationStatus === "error"
+      ? "error"
+      : correlationStatus === "cancelled"
+        ? "canceled"
+        : correlationResult
+          ? "live"
+          : "idle";
+  const summaryLabel = correlationStatus === "loading"
+    ? "Running correlation analysis"
+    : correlationStatus === "error"
+      ? "Run failed"
+      : correlationStatus === "cancelled"
+        ? "Run canceled"
+        : correlationResult
+          ? "Results ready"
+          : "No analysis run yet";
+
   return (
-    <div className="space-y-6">
-      {correlationStatus === "loading" && (
-        <div className="rounded-[var(--radius)] border border-[var(--border)] bg-white p-4 shadow-sm">
-          <div className="flex items-center justify-between text-sm font-bold text-[var(--text-primary)]">
-            <span>Correlation worker progress</span>
-            <span>{correlationProgress}%</span>
-          </div>
-          <div className="mt-3 h-3 rounded-full bg-slate-100">
-            <div className="h-3 rounded-full bg-[var(--accent)] transition-all" style={{ width: `${correlationProgress}%` }} />
-          </div>
-        </div>
+    <MonteCarloRunPanel
+      status={correlationStatus}
+      progress={correlationProgress}
+      progressLabel="Correlation worker progress"
+      errorFallbackMessage="Correlation engine failed."
+      cancelledMessage="Correlation simulation cancelled."
+      summary={(
+        <MonteCarloTabSummary
+          title="Correlation Model Summary"
+          description="This tab owns the multi-asset setup and run action. Correlation exports stay at this summary boundary before the frontier, heatmap, and sensitivity surfaces."
+          status={summaryStatus}
+          statusLabel={summaryLabel}
+          items={[
+            { label: "Assets", value: correlationInput.assets.length.toString() },
+            { label: "Simulations", value: correlationInput.simulationCount.toLocaleString() },
+            { label: "Optimal return", value: correlationResult ? pct(correlationResult.optimal_summary.optimal_return) : "Pending" },
+            { label: "Optimal Sharpe", value: correlationResult ? numberText(correlationResult.optimal_summary.optimal_sharpe) : "Pending" },
+          ]}
+          actions={correlationResult ? (
+            <>
+              <ActionButton label="Export Frontier CSV" size="sm" onClick={exportCorrelationFrontierCsv} icon={<Download className="h-4 w-4" />} />
+              <ActionButton label="Export Sensitivity CSV" size="sm" onClick={exportCorrelationSensitivityCsv} icon={<Download className="h-4 w-4" />} />
+              <ActionButton label="Export Heatmap CSV" size="sm" onClick={exportCorrelationHeatmapCsv} icon={<Download className="h-4 w-4" />} />
+            </>
+          ) : undefined}
+        />
       )}
-
-      {correlationStatus === "error" && (
-        <div className="flex items-center gap-2 rounded-[var(--radius)] border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700">
-          <AlertTriangle className="h-4 w-4" />
-          Correlation engine failed.
-        </div>
-      )}
-
-      {correlationStatus === "cancelled" && (
-        <div className="flex items-center gap-2 rounded-[var(--radius)] border border-amber-200 bg-amber-50 p-4 text-sm font-bold text-amber-700">
-          <AlertTriangle className="h-4 w-4" />
-          Correlation simulation cancelled.
-        </div>
-      )}
-
+    >
       {/* Three-column layout: inputs, analysis visuals, portfolio metrics */}
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(340px,0.95fr)_minmax(0,1.45fr)_minmax(260px,0.8fr)]">
         <aside className="space-y-6">
           {/* Left panel: asset assumptions, correlation matrix, and run action */}
-          <section className="rounded-[var(--radius)] border border-[var(--border)] bg-white p-5 shadow-sm">
+          <section className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-5 shadow-sm">
             <h2 className="text-lg font-black text-[var(--text-primary)]">Multi-Asset Setup</h2>
             <div className="mt-3 grid grid-cols-[88px_minmax(0,1fr)_minmax(0,1fr)] gap-2 text-xs font-bold uppercase tracking-wide text-[var(--text-muted)]">
               <div>Asset</div>
@@ -139,31 +178,32 @@ export function CorrelationModelSection({
 
         <div className="space-y-6">
           {!correlationResult ? (
-            <div className="rounded-[var(--radius)] border border-dashed border-[var(--border)] bg-white p-10 text-center text-sm text-[var(--text-muted)]">
+            <div className="rounded-[var(--radius)] border border-dashed border-[var(--border)] bg-[var(--bg-surface)] p-10 text-center text-sm text-[var(--text-muted)]">
               Run the portfolio correlation engine to generate efficient frontier, correlation matrix, and sensitivity diagnostics.
             </div>
           ) : (
             <>
               {/* Middle panel: efficient frontier */}
-              <section className="rounded-[var(--radius)] border border-[var(--border)] bg-white p-5 shadow-sm">
+              <section className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-5 shadow-sm">
                 <h2 className="text-lg font-black text-[var(--text-primary)]">Efficient Frontier</h2>
                 <p className="text-xs text-[var(--text-muted)]">Scatter plot of 400 random portfolios. Purple points show sampled portfolios and the brightest green point marks the highest Sharpe ratio.</p>
-                <div className="mt-4 h-80">
-                  <ResponsiveChart minWidth={1} minHeight={1}>
-                    <ScatterChart>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="risk" name="Risk sigma" tickFormatter={(value) => `${Number(value).toFixed(0)}%`} />
-                      <YAxis dataKey="return" name="Return mu" tickFormatter={(value) => `${Number(value).toFixed(0)}%`} />
+                  <div className="mt-4 h-80">
+                    <ResponsiveChart minWidth={1} minHeight={1}>
+                    <ScatterChart margin={CHART_MARGIN}>
+                      <CartesianGrid {...GRID_STYLE} />
+                      <XAxis dataKey="risk" name="Risk sigma" tickFormatter={fmtPctTick} tick={AXIS_TICK_STYLE} axisLine={AXIS_LINE_STYLE} tickLine={false} />
+                      <YAxis dataKey="return" name="Return mu" tickFormatter={fmtPctTick} tick={AXIS_TICK_STYLE} axisLine={AXIS_LINE_STYLE} tickLine={false} />
                       <ZAxis dataKey="sharpe" range={[30, 180]} />
                       <Tooltip
+                        {...DEFAULT_TOOLTIP_PROPS}
                         formatter={(value, name) => {
                           if (name === "risk" || name === "return") return `${Number(value).toFixed(2)}%`;
                           return Number(value).toFixed(4);
                         }}
                         labelFormatter={() => "Portfolio"}
                       />
-                      <Scatter data={correlationResult.efficient_frontier.filter((point) => !point.is_optimal)} fill="#7c3aed" />
-                      <Scatter data={correlationResult.efficient_frontier.filter((point) => point.is_optimal)} fill="#22c55e" />
+                      <Scatter data={correlationResult.efficient_frontier.filter((point) => !point.is_optimal)} fill={CHART_COLORS.tertiary} />
+                      <Scatter data={correlationResult.efficient_frontier.filter((point) => point.is_optimal)} fill={CHART_COLORS.positive} />
                     </ScatterChart>
                   </ResponsiveChart>
                 </div>
@@ -171,16 +211,16 @@ export function CorrelationModelSection({
 
               {/* Middle panel: sensitivity analysis and full heatmap */}
               <section className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-                <div className="rounded-[var(--radius)] border border-[var(--border)] bg-white p-5 shadow-sm">
+                <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-5 shadow-sm">
                   <h2 className="text-lg font-black text-[var(--text-primary)]">Spearman rho Sensitivity</h2>
                   <p className="text-xs text-[var(--text-muted)]">Rank correlation between each asset return and the portfolio return, with positive exposures in green and negative exposures in red.</p>
                   <div className="mt-4 h-80">
                     <ResponsiveChart minWidth={1} minHeight={1}>
                       <BarChart data={correlationResult.spearman_sensitivity} layout="vertical">
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis type="number" domain={[-1, 1]} />
-                        <YAxis type="category" dataKey="asset" width={70} />
-                        <Tooltip />
+                        <CartesianGrid {...GRID_STYLE} />
+                        <XAxis type="number" domain={[-1, 1]} tick={AXIS_TICK_STYLE} axisLine={AXIS_LINE_STYLE} tickLine={false} />
+                        <YAxis type="category" dataKey="asset" width={70} tick={AXIS_TICK_STYLE} axisLine={AXIS_LINE_STYLE} tickLine={false} />
+                        <Tooltip {...DEFAULT_TOOLTIP_PROPS} />
                         <Bar dataKey="spearman_rho_sensitivity">
                           {correlationResult.spearman_sensitivity.map((row) => {
                             const value = Number(row.spearman_rho_sensitivity);
@@ -194,41 +234,16 @@ export function CorrelationModelSection({
                   </div>
                 </div>
 
-                <div className="rounded-[var(--radius)] border border-[var(--border)] bg-white p-5 shadow-sm">
-                  <h2 className="text-lg font-black text-[var(--text-primary)]">Correlation Coefficient Heatmap</h2>
-                  <div className="mt-4 overflow-hidden rounded-[var(--radius)] border border-[var(--border)]">
-                    <table className="w-full table-fixed text-sm">
-                      <thead>
-                        <tr className="bg-[var(--surface)] text-center">
-                          <th className="p-3"> </th>
-                          {correlationResult.assets.map((asset) => <th key={asset} className="p-3">{asset.replace("Asset ", "")}</th>)}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {correlationResult.assets.map((assetY) => (
-                          <tr key={assetY} className="border-t border-[var(--border)]">
-                            <td className="p-3 text-center font-bold text-[var(--text-primary)]">{assetY.replace("Asset ", "")}</td>
-                            {correlationResult.assets.map((assetX) => {
-                              const cell = correlationResult.heatmap.find((entry) => entry.asset_x === assetX && entry.asset_y === assetY);
-                              const value = cell?.correlation ?? 0;
-                              const alpha = Math.min(Math.abs(value), 1);
-                              const isDiagonal = assetX === assetY;
-                              return (
-                                <td
-                                  key={`${assetY}-${assetX}`}
-                                  className="p-3 text-center font-bold text-[var(--text-primary)]"
-                                  style={{ backgroundColor: isDiagonal ? "rgba(22, 163, 74, 1)" : value >= 0 ? `rgba(96, 202, 173, ${alpha})` : `rgba(239, 68, 68, ${alpha})` }}
-                                >
-                                  {value.toFixed(2)}
-                                </td>
-                              );
-                            })}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
+                <HeatmapPanel
+                  title="Correlation Coefficient Heatmap"
+                  data={correlationResult.heatmap.map((d) => ({
+                    x: d.asset_x,
+                    y: d.asset_y,
+                    value: d.correlation,
+                  }))}
+                  xLabels={correlationResult.assets}
+                  yLabels={correlationResult.assets}
+                />
               </section>
             </>
           )}
@@ -246,6 +261,6 @@ export function CorrelationModelSection({
           )}
         </aside>
       </div>
-    </div>
+    </MonteCarloRunPanel>
   );
 }

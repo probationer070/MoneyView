@@ -1,5 +1,7 @@
 export { CorrelationModelSection } from "./CorrelationModelSection";
 export { CorporateValuationSection } from "./CorporateValuationSection";
+export { MonteCarloRunPanel } from "./MonteCarloRunPanel";
+export { MonteCarloTabSummary } from "./MonteCarloTabSummary";
 export { PathSimulationSection } from "./PathSimulationSection";
 export { ReturnDistributionSection } from "./ReturnDistributionSection";
 export { RiskAnalysisSection } from "./RiskAnalysisSection";
