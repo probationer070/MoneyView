@@ -1,0 +1,41 @@
+MoneyView Tab Files
+
+Purpose
+- Organize the user-facing MoneyView tabs into dedicated plain-text reference files.
+- Each file now includes:
+  - tab identity
+  - route
+  - purpose
+  - design intent
+  - layout structure
+  - key sections
+  - important behavior
+  - primary data sources
+
+Files
+- `market-overview-tab.txt`
+- `portfolio-tab.txt`
+- `news-feed-tab.txt`
+- `corporate-analysis-tab.txt`
+- `monte-carlo-tab.txt`
+
+Top-Level Sidebar Tabs Covered
+- Market Overview
+- Portfolio
+- News Feed
+- Corporate Analysis
+- Monte Carlo
+
+Design Coverage
+- The files are not only feature lists.
+- They also describe how each tab is designed to be read and used:
+  - dashboard
+  - control panel
+  - research surface
+  - reading stream
+  - simulation lab
+
+Note
+- The drill-down route `/detail/[ticker]` is not a top-level sidebar tab, so it is still excluded from this set.
+- If needed, it can be documented separately as a detail-page reference file.
+

@@ -1,0 +1,134 @@
+Issue
+
+On the Corporate Analysis page, the following diagnostics sections showed titles and metric text but no visible charts:
+
+- Company Status Diagnosis
+- Hurdle Rate Decomposition
+- 4-Quadrant Value Driver Matrix
+- Risk-Return Minard Chart
+
+At the same time, "Bottom-up Beta + WACC U-Curve" rendered correctly.
+
+Observed Symptom
+
+The data was already present in the page state and in the raw dataset export path:
+
+- `healthRadar`
+- `regionalMinard`
+- `valueMatrix`
+- `riskReturn`
+
+This meant the failure was not caused by missing imported data. The problem happened later in the rendering path.
+
+Root Cause
+
+The issue was a sizing contract mismatch with the shared Recharts wrapper:
+
+- `apps/web/components/ui/ResponsiveChart.tsx`
+
+`ResponsiveChart` measures its own wrapper element and only mounts `ResponsiveContainer` after that wrapper reports a non-zero width and height.
+
+Why Beta + WACC worked:
+
+- `apps/web/app/corporate/components/graphs/BetaWaccCurveGraph.tsx`
+- In this component, each `ResponsiveChart` is placed directly into a grid cell that stretches to fill the available chart area.
+- The wrapper therefore receives a measurable height and width, so the chart mounts.
+
+Why the other four failed:
+
+- `CompanyStatusGraph.tsx`
+- `HurdleRateDecompositionGraph.tsx`
+- `ValueDriverMatrixGraph.tsx`
+- `RiskReturnMinardGraph.tsx`
+
+Each of those components used this structure:
+
+- outer chart area container with fixed height such as `h-72` or `h-80`
+- inner `ResponsiveChart` without its own explicit height
+
+As a result:
+
+- the parent chart area had height
+- the `ResponsiveChart` wrapper itself did not
+- `ResponsiveChart` measured `0px` height
+- `ResponsiveChart` returned `null`
+- the Recharts SVG never mounted
+
+This is why the data existed but no graphical output appeared.
+
+Resolution
+
+Give the `ResponsiveChart` wrapper a real size inside the fixed-height container:
+
+- `className="h-full w-full"`
+
+Applied fixes:
+
+- `apps/web/app/corporate/components/graphs/CompanyStatusGraph.tsx`
+- `apps/web/app/corporate/components/graphs/HurdleRateDecompositionGraph.tsx`
+- `apps/web/app/corporate/components/graphs/ValueDriverMatrixGraph.tsx`
+- `apps/web/app/corporate/components/graphs/RiskReturnMinardGraph.tsx`
+
+Code pattern before:
+
+```tsx
+<div className="h-72 min-h-72 min-w-0">
+  <ResponsiveChart minWidth={1} minHeight={1}>
+    ...
+  </ResponsiveChart>
+</div>
+```
+
+Code pattern after:
+
+```tsx
+<div className="h-72 min-h-72 min-w-0">
+  <ResponsiveChart className="h-full w-full" minWidth={1} minHeight={1}>
+    ...
+  </ResponsiveChart>
+</div>
+```
+
+Why This Fix Works
+
+`ResponsiveChart` does not inherit height automatically from its parent unless its own wrapper is given height.
+
+After adding `h-full w-full`:
+
+- the wrapper fills the fixed-height parent
+- `ResizeObserver` measures a non-zero size
+- `ResponsiveContainer` mounts
+- the chart SVG renders normally
+
+Comparison Summary
+
+Working section:
+
+- `BetaWaccCurveGraph.tsx`
+- layout already gave `ResponsiveChart` a measurable render box
+
+Broken sections:
+
+- `CompanyStatusGraph.tsx`
+- `HurdleRateDecompositionGraph.tsx`
+- `ValueDriverMatrixGraph.tsx`
+- `RiskReturnMinardGraph.tsx`
+- had fixed-height parents but zero-height `ResponsiveChart` wrappers
+
+Therefore the real difference was layout sizing, not data availability and not chart-type-specific math.
+
+Verification
+
+Targeted frontend lint passed for the affected files:
+
+```powershell
+npm.cmd run lint -- app/corporate/components/graphs/CompanyStatusGraph.tsx app/corporate/components/graphs/HurdleRateDecompositionGraph.tsx app/corporate/components/graphs/ValueDriverMatrixGraph.tsx app/corporate/components/graphs/RiskReturnMinardGraph.tsx
+```
+
+Follow-up
+
+If a similar blank-chart issue appears elsewhere in the repo, check whether:
+
+1. the parent chart area has fixed height
+2. the `ResponsiveChart` wrapper itself has `h-full w-full`
+3. `ResponsiveChart` is measuring its own wrapper rather than a zero-height intermediate container

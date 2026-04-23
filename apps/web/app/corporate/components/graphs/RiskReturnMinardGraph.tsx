@@ -19,16 +19,19 @@ export function RiskReturnMinardGraph({
   return (
     <div className="lg:col-span-4 rounded-[var(--radius)] border border-[var(--border)] bg-white p-5 shadow-sm">
       <div className="flex flex-col gap-1 md:flex-row md:items-baseline md:justify-between">
-        <button
-          type="button"
-          onClick={() => onOpenDetail("riskReturnMinard")}
-          className="text-left text-sm font-bold text-[var(--text-primary)] underline decoration-dotted underline-offset-4 hover:text-[var(--surface)]"
-        >
-          <InfoTooltip
-            label="Risk-Return Minard Chart"
-            description="X-axis moves across risk exposure segments: Inflation, FX, Demand, and Margin. The NPV path approximates expected return under each exposure; stroke thickness represents success probability, and the area layer indicates failure probability."
-          />
-        </button>
+        <div className="min-w-0">
+          <h3 className="text-sm font-bold text-[var(--text-primary)]">Risk-Return Minard Chart</h3>
+          <button
+            type="button"
+            onClick={() => onOpenDetail("riskReturnMinard")}
+            className="mt-1 text-left text-xs text-[var(--text-muted)] underline decoration-dotted underline-offset-4 hover:text-[var(--surface)]"
+          >
+            <InfoTooltip
+              label="Open scenario path details"
+              description="X-axis moves across risk exposure segments: Inflation, FX, Demand, and Margin. The NPV path approximates expected return under each exposure; stroke thickness represents success probability, and the area layer indicates failure probability."
+            />
+          </button>
+        </div>
         <button
           type="button"
           onClick={() => onOpenDetail("failureProbability")}
@@ -38,7 +41,7 @@ export function RiskReturnMinardGraph({
         </button>
       </div>
       <div className="h-80 min-h-80 min-w-0">
-        <ResponsiveChart minWidth={1} minHeight={1}>
+        <ResponsiveChart className="h-full w-full" minWidth={1} minHeight={1}>
           <AreaChart data={riskReturn} margin={{ top: 20, right: 24, bottom: 0, left: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
             <XAxis dataKey="risk" tick={{ fill: "var(--text-muted)" }} />

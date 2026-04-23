@@ -1,155 +1,261 @@
 # MoneyView System Design
 
 > **Document Scope**
-> This document defines the structural and behavioral design of the MoneyView system. It should be read alongside the Product Overview, API Reference, and Quant Engine documentation for full system understanding.
+> This document defines the structural and runtime design of MoneyView as it exists today. Read it alongside the Product Overview, Storage Model, API Reference, Quant Engine, and Data Flow documents for full system understanding.
 
-## 0. System Identity (Architectural Context)
+## 0. System Identity
 
-MoneyView is a **local-first analytical system**, not a distributed application.  
-It must be understood as:
-- a **single-node system**
-- with **separated UI and computation layers**
-- communicating over **localhost HTTP boundaries**
+MoneyView is a local-first analytical system, not a distributed application. It should be understood as:
 
----
+- a single-node system
+- a trusted-local, single-user runtime
+- a separated UI, API, and computation architecture
+- a localhost HTTP application with local persistence and local cache files
 
-## 1. System Architecture
+## 1. Runtime Architecture
 
-MoneyView operates on a local-first, single-node, dual-process architecture. Both the frontend and backend run concurrently on the same local machine.
+MoneyView runs on one local machine with two primary long-lived processes:
 
-### 1.1 System Boundaries
-- **Internal:** Frontend (Next.js), Backend (FastAPI), Core Finance Engine (`packages/core_finance`), SQLite database.
-- **External:** Market data providers (e.g., Yahoo Finance).
-- **Excluded:** Authentication systems, Cloud services, Distributed processing.
+- a Next.js frontend under `apps/web`
+- a FastAPI backend under `apps/api`
 
-### 1.2 Data Ownership
-- **Persistent (SQLite):** Watchlist holdings, corporate snapshots, overridden metrics.
-- **Transient (Computed per request):** DCF outputs, attribution results, Monte Carlo simulations.
+The runtime also includes browser-worker execution for selected simulation-heavy UI flows and SQLite/file-based local persistence under `data/`.
 
-### 1.3 Security Model
-- The system assumes a **trusted local environment**.
-- No authentication or authorization is implemented.
-- No protection against malicious local actors exists.
-- Not intended to be exposed to public networks.
+### 1.1 Internal Boundaries
 
-### 1.4 Core Engine Relationship
-- The `core_finance` package is the **single source of truth** for financial computations.
-- Backend services act only as orchestrators.
-- The engine:
-  - does not depend on FastAPI.
-  - does not access the database.
-  - does not maintain state.
+**Internal Components**
+- Next.js frontend
+- FastAPI backend
+- `packages/core_finance`
+- SQLite database
+- local cache and log files
+- launcher/runtime scripts
 
-### 1.5 Communication Constraints
-- All frontend-backend communication must occur via HTTP API.
-- No direct database access from the frontend.
-- No shared memory between processes.
+**External Dependencies**
+- market-data providers
+- news/crawling sources
+- the local Python and Node toolchains
 
----
+**Excluded From The System**
+- authentication and authorization services
+- cloud persistence
+- distributed job orchestration
+- WebSocket-based real-time streaming
+- multi-user shared backend behavior
 
-## 2. Frontend Design (`apps/web`)
+### 1.2 Process Model
 
-The frontend acts as the presentation and interaction layer.
-- **Constraint:** The frontend must **not** implement core financial calculations. It only transforms data for visualization.
-- **State Management:** Uses React Query for caching, background refetching, and invalidation. No global state managers (e.g., Redux) are used.
+The standard local launcher path is:
 
-### Visualizations & Charting
-- **Performance Considerations:** Large datasets require downsampling. Recharts performance may degrade with high-frequency OHLCV arrays.
-- **Data Contract:** The backend returns pure domain models. Frontend adapters flatten this data for chart libraries.
+1. `run.cmd` forwards `run MoneyView ...` arguments into `scripts/start_local.ps1`.
+2. `scripts/start_local.ps1` selects ports, verifies backend/frontend prerequisites, and writes `data/cache/moneyview_port.json`.
+3. The launcher opens a dedicated PowerShell window for the FastAPI server.
+4. The launcher opens a dedicated PowerShell window for the Next.js server.
+5. The frontend reads the backend port from `data/cache/moneyview_port.json` and uses it for local backend discovery.
 
----
+### 1.3 Startup Responsibilities
 
-## 3. Backend Design (`apps/api`)
+At backend startup, the FastAPI lifespan in `apps/api/main.py` performs these responsibilities:
 
-The backend is an orchestrator and computation engine.
-- **Routing (`routes/`):** Thin HTTP handlers.
-- **Services (`services/`):** The orchestration layer. Services coordinate DB calls and Core Engine calls. They do **not** contain core financial formulas themselves.
-- **Execution Model:**
-  - **CPU-bound tasks:** Executed synchronously.
-  - **I/O-bound tasks:** Executed asynchronously via `asyncio`.
+- initialize the SQLite schema with additive compatibility migrations
+- start a periodic WAL checkpoint task
+- start a corporate comparison snapshot task that ensures the KST-daily snapshot at startup and again at each KST midnight boundary
+- start a stock prewarm task for configured tickers
 
----
+These startup tasks are runtime support tasks, not a distributed scheduler. If the backend process stops, these tasks stop with it.
 
-## 4. Data and Computation Flow
+### 1.4 Shutdown Responsibilities
 
-### 4.1 Computation Flow (General Pattern)
-1. **Frontend** sends HTTP request.
-2. **Backend** validates input via Pydantic.
-3. **Service** orchestrates data retrieval (from SQLite/cache) and delegates to `core_finance`.
-4. **Engine** returns:
-   - deterministic outputs for rule-based calculations (DCF, attribution).
-   - stochastic outputs for simulation-based models (Monte Carlo).
-5. **Backend** wraps the response in an `APIResponse[T]`.
-6. **Frontend** receives the payload and renders the visualization.
+At backend shutdown, the app cancels its background tasks and attempts a final `PRAGMA wal_checkpoint(TRUNCATE)` on the SQLite database. There is no external supervisor or crash recovery layer.
 
-### 4.2 Data Lifecycle
-Data traverses the following lifecycle:
-1. Ingested from external providers.
-2. Normalized into domain models.
-3. Optionally persisted in SQLite.
-4. Used in computations.
-5. Returned to the frontend for visualization.
-*(Note: Some data, like simulation outputs, exists only transiently.)*
+## 2. Communication Model
 
-### 4.3 Cache Strategy
-- **Frontend Cache:** Managed by React Query; controls refetching and UI state.
-- **Backend Cache:** May include SQLite persistence or file-based caching. There is no dedicated in-memory cache layer (e.g., Redis).
+### 2.1 Frontend To Backend
 
-### 4.4 Module Interaction
-- **Portfolio Module** depends on: watchlist data, attribution engine.
-- **Corporate Module** depends on: financial metrics, DCF engine.
-- **Simulation Module** depends on: stochastic engine, frontend worker execution.
+- Communication happens over HTTP on localhost.
+- The frontend does not access SQLite directly.
+- Backend port discovery for SSR/local runtime is file-based through `data/cache/moneyview_port.json`.
 
----
+### 2.2 Launcher To Frontend Coordination
 
-## 5. Runtime, Reliability, & Scale
+The launcher writes a JSON payload into `data/cache/moneyview_port.json` that includes:
 
-### 5.1 Failure Modes
-- **External API failure** → Fallback to cached data or return explicit error.
-- **Backend failure** → Frontend request fails cleanly.
-- **Frontend failure** → UI becomes unresponsive.
-- **Process crash** → Manual restart required (no process supervisor).
+- backend port
+- host
+- base API URL
+- generation timestamp
+- generated-by marker
+- log file paths for the API and Next.js processes
 
-### 5.2 Reliability
-- **Missing Components:** There is no retry/backoff strategy, no persistent job queue, no state recovery after crash, and no audit/log replay system. The system relies entirely on the stability of the trusted local environment stack.
+The frontend server-side helper under `apps/web/lib/server/backendPort.ts` reads this file and falls back to port `8000` if discovery fails.
 
-### 5.3 Scalability Boundaries
-- **Designed for:** Single-user workloads, moderate dataset sizes.
-- **Not designed for:** Concurrent multi-user access, large-scale distributed simulations, or high-frequency real-time data ingestion.
+### 2.3 In-Process Background Work
 
-### 5.4 Performance Optimization Strategy
-- Offload specific exploratory simulations to Web Workers in the frontend.
-- Utilize NumPy vectorization on the backend.
-- A planned Rust bridge (`simulation-rs`) for iterations exceeding 100k.
+The backend uses in-process background loops for:
 
----
+- periodic WAL truncation
+- KST-daily corporate comparison snapshot materialization
+- startup stock prewarm scheduling
 
-## 6. Known Constraints & Limitations
+This is intentionally lightweight local runtime behavior, not a durable queueing system.
 
-- **No WebSocket / real-time streaming.**
-- **No distributed scaling.** Bounded tightly to the local machine's compute capacity.
-- **Tight coupling to local environment.** (Assumes a local Python/Node setup).
-- **External data reliability is not guaranteed.** Missing or lagged vendor data directly degrades system accuracy.
+## 3. Data Ownership And Persistence Boundaries
 
-### 6.1 Non-Goals
-The system is **not** designed to:
-- operate as a multi-user or multi-tenant backend.
-- provide real-time streaming or trading execution.
-- serve as a production-grade cloud API.
-- support distributed or horizontally scaled computation.
+### 3.1 Canonical Persistent State
 
----
+Canonical local state is primarily stored in SQLite at `data/processed/moneyview.db` unless `DB_PATH` overrides the default location.
 
-## 7. Architectural Rules
+Important canonical persistent areas include:
 
-- **Frontend** must not implement financial logic.
-- **Backend** must remain thin (no heavy business logic in routes or services).
-- **Core engine** must remain web-framework independent (pure Python).
-- **Data flow** must pass through API boundaries.
+- watchlist membership and saved weights
+- corporate metrics overrides
+- manually added corporate companies
+- portfolio workspace preferences
+- corporate comparison snapshots
+- dataset freshness/sync metadata
+- ingested market, index, indicator, and news tables
+
+### 3.2 File-Based Runtime State
+
+File-based runtime state exists for coordination, cache, and logs:
+
+- `data/cache/moneyview_port.json` for backend discovery
+- `data/cache/logs/api-server.log`
+- `data/cache/logs/next-server.log`
+- local cache artifacts under `data/cache/`
+- optional raw/processed data artifacts under `data/raw/` and `data/processed/`
+
+### 3.3 Seed And Import-Export Artifacts
+
+`apps/api/services/webscrap/stock_targets.json` is not the canonical mutable store once the app is in use. It serves as:
+
+- a first-run bootstrap source
+- an explicit import source for destructive watchlist replacement
+- an explicit export target for DB-to-JSON sync
+
+The authoritative mutable watchlist remains SQLite.
+
+### 3.4 Transient Data
+
+The following are computed on demand rather than treated as canonical persisted state:
+
+- DCF request outputs
+- portfolio attribution results
+- risk metrics returned per request
+- most Monte Carlo outputs
+- transient frontend-derived chart arrays
+
+## 4. Frontend Design
+
+The frontend is the presentation and interaction layer.
+
+### 4.1 Responsibilities
+
+- page composition and interaction workflows
+- chart and table rendering
+- cache invalidation and UI loading/error/empty state handling
+- browser-worker orchestration for exploratory simulation flows
+- report download and print-trigger interactions
+
+### 4.2 Constraints
+
+- no direct database access
+- no canonical financial methodology ownership
+- no reliance on shared memory with the backend
+
+### 4.3 Frontend Compute Exception
+
+The Simulation Lab uses browser workers for responsiveness. Those worker paths are allowed because they are exploratory, browser-contained flows. They do not replace the backend/Python ownership of canonical finance methodology.
+
+## 5. Backend Design
+
+The backend is the orchestration and local runtime boundary.
+
+### 5.1 Route Layer
+
+`apps/api/routes` owns:
+
+- request parsing
+- validation entry points
+- response shaping
+- status-code behavior
+- streaming transport for selected endpoints
+
+### 5.2 Service Layer
+
+`apps/api/services` owns:
+
+- SQLite interaction
+- cache and sync behavior
+- provider access
+- report rendering
+- orchestration between persistence and finance calculations
+
+### 5.3 Execution Model
+
+- CPU-bound calculations generally execute synchronously inside the local backend process.
+- I/O-bound operations may be handled asynchronously.
+- Long-lived heavy-job infrastructure such as an external queue is intentionally absent.
+
+## 6. Reliability, Security, And Scale Limits
+
+### 6.1 Trusted-Local Security Model
+
+MoneyView assumes a trusted local environment:
+
+- no authentication
+- no authorization
+- no hardened public-network deployment model
+- no malicious-local-user protection boundary
+
+It should not be treated as a production-grade public API.
+
+### 6.2 Failure Modes
+
+- External provider failure degrades or fails the specific request.
+- Backend failure causes frontend requests to fail until the process is restarted.
+- Frontend failure leaves the UI unusable until refreshed or restarted.
+- Process crashes require manual restart.
+- Background runtime tasks stop when the owning process stops.
+
+### 6.3 Reliability Characteristics
+
+MoneyView currently does not provide:
+
+- retry/backoff infrastructure
+- a persistent background job queue
+- distributed scheduling
+- crash-state replay
+- transactional consistency across multiple endpoints
+- real-time push transport
+
+### 6.4 Scale Boundaries
+
+MoneyView is designed for:
+
+- single-user local analysis
+- moderate local datasets
+- interactive but bounded heavy-compute workflows
+
+It is not designed for:
+
+- concurrent multi-user access
+- horizontal scaling
+- high-frequency real-time ingestion
+- cloud-native deployment behavior
+
+## 7. Runtime Rules
+
+- All frontend-backend communication must pass through API boundaries.
+- Backend Pydantic models remain the source of truth for public contracts.
+- Canonical financial logic must not live in `apps/web`.
+- SQLite is the default local persistent store until measured requirements justify something else.
+- Browser-worker simulations remain acceptable only for exploratory, non-persisted flows.
 
 ## 8. Terminology
 
-- **Module:** A feature-level system (e.g., portfolio, corporate, simulation).
-- **Engine:** The core computation layer (`core_finance`).
-- **Service:** A backend computation orchestration unit.
-- **Adapter:** A frontend transformation layer bridging domain payloads to chart inputs.
+- **Module:** A feature-level system such as Portfolio, Corporate Analysis, or Simulation Lab.
+- **Engine:** The core computation layer in `packages/core_finance`.
+- **Service:** A backend orchestration unit coordinating persistence, providers, and calculations.
+- **Adapter:** A frontend transformation layer that reshapes domain payloads for visualization.
+- **Bootstrap:** First-time seeding behavior used only when local canonical state is empty.

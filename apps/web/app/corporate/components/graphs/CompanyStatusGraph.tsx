@@ -22,19 +22,22 @@ export function CompanyStatusGraph({
 }) {
   return (
     <div className="lg:col-span-2 rounded-[var(--radius)] border border-[var(--border)] bg-white p-5 shadow-sm">
-      <div className="flex items-center justify-between">
-        <button
-          type="button"
-          onClick={() => onOpenDetail("companyStatus")}
-          className="text-left text-sm font-bold text-[var(--text-primary)] underline decoration-dotted underline-offset-4 hover:text-[var(--surface)]"
-        >
-          <InfoTooltip
-            label="Company Status Diagnosis"
-            description="Radar axes combine objective operating drivers with levered beta risk. Governance, ESG/agency, and innovation are subjective and can be toggled into or out of the score."
-          />
-        </button>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="text-sm font-bold text-[var(--text-primary)]">Company Status Diagnosis</h3>
+          <button
+            type="button"
+            onClick={() => onOpenDetail("companyStatus")}
+            className="mt-1 text-left text-xs text-[var(--text-muted)] underline decoration-dotted underline-offset-4 hover:text-[var(--surface)]"
+          >
+            <InfoTooltip
+              label="Open formula and scoring details"
+              description="Radar axes combine objective operating drivers with levered beta risk. Governance, ESG/agency, and innovation are subjective and can be toggled into or out of the score."
+            />
+          </button>
+        </div>
         <div
-          className="h-14 w-14 rounded-full border-4 flex items-center justify-center text-sm font-black"
+          className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full border-4 text-sm font-black"
           style={{
             borderColor: healthScore > 65 ? "var(--accent)" : "var(--delta-down)",
             backgroundColor: healthScore > 65 ? "rgba(96,202,173,0.12)" : "rgba(157,165,162,0.14)",
@@ -53,7 +56,7 @@ export function CompanyStatusGraph({
         Include subjective Innovation, Governance, and ESG/Agency inputs
       </label>
       <div className="h-72 min-h-72 min-w-0">
-        <ResponsiveChart minWidth={1} minHeight={1}>
+        <ResponsiveChart className="h-full w-full" minWidth={1} minHeight={1}>
           <RadarChart data={healthRadar}>
             <PolarGrid stroke="var(--border)" />
             <PolarAngleAxis dataKey="subject" tick={{ fill: "var(--text-muted)", fontSize: 11 }} />

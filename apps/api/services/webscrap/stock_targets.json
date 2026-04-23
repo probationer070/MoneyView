@@ -4,12 +4,12 @@
       {
         "name": "Apple",
         "ticker": "AAPL",
-        "sector": "Consumer Electronics"
+        "sector": "Technology"
       },
       {
         "name": "Tesla",
         "ticker": "TSLA",
-        "sector": "Automotive"
+        "sector": "Technology"
       },
       {
         "name": "Nvidia",
@@ -24,32 +24,32 @@
       {
         "name": "Microsoft",
         "ticker": "MSFT",
-        "sector": "Software & Cloud"
+        "sector": "Technology"
       },
       {
         "name": "Amazon",
         "ticker": "AMZN",
-        "sector": "E-commerce & Cloud"
+        "sector": "Technology"
       },
       {
         "name": "Meta",
         "ticker": "META",
-        "sector": "Communication Services"
+        "sector": "Technology"
       },
       {
         "name": "Alphabet",
         "ticker": "GOOGL",
-        "sector": "Communication Services"
+        "sector": "Technology"
       },
       {
         "name": "Palantir",
         "ticker": "PLTR",
-        "sector": "Software & AI"
+        "sector": "Security/Defense"
       },
       {
         "name": "Palo Alto Networks",
         "ticker": "PANW",
-        "sector": "Cybersecurity"
+        "sector": "Security/Defense"
       },
       {
         "name": "Micron Technology",
@@ -59,72 +59,72 @@
       {
         "name": "Broadcom",
         "ticker": "AVGO",
-        "sector": "Semiconductor"
+        "sector": "Computer Electronics Equipment"
       },
       {
         "name": "Arista Networks",
         "ticker": "ANET",
-        "sector": "Networking Equipment"
+        "sector": "Technology"
       },
       {
         "name": "SanDisk",
         "ticker": "SNDK",
-        "sector": "Storage Solutions"
+        "sector": "Computer Electronics Equipment"
       },
       {
         "name": "Western Digital",
         "ticker": "WDC",
-        "sector": "Storage Solutions"
+        "sector": "Computer Electronics Equipment"
       },
       {
         "name": "Gold ETF",
         "ticker": "IAUM",
-        "sector": "Commodities"
+        "sector": "ETF"
       },
       {
         "name": "Silver ETF",
         "ticker": "SLV",
-        "sector": "Commodities"
+        "sector": "ETF"
       },
       {
         "name": "Occidental Petroleum",
         "ticker": "OXY",
-        "sector": "Energy"
+        "sector": "Oil"
       },
       {
         "name": "Chevron",
         "ticker": "CVX",
-        "sector": "Energy"
+        "sector": "Oil"
       },
       {
         "name": "Exxon Mobil",
         "ticker": "XOM",
-        "sector": "Energy"
+        "sector": "Oil"
       },
       {
         "name": "Coinbase",
         "ticker": "COIN",
-        "sector": "Financial Services"
+        "sector": "Crypto"
       },
       {
         "name": "MicroStrategy",
         "ticker": "MSTR",
-        "sector": "Financial Services"
+        "sector": "Crypto"
       },
       {
         "name": "Circle",
         "ticker": "CRCL",
-        "sector": "Financial Services"
+        "sector": "Crypto"
       },
       {
         "name": "Oklo",
         "ticker": "OKLO",
-        "sector": "Nuclear Energy"
+        "sector": "SMR"
       },
       {
         "name": "Centrus Energy",
         "ticker": "LEU",
-        "sector": "Nuclear Energy"
+        "sector": "SMR"
       }
     ]
   },
@@ -133,677 +133,677 @@
       {
         "name": "Plug Power",
         "ticker": "PLUG",
-        "sector": "신재생에너지"
+        "sector": "Power & Electrical"
       },
       {
         "name": "AES Corp",
         "ticker": "AES",
-        "sector": "유틸리티"
+        "sector": "Power & Electrical"
       },
       {
         "name": "Power Solutions International",
         "ticker": "PSIX",
-        "sector": "산업 장비"
+        "sector": "Power & Electrical"
       },
       {
         "name": "Twin Disc",
         "ticker": "TWIN",
-        "sector": "산업 장비"
+        "sector": "Power & Electrical"
       },
       {
         "name": "Ideal Power",
         "ticker": "IPWR",
-        "sector": "유틸리티"
+        "sector": "Power & Electrical"
       },
       {
         "name": "Evergy",
         "ticker": "EVRG",
-        "sector": "유틸리티"
+        "sector": "Power & Electrical"
       },
       {
         "name": "Vicor",
         "ticker": "VICR",
-        "sector": "반도체/부품"
+        "sector": "Power & Electrical"
       },
       {
         "name": "Aris Water Solutions",
         "ticker": "ARIS",
-        "sector": "유틸리티"
+        "sector": "Energy"
       },
       {
         "name": "SkyX Platforms",
         "ticker": "SKYX",
-        "sector": "유틸리티"
+        "sector": "Power & Electrical"
       },
       {
         "name": "nVent Electric",
         "ticker": "NVT",
-        "sector": "유틸리티"
+        "sector": "Power & Electrical"
       },
       {
         "name": "Ondas Holdings",
         "ticker": "ONDS",
-        "sector": "보안/방산"
+        "sector": "Security/Defense"
       },
       {
         "name": "GE Aerospace",
         "ticker": "GE",
-        "sector": "보안/방산"
+        "sector": "Security/Defense"
       },
       {
         "name": "SentinelOne",
         "ticker": "S",
-        "sector": "보안/방산"
+        "sector": "Security/Defense"
       },
       {
         "name": "Telos",
         "ticker": "TLS",
-        "sector": "보안/방산"
+        "sector": "Security/Defense"
       },
       {
         "name": "Gen Digital",
         "ticker": "GEN",
-        "sector": "보안/방산"
+        "sector": "Security/Defense"
       },
       {
         "name": "L3Harris Technologies",
         "ticker": "LHX",
-        "sector": "보안/방산"
+        "sector": "Security/Defense"
       },
       {
         "name": "Palo Alto Networks",
         "ticker": "PANW",
-        "sector": "보안/방산"
+        "sector": "Security/Defense"
       },
       {
         "name": "OSI Systems",
         "ticker": "OSIS",
-        "sector": "보안/방산"
+        "sector": "Security/Defense"
       },
       {
         "name": "Allegion",
         "ticker": "ALLE",
-        "sector": "보안/방산"
+        "sector": "Security/Defense"
       },
       {
         "name": "Verisign",
         "ticker": "VRSN",
-        "sector": "AI/소프트웨어"
+        "sector": "Security/Defense"
       },
       {
         "name": "NetScout Systems",
         "ticker": "NTCT",
-        "sector": "AI/소프트웨어"
+        "sector": "Security/Defense"
       },
       {
         "name": "Palantir Technologies",
         "ticker": "PLTR",
-        "sector": "AI/소프트웨어"
+        "sector": "Security/Defense"
       },
       {
         "name": "IonQ",
         "ticker": "IONQ",
-        "sector": "양자 컴퓨팅"
+        "sector": "Quantum"
       },
       {
         "name": "Rigetti Computing",
         "ticker": "RGTI",
-        "sector": "양자 컴퓨팅"
+        "sector": "Quantum"
       },
       {
         "name": "TC Energy",
         "ticker": "TRP",
-        "sector": "석유/가스"
+        "sector": "Energy"
       },
       {
         "name": "Fluor",
         "ticker": "FLR",
-        "sector": "에너지 인프라"
+        "sector": "Energy"
       },
       {
         "name": "American Water Works",
         "ticker": "AWK",
-        "sector": "유틸리티"
+        "sector": "Energy"
       },
       {
         "name": "Stem",
         "ticker": "STEM",
-        "sector": "신재생에너지"
+        "sector": "Energy"
       },
       {
         "name": "Southern Company",
         "ticker": "SO",
-        "sector": "유틸리티"
+        "sector": "Energy"
       },
       {
         "name": "Fortis",
         "ticker": "FTS",
-        "sector": "유틸리티"
+        "sector": "Energy"
       },
       {
         "name": "Exelon",
         "ticker": "EXC",
-        "sector": "유틸리티"
+        "sector": "Energy"
       },
       {
         "name": "Qualcomm",
         "ticker": "QCOM",
-        "sector": "반도체"
+        "sector": "Semiconductor"
       },
       {
         "name": "Enerflex",
         "ticker": "EFXT",
-        "sector": "석유/가스"
+        "sector": "Energy"
       },
       {
         "name": "KEPCO ADR",
         "ticker": "KEP",
-        "sector": "유틸리티"
+        "sector": "Energy"
       },
       {
         "name": "American Electric Power",
         "ticker": "AEP",
-        "sector": "유틸리티"
+        "sector": "Energy"
       },
       {
         "name": "Lightbridge",
         "ticker": "LTBR",
-        "sector": "SMR/원자력"
+        "sector": "Energy"
       },
       {
         "name": "FirstEnergy",
         "ticker": "FE",
-        "sector": "유틸리티"
+        "sector": "Energy"
       },
       {
         "name": "NextEra Energy",
         "ticker": "NEE",
-        "sector": "유틸리티"
+        "sector": "Energy"
       },
       {
         "name": "Bloom Energy",
         "ticker": "BE",
-        "sector": "신재생에너지"
+        "sector": "Energy"
       },
       {
         "name": "Energy Fuels",
         "ticker": "UUUU",
-        "sector": "SMR/원자력"
+        "sector": "Energy"
       },
       {
         "name": "Enersys",
         "ticker": "ENS",
-        "sector": "유틸리티"
+        "sector": "Energy"
       },
       {
         "name": "Fluence Energy",
         "ticker": "FLNC",
-        "sector": "신재생에너지"
+        "sector": "Energy"
       },
       {
         "name": "Sigma Lithium",
         "ticker": "SGML",
-        "sector": "광물"
+        "sector": "Materials"
       },
       {
         "name": "Lithium Americas",
         "ticker": "LAC",
-        "sector": "광물"
+        "sector": "Materials"
       },
       {
         "name": "Ero Copper",
         "ticker": "ERO",
-        "sector": "광물"
+        "sector": "Materials"
       },
       {
         "name": "Centerra Gold",
         "ticker": "CGAU",
-        "sector": "광물"
+        "sector": "Materials"
       },
       {
         "name": "Avino Silver & Gold Mines",
         "ticker": "ASM",
-        "sector": "광물"
+        "sector": "Materials"
       },
       {
         "name": "Northern Dynasty Minerals",
         "ticker": "NAK",
-        "sector": "광물"
+        "sector": "Materials"
       },
       {
         "name": "Western Copper and Gold",
         "ticker": "WRN",
-        "sector": "광물"
+        "sector": "Materials"
       },
       {
         "name": "Nova Minerals ADR",
         "ticker": "NVA",
-        "sector": "광물"
+        "sector": "Materials"
       },
       {
         "name": "Uranium Energy Corp",
         "ticker": "UEC",
-        "sector": "SMR/원자력"
+        "sector": "Materials"
       },
       {
         "name": "Trilogy Metals",
         "ticker": "TMQ",
-        "sector": "광물"
+        "sector": "Materials"
       },
       {
         "name": "Taseko Mines",
         "ticker": "TGB",
-        "sector": "광물"
+        "sector": "Materials"
       },
       {
         "name": "New Pacific Metals",
         "ticker": "NUAG",
-        "sector": "광물"
+        "sector": "Materials"
       },
       {
         "name": "Fury Gold Mines",
         "ticker": "FURY",
-        "sector": "광물"
+        "sector": "Materials"
       },
       {
         "name": "Critical Metals",
         "ticker": "CRML",
-        "sector": "광물"
+        "sector": "Materials"
       },
       {
         "name": "Lithium Argentina",
         "ticker": "LAR",
-        "sector": "광물"
+        "sector": "Materials"
       },
       {
         "name": "Largo",
         "ticker": "LGO",
-        "sector": "광물"
+        "sector": "Materials"
       },
       {
         "name": "Uranium Royalty",
         "ticker": "UROY",
-        "sector": "SMR/원자력"
+        "sector": "Materials"
       },
       {
         "name": "Standard Lithium",
         "ticker": "SLI",
-        "sector": "광물"
+        "sector": "Materials"
       },
       {
         "name": "Nexa Resources",
         "ticker": "NEXA",
-        "sector": "광물"
+        "sector": "Materials"
       },
       {
         "name": "Denison Mines",
         "ticker": "DNN",
-        "sector": "SMR/원자력"
+        "sector": "Materials"
       },
       {
         "name": "Coinbase",
         "ticker": "COIN",
-        "sector": "금융/가상자산"
+        "sector": "Crypto"
       },
       {
         "name": "MicroStrategy",
         "ticker": "MSTR",
-        "sector": "금융/가상자산"
+        "sector": "Crypto"
       },
       {
         "name": "Iren",
         "ticker": "IREN",
-        "sector": "금융/가상자산"
+        "sector": "Crypto"
       },
       {
         "name": "Super Micro Computer",
         "ticker": "SMCI",
-        "sector": "반도체/부품"
+        "sector": "Computer Electronics Equipment"
       },
       {
         "name": "Anterix",
         "ticker": "ATEX",
-        "sector": "통신"
+        "sector": "Computer Electronics Equipment"
       },
       {
         "name": "Western Digital",
         "ticker": "WDC",
-        "sector": "반도체/부품"
+        "sector": "Computer Electronics Equipment"
       },
       {
         "name": "Broadcom",
         "ticker": "AVGO",
-        "sector": "반도체"
+        "sector": "Computer Electronics Equipment"
       },
       {
         "name": "Fortinet",
         "ticker": "FTNT",
-        "sector": "보안/방산"
+        "sector": "Computer Electronics Equipment"
       },
       {
         "name": "Seagate Technology",
         "ticker": "STX",
-        "sector": "반도체/부품"
+        "sector": "Computer Electronics Equipment"
       },
       {
         "name": "Cisco Systems",
         "ticker": "CSCO",
-        "sector": "보안/방산"
+        "sector": "Computer Electronics Equipment"
       },
       {
         "name": "Arista Networks",
         "ticker": "ANET",
-        "sector": "보안/방산"
+        "sector": "Technology"
       },
       {
         "name": "Pure Storage",
         "ticker": "PSTG",
-        "sector": "반도체/부품"
+        "sector": "Technology"
       },
       {
         "name": "Fastly",
         "ticker": "FSLY",
-        "sector": "AI/소프트웨어"
+        "sector": "Technology"
       },
       {
         "name": "Nebius Group",
         "ticker": "NBIS",
-        "sector": "AI/소프트웨어"
+        "sector": "Technology"
       },
       {
         "name": "Open Text",
         "ticker": "OTEX",
-        "sector": "AI/소프트웨어"
+        "sector": "Technology"
       },
       {
         "name": "Amazon",
         "ticker": "AMZN",
-        "sector": "AI/소프트웨어"
+        "sector": "Technology"
       },
       {
         "name": "Microsoft",
         "ticker": "MSFT",
-        "sector": "AI/소프트웨어"
+        "sector": "Technology"
       },
       {
         "name": "Meta Platforms",
         "ticker": "META",
-        "sector": "AI/소프트웨어"
+        "sector": "Technology"
       },
       {
         "name": "Alphabet Class A",
         "ticker": "GOOGL",
-        "sector": "AI/소프트웨어"
+        "sector": "Technology"
       },
       {
         "name": "MongoDB",
         "ticker": "MDB",
-        "sector": "AI/소프트웨어"
+        "sector": "Technology"
       },
       {
         "name": "Reddit",
         "ticker": "RDDT",
-        "sector": "AI/소프트웨어"
+        "sector": "Technology"
       },
       {
         "name": "Unity Software",
         "ticker": "U",
-        "sector": "AI/소프트웨어"
+        "sector": "Technology"
       },
       {
         "name": "Elastic",
         "ticker": "ESTC",
-        "sector": "AI/소프트웨어"
+        "sector": "Technology"
       },
       {
         "name": "Datadog",
         "ticker": "DDOG",
-        "sector": "AI/소프트웨어"
+        "sector": "Technology"
       },
       {
         "name": "Resideo Technologies",
         "ticker": "REZI",
-        "sector": "산업 장비"
+        "sector": "Technology"
       },
       {
         "name": "Serve Robotics",
         "ticker": "SERV",
-        "sector": "로봇"
+        "sector": "Technology"
       },
       {
         "name": "Oracle",
         "ticker": "ORCL",
-        "sector": "AI/소프트웨어"
+        "sector": "Technology"
       },
       {
         "name": "Tesla",
         "ticker": "TSLA",
-        "sector": "모빌리티"
+        "sector": "Technology"
       },
       {
         "name": "ADT Inc",
         "ticker": "ADT",
-        "sector": "보안/방산"
+        "sector": "Technology"
       },
       {
         "name": "Apple",
         "ticker": "AAPL",
-        "sector": "반도체/부품"
+        "sector": "Technology"
       },
       {
         "name": "Micron Technology",
         "ticker": "MU",
-        "sector": "반도체"
+        "sector": "Semiconductor"
       },
       {
         "name": "Semtech",
         "ticker": "SMTC",
-        "sector": "반도체"
+        "sector": "Semiconductor"
       },
       {
         "name": "Allegro MicroSystems",
         "ticker": "ALGM",
-        "sector": "반도체"
+        "sector": "Semiconductor"
       },
       {
         "name": "CEVA Inc",
         "ticker": "CEVA",
-        "sector": "반도체"
+        "sector": "Semiconductor"
       },
       {
         "name": "MaxLinear",
         "ticker": "MXL",
-        "sector": "반도체"
+        "sector": "Semiconductor"
       },
       {
         "name": "Coherent",
         "ticker": "COHR",
-        "sector": "반도체"
+        "sector": "Semiconductor"
       },
       {
         "name": "Poet Technologies",
         "ticker": "POET",
-        "sector": "반도체"
+        "sector": "Semiconductor"
       },
       {
         "name": "FormFactor",
         "ticker": "FORM",
-        "sector": "반도체"
+        "sector": "Semiconductor"
       },
       {
         "name": "Marvell Technology",
         "ticker": "MRVL",
-        "sector": "반도체"
+        "sector": "Semiconductor"
       },
       {
         "name": "AMD",
         "ticker": "AMD",
-        "sector": "반도체"
+        "sector": "Semiconductor"
       },
       {
         "name": "TSMC ADR",
         "ticker": "TSM",
-        "sector": "반도체"
+        "sector": "Semiconductor"
       },
       {
         "name": "Synopsys",
         "ticker": "SNPS",
-        "sector": "반도체"
+        "sector": "Semiconductor"
       },
       {
         "name": "NVIDIA",
         "ticker": "NVDA",
-        "sector": "반도체"
+        "sector": "Semiconductor"
       },
       {
         "name": "Intel",
         "ticker": "INTC",
-        "sector": "반도체"
+        "sector": "Semiconductor"
       },
       {
         "name": "Texas Instruments",
         "ticker": "TXN",
-        "sector": "반도체"
+        "sector": "Semiconductor"
       },
       {
         "name": "Bank of America",
         "ticker": "BAC",
-        "sector": "금융"
+        "sector": "Stocks"
       },
       {
         "name": "Merck & Co",
         "ticker": "MRK",
-        "sector": "헬스케어"
+        "sector": "Stocks"
       },
       {
         "name": "CrowdStrike",
         "ticker": "CRWD",
-        "sector": "보안/방산"
+        "sector": "Stocks"
       },
       {
         "name": "DigitalOcean",
         "ticker": "DOCN",
-        "sector": "AI/소프트웨어"
+        "sector": "Stocks"
       },
       {
         "name": "Cadence Design Systems",
         "ticker": "CDNS",
-        "sector": "반도체"
+        "sector": "Stocks"
       },
       {
         "name": "Wesco International",
         "ticker": "WCC",
-        "sector": "산업 장비"
+        "sector": "Stocks"
       },
       {
         "name": "Entergy",
         "ticker": "ETR",
-        "sector": "유틸리티"
+        "sector": "Stocks"
       },
       {
         "name": "Teradyne",
         "ticker": "TER",
-        "sector": "반도체"
+        "sector": "Stocks"
       },
       {
         "name": "Toll Brothers",
         "ticker": "TOL",
-        "sector": "기타"
+        "sector": "Stocks"
       },
       {
         "name": "UPS",
         "ticker": "UPS",
-        "sector": "기타"
+        "sector": "Stocks"
       },
       {
         "name": "FedEx",
         "ticker": "FDX",
-        "sector": "기타"
+        "sector": "Stocks"
       },
       {
         "name": "American Express",
         "ticker": "AXP",
-        "sector": "금융"
+        "sector": "Stocks"
       },
       {
         "name": "Visa",
         "ticker": "V",
-        "sector": "금융"
+        "sector": "Stocks"
       },
       {
         "name": "Powell Industries",
         "ticker": "POWL",
-        "sector": "유틸리티"
+        "sector": "Stocks"
       },
       {
         "name": "Iridium Communications",
         "ticker": "IRDM",
-        "sector": "통신"
+        "sector": "Stocks"
       },
       {
         "name": "Coca-Cola",
         "ticker": "KO",
-        "sector": "기타"
+        "sector": "Stocks"
       },
       {
         "name": "Occidental Petroleum",
         "ticker": "OXY",
-        "sector": "석유/가스"
+        "sector": "Oil"
       },
       {
         "name": "Targa Resources",
         "ticker": "TRGP",
-        "sector": "석유/가스"
+        "sector": "Oil"
       },
       {
         "name": "Chevron",
         "ticker": "CVX",
-        "sector": "석유/가스"
+        "sector": "Oil"
       },
       {
         "name": "Exxon Mobil",
         "ticker": "XOM",
-        "sector": "석유/가스"
+        "sector": "Oil"
       },
       {
         "name": "Constellation Energy",
         "ticker": "CEG",
-        "sector": "유틸리티"
+        "sector": "SMR"
       },
       {
         "name": "Vistra Corp",
         "ticker": "VST",
-        "sector": "유틸리티"
+        "sector": "SMR"
       },
       {
         "name": "BWX Technologies",
         "ticker": "BWXT",
-        "sector": "SMR/원자력"
+        "sector": "SMR"
       },
       {
         "name": "Cameco",
         "ticker": "CCJ",
-        "sector": "SMR/원자력"
+        "sector": "SMR"
       },
       {
         "name": "Centrus Energy",
         "ticker": "LEU",
-        "sector": "SMR/원자력"
+        "sector": "SMR"
       },
       {
         "name": "Nano Nuclear Energy",
         "ticker": "NNE",
-        "sector": "SMR/원자력"
+        "sector": "SMR"
       },
       {
         "name": "NuScale Power",
         "ticker": "SMR",
-        "sector": "SMR/원자력"
+        "sector": "SMR"
       },
       {
         "name": "Oklo",
         "ticker": "OKLO",
-        "sector": "SMR/원자력"
+        "sector": "SMR"
       }
     ]
   }

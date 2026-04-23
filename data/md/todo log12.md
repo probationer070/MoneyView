@@ -25,12 +25,12 @@ Target outcome:
 - When the realtime API console cannot be seen, a developer can still inspect recent API activity through a plain-text tail/read view backed by `data/cache/logs/api-server.log`.
 
 Execution checklist:
-- [ ] Audit the current local log sources across `apps/web` dev server output, `apps/api/core/logger.py`, `apps/api/core/transport_progress.py`, and `apps/web/app/actions/discovery.ts`
-- [ ] Define a readable console log format for API request lifecycle lines, including source, method, path, status, elapsed time, and request id when available
-- [ ] Reduce or gate routine `discoverBackendPort()` logging so the web server does not emit low-signal lines on every request in normal development
-- [ ] Add an API-side plain-text log tail/read contract that exposes recent `api-server.log` lines without replacing the existing JSON file logging
-- [ ] Add a lightweight web-side developer surface or documented local workflow for viewing the recent API log tail when the realtime API console is unavailable
-- [ ] Verify the resulting local experience with one normal page load and one streaming DCF request, confirming the emitted text is easy to scan
+- [x] Audit the current local log sources across `apps/web` dev server output, `apps/api/core/logger.py`, `apps/api/core/transport_progress.py`, and the web-side backend-port discovery path
+- [x] Define a readable console log format for API request lifecycle lines, including source, method, path, status, elapsed time, and request id when available
+- [x] Reduce or gate routine `discoverBackendPort()` logging so the web server does not emit low-signal lines on every request in normal development
+- [x] Add an API-side plain-text log tail/read contract that exposes recent `api-server.log` lines without replacing the existing JSON file logging
+- [x] Add a lightweight web-side developer surface or documented local workflow for viewing the recent API log tail when the realtime API console is unavailable
+- [x] Verify the resulting local experience with one normal page load and one streaming DCF request, confirming the emitted text is easy to scan
 
 Engineering notes:
 - Keep log formatting ownership inside `apps/api/core`; route handlers should emit facts, not hand-build presentation strings everywhere.
@@ -79,7 +79,7 @@ Execution checklist:
 - [x] Add similar-stock comparison visualizations in Corporate Analysis
 - [x] Add a bulk “calculate reports for all stocks” action in Corporate Analysis
 - [x] Verify Corporate Analysis and Watchlist Holdings synchronization with focused API and/or frontend coverage
-- [ ] Run narrow verification for changed frontend and backend areas
+- [x] Run narrow verification for changed frontend and backend areas
 
 Engineering notes:
 - Keep watchlist ownership in the portfolio backend and avoid duplicating allocation truth in browser-only state.
@@ -107,9 +107,8 @@ Definition of done:
 - [x] Verified Corporate Analysis reflects current Watchlist Holdings in the intended synchronized paths
 
 Verification note:
-- Targeted Playwright coverage passed on 2026-04-20 for `tests/e2e/portfolio-watchlist.spec.ts`, `tests/e2e/portfolio-snapshot-history.spec.ts`, and `tests/e2e/corporate-comparison.spec.ts`.
-- Targeted backend pytest coverage for `tests/api/test_watchlist_resync.py` and `tests/api/test_corporate_comparison.py` remains blocked in this environment because `pytest` cannot create or clean its temp directories under `C:\Users\VIP\AppData\Local\Temp\pytest-of-VIP`.
-- Re-run attempts on 2026-04-20 with explicit `--basetemp` and `cache_dir` under both `E:\MoneyView\.tmp\...` and `C:\Users\VIP\.codex\memories\...` still failed with `PermissionError: [WinError 5] Access is denied` during pytest temp-directory setup/cleanup, so the backend verification item cannot be marked complete from this session.
+- Targeted backend pytest coverage passed on 2026-04-22 for `tests/api/test_watchlist_resync.py` and `tests/api/test_corporate_comparison.py`.
+- Targeted Playwright coverage passed on 2026-04-22 for `tests/e2e/portfolio-watchlist.spec.ts`, `tests/e2e/portfolio-snapshot-history.spec.ts`, and `tests/e2e/corporate-comparison.spec.ts`.
 
 
 

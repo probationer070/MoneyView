@@ -16,18 +16,21 @@ export function HurdleRateDecompositionGraph({
 }) {
   return (
     <div className="lg:col-span-2 rounded-[var(--radius)] border border-[var(--border)] bg-white p-5 shadow-sm">
-      <button
-        type="button"
-        onClick={() => onOpenDetail("hurdleDecomposition")}
-        className="text-left text-sm font-bold text-[var(--text-primary)] underline decoration-dotted underline-offset-4 hover:text-[var(--surface)]"
-      >
-        <InfoTooltip
-          label="Hurdle Rate Decomposition"
-          description="Cost of equity uses market-implied expected returns instead of historical ERP. Indicators are shown for the US, EU, Korea, and emerging markets."
-        />
-      </button>
+      <div className="min-w-0">
+        <h3 className="text-sm font-bold text-[var(--text-primary)]">Hurdle Rate Decomposition</h3>
+        <button
+          type="button"
+          onClick={() => onOpenDetail("hurdleDecomposition")}
+          className="mt-1 text-left text-xs text-[var(--text-muted)] underline decoration-dotted underline-offset-4 hover:text-[var(--surface)]"
+        >
+          <InfoTooltip
+            label="Open formula and regional breakdown details"
+            description="Cost of equity uses market-implied expected returns instead of historical ERP. Indicators are shown for the US, EU, Korea, and emerging markets."
+          />
+        </button>
+      </div>
       <div className="h-72 min-h-72 min-w-0">
-        <ResponsiveChart minWidth={1} minHeight={1}>
+        <ResponsiveChart className="h-full w-full" minWidth={1} minHeight={1}>
           <ComposedChart data={regionalMinard} margin={{ top: 20, right: 20, left: 0, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
             <XAxis dataKey="region" tick={{ fill: "var(--text-muted)" }} />
@@ -39,7 +42,7 @@ export function HurdleRateDecompositionGraph({
           </ComposedChart>
         </ResponsiveChart>
       </div>
-      <div className="mt-2 grid grid-cols-3 gap-2 text-xs text-[var(--text-muted)]">
+      <div className="mt-2 grid grid-cols-1 gap-2 text-xs text-[var(--text-muted)] sm:grid-cols-2 lg:grid-cols-3">
         {hurdleBars.map((item) => (
           <button
             key={item.name}

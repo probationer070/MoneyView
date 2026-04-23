@@ -1,6 +1,63 @@
-export { BetaWaccCurveGraph } from "./graphs/BetaWaccCurveGraph";
-export { CompanyStatusGraph } from "./graphs/CompanyStatusGraph";
-export { DcfCoreModulesGraph } from "./graphs/DcfCoreModulesGraph";
-export { HurdleRateDecompositionGraph } from "./graphs/HurdleRateDecompositionGraph";
-export { RiskReturnMinardGraph } from "./graphs/RiskReturnMinardGraph";
-export { ValueDriverMatrixGraph } from "./graphs/ValueDriverMatrixGraph";
+"use client";
+
+import dynamic from "next/dynamic";
+
+function GraphLoadingCard({
+  className,
+  title,
+  chartHeightClassName = "h-72",
+}: {
+  className: string;
+  title: string;
+  chartHeightClassName?: string;
+}) {
+  return (
+    <div className={`${className} rounded-[var(--radius)] border border-[var(--border)] bg-white p-5 shadow-sm`}>
+      <h3 className="text-sm font-bold text-[var(--text-primary)]">{title}</h3>
+      <div className="mt-1 h-3 w-44 animate-pulse rounded bg-[var(--surface-muted)]" />
+      <div className={`mt-4 animate-pulse rounded bg-[var(--surface-muted)] ${chartHeightClassName}`} />
+    </div>
+  );
+}
+
+export const BetaWaccCurveGraph = dynamic(
+  () => import("./graphs/BetaWaccCurveGraph").then((mod) => mod.BetaWaccCurveGraph),
+  {
+    loading: () => <GraphLoadingCard className="lg:col-span-2" title="Bottom-up Beta + WACC U-Curve" />,
+  },
+);
+
+export const CompanyStatusGraph = dynamic(
+  () => import("./graphs/CompanyStatusGraph").then((mod) => mod.CompanyStatusGraph),
+  {
+    loading: () => <GraphLoadingCard className="lg:col-span-2" title="Company Status Diagnosis" />,
+  },
+);
+
+export const DcfCoreModulesGraph = dynamic(
+  () => import("./graphs/DcfCoreModulesGraph").then((mod) => mod.DcfCoreModulesGraph),
+  {
+    loading: () => <GraphLoadingCard className="lg:col-span-4" title="DCF Core Modules" chartHeightClassName="h-44" />,
+  },
+);
+
+export const HurdleRateDecompositionGraph = dynamic(
+  () => import("./graphs/HurdleRateDecompositionGraph").then((mod) => mod.HurdleRateDecompositionGraph),
+  {
+    loading: () => <GraphLoadingCard className="lg:col-span-2" title="Hurdle Rate Decomposition" />,
+  },
+);
+
+export const RiskReturnMinardGraph = dynamic(
+  () => import("./graphs/RiskReturnMinardGraph").then((mod) => mod.RiskReturnMinardGraph),
+  {
+    loading: () => <GraphLoadingCard className="lg:col-span-4" title="Risk-Return Minard Chart" chartHeightClassName="h-80" />,
+  },
+);
+
+export const ValueDriverMatrixGraph = dynamic(
+  () => import("./graphs/ValueDriverMatrixGraph").then((mod) => mod.ValueDriverMatrixGraph),
+  {
+    loading: () => <GraphLoadingCard className="lg:col-span-2" title="4-Quadrant Value Driver Matrix" />,
+  },
+);

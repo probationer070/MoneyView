@@ -6,6 +6,13 @@ The local web app also avoids using a client-triggered Server Action for backend
 
 ## What Is Logged
 
+Readable console summaries:
+- request lifecycle lines render as:
+  - `src=api.request | METHOD /path | status=... | elapsed=...ms | request_id=...`
+- transport lifecycle lines render as:
+  - `src=api.transport | METHOD /path | transport=known_size|sse | ... | elapsed=...ms | request_id=...`
+- this keeps the console scan-friendly while the file log remains structured JSON
+
 Known-size responses:
 - middleware emits `transport.progress`
 - fields include:
@@ -60,3 +67,9 @@ Streaming / SSE responses:
 - Persistent API logs are written to `data/cache/logs/api-server.log` unless `API_LOG_PATH` overrides the location.
 - The diagnostic endpoint `GET /api/v1/diagnostic/logs/api-tail?lines=100` returns the most recent plain-text log lines from that file.
 - This endpoint is intended as a local developer fallback for visibility, not as a user-facing production feature.
+
+## Verification
+
+- Targeted backend verification covers:
+  - JSON file logging for known-size progress and DCF SSE phase logs in `tests/api/test_transport_progress.py`
+  - console readability for one normal API request and one DCF streaming request in the same test module

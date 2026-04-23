@@ -16,18 +16,21 @@ export function ValueDriverMatrixGraph({
 }) {
   return (
     <div className="lg:col-span-2 rounded-[var(--radius)] border border-[var(--border)] bg-white p-5 shadow-sm">
-      <button
-        type="button"
-        onClick={() => onOpenDetail("valueDriverMatrix")}
-        className="text-left text-sm font-bold text-[var(--text-primary)] underline decoration-dotted underline-offset-4 hover:text-[var(--surface)]"
-      >
-        <InfoTooltip
-          label="4-Quadrant Value Driver Matrix"
-          description="X-axis is growth. Y-axis is ROIC minus WACC. Bubble size approximates FCFF magnitude, highlighting value creation or destruction."
-        />
-      </button>
+      <div className="min-w-0">
+        <h3 className="text-sm font-bold text-[var(--text-primary)]">4-Quadrant Value Driver Matrix</h3>
+        <button
+          type="button"
+          onClick={() => onOpenDetail("valueDriverMatrix")}
+          className="mt-1 text-left text-xs text-[var(--text-muted)] underline decoration-dotted underline-offset-4 hover:text-[var(--surface)]"
+        >
+          <InfoTooltip
+            label="Open matrix interpretation details"
+            description="X-axis is growth. Y-axis is ROIC minus WACC. Bubble size approximates FCFF magnitude, highlighting value creation or destruction."
+          />
+        </button>
+      </div>
       <div className="h-72 min-h-72 min-w-0">
-        <ResponsiveChart minWidth={1} minHeight={1}>
+        <ResponsiveChart className="h-full w-full" minWidth={1} minHeight={1}>
           <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
             <XAxis type="number" dataKey="growth" name="Growth" tick={{ fill: "var(--text-muted)" }} />

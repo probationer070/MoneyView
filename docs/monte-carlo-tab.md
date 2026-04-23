@@ -214,6 +214,118 @@ Core engines:
 - `correlation-core.ts`
   Worker-side correlation and efficient-frontier engine
 
+## How To Use The Graphs
+
+### 1. Path Simulation
+
+Start here whenever you want a base scenario for the portfolio-path, risk, and distribution tabs.
+
+#### `GBM + Jump-Diffusion Simulated Paths`
+
+- use this chart to see path dispersion over time, not just terminal outcomes
+- focus on how quickly paths separate and how deep bad paths fall during the horizon
+- if the path cloud becomes unrealistically wide very early, reduce volatility or jump assumptions before trusting the run
+
+#### `Percentile Cone`
+
+- use the cone when you want a cleaner uncertainty summary than the raw path chart
+- read the median line first
+- then compare the `25%-75%`, `10%-90%`, and `5%-95%` bands to understand how fragile the scenario is
+- if the cone is extremely wide, the setup is better treated as a stress test than a base case
+
+#### KPI cards and setup panel
+
+- use the cards for quick summary
+- use the setup panel to verify that the chart you are looking at really matches the assumptions you intended to test
+- export CSV files when you want to compare runs outside the app
+
+### 2. Risk Analysis
+
+Use this tab after running `Path Simulation`. It reuses the same result.
+
+#### `VaR / CVaR Risk Distribution`
+
+- use this chart to understand tail loss, not average outcome
+- look at the zero line first to separate gain and loss regions
+- then compare the VaR 95, VaR 99, and CVaR 95 markers
+- if CVaR sits far beyond VaR, tail losses are materially worse than the headline threshold suggests
+
+#### `Terminal Value Percentiles`
+
+- use this bar chart to answer: "what terminal outcomes are plausible across good, base, and bad cases?"
+- compare P5/P10 against your capital-loss tolerance
+- compare P50 against your base-case expectation
+- compare P90/P95 against upside realism rather than treating them as likely outcomes
+
+#### `Statistical Summary`
+
+- use the table to validate what the charts imply
+- if skewness or kurtosis looks unusual, check the return-distribution tab next rather than assuming a normal-shaped result
+
+### 3. Return Distribution
+
+Use this when you want to inspect whether the simulation behaves like a simple bell curve or a heavier-tailed process.
+
+#### `Return Histogram with Fitted Normal Curve`
+
+- compare the bar shape against the fitted normal line
+- if the left or right tails stick out beyond the line, the scenario is less normal than a simple mean-volatility summary suggests
+- use this chart when you want to explain why Sharpe-style summaries may hide tail risk
+
+#### `CDF Comparison`
+
+- use this to compare cumulative probabilities instead of raw frequency bars
+- if the simulated CDF diverges materially from the fitted normal CDF, treat normal-based intuition with caution
+
+### 4. Corporate Valuation
+
+Use this tab when you want a valuation range instead of one point estimate.
+
+#### `Fair Value Distribution`
+
+- use the histogram to see how tightly or loosely fair value clusters
+- compare the current-price line against the mass of the distribution
+- if the current price sits near the center of the distribution, the stock is not obviously mispriced under the chosen assumptions
+- if the distribution is extremely wide, focus on uncertainty drivers before acting on the median
+
+#### `Valuation Statistics`
+
+- use P10, median, and P90 as practical bear/base/bull anchors
+- use undervaluation probability as a summary, but do not rely on it alone when the range is very wide
+- use z-score to understand how far current price sits from the modeled center
+
+### 5. Correlation Model
+
+Use this tab to understand diversification structure, not just standalone asset attractiveness.
+
+#### `Efficient Frontier`
+
+- use the frontier to see the tradeoff between expected return and volatility across sampled portfolios
+- find the highlighted highest-Sharpe point first
+- then compare nearby points to see whether a slightly lower Sharpe gives a materially different risk level
+
+#### `Spearman rho Sensitivity`
+
+- use this chart to see which assets are actually driving portfolio-return sensitivity
+- strong positive bars indicate assets that move with portfolio outcomes
+- negative bars indicate assets acting as diversifiers or offsets
+
+#### `Correlation Coefficient Heatmap`
+
+- use the heatmap before trusting the frontier
+- if the matrix is full of strong positive correlations, diversification benefits will be limited even if individual assets look attractive
+- look for low or negative relationships when you want genuine diversification rather than multiple versions of the same risk
+
+### Practical workflow
+
+Recommended reading order:
+
+1. run `Path Simulation`
+2. inspect `Risk Analysis`
+3. inspect `Return Distribution`
+4. run `Corporate Valuation` if you need single-stock uncertainty
+5. run `Correlation Model` if you need multi-asset diversification context
+
 ## Relationship To Other Tabs
 
 - Use `Monte Carlo` for scenario analysis, distribution inspection, valuation uncertainty, and portfolio-correlation experiments

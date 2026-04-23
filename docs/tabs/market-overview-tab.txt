@@ -1,0 +1,203 @@
+MoneyView Tab Reference: Market Overview
+
+Tab
+- Market Overview
+
+Route
+- `/`
+
+Primary Goal
+- Give the user a fast macro snapshot of major market instruments.
+- Support two reading modes:
+  - quick scan across many instruments
+  - deep drill-down into one instrument through a modal
+
+Design Intent
+- This tab is the dashboard-style front door of MoneyView.
+- The design emphasizes scan speed first, detail second.
+- The first read should answer:
+  - what is up
+  - what is down
+  - what deserves closer inspection
+- The page uses a white card surface, muted secondary text, and delta color as the main visual priority signal.
+- Positive and negative moves are intentionally easy to spot before the user reads the numbers closely.
+
+Layout Structure
+
+1. Page Header
+- Title: `Market Overview`
+- Subtitle: `Real-time snapshot of major global and domestic indices`
+- Visual role:
+  - orient the user immediately
+  - frame the page as a broad market summary rather than a stock-specific workspace
+
+2. Dashboard Control Bar
+- Contains:
+  - section heading: `Market Dashboard`
+  - helper text about scanning in graph or table view
+  - view toggle
+- Visual role:
+  - act as the switchboard for how dense or visual the market summary should be
+
+3. Main Content Area
+- Two display modes:
+  - `Chart` view
+  - `Table` view
+- Both modes use the same underlying instrument set.
+
+Chart View Design
+- Grid of instrument cards.
+- Each card is a compact market tile.
+- Card contents:
+  - instrument name
+  - ticker
+  - current value
+  - percent-change badge
+  - sparkline
+  - source or period hint
+- Visual behavior:
+  - current value and delta are the focal points
+  - the sparkline acts as a trend cue, not a full charting workspace
+  - cards are clickable and feel like drill-down entry points
+- Best use:
+  - fast visual market scanning
+  - deciding which instrument to inspect in the modal
+
+Table View Design
+- Dense comparison layout for users who prefer structured reading over card scanning.
+- Columns:
+  - instrument
+  - current
+  - absolute change
+  - percent change
+  - source
+- Visual behavior:
+  - right-aligned numeric columns emphasize comparison
+  - the instrument column remains the navigation entry point
+- Best use:
+  - comparing values precisely
+  - reviewing several markets at once without card spacing
+
+Instrument Coverage
+- The route and modal design support multiple instrument types:
+  - index
+  - commodity
+  - FX
+  - crypto
+- The detail modal adjusts interpretation language depending on instrument type.
+
+Market Detail Modal
+
+Purpose
+- Convert a broad dashboard card into a deep market review surface.
+- Reuse charting and analysis patterns that are familiar from other MoneyView drill-downs.
+
+Modal Design Intent
+- Large, layered research surface.
+- Built to feel like a focused overlay, not a separate page.
+- Uses:
+  - strong header
+  - KPI summary cards
+  - main chart area
+  - side analysis panels
+  - warning and data-quality surfaces
+
+Modal Sections
+
+1. Modal Header
+- Shows:
+  - instrument name
+  - ticker
+  - instrument label
+  - optional unit label
+- Includes close button
+- Visual role:
+  - reset user context from dashboard summary to detailed inspection
+
+2. Top Summary Cards
+- Current Value
+- Absolute Change
+- Percent Change
+- Observed Trend
+- Visual role:
+  - summarize the current move before the user reads indicators or data quality
+
+3. OHLCV Chart Section
+- Candlestick chart
+- Volume bars
+- Moving-average overlays
+- Daily/monthly toggle
+- Chart metadata:
+  - timeframe
+  - point count
+  - requested window
+- Design role:
+  - main visual anchor of the modal
+  - intended for actual price-path reading rather than sparkline triage
+
+4. Indicator Grids
+- Daily indicators grid
+- Monthly indicators grid
+- Common indicator families:
+  - RSI
+  - MACD or related momentum fields
+  - Bollinger or price-range bands
+  - moving averages
+- Design role:
+  - structured analytical panel
+  - lets the user switch from chart interpretation to indicator confirmation
+
+5. Daily Volume Panel
+- Latest volume
+- 20-day average volume
+- 60-day average volume
+- Volume versus 20-day average
+- Design role:
+  - add participation or turnover context
+  - especially important when price movement alone is misleading
+
+6. Context Panel
+- Instrument-type-specific interpretation notes
+- For index instruments also includes:
+  - regime label
+  - regime summary
+  - breadth
+  - cross-asset signal mix
+- Design role:
+  - move the modal from pure chart reading into interpretive macro context
+
+7. Data Quality Panel
+- Source
+- Last updated
+- Latest trading date
+- Freshness
+- Coverage note
+- Fallback note
+- Design role:
+  - make reliability visible
+  - prevent users from over-trusting stale or partial detail data
+
+Warnings And States
+- Empty state when the main page has no market data
+- Detail loading state
+- Detail unavailable state
+- Warning panel for:
+  - stale cache fallback
+  - forced live refresh
+  - missing monthly history
+  - unavailable FX volume
+
+Primary User Workflow
+1. Open Market Overview.
+2. Scan chart cards or table rows.
+3. Identify unusual movers.
+4. Open one instrument.
+5. Check summary cards.
+6. Read OHLCV chart.
+7. Confirm with indicator grids.
+8. Review context and data quality before drawing conclusions.
+
+Primary Data Sources
+- `GET /api/v1/market/indices`
+- `GET /api/v1/market/index/{ticker}/detail`
+

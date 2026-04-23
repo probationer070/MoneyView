@@ -1,0 +1,212 @@
+MoneyView Tab Reference: Monte Carlo
+
+Tab
+- Monte Carlo
+
+Route
+- `/monte-carlo`
+
+Primary Goal
+- Provide simulation and uncertainty analysis for:
+  - portfolio path scenarios
+  - risk analysis
+  - return distribution
+  - corporate valuation uncertainty
+  - multi-asset correlation structure
+
+Design Intent
+- This tab is a lab-style workspace.
+- It is different from Portfolio and Corporate because it is experiment-first, not persistence-first.
+- The page is designed around:
+  - tabbed sub-workflows
+  - input panels
+  - progress-aware computation
+  - chart-driven interpretation
+
+Page Design Structure
+
+1. Header Card
+- Eyebrow: `Monte Carlo investment analysis`
+- Title: `Simulation Lab`
+- Description summarizing the five-tab workflow
+
+2. Simulation Sub-Tab Strip
+- Path Simulation
+- Risk Analysis
+- Return Distribution
+- Corporate Valuation
+- Correlation Model
+
+3. Active Work Section
+- Only one sub-tab is active at a time.
+- Each sub-tab renders through its own section component.
+
+Sub-Tab Design Philosophy
+- `Path Simulation` is the engine room.
+- `Risk Analysis` and `Return Distribution` are analytical views built on the same shared result.
+- `Corporate Valuation` and `Correlation Model` are separate worker jobs with their own input and result surfaces.
+
+1. Path Simulation
+
+Purpose
+- Run the base Monte Carlo path engine for investment-value evolution over time.
+
+Inputs
+- initial investment
+- expected annual return
+- annual volatility
+- investment horizon
+- number of simulations
+- execution mode
+- jump probability
+- jump intensity
+- risk-free rate
+- seed
+
+Actions
+- `Run Path Simulation`
+- `Cancel`
+
+Outputs
+- progress bar
+- export buttons
+- KPI summary cards
+- percentile indicators
+- simulated paths chart
+- percentile cone chart
+- simulation setup panel
+
+Design Notes
+- This is the main command center of the tab.
+- Inputs should feel like a simulation form.
+- Outputs should feel like a scenario dashboard.
+- Export actions are positioned as analyst tools, not casual buttons.
+
+2. Risk Analysis
+
+Purpose
+- Translate the path result into downside and tail-risk interpretation.
+
+Metrics
+- VaR 95%
+- VaR 99%
+- CVaR 95%
+- maximum drawdown
+- Sortino ratio
+- skewness
+
+Visuals
+- VaR/CVaR risk distribution
+- terminal value percentiles
+- statistical summary
+
+Design Notes
+- This sub-tab is a diagnostic reading surface, not an input-heavy surface.
+- It is intended to answer:
+  - how bad can the bad cases be
+  - how asymmetric is the outcome set
+
+3. Return Distribution
+
+Purpose
+- Compare the simulated return distribution with a normal approximation.
+
+Metrics
+- mean return
+- standard deviation
+- kurtosis
+- maximum return
+- minimum return
+
+Visuals
+- return histogram with fitted normal curve
+- CDF comparison
+
+Design Notes
+- This sub-tab is built to challenge oversimplified "normal market" intuition.
+- It should help the user see whether the simulation behaves like a bell curve or a heavy-tailed process.
+
+4. Corporate Valuation
+
+Purpose
+- Produce a distribution of fair values for one stock rather than a single point estimate.
+
+Inputs
+- ticker
+- current stock price
+- base EPS
+- average growth rate
+- growth uncertainty
+- discount rate
+- discount-rate uncertainty
+- terminal growth rate
+- forecast period
+- target PER uncertainty
+- simulation count
+- seed
+
+Actions
+- price auto-fill on ticker lookup
+- `Run Valuation`
+- `Cancel`
+
+Outputs
+- progress bar
+- KPI cards
+- fair value distribution histogram
+- valuation statistics table
+
+Design Notes
+- This section combines form controls with a result board.
+- It is designed to feel like a probabilistic valuation bench rather than a standard DCF page.
+
+5. Correlation Model
+
+Purpose
+- Explore diversification, correlation structure, and efficient-frontier behavior across multiple assets.
+
+Inputs
+- asset list
+- expected return
+- volatility
+- editable correlation matrix
+- simulation count
+- seed
+
+Action
+- `Run Correlation Analysis`
+
+Outputs
+- progress bar
+- efficient frontier
+- Spearman rho sensitivity
+- correlation heatmap
+- optimal portfolio KPI cards
+
+Design Notes
+- The matrix editing surface is the defining interaction of this sub-tab.
+- It is the most "quant-lab" feeling part of MoneyView.
+
+Execution Model
+- The page owns worker lifecycle and request tracking.
+- Shared result:
+  - Path Simulation
+  - Risk Analysis
+  - Return Distribution
+- Separate worker jobs:
+  - Corporate Valuation
+  - Correlation Model
+
+Core Worker And Engine Files
+- `apps/web/app/monte-carlo/workers/simulation.worker.ts`
+- `apps/web/app/monte-carlo/lib/simulation-core.ts`
+- `apps/web/app/monte-carlo/lib/valuation-core.ts`
+- `apps/web/app/monte-carlo/lib/correlation-core.ts`
+
+Primary User Workflow
+1. Open Monte Carlo.
+2. Choose a sub-tab.
+3. Start with Path Simulation if a base scenario is needed.
+4. Read Risk Analysis and Return Distribution from the shared result.
+5. Switch to Corporate Valuation for stock-specific uncertainty.
+6. Switch to Correlation Model for diversification and frontier analysis.

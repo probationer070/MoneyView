@@ -13,42 +13,66 @@ const navItems = [
   { href: "/monte-carlo", label: "Monte Carlo", icon: Orbit },
 ];
 
-export function Sidebar() {
+export function Sidebar({
+  isOpen,
+  onClose,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+}) {
   const pathname = usePathname();
 
   return (
-    <aside className="fixed left-0 top-0 h-screen w-64 bg-[var(--bg-secondary)] border-r border-[var(--border)] p-4 flex flex-col">
-      <div className="flex items-center gap-2 mb-8 px-2">
-        <Activity className="h-6 w-6 text-[var(--surface)]" />
-        <h1 className="font-bold text-xl text-[var(--text-primary)]">MoneyView</h1>
-      </div>
+    <>
+      <div
+        className={clsx(
+          "fixed inset-0 z-30 bg-black/40 transition-opacity lg:hidden",
+          isOpen ? "opacity-100" : "pointer-events-none opacity-0",
+        )}
+        onClick={onClose}
+        aria-hidden="true"
+      />
 
-      <nav className="flex flex-col gap-2">
-        {navItems.map((item) => {
-          const isActive = pathname === item.href;
-          const Icon = item.icon;
+      <aside
+        id="app-sidebar"
+        className={clsx(
+          "fixed left-0 top-0 z-40 flex h-screen w-64 flex-col border-r border-[var(--border)] bg-[var(--bg-secondary)] p-4 transition-transform lg:translate-x-0",
+          isOpen ? "translate-x-0" : "-translate-x-full",
+        )}
+      >
+        <div className="mb-8 flex items-center gap-2 px-2">
+          <Activity className="h-6 w-6 text-[var(--surface)]" />
+          <h1 className="font-bold text-xl text-[var(--text-primary)]">MoneyView</h1>
+        </div>
 
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={clsx(
-                "flex items-center gap-3 px-3 py-2 rounded-[var(--radius)] transition-colors",
-                isActive
-                  ? "bg-[var(--surface)] text-white font-medium shadow-sm"
-                  : "text-[var(--text-muted)] hover:bg-[var(--surface)] hover:text-[var(--text-primary)]"
-              )}
-            >
-              <Icon className="h-5 w-5" />
-              {item.label}
-            </Link>
-          );
-        })}
-      </nav>
+        <nav className="flex flex-col gap-2">
+          {navItems.map((item) => {
+            const isActive = pathname === item.href;
+            const Icon = item.icon;
 
-      <div className="mt-auto px-2 pb-4 text-xs text-center text-[var(--text-muted)]">
-        Powered by FastAPI & Next.js
-      </div>
-    </aside>
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={onClose}
+                className={clsx(
+                  "flex items-center gap-3 rounded-[var(--radius)] px-3 py-2 transition-colors",
+                  isActive
+                    ? "bg-[var(--surface)] text-white font-medium shadow-sm"
+                    : "text-[var(--text-muted)] hover:bg-[var(--surface)] hover:text-[var(--text-primary)]"
+                )}
+              >
+                <Icon className="h-5 w-5" />
+                {item.label}
+              </Link>
+            );
+          })}
+        </nav>
+
+        <div className="mt-auto px-2 pb-4 text-center text-xs text-[var(--text-muted)]">
+          Powered by FastAPI & Next.js
+        </div>
+      </aside>
+    </>
   );
 }

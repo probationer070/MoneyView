@@ -124,7 +124,7 @@ test("clicking a holding opens the stock detail modal", async ({ page }) => {
 
   await page.getByRole("dialog").getByRole("button", { name: "Open Snapshot History" }).click();
   await expect(page.getByRole("heading", { name: "Snapshot History Drill-down" })).toBeVisible();
-  await expect(page.getByText("Saved Snapshots")).toBeVisible();
+  await expect(page.getByText("Saved Snapshots", { exact: true })).toBeVisible();
   await expect(page.getByText("Expected Spread Trend")).toBeVisible();
   const stockDetailDialog = page.getByRole("dialog");
   await expect(stockDetailDialog.getByRole("cell", { name: "4/11/2026" })).toBeVisible();
@@ -218,6 +218,7 @@ test("weight editing and sync or import controls are visible and actionable", as
   await savePortfolioAllocation(page, "AAPL", "35");
   await expect(page.getByText(/Saved allocation changes and updated the/)).toBeVisible();
   await page.getByRole("button", { name: "Normalize To 100%" }).click();
+  await expect(page.getByText("Normalized saved stock weights to 100.0% invested.")).toBeVisible();
   await expect(page.getByText(/Normalized weights and updated the/)).toBeVisible();
 
   await page.reload({ waitUntil: "domcontentloaded" });

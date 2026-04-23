@@ -1,0 +1,99 @@
+MoneyView Tab Reference: News Feed
+
+Tab
+- News Feed
+
+Route
+- `/news`
+
+Primary Goal
+- Provide a scrolling market-news surface for headline discovery and quick outbound reading.
+
+Design Intent
+- This tab is intentionally simpler and calmer than the analysis tabs.
+- It behaves like a clean reading stream rather than a control-heavy dashboard.
+- The design focuses on:
+  - headline readability
+  - publication recency
+  - ticker tagging
+  - smooth incremental loading
+
+Layout Structure
+
+1. Header
+- Title: `Market Intelligence`
+- Description explains:
+  - items are ordered by publication date
+  - the first 5 rows load initially
+  - 5 more rows are fetched when the user scrolls down
+
+Design Notes
+- The header frames the tab as an information stream rather than a trading terminal.
+- The InfoTooltip gives behavioral context without cluttering the card list.
+
+2. Scrollable News Feed
+- The main content area is a vertically scrollable feed.
+- Each article is rendered as a clickable card.
+- Card contents:
+  - headline
+  - published date
+  - optional ticker badge
+  - outbound link target
+
+Card Design
+- White card surface
+- subtle border
+- hover emphasis
+- clean typography with the headline as the focal point
+- ticker badge appears as a small supporting label, not the main title
+
+Today Highlighting
+- Articles published today receive a more visually distinct left-border treatment.
+- Design purpose:
+- make fresh items easier to spot
+- avoid needing a separate "today" filter
+
+Infinite Scroll Behavior
+- Initial batch size: 5
+- Additional load size: 5
+- Trigger:
+  - when the user nears the bottom of the scroll area
+
+Design Notes
+- Infinite scroll is used here because the tab is consumption-oriented.
+- It keeps the first view light while still allowing long reading sessions.
+
+Data Model Per Item
+- id
+- ticker
+- headline
+- url
+- source
+- published_date
+- sentiment
+- importance
+
+Visible Information Versus Hidden Metadata
+- Visible by default:
+  - headline
+  - date
+  - ticker badge
+- Present in the data but not emphasized in the current UI:
+  - source
+  - sentiment
+  - importance
+
+Loading And Empty States
+- `Loading news...`
+- `No news articles found.`
+- `Loading 5 more articles...`
+
+Primary User Workflow
+1. Open News Feed.
+2. Read newest visible headlines.
+3. Use ticker badges to recognize instrument-specific relevance.
+4. Scroll to reveal more.
+5. Open selected items in a new tab.
+
+Primary Data Source
+- `GET /api/v1/news/feed?limit={pageSize}&offset={offset}`

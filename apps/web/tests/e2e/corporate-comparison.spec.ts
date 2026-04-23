@@ -8,9 +8,7 @@ test("corporate comparison table renders and exposes sorting controls", async ({
   await expect(page.getByRole("heading", { name: /Corporate Analysis/i })).toBeVisible({ timeout: 60_000 });
   await expect(page.getByText("Target Stock Comparison")).toBeVisible();
   await expect(page.getByLabel("Comparison universe")).toBeVisible({ timeout: 60_000 });
-  await expect(page.getByLabel("Comparison benchmark preset")).toBeVisible({ timeout: 60_000 });
-  await expect(page.getByLabel("Benchmark ticker")).toBeVisible({ timeout: 60_000 });
-  await expect(page.getByLabel("Benchmark ticker")).toHaveValue("^KS11");
+  await expect(page.getByText("S&P 500 (^GSPC)")).toBeVisible({ timeout: 60_000 });
   await expect(page.getByLabel("Sort by")).toBeVisible({ timeout: 60_000 });
   await expect(page.getByLabel("Direction")).toBeVisible();
   await expect(page.getByText(/Portfolio snapshots and saved history are managed from the Portfolio page only\./)).toBeVisible();
@@ -20,17 +18,17 @@ test("corporate comparison table renders and exposes sorting controls", async ({
   await expect(page.getByText(/All live watchlist tickers are available inside Corporate Analysis\./)).toBeVisible();
 
   await page.getByLabel("Comparison universe").selectOption("watchlist_plus_benchmark");
+  await page.getByRole("button", { name: "Refresh comparison" }).click();
   await expect(page.locator("div").filter({ hasText: /^Watchlist \+ Benchmark$/ }).first()).toBeVisible();
   await expect(page.getByText("GOOGL")).toBeVisible();
-  await page.getByLabel("Comparison benchmark preset").selectOption("secondary-battery");
-  await expect(page.getByLabel("Benchmark ticker")).toHaveValue("305720.KS");
 
   await page.getByLabel("Comparison universe").selectOption("custom");
   await expect(page.getByLabel("Custom tickers")).toBeVisible();
-  await page.getByLabel("Benchmark ticker").fill("^IXIC");
   await page.getByLabel("Custom tickers").fill("NVDA, TSLA");
+  await page.getByRole("button", { name: "Refresh comparison" }).click();
   await expect(page.locator("div").filter({ hasText: /^Custom Universe$/ }).first()).toBeVisible();
-  await expect(page.getByRole("cell", { name: "^IXIC" }).first()).toBeVisible();
+  await expect(page.getByText(/Benchmark: \^GSPC\./)).toBeVisible();
+  await expect(page.getByRole("cell", { name: "^GSPC" }).first()).toBeVisible();
   await expect(page.getByRole("cell", { name: "NVDA" }).first()).toBeVisible();
 
   await page.getByLabel("Sort by").selectOption("roic_minus_wacc");

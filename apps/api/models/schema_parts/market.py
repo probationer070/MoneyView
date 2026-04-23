@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from .news import TechnicalIndicators
 
@@ -10,17 +10,8 @@ from .news import TechnicalIndicators
 class StockOHLCV(BaseModel):
     """Single OHLCV bar in financial-asset schema format."""
 
-    date: str
-    open: float
-    high: float
-    low: float
-    close: float
-    volume: int
-    dividends: float = 0.0
-    stock_splits: float = 0.0
-
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "date": "2025-04-07",
                 "open": 180.50,
@@ -32,6 +23,16 @@ class StockOHLCV(BaseModel):
                 "stock_splits": 0.0,
             }
         }
+    )
+
+    date: str
+    open: float
+    high: float
+    low: float
+    close: float
+    volume: int
+    dividends: float = 0.0
+    stock_splits: float = 0.0
 
 
 class DeltaBadge(BaseModel):
@@ -84,18 +85,8 @@ class IndexQuote(BaseModel):
 class IndicatorRecord(BaseModel):
     """Single macro or economic indicator data point."""
 
-    category: str
-    name: str
-    code: str
-    value: Optional[float]
-    unit: str = ""
-    date: str
-    source: str = ""
-    cycle: str = ""
-    description: str = ""
-
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "category": "FX",
                 "name": "USD/KRW",
@@ -108,6 +99,17 @@ class IndicatorRecord(BaseModel):
                 "description": "",
             }
         }
+    )
+
+    category: str
+    name: str
+    code: str
+    value: Optional[float]
+    unit: str = ""
+    date: str
+    source: str = ""
+    cycle: str = ""
+    description: str = ""
 
 
 class MarketVolumeSummary(BaseModel):

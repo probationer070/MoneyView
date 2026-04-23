@@ -1,0 +1,140 @@
+Issue
+
+Corporate Analysis could appear to break or show incorrect behavior after a browser refresh.
+
+The visible symptoms were:
+
+- the page runtime was recreated after refresh
+- selected company state had to be restored from browser storage
+- heavy calculation zones had to remain idle instead of auto-fetching
+- stale source-data cache from one ticker could still be present when another ticker was active
+
+The most important risk was stale ticker-specific data. For example, if source data had been cached for `AAPL`, then the user selected `MSFT` and refreshed the page, the Corporate page could restore `MSFT` as the active ticker while still having `AAPL` source-data payloads available in `sessionStorage`.
+
+Root Cause
+
+Browser refresh is a full Next.js and React remount.
+
+That means these values are lost:
+
+- `useState`
+- refs
+- in-memory React Query cache
+- active refresh tokens
+- pending async state
+- active modal state
+- temporary form/search input state
+
+Only state reconstructed from one of these sources survives:
+
+- URL or route params
+- backend state
+- `localStorage`
+- `sessionStorage`
+
+The Corporate page already used browser storage for some state:
+
+- active ticker identity used `sessionStorage`
+- per-ticker assumptions used `localStorage`
+- last successful DCF/comparison/source-data results used `sessionStorage`
+
+However, the source-data restoration path consumed cached payloads without first proving that the cached snapshot ticker matched the active ticker.
+
+Why Auto-Fetch Was Not The Right Fix
+
+The heavy Corporate zones are intentionally refresh-gated:
+
+- backend DCF
+- live comparison
+- metric history
+- quarterly statements
+- OHLCV price history
+
+Those zones require both a requested snapshot and a refresh token before fetching.
+
+The refresh token is intentionally ephemeral. It should not be restored after reload because that would silently re-run expensive requests and undo the idle-first performance design.
+
+Resolution
+
+The fix keeps the manual-refresh contract and makes source-data cache restoration snapshot-aware.
+
+Updated file:
+
+- `apps/web/app/corporate/page.tsx`
+
+What changed:
+
+- cached metric-history snapshot ticker is restored separately from cached metric-history data
+- cached quarterly-statements snapshot ticker is restored separately from cached quarterly-statements data
+- cached historical-price snapshot ticker is restored separately from cached historical-price data
+- each source-data payload is only used when its snapshot ticker matches the currently active ticker
+- mismatched source-data cache is not fed into controls, calculation details, modals, or exports
+- the UI now displays an explicit stale-cache message
+
+Example stale message:
+
+- `Cached source data is for AAPL. Refresh for MSFT.`
+
+This means the user can see that old data exists, but the page does not silently apply it to the wrong company.
+
+Tests Added
+
+Updated file:
+
+- `apps/web/tests/e2e/refresh-idle-state.spec.ts`
+
+New coverage:
+
+- select a non-default ticker, refresh the browser page, and confirm the selected ticker is restored
+- confirm page refresh does not auto-fetch heavy zones
+- seed `AAPL` source-data cache with `MSFT` as the active ticker
+- confirm stale-cache messaging is shown
+- confirm annual metric controls do not reuse `AAPL` metric history for `MSFT`
+
+Updated mock file:
+
+- `apps/web/tests/e2e/helpers/corporatePageMock.ts`
+
+Mock support added:
+
+- deterministic `MSFT` metrics endpoint
+- deterministic `MSFT` metric save endpoint
+
+Why This Is Correct
+
+The fix separates state by lifetime and ownership:
+
+- active ticker: session-owned
+- assumptions: durable browser fallback by ticker
+- heavy-zone results: session-owned, snapshot-aware cache
+- refresh tokens: intentionally ephemeral
+- temporary UI details: intentionally not persisted
+
+After refresh, the page can restore useful session context without pretending stale ticker-specific data is current.
+
+Verification
+
+Lint:
+
+- `npm.cmd run lint -- app/corporate/page.tsx tests/e2e/refresh-idle-state.spec.ts tests/e2e/helpers/corporatePageMock.ts`
+
+Result:
+
+- passed
+
+Playwright:
+
+- `npm.cmd run test:e2e -- tests/e2e/refresh-idle-state.spec.ts`
+
+Result:
+
+- 6 passed
+
+Note
+
+The first Playwright run failed with:
+
+- `Error: spawn EPERM`
+
+That was an environment permission issue when Playwright attempted to spawn browser/server processes. The same targeted command passed after rerunning with elevated browser-spawn permission.
+

@@ -15,6 +15,7 @@ export type CorporatePageMockStats = {
   dcfFullReportRequests: number;
   dcfBulkReportRequests: number;
   comparisonRequests: number;
+  metricSaveRequests: number;
   metricHistoryRequests: number;
   quarterlyRequests: number;
   ohlcvRequests: number;
@@ -333,7 +334,31 @@ export async function mockCorporatePageApi(page: Page, stats?: CorporatePageMock
       });
     }
 
+    if (pathname === `${API_PREFIX}/corporate/metrics/MSFT` && method === "GET") {
+      return json(route, {
+        ticker: "MSFT",
+        growth: 7,
+        roic: 22,
+        wacc: 9,
+        debt_ratio: 15,
+        unlevered_beta: 0.95,
+        crp: 0.8,
+        reinvestment: 40,
+        fcff: 120,
+        innovation: 88,
+        market_share: 58,
+        governance: 80,
+        esg_penalty: 18,
+      });
+    }
+
     if (pathname === `${API_PREFIX}/corporate/metrics/AAPL` && method === "PUT") {
+      if (stats) stats.metricSaveRequests += 1;
+      return json(route, JSON.parse(route.request().postData() ?? "{}"));
+    }
+
+    if (pathname === `${API_PREFIX}/corporate/metrics/MSFT` && method === "PUT") {
+      if (stats) stats.metricSaveRequests += 1;
       return json(route, JSON.parse(route.request().postData() ?? "{}"));
     }
 

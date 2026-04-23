@@ -889,7 +889,7 @@ async def get_corporate_companies():
             ticker=ticker,
             name=name,
             sector=row["sector"] or DEFAULT_COMPANIES.get(ticker, {}).get("sector", ""),
-            source="watchlist",
+            source="portfolio",
         )
 
     for row in manual_rows:
@@ -1032,7 +1032,8 @@ async def get_corporate_comparison_history(
 @router.get("/comparison/snapshot-version", response_model=APIResponse[CorporateComparisonResponse])
 async def get_corporate_comparison_snapshot_version(snapshot_version: str = Query(..., min_length=1)):
     """Return one persisted comparison snapshot version by id."""
-    response = load_corporate_comparison_snapshot_version(snapshot_version=snapshot_version)
+    normalized_snapshot_version = snapshot_version.strip().replace(" ", "+")
+    response = load_corporate_comparison_snapshot_version(snapshot_version=normalized_snapshot_version)
     if response is None:
         raise HTTPException(status_code=404, detail="Snapshot version not found")
     return APIResponse(
@@ -1044,12 +1045,13 @@ async def get_corporate_comparison_snapshot_version(snapshot_version: str = Quer
 @router.delete("/comparison/snapshot-version", response_model=APIResponse[CorporateComparisonSnapshotDeleteResult])
 async def delete_corporate_comparison_snapshot(snapshot_version: str = Query(..., min_length=1)):
     """Delete one persisted comparison snapshot version by id."""
-    deleted_rows = delete_corporate_comparison_snapshot_version(snapshot_version=snapshot_version)
+    normalized_snapshot_version = snapshot_version.strip().replace(" ", "+")
+    deleted_rows = delete_corporate_comparison_snapshot_version(snapshot_version=normalized_snapshot_version)
     if deleted_rows == 0:
         raise HTTPException(status_code=404, detail="Snapshot version not found")
     return APIResponse(
         data=CorporateComparisonSnapshotDeleteResult(
-            snapshot_version=snapshot_version,
+            snapshot_version=normalized_snapshot_version,
             deleted_rows=deleted_rows,
         ),
         meta=APIMeta(last_updated_at=datetime.now(timezone.utc).isoformat(), request_id=""),

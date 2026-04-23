@@ -7,9 +7,23 @@ const CORPORATE_COMPARISON_CACHE_KEY = "moneyview:corporate-comparison-cache:v1"
 const CORPORATE_METRIC_HISTORY_CACHE_KEY = "moneyview:corporate-metric-history-cache:v1";
 const CORPORATE_QUARTERLY_CACHE_KEY = "moneyview:corporate-quarterly-statements-cache:v1";
 const CORPORATE_PRICE_HISTORY_CACHE_KEY = "moneyview:corporate-price-history-cache:v1";
+const CORPORATE_ACTIVE_TICKER_KEY = "moneyview:corporate-active-ticker:v1";
 const PORTFOLIO_COMPARISON_CACHE_KEY = "moneyview.portfolio.comparison-cache.v1";
 const PORTFOLIO_COMPARISON_HISTORY_CACHE_KEY = "moneyview.portfolio.comparison-history-cache.v1";
 const PORTFOLIO_ATTRIBUTION_CACHE_KEY = "moneyview.portfolio.attribution-cache.v1";
+
+function corporateStats(): CorporatePageMockStats {
+  return {
+    dcfRequests: 0,
+    dcfFullReportRequests: 0,
+    dcfBulkReportRequests: 0,
+    comparisonRequests: 0,
+    metricSaveRequests: 0,
+    metricHistoryRequests: 0,
+    quarterlyRequests: 0,
+    ohlcvRequests: 0,
+  };
+}
 
 async function seedSessionStorage(page: Page, values: Record<string, unknown>) {
   await page.addInitScript((entries: Array<[string, unknown]>) => {
@@ -21,15 +35,7 @@ async function seedSessionStorage(page: Page, values: Record<string, unknown>) {
 }
 
 test("corporate first load keeps heavy calculation zones idle until refresh", async ({ page }) => {
-  const stats: CorporatePageMockStats = {
-    dcfRequests: 0,
-    dcfFullReportRequests: 0,
-    dcfBulkReportRequests: 0,
-    comparisonRequests: 0,
-    metricHistoryRequests: 0,
-    quarterlyRequests: 0,
-    ohlcvRequests: 0,
-  };
+  const stats = corporateStats();
   await mockCorporatePageApi(page, stats);
 
   await page.goto("/corporate", { waitUntil: "domcontentloaded" });
@@ -47,15 +53,7 @@ test("corporate first load keeps heavy calculation zones idle until refresh", as
 });
 
 test("corporate renders cached calculation results without auto-fetch and refreshes live data on demand", async ({ page }) => {
-  const stats: CorporatePageMockStats = {
-    dcfRequests: 0,
-    dcfFullReportRequests: 0,
-    dcfBulkReportRequests: 0,
-    comparisonRequests: 0,
-    metricHistoryRequests: 0,
-    quarterlyRequests: 0,
-    ohlcvRequests: 0,
-  };
+  const stats = corporateStats();
   await seedSessionStorage(page, {
     [CORPORATE_DCF_CACHE_KEY]: {
       snapshot: {
@@ -211,6 +209,80 @@ test("corporate renders cached calculation results without auto-fetch and refres
   await page.getByRole("button", { name: "Refresh comparison" }).click();
   await expect.poll(() => stats.comparisonRequests).toBe(1);
   await expect(page.getByRole("cell", { name: "GOOGL" }).first()).toBeVisible();
+});
+
+test("corporate page refresh restores the selected ticker without auto-fetching heavy zones", async ({ page }) => {
+  const stats = corporateStats();
+  await mockCorporatePageApi(page, stats);
+
+  await page.goto("/corporate", { waitUntil: "domcontentloaded" });
+  await expect(page.getByRole("heading", { name: /Corporate Analysis/i })).toBeVisible({ timeout: 60_000 });
+
+  await page.getByLabel("Company Search").fill("Microsoft");
+  await page.getByRole("button", { name: "Microsoft" }).click();
+  await expect(page.getByText(/Microsoft: life cycle/i)).toBeVisible();
+
+  await page.reload({ waitUntil: "domcontentloaded" });
+
+  await expect(page.getByRole("heading", { name: /Corporate Analysis/i })).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByText(/Microsoft: life cycle/i)).toBeVisible();
+  await expect(page.getByRole("button", { name: /Backend DCF/i })).toContainText("Refresh to calculate");
+  await page.waitForTimeout(300);
+  expect(stats.dcfRequests).toBe(0);
+  expect(stats.comparisonRequests).toBe(0);
+  expect(stats.metricHistoryRequests).toBe(0);
+  expect(stats.quarterlyRequests).toBe(0);
+  expect(stats.ohlcvRequests).toBe(0);
+});
+
+test("corporate page refresh labels stale source-data cache for a different selected ticker", async ({ page }) => {
+  const stats = corporateStats();
+  await seedSessionStorage(page, {
+    [CORPORATE_ACTIVE_TICKER_KEY]: "MSFT",
+    [CORPORATE_METRIC_HISTORY_CACHE_KEY]: {
+      snapshot: "AAPL",
+      result: {
+        ticker: "AAPL",
+        start_year: 2021,
+        country_risk_premium: 0.8,
+        growth_cagr: 5.5,
+        growth_recent_average: 5.2,
+        annual_growth_rates: [{ year: 2025, value: 5.3 }],
+        roic_recent_average: 17.8,
+        roic_all_year_average: 17.1,
+        annual_roic: [{ year: 2025, value: 17.5 }],
+      },
+      lastUpdatedAt: "2026-04-10T10:00:00Z",
+    },
+    [CORPORATE_QUARTERLY_CACHE_KEY]: {
+      snapshot: "AAPL",
+      result: {
+        ticker: "AAPL",
+        source: "Cached quarterly statements",
+        rows: [],
+      },
+      lastUpdatedAt: "2026-04-10T10:00:00Z",
+    },
+    [CORPORATE_PRICE_HISTORY_CACHE_KEY]: {
+      snapshot: "AAPL",
+      result: [
+        { date: "2026-04-08", open: 180, high: 182, low: 179, close: 181, volume: 1000000 },
+      ],
+      lastUpdatedAt: "2026-04-10T10:00:00Z",
+    },
+  });
+  await mockCorporatePageApi(page, stats);
+
+  await page.goto("/corporate", { waitUntil: "domcontentloaded" });
+
+  await expect(page.getByText(/Microsoft: life cycle/i)).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByText("Cached source data is for AAPL. Refresh for MSFT.")).toBeVisible();
+  await page.getByLabel("Growth Basis").selectOption("annual");
+  await expect(page.getByText("2025 Growth unavailable from Yahoo statements. Retaining the current/manual Growth Rate value.")).toBeVisible();
+  await page.waitForTimeout(300);
+  expect(stats.metricHistoryRequests).toBe(0);
+  expect(stats.quarterlyRequests).toBe(0);
+  expect(stats.ohlcvRequests).toBe(0);
 });
 
 test("portfolio first load keeps analysis requests idle until refresh", async ({ page }) => {

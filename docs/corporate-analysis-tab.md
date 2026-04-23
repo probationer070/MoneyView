@@ -116,9 +116,7 @@ Controls in this block:
 - `Universe`
   Switches between `watchlist_plus_benchmark` and `custom`
 - `Benchmark`
-  Changes the comparison benchmark ticker
-- `Korea preset`
-  Quick-select preset benchmark tickers
+  Fixed to `S&P 500 (^GSPC)` for the current live comparison workflow
 - `Custom tickers`
   Available when the universe is `custom`
 - `Sort by`
@@ -146,6 +144,104 @@ Behavior:
 - this section stays in live comparison mode
 - snapshot history and persisted portfolio-side snapshots are managed from the Portfolio tab, not here
 - the active selected ticker is highlighted inside the comparison table
+
+## How To Use The Graphs
+
+### 1. Start with KPI cards
+
+Use the KPI cards to decide which diagnostic graph deserves attention first.
+
+- if `ROIC - WACC` is weak or negative, focus on value-creation and hurdle-rate graphs
+- if `Bottom-up Ke` or `Levered Beta` looks high, focus on leverage and risk decomposition
+- if `Success Probability` is weak, use the risk-return and value-driver visuals before changing multiple sliders at once
+
+Practical rule:
+
+- change one major assumption at a time
+- watch which KPI moves first
+- then use the graph tied to that KPI to understand why
+
+### 2. Use the six diagnostic graphs by question
+
+#### `Company Status Graph`
+
+Use this when you want a fast operating-profile read.
+
+- look for obvious strengths and weaknesses rather than tiny score differences
+- use it to spot imbalance across health dimensions
+- if one spoke is much weaker than the others, review the supporting assumptions and source data before concluding the company is broadly weak
+
+#### `Hurdle Rate Decomposition`
+
+Use this when the company looks expensive or risky and you need to know which required-return component is driving that result.
+
+- check whether the hurdle rate is being lifted mostly by base market risk, beta, or country risk premium
+- if the hurdle rate seems too punitive, adjust the relevant driver rather than forcing the final DCF result directly
+
+#### `Beta + WACC Curve`
+
+Use this when testing leverage sensitivity.
+
+- read how debt-ratio changes alter beta and WACC together
+- use it to avoid unrealistic leverage assumptions that make valuation look better only because one slider was pushed too far
+
+#### `Value Driver Matrix`
+
+Use this when you want to place the company in a growth-versus-quality frame.
+
+- read it as positioning, not precision
+- use it to compare the selected ticker against the kind of value-creation story you think the business has
+
+#### `Risk-Return Minard`
+
+Use this when deciding whether the current setup is attractive enough to keep modeling.
+
+- read spread and success probability together
+- if spread looks good but success probability is weak, treat the case as fragile rather than obviously attractive
+
+#### `DCF Core Modules`
+
+Use this when you need to understand what is actually driving the fair-value result.
+
+- check sustainable growth first
+- then review terminal value share and FCFF support
+- if fair value looks too sensitive to terminal assumptions, do not treat the point estimate as stable
+
+### 3. Use the calculation detail modal for verification
+
+Every major graph and KPI can lead into the same detail system.
+
+- open the modal when you need formulas, source lineage, and raw supporting datasets
+- use the CSV downloads when you want to verify that a chart is not hiding a weak input set
+- prefer the modal before making large slider changes based only on chart shape
+
+### 4. Use Target Stock Comparison as a ranking tool, not a final decision tool
+
+The bottom comparison section is best for ranking and triage.
+
+#### Similar Stocks Spread View
+
+- use this first to compare the selected ticker against sector peers
+- if there are too few same-sector names, remember the chart falls back to the active comparison universe
+- treat a strong spread bar as a prompt to inspect assumptions, not as proof the stock is superior
+
+#### Price Vs Fair Value Map
+
+- use this to see whether market price already sits above or below DCF value
+- larger bubbles mean larger expected-return spread, so investigate big outliers first
+- if a bubble is far from peers, confirm the price and DCF assumptions before trusting the signal
+
+#### Comparison table
+
+- sort by expected return spread for idea generation
+- sort by `ROIC - WACC` for quality and value-creation review
+- sort by DCF value when you want raw valuation context
+- use the highlighted active ticker row as the anchor while scanning peers
+
+Important interpretation rule:
+
+- this section is live and non-persisted
+- use Portfolio, not Corporate Analysis, when you need saved snapshots, history, or weight-aware review
 
 ## Data Sources
 

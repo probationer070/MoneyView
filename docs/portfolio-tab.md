@@ -110,6 +110,54 @@ The attribution request uses:
 - implied cash when saved weights sum to less than `100%`
 - the current benchmark and date window selected in the page
 
+### How To Use The Graphs
+
+#### Allocation donut chart
+
+Use the allocation donut first when you want to understand concentration before interpreting performance.
+
+- start by checking whether one or two sectors dominate the portfolio
+- compare the largest slices against the saved-weight table and implied-cash state
+- if a sector looks unexpectedly large, review saved weights before treating attribution output as intentional positioning
+- use the sector filter in holdings to inspect the names driving a large slice
+
+Interpretation rule:
+
+- the donut explains where capital is allocated
+- it does not explain whether that allocation helped or hurt performance
+
+#### Attribution waterfall chart
+
+Use the waterfall after the KPI cards when you want to explain `why` active return was positive or negative.
+
+- read `Active Return` first to confirm whether the portfolio outperformed or underperformed
+- then read `Allocation`, `Selection`, and `Interaction` in that order
+- a positive effect means that source added value relative to the benchmark
+- a negative effect means that source detracted from benchmark-relative performance
+- open `Details` when you need the formula and the largest sector driver behind each effect
+
+Practical reading order:
+
+- if `Allocation` is large, review sector overweight and underweight decisions
+- if `Selection` is large, inspect stock picking inside sectors
+- if `Interaction` is large, review combined sector-bet and stock-pick effects rather than treating them as isolated drivers
+
+#### Holding sparkline and stock-detail chart
+
+Use the watchlist sparkline for triage and the stock modal chart for review.
+
+- sparkline: quickly scan whether a holding has been trending up, down, or flat recently
+- stock modal OHLCV chart: inspect the exact price path when a row-level comparison metric looks surprising or invalid
+- if the modal shows outlier warnings or `N/A` comparison values, prefer the price chart and saved snapshot history over the spread metrics
+
+#### Snapshot-history visuals
+
+Use snapshot history when you want to compare the same stock or portfolio comparison across saved review dates.
+
+- open history from the page when you want day/version context
+- open stock-level history when you want to see how spread and DCF review metrics changed for one name
+- treat saved snapshots as the authoritative review path when the current live comparison is moving around during the day
+
 ### 4. Watchlist Holdings
 
 This is the tracking list, not the weighted portfolio model itself.

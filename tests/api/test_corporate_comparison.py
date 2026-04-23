@@ -403,8 +403,19 @@ def test_corporate_bulk_dcf_reports_returns_full_reports_for_requested_tickers(t
 
     from apps.api.routes import corporate as corporate_route
 
-    def fake_full_report(*, metrics, current_price, assumptions):
-        ticker = metrics.ticker
+    def fake_full_report(
+        ticker: str,
+        params,
+        *,
+        current_price_loader,
+        metrics_loader,
+        risk_free_rate,
+        equity_risk_premium,
+        country_risk_premium,
+    ):
+        metrics = metrics_loader(ticker)
+        current_price = current_price_loader(ticker)
+        assumptions = params
         report_id = f"bulk-{ticker.lower()}"
         return {
             "summary": {
@@ -432,12 +443,12 @@ def test_corporate_bulk_dcf_reports_returns_full_reports_for_requested_tickers(t
                 {"year": 1, "projected_fcff": 97.5, "discount_factor": 1.1, "present_value": 88.6},
             ],
             "wacc_breakdown": {
-                "risk_free_rate": 0.042,
+                "risk_free_rate": risk_free_rate,
                 "unlevered_beta": metrics.unlevered_beta,
                 "debt_ratio": metrics.debt_ratio,
                 "tax_rate": 0.25,
-                "equity_risk_premium": 0.055,
-                "country_risk_premium": metrics.crp,
+                "equity_risk_premium": equity_risk_premium,
+                "country_risk_premium": country_risk_premium,
             },
             "terminal_cash_flow": 133.2,
             "terminal_value": 1665.0,

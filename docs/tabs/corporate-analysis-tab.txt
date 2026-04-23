@@ -1,0 +1,233 @@
+MoneyView Tab Reference: Corporate Analysis
+
+Tab
+- Corporate Analysis
+
+Route
+- `/corporate`
+
+Primary Goal
+- Provide a single-company valuation and diagnostics workspace.
+- Support:
+  - ticker selection
+  - live assumption tuning
+  - backend DCF review
+  - chart-based diagnostics
+  - live peer comparison
+
+Design Intent
+- This is the densest research tab in MoneyView.
+- It is designed as a modeling desk rather than a passive dashboard.
+- The page has two simultaneous jobs:
+  - allow direct assumption editing
+  - show immediate analytical consequences
+- The left side behaves like a control panel.
+- The right side behaves like an analysis board.
+
+Overall Layout
+
+1. Header Zone
+- title
+- company context
+- company search
+- backend DCF shortcut
+- add-company form
+
+2. Main Analysis Grid
+- left column:
+  - realtime assumptions
+  - refresh controls
+  - basis selectors
+  - slider inputs
+- right column:
+  - KPI cards
+  - diagnostics graphs
+
+3. Bottom Comparison Zone
+- target stock comparison
+- live peer table
+- chart-style peer diagnostics
+- route handoff to Portfolio
+
+Major Sections
+
+1. Header Controls
+
+Content
+- `Company Search`
+- `Backend DCF`
+- `Refresh DCF`
+- `View Full Report`
+- `Calculate All Reports`
+- `Add Company`
+
+Design Notes
+- The header combines navigation, valuation shortcut, and entity management.
+- It is built so the active company identity remains obvious at all times.
+
+2. Realtime Assumptions Panel
+
+Purpose
+- Act as the model-input surface for the selected ticker.
+
+Controls
+- Growth Basis
+- Growth Year
+- ROIC Basis
+- ROIC Year
+- Refresh source data
+- Growth Rate
+- ROIC
+- WACC
+- Debt Ratio
+- Unlevered Beta
+- Country Risk Premium
+- Reinvestment Rate
+- Innovation Index
+- Governance Quality
+- ESG / Agency Penalty
+
+Design Notes
+- This panel is intentionally tool-like.
+- It uses small, dense controls rather than broad explanatory copy because the right side is reserved for output.
+- Refresh state is visible directly inside the control panel:
+  - last updated
+  - stale
+  - idle-first message
+
+Refresh And State Design
+- Heavy calculations are explicit refresh zones, not automatic mount-time fetches.
+- This includes:
+  - DCF
+  - comparison
+  - metric history
+  - quarterly statements
+  - price history
+- The page intentionally favors:
+  - cached previous result
+  - explicit user refresh
+  - visible stale state
+- Cached source-data is snapshot-aware, so a wrong ticker cache should never silently drive the current company UI.
+
+3. KPI Cards
+
+Cards
+- `ROIC - WACC`
+- `Bottom-up Ke`
+- `Levered Beta`
+- `Success Probability`
+
+Design Notes
+- These cards are the top summary layer for the chosen company.
+- They are clickable, so they are not just display widgets.
+- They are designed to answer:
+  - is value creation positive
+  - is required return too high
+  - is leverage risk elevated
+  - is the scenario robust or fragile
+
+4. Diagnostic Graph Suite
+
+Graphs
+- Company Status Graph
+- Hurdle Rate Decomposition
+- Beta + WACC Curve
+- Value Driver Matrix
+- Risk-Return Minard
+- DCF Core Modules
+
+Design Notes
+- The graphs are intentionally varied in visual grammar so each answers a different question.
+- The section is a diagnostic board, not a single narrative chart.
+- It is meant for:
+  - pattern recognition
+  - sensitivity reading
+  - assumption validation
+
+5. Calculation Detail Modal
+
+Purpose
+- Open any KPI or chart into a deeper explanation layer.
+
+Content
+- formula explanation
+- result summary
+- data lineage
+- supporting calculation rows
+- raw analysis datasets
+- CSV download actions for:
+  - raw analysis datasets
+  - 5-year historical OHLCV data
+  - quarterly statements
+
+Design Notes
+- This modal is the audit layer of the Corporate tab.
+- It exists so charts and KPIs can stay visually readable while still being explainable.
+
+6. Target Stock Comparison
+
+Purpose
+- Compare the active ticker against live peers or custom names.
+
+Metadata
+- risk-free rate
+- equity risk premium
+- stock return method
+- comparison reference method
+- comparison type
+- comparison universe
+
+Controls
+- universe
+- benchmark
+- custom tickers
+- sort by
+- direction
+- `Refresh comparison`
+- `Open Portfolio Testing`
+
+Table Fields
+- ticker
+- company
+- weight
+- `ROIC - WACC`
+- DCF value
+- current price
+- DCF return
+- CAPM return
+- market return
+- expected return spread
+
+Design Notes
+- This section is live, comparative, and exploratory.
+- It is intentionally separate from Portfolio because it is not weight-aware and not snapshot-history-driven.
+- It is for ranking and triage, not final portfolio review.
+
+Important Behavior Rules
+- The tab is ticker-centric.
+- The active ticker persists during the browser session.
+- Heavy analysis zones remain idle until manually refreshed.
+- Stored source-data is session-aware and snapshot-aware.
+- Portfolio-specific history, weighting, and snapshot governance live in the Portfolio tab.
+
+Primary User Workflow
+1. Search or select a company.
+2. Review current assumptions.
+3. Refresh source data if needed.
+4. Inspect KPI cards.
+5. Read diagnostic graphs.
+6. Open detail modal for formulas or raw lineage.
+7. Refresh DCF or comparison explicitly when a new valuation pass is needed.
+8. Move to Portfolio if the analysis should become weight-aware or snapshot-persisted.
+
+Primary Data Sources
+- `GET /api/v1/corporate/companies`
+- `POST /api/v1/corporate/companies`
+- `GET /api/v1/corporate/metrics/{ticker}`
+- `PUT /api/v1/corporate/metrics/{ticker}`
+- `GET /api/v1/corporate/metrics/{ticker}/history`
+- `GET /api/v1/corporate/metrics/{ticker}/quarterly-statements`
+- `GET /api/v1/detail/{ticker}/ohlcv`
+- `POST /api/v1/corporate/dcf/{ticker}`
+- `GET /api/v1/corporate/comparison`
+

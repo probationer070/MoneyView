@@ -1,0 +1,252 @@
+MoneyView Tab Reference: Portfolio
+
+Tab
+- Portfolio
+
+Route
+- `/portfolio`
+
+Primary Goal
+- Manage the user's tracked holdings and saved allocations.
+- Support review workflows for:
+  - comparison snapshots
+  - attribution
+  - stock-level drill-down
+  - saved snapshot history
+
+Design Intent
+- This is MoneyView's operations-heavy tab.
+- It is intentionally denser than Market Overview.
+- The design balances three jobs:
+  - portfolio control surface
+  - review dashboard
+  - saved-history workspace
+- The page is built around stacked white cards and clearly separated work zones so the user can move from summary to action without losing context.
+
+Overall Layout
+
+1. Header
+- Title: `Portfolio`
+- Establishes this tab as the weight-aware and snapshot-aware workspace.
+
+2. Top Analysis Zone
+- Comparison snapshot summary
+- snapshot controls
+- attribution cards and charts
+- analysis refresh state
+- This is the review layer of the page.
+
+3. Holdings And Allocation Zone
+- watchlist holdings
+- sync controls
+- allocation editing workspace
+- stock detail modal access
+- This is the control layer of the page.
+
+Major Sections
+
+1. Comparison Snapshot Summary
+
+Purpose
+- Show the latest saved or selected comparison review context for the portfolio universe.
+
+Content
+- snapshot as-of date
+- snapshot source mode
+- comparison universe
+- benchmark ticker
+- positive spread count
+- positive `ROIC - WACC` count
+- highest expected-return spread
+- generated timestamp
+- version count
+
+Controls
+- portfolio comparison universe
+- portfolio benchmark preset
+- portfolio benchmark ticker
+- portfolio custom tickers
+- portfolio comparison source
+- `Refresh Analysis`
+- `Save Current As Snapshot`
+- `Open Full Comparison View`
+- `Open Snapshot History`
+
+Design Notes
+- This section is built like a decision dashboard.
+- It visually prioritizes summary metrics and control buttons over raw per-row detail.
+- It is meant to answer:
+  - what review context am I in
+  - which benchmark am I using
+  - do I need to inspect deeper
+
+2. Snapshot History Review
+
+Purpose
+- Let the user review saved historical comparison states without mixing them with live controls.
+
+Content
+- history modal
+- saved snapshot rows grouped by day and version
+- review banner when a saved snapshot is selected
+- stock-level snapshot drill-down in the stock modal
+
+Design Notes
+- This is the memory system of the Portfolio tab.
+- Saved snapshots are treated as a deliberate review layer, not just cached live data.
+- The UI intentionally locks the benchmark and universe context when a saved snapshot is under review.
+
+3. Attribution Summary
+
+Purpose
+- Explain how portfolio performance compares with the benchmark.
+
+Top KPI Cards
+- Portfolio Return
+- Benchmark Return
+- Active Return
+- Beta
+
+Supporting Content
+- benchmark methodology notes
+- benchmark proxy status
+- allocation donut chart
+- attribution waterfall chart
+
+Design Notes
+- The KPI cards are the executive summary.
+- The donut explains positioning.
+- The waterfall explains why active return happened.
+- This section is built to move from:
+  - headline result
+  - to contribution source
+  - to stock-level follow-up
+
+4. Watchlist Holdings
+
+Purpose
+- Show tracked names independently of whether they currently have portfolio weight.
+
+Content Per Holding
+- company name
+- ticker
+- sector
+- last close
+- day-over-day delta
+- recent sparkline
+
+Interaction Modes
+- card view
+- table view
+- sector grouping
+- add holding
+- remove holding
+- open stock detail modal
+
+Design Notes
+- This area blends monitoring and editing.
+- Cards are better for quick reading.
+- Table mode is better for dense review and editing.
+- The sparkline is a triage cue, not a full analytical chart.
+
+5. Watchlist Sync Controls
+
+Purpose
+- Bridge the local DB-backed watchlist with JSON import/export.
+
+Controls
+- `Export Watchlist To JSON`
+- `Import JSON Into DB`
+- sync and import status surface
+
+Design Notes
+- This block is intentionally utility-oriented.
+- It should feel like a system control area rather than a market-analysis card.
+
+6. Portfolio Allocation Model
+
+Purpose
+- Convert the watchlist into an actual weighted test portfolio.
+
+Summary Content
+- tracked names count
+- allocated names count
+- invested weight
+- implied cash weight
+- cash treatment
+
+Editing Controls
+- per-row saved weight display
+- editable allocation input
+- row save action
+- `Normalize To 100%`
+- `Apply to Snapshot`
+
+Design Notes
+- This is the highest-action area of the page.
+- Inputs and save actions are intentionally near the holdings they affect.
+- The design keeps watchlist tracking and weighted ownership related but not identical.
+
+Stock Detail Modal
+
+Purpose
+- Open a single holding into a richer review surface.
+
+Content
+- OHLCV chart
+- key metric cards
+- snapshot version and source context
+- price-trend summary
+- stock-specific saved snapshot history
+- ticker-specific news
+
+Design Notes
+- The modal is the bridge between portfolio summary and stock-specific investigation.
+- It is intended for:
+  - validating unusual comparison metrics
+  - reading price path
+  - reviewing saved stock-level snapshot behavior
+
+Important Behavior Rules
+- Snapshot mode is the main persisted review path.
+- Live mode is review-only and does not rewrite history.
+- Per-stock comparison rows are more important than portfolio-level averages when outliers exist.
+- Comparison outliers can render as `N/A`.
+- Positive saved weights are used directly for attribution.
+- Weight below `100%` creates implied cash.
+- Zero-weight names stay in the watchlist but do not affect weighted portfolio results.
+
+Error And Empty States
+- `Portfolio Data Unavailable`
+- `No Holdings Yet`
+- `Attribution Pending Portfolio`
+- `Allocation Weights Exceed 100%`
+- `Attribution Engine Unavailable`
+- `Portfolio Snapshot Summary Unavailable`
+- `Snapshot History Unavailable`
+- `Selected Snapshot Unavailable`
+- `Snapshot Trend Unavailable`
+
+Primary User Workflow
+1. Open Portfolio.
+2. Review the current snapshot and benchmark context.
+3. Refresh analysis when needed.
+4. Review attribution KPIs and charts.
+5. Inspect holdings and saved weights.
+6. Adjust allocations if needed.
+7. Save or normalize weights.
+8. Persist a snapshot when a review state should be kept.
+
+Primary Data Sources
+- `GET /api/v1/portfolio/watchlist`
+- `POST /api/v1/portfolio/watchlist`
+- `DELETE /api/v1/portfolio/watchlist/{ticker}`
+- `POST /api/v1/portfolio/attribution`
+- `GET /api/v1/portfolio/stock/{ticker}`
+- `GET /api/v1/news/feed`
+- `POST /api/v1/news/crawl/stock`
+- `GET /api/v1/corporate/comparison`
+- `POST /api/v1/corporate/comparison/snapshot`
+- `GET /api/v1/corporate/comparison/history`
+- `GET /api/v1/corporate/comparison/snapshot-version`
+- `GET /api/v1/corporate/comparison/stock-history`
