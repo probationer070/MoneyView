@@ -56,7 +56,6 @@ import type {
   CorporateMetricHistoryApi,
   CorporateMetricsApi,
   DcfRequestSnapshot,
-  GrowthBasis,
   ImpliedErpInputs,
   QuarterlyStatementsApi,
   RawDatasetRow,
@@ -121,8 +120,7 @@ export default function CorporateAnalysisPage() {
   const [newCompanyName, setNewCompanyName] = useState("");
   const [newCompanySymbol, setNewCompanySymbol] = useState("");
   const [activeCalculation, setActiveCalculation] = useState<CalculationDetailKey | null>(null);
-  const [growthBasis, setGrowthBasis] = useState<GrowthBasis>("cagr");
-  const [growthYear, setGrowthYear] = useState("2025");
+  const [latestLoadedMetrics, setLatestLoadedMetrics] = useState<CorporateMetricsApi | null>(null);
   const [roicBasis, setRoicBasis] = useState<RoicBasis>("recent_average");
   const [roicYear, setRoicYear] = useState("2025");
   const [includeSubjectiveHealth, setIncludeSubjectiveHealth] = useState(false);
@@ -165,8 +163,8 @@ export default function CorporateAnalysisPage() {
   const [comparisonRefreshToken, setComparisonRefreshToken] = useState<string | null>(null);
   const debounced = useDebounce(assumptions, 250);
   const selectedMetricParams = useMemo(
-    () => metricBasisParams(growthBasis, growthYear, roicBasis, roicYear),
-    [growthBasis, growthYear, roicBasis, roicYear],
+    () => metricBasisParams(roicBasis, roicYear),
+    [roicBasis, roicYear],
   );
   const activeDcfSnapshot = useMemo<DcfRequestSnapshot>(() => ({
     ticker: debounced.ticker,
@@ -252,9 +250,10 @@ export default function CorporateAnalysisPage() {
     hydratingTickerRef.current = ticker;
     fetchApi<CorporateMetricsApi>(`/corporate/metrics/${ticker}`, { params: selectedMetricParams })
       .then((metrics) => {
-        setAssumptions((current) => (
-          current.ticker === ticker ? fromApiMetrics(metrics) : current
+        setLatestLoadedMetrics((current) => (
+          hydratingTickerRef.current === ticker || current?.ticker?.trim().toUpperCase() === ticker ? metrics : current
         ));
+        setAssumptions((current) => (current.ticker === ticker ? fromApiMetrics(metrics) : current));
       })
       .catch(() => {
         // Local storage remains the fallback when backend hydration is unavailable.
@@ -299,22 +298,15 @@ export default function CorporateAnalysisPage() {
   };
 
   const applyMetricHistorySelection = ({
-    nextGrowthBasis = growthBasis,
-    nextGrowthYear = growthYear,
     nextRoicBasis = roicBasis,
     nextRoicYear = roicYear,
   }: {
-    nextGrowthBasis?: GrowthBasis;
-    nextGrowthYear?: string;
     nextRoicBasis?: RoicBasis;
     nextRoicYear?: string;
   }) => {
     const history = metricsHistoryData;
     if (!history || history.ticker !== assumptions.ticker) return;
 
-    const growthValue = nextGrowthBasis === "cagr"
-      ? history.growth_cagr
-      : selectedMetricValue(nextGrowthBasis, nextGrowthYear, history.annual_growth_rates, history.growth_recent_average);
     const roicValue = selectedMetricValue(
       nextRoicBasis,
       nextRoicYear,
@@ -328,7 +320,6 @@ export default function CorporateAnalysisPage() {
       if (current.ticker !== history.ticker) return current;
       return {
         ...current,
-        growth: growthValue == null ? current.growth : growthValue,
         roic: roicValue == null ? current.roic : roicValue,
       };
     });
@@ -337,6 +328,7 @@ export default function CorporateAnalysisPage() {
   const selectTicker = (ticker: string) => {
     const normalizedTicker = ticker.trim().toUpperCase();
     setCompanySearch("");
+    setLatestLoadedMetrics(null);
     writeSessionCache(ACTIVE_TICKER_SESSION_KEY, normalizedTicker);
     try {
       const stored = window.localStorage.getItem(STORAGE_KEY);
@@ -489,6 +481,11 @@ export default function CorporateAnalysisPage() {
   const historicalPricesData = historicalPricesSnapshot === sourceDataTicker ? rawHistoricalPricesData : [];
   const dcfData = dcfDisplayData;
   const comparisonData = comparisonDisplayData;
+  const activeMetricsMeta = latestLoadedMetrics?.ticker?.trim().toUpperCase() === assumptions.ticker.trim().toUpperCase()
+    ? latestLoadedMetrics
+    : null;
+  const growthMeta = activeMetricsMeta?.growth_meta ?? null;
+  const roicMeta = activeMetricsMeta?.roic_meta ?? null;
   const dcfDisplayLastUpdatedAt = dcfStreamResult?.generated_at ?? dcfLastUpdatedAt;
   const comparisonDisplayLastUpdatedAt = comparisonQuery.data ? new Date(comparisonQuery.dataUpdatedAt).toISOString() : comparisonLastUpdatedAt;
   const sourceDataDisplayLastUpdatedAt = metricsHistoryQuery.data
@@ -859,26 +856,28 @@ export default function CorporateAnalysisPage() {
 
   const annualGrowthRates = annualMetricRows(metricsHistoryData?.annual_growth_rates ?? []);
   const annualRoicValues = annualMetricRows(metricsHistoryData?.annual_roic ?? []);
-  const selectedGrowthYearValue = annualGrowthRates.find((point) => String(point.year) === growthYear)?.value;
   const selectedRoicYearValue = annualRoicValues.find((point) => String(point.year) === roicYear)?.value;
-  const growthYearUnavailableMessage = growthBasis === "annual" && selectedGrowthYearValue == null
-    ? `${growthYear} Growth unavailable from Yahoo statements. Retaining the current/manual Growth Rate value.`
-    : "";
   const roicYearUnavailableMessage = roicBasis === "annual" && selectedRoicYearValue == null
     ? `${roicYear} ROIC unavailable from Yahoo statements. Retaining the current/manual ROIC value.`
     : "";
-  const growthBasisLabel = growthBasis === "cagr"
-    ? "5-year CAGR"
-    : growthBasis === "recent_average"
-      ? "recent multi-year average"
-      : `annual ${growthYear || annualGrowthRates.at(-1)?.year || ""}`.trim();
+  const growthBasisLabel = growthMeta?.metric_role === "fallback"
+    ? "stable CAGR unavailable; fallback assumption in use"
+    : "stable CAGR";
   const roicBasisLabel = roicBasis === "recent_average"
     ? "recent multi-year average"
     : roicBasis === "all_year_average"
       ? "all available years average"
       : `annual ${roicYear || annualRoicValues.at(-1)?.year || ""}`.trim();
 
-  const sourceLabel = "Yahoo Finance annual financial statements from fiscal years 2021+ when available; current slider/browser values and saved presets are fallbacks or manual overrides";
+  const sourceLabel = [
+    growthMeta?.metric_role === "fallback"
+      ? "Growth is currently using a fallback assumption because stable CAGR was unavailable."
+      : "Growth is using the stable CAGR derived from Yahoo annual revenue where available.",
+    roicMeta?.metric_role === "fallback"
+      ? "ROIC is currently using a fallback assumption because the stable invested-capital pipeline was not decision-grade."
+      : "ROIC is using the stabilized NOPAT / average invested-capital pipeline.",
+    "Current slider/browser values and saved presets remain manual override layers.",
+  ].join(" ");
 
   const calculationDetails = buildCalculationDetails({
     companyName,
@@ -1058,20 +1057,16 @@ export default function CorporateAnalysisPage() {
           hasMetricsHistoryData={Boolean(metricsHistoryData)}
           hasQuarterlyStatementsData={Boolean(quarterlyStatementsData)}
           hasHistoricalPricesData={historicalPricesData.length > 0}
-          growthBasis={growthBasis}
-          setGrowthBasis={setGrowthBasis}
-          growthYear={growthYear}
-          setGrowthYear={setGrowthYear}
           applyMetricHistorySelection={applyMetricHistorySelection}
-          annualGrowthRates={annualGrowthRates}
           growthBasisLabel={growthBasisLabel}
-          growthYearUnavailableMessage={growthYearUnavailableMessage}
+          growthMeta={growthMeta}
           roicBasis={roicBasis}
           setRoicBasis={setRoicBasis}
           roicYear={roicYear}
           setRoicYear={setRoicYear}
           annualRoicValues={annualRoicValues}
           roicBasisLabel={roicBasisLabel}
+          roicMeta={roicMeta}
           roicYearUnavailableMessage={roicYearUnavailableMessage}
           roicAudit={metricAuditQuery.data?.roic ?? null}
           waccAudit={metricAuditQuery.data?.wacc ?? null}

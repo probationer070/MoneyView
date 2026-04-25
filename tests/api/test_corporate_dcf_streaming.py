@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from apps.api.main import app
-from apps.api.models.schemas import CorporateMetrics
+from apps.api.models.schemas import CorporateDerivedMetricMeta, CorporateMetrics
 from apps.api.routes import corporate as corporate_route
 
 
@@ -91,3 +91,49 @@ def test_dcf_full_report_endpoint_returns_projection_rows(monkeypatch):
     assert payload["projection_rows"][0]["year"] == 1
     assert "wacc_breakdown" in payload
     assert payload["assumptions"]["wacc_used"] == 0.1
+
+
+def test_valuation_params_from_metrics_accepts_stabilized_metric_metadata():
+    params = corporate_route._valuation_params_from_metrics(
+        CorporateMetrics(
+            ticker="AAPL",
+            growth=6.0,
+            roic=18.0,
+            wacc=10.0,
+            debt_ratio=18.0,
+            unlevered_beta=1.05,
+            crp=0.8,
+            reinvestment=34.0,
+            fcff=92.0,
+            innovation=82.0,
+            market_share=64.0,
+            governance=74.0,
+            esg_penalty=22.0,
+            growth_meta=CorporateDerivedMetricMeta(
+                method="stable_cagr",
+                quality="invalid",
+                reason="Stable CAGR unavailable.",
+                warnings=["Stable CAGR unavailable."],
+                confidence=0.3,
+                source="Fallback growth assumption",
+                calculation_version="growth_v2_stable_cagr",
+                metric_role="fallback",
+                as_of=None,
+            ),
+            roic_meta=CorporateDerivedMetricMeta(
+                method="stable_invested_capital",
+                quality="estimated",
+                reason=None,
+                warnings=["Previous-year invested capital unavailable."],
+                confidence=0.78,
+                source="Stable ROIC from NOPAT over average invested capital",
+                calculation_version="roic_v3_stable_invested_capital",
+                metric_role="primary",
+                as_of="2025-12-31",
+            ),
+        )
+    )
+
+    assert params.revenue_growth_rate == 0.06
+    assert params.operating_margin == 0.18
+    assert params.terminal_growth_rate == 0.06

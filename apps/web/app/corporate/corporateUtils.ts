@@ -16,7 +16,6 @@ import type {
   CorporateCompany,
   CorporateMetricsApi,
   DcfRequestSnapshot,
-  GrowthBasis,
   ImpliedErpInputs,
   QuarterlyStatementRow,
   RawDatasetRow,
@@ -307,23 +306,16 @@ export function solveImpliedMarketReturn(inputs: ImpliedErpInputs) {
   return ((low + high) / 2) * 100;
 }
 
-export function metricBasisParams(
-  growthBasis: GrowthBasis,
-  growthYear: string,
-  roicBasis: RoicBasis,
-  roicYear: string,
-) {
+export function metricBasisParams(roicBasis: RoicBasis, roicYear: string) {
   const params: Record<string, string | number> = {
-    growth_basis: growthBasis,
     roic_basis: roicBasis,
   };
-  if (growthBasis === "annual" && growthYear) params.growth_year = growthYear;
   if (roicBasis === "annual" && roicYear) params.roic_year = roicYear;
   return params;
 }
 
 export function selectedMetricValue(
-  basis: GrowthBasis | RoicBasis,
+  basis: RoicBasis,
   selectedYear: string,
   annualValues: AnnualMetricPoint[],
   recentAverage: number | null | undefined,

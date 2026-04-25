@@ -57,7 +57,11 @@ export interface ImpliedErpInputs {
 export interface CorporateMetricsApi {
   ticker: string;
   growth: number;
+  growth_avg_legacy?: number | null;
+  growth_cagr_v2?: number | null;
   roic: number;
+  roic_legacy?: number | null;
+  roic_stable_v2?: number | null;
   wacc: number;
   debt_ratio: number;
   unlevered_beta: number;
@@ -68,9 +72,22 @@ export interface CorporateMetricsApi {
   market_share: number;
   governance: number;
   esg_penalty: number;
+  growth_meta?: CorporateDerivedMetricMeta | null;
+  roic_meta?: CorporateDerivedMetricMeta | null;
 }
 
-export type GrowthBasis = "cagr" | "recent_average" | "annual";
+export interface CorporateDerivedMetricMeta {
+  method: string;
+  quality: "ok" | "estimated" | "stale" | "suspicious" | "invalid" | "missing";
+  reason: string | null;
+  warnings: string[];
+  confidence: number;
+  source: string;
+  calculation_version: string;
+  metric_role: "primary" | "supporting" | "fallback";
+  as_of: string | null;
+}
+
 export type RoicBasis = "recent_average" | "all_year_average" | "annual";
 
 export interface AnnualMetricPoint {

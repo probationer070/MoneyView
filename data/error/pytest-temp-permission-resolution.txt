@@ -1,0 +1,79 @@
+Issue
+`pytest` failed before assertions with Windows temp and cleanup errors such as:
+
+- `PermissionError: [WinError 5] 액세스가 거부되었습니다: 'C:\Users\VIP\AppData\Local\Temp\pytest-of-VIP'`
+- `PermissionError: [WinError 5] 액세스가 거부되었습니다: 'E:\MoneyView\tmp_test_write\pytest_run3'`
+- `PermissionError: [WinError 5] 액세스가 거부되었습니다: 'C:\Users\VIP\.codex\memories\pytest_tmp_audit'`
+
+In this repo, pytest was failing during temp-directory setup or teardown, not because the application tests themselves were failing.
+
+Root cause
+- pytest normally creates and later deletes its own temp working directory.
+- In this environment, temp roots under the user profile and under the repo both hit Windows permission problems during that lifecycle.
+- Putting `--basetemp` inside the project was not sufficient. pytest could still fail when creating, scanning, or removing the directory.
+- The cache plugin added extra write noise under `.pytest_cache`, which made the environment problem noisier but was not the main blocker.
+
+Correct fix
+Use an external temp root outside the repo, for example `C:\Temp`, and give pytest a fresh run folder each time.
+
+Repo config:
+- Do not force `--basetemp` inside `E:\MoneyView`.
+- Temporary repo-safe config is to disable the cache plugin only:
+
+```toml
+[tool.pytest.ini_options]
+addopts = "-p no:cacheprovider"
+```
+
+Working PowerShell pattern:
+
+```powershell
+$root = 'C:\Temp\moneyview-pytest'
+New-Item -ItemType Directory -Force $root | Out-Null
+$run = Join-Path $root ('run-' + [guid]::NewGuid().ToString())
+pytest tests\api\test_corporate_metric_audit.py --basetemp=$run
+```
+
+Example for the related comparison suite:
+
+```powershell
+$root = 'C:\Temp\moneyview-pytest'
+New-Item -ItemType Directory -Force $root | Out-Null
+$run = Join-Path $root ('run-' + [guid]::NewGuid().ToString())
+pytest tests\api\test_corporate_comparison.py --basetemp=$run
+```
+
+Why this fix is appropriate
+- `C:\Temp` avoids the blocked `%TEMP%` path under `C:\Users\VIP\AppData\Local\Temp\pytest-of-VIP`.
+- It also avoids repo-local paths that this environment may protect during cleanup.
+- A fresh GUID-based run directory prevents pytest from reusing a temp directory with stale ACL or teardown residue.
+- Disabling the cache plugin reduces unrelated write attempts under `.pytest_cache`.
+
+Verified result
+Using the external-temp pattern above:
+
+- `tests\api\test_corporate_metric_audit.py` passed: `3 passed`
+- `tests\api\test_corporate_comparison.py` passed: `12 passed`
+
+Prevention guidance
+1. Do not pin pytest `--basetemp` to a fixed directory inside the repo on this machine.
+
+2. Prefer a fresh external run directory for every manual or agent-driven test run:
+
+```powershell
+$run = Join-Path 'C:\Temp\moneyview-pytest' ('run-' + [guid]::NewGuid().ToString())
+pytest ... --basetemp=$run
+```
+
+3. Keep repo config limited to:
+- disabling cache writes if needed
+- not hardcoding an in-repo basetemp
+
+4. If `C:\Temp` itself later becomes permission-restricted, create a different external root and keep the same pattern:
+- external path
+- explicit write permission
+- unique run folder per invocation
+
+Notes
+- The first successful external-temp run exposed real test failures after the environment issue was removed. That confirmed the earlier pytest problem was masking actual assertion results.
+- In this specific refactor, the real failures were compatibility regressions in route-level monkeypatch tests, not temp-directory issues.

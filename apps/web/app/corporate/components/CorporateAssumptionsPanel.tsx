@@ -1,14 +1,14 @@
 "use client";
 
 import { RefreshCw } from "lucide-react";
-import type { CorporateMetricAuditEntry } from "../../../../../packages/shared-types";
+import type { CorporateDerivedMetricMeta, CorporateMetricAuditEntry } from "../../../../../packages/shared-types";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { MetricQualityBadge } from "@/components/ui/MetricQualityBadge";
 import { formatAuditMetricValue, metricAuditReason } from "@/lib/metricAudit";
 import { RangeControl } from "./RangeControl";
 import { dateTimeText, pct } from "../corporateUtils";
 import { KOREA_COUNTRY_RISK_PREMIUM } from "../corporateConstants";
-import type { CorporateAssumptions, GrowthBasis, RoicBasis } from "../corporateTypes";
+import type { CorporateAssumptions, RoicBasis } from "../corporateTypes";
 import type { CalculationDetailKey } from "./calculationDetailTypes";
 
 interface CorporateAssumptionsPanelProps {
@@ -23,25 +23,26 @@ interface CorporateAssumptionsPanelProps {
   hasMetricsHistoryData: boolean;
   hasQuarterlyStatementsData: boolean;
   hasHistoricalPricesData: boolean;
-  growthBasis: GrowthBasis;
-  setGrowthBasis: (basis: GrowthBasis) => void;
-  growthYear: string;
-  setGrowthYear: (year: string) => void;
-  applyMetricHistorySelection: (options: { nextGrowthBasis?: GrowthBasis; nextGrowthYear?: string; nextRoicBasis?: RoicBasis; nextRoicYear?: string }) => void;
-  annualGrowthRates: { year: number | string; value: number | null }[];
+  applyMetricHistorySelection: (options: { nextRoicBasis?: RoicBasis; nextRoicYear?: string }) => void;
   growthBasisLabel: string;
-  growthYearUnavailableMessage: string;
+  growthMeta: CorporateDerivedMetricMeta | null;
   roicBasis: RoicBasis;
   setRoicBasis: (basis: RoicBasis) => void;
   roicYear: string;
   setRoicYear: (year: string) => void;
   annualRoicValues: { year: number | string; value: number | null }[];
   roicBasisLabel: string;
+  roicMeta: CorporateDerivedMetricMeta | null;
   roicYearUnavailableMessage: string;
   roicAudit: CorporateMetricAuditEntry | null;
   waccAudit: CorporateMetricAuditEntry | null;
   assumptions: CorporateAssumptions;
   update: (field: keyof CorporateAssumptions, value: number) => void;
+}
+
+function metricMetaReason(meta: CorporateDerivedMetricMeta | null) {
+  if (!meta) return "";
+  return meta.reason ?? meta.warnings[0] ?? "";
 }
 
 export function CorporateAssumptionsPanel({
@@ -56,20 +57,16 @@ export function CorporateAssumptionsPanel({
   hasMetricsHistoryData,
   hasQuarterlyStatementsData,
   hasHistoricalPricesData,
-  growthBasis,
-  setGrowthBasis,
-  growthYear,
-  setGrowthYear,
   applyMetricHistorySelection,
-  annualGrowthRates,
   growthBasisLabel,
-  growthYearUnavailableMessage,
+  growthMeta,
   roicBasis,
   setRoicBasis,
   roicYear,
   setRoicYear,
   annualRoicValues,
   roicBasisLabel,
+  roicMeta,
   roicYearUnavailableMessage,
   roicAudit,
   waccAudit,
@@ -113,43 +110,16 @@ export function CorporateAssumptionsPanel({
             <span className="text-[var(--text-muted)]">Source data stays idle on first load until refreshed.</span>
           )}
         </div>
-        <label className="grid gap-1 font-bold text-[var(--text-primary)]">
-          Growth Basis
-          <select
-            value={growthBasis}
-            onChange={(event) => {
-              const next = event.target.value as GrowthBasis;
-              setGrowthBasis(next);
-              applyMetricHistorySelection({ nextGrowthBasis: next, nextGrowthYear: growthYear });
-            }}
-            className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-2 py-2 text-sm font-bold text-[var(--text-primary)]"
-          >
-            <option value="cagr">5-year CAGR</option>
-            <option value="recent_average">Recent multi-year average</option>
-            <option value="annual">Select annual value</option>
-          </select>
-        </label>
-        {growthBasis === "annual" && (
-          <label className="grid gap-1 font-bold text-[var(--text-primary)]">
-            Growth Year
-            <select
-              value={growthYear}
-              onChange={(event) => {
-                const nextYear = event.target.value;
-                setGrowthYear(nextYear);
-                applyMetricHistorySelection({ nextGrowthYear: nextYear });
-              }}
-              className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-2 py-2 text-sm font-bold text-[var(--text-primary)]"
-            >
-              {annualGrowthRates.map((point) => (
-                <option key={point.year} value={point.year}>{point.year}: {point.value == null ? "Unavailable" : pct(point.value)}</option>
-              ))}
-            </select>
-            {growthYearUnavailableMessage && (
-              <span className="text-xs font-bold text-red-700">{growthYearUnavailableMessage}</span>
-            )}
-          </label>
-        )}
+        <div className="grid gap-1 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2">
+          <div className="text-xs font-bold text-[var(--text-primary)]">Growth Basis</div>
+          <div className="flex items-center gap-2 text-sm font-bold text-[var(--text-primary)]">
+            <span>{growthBasisLabel}</span>
+            {growthMeta ? <MetricQualityBadge quality={growthMeta.quality} /> : null}
+          </div>
+          <div className="text-xs text-[var(--text-muted)]">
+            {metricMetaReason(growthMeta) || "Growth Rate now stays on the stable CAGR path. Annual growth rates remain available in View Details for context."}
+          </div>
+        </div>
         <label className="grid gap-1 font-bold text-[var(--text-primary)]">
           ROIC Basis
           <select
@@ -189,8 +159,8 @@ export function CorporateAssumptionsPanel({
         )}
       </div>
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-1">
-        <RangeControl label="Growth Rate" description={`Yahoo annual revenue from 2021+. Current basis: ${growthBasisLabel}; annual rates are available in details.`} value={assumptions.growth} min={-5} max={20} step={0.5} onDetailClick={() => setActiveCalculation("growth")} onChange={(value) => update("growth", value)} />
-        <RangeControl label="ROIC" description={`${`Yahoo annual NOPAT / invested capital from 2021+. Current basis: ${roicBasisLabel}.`} ${roicAudit ? metricAuditReason(roicAudit) : ""}`.trim()} value={assumptions.roic} valueDisplay={roicAudit ? formatAuditMetricValue(roicAudit) : undefined} statusBadge={roicAudit ? <MetricQualityBadge quality={roicAudit.quality} /> : undefined} min={-5} max={45} step={0.5} onDetailClick={() => setActiveCalculation("roic")} onChange={(value) => update("roic", value)} />
+        <RangeControl label="Growth Rate" description={`${`Yahoo annual revenue from 2021+. Current basis: ${growthBasisLabel}; annual growth rates remain available in details as supporting context.`} ${metricMetaReason(growthMeta)}`.trim()} value={assumptions.growth} statusBadge={growthMeta ? <MetricQualityBadge quality={growthMeta.quality} /> : undefined} min={-5} max={20} step={0.5} onDetailClick={() => setActiveCalculation("growth")} onChange={(value) => update("growth", value)} />
+        <RangeControl label="ROIC" description={`${`Yahoo annual NOPAT / invested capital from 2021+. Current basis: ${roicBasisLabel}.`} ${roicAudit ? metricAuditReason(roicAudit) : metricMetaReason(roicMeta)}`.trim()} value={assumptions.roic} valueDisplay={roicAudit ? formatAuditMetricValue(roicAudit) : undefined} statusBadge={roicAudit ? <MetricQualityBadge quality={roicAudit.quality} /> : roicMeta ? <MetricQualityBadge quality={roicMeta.quality} /> : undefined} min={-5} max={45} step={0.5} onDetailClick={() => setActiveCalculation("roic")} onChange={(value) => update("roic", value)} />
         <RangeControl label="WACC" description={`${"Derived from Yahoo beta and the most recent Yahoo annual statement capital structure, tax rate, and cost of debt; not directly reported by Yahoo statements."} ${waccAudit ? metricAuditReason(waccAudit) : ""}`.trim()} value={assumptions.wacc} valueDisplay={waccAudit ? formatAuditMetricValue(waccAudit) : undefined} statusBadge={waccAudit ? <MetricQualityBadge quality={waccAudit.quality} /> : undefined} min={2} max={24} step={0.25} onDetailClick={() => setActiveCalculation("wacc")} onChange={(value) => update("wacc", value)} />
         <RangeControl label="Debt Ratio" description="Uses the most recent Yahoo annual debt / (debt + equity), not a 5-year average." value={assumptions.debtRatio} min={0} max={90} step={1} onDetailClick={() => setActiveCalculation("debtRatio")} onChange={(value) => update("debtRatio", value)} />
         <RangeControl label="Unlevered Beta" description="Yahoo levered beta de-levered with the most recent annual D/E and tax rate from Yahoo statements; not directly reported in statements." value={assumptions.unleveredBeta} min={0.4} max={2.5} step={0.05} suffix="" onDetailClick={() => setActiveCalculation("unleveredBeta")} onChange={(value) => update("unleveredBeta", value)} />

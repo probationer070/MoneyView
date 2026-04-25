@@ -101,7 +101,11 @@ class CorporateMetrics(BaseModel):
 
     ticker: str
     growth: float = 6.0
+    growth_avg_legacy: float | None = None
+    growth_cagr_v2: float | None = None
     roic: float = 18.0
+    roic_legacy: float | None = None
+    roic_stable_v2: float | None = None
     wacc: float = 10.0
     debt_ratio: float = 18.0
     unlevered_beta: float = 1.05
@@ -112,10 +116,26 @@ class CorporateMetrics(BaseModel):
     market_share: float = 64.0
     governance: float = 74.0
     esg_penalty: float = 22.0
+    growth_meta: "CorporateDerivedMetricMeta | None" = None
+    roic_meta: "CorporateDerivedMetricMeta | None" = None
 
 
 class MetricQuality(str):
     """Quality states used to qualify derived valuation metrics."""
+
+
+class CorporateDerivedMetricMeta(BaseModel):
+    """Decision-surface metadata for one derived corporate metric."""
+
+    method: str = ""
+    quality: str = "missing"
+    reason: str | None = None
+    warnings: List[str] = Field(default_factory=list)
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+    source: str = ""
+    calculation_version: str = ""
+    metric_role: str = "primary"
+    as_of: str | None = None
 
 
 class CorporateMetricAuditInput(BaseModel):
@@ -133,9 +153,11 @@ class CorporateMetricAuditEntry(BaseModel):
 
     value: float | None = None
     display_value: str = "N/A"
+    method: str = ""
     quality: str = "missing"
     reason: str | None = None
     warnings: List[str] = Field(default_factory=list)
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
     inputs_used: List[CorporateMetricAuditInput] = Field(default_factory=list)
     source: str = ""
     as_of: str | None = None
@@ -148,9 +170,11 @@ class CorporateMetricAudit(BaseModel):
     ticker: str
     source_mode: str = "unavailable"
     generated_at: str
+    growth: CorporateMetricAuditEntry | None = None
     roic: CorporateMetricAuditEntry
     wacc: CorporateMetricAuditEntry
     spread: CorporateMetricAuditEntry
+    dcf: CorporateMetricAuditEntry | None = None
 
 
 class CorporateCompany(BaseModel):

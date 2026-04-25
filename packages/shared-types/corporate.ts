@@ -109,9 +109,11 @@ export interface CorporateMetricAuditInput {
 export interface CorporateMetricAuditEntry {
   value: number | null;
   display_value: string;
+  method: string;
   quality: MetricQuality;
   reason: string | null;
   warnings: string[];
+  confidence: number;
   inputs_used: CorporateMetricAuditInput[];
   source: string;
   as_of: string | null;
@@ -122,7 +124,21 @@ export interface CorporateMetricAudit {
   ticker: string;
   source_mode: "yahoo_finance" | "corporate_metrics" | "default_model" | "unavailable";
   generated_at: string;
+  growth: CorporateMetricAuditEntry | null;
   roic: CorporateMetricAuditEntry;
   wacc: CorporateMetricAuditEntry;
   spread: CorporateMetricAuditEntry;
+  dcf: CorporateMetricAuditEntry | null;
+}
+
+export interface CorporateDerivedMetricMeta {
+  method: string;
+  quality: MetricQuality;
+  reason: string | null;
+  warnings: string[];
+  confidence: number;
+  source: string;
+  calculation_version: string;
+  metric_role: "primary" | "supporting" | "fallback";
+  as_of: string | null;
 }

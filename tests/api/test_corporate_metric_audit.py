@@ -72,16 +72,26 @@ def test_metric_audit_marks_missing_roic_when_yahoo_years_do_not_overlap(tmp_pat
     payload = response.json()
     assert payload["ticker"] == "AAPL"
     assert payload["source_mode"] == "yahoo_finance"
+    assert payload["growth"]["quality"] == "invalid"
+    assert payload["growth"]["method"] == "stable_cagr"
+    assert payload["growth"]["confidence"] < 0.5
+    assert payload["growth"]["calculation_version"] == "growth_v2_stable_cagr"
     assert payload["roic"]["quality"] == "missing"
     assert payload["roic"]["reason"] == "No overlapping Yahoo statement years were available to compute ROIC."
-    assert payload["roic"]["calculation_version"] == "roic_v2_average_invested_capital"
+    assert payload["roic"]["method"] == "stable_invested_capital"
+    assert payload["roic"]["confidence"] < 0.5
+    assert payload["roic"]["calculation_version"] == "roic_v3_stable_invested_capital"
     assert payload["wacc"]["quality"] == "estimated"
+    assert payload["wacc"]["method"] == "latest_capital_structure"
     assert payload["wacc"]["warnings"] == ["Market capitalization was unavailable, so debt and equity weights fall back to statement debt ratio."]
     assert payload["wacc"]["calculation_version"] == "wacc_v2_latest_capital_structure"
     assert payload["spread"]["quality"] == "missing"
     assert payload["spread"]["reason"] == "ROIC - WACC inherits the lower-confidence state of the two source metrics."
+    assert payload["spread"]["method"] == "roic_minus_wacc"
     assert payload["spread"]["warnings"] == ["ROIC - WACC inherits the lower-confidence state of ROIC and WACC."]
     assert payload["spread"]["calculation_version"] == "spread_v1_roic_minus_wacc"
+    assert payload["dcf"]["quality"] == "missing"
+    assert payload["dcf"]["method"] == "dcf_summary_placeholder"
 
 
 def test_metric_audit_marks_invalid_when_average_invested_capital_is_non_positive(tmp_path, monkeypatch):
@@ -102,14 +112,14 @@ def test_metric_audit_marks_invalid_when_average_invested_capital_is_non_positiv
             },
             balance_rows={
                 "2024-12-31": {
-                    "Total Debt": 20.0,
-                    "Stockholders Equity": 30.0,
-                    "Cash And Cash Equivalents": 60.0,
+                    "Total Debt": 300000.0,
+                    "Stockholders Equity": 400000.0,
+                    "Cash And Cash Equivalents": 600000.0,
                 },
                 "2025-12-31": {
-                    "Total Debt": 20.0,
-                    "Stockholders Equity": 30.0,
-                    "Cash And Cash Equivalents": 60.0,
+                    "Total Debt": 300000.0,
+                    "Stockholders Equity": 400000.0,
+                    "Cash And Cash Equivalents": 600000.0,
                 },
             },
             info={},
@@ -122,10 +132,11 @@ def test_metric_audit_marks_invalid_when_average_invested_capital_is_non_positiv
 
     payload = response.json()
     assert payload["roic"]["quality"] == "invalid"
-    assert payload["roic"]["reason"] == "Average invested capital is missing or non-positive."
-    assert "Average invested capital is missing or non-positive." in payload["roic"]["warnings"]
+    assert payload["roic"]["reason"] == "Invested capital is too small; ROIC denominator unstable."
+    assert "Invested capital is too small; ROIC denominator unstable." in payload["roic"]["warnings"]
+    assert payload["growth"]["quality"] == "invalid"
     avg_capital = next(item for item in payload["roic"]["inputs_used"] if item["field"] == "average_invested_capital")
-    assert avg_capital["value"] == -10.0
+    assert avg_capital["value"] is None
     assert payload["spread"]["quality"] == "invalid"
 
 
@@ -139,22 +150,22 @@ def test_metric_audit_marks_suspicious_when_average_invested_capital_is_too_smal
         lambda ticker, endpoint: _make_bundle(
             income_rows={
                 "2025-12-31": {
-                    "Operating Income": 0.06,
-                    "Pretax Income": 0.06,
-                    "Tax Provision": 0.01,
-                    "Interest Expense": 0.05,
+                    "Operating Income": 20000000.0,
+                    "Pretax Income": 20000000.0,
+                    "Tax Provision": 3000000.0,
+                    "Interest Expense": 50000.0,
                 },
             },
             balance_rows={
                 "2024-12-31": {
-                    "Total Debt": 1.0,
-                    "Stockholders Equity": 1.0,
-                    "Cash And Cash Equivalents": 1.5,
+                    "Total Debt": 500000.0,
+                    "Stockholders Equity": 1000000.0,
+                    "Cash And Cash Equivalents": 1500000.0,
                 },
                 "2025-12-31": {
-                    "Total Debt": 1.0,
-                    "Stockholders Equity": 1.0,
-                    "Cash And Cash Equivalents": 1.5,
+                    "Total Debt": 500000.0,
+                    "Stockholders Equity": 1000000.0,
+                    "Cash And Cash Equivalents": 1500000.0,
                 },
             },
             info={"beta": 1.05},
@@ -169,6 +180,7 @@ def test_metric_audit_marks_suspicious_when_average_invested_capital_is_too_smal
     assert payload["roic"]["quality"] == "suspicious"
     assert payload["roic"]["reason"] == "Average invested capital is unusually small relative to NOPAT."
     assert "Average invested capital is unusually small relative to NOPAT." in payload["roic"]["warnings"]
+    assert payload["growth"]["quality"] == "invalid"
     assert payload["spread"]["quality"] == "suspicious"
     assert payload["roic"]["inputs_used"]
     assert payload["wacc"]["inputs_used"]

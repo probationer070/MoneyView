@@ -62,6 +62,11 @@ export function MetricAuditPanel({
                 Calculation version: {entry.calculation_version}
               </div>
             ) : null}
+            <p>
+              Method: <span className="font-semibold text-[var(--text-primary)]">{entry.method || "Unavailable"}</span>
+              {" "}
+              Confidence: <span className="font-semibold text-[var(--text-primary)]">{Math.round(entry.confidence * 100)}%</span>
+            </p>
           </div>
         </div>
         <MetricQualityBadge quality={entry.quality} />
