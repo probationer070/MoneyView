@@ -18,6 +18,13 @@ export type PortfolioPageMockStats = {
   stockSnapshotHistoryRequests: number;
 };
 
+export type PortfolioPageMockOptions = {
+  failStockDetail?: boolean;
+  failNewsFeed?: boolean;
+  excludeComparisonTickers?: string[];
+  nullMetricTicker?: string;
+};
+
 function buildAttribution(weights: number[], tickers: string[]) {
   const normalizedWeights = tickers.map((_, index) => weights[index] ?? 0);
   const portfolioReturn = normalizedWeights.reduce((sum, weight, index) => sum + weight * (0.08 + index * 0.02), 0);
@@ -87,7 +94,7 @@ function buildAttribution(weights: number[], tickers: string[]) {
   };
 }
 
-export async function mockPortfolioPageApi(page: Page, stats?: PortfolioPageMockStats) {
+export async function mockPortfolioPageApi(page: Page, stats?: PortfolioPageMockStats, options?: PortfolioPageMockOptions) {
   let watchlist: PortfolioStock[] = cloneFixture(portfolioPartialWeightsFixture);
   let companyRegistry = [
     { ticker: "AAPL", name: "Apple Inc.", sector: "Technology", source: "portfolio" },
@@ -180,8 +187,8 @@ export async function mockPortfolioPageApi(page: Page, stats?: PortfolioPageMock
   };
 
   const comparisonRowsByUniverse = (comparisonUniverse: string, benchmarkTicker: string, customTickers: string[]) => {
-    if (comparisonUniverse === "custom") {
-      return [
+    const rows = comparisonUniverse === "custom"
+      ? [
         {
           ticker: benchmarkTicker,
           name: benchmarkTicker,
@@ -212,11 +219,74 @@ export async function mockPortfolioPageApi(page: Page, stats?: PortfolioPageMock
           market_expected_return: 9.7,
           expected_return_spread: 4.61 - index,
         })),
-      ];
-    }
+      ]
+      : cloneFixture(benchmarkUniverseFixture.rows);
 
-    return cloneFixture(benchmarkUniverseFixture.rows);
+    const excludedTickers = new Set((options?.excludeComparisonTickers ?? []).map((ticker) => ticker.toUpperCase()));
+    return rows
+      .filter((row) => !excludedTickers.has(String(row.ticker).toUpperCase()))
+      .map((row) => {
+        if ((options?.nullMetricTicker ?? "").toUpperCase() !== String(row.ticker).toUpperCase()) {
+          return row;
+        }
+        return {
+          ...row,
+          roic_minus_wacc: null,
+          dcf_implied_return: null,
+          expected_return_spread: null,
+        };
+      });
   };
+  const metricAudit = (ticker: string) => ({
+    ticker,
+    source_mode: "yahoo_finance",
+    generated_at: nowIso(),
+    roic: {
+      value: 18,
+      display_value: "18.0%",
+      quality: "ok",
+      reason: null,
+      warnings: [],
+      source: "Yahoo Finance annual or quarterly statement bundle",
+      as_of: "2025-12-31",
+      calculation_version: "roic_v2_average_invested_capital",
+      inputs_used: [
+        { field: "operating_income", label: "Operating income / EBIT", value: 114000000000, display_value: "$114,000,000,000", source: "Yahoo Finance annual or quarterly statement bundle" },
+        { field: "tax_rate", label: "Tax rate", value: 0.156, display_value: "15.6%", source: "Yahoo Finance annual or quarterly statement bundle" },
+        { field: "average_invested_capital", label: "Average invested capital", value: 118000000000, display_value: "$118,000,000,000", source: "Yahoo Finance annual or quarterly statement bundle" },
+        { field: "final_roic_value", label: "Final ROIC value", value: 18, display_value: "18.0%", source: "Computed from recent_average basis" },
+      ],
+    },
+    wacc: {
+      value: 10,
+      display_value: "10.0%",
+      quality: "estimated",
+      reason: "Market capitalization was unavailable, so debt and equity weights fall back to statement debt ratio.",
+      warnings: ["Market capitalization was unavailable, so debt and equity weights fall back to statement debt ratio."],
+      source: "Yahoo Finance statement bundle plus market profile",
+      as_of: "2025-12-31",
+      calculation_version: "wacc_v2_latest_capital_structure",
+      inputs_used: [
+        { field: "risk_free_rate", label: "Risk-free rate", value: 0.042, display_value: "4.2%", source: "Model policy input" },
+        { field: "beta", label: "Beta", value: 1.12, display_value: "1.12", source: "Yahoo Finance statement bundle plus market profile" },
+        { field: "final_wacc_value", label: "Final WACC value", value: 10, display_value: "10.0%", source: "Weighted capital costs" },
+      ],
+    },
+    spread: {
+      value: 8,
+      display_value: "8.0%",
+      quality: "estimated",
+      reason: "ROIC - WACC inherits the lower-confidence state of the two source metrics.",
+      warnings: ["ROIC - WACC inherits the lower-confidence state of ROIC and WACC."],
+      source: "Derived spread",
+      as_of: "2025-12-31",
+      calculation_version: "spread_v1_roic_minus_wacc",
+      inputs_used: [
+        { field: "roic", label: "ROIC", value: 18, display_value: "18.0%", source: "Yahoo Finance annual or quarterly statement bundle" },
+        { field: "wacc", label: "WACC", value: 10, display_value: "10.0%", source: "Yahoo Finance statement bundle plus market profile" },
+      ],
+    },
+  });
 
   await page.route("**/*", async (route) => {
     const url = new URL(route.request().url());
@@ -425,6 +495,11 @@ export async function mockPortfolioPageApi(page: Page, stats?: PortfolioPageMock
       });
     }
 
+    if (pathname.startsWith(`${API_PREFIX}/corporate/metrics/`) && pathname.endsWith("/audit") && method === "GET") {
+      const ticker = (pathname.split("/").at(-2) ?? "AAPL").toUpperCase();
+      return json(route, metricAudit(ticker));
+    }
+
     if (pathname === `${API_PREFIX}/portfolio/watchlist` && method === "POST") {
       const payload = JSON.parse(route.request().postData() ?? "{}");
       const nextRow: PortfolioStock = {
@@ -525,6 +600,13 @@ export async function mockPortfolioPageApi(page: Page, stats?: PortfolioPageMock
 
     if (pathname.startsWith(`${API_PREFIX}/portfolio/stock/`) && method === "GET") {
       if (stats) stats.stockDetailRequests += 1;
+      if (options?.failStockDetail) {
+        return route.fulfill({
+          status: 500,
+          contentType: "application/json",
+          body: JSON.stringify({ detail: "Mock stock detail failure" }),
+        });
+      }
       const ticker = pathname.split("/").at(-1) ?? "AAPL";
       return json(route, {
         ticker,
@@ -549,6 +631,13 @@ export async function mockPortfolioPageApi(page: Page, stats?: PortfolioPageMock
     }
 
     if (pathname === `${API_PREFIX}/news/feed` && method === "GET") {
+      if (options?.failNewsFeed) {
+        return route.fulfill({
+          status: 500,
+          contentType: "application/json",
+          body: JSON.stringify({ detail: "Mock news feed failure" }),
+        });
+      }
       const ticker = url.searchParams.get("ticker") ?? "AAPL";
       return json(route, Array.from({ length: 5 }, (_, index) => ({
         id: index + 1,

@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
 
 export function RangeControl({
@@ -10,6 +11,8 @@ export function RangeControl({
   step,
   suffix = "%",
   description,
+  valueDisplay,
+  statusBadge,
   onDetailClick,
   onChange,
 }: {
@@ -20,6 +23,8 @@ export function RangeControl({
   step: number;
   suffix?: string;
   description?: string;
+  valueDisplay?: string;
+  statusBadge?: ReactNode;
   onDetailClick?: () => void;
   onChange: (value: number) => void;
 }) {
@@ -44,9 +49,11 @@ export function RangeControl({
             label
           )}
         </span>
-        <span className="text-[var(--text-primary)] transition-colors group-hover/range:text-[var(--surface)]">
-          {value.toFixed(1)}
-          {suffix}
+        <span className="flex items-center gap-2 text-[var(--text-primary)] transition-colors group-hover/range:text-[var(--surface)]">
+          {statusBadge}
+          <span>
+            {valueDisplay ?? `${value.toFixed(1)}${suffix}`}
+          </span>
         </span>
       </div>
       <input

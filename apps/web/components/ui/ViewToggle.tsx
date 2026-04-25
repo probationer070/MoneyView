@@ -33,9 +33,9 @@ export function ViewToggle({ value, onChange, className }: ViewToggleProps) {
             type="button"
             onClick={() => onChange(option.value)}
             className={clsx(
-              "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+              "rounded-md px-3 py-1.5 text-[length:var(--type-label)] font-medium transition-colors",
               selected
-                ? "bg-[var(--surface)] text-white shadow-sm"
+                ? "bg-[var(--surface)] text-white"
                 : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
             )}
             aria-pressed={selected}

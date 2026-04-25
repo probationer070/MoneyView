@@ -6,6 +6,8 @@ import { fetchApi } from "@/lib/api";
 import { RefreshCw } from "lucide-react";
 import { DiagnosticRadar } from "@/components/charts/DiagnosticRadar";
 import { TornadoChart } from "@/components/charts/TornadoChart";
+import { ErrorState } from "@/components/ui/ErrorState";
+import { LoadingState } from "@/components/ui/LoadingState";
 
 interface RadarEntry {
     subject: string;
@@ -66,14 +68,14 @@ export const DiagnosticWorkbench: React.FC<{ ticker: string }> = ({ ticker }) =>
     );
 
     // Parallel React Query fetching for completely decoupled Recharts layouts
-    const { data: radarData, isLoading: radarLoading } = useQuery({
+    const { data: radarData, isLoading: radarLoading, isError: radarError } = useQuery({
         queryKey: ["detail-radar", requestedSnapshot?.ticker ?? "idle", refreshToken ?? "idle"],
         queryFn: ({ signal }) => fetchApi<RadarEntry[]>(`/corporate/diagnostic/${requestedSnapshot?.ticker ?? ticker}/radar`, { signal }),
         staleTime: 1000 * 60 * 60, // Scored rarely update intra-day
         enabled: Boolean(requestedSnapshot && refreshToken),
     });
 
-    const { data: tornadoData, isLoading: tornadoLoading } = useQuery({
+    const { data: tornadoData, isLoading: tornadoLoading, isError: tornadoError } = useQuery({
         queryKey: ["detail-tornado", requestedSnapshot?.ticker ?? "idle", refreshToken ?? "idle"],
         queryFn: ({ signal }) => fetchApi<TornadoEntry[]>(`/corporate/diagnostic/${requestedSnapshot?.ticker ?? ticker}/tornado`, { signal }),
         staleTime: 1000 * 60 * 60, 
@@ -131,28 +133,32 @@ export const DiagnosticWorkbench: React.FC<{ ticker: string }> = ({ ticker }) =>
 
             <div className="relative">
                 {radarLoading && (
-                    <div className="absolute inset-0 bg-[var(--bg-surface)] z-10 rounded-[var(--radius)] border border-gray-100 p-6 flex flex-col shadow-sm">
-                        <div className="h-6 w-48 bg-gray-200 rounded animate-pulse mb-6"></div>
-                        <div className="flex-1 w-full flex items-center justify-center">
-                            <div className="w-[80%] aspect-square rounded-full border-[20px] border-gray-100 animate-pulse"></div>
-                        </div>
+                    <div className="absolute inset-0 z-10 rounded-[var(--radius)] bg-[var(--bg-surface)]">
+                        <LoadingState variant="skeleton" label="Loading radar diagnostics..." />
                     </div>
                 )}
-                {displayRadarData ? <DiagnosticRadar data={displayRadarData} /> : <div className="h-[400px] bg-[var(--bg-surface)] rounded-lg border border-dashed border-[var(--border-default)]"></div>}
+                {radarError && !displayRadarData ? (
+                    <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-5">
+                        <ErrorState title="Radar Diagnostics Unavailable" message="Refresh diagnostics to retry the strategic positioning radar." />
+                    </div>
+                ) : (
+                    <DiagnosticRadar data={displayRadarData ?? []} />
+                )}
             </div>
 
             <div className="relative">
                 {tornadoLoading && (
-                    <div className="absolute inset-0 bg-[var(--bg-surface)] z-10 rounded-[var(--radius)] border border-gray-100 p-6 flex flex-col shadow-sm">
-                        <div className="h-6 w-64 bg-gray-200 rounded animate-pulse mb-10"></div>
-                        <div className="space-y-8 mt-4 w-full px-6">
-                            <div className="h-10 w-full bg-[var(--bg-subtle)] rounded animate-pulse relative"><div className="absolute left-0 top-0 h-full w-[25%] bg-gray-200 rounded-l"></div></div>
-                            <div className="h-10 w-full bg-[var(--bg-subtle)] rounded animate-pulse relative"><div className="absolute left-0 top-0 h-full w-[60%] bg-gray-200 rounded-l"></div></div>
-                            <div className="h-10 w-full bg-[var(--bg-subtle)] rounded animate-pulse relative"><div className="absolute left-0 top-0 h-full w-[85%] bg-gray-200 rounded-l"></div></div>
-                        </div>
+                    <div className="absolute inset-0 z-10 rounded-[var(--radius)] bg-[var(--bg-surface)]">
+                        <LoadingState variant="skeleton" label="Loading tornado diagnostics..." />
                     </div>
                 )}
-                {displayTornadoData ? <TornadoChart data={displayTornadoData} /> : <div className="h-[400px] bg-[var(--bg-surface)] rounded-lg border border-dashed border-[var(--border-default)]"></div>}
+                {tornadoError && !displayTornadoData ? (
+                    <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-5">
+                        <ErrorState title="Tornado Diagnostics Unavailable" message="Refresh diagnostics to retry the sensitivity bounds chart." />
+                    </div>
+                ) : (
+                    <TornadoChart data={displayTornadoData ?? []} />
+                )}
             </div>
         </div>
     );

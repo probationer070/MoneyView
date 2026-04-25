@@ -3,7 +3,6 @@
 import type { CorrelationInput, CorrelationResult } from "../lib/types";
 import { Download, Loader2, Play } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Cell, Scatter, ScatterChart, Tooltip, XAxis, YAxis, ZAxis } from "recharts";
-import { ResponsiveChart } from "@/components/ui/ResponsiveChart";
 import { ActionButton } from "@/components/ui/ActionButton";
 import {
   AXIS_LINE_STYLE,
@@ -13,17 +12,20 @@ import {
   DEFAULT_TOOLTIP_PROPS,
   GRID_STYLE,
   fmtPctTick,
+  withTooltipProps,
 } from "@/lib/chartConfig";
-import { MetricCard, numberText, pct } from "./shared";
+import { MetricCard, WarningNotice, numberText, pct } from "./shared";
 import { MonteCarloRunPanel } from "./MonteCarloRunPanel";
 import { MonteCarloTabSummary } from "./MonteCarloTabSummary";
 import { HeatmapPanel } from "@/components/charts/HeatmapPanel";
+import { ChartGuard } from "./ChartGuard";
 
 type Props = {
   correlationInput: CorrelationInput;
   correlationResult: CorrelationResult | null;
   correlationStatus: "idle" | "loading" | "error" | "cancelled";
   correlationProgress: number;
+  warnings: string[];
   updateCorrelation: <K extends keyof CorrelationInput>(key: K, value: CorrelationInput[K]) => void;
   updateCorrelationAsset: (assetIndex: number, field: "name" | "expectedReturn" | "volatility", value: string | number) => void;
   updateCorrelationCell: (rowIndex: number, columnIndex: number, value: number) => void;
@@ -38,6 +40,7 @@ export function CorrelationModelSection({
   correlationResult,
   correlationStatus,
   correlationProgress,
+  warnings,
   updateCorrelation,
   updateCorrelationAsset,
   updateCorrelationCell,
@@ -98,7 +101,7 @@ export function CorrelationModelSection({
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(340px,0.95fr)_minmax(0,1.45fr)_minmax(260px,0.8fr)]">
         <aside className="space-y-6">
           {/* Left panel: asset assumptions, correlation matrix, and run action */}
-          <section className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-5 shadow-sm">
+          <section className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-5">
             <h2 className="text-lg font-black text-[var(--text-primary)]">Multi-Asset Setup</h2>
             <div className="mt-3 grid grid-cols-[88px_minmax(0,1fr)_minmax(0,1fr)] gap-2 text-xs font-bold uppercase tracking-wide text-[var(--text-muted)]">
               <div>Asset</div>
@@ -168,7 +171,7 @@ export function CorrelationModelSection({
                 <span>{correlationInput.simulationCount.toLocaleString()}</span>
               </div>
               <input type="range" min={500} max={5000} step={100} value={correlationInput.simulationCount} onChange={(event) => updateCorrelation("simulationCount", Number(event.target.value))} className="w-full accent-[var(--accent)]" />
-              <button type="button" onClick={runCorrelationSimulation} disabled={correlationStatus === "loading"} className="inline-flex w-full items-center justify-center gap-2 rounded-[var(--radius)] bg-[var(--accent)] px-5 py-3 text-sm font-black text-white shadow-sm disabled:opacity-60">
+              <button type="button" onClick={runCorrelationSimulation} disabled={correlationStatus === "loading"} className="inline-flex w-full items-center justify-center gap-2 rounded-[var(--radius)] bg-[var(--accent)] px-5 py-3 text-sm font-black text-white disabled:opacity-60">
                 {correlationStatus === "loading" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
                 Run Correlation Analysis
               </button>
@@ -183,12 +186,19 @@ export function CorrelationModelSection({
             </div>
           ) : (
             <>
+              <WarningNotice warnings={warnings} title="Correlation-output normalization warnings" />
+
               {/* Middle panel: efficient frontier */}
-              <section className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-5 shadow-sm">
-                <h2 className="text-lg font-black text-[var(--text-primary)]">Efficient Frontier</h2>
-                <p className="text-xs text-[var(--text-muted)]">Scatter plot of 400 random portfolios. Purple points show sampled portfolios and the brightest green point marks the highest Sharpe ratio.</p>
-                  <div className="mt-4 h-80">
-                    <ResponsiveChart minWidth={1} minHeight={1}>
+              <ChartGuard
+                title="Efficient Frontier"
+                description="Scatter plot of 400 random portfolios. Purple points show sampled portfolios and the brightest green point marks the highest Sharpe ratio."
+                state={correlationResult.efficient_frontier.length > 0 ? "ready" : "invalid"}
+                emptyTitle="No efficient-frontier data yet"
+                emptyDescription="Run the correlation engine to generate efficient-frontier portfolios."
+                invalidTitle="Efficient-frontier data is invalid"
+                invalidDescription="The worker result did not contain chart-safe efficient-frontier rows, so the panel was withheld instead of rendering blank."
+                chartHeight={320}
+              >
                     <ScatterChart margin={CHART_MARGIN}>
                       <CartesianGrid {...GRID_STYLE} />
                       <XAxis dataKey="risk" name="Risk sigma" tickFormatter={fmtPctTick} tick={AXIS_TICK_STYLE} axisLine={AXIS_LINE_STYLE} tickLine={false} />
@@ -205,34 +215,35 @@ export function CorrelationModelSection({
                       <Scatter data={correlationResult.efficient_frontier.filter((point) => !point.is_optimal)} fill={CHART_COLORS.tertiary} />
                       <Scatter data={correlationResult.efficient_frontier.filter((point) => point.is_optimal)} fill={CHART_COLORS.positive} />
                     </ScatterChart>
-                  </ResponsiveChart>
-                </div>
-              </section>
+              </ChartGuard>
 
               {/* Middle panel: sensitivity analysis and full heatmap */}
               <section className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-                <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-5 shadow-sm">
-                  <h2 className="text-lg font-black text-[var(--text-primary)]">Spearman rho Sensitivity</h2>
-                  <p className="text-xs text-[var(--text-muted)]">Rank correlation between each asset return and the portfolio return, with positive exposures in green and negative exposures in red.</p>
-                  <div className="mt-4 h-80">
-                    <ResponsiveChart minWidth={1} minHeight={1}>
-                      <BarChart data={correlationResult.spearman_sensitivity} layout="vertical">
-                        <CartesianGrid {...GRID_STYLE} />
-                        <XAxis type="number" domain={[-1, 1]} tick={AXIS_TICK_STYLE} axisLine={AXIS_LINE_STYLE} tickLine={false} />
-                        <YAxis type="category" dataKey="asset" width={70} tick={AXIS_TICK_STYLE} axisLine={AXIS_LINE_STYLE} tickLine={false} />
-                        <Tooltip {...DEFAULT_TOOLTIP_PROPS} />
-                        <Bar dataKey="spearman_rho_sensitivity">
-                          {correlationResult.spearman_sensitivity.map((row) => {
-                            const value = Number(row.spearman_rho_sensitivity);
-                            const alpha = Math.min(Math.abs(value), 1);
-                            const fill = value >= 0 ? `rgba(34, 197, 94, ${alpha})` : `rgba(239, 68, 68, ${alpha})`;
-                            return <Cell key={`spearman-${row.asset}`} fill={fill} />;
-                          })}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveChart>
-                  </div>
-                </div>
+                <ChartGuard
+                  title="Spearman rho Sensitivity"
+                  description="Rank correlation between each asset return and the portfolio return, with positive exposures in green and negative exposures in red."
+                  state={correlationResult.spearman_sensitivity.length > 0 ? "ready" : "invalid"}
+                  emptyTitle="No sensitivity data yet"
+                  emptyDescription="Run the correlation engine to generate Spearman sensitivity rows."
+                  invalidTitle="Spearman sensitivity data is invalid"
+                  invalidDescription="The worker result did not contain chart-safe sensitivity rows, so the panel was withheld instead of rendering blank."
+                  chartHeight={320}
+                >
+                  <BarChart data={correlationResult.spearman_sensitivity} layout="vertical">
+                    <CartesianGrid {...GRID_STYLE} />
+                    <XAxis type="number" domain={[-1, 1]} tick={AXIS_TICK_STYLE} axisLine={AXIS_LINE_STYLE} tickLine={false} />
+                    <YAxis type="category" dataKey="asset" width={70} tick={AXIS_TICK_STYLE} axisLine={AXIS_LINE_STYLE} tickLine={false} />
+                    <Tooltip {...withTooltipProps()} />
+                    <Bar dataKey="spearman_rho_sensitivity">
+                      {correlationResult.spearman_sensitivity.map((row) => {
+                        const value = Number(row.spearman_rho_sensitivity);
+                        const alpha = Math.min(Math.abs(value), 1);
+                        const fill = value >= 0 ? `rgba(34, 197, 94, ${alpha})` : `rgba(239, 68, 68, ${alpha})`;
+                        return <Cell key={`spearman-${row.asset}`} fill={fill} />;
+                      })}
+                    </Bar>
+                  </BarChart>
+                </ChartGuard>
 
                 <HeatmapPanel
                   title="Correlation Coefficient Heatmap"
@@ -243,6 +254,8 @@ export function CorrelationModelSection({
                   }))}
                   xLabels={correlationResult.assets}
                   yLabels={correlationResult.assets}
+                  emptyTitle="Correlation heatmap data is invalid"
+                  emptyDescription="The worker result did not contain a complete heatmap matrix, so the panel was withheld instead of rendering blank."
                 />
               </section>
             </>

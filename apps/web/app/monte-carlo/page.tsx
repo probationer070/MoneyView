@@ -6,6 +6,7 @@ import type {
   MonteCarloResult,
   PathSimulationInput,
   SharedSimulationResult,
+  SimulationResultState,
   StockPriceLookup,
   SimulationWorkerResponse,
   ValuationInput,
@@ -22,6 +23,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getApiBaseUrl } from "@/lib/api";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { normalizeCorrelationResult, normalizeMonteCarloResult, normalizeValuationResult } from "./lib/resultNormalization";
 
 type SimulationTab = "path" | "risk" | "distribution" | "valuation" | "correlation";
 
@@ -136,9 +138,9 @@ export default function MonteCarloPage() {
   const [input, setInput] = useState<PathSimulationInput>(defaultInput);
   const [valuationInput, setValuationInput] = useState<ValuationInput>(defaultValuationInput);
   const [correlationInput, setCorrelationInput] = useState<CorrelationInput>(defaultCorrelationInput);
-  const [result, setResult] = useState<MonteCarloResult | null>(null);
-  const [valuationResult, setValuationResult] = useState<ValuationResult | null>(null);
-  const [correlationResult, setCorrelationResult] = useState<CorrelationResult | null>(null);
+  const [pathRunState, setPathRunState] = useState<SimulationResultState<MonteCarloResult>>({ result: null, warnings: [] });
+  const [valuationRunState, setValuationRunState] = useState<SimulationResultState<ValuationResult>>({ result: null, warnings: [] });
+  const [correlationRunState, setCorrelationRunState] = useState<SimulationResultState<CorrelationResult>>({ result: null, warnings: [] });
   const [status, setStatus] = useState<"idle" | "loading" | "error" | "cancelled">("idle");
   const [valuationStatus, setValuationStatus] = useState<"idle" | "loading" | "error" | "cancelled">("idle");
   const [correlationStatus, setCorrelationStatus] = useState<"idle" | "loading" | "error" | "cancelled">("idle");
@@ -151,10 +153,15 @@ export default function MonteCarloPage() {
   const workerRef = useRef<Worker | null>(null);
   const activeRequestIdRef = useRef<string | null>(null);
   const activeRequestKindRef = useRef<"path" | "valuation" | "correlation" | null>(null);
+  const latestInitialInvestmentRef = useRef(defaultInput.initialInvestment);
   const priceLookupRequestSeqRef = useRef(0);
   const priceLookupTickerRef = useRef(defaultValuationInput.ticker);
   const priceLookupAbortRef = useRef<AbortController | null>(null);
   const priceLookupManualEditSeqRef = useRef(0);
+
+  useEffect(() => {
+    latestInitialInvestmentRef.current = input.initialInvestment;
+  }, [input.initialInvestment]);
 
   // One shared worker handles path, valuation, and correlation jobs.
   useEffect(() => {
@@ -170,7 +177,8 @@ export default function MonteCarloPage() {
         return;
       }
       if (message.type === "result") {
-        setResult(message.result);
+        const normalized = normalizeMonteCarloResult(message.result, latestInitialInvestmentRef.current);
+        setPathRunState({ result: normalized.result, warnings: normalized.warnings });
         setProgress(100);
         setErrorMessage(null);
         setStatus("idle");
@@ -179,7 +187,8 @@ export default function MonteCarloPage() {
         return;
       }
       if (message.type === "valuation-result") {
-        setValuationResult(message.result);
+        const normalized = normalizeValuationResult(message.result);
+        setValuationRunState({ result: normalized.result, warnings: normalized.warnings });
         setValuationProgress(100);
         setValuationStatus("idle");
         activeRequestIdRef.current = null;
@@ -187,7 +196,8 @@ export default function MonteCarloPage() {
         return;
       }
       if (message.type === "correlation-result") {
-        setCorrelationResult(message.result);
+        const normalized = normalizeCorrelationResult(message.result);
+        setCorrelationRunState({ result: normalized.result, warnings: normalized.warnings });
         setCorrelationProgress(100);
         setCorrelationStatus("idle");
         activeRequestIdRef.current = null;
@@ -358,6 +368,7 @@ export default function MonteCarloPage() {
     const requestId = crypto.randomUUID();
     activeRequestIdRef.current = requestId;
     activeRequestKindRef.current = "path";
+    setPathRunState((current) => ({ ...current, warnings: [] }));
     setErrorMessage(null);
     setStatus("loading");
     setProgress(0);
@@ -372,6 +383,7 @@ export default function MonteCarloPage() {
     const requestId = crypto.randomUUID();
     activeRequestIdRef.current = requestId;
     activeRequestKindRef.current = "valuation";
+    setValuationRunState((current) => ({ ...current, warnings: [] }));
     setValuationStatus("loading");
     setValuationProgress(0);
     workerRef.current.postMessage({ type: "run-valuation", requestId, payload: valuationInput });
@@ -385,6 +397,7 @@ export default function MonteCarloPage() {
     const requestId = crypto.randomUUID();
     activeRequestIdRef.current = requestId;
     activeRequestKindRef.current = "correlation";
+    setCorrelationRunState((current) => ({ ...current, warnings: [] }));
     setCorrelationStatus("loading");
     setCorrelationProgress(0);
     workerRef.current.postMessage({ type: "run-correlation", requestId, payload: correlationInput });
@@ -413,18 +426,17 @@ export default function MonteCarloPage() {
     [input.investmentHorizonYears],
   );
 
+  const result = pathRunState.result;
+  const valuationResult = valuationRunState.result;
+  const correlationResult = correlationRunState.result;
+
   // Shared path outputs feed the Path, Risk, and Return Distribution tabs from one run.
   const sharedSimulation = useMemo<SharedSimulationResult | null>(() => {
     if (!result) return null;
-    const pathSummary = result.path_summary;
-    const pathKeys = result.sample_paths.length
-      ? Object.keys(result.sample_paths[0]).filter((key) => key.startsWith("path_")).slice(0, 12)
-      : [];
-    const pathChartData = result.sample_paths.map((row, index) => ({
-      ...row,
-      average_path: Number(pathSummary[index]?.mean ?? input.initialInvestment),
-      principal_line: input.initialInvestment,
-    }));
+    const normalized = normalizeMonteCarloResult(result, input.initialInvestment);
+    const pathSummary = normalized.pathSummary;
+    const pathKeys = normalized.pathKeys;
+    const pathChartData = normalized.pathChartData;
     const terminalMedian = Number(pathSummary.at(-1)?.p50 ?? input.initialInvestment);
     const terminalP05 = Number(pathSummary.at(-1)?.p05 ?? input.initialInvestment);
     const terminalP10 = Number(pathSummary.at(-1)?.p10 ?? input.initialInvestment);
@@ -445,18 +457,20 @@ export default function MonteCarloPage() {
     const percentileGaugeMin = terminalP05;
     const percentileGaugeMax = terminalP95;
     const percentileGaugeRange = Math.max(percentileGaugeMax - percentileGaugeMin, 1);
-    const maxFrequency = Math.max(...result.histogram.map((row) => Number(row.frequency ?? 0)), 0.001);
-    const maxDensity = Math.max(...result.normal_fit.map((row) => Number(row.density ?? 0)), 0.001);
-    const normalOverlay = result.normal_fit.map((row) => ({
+    const maxFrequency = Math.max(...normalized.result.histogram.map((row) => Number(row.frequency ?? 0)), 0.001);
+    const maxDensity = Math.max(...normalized.result.normal_fit.map((row) => Number(row.density ?? 0)), 0.001);
+    const normalOverlay = normalized.result.normal_fit.map((row) => ({
       return: Number(row.return ?? 0),
       normal_scaled: (Number(row.density ?? 0) / maxDensity) * maxFrequency,
     }));
-    const returnDistributionChartData = result.histogram.map((row, index) => ({
-      ...row,
+    const returnDistributionChartData = normalized.result.histogram.map((row, index) => ({
+      return: Number(row.return ?? 0),
+      frequency: Number(row.frequency ?? 0),
+      ...(row.loss_bucket == null ? {} : { loss_bucket: Number(row.loss_bucket) }),
       normal_scaled: Number(normalOverlay[Math.min(index, normalOverlay.length - 1)]?.normal_scaled ?? 0),
     }));
     return {
-      raw: result,
+      raw: normalized.result,
       pathKeys,
       pathChartData,
       pathSummary,
@@ -579,10 +593,12 @@ export default function MonteCarloPage() {
         subtitle="Five-tab workflow for path simulation, risk analysis, return distribution, valuation uncertainty, and correlation structure."
       />
 
-      <section className="grid grid-cols-1 gap-3 lg:grid-cols-5">
+      <section className="grid grid-cols-1 gap-3 lg:grid-cols-5" role="tablist" aria-label="Simulation workflows">
         {tabs.map((tab) => (
           <TabButton
             key={tab.key}
+            id={`simulation-tab-${tab.key}`}
+            controls={`simulation-panel-${tab.key}`}
             active={activeTab === tab.key}
             label={tab.label}
             description={tab.description}
@@ -592,6 +608,11 @@ export default function MonteCarloPage() {
       </section>
 
       {/* Each tab renders through a dedicated section component. */}
+      <section
+        id={`simulation-panel-${activeTab}`}
+        role="tabpanel"
+        aria-labelledby={`simulation-tab-${activeTab}`}
+      >
       {activeTab === "path" ? (
         <PathSimulationSection
           input={input}
@@ -599,6 +620,7 @@ export default function MonteCarloPage() {
           status={status}
           progress={progress}
           errorMessage={errorMessage}
+          warnings={pathRunState.warnings}
           yearlyTicks={yearlyTicks}
           update={update}
           runPathSimulation={runPathSimulation}
@@ -612,12 +634,14 @@ export default function MonteCarloPage() {
         <RiskAnalysisSection
           sharedSimulation={sharedSimulation}
           initialInvestment={input.initialInvestment}
+          warnings={pathRunState.warnings}
           exportRiskSummaryCsv={exportRiskSummaryCsv}
           exportRiskHistogramCsv={exportRiskHistogramCsv}
         />
       ) : activeTab === "distribution" ? (
         <ReturnDistributionSection
           sharedSimulation={sharedSimulation}
+          warnings={pathRunState.warnings}
           exportReturnHistogramCsv={exportReturnHistogramCsv}
           exportReturnCdfCsv={exportReturnCdfCsv}
         />
@@ -627,6 +651,7 @@ export default function MonteCarloPage() {
           valuationResult={valuationResult}
           valuationStatus={valuationStatus}
           valuationProgress={valuationProgress}
+          warnings={valuationRunState.warnings}
           valuationPriceLookupStatus={valuationPriceLookupStatus}
           valuationPriceLookupMessage={valuationPriceLookupMessage}
           updateValuation={updateValuation}
@@ -642,6 +667,7 @@ export default function MonteCarloPage() {
           correlationResult={correlationResult}
           correlationStatus={correlationStatus}
           correlationProgress={correlationProgress}
+          warnings={correlationRunState.warnings}
           updateCorrelation={updateCorrelation}
           updateCorrelationAsset={updateCorrelationAsset}
           updateCorrelationCell={updateCorrelationCell}
@@ -651,6 +677,7 @@ export default function MonteCarloPage() {
           exportCorrelationSensitivityCsv={exportCorrelationSensitivityCsv}
         />
       )}
+      </section>
     </div>
   );
 }

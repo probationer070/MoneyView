@@ -5,18 +5,19 @@ import { Download } from "lucide-react";
 import { ReferenceLine } from "recharts";
 import { ActionButton } from "@/components/ui/ActionButton";
 import { MonteCarloTabSummary } from "./MonteCarloTabSummary";
-import { LegendItem, MetricCard, SummaryRow, TEN_THOUSAND_KRW, krwLossFromPercent, numberText, pct } from "./shared";
+import { LegendItem, MetricCard, SummaryRow, TEN_THOUSAND_KRW, WarningNotice, krwLossFromPercent, numberText, pct } from "./shared";
 import { HistogramPanel, type HistogramBin } from "@/components/charts/HistogramPanel";
 import { PercentileBandPanel } from "@/components/charts/PercentileBandPanel";
 
 type Props = {
   sharedSimulation: SharedSimulationResult | null;
   initialInvestment: number;
+  warnings: string[];
   exportRiskSummaryCsv: () => void;
   exportRiskHistogramCsv: () => void;
 };
 
-export function RiskAnalysisSection({ sharedSimulation, initialInvestment, exportRiskSummaryCsv, exportRiskHistogramCsv }: Props) {
+export function RiskAnalysisSection({ sharedSimulation, initialInvestment, warnings, exportRiskSummaryCsv, exportRiskHistogramCsv }: Props) {
   if (!sharedSimulation) {
     return (
       <div className="space-y-6">
@@ -41,6 +42,8 @@ export function RiskAnalysisSection({ sharedSimulation, initialInvestment, expor
 
   return (
     <div className="space-y-6">
+      <WarningNotice warnings={warnings} title="Risk output normalization warnings" />
+
       <MonteCarloTabSummary
         title="Risk Analysis Summary"
         description="This tab reuses the shared path run and keeps risk exports in the same top boundary before the distribution and percentile cards."
@@ -75,6 +78,8 @@ export function RiskAnalysisSection({ sharedSimulation, initialInvestment, expor
         title="VaR / CVaR Risk Distribution"
         description="Terminal return distribution with principal, VaR 95, VaR 99, and CVaR 95 thresholds marked on the loss side."
         data={sharedSimulation.raw.histogram as unknown as HistogramBin[]}
+        emptyTitle="Risk distribution data is invalid"
+        emptyDescription="The shared simulation result did not contain a chart-safe histogram, so the risk distribution panel was withheld instead of rendering blank."
         legend={
           <div className="flex flex-wrap gap-3 text-xs font-bold text-[var(--text-muted)]">
             <LegendItem label="Loss buckets" lineClass="bg-red-500" />
@@ -109,9 +114,11 @@ export function RiskAnalysisSection({ sharedSimulation, initialInvestment, expor
           }))}
           valueLabel="M KRW"
           valueFormatter={(val) => `${val.toLocaleString(undefined, { maximumFractionDigits: 2 })}`}
+          emptyTitle="Terminal percentile data is invalid"
+          emptyDescription="The shared simulation result did not contain chart-safe terminal percentile values."
         />
 
-        <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-5 shadow-sm">
+        <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-5">
           <h2 className="text-lg font-black text-[var(--text-primary)]">Statistical Summary</h2>
           <div className="mt-4 overflow-hidden rounded-[var(--radius)] border border-[var(--border)]">
             <table className="w-full text-sm">

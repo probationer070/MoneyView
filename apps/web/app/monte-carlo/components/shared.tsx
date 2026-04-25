@@ -33,20 +33,29 @@ export function TabButton({
   label,
   description,
   onClick,
+  id,
+  controls,
 }: {
   active: boolean;
   label: string;
   description: string;
   onClick: () => void;
+  id: string;
+  controls: string;
 }) {
   return (
     <button
       type="button"
+      id={id}
+      role="tab"
+      aria-selected={active}
+      aria-controls={controls}
+      tabIndex={active ? 0 : -1}
       onClick={onClick}
       className={clsx(
         "rounded-[var(--radius)] border px-4 py-3 text-left transition",
         active
-          ? "border-[var(--accent)] bg-[var(--surface)] text-white shadow-sm"
+          ? "border-[var(--accent)] bg-[var(--surface)] text-white"
           : "border-[var(--border)] bg-[var(--bg-surface)] text-[var(--text-primary)] hover:border-[var(--accent)]",
       )}
     >
@@ -81,6 +90,7 @@ export function NumericField({
           min={min}
           step={step}
           onChange={(event) => onChange(Number(event.target.value))}
+          aria-label={label}
           className="w-full bg-transparent text-sm font-bold outline-none"
         />
         {suffix && <span className="text-[var(--text-muted)]">{suffix}</span>}
@@ -106,6 +116,7 @@ export function SelectField({
       <select
         value={value}
         onChange={(event) => onChange(event.target.value)}
+        aria-label={label}
         className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-sm font-bold outline-none"
       >
         {options.map((option) => (
@@ -120,7 +131,7 @@ export function SelectField({
 
 export function MetricCard({ label, value, detail }: { label: string; value: string; detail: string }) {
   return (
-    <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4 shadow-sm">
+    <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4">
       <div className="text-xs font-bold uppercase tracking-wide text-[var(--text-muted)]">{label}</div>
       <div className="mt-2 text-2xl font-black text-[var(--text-primary)]">{value}</div>
       <div className="mt-1 text-xs text-[var(--text-muted)]">{detail}</div>
@@ -140,7 +151,7 @@ export function PercentileIndicator({
   description: string;
 }) {
   return (
-    <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-3 shadow-sm">
+    <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-3">
       <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-[var(--text-muted)]">
         <span className={clsx("inline-block h-2.5 w-2.5 rounded-full", colorClass)} />
         <InfoTooltip label={label} description={description} />
@@ -173,5 +184,26 @@ export function SummaryRow({ label, value }: { label: string; value: string }) {
       <td className="p-3 font-bold text-[var(--text-primary)]">{label}</td>
       <td className="p-3 text-right text-[var(--text-primary)]">{value}</td>
     </tr>
+  );
+}
+
+export function WarningNotice({
+  warnings,
+  title = "Recovered data warnings",
+}: {
+  warnings: string[];
+  title?: string;
+}) {
+  if (warnings.length === 0) return null;
+
+  return (
+    <div className="rounded-[var(--radius)] border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+      <div className="font-bold">{title}</div>
+      <ul className="mt-2 list-disc space-y-1 pl-5">
+        {warnings.map((warning) => (
+          <li key={warning}>{warning}</li>
+        ))}
+      </ul>
+    </div>
   );
 }

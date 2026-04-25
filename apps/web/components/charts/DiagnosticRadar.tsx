@@ -2,7 +2,9 @@
 
 import React from "react";
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Tooltip } from "recharts";
+import { ChartPanelFrame } from "@/components/charts/ChartPanelFrame";
 import { ResponsiveChart } from "@/components/ui/ResponsiveChart";
+import { AXIS_TICK_STYLE, withTooltipProps } from "@/lib/chartConfig";
 
 interface RadarEntry {
     subject: string;
@@ -13,12 +15,18 @@ interface RadarEntry {
 
 export const DiagnosticRadar: React.FC<{ data: RadarEntry[] }> = ({ data }) => {
     return (
-        <div className="bg-[var(--surface-panel)] rounded-[var(--radius)] border border-[var(--border)] p-6 shadow-sm w-full h-[400px] min-h-[400px] min-w-0">
-            <h2 className="text-lg font-bold mb-4">Strategic Positioning</h2>
+        <ChartPanelFrame
+            title="Strategic Positioning"
+            empty={data.length === 0}
+            emptyTitle="No diagnostic radar data available"
+            emptyDescription="Refresh diagnostics to load the strategic positioning radar."
+            className="h-[400px] min-h-[400px] min-w-0 w-full bg-[var(--surface-panel)]"
+        >
+            <div className="mt-4 h-full">
             <ResponsiveChart minWidth={1} minHeight={1}>
                 <RadarChart cx="50%" cy="50%" outerRadius="70%" data={data}>
                     <PolarGrid stroke="var(--border)" />
-                    <PolarAngleAxis dataKey="subject" tick={{ fill: "var(--text-muted)", fontSize: 12 }} />
+                    <PolarAngleAxis dataKey="subject" tick={AXIS_TICK_STYLE} />
                     <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} />
                     
                     {/* Primary Overlay */}
@@ -39,11 +47,10 @@ export const DiagnosticRadar: React.FC<{ data: RadarEntry[] }> = ({ data }) => {
                         fillOpacity={0.2} 
                     />
                     
-                    <Tooltip 
-                        contentStyle={{ borderRadius: "8px", border: "1px solid var(--border)", boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)" }}
-                    />
+                    <Tooltip {...withTooltipProps()} />
                 </RadarChart>
             </ResponsiveChart>
-        </div>
+            </div>
+        </ChartPanelFrame>
     );
 };

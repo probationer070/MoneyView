@@ -2,6 +2,7 @@
 
 import React, { useRef, useState, useMemo, useEffect } from "react";
 import { useQuery, useInfiniteQuery } from "@tanstack/react-query";
+import Link from "next/link";
 import { fetchApi } from "@/lib/api";
 import { 
   transformToTVCandles, 
@@ -13,14 +14,17 @@ import { TimelineList } from "@/components/data/TimelineList";
 import { ModalShell } from "@/components/ui/ModalShell";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
+import { MetricAuditPanel } from "@/components/ui/MetricAuditPanel";
+import { MetricQualityBadge } from "@/components/ui/MetricQualityBadge";
 
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { Sparkline } from "@/components/ui/Sparkline";
 import { NewsFeedList } from "@/app/news/components/NewsFeedList";
+import { formatAuditMetricValue, metricAuditReason } from "@/lib/metricAudit";
+import type { CorporateMetricAudit } from "../../../../../packages/shared-types";
 
 import { 
   type PortfolioStock, 
-  type PortfolioComparisonMetrics, 
   type CorporateComparisonSnapshotMeta, 
   type PortfolioComparisonUniverse,
   type CorporateComparisonStockHistoryResponse,
@@ -29,9 +33,7 @@ import {
   formatDateLabel,
   portfolioComparisonUniverseLabel,
   formatMetricPercent,
-  metricToneClass,
   formatCurrencyCompact,
-  isMetricOutlier,
   summarizeSparklineTrend,
   StatusPanel,
   aggregateMonthlyBars,
@@ -39,11 +41,18 @@ import {
   MOVING_AVERAGE_WINDOWS,
   MOVING_AVERAGE_COLORS
 } from "../page";
+import {
+  buildPortfolioDisplayMetric,
+  metricDisplayTitle,
+  metricSubtitle,
+  metricToneClass,
+  type PortfolioTickerMetrics,
+} from "../portfolioMetrics";
 
 export interface StockDetailModalProps {
   stock: PortfolioStock;
   isInWatchlist: boolean;
-  comparisonMetrics: PortfolioComparisonMetrics;
+  comparisonMetrics: PortfolioTickerMetrics;
   snapshotMeta: CorporateComparisonSnapshotMeta | null;
   comparisonUniverse: PortfolioComparisonUniverse;
   comparisonBenchmarkTicker: string;
@@ -137,6 +146,12 @@ export function StockDetailModal({
       }),
     staleTime: 60_000,
   });
+  const metricAuditQuery = useQuery<CorporateMetricAudit>({
+    queryKey: ["portfolio-stock-metric-audit", stock.ticker],
+    queryFn: ({ signal }) =>
+      fetchApi<CorporateMetricAudit>(`/corporate/metrics/${stock.ticker}/audit`, { signal }),
+    staleTime: 5 * 60_000,
+  });
 
   const prices = useMemo(() => detailQuery.data?.prices ?? [], [detailQuery.data?.prices]);
   const chartPrices = useMemo(
@@ -176,7 +191,7 @@ export function StockDetailModal({
     comparisonMetrics.roicMinusWacc,
     comparisonMetrics.dcfUpside,
     comparisonMetrics.expectedVsMarket,
-  ].filter((value) => isMetricOutlier(value)).length;
+  ].filter((metric) => metric.quality === "suspicious" || metric.quality === "invalid").length;
   
   const earliestSnapshotTrendPoint = snapshotTrendPoints.at(-1) ?? null;
   const latestSnapshotTrendPoint = snapshotTrendPoints[0] ?? null;
@@ -187,6 +202,35 @@ export function StockDetailModal({
     () => news.map((item, index) => ({ ...item, id: item.id ?? index + 1 })),
     [news],
   );
+  const snapshotTimelineMetrics = useMemo(() => (
+    snapshotTrendPoints.reduce<Record<string, {
+      roicMinusWacc: ReturnType<typeof buildPortfolioDisplayMetric>;
+      dcfUpside: ReturnType<typeof buildPortfolioDisplayMetric>;
+      expectedVsMarket: ReturnType<typeof buildPortfolioDisplayMetric>;
+    }>>((acc, point) => {
+      acc[point.snapshot_version] = {
+        roicMinusWacc: buildPortfolioDisplayMetric(point.roic_minus_wacc, {
+          missingReason: "Saved snapshot is missing ROIC - WACC for this ticker.",
+          suspiciousReason: "Saved snapshot ROIC - WACC falls outside the sanity range.",
+        }),
+        dcfUpside: buildPortfolioDisplayMetric(point.dcf_implied_return, {
+          missingReason: "Saved snapshot is missing DCF upside for this ticker.",
+          suspiciousReason: "Saved snapshot DCF upside falls outside the sanity range.",
+        }),
+        expectedVsMarket: buildPortfolioDisplayMetric(point.expected_return_spread, {
+          missingReason: "Saved snapshot is missing Expected vs Market for this ticker.",
+          suspiciousReason: "Saved snapshot Expected vs Market falls outside the sanity range.",
+        }),
+      };
+      return acc;
+    }, {})
+  ), [snapshotTrendPoints]);
+  const detailErrorMessage = detailQuery.error instanceof Error
+    ? detailQuery.error.message
+    : "Could not load OHLC history and supporting stock detail data for this ticker.";
+  const newsErrorMessage = newsQuery.error instanceof Error
+    ? newsQuery.error.message
+    : `Could not load filtered headlines for ${stock.ticker}.`;
   const timelineGroups = useMemo(() => (
     snapshotTrendPoints.length === 0
       ? []
@@ -194,14 +238,21 @@ export function StockDetailModal({
           {
             id: `${stock.ticker}-history`,
             label: "Saved Snapshot History",
-            items: snapshotTrendPoints.map((point) => ({
+            items: snapshotTrendPoints.map((point) => {
+              const metrics = snapshotTimelineMetrics[point.snapshot_version];
+              return {
               id: point.snapshot_version,
               title: formatDateLabel(point.as_of_date),
               subtitle: `${point.snapshot_source} snapshot against ${point.benchmark_ticker}`,
               active: point.snapshot_version === activeSnapshotVersion,
               meta: (
-                <div className="flex flex-wrap items-center gap-2">
-                  <span>Version {point.snapshot_version}</span>
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                  <span
+                    className="overflow-inline-ellipsis max-w-full rounded-[var(--radius-sm)] bg-[var(--surface-muted)] px-2 py-1 font-mono text-[11px] text-[var(--text-primary)]"
+                    title={point.snapshot_version}
+                  >
+                    Version {point.snapshot_version}
+                  </span>
                   <span aria-hidden="true">•</span>
                   <span>Price {formatCurrencyCompact(point.current_price)}</span>
                 </div>
@@ -210,15 +261,18 @@ export function StockDetailModal({
                 <div className="grid grid-cols-2 gap-3 text-xs md:grid-cols-4">
                   <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2">
                     <div className="text-[var(--text-muted)]">ROIC - WACC</div>
-                    <div className={`mt-1 font-bold tabular-nums ${metricToneClass(point.roic_minus_wacc)}`}>{formatMetricPercent(point.roic_minus_wacc)}</div>
+                    <div className={`mt-1 font-bold tabular-nums ${metricToneClass(metrics.roicMinusWacc)}`} title={metricDisplayTitle(metrics.roicMinusWacc)}>{metrics.roicMinusWacc.displayValue}</div>
+                    {metricSubtitle(metrics.roicMinusWacc) ? <div className="mt-1 text-[11px] leading-tight text-[var(--text-muted)]">{metricSubtitle(metrics.roicMinusWacc)}</div> : null}
                   </div>
                   <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2">
                     <div className="text-[var(--text-muted)]">DCF Upside</div>
-                    <div className={`mt-1 font-bold tabular-nums ${metricToneClass(point.dcf_implied_return)}`}>{formatMetricPercent(point.dcf_implied_return)}</div>
+                    <div className={`mt-1 font-bold tabular-nums ${metricToneClass(metrics.dcfUpside)}`} title={metricDisplayTitle(metrics.dcfUpside)}>{metrics.dcfUpside.displayValue}</div>
+                    {metricSubtitle(metrics.dcfUpside) ? <div className="mt-1 text-[11px] leading-tight text-[var(--text-muted)]">{metricSubtitle(metrics.dcfUpside)}</div> : null}
                   </div>
                   <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2">
                     <div className="text-[var(--text-muted)]">Expected vs Market</div>
-                    <div className={`mt-1 font-bold tabular-nums ${metricToneClass(point.expected_return_spread)}`}>{formatMetricPercent(point.expected_return_spread)}</div>
+                    <div className={`mt-1 font-bold tabular-nums ${metricToneClass(metrics.expectedVsMarket)}`} title={metricDisplayTitle(metrics.expectedVsMarket)}>{metrics.expectedVsMarket.displayValue}</div>
+                    {metricSubtitle(metrics.expectedVsMarket) ? <div className="mt-1 text-[11px] leading-tight text-[var(--text-muted)]">{metricSubtitle(metrics.expectedVsMarket)}</div> : null}
                   </div>
                   <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2">
                     <div className="text-[var(--text-muted)]">Market Return</div>
@@ -226,10 +280,11 @@ export function StockDetailModal({
                   </div>
                 </div>
               ),
-            })),
+            };
+            }),
           },
         ]
-  ), [activeSnapshotVersion, snapshotTrendPoints, stock.ticker]);
+  ), [activeSnapshotVersion, snapshotTimelineMetrics, snapshotTrendPoints, stock.ticker]);
 
   useEffect(() => {
     const tickerChanged = previousTickerRef.current !== stock.ticker;
@@ -278,6 +333,21 @@ export function StockDetailModal({
       size="full"
       headerRightContent={headerRight}
     >
+      <section className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4">
+        <div>
+          <h3 className="text-sm font-semibold text-[var(--text-primary)]">Quick portfolio review</h3>
+          <p className="mt-1 text-sm text-[var(--text-muted)]">
+            Stay in the portfolio workflow here, or open the canonical detail route for full standalone ticker analysis.
+          </p>
+        </div>
+        <Link
+          href={`/detail/${encodeURIComponent(stock.ticker)}`}
+          className="inline-flex min-h-9 items-center justify-center rounded-[var(--radius-md)] border border-[var(--border-default)] px-[var(--space-4)] text-[length:var(--type-label)] font-medium text-[var(--text-primary)] transition-colors duration-[var(--duration-fast)] hover:bg-[var(--bg-subtle)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--state-info)] focus-visible:ring-offset-1"
+        >
+          View Full Detail
+        </Link>
+      </section>
+
       <div className="flex flex-col mb-4">
         <div className="flex flex-wrap items-center gap-2">
           <span className="rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-1 text-xs font-semibold text-[var(--text-muted)]">
@@ -302,7 +372,7 @@ export function StockDetailModal({
         {sectorMessage && <p className="mt-2 text-xs text-[var(--text-muted)]">{sectorMessage}</p>}
       </div>
 
-      <section className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+      <section className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4 mb-4">
         <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-muted)] p-4">
           <div className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Price</div>
           <div className="mt-2 text-2xl font-black tabular-nums text-[var(--text-primary)]">
@@ -326,7 +396,7 @@ export function StockDetailModal({
       </section>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(22rem,1fr)]">
-        <section className="lg:col-span-2 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4 shadow-sm">
+        <section className="lg:col-span-1 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4">
           <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <h3 className="text-sm font-bold text-[var(--text-primary)]">
@@ -381,9 +451,9 @@ export function StockDetailModal({
             lineSeriesData={movingAverageSeries}
             height={520}
             tickerName={stock.ticker}
-            colorAccent="var(--accent)"
-            upColor="#EF5350"
-            downColor="#4589E5"
+            colorAccent="var(--delta-up)"
+            upColor="var(--delta-up)"
+            downColor="var(--delta-down)"
             loading={detailQuery.isLoading}
             timeframe={timeframe}
             onTimeframeChange={(value) => setTimeframe(value as "daily" | "monthly")}
@@ -402,34 +472,60 @@ export function StockDetailModal({
             ))}
             emptyDescription="No OHLC history is available for this ticker yet."
           />
-          {!detailQuery.isLoading && candles.length > 0 ? (
+          {detailQuery.isError ? (
+            <ErrorState
+              title="Stock Detail Unavailable"
+              message={detailErrorMessage}
+            />
+          ) : !detailQuery.isLoading && candles.length > 0 ? (
             <>
-              <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
+              <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
                 <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-muted)] p-4">
-                  <div className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">ROIC - WACC</div>
-                  <div className={`mt-2 text-2xl font-black tabular-nums ${metricToneClass(comparisonMetrics.roicMinusWacc)}`}>
-                    {formatMetricPercent(comparisonMetrics.roicMinusWacc)}
+                  <div className="flex items-center justify-between gap-2 text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                    <span>ROIC - WACC</span>
+                    {metricAuditQuery.data ? <MetricQualityBadge quality={metricAuditQuery.data.spread.quality} /> : null}
+                  </div>
+                  <div className={`mt-2 text-2xl font-black tabular-nums ${metricToneClass(comparisonMetrics.roicMinusWacc)}`} title={metricDisplayTitle(comparisonMetrics.roicMinusWacc)}>
+                    {metricAuditQuery.data ? formatAuditMetricValue(metricAuditQuery.data.spread) : comparisonMetrics.roicMinusWacc.displayValue}
                   </div>
                   <p className="mt-2 text-xs text-[var(--text-muted)]">
-                    Positive values imply returns on invested capital are exceeding the current capital cost estimate.
+                    {metricAuditQuery.data ? metricAuditReason(metricAuditQuery.data.spread) : metricSubtitle(comparisonMetrics.roicMinusWacc) ?? "Positive values imply returns on invested capital are exceeding the current capital cost estimate."}
                   </p>
                 </div>
                 <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-muted)] p-4">
-                  <div className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">DCF Upside</div>
-                  <div className={`mt-2 text-2xl font-black tabular-nums ${metricToneClass(comparisonMetrics.dcfUpside)}`}>
-                    {formatMetricPercent(comparisonMetrics.dcfUpside)}
+                  <div className="flex items-center justify-between gap-2 text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                    <span>DCF Upside</span>
+                    <MetricQualityBadge quality={comparisonMetrics.dcfUpside.quality} />
+                  </div>
+                  <div className={`mt-2 text-2xl font-black tabular-nums ${metricToneClass(comparisonMetrics.dcfUpside)}`} title={metricDisplayTitle(comparisonMetrics.dcfUpside)}>
+                    {comparisonMetrics.dcfUpside.displayValue}
                   </div>
                   <p className="mt-2 text-xs text-[var(--text-muted)]">
-                    Snapshot-side upside or downside versus current price, filtered for outlier values before display.
+                    {metricSubtitle(comparisonMetrics.dcfUpside) ?? "Snapshot-side upside or downside versus current price."}
                   </p>
                 </div>
                 <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-muted)] p-4">
-                  <div className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Expected vs Market</div>
-                  <div className={`mt-2 text-2xl font-black tabular-nums ${metricToneClass(comparisonMetrics.expectedVsMarket)}`}>
-                    {formatMetricPercent(comparisonMetrics.expectedVsMarket)}
+                  <div className="flex items-center justify-between gap-2 text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                    <span>Expected vs Market</span>
+                    <MetricQualityBadge quality={comparisonMetrics.expectedVsMarket.quality} />
+                  </div>
+                  <div className={`mt-2 text-2xl font-black tabular-nums ${metricToneClass(comparisonMetrics.expectedVsMarket)}`} title={metricDisplayTitle(comparisonMetrics.expectedVsMarket)}>
+                    {comparisonMetrics.expectedVsMarket.displayValue}
                   </div>
                   <p className="mt-2 text-xs text-[var(--text-muted)]">
-                    Spread between the stock return expectation and the market reference return used in the saved comparison snapshot.
+                    {metricSubtitle(comparisonMetrics.expectedVsMarket) ?? "Spread between the stock return expectation and the market reference return used in the saved comparison snapshot."}
+                  </p>
+                </div>
+                <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-muted)] p-4">
+                  <div className="flex items-center justify-between gap-2 text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                    <span>Volatility</span>
+                    <MetricQualityBadge quality={comparisonMetrics.volatility.quality} />
+                  </div>
+                  <div className={`mt-2 text-2xl font-black tabular-nums ${comparisonMetrics.volatility.quality === "missing" || comparisonMetrics.volatility.quality === "invalid" || comparisonMetrics.volatility.quality === "suspicious" ? "text-amber-700" : "text-[var(--text-primary)]"}`} title={metricDisplayTitle(comparisonMetrics.volatility)}>
+                    {comparisonMetrics.volatility.displayValue}
+                  </div>
+                  <p className="mt-2 text-xs text-[var(--text-muted)]">
+                    {metricSubtitle(comparisonMetrics.volatility) ?? "Estimated from recent local price history for quick portfolio comparison."}
                   </p>
                 </div>
               </div>
@@ -449,23 +545,23 @@ export function StockDetailModal({
                   </div>
                   <div className="rounded-[var(--radius)] border border-[var(--border-soft)] bg-[var(--surface-muted)] p-3 text-xs">
                     <div className="text-[var(--text-muted)]">Source</div>
-                    <div className="mt-1 font-bold capitalize text-[var(--text-primary)]">
+                    <div className="mt-1 overflow-inline-ellipsis font-bold capitalize text-[var(--text-primary)]" title={snapshotMeta?.snapshot_source ?? snapshotMeta?.mode ?? "live"}>
                       {snapshotMeta?.snapshot_source ?? snapshotMeta?.mode ?? "live"}
                     </div>
                   </div>
                   <div className="rounded-[var(--radius)] border border-[var(--border-soft)] bg-[var(--surface-muted)] p-3 text-xs">
                     <div className="text-[var(--text-muted)]">Universe</div>
-                    <div className="mt-1 font-bold text-[var(--text-primary)]">
+                    <div className="mt-1 overflow-inline-ellipsis font-bold text-[var(--text-primary)]" title={portfolioComparisonUniverseLabel(effectiveComparisonUniverse)}>
                       {portfolioComparisonUniverseLabel(effectiveComparisonUniverse)}
                     </div>
                   </div>
                   <div className="rounded-[var(--radius)] border border-[var(--border-soft)] bg-[var(--surface-muted)] p-3 text-xs">
                     <div className="text-[var(--text-muted)]">Benchmark</div>
-                    <div className="mt-1 font-bold text-[var(--text-primary)]">{effectiveComparisonBenchmarkTicker}</div>
+                    <div className="mt-1 overflow-inline-ellipsis font-bold text-[var(--text-primary)]" title={effectiveComparisonBenchmarkTicker}>{effectiveComparisonBenchmarkTicker}</div>
                   </div>
                   <div className="rounded-[var(--radius)] border border-[var(--border-soft)] bg-[var(--surface-muted)] p-3 text-xs">
                     <div className="text-[var(--text-muted)]">Version</div>
-                    <div className="mt-1 font-bold text-[var(--text-primary)]">{activeSnapshotVersion || "Live"}</div>
+                    <div className="mt-1 overflow-mono-block text-[var(--text-primary)]" title={activeSnapshotVersion || "Live"}>{activeSnapshotVersion || "Live"}</div>
                   </div>
                 </div>
                 {sparklineTrendPct != null && (
@@ -479,6 +575,22 @@ export function StockDetailModal({
                   {flaggedComparisonMetricCount} stock metric value{flaggedComparisonMetricCount === 1 ? "" : "s"} for {stock.ticker} {flaggedComparisonMetricCount === 1 ? "is" : "are"} currently flagged as outlier data and rendered as <span className="font-semibold">N/A</span>. Treat the price chart and saved snapshot history as the primary review context until fresher fundamentals are available.
                 </div>
               )}
+              <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-2">
+                {metricAuditQuery.isLoading ? (
+                  <div className="xl:col-span-2">
+                    <EmptyState title="Loading ROIC/WACC audit..." />
+                  </div>
+                ) : metricAuditQuery.isError ? (
+                  <div className="xl:col-span-2">
+                    <ErrorState title="Metric Audit Unavailable" message={`Could not load ROIC/WACC audit inputs for ${stock.ticker}.`} />
+                  </div>
+                ) : (
+                  <>
+                    <MetricAuditPanel audit={metricAuditQuery.data ?? null} metric="roic" title="ROIC Audit" />
+                    <MetricAuditPanel audit={metricAuditQuery.data ?? null} metric="wacc" title="WACC Audit" />
+                  </>
+                )}
+              </div>
               <div className="mt-4 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4">
                 <div className="flex flex-col gap-1">
                   <h4 className="text-sm font-bold text-[var(--text-primary)]">Stock History Timeline</h4>
@@ -507,17 +619,17 @@ export function StockDetailModal({
                   <div className="mt-3 space-y-3">
                     <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                       <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-muted)] p-3">
-                        <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Saved Snapshots</div>
+                        <div className="text-[length:var(--type-caption)] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Saved Snapshots</div>
                         <div className="mt-1 text-lg font-black text-[var(--text-primary)]">{snapshotTrendPoints.length}</div>
                         <p className="mt-1 text-xs text-[var(--text-muted)]">Persisted comparison rows currently available for {stock.ticker}.</p>
                       </div>
                       <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-muted)] p-3">
-                        <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Expected Spread Trend</div>
-                        <div className={`mt-1 text-lg font-black ${metricToneClass(expectedSpreadTrendDelta)}`}>{formatMetricPercent(expectedSpreadTrendDelta)}</div>
+                        <div className="text-[length:var(--type-caption)] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Expected Spread Trend</div>
+                        <div className={`mt-1 text-lg font-black ${expectedSpreadTrendDelta == null ? "text-[var(--text-muted)]" : expectedSpreadTrendDelta > 0 ? "text-[var(--delta-up)]" : "text-[var(--delta-down)]"}`}>{formatMetricPercent(expectedSpreadTrendDelta)}</div>
                         <p className="mt-1 text-xs text-[var(--text-muted)]">Latest versus oldest saved expected-return spread in this history.</p>
                       </div>
                       <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-muted)] p-3">
-                        <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Recent Price Sparkline</div>
+                        <div className="text-[length:var(--type-caption)] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Recent Price Sparkline</div>
                         <div className="mt-2 h-10">
                           <Sparkline
                             data={stock.sparkline}
@@ -538,7 +650,7 @@ export function StockDetailModal({
           ) : null}
         </section>
 
-        <section className="flex min-h-[24rem] flex-col rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4 shadow-sm">
+        <section className="flex min-h-[24rem] flex-col rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4">
           <h3 className="text-sm font-bold text-[var(--text-primary)]">
             <InfoTooltip
               label="Ticker News Feed (filtered)"
@@ -549,6 +661,8 @@ export function StockDetailModal({
           <div className="mt-4 min-h-0 flex-1">
             {newsQuery.isLoading ? (
               <EmptyState title="Loading filtered news..." />
+            ) : newsQuery.isError && stockNewsItems.length === 0 ? (
+              <ErrorState title="Filtered News Unavailable" message={newsErrorMessage} />
             ) : stockNewsItems.length === 0 ? (
               <EmptyState title="No stock-specific news found" description={`No filtered headlines are available for ${stock.ticker} yet.`} />
             ) : (

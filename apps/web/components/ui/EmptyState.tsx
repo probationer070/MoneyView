@@ -15,9 +15,9 @@ export function EmptyState({ icon, title, description, action }: EmptyStateProps
         {icon ?? <Inbox className="h-6 w-6" />}
       </div>
       <div className="flex flex-col gap-1">
-        <p className="text-[14px] font-medium text-[var(--text-primary)]">{title}</p>
+        <p className="text-[length:var(--type-body)] font-medium text-[var(--text-primary)]">{title}</p>
         {description && (
-          <p className="text-[12px] text-[var(--text-muted)] max-w-[280px]">{description}</p>
+          <p className="text-[length:var(--type-helper)] text-[var(--text-muted)] max-w-[280px]">{description}</p>
         )}
       </div>
       {action && <div className="mt-1">{action}</div>}

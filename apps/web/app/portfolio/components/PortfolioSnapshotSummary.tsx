@@ -97,19 +97,19 @@ export function PortfolioSnapshotSummary({
         </div>
         <div className="rounded-[var(--radius)] bg-[var(--surface-muted)] p-3 text-xs">
           <div className="text-[var(--text-muted)]">Source</div>
-          <div className="mt-1 font-bold capitalize text-[var(--text-primary)]">
+          <div className="mt-1 overflow-inline-ellipsis font-bold capitalize text-[var(--text-primary)]" title={activeComparisonData.snapshot.mode}>
             {activeComparisonData.snapshot.mode}
           </div>
         </div>
         <div className="rounded-[var(--radius)] bg-[var(--surface-muted)] p-3 text-xs">
           <div className="text-[var(--text-muted)]">Universe</div>
-          <div className="mt-1 font-bold text-[var(--text-primary)]">
+          <div className="mt-1 overflow-inline-ellipsis font-bold text-[var(--text-primary)]" title={portfolioComparisonUniverseLabel(activeComparisonData.snapshot.comparison_universe)}>
             {portfolioComparisonUniverseLabel(activeComparisonData.snapshot.comparison_universe)}
           </div>
         </div>
         <div className="rounded-[var(--radius)] bg-[var(--surface-muted)] p-3 text-xs">
           <div className="text-[var(--text-muted)]">Benchmark</div>
-          <div className="mt-1 font-bold text-[var(--text-primary)]">
+          <div className="mt-1 overflow-inline-ellipsis font-bold text-[var(--text-primary)]" title={activeComparisonData.snapshot.benchmark_ticker}>
             {activeComparisonData.snapshot.benchmark_ticker}
           </div>
         </div>
@@ -136,7 +136,7 @@ export function PortfolioSnapshotSummary({
         <p>
           Market expected return: {activeComparisonData.market_expected_return.toFixed(2)}%. Primary stock return: {activeComparisonData.stock_expected_return_method.replaceAll("_", " ")}. Reference return: {activeComparisonData.comparison_reference_return_method.replaceAll("_", " ")}.
         </p>
-        <p>
+        <p title={activeComparisonData.snapshot.generated_at}>
           Generated: {formatSyncTimestamp(activeComparisonData.snapshot.generated_at)}. Versions for this KST day: {activeComparisonData.snapshot.snapshot_versions_for_day}. Holdings summarized: {portfolioSnapshotSummary.stockCount}.
         </p>
       </div>
@@ -151,7 +151,10 @@ export function PortfolioSnapshotSummary({
       </div>
       {activeComparisonData.snapshot.comparison_universe === "custom" && (
         <p className="mt-2 text-sm text-[var(--text-muted)]">
-          Custom tickers: {activeComparisonData.snapshot.custom_tickers.join(", ") || "None"}.
+          <span className="font-semibold text-[var(--text-primary)]">Custom tickers:</span>{" "}
+          <span className="overflow-mono-block rounded-[var(--radius-sm)] bg-[var(--surface-muted)] px-2 py-1 text-xs text-[var(--text-primary)]" title={activeComparisonData.snapshot.custom_tickers.join(", ") || "None"}>
+            {activeComparisonData.snapshot.custom_tickers.join(", ") || "None"}
+          </span>
         </p>
       )}
       {activeComparisonData.snapshot.snapshot_is_stale && (

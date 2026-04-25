@@ -89,3 +89,36 @@ test("corporate comparison sorting reorders non-benchmark rows and metric clicks
   await expect(calculationDialog.getByText("Calculation transparency and data lineage")).toBeVisible();
   await expect(calculationDialog.getByRole("button", { name: "Download CSV: Analysis" }).first()).toBeVisible();
 });
+
+test("calculation detail modal shows explicit source-data and full-report errors", async ({ page }) => {
+  await mockCorporatePageApi(page, undefined, {
+    failQuarterlyStatements: true,
+    failOhlcv: true,
+    failDcfFullReport: true,
+  });
+  await page.goto("/corporate", { waitUntil: "domcontentloaded" });
+
+  await expect(page.getByRole("heading", { name: /Corporate Analysis/i })).toBeVisible({ timeout: 60_000 });
+  await page.getByRole("button", { name: "Refresh source data" }).click();
+  await page.getByRole("button", { name: /ROIC - WACC/i }).first().click();
+
+  const calculationDialog = page.getByRole("dialog");
+  await expect(calculationDialog).toBeVisible();
+  await expect(calculationDialog.getByRole("heading", { name: "ROIC - WACC Audit" })).toBeVisible();
+  await expect(calculationDialog.getByText("ROIC - WACC inherits the lower-confidence state").first()).toBeVisible();
+  await calculationDialog.locator("summary").filter({ hasText: "Historical OHLCV Dataset" }).click();
+  await calculationDialog.locator("summary").filter({ hasText: "Quarterly Financial Statements" }).click();
+  await expect(calculationDialog.getByText("Historical OHLCV Unavailable")).toBeVisible();
+  await expect(calculationDialog.locator("p").filter({ hasText: /^Quarterly Financial Statements Unavailable$/ })).toBeVisible();
+
+  await calculationDialog.getByRole("button", { name: "Close modal" }).click();
+  await page.getByRole("button", { name: "Refresh DCF" }).click();
+  const viewFullReportButton = page.getByRole("button", { name: "View Full Report" });
+  await expect(viewFullReportButton).toBeEnabled();
+  await viewFullReportButton.click();
+
+  const dcfDialog = page.getByRole("dialog");
+  await expect(dcfDialog).toBeVisible();
+  await dcfDialog.locator("summary").filter({ hasText: "Full DCF Report" }).click();
+  await expect(dcfDialog.getByText("Full DCF Report Unavailable")).toBeVisible();
+});

@@ -184,9 +184,28 @@ Provide ticker-centric valuation analysis, backend DCF inspection, operating dia
 - active ticker
 - live assumption sliders and basis selectors
 - cached DCF and comparison results
+- source-data request snapshot for metrics history, quarterly statements, and OHLCV
 - comparison-universe, benchmark, sort, and direction controls
 - selected comparison row for peer charts
 - detail modal state for formula explanations and downloads
+
+### Refresh And Cache Ownership
+
+- active assumption controls remain frontend-owned and are restored from backend state plus browser fallback storage
+- per-ticker assumption overrides may be restored from `localStorage`, but `localStorage` is a continuity fallback, not canonical business state
+- active ticker and last successful heavy-zone payloads may be restored from `sessionStorage` for same-session continuity
+- heavy zones are intentionally refresh-gated:
+  - DCF
+  - comparison
+  - metric history
+  - quarterly statements
+  - OHLCV history
+- refresh tokens for heavy zones are intentionally ephemeral and are not persisted across reloads
+- reload behavior must stay idle-first for heavy analysis zones; cached results may be shown as cached or stale, but reload must not silently trigger heavy requests
+- cached source-data payloads are snapshot-aware by ticker and should be ignored or labeled stale when the selected ticker no longer matches the cached snapshot
+- page-level ownership rule:
+  - backend owns canonical metrics, comparison results, and snapshot persistence
+  - Corporate page owns refresh intent, browser continuity state, stale labeling, and cache-read filtering
 
 ### Outputs
 
@@ -225,6 +244,20 @@ Run browser-side exploratory simulations without blocking the backend request pa
 - shared path result
 - valuation result
 - correlation result
+- normalization warnings attached to each result family after page-level validation
+
+### Rendering contract
+
+- worker result presence alone is not sufficient to render a chart
+- page-level Monte Carlo state must normalize worker payloads before chart consumption
+- chart panels are expected to render one explicit state:
+  - `loading`
+  - `empty`
+  - `invalid-data`
+  - `error`
+  - valid chart
+- chart components consume validated view models through guard-style boundaries rather than reading raw worker payloads directly
+- fixed chart containers must provide measurable height so `ResponsiveContainer`/Recharts mounts do not collapse into blank output
 
 ### Outputs
 
@@ -600,6 +633,22 @@ Expose local runtime-health and sensitivity context without requiring the user t
 - Important note: because this remains primarily UI-defined today, this document is the canonical specification until the logic is moved to a shared backend/service layer.
 - Drill-down: calculation-detail modal.
 
+### Metric audit quality badges and drill-down
+
+- Meaning: qualify whether displayed `ROIC`, `WACC`, and `ROIC - WACC` values are decision-grade, estimated fallback values, stale/suspicious values, invalid values, or unavailable.
+- Source: `GET /api/v1/corporate/metrics/{ticker}/audit`.
+- Ownership:
+  - backend owns `source_mode`, per-metric `quality`, warnings, and `inputs_used`
+  - frontend chooses badge styling, short reason copy, and modal/table layout
+- Quality semantics:
+  - `ok` means the metric is auditable from the preferred source path
+  - `estimated` means the UI is using saved or deterministic fallback assumptions
+  - `stale`, `suspicious`, `invalid`, and `missing` must remain visible as explicit caution states rather than being normalized into a neutral display
+  - `ROIC - WACC` inherits the lower-confidence state of the ROIC and WACC source metrics
+- Drill-down:
+  - Corporate assumption controls may show compact quality badges inline
+  - calculation-detail and stock-detail audit panels show the intermediate inputs and calculation-version metadata used to produce the displayed metric
+
 ## 5.2 Diagnostic graph modules
 
 ### Company Status Graph
@@ -788,6 +837,7 @@ This shared-result rule is canonical for the current frontend implementation.
 
 - Meaning: histogram of terminal-return outcomes with loss-side thresholds marked.
 - Granularity: histogram bucket level.
+- Invalid or non-finite buckets must be removed during normalization before the histogram is rendered.
 - Drill-down: no modal; table below provides exact summary values.
 
 ### `Terminal Value Percentiles`
@@ -795,6 +845,7 @@ This shared-result rule is canonical for the current frontend implementation.
 - Meaning: P5, P10, P25, P50, P75, P90, and P95 terminal outcomes.
 - Source: terminal percentile values from shared path result.
 - Granularity: percentile-bar level.
+- Empty or structurally incomplete percentile rows must produce an explicit invalid/empty state instead of a blank chart shell.
 - Color semantics: lower percentiles use red/orange tones, median dark neutral, upper percentiles teal/green.
 
 ## 6.3 Return Distribution
@@ -810,6 +861,9 @@ This shared-result rule is canonical for the current frontend implementation.
 - Ownership:
   - worker owns histogram and normal-fit data
   - frontend overlays them in a composed chart
+- Rendering contract:
+  - histogram rows with invalid bucket boundaries or counts are dropped before render
+  - missing histogram but valid summary metrics should degrade to explicit `invalid-data` chart copy rather than hiding the whole section
 - Color semantics:
   - red bars for loss buckets
   - green bars for gain buckets
@@ -819,6 +873,9 @@ This shared-result rule is canonical for the current frontend implementation.
 
 - Meaning: compare simulated cumulative probability against the fitted normal CDF.
 - Ownership: worker data, frontend line rendering.
+- Rendering contract:
+  - simulated and fitted CDF arrays must be shape-checked and normalized before render
+  - if one side is unusable, the panel should surface an explicit degraded or invalid state rather than silently drawing only axes
 - Color semantics:
   - teal line for simulated CDF
   - dashed black line for normal CDF
@@ -846,11 +903,13 @@ For all four:
 - source: valuation worker output
 - ownership: frontend worker valuation engine
 - filters: current valuation input set, including current price, EPS, growth uncertainty, discount-rate uncertainty, terminal growth, forecast period, PER uncertainty, and simulation count
+- rendering rule: invalid or non-finite fair-value points must be removed during normalization, with warnings surfaced when a partial recovery was necessary
 
 ### `Fair Value Distribution`
 
 - Meaning: histogram of simulated single-stock fair values.
 - Source: `valuation_distribution`.
+- Rendering contract: an empty or invalid fair-value distribution must render an explicit guard state instead of an empty histogram area.
 - Color semantics:
   - green bars for distribution
   - black reference line for current price
@@ -884,12 +943,14 @@ For all four:
 - source: correlation worker output
 - ownership: worker model
 - filters: current asset list, expected returns, volatilities, correlation matrix, and simulation count
+- rendering rule: page-level normalization must reject malformed frontier points, invalid sensitivity rows, and non-finite summary values before UI state is committed
 
 ### `Efficient Frontier`
 
 - Meaning: scatter of sampled portfolios in risk-return space.
 - Source: `efficient_frontier`.
 - Granularity: one point per sampled portfolio.
+- Rendering contract: invalid points are dropped during normalization; a frontier with no valid points must render an explicit invalid-data state.
 - Color semantics:
   - sampled portfolios use purple
   - highest-Sharpe portfolio uses bright green
@@ -898,6 +959,7 @@ For all four:
 
 - Meaning: rank correlation of each asset return with portfolio returns.
 - Granularity: one bar per asset.
+- Rendering contract: asset rows missing labels or non-finite rho values are invalid and must not be passed straight into the chart.
 - Color semantics:
   - positive exposures shown in green
   - negative exposures shown in red
@@ -907,6 +969,7 @@ For all four:
 
 - Meaning: full pairwise correlation matrix for the current setup.
 - Granularity: matrix cell.
+- Rendering contract: the grid must be square and finite after normalization; otherwise the panel should show explicit invalid-data treatment.
 - Color semantics:
   - diagonal cells solid green
   - positive off-diagonal cells green with strength-based opacity

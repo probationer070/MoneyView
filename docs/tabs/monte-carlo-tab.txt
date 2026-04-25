@@ -45,6 +45,8 @@ Sub-Tab Design Philosophy
 - `Path Simulation` is the engine room.
 - `Risk Analysis` and `Return Distribution` are analytical views built on the same shared result.
 - `Corporate Valuation` and `Correlation Model` are separate worker jobs with their own input and result surfaces.
+- Worker output is not treated as render-ready by itself.
+- The page validates and normalizes worker payloads before charts are allowed to render.
 
 1. Path Simulation
 
@@ -81,6 +83,10 @@ Design Notes
 - Inputs should feel like a simulation form.
 - Outputs should feel like a scenario dashboard.
 - Export actions are positioned as analyst tools, not casual buttons.
+- Path results are the shared source for:
+  - Path Simulation
+  - Risk Analysis
+  - Return Distribution
 
 2. Risk Analysis
 
@@ -105,6 +111,10 @@ Design Notes
 - It is intended to answer:
   - how bad can the bad cases be
   - how asymmetric is the outcome set
+- Panels must degrade explicitly when normalized data is incomplete:
+  - `empty`
+  - `invalid-data`
+  - valid chart with warnings when recovery was partial
 
 3. Return Distribution
 
@@ -125,6 +135,7 @@ Visuals
 Design Notes
 - This sub-tab is built to challenge oversimplified "normal market" intuition.
 - It should help the user see whether the simulation behaves like a bell curve or a heavy-tailed process.
+- Histogram and CDF charts should never render as blank shells when malformed rows are dropped.
 
 4. Corporate Valuation
 
@@ -159,6 +170,7 @@ Outputs
 Design Notes
 - This section combines form controls with a result board.
 - It is designed to feel like a probabilistic valuation bench rather than a standard DCF page.
+- Invalid fair-value rows may be removed during normalization, with warning copy kept visible near the result panel.
 
 5. Correlation Model
 
@@ -186,9 +198,11 @@ Outputs
 Design Notes
 - The matrix editing surface is the defining interaction of this sub-tab.
 - It is the most "quant-lab" feeling part of MoneyView.
+- Correlation frontier, sensitivity rows, and heatmap cells must pass validation before the charts render.
 
 Execution Model
 - The page owns worker lifecycle and request tracking.
+- The page also owns result normalization and warning propagation.
 - Shared result:
   - Path Simulation
   - Risk Analysis
@@ -202,6 +216,8 @@ Core Worker And Engine Files
 - `apps/web/app/monte-carlo/lib/simulation-core.ts`
 - `apps/web/app/monte-carlo/lib/valuation-core.ts`
 - `apps/web/app/monte-carlo/lib/correlation-core.ts`
+- `apps/web/app/monte-carlo/lib/resultNormalization.ts`
+- `apps/web/app/monte-carlo/components/ChartGuard.tsx`
 
 Primary User Workflow
 1. Open Monte Carlo.

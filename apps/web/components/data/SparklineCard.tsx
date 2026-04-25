@@ -35,11 +35,11 @@ export function SparklineCard({
       >
         <div className="mb-[var(--space-4)] flex items-start justify-between gap-[var(--space-4)]">
           <div className="min-w-0">
-            <h3 className="truncate text-[18px] font-semibold text-[var(--text-primary)]">{title}</h3>
-            <span className="text-[11px] uppercase tracking-wide text-[var(--text-muted)]">{ticker}</span>
+            <h3 className="truncate text-[length:var(--type-card-title)] font-semibold text-[var(--text-primary)]">{title}</h3>
+            <span className="text-[length:var(--type-caption)] uppercase tracking-wide text-[var(--text-muted)]">{ticker}</span>
           </div>
           <div className="shrink-0 text-right">
-            <div className="text-[20px] font-bold tabular-nums text-[var(--text-primary)]">{value}</div>
+            <div className="text-[length:var(--type-metric-md)] font-bold tabular-nums text-[var(--text-primary)]">{value}</div>
             <DeltaBadge value={deltaPct} className="mt-[var(--space-1)]" />
           </div>
         </div>
@@ -48,7 +48,7 @@ export function SparklineCard({
           <Sparkline data={sparkline} color={sparklineColor} />
         </div>
 
-        <div className="mt-[var(--space-4)] flex items-center justify-between text-[12px] text-[var(--text-muted)]">
+        <div className="mt-[var(--space-4)] flex items-center justify-between text-[length:var(--type-helper)] text-[var(--text-muted)]">
           <span>Detail available</span>
           <span>{periodLabel ?? "Snapshot"}</span>
         </div>

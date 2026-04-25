@@ -176,6 +176,7 @@ export function buildCalculationDetails({
     timeHorizon,
     formula,
     simulation,
+    auditMetric,
   }: {
     title: string;
     label: string;
@@ -186,6 +187,7 @@ export function buildCalculationDetails({
     timeHorizon: string;
     formula: string;
     simulation: CalculationRow[];
+    auditMetric?: "roic" | "wacc" | "spread";
   }): CalculationDetail => ({
     title: `${companyName} ${title}`,
     timeHorizon,
@@ -205,6 +207,7 @@ export function buildCalculationDetails({
       { label: "Fallback model", value: "Built-in preset or deterministic sector default", source: "Used only when no ticker-specific row exists" },
     ],
     simulation,
+    auditMetric,
   });
 
   return {
@@ -284,6 +287,7 @@ export function buildCalculationDetails({
       source: "Yahoo annual statements: calculate ROIC for each available fiscal year from 2021 onward, then average annual ROIC values",
       timeHorizon: `Annual values from fiscal years 2021+. Current display basis: ${roicBasisLabel}; ROIC can be set to a single year or a recent/all-year average.`,
       formula: "ROIC = NOPAT / Invested Capital x 100",
+      auditMetric: "roic",
       simulation: [
         { label: "1", value: `${pct(assumptions.roic)} / 100.0`, source: numberText(assumptions.roic / 100) },
         { label: "2", value: `${numberText(assumptions.roic / 100)} x 100`, source: pct(assumptions.roic) },
@@ -303,6 +307,7 @@ export function buildCalculationDetails({
       source: "Yahoo beta plus the latest available Yahoo annual statement debt/equity/tax/cost-of-debt inputs; South Korea CRP and base market rates are model inputs",
       timeHorizon: "WACC uses the most recent available annual statement capital structure rather than a 5-year average.",
       formula: "WACC = E/V x Ke + D/V x Kd x (1 - tax)",
+      auditMetric: "wacc",
       simulation: [
         { label: "1", value: `Selected WACC input ${pct(assumptions.wacc)}`, source: sourceLabel },
         { label: "2", value: `Compare with bottom-up Ke ${pct(derived.bottomUpKe)}`, source: `Spread ${pct(assumptions.roic - assumptions.wacc)}` },
@@ -556,6 +561,7 @@ export function buildCalculationDetails({
         { label: "2", value: `${numberText(assumptions.roic)} - ${numberText(assumptions.wacc)}`, source: numberText(derived.spread) },
         { label: "3", value: pct(derived.spread), source: "Final ROIC - WACC spread" },
       ],
+      auditMetric: "spread",
     },
     bottomUpKe: {
       title: `${companyName} Bottom-up Ke`,

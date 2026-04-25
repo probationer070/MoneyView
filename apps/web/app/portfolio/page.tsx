@@ -27,12 +27,22 @@ import {
 import { useDebounce } from "@/hooks/useDebounce";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
-import { SkeletonCard } from "@/components/ui/LoadingState";
+import { LoadingState, SkeletonCard } from "@/components/ui/LoadingState";
 import { ActionButton } from "@/components/ui/ActionButton";
 import { PortfolioSnapshotSummary } from "./components/PortfolioSnapshotSummary";
 import { PortfolioAllocationEditor } from "./components/PortfolioAllocationEditor";
 import { StockDetailModal } from "./components/StockDetailModal";
 import { SnapshotHistoryModal } from "./components/SnapshotHistoryModal";
+import {
+  buildPortfolioTickerMetrics,
+  metricDisplayTitle,
+  metricNumericValue,
+  metricSubtitle,
+  metricToneClass as portfolioMetricToneClass,
+  type PortfolioTickerMetrics,
+  volatilityToneClass as portfolioVolatilityToneClass,
+} from "./portfolioMetrics";
+import { MetricQualityBadge } from "@/components/ui/MetricQualityBadge";
 
 // Domain models returned by the portfolio, detail, and news endpoints.
 interface WatchlistDelta {
@@ -124,7 +134,7 @@ export interface CorporateComparisonSnapshotMeta {
   snapshot_is_stale: boolean;
 }
 
-interface CorporateComparisonResponse {
+export interface CorporateComparisonResponse {
   market_expected_return: number;
   risk_free_rate: number;
   equity_risk_premium: number;
@@ -199,14 +209,6 @@ export interface StockDetail {
 interface SectorGroup {
   sector: string;
   holdings: PortfolioStock[];
-}
-
-export interface PortfolioComparisonMetrics {
-  roicMinusWacc: number | null;
-  dcfUpside: number | null;
-  expectedVsMarket: number | null;
-  currentPrice: number | null;
-  volatility: number | null;
 }
 
 const PORTFOLIO_DATE_FILTERS_STORAGE_KEY = "moneyview.portfolio.dateFilters.v1";
@@ -327,7 +329,7 @@ function WatchlistSkeletonGrid() {
       {Array.from({ length: 4 }).map((_, idx) => (
         <div
           key={`watchlist-skeleton-${idx}`}
-          className="bg-[var(--bg-surface)] rounded-[var(--radius)] border border-[var(--border)] p-4 shadow-sm animate-pulse"
+          className="bg-[var(--bg-surface)] rounded-[var(--radius)] border border-[var(--border)] p-4 animate-pulse"
         >
           <div className="flex justify-between items-start mb-3">
             <div className="space-y-2">
@@ -360,6 +362,25 @@ function StockIdentity({ stock }: { stock: PortfolioStock }) {
         {stock.name || stock.ticker}
       </h3>
       <p className="text-xs font-light tracking-wide text-[var(--text-muted)]">{stock.ticker}</p>
+    </div>
+  );
+}
+
+function MetricCell({ metric, toneClass }: { metric: PortfolioTickerMetrics["roicMinusWacc"]; toneClass: string }) {
+  const subtitle = metricSubtitle(metric);
+  return (
+    <div className="flex flex-col items-end gap-1">
+      <div className={`font-semibold tabular-nums ${toneClass}`} title={metricDisplayTitle(metric)}>
+        {metric.displayValue}
+      </div>
+      <div className="flex flex-wrap justify-end gap-1">
+        <MetricQualityBadge quality={metric.quality} />
+      </div>
+      {subtitle ? (
+        <div className="max-w-[12rem] text-right text-[11px] leading-tight text-[var(--text-muted)]">
+          {subtitle}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -411,13 +432,13 @@ function HoldingsTable({
   deletingTicker,
 }: {
   watchlist: PortfolioStock[];
-  comparisonMetricsByTicker: Record<string, PortfolioComparisonMetrics>;
+  comparisonMetricsByTicker: Record<string, PortfolioTickerMetrics>;
   onSelect: (stock: PortfolioStock) => void;
   onDelete: (stock: PortfolioStock) => void;
   deletingTicker?: string | null;
 }) {
   return (
-    <section className="overflow-x-auto rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-panel)] shadow-sm">
+    <section className="overflow-x-auto rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-panel)]">
       <div className="border-b border-[var(--border)] bg-[var(--surface-muted)] px-4 py-2 text-xs text-[var(--text-muted)] sm:hidden">
         Mobile view keeps the core comparison columns visible first. Open a stock row for the full detail workflow.
       </div>
@@ -450,7 +471,7 @@ function HoldingsTable({
                 <td className="px-4 py-3">
                   <div className="font-bold text-[var(--text-primary)]">{stock.ticker}</div>
                   <div className="text-xs font-light tracking-wide text-[var(--text-muted)]">{stock.name || stock.ticker}</div>
-                  <div className="mt-1 text-[11px] text-[var(--text-muted)] lg:hidden">{sectorLabel(stock.sector)}</div>
+                  <div className="mt-1 text-[length:var(--type-caption)] text-[var(--text-muted)] lg:hidden">{sectorLabel(stock.sector)}</div>
                 </td>
                 <td className="hidden px-4 py-3 text-[var(--text-muted)] lg:table-cell">{sectorLabel(stock.sector)}</td>
                 <td className="px-4 py-3 text-right tabular-nums">{formatCurrencyCompact(metrics.currentPrice ?? stock.last_close)}</td>
@@ -463,17 +484,17 @@ function HoldingsTable({
                     />
                   </div>
                 </td>
-                <td className={`px-4 py-3 text-right font-semibold tabular-nums ${metricToneClass(metrics.roicMinusWacc)}`}>
-                  {formatMetricPercent(metrics.roicMinusWacc)}
+                <td className="px-4 py-3 text-right align-top">
+                  <MetricCell metric={metrics.roicMinusWacc} toneClass={portfolioMetricToneClass(metrics.roicMinusWacc)} />
                 </td>
-                <td className={`px-4 py-3 text-right font-semibold tabular-nums ${metricToneClass(metrics.dcfUpside)}`}>
-                  {formatMetricPercent(metrics.dcfUpside)}
+                <td className="px-4 py-3 text-right align-top">
+                  <MetricCell metric={metrics.dcfUpside} toneClass={portfolioMetricToneClass(metrics.dcfUpside)} />
                 </td>
-                <td className={`px-4 py-3 text-right font-semibold tabular-nums ${metricToneClass(metrics.expectedVsMarket)}`}>
-                  {formatMetricPercent(metrics.expectedVsMarket)}
+                <td className="px-4 py-3 text-right align-top">
+                  <MetricCell metric={metrics.expectedVsMarket} toneClass={portfolioMetricToneClass(metrics.expectedVsMarket)} />
                 </td>
-                <td className={`hidden px-4 py-3 text-right font-semibold tabular-nums md:table-cell ${volatilityToneClass(metrics.volatility)}`}>
-                  {formatMetricPercent(metrics.volatility)}
+                <td className="hidden px-4 py-3 text-right align-top md:table-cell">
+                  <MetricCell metric={metrics.volatility} toneClass={portfolioVolatilityToneClass(metrics.volatility)} />
                 </td>
                 <td className="hidden px-4 py-3 text-right tabular-nums lg:table-cell">
                   {formatWeightPercent(stock.weight)}
@@ -560,14 +581,7 @@ function parseAllocationPercent(value: string, fallbackPercent: number) {
 export function metricToneClass(value: number | null | undefined) {
   if (isMetricOutlier(value)) return "text-amber-700";
   if (value === 0) return "text-[var(--text-muted)]";
-  return Number(value) > 0 ? "text-[var(--surface)]" : "text-[var(--delta-down)]";
-}
-
-function volatilityToneClass(value: number | null | undefined) {
-  if (isMetricOutlier(value)) return "text-amber-700";
-  if ((value ?? 0) >= 35) return "text-[var(--delta-down)]";
-  if ((value ?? 0) >= 20) return "text-amber-700";
-  return "text-[var(--surface)]";
+  return Number(value) > 0 ? "text-[var(--delta-up)]" : "text-[var(--delta-down)]";
 }
 
 function estimateVolatilityFromSparkline(sparkline: number[]) {
@@ -594,12 +608,18 @@ export function summarizeSparklineTrend(sparkline: number[]) {
   return ((last - first) / first) * 100;
 }
 
-const EMPTY_COMPARISON_METRICS: PortfolioComparisonMetrics = {
-  roicMinusWacc: null,
-  dcfUpside: null,
-  expectedVsMarket: null,
+const EMPTY_COMPARISON_METRICS: PortfolioTickerMetrics = {
+  ticker: "",
+  roicMinusWacc: { value: null, displayValue: "N/A", quality: "missing", reason: "No portfolio comparison data has been loaded yet." },
+  dcfUpside: { value: null, displayValue: "N/A", quality: "missing", reason: "No portfolio comparison data has been loaded yet." },
+  expectedVsMarket: { value: null, displayValue: "N/A", quality: "missing", reason: "No portfolio comparison data has been loaded yet." },
   currentPrice: null,
-  volatility: null,
+  volatility: { value: null, displayValue: "N/A", quality: "missing", reason: "Not enough price history to estimate volatility." },
+  sourceMode: "unavailable",
+  asOf: null,
+  snapshotVersion: null,
+  warnings: [],
+  excludedFromRanking: true,
 };
 
 function normalizeWeightsToOne(weights: PortfolioStock[]) {
@@ -929,25 +949,36 @@ export default function PortfolioPage() {
     holdingStartDate,
     attributionAsOfDate,
   }), [attributionAsOfDate, debouncedBenchmarkTicker, holdingStartDate, tickers, weights]);
+  const effectivePortfolioComparisonSnapshot = useMemo<PortfolioComparisonRequestSnapshot | null>(() => {
+    if (portfolioComparisonRequestedSnapshot) return portfolioComparisonRequestedSnapshot;
+    if (!hasHoldings) return null;
+    if (portfolioComparisonMode !== "snapshot") return null;
+    return comparisonCurrentSnapshot;
+  }, [comparisonCurrentSnapshot, hasHoldings, portfolioComparisonMode, portfolioComparisonRequestedSnapshot]);
+  const portfolioComparisonFetchTrigger = portfolioComparisonRequestedSnapshot
+    ? (portfolioAnalysisRefreshToken ?? "manual")
+    : effectivePortfolioComparisonSnapshot
+      ? "auto-snapshot"
+      : "idle";
   const portfolioComparisonQuery = useQuery<CorporateComparisonResponse>({
     queryKey: [
       "portfolio-comparison-summary",
-      portfolioComparisonRequestedSnapshot?.mode ?? "idle",
-      portfolioComparisonRequestedSnapshot?.comparisonUniverse ?? "idle",
-      portfolioComparisonRequestedSnapshot?.benchmarkTicker ?? "idle",
-      portfolioComparisonRequestedSnapshot?.customTickersInput ?? "",
-      portfolioComparisonRequestedSnapshot?.holdingsSignature ?? "idle",
-      portfolioAnalysisRefreshToken ?? "idle",
+      effectivePortfolioComparisonSnapshot?.mode ?? "idle",
+      effectivePortfolioComparisonSnapshot?.comparisonUniverse ?? "idle",
+      effectivePortfolioComparisonSnapshot?.benchmarkTicker ?? "idle",
+      effectivePortfolioComparisonSnapshot?.customTickersInput ?? "",
+      effectivePortfolioComparisonSnapshot?.holdingsSignature ?? "idle",
+      portfolioComparisonFetchTrigger,
     ],
-    enabled: Boolean(hasHoldings && portfolioComparisonRequestedSnapshot && portfolioAnalysisRefreshToken),
+    enabled: Boolean(hasHoldings && effectivePortfolioComparisonSnapshot && portfolioComparisonFetchTrigger !== "idle"),
     queryFn: ({ signal }) =>
       fetchApi<CorporateComparisonResponse>("/corporate/comparison", {
         signal,
         params: {
-          mode: portfolioComparisonRequestedSnapshot?.mode ?? "snapshot",
-          comparison_universe: portfolioComparisonRequestedSnapshot?.comparisonUniverse ?? "portfolio_plus_benchmark",
-          benchmark_ticker: portfolioComparisonRequestedSnapshot?.benchmarkTicker ?? DEFAULT_PORTFOLIO_BENCHMARK_TICKER,
-          custom_tickers: portfolioComparisonRequestedSnapshot?.customTickersInput ?? "",
+          mode: effectivePortfolioComparisonSnapshot?.mode ?? "snapshot",
+          comparison_universe: effectivePortfolioComparisonSnapshot?.comparisonUniverse ?? "portfolio_plus_benchmark",
+          benchmark_ticker: effectivePortfolioComparisonSnapshot?.benchmarkTicker ?? DEFAULT_PORTFOLIO_BENCHMARK_TICKER,
+          custom_tickers: effectivePortfolioComparisonSnapshot?.customTickersInput ?? "",
         },
       }),
     staleTime: 60_000,
@@ -1086,23 +1117,26 @@ export default function PortfolioPage() {
     ),
   );
   const portfolioAnalysisIsStale = portfolioComparisonIsStale || portfolioComparisonHistoryIsStale || portfolioAttributionIsStale;
-  const comparisonMetricsByTicker = useMemo<Record<string, PortfolioComparisonMetrics>>(() => {
-    const portfolioComparisonRows = activeComparisonData?.rows ?? [];
-    return portfolioComparisonRows
-      .filter((row) => row.group_name !== "benchmark")
-      .reduce<Record<string, PortfolioComparisonMetrics>>((acc, row) => {
-        acc[row.ticker] = {
-          roicMinusWacc: row.roic_minus_wacc,
-          dcfUpside: row.dcf_implied_return,
-          expectedVsMarket: row.expected_return_spread,
-          currentPrice: row.current_price,
-          volatility: estimateVolatilityFromSparkline(
-            watchlist.find((stock) => stock.ticker === row.ticker)?.sparkline ?? [],
-          ),
-        };
-        return acc;
-      }, {});
-  }, [activeComparisonData?.rows, watchlist]);
+  const comparisonMetricsByTicker = useMemo<Record<string, PortfolioTickerMetrics>>(() => buildPortfolioTickerMetrics({
+    watchlist,
+    activeComparisonData: activeComparisonData ?? null,
+    comparisonData: comparisonData ?? null,
+    selectedSnapshotData: selectedSnapshotQuery.data,
+    selectedHistoryPointSnapshotVersion: selectedHistoryPoint?.snapshot_version ?? null,
+    portfolioComparisonUniverse,
+    portfolioComparisonQueryHasData: Boolean(portfolioComparisonQuery.data),
+    activeSnapshotMeta,
+    estimateVolatilityFromSparkline,
+  }), [
+    activeComparisonData,
+    activeSnapshotMeta,
+    comparisonData,
+    portfolioComparisonQuery.data,
+    portfolioComparisonUniverse,
+    selectedHistoryPoint?.snapshot_version,
+    selectedSnapshotQuery.data,
+    watchlist,
+  ]);
   const allocationRows = useMemo(() => watchlist.map((stock) => {
     const allocationPercent = parseAllocationPercent(
       weightDrafts[stock.ticker] ?? (stock.weight * 100).toFixed(1),
@@ -1110,7 +1144,7 @@ export default function PortfolioPage() {
     );
     const allocatedAmount = totalInvestmentAmount * (allocationPercent / 100);
     const metrics = comparisonMetricsByTicker[stock.ticker] ?? EMPTY_COMPARISON_METRICS;
-    const projectedUpsidePercent = isMetricOutlier(metrics.dcfUpside) ? null : Number(metrics.dcfUpside);
+    const projectedUpsidePercent = metricNumericValue(metrics.dcfUpside);
     const grossProjectedValue = projectedUpsidePercent == null
       ? allocatedAmount
       : allocatedAmount * (1 + (projectedUpsidePercent / 100));
@@ -1157,20 +1191,20 @@ export default function PortfolioPage() {
   }), [allocationRows]);
 
   const portfolioSnapshotSummary = useMemo(() => {
-    const stockRows = activeComparisonData?.rows.filter((row) => row.group_name !== "benchmark") ?? [];
+    const stockRows = watchlist.map((stock) => comparisonMetricsByTicker[stock.ticker] ?? EMPTY_COMPARISON_METRICS);
     if (stockRows.length === 0) return null;
     const flaggedMetricsCount = stockRows.reduce((sum, row) => (
       sum
-      + (isMetricOutlier(row.expected_return_spread) ? 1 : 0)
-      + (isMetricOutlier(row.roic_minus_wacc) ? 1 : 0)
-      + (isMetricOutlier(row.dcf_implied_return) ? 1 : 0)
+      + (row.expectedVsMarket.quality === "suspicious" || row.expectedVsMarket.quality === "invalid" ? 1 : 0)
+      + (row.roicMinusWacc.quality === "suspicious" || row.roicMinusWacc.quality === "invalid" ? 1 : 0)
+      + (row.dcfUpside.quality === "suspicious" || row.dcfUpside.quality === "invalid" ? 1 : 0)
     ), 0);
-    const positiveSpreadCount = stockRows.filter((row) => !isMetricOutlier(row.expected_return_spread) && row.expected_return_spread > 0).length;
-    const positiveEconomicSpreadCount = stockRows.filter((row) => !isMetricOutlier(row.roic_minus_wacc) && row.roic_minus_wacc > 0).length;
-    const positiveDcfCount = stockRows.filter((row) => !isMetricOutlier(row.dcf_implied_return) && row.dcf_implied_return > 0).length;
+    const positiveSpreadCount = stockRows.filter((row) => (metricNumericValue(row.expectedVsMarket) ?? 0) > 0).length;
+    const positiveEconomicSpreadCount = stockRows.filter((row) => (metricNumericValue(row.roicMinusWacc) ?? 0) > 0).length;
+    const positiveDcfCount = stockRows.filter((row) => (metricNumericValue(row.dcfUpside) ?? 0) > 0).length;
     const highestSpreadRow = stockRows
-      .filter((row) => !isMetricOutlier(row.expected_return_spread))
-      .sort((left, right) => right.expected_return_spread - left.expected_return_spread)[0] ?? null;
+      .filter((row) => !row.excludedFromRanking && metricNumericValue(row.expectedVsMarket) != null)
+      .sort((left, right) => (metricNumericValue(right.expectedVsMarket) ?? -Infinity) - (metricNumericValue(left.expectedVsMarket) ?? -Infinity))[0] ?? null;
     return {
       stockCount: stockRows.length,
       flaggedMetricsCount,
@@ -1178,18 +1212,18 @@ export default function PortfolioPage() {
       positiveEconomicSpreadCount,
       positiveDcfCount,
       highestSpreadTicker: highestSpreadRow?.ticker ?? "N/A",
-      highestSpreadValue: highestSpreadRow?.expected_return_spread ?? null,
+      highestSpreadValue: highestSpreadRow ? metricNumericValue(highestSpreadRow.expectedVsMarket) : null,
     };
-  }, [activeComparisonData?.rows]);
+  }, [comparisonMetricsByTicker, watchlist]);
 
   useEffect(() => {
-    if (!portfolioComparisonQuery.data || !portfolioComparisonRequestedSnapshot) return;
+    if (!portfolioComparisonQuery.data || !effectivePortfolioComparisonSnapshot) return;
     writeSessionCache(PORTFOLIO_COMPARISON_CACHE_KEY, {
-      snapshot: portfolioComparisonRequestedSnapshot,
+      snapshot: effectivePortfolioComparisonSnapshot,
       result: portfolioComparisonQuery.data,
       lastUpdatedAt: new Date(portfolioComparisonQuery.dataUpdatedAt).toISOString(),
     } satisfies CachedCalculation<PortfolioComparisonRequestSnapshot, CorporateComparisonResponse>);
-  }, [portfolioComparisonQuery.data, portfolioComparisonQuery.dataUpdatedAt, portfolioComparisonRequestedSnapshot]);
+  }, [effectivePortfolioComparisonSnapshot, portfolioComparisonQuery.data, portfolioComparisonQuery.dataUpdatedAt]);
 
   useEffect(() => {
     if (!portfolioComparisonHistoryQuery.data || !portfolioComparisonHistoryRequestedSnapshot) return;
@@ -1731,7 +1765,7 @@ export default function PortfolioPage() {
         </header>
 
         {hasHoldings && (
-          <section className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4 shadow-sm">
+          <section className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4">
             <div className="flex flex-col gap-4 min-[1450px]:flex-row lg:items-start lg:justify-between">
               <div>
                 <h2 className="text-lg font-bold text-[var(--text-primary)]">
@@ -1894,7 +1928,7 @@ export default function PortfolioPage() {
 
             <div className="mt-3 flex flex-col gap-2 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-panel)] p-4 text-sm text-[var(--text-muted)] sm:flex-row sm:items-center sm:justify-between">
               <div className="flex flex-col gap-1">
-                <span>{portfolioAnalysisDisplayLastUpdatedAt ? `Last updated ${formatSyncTimestamp(portfolioAnalysisDisplayLastUpdatedAt)}` : "Portfolio analysis stays idle on first load until refreshed."}</span>
+                <span>{portfolioAnalysisDisplayLastUpdatedAt ? `Last updated ${formatSyncTimestamp(portfolioAnalysisDisplayLastUpdatedAt)}` : "Latest saved comparison snapshot loads automatically when holdings exist."}</span>
                 {portfolioAnalysisMessage && <span>{portfolioAnalysisMessage}</span>}
               </div>
               {portfolioAnalysisIsStale && (
@@ -1932,7 +1966,9 @@ export default function PortfolioPage() {
                 </button>
               </div>
               {portfolioComparisonHistoryQuery.isLoading && !comparisonHistoryData && (
-                <p className="mt-3 text-sm text-[var(--text-muted)]">Loading saved snapshots...</p>
+                <div className="mt-3 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)]">
+                  <LoadingState variant="spinner" label="Loading saved snapshots..." />
+                </div>
               )}
               {portfolioComparisonHistoryQuery.isError && !comparisonHistoryData && (
                 <div className="mt-3">
@@ -1944,10 +1980,20 @@ export default function PortfolioPage() {
                 </div>
               )}
               {!comparisonHistoryData && !portfolioComparisonHistoryQuery.isLoading && !portfolioComparisonHistoryQuery.isError && (
-                <p className="mt-3 text-sm text-[var(--text-muted)]">Saved snapshot history stays idle until you refresh portfolio analysis.</p>
+                <div className="mt-3 rounded-[var(--radius)] border border-dashed border-[var(--border)] bg-[var(--surface-muted)]">
+                  <EmptyState
+                    title="Saved snapshot history stays idle until you refresh portfolio analysis."
+                    description="Refresh portfolio analysis to load the latest persisted snapshot versions for this review context."
+                  />
+                </div>
               )}
               {comparisonHistoryData && !portfolioComparisonHistoryQuery.isLoading && !portfolioComparisonHistoryQuery.isError && recentSnapshotPoints.length === 0 && (
-                <p className="mt-3 text-sm text-[var(--text-muted)]">No saved snapshots are available yet for the current review context.</p>
+                <div className="mt-3 rounded-[var(--radius)] border border-dashed border-[var(--border)] bg-[var(--surface-muted)]">
+                  <EmptyState
+                    title="No saved snapshots are available yet"
+                    description="No saved snapshots are available yet for the current review context."
+                  />
+                </div>
               )}
               {comparisonHistoryData && !portfolioComparisonHistoryQuery.isLoading && !portfolioComparisonHistoryQuery.isError && recentSnapshotPoints.length > 0 && (
                 <div className="mt-3 space-y-2">
@@ -2003,9 +2049,12 @@ export default function PortfolioPage() {
               <p className="mt-3 text-sm text-[var(--text-muted)]">{portfolioComparisonMessage}</p>
             )}
             {selectedHistoryPoint && selectedSnapshotQuery.isLoading && (
-              <p className="mt-3 text-sm text-[var(--text-muted)]">
-                Loading selected snapshot for {formatDateLabel(selectedHistoryPoint.as_of_date)}...
-              </p>
+              <div className="mt-3 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)]">
+                <LoadingState
+                  variant="spinner"
+                  label={`Loading selected snapshot for ${formatDateLabel(selectedHistoryPoint.as_of_date)}...`}
+                />
+              </div>
             )}
             {selectedHistoryPoint && selectedSnapshotQuery.isError && (
               <div className="mt-3">
@@ -2018,7 +2067,9 @@ export default function PortfolioPage() {
             )}
 
             {portfolioComparisonQuery.isLoading && !comparisonData && (
-              <p className="mt-4 text-sm text-[var(--text-muted)]">Loading portfolio snapshot summary...</p>
+              <div className="mt-4 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)]">
+                <LoadingState variant="spinner" label="Loading portfolio snapshot summary..." />
+              </div>
             )}
 
             {portfolioComparisonQuery.isError && !comparisonData && (
@@ -2032,8 +2083,11 @@ export default function PortfolioPage() {
             )}
 
             {!activeComparisonData && !portfolioComparisonQuery.isLoading && !portfolioComparisonQuery.isError && !selectedSnapshotQuery.isLoading && (
-              <div className="mt-4 rounded-[var(--radius)] border border-dashed border-[var(--border)] bg-[var(--surface-muted)] px-4 py-6 text-sm text-[var(--text-muted)]">
-                Portfolio comparison stays idle on first load. Adjust the review controls if needed, then click `Refresh Analysis` to calculate.
+              <div className="mt-4 rounded-[var(--radius)] border border-dashed border-[var(--border)] bg-[var(--surface-muted)]">
+                <EmptyState
+                  title="Portfolio comparison is unavailable."
+                  description="No latest saved snapshot or cached comparison result is available for the current holdings yet. Use `Refresh Analysis` to request a fresh comparison run."
+                />
               </div>
             )}
 
@@ -2123,7 +2177,7 @@ export default function PortfolioPage() {
               </div>
             </section>
 
-            <section className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4 shadow-sm">
+            <section className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4">
               <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                 <div className="max-w-3xl">
                   <h2 className="text-sm font-bold text-[var(--text-primary)]">
@@ -2241,7 +2295,7 @@ export default function PortfolioPage() {
           </div>
         </section>
 
-        <section ref={allocationSectionRef} className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4 shadow-sm">
+        <section ref={allocationSectionRef} className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4">
           <div className="flex flex-col gap-2">
             <h2 className="text-lg font-bold text-[var(--text-primary)]">Portfolio Allocation Workspace</h2>
             <p className="text-sm text-[var(--text-muted)]">
@@ -2265,19 +2319,19 @@ export default function PortfolioPage() {
             <div className="rounded-[var(--radius)] bg-[var(--surface-muted)] p-3 text-xs">
               <div className="text-[var(--text-muted)]">Invested Capital</div>
               <div className="mt-1 font-bold text-[var(--text-primary)]">{formatCurrencyCompact(allocationSummary.allocatedAmount)}</div>
-              <div className="mt-1 text-[11px] text-[var(--text-muted)]">{formatWeightPercent(investedWeight)} allocated</div>
+              <div className="mt-1 text-[length:var(--type-caption)] text-[var(--text-muted)]">{formatWeightPercent(investedWeight)} allocated</div>
             </div>
             <div className="rounded-[var(--radius)] bg-[var(--surface-muted)] p-3 text-xs">
               <div className="text-[var(--text-muted)]">Implied Cash</div>
               <div className="mt-1 font-bold text-[var(--text-primary)]">{formatCurrencyCompact(totalInvestmentAmount * impliedCashWeight)}</div>
-              <div className="mt-1 text-[11px] text-[var(--text-muted)]">{formatWeightPercent(impliedCashWeight)} unallocated</div>
+              <div className="mt-1 text-[length:var(--type-caption)] text-[var(--text-muted)]">{formatWeightPercent(impliedCashWeight)} unallocated</div>
             </div>
             <div className="rounded-[var(--radius)] bg-[var(--surface-muted)] p-3 text-xs">
               <div className="text-[var(--text-muted)]">Final Profit</div>
               <div className={`mt-1 font-bold ${metricToneClass(allocationSummary.finalProfit)}`}>
                 {formatCurrencyCompact(allocationSummary.finalProfit)}
               </div>
-              <div className="mt-1 text-[11px] text-[var(--text-muted)]">
+              <div className="mt-1 text-[length:var(--type-caption)] text-[var(--text-muted)]">
                 Fee-aware using {(portfolioPreferences.transaction_fee_rate * 100).toFixed(1)}% exit fee
               </div>
             </div>
@@ -2421,7 +2475,7 @@ export default function PortfolioPage() {
                       />
                       <span>
                         Add to Watchlist only
-                        <span className="mt-1 block text-[11px] font-normal text-[var(--text-muted)]">
+                        <span className="mt-1 block text-[length:var(--type-caption)] font-normal text-[var(--text-muted)]">
                           Default keeps this name tracked at 0.0% until you opt into the portfolio model.
                         </span>
                       </span>
@@ -2525,7 +2579,7 @@ export default function PortfolioPage() {
         </section>
 
         {watchlist.length > 0 && (
-          <section className="flex flex-col gap-3 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4 shadow-sm">
+          <section className="flex flex-col gap-3 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4">
             <div className="flex flex-col gap-1">
               <h3 className="text-sm font-bold text-[var(--text-primary)]">Sector Filter</h3>
               <p className="text-sm text-[var(--text-muted)]">
@@ -2560,7 +2614,7 @@ export default function PortfolioPage() {
         ) : watchlist.length > 0 && holdingsView === "chart" ? (
           <section className="space-y-4">
             {watchlistSectorGroups.map((group) => (
-              <div key={group.sector} className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4 shadow-sm">
+              <div key={group.sector} className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4">
                 <div className="mb-4">
                   <h3 className="text-sm font-bold text-[var(--text-primary)]">{group.sector}</h3>
                   <p className="text-xs text-[var(--text-muted)]">{group.holdings.length} holding{group.holdings.length === 1 ? "" : "s"}</p>
@@ -2580,7 +2634,7 @@ export default function PortfolioPage() {
                           }
                         }}
                         key={stock.ticker}
-                        className="group relative block bg-[var(--surface-panel)] rounded-[var(--radius)] border border-[var(--border)] p-4 text-left shadow-sm hover:shadow-md transition-all hover:border-[var(--accent)]"
+                        className="group relative block bg-[var(--surface-panel)] rounded-[var(--radius)] border border-[var(--border)] p-4 text-left transition-all hover:border-[var(--accent)] hover:shadow-[var(--shadow-card-hover)]"
                       >
                         <button
                           type="button"
@@ -2589,19 +2643,19 @@ export default function PortfolioPage() {
                             void handleDeleteHolding(stock);
                           }}
                           disabled={deleteWatchlistMutation.isPending && deleteWatchlistMutation.variables === stock.ticker}
-                          className="absolute right-3 top-3 z-10 inline-flex items-center gap-1 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-2 py-1 text-xs font-semibold text-[var(--text-muted)] hover:text-[var(--delta-down)] disabled:opacity-50"
+                          className="absolute right-3 top-3 z-10 inline-flex items-center gap-1 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-2 py-1 text-xs font-semibold text-[var(--text-muted)] opacity-0 transition-opacity hover:text-[var(--delta-down)] group-hover:opacity-100 group-focus-within:opacity-100 disabled:opacity-50"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                           {deleteWatchlistMutation.isPending && deleteWatchlistMutation.variables === stock.ticker ? "Removing" : "Remove"}
                         </button>
-                        <div className="flex justify-between items-start mb-2">
+                        <div className="flex flex-col justify-between items-start mb-2">
                           <StockIdentity stock={stock} />
-                          <div className="text-right">
+                          <div className="text-right flex flex-row justify-between items-end gap-4">
                             <div className="font-semibold tabular-nums">
                               {stock.last_close.toLocaleString(undefined, {
                                 minimumFractionDigits: 1,
                                 maximumFractionDigits: 1,
-                              })}
+                              })}$
                             </div>
                             <DeltaBadge value={deltaPct} className="mt-1" />
                             <p className="sr-only">{portfolioStatus("change", deltaPct)}</p>
@@ -2627,7 +2681,7 @@ export default function PortfolioPage() {
             {watchlistSectorGroups.map((group) => {
               const isCollapsed = collapsedSectors[group.sector] ?? false;
               return (
-                <div key={group.sector} className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4 shadow-sm">
+                <div key={group.sector} className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4">
                   <button
                     type="button"
                     onClick={() => setCollapsedSectors((current) => ({ ...current, [group.sector]: !isCollapsed }))}

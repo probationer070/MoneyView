@@ -19,8 +19,8 @@ interface ToggleGroupProps {
 }
 
 const sizeStyles: Record<ToggleGroupSize, string> = {
-  sm: "min-h-8 px-[var(--space-3)] text-[12px]",
-  md: "min-h-9 px-[var(--space-4)] text-[13px]",
+  sm: "min-h-8 px-[var(--space-3)] text-[length:var(--type-helper)]",
+  md: "min-h-9 px-[var(--space-4)] text-[length:var(--type-label)]",
 };
 
 export function ToggleGroup({
@@ -53,7 +53,7 @@ export function ToggleGroup({
               "inline-flex items-center justify-center rounded-[calc(var(--radius-md)-2px)] font-medium transition-colors duration-[var(--duration-fast)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--state-info)] focus-visible:ring-offset-1",
               sizeStyles[size],
               selected
-                ? "border border-transparent bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-[var(--shadow-card-hover)]"
+                ? "border border-transparent bg-[var(--bg-surface)] text-[var(--text-primary)]"
                 : "border border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
             )}
           >

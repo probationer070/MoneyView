@@ -34,19 +34,19 @@ export function ChartPanelFrame({
   children,
 }: ChartPanelFrameProps) {
   return (
-    <section className={`rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-5 shadow-sm ${className}`}>
+    <section className={`rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-5 ${className}`}>
       {title ? (
         <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <h2 className="text-lg font-black text-[var(--text-primary)]">{title}</h2>
-            {description ? <p className="text-xs text-[var(--text-muted)]">{description}</p> : null}
+            <h2 className="text-[length:var(--type-section-title)] font-black text-[var(--text-primary)]">{title}</h2>
+            {description ? <p className="text-[length:var(--type-helper)] text-[var(--text-muted)]">{description}</p> : null}
           </div>
           {staleLabel ? <StatusBadge status="stale" label={staleLabel} /> : null}
         </div>
       ) : null}
 
       {lastUpdatedLabel ? (
-        <p className="mt-2 text-xs text-[var(--text-muted)]">{lastUpdatedLabel}</p>
+        <p className="mt-2 text-[length:var(--type-helper)] text-[var(--text-muted)]">{lastUpdatedLabel}</p>
       ) : null}
 
       {loading ? (

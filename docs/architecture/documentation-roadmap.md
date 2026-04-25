@@ -84,11 +84,19 @@ If a concept appears in more than one document, keep one canonical explanation a
 Update the docs when any of the following change:
 
 - a public API route, schema, or response envelope changes
+- a frontend-consumed shared contract in `packages/shared-types` changes
 - a finance formula or engine module changes behavior
 - canonical storage ownership changes between SQLite, cache files, seed files, or transient data
 - a major workflow changes its execution path between frontend, backend, worker, and engine
 - a KPI or chart changes its business meaning, filter rules, or source metric
 - a module changes ownership between `apps/web`, `apps/api`, and `packages/core_finance`
+
+Recent examples that must stay aligned across the canonical set:
+
+- when a new route such as `GET /api/v1/corporate/metrics/{ticker}/audit` is added, update `moneyview-api-reference.md`
+- when a workflow begins consuming that route for UI quality badges or drill-down panels, update `data-flow.md`
+- when the payload changes the visible meaning of metric quality, warnings, or fallback state, update `visualization-metrics.md`
+- when worker results require normalization or guard states before rendering, update both `data-flow.md` and `visualization-metrics.md`
 
 ## 8. Update Triggers By Source Area
 
@@ -99,6 +107,7 @@ Use this mapping to decide which docs need review after code changes:
 | `apps/api/routes/`, `apps/api/models/`, `apps/api/schemas/` | `moneyview-api-reference.md`, `data-flow.md` |
 | `apps/api/services/` | `moneyview-system-design.md`, `data-flow.md`, `storage-model.md` |
 | `packages/core_finance/` | `moneyview-quant-engine.md`, `data-flow.md` |
+| `packages/shared-types/` | `moneyview-api-reference.md`, `visualization-metrics.md`, `data-flow.md` when the contract changes workflow behavior |
 | `apps/web/app/`, `apps/web/components/` | `visualization-metrics.md`, `data-flow.md`, module-specific notes |
 | `scripts/start_local.ps1`, `run.cmd`, runtime boot logic | `moneyview-system-design.md`, `system-overview.md` |
 | SQLite schema/storage behavior | `storage-model.md`, `data-flow.md`, `moneyview-api-reference.md` where relevant |
@@ -128,3 +137,16 @@ The architecture set is in good shape when:
 - product scope, runtime design, API behavior, engine theory, and workflow pipelines do not contradict each other
 - the docs describe the current system instead of an aspirational rewrite
 - future agents can tell which document must be updated after a code change
+
+## 11. Current Alignment Notes
+
+The current documentation pass has already aligned these areas:
+
+- `moneyview-api-reference.md` documents the corporate metric-audit route and its quality/source semantics
+- `data-flow.md` documents metric-audit consumption in the Corporate pipeline and result normalization in the Monte Carlo pipeline
+- `visualization-metrics.md` documents audit-quality badge meaning plus guard-driven Monte Carlo chart states
+
+Near-term review priorities:
+
+- keep `documentation-roadmap.md` in sync whenever a new canonical architecture file is added or ownership moves between existing files
+- review `moneyview-api-reference.md`, `data-flow.md`, and `visualization-metrics.md` together whenever corporate metric quality or frontend guard behavior changes

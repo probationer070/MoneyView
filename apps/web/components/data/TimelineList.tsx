@@ -32,7 +32,7 @@ export function TimelineList({ groups, empty }: TimelineListProps) {
     <div className="space-y-6">
       {groups.map((group) => (
         <section key={group.id} className="space-y-3">
-          <div className="sticky top-0 z-10 inline-flex rounded-full border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-1 text-xs font-semibold text-[var(--text-muted)] shadow-sm">
+          <div className="sticky top-0 z-10 inline-flex rounded-full border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-1 text-xs font-semibold text-[var(--text-muted)]">
             {group.label}
           </div>
           <div className="space-y-4">
@@ -47,7 +47,7 @@ export function TimelineList({ groups, empty }: TimelineListProps) {
                       <span className="absolute top-5 bottom-[-1rem] w-px bg-[var(--border)]" />
                     ) : null}
                   </div>
-                  <article className={`rounded-[var(--radius)] border px-4 py-4 shadow-sm ${item.active ? "border-[var(--accent)] bg-[var(--surface-muted)]/40" : "border-[var(--border)] bg-[var(--bg-surface)]"}`}>
+                  <article className={`rounded-[var(--radius)] border px-4 py-4 ${item.active ? "border-[var(--accent)] bg-[var(--surface-muted)]/40" : "border-[var(--border)] bg-[var(--bg-surface)]"}`}>
                     <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                       <div className="min-w-0 space-y-1">
                         <h3 className="text-sm font-bold text-[var(--text-primary)]">{item.title}</h3>

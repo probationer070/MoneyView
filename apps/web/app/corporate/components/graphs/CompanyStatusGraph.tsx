@@ -3,6 +3,7 @@
 import { PolarAngleAxis, PolarGrid, PolarRadiusAxis, Radar, RadarChart, Tooltip } from "recharts";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { ResponsiveChart } from "@/components/ui/ResponsiveChart";
+import { AXIS_TICK_STYLE, withTooltipProps } from "@/lib/chartConfig";
 import { type DetailKey, type HealthRadarPoint, numberText } from "./shared";
 
 export function CompanyStatusGraph({
@@ -21,7 +22,7 @@ export function CompanyStatusGraph({
   onOpenDetail: (key: DetailKey) => void;
 }) {
   return (
-    <div className="lg:col-span-2 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-5 shadow-sm">
+    <div className="lg:col-span-2 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-5">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h3 className="text-sm font-bold text-[var(--text-primary)]">Company Status Diagnosis</h3>
@@ -59,11 +60,11 @@ export function CompanyStatusGraph({
         <ResponsiveChart className="h-full w-full" minWidth={1} minHeight={1}>
           <RadarChart data={healthRadar}>
             <PolarGrid stroke="var(--border)" />
-            <PolarAngleAxis dataKey="subject" tick={{ fill: "var(--text-muted)", fontSize: 11 }} />
+            <PolarAngleAxis dataKey="subject" tick={AXIS_TICK_STYLE} />
             <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} />
             <Radar name={companyName} dataKey="score" stroke="var(--accent)" fill="var(--accent)" fillOpacity={0.45} />
             <Radar name="Peer" dataKey="peer" stroke="var(--text-muted)" fill="var(--text-muted)" fillOpacity={0.16} />
-            <Tooltip />
+            <Tooltip {...withTooltipProps()} />
           </RadarChart>
         </ResponsiveChart>
       </div>

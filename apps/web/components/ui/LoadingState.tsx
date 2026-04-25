@@ -19,7 +19,7 @@ export function LoadingState({
     return (
       <div className={clsx("flex flex-col items-center justify-center gap-3 py-12", className)}>
         <div className="h-8 w-8 rounded-full border-2 border-[var(--border-soft)] border-t-[var(--state-info)] animate-spin" />
-        {label && <p className="text-[12px] text-[var(--text-muted)]">{label}</p>}
+        {label && <p className="text-[length:var(--type-helper)] text-[var(--text-muted)]">{label}</p>}
       </div>
     );
   }
@@ -30,8 +30,8 @@ export function LoadingState({
       <div className={clsx("flex flex-col gap-2 py-4", className)}>
         {label && (
           <div className="flex items-center justify-between">
-            <p className="text-[12px] text-[var(--text-muted)]">{label}</p>
-            <p className="text-[12px] font-medium text-[var(--text-primary)] tabular-nums">{pct}%</p>
+            <p className="text-[length:var(--type-helper)] text-[var(--text-muted)]">{label}</p>
+            <p className="text-[length:var(--type-helper)] font-medium text-[var(--text-primary)] tabular-nums">{pct}%</p>
           </div>
         )}
         <div className="h-1.5 w-full rounded-full bg-[var(--bg-subtle)] overflow-hidden">

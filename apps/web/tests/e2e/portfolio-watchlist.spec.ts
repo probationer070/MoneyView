@@ -90,6 +90,8 @@ test("added holdings persist and the portfolio table shows saved allocations", a
 
   await page.getByRole("button", { name: "Table" }).click();
   await expect(page.getByRole("columnheader", { name: "Allocation", exact: true })).toBeVisible();
+  await expect(page.getByRole("cell", { name: /14\.31%/ }).first()).toBeVisible();
+  await expect(page.getByRole("cell", { name: /4\.61%/ }).first()).toBeVisible();
   await expect(page.getByRole("button", { name: "60.0%" }).first()).toBeVisible();
   await expect(page.getByRole("button", { name: "40.0%" }).first()).toBeVisible();
   await expect(page.getByRole("button", { name: "Export Watchlist To JSON" })).toBeEnabled();
@@ -106,17 +108,28 @@ test("clicking a holding opens the stock detail modal", async ({ page }) => {
   await mockPortfolioPageApi(page);
   await clearAllHoldings(page);
   await addHolding(page, "AAPL", "Apple Inc.", "Technology");
-  await refreshPortfolioAnalysis(page);
 
-  await page.locator('[role="button"]').filter({ hasText: "Apple Inc." }).first().click();
+  const stockTrigger = page.locator('[role="button"]').filter({ hasText: "Apple Inc." }).first();
+  await stockTrigger.focus();
+  await expect(stockTrigger).toBeFocused();
+  await stockTrigger.click();
 
   const stockDetailDialog = page.getByRole("dialog");
+  const closeButton = stockDetailDialog.getByRole("button", { name: "Close modal" });
   await expect(stockDetailDialog).toBeVisible();
+  await expect(closeButton).toBeFocused();
   await expect(stockDetailDialog.locator("h2").filter({ hasText: "OHLC Candlestick + Volume" })).toBeVisible();
   await expect(stockDetailDialog.getByText("Ticker News Feed (filtered)", { exact: true })).toBeVisible();
   await expect(stockDetailDialog.getByText("ROIC - WACC", { exact: true }).first()).toBeVisible();
   await expect(stockDetailDialog.getByText("DCF Upside", { exact: true }).first()).toBeVisible();
   await expect(stockDetailDialog.getByText("Expected vs Market", { exact: true }).first()).toBeVisible();
+  await expect(stockDetailDialog.getByText("14.31%").first()).toBeVisible();
+  await expect(stockDetailDialog.getByText("4.61%").first()).toBeVisible();
+  await expect(stockDetailDialog.getByRole("heading", { name: "ROIC Audit" })).toBeVisible();
+  await expect(stockDetailDialog.getByRole("heading", { name: "WACC Audit" })).toBeVisible();
+  await expect(stockDetailDialog.getByText("Average invested capital")).toBeVisible();
+  await expect(stockDetailDialog.getByText("Market capitalization was unavailable").first()).toBeVisible();
+  await expect(stockDetailDialog.getByRole("link", { name: "View Full Detail" })).toHaveAttribute("href", "/detail/AAPL");
   await expect(stockDetailDialog.getByText(/Saved snapshot metrics from/)).toBeVisible();
   await expect(stockDetailDialog.getByLabel("Stock sector")).toHaveValue("Technology");
   await stockDetailDialog.getByLabel("Stock sector").fill("Consumer Technology");
@@ -130,8 +143,22 @@ test("clicking a holding opens the stock detail modal", async ({ page }) => {
   await expect(stockDetailDialog.getByRole("heading", { name: "4/11/2026", exact: true })).toBeVisible();
   await expect(stockDetailDialog.getByText("13.20%").first()).toBeVisible();
 
-  await stockDetailDialog.getByRole("button", { name: "Close modal" }).click();
+  await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toHaveCount(0);
+});
+
+test("stock detail modal shows explicit error states when detail and news requests fail", async ({ page }) => {
+  await mockPortfolioPageApi(page, undefined, { failStockDetail: true, failNewsFeed: true });
+  await clearAllHoldings(page);
+  await addHolding(page, "AAPL", "Apple Inc.", "Technology");
+  await refreshPortfolioAnalysis(page);
+
+  await page.locator('[role="button"]').filter({ hasText: "Apple Inc." }).first().click();
+
+  const stockDetailDialog = page.getByRole("dialog");
+  await expect(stockDetailDialog).toBeVisible();
+  await expect(stockDetailDialog.getByText("Stock Detail Unavailable")).toBeVisible();
+  await expect(stockDetailDialog.getByText("Filtered News Unavailable")).toBeVisible();
 });
 
 test("deleted holdings stay searchable and can reopen detail from the stock search panel", async ({ page }) => {
@@ -192,7 +219,8 @@ test("weight editing and sync or import controls are visible and actionable", as
   await page.getByLabel("Portfolio benchmark ticker").fill("^IXIC");
   await page.getByLabel("Portfolio custom tickers").fill("NVDA, TSLA");
   await refreshPortfolioAnalysis(page);
-  await expect(page.getByText("Custom tickers: NVDA, TSLA.")).toBeVisible();
+  await expect(page.getByText(/Custom tickers:/)).toBeVisible();
+  await expect(page.getByText("NVDA, TSLA")).toBeVisible();
   await expect(page.getByText(/Preset is currently Manual ticker\./)).toBeVisible();
   await page.getByRole("button", { name: "Save Current As Snapshot" }).click();
   await expect(page.getByText(/Saved portfolio snapshot for/)).toBeVisible();
@@ -303,4 +331,21 @@ test("portfolio allocation table keeps long ticker lists inside a scroll region"
 
   const bottomSlider = scrollRegion.locator('input[type="range"]').last();
   await expect(bottomSlider).toBeVisible();
+});
+
+test("portfolio table and stock modal stay aligned on latest snapshot metric values and source context", async ({ page }) => {
+  await mockPortfolioPageApi(page);
+  await gotoPortfolio(page);
+
+  await page.getByRole("button", { name: "Table" }).click();
+  await expect(page.getByRole("cell", { name: /14\.31%/ }).first()).toBeVisible();
+  await expect(page.getByRole("cell", { name: /4\.61%/ }).first()).toBeVisible();
+
+  await page.getByLabel("Stock browser search").fill("AAPL");
+  await page.getByRole("button", { name: "Open Detail" }).first().click();
+  const stockDetailDialog = page.getByRole("dialog");
+  await expect(stockDetailDialog).toBeVisible();
+  await expect(stockDetailDialog.getByText("14.31%").first()).toBeVisible();
+  await expect(stockDetailDialog.getByText("4.61%").first()).toBeVisible();
+  await expect(stockDetailDialog.getByText(/Saved snapshot metrics from/)).toBeVisible();
 });

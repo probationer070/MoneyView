@@ -3,6 +3,7 @@
 import { Bar, CartesianGrid, ComposedChart, Line, Tooltip, XAxis, YAxis, ZAxis } from "recharts";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { ResponsiveChart } from "@/components/ui/ResponsiveChart";
+import { GRID_STYLE, fmtPctTick, withAxisProps, withCategoryAxisProps, withTooltipProps } from "@/lib/chartConfig";
 import { type DetailKey, type HurdleBarPoint, type RegionalHurdlePoint, pct, pct2 } from "./shared";
 
 export function HurdleRateDecompositionGraph({
@@ -15,7 +16,7 @@ export function HurdleRateDecompositionGraph({
   onOpenDetail: (key: DetailKey) => void;
 }) {
   return (
-    <div className="lg:col-span-2 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-5 shadow-sm">
+    <div className="lg:col-span-2 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-5">
       <div className="min-w-0">
         <h3 className="text-sm font-bold text-[var(--text-primary)]">Hurdle Rate Decomposition</h3>
         <button
@@ -32,11 +33,11 @@ export function HurdleRateDecompositionGraph({
       <div className="h-72 min-h-72 min-w-0">
         <ResponsiveChart className="h-full w-full" minWidth={1} minHeight={1}>
           <ComposedChart data={regionalMinard} margin={{ top: 20, right: 20, left: 0, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-            <XAxis dataKey="region" tick={{ fill: "var(--text-muted)" }} />
-            <YAxis tick={{ fill: "var(--text-muted)" }} />
+            <CartesianGrid {...GRID_STYLE} />
+            <XAxis dataKey="region" {...withCategoryAxisProps()} />
+            <YAxis {...withAxisProps({ tickFormatter: (value: number | string) => fmtPctTick(Number(value), 0) })} />
             <ZAxis dataKey="revenue" range={[80, 520]} />
-            <Tooltip formatter={(value, name) => (name === "Implied ERP" ? pct2(Number(value)) : pct(Number(value)))} />
+            <Tooltip {...withTooltipProps()} formatter={(value, name) => (name === "Implied ERP" ? pct2(Number(value)) : pct(Number(value)))} />
             <Bar dataKey="crp" name="CRP" fill="#444444" radius={[4, 4, 0, 0]} />
             <Line dataKey="erp" name="Implied ERP" stroke="var(--accent)" strokeWidth={3} dot={{ r: 4 }} />
           </ComposedChart>

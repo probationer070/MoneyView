@@ -47,7 +47,7 @@ export function Tabs({
             tabIndex={selected ? 0 : -1}
             onClick={() => onChange(item.key)}
             className={clsx(
-              "inline-flex min-h-10 items-center gap-[var(--space-2)] border-b-2 px-[var(--space-1)] pb-[var(--space-3)] pt-[var(--space-2)] text-[13px] font-medium transition-colors duration-[var(--duration-fast)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--state-info)] focus-visible:ring-offset-1",
+              "inline-flex min-h-10 items-center gap-[var(--space-2)] border-b-2 px-[var(--space-1)] pb-[var(--space-3)] pt-[var(--space-2)] text-[length:var(--type-label)] font-medium transition-colors duration-[var(--duration-fast)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--state-info)] focus-visible:ring-offset-1",
               selected
                 ? "border-[var(--border-accent)] text-[var(--text-primary)]"
                 : "border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)]"

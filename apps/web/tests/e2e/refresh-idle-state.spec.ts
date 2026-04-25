@@ -285,7 +285,7 @@ test("corporate page refresh labels stale source-data cache for a different sele
   expect(stats.ohlcvRequests).toBe(0);
 });
 
-test("portfolio first load keeps analysis requests idle until refresh", async ({ page }) => {
+test("portfolio first load auto-loads the latest comparison snapshot while history and attribution stay idle until refresh", async ({ page }) => {
   const stats: PortfolioPageMockStats = {
     comparisonRequests: 0,
     comparisonHistoryRequests: 0,
@@ -298,12 +298,12 @@ test("portfolio first load keeps analysis requests idle until refresh", async ({
   await page.goto("/portfolio", { waitUntil: "domcontentloaded" });
 
   await expect(page.getByRole("heading", { name: "Portfolio", exact: true })).toBeVisible({ timeout: 60_000 });
-  await expect(page.getByText("Portfolio analysis stays idle on first load until refreshed.")).toBeVisible();
   await expect(page.getByText("Saved snapshot history stays idle until you refresh portfolio analysis.")).toBeVisible();
-  await expect(page.getByText(/Portfolio comparison stays idle on first load\./)).toBeVisible();
   await expect(page.getByText("Attribution stays idle on first load. Click Refresh Analysis when you want current portfolio attribution.")).toBeVisible();
+  await expect(page.getByText("Latest Snapshot Summary")).toBeVisible();
+  await expect(page.getByText(/Market expected return: 9\.70%/)).toBeVisible();
   await page.waitForTimeout(300);
-  expect(stats.comparisonRequests).toBe(0);
+  expect(stats.comparisonRequests).toBe(1);
   expect(stats.comparisonHistoryRequests).toBe(0);
   expect(stats.attributionRequests).toBe(0);
 });
@@ -490,14 +490,14 @@ test("portfolio renders cached analysis without auto-fetch, refreshes on demand,
   await expect(page.getByText("Positive Spread")).toBeVisible();
   await expect(page.getByText("8.0%")).toBeVisible();
   await page.waitForTimeout(300);
-  expect(stats.comparisonRequests).toBe(0);
+  expect(stats.comparisonRequests).toBe(1);
   expect(stats.comparisonHistoryRequests).toBe(0);
   expect(stats.attributionRequests).toBe(0);
   expect(stats.stockDetailRequests).toBe(0);
   expect(stats.stockSnapshotHistoryRequests).toBe(0);
 
   await page.getByRole("button", { name: "Refresh Analysis" }).click();
-  await expect.poll(() => stats.comparisonRequests).toBe(1);
+  await expect.poll(() => stats.comparisonRequests).toBe(2);
   await expect.poll(() => stats.comparisonHistoryRequests).toBe(1);
   await expect.poll(() => stats.attributionRequests).toBe(1);
   await expect(page.getByText(/Refreshing portfolio comparison, snapshot history, and attribution\./)).toBeVisible();
@@ -506,10 +506,9 @@ test("portfolio renders cached analysis without auto-fetch, refreshes on demand,
   expect(stats.stockSnapshotHistoryRequests).toBe(0);
 
   await page.locator('[role="button"]').filter({ hasText: "Apple" }).first().click();
-  await expect(page.getByRole("dialog")).toBeVisible();
+  const stockDetailDialog = page.getByRole("dialog");
+  await expect(stockDetailDialog).toBeVisible();
   await expect.poll(() => stats.stockDetailRequests).toBe(1);
-  expect(stats.stockSnapshotHistoryRequests).toBe(0);
-
-  await page.getByRole("dialog").getByRole("button", { name: "Open Snapshot History" }).click();
-  await expect.poll(() => stats.stockSnapshotHistoryRequests).toBe(1);
+  await expect.poll(() => stats.stockSnapshotHistoryRequests).toBeGreaterThan(0);
+  await expect(stockDetailDialog.getByRole("heading", { name: "Stock History Timeline" })).toBeVisible();
 });

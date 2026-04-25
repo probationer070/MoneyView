@@ -12,7 +12,7 @@ function GraphLoadingCard({
   chartHeightClassName?: string;
 }) {
   return (
-    <div className={`${className} rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-5 shadow-sm`}>
+    <div className={`${className} rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-5`}>
       <h3 className="text-sm font-bold text-[var(--text-primary)]">{title}</h3>
       <div className="mt-1 h-3 w-44 animate-pulse rounded bg-[var(--surface-muted)]" />
       <div className={`mt-4 animate-pulse rounded bg-[var(--surface-muted)] ${chartHeightClassName}`} />

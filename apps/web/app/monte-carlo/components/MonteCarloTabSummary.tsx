@@ -26,7 +26,7 @@ export function MonteCarloTabSummary({
   actions,
 }: Props) {
   return (
-    <section className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-5 shadow-sm">
+    <section className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-5">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-2">
@@ -41,7 +41,7 @@ export function MonteCarloTabSummary({
       <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {items.map((item) => (
           <div key={item.label} className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-subtle)] px-4 py-3">
-            <div className="text-[11px] font-bold uppercase tracking-wide text-[var(--text-muted)]">{item.label}</div>
+            <div className="text-[length:var(--type-caption)] font-bold uppercase tracking-wide text-[var(--text-muted)]">{item.label}</div>
             <div className="mt-1 text-sm font-black text-[var(--text-primary)]">{item.value}</div>
           </div>
         ))}

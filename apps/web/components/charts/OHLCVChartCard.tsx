@@ -68,7 +68,6 @@ export function OHLCVChartCard({
       empty={data.length === 0}
       emptyTitle={emptyTitle}
       emptyDescription={emptyDescription}
-      className="shadow-sm"
     >
       <div className="flex flex-wrap gap-2">
         {hasToggle ? (

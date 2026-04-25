@@ -17,7 +17,7 @@ export function DcfCoreModulesGraph({
   onOpenDetail: (key: DetailKey) => void;
 }) {
   return (
-    <div className="lg:col-span-4 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-5 shadow-sm">
+    <div className="lg:col-span-4 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-5">
       <button
         type="button"
         onClick={() => onOpenDetail("dcfCoreModules")}

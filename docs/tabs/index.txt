@@ -39,3 +39,8 @@ Note
 - The drill-down route `/detail/[ticker]` is not a top-level sidebar tab, so it is still excluded from this set.
 - If needed, it can be documented separately as a detail-page reference file.
 
+Current alignment notes
+- `corporate-analysis-tab.txt` includes the audit-qualified metric workflow and the calculation-detail audit layer.
+- `portfolio-tab.txt` includes the stock-modal audit-aware review path.
+- `monte-carlo-tab.txt` includes worker-result normalization and guard-driven chart behavior.
+

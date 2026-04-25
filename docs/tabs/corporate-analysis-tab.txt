@@ -90,6 +90,10 @@ Controls
 Design Notes
 - This panel is intentionally tool-like.
 - It uses small, dense controls rather than broad explanatory copy because the right side is reserved for output.
+- Audit-qualified metric state belongs directly in the assumptions experience:
+  - ROIC and WACC can surface quality badges
+  - helper text can reflect fallback or warning state
+  - the UI must not hide when a displayed metric is estimated or suspicious
 - Refresh state is visible directly inside the control panel:
   - last updated
   - stale
@@ -125,6 +129,7 @@ Design Notes
   - is required return too high
   - is leverage risk elevated
   - is the scenario robust or fragile
+- When audit metadata is available, the displayed spread and supporting ROIC/WACC values can carry explicit quality state instead of pretending all values are equally reliable.
 
 4. Diagnostic Graph Suite
 
@@ -153,6 +158,7 @@ Content
 - formula explanation
 - result summary
 - data lineage
+- metric audit panel for ROIC, WACC, and spread quality
 - supporting calculation rows
 - raw analysis datasets
 - CSV download actions for:
@@ -163,6 +169,11 @@ Content
 Design Notes
 - This modal is the audit layer of the Corporate tab.
 - It exists so charts and KPIs can stay visually readable while still being explainable.
+- The modal is also where the user should see:
+  - source quality
+  - warning rationale
+  - calculation-version context
+  - intermediate audit inputs
 
 6. Target Stock Comparison
 
@@ -208,6 +219,7 @@ Important Behavior Rules
 - The active ticker persists during the browser session.
 - Heavy analysis zones remain idle until manually refreshed.
 - Stored source-data is session-aware and snapshot-aware.
+- Audit-qualified metrics are allowed to remain visible in the main page, but their warning state must stay visible and drillable.
 - Portfolio-specific history, weighting, and snapshot governance live in the Portfolio tab.
 
 Primary User Workflow
@@ -224,6 +236,7 @@ Primary Data Sources
 - `GET /api/v1/corporate/companies`
 - `POST /api/v1/corporate/companies`
 - `GET /api/v1/corporate/metrics/{ticker}`
+- `GET /api/v1/corporate/metrics/{ticker}/audit`
 - `PUT /api/v1/corporate/metrics/{ticker}`
 - `GET /api/v1/corporate/metrics/{ticker}/history`
 - `GET /api/v1/corporate/metrics/{ticker}/quarterly-statements`

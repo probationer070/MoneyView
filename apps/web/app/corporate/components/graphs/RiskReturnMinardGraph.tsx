@@ -3,6 +3,7 @@
 import { Area, AreaChart, CartesianGrid, Line, ReferenceLine, Tooltip, XAxis, YAxis } from "recharts";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { ResponsiveChart } from "@/components/ui/ResponsiveChart";
+import { GRID_STYLE, fmtPctTick, withAxisProps, withCategoryAxisProps, withTooltipProps } from "@/lib/chartConfig";
 import { type DetailKey, type RiskReturnPoint, numberText, pct2 } from "./shared";
 
 export function RiskReturnMinardGraph({
@@ -17,7 +18,7 @@ export function RiskReturnMinardGraph({
   onOpenDetail: (key: DetailKey) => void;
 }) {
   return (
-    <div className="lg:col-span-4 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-5 shadow-sm">
+    <div className="lg:col-span-4 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-5">
       <div className="flex flex-col gap-1 md:flex-row md:items-baseline md:justify-between">
         <div className="min-w-0">
           <h3 className="text-sm font-bold text-[var(--text-primary)]">Risk-Return Minard Chart</h3>
@@ -43,10 +44,10 @@ export function RiskReturnMinardGraph({
       <div className="h-80 min-h-80 min-w-0">
         <ResponsiveChart className="h-full w-full" minWidth={1} minHeight={1}>
           <AreaChart data={riskReturn} margin={{ top: 20, right: 24, bottom: 0, left: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-            <XAxis dataKey="risk" tick={{ fill: "var(--text-muted)" }} />
-            <YAxis tick={{ fill: "var(--text-muted)" }} />
-            <Tooltip formatter={(value, name) => (name === "Failure probability" ? pct2(Number(value)) : numberText(Number(value)))} />
+            <CartesianGrid {...GRID_STYLE} />
+            <XAxis dataKey="risk" {...withCategoryAxisProps()} />
+            <YAxis {...withAxisProps({ tickFormatter: (value: number | string) => fmtPctTick(Number(value), 0) })} />
+            <Tooltip {...withTooltipProps()} formatter={(value, name) => (name === "Failure probability" ? pct2(Number(value)) : numberText(Number(value)))} />
             <ReferenceLine y={0} stroke="#444444" />
             <Area type="monotone" dataKey="fail" name="Failure probability" stroke="#9DA5A2" fill="#9DA5A2" fillOpacity={0.22} />
             <Line type="monotone" dataKey="npv" name="NPV path" stroke={derivedSpread >= 0 ? "var(--accent)" : "var(--delta-down)"} strokeWidth={Math.max(2, successProbability / 18)} dot={{ r: 4 }} />

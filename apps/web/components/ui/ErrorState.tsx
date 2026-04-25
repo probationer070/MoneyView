@@ -17,14 +17,14 @@ export function ErrorState({
         <AlertCircle className="h-6 w-6" />
       </div>
       <div className="flex flex-col gap-1">
-        <p className="text-[14px] font-medium text-[var(--text-primary)]">{title}</p>
-        <p className="text-[12px] text-[var(--text-muted)] max-w-[320px]">{message}</p>
+        <p className="text-[length:var(--type-body)] font-medium text-[var(--text-primary)]">{title}</p>
+        <p className="text-[length:var(--type-helper)] text-[var(--text-muted)] max-w-[320px]">{message}</p>
       </div>
       {retryAction && (
         <button
           type="button"
           onClick={retryAction}
-          className="mt-1 text-[13px] font-medium text-[var(--state-info)] underline decoration-dotted underline-offset-4 hover:opacity-80 transition-opacity duration-[var(--duration-fast)]"
+          className="mt-1 text-[length:var(--type-label)] font-medium text-[var(--state-info)] underline decoration-dotted underline-offset-4 hover:opacity-80 transition-opacity duration-[var(--duration-fast)]"
         >
           Try again
         </button>

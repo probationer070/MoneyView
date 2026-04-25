@@ -1,7 +1,7 @@
 "use client";
 
-import type { ReactNode } from "react";
-import { useEffect, useCallback } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from "react";
+import { useEffect, useCallback, useId, useRef } from "react";
 import { X } from "lucide-react";
 import clsx from "clsx";
 import { IconButton } from "@/components/ui/IconButton";
@@ -28,25 +28,89 @@ const maxWidthMap: Record<ModalSize, string> = {
 export function ModalShell({
   open, onClose, title, subtitle, size = "lg", headerRightContent, children,
 }: ModalShellProps) {
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  const previouslyFocusedElementRef = useRef<HTMLElement | null>(null);
+  const titleId = useId();
+  const subtitleId = useId();
+
   const handleEscape = useCallback(
-    (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); },
+    (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onClose();
+      }
+    },
     [onClose]
   );
 
   useEffect(() => {
     if (!open) return;
+
+    previouslyFocusedElementRef.current = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+
     document.addEventListener("keydown", handleEscape);
     document.body.style.overflow = "hidden";
+
+    const dialog = dialogRef.current;
+    if (dialog) {
+      const focusableElements = dialog.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      );
+      const firstFocusableElement = focusableElements[0];
+      if (firstFocusableElement) {
+        firstFocusableElement.focus();
+      } else {
+        dialog.focus();
+      }
+    }
+
     return () => {
       document.removeEventListener("keydown", handleEscape);
       document.body.style.overflow = "";
+      previouslyFocusedElementRef.current?.focus();
     };
   }, [open, handleEscape]);
+
+  const handleDialogKeyDown = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== "Tab") return;
+
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+
+    const focusableElements = Array.from(
+      dialog.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      )
+    ).filter((element) => !element.hasAttribute("disabled") && element.tabIndex !== -1);
+
+    if (focusableElements.length === 0) {
+      event.preventDefault();
+      dialog.focus();
+      return;
+    }
+
+    const firstFocusableElement = focusableElements[0];
+    const lastFocusableElement = focusableElements[focusableElements.length - 1];
+    const activeElement = document.activeElement;
+
+    if (event.shiftKey && activeElement === firstFocusableElement) {
+      event.preventDefault();
+      lastFocusableElement.focus();
+      return;
+    }
+
+    if (!event.shiftKey && activeElement === lastFocusableElement) {
+      event.preventDefault();
+      firstFocusableElement.focus();
+    }
+  }, []);
 
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 lg:p-6">
+    <div className="fixed inset-0 z-50 flex items-end justify-center p-2 sm:items-center sm:p-4 lg:p-6">
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/40 transition-opacity duration-[var(--duration-slow)]"
@@ -56,14 +120,18 @@ export function ModalShell({
 
       {/* Dialog */}
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
-        aria-labelledby="modal-title"
+        aria-labelledby={titleId}
+        aria-describedby={subtitle ? subtitleId : undefined}
+        tabIndex={-1}
+        onKeyDown={handleDialogKeyDown}
         className={clsx(
-          "relative z-10 w-full flex flex-col",
+          "relative z-10 flex w-full min-h-0 flex-col",
           "bg-[var(--bg-elevated)] rounded-[var(--radius-lg)]",
           "shadow-[var(--shadow-modal)]",
-          "max-h-[calc(100vh-48px)]",
+          "max-h-[calc(100dvh-48px)] sm:max-h-[calc(100dvh-96px)]",
           maxWidthMap[size],
         )}
       >
@@ -71,13 +139,13 @@ export function ModalShell({
         <div className="flex items-start justify-between gap-3 px-5 pt-5 pb-4 border-b border-[var(--border-soft)] shrink-0">
           <div className="min-w-0">
             <h2
-              id="modal-title"
-              className="text-[17px] font-semibold text-[var(--text-primary)] leading-snug"
+              id={titleId}
+              className="text-[length:var(--type-section-title)] font-semibold text-[var(--text-primary)] leading-snug"
             >
               {title}
             </h2>
             {subtitle && (
-              <p className="mt-0.5 text-[12px] text-[var(--text-muted)]">{subtitle}</p>
+              <p id={subtitleId} className="mt-0.5 text-[length:var(--type-helper)] text-[var(--text-muted)]">{subtitle}</p>
             )}
           </div>
           {headerRightContent && (

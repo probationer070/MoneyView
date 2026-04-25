@@ -1,5 +1,6 @@
 import type { Page } from "@playwright/test";
 import type {
+  CorporateMetricAudit,
   DcfAssumptionSummary,
   DcfCompleteEvent,
   DcfFullReport,
@@ -19,6 +20,12 @@ export type CorporatePageMockStats = {
   metricHistoryRequests: number;
   quarterlyRequests: number;
   ohlcvRequests: number;
+};
+
+export type CorporatePageMockOptions = {
+  failQuarterlyStatements?: boolean;
+  failOhlcv?: boolean;
+  failDcfFullReport?: boolean;
 };
 
 const mockDcfSummary: DcfSummary = {
@@ -97,7 +104,60 @@ const mockDcfCompleteEvent: DcfCompleteEvent = {
   generated_at: mockDcfSummary.generated_at,
 };
 
-export async function mockCorporatePageApi(page: Page, stats?: CorporatePageMockStats) {
+const mockMetricAudit = (ticker: string): CorporateMetricAudit => ({
+  ticker,
+  source_mode: "yahoo_finance",
+  generated_at: nowIso(),
+  roic: {
+    value: ticker === "MSFT" ? 22 : 18,
+    display_value: ticker === "MSFT" ? "22.0%" : "18.0%",
+    quality: "ok",
+    reason: null,
+    warnings: [],
+    source: "Yahoo Finance annual or quarterly statement bundle",
+    as_of: "2025-12-31",
+    calculation_version: "roic_v2_average_invested_capital",
+    inputs_used: [
+      { field: "operating_income", label: "Operating income / EBIT", value: 114000000000, display_value: "$114,000,000,000", source: "Yahoo Finance annual or quarterly statement bundle" },
+      { field: "tax_rate", label: "Tax rate", value: 0.156, display_value: "15.6%", source: "Yahoo Finance annual or quarterly statement bundle" },
+      { field: "nopat", label: "NOPAT", value: 96200000000, display_value: "$96,200,000,000", source: "Yahoo Finance annual or quarterly statement bundle" },
+      { field: "average_invested_capital", label: "Average invested capital", value: 118000000000, display_value: "$118,000,000,000", source: "Yahoo Finance annual or quarterly statement bundle" },
+      { field: "final_roic_value", label: "Final ROIC value", value: ticker === "MSFT" ? 22 : 18, display_value: ticker === "MSFT" ? "22.0%" : "18.0%", source: "Computed from recent_average basis" },
+    ],
+  },
+  wacc: {
+    value: ticker === "MSFT" ? 9 : 10,
+    display_value: ticker === "MSFT" ? "9.0%" : "10.0%",
+    quality: "estimated",
+    reason: "Market capitalization was unavailable, so debt and equity weights fall back to statement debt ratio.",
+    warnings: ["Market capitalization was unavailable, so debt and equity weights fall back to statement debt ratio."],
+    source: "Yahoo Finance statement bundle plus market profile",
+    as_of: "2025-12-31",
+    calculation_version: "wacc_v2_latest_capital_structure",
+    inputs_used: [
+      { field: "risk_free_rate", label: "Risk-free rate", value: 0.042, display_value: "4.2%", source: "Model policy input" },
+      { field: "beta", label: "Beta", value: 1.12, display_value: "1.12", source: "Yahoo Finance statement bundle plus market profile" },
+      { field: "equity_risk_premium", label: "Equity risk premium", value: 0.055, display_value: "5.5%", source: "Model policy input" },
+      { field: "final_wacc_value", label: "Final WACC value", value: ticker === "MSFT" ? 9 : 10, display_value: ticker === "MSFT" ? "9.0%" : "10.0%", source: "Weighted capital costs" },
+    ],
+  },
+  spread: {
+    value: ticker === "MSFT" ? 13 : 8,
+    display_value: ticker === "MSFT" ? "13.0%" : "8.0%",
+    quality: "estimated",
+    reason: "ROIC - WACC inherits the lower-confidence state of the two source metrics.",
+    warnings: ["ROIC - WACC inherits the lower-confidence state of ROIC and WACC."],
+    source: "Derived spread",
+    as_of: "2025-12-31",
+    calculation_version: "spread_v1_roic_minus_wacc",
+    inputs_used: [
+      { field: "roic", label: "ROIC", value: ticker === "MSFT" ? 22 : 18, display_value: ticker === "MSFT" ? "22.0%" : "18.0%", source: "Yahoo Finance annual or quarterly statement bundle" },
+      { field: "wacc", label: "WACC", value: ticker === "MSFT" ? 9 : 10, display_value: ticker === "MSFT" ? "9.0%" : "10.0%", source: "Yahoo Finance statement bundle plus market profile" },
+    ],
+  },
+});
+
+export async function mockCorporatePageApi(page: Page, stats?: CorporatePageMockStats, options?: CorporatePageMockOptions) {
   let comparisonSnapshot = {
     mode: "snapshot",
     as_of_date: "2026-04-11",
@@ -307,8 +367,23 @@ export async function mockCorporatePageApi(page: Page, stats?: CorporatePageMock
       });
     }
 
+    if (pathname === `${API_PREFIX}/corporate/metrics/AAPL/audit` && method === "GET") {
+      return json(route, mockMetricAudit("AAPL"));
+    }
+
+    if (pathname === `${API_PREFIX}/corporate/metrics/MSFT/audit` && method === "GET") {
+      return json(route, mockMetricAudit("MSFT"));
+    }
+
     if (pathname === `${API_PREFIX}/corporate/metrics/AAPL/quarterly-statements` && method === "GET") {
       if (stats) stats.quarterlyRequests += 1;
+      if (options?.failQuarterlyStatements) {
+        return route.fulfill({
+          status: 500,
+          contentType: "application/json",
+          body: JSON.stringify({ detail: "Mock quarterly statements failure" }),
+        });
+      }
       return json(route, {
         ticker: "AAPL",
         source: "Mock quarterly statements",
@@ -390,6 +465,13 @@ export async function mockCorporatePageApi(page: Page, stats?: CorporatePageMock
 
     if (pathname === `${API_PREFIX}/corporate/dcf/AAPL/report` && method === "POST") {
       if (stats) stats.dcfFullReportRequests += 1;
+      if (options?.failDcfFullReport) {
+        return route.fulfill({
+          status: 500,
+          contentType: "application/json",
+          body: JSON.stringify({ detail: "Mock full DCF report failure" }),
+        });
+      }
       return json(route, {
         status: "ok",
         data: mockDcfFullReport,
@@ -494,6 +576,13 @@ export async function mockCorporatePageApi(page: Page, stats?: CorporatePageMock
 
     if (pathname === `${API_PREFIX}/detail/AAPL/ohlcv` && method === "GET") {
       if (stats) stats.ohlcvRequests += 1;
+      if (options?.failOhlcv) {
+        return route.fulfill({
+          status: 500,
+          contentType: "application/json",
+          body: JSON.stringify({ detail: "Mock OHLCV failure" }),
+        });
+      }
       return json(route, [
         { date: "2026-04-07", open: 200, high: 205, low: 198, close: 203, volume: 1000000 },
         { date: "2026-04-08", open: 203, high: 207, low: 202, close: 206, volume: 1200000 },

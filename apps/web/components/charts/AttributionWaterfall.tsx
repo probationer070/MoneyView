@@ -2,8 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Bar, BarChart, CartesianGrid, Tooltip, XAxis, YAxis } from "recharts";
+import { ChartPanelFrame } from "@/components/charts/ChartPanelFrame";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { ResponsiveChart } from "@/components/ui/ResponsiveChart";
+import { GRID_STYLE, fmtPctTick, withAxisProps, withCategoryAxisProps, withTooltipProps } from "@/lib/chartConfig";
 
 interface AttributionWaterfallProps {
   data: Array<{ name: string; value: number }>;
@@ -82,38 +84,47 @@ export function AttributionWaterfall({ data, sectorBreakdowns = [] }: Attributio
   }, [isDetailOpen]);
 
   return (
-    <div className="bg-[var(--surface-panel)] rounded-[var(--radius)] border border-[var(--border)] p-4 shadow-sm h-[320px] min-h-[320px] min-w-0">
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <h3 className="text-sm font-semibold text-[var(--text-primary)]">
-          <InfoTooltip
-            label="Attribution Effects (%)"
-            description="Brinson-style attribution decomposes active return into allocation, selection, and interaction effects. Positive percentages add value versus the benchmark; negative percentages detract."
-          />
-        </h3>
-        <button
-          type="button"
-          onClick={() => setIsDetailOpen(true)}
-          className="rounded-[var(--radius)] border border-[var(--border)] px-2 py-1 text-xs font-semibold text-[var(--text-muted)] transition hover:border-[var(--surface)] hover:text-[var(--text-primary)]"
-        >
-          Details
-        </button>
-      </div>
-      <ResponsiveChart minWidth={1} minHeight={1}>
-        <BarChart data={formatted}>
-          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
-          <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-          <YAxis tick={{ fontSize: 12 }} />
-          <Tooltip
-            formatter={(value) => `${Number(value ?? 0).toFixed(2)}%`}
-            contentStyle={{ borderRadius: 8, border: "1px solid var(--border)" }}
-          />
-          <Bar
-            dataKey="percentage"
-            radius={[6, 6, 0, 0]}
-            fill="var(--accent)"
-          />
-        </BarChart>
-      </ResponsiveChart>
+    <>
+      <ChartPanelFrame
+        empty={formatted.length === 0}
+        emptyTitle="No attribution effects available"
+        emptyDescription="Refresh attribution results to compare allocation, selection, interaction, and active return."
+        className="min-h-[320px] min-w-0 bg-[var(--surface-panel)]"
+      >
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h3 className="text-sm font-semibold text-[var(--text-primary)]">
+            <InfoTooltip
+              label="Attribution Effects (%)"
+              description="Brinson-style attribution decomposes active return into allocation, selection, and interaction effects. Positive percentages add value versus the benchmark; negative percentages detract."
+            />
+          </h3>
+          <button
+            type="button"
+            onClick={() => setIsDetailOpen(true)}
+            className="rounded-[var(--radius)] border border-[var(--border)] px-2 py-1 text-xs font-semibold text-[var(--text-muted)] transition hover:border-[var(--surface)] hover:text-[var(--text-primary)]"
+          >
+            Details
+          </button>
+        </div>
+        <div className="h-[220px] min-h-[220px]">
+          <ResponsiveChart className="h-full w-full" minWidth={1} minHeight={1}>
+            <BarChart data={formatted}>
+              <CartesianGrid {...GRID_STYLE} vertical={false} />
+              <XAxis dataKey="name" {...withCategoryAxisProps()} />
+              <YAxis {...withAxisProps({ tickFormatter: (value: number | string) => fmtPctTick(Number(value), 0) })} />
+              <Tooltip
+                {...withTooltipProps()}
+                formatter={(value) => `${Number(value ?? 0).toFixed(2)}%`}
+              />
+              <Bar
+                dataKey="percentage"
+                radius={[6, 6, 0, 0]}
+                fill="var(--accent)"
+              />
+            </BarChart>
+          </ResponsiveChart>
+        </div>
+      </ChartPanelFrame>
       {isDetailOpen && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4"
@@ -166,6 +177,6 @@ export function AttributionWaterfall({ data, sectorBreakdowns = [] }: Attributio
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }

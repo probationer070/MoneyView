@@ -41,7 +41,7 @@ export function Sidebar({
         )}
       >
         <div className="mb-8 flex items-center gap-2 px-2">
-          <Activity className="h-6 w-6 text-[var(--surface)]" />
+          <Activity className="h-6 w-6 text-[var(--accent)]" />
           <h1 className="font-bold text-xl text-[var(--text-primary)]">MoneyView</h1>
         </div>
 
@@ -58,7 +58,7 @@ export function Sidebar({
                 className={clsx(
                   "flex items-center gap-3 rounded-[var(--radius)] px-3 py-2 transition-colors",
                   isActive
-                    ? "bg-[var(--surface)] text-white font-medium shadow-sm"
+                    ? "bg-[var(--surface)] text-white font-medium"
                     : "text-[var(--text-muted)] hover:bg-[var(--surface)] hover:text-[var(--text-primary)]"
                 )}
               >

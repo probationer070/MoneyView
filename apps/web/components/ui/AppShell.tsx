@@ -23,7 +23,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <button
         type="button"
         onClick={() => setSidebarOpen((current) => !current)}
-        className="fixed left-4 top-4 z-50 inline-flex items-center gap-2 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-sm font-semibold text-[var(--text-primary)] shadow-sm lg:hidden"
+        className="fixed left-4 top-4 z-50 inline-flex items-center gap-2 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-sm font-semibold text-[var(--text-primary)] lg:hidden"
         aria-label={sidebarOpen ? "Close navigation sidebar" : "Open navigation sidebar"}
         aria-expanded={sidebarOpen}
         aria-controls="app-sidebar"

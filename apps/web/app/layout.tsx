@@ -22,7 +22,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${inter.variable} font-sans flex min-h-screen`}>
+      <body className={`${inter.variable} font-sans flex min-h-screen justify-center`}>
         <AppProvider>
           <AppShell>{children}</AppShell>
         </AppProvider>

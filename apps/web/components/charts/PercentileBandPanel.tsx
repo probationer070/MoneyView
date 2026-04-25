@@ -74,7 +74,7 @@ export function PercentileBandPanel({
         className="h-full flex flex-col"
       >
         <div className="mt-4 flex-grow" style={{ minHeight: height }}>
-          <ResponsiveChart minWidth={1} minHeight={1}>
+          <ResponsiveChart className="h-full w-full" minWidth={1} minHeight={1}>
             <BarChart data={data} margin={CHART_MARGIN}>
               <CartesianGrid {...GRID_STYLE} vertical={false} />
               <XAxis

@@ -65,8 +65,13 @@ export function SnapshotHistoryModal({
           subtitle: `${point.stock_count} holdings reviewed against ${point.benchmark_ticker || effectiveBenchmarkTicker}`,
           active: isActive,
           meta: (
-            <div className="flex flex-wrap items-center gap-2">
-              <span>Version {point.snapshot_version}</span>
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <span
+                className="overflow-inline-ellipsis max-w-full rounded-[var(--radius-sm)] bg-[var(--surface-muted)] px-2 py-1 font-mono text-[11px] text-[var(--text-primary)]"
+                title={point.snapshot_version}
+              >
+                Version {point.snapshot_version}
+              </span>
               <span aria-hidden="true">•</span>
               <span>{point.snapshot_versions_for_day} saved version{point.snapshot_versions_for_day === 1 ? "" : "s"} that day</span>
             </div>
@@ -75,13 +80,13 @@ export function SnapshotHistoryModal({
             <div className="grid grid-cols-2 gap-3 text-xs md:grid-cols-4 xl:grid-cols-5">
               <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2">
                 <div className="text-[var(--text-muted)]">Avg Spread</div>
-                <div className={`mt-1 font-bold tabular-nums ${point.average_expected_return_spread >= 0 ? "text-[var(--surface)]" : "text-[var(--delta-down)]"}`}>
+                <div className={`mt-1 font-bold tabular-nums ${point.average_expected_return_spread >= 0 ? "text-[var(--delta-up)]" : "text-[var(--delta-down)]"}`}>
                   {point.average_expected_return_spread.toFixed(2)}%
                 </div>
               </div>
               <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2">
                 <div className="text-[var(--text-muted)]">Avg ROIC - WACC</div>
-                <div className={`mt-1 font-bold tabular-nums ${point.average_roic_minus_wacc >= 0 ? "text-[var(--surface)]" : "text-[var(--delta-down)]"}`}>
+                <div className={`mt-1 font-bold tabular-nums ${point.average_roic_minus_wacc >= 0 ? "text-[var(--delta-up)]" : "text-[var(--delta-down)]"}`}>
                   {point.average_roic_minus_wacc.toFixed(2)}%
                 </div>
               </div>
@@ -154,15 +159,19 @@ export function SnapshotHistoryModal({
             <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <div className="rounded-[var(--radius)] border border-[var(--border-soft)] bg-[var(--surface-muted)] p-3 text-xs">
                 <div className="text-[var(--text-muted)]">Universe</div>
-                <div className="mt-1 font-bold capitalize text-[var(--text-primary)]">{effectiveComparisonUniverse}</div>
+                <div className="mt-1 overflow-inline-ellipsis font-bold capitalize text-[var(--text-primary)]" title={effectiveComparisonUniverse}>
+                  {effectiveComparisonUniverse}
+                </div>
               </div>
               <div className="rounded-[var(--radius)] border border-[var(--border-soft)] bg-[var(--surface-muted)] p-3 text-xs">
                 <div className="text-[var(--text-muted)]">Benchmark</div>
-                <div className="mt-1 font-bold text-[var(--text-primary)]">{effectiveBenchmarkTicker}</div>
+                <div className="mt-1 overflow-inline-ellipsis font-bold text-[var(--text-primary)]" title={effectiveBenchmarkTicker}>
+                  {effectiveBenchmarkTicker}
+                </div>
               </div>
               <div className="rounded-[var(--radius)] border border-[var(--border-soft)] bg-[var(--surface-muted)] p-3 text-xs">
                 <div className="text-[var(--text-muted)]">Custom Tickers</div>
-                <div className="mt-1 font-bold text-[var(--text-primary)]">{customTickersLabel}</div>
+                <div className="mt-1 overflow-mono-block text-[var(--text-primary)]" title={customTickersLabel}>{customTickersLabel}</div>
               </div>
               <div className="rounded-[var(--radius)] border border-[var(--border-soft)] bg-[var(--surface-muted)] p-3 text-xs">
                 <div className="text-[var(--text-muted)]">Saved Versions</div>

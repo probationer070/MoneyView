@@ -77,7 +77,7 @@ export function HistogramPanel({
       >
         {legend && <div className="mt-3">{legend}</div>}
         <div className="mt-4" style={{ height }}>
-          <ResponsiveChart minWidth={1} minHeight={1}>
+          <ResponsiveChart className="h-full w-full" minWidth={1} minHeight={1}>
             <ComposedChart data={data} margin={CHART_MARGIN}>
               <CartesianGrid {...GRID_STYLE} vertical={false} />
               <XAxis

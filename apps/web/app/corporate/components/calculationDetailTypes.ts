@@ -49,4 +49,5 @@ export interface CalculationDetail {
   result: string;
   sourcing: CalculationRow[];
   simulation: CalculationRow[];
+  auditMetric?: "roic" | "wacc" | "spread";
 }

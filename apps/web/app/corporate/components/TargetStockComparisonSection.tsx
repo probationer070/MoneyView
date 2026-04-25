@@ -5,6 +5,10 @@ import type { BenchmarkPreset } from "@/lib/benchmarkPresets";
 import { Bar, BarChart, CartesianGrid, Cell, Scatter, ScatterChart, Tooltip, XAxis, YAxis, ZAxis } from "recharts";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { ResponsiveChart } from "@/components/ui/ResponsiveChart";
+import { LoadingState } from "@/components/ui/LoadingState";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { ErrorState } from "@/components/ui/ErrorState";
+import { GRID_STYLE, fmtCurrencyCompactTick, fmtPctTick, withAxisProps, withCategoryAxisProps, withTooltipProps } from "@/lib/chartConfig";
 import { CorporateComparisonTable } from "./CorporateComparisonTable";
 import type { CalculationDetailKey } from "./calculationDetailTypes";
 
@@ -150,7 +154,7 @@ export function TargetStockComparisonSection({
   const selectedBenchmarkLabel = comparisonBenchmarkOptions.find((preset) => preset.ticker === comparisonBenchmarkTicker)?.label ?? comparisonBenchmarkTicker;
 
   return (
-    <section className="mt-4 col-span-6 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4 shadow-sm">
+    <section className="mt-4 col-span-6 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4">
       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
         <div className="min-w-0 xl:max-w-2xl">
           <h2 className="text-sm font-bold text-[var(--text-primary)]">
@@ -174,7 +178,7 @@ export function TargetStockComparisonSection({
             type="button"
             onClick={onRefreshComparison}
             disabled={comparisonIsFetching}
-            className="inline-flex items-center gap-2 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-xs font-bold text-[var(--text-primary)] shadow-sm disabled:opacity-60"
+            className="inline-flex items-center gap-2 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-xs font-bold text-[var(--text-primary)] disabled:opacity-60"
           >
             Refresh comparison
           </button>
@@ -182,7 +186,7 @@ export function TargetStockComparisonSection({
             type="button"
             onClick={onVerifyWatchlistSync}
             disabled={watchlistSyncLoading}
-            className="inline-flex items-center gap-2 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-xs font-bold text-[var(--text-primary)] shadow-sm disabled:opacity-60"
+            className="inline-flex items-center gap-2 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-xs font-bold text-[var(--text-primary)] disabled:opacity-60"
           >
             Verify Watchlist Sync
           </button>
@@ -190,7 +194,7 @@ export function TargetStockComparisonSection({
             {comparisonDisplayLastUpdatedAt ? `Last updated ${formatDateTime(comparisonDisplayLastUpdatedAt)}` : "Not calculated yet"}
           </span>
           {comparisonIsStale && (
-            <span className="rounded-full bg-amber-100 px-2 py-1 text-[11px] font-bold text-amber-800">
+            <span className="rounded-full bg-amber-100 px-2 py-1 text-[length:var(--type-caption)] font-bold text-amber-800">
               Stale
             </span>
           )}
@@ -226,7 +230,7 @@ export function TargetStockComparisonSection({
               <button
                 type="button"
                 onClick={onOpenPortfolio}
-                className="mt-1 text-left font-bold text-[var(--surface)] underline decoration-dotted underline-offset-4"
+                className="mt-1 text-left font-bold text-[var(--delta-up)] underline decoration-dotted underline-offset-4"
               >
                 Open Portfolio Testing
               </button>
@@ -341,18 +345,26 @@ export function TargetStockComparisonSection({
       </div>
 
       {comparisonIsLoading && !comparisonData && (
-        <div className="mt-4 text-sm text-[var(--text-muted)]">Loading comparison rows...</div>
+        <div className="mt-4 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)]">
+          <LoadingState variant="spinner" label="Loading comparison rows..." />
+        </div>
       )}
 
       {comparisonIsError && (
-        <div className="mt-4 rounded-[var(--radius)] border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
-          Target stock comparison is currently unavailable.
+        <div className="mt-4 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)]">
+          <ErrorState
+            title="Target Stock Comparison Unavailable"
+            message="Target stock comparison is currently unavailable."
+          />
         </div>
       )}
 
       {!comparisonData && !comparisonIsFetching && !comparisonIsError && (
-        <div className="mt-4 rounded-[var(--radius)] border border-dashed border-[var(--border)] bg-[var(--surface-muted)] px-4 py-6 text-sm text-[var(--text-muted)]">
-          Comparison stays idle on first load. Adjust the universe if needed, then click `Refresh comparison` to calculate.
+        <div className="mt-4 rounded-[var(--radius)] border border-dashed border-[var(--border)] bg-[var(--surface-muted)]">
+          <EmptyState
+            title="Comparison stays idle on first load. Adjust the universe if needed, then click `Refresh comparison` to calculate."
+            description="Comparison rows, spread charts, and batch DCF actions remain idle until you refresh."
+          />
         </div>
       )}
 
@@ -368,10 +380,11 @@ export function TargetStockComparisonSection({
               </div>
               <ResponsiveChart className="mt-4 h-[320px]" minWidth={1} minHeight={1}>
                 <BarChart data={similarComparisonBarData} margin={{ top: 8, right: 16, bottom: 8, left: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(148, 163, 184, 0.35)" />
-                  <XAxis dataKey="ticker" tick={{ fontSize: 12 }} />
-                  <YAxis tickFormatter={(value) => `${Number(value).toFixed(0)}%`} width={52} />
+                  <CartesianGrid {...GRID_STYLE} />
+                  <XAxis dataKey="ticker" {...withCategoryAxisProps()} />
+                  <YAxis {...withAxisProps({ tickFormatter: (value: number | string) => fmtPctTick(Number(value), 0), width: 52 })} />
                   <Tooltip
+                    {...withTooltipProps()}
                     formatter={(value, name) => {
                       const numericValue = typeof value === "number" ? value : Number(value ?? 0);
                       return [`${numericValue.toFixed(2)}%`, name === "roic_minus_wacc" ? "ROIC - WACC" : "Expected return spread"];
@@ -400,25 +413,24 @@ export function TargetStockComparisonSection({
               </div>
               <ResponsiveChart className="mt-4 h-[320px]" minWidth={1} minHeight={1}>
                 <ScatterChart margin={{ top: 8, right: 16, bottom: 12, left: 8 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(148, 163, 184, 0.35)" />
+                  <CartesianGrid {...GRID_STYLE} />
                   <XAxis
                     type="number"
                     dataKey="current_price"
                     name="Current price"
-                    tickFormatter={(value) => formatMoney(Number(value))}
+                    {...withAxisProps({ tickFormatter: (value: number | string) => fmtCurrencyCompactTick(Number(value)) })}
                     domain={["auto", "auto"]}
                   />
                   <YAxis
                     type="number"
                     dataKey="dcf_value"
                     name="DCF value"
-                    tickFormatter={(value) => formatMoney(Number(value))}
-                    width={76}
+                    {...withAxisProps({ tickFormatter: (value: number | string) => fmtCurrencyCompactTick(Number(value)), width: 76 })}
                     domain={["auto", "auto"]}
                   />
                   <ZAxis type="number" dataKey="bubble_size" range={[80, 260]} />
                   <Tooltip
-                    cursor={{ strokeDasharray: "3 3" }}
+                    {...withTooltipProps({ cursor: { strokeDasharray: "3 3" } })}
                     formatter={(value, name) => {
                       const numericValue = typeof value === "number" ? value : Number(value ?? 0);
                       if (name === "expected_return_spread") return [`${numericValue.toFixed(2)}%`, "Expected return spread"];
@@ -446,7 +458,7 @@ export function TargetStockComparisonSection({
               type="button"
               onClick={onCalculateAllDcfReports}
               disabled={bulkDcfReportsLoading || sortedComparisonRows.filter((row) => row.group_name !== "benchmark").length === 0}
-              className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-xs font-bold text-[var(--text-primary)] shadow-sm disabled:opacity-60"
+              className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-xs font-bold text-[var(--text-primary)] disabled:opacity-60"
             >
               {bulkDcfReportsLoading ? "Calculating all reports..." : "Calculate All Reports"}
             </button>
@@ -501,7 +513,7 @@ export function TargetStockComparisonSection({
                           <td className="px-4 py-3 text-[var(--text-muted)]">{report.summary.report_id}</td>
                           <td className="px-4 py-3 text-right font-semibold tabular-nums">{formatMoney(report.summary.estimated_value)}</td>
                           <td className="px-4 py-3 text-right tabular-nums">{formatMoney(report.summary.current_price)}</td>
-                          <td className={`px-4 py-3 text-right font-semibold tabular-nums ${report.summary.upside_pct >= 0 ? "text-[var(--surface)]" : "text-[var(--delta-down)]"}`}>
+                          <td className={`px-4 py-3 text-right font-semibold tabular-nums ${report.summary.upside_pct >= 0 ? "text-[var(--delta-up)]" : "text-[var(--delta-down)]"}`}>
                             {formatPct2(report.summary.upside_pct)}
                           </td>
                           <td className="px-4 py-3 text-[var(--text-muted)]">{report.summary.status}</td>

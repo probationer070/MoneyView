@@ -21,6 +21,15 @@ Use the following files as the canonical architecture set under `docs/architectu
 | `visualization-metrics.md` | KPI, chart, and metric semantics | graph meaning, filters, and ownership of metric meaning |
 | `documentation-roadmap.md` | Documentation structure, writing order, and maintenance rules | planning future documentation work |
 
+## How To Use This Set
+
+Read across the set by ownership boundary rather than by feature name:
+
+- use `moneyview-api-reference.md` when a question is about routes, payloads, response envelopes, shared contracts, or route side effects
+- use `data-flow.md` when a question is about how a user action turns into backend work, worker execution, persistence reads/writes, or UI state transitions
+- use `visualization-metrics.md` when a question is about what a KPI means, why a badge/warning is visible, or when a chart should render `empty`, `invalid-data`, or a valid view
+- use `documentation-roadmap.md` when a change touches more than one of those boundaries and you need to know which docs must move together
+
 ## Current Runtime Components
 
 - `apps/api`: FastAPI backend for data access, finance calculations, attribution, reporting, and validation.
@@ -33,8 +42,17 @@ Use the following files as the canonical architecture set under `docs/architectu
 ## Quick Ownership Map
 
 - `Portfolio` is the backend-heavy workflow for watchlist state, saved weights, implied cash, attribution, report export, and persisted comparison snapshots.
-- `Corporate Analysis` is the ticker-centric workflow for live assumption tuning, backend DCF requests, diagnostics, and live cross-stock comparison.
-- `Simulation Lab` is primarily frontend-compute and worker-driven for path simulation, risk analysis, return distribution, valuation uncertainty, and correlation experiments.
+- `Corporate Analysis` is the ticker-centric workflow for live assumption tuning, backend DCF requests, diagnostics, live cross-stock comparison, and audit-qualified valuation metrics.
+- `Simulation Lab` is primarily frontend-compute and worker-driven for path simulation, risk analysis, return distribution, valuation uncertainty, and correlation experiments, with page-level normalization between raw worker output and rendered chart state.
+
+## Current Cross-Document Alignment
+
+The current architecture set is intended to stay aligned on these recent responsibilities:
+
+- the corporate metric-audit route belongs to `moneyview-api-reference.md` as an API contract
+- the fact that Corporate and Portfolio flows consume that audit payload belongs to `data-flow.md`
+- the visible meaning of audit quality badges, warnings, and fallback state belongs to `visualization-metrics.md`
+- Monte Carlo worker result normalization and guard-driven chart states are split between `data-flow.md` for execution flow and `visualization-metrics.md` for rendering semantics
 
 ## Boundary Rules
 
@@ -44,3 +62,4 @@ Use the following files as the canonical architecture set under `docs/architectu
 - Reproducible report rendering belongs behind `apps/api`.
 - Frontend chart adapters may reshape domain payloads for visualization, but they do not redefine financial methodology.
 - Frontend worker-local simulation logic is acceptable when the workflow is exploratory, browser-contained, and does not require backend persistence.
+- Shared contract changes that affect both backend and frontend should be reviewed across `packages/shared-types`, `moneyview-api-reference.md`, `data-flow.md`, and `visualization-metrics.md` together rather than updated in isolation.

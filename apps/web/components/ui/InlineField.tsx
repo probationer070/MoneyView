@@ -24,9 +24,9 @@ export function InlineField({
       )}
     >
       <div className="flex items-start justify-between gap-[var(--space-3)]">
-        <span className="min-w-0 text-[12px] font-semibold text-[var(--text-primary)]">{label}</span>
+        <span className="min-w-0 text-[length:var(--type-helper)] font-semibold text-[var(--text-primary)]">{label}</span>
         {helperText && (
-          <span className="max-w-[16rem] text-right text-[11px] leading-[1.4] text-[var(--text-muted)]">
+          <span className="max-w-[16rem] text-right text-[length:var(--type-caption)] leading-[1.4] text-[var(--text-muted)]">
             {helperText}
           </span>
         )}

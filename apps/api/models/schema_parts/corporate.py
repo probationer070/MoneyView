@@ -114,6 +114,45 @@ class CorporateMetrics(BaseModel):
     esg_penalty: float = 22.0
 
 
+class MetricQuality(str):
+    """Quality states used to qualify derived valuation metrics."""
+
+
+class CorporateMetricAuditInput(BaseModel):
+    """One raw or intermediate input used in an auditable metric calculation."""
+
+    field: str
+    label: str
+    value: float | None = None
+    display_value: str
+    source: str
+
+
+class CorporateMetricAuditEntry(BaseModel):
+    """Auditable metadata for one derived valuation metric."""
+
+    value: float | None = None
+    display_value: str = "N/A"
+    quality: str = "missing"
+    reason: str | None = None
+    warnings: List[str] = Field(default_factory=list)
+    inputs_used: List[CorporateMetricAuditInput] = Field(default_factory=list)
+    source: str = ""
+    as_of: str | None = None
+    calculation_version: str = ""
+
+
+class CorporateMetricAudit(BaseModel):
+    """Full audit payload for ROIC, WACC, and spread quality."""
+
+    ticker: str
+    source_mode: str = "unavailable"
+    generated_at: str
+    roic: CorporateMetricAuditEntry
+    wacc: CorporateMetricAuditEntry
+    spread: CorporateMetricAuditEntry
+
+
 class CorporateCompany(BaseModel):
     """Company available for corporate analysis."""
 

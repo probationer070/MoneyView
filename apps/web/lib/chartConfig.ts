@@ -13,6 +13,12 @@ export const AXIS_TICK_STYLE = {
   fill: "var(--chart-label)",
 } as const;
 
+export const AXIS_CATEGORY_TICK_STYLE = {
+  ...AXIS_TICK_STYLE,
+  fill: "var(--text-primary)",
+  fontWeight: 600,
+} as const;
+
 export const AXIS_LINE_STYLE = {
   stroke: "var(--chart-grid)",
 } as const;
@@ -20,6 +26,18 @@ export const AXIS_LINE_STYLE = {
 export const GRID_STYLE = {
   stroke: "var(--chart-grid)",
   strokeDasharray: "3 3",
+} as const;
+
+export const DEFAULT_AXIS_PROPS = {
+  tick: AXIS_TICK_STYLE,
+  axisLine: AXIS_LINE_STYLE,
+  tickLine: false,
+} as const;
+
+export const DEFAULT_CATEGORY_AXIS_PROPS = {
+  tick: AXIS_CATEGORY_TICK_STYLE,
+  axisLine: AXIS_LINE_STYLE,
+  tickLine: false,
 } as const;
 
 export const TOOLTIP_CONTENT_STYLE = {
@@ -52,6 +70,27 @@ export const DEFAULT_TOOLTIP_PROPS = {
   itemStyle: TOOLTIP_ITEM_STYLE,
   cursor: TOOLTIP_CURSOR_STYLE,
 } as const;
+
+export function withTooltipProps<T extends Record<string, unknown>>(overrides?: T) {
+  return {
+    ...DEFAULT_TOOLTIP_PROPS,
+    ...overrides,
+  };
+}
+
+export function withAxisProps<T extends Record<string, unknown>>(overrides?: T) {
+  return {
+    ...DEFAULT_AXIS_PROPS,
+    ...overrides,
+  };
+}
+
+export function withCategoryAxisProps<T extends Record<string, unknown>>(overrides?: T) {
+  return {
+    ...DEFAULT_CATEGORY_AXIS_PROPS,
+    ...overrides,
+  };
+}
 
 export const CHART_COLORS = {
   primary: "var(--chart-primary)",
@@ -131,8 +170,18 @@ export function fmtPct(value: number, decimals = 1): string {
   return `${value >= 0 ? "+" : ""}${value.toFixed(decimals)}%`;
 }
 
+function normalizeFixedDigits(value: unknown, fallback: number): number {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return fallback;
+  return Math.min(100, Math.max(0, Math.trunc(numeric)));
+}
+
 export function fmtPctTick(value: number, decimals = 0): string {
-  return `${Number(value).toFixed(decimals)}%`;
+  return `${Number(value).toFixed(normalizeFixedDigits(decimals, 0))}%`;
+}
+
+export function fmtRatioTick(value: number, decimals = 2): string {
+  return Number(value).toFixed(normalizeFixedDigits(decimals, 2));
 }
 
 export function fmtNum(value: number, decimals = 1): string {
@@ -149,10 +198,27 @@ export function fmtPlain(value: number, decimals = 0): string {
   });
 }
 
+export function fmtCurrencyTick(value: number, decimals = 0, currencySymbol = "$"): string {
+  return `${currencySymbol}${fmtPlain(Number(value), decimals)}`;
+}
+
+export function fmtCurrencyCompactTick(value: number, currencySymbol = "$"): string {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) return `${currencySymbol}0`;
+  return `${currencySymbol}${numericValue.toLocaleString(undefined, {
+    notation: "compact",
+    maximumFractionDigits: 1,
+  })}`;
+}
+
 export function fmtYearsTick(value: number): string {
   return `${value}Y`;
 }
 
 export function fmtCompactThousands(value: number): string {
   return `${Math.round(Number(value) / 1000)}k`;
+}
+
+export function fmtTenThousandsTick(value: number): string {
+  return fmtPlain(Math.round(Number(value) / 10_000));
 }

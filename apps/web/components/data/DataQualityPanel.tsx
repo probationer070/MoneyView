@@ -19,7 +19,7 @@ export function DataQualityPanel({
   className
 }: DataQualityPanelProps) {
   return (
-    <div className={clsx("flex flex-col gap-2 text-[13px] p-4 bg-[var(--bg-surface)] border border-[var(--border-default)] rounded-[var(--radius-md)]", className)}>
+    <div className={clsx("flex flex-col gap-2 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-4 text-[length:var(--type-helper)]", className)}>
       <div className="flex items-center justify-between">
         <span className="text-[var(--text-muted)] font-medium">Status</span>
         <StatusBadge status={freshness} />

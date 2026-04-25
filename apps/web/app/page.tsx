@@ -7,6 +7,7 @@ export const dynamic = "force-dynamic";
 
 export default async function MarketOverview() {
   let indices: MarketIndexQuote[] = [];
+  let fetchError: string | null = null;
   const backendPort = readBackendPort();
   const apiBaseUrl = apiBaseUrlForPort(backendPort);
 
@@ -14,6 +15,7 @@ export default async function MarketOverview() {
     indices = await fetchApi<MarketIndexQuote[]>("/market/indices", { baseUrl: apiBaseUrl });
   } catch (error) {
     console.error("Failed to fetch market indices:", error);
+    fetchError = error instanceof Error ? error.message : "Failed to load market indices.";
   }
 
   return (
@@ -22,7 +24,7 @@ export default async function MarketOverview() {
         title="Market Overview"
         subtitle="Real-time snapshot of major global and domestic indices"
       />
-      <MarketOverviewClient indices={indices} />
+      <MarketOverviewClient indices={indices} fetchError={fetchError} />
     </div>
   );
 }

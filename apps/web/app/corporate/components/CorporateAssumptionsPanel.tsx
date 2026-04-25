@@ -1,7 +1,10 @@
 "use client";
 
 import { RefreshCw } from "lucide-react";
+import type { CorporateMetricAuditEntry } from "../../../../../packages/shared-types";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
+import { MetricQualityBadge } from "@/components/ui/MetricQualityBadge";
+import { formatAuditMetricValue, metricAuditReason } from "@/lib/metricAudit";
 import { RangeControl } from "./RangeControl";
 import { dateTimeText, pct } from "../corporateUtils";
 import { KOREA_COUNTRY_RISK_PREMIUM } from "../corporateConstants";
@@ -35,6 +38,8 @@ interface CorporateAssumptionsPanelProps {
   annualRoicValues: { year: number | string; value: number | null }[];
   roicBasisLabel: string;
   roicYearUnavailableMessage: string;
+  roicAudit: CorporateMetricAuditEntry | null;
+  waccAudit: CorporateMetricAuditEntry | null;
   assumptions: CorporateAssumptions;
   update: (field: keyof CorporateAssumptions, value: number) => void;
 }
@@ -66,13 +71,15 @@ export function CorporateAssumptionsPanel({
   annualRoicValues,
   roicBasisLabel,
   roicYearUnavailableMessage,
+  roicAudit,
+  waccAudit,
   assumptions,
   update,
 }: CorporateAssumptionsPanelProps) {
   const isFetchingSourceData = metricsHistoryQueryIsFetching || quarterlyStatementsQueryIsFetching || historicalPricesQueryIsFetching;
 
   return (
-    <div id="realtime-assumptions-container" className="hidden rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-5 shadow-sm xl:col-span-2 xl:block">
+    <div id="realtime-assumptions-container" className="hidden rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-5 xl:col-span-2 xl:block">
       <button
         type="button"
         onClick={() => setActiveCalculation("realtime")}
@@ -89,7 +96,7 @@ export function CorporateAssumptionsPanel({
             type="button"
             onClick={handleRefreshSourceData}
             disabled={isFetchingSourceData}
-            className="inline-flex items-center gap-2 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-xs font-bold text-[var(--text-primary)] shadow-sm disabled:opacity-60"
+            className="inline-flex items-center gap-2 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-xs font-bold text-[var(--text-primary)] disabled:opacity-60"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${isFetchingSourceData ? "animate-spin" : ""}`} />
             Refresh source data
@@ -98,7 +105,7 @@ export function CorporateAssumptionsPanel({
             {sourceDataDisplayLastUpdatedAt ? `Last updated ${dateTimeText(sourceDataDisplayLastUpdatedAt)}` : "Not loaded yet"}
           </span>
           {sourceDataIsStale && (
-            <span className="rounded-full bg-amber-100 px-2 py-1 text-[11px] font-bold text-amber-800">
+            <span className="rounded-full bg-amber-100 px-2 py-1 text-[length:var(--type-caption)] font-bold text-amber-800">
               {sourceDataStaleMessage}
             </span>
           )}
@@ -183,8 +190,8 @@ export function CorporateAssumptionsPanel({
       </div>
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-1">
         <RangeControl label="Growth Rate" description={`Yahoo annual revenue from 2021+. Current basis: ${growthBasisLabel}; annual rates are available in details.`} value={assumptions.growth} min={-5} max={20} step={0.5} onDetailClick={() => setActiveCalculation("growth")} onChange={(value) => update("growth", value)} />
-        <RangeControl label="ROIC" description={`Yahoo annual NOPAT / invested capital from 2021+. Current basis: ${roicBasisLabel}.`} value={assumptions.roic} min={-5} max={45} step={0.5} onDetailClick={() => setActiveCalculation("roic")} onChange={(value) => update("roic", value)} />
-        <RangeControl label="WACC" description="Derived from Yahoo beta and the most recent Yahoo annual statement capital structure, tax rate, and cost of debt; not directly reported by Yahoo statements." value={assumptions.wacc} min={2} max={24} step={0.25} onDetailClick={() => setActiveCalculation("wacc")} onChange={(value) => update("wacc", value)} />
+        <RangeControl label="ROIC" description={`${`Yahoo annual NOPAT / invested capital from 2021+. Current basis: ${roicBasisLabel}.`} ${roicAudit ? metricAuditReason(roicAudit) : ""}`.trim()} value={assumptions.roic} valueDisplay={roicAudit ? formatAuditMetricValue(roicAudit) : undefined} statusBadge={roicAudit ? <MetricQualityBadge quality={roicAudit.quality} /> : undefined} min={-5} max={45} step={0.5} onDetailClick={() => setActiveCalculation("roic")} onChange={(value) => update("roic", value)} />
+        <RangeControl label="WACC" description={`${"Derived from Yahoo beta and the most recent Yahoo annual statement capital structure, tax rate, and cost of debt; not directly reported by Yahoo statements."} ${waccAudit ? metricAuditReason(waccAudit) : ""}`.trim()} value={assumptions.wacc} valueDisplay={waccAudit ? formatAuditMetricValue(waccAudit) : undefined} statusBadge={waccAudit ? <MetricQualityBadge quality={waccAudit.quality} /> : undefined} min={2} max={24} step={0.25} onDetailClick={() => setActiveCalculation("wacc")} onChange={(value) => update("wacc", value)} />
         <RangeControl label="Debt Ratio" description="Uses the most recent Yahoo annual debt / (debt + equity), not a 5-year average." value={assumptions.debtRatio} min={0} max={90} step={1} onDetailClick={() => setActiveCalculation("debtRatio")} onChange={(value) => update("debtRatio", value)} />
         <RangeControl label="Unlevered Beta" description="Yahoo levered beta de-levered with the most recent annual D/E and tax rate from Yahoo statements; not directly reported in statements." value={assumptions.unleveredBeta} min={0.4} max={2.5} step={0.05} suffix="" onDetailClick={() => setActiveCalculation("unleveredBeta")} onChange={(value) => update("unleveredBeta", value)} />
         <button

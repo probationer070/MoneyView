@@ -89,3 +89,40 @@ export interface CorporateComparisonSnapshotDeleteResult {
 export interface CorporateDcfBatchRequest {
   tickers: string[];
 }
+
+export type MetricQuality =
+  | "ok"
+  | "estimated"
+  | "stale"
+  | "suspicious"
+  | "invalid"
+  | "missing";
+
+export interface CorporateMetricAuditInput {
+  field: string;
+  label: string;
+  value: number | null;
+  display_value: string;
+  source: string;
+}
+
+export interface CorporateMetricAuditEntry {
+  value: number | null;
+  display_value: string;
+  quality: MetricQuality;
+  reason: string | null;
+  warnings: string[];
+  inputs_used: CorporateMetricAuditInput[];
+  source: string;
+  as_of: string | null;
+  calculation_version: string;
+}
+
+export interface CorporateMetricAudit {
+  ticker: string;
+  source_mode: "yahoo_finance" | "corporate_metrics" | "default_model" | "unavailable";
+  generated_at: string;
+  roic: CorporateMetricAuditEntry;
+  wacc: CorporateMetricAuditEntry;
+  spread: CorporateMetricAuditEntry;
+}

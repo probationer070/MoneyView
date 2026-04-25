@@ -6,6 +6,8 @@ export async function mockMarketPageApi(
   page: Page,
   options?: {
     detailOverrides?: Partial<Record<keyof typeof marketIndexDetailFixture, unknown>>;
+    failOverview?: boolean;
+    failDetailTickers?: string[];
   },
 ) {
   await page.route("**/*", async (route) => {
@@ -18,12 +20,26 @@ export async function mockMarketPageApi(
     }
 
     if (pathname === `${API_PREFIX}/market/indices` && method === "GET") {
+      if (options?.failOverview) {
+        return route.fulfill({
+          status: 500,
+          contentType: "application/json",
+          body: JSON.stringify({ detail: "Mock market overview failure" }),
+        });
+      }
       return json(route, cloneFixture(marketOverviewFixture));
     }
 
     const detailMatch = pathname.match(/^\/api\/v1\/market\/index\/(.+)\/detail$/);
     if (detailMatch && method === "GET") {
       const ticker = decodeURIComponent(detailMatch[1]);
+      if (options?.failDetailTickers?.includes(ticker)) {
+        return route.fulfill({
+          status: 500,
+          contentType: "application/json",
+          body: JSON.stringify({ detail: `Mock market detail failure for ${ticker}` }),
+        });
+      }
       const detail = marketIndexDetailFixture[ticker as keyof typeof marketIndexDetailFixture];
       if (detail) {
         const override = options?.detailOverrides?.[ticker as keyof typeof marketIndexDetailFixture] as Record<string, unknown> | undefined;

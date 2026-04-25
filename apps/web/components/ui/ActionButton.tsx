@@ -25,8 +25,8 @@ const variantStyles: Record<ActionVariant, string> = {
 };
 
 const sizeStyles: Record<ActionSize, string> = {
-  sm: "h-8 px-3 text-[12px] gap-1.5",
-  md: "h-9 px-4 text-[13px] gap-2",
+  sm: "h-8 px-3 text-[length:var(--type-helper)] gap-1.5",
+  md: "h-9 px-4 text-[length:var(--type-label)] gap-2",
 };
 
 export function ActionButton({

@@ -48,7 +48,7 @@ export function StatusBadge({ status, label, className }: StatusBadgeProps) {
   return (
     <span
       className={clsx(
-        "inline-flex items-center gap-1.5 rounded-[var(--radius-sm)] px-2 py-0.5 text-[11px] font-medium leading-tight",
+        "inline-flex items-center gap-1.5 rounded-[var(--radius-sm)] px-2 py-0.5 text-[length:var(--type-caption)] font-medium leading-tight",
         styles.bg,
         styles.text,
         className

@@ -1,0 +1,34 @@
+Verification checks used in the frontend workflow
+
+1. tsc --noEmit
+- Runs the TypeScript compiler in type-check mode.
+- Confirms that props, function arguments, return types, imports, and nullable values are consistent.
+- Does not write output files because of --noEmit.
+- Main purpose: catch type-contract errors early.
+
+2. npm.cmd run lint
+- Runs ESLint for static code-quality checks.
+- Catches rule violations such as unused variables, unsafe patterns, and React or Next.js rule issues.
+- Main purpose: enforce code-quality and framework rules before shipping.
+
+3. npm.cmd run build
+- Runs the production Next.js build.
+- Confirms the app can compile, bundle, and generate route output for deployment.
+- This is closer to a real release check than tsc or lint alone.
+- Main purpose: verify the application can actually build for production.
+
+Recommended order
+- Run tsc first for fast type failures.
+- Run lint next for code-quality and framework-rule failures.
+- Run build last because it is the most complete and usually the heaviest check.
+
+4. Targeted verification still matters after tsc, lint, and build
+- Passing the three baseline checks does not replace feature-specific verification.
+- When a change affects API contracts, metric-quality states, worker normalization, or page-level cache / source selection, run the narrowest targeted tests that exercise that behavior.
+- Typical examples in this repo:
+  - `pytest` for backend contract changes such as quality metadata, warnings, and calculation-version fields
+  - targeted Playwright specs for UI regressions such as first-load snapshot sourcing, overflow handling, and degraded-but-visible chart states
+
+Verification gate rule
+- Use `tsc --noEmit`, `npm.cmd run lint`, and `npm.cmd run build` as the baseline release gate.
+- Add targeted backend or e2e verification whenever the change introduces a new runtime contract or fixes a previously observed regression pattern.

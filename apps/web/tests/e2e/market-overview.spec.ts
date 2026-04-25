@@ -28,7 +28,7 @@ test("market overview opens and closes detail from both card and table views", a
   await expect(page.getByText("1,340,000,000")).toBeVisible();
   await expect(page.getByText("fresh_cache").first()).toBeVisible();
   await expect(page.getByText("2026-04-16T07:30:00Z")).toBeVisible();
-  await page.getByRole("button", { name: "Close market detail" }).click();
+  await page.getByRole("button", { name: "Close modal" }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
 
   await page.getByRole("button", { name: "Table" }).click();
@@ -49,7 +49,7 @@ test("market overview detail uses instrument-aware copy for commodity, fx, and c
   await expect(page.getByText("Trend Spread").first()).toBeVisible();
   await expect(page.getByText("Upper Range Band").first()).toBeVisible();
   await expect(page.getByText("Unit framing: USD per ounce matter more than stock-style benchmark framing.")).toBeVisible();
-  await page.getByRole("button", { name: "Close market detail" }).click();
+  await page.getByRole("button", { name: "Close modal" }).click();
 
   await page.getByRole("button", { name: "Open detail for USD/KRW" }).click();
   await expect(page.getByRole("dialog", { name: "USD/KRW" })).toBeVisible();
@@ -58,7 +58,7 @@ test("market overview detail uses instrument-aware copy for commodity, fx, and c
   await expect(page.getByText("Pair Momentum").first()).toBeVisible();
   await expect(page.getByText("20D Pair Average").first()).toBeVisible();
   await expect(page.getByText("USD/KRW reads as quote-currency value per base-currency unit.")).toBeVisible();
-  await page.getByRole("button", { name: "Close market detail" }).click();
+  await page.getByRole("button", { name: "Close modal" }).click();
 
   await page.getByRole("button", { name: "Open detail for Bitcoin" }).click();
   await expect(page.getByRole("dialog", { name: "Bitcoin" })).toBeVisible();
@@ -81,7 +81,7 @@ test("market overview detail stays usable on mobile width", async ({ page }) => 
   await expect(page.getByRole("heading", { name: "Monthly Indicators" })).toBeVisible();
   await expect(page.getByText("Monthly bars")).toBeVisible();
 
-  await page.getByRole("button", { name: "Close market detail" }).click();
+  await page.getByRole("button", { name: "Close modal" }).click();
   await page.getByRole("button", { name: "Open detail for Bitcoin" }).click();
   await expect(page.getByRole("heading", { name: "Monthly Crypto Signals" })).toBeVisible();
 });
@@ -125,4 +125,13 @@ test("market overview detail shows explicit warnings for stale and partial data"
   await expect(page.getByText("This market detail is using stale cached history because a live refresh was unavailable.")).toBeVisible();
   await expect(page.getByText("Monthly history is not available for this instrument yet, so the monthly chart and indicators are incomplete.")).toBeVisible();
   await expect(page.getByText("Daily volume is not provided for this FX pair, so volume metrics are intentionally shown as unavailable.")).toBeVisible();
+});
+
+test("market overview detail shows an explicit modal error state when the detail request fails", async ({ page }) => {
+  await mockMarketPageApi(page, { failDetailTickers: ["^GSPC"] });
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  await page.getByRole("button", { name: "Open detail for S&P 500" }).click();
+  await expect(page.getByRole("dialog", { name: "S&P 500" })).toBeVisible();
+  await expect(page.getByText("Market Detail Unavailable")).toBeVisible();
 });

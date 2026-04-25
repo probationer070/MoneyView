@@ -336,6 +336,19 @@ Base path: `/api/v1/corporate`
 - **Classification:** medium
 - **Consumers:** Corporate assumptions and metrics sidebar
 
+### `GET /metrics/{ticker}/audit`
+
+- **Response:** `CorporateMetricAudit`
+- **Purpose:** Return auditable ROIC, WACC, and `ROIC - WACC` metadata, including source mode, quality state, warnings, calculation version, and the intermediate inputs used for display/explanation.
+- **Query parameters:** `roic_basis`, `roic_year`
+- **Persistence touched:** reads `corporate_metrics` and Yahoo-derived statement inputs when available; does not persist audit output
+- **Classification:** medium
+- **Special cases:**
+  - `source_mode` may be `yahoo_finance`, `corporate_metrics`, `default_model`, or `unavailable`
+  - metric quality may be `ok`, `estimated`, `stale`, `suspicious`, `invalid`, or `missing`
+  - `spread` inherits the lower-confidence state of `roic` and `wacc`
+- **Consumers:** Corporate calculation-detail modal, Corporate assumption quality badges, and Portfolio stock-detail audit panels
+
 ### `GET /metrics/{ticker}/history`
 
 - **Response:** plain JSON history payload

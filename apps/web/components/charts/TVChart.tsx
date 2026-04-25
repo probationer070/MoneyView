@@ -26,9 +26,9 @@ const TVChart: React.FC<TVChartProps> = ({
     volumeData,
     lineSeriesData = [],
     height = 500,
-    colorAccent = "#EF5350",
+    colorAccent = "var(--delta-up)",
     upColor,
-    downColor = "#4589E5",
+    downColor = "var(--delta-down)",
     tickerName = "Overview"
 }) => {
     const chartContainerRef = useRef<HTMLDivElement>(null);

@@ -5,6 +5,7 @@ import { fetchApi } from "@/lib/api";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { ErrorState } from "@/components/ui/ErrorState";
 import { NewsFeedList, type NewsArticle } from "./components/NewsFeedList";
 
 export default function NewsPage() {
@@ -30,6 +31,11 @@ export default function NewsPage() {
 
       {newsQuery.isLoading ? (
         <LoadingState variant="skeleton" />
+      ) : newsQuery.isError ? (
+        <ErrorState
+          title="News Feed Unavailable"
+          message={newsQuery.error instanceof Error ? newsQuery.error.message : "Could not load market news from the backend feed."}
+        />
       ) : visibleNews.length === 0 ? (
         <EmptyState title="No news articles found" description="Check back later or ensure the backend feed is running." />
       ) : (

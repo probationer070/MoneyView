@@ -1,12 +1,14 @@
 "use client";
 
 import type { ReactNode } from "react";
-import type { DcfFullReport } from "../../../../../packages/shared-types";
+import type { CorporateMetricAudit, DcfFullReport } from "../../../../../packages/shared-types";
 import type { CalculationDetail, CalculationRow, RawDatasetRow } from "./calculationDetailTypes";
 import { ModalShell } from "@/components/ui/ModalShell";
 import { ActionButton } from "@/components/ui/ActionButton";
 import { StatusBadge, type StatusVariant } from "@/components/ui/StatusBadge";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { ErrorState } from "@/components/ui/ErrorState";
+import { MetricAuditPanel } from "@/components/ui/MetricAuditPanel";
 
 interface StockPriceRow {
   date: string;
@@ -28,13 +30,22 @@ interface QuarterlyStatementRow {
 interface CalculationDetailModalProps {
   detail: CalculationDetail;
   ticker: string;
+  metricAudit: CorporateMetricAudit | null;
+  metricAuditIsLoading: boolean;
+  metricAuditIsError: boolean;
   rawDatasetRows: RawDatasetRow[];
   historicalPrices: StockPriceRow[];
   historicalStatus: string;
+  historicalIsLoading: boolean;
+  historicalIsError: boolean;
   quarterlyStatementRows: QuarterlyStatementRow[];
   quarterlyStatementStatus: string;
+  quarterlyStatementsIsLoading: boolean;
+  quarterlyStatementsIsError: boolean;
   dcfFullReport: DcfFullReport | null;
   dcfFullReportStatus: string | null;
+  dcfFullReportIsLoading: boolean;
+  dcfFullReportIsError: boolean;
   onRequestDcfFullReport?: (() => void) | null;
   onClose: () => void;
   onDownloadRawDatasetCsv: () => void;
@@ -80,7 +91,7 @@ interface RawDatasetSectionProps {
 function MetricCard({ label, value, helper }: MetricCardProps) {
   return (
     <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-muted)] p-4">
-      <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">{label}</div>
+      <div className="text-[length:var(--type-caption)] font-semibold uppercase tracking-wide text-[var(--text-muted)]">{label}</div>
       <div className="mt-2 text-lg font-black text-[var(--text-primary)]">{value}</div>
       {helper ? <p className="mt-2 text-xs text-[var(--text-muted)]">{helper}</p> : null}
     </div>
@@ -110,7 +121,7 @@ function DenseRowsTable({ columns, rows, emptyTitle, emptyDescription }: Omit<Da
   return (
     <div className="overflow-x-auto rounded-[var(--radius)] border border-[var(--border)]">
       <table className="w-full min-w-[42rem] table-fixed text-left text-sm">
-        <thead className="bg-[var(--surface)] text-[11px] font-bold uppercase tracking-wide text-[var(--text-primary)]">
+        <thead className="bg-[var(--surface)] text-[length:var(--type-table-header)] font-bold uppercase tracking-wide text-[var(--text-primary)]">
           <tr>
             {columns.map((column) => (
               <th key={column} className="px-3 py-2">
@@ -202,13 +213,22 @@ function supportingRows(detail: CalculationDetail) {
 export function CalculationDetailModal({
   detail,
   ticker,
+  metricAudit,
+  metricAuditIsLoading,
+  metricAuditIsError,
   rawDatasetRows,
   historicalPrices,
   historicalStatus,
+  historicalIsLoading,
+  historicalIsError,
   quarterlyStatementRows,
   quarterlyStatementStatus,
+  quarterlyStatementsIsLoading,
+  quarterlyStatementsIsError,
   dcfFullReport,
   dcfFullReportStatus,
+  dcfFullReportIsLoading,
+  dcfFullReportIsError,
   onRequestDcfFullReport,
   onClose,
   onDownloadRawDatasetCsv,
@@ -265,6 +285,23 @@ export function CalculationDetailModal({
       size="xl"
     >
       <div className="space-y-5">
+        {detail.auditMetric ? (
+          metricAuditIsLoading ? (
+            <SectionCard title="Calculation Audit" description="Loading auditable ROIC/WACC inputs for the selected metric.">
+              <EmptyState title="Loading calculation audit..." />
+            </SectionCard>
+          ) : metricAuditIsError ? (
+            <SectionCard title="Calculation Audit" description="The auditable input payload could not be loaded for this metric.">
+              <ErrorState title="Calculation Audit Unavailable" message={`Could not load the metric audit for ${ticker}.`} />
+            </SectionCard>
+          ) : (
+            <MetricAuditPanel
+              audit={metricAudit}
+              metric={detail.auditMetric}
+              title={detail.auditMetric === "spread" ? "ROIC - WACC Audit" : `${detail.auditMetric.toUpperCase()} Audit`}
+            />
+          )
+        ) : null}
         <section className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
             <div>
@@ -311,19 +348,19 @@ export function CalculationDetailModal({
         >
           <div className="space-y-4">
             <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-muted)] p-4">
-              <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Calculation Formula</div>
+              <div className="text-[length:var(--type-caption)] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Calculation Formula</div>
               <p className="mt-2 whitespace-pre-wrap font-mono text-sm font-bold text-[var(--text-primary)]">{detail.formula}</p>
             </div>
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-muted)] p-4">
-                <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Result Summary</div>
+                <div className="text-[length:var(--type-caption)] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Result Summary</div>
                 <p className="mt-2 text-sm font-bold text-[var(--text-primary)]">{detail.result}</p>
                 <p className="mt-2 text-xs text-[var(--text-muted)]">
                   Inputs used come from the selected realtime assumption state, saved source data, and the currently active ticker context.
                 </p>
               </div>
               <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-muted)] p-4">
-                <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Time Horizon</div>
+                <div className="text-[length:var(--type-caption)] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Time Horizon</div>
                 <p className="mt-2 text-sm font-bold text-[var(--text-primary)]">{detail.timeHorizon}</p>
                 <p className="mt-2 text-xs text-[var(--text-muted)]">
                   Every supporting row and raw dataset below is interpreted through this horizon or model policy window.
@@ -374,7 +411,7 @@ export function CalculationDetailModal({
             title="Full DCF Report"
             description="Expanded DCF projection, terminal-value, and WACC breakdown. This stays behind an explicit open action to preserve progressive disclosure."
             status={dcfFullReportStatus ?? "Full report not loaded yet."}
-            statusVariant={statusFromText(dcfFullReportStatus)}
+            statusVariant={dcfFullReportIsError ? "error" : statusFromText(dcfFullReportStatus)}
             defaultOpen={Boolean(dcfFullReport)}
           >
             <div className="space-y-4">
@@ -386,11 +423,21 @@ export function CalculationDetailModal({
                   size="sm"
                 />
               ) : null}
-              {dcfFullReport ? (
+              {dcfFullReportIsLoading && !dcfFullReport ? (
+                <EmptyState
+                  title="Loading full DCF report..."
+                  description="Fetching the expanded projection rows and WACC breakdown for this ticker."
+                />
+              ) : dcfFullReportIsError && !dcfFullReport ? (
+                <ErrorState
+                  title="Full DCF Report Unavailable"
+                  message={dcfFullReportStatus ?? "Could not load the expanded DCF report for this ticker."}
+                />
+              ) : dcfFullReport ? (
                 <>
                   <div className="overflow-x-auto rounded-[var(--radius)] border border-[var(--border)]">
                     <table className="w-full min-w-[42rem] table-fixed text-left text-sm">
-                      <thead className="bg-[var(--surface)] text-[11px] font-bold uppercase tracking-wide text-[var(--text-primary)]">
+                      <thead className="bg-[var(--surface)] text-[length:var(--type-table-header)] font-bold uppercase tracking-wide text-[var(--text-primary)]">
                         <tr>
                           <th className="px-3 py-2">Year</th>
                           <th className="px-3 py-2">Projected FCFF</th>
@@ -412,7 +459,7 @@ export function CalculationDetailModal({
                   </div>
                   <div className="overflow-x-auto rounded-[var(--radius)] border border-[var(--border)]">
                     <table className="w-full min-w-[42rem] table-fixed text-left text-sm">
-                      <thead className="bg-[var(--surface)] text-[11px] font-bold uppercase tracking-wide text-[var(--text-primary)]">
+                      <thead className="bg-[var(--surface)] text-[length:var(--type-table-header)] font-bold uppercase tracking-wide text-[var(--text-primary)]">
                         <tr>
                           <th className="px-3 py-2">Breakdown</th>
                           <th className="px-3 py-2">Value</th>
@@ -461,7 +508,7 @@ export function CalculationDetailModal({
           {rawDatasetRows.length > 0 ? (
             <div className="max-h-80 overflow-auto rounded-[var(--radius)] border border-[var(--border)]">
               <table className="w-full min-w-[52rem] table-fixed text-left text-sm">
-                <thead className="sticky top-0 bg-[var(--surface)] text-[11px] font-bold uppercase tracking-wide text-[var(--text-primary)]">
+                <thead className="sticky top-0 bg-[var(--surface)] text-[length:var(--type-table-header)] font-bold uppercase tracking-wide text-[var(--text-primary)]">
                   <tr>
                     <th className="px-3 py-2">Dataset</th>
                     <th className="px-3 py-2">Field</th>
@@ -493,13 +540,23 @@ export function CalculationDetailModal({
           title="Historical OHLCV Dataset"
           description="Underlying five-year price history used for price-linked context and export."
           status={historicalStatus}
-          statusVariant={statusFromText(historicalStatus)}
+          statusVariant={historicalIsError ? "error" : statusFromText(historicalStatus)}
           defaultOpen={false}
         >
-          {historicalPrices.length > 0 ? (
+          {historicalIsLoading && historicalPrices.length === 0 ? (
+            <EmptyState
+              title="Loading historical OHLCV dataset..."
+              description="Fetching the five-year price history used for this audit layer."
+            />
+          ) : historicalIsError && historicalPrices.length === 0 ? (
+            <ErrorState
+              title="Historical OHLCV Unavailable"
+              message={historicalStatus}
+            />
+          ) : historicalPrices.length > 0 ? (
             <div className="max-h-80 overflow-auto rounded-[var(--radius)] border border-[var(--border)]">
               <table className="w-full min-w-[48rem] table-fixed text-left text-sm">
-                <thead className="sticky top-0 bg-[var(--surface)] text-[11px] font-bold uppercase tracking-wide text-[var(--text-primary)]">
+                <thead className="sticky top-0 bg-[var(--surface)] text-[length:var(--type-table-header)] font-bold uppercase tracking-wide text-[var(--text-primary)]">
                   <tr>
                     <th className="px-3 py-2">Date</th>
                     <th className="px-3 py-2">Open</th>
@@ -535,13 +592,23 @@ export function CalculationDetailModal({
           title="Quarterly Financial Statements"
           description="Quarterly balance sheet, income statement, and cash-flow rows used to support the current audit view."
           status={quarterlyStatementStatus}
-          statusVariant={statusFromText(quarterlyStatementStatus)}
+          statusVariant={quarterlyStatementsIsError ? "error" : statusFromText(quarterlyStatementStatus)}
           defaultOpen={false}
         >
-          {quarterlyStatementRows.length > 0 ? (
+          {quarterlyStatementsIsLoading && quarterlyStatementRows.length === 0 ? (
+            <EmptyState
+              title="Loading quarterly financial statements..."
+              description="Fetching the supporting quarterly balance-sheet, income, and cash-flow rows."
+            />
+          ) : quarterlyStatementsIsError && quarterlyStatementRows.length === 0 ? (
+            <ErrorState
+              title="Quarterly Financial Statements Unavailable"
+              message={quarterlyStatementStatus}
+            />
+          ) : quarterlyStatementRows.length > 0 ? (
             <div className="max-h-96 overflow-auto rounded-[var(--radius)] border border-[var(--border)]">
               <table className="w-full min-w-[56rem] table-fixed text-left text-sm">
-                <thead className="sticky top-0 bg-[var(--surface)] text-[11px] font-bold uppercase tracking-wide text-[var(--text-primary)]">
+                <thead className="sticky top-0 bg-[var(--surface)] text-[length:var(--type-table-header)] font-bold uppercase tracking-wide text-[var(--text-primary)]">
                   <tr>
                     <th className="px-3 py-2">Statement</th>
                     <th className="px-3 py-2">Quarter</th>

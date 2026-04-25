@@ -7,6 +7,7 @@ import { RefreshCw } from "lucide-react";
 import { fetchApi } from "@/lib/api";
 import type {
   CorporateDcfBatchRequest,
+  CorporateMetricAudit,
   DcfAssumptionSummary as DCFAssumptionSummary,
   DcfFullReport as DCFFullReport,
   DcfSummaryResponse as DCFResult,
@@ -152,6 +153,7 @@ export default function CorporateAnalysisPage() {
   const [dcfFullReport, setDcfFullReport] = useState<DCFFullReport | null>(null);
   const [dcfStreamStatus, setDcfStreamStatus] = useState<"idle" | "streaming" | "complete" | "error">("idle");
   const [dcfFullReportLoading, setDcfFullReportLoading] = useState(false);
+  const [dcfFullReportError, setDcfFullReportError] = useState<string | null>(null);
   const [dcfStreamError, setDcfStreamError] = useState<string | null>(null);
   const [bulkDcfReports, setBulkDcfReports] = useState<DCFFullReport[]>([]);
   const [bulkDcfReportsLoading, setBulkDcfReportsLoading] = useState(false);
@@ -230,6 +232,19 @@ export default function CorporateAnalysisPage() {
     placeholderData: (previous) => previous,
     staleTime: 5 * 60_000,
     enabled: Boolean(sourceDataRequestedTicker && sourceDataRefreshToken),
+  });
+  const metricAuditQuery = useQuery<CorporateMetricAudit>({
+    queryKey: ["corporate-metric-audit", assumptions.ticker, roicBasis, roicYear],
+    queryFn: ({ signal }) =>
+      fetchApi<CorporateMetricAudit>(`/corporate/metrics/${assumptions.ticker}/audit`, {
+        signal,
+        params: {
+          roic_basis: roicBasis,
+          ...(roicBasis === "annual" ? { roic_year: Number(roicYear) } : {}),
+        },
+      }),
+    staleTime: 5 * 60_000,
+    enabled: Boolean(assumptions.ticker),
   });
 
   useEffect(() => {
@@ -594,17 +609,17 @@ export default function CorporateAnalysisPage() {
 
   const handleViewFullDcfReport = async () => {
     const snapshot = dcfRequestedSnapshot ?? activeDcfSnapshot;
+    setActiveCalculation("backendDcf");
     setDcfFullReportLoading(true);
-    setDcfStreamError(null);
+    setDcfFullReportError(null);
     try {
       const report = await fetchApi<DCFFullReport>(`/corporate/dcf/${snapshot.ticker}/report`, {
         method: "POST",
         body: JSON.stringify(dcfRequestBody(snapshot)),
       });
       setDcfFullReport(report);
-      setActiveCalculation("backendDcf");
     } catch (error) {
-      setDcfStreamError(error instanceof Error ? error.message : "Failed to load the full DCF report.");
+      setDcfFullReportError(error instanceof Error ? error.message : "Failed to load the full DCF report.");
     } finally {
       setDcfFullReportLoading(false);
     }
@@ -947,7 +962,7 @@ export default function CorporateAnalysisPage() {
               <button
                 type="button"
                 onClick={() => setActiveCalculation("backendDcf")}
-                className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-4 py-3 text-left text-sm shadow-sm transition hover:border-[var(--surface)]"
+                className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-4 py-3 text-left text-sm transition hover:border-[var(--surface)]"
               >
                 <div className="text-xs text-[var(--text-muted)]">
                   <InfoTooltip
@@ -965,7 +980,7 @@ export default function CorporateAnalysisPage() {
                   type="button"
                   onClick={handleRefreshDcf}
                   disabled={dcfStreamStatus === "streaming"}
-                  className="inline-flex items-center gap-2 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 font-bold text-[var(--text-primary)] shadow-sm disabled:opacity-60"
+                  className="inline-flex items-center gap-2 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 font-bold text-[var(--text-primary)] disabled:opacity-60"
                 >
                   <RefreshCw className={`h-3.5 w-3.5 ${dcfStreamStatus === "streaming" ? "animate-spin" : ""}`} />
                   Refresh DCF
@@ -974,7 +989,7 @@ export default function CorporateAnalysisPage() {
                   type="button"
                   onClick={() => void handleViewFullDcfReport()}
                   disabled={dcfFullReportLoading || (!dcfData && dcfStreamStatus === "idle")}
-                  className="inline-flex items-center gap-2 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 font-bold text-[var(--text-primary)] shadow-sm disabled:opacity-60"
+                  className="inline-flex items-center gap-2 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 font-bold text-[var(--text-primary)] disabled:opacity-60"
                 >
                   {dcfFullReportLoading ? "Loading report..." : "View Full Report"}
                 </button>
@@ -982,13 +997,13 @@ export default function CorporateAnalysisPage() {
                   type="button"
                   onClick={() => void handleCalculateAllDcfReports()}
                   disabled={bulkDcfReportsLoading || nonBenchmarkComparisonRows.length === 0}
-                  className="inline-flex items-center gap-2 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 font-bold text-[var(--text-primary)] shadow-sm disabled:opacity-60"
+                  className="inline-flex items-center gap-2 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 font-bold text-[var(--text-primary)] disabled:opacity-60"
                 >
                   {bulkDcfReportsLoading ? "Calculating all DCF reports..." : "Calculate All DCF Reports"}
                 </button>
                 <span>{dcfDisplayLastUpdatedAt ? `Last updated ${dateTimeText(dcfDisplayLastUpdatedAt)}` : "Not calculated yet"}</span>
                 {dcfIsStale && (
-                  <span className="rounded-full bg-amber-100 px-2 py-1 text-[11px] font-bold text-amber-800">
+                  <span className="rounded-full bg-amber-100 px-2 py-1 text-[length:var(--type-caption)] font-bold text-amber-800">
                     Stale
                   </span>
                 )}
@@ -996,14 +1011,14 @@ export default function CorporateAnalysisPage() {
                   <span>DCF stays idle on first load until you refresh it.</span>
                 )}
                 {dcfStreamError && (
-                  <span className="rounded-full bg-red-100 px-2 py-1 text-[11px] font-bold text-red-800">
+                  <span className="rounded-full bg-red-100 px-2 py-1 text-[length:var(--type-caption)] font-bold text-red-800">
                     {dcfStreamError}
                   </span>
                 )}
               </div>
             </div>
             {/* Add Company: persists a manual ticker and immediately selects it for analysis. */}
-            <form onSubmit={addCompany} className="grid w-full min-w-0 grid-cols-1 gap-2 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-3 text-sm shadow-sm sm:grid-cols-2 min-[1300px]:max-w-sm">
+            <form onSubmit={addCompany} className="grid w-full min-w-0 grid-cols-1 gap-2 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-3 text-sm sm:grid-cols-2 min-[1300px]:max-w-sm">
               <div className="text-xs font-semibold text-[var(--text-muted)] sm:col-span-2">Add Company</div>
               <input
                 value={newCompanyName}
@@ -1058,6 +1073,8 @@ export default function CorporateAnalysisPage() {
           annualRoicValues={annualRoicValues}
           roicBasisLabel={roicBasisLabel}
           roicYearUnavailableMessage={roicYearUnavailableMessage}
+          roicAudit={metricAuditQuery.data?.roic ?? null}
+          waccAudit={metricAuditQuery.data?.wacc ?? null}
           assumptions={assumptions}
           update={update}
         />
@@ -1068,7 +1085,7 @@ export default function CorporateAnalysisPage() {
             <button
               type="button"
               onClick={() => setActiveCalculation("spread")}
-              className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4 text-left shadow-sm transition hover:border-[var(--surface)]"
+              className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4 text-left transition hover:border-[var(--surface)]"
             >
               <div className="text-xs font-semibold text-[var(--text-muted)]">
                 <InfoTooltip
@@ -1076,7 +1093,7 @@ export default function CorporateAnalysisPage() {
                   description={`Spread between return on invested capital and WACC. Basis: ${pct(assumptions.roic)} ROIC - ${pct(assumptions.wacc)} WACC = ${pct(derived.spread)}. Positive is good because returns exceed the hurdle rate; current status is ${derived.spread >= 0 ? "Good, value creation" : "Bad, value destruction"}.`}
                 />
               </div>
-              <div className={`mt-1 text-3xl font-black ${derived.spread >= 0 ? "text-[var(--surface)]" : "text-[var(--delta-down)]"}`}>
+              <div className={`mt-1 text-3xl font-black ${derived.spread >= 0 ? "text-[var(--delta-up)]" : "text-[var(--delta-down)]"}`}>
                 {pct(derived.spread)}
               </div>
               <div className="mt-2 text-xs text-[var(--text-muted)]">
@@ -1086,7 +1103,7 @@ export default function CorporateAnalysisPage() {
             <button
               type="button"
               onClick={() => setActiveCalculation("bottomUpKe")}
-              className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4 text-left shadow-sm transition hover:border-[var(--surface)]"
+              className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4 text-left transition hover:border-[var(--surface)]"
             >
               <div className="text-xs font-semibold text-[var(--text-muted)]">
                 <InfoTooltip
@@ -1100,7 +1117,7 @@ export default function CorporateAnalysisPage() {
             <button
               type="button"
               onClick={() => setActiveCalculation("leveredBeta")}
-              className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4 text-left shadow-sm transition hover:border-[var(--surface)]"
+              className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4 text-left transition hover:border-[var(--surface)]"
             >
               <div className="text-xs font-semibold text-[var(--text-muted)]">
                 <InfoTooltip
@@ -1114,7 +1131,7 @@ export default function CorporateAnalysisPage() {
             <button
               type="button"
               onClick={() => setActiveCalculation("failureProbability")}
-              className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4 text-left shadow-sm transition hover:border-[var(--surface)]"
+              className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4 text-left transition hover:border-[var(--surface)]"
             >
               <div className="text-xs font-semibold text-[var(--text-muted)]">
                 <InfoTooltip
@@ -1122,7 +1139,7 @@ export default function CorporateAnalysisPage() {
                   description={`Scenario score from spread, growth, and agency/ESG penalty. Current basis: spread ${pct(derived.spread)}, growth ${pct(assumptions.growth)}, penalty ${numberText(assumptions.esgPenalty)}. Above 60% is good; current status is ${derived.successProbability >= 60 ? "Good" : "Weak"}.`}
                 />
               </div>
-              <div className="mt-1 text-3xl font-black text-[var(--surface)]">{pct(derived.successProbability)}</div>
+              <div className="mt-1 text-3xl font-black text-[var(--delta-up)]">{pct(derived.successProbability)}</div>
               <div className="mt-2 text-xs text-[var(--text-muted)]">Risk-return scenario</div>
             </button>
           </div>
@@ -1201,6 +1218,9 @@ export default function CorporateAnalysisPage() {
         <CalculationDetailModal
           detail={activeCalculationDetail}
           ticker={assumptions.ticker}
+          metricAudit={metricAuditQuery.data ?? null}
+          metricAuditIsLoading={metricAuditQuery.isLoading}
+          metricAuditIsError={metricAuditQuery.isError}
           rawDatasetRows={rawDatasetRows}
           historicalPrices={historicalPricesData}
           historicalStatus={
@@ -1212,6 +1232,8 @@ export default function CorporateAnalysisPage() {
                   ? "Refresh source data to load 5-year historical price data"
                   : `${historicalPricesData.length} daily rows from the 5-year OHLCV endpoint`
           }
+          historicalIsLoading={historicalPricesQuery.isLoading && historicalPricesData.length === 0}
+          historicalIsError={historicalPricesQuery.isError && historicalPricesData.length === 0}
           quarterlyStatementRows={quarterlyStatementsData?.rows ?? []}
           quarterlyStatementStatus={
             quarterlyStatementsQuery.isLoading && !quarterlyStatementsData
@@ -1222,14 +1244,20 @@ export default function CorporateAnalysisPage() {
                   ? "Refresh source data to load Yahoo quarterly financial statements"
                   : `${quarterlyStatementsData.rows.length} rows from ${quarterlyStatementsData.source ?? "Yahoo quarterly financial statements"}`
           }
+          quarterlyStatementsIsLoading={quarterlyStatementsQuery.isLoading && !quarterlyStatementsData}
+          quarterlyStatementsIsError={quarterlyStatementsQuery.isError && !quarterlyStatementsData}
           dcfFullReport={dcfFullReport}
           dcfFullReportStatus={
             dcfFullReportLoading
               ? "Loading full DCF report..."
+              : dcfFullReportError
+                ? dcfFullReportError
               : dcfFullReport
                 ? `Full report loaded for ${dcfFullReport.summary.ticker} (${dcfFullReport.summary.report_id}).`
                 : "Full report not loaded yet."
           }
+          dcfFullReportIsLoading={dcfFullReportLoading}
+          dcfFullReportIsError={Boolean(dcfFullReportError)}
           onRequestDcfFullReport={() => void handleViewFullDcfReport()}
           onDownloadRawDatasetCsv={() => downloadRawDatasetCsv(assumptions.ticker, rawDatasetRows)}
           onDownloadHistoricalPriceCsv={() => downloadHistoricalPriceCsv(assumptions.ticker, historicalPricesData)}

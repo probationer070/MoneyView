@@ -69,5 +69,5 @@ A task is done when:
 - docs/contracts are updated when needed
 - residual risks are stated clearly
 - update `guideline/todo.md` with new tasks
-- check `guideline/security/` for security issues and update if needed
-- update `guideline/security-review.md` if needed
+- review `guideline/security-reviewer.md` when the change touches secrets, file access, SQL, HTML/report generation, or dependency risk
+- update security-related docs/checklists if the change introduces a new security-sensitive workflow or verification requirement

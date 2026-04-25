@@ -7,6 +7,54 @@ async function openCorporateValuationTab(page: Page) {
   await expect(page.getByLabel("Ticker")).toBeVisible();
 }
 
+test("simulation lab keeps heavy runs idle on first load and only looks up price after user blur", async ({ page }) => {
+  let priceLookupRequests = 0;
+  await page.route("**/api/v1/stock/*/price", async (route) => {
+    priceLookupRequests += 1;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        status: "ok",
+        data: {
+          ticker: "AAPL",
+          status: "ok",
+          price: 211400,
+          as_of_date: "2026-04-19",
+          source: "cache",
+          freshness_status: "fresh_cache",
+          retry_after_seconds: null,
+          detail_note: "Latest price served from local cache.",
+        },
+      }),
+    });
+  });
+
+  await page.goto("/monte-carlo", { waitUntil: "domcontentloaded" });
+  await expect(page.getByRole("heading", { name: /Simulation Lab/i })).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByText("No analysis run yet").first()).toBeVisible();
+  await expect(page.getByRole("button", { name: "Run Path Simulation" })).toBeVisible();
+
+  await page.getByRole("button", { name: /Corporate Valuation/i }).click();
+  await expect(page.getByText("No analysis run yet").first()).toBeVisible();
+  await expect(page.getByText("Run the valuation engine to generate fair value distribution, undervaluation probability, z-score, and DCF uncertainty summaries.")).toBeVisible();
+  await page.waitForTimeout(300);
+  expect(priceLookupRequests).toBe(0);
+
+  await page.getByLabel("Ticker").fill("AAPL");
+  await page.waitForTimeout(300);
+  expect(priceLookupRequests).toBe(0);
+
+  await page.getByLabel("Ticker").press("Tab");
+  await expect(page.getByText("AAPL price loaded from cache.")).toBeVisible();
+  expect(priceLookupRequests).toBe(1);
+
+  await page.getByRole("button", { name: /Correlation Model/i }).click();
+  await expect(page.getByText("No analysis run yet").first()).toBeVisible();
+  await expect(page.getByText("Run the portfolio correlation engine to generate efficient frontier, correlation matrix, and sensitivity diagnostics.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Run Correlation Analysis" })).toBeVisible();
+});
+
 test("simulation lab auto-fills current price from cached ticker lookup", async ({ page }) => {
   await page.route("**/api/v1/stock/005930.KS/price", async (route) => {
     await route.fulfill({

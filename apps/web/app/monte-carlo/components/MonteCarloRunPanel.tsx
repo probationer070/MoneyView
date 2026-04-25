@@ -50,7 +50,7 @@ export function MonteCarloRunPanel({
       {summary}
 
       {status === "loading" && (
-        <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4 shadow-sm">
+        <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4">
           <div className="flex items-center justify-between text-sm font-bold text-[var(--text-primary)]">
             <span>{progressLabel}</span>
             <span>{progress}%</span>

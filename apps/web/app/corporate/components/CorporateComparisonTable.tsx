@@ -75,7 +75,7 @@ export function CorporateComparisonTable({
                   type="button"
                   onClick={() => onOpenCalculationForTicker(row.ticker, "spread")}
                   disabled={row.group_name === "benchmark"}
-                  className={`font-bold tabular-nums ${row.roic_minus_wacc >= 0 ? "text-[var(--surface)]" : "text-[var(--delta-down)]"} ${row.group_name === "benchmark" ? "cursor-default" : "underline decoration-dotted underline-offset-4 hover:opacity-80"}`}
+                  className={`font-bold tabular-nums ${row.roic_minus_wacc >= 0 ? "text-[var(--delta-up)]" : "text-[var(--delta-down)]"} ${row.group_name === "benchmark" ? "cursor-default" : "underline decoration-dotted underline-offset-4 hover:opacity-80"}`}
                 >
                   {formatPct2(row.roic_minus_wacc)}
                 </button>
@@ -108,7 +108,7 @@ export function CorporateComparisonTable({
                   type="button"
                   onClick={() => onOpenCalculationForTicker(row.ticker, "riskReturnMinard")}
                   disabled={row.group_name === "benchmark"}
-                  className={`font-bold tabular-nums ${row.expected_return_spread >= 0 ? "text-[var(--surface)]" : "text-[var(--delta-down)]"} ${row.group_name === "benchmark" ? "cursor-default" : "underline decoration-dotted underline-offset-4 hover:opacity-80"}`}
+                  className={`font-bold tabular-nums ${row.expected_return_spread >= 0 ? "text-[var(--delta-up)]" : "text-[var(--delta-down)]"} ${row.group_name === "benchmark" ? "cursor-default" : "underline decoration-dotted underline-offset-4 hover:opacity-80"}`}
                 >
                   {formatPct2(row.expected_return_spread)}
                 </button>

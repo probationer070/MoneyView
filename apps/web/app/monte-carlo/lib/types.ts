@@ -23,6 +23,36 @@ export type MonteCarloResult = {
   cdf_comparison: Array<Record<string, number>>;
 };
 
+export type PathSummaryPoint = {
+  time: number;
+  mean: number;
+  p05: number;
+  p10: number;
+  p25: number;
+  p50: number;
+  p75: number;
+  p90: number;
+  p95: number;
+};
+
+export type HistogramPoint = {
+  return: number;
+  frequency: number;
+  loss_bucket?: number;
+  normal_scaled?: number;
+};
+
+export type NormalFitPoint = {
+  return: number;
+  density: number;
+};
+
+export type CdfComparisonPoint = {
+  return: number;
+  simulated_cdf: number;
+  normal_cdf: number;
+};
+
 export type ValuationInput = {
   ticker: string;
   currentPrice: number;
@@ -71,6 +101,11 @@ export type ValuationResult = {
   };
 };
 
+export type ValuationDistributionPoint = {
+  fair_value: number;
+  frequency: number;
+};
+
 export type CorrelationInput = {
   assets: Array<{
     name: string;
@@ -97,11 +132,29 @@ export type CorrelationResult = {
   };
 };
 
+export type CorrelationHeatmapPoint = {
+  asset_x: string;
+  asset_y: string;
+  correlation: number;
+};
+
+export type EfficientFrontierPoint = {
+  return: number;
+  risk: number;
+  sharpe: number;
+  is_optimal?: number;
+};
+
+export type SpearmanSensitivityPoint = {
+  asset: string;
+  spearman_rho_sensitivity: number;
+};
+
 export type SharedSimulationResult = {
   raw: MonteCarloResult;
   pathKeys: string[];
   pathChartData: Array<Record<string, number>>;
-  pathSummary: Array<Record<string, number>>;
+  pathSummary: PathSummaryPoint[];
   terminalMedian: number;
   terminalP05: number;
   terminalP10: number;
@@ -114,8 +167,13 @@ export type SharedSimulationResult = {
   percentileGaugeMin: number;
   percentileGaugeMax: number;
   percentileGaugeRange: number;
-  normalOverlay: Array<Record<string, number>>;
-  returnDistributionChartData: Array<Record<string, number>>;
+  normalOverlay: Array<{ return: number; normal_scaled: number }>;
+  returnDistributionChartData: HistogramPoint[];
+};
+
+export type SimulationResultState<T> = {
+  result: T | null;
+  warnings: string[];
 };
 
 export type SimulationWorkerRequest = {

@@ -195,6 +195,8 @@ Purpose
 Content
 - OHLCV chart
 - key metric cards
+- metric quality badge treatment where comparison or audit-backed metrics are shown
+- metric audit drill-down content for spread, ROIC, and WACC quality
 - snapshot version and source context
 - price-trend summary
 - stock-specific saved snapshot history
@@ -204,6 +206,7 @@ Design Notes
 - The modal is the bridge between portfolio summary and stock-specific investigation.
 - It is intended for:
   - validating unusual comparison metrics
+  - checking whether displayed valuation metrics are decision-grade or fallback-quality
   - reading price path
   - reviewing saved stock-level snapshot behavior
 
@@ -212,6 +215,7 @@ Important Behavior Rules
 - Live mode is review-only and does not rewrite history.
 - Per-stock comparison rows are more important than portfolio-level averages when outliers exist.
 - Comparison outliers can render as `N/A`.
+- Audit-qualified comparison metrics may remain visible in the modal, but warning state should stay visible rather than being normalized away.
 - Positive saved weights are used directly for attribution.
 - Weight below `100%` creates implied cash.
 - Zero-weight names stay in the watchlist but do not affect weighted portfolio results.
@@ -243,6 +247,7 @@ Primary Data Sources
 - `DELETE /api/v1/portfolio/watchlist/{ticker}`
 - `POST /api/v1/portfolio/attribution`
 - `GET /api/v1/portfolio/stock/{ticker}`
+- `GET /api/v1/corporate/metrics/{ticker}/audit`
 - `GET /api/v1/news/feed`
 - `POST /api/v1/news/crawl/stock`
 - `GET /api/v1/corporate/comparison`

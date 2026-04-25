@@ -3,17 +3,19 @@
 import type { ValuationInput, ValuationResult } from "../lib/types";
 import { Download, Loader2, Play, Square } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, ReferenceLine, Tooltip, XAxis, YAxis } from "recharts";
-import { ResponsiveChart } from "@/components/ui/ResponsiveChart";
 import { ActionButton } from "@/components/ui/ActionButton";
 import { MonteCarloRunPanel } from "./MonteCarloRunPanel";
 import { MonteCarloTabSummary } from "./MonteCarloTabSummary";
-import { MetricCard, NumericField, SummaryRow, krw, numberText, pct } from "./shared";
+import { ChartGuard } from "./ChartGuard";
+import { GRID_STYLE, fmtCompactThousands, withAxisProps, withTooltipProps } from "@/lib/chartConfig";
+import { MetricCard, NumericField, SummaryRow, WarningNotice, krw, numberText, pct } from "./shared";
 
 type Props = {
   valuationInput: ValuationInput;
   valuationResult: ValuationResult | null;
   valuationStatus: "idle" | "loading" | "error" | "cancelled";
   valuationProgress: number;
+  warnings: string[];
   valuationPriceLookupStatus: "idle" | "loading" | "fetching" | "success" | "not_found" | "error";
   valuationPriceLookupMessage: string | null;
   updateValuation: <K extends keyof ValuationInput>(key: K, value: ValuationInput[K]) => void;
@@ -29,6 +31,7 @@ export function CorporateValuationSection({
   valuationResult,
   valuationStatus,
   valuationProgress,
+  warnings,
   valuationPriceLookupStatus,
   valuationPriceLookupMessage,
   updateValuation,
@@ -90,8 +93,8 @@ export function CorporateValuationSection({
               <span
                 className={
                   valuationPriceLookupStatus === "not_found" || valuationPriceLookupStatus === "error"
-                    ? "text-[11px] text-red-600"
-                    : "text-[11px] text-[var(--text-muted)]"
+                    ? "text-[length:var(--type-caption)] text-red-600"
+                    : "text-[length:var(--type-caption)] text-[var(--text-muted)]"
                 }
               >
                 {valuationPriceLookupMessage}
@@ -112,7 +115,7 @@ export function CorporateValuationSection({
               type="button"
               onClick={runValuationSimulation}
               disabled={valuationStatus === "loading"}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-[var(--radius)] bg-[var(--accent)] px-5 py-3 text-sm font-black text-white shadow-sm disabled:opacity-60"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-[var(--radius)] bg-[var(--accent)] px-5 py-3 text-sm font-black text-white disabled:opacity-60"
             >
               {valuationStatus === "loading" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
               Run Valuation
@@ -121,7 +124,7 @@ export function CorporateValuationSection({
               type="button"
               onClick={cancelValuationSimulation}
               disabled={valuationStatus !== "loading"}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-5 py-3 text-sm font-black text-[var(--text-primary)] shadow-sm disabled:opacity-50"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-5 py-3 text-sm font-black text-[var(--text-primary)] disabled:opacity-50"
             >
               <Square className="h-4 w-4" />
               Cancel
@@ -162,6 +165,8 @@ export function CorporateValuationSection({
       )}
       resultContent={valuationResult ? (
         <div className="space-y-6">
+          <WarningNotice warnings={warnings} title="Valuation-output normalization warnings" />
+
           {/* Top-line valuation outputs */}
           <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
             <MetricCard label="Median Fair Value" value={krw(valuationResult.fair_value_summary.fair_value_median)} detail="50th percentile fair value across valuation simulations" />
@@ -172,24 +177,29 @@ export function CorporateValuationSection({
 
           {/* Distribution chart and tabular valuation summary */}
           <section className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-            <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-5 shadow-sm xl:col-span-2">
-              <h2 className="text-lg font-black text-[var(--text-primary)]">Fair Value Distribution</h2>
-              <p className="text-xs text-[var(--text-muted)]">Single-stock Monte Carlo fair value distribution using EPS growth, discount-rate uncertainty, and target PER uncertainty.</p>
-              <div className="mt-4 h-80">
-                <ResponsiveChart minWidth={1} minHeight={1}>
-                  <BarChart data={valuationResult.valuation_distribution}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="fair_value" tickFormatter={(value) => `${Math.round(Number(value) / 1000)}k`} />
-                    <YAxis />
-                    <Tooltip formatter={(value) => `${(Number(value) * 100).toFixed(2)}%`} labelFormatter={(label) => krw(Number(label))} />
-                    <ReferenceLine x={valuationResult.fair_value_summary.current_price} stroke="#111827" label="Current Price" />
-                    <Bar dataKey="frequency" fill="#60caad" />
-                  </BarChart>
-                </ResponsiveChart>
-              </div>
+            <div className="xl:col-span-2">
+              <ChartGuard
+                title="Fair Value Distribution"
+                description="Single-stock Monte Carlo fair value distribution using EPS growth, discount-rate uncertainty, and target PER uncertainty."
+                state={valuationResult.valuation_distribution.length > 0 ? "ready" : "invalid"}
+                emptyTitle="No fair-value distribution yet"
+                emptyDescription="Run the valuation engine to generate a fair-value distribution."
+                invalidTitle="Fair-value distribution data is invalid"
+                invalidDescription="The worker result did not contain a chart-safe valuation distribution, so the panel was withheld instead of rendering blank."
+                chartHeight={320}
+              >
+                <BarChart data={valuationResult.valuation_distribution}>
+                  <CartesianGrid {...GRID_STYLE} />
+                  <XAxis dataKey="fair_value" {...withAxisProps({ tickFormatter: (value: number | string) => fmtCompactThousands(Number(value)) })} />
+                  <YAxis {...withAxisProps()} />
+                  <Tooltip {...withTooltipProps()} formatter={(value) => `${(Number(value) * 100).toFixed(2)}%`} labelFormatter={(label) => krw(Number(label))} />
+                  <ReferenceLine x={valuationResult.fair_value_summary.current_price} stroke="#111827" label="Current Price" />
+                  <Bar dataKey="frequency" fill="#60caad" />
+                </BarChart>
+              </ChartGuard>
             </div>
 
-            <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-5 shadow-sm">
+            <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-5">
               <h2 className="text-lg font-black text-[var(--text-primary)]">Valuation Statistics</h2>
               <div className="mt-4 overflow-hidden rounded-[var(--radius)] border border-[var(--border)]">
                 <table className="w-full text-sm">

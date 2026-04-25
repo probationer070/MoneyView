@@ -34,7 +34,7 @@ export function DenseTable<T extends Record<string, unknown>>({
 }: DenseTableProps<T>) {
   return (
     <div className={clsx("w-full overflow-x-auto", className)}>
-      <table className="w-full min-w-max border-collapse text-[13px]">
+      <table className="w-full min-w-max border-collapse text-[length:var(--type-table-body)]">
         <thead
           className={clsx(
             "bg-[var(--bg-subtle)]",
@@ -46,7 +46,7 @@ export function DenseTable<T extends Record<string, unknown>>({
               <th
                 key={col.key}
                 className={clsx(
-                  "px-3 py-2.5 text-[12px] font-semibold text-[var(--text-muted)] uppercase tracking-wide border-b border-[var(--border-soft)] whitespace-nowrap",
+                  "px-3 py-2.5 text-[length:var(--type-table-header)] font-semibold text-[var(--text-muted)] uppercase tracking-wide border-b border-[var(--border-soft)] whitespace-nowrap",
                   alignMap[col.align ?? "left"]
                 )}
                 style={col.width ? { width: col.width } : undefined}
@@ -61,7 +61,7 @@ export function DenseTable<T extends Record<string, unknown>>({
             <tr>
               <td
                 colSpan={columns.length}
-                className="px-3 py-8 text-center text-[var(--text-muted)] text-[13px]"
+                className="px-3 py-8 text-center text-[var(--text-muted)] text-[length:var(--type-table-body)]"
               >
                 {emptyMessage}
               </td>

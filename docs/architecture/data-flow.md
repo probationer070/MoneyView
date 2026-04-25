@@ -192,29 +192,37 @@ The user selects a ticker in Corporate Analysis and changes valuation assumption
 2. The user selects a ticker or adds a company.
 3. The frontend loads `GET /api/v1/corporate/metrics/{ticker}` to obtain effective metrics and basis-specific assumptions.
 4. Optional supporting requests load:
+   `GET /api/v1/corporate/metrics/{ticker}/audit`
    `GET /api/v1/corporate/metrics/{ticker}/history`
    `GET /api/v1/corporate/metrics/{ticker}/quarterly-statements`
    `GET /api/v1/detail/{ticker}/ohlcv`
-5. The page keeps fast-changing form state frontend-owned while debouncing DCF requests.
-6. The frontend sends either:
+5. The page restores active ticker and previously successful heavy-zone payloads from browser continuity state when available:
+   per-ticker assumptions may come from `localStorage`
+   active ticker and last successful heavy-zone payloads may come from `sessionStorage`
+6. The page keeps fast-changing form state frontend-owned while debouncing DCF requests.
+7. Heavy DCF execution remains explicit-refresh-owned. Reload may reuse cached or stale results for continuity, but it must not silently re-run heavy DCF work because refresh tokens are intentionally ephemeral.
+8. The frontend sends either:
    `POST /api/v1/corporate/dcf/{ticker}`
    `POST /api/v1/corporate/dcf/{ticker}/report`
    or `POST /api/v1/corporate/dcf/{ticker}/stream`
-7. The route reads effective metrics through backend helpers and loads current market price through market-data services.
-8. Backend DCF orchestration in `apps/api/services/corporate_dcf.py` assembles valuation assumptions, summary values, and full-report content.
-9. For the streaming route, the backend emits `phase1`, `phase2`, and `complete` SSE events instead of waiting for one monolithic response.
-10. The frontend merges backend-returned valuation output with its local assumption state and supporting chart/detail datasets.
-11. KPI cards, diagnostics, and calculation-detail views render from the combined result set.
+9. The route reads effective metrics through backend helpers and loads current market price through market-data services.
+10. Backend DCF orchestration in `apps/api/services/corporate_dcf.py` assembles valuation assumptions, summary values, and full-report content.
+11. For the streaming route, the backend emits `phase1`, `phase2`, and `complete` SSE events instead of waiting for one monolithic response.
+12. The frontend merges backend-returned valuation output with its local assumption state and supporting chart/detail datasets.
+13. KPI cards, diagnostics, and calculation-detail views render from the combined result set.
+14. Audit-driven UI badges and calculation-detail audit tables use the separate metric-audit payload so the displayed ROIC, WACC, and spread can surface source quality, warnings, and fallback state explicitly.
 
 ### 6.3 Persistence And Cache Impact
 
 - reads `corporate_metrics`, `corporate_companies`, and price/provider inputs
 - does not persist DCF request results as canonical SQLite records
 - persistence only occurs when metrics overrides or companies are explicitly saved through separate routes
+- browser continuity state may cache last successful heavy-zone payloads, but that cache is frontend-owned and non-canonical
 
 ### 6.4 Ownership Summary
 
 - live assumption state: frontend
+- browser continuity cache and stale-label behavior: frontend
 - valuation execution: backend
 - canonical DCF response payload: backend
 - final visualization composition: frontend
@@ -242,12 +250,14 @@ The user selects a ticker in Corporate Analysis and changes valuation assumption
    market expected return
    expected return spread
 10. The response is returned as `CorporateComparisonResponse` in live mode.
-11. The frontend sorts, filters, and highlights rows but does not own the formulas.
+11. The frontend sorts, filters, highlights rows, and may restore the last successful comparison payload from browser continuity state, but it does not own the formulas.
+12. Reload remains idle-first for heavy comparison work. Cached comparison results may be shown for continuity, but a new heavy comparison request only happens after explicit refresh intent.
 
 Persistence impact:
 - reads `watchlist`, `corporate_metrics`, `corporate_companies`
 - reads live price/provider inputs
 - no snapshot rows written in live mode
+- browser `sessionStorage` may hold the last successful comparison payload for same-session continuity, but it is not canonical persistence
 
 ## 7.2 Snapshot Read Pipeline
 
@@ -309,6 +319,13 @@ Persistence impact:
 
 The current Simulation Lab is primarily a frontend-owned worker workflow, not a persisted backend reporting workflow.
 
+Cross-cutting rule for this section:
+
+- raw worker output is not a render-ready contract by itself
+- `apps/web/app/monte-carlo/page.tsx` owns normalization before React state is committed
+- warnings generated during normalization are part of the page-level result contract and must remain visible in the UI
+- chart sections consume validated view models and guard states, not unchecked worker payloads
+
 ## 8.1 Worker Lifecycle Pipeline
 
 1. The page `apps/web/app/monte-carlo/page.tsx` mounts.
@@ -326,6 +343,11 @@ The current Simulation Lab is primarily a frontend-owned worker workflow, not a 
    `run-correlation`
    `cancel`
 5. The worker tracks cancelled request ids and suppresses stale results.
+6. The page normalizes worker payloads before storing user-visible results:
+   invalid rows may be dropped
+   non-finite numbers may be removed or downgraded
+   mismatched arrays may be trimmed or rejected
+   recoverable issues are surfaced as warnings instead of staying silent
 
 Persistence impact:
 - none by default
@@ -345,7 +367,9 @@ Persistence impact:
    CDF comparison rows
 5. Progress messages are sent back to the page while the run is active.
 6. The final result is posted back as a `result` message.
-7. The page stores the result and derives shared tab-ready view models from it.
+7. The page validates and normalizes the raw result.
+8. The page stores the normalized result, warning list, and any degraded-state markers.
+9. Shared tab-ready view models are derived from the normalized result rather than the raw worker payload.
 
 Persistence impact:
 - none
@@ -359,6 +383,7 @@ Persistence impact:
    VaR/CVaR and downside metrics
    percentile cone summaries
    normal-fit and distribution overlays
+4. Reused charts must still pass through chart guards so incomplete normalized subsets produce explicit `empty` or `invalid-data` states rather than blank panels.
 
 Persistence impact:
 - none
@@ -371,7 +396,8 @@ Persistence impact:
 4. The worker executes `runValuationMonteCarlo` from `valuation-core.ts`.
 5. The valuation engine simulates fair values using growth, discount-rate, and target-PER uncertainty.
 6. The worker emits progress updates and finally posts a `valuation-result` message.
-7. The page renders fair-value distribution, percentile bands, undervaluation probability, and related valuation summaries.
+7. The page normalizes the valuation payload, removing invalid fair-value points and recording any partial-recovery warnings.
+8. The page renders fair-value distribution, percentile bands, undervaluation probability, and related valuation summaries from the normalized payload plus warning state.
 
 Persistence impact:
 - optional stock price lookup reads backend data
@@ -389,7 +415,9 @@ Persistence impact:
    Spearman sensitivity outputs
    covariance and optimal-summary views
 5. The worker posts progress and then a `correlation-result`.
-6. The page renders the correlation and efficient-frontier views.
+6. The page validates summary values, frontier points, sensitivity rows, and correlation-matrix shape before state commit.
+7. Invalid points are dropped or the affected panel is marked invalid, with warnings retained when recovery was partial.
+8. The page renders the correlation and efficient-frontier views through guard-aware chart sections.
 
 Persistence impact:
 - none

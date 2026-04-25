@@ -1,3 +1,4 @@
+export { ChartGuard } from "./ChartGuard";
 export { CorrelationModelSection } from "./CorrelationModelSection";
 export { CorporateValuationSection } from "./CorporateValuationSection";
 export { MonteCarloRunPanel } from "./MonteCarloRunPanel";

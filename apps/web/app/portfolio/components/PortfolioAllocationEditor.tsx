@@ -195,7 +195,7 @@ export function PortfolioAllocationEditor({
                       {row.allocationPercent.toFixed(1)}%
                     </button>
                   )}
-                  {row.isSaving && <div className="text-[11px] text-[var(--text-muted)]">Saving...</div>}
+                  {row.isSaving && <div className="text-[length:var(--type-caption)] text-[var(--text-muted)]">Saving...</div>}
                 </td>
                 <td className="px-4 py-3">
                   <input

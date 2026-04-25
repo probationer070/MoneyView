@@ -24,6 +24,9 @@ from apps.api.models.schemas import (
     CorporateComparisonResponse,
     CorporateComparisonStockHistoryResponse,
     CorporateDcfBatchRequest,
+    CorporateMetricAudit,
+    CorporateMetricAuditEntry,
+    CorporateMetricAuditInput,
     CorporateMetrics,
     ValuationAssumptions,
 )
@@ -674,6 +677,482 @@ def _is_generic_default(row) -> bool:
     )
 
 
+def _display_number(value: Optional[float], suffix: str = "", precision: int = 2) -> str:
+    if value is None:
+        return "Unavailable"
+    return f"{value:.{precision}f}{suffix}"
+
+
+def _display_percent(value: Optional[float], precision: int = 1) -> str:
+    if value is None:
+        return "N/A"
+    return f"{value:.{precision}f}%"
+
+
+def _display_money(value: Optional[float]) -> str:
+    if value is None:
+        return "Unavailable"
+    return f"${value:,.0f}"
+
+
+def _quality_rank(value: str) -> int:
+    order = {
+        "ok": 0,
+        "estimated": 1,
+        "stale": 2,
+        "suspicious": 3,
+        "invalid": 4,
+        "missing": 5,
+    }
+    return order.get(value, 5)
+
+
+def _pick_worst_quality(*values: str) -> str:
+    return max(values, key=_quality_rank) if values else "missing"
+
+
+def _audit_input(
+    *,
+    field: str,
+    label: str,
+    value: Optional[float],
+    display_value: str,
+    source: str,
+) -> CorporateMetricAuditInput:
+    return CorporateMetricAuditInput(
+        field=field,
+        label=label,
+        value=value,
+        display_value=display_value,
+        source=source,
+    )
+
+
+def _fallback_metric_audit(
+    ticker: str,
+    metrics: CorporateMetrics,
+    *,
+    source_mode: str,
+    source_label: str,
+) -> CorporateMetricAudit:
+    generated_at = datetime.now(timezone.utc).isoformat()
+    roic_quality = "estimated" if source_mode != "unavailable" else "missing"
+    wacc_quality = "estimated" if source_mode != "unavailable" else "missing"
+    roic_reason = (
+        "Yahoo statement inputs were unavailable, so the UI is using saved or deterministic fallback assumptions."
+        if source_mode != "unavailable"
+        else "No auditable ROIC source is available for this ticker."
+    )
+    wacc_reason = (
+        "Yahoo statement inputs were unavailable, so the UI is using saved or deterministic fallback assumptions."
+        if source_mode != "unavailable"
+        else "No auditable WACC source is available for this ticker."
+    )
+    roic_warnings = [roic_reason] if roic_reason else []
+    wacc_warnings = [wacc_reason] if wacc_reason else []
+    spread_value = float(metrics.roic) - float(metrics.wacc)
+    spread_quality = _pick_worst_quality(roic_quality, wacc_quality)
+    return CorporateMetricAudit(
+        ticker=ticker,
+        source_mode=source_mode,
+        generated_at=generated_at,
+        roic=CorporateMetricAuditEntry(
+            value=float(metrics.roic),
+            display_value=_display_percent(float(metrics.roic)),
+            quality=roic_quality,
+            reason=roic_reason,
+            warnings=roic_warnings,
+            inputs_used=[
+                _audit_input(
+                    field="final_roic_value",
+                    label="Final ROIC value",
+                    value=float(metrics.roic),
+                    display_value=_display_percent(float(metrics.roic)),
+                    source=source_label,
+                )
+            ],
+            source=source_label,
+            as_of=None,
+            calculation_version="roic_v2_average_invested_capital",
+        ),
+        wacc=CorporateMetricAuditEntry(
+            value=float(metrics.wacc),
+            display_value=_display_percent(float(metrics.wacc)),
+            quality=wacc_quality,
+            reason=wacc_reason,
+            warnings=wacc_warnings,
+            inputs_used=[
+                _audit_input(
+                    field="final_wacc_value",
+                    label="Final WACC value",
+                    value=float(metrics.wacc),
+                    display_value=_display_percent(float(metrics.wacc)),
+                    source=source_label,
+                )
+            ],
+            source=source_label,
+            as_of=None,
+            calculation_version="wacc_v2_latest_capital_structure",
+        ),
+        spread=CorporateMetricAuditEntry(
+            value=round(spread_value, 2),
+            display_value=_display_percent(round(spread_value, 2)),
+            quality=spread_quality,
+            reason="Spread inherits the lower-confidence state of ROIC and WACC." if spread_quality != "ok" else None,
+            warnings=[
+                "ROIC - WACC inherits the lower-confidence state of the two source metrics."
+            ] if spread_quality != "ok" else [],
+            inputs_used=[
+                _audit_input(
+                    field="roic",
+                    label="ROIC",
+                    value=float(metrics.roic),
+                    display_value=_display_percent(float(metrics.roic)),
+                    source=source_label,
+                ),
+                _audit_input(
+                    field="wacc",
+                    label="WACC",
+                    value=float(metrics.wacc),
+                    display_value=_display_percent(float(metrics.wacc)),
+                    source=source_label,
+                ),
+            ],
+            source=source_label,
+            as_of=None,
+            calculation_version="spread_v1_roic_minus_wacc",
+        ),
+    )
+
+
+def _metric_audit_for_ticker(
+    ticker: str,
+    *,
+    roic_basis: str = "recent_average",
+    roic_year: Optional[int] = None,
+) -> CorporateMetricAudit:
+    ticker = ticker.upper()
+    fallback = _default_metrics(ticker)
+    row = None
+    with get_db() as conn:
+        row = conn.execute(
+            """SELECT * FROM corporate_metrics WHERE ticker = ?""",
+            (ticker,),
+        ).fetchone()
+    if row and not _is_generic_default(row):
+        fallback = CorporateMetrics(
+            ticker=row["ticker"],
+            growth=row["growth"],
+            roic=row["roic"],
+            wacc=row["wacc"],
+            debt_ratio=row["debt_ratio"],
+            unlevered_beta=row["unlevered_beta"],
+            crp=row["crp"],
+            reinvestment=row["reinvestment"],
+            fcff=row["fcff"],
+            innovation=row["innovation"],
+            market_share=row["market_share"],
+            governance=row["governance"],
+            esg_penalty=row["esg_penalty"],
+        )
+    bundle = _get_yahoo_statement_bundle(ticker, "audit")
+    if bundle is None:
+        if row and not _is_generic_default(row):
+            return _fallback_metric_audit(
+                ticker,
+                fallback,
+                source_mode="corporate_metrics",
+                source_label="SQLite corporate_metrics fallback",
+            )
+        return _fallback_metric_audit(
+            ticker,
+            fallback,
+            source_mode="default_model",
+            source_label="Deterministic default model fallback",
+        )
+
+    income = bundle["income"]
+    balance = bundle["balance"]
+    quarterly_income = bundle["quarterly_income"]
+    quarterly_balance = bundle["quarterly_balance"]
+    info = bundle["info"]
+
+    operating_income_by_year = _prefer_annual_map(
+        _statement_map(income, ("Operating Income", "EBIT")),
+        _quarterly_flow_map(quarterly_income, ("Operating Income", "EBIT")),
+    )
+    pretax_income_by_year = _prefer_annual_map(
+        _statement_map(income, ("Pretax Income", "Income Before Tax")),
+        _quarterly_flow_map(quarterly_income, ("Pretax Income", "Income Before Tax")),
+    )
+    tax_expense_by_year = _prefer_annual_map(
+        _statement_map(income, ("Tax Provision", "Income Tax Expense")),
+        _quarterly_flow_map(quarterly_income, ("Tax Provision", "Income Tax Expense")),
+    )
+    interest_expense_by_year = {
+        year: abs(value)
+        for year, value in _prefer_annual_map(
+            _statement_map(income, ("Interest Expense", "Interest Expense Non Operating")),
+            _quarterly_flow_map(quarterly_income, ("Interest Expense", "Interest Expense Non Operating")),
+        ).items()
+    }
+    debt_by_year = _prefer_annual_map(
+        _statement_map(balance, ("Total Debt", "Net Debt")),
+        _quarterly_balance_map(quarterly_balance, ("Total Debt", "Net Debt")),
+    )
+    equity_by_year = _prefer_annual_map(
+        _statement_map(balance, ("Stockholders Equity", "Total Equity Gross Minority Interest")),
+        _quarterly_balance_map(quarterly_balance, ("Stockholders Equity", "Total Equity Gross Minority Interest")),
+    )
+    cash_by_year = _prefer_annual_map(
+        _statement_map(balance, ("Cash And Cash Equivalents", "Cash Cash Equivalents And Short Term Investments")),
+        _quarterly_balance_map(quarterly_balance, ("Cash And Cash Equivalents", "Cash Cash Equivalents And Short Term Investments")),
+    )
+
+    tax_rates = [
+        _bounded(tax_expense_by_year[year] / pretax_income_by_year[year], 0, 0.35)
+        for year in _matching_years(tax_expense_by_year, pretax_income_by_year)
+        if pretax_income_by_year[year] > 0
+    ]
+    tax_rate = _average(tax_rates) or DEFAULT_TAX_RATE
+
+    roic_years = _matching_years(operating_income_by_year, debt_by_year, equity_by_year)
+    roic_records: list[dict[str, float | int | None]] = []
+    for year in roic_years:
+        debt_value = debt_by_year.get(year)
+        equity_value = equity_by_year.get(year)
+        cash_value = cash_by_year.get(year, 0.0)
+        beginning_year = year - 1
+        beginning_debt = debt_by_year.get(beginning_year, debt_value)
+        beginning_equity = equity_by_year.get(beginning_year, equity_value)
+        beginning_cash = cash_by_year.get(beginning_year, cash_value)
+        invested_capital_ending = None if debt_value is None or equity_value is None else debt_value + equity_value - cash_value
+        invested_capital_beginning = None if beginning_debt is None or beginning_equity is None else beginning_debt + beginning_equity - beginning_cash
+        average_invested_capital = None
+        if invested_capital_ending is not None and invested_capital_beginning is not None:
+            average_invested_capital = (invested_capital_beginning + invested_capital_ending) / 2
+        nopat = None
+        if year in operating_income_by_year:
+            nopat = operating_income_by_year[year] * (1 - tax_rate)
+        roic_value = _safe_ratio(nopat, average_invested_capital) if nopat is not None and average_invested_capital not in (None, 0) else None
+        roic_records.append({
+            "year": year,
+            "operating_income": operating_income_by_year.get(year),
+            "debt": debt_value,
+            "equity": equity_value,
+            "cash": cash_value,
+            "invested_capital_beginning": invested_capital_beginning,
+            "invested_capital_ending": invested_capital_ending,
+            "average_invested_capital": average_invested_capital,
+            "nopat": nopat,
+            "roic": (roic_value * 100) if roic_value is not None else None,
+        })
+
+    selected_roic_record = None
+    if roic_basis == "annual" and roic_year is not None:
+        selected_roic_record = next((record for record in roic_records if int(record["year"]) == roic_year), None)
+    if selected_roic_record is None and roic_records:
+        selected_roic_record = roic_records[-1] if roic_basis == "annual" else roic_records[-1]
+
+    roic_values = [float(record["roic"]) for record in roic_records if record["roic"] is not None]
+    if roic_basis == "all_year_average":
+        roic_value = _average(roic_values)
+    elif roic_basis == "annual" and selected_roic_record is not None:
+        roic_value = selected_roic_record["roic"]
+    else:
+        roic_value = _average(roic_values[-3:])
+
+    latest_year = sorted(roic_years)[-1] if roic_years else None
+    latest_debt = _latest_from_map(debt_by_year)
+    latest_equity = _latest_from_map(equity_by_year)
+    latest_cash = _latest_from_map(cash_by_year) or 0.0
+    latest_interest = _latest_from_map(interest_expense_by_year) or 0.0
+    debt_ratio = (
+        _bounded(latest_debt / (latest_debt + latest_equity), 0, 0.9)
+        if latest_debt is not None and latest_equity is not None and latest_debt + latest_equity != 0
+        else max(float(fallback.debt_ratio) / 100, 0.0)
+    )
+    debt_to_equity = (
+        latest_debt / latest_equity
+        if latest_debt is not None and latest_equity not in (None, 0)
+        else max(float(fallback.debt_ratio) / max(100 - float(fallback.debt_ratio), 1), 0.0)
+    )
+    levered_beta = float(info.get("beta") or fallback.unlevered_beta * (1 + (1 - tax_rate) * debt_to_equity))
+    cost_of_debt = min(max((latest_interest / latest_debt) if latest_debt and latest_debt > 0 else 0.045, 0.01), 0.15)
+    cost_of_equity = DEFAULT_RISK_FREE_RATE + levered_beta * DEFAULT_EQUITY_RISK_PREMIUM + KOREA_COUNTRY_RISK_PREMIUM / 100
+    market_cap = float(info.get("marketCap") or 0.0) or None
+    if market_cap is not None and latest_debt is not None and market_cap + latest_debt > 0:
+        debt_weight = latest_debt / (market_cap + latest_debt)
+        equity_weight = market_cap / (market_cap + latest_debt)
+    else:
+        debt_weight = debt_ratio
+        equity_weight = 1 - debt_weight
+    wacc_value = (equity_weight * cost_of_equity + debt_weight * cost_of_debt * (1 - tax_rate)) * 100
+
+    roic_warnings: list[str] = []
+    roic_quality = "ok"
+    roic_reason = None
+    if not roic_records:
+        roic_quality = "missing"
+        roic_reason = "No overlapping Yahoo statement years were available to compute ROIC."
+    else:
+        selected_average_capital = (
+            float(selected_roic_record["average_invested_capital"])
+            if selected_roic_record and selected_roic_record["average_invested_capital"] is not None
+            else None
+        )
+        selected_beginning_capital = (
+            float(selected_roic_record["invested_capital_beginning"])
+            if selected_roic_record and selected_roic_record["invested_capital_beginning"] is not None
+            else None
+        )
+        if roic_basis != "annual":
+            roic_warnings.append(f"ROIC uses {roic_basis.replace('_', ' ')} rather than a single fiscal year.")
+            roic_quality = "estimated"
+        if selected_beginning_capital is None:
+            roic_warnings.append("Beginning invested capital was unavailable, so the latest ending capital was reused.")
+            roic_quality = "estimated"
+        if selected_average_capital is None or selected_average_capital <= 0:
+            roic_quality = "invalid"
+            roic_reason = "Average invested capital is missing or non-positive."
+        elif roic_value is not None and abs(float(roic_value)) > 100:
+            roic_quality = "suspicious"
+            roic_reason = "ROIC exceeds the configured sanity range."
+        elif selected_average_capital is not None and selected_roic_record and selected_roic_record["nopat"] is not None:
+            nopat_value = abs(float(selected_roic_record["nopat"]))
+            if selected_average_capital < max(nopat_value * 0.1, 1.0):
+                roic_quality = "suspicious"
+                roic_reason = "Average invested capital is unusually small relative to NOPAT."
+    if roic_reason:
+        roic_warnings.append(roic_reason)
+
+    wacc_warnings: list[str] = []
+    wacc_quality = "ok"
+    wacc_reason = None
+    if market_cap is None:
+        wacc_quality = "estimated"
+        wacc_warnings.append("Market capitalization was unavailable, so debt and equity weights fall back to statement debt ratio.")
+    if latest_debt is None or latest_equity is None:
+        wacc_quality = "invalid"
+        wacc_reason = "Debt or equity inputs are missing, so capital structure cannot be audited reliably."
+    elif wacc_value <= 0 or wacc_value > 40:
+        wacc_quality = "suspicious"
+        wacc_reason = "WACC falls outside the expected sanity range."
+    if wacc_reason:
+        wacc_warnings.append(wacc_reason)
+
+    source_as_of = f"{latest_year}-12-31" if latest_year is not None else None
+    roic_source = "Yahoo Finance annual or quarterly statement bundle"
+    wacc_source = "Yahoo Finance statement bundle plus market profile"
+    spread_value = round((float(roic_value) if roic_value is not None else fallback.roic) - wacc_value, 2)
+    spread_quality = _pick_worst_quality(roic_quality, wacc_quality)
+
+    return CorporateMetricAudit(
+        ticker=ticker,
+        source_mode="yahoo_finance",
+        generated_at=datetime.now(timezone.utc).isoformat(),
+        roic=CorporateMetricAuditEntry(
+            value=round(float(roic_value), 2) if roic_value is not None else None,
+            display_value=_display_percent(round(float(roic_value), 2), precision=1) if roic_value is not None else "N/A",
+            quality=roic_quality,
+            reason=roic_reason,
+            warnings=roic_warnings,
+            inputs_used=[
+                _audit_input(
+                    field="operating_income",
+                    label="Operating income / EBIT",
+                    value=float(selected_roic_record["operating_income"]) if selected_roic_record and selected_roic_record["operating_income"] is not None else None,
+                    display_value=_display_money(float(selected_roic_record["operating_income"])) if selected_roic_record and selected_roic_record["operating_income"] is not None else "Unavailable",
+                    source=roic_source,
+                ),
+                _audit_input(field="tax_rate", label="Tax rate", value=round(tax_rate, 6), display_value=_display_percent(tax_rate * 100), source=roic_source),
+                _audit_input(
+                    field="nopat",
+                    label="NOPAT",
+                    value=float(selected_roic_record["nopat"]) if selected_roic_record and selected_roic_record["nopat"] is not None else None,
+                    display_value=_display_money(float(selected_roic_record["nopat"])) if selected_roic_record and selected_roic_record["nopat"] is not None else "Unavailable",
+                    source=roic_source,
+                ),
+                _audit_input(field="total_debt", label="Total debt", value=latest_debt, display_value=_display_money(latest_debt), source=roic_source),
+                _audit_input(field="total_equity", label="Total equity", value=latest_equity, display_value=_display_money(latest_equity), source=roic_source),
+                _audit_input(field="cash_and_equivalents", label="Cash and equivalents", value=latest_cash, display_value=_display_money(latest_cash), source=roic_source),
+                _audit_input(
+                    field="invested_capital",
+                    label="Invested capital",
+                    value=float(selected_roic_record["invested_capital_ending"]) if selected_roic_record and selected_roic_record["invested_capital_ending"] is not None else None,
+                    display_value=_display_money(float(selected_roic_record["invested_capital_ending"])) if selected_roic_record and selected_roic_record["invested_capital_ending"] is not None else "Unavailable",
+                    source=roic_source,
+                ),
+                _audit_input(
+                    field="invested_capital_beginning",
+                    label="Beginning invested capital",
+                    value=float(selected_roic_record["invested_capital_beginning"]) if selected_roic_record and selected_roic_record["invested_capital_beginning"] is not None else None,
+                    display_value=_display_money(float(selected_roic_record["invested_capital_beginning"])) if selected_roic_record and selected_roic_record["invested_capital_beginning"] is not None else "Unavailable",
+                    source=roic_source,
+                ),
+                _audit_input(
+                    field="invested_capital_ending",
+                    label="Ending invested capital",
+                    value=float(selected_roic_record["invested_capital_ending"]) if selected_roic_record and selected_roic_record["invested_capital_ending"] is not None else None,
+                    display_value=_display_money(float(selected_roic_record["invested_capital_ending"])) if selected_roic_record and selected_roic_record["invested_capital_ending"] is not None else "Unavailable",
+                    source=roic_source,
+                ),
+                _audit_input(
+                    field="average_invested_capital",
+                    label="Average invested capital",
+                    value=float(selected_roic_record["average_invested_capital"]) if selected_roic_record and selected_roic_record["average_invested_capital"] is not None else None,
+                    display_value=_display_money(float(selected_roic_record["average_invested_capital"])) if selected_roic_record and selected_roic_record["average_invested_capital"] is not None else "Unavailable",
+                    source=roic_source,
+                ),
+                _audit_input(field="final_roic_value", label="Final ROIC value", value=round(float(roic_value), 2) if roic_value is not None else None, display_value=_display_percent(round(float(roic_value), 2), precision=1) if roic_value is not None else "N/A", source=f"Computed from {roic_basis} basis"),
+            ],
+            source=roic_source,
+            as_of=source_as_of,
+            calculation_version="roic_v2_average_invested_capital",
+        ),
+        wacc=CorporateMetricAuditEntry(
+            value=round(float(wacc_value), 2),
+            display_value=_display_percent(round(float(wacc_value), 2), precision=1),
+            quality=wacc_quality,
+            reason=wacc_reason,
+            warnings=wacc_warnings,
+            inputs_used=[
+                _audit_input(field="risk_free_rate", label="Risk-free rate", value=round(DEFAULT_RISK_FREE_RATE, 6), display_value=_display_percent(DEFAULT_RISK_FREE_RATE * 100), source="Model policy input"),
+                _audit_input(field="beta", label="Beta", value=round(levered_beta, 6), display_value=_display_number(round(levered_beta, 6), precision=2), source=wacc_source),
+                _audit_input(field="equity_risk_premium", label="Equity risk premium", value=round(DEFAULT_EQUITY_RISK_PREMIUM, 6), display_value=_display_percent(DEFAULT_EQUITY_RISK_PREMIUM * 100), source="Model policy input"),
+                _audit_input(field="country_risk_premium", label="Country risk premium", value=round(KOREA_COUNTRY_RISK_PREMIUM / 100, 6), display_value=_display_percent(KOREA_COUNTRY_RISK_PREMIUM), source="Model policy input"),
+                _audit_input(field="cost_of_equity", label="Cost of equity", value=round(cost_of_equity, 6), display_value=_display_percent(cost_of_equity * 100), source="Risk-free rate + beta x ERP + CRP"),
+                _audit_input(field="total_debt", label="Total debt", value=latest_debt, display_value=_display_money(latest_debt), source=wacc_source),
+                _audit_input(field="market_cap", label="Market cap", value=market_cap, display_value=_display_money(market_cap), source="Yahoo Finance company profile"),
+                _audit_input(field="debt_weight", label="Debt weight", value=round(debt_weight, 6), display_value=_display_percent(debt_weight * 100), source="Capital structure mix"),
+                _audit_input(field="equity_weight", label="Equity weight", value=round(equity_weight, 6), display_value=_display_percent(equity_weight * 100), source="Capital structure mix"),
+                _audit_input(field="cost_of_debt", label="Cost of debt", value=round(cost_of_debt, 6), display_value=_display_percent(cost_of_debt * 100), source="Interest expense / debt balance"),
+                _audit_input(field="tax_rate", label="Tax rate", value=round(tax_rate, 6), display_value=_display_percent(tax_rate * 100), source=wacc_source),
+                _audit_input(field="final_wacc_value", label="Final WACC value", value=round(float(wacc_value), 2), display_value=_display_percent(round(float(wacc_value), 2), precision=1), source="Weighted capital costs"),
+            ],
+            source=wacc_source,
+            as_of=source_as_of,
+            calculation_version="wacc_v2_latest_capital_structure",
+        ),
+        spread=CorporateMetricAuditEntry(
+            value=spread_value,
+            display_value=_display_percent(spread_value, precision=1),
+            quality=spread_quality,
+            reason="ROIC - WACC inherits the lower-confidence state of the two source metrics." if spread_quality != "ok" else None,
+            warnings=[
+                "ROIC - WACC inherits the lower-confidence state of ROIC and WACC."
+            ] if spread_quality != "ok" else [],
+            inputs_used=[
+                _audit_input(field="roic", label="ROIC", value=round(float(roic_value), 2) if roic_value is not None else None, display_value=_display_percent(round(float(roic_value), 2), precision=1) if roic_value is not None else "N/A", source=roic_source),
+                _audit_input(field="wacc", label="WACC", value=round(float(wacc_value), 2), display_value=_display_percent(round(float(wacc_value), 2), precision=1), source=wacc_source),
+            ],
+            source="Derived spread",
+            as_of=source_as_of,
+            calculation_version="spread_v1_roic_minus_wacc",
+        ),
+    )
+
+
 def _metrics_for_ticker(
     ticker: str,
     growth_basis: str = "cagr",
@@ -1244,6 +1723,26 @@ async def get_corporate_metrics(
         growth_basis=growth_basis,
         roic_basis=roic_basis,
         growth_year=growth_year,
+        roic_year=roic_year,
+    )
+
+
+@router.get("/metrics/{ticker}/audit", response_model=CorporateMetricAudit)
+async def get_corporate_metric_audit(
+    ticker: str,
+    roic_basis: Literal["recent_average", "all_year_average", "annual"] = Query(default="recent_average"),
+    roic_year: Optional[int] = Query(default=None, ge=YAHOO_STATEMENT_START_YEAR),
+):
+    ticker = ticker.upper()
+    logger.info(
+        "corporate.metric_audit_request ticker=%s roic_basis=%s roic_year=%s",
+        ticker,
+        roic_basis,
+        roic_year,
+    )
+    return _metric_audit_for_ticker(
+        ticker,
+        roic_basis=roic_basis,
         roic_year=roic_year,
     )
 

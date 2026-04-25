@@ -26,15 +26,15 @@ export const Sliders: React.FC<SlidersProps> = ({
   }, [wacc, margin, growth, onChange]);
 
   return (
-    <div className="bg-[var(--bg-surface)] rounded-[var(--radius)] border border-[var(--border)] p-6 shadow-sm">
-      <h2 className="text-lg font-bold mb-4">Interactive DCF Scenarios</h2>
+    <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-6">
+      <h2 className="mb-4 text-[length:var(--type-section-title)] font-bold text-[var(--text-primary)]">Interactive DCF Scenarios</h2>
       <div className="space-y-6">
 
         {/* WACC Control */}
         <div>
           <div className="flex justify-between items-center mb-2">
-            <span className="text-sm font-semibold text-[var(--text-muted)]">Discount Rate (WACC)</span>
-            <span className="text-sm font-black text-[var(--surface)]">{wacc.toFixed(1)}%</span>
+            <span className="text-[length:var(--type-label)] font-semibold text-[var(--text-muted)]">Discount Rate (WACC)</span>
+            <span className="text-[length:var(--type-label)] font-black text-[var(--text-primary)]">{wacc.toFixed(1)}%</span>
           </div>
           <input
             type="range"
@@ -50,8 +50,8 @@ export const Sliders: React.FC<SlidersProps> = ({
         {/* Operating Margin */}
         <div>
           <div className="flex justify-between items-center mb-2">
-            <span className="text-sm font-semibold text-[var(--text-muted)]">Target Operating Margin</span>
-            <span className="text-sm font-black text-[var(--surface)]">{margin.toFixed(1)}%</span>
+            <span className="text-[length:var(--type-label)] font-semibold text-[var(--text-muted)]">Target Operating Margin</span>
+            <span className="text-[length:var(--type-label)] font-black text-[var(--text-primary)]">{margin.toFixed(1)}%</span>
           </div>
           <input
             type="range"
@@ -67,8 +67,8 @@ export const Sliders: React.FC<SlidersProps> = ({
         {/* Target Growth */}
         <div>
           <div className="flex justify-between items-center mb-2">
-            <span className="text-sm font-semibold text-[var(--text-muted)]">Terminal Rev Growth</span>
-            <span className="text-sm font-black text-[var(--surface)]">{growth.toFixed(1)}%</span>
+            <span className="text-[length:var(--type-label)] font-semibold text-[var(--text-muted)]">Terminal Rev Growth</span>
+            <span className="text-[length:var(--type-label)] font-black text-[var(--text-primary)]">{growth.toFixed(1)}%</span>
           </div>
           <input
             type="range"
