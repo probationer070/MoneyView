@@ -621,6 +621,62 @@ class MarketDataService:
             detail_note="No cached price was available, so a background fetch has been started.",
         )
 
+    def get_latest_stock_price(self, ticker: str, *, period: str = "1mo") -> float:
+        """Return the newest available quote, falling back to OHLCV close history."""
+        normalized_ticker = ticker.upper().strip()
+        if not normalized_ticker:
+            return 0.0
+
+        live_price = self._fetch_live_quote_price(normalized_ticker)
+        if live_price is not None and live_price > 0:
+            return float(live_price)
+
+        table = self._table_for_ticker(normalized_ticker)
+        bars = self.get_stock_ohlcv(normalized_ticker, period=period, table=table)
+        if not bars:
+            return 0.0
+        return float(bars[-1].close)
+
+    def _fetch_live_quote_price(self, ticker: str) -> float | None:
+        try:
+            import yfinance as yf
+        except ImportError as exc:
+            logger.warning("yfinance import failed for latest quote %s: %s", ticker, exc)
+        else:
+            try:
+                fast_info = getattr(yf.Ticker(ticker), "fast_info", {}) or {}
+                for key in ("last_price", "regular_market_price", "lastPrice", "regularMarketPrice"):
+                    price = fast_info.get(key) if hasattr(fast_info, "get") else None
+                    if price is not None and float(price) > 0:
+                        return float(price)
+            except YAHOO_PROVIDER_ERRORS as exc:
+                logger.warning("yfinance latest quote fetch failed for %s: %s", ticker, exc)
+
+        try:
+            response = requests.get(
+                f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}",
+                headers={
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                    "Accept-Language": "en-US,en;q=0.9",
+                    "Origin": "https://finance.yahoo.com",
+                    "Referer": "https://finance.yahoo.com/",
+                },
+                params={"interval": "1d", "range": "1d"},
+                timeout=10,
+            )
+            response.raise_for_status()
+            payload = response.json()
+            result = (payload.get("chart", {}).get("result") or [None])[0]
+            meta = (result or {}).get("meta", {})
+            for key in ("regularMarketPrice", "previousClose", "chartPreviousClose"):
+                price = meta.get(key)
+                if price is not None and float(price) > 0:
+                    return float(price)
+        except YAHOO_PROVIDER_ERRORS as exc:
+            logger.warning("Yahoo chart latest quote fetch failed for %s: %s", ticker, exc)
+
+        return None
+
     @staticmethod
     def _index_name_for_ticker(ticker: str) -> str:
         for name, yahoo_ticker in MARKET_INDICES.items():

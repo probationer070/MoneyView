@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from apps.api.main import app
-from apps.api.models.schemas import StockPriceLookup
+from apps.api.models.schemas import StockOHLCV, StockPriceLookup
 from apps.api.services import db as db_service
 from apps.api.services.market_data import MarketDataService
 
@@ -127,6 +127,44 @@ def test_get_stock_price_lookup_returns_not_found_after_failed_background_refres
     assert lookup.status == "not_found"
     assert lookup.source == "live_fetch_failed"
     assert lookup.price is None
+
+
+def test_get_latest_stock_price_prefers_live_quote_over_cached_close(monkeypatch):
+    service = MarketDataService()
+    monkeypatch.setattr(service, "_fetch_live_quote_price", lambda ticker: 212.34)
+    monkeypatch.setattr(service, "get_stock_ohlcv", lambda ticker, period="1mo", table="stocks": [])
+
+    assert service.get_latest_stock_price("aapl") == 212.34
+
+
+def test_get_latest_stock_price_falls_back_to_ohlcv_close(monkeypatch):
+    service = MarketDataService()
+    monkeypatch.setattr(service, "_fetch_live_quote_price", lambda ticker: None)
+    monkeypatch.setattr(
+        service,
+        "get_stock_ohlcv",
+        lambda ticker, period="1mo", table="stocks": [
+            StockOHLCV(date="2026-04-30", open=99.0, high=101.0, low=98.0, close=100.0, volume=1_000),
+        ],
+    )
+
+    assert service.get_latest_stock_price("aapl") == 100.0
+
+
+def test_corporate_latest_market_price_uses_latest_quote_loader(monkeypatch):
+    from apps.api.services import corporate_metrics_service
+
+    calls: list[tuple[str, str]] = []
+
+    class StubMarketDataService:
+        def get_latest_stock_price(self, ticker: str, *, period: str = "1mo") -> float:
+            calls.append((ticker, period))
+            return 212.34
+
+    monkeypatch.setattr(corporate_metrics_service, "_MKT", StubMarketDataService())
+
+    assert corporate_metrics_service.latest_market_price("AAPL") == 212.34
+    assert calls == [("AAPL", "1mo")]
 
 
 def test_stock_price_endpoint_returns_202_for_fetching_lookup(monkeypatch):

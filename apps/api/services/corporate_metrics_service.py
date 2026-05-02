@@ -240,10 +240,7 @@ def metrics_for_ticker(
 
 
 def latest_market_price(ticker: str) -> float:
-    bars = _MKT.get_stock_ohlcv(ticker, period="1mo")
-    if not bars:
-        return 0.0
-    return float(bars[-1].close)
+    return _MKT.get_latest_stock_price(ticker, period="1mo")
 
 
 def seed_watchlist_from_json_if_empty(watchlist_json: Path = WATCHLIST_JSON) -> None:
