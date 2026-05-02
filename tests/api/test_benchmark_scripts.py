@@ -4,6 +4,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from scripts.benchmark_finance import run_finance_benchmarks
+from scripts.benchmark_api import run_api_benchmarks
 from scripts.benchmark_sqlite import run_sqlite_benchmarks
 
 
@@ -81,4 +82,20 @@ def test_finance_benchmark_smoke():
     names = {result.name for result in results}
     assert "core_finance:npv-10-cashflows" in names
     assert any(name.startswith("maths:brinson-fachler") for name in names)
+    assert any(name.startswith("market:technical-indicators") for name in names)
+    assert "corporate:stable-growth-5-years" in names
+    assert "corporate:roic-records-5-years" in names
     assert all(result.avg_ms >= 0 for result in results)
+
+
+def test_api_benchmark_smoke():
+    results = run_api_benchmarks(iterations=1)
+
+    names = {result.name for result in results}
+    assert "GET /api/v1/corporate/metrics/AAPL" in names
+    assert "POST /api/v1/corporate/dcf/AAPL" in names
+    assert "GET /api/v1/corporate/comparison?mode=live" in names
+    assert "POST /api/v1/portfolio/attribution" in names
+    assert "GET /api/v1/detail/AAPL/technicals?period=5y" in names
+    assert "GET /api/v1/detail/AAPL/monte-carlo?paths=1000&horizon_days=252" in names
+    assert all(result.status_code == 200 for result in results)

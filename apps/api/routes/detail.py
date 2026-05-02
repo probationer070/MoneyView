@@ -7,7 +7,7 @@ GET /api/detail/{ticker}/monte-carlo
 """
 
 from fastapi import APIRouter, Query
-from typing import List, Optional
+from typing import List
 
 import numpy as np
 
@@ -32,84 +32,12 @@ async def get_ohlcv(
     return _mkt.get_stock_ohlcv(ticker.upper(), period=period)
 
 
-# ---------------------------------------------------------------------------
-# Technical Indicators (pure NumPy)
-# ---------------------------------------------------------------------------
-
-def _rsi(closes: np.ndarray, period: int = 14) -> Optional[float]:
-    if len(closes) < period + 1:
-        return None
-    delta = np.diff(closes)
-    gain  = np.where(delta > 0, delta, 0.0)
-    loss  = np.where(delta < 0, -delta, 0.0)
-    avg_gain = gain[-period:].mean()
-    avg_loss = loss[-period:].mean()
-    if avg_loss == 0:
-        return 100.0
-    rs = avg_gain / avg_loss
-    return round(100 - (100 / (1 + rs)), 2)
-
-
-def _ema(closes: np.ndarray, span: int) -> np.ndarray:
-    alpha  = 2.0 / (span + 1)
-    result = np.empty_like(closes, dtype=float)
-    result[0] = closes[0]
-    for i in range(1, len(closes)):
-        result[i] = alpha * closes[i] + (1 - alpha) * result[i - 1]
-    return result
-
-
-def _macd(closes: np.ndarray):
-    if len(closes) < 26:
-        return None, None, None
-    ema12   = _ema(closes, 12)
-    ema26   = _ema(closes, 26)
-    line    = ema12 - ema26
-    signal  = _ema(line, 9)
-    hist    = line - signal
-    return round(float(line[-1]), 4), round(float(signal[-1]), 4), round(float(hist[-1]), 4)
-
-
-def _bollinger(closes: np.ndarray, period: int = 20):
-    if len(closes) < period:
-        return None, None, None
-    window = closes[-period:]
-    mid    = window.mean()
-    std    = window.std()
-    return round(float(mid + 2*std), 4), round(float(mid), 4), round(float(mid - 2*std), 4)
-
-
-def _sma(closes: np.ndarray, period: int) -> Optional[float]:
-    if len(closes) < period:
-        return None
-    return round(float(closes[-period:].mean()), 4)
-
-
 @router.get("/{ticker}/technicals", response_model=TechnicalIndicators)
 async def get_technicals(ticker: str, period: str = Query(default="5y")):
-    """Compute RSI-14, MACD, Bollinger Bands, and MAs using pure NumPy."""
-    bars = _mkt.get_stock_ohlcv(ticker.upper(), period=period)
-    if not bars:
-        return TechnicalIndicators(ticker=ticker.upper())
-
-    closes = np.array([b.close for b in bars], dtype=float)
-    macd, macd_sig, macd_hist = _macd(closes)
-    bb_upper, bb_mid, bb_lower = _bollinger(closes)
-
-    return TechnicalIndicators(
-        ticker=ticker.upper(),
-        rsi_14=_rsi(closes),
-        macd=macd,
-        macd_signal=macd_sig,
-        macd_hist=macd_hist,
-        bb_upper=bb_upper,
-        bb_mid=bb_mid,
-        bb_lower=bb_lower,
-        ma_20=_sma(closes, 20),
-        ma_50=_sma(closes, 50),
-        ma_200=_sma(closes, 200),
-        as_of_date=bars[-1].date if bars else None,
-    )
+    """Compute RSI-14, MACD, Bollinger Bands, and MAs using the market-data service."""
+    normalized_ticker = ticker.upper()
+    bars = _mkt.get_stock_ohlcv(normalized_ticker, period=period)
+    return _mkt._compute_technicals(normalized_ticker, bars)
 
 
 # ---------------------------------------------------------------------------

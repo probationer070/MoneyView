@@ -2,6 +2,7 @@
 
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { RefreshCw } from "lucide-react";
 import { fetchApi } from "@/lib/api";
@@ -21,7 +22,6 @@ import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { PageHeader } from "@/components/ui/PageHeader";
 import {
 } from "./components/CorporateGraphs";
-import { CalculationDetailModal } from "./components/CalculationDetailModal";
 import { CorporateDiagnosticsSection } from "./components/CorporateDiagnosticsSection";
 import { TargetStockComparisonSection } from "./components/TargetStockComparisonSection";
 import { CorporateAssumptionsPanel } from "./components/CorporateAssumptionsPanel";
@@ -90,6 +90,34 @@ import {
   toApiMetrics,
   writeSessionCache,
 } from "./corporateUtils";
+import {
+  buildRawDatasetRows,
+  buildSimilarComparisonBarData,
+  buildSimilarComparisonRows,
+  buildSimilarComparisonScatterPeers,
+  buildSimilarComparisonScatterSelected,
+  buildWatchlistCoverage,
+  sortComparisonRows,
+} from "./corporateDerivedViews";
+
+function CalculationModalLoadingOverlay() {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="status" aria-live="polite">
+      <div className="w-full max-w-2xl rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-5 shadow-2xl">
+        <div className="text-sm font-semibold text-[var(--text-primary)]">Loading calculation detail</div>
+        <div className="mt-4 h-28 animate-pulse rounded bg-[var(--surface-muted)]" />
+      </div>
+    </div>
+  );
+}
+
+const CalculationDetailModal = dynamic(
+  () => import("./components/CalculationDetailModal").then((mod) => mod.CalculationDetailModal),
+  {
+    loading: () => <CalculationModalLoadingOverlay />,
+    ssr: false,
+  },
+);
 
 export default function CorporateAnalysisPage() {
   // Local UI state: selected ticker assumptions, search input, add-company form, and active modal.
@@ -143,9 +171,13 @@ export default function CorporateAnalysisPage() {
     ?? readSessionCache<CachedCalculation<string, StockPriceRow[]>>(PRICE_HISTORY_CACHE_KEY)?.lastUpdatedAt
     ?? null,
   );
-  const [dcfRequestedSnapshot, setDcfRequestedSnapshot] = useState<DcfRequestSnapshot | null>(() => readSessionCache<CachedCalculation<DcfRequestSnapshot, DCFResult>>(DCF_CACHE_KEY)?.snapshot ?? null);
-  const [dcfCachedResult] = useState<DCFResult | null>(() => readSessionCache<CachedCalculation<DcfRequestSnapshot, DCFResult>>(DCF_CACHE_KEY)?.result ?? null);
-  const [dcfLastUpdatedAt] = useState<string | null>(() => readSessionCache<CachedCalculation<DcfRequestSnapshot, DCFResult>>(DCF_CACHE_KEY)?.lastUpdatedAt ?? null);
+  const [dcfRequestedSnapshot, setDcfRequestedSnapshot] = useState<DcfRequestSnapshot | null>(() => {
+    const cached = readSessionCache<CachedCalculation<DcfRequestSnapshot, DCFResult>>(DCF_CACHE_KEY);
+    return cached?.snapshot.ticker?.trim().toUpperCase() === restoredInitialTicker.current ? cached.snapshot : null;
+  });
+  const [dcfCachedCalculation] = useState<CachedCalculation<DcfRequestSnapshot, DCFResult> | null>(() =>
+    readSessionCache<CachedCalculation<DcfRequestSnapshot, DCFResult>>(DCF_CACHE_KEY),
+  );
   const [dcfRefreshToken, setDcfRefreshToken] = useState<string | null>(null);
   const [dcfStreamResult, setDcfStreamResult] = useState<DCFResult | null>(null);
   const [dcfFullReport, setDcfFullReport] = useState<DCFFullReport | null>(null);
@@ -190,14 +222,14 @@ export default function CorporateAnalysisPage() {
   const companiesQuery = useQuery<CorporateCompany[]>({
     queryKey: ["corporate-companies"],
     queryFn: () => fetchApi<CorporateCompany[]>("/corporate/companies"),
-    staleTime: 10_000,
-    refetchOnWindowFocus: true,
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
   });
   const watchlistQuery = useQuery<WatchlistHolding[]>({
     queryKey: ["corporate-watchlist-holdings"],
     queryFn: () => fetchApi<WatchlistHolding[]>("/portfolio/watchlist"),
-    staleTime: 10_000,
-    refetchOnWindowFocus: true,
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
   });
 
   const companies = useMemo(() => mergeCompanies(companiesQuery.data), [companiesQuery.data]);
@@ -468,7 +500,10 @@ export default function CorporateAnalysisPage() {
     staleTime: 5 * 60_000,
     enabled: Boolean(sourceDataRequestedTicker && sourceDataRefreshToken),
   });
-  const dcfDisplayData = dcfStreamResult ?? dcfCachedResult;
+  const dcfCachedForTicker = dcfCachedCalculation?.snapshot.ticker?.trim().toUpperCase() === sourceDataTicker
+    ? dcfCachedCalculation
+    : null;
+  const dcfDisplayData = dcfStreamResult ?? dcfCachedForTicker?.result ?? null;
   const comparisonDisplayData = comparisonQuery.data ?? comparisonCachedResult;
   const rawMetricsHistoryData = metricsHistoryQuery.data ?? cachedMetricsHistory;
   const rawQuarterlyStatementsData = quarterlyStatementsQuery.data ?? cachedQuarterlyStatements;
@@ -486,7 +521,7 @@ export default function CorporateAnalysisPage() {
     : null;
   const growthMeta = activeMetricsMeta?.growth_meta ?? null;
   const roicMeta = activeMetricsMeta?.roic_meta ?? null;
-  const dcfDisplayLastUpdatedAt = dcfStreamResult?.generated_at ?? dcfLastUpdatedAt;
+  const dcfDisplayLastUpdatedAt = dcfStreamResult?.generated_at ?? dcfCachedForTicker?.lastUpdatedAt ?? null;
   const comparisonDisplayLastUpdatedAt = comparisonQuery.data ? new Date(comparisonQuery.dataUpdatedAt).toISOString() : comparisonLastUpdatedAt;
   const sourceDataDisplayLastUpdatedAt = metricsHistoryQuery.data
     ? new Date(metricsHistoryQuery.dataUpdatedAt).toISOString()
@@ -659,14 +694,10 @@ export default function CorporateAnalysisPage() {
     setSourceDataRefreshToken(`${Date.now()}`);
   };
 
-  const sortedComparisonRows = useMemo(() => {
-    const rows = [...(comparisonDisplayData?.rows ?? [])];
-    rows.sort((left, right) => {
-      const delta = Number(left[comparisonSortKey]) - Number(right[comparisonSortKey]);
-      return comparisonSortDirection === "asc" ? delta : -delta;
-    });
-    return rows;
-  }, [comparisonDisplayData?.rows, comparisonSortDirection, comparisonSortKey]);
+  const sortedComparisonRows = useMemo(
+    () => sortComparisonRows(comparisonDisplayData?.rows, comparisonSortKey, comparisonSortDirection),
+    [comparisonDisplayData?.rows, comparisonSortDirection, comparisonSortKey],
+  );
   const nonBenchmarkComparisonRows = useMemo(
     () => sortedComparisonRows.filter((row) => row.group_name !== "benchmark"),
     [sortedComparisonRows],
@@ -676,63 +707,30 @@ export default function CorporateAnalysisPage() {
     [assumptions.ticker, nonBenchmarkComparisonRows],
   );
   const selectedComparisonSector = (selectedComparisonRow?.sector ?? activeCompany.sector ?? "").trim();
-  const similarComparisonRows = useMemo(() => {
-    if (nonBenchmarkComparisonRows.length === 0) return [];
-
-    const normalizedSector = selectedComparisonSector.toLowerCase();
-    const sameSectorRows = normalizedSector
-      ? nonBenchmarkComparisonRows.filter((row) => row.sector.trim().toLowerCase() === normalizedSector)
-      : [];
-    const baseRows = sameSectorRows.length >= 2 ? sameSectorRows : nonBenchmarkComparisonRows;
-    const prioritizedRows = selectedComparisonRow
-      ? [selectedComparisonRow, ...baseRows.filter((row) => row.ticker !== selectedComparisonRow.ticker)]
-      : baseRows;
-    return prioritizedRows
-      .filter((row, index, rows) => rows.findIndex((entry) => entry.ticker === row.ticker) === index)
-      .slice(0, 6);
-  }, [nonBenchmarkComparisonRows, selectedComparisonRow, selectedComparisonSector]);
-  const similarComparisonBarData = useMemo(() => similarComparisonRows.map((row) => ({
-    ticker: row.ticker,
-    sector: row.sector,
-    roic_minus_wacc: Number(row.roic_minus_wacc.toFixed(2)),
-    expected_return_spread: Number(row.expected_return_spread.toFixed(2)),
-    isSelected: row.ticker === selectedComparisonRow?.ticker,
-  })), [selectedComparisonRow?.ticker, similarComparisonRows]);
+  const similarComparisonRows = useMemo(
+    () => buildSimilarComparisonRows({
+      rows: nonBenchmarkComparisonRows,
+      selectedTicker: selectedComparisonRow?.ticker ?? "",
+      selectedSector: selectedComparisonSector,
+    }),
+    [nonBenchmarkComparisonRows, selectedComparisonRow?.ticker, selectedComparisonSector],
+  );
+  const similarComparisonBarData = useMemo(
+    () => buildSimilarComparisonBarData(similarComparisonRows, selectedComparisonRow?.ticker ?? ""),
+    [selectedComparisonRow?.ticker, similarComparisonRows],
+  );
   const similarComparisonScatterPeers = useMemo(
-    () => similarComparisonRows
-      .filter((row) => row.ticker !== selectedComparisonRow?.ticker)
-      .map((row) => ({
-        ticker: row.ticker,
-        current_price: Number(row.current_price.toFixed(2)),
-        dcf_value: Number(row.dcf_value.toFixed(2)),
-        expected_return_spread: Number(row.expected_return_spread.toFixed(2)),
-        bubble_size: Math.max(Math.abs(row.expected_return_spread) * 5, 80),
-      })),
+    () => buildSimilarComparisonScatterPeers(similarComparisonRows, selectedComparisonRow?.ticker ?? ""),
     [selectedComparisonRow?.ticker, similarComparisonRows],
   );
   const similarComparisonScatterSelected = useMemo(
-    () => selectedComparisonRow
-      ? [{
-        ticker: selectedComparisonRow.ticker,
-        current_price: Number(selectedComparisonRow.current_price.toFixed(2)),
-        dcf_value: Number(selectedComparisonRow.dcf_value.toFixed(2)),
-        expected_return_spread: Number(selectedComparisonRow.expected_return_spread.toFixed(2)),
-        bubble_size: Math.max(Math.abs(selectedComparisonRow.expected_return_spread) * 5, 120),
-      }]
-      : [],
+    () => buildSimilarComparisonScatterSelected(selectedComparisonRow),
     [selectedComparisonRow],
   );
-  const watchlistCoverage = useMemo(() => {
-    const liveWatchlistTickers = watchlistHoldings.map((row) => row.ticker.toUpperCase());
-    const registryTickers = new Set(companies.map((company) => company.ticker.toUpperCase()));
-    const missingTickers = liveWatchlistTickers.filter((ticker) => !registryTickers.has(ticker));
-    return {
-      liveWatchlistCount: liveWatchlistTickers.length,
-      registryCount: companies.length,
-      missingTickers,
-      isSynchronized: missingTickers.length === 0,
-    };
-  }, [companies, watchlistHoldings]);
+  const watchlistCoverage = useMemo(
+    () => buildWatchlistCoverage(watchlistHoldings, companies),
+    [companies, watchlistHoldings],
+  );
   const bulkDcfReportUniverseKey = useMemo(
     () => nonBenchmarkComparisonRows.map((row) => row.ticker).join(","),
     [nonBenchmarkComparisonRows],
@@ -807,52 +805,21 @@ export default function CorporateAnalysisPage() {
   ];
 
   // Downloadable raw dataset mirrors the assumptions, derived metrics, and chart inputs.
-  const rawDatasetRows: RawDatasetRow[] = (() => {
-    const rows: RawDatasetRow[] = [];
-    const pushRecord = (dataset: string, record: object, source: string) => {
-      Object.entries(record).forEach(([field, value]) => {
-        rows.push({ dataset, field, value: value == null ? "" : String(value), source });
-      });
-    };
-    const pushSeries = (dataset: string, series: object[], source: string) => {
-      series.forEach((record, index) => pushRecord(`${dataset}[${index + 1}]`, record, source));
-    };
-
-    pushRecord("active_assumptions", assumptions, "Realtime controls, SQLite corporate_metrics, and browser localStorage fallback");
-    pushRecord("derived_metrics", {
-      debtToEquity: numberText(derived.debtToEquity),
-      leveredBeta: numberText2(derived.leveredBeta),
-      impliedMarketReturn: pct(impliedMarketReturn),
-      impliedErp: pct(impliedErp),
-      bottomUpKe: pct(derived.bottomUpKe),
-      spread: pct(derived.spread),
-      sustainableGrowth: pct(derived.sustainableGrowth),
-      terminalValueShare: pct(derived.terminalValueShare),
-      successProbability: pct(derived.successProbability),
-      failureProbability: pct2(100 - derived.successProbability),
-      agencyRisk: numberText(derived.agencyRisk),
-      lifeCyclePosition: numberText(derived.lifeCyclePosition),
-      healthScore: numberText(derived.healthScore),
-    }, "Frontend formulas shown in View Details");
-    pushRecord("implied_erp_inputs", {
-      sp500IndexLevel: numberText(impliedErpInputs.indexLevel),
-      dividendYield: pct(impliedErpInputs.dividendYield),
-      buybackYield: pct(impliedErpInputs.buybackYield),
-      fiveYearGrowthPath: impliedErpInputs.growthRates.map((growth) => pct(growth)).join(" -> "),
-      stableGrowth: pct(impliedErpInputs.stableGrowth),
-      expectedMarketReturnIrr: pct(impliedMarketReturn),
-      impliedErp: pct(impliedErp),
-    }, "S&P 500 implied ERP model: price from market API; cash-flow yields and consensus growth path are model assumptions until constituent-level estimates are wired");
-    if (dcfData) pushRecord("backend_dcf", dcfData, "FastAPI /corporate/dcf response");
-    pushSeries("company_status_radar", healthRadar, "Company Status Diagnosis chart dataset");
-    pushSeries("hurdle_rate_decomposition", regionalMinard, "Hurdle Rate Decomposition chart dataset");
-    pushSeries("hurdle_bar_components", hurdleBars, "Bottom-up Ke component dataset");
-    pushSeries("beta_wacc_curve_beta_components", betaTreemapProxy, "Bottom-up Beta chart dataset");
-    pushSeries("wacc_curve", waccCurve, "WACC U-Curve chart dataset");
-    pushSeries("value_driver_matrix", valueMatrix, "4-Quadrant Value Driver Matrix dataset");
-    pushSeries("risk_return_minard", riskReturn, "Risk-Return Minard chart dataset");
-    return rows;
-  })();
+  const rawDatasetRows: RawDatasetRow[] = buildRawDatasetRows({
+    assumptions,
+    derived,
+    impliedMarketReturn,
+    impliedErp,
+    impliedErpInputs,
+    dcfData,
+    healthRadar,
+    regionalMinard,
+    hurdleBars,
+    betaTreemapProxy,
+    waccCurve,
+    valueMatrix,
+    riskReturn,
+  });
 
   const annualGrowthRates = annualMetricRows(metricsHistoryData?.annual_growth_rates ?? []);
   const annualRoicValues = annualMetricRows(metricsHistoryData?.annual_roic ?? []);

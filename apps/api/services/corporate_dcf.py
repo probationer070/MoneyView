@@ -66,6 +66,42 @@ def build_dcf_full_report(
     return full_report
 
 
+def build_bulk_dcf_reports(
+    tickers: list[str],
+    *,
+    current_price_loader: Callable[[str], float],
+    metrics_loader: Callable[[str], CorporateMetrics],
+    valuation_params_builder: Callable[[CorporateMetrics], ValuationAssumptions],
+    report_builder: Callable[..., DCFFullReport] = build_dcf_full_report,
+    risk_free_rate: float,
+    equity_risk_premium: float = DEFAULT_EQUITY_RISK_PREMIUM,
+    country_risk_premium: float = DEFAULT_COUNTRY_RISK_PREMIUM,
+) -> list[DCFFullReport]:
+    """Build full DCF reports for a deduplicated ticker list."""
+
+    normalized_tickers: list[str] = []
+    for raw_ticker in tickers:
+        ticker = raw_ticker.upper().strip()
+        if ticker and ticker not in normalized_tickers:
+            normalized_tickers.append(ticker)
+
+    reports: list[DCFFullReport] = []
+    for ticker in normalized_tickers:
+        metrics = metrics_loader(ticker)
+        reports.append(
+            report_builder(
+                ticker=ticker,
+                params=valuation_params_builder(metrics),
+                current_price_loader=current_price_loader,
+                metrics_loader=metrics_loader,
+                risk_free_rate=risk_free_rate,
+                equity_risk_premium=equity_risk_premium,
+                country_risk_premium=country_risk_premium,
+            )
+        )
+    return reports
+
+
 def _build_dcf_outputs(
     *,
     ticker: str,

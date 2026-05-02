@@ -43,9 +43,11 @@ def get_db() -> Generator[sqlite3.Connection, None, None]:
     _configure(conn)
     try:
         yield conn
-        conn.commit()
+        if conn.in_transaction:
+            conn.commit()
     except Exception:
-        conn.rollback()
+        if conn.in_transaction:
+            conn.rollback()
         raise
     finally:
         conn.close()
@@ -270,6 +272,10 @@ CREATE TABLE IF NOT EXISTS corporate_comparison_snapshots_v3 (
 );
 CREATE INDEX IF NOT EXISTS idx_corporate_comparison_snapshots_v3_lookup
     ON corporate_comparison_snapshots_v3(snapshot_date DESC, universe_key, snapshot_taken_at DESC, ticker);
+CREATE INDEX IF NOT EXISTS idx_corporate_comparison_snapshots_v3_universe_date
+    ON corporate_comparison_snapshots_v3(universe_key, snapshot_date DESC, snapshot_taken_at DESC, snapshot_version);
+CREATE INDEX IF NOT EXISTS idx_corporate_comparison_snapshots_v3_ticker_universe_date
+    ON corporate_comparison_snapshots_v3(ticker, universe_key, snapshot_date DESC, snapshot_taken_at DESC);
 """
 
 
@@ -443,6 +449,14 @@ def _ensure_schema_compatibility(conn: sqlite3.Connection) -> None:
     conn.execute(
         """CREATE INDEX IF NOT EXISTS idx_corporate_comparison_snapshots_v3_lookup
            ON corporate_comparison_snapshots_v3(snapshot_date DESC, universe_key, snapshot_taken_at DESC, ticker)"""
+    )
+    conn.execute(
+        """CREATE INDEX IF NOT EXISTS idx_corporate_comparison_snapshots_v3_universe_date
+           ON corporate_comparison_snapshots_v3(universe_key, snapshot_date DESC, snapshot_taken_at DESC, snapshot_version)"""
+    )
+    conn.execute(
+        """CREATE INDEX IF NOT EXISTS idx_corporate_comparison_snapshots_v3_ticker_universe_date
+           ON corporate_comparison_snapshots_v3(ticker, universe_key, snapshot_date DESC, snapshot_taken_at DESC)"""
     )
     if "dcf_implied_return" not in v3_columns:
         conn.execute("ALTER TABLE corporate_comparison_snapshots_v3 ADD COLUMN dcf_implied_return REAL NOT NULL DEFAULT 0.0")

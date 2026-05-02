@@ -15,6 +15,7 @@ dependencies = [
     "lxml[html_clean]",
     "feedparser",
     "youtube-transcript-api",
+    "yt-dlp",
     # "investiny",
     # FastAPI backend dependencies.
     "fastapi>=0.111.0",

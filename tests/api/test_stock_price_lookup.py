@@ -44,6 +44,7 @@ def _insert_stock_rows(ticker: str, latest: date, count: int) -> None:
 def _reset_market_data_state() -> None:
     MarketDataService._inflight_refreshes.clear()
     MarketDataService._refresh_failures.clear()
+    MarketDataService._provider_fetch_cache.clear()
 
 
 def _db_path() -> Path:

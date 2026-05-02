@@ -99,9 +99,11 @@ export interface CorporateMetricHistoryApi {
   ticker: string;
   start_year: number;
   country_risk_premium: number;
+  growth_calculation_version?: string;
   growth_cagr: number | null;
   growth_recent_average: number | null;
   annual_growth_rates: AnnualMetricPoint[];
+  roic_calculation_version?: string;
   roic_recent_average: number | null;
   roic_all_year_average: number | null;
   annual_roic: AnnualMetricPoint[];

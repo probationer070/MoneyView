@@ -8,6 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from apps.api.main import app
 from apps.api.models.schemas import CorporateDerivedMetricMeta, CorporateMetrics
 from apps.api.routes import corporate as corporate_route
+from apps.api.services.corporate_dcf import build_bulk_dcf_reports
 
 
 def _valuation_payload() -> dict[str, float]:
@@ -91,6 +92,43 @@ def test_dcf_full_report_endpoint_returns_projection_rows(monkeypatch):
     assert payload["projection_rows"][0]["year"] == 1
     assert "wacc_breakdown" in payload
     assert payload["assumptions"]["wacc_used"] == 0.1
+
+
+def test_bulk_dcf_service_normalizes_and_deduplicates_tickers():
+    seen_tickers: list[str] = []
+
+    def report_builder(
+        ticker: str,
+        params,
+        *,
+        current_price_loader,
+        metrics_loader,
+        risk_free_rate,
+        equity_risk_premium,
+        country_risk_premium,
+    ):
+        seen_tickers.append(ticker)
+        return {
+            "ticker": ticker,
+            "price": current_price_loader(ticker),
+            "growth": params.revenue_growth_rate,
+            "risk_free_rate": risk_free_rate,
+        }
+
+    reports = build_bulk_dcf_reports(
+        [" aapl ", "AAPL", "", "msft"],
+        current_price_loader=lambda ticker: {"AAPL": 210.4, "MSFT": 430.0}[ticker],
+        metrics_loader=_mock_metrics,
+        valuation_params_builder=corporate_route._valuation_params_from_metrics,
+        report_builder=report_builder,
+        risk_free_rate=0.042,
+        equity_risk_premium=0.055,
+        country_risk_premium=0.8,
+    )
+
+    assert seen_tickers == ["AAPL", "MSFT"]
+    assert [report["ticker"] for report in reports] == ["AAPL", "MSFT"]
+    assert reports[0]["price"] == 210.4
 
 
 def test_valuation_params_from_metrics_accepts_stabilized_metric_metadata():

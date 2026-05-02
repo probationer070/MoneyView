@@ -1,4 +1,5 @@
 import sys
+import sqlite3
 from pathlib import Path
 
 import pandas as pd
@@ -8,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from apps.api.main import app
 from apps.api.services import db as db_service
+from apps.api.services import corporate_metrics_service
 
 
 def _make_frame(rows: dict[str, dict[str, float]]) -> pd.DataFrame:
@@ -36,6 +38,32 @@ def _init_test_db(tmp_path, monkeypatch):
     db_path = tmp_path / "moneyview.db"
     monkeypatch.setattr(db_service, "_DB_PATH", db_path)
     db_service.init_db()
+
+
+def test_default_metrics_falls_back_when_sector_lookup_has_sqlite_error(monkeypatch):
+    def raise_sqlite_error():
+        raise sqlite3.OperationalError("database is locked")
+
+    monkeypatch.setattr(corporate_metrics_service, "get_db", raise_sqlite_error)
+
+    metrics = corporate_metrics_service.default_metrics("ZZZ")
+
+    assert metrics.ticker == "ZZZ"
+    assert metrics.growth >= 1.0
+
+
+def test_default_metrics_does_not_hide_unexpected_sector_lookup_errors(monkeypatch):
+    def raise_unexpected_error():
+        raise RuntimeError("unexpected bug")
+
+    monkeypatch.setattr(corporate_metrics_service, "get_db", raise_unexpected_error)
+
+    try:
+        corporate_metrics_service.default_metrics("ZZZ")
+    except RuntimeError as exc:
+        assert str(exc) == "unexpected bug"
+    else:
+        raise AssertionError("default_metrics should not hide unexpected errors")
 
 
 def test_metrics_uses_stable_cagr_as_primary_growth(tmp_path, monkeypatch):
@@ -89,7 +117,7 @@ def test_metrics_uses_stable_cagr_as_primary_growth(tmp_path, monkeypatch):
     assert payload["growth_meta"]["method"] == "stable_cagr"
     assert payload["growth_meta"]["confidence"] >= 0.9
     assert payload["growth_meta"]["calculation_version"] == "growth_v2_stable_cagr"
-    assert payload["roic_stable_v2"] == payload["roic"]
+    assert payload["roic_stable_v2"] is not None
     assert payload["roic_legacy"] is not None
     assert payload["roic_meta"]["calculation_version"] == "roic_v3_stable_invested_capital"
     assert payload["roic_meta"]["method"] == "stable_invested_capital"
@@ -157,8 +185,10 @@ def test_growth_history_suppresses_outlier_cagr_and_metrics_falls_back(tmp_path,
     history_response = client.get("/api/v1/corporate/metrics/AAPL/history")
     assert history_response.status_code == 200
     history_payload = history_response.json()
+    assert history_payload["growth_calculation_version"] == "growth_v2_stable_cagr"
     assert history_payload["growth_cagr"] is None
     assert history_payload["growth_recent_average"] is not None
+    assert history_payload["roic_calculation_version"] == "roic_v3_stable_invested_capital"
 
 
 def test_metrics_exposes_roic_meta_and_falls_back_when_roic_is_not_decision_grade(tmp_path, monkeypatch):
@@ -205,9 +235,60 @@ def test_metrics_exposes_roic_meta_and_falls_back_when_roic_is_not_decision_grad
 
     payload = response.json()
     assert payload["roic"] == 18.0
-    assert payload["roic_stable_v2"] == payload["roic"]
+    assert payload["roic_stable_v2"] is None
     assert payload["roic_legacy"] is not None
     assert payload["roic_meta"]["quality"] == "invalid"
     assert payload["roic_meta"]["metric_role"] == "fallback"
     assert payload["roic_meta"]["method"] == "stable_invested_capital"
     assert payload["roic_meta"]["reason"] == "Invested capital is too small; ROIC denominator unstable."
+
+
+def test_metrics_suppresses_suspicious_roic_from_primary_payload_but_keeps_versioned_stable_value(tmp_path, monkeypatch):
+    _init_test_db(tmp_path, monkeypatch)
+    from apps.api.routes import corporate as corporate_route
+
+    monkeypatch.setattr(
+        corporate_route,
+        "_get_yahoo_statement_bundle",
+        lambda ticker, endpoint: _make_bundle(
+            income_rows={
+                "2024-12-31": {
+                    "Total Revenue": 1_000_000.0,
+                    "Operating Income": 12_000_000.0,
+                    "Pretax Income": 12_000_000.0,
+                    "Tax Provision": 1_800_000.0,
+                    "Interest Expense": 5_000.0,
+                },
+                "2025-12-31": {
+                    "Total Revenue": 1_100_000.0,
+                    "Operating Income": 12_000_000.0,
+                    "Pretax Income": 12_000_000.0,
+                    "Tax Provision": 1_800_000.0,
+                    "Interest Expense": 5_000.0,
+                },
+            },
+            balance_rows={
+                "2024-12-31": {
+                    "Total Debt": 500_000.0,
+                    "Stockholders Equity": 1_000_000.0,
+                },
+                "2025-12-31": {
+                    "Total Debt": 500_000.0,
+                    "Stockholders Equity": 1_000_000.0,
+                },
+            },
+            info={"beta": 1.02},
+        ),
+    )
+
+    client = TestClient(app)
+    response = client.get("/api/v1/corporate/metrics/AAPL")
+    assert response.status_code == 200
+
+    payload = response.json()
+    assert payload["roic"] == 18.0
+    assert payload["roic_stable_v2"] > 300.0
+    assert payload["roic_legacy"] == 18.0
+    assert payload["roic_meta"]["quality"] == "suspicious"
+    assert payload["roic_meta"]["metric_role"] == "fallback"
+    assert payload["roic_meta"]["reason"] == "ROIC exceeds the configured sanity range."

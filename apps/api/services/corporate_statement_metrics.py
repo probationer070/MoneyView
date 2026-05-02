@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 import sys
+import os
+from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Callable, Optional
+
+from cachetools import TTLCache
 
 from apps.api.core.logger import setup_logger
 from apps.api.models.schemas import (
@@ -12,24 +16,74 @@ from apps.api.models.schemas import (
     CorporateMetricAuditInput,
     CorporateMetrics,
 )
+from packages.core_finance.corporate_statement_metrics import NumericRule
 
 logger = setup_logger(__name__)
 
 YAHOO_STATEMENT_START_YEAR = 2021
 YAHOO_STATEMENT_END_YEAR = 2025
-DEFAULT_TAX_RATE = 0.21
-MIN_TAX_RATE = 0.15
-MAX_TAX_RATE = 0.30
-MIN_INVESTED_CAPITAL = 1_000_000.0
-MAX_ABS_ROIC = 3.0
-MIN_REVENUE = 1_000_000.0
-MAX_GROWTH_CAGR = 2.0
-MIN_GROWTH_CAGR = -0.9
 DEFAULT_RISK_FREE_RATE = 0.042
 DEFAULT_EQUITY_RISK_PREMIUM = 0.055
 KOREA_COUNTRY_RISK_PREMIUM = 0.8
-YAHOO_STATEMENT_CACHE_TTL_SECONDS = 300
-_YAHOO_STATEMENT_CACHE: dict[str, dict[str, object]] = {}
+YAHOO_STATEMENT_CACHE_TTL_SECONDS = int(os.getenv("MONEYVIEW_YAHOO_STATEMENT_CACHE_TTL_SECONDS", "300"))
+YAHOO_STATEMENT_CACHE_MAXSIZE = int(os.getenv("MONEYVIEW_YAHOO_STATEMENT_CACHE_MAXSIZE", "48"))
+_YAHOO_STATEMENT_CACHE = TTLCache(maxsize=YAHOO_STATEMENT_CACHE_MAXSIZE, ttl=YAHOO_STATEMENT_CACHE_TTL_SECONDS)
+
+
+@dataclass(frozen=True)
+class WaccAuditContext:
+    market_cap: Optional[float]
+    latest_debt: Optional[float]
+    latest_equity: Optional[float]
+    wacc_value: float
+
+
+@dataclass(frozen=True)
+class WaccAuditRule:
+    name: str
+    quality: str
+    predicate: Callable[[WaccAuditContext], bool]
+    message: str
+
+
+WACC_SANITY_RULE = NumericRule("wacc_percent", 0.0, 40.0)
+
+
+def _is_missing_market_cap(context: WaccAuditContext) -> bool:
+    return context.market_cap is None
+
+
+def _has_missing_capital_structure_inputs(context: WaccAuditContext) -> bool:
+    return context.latest_debt is None or context.latest_equity is None
+
+
+def _is_wacc_outside_sanity_range(context: WaccAuditContext) -> bool:
+    return context.wacc_value <= WACC_SANITY_RULE.minimum or context.wacc_value > WACC_SANITY_RULE.maximum
+
+
+WACC_WARNING_RULES = (
+    WaccAuditRule(
+        name="missing_market_cap",
+        quality="estimated",
+        predicate=_is_missing_market_cap,
+        message="Market capitalization was unavailable, so debt and equity weights fall back to statement debt ratio.",
+    ),
+)
+
+WACC_QUALITY_RULES = (
+    WaccAuditRule(
+        name="missing_capital_structure_inputs",
+        quality="invalid",
+        predicate=_has_missing_capital_structure_inputs,
+        message="Debt or equity inputs are missing, so capital structure cannot be audited reliably.",
+    ),
+    WaccAuditRule(
+        name="wacc_outside_sanity_range",
+        quality="suspicious",
+        predicate=_is_wacc_outside_sanity_range,
+        message="WACC falls outside the expected sanity range.",
+    ),
+)
 
 
 def _frame_shape(frame) -> tuple[int, int]:
@@ -69,7 +123,7 @@ def get_yahoo_statement_bundle(ticker: str, endpoint: str) -> Optional[dict[str,
     logger.info("corporate.statement_cache ticker=%s endpoint=%s cache_hit=false", ticker, endpoint)
     try:
         import yfinance as yf
-    except Exception as exc:
+    except ImportError as exc:
         logger.warning(
             "corporate.statement_import_failed ticker=%s endpoint=%s python_executable=%s error=%s",
             ticker,
@@ -89,10 +143,10 @@ def get_yahoo_statement_bundle(ticker: str, endpoint: str) -> Optional[dict[str,
         quarterly_cashflow = yahoo_ticker.quarterly_cashflow
         try:
             info = yahoo_ticker.info or {}
-        except Exception as exc:
+        except (AttributeError, KeyError, TypeError, ValueError) as exc:
             logger.warning("corporate.statement_info_fetch_failed ticker=%s endpoint=%s error=%s", ticker, endpoint, exc)
             info = {}
-    except Exception as exc:
+    except (AttributeError, KeyError, TypeError, ValueError) as exc:
         logger.warning("corporate.statement_fetch_failed ticker=%s endpoint=%s error=%s", ticker, endpoint, exc)
         return None
 
@@ -141,21 +195,28 @@ def _statement_series(frame, labels: tuple[str, ...]):
     return None
 
 
-def _annual_statement_points(series, start_year: int = YAHOO_STATEMENT_START_YEAR) -> list[tuple[int, float]]:
+def _statement_year_value_items(series, start_year: int = YAHOO_STATEMENT_START_YEAR):
     if series is None:
-        return []
-    points: list[tuple[int, float]] = []
+        return
     for date_index, raw in series.items():
-        try:
-            year = int(getattr(date_index, "year", 0))
-            if year < start_year or year > YAHOO_STATEMENT_END_YEAR:
-                continue
-            value = float(raw)
-            if value == value and value != 0:
-                points.append((year, value))
-        except (TypeError, ValueError):
+        year = _safe_statement_year(date_index)
+        value = _safe_number(raw)
+        if year is None or year < start_year or year > YAHOO_STATEMENT_END_YEAR:
             continue
-    return points[-5:]
+        if value is None or value == 0:
+            continue
+        yield date_index, year, value
+
+
+def _safe_statement_year(date_index: object) -> Optional[int]:
+    try:
+        return int(getattr(date_index, "year", 0))
+    except (TypeError, ValueError):
+        return None
+
+
+def _annual_statement_points(series, start_year: int = YAHOO_STATEMENT_START_YEAR) -> list[tuple[int, float]]:
+    return [(year, value) for _, year, value in _statement_year_value_items(series, start_year)][-5:]
 
 
 def _statement_map(frame, labels: tuple[str, ...]) -> dict[int, float]:
@@ -168,39 +229,19 @@ def _statement_map_from_year(frame, labels: tuple[str, ...], start_year: int) ->
 
 def _quarterly_flow_map(frame, labels: tuple[str, ...], start_year: int = YAHOO_STATEMENT_START_YEAR) -> dict[int, float]:
     series = _statement_series(frame, labels)
-    if series is None:
-        return {}
     by_year: dict[int, float] = {}
-    for date_index, raw in series.items():
-        try:
-            year = int(getattr(date_index, "year", 0))
-            if year < start_year or year > YAHOO_STATEMENT_END_YEAR:
-                continue
-            value = float(raw)
-            if value == value and value != 0:
-                by_year[year] = by_year.get(year, 0.0) + value
-        except (TypeError, ValueError):
-            continue
+    for _, year, value in _statement_year_value_items(series, start_year):
+        by_year[year] = by_year.get(year, 0.0) + value
     return by_year
 
 
 def _quarterly_balance_map(frame, labels: tuple[str, ...], start_year: int = YAHOO_STATEMENT_START_YEAR) -> dict[int, float]:
     series = _statement_series(frame, labels)
-    if series is None:
-        return {}
     latest_by_year: dict[int, tuple[object, float]] = {}
-    for date_index, raw in series.items():
-        try:
-            year = int(getattr(date_index, "year", 0))
-            if year < start_year or year > YAHOO_STATEMENT_END_YEAR:
-                continue
-            value = float(raw)
-            if value == value and value != 0:
-                previous = latest_by_year.get(year)
-                if previous is None or date_index > previous[0]:
-                    latest_by_year[year] = (date_index, value)
-        except (TypeError, ValueError):
-            continue
+    for date_index, year, value in _statement_year_value_items(series, start_year):
+        previous = latest_by_year.get(year)
+        if previous is None or date_index > previous[0]:
+            latest_by_year[year] = (date_index, value)
     return {year: value for year, (_, value) in latest_by_year.items()}
 
 
@@ -208,6 +249,14 @@ def _prefer_annual_map(annual: dict[int, float], quarterly: dict[int, float]) ->
     combined = dict(quarterly)
     combined.update(annual)
     return combined
+
+
+def _current_statement_years(values: dict[int, float]) -> dict[int, float]:
+    return {
+        year: value
+        for year, value in values.items()
+        if YAHOO_STATEMENT_START_YEAR <= year <= YAHOO_STATEMENT_END_YEAR
+    }
 
 
 def _average(values: list[float]) -> Optional[float]:
@@ -256,10 +305,7 @@ def _latest_from_map(values: dict[int, float]) -> Optional[float]:
 def _matching_years(*maps: dict[int, float]) -> list[int]:
     if not maps:
         return []
-    years = set(maps[0])
-    for mapping in maps[1:]:
-        years &= set(mapping)
-    return sorted(years)[-5:]
+    return sorted(set.intersection(*(set(mapping) for mapping in maps)))[-5:]
 
 
 def _stable_tax_result(pretax_income_by_year: dict[int, float], tax_expense_by_year: dict[int, float]) -> dict[str, object]:
@@ -515,6 +561,88 @@ def _roic_value(points: list[dict[str, float]], roic_basis: str, roic_year: Opti
     return _average(values[-3:])
 
 
+def _assess_roic_quality(
+    *,
+    roic_records: list[dict[str, float | int | None | str | bool]],
+    selected_roic_record: dict[str, float | int | None | str | bool] | None,
+    roic_basis: str,
+    tax_result: dict[str, object],
+    derived_roic: Optional[float],
+) -> dict[str, object]:
+    warnings: list[str] = []
+    reason = None
+    quality = "ok"
+    if not roic_records:
+        quality = "missing"
+        reason = "No overlapping Yahoo statement years were available to compute ROIC."
+    else:
+        selected_average_capital = (
+            float(selected_roic_record["average_invested_capital"])
+            if selected_roic_record and selected_roic_record["average_invested_capital"] is not None
+            else None
+        )
+        if roic_basis != "annual":
+            quality = "estimated"
+            warnings.append(f"ROIC uses {roic_basis.replace('_', ' ')} rather than a single fiscal year.")
+        if tax_result["tax_rate_source"] == "fallback_default":
+            quality = "estimated"
+            warnings.append(str(tax_result["tax_rate_note"]))
+        if selected_roic_record and not bool(selected_roic_record["used_previous_capital"]):
+            quality = "estimated" if quality == "ok" else quality
+            warnings.append(str(selected_roic_record["average_invested_capital_note"]))
+        if selected_average_capital is None:
+            quality = "invalid"
+            reason = str(selected_roic_record["average_invested_capital_note"]) if selected_roic_record else "Average invested capital is missing or non-positive."
+        elif selected_average_capital <= 0:
+            quality = "invalid"
+            reason = "Average invested capital is missing or non-positive."
+        elif selected_roic_record and selected_roic_record["nopat"] is not None:
+            nopat_value = abs(float(selected_roic_record["nopat"]))
+            if selected_average_capital < max(nopat_value * 0.1, 1.0):
+                quality = "suspicious"
+                reason = "Average invested capital is unusually small relative to NOPAT."
+            elif derived_roic is not None and abs(float(derived_roic)) > MAX_ABS_ROIC * 100:
+                quality = "suspicious"
+                reason = "ROIC exceeds the configured sanity range."
+        elif derived_roic is not None and abs(float(derived_roic)) > MAX_ABS_ROIC * 100:
+            quality = "suspicious"
+            reason = "ROIC exceeds the configured sanity range."
+    if reason:
+        warnings.append(reason)
+    return {
+        "quality": quality,
+        "reason": reason,
+        "warnings": warnings,
+    }
+
+
+from packages.core_finance.corporate_statement_metrics import (  # noqa: E402
+    DEFAULT_TAX_RATE,
+    MAX_ABS_ROIC,
+    MAX_GROWTH_CAGR,
+    MAX_TAX_RATE,
+    MIN_GROWTH_CAGR,
+    MIN_INVESTED_CAPITAL,
+    MIN_REVENUE,
+    MIN_TAX_RATE,
+    assess_roic_quality as _assess_roic_quality,
+    average as _average,
+    average_invested_capital_result as _average_invested_capital_result,
+    bounded as _bounded,
+    build_roic_records as _build_roic_records,
+    calculate_invested_capital as _calculate_invested_capital,
+    calculate_nopat as _calculate_nopat,
+    growth_value as _growth_value,
+    matching_years as _matching_years,
+    median as _median,
+    roic_value as _roic_value,
+    safe_number as _safe_number,
+    safe_ratio as _safe_ratio,
+    stable_growth_payload as _stable_growth_payload,
+    stable_tax_result as _stable_tax_result,
+)
+
+
 def _annual_metric_rows(points: list[dict[str, float]]) -> list[dict[str, Optional[float]]]:
     by_year = {int(point["year"]): round(float(point["value"]), 2) for point in points}
     return [
@@ -570,18 +698,6 @@ def yahoo_statement_metrics(
         _statement_map_from_year(income, ("Total Revenue", "Operating Revenue"), YAHOO_STATEMENT_START_YEAR - 1),
         _quarterly_flow_map(quarterly_income, ("Total Revenue", "Operating Revenue"), start_year=YAHOO_STATEMENT_START_YEAR - 1),
     )
-    current_revenue_by_year = {
-        year: value
-        for year, value in revenue_by_year.items()
-        if YAHOO_STATEMENT_START_YEAR <= year <= YAHOO_STATEMENT_END_YEAR
-    }
-    growth_payload = _stable_growth_payload(current_revenue_by_year)
-    annual_growth = growth_payload["annual_growth"]
-
-    revenue_by_year = _prefer_annual_map(
-        _statement_map_from_year(income, ("Total Revenue", "Operating Revenue"), YAHOO_STATEMENT_START_YEAR - 1),
-        _quarterly_flow_map(quarterly_income, ("Total Revenue", "Operating Revenue"), start_year=YAHOO_STATEMENT_START_YEAR - 1),
-    )
     operating_income_by_year = _prefer_annual_map(
         _statement_map(income, ("Operating Income", "EBIT")),
         _quarterly_flow_map(quarterly_income, ("Operating Income", "EBIT")),
@@ -617,11 +733,7 @@ def yahoo_statement_metrics(
     free_cash_flow_by_year = _statement_map(cashflow, ("Free Cash Flow",))
     research_development_by_year = _statement_map(income, ("Research And Development", "Research Development"))
 
-    current_revenue_by_year = {
-        year: value
-        for year, value in revenue_by_year.items()
-        if YAHOO_STATEMENT_START_YEAR <= year <= YAHOO_STATEMENT_END_YEAR
-    }
+    current_revenue_by_year = _current_statement_years(revenue_by_year)
 
     if len(revenue_by_year) < 2 or not current_revenue_by_year:
         logger.info(
@@ -643,12 +755,13 @@ def yahoo_statement_metrics(
     )
     latest_growth_year = int(growth_payload["revenue_points"][-1]["year"]) if growth_payload["revenue_points"] else None
     growth_as_of = f"{latest_growth_year}-12-31" if latest_growth_year is not None else None
-    growth_quality = "ok" if growth_payload["growth_cagr"] is not None else "invalid"
-    growth_reason = None if growth_payload["growth_cagr"] is not None else str(growth_payload["growth_note"])
+    has_stable_growth_cagr = _has_stable_growth_cagr(growth_payload)
+    growth_quality = "ok" if has_stable_growth_cagr else "invalid"
+    growth_reason = None if has_stable_growth_cagr else str(growth_payload["growth_note"])
     growth_warnings = [str(growth_payload["growth_note"])] if growth_reason else []
-    growth_metric_role = "primary" if growth_payload["growth_cagr"] is not None else "fallback"
+    growth_metric_role = "primary" if has_stable_growth_cagr else "fallback"
     growth_source = "Stable CAGR from valid Yahoo annual revenue values"
-    growth_output = derived_growth if growth_payload["growth_cagr"] is not None and derived_growth is not None else float(fallback.growth)
+    growth_output = derived_growth if has_stable_growth_cagr and derived_growth is not None else float(fallback.growth)
     growth_meta = _derived_metric_meta(
         method="stable_cagr",
         quality=growth_quality,
@@ -681,49 +794,19 @@ def yahoo_statement_metrics(
         selected_roic_record = next((record for record in roic_payload["roic_records"] if int(record["year"]) == roic_year), None)
     if selected_roic_record is None and roic_payload["roic_records"]:
         selected_roic_record = roic_payload["roic_records"][-1] if roic_basis == "annual" else roic_payload["roic_records"][-1]
-    roic_reason = None
-    roic_warnings: list[str] = []
-    roic_quality = "ok"
-    if not roic_payload["roic_records"]:
-        roic_quality = "missing"
-        roic_reason = "No overlapping Yahoo statement years were available to compute ROIC."
-    else:
-        selected_average_capital = (
-            float(selected_roic_record["average_invested_capital"])
-            if selected_roic_record and selected_roic_record["average_invested_capital"] is not None
-            else None
-        )
-        if roic_basis != "annual":
-            roic_quality = "estimated"
-            roic_warnings.append(f"ROIC uses {roic_basis.replace('_', ' ')} rather than a single fiscal year.")
-        if roic_payload["tax_result"]["tax_rate_source"] == "fallback_default":
-            roic_quality = "estimated"
-            roic_warnings.append(str(roic_payload["tax_result"]["tax_rate_note"]))
-        if selected_roic_record and not bool(selected_roic_record["used_previous_capital"]):
-            roic_quality = "estimated" if roic_quality == "ok" else roic_quality
-            roic_warnings.append(str(selected_roic_record["average_invested_capital_note"]))
-        if selected_average_capital is None:
-            roic_quality = "invalid"
-            roic_reason = str(selected_roic_record["average_invested_capital_note"]) if selected_roic_record else "Average invested capital is missing or non-positive."
-        elif selected_average_capital <= 0:
-            roic_quality = "invalid"
-            roic_reason = "Average invested capital is missing or non-positive."
-        elif selected_average_capital is not None and selected_roic_record and selected_roic_record["nopat"] is not None:
-            nopat_value = abs(float(selected_roic_record["nopat"]))
-            if selected_average_capital < max(nopat_value * 0.1, 1.0):
-                roic_quality = "suspicious"
-                roic_reason = "Average invested capital is unusually small relative to NOPAT."
-            elif derived_roic is not None and abs(float(derived_roic)) > MAX_ABS_ROIC * 100:
-                roic_quality = "suspicious"
-                roic_reason = "ROIC exceeds the configured sanity range."
-        elif derived_roic is not None and abs(float(derived_roic)) > MAX_ABS_ROIC * 100:
-            roic_quality = "suspicious"
-            roic_reason = "ROIC exceeds the configured sanity range."
-    if roic_reason:
-        roic_warnings.append(roic_reason)
+    roic_assessment = _assess_roic_quality(
+        roic_records=roic_payload["roic_records"],
+        selected_roic_record=selected_roic_record,
+        roic_basis=roic_basis,
+        tax_result=roic_payload["tax_result"],
+        derived_roic=derived_roic,
+    )
+    roic_quality = str(roic_assessment["quality"])
+    roic_reason = _metric_reason(roic_assessment["reason"])
+    roic_warnings = list(roic_assessment["warnings"])
     latest_roic_year = sorted(roic_payload["roic_years"])[-1] if roic_payload["roic_years"] else None
     roic_as_of = f"{latest_roic_year}-12-31" if latest_roic_year is not None else None
-    roic_metric_role = "primary" if roic_quality in {"ok", "estimated"} and derived_roic is not None else "fallback"
+    roic_metric_role = "primary" if _is_decision_grade_roic(roic_quality, derived_roic) else "fallback"
     roic_output = float(derived_roic) if roic_metric_role == "primary" and derived_roic is not None else float(fallback.roic)
     roic_meta = _derived_metric_meta(
         method="stable_invested_capital",
@@ -739,21 +822,15 @@ def yahoo_statement_metrics(
 
     latest_debt = _latest_from_map(debt_by_year)
     latest_equity = _latest_from_map(equity_by_year)
-    latest_debt_ratio = (
-        _bounded(latest_debt / (latest_debt + latest_equity) * 100, 0, 90)
-        if latest_debt is not None and latest_equity is not None and latest_debt + latest_equity != 0
-        else None
-    )
+    latest_debt_ratio = _bounded(latest_debt / (latest_debt + latest_equity) * 100, 0, 90) if _has_valid_capital_ratio_inputs(latest_debt, latest_equity) else None
     debt_ratio = latest_debt_ratio
 
-    reinvestment_values = []
-    for year in _matching_years(capex_by_year, depreciation_by_year):
-        nopat = nopat_by_year.get(year)
-        if nopat is None:
-            continue
-        ratio = _safe_ratio(max(capex_by_year[year] - depreciation_by_year[year], 0), nopat)
-        if ratio is not None:
-            reinvestment_values.append(_bounded(ratio * 100, 0, 100))
+    reinvestment_values = [
+        _bounded(ratio * 100, 0, 100)
+        for year in _matching_years(capex_by_year, depreciation_by_year)
+        if (nopat := nopat_by_year.get(year)) is not None
+        if (ratio := _safe_ratio(max(capex_by_year[year] - depreciation_by_year[year], 0), nopat)) is not None
+    ]
     reinvestment = _average(reinvestment_values)
 
     fcff_billions = _average([free_cash_flow_by_year[year] / 1_000_000_000 for year in sorted(free_cash_flow_by_year)[-3:]])
@@ -768,16 +845,12 @@ def yahoo_statement_metrics(
     ]
     innovation = _average([min(max(value * 10, 0), 100) for value in rd_intensity_values])
 
-    debt_to_equity = (
-        latest_debt / latest_equity
-        if latest_debt is not None and latest_equity is not None and latest_equity != 0
-        else fallback.debt_ratio / max(100 - fallback.debt_ratio, 1)
-    )
+    debt_to_equity = _statement_debt_to_equity(latest_debt=latest_debt, latest_equity=latest_equity, fallback=fallback)
     levered_beta = float(info.get("beta") or fallback.unlevered_beta * (1 + (1 - tax_rate) * debt_to_equity))
     unlevered_beta = _bounded(levered_beta / (1 + (1 - tax_rate) * debt_to_equity), 0.4, 3.0)
 
     latest_interest = _latest_from_map(interest_expense_by_year) or 0
-    cost_of_debt = min(max((latest_interest / latest_debt) if latest_debt and latest_debt > 0 else 0.045, 0.01), 0.15)
+    cost_of_debt = min(max((latest_interest / latest_debt) if _has_positive_debt_balance(latest_debt) else 0.045, 0.01), 0.15)
     debt_weight = (debt_ratio or fallback.debt_ratio) / 100
     equity_weight = 1 - debt_weight
     cost_of_equity = DEFAULT_RISK_FREE_RATE + levered_beta * DEFAULT_EQUITY_RISK_PREMIUM + KOREA_COUNTRY_RISK_PREMIUM / 100
@@ -809,7 +882,7 @@ def yahoo_statement_metrics(
         growth_cagr_v2=round(growth_payload["growth_cagr"], 2) if growth_payload["growth_cagr"] is not None else None,
         roic=round(roic_output, 2),
         roic_legacy=round(float(fallback.roic), 2),
-        roic_stable_v2=round(roic_output, 2),
+        roic_stable_v2=round(float(derived_roic), 2) if derived_roic is not None else None,
         wacc=round(wacc, 2),
         debt_ratio=round(debt_ratio if debt_ratio is not None else fallback.debt_ratio, 2),
         unlevered_beta=round(unlevered_beta, 2),
@@ -876,6 +949,34 @@ def _metric_confidence(quality: str, metric_role: str) -> float:
     return round(min(max(base + role_adjustment, 0.0), 1.0), 2)
 
 
+def _assess_wacc_quality(
+    *,
+    market_cap: Optional[float],
+    latest_debt: Optional[float],
+    latest_equity: Optional[float],
+    wacc_value: float,
+) -> dict[str, object]:
+    context = WaccAuditContext(
+        market_cap=market_cap,
+        latest_debt=latest_debt,
+        latest_equity=latest_equity,
+        wacc_value=wacc_value,
+    )
+    warnings: list[str] = []
+    quality = "ok"
+    for warning_rule in WACC_WARNING_RULES:
+        if warning_rule.predicate(context):
+            quality = warning_rule.quality
+            warnings.append(warning_rule.message)
+
+    matched_rule = next((rule for rule in WACC_QUALITY_RULES if rule.predicate(context)), None)
+    reason = matched_rule.message if matched_rule is not None else None
+    if matched_rule is not None:
+        quality = matched_rule.quality
+        warnings.append(reason)
+    return {"quality": quality, "reason": reason, "warnings": warnings}
+
+
 def _derived_metric_meta(
     *,
     method: str,
@@ -916,6 +1017,120 @@ def _audit_input(
         display_value=display_value,
         source=source,
     )
+
+
+def _select_roic_record(
+    roic_records: list[dict[str, float | int | None | str | bool]],
+    *,
+    roic_basis: str,
+    roic_year: Optional[int],
+) -> dict[str, float | int | None | str | bool] | None:
+    if not roic_records:
+        return None
+    if roic_basis != "annual" or roic_year is None:
+        return roic_records[-1]
+    return next((record for record in roic_records if int(record["year"]) == roic_year), roic_records[-1])
+
+
+def _roic_value_for_basis(
+    roic_records: list[dict[str, float | int | None | str | bool]],
+    selected_roic_record: dict[str, float | int | None | str | bool] | None,
+    *,
+    roic_basis: str,
+) -> Optional[float]:
+    roic_values = [float(record["roic"]) for record in roic_records if record["roic"] is not None]
+    if roic_basis == "all_year_average":
+        return _average(roic_values)
+    if roic_basis != "annual":
+        return _average(roic_values[-3:])
+    if selected_roic_record is None:
+        return None
+    return selected_roic_record["roic"]  # type: ignore[return-value]
+
+
+def _statement_debt_ratio(
+    *,
+    latest_debt: Optional[float],
+    latest_equity: Optional[float],
+    fallback: CorporateMetrics,
+) -> float:
+    if not _has_valid_capital_ratio_inputs(latest_debt, latest_equity):
+        return max(float(fallback.debt_ratio) / 100, 0.0)
+    return _bounded(latest_debt / (latest_debt + latest_equity), 0, 0.9)
+
+
+def _has_valid_capital_ratio_inputs(latest_debt: Optional[float], latest_equity: Optional[float]) -> bool:
+    if latest_debt is None or latest_equity is None:
+        return False
+    return latest_debt + latest_equity != 0
+
+
+def _has_valid_debt_to_equity_inputs(latest_debt: Optional[float], latest_equity: Optional[float]) -> bool:
+    return latest_debt is not None and latest_equity is not None and latest_equity != 0
+
+
+def _has_positive_debt_balance(latest_debt: Optional[float]) -> bool:
+    return latest_debt is not None and latest_debt > 0
+
+
+def _statement_debt_to_equity(
+    *,
+    latest_debt: Optional[float],
+    latest_equity: Optional[float],
+    fallback: CorporateMetrics,
+) -> float:
+    if not _has_valid_debt_to_equity_inputs(latest_debt, latest_equity):
+        return max(float(fallback.debt_ratio) / max(100 - float(fallback.debt_ratio), 1), 0.0)
+    return latest_debt / latest_equity
+
+
+def _capital_weights(
+    *,
+    market_cap: Optional[float],
+    latest_debt: Optional[float],
+    debt_ratio: float,
+) -> tuple[float, float]:
+    if market_cap is None or latest_debt is None:
+        return debt_ratio, 1 - debt_ratio
+    if market_cap + latest_debt <= 0:
+        return debt_ratio, 1 - debt_ratio
+    return latest_debt / (market_cap + latest_debt), market_cap / (market_cap + latest_debt)
+
+
+def _record_value(
+    record: dict[str, float | int | None | str | bool] | None,
+    field: str,
+) -> Optional[float]:
+    if record is None:
+        return None
+    value = record[field]
+    if value is None:
+        return None
+    return float(value)
+
+
+def _record_money_display(
+    record: dict[str, float | int | None | str | bool] | None,
+    field: str,
+) -> str:
+    value = _record_value(record, field)
+    if value is None:
+        return "Unavailable"
+    return _display_money(value)
+
+
+def _metric_reason(value: object) -> str | None:
+    if value is None:
+        return None
+    return str(value)
+
+
+def _has_stable_growth_cagr(growth_payload: dict[str, object]) -> bool:
+    return growth_payload["growth_cagr"] is not None
+
+
+def _is_decision_grade_roic(roic_quality: str, roic_value: Optional[float]) -> bool:
+    return roic_quality in {"ok", "estimated"} and roic_value is not None
 
 
 def _fallback_metric_audit(
@@ -1098,11 +1313,7 @@ def metric_audit_for_ticker(
         _statement_map_from_year(income, ("Total Revenue", "Operating Revenue"), YAHOO_STATEMENT_START_YEAR - 1),
         _quarterly_flow_map(quarterly_income, ("Total Revenue", "Operating Revenue"), start_year=YAHOO_STATEMENT_START_YEAR - 1),
     )
-    current_revenue_by_year = {
-        year: value
-        for year, value in revenue_by_year.items()
-        if YAHOO_STATEMENT_START_YEAR <= year <= YAHOO_STATEMENT_END_YEAR
-    }
+    current_revenue_by_year = _current_statement_years(revenue_by_year)
     growth_payload = _stable_growth_payload(current_revenue_by_year)
     annual_growth = growth_payload["annual_growth"]
 
@@ -1145,53 +1356,34 @@ def metric_audit_for_ticker(
     roic_years = roic_payload["roic_years"]
     roic_records = roic_payload["roic_records"]
 
-    selected_roic_record = None
-    if roic_basis == "annual" and roic_year is not None:
-        selected_roic_record = next((record for record in roic_records if int(record["year"]) == roic_year), None)
-    if selected_roic_record is None and roic_records:
-        selected_roic_record = roic_records[-1]
-
-    roic_values = [float(record["roic"]) for record in roic_records if record["roic"] is not None]
-    if roic_basis == "all_year_average":
-        roic_value = _average(roic_values)
-    elif roic_basis == "annual" and selected_roic_record is not None:
-        roic_value = selected_roic_record["roic"]
-    else:
-        roic_value = _average(roic_values[-3:])
+    selected_roic_record = _select_roic_record(roic_records, roic_basis=roic_basis, roic_year=roic_year)
+    roic_value = _roic_value_for_basis(roic_records, selected_roic_record, roic_basis=roic_basis)
 
     latest_year = sorted(roic_years)[-1] if roic_years else None
     latest_debt = _latest_from_map(debt_by_year)
     latest_equity = _latest_from_map(equity_by_year)
     latest_interest = _latest_from_map(interest_expense_by_year) or 0.0
-    debt_ratio = (
-        _bounded(latest_debt / (latest_debt + latest_equity), 0, 0.9)
-        if latest_debt is not None and latest_equity is not None and latest_debt + latest_equity != 0
-        else max(float(fallback.debt_ratio) / 100, 0.0)
-    )
-    debt_to_equity = (
-        latest_debt / latest_equity
-        if latest_debt is not None and latest_equity not in (None, 0)
-        else max(float(fallback.debt_ratio) / max(100 - float(fallback.debt_ratio), 1), 0.0)
-    )
+    debt_ratio = _statement_debt_ratio(latest_debt=latest_debt, latest_equity=latest_equity, fallback=fallback)
+    debt_to_equity = _statement_debt_to_equity(latest_debt=latest_debt, latest_equity=latest_equity, fallback=fallback)
     levered_beta = float(info.get("beta") or fallback.unlevered_beta * (1 + (1 - tax_rate) * debt_to_equity))
-    cost_of_debt = min(max((latest_interest / latest_debt) if latest_debt and latest_debt > 0 else 0.045, 0.01), 0.15)
+    cost_of_debt = min(max((latest_interest / latest_debt) if _has_positive_debt_balance(latest_debt) else 0.045, 0.01), 0.15)
     cost_of_equity = DEFAULT_RISK_FREE_RATE + levered_beta * DEFAULT_EQUITY_RISK_PREMIUM + KOREA_COUNTRY_RISK_PREMIUM / 100
     market_cap = float(info.get("marketCap") or 0.0) or None
-    if market_cap is not None and latest_debt is not None and market_cap + latest_debt > 0:
-        debt_weight = latest_debt / (market_cap + latest_debt)
-        equity_weight = market_cap / (market_cap + latest_debt)
-    else:
-        debt_weight = debt_ratio
-        equity_weight = 1 - debt_weight
+    debt_weight, equity_weight = _capital_weights(
+        market_cap=market_cap,
+        latest_debt=latest_debt,
+        debt_ratio=debt_ratio,
+    )
     wacc_value = (equity_weight * cost_of_equity + debt_weight * cost_of_debt * (1 - tax_rate)) * 100
 
     latest_growth_year = int(growth_payload["revenue_points"][-1]["year"]) if growth_payload["revenue_points"] else None
     growth_as_of = f"{latest_growth_year}-12-31" if latest_growth_year is not None else None
-    growth_quality = "ok" if growth_payload["growth_cagr"] is not None else "invalid"
-    growth_reason = None if growth_payload["growth_cagr"] is not None else str(growth_payload["growth_note"])
-    growth_metric_role = "primary" if growth_payload["growth_cagr"] is not None else "fallback"
+    has_stable_growth_cagr = _has_stable_growth_cagr(growth_payload)
+    growth_quality = "ok" if has_stable_growth_cagr else "invalid"
+    growth_reason = None if has_stable_growth_cagr else str(growth_payload["growth_note"])
+    growth_metric_role = "primary" if has_stable_growth_cagr else "fallback"
     growth_confidence = _metric_confidence(growth_quality, growth_metric_role)
-    growth_value = float(growth_payload["growth_cagr"]) if growth_payload["growth_cagr"] is not None else float(fallback.growth)
+    growth_value = float(growth_payload["growth_cagr"]) if has_stable_growth_cagr else float(fallback.growth)
     dcf_placeholder = CorporateMetricAuditEntry(
         value=None,
         display_value="Unavailable",
@@ -1206,58 +1398,26 @@ def metric_audit_for_ticker(
         calculation_version="dcf_v1_summary_placeholder",
     )
 
-    roic_warnings: list[str] = []
-    roic_quality = "ok"
-    roic_reason = None
-    if not roic_records:
-        roic_quality = "missing"
-        roic_reason = "No overlapping Yahoo statement years were available to compute ROIC."
-    else:
-        selected_average_capital = (
-            float(selected_roic_record["average_invested_capital"])
-            if selected_roic_record and selected_roic_record["average_invested_capital"] is not None
-            else None
-        )
-        if roic_basis != "annual":
-            roic_warnings.append(f"ROIC uses {roic_basis.replace('_', ' ')} rather than a single fiscal year.")
-            roic_quality = "estimated"
-        if tax_result["tax_rate_source"] == "fallback_default":
-            roic_warnings.append(str(tax_result["tax_rate_note"]))
-            roic_quality = "estimated"
-        if selected_roic_record and not bool(selected_roic_record["used_previous_capital"]):
-            roic_warnings.append(str(selected_roic_record["average_invested_capital_note"]))
-            roic_quality = "estimated"
-        if selected_average_capital is None:
-            roic_quality = "invalid"
-            roic_reason = str(selected_roic_record["average_invested_capital_note"]) if selected_roic_record else "Average invested capital is missing or non-positive."
-        elif selected_average_capital <= 0:
-            roic_quality = "invalid"
-            roic_reason = "Average invested capital is missing or non-positive."
-        elif selected_average_capital is not None and selected_roic_record and selected_roic_record["nopat"] is not None:
-            nopat_value = abs(float(selected_roic_record["nopat"]))
-            if selected_average_capital < max(nopat_value * 0.1, 1.0):
-                roic_quality = "suspicious"
-                roic_reason = "Average invested capital is unusually small relative to NOPAT."
-        elif roic_value is not None and abs(float(roic_value)) > MAX_ABS_ROIC * 100:
-            roic_quality = "suspicious"
-            roic_reason = "ROIC exceeds the configured sanity range."
-    if roic_reason:
-        roic_warnings.append(roic_reason)
+    roic_assessment = _assess_roic_quality(
+        roic_records=roic_records,
+        selected_roic_record=selected_roic_record,
+        roic_basis=roic_basis,
+        tax_result=tax_result,
+        derived_roic=roic_value,
+    )
+    roic_quality = str(roic_assessment["quality"])
+    roic_reason = _metric_reason(roic_assessment["reason"])
+    roic_warnings = list(roic_assessment["warnings"])
 
-    wacc_warnings: list[str] = []
-    wacc_quality = "ok"
-    wacc_reason = None
-    if market_cap is None:
-        wacc_quality = "estimated"
-        wacc_warnings.append("Market capitalization was unavailable, so debt and equity weights fall back to statement debt ratio.")
-    if latest_debt is None or latest_equity is None:
-        wacc_quality = "invalid"
-        wacc_reason = "Debt or equity inputs are missing, so capital structure cannot be audited reliably."
-    elif wacc_value <= 0 or wacc_value > 40:
-        wacc_quality = "suspicious"
-        wacc_reason = "WACC falls outside the expected sanity range."
-    if wacc_reason:
-        wacc_warnings.append(wacc_reason)
+    wacc_assessment = _assess_wacc_quality(
+        market_cap=market_cap,
+        latest_debt=latest_debt,
+        latest_equity=latest_equity,
+        wacc_value=wacc_value,
+    )
+    wacc_quality = str(wacc_assessment["quality"])
+    wacc_reason = _metric_reason(wacc_assessment["reason"])
+    wacc_warnings = list(wacc_assessment["warnings"])
 
     source_as_of = f"{latest_year}-12-31" if latest_year is not None else None
     roic_source = "Yahoo Finance annual or quarterly statement bundle"
@@ -1304,21 +1464,21 @@ def metric_audit_for_ticker(
             quality=roic_quality,
             reason=roic_reason,
             warnings=roic_warnings,
-            confidence=_metric_confidence(roic_quality, "primary" if roic_quality in {"ok", "estimated"} and roic_value is not None else "fallback"),
+            confidence=_metric_confidence(roic_quality, "primary" if _is_decision_grade_roic(roic_quality, roic_value) else "fallback"),
             inputs_used=[
                 _audit_input(
                     field="operating_income",
                     label="Operating income / EBIT",
-                    value=float(selected_roic_record["operating_income"]) if selected_roic_record and selected_roic_record["operating_income"] is not None else None,
-                    display_value=_display_money(float(selected_roic_record["operating_income"])) if selected_roic_record and selected_roic_record["operating_income"] is not None else "Unavailable",
+                    value=_record_value(selected_roic_record, "operating_income"),
+                    display_value=_record_money_display(selected_roic_record, "operating_income"),
                     source=roic_source,
                 ),
                 _audit_input(field="tax_rate", label="Tax rate", value=round(tax_rate, 6), display_value=_display_percent(tax_rate * 100), source=str(tax_result["tax_rate_source"])),
                 _audit_input(
                     field="nopat",
                     label="NOPAT",
-                    value=float(selected_roic_record["nopat"]) if selected_roic_record and selected_roic_record["nopat"] is not None else None,
-                    display_value=_display_money(float(selected_roic_record["nopat"])) if selected_roic_record and selected_roic_record["nopat"] is not None else "Unavailable",
+                    value=_record_value(selected_roic_record, "nopat"),
+                    display_value=_record_money_display(selected_roic_record, "nopat"),
                     source=roic_source,
                 ),
                 _audit_input(field="total_debt", label="Total debt", value=latest_debt, display_value=_display_money(latest_debt), source=roic_source),
@@ -1326,29 +1486,29 @@ def metric_audit_for_ticker(
                 _audit_input(
                     field="invested_capital",
                     label="Invested capital",
-                    value=float(selected_roic_record["invested_capital_ending"]) if selected_roic_record and selected_roic_record["invested_capital_ending"] is not None else None,
-                    display_value=_display_money(float(selected_roic_record["invested_capital_ending"])) if selected_roic_record and selected_roic_record["invested_capital_ending"] is not None else "Unavailable",
+                    value=_record_value(selected_roic_record, "invested_capital_ending"),
+                    display_value=_record_money_display(selected_roic_record, "invested_capital_ending"),
                     source=roic_source,
                 ),
                 _audit_input(
                     field="invested_capital_beginning",
                     label="Beginning invested capital",
-                    value=float(selected_roic_record["invested_capital_beginning"]) if selected_roic_record and selected_roic_record["invested_capital_beginning"] is not None else None,
-                    display_value=_display_money(float(selected_roic_record["invested_capital_beginning"])) if selected_roic_record and selected_roic_record["invested_capital_beginning"] is not None else "Unavailable",
+                    value=_record_value(selected_roic_record, "invested_capital_beginning"),
+                    display_value=_record_money_display(selected_roic_record, "invested_capital_beginning"),
                     source=roic_source,
                 ),
                 _audit_input(
                     field="invested_capital_ending",
                     label="Ending invested capital",
-                    value=float(selected_roic_record["invested_capital_ending"]) if selected_roic_record and selected_roic_record["invested_capital_ending"] is not None else None,
-                    display_value=_display_money(float(selected_roic_record["invested_capital_ending"])) if selected_roic_record and selected_roic_record["invested_capital_ending"] is not None else "Unavailable",
+                    value=_record_value(selected_roic_record, "invested_capital_ending"),
+                    display_value=_record_money_display(selected_roic_record, "invested_capital_ending"),
                     source=roic_source,
                 ),
                 _audit_input(
                     field="average_invested_capital",
                     label="Average invested capital",
-                    value=float(selected_roic_record["average_invested_capital"]) if selected_roic_record and selected_roic_record["average_invested_capital"] is not None else None,
-                    display_value=_display_money(float(selected_roic_record["average_invested_capital"])) if selected_roic_record and selected_roic_record["average_invested_capital"] is not None else "Unavailable",
+                    value=_record_value(selected_roic_record, "average_invested_capital"),
+                    display_value=_record_money_display(selected_roic_record, "average_invested_capital"),
                     source=roic_source,
                 ),
                 _audit_input(field="final_roic_value", label="Final ROIC value", value=round(float(roic_value), 2) if roic_value is not None else None, display_value=_display_percent(round(float(roic_value), 2), precision=1) if roic_value is not None else "N/A", source=f"Computed from {roic_basis} basis"),
@@ -1469,8 +1629,10 @@ def yahoo_metric_history(ticker: str, bundle_loader=get_yahoo_statement_bundle) 
         "ticker": ticker,
         "start_year": YAHOO_STATEMENT_START_YEAR,
         "country_risk_premium": KOREA_COUNTRY_RISK_PREMIUM,
+        "growth_calculation_version": "growth_v2_stable_cagr",
         "growth_cagr": growth_payload["growth_cagr"],
         "growth_recent_average": growth_payload["growth_recent_average"],
+        "roic_calculation_version": "roic_v3_stable_invested_capital",
         "annual_growth_rates": _annual_metric_rows(annual_growth),
         "roic_recent_average": _roic_value(roic_points, "recent_average", None),
         "roic_all_year_average": _roic_value(roic_points, "all_year_average", None),

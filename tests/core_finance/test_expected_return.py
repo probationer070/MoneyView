@@ -6,9 +6,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import pytest
 
 from packages.core_finance.expected_return import (
+    ExpectedReturnInputs,
     calculate_capm_expected_return,
     calculate_dcf_implied_return,
     calculate_expected_return_spread,
+    calculate_expected_return_result,
     calculate_market_expected_return,
 )
 
@@ -31,3 +33,21 @@ def test_calculate_dcf_implied_return_handles_missing_price():
 
 def test_calculate_expected_return_spread_subtracts_market_return():
     assert calculate_expected_return_spread(0.2, 0.097) == pytest.approx(0.103)
+
+
+def test_calculate_expected_return_result_returns_stable_value_object():
+    result = calculate_expected_return_result(
+        ExpectedReturnInputs(
+            current_price=100.0,
+            intrinsic_value=120.0,
+            risk_free_rate=0.042,
+            equity_risk_premium=0.055,
+            beta=1.2,
+        )
+    )
+
+    assert result.dcf_implied_return == pytest.approx(0.2)
+    assert result.capm_expected_return == pytest.approx(0.108)
+    assert result.stock_expected_return == pytest.approx(result.dcf_implied_return)
+    assert result.market_expected_return == pytest.approx(0.097)
+    assert result.expected_return_spread == pytest.approx(0.103)

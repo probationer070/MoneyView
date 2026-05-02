@@ -239,6 +239,30 @@ test("corporate page refresh labels stale source-data cache for a different sele
   const stats = corporateStats();
   await seedSessionStorage(page, {
     [CORPORATE_ACTIVE_TICKER_KEY]: "MSFT",
+    [CORPORATE_DCF_CACHE_KEY]: {
+      snapshot: {
+        ticker: "AAPL",
+        growth: 6,
+        roic: 18,
+        wacc: 10,
+        debtRatio: 18,
+        unleveredBeta: 1.05,
+        crp: 0.8,
+        reinvestment: 34,
+        fcff: 92,
+        esgPenalty: 22,
+      },
+      result: {
+        estimated_value: 199.9,
+        current_price: 180.2,
+        upside_pct: 10.93,
+        wacc_used: 0.1,
+        margin_used: 0.18,
+        growth_used: 0.06,
+        status: "Cached",
+      },
+      lastUpdatedAt: "2026-04-10T10:00:00Z",
+    },
     [CORPORATE_METRIC_HISTORY_CACHE_KEY]: {
       snapshot: "AAPL",
       result: {
@@ -276,10 +300,12 @@ test("corporate page refresh labels stale source-data cache for a different sele
   await page.goto("/corporate", { waitUntil: "domcontentloaded" });
 
   await expect(page.getByText(/Microsoft: life cycle/i)).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByRole("button", { name: /Backend DCF/i })).toContainText("Refresh to calculate");
+  await expect(page.getByRole("button", { name: /Backend DCF/i })).not.toContainText("$199.9");
   await expect(page.getByText("Cached source data is for AAPL. Refresh for MSFT.")).toBeVisible();
-  await page.getByLabel("Growth Basis").selectOption("annual");
-  await expect(page.getByText("2025 Growth unavailable from Yahoo statements. Retaining the current/manual Growth Rate value.")).toBeVisible();
+  await expect(page.getByText("Growth Rate now stays on the stable CAGR path. Annual growth rates remain available in View Details for context.")).toBeVisible();
   await page.waitForTimeout(300);
+  expect(stats.dcfRequests).toBe(0);
   expect(stats.metricHistoryRequests).toBe(0);
   expect(stats.quarterlyRequests).toBe(0);
   expect(stats.ohlcvRequests).toBe(0);
@@ -323,7 +349,7 @@ test("portfolio renders cached analysis without auto-fetch, refreshes on demand,
         comparisonUniverse: "portfolio_plus_benchmark",
         benchmarkTicker: "^GSPC",
         customTickersInput: "",
-        holdingsSignature: "AAPL:0.350000|MSFT:0.250000|GOOGL:0.000000|TSLA:0.000000|005930.KS:0.000000",
+        holdingsSignature: "AAPL:0.200000|MSFT:0.200000|NVDA:0.200000|GOOGL:0.200000|AMZN:0.200000",
       },
       result: {
         market_expected_return: 9.7,
@@ -382,7 +408,7 @@ test("portfolio renders cached analysis without auto-fetch, refreshes on demand,
         comparisonUniverse: "portfolio_plus_benchmark",
         benchmarkTicker: "^GSPC",
         customTickersInput: "",
-        holdingsSignature: "AAPL:0.350000|MSFT:0.250000|GOOGL:0.000000|TSLA:0.000000|005930.KS:0.000000",
+        holdingsSignature: "AAPL:0.200000|MSFT:0.200000|NVDA:0.200000|GOOGL:0.200000|AMZN:0.200000",
       },
       result: {
         comparison_universe: "portfolio_plus_benchmark",
@@ -409,8 +435,8 @@ test("portfolio renders cached analysis without auto-fetch, refreshes on demand,
     },
     [PORTFOLIO_ATTRIBUTION_CACHE_KEY]: {
       snapshot: {
-        tickers: ["AAPL", "MSFT", "GOOGL", "TSLA", "005930.KS"],
-        weights: [0.35, 0.25, 0, 0, 0],
+        tickers: ["AAPL", "MSFT", "NVDA", "GOOGL", "AMZN"],
+        weights: [0.2, 0.2, 0.2, 0.2, 0.2],
         benchmarkTicker: "^GSPC",
         holdingStartDate: "",
         attributionAsOfDate: "",
@@ -501,6 +527,15 @@ test("portfolio renders cached analysis without auto-fetch, refreshes on demand,
   await expect.poll(() => stats.comparisonHistoryRequests).toBe(1);
   await expect.poll(() => stats.attributionRequests).toBe(1);
   await expect(page.getByText(/Refreshing portfolio comparison, snapshot history, and attribution\./)).toBeVisible();
+
+  await page.getByLabel("Add to Watchlist only").check();
+  await page.getByLabel("Ticker", { exact: true }).fill("ORCL");
+  await page.getByLabel("Name", { exact: true }).fill("Oracle");
+  await page.getByLabel("Sector", { exact: true }).fill("Software");
+  await page.getByRole("button", { name: "Save Manual Ticker" }).click();
+  await expect(page.getByText("Saved ORCL as a tracked holding with 0.0% portfolio allocation.")).toBeVisible();
+  await page.waitForTimeout(300);
+  expect(stats.attributionRequests).toBe(1);
 
   expect(stats.stockDetailRequests).toBe(0);
   expect(stats.stockSnapshotHistoryRequests).toBe(0);

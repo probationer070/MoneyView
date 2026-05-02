@@ -735,7 +735,12 @@ def test_init_db_adds_comparison_universe_columns_for_legacy_snapshot_tables(tmp
         legacy_columns = {row["name"] for row in conn.execute("PRAGMA table_info(corporate_comparison_snapshots)")}
         v2_columns = {row["name"] for row in conn.execute("PRAGMA table_info(corporate_comparison_snapshots_v2)")}
         v3_columns = {row["name"] for row in conn.execute("PRAGMA table_info(corporate_comparison_snapshots_v3)")}
+        v3_indexes = {row["name"] for row in conn.execute("PRAGMA index_list(corporate_comparison_snapshots_v3)")}
 
     assert "comparison_universe" in legacy_columns
     assert {"universe_key", "comparison_universe", "benchmark_ticker", "custom_tickers"}.issubset(v2_columns)
     assert {"universe_key", "comparison_universe", "benchmark_ticker", "custom_tickers"}.issubset(v3_columns)
+    assert {
+        "idx_corporate_comparison_snapshots_v3_universe_date",
+        "idx_corporate_comparison_snapshots_v3_ticker_universe_date",
+    }.issubset(v3_indexes)

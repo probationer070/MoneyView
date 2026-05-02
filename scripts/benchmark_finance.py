@@ -28,13 +28,17 @@ from apps.api.core.maths import (  # noqa: E402
     historical_expected_shortfall,
     historical_var,
 )
+from apps.api.models.schema_parts.market import StockOHLCV  # noqa: E402
+from apps.api.services.market_data import MarketDataService  # noqa: E402
 from packages.core_finance import (  # noqa: E402
     bottom_up_beta,
+    build_roic_records,
     calculate_crp,
     calculate_npv,
     calculate_wacc,
     monte_carlo_npv,
     multi_stage_dcf,
+    stable_growth_payload,
     wacc_sensitivity,
 )
 
@@ -126,6 +130,59 @@ def run_finance_benchmarks(iterations: int, monte_carlo_runs: int, vector_size: 
         "wacc": 0.085,
         "terminal_growth": 0.025,
     }
+    technical_bars = [
+        StockOHLCV(
+            date=f"2024-{((idx // 28) % 12) + 1:02d}-{(idx % 28) + 1:02d}",
+            open=100.0 + idx * 0.05,
+            high=101.0 + idx * 0.05,
+            low=99.0 + idx * 0.05,
+            close=100.0 + idx * 0.05 + float(rng.normal(0, 0.6)),
+            volume=1_000_000 + idx * 100,
+        )
+        for idx in range(vector_size)
+    ]
+    revenue_by_year = {
+        2021: 1_000_000_000.0,
+        2022: 1_080_000_000.0,
+        2023: 1_175_000_000.0,
+        2024: 1_260_000_000.0,
+        2025: 1_350_000_000.0,
+    }
+    operating_income_by_year = {
+        2021: 180_000_000.0,
+        2022: 192_000_000.0,
+        2023: 210_000_000.0,
+        2024: 226_000_000.0,
+        2025: 241_000_000.0,
+    }
+    pretax_income_by_year = {
+        2021: 160_000_000.0,
+        2022: 176_000_000.0,
+        2023: 196_000_000.0,
+        2024: 211_000_000.0,
+        2025: 225_000_000.0,
+    }
+    tax_expense_by_year = {
+        2021: 34_000_000.0,
+        2022: 38_000_000.0,
+        2023: 42_000_000.0,
+        2024: 45_000_000.0,
+        2025: 48_000_000.0,
+    }
+    debt_by_year = {
+        2021: 210_000_000.0,
+        2022: 220_000_000.0,
+        2023: 235_000_000.0,
+        2024: 242_000_000.0,
+        2025: 250_000_000.0,
+    }
+    equity_by_year = {
+        2021: 750_000_000.0,
+        2022: 810_000_000.0,
+        2023: 870_000_000.0,
+        2024: 930_000_000.0,
+        2025: 995_000_000.0,
+    }
 
     return [
         _time_call("core_finance:npv-10-cashflows", iterations, lambda: calculate_npv(cash_flows, 0.09)),
@@ -174,6 +231,27 @@ def run_finance_benchmarks(iterations: int, monte_carlo_runs: int, vector_size: 
             f"maths:historical-es-{vector_size}",
             iterations,
             lambda: historical_expected_shortfall(returns, confidence_level=0.95, horizon_days=1),
+        ),
+        _time_call(
+            f"market:technical-indicators-{vector_size}",
+            iterations,
+            lambda: MarketDataService._compute_technicals("AAPL", technical_bars),
+        ),
+        _time_call(
+            "corporate:stable-growth-5-years",
+            iterations,
+            lambda: stable_growth_payload(revenue_by_year),
+        ),
+        _time_call(
+            "corporate:roic-records-5-years",
+            iterations,
+            lambda: build_roic_records(
+                operating_income_by_year=operating_income_by_year,
+                pretax_income_by_year=pretax_income_by_year,
+                tax_expense_by_year=tax_expense_by_year,
+                debt_by_year=debt_by_year,
+                equity_by_year=equity_by_year,
+            ),
         ),
     ]
 

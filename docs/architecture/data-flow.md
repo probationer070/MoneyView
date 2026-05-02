@@ -24,6 +24,7 @@ These rules apply across most MoneyView workflows:
 - the backend owns canonical API responses and persistence orchestration
 - frontend adapters may reshape response payloads for charts, but they do not redefine the underlying calculations
 - browser workers are allowed for exploratory simulation flows that do not require backend persistence
+- cache ownership, query keys, TTLs, invalidation scope, and stale-read tolerances are documented in `docs/architecture/cache-ownership-invalidation.md`
 
 ## 3. Portfolio Attribution Pipeline
 

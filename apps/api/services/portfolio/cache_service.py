@@ -1,17 +1,23 @@
 from __future__ import annotations
 
+import os
 from hashlib import sha256
 
 from cachetools import TTLCache
 
 from apps.api.models.schemas import AttributionRequest, AttributionResult, ReportPayload, ReportSummaryRequest
 
+ATTRIBUTION_CACHE_MAXSIZE = int(os.getenv("MONEYVIEW_ATTRIBUTION_CACHE_MAXSIZE", "128"))
+ATTRIBUTION_CACHE_TTL_SECONDS = int(os.getenv("MONEYVIEW_ATTRIBUTION_CACHE_TTL_SECONDS", "180"))
+REPORT_CACHE_MAXSIZE = int(os.getenv("MONEYVIEW_REPORT_CACHE_MAXSIZE", "64"))
+REPORT_CACHE_TTL_SECONDS = int(os.getenv("MONEYVIEW_REPORT_CACHE_TTL_SECONDS", "180"))
+
 
 class CacheService:
     """Owns portfolio attribution/report cache keys and reads/writes."""
 
-    _attribution_cache = TTLCache(maxsize=512, ttl=300)
-    _report_cache = TTLCache(maxsize=256, ttl=300)
+    _attribution_cache = TTLCache(maxsize=ATTRIBUTION_CACHE_MAXSIZE, ttl=ATTRIBUTION_CACHE_TTL_SECONDS)
+    _report_cache = TTLCache(maxsize=REPORT_CACHE_MAXSIZE, ttl=REPORT_CACHE_TTL_SECONDS)
 
     def attribution_cache_key(self, request: AttributionRequest) -> str:
         profile = request.risk_profile

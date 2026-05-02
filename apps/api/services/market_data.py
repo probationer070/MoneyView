@@ -12,13 +12,16 @@ import os
 import sys
 import threading
 import time
-from datetime import date, datetime, timedelta
+from dataclasses import dataclass
+from json import JSONDecodeError
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import List
 
 import numpy as np
 import pandas as pd
 import requests
+from cachetools import TTLCache
 
 # Allow importing from project root for API package execution.
 _ROOT = Path(__file__).resolve().parents[3]
@@ -30,8 +33,43 @@ from apps.api.services.db import get_db
 
 logger = logging.getLogger(__name__)
 
+YAHOO_PROVIDER_ERRORS = (
+    requests.RequestException,
+    ValueError,
+    KeyError,
+    IndexError,
+    TypeError,
+    JSONDecodeError,
+)
+
 DEFAULT_OHLCV_PERIOD = "5y"
 DEFAULT_OHLCV_DAYS = 1825
+PROVIDER_FETCH_CACHE_TTL_SECONDS = int(os.getenv("MONEYVIEW_LIVE_FETCH_CACHE_TTL_SECONDS", "30"))
+PROVIDER_FETCH_CACHE_MAXSIZE = int(os.getenv("MONEYVIEW_LIVE_FETCH_CACHE_MAXSIZE", "96"))
+
+
+@dataclass(frozen=True)
+class MarketDataFreshnessRule:
+    """Explicit cache coverage rule for a requested OHLCV period."""
+
+    period: str
+    days: int
+    minimum_coverage_ratio: float = 0.9
+
+    @property
+    def minimum_span_days(self) -> int:
+        return int(self.days * self.minimum_coverage_ratio)
+
+
+OHLCV_FRESHNESS_RULES = {
+    "1w": MarketDataFreshnessRule("1w", 7),
+    "1mo": MarketDataFreshnessRule("1mo", 30),
+    "3mo": MarketDataFreshnessRule("3mo", 90),
+    "6mo": MarketDataFreshnessRule("6mo", 180),
+    "1y": MarketDataFreshnessRule("1y", 365),
+    "2y": MarketDataFreshnessRule("2y", 730),
+    "5y": MarketDataFreshnessRule("5y", DEFAULT_OHLCV_DAYS),
+}
 
 MARKET_INDICES = {
     "S&P 500": "^GSPC",
@@ -78,6 +116,15 @@ class MarketDataService:
     _refresh_lock = threading.Lock()
     _inflight_refreshes: set[str] = set()
     _refresh_failures: dict[str, dict[str, str]] = {}
+    _provider_fetch_cache = TTLCache(maxsize=PROVIDER_FETCH_CACHE_MAXSIZE, ttl=PROVIDER_FETCH_CACHE_TTL_SECONDS)
+
+    @staticmethod
+    def _freshness_rule(period: str) -> MarketDataFreshnessRule:
+        return OHLCV_FRESHNESS_RULES.get(period, OHLCV_FRESHNESS_RULES[DEFAULT_OHLCV_PERIOD])
+
+    @classmethod
+    def _copy_bars(cls, rows: List[StockOHLCV]) -> List[StockOHLCV]:
+        return [StockOHLCV(**row.model_dump()) for row in rows]
 
     @staticmethod
     def _row_get(row, key: str, default=0):
@@ -246,7 +293,7 @@ class MarketDataService:
             used_live_refresh=used_live_refresh,
             used_stale_cache_fallback=used_stale_cache_fallback,
             requested_period=requested_period,
-            last_updated=datetime.utcnow().replace(microsecond=0).isoformat() + "Z",
+            last_updated=datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
             latest_trading_date=latest_trading_date,
             detail_note=detail_note,
         )
@@ -258,15 +305,7 @@ class MarketDataService:
         table: str = "stocks",
     ) -> tuple[List[StockOHLCV], MarketDataQuality]:
         ticker = ticker.upper()
-        period_days = {
-            "1w": 7,
-            "1mo": 30,
-            "3mo": 90,
-            "6mo": 180,
-            "1y": 365,
-            "2y": 730,
-            "5y": 1825,
-        }.get(period, DEFAULT_OHLCV_DAYS)
+        freshness_rule = self._freshness_rule(period)
 
         with get_db() as conn:
             tickers = self._query_tickers(ticker, table)
@@ -276,12 +315,12 @@ class MarketDataService:
                     WHERE ticker IN ({placeholders})
                     ORDER BY date DESC
                     LIMIT ?""",
-                (*tickers, period_days),
+                (*tickers, freshness_rule.days),
             ).fetchall()
 
         if not rows:
             logger.info("OHLCV cache miss for %s; fetching live data", ticker)
-            live_rows = self._fetch_live_ohlcv(ticker, period)
+            live_rows = self._fetch_live_ohlcv_cached(ticker, period=period, table=table)
             latest_date = live_rows[-1].date if live_rows else None
             return live_rows, self._build_data_quality(
                 source="live_fetch",
@@ -294,7 +333,7 @@ class MarketDataService:
             )
 
         rows_fresh = self._rows_are_fresh(rows)
-        rows_cover_period = self._rows_cover_period(rows, period_days)
+        rows_cover_period = self._rows_cover_period(rows, freshness_rule)
         cached_rows = list(reversed(self._rows_to_ohlcv(rows)))
         latest_cached_date = cached_rows[-1].date if cached_rows else None
         if not rows_fresh or not rows_cover_period:
@@ -307,9 +346,9 @@ class MarketDataService:
                 oldest.isoformat() if oldest else "unknown",
                 period,
             )
-            live_rows = self._fetch_live_ohlcv(ticker, period)
+            live_rows = self._fetch_live_ohlcv_cached(ticker, period=period, table=table)
             if live_rows:
-                live_rows = live_rows[-period_days:]
+                live_rows = live_rows[-freshness_rule.days:]
                 latest_live_date = live_rows[-1].date if live_rows else latest_cached_date
                 return live_rows, self._build_data_quality(
                     source="live_refresh",
@@ -371,13 +410,13 @@ class MarketDataService:
         latest = self._latest_row_date(rows)
         return latest is not None and latest >= self._previous_trading_day()
 
-    def _rows_cover_period(self, rows, period_days: int) -> bool:
+    def _rows_cover_period(self, rows, period: int | MarketDataFreshnessRule) -> bool:
         latest = self._latest_row_date(rows)
         oldest = self._oldest_row_date(rows)
         if latest is None or oldest is None:
             return False
-        required_span_days = int(period_days * 0.9)
-        return (latest - oldest).days >= required_span_days
+        freshness_rule = MarketDataFreshnessRule("custom", period) if isinstance(period, int) else period
+        return (latest - oldest).days >= freshness_rule.minimum_span_days
 
     @staticmethod
     def _query_tickers(ticker: str, table: str) -> List[str]:
@@ -401,15 +440,7 @@ class MarketDataService:
         period: str = DEFAULT_OHLCV_PERIOD,
         table: str = "stocks",
     ):
-        period_days = {
-            "1w": 7,
-            "1mo": 30,
-            "3mo": 90,
-            "6mo": 180,
-            "1y": 365,
-            "2y": 730,
-            "5y": 1825,
-        }.get(period, DEFAULT_OHLCV_DAYS)
+        freshness_rule = self._freshness_rule(period)
         with get_db() as conn:
             tickers = self._query_tickers(ticker.upper(), table)
             placeholders = ",".join("?" for _ in tickers)
@@ -418,7 +449,7 @@ class MarketDataService:
                     WHERE ticker IN ({placeholders})
                     ORDER BY date DESC
                     LIMIT ?""",
-                (*tickers, period_days),
+                (*tickers, freshness_rule.days),
             ).fetchall()
 
     def _fetch_live_ohlcv_with_retry(
@@ -433,7 +464,7 @@ class MarketDataService:
         backoff_seconds = base_backoff_seconds or float(os.getenv("MONEYVIEW_PRICE_FETCH_BACKOFF_SECONDS", "0.5"))
         last_rows: List[StockOHLCV] = []
         for attempt in range(1, max_attempts + 1):
-            last_rows = self._fetch_live_ohlcv(ticker, period)
+            last_rows = self._fetch_live_ohlcv_cached(ticker, period=period, table=self._table_for_ticker(ticker))
             if last_rows:
                 if attempt > 1:
                     logger.info("Recovered live OHLCV fetch for %s on retry %d", ticker, attempt)
@@ -449,6 +480,39 @@ class MarketDataService:
                 )
                 time.sleep(sleep_seconds)
         return last_rows
+
+    def _fetch_live_ohlcv_cached(
+        self,
+        ticker: str,
+        *,
+        period: str = DEFAULT_OHLCV_PERIOD,
+        table: str | None = None,
+    ) -> List[StockOHLCV]:
+        normalized_ticker = ticker.upper()
+        resolved_table = table or self._table_for_ticker(normalized_ticker)
+        key = self._refresh_key(normalized_ticker, period, resolved_table)
+        now = datetime.now(timezone.utc)
+
+        with self._refresh_lock:
+            cached = self._provider_fetch_cache.get(key)
+            if cached is not None:
+                fetched_at, rows = cached
+                age_seconds = (now - fetched_at).total_seconds()
+                if age_seconds < PROVIDER_FETCH_CACHE_TTL_SECONDS:
+                    logger.info(
+                        "OHLCV provider cache hit for %s period=%s age_seconds=%.2f",
+                        normalized_ticker,
+                        period,
+                        age_seconds,
+                    )
+                    return self._copy_bars(rows)
+                self._provider_fetch_cache.pop(key, None)
+
+        rows = self._fetch_live_ohlcv(normalized_ticker, period)
+        if rows:
+            with self._refresh_lock:
+                self._provider_fetch_cache[key] = (now, self._copy_bars(rows))
+        return rows
 
     def _refresh_ohlcv_in_background(
         self,
@@ -470,7 +534,7 @@ class MarketDataService:
                 logger.warning("Background OHLCV hydration failed for %s after all retries", ticker)
                 with self._refresh_lock:
                     self._refresh_failures[key] = {
-                        "failed_at": datetime.utcnow().replace(microsecond=0).isoformat() + "Z",
+                        "failed_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
                         "detail_note": "Live provider fetch failed after all retries for this cold cache miss.",
                     }
             finally:
@@ -749,39 +813,45 @@ class MarketDataService:
         """Fetch from yfinance first; fall back to Yahoo chart API."""
         try:
             import yfinance as yf
-
-            df = yf.Ticker(ticker).history(period=period)
-            if df.empty:
-                raise ValueError("empty yfinance history")
-            df.reset_index(inplace=True)
-            df = self._normalise_date(df)
-
-            rows = [
-                StockOHLCV(
-                    date=str(row.get("Date", "")),
-                    open=float(row.get("Open", 0) or 0),
-                    high=float(row.get("High", 0) or 0),
-                    low=float(row.get("Low", 0) or 0),
-                    close=float(row.get("Close", 0) or 0),
-                    volume=int(row.get("Volume", 0) or 0),
-                    dividends=float(row.get("Dividends", 0) or 0),
-                    stock_splits=float(row.get("Stock Splits", 0) or 0),
-                )
-                for _, row in df.iterrows()
-            ]
-            self._save_ohlcv_rows(ticker, rows)
-            logger.info("Fetched and cached %d bars for %s", len(rows), ticker)
-            return rows
-        except Exception as exc:
-            logger.warning("yfinance fetch failed for %s: %s", ticker, exc)
+        except ImportError as exc:
+            logger.warning("yfinance import failed for %s: %s", ticker, exc)
+        else:
             try:
-                rows = self._fetch_yahoo_chart_ohlcv(ticker, period)
-                if rows:
-                    logger.info("Fetched %d Yahoo chart bars for %s", len(rows), ticker)
-                return rows
-            except Exception as yahoo_exc:
-                logger.warning("Yahoo chart fetch failed for %s: %s", ticker, yahoo_exc)
-                return []
+                df = yf.Ticker(ticker).history(period=period)
+            except YAHOO_PROVIDER_ERRORS as exc:
+                logger.warning("yfinance fetch failed for %s: %s", ticker, exc)
+            else:
+                if df.empty:
+                    logger.warning("yfinance fetch returned no bars for %s", ticker)
+                else:
+                    df.reset_index(inplace=True)
+                    df = self._normalise_date(df)
+
+                    rows = [
+                        StockOHLCV(
+                            date=str(row.get("Date", "")),
+                            open=float(row.get("Open", 0) or 0),
+                            high=float(row.get("High", 0) or 0),
+                            low=float(row.get("Low", 0) or 0),
+                            close=float(row.get("Close", 0) or 0),
+                            volume=int(row.get("Volume", 0) or 0),
+                            dividends=float(row.get("Dividends", 0) or 0),
+                            stock_splits=float(row.get("Stock Splits", 0) or 0),
+                        )
+                        for _, row in df.iterrows()
+                    ]
+                    self._save_ohlcv_rows(ticker, rows)
+                    logger.info("Fetched and cached %d bars for %s", len(rows), ticker)
+                    return rows
+
+        try:
+            rows = self._fetch_yahoo_chart_ohlcv(ticker, period)
+            if rows:
+                logger.info("Fetched %d Yahoo chart bars for %s", len(rows), ticker)
+            return rows
+        except YAHOO_PROVIDER_ERRORS as yahoo_exc:
+            logger.warning("Yahoo chart fetch failed for %s: %s", ticker, yahoo_exc)
+            return []
 
     def get_stock_ohlcv(
         self,

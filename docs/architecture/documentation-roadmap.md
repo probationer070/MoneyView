@@ -25,6 +25,7 @@ The following files are the intended long-term architecture set under `docs/arch
 | `moneyview-quant-engine.md` | Canonical finance-engine specification, formulas, numerical conventions, theory | frontend presentation detail or HTTP transport discussion |
 | `data-flow.md` | End-to-end workflows and calculation pipelines | top-level product framing |
 | `storage-model.md` | SQLite, file cache, seed artifacts, retention, source-of-truth rules | route catalog or UI behavior detail |
+| `cqrs-read-write-separation.md` | Command/query ownership, read-model adoption rules, projection boundaries | generic CQRS theory or implementation-free wish lists |
 | `visualization-metrics.md` | KPI and chart semantics, filters, drill-downs, ownership of metric meaning | full component implementation walkthroughs |
 
 ## 3. Planned Additions
@@ -44,10 +45,11 @@ For a new engineer, reviewer, or future agent, use this order:
 2. `moneyview-overview.md`
 3. `moneyview-system-design.md`
 4. `storage-model.md`
-5. `moneyview-api-reference.md`
-6. `moneyview-quant-engine.md`
-7. `data-flow.md`
-8. `visualization-metrics.md`
+5. `cqrs-read-write-separation.md`
+6. `moneyview-api-reference.md`
+7. `moneyview-quant-engine.md`
+8. `data-flow.md`
+9. `visualization-metrics.md`
 
 ## 5. Writing Order For Documentation Work
 
@@ -58,10 +60,11 @@ When expanding or rebuilding the docs, write in this order:
 3. `moneyview-overview.md`
 4. `moneyview-system-design.md`
 5. `storage-model.md`
-6. `moneyview-api-reference.md`
-7. `moneyview-quant-engine.md`
-8. `data-flow.md`
-9. `visualization-metrics.md`
+6. `cqrs-read-write-separation.md`
+7. `moneyview-api-reference.md`
+8. `moneyview-quant-engine.md`
+9. `data-flow.md`
+10. `visualization-metrics.md`
 
 The goal is to stabilize scope and boundaries before documenting contracts, formulas, and visualization semantics.
 
@@ -75,6 +78,7 @@ Use these rules to decide where a concept belongs:
 - Put canonical formulas, engine module definitions, and numerical constraints in `moneyview-quant-engine.md`.
 - Put user-action-to-output execution paths in `data-flow.md`.
 - Put local persistence ownership and seed/cache behavior in `storage-model.md`.
+- Put command/query ownership, read-model adoption rules, and projection boundaries in `cqrs-read-write-separation.md`.
 - Put KPI meaning and chart semantics in `visualization-metrics.md`.
 
 If a concept appears in more than one document, keep one canonical explanation and link to it from the others.

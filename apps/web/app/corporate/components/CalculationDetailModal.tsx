@@ -287,7 +287,7 @@ export function CalculationDetailModal({
       <div className="space-y-5">
         {detail.auditMetric ? (
           metricAuditIsLoading ? (
-            <SectionCard title="Calculation Audit" description="Loading auditable ROIC/WACC inputs for the selected metric.">
+            <SectionCard title="Calculation Audit" description="Loading auditable inputs for the selected metric.">
               <EmptyState title="Loading calculation audit..." />
             </SectionCard>
           ) : metricAuditIsError ? (
@@ -298,7 +298,7 @@ export function CalculationDetailModal({
             <MetricAuditPanel
               audit={metricAudit}
               metric={detail.auditMetric}
-              title={detail.auditMetric === "spread" ? "ROIC - WACC Audit" : `${detail.auditMetric.toUpperCase()} Audit`}
+              title={detail.auditMetric === "spread" ? "ROIC - WACC Audit" : detail.auditMetric === "growth" ? "Growth Audit" : `${detail.auditMetric.toUpperCase()} Audit`}
             />
           )
         ) : null}

@@ -36,7 +36,7 @@ export function MetricAuditPanel({
   title,
 }: {
   audit: CorporateMetricAudit | null;
-  metric: "roic" | "wacc" | "spread";
+  metric: "growth" | "roic" | "wacc" | "spread";
   title: string;
 }) {
   if (!audit) {
@@ -44,6 +44,10 @@ export function MetricAuditPanel({
   }
 
   const entry = audit[metric];
+  if (!entry) {
+    return <EmptyState title={`${title} audit unavailable`} description="Refresh or reopen the metric detail to load the calculation audit." />;
+  }
+
   return (
     <section className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">

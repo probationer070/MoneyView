@@ -2,6 +2,9 @@ __pycache__
 *.code-workspace
 .vscode
 .pytest_cache
+.pytest-basetemp/
+.tmp/
+.tmp-codex-pytest/
 
 apikey*
 filtered_stocks.csv
@@ -24,4 +27,11 @@ config/*.local.env
 data/cache/
 data/raw/
 data/processed/
+apps/web/.next/
+.next/
 yt_extractor/
+pytest*/
+pytest-*
+*.db
+*.sqlite
+*.sqlite3

@@ -1,0 +1,15 @@
+.git/
+.next/
+apps/web/.next/
+.pytest_cache/
+.pytest-basetemp/
+.tmp/
+.tmp-codex-pytest/
+pytest*/
+pytest-*
+data/cache/
+data/processed/
+data/raw/
+*.db
+*.sqlite
+*.sqlite3

@@ -14,10 +14,11 @@ def _row(row_date: date) -> dict:
     }
 
 
-def test_rows_cover_period_rejects_fresh_one_year_cache_for_five_year_request():
+def test_rows_cover_period_rejects_fresh_one_year_cache_for_five_year_request(monkeypatch):
     service = MarketDataService()
     latest = date(2026, 4, 8)
     rows = [_row(latest - timedelta(days=offset)) for offset in range(365)]
+    monkeypatch.setattr(service, "_previous_trading_day", lambda today=None: latest)
 
     assert service._rows_are_fresh(rows)
     assert not service._rows_cover_period(rows, 1825)

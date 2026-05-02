@@ -83,6 +83,34 @@ def test_get_stock_ohlcv_with_metadata_returns_stale_cache_fallback_when_live_re
     assert "fell back to the latest cached history" in metadata.detail_note
 
 
+def test_get_stock_ohlcv_reuses_recent_live_fetch_for_adjacent_endpoints(tmp_path, monkeypatch):
+    db_path = tmp_path / "moneyview.db"
+    monkeypatch.setattr(db_service, "_DB_PATH", db_path)
+    db_service.init_db()
+    MarketDataService._provider_fetch_cache.clear()
+
+    service = MarketDataService()
+    calls: list[tuple[str, str]] = []
+    live_rows = [
+        StockOHLCV(date="2026-04-09", open=99, high=102, low=98, close=101, volume=1_000),
+        StockOHLCV(date="2026-04-10", open=101, high=104, low=100, close=103, volume=1_200),
+    ]
+
+    def fake_fetch(ticker: str, period: str = "5y"):
+        calls.append((ticker, period))
+        return live_rows
+
+    monkeypatch.setattr(service, "_fetch_live_ohlcv", fake_fetch)
+
+    first = service.get_stock_ohlcv("AAPL", period="5y")
+    second = service.get_stock_ohlcv("AAPL", period="5y")
+
+    assert [bar.close for bar in first] == [101, 103]
+    assert [bar.close for bar in second] == [101, 103]
+    assert calls == [("AAPL", "5y")]
+    assert first is not second
+
+
 def test_get_index_detail_shapes_instrument_metadata(monkeypatch):
     service = MarketDataService()
     sample_bars = [

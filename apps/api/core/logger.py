@@ -15,12 +15,22 @@ class ConsoleFormatter(logging.Formatter):
     default_msec_format = "%s.%03d"
 
     @staticmethod
+    def _first_present(*values):
+        for value in values:
+            if value not in (None, ""):
+                return value
+        return ""
+
+    @staticmethod
     def _request_summary(record: logging.LogRecord, *, failed: bool = False) -> str:
         source = "api.request"
         method = getattr(record, "method", "") or "-"
         path = getattr(record, "path", "") or "-"
         status = getattr(record, "status_code", "") or (500 if failed else "-")
-        elapsed_ms = getattr(record, "duration_ms", "") or getattr(record, "elapsed_ms", "")
+        elapsed_ms = ConsoleFormatter._first_present(
+            getattr(record, "duration_ms", ""),
+            getattr(record, "elapsed_ms", ""),
+        )
         parts = [
             f"src={source}",
             f"{method} {path}",
@@ -41,7 +51,10 @@ class ConsoleFormatter(logging.Formatter):
         method = getattr(record, "method", "") or "-"
         path = getattr(record, "path", "") or "-"
         status = getattr(record, "status_code", "")
-        elapsed_ms = getattr(record, "elapsed_ms", "") or getattr(record, "duration_ms", "")
+        elapsed_ms = ConsoleFormatter._first_present(
+            getattr(record, "elapsed_ms", ""),
+            getattr(record, "duration_ms", ""),
+        )
         transport_kind = getattr(record, "transport_kind", "") or "http"
 
         parts = [

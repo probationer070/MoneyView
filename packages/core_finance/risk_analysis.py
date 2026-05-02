@@ -139,7 +139,7 @@ def monte_carlo_npv(
                 sampled[var] = mean
         try:
             results[i] = npv_function(**sampled)
-        except Exception:
+        except (ArithmeticError, FloatingPointError, TypeError, ValueError):
             results[i] = 0.0
 
     counts, edges = np.histogram(results, bins=20)

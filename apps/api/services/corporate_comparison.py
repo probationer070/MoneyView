@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import sqlite3
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Callable
 from zoneinfo import ZoneInfo
@@ -16,9 +18,8 @@ from apps.api.models.schemas import (
 )
 from apps.api.services.db import get_db
 from packages.core_finance.expected_return import (
-    calculate_capm_expected_return,
-    calculate_dcf_implied_return,
-    calculate_expected_return_spread,
+    ExpectedReturnInputs,
+    calculate_expected_return_result,
     calculate_market_expected_return,
 )
 
@@ -32,6 +33,12 @@ DEFAULT_COMPARISON_UNIVERSE = "portfolio_plus_benchmark"
 DEFAULT_BENCHMARK_TICKER = "^GSPC"
 BENCHMARK_GROUP_NAME = "benchmark"
 DEFAULT_TAX_RATE = 0.21
+
+
+@dataclass(frozen=True)
+class _CompanyUniverseData:
+    registry: dict[str, dict[str, object]]
+    watchlist_rows: list[dict[str, object]]
 
 
 def build_corporate_comparison_response(
@@ -96,7 +103,7 @@ def build_corporate_comparison_response(
             risk_free_rate=risk_free_rate,
             equity_risk_premium=equity_risk_premium,
         )
-    except Exception:
+    except (sqlite3.Error, ValueError, KeyError):
         if latest_snapshot is not None:
             latest_snapshot.snapshot.snapshot_is_stale = True
             return latest_snapshot
@@ -265,12 +272,13 @@ def _build_live_rows(
     risk_free_rate: float,
     equity_risk_premium: float,
 ) -> list[CorporateComparisonRow]:
-    company_registry = _load_company_registry(default_companies)
+    company_data = _load_company_universe_data(default_companies)
     universe_rows = _resolve_comparison_universe_rows(
         comparison_universe=comparison_universe,
         benchmark_ticker=benchmark_ticker,
         custom_tickers=custom_tickers,
-        company_registry=company_registry,
+        company_registry=company_data.registry,
+        watchlist_payload=company_data.watchlist_rows,
     )
 
     rows: list[CorporateComparisonRow] = []
@@ -289,8 +297,8 @@ def _build_live_rows(
         rows.append(
             CorporateComparisonRow(
                 ticker=ticker,
-                name=str(row["name"] or company_registry.get(ticker, {}).get("name") or ticker),
-                sector=str(row["sector"] or company_registry.get(ticker, {}).get("sector", "")),
+                name=str(row["name"] or company_data.registry.get(ticker, {}).get("name") or ticker),
+                sector=str(row["sector"] or company_data.registry.get(ticker, {}).get("sector", "")),
                 group_name=str(row["group_name"] or "custom"),
                 weight=float(row["weight"] or 0.0),
                 roic=round(float(metrics.roic), 2),
@@ -340,26 +348,24 @@ def _dcf_snapshot(
     else:
         estimated_value = enterprise_value * agency_discount
 
-    stock_expected_return = calculate_dcf_implied_return(current_price, estimated_value) * 100
-    market_expected_return = _market_expected_return_pct(risk_free_rate, equity_risk_premium)
-    capm_expected_return = calculate_capm_expected_return(
-        risk_free_rate,
-        equity_risk_premium,
-        _levered_beta_from_metrics(metrics),
-    ) * 100
-    expected_return_spread = calculate_expected_return_spread(
-        stock_expected_return / 100,
-        market_expected_return / 100,
-    ) * 100
+    expected_returns = calculate_expected_return_result(
+        ExpectedReturnInputs(
+            current_price=current_price,
+            intrinsic_value=estimated_value,
+            risk_free_rate=risk_free_rate,
+            equity_risk_premium=equity_risk_premium,
+            beta=_levered_beta_from_metrics(metrics),
+        )
+    )
 
     return {
         "estimated_value": round(float(estimated_value), 2),
         "current_price": round(float(current_price), 2),
-        "dcf_implied_return": round(float(stock_expected_return), 2),
-        "capm_expected_return": round(float(capm_expected_return), 2),
-        "stock_expected_return": round(float(stock_expected_return), 2),
-        "market_expected_return": round(float(market_expected_return), 2),
-        "expected_return_spread": round(float(expected_return_spread), 2),
+        "dcf_implied_return": round(float(expected_returns.dcf_implied_return * 100), 2),
+        "capm_expected_return": round(float(expected_returns.capm_expected_return * 100), 2),
+        "stock_expected_return": round(float(expected_returns.stock_expected_return * 100), 2),
+        "market_expected_return": round(float(expected_returns.market_expected_return * 100), 2),
+        "expected_return_spread": round(float(expected_returns.expected_return_spread * 100), 2),
         "status": "Undervalued" if current_price > 0 and estimated_value > current_price else "Overvalued",
     }
 
@@ -816,6 +822,10 @@ def _snapshot_business_date() -> str:
 
 
 def _load_company_registry(default_companies: dict[str, dict[str, str]]) -> dict[str, dict[str, object]]:
+    return _load_company_universe_data(default_companies).registry
+
+
+def _load_company_universe_data(default_companies: dict[str, dict[str, str]]) -> _CompanyUniverseData:
     registry: dict[str, dict[str, object]] = {
         ticker.upper(): {
             "ticker": ticker.upper(),
@@ -826,6 +836,7 @@ def _load_company_registry(default_companies: dict[str, dict[str, str]]) -> dict
         }
         for ticker, payload in default_companies.items()
     }
+    watchlist_payload: list[dict[str, object]] = []
     with get_db() as conn:
         watchlist_rows = conn.execute(
             """SELECT ticker, name, sector, group_name, weight
@@ -842,6 +853,15 @@ def _load_company_registry(default_companies: dict[str, dict[str, str]]) -> dict
         ticker = str(row["ticker"] or "").upper().strip()
         if not ticker:
             continue
+        watchlist_payload.append(
+            {
+                "ticker": ticker,
+                "name": row["name"] or "",
+                "sector": row["sector"] or "",
+                "group_name": row["group_name"] or "custom",
+                "weight": float(row["weight"] or 0.0),
+            }
+        )
         registry[ticker] = {
             "ticker": ticker,
             "name": row["name"] or registry.get(ticker, {}).get("name") or ticker,
@@ -863,7 +883,7 @@ def _load_company_registry(default_companies: dict[str, dict[str, str]]) -> dict
             "weight": float(existing.get("weight", 0.0)),
         }
 
-    return registry
+    return _CompanyUniverseData(registry=registry, watchlist_rows=watchlist_payload)
 
 
 def _resolve_comparison_universe_rows(
@@ -872,14 +892,8 @@ def _resolve_comparison_universe_rows(
     benchmark_ticker: str,
     custom_tickers: list[str],
     company_registry: dict[str, dict[str, object]],
+    watchlist_payload: list[dict[str, object]],
 ) -> list[dict[str, object]]:
-    with get_db() as conn:
-        watchlist_rows = conn.execute(
-            """SELECT ticker, name, sector, group_name, weight
-               FROM watchlist
-               ORDER BY group_name, ticker"""
-        ).fetchall()
-
     normalized_benchmark = _normalize_benchmark_ticker(benchmark_ticker)
 
     if comparison_universe == "custom":
@@ -890,18 +904,6 @@ def _resolve_comparison_universe_rows(
         if normalized_benchmark:
             rows.append(_benchmark_row_for_ticker(normalized_benchmark, company_registry))
         return _dedupe_rows(rows)
-
-    watchlist_payload = [
-        {
-            "ticker": str(row["ticker"] or "").upper().strip(),
-            "name": row["name"] or "",
-            "sector": row["sector"] or "",
-            "group_name": row["group_name"] or "custom",
-            "weight": float(row["weight"] or 0.0),
-        }
-        for row in watchlist_rows
-        if str(row["ticker"] or "").upper().strip()
-    ]
 
     if comparison_universe == "portfolio_plus_benchmark":
         positive_rows = [row for row in watchlist_payload if float(row["weight"]) > 0]

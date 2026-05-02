@@ -1,4 +1,5 @@
 import sys
+from types import SimpleNamespace
 from pathlib import Path
 
 import pandas as pd
@@ -7,7 +8,16 @@ from fastapi.testclient import TestClient
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from apps.api.main import app
+from apps.api.models.schemas import CorporateMetrics
 from apps.api.services import db as db_service
+from apps.api.services.corporate_statement_metrics import (
+    WACC_QUALITY_RULES,
+    WACC_SANITY_RULE,
+    WACC_WARNING_RULES,
+    _YAHOO_STATEMENT_CACHE,
+    get_yahoo_statement_bundle,
+    metric_audit_for_ticker,
+)
 
 
 def _make_frame(rows: dict[str, dict[str, float]]) -> pd.DataFrame:
@@ -36,6 +46,118 @@ def _init_test_db(tmp_path, monkeypatch):
     db_path = tmp_path / "moneyview.db"
     monkeypatch.setattr(db_service, "_DB_PATH", db_path)
     db_service.init_db()
+
+
+def _fallback_metrics() -> CorporateMetrics:
+    return CorporateMetrics(
+        ticker="AAPL",
+        growth=6.0,
+        roic=18.0,
+        wacc=10.0,
+        debt_ratio=18.0,
+        unlevered_beta=1.05,
+        crp=0.8,
+        reinvestment=34.0,
+        fcff=92.0,
+        innovation=82.0,
+        market_share=64.0,
+        governance=74.0,
+        esg_penalty=22.0,
+        growth_avg_legacy=5.0,
+        growth_cagr_v2=6.0,
+        roic_legacy=17.0,
+        roic_stable_v2=18.0,
+    )
+
+
+def test_wacc_policy_rules_expose_named_sanity_and_quality_data():
+    assert WACC_SANITY_RULE.name == "wacc_percent"
+    assert WACC_SANITY_RULE.minimum == 0.0
+    assert WACC_SANITY_RULE.maximum == 40.0
+    assert [rule.name for rule in WACC_WARNING_RULES] == ["missing_market_cap"]
+    assert [rule.name for rule in WACC_QUALITY_RULES] == [
+        "missing_capital_structure_inputs",
+        "wacc_outside_sanity_range",
+    ]
+
+
+def test_metric_audit_uses_saved_metric_fallback_when_provider_bundle_is_missing():
+    audit = metric_audit_for_ticker(
+        "aapl",
+        _fallback_metrics(),
+        has_saved_metrics=True,
+        bundle_loader=lambda ticker, endpoint: None,
+    )
+
+    assert audit.ticker == "AAPL"
+    assert audit.source_mode == "corporate_metrics"
+    assert audit.growth.quality == "estimated"
+    assert audit.growth.method == "fallback_growth_assumption"
+    assert audit.growth.source == "SQLite corporate_metrics fallback"
+    assert audit.growth.calculation_version == "growth_v2_stable_cagr"
+    assert audit.roic.quality == "estimated"
+    assert audit.roic.method == "stable_invested_capital"
+    assert audit.roic.source == "SQLite corporate_metrics fallback"
+    assert audit.roic.calculation_version == "roic_v3_stable_invested_capital"
+    assert audit.wacc.quality == "estimated"
+    assert audit.wacc.method == "latest_capital_structure"
+    assert audit.spread.quality == "estimated"
+    assert audit.spread.value == 8.0
+    assert audit.dcf is not None
+    assert audit.dcf.quality == "missing"
+
+
+def test_metric_audit_uses_default_model_fallback_when_provider_and_saved_metrics_are_missing():
+    audit = metric_audit_for_ticker(
+        "aapl",
+        _fallback_metrics(),
+        has_saved_metrics=False,
+        bundle_loader=lambda ticker, endpoint: None,
+    )
+
+    assert audit.ticker == "AAPL"
+    assert audit.source_mode == "default_model"
+    assert audit.growth.source == "Deterministic default model fallback"
+    assert audit.roic.source == "Deterministic default model fallback"
+    assert audit.wacc.source == "Deterministic default model fallback"
+    assert audit.growth.warnings == [
+        "Yahoo statement inputs were unavailable, so the UI is using saved or deterministic fallback assumptions."
+    ]
+    assert audit.roic.inputs_used[0].field == "final_roic_value"
+    assert audit.roic.inputs_used[0].value == 18.0
+    assert audit.spread.inputs_used[0].field == "roic"
+    assert audit.spread.inputs_used[1].field == "wacc"
+    assert audit.growth.calculation_version == "growth_v2_stable_cagr"
+    assert audit.roic.calculation_version == "roic_v3_stable_invested_capital"
+
+
+def test_yahoo_statement_bundle_returns_none_for_known_provider_missing_data(monkeypatch):
+    class MissingDataTicker:
+        @property
+        def financials(self):
+            raise ValueError("provider returned malformed statement payload")
+
+    _YAHOO_STATEMENT_CACHE.clear()
+    monkeypatch.setitem(sys.modules, "yfinance", SimpleNamespace(Ticker=lambda ticker: MissingDataTicker()))
+
+    assert get_yahoo_statement_bundle("KNOWNMISS", "audit") is None
+
+
+def test_yahoo_statement_bundle_does_not_hide_unexpected_provider_bug(monkeypatch):
+    class BuggyTicker:
+        @property
+        def financials(self):
+            raise RuntimeError("unexpected provider bug")
+
+    _YAHOO_STATEMENT_CACHE.clear()
+    monkeypatch.setitem(sys.modules, "yfinance", SimpleNamespace(Ticker=lambda ticker: BuggyTicker()))
+
+    try:
+        get_yahoo_statement_bundle("BUGGY", "audit")
+    except RuntimeError as exc:
+        assert str(exc) == "unexpected provider bug"
+    else:
+        raise AssertionError("unexpected provider bugs should not be converted to missing data")
 
 
 def test_metric_audit_marks_missing_roic_when_yahoo_years_do_not_overlap(tmp_path, monkeypatch):
@@ -185,3 +307,55 @@ def test_metric_audit_marks_suspicious_when_average_invested_capital_is_too_smal
     assert payload["roic"]["inputs_used"]
     assert payload["wacc"]["inputs_used"]
     assert payload["spread"]["inputs_used"]
+
+
+def test_metric_audit_surfaces_fallback_tax_rate_and_keeps_unified_payload(tmp_path, monkeypatch):
+    _init_test_db(tmp_path, monkeypatch)
+    from apps.api.routes import corporate as corporate_route
+
+    monkeypatch.setattr(
+        corporate_route,
+        "_get_yahoo_statement_bundle",
+        lambda ticker, endpoint: _make_bundle(
+            income_rows={
+                "2024-12-31": {
+                    "Total Revenue": 1_000_000.0,
+                    "Operating Income": 100_000.0,
+                    "Pretax Income": -10_000.0,
+                    "Tax Provision": 5_000.0,
+                    "Interest Expense": 5_000.0,
+                },
+                "2025-12-31": {
+                    "Total Revenue": 1_100_000.0,
+                    "Operating Income": 120_000.0,
+                    "Pretax Income": 0.0,
+                    "Tax Provision": 7_000.0,
+                    "Interest Expense": 5_000.0,
+                },
+            },
+            balance_rows={
+                "2024-12-31": {
+                    "Total Debt": 2_000_000.0,
+                    "Stockholders Equity": 8_000_000.0,
+                },
+                "2025-12-31": {
+                    "Total Debt": 2_200_000.0,
+                    "Stockholders Equity": 8_200_000.0,
+                },
+            },
+            info={"beta": 1.05},
+        ),
+    )
+
+    client = TestClient(app)
+    response = client.get("/api/v1/corporate/metrics/AAPL/audit")
+    assert response.status_code == 200
+
+    payload = response.json()
+    assert set(payload) >= {"growth", "roic", "wacc", "dcf"}
+    assert payload["roic"]["quality"] == "estimated"
+    assert payload["roic"]["method"] == "stable_invested_capital"
+    assert payload["roic"]["warnings"][0] == "ROIC uses recent average rather than a single fiscal year."
+    assert "No valid positive statement tax rate found." in payload["roic"]["warnings"]
+    tax_rate = next(item for item in payload["roic"]["inputs_used"] if item["field"] == "tax_rate")
+    assert tax_rate["source"] == "fallback_default"

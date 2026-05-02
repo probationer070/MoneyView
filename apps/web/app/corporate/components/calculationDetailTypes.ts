@@ -49,5 +49,5 @@ export interface CalculationDetail {
   result: string;
   sourcing: CalculationRow[];
   simulation: CalculationRow[];
-  auditMetric?: "roic" | "wacc" | "spread";
+  auditMetric?: "growth" | "roic" | "wacc" | "spread";
 }
