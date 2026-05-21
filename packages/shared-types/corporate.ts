@@ -2,6 +2,11 @@ export interface DcfSummary {
   report_id: string;
   ticker: string;
   estimated_value: number;
+  intrinsic_value_per_share: number | null;
+  enterprise_value: number;
+  equity_value: number | null;
+  valuation_method: string;
+  bridge_quality: string;
   current_price: number;
   upside_pct: number;
   status: string;
@@ -47,6 +52,13 @@ export interface DcfFullReport {
   present_value_of_terminal: number;
   present_value_of_fcff: number;
   enterprise_value: number;
+  equity_value: number | null;
+  intrinsic_value_per_share: number | null;
+  net_debt: number | null;
+  non_operating_assets: number | null;
+  diluted_shares_outstanding: number | null;
+  valuation_method: string;
+  bridge_quality: string;
   agency_discount: number;
   dcf_multiple: number;
   baseline_multiple: number;

@@ -34,7 +34,7 @@ Examples:
 - `Active Return`
 - `Beta`
 - `ROIC - WACC`
-- DCF fair value
+- intrinsic DCF value
 - expected return spread
 - report summary metrics
 - API log tail metadata
@@ -682,18 +682,19 @@ Expose local runtime-health and sensitivity context without requiring the user t
 - Meaning: visual placement of spread and success probability in risk-return space.
 - Source: derived values on the page.
 - Ownership: hybrid, with `Success Probability` still UI-defined.
+- Caveat: this is a frontend heuristic scenario chart, not a statistically calibrated probability model or audited NPV model.
 
 ### DCF Core Modules
 
-- Meaning: breakdown of sustainable growth, terminal value share, FCFF, and backend fair-value context.
+- Meaning: breakdown of sustainable growth, terminal value share, FCFF, and backend intrinsic-value context.
 - Source: backend DCF result plus active assumptions.
 - Ownership: backend DCF methodology; frontend graph composition.
 
 ## 5.3 Backend DCF summary and reports
 
-### Backend Fair Value
+### Intrinsic DCF Value
 
-- Meaning: point estimate from backend DCF request.
+- Meaning: intrinsic value point estimate from backend DCF request.
 - Source: `/api/v1/corporate/dcf/{ticker}`.
 - Ownership: backend.
 - Drill-down: opens the detailed DCF modal and can request full report.
@@ -755,11 +756,11 @@ Expose local runtime-health and sensitivity context without requiring the user t
 - `ROIC - WACC`
   - Meaning: value-creation spread.
 - `DCF Value`
-  - Meaning: backend fair-value estimate.
+  - Meaning: backend intrinsic-value estimate.
 - `Current Price`
   - Meaning: live or cached current price when available, else `N/A`.
 - `DCF Return`
-  - Meaning: DCF-implied return from price to fair value.
+  - Meaning: DCF-implied return from current price to intrinsic value.
 - `CAPM Return`
   - Meaning: CAPM-based equity return estimate.
 - `Market Return`

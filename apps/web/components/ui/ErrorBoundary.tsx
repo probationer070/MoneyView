@@ -1,11 +1,13 @@
 "use client";
 
 import React from "react";
+import { emitClientPerformanceEvent } from "@/lib/api";
 
 interface BoundaryProps {
     children: React.ReactNode;
     fallbackTitle?: string;
     fallbackMessage?: string;
+    monitorComponent?: string;
 }
 
 interface BoundaryState {
@@ -25,8 +27,20 @@ export class ErrorBoundary extends React.Component<BoundaryProps, BoundaryState>
     }
 
     componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-        // Here we would link into external logging observability platforms like Sentry
         console.error("UI Render Blocked by Error Boundary:", error, errorInfo);
+        void emitClientPerformanceEvent({
+            level: "error",
+            scope: "chart",
+            operation: "chart.render_error",
+            status: "error",
+            route: typeof window !== "undefined" ? window.location.pathname : null,
+            component: this.props.monitorComponent ?? this.props.fallbackTitle ?? "error_boundary",
+            error_code: "react_render_failure",
+            message: error.message,
+            metadata: {
+                has_component_stack: Boolean(errorInfo.componentStack),
+            },
+        });
     }
 
     render() {

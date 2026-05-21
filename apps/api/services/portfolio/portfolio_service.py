@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 
 import numpy as np
 
+from apps.api.core.dev_monitor import perf_timer
 from apps.api.core.maths import aggregate_weighted_return
 from apps.api.models.schemas import (
     AttributionDataContract,
@@ -52,123 +53,131 @@ class PortfolioAnalyticsService:
         return datetime.now(timezone.utc).isoformat()
 
     def build_attribution(self, request: AttributionRequest) -> AttributionResult:
-        cache_key = self.cache.attribution_cache_key(request)
-        cached = self.cache.get_attribution(cache_key)
-        if cached is not None:
-            return cached
+        with perf_timer(
+            scope="calculation",
+            operation="calculation.portfolio_attribution",
+            component="portfolio_attribution",
+            metadata={"benchmark": request.benchmark.upper(), "ticker_count": len(request.tickers)},
+        ):
+            cache_key = self.cache.attribution_cache_key(request)
+            cached = self.cache.get_attribution(cache_key)
+            if cached is not None:
+                return cached
 
-        portfolio_hash = request.portfolio_hash()
-        tickers = request.tickers
-        weights = np.array(request.weights, dtype=float)
-        synthetic_tickers: set[str] = set()
-        ticker_return_values = []
-        for ticker in tickers:
-            ticker_return, synthetic_used = self.data.scalar_return(
-                ticker,
-                request.period,
-                date_from=request.date_from,
-                as_of_date=request.as_of_date,
-                allow_synthetic_fallback=request.allow_synthetic_fallback,
-            )
-            if synthetic_used:
-                synthetic_tickers.add(ticker)
-            ticker_return_values.append(ticker_return)
-        ticker_returns = np.array(ticker_return_values, dtype=float)
+            portfolio_hash = request.portfolio_hash()
+            tickers = request.tickers
+            weights = np.array(request.weights, dtype=float)
+            synthetic_tickers: set[str] = set()
+            ticker_return_values = []
+            for ticker in tickers:
+                ticker_return, synthetic_used = self.data.scalar_return(
+                    ticker,
+                    request.period,
+                    date_from=request.date_from,
+                    as_of_date=request.as_of_date,
+                    allow_synthetic_fallback=request.allow_synthetic_fallback,
+                )
+                if synthetic_used:
+                    synthetic_tickers.add(ticker)
+                ticker_return_values.append(ticker_return)
+            ticker_returns = np.array(ticker_return_values, dtype=float)
 
-        portfolio_return = aggregate_weighted_return(weights, ticker_returns)
-        if request.benchmark_weights is not None:
-            benchmark_return = aggregate_weighted_return(
-                np.array(request.benchmark_weights, dtype=float),
-                ticker_returns,
-            )
-        else:
-            benchmark_return, benchmark_synthetic = self.data.scalar_return(
-                request.benchmark.upper(),
-                request.period,
-                date_from=request.date_from,
-                as_of_date=request.as_of_date,
-                allow_synthetic_fallback=request.allow_synthetic_fallback,
-            )
-            if benchmark_synthetic:
-                synthetic_tickers.add(request.benchmark.upper())
+            portfolio_return = aggregate_weighted_return(weights, ticker_returns)
+            if request.benchmark_weights is not None:
+                benchmark_return = aggregate_weighted_return(
+                    np.array(request.benchmark_weights, dtype=float),
+                    ticker_returns,
+                )
+            else:
+                benchmark_return, benchmark_synthetic = self.data.scalar_return(
+                    request.benchmark.upper(),
+                    request.period,
+                    date_from=request.date_from,
+                    as_of_date=request.as_of_date,
+                    allow_synthetic_fallback=request.allow_synthetic_fallback,
+                )
+                if benchmark_synthetic:
+                    synthetic_tickers.add(request.benchmark.upper())
 
-        sector_map = self.data.sector_map(tickers)
-        sectors = [sector_map.get(ticker, "UNCLASSIFIED") for ticker in tickers]
+            sector_map = self.data.sector_map(tickers)
+            sectors = [sector_map.get(ticker, "UNCLASSIFIED") for ticker in tickers]
 
-        (
-            benchmark_sector_weights,
-            benchmark_sector_returns,
-            benchmark_source,
-            benchmark_proxy_used,
-            benchmark_proxy_method,
-        ) = self.benchmark.sector_profile(
-            request=request,
-            sectors=sectors,
-            ticker_returns=ticker_returns,
-            benchmark_total_return=benchmark_return,
-        )
-
-        sector_breakdowns, effect_totals = self.attr.calculate_sector_breakdowns(
-            sectors=sectors,
-            portfolio_weights=weights,
-            ticker_returns=ticker_returns,
-            benchmark_sector_weights=benchmark_sector_weights,
-            benchmark_sector_returns=benchmark_sector_returns,
-            benchmark_total_return=benchmark_return,
-        )
-        allocation, selection, interaction = effect_totals
-        risk_metrics, risk_synthetic_tickers = self.risk.calculate(request)
-        synthetic_tickers.update(risk_synthetic_tickers)
-
-        limitations = []
-        if benchmark_proxy_used:
-            limitations.append(
-                "Benchmark sector weights use an explicit equal-sector proxy, not true benchmark constituent weights."
-            )
-        if synthetic_tickers:
-            limitations.append(
-                "Synthetic deterministic returns were used for missing price series because allow_synthetic_fallback=true."
+            (
+                benchmark_sector_weights,
+                benchmark_sector_returns,
+                benchmark_source,
+                benchmark_proxy_used,
+                benchmark_proxy_method,
+            ) = self.benchmark.sector_profile(
+                request=request,
+                sectors=sectors,
+                ticker_returns=ticker_returns,
+                benchmark_total_return=benchmark_return,
             )
 
-        attribution_result = AttributionResult(
-            totals=AttributionTotals(
-                portfolio_return=float(portfolio_return),
-                benchmark_return=float(benchmark_return),
-            ),
-            active_return=float(portfolio_return - benchmark_return),
-            effects=AttributionEffects(
-                allocation=allocation,
-                selection=selection,
-                interaction=interaction,
-            ),
-            sector_breakdowns=sector_breakdowns,
-            risk_metrics=risk_metrics,
-            metadata=AttributionMetadata(
-                method=request.attribution_method,
-                benchmark=request.benchmark.upper(),
-                benchmark_weights_source=benchmark_source,
-                period=request.period,
-                generated_at=self._now_iso(),
-                portfolio_hash=portfolio_hash,
-                cache_key=cache_key,
-                cache_hit=False,
-                data_contract=AttributionDataContract(
-                    return_frequency=request.return_frequency,
-                    rebalancing_assumption=request.rebalancing,
-                    currency=request.currency.upper(),
+            with perf_timer(scope="calculation", operation="calculation.attribution_effects", component="portfolio_attribution", metadata={"ticker_count": len(tickers)}):
+                sector_breakdowns, effect_totals = self.attr.calculate_sector_breakdowns(
+                    sectors=sectors,
+                    portfolio_weights=weights,
+                    ticker_returns=ticker_returns,
+                    benchmark_sector_weights=benchmark_sector_weights,
+                    benchmark_sector_returns=benchmark_sector_returns,
+                    benchmark_total_return=benchmark_return,
+                )
+            allocation, selection, interaction = effect_totals
+            with perf_timer(scope="metric", operation="metric.risk_metrics", component="portfolio_risk", metadata={"ticker_count": len(tickers)}):
+                risk_metrics, risk_synthetic_tickers = self.risk.calculate(request)
+            synthetic_tickers.update(risk_synthetic_tickers)
+
+            limitations = []
+            if benchmark_proxy_used:
+                limitations.append(
+                    "Benchmark sector weights use an explicit equal-sector proxy, not true benchmark constituent weights."
+                )
+            if synthetic_tickers:
+                limitations.append(
+                    "Synthetic deterministic returns were used for missing price series because allow_synthetic_fallback=true."
+                )
+
+            attribution_result = AttributionResult(
+                totals=AttributionTotals(
+                    portfolio_return=float(portfolio_return),
+                    benchmark_return=float(benchmark_return),
                 ),
-                data_quality=AttributionDataQuality(
-                    synthetic_data_used=bool(synthetic_tickers),
-                    synthetic_tickers=sorted(synthetic_tickers),
-                    benchmark_proxy_used=benchmark_proxy_used,
-                    benchmark_proxy_method=benchmark_proxy_method,
-                    limitations=limitations,
+                active_return=float(portfolio_return - benchmark_return),
+                effects=AttributionEffects(
+                    allocation=allocation,
+                    selection=selection,
+                    interaction=interaction,
                 ),
-            ),
-        )
+                sector_breakdowns=sector_breakdowns,
+                risk_metrics=risk_metrics,
+                metadata=AttributionMetadata(
+                    method=request.attribution_method,
+                    benchmark=request.benchmark.upper(),
+                    benchmark_weights_source=benchmark_source,
+                    period=request.period,
+                    generated_at=self._now_iso(),
+                    portfolio_hash=portfolio_hash,
+                    cache_key=cache_key,
+                    cache_hit=False,
+                    data_contract=AttributionDataContract(
+                        return_frequency=request.return_frequency,
+                        rebalancing_assumption=request.rebalancing,
+                        currency=request.currency.upper(),
+                    ),
+                    data_quality=AttributionDataQuality(
+                        synthetic_data_used=bool(synthetic_tickers),
+                        synthetic_tickers=sorted(synthetic_tickers),
+                        benchmark_proxy_used=benchmark_proxy_used,
+                        benchmark_proxy_method=benchmark_proxy_method,
+                        limitations=limitations,
+                    ),
+                ),
+            )
 
-        self.cache.set_attribution(cache_key, attribution_result)
-        return attribution_result
+            self.cache.set_attribution(cache_key, attribution_result)
+            return attribution_result
 
     def build_report(self, request: ReportSummaryRequest) -> ReportPayload:
         attribution_request = request.to_attribution_request()

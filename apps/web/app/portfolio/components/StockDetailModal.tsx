@@ -93,7 +93,13 @@ export function StockDetailModal({
 
   const detailQuery = useQuery<StockDetail>({
     queryKey: ["portfolio-stock-detail", stock.ticker],
-    queryFn: () => fetchApi<StockDetail>(`/portfolio/stock/${stock.ticker}?period=5y`),
+    queryFn: () => fetchApi<StockDetail>(`/portfolio/stock/${stock.ticker}?period=5y`, {
+      monitor: {
+        operation: "frontend.query.portfolio_stock_detail",
+        component: "portfolio_stock_detail_modal",
+        ticker: stock.ticker,
+      },
+    }),
   });
 
   const newsQuery = useInfiniteQuery<NewsArticle[]>({
@@ -102,15 +108,36 @@ export function StockDetailModal({
       const offset = Number(pageParam);
       const existing = await fetchApi<NewsArticle[]>(
         `/news/feed?ticker=${stock.ticker}&limit=${newsPageSize}&offset=${offset}`,
+        {
+          monitor: {
+            operation: "frontend.query.portfolio_stock_news_feed",
+            component: "portfolio_stock_detail_modal",
+            ticker: stock.ticker,
+          },
+        },
       );
       if (existing.length >= newsPageSize) return existing;
 
       await fetchApi<NewsArticle[]>(
         `/news/crawl/stock?ticker=${stock.ticker}&company_name=${encodeURIComponent(stock.name || stock.ticker)}&limit=${newsPageSize}&offset=${offset}`,
-        { method: "POST" },
+        {
+          method: "POST",
+          monitor: {
+            operation: "frontend.query.portfolio_stock_news_crawl",
+            component: "portfolio_stock_detail_modal",
+            ticker: stock.ticker,
+          },
+        },
       );
       const refreshed = await fetchApi<NewsArticle[]>(
         `/news/feed?ticker=${stock.ticker}&limit=${newsPageSize}&offset=${offset}`,
+        {
+          monitor: {
+            operation: "frontend.query.portfolio_stock_news_refresh",
+            component: "portfolio_stock_detail_modal",
+            ticker: stock.ticker,
+          },
+        },
       );
       if (refreshed.length > 0) return refreshed;
       if (existing.length > 0) return existing;
@@ -143,13 +170,25 @@ export function StockDetailModal({
           custom_tickers: effectiveComparisonUniverse === "custom" ? effectiveComparisonCustomTickersInput : "",
           limit: 30,
         },
+        monitor: {
+          operation: "frontend.query.portfolio_stock_snapshot_history",
+          component: "portfolio_stock_detail_modal",
+          ticker: stock.ticker,
+        },
       }),
     staleTime: 60_000,
   });
   const metricAuditQuery = useQuery<CorporateMetricAudit>({
     queryKey: ["portfolio-stock-metric-audit", stock.ticker],
     queryFn: ({ signal }) =>
-      fetchApi<CorporateMetricAudit>(`/corporate/metrics/${stock.ticker}/audit`, { signal }),
+      fetchApi<CorporateMetricAudit>(`/corporate/metrics/${stock.ticker}/audit`, {
+        signal,
+        monitor: {
+          operation: "frontend.query.portfolio_stock_metric_audit",
+          component: "portfolio_stock_detail_modal",
+          ticker: stock.ticker,
+        },
+      }),
     staleTime: 5 * 60_000,
   });
 

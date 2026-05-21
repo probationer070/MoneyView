@@ -26,6 +26,18 @@ def _valuation_payload() -> dict[str, float]:
     }
 
 
+def _valuation_payload_with_bridge() -> dict[str, float]:
+    payload = _valuation_payload()
+    payload.update(
+        {
+            "net_debt": 100.0,
+            "non_operating_assets": 20.0,
+            "diluted_shares_outstanding": 10.0,
+        }
+    )
+    return payload
+
+
 def _mock_metrics(_: str) -> CorporateMetrics:
     return CorporateMetrics(
         ticker="AAPL",
@@ -55,6 +67,12 @@ def test_dcf_summary_endpoint_omits_full_report_fields(monkeypatch):
     payload = response.json()["data"]
     assert payload["ticker"] == "AAPL"
     assert "estimated_value" in payload
+    assert payload["estimated_value"] == payload["enterprise_value"]
+    assert payload["intrinsic_value_per_share"] is None
+    assert payload["valuation_method"] == "enterprise_value_no_share_bridge"
+    assert payload["bridge_quality"] == "missing"
+    assert payload["upside_pct"] == 0.0
+    assert payload["status"] == "Bridge Incomplete"
     assert "wacc_used" in payload
     assert "projection_rows" not in payload
     assert "wacc_breakdown" not in payload
@@ -92,6 +110,46 @@ def test_dcf_full_report_endpoint_returns_projection_rows(monkeypatch):
     assert payload["projection_rows"][0]["year"] == 1
     assert "wacc_breakdown" in payload
     assert payload["assumptions"]["wacc_used"] == 0.1
+    assert payload["summary"]["enterprise_value"] == payload["enterprise_value"]
+    assert payload["summary"]["intrinsic_value_per_share"] is None
+    assert payload["bridge_quality"] == "missing"
+    assert payload["summary"]["status"] == "Bridge Incomplete"
+
+
+def test_dcf_value_does_not_depend_on_current_price(monkeypatch):
+    prices = iter([100.0, 300.0])
+    monkeypatch.setattr(corporate_route, "_latest_market_price", lambda ticker: next(prices))
+    monkeypatch.setattr(corporate_route, "_metrics_for_ticker", _mock_metrics)
+    client = TestClient(app)
+
+    first = client.post("/api/v1/corporate/dcf/AAPL", json=_valuation_payload()).json()["data"]
+    second = client.post("/api/v1/corporate/dcf/AAPL", json=_valuation_payload()).json()["data"]
+
+    assert first["current_price"] == 100.0
+    assert second["current_price"] == 300.0
+    assert first["estimated_value"] == second["estimated_value"]
+    assert first["enterprise_value"] == second["enterprise_value"]
+
+
+def test_dcf_full_report_uses_explicit_equity_bridge(monkeypatch):
+    monkeypatch.setattr(corporate_route, "_latest_market_price", lambda ticker: 210.4)
+    monkeypatch.setattr(corporate_route, "_metrics_for_ticker", _mock_metrics)
+    client = TestClient(app)
+
+    response = client.post("/api/v1/corporate/dcf/AAPL/report", json=_valuation_payload_with_bridge())
+
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert payload["net_debt"] == 100.0
+    assert payload["non_operating_assets"] == 20.0
+    assert payload["diluted_shares_outstanding"] == 10.0
+    assert payload["equity_value"] == 1306.87
+    assert payload["intrinsic_value_per_share"] == 130.687
+    assert payload["summary"]["estimated_value"] == 130.69
+    assert payload["summary"]["intrinsic_value_per_share"] == 130.69
+    assert payload["valuation_method"] == "intrinsic_equity_per_share"
+    assert payload["bridge_quality"] == "ok"
+    assert payload["summary"]["status"] == "Overvalued"
 
 
 def test_bulk_dcf_service_normalizes_and_deduplicates_tickers():

@@ -55,7 +55,7 @@ Major Sections
 
 Content
 - `Company Search`
-- `Backend DCF`
+- `Intrinsic DCF`
 - `Refresh DCF`
 - `View Full Report`
 - `Calculate All Reports`

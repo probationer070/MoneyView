@@ -60,7 +60,7 @@ Use this registry when reviewing cache-backed or stored projections. A row is a 
 - Corporate company add writes the company registry and updates or invalidates `["corporate-companies"]`; Portfolio company search also consumes `["portfolio-browser-companies"]` and must be invalidated when the same registry changes from Portfolio.
 - Metric override writes affect same-ticker metric hydration, audit, DCF inputs, and future comparison snapshots. If metric persistence becomes a React Query mutation, invalidate the affected ticker's `corporate-metric-audit`, `corporate-metric-history`, `corporate-quarterly-statements`, and any active live comparison key rather than broad-refetching all corporate queries.
 - Existing comparison snapshots are historical read models. Metric edits should create future snapshot versions; they should not mutate old snapshot rows.
-- Corporate DCF session-cache restores are ticker guarded. A cached DCF result for `AAPL` must not populate the Backend DCF card when the restored or selected active ticker is `MSFT`; the card should stay in its refresh-to-calculate state.
+- Corporate DCF session-cache restores are ticker guarded. A cached DCF result for `AAPL` must not populate the Intrinsic DCF card when the restored or selected active ticker is `MSFT`; the card should stay in its refresh-to-calculate state.
 
 ### Source Data And Provider Refreshes
 

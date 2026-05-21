@@ -23,6 +23,7 @@ from apps.api.core.middleware import StructuralMiddleware
 from apps.api.core.transport_progress import TransportProgressMiddleware
 from apps.api.routes import (
     corporate_router,
+    dev_monitor_router,
     diagnostic_router,
     detail_router,
     market_router,
@@ -161,6 +162,7 @@ app.include_router(detail_router, prefix="/api/v1/detail", tags=["Detail"])
 app.include_router(news_router, prefix="/api/v1/news", tags=["News"])
 app.include_router(corporate_router, prefix="/api/v1/corporate", tags=["Corporate"])
 app.include_router(diagnostic_router, prefix="/api/v1/diagnostic", tags=["Diagnostic"])
+app.include_router(dev_monitor_router, prefix="/api/v1/dev", tags=["Dev Monitor"])
 app.include_router(report_router, prefix="/api/v1/report", tags=["Report"])
 app.include_router(monte_carlo_router, prefix="/api/v1/monte-carlo", tags=["Monte Carlo"])
 app.include_router(stock_router, prefix="/api/v1/stock", tags=["Stock"])

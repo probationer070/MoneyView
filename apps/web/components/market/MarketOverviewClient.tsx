@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { fetchApi } from "@/lib/api";
+import { useDevMonitorPageLoad } from "@/hooks/useDevMonitorPageLoad";
 import TVChart from "@/components/charts/TVChart";
 import { DeltaBadge } from "@/components/ui/DeltaBadge";
 import { ViewToggle, type ViewMode } from "@/components/ui/ViewToggle";
@@ -359,6 +360,11 @@ function MarketDetailModal({ item, onClose }: { item: MarketIndexQuote; onClose:
     queryFn: () =>
       fetchApi<MarketIndexDetail>(`/market/index/${encodeURIComponent(item.ticker)}/detail`, {
         params: { period: item.period ?? "5y" },
+        monitor: {
+          operation: "frontend.query.market_index_detail",
+          component: "market_detail_modal",
+          ticker: item.ticker,
+        },
       }),
     staleTime: 1000 * 60,
   });
@@ -663,6 +669,7 @@ export function MarketOverviewClient({
   indices: MarketIndexQuote[];
   fetchError?: string | null;
 }) {
+  useDevMonitorPageLoad({ component: "market" });
   const [viewMode, setViewMode] = useState<ViewMode>("chart");
   const [selectedIndex, setSelectedIndex] = useState<MarketIndexQuote | null>(null);
 

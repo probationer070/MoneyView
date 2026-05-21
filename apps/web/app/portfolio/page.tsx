@@ -6,6 +6,7 @@ import { ChevronDown, ChevronRight, RefreshCw, Trash2 } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { fetchApi } from "@/lib/api";
+import { useDevMonitorPageLoad } from "@/hooks/useDevMonitorPageLoad";
 import { DeltaBadge } from "@/components/ui/DeltaBadge";
 import { Sparkline } from "@/components/ui/Sparkline";
 import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
@@ -871,6 +872,7 @@ export function buildMovingAverageSeries(prices: RawOHLCV[], windowSize: (typeof
 // StockDetailModal extracted to components/StockDetailModal.tsx
 
 export default function PortfolioPage() {
+  useDevMonitorPageLoad({ component: "portfolio" });
   // Page state tracks the holdings presentation mode and the currently opened detail modal.
   const queryClient = useQueryClient();
   const router = useRouter();
@@ -958,22 +960,42 @@ export default function PortfolioPage() {
   // Watchlist query is the source for holdings, attribution inputs, and detail entry points.
   const watchlistQuery = useQuery<PortfolioStock[]>({
     queryKey: ["portfolio-watchlist"],
-    queryFn: () => fetchApi<PortfolioStock[]>("/portfolio/watchlist"),
+    queryFn: () => fetchApi<PortfolioStock[]>("/portfolio/watchlist", {
+      monitor: {
+        operation: "frontend.query.portfolio_watchlist",
+        component: "portfolio_page",
+      },
+    }),
     staleTime: 1000 * 60,
   });
   const companiesQuery = useQuery<CorporateCompany[]>({
     queryKey: ["portfolio-browser-companies"],
-    queryFn: () => fetchApi<CorporateCompany[]>("/corporate/companies"),
+    queryFn: () => fetchApi<CorporateCompany[]>("/corporate/companies", {
+      monitor: {
+        operation: "frontend.query.portfolio_companies",
+        component: "portfolio_page",
+      },
+    }),
     staleTime: 1000 * 60 * 5,
   });
   const syncStatusQuery = useQuery<WatchlistSyncStatus>({
     queryKey: ["portfolio-watchlist-sync-status"],
-    queryFn: () => fetchApi<WatchlistSyncStatus>("/portfolio/watchlist/sync-status"),
+    queryFn: () => fetchApi<WatchlistSyncStatus>("/portfolio/watchlist/sync-status", {
+      monitor: {
+        operation: "frontend.query.portfolio_sync_status",
+        component: "portfolio_page",
+      },
+    }),
     staleTime: 1000 * 30,
   });
   const portfolioPreferencesQuery = useQuery<PortfolioPreferences>({
     queryKey: ["portfolio-preferences"],
-    queryFn: () => fetchApi<PortfolioPreferences>("/portfolio/preferences"),
+    queryFn: () => fetchApi<PortfolioPreferences>("/portfolio/preferences", {
+      monitor: {
+        operation: "frontend.query.portfolio_preferences",
+        component: "portfolio_page",
+      },
+    }),
     staleTime: 1000 * 60,
   });
 
@@ -1125,16 +1147,20 @@ export default function PortfolioPage() {
       portfolioComparisonFetchTrigger,
     ],
     enabled: Boolean(hasHoldings && effectivePortfolioComparisonSnapshot && portfolioComparisonFetchTrigger !== "idle"),
-    queryFn: ({ signal }) =>
-      fetchApi<CorporateComparisonResponse>("/corporate/comparison", {
-        signal,
-        params: {
-          mode: effectivePortfolioComparisonSnapshot?.mode ?? "snapshot",
-          comparison_universe: effectivePortfolioComparisonSnapshot?.comparisonUniverse ?? "portfolio_plus_benchmark",
-          benchmark_ticker: effectivePortfolioComparisonSnapshot?.benchmarkTicker ?? DEFAULT_PORTFOLIO_BENCHMARK_TICKER,
-          custom_tickers: effectivePortfolioComparisonSnapshot?.customTickersInput ?? "",
-        },
-      }),
+      queryFn: ({ signal }) =>
+        fetchApi<CorporateComparisonResponse>("/corporate/comparison", {
+          signal,
+          params: {
+            mode: effectivePortfolioComparisonSnapshot?.mode ?? "snapshot",
+            comparison_universe: effectivePortfolioComparisonSnapshot?.comparisonUniverse ?? "portfolio_plus_benchmark",
+            benchmark_ticker: effectivePortfolioComparisonSnapshot?.benchmarkTicker ?? DEFAULT_PORTFOLIO_BENCHMARK_TICKER,
+            custom_tickers: effectivePortfolioComparisonSnapshot?.customTickersInput ?? "",
+          },
+          monitor: {
+            operation: "frontend.query.portfolio_comparison",
+            component: "portfolio_page",
+          },
+        }),
     staleTime: 60_000,
   });
   const portfolioComparisonHistoryQuery = useQuery<CorporateComparisonHistoryResponse>({
@@ -1147,28 +1173,36 @@ export default function PortfolioPage() {
       portfolioAnalysisRefreshToken ?? "idle",
     ],
     enabled: Boolean(hasHoldings && portfolioComparisonHistoryRequestedSnapshot && portfolioAnalysisRefreshToken),
-    queryFn: ({ signal }) =>
-      fetchApi<CorporateComparisonHistoryResponse>("/corporate/comparison/history", {
-        signal,
-        params: {
-          comparison_universe: portfolioComparisonHistoryRequestedSnapshot?.comparisonUniverse ?? "portfolio_plus_benchmark",
-          benchmark_ticker: portfolioComparisonHistoryRequestedSnapshot?.benchmarkTicker ?? DEFAULT_PORTFOLIO_BENCHMARK_TICKER,
-          custom_tickers: portfolioComparisonHistoryRequestedSnapshot?.customTickersInput ?? "",
-          limit: 30,
-        },
-    }),
+      queryFn: ({ signal }) =>
+        fetchApi<CorporateComparisonHistoryResponse>("/corporate/comparison/history", {
+          signal,
+          params: {
+            comparison_universe: portfolioComparisonHistoryRequestedSnapshot?.comparisonUniverse ?? "portfolio_plus_benchmark",
+            benchmark_ticker: portfolioComparisonHistoryRequestedSnapshot?.benchmarkTicker ?? DEFAULT_PORTFOLIO_BENCHMARK_TICKER,
+            custom_tickers: portfolioComparisonHistoryRequestedSnapshot?.customTickersInput ?? "",
+            limit: 30,
+          },
+          monitor: {
+            operation: "frontend.query.portfolio_comparison_history",
+            component: "portfolio_page",
+          },
+      }),
     staleTime: 60_000,
   });
   const selectedSnapshotQuery = useQuery<CorporateComparisonResponse>({
     queryKey: ["portfolio-comparison-snapshot-version", selectedHistoryPoint?.snapshot_version ?? ""],
     enabled: hasHoldings && portfolioComparisonMode === "snapshot" && Boolean(selectedHistoryPoint?.snapshot_version),
-    queryFn: ({ signal }) =>
-      fetchApi<CorporateComparisonResponse>("/corporate/comparison/snapshot-version", {
-        signal,
-        params: {
-          snapshot_version: selectedHistoryPoint?.snapshot_version ?? "",
-        },
-    }),
+      queryFn: ({ signal }) =>
+        fetchApi<CorporateComparisonResponse>("/corporate/comparison/snapshot-version", {
+          signal,
+          params: {
+            snapshot_version: selectedHistoryPoint?.snapshot_version ?? "",
+          },
+          monitor: {
+            operation: "frontend.query.portfolio_snapshot_version",
+            component: "portfolio_page",
+          },
+      }),
     staleTime: 60_000,
   });
 
@@ -1186,22 +1220,26 @@ export default function PortfolioPage() {
       portfolioAnalysisRefreshToken ?? "idle",
     ],
     enabled: Boolean(canRunAttribution && portfolioAttributionRequestedSnapshot && portfolioAnalysisRefreshToken),
-    queryFn: () =>
-      fetchApi<AttributionResult>("/portfolio/attribution", {
-        method: "POST",
-        body: JSON.stringify({
-          tickers: portfolioAttributionRequestedSnapshot?.tickers ?? [],
+      queryFn: () =>
+        fetchApi<AttributionResult>("/portfolio/attribution", {
+          method: "POST",
+          body: JSON.stringify({
+            tickers: portfolioAttributionRequestedSnapshot?.tickers ?? [],
           weights: portfolioAttributionRequestedSnapshot?.weights ?? [],
           benchmark: portfolioAttributionRequestedSnapshot?.benchmarkTicker ?? DEFAULT_PORTFOLIO_BENCHMARK_TICKER,
           period: "5y",
           currency: "USD",
           date_from: portfolioAttributionRequestedSnapshot?.holdingStartDate || null,
           as_of_date: portfolioAttributionRequestedSnapshot?.attributionAsOfDate || null,
-          attribution_method: "brinson_fachler_arithmetic",
-          allow_synthetic_fallback: true,
-          allow_benchmark_proxy: true,
+            attribution_method: "brinson_fachler_arithmetic",
+            allow_synthetic_fallback: true,
+            allow_benchmark_proxy: true,
+          }),
+          monitor: {
+            operation: "frontend.query.portfolio_attribution",
+            component: "portfolio_page",
+          },
         }),
-      }),
     placeholderData: (previous) => previous,
   });
 

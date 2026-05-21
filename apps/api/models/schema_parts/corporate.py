@@ -20,6 +20,9 @@ class ValuationAssumptions(BaseModel):
     reinvestment: float | None = Field(default=None, ge=0.0, le=100.0)
     unlevered_beta: float | None = Field(default=None, ge=0.0, le=5.0)
     debt_ratio: float | None = Field(default=None, ge=0.0, le=100.0)
+    net_debt: float | None = None
+    non_operating_assets: float | None = Field(default=None, ge=0.0)
+    diluted_shares_outstanding: float | None = Field(default=None, gt=0.0)
 
 
 class DCFSummary(BaseModel):
@@ -28,6 +31,11 @@ class DCFSummary(BaseModel):
     report_id: str
     ticker: str
     estimated_value: float
+    intrinsic_value_per_share: float | None = None
+    enterprise_value: float
+    equity_value: float | None = None
+    valuation_method: str = "enterprise_value_no_share_bridge"
+    bridge_quality: str = "missing"
     current_price: float
     upside_pct: float
     status: str
@@ -81,6 +89,13 @@ class DCFFullReport(BaseModel):
     present_value_of_terminal: float
     present_value_of_fcff: float
     enterprise_value: float
+    equity_value: float | None = None
+    intrinsic_value_per_share: float | None = None
+    net_debt: float | None = None
+    non_operating_assets: float | None = None
+    diluted_shares_outstanding: float | None = None
+    valuation_method: str = "enterprise_value_no_share_bridge"
+    bridge_quality: str = "missing"
     agency_discount: float
     dcf_multiple: float
     baseline_multiple: float

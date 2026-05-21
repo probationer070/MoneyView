@@ -15,14 +15,171 @@ Usage:
 import sqlite3
 import os
 import logging
+import re
+import time
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Generator
+
+from apps.api.core.dev_monitor import emit_performance_event, get_current_request_id
+from apps.api.models.schema_parts.dev_monitor import PerformanceEvent
 
 logger = logging.getLogger(__name__)
 
 # Resolve DB path from env or default
 _DB_PATH = Path(os.getenv("DB_PATH", "data/processed/moneyview.db"))
+_SQL_ACTION_PATTERN = re.compile(r"^\s*(SELECT|INSERT|UPDATE|DELETE|REPLACE|ALTER|CREATE|DROP|PRAGMA)\b", re.IGNORECASE)
+_SQL_TABLE_PATTERNS = {
+    "SELECT": re.compile(r"\bFROM\s+([A-Za-z_][A-Za-z0-9_]*)", re.IGNORECASE),
+    "INSERT": re.compile(r"\bINTO\s+([A-Za-z_][A-Za-z0-9_]*)", re.IGNORECASE),
+    "REPLACE": re.compile(r"\bINTO\s+([A-Za-z_][A-Za-z0-9_]*)", re.IGNORECASE),
+    "UPDATE": re.compile(r"\bUPDATE\s+([A-Za-z_][A-Za-z0-9_]*)", re.IGNORECASE),
+    "DELETE": re.compile(r"\bFROM\s+([A-Za-z_][A-Za-z0-9_]*)", re.IGNORECASE),
+    "ALTER": re.compile(r"\bTABLE\s+([A-Za-z_][A-Za-z0-9_]*)", re.IGNORECASE),
+    "CREATE": re.compile(r"\bTABLE(?:\s+IF\s+NOT\s+EXISTS)?\s+([A-Za-z_][A-Za-z0-9_]*)", re.IGNORECASE),
+    "DROP": re.compile(r"\bTABLE(?:\s+IF\s+EXISTS)?\s+([A-Za-z_][A-Za-z0-9_]*)", re.IGNORECASE),
+    "PRAGMA": re.compile(r"^\s*PRAGMA\s+([A-Za-z_][A-Za-z0-9_]*)", re.IGNORECASE),
+}
+
+
+def _parse_sql_operation(sql: str) -> tuple[str, str | None]:
+    action_match = _SQL_ACTION_PATTERN.match(sql or "")
+    if not action_match:
+        return "query", None
+    action = action_match.group(1).upper()
+    table_match = _SQL_TABLE_PATTERNS.get(action, re.compile(r"$^")).search(sql)
+    table = table_match.group(1) if table_match else None
+    return action.lower(), table
+
+
+def _emit_db_event(
+    *,
+    operation_type: str,
+    table: str | None,
+    duration_ms: float,
+    status: str,
+    row_count: int | None = None,
+    error_code: str | None = None,
+    message: str | None = None,
+) -> None:
+    request_id = get_current_request_id()
+    metadata: dict[str, object] = {"operation_type": operation_type}
+    if row_count is not None:
+        metadata["rows"] = row_count
+    emit_performance_event(
+        PerformanceEvent(
+            request_id=request_id,
+            level="error" if status == "error" else ("warn" if status == "slow" else "info"),
+            scope="db",
+            operation=f"db.{operation_type}_{table or 'query'}",
+            status=status,
+            duration_ms=duration_ms,
+            table=table,
+            error_code=error_code,
+            message=message,
+            metadata=metadata,
+        )
+    )
+
+
+class InstrumentedCursor(sqlite3.Cursor):
+    def __init__(self, connection: sqlite3.Connection):
+        super().__init__(connection)
+        self._perf_started_at = 0.0
+        self._perf_operation_type = "query"
+        self._perf_table: str | None = None
+        self._perf_emitted = False
+        self._perf_select_like = False
+
+    def _begin(self, sql: str) -> None:
+        self._perf_started_at = time.perf_counter()
+        self._perf_operation_type, self._perf_table = _parse_sql_operation(sql)
+        self._perf_emitted = False
+        self._perf_select_like = self._perf_operation_type in {"select", "pragma"}
+
+    def _duration_ms(self) -> float:
+        return round((time.perf_counter() - self._perf_started_at) * 1000, 1)
+
+    def _emit_success(self, row_count: int | None = None) -> None:
+        if self._perf_emitted:
+            return
+        duration_ms = self._duration_ms()
+        status = "slow" if duration_ms >= 250.0 else "success"
+        _emit_db_event(
+            operation_type=self._perf_operation_type,
+            table=self._perf_table,
+            duration_ms=duration_ms,
+            status=status,
+            row_count=row_count,
+        )
+        self._perf_emitted = True
+
+    def _emit_error(self, exc: Exception) -> None:
+        if self._perf_emitted:
+            return
+        _emit_db_event(
+            operation_type=self._perf_operation_type,
+            table=self._perf_table,
+            duration_ms=self._duration_ms(),
+            status="error",
+            error_code=type(exc).__name__,
+            message=str(exc),
+        )
+        self._perf_emitted = True
+
+    def execute(self, sql: str, parameters=()):
+        self._begin(sql)
+        try:
+            result = super().execute(sql, parameters)
+        except Exception as exc:
+            self._emit_error(exc)
+            raise
+        if not self._perf_select_like:
+            row_count = self.rowcount if self.rowcount >= 0 else None
+            self._emit_success(row_count=row_count)
+        return result
+
+    def executemany(self, sql: str, seq_of_parameters):
+        self._begin(sql)
+        try:
+            result = super().executemany(sql, seq_of_parameters)
+        except Exception as exc:
+            self._emit_error(exc)
+            raise
+        row_count = self.rowcount if self.rowcount >= 0 else None
+        self._emit_success(row_count=row_count)
+        return result
+
+    def fetchone(self):
+        row = super().fetchone()
+        self._emit_success(row_count=1 if row is not None else 0)
+        return row
+
+    def fetchmany(self, size: int | None = None):
+        rows = super().fetchmany(size)
+        self._emit_success(row_count=len(rows))
+        return rows
+
+    def fetchall(self):
+        rows = super().fetchall()
+        self._emit_success(row_count=len(rows))
+        return rows
+
+    def close(self) -> None:
+        if self._perf_select_like and not self._perf_emitted:
+            self._emit_success()
+        super().close()
+
+
+class InstrumentedConnection(sqlite3.Connection):
+    def cursor(self, factory=None):
+        return super().cursor(factory or InstrumentedCursor)
+
+    def execute(self, sql, parameters=(), /):
+        return self.cursor().execute(sql, parameters)
+
+    def executemany(self, sql, seq_of_parameters, /):
+        return self.cursor().executemany(sql, seq_of_parameters)
 
 
 def _configure(conn: sqlite3.Connection) -> None:
@@ -39,7 +196,7 @@ def _configure(conn: sqlite3.Connection) -> None:
 def get_db() -> Generator[sqlite3.Connection, None, None]:
     """Context-managed SQLite connection with WAL mode."""
     _DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(_DB_PATH), check_same_thread=False)
+    conn = sqlite3.connect(str(_DB_PATH), check_same_thread=False, factory=InstrumentedConnection)
     _configure(conn)
     try:
         yield conn
@@ -282,7 +439,7 @@ CREATE INDEX IF NOT EXISTS idx_corporate_comparison_snapshots_v3_ticker_universe
 def init_db() -> None:
     """Create all tables if they do not exist. Safe to call multiple times."""
     _DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(_DB_PATH), check_same_thread=False)
+    conn = sqlite3.connect(str(_DB_PATH), check_same_thread=False, factory=InstrumentedConnection)
     _configure(conn)
     try:
         try:

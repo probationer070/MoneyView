@@ -4,6 +4,8 @@ import hashlib
 from datetime import datetime, timezone
 from typing import Callable
 
+from packages.core_finance.dcf import calculate_equity_value, calculate_intrinsic_value_per_share
+
 from apps.api.models.schemas import (
     DCFAssumptionSummary,
     DCFFullReport,
@@ -148,12 +150,45 @@ def _build_dcf_outputs(
     agency_discount = 1 - min(max(esg_penalty, 0), 80) / 400
     dcf_multiple = enterprise_value / base_fcff
     baseline_multiple = 1 / max(wacc - terminal_growth, 0.005)
-    fcff_scale = base_fcff / 92.0
-    if current_price > 0:
-        estimated_value = current_price * (dcf_multiple / baseline_multiple) * agency_discount * fcff_scale
-    else:
-        estimated_value = enterprise_value * agency_discount
-    upside_pct = ((estimated_value - current_price) / current_price) * 100 if current_price > 0 else 0.0
+    fcff_scale = 1.0
+    net_debt = float(params.net_debt) if params.net_debt is not None else None
+    non_operating_assets = float(params.non_operating_assets) if params.non_operating_assets is not None else None
+    diluted_shares_outstanding = (
+        float(params.diluted_shares_outstanding)
+        if params.diluted_shares_outstanding is not None
+        else None
+    )
+    bridge_net_debt = net_debt if net_debt is not None else 0.0
+    bridge_non_operating_assets = non_operating_assets if non_operating_assets is not None else 0.0
+    equity_value = (
+        calculate_equity_value(
+            enterprise_value=enterprise_value,
+            net_debt=bridge_net_debt,
+            non_operating_assets=bridge_non_operating_assets,
+        )
+        if diluted_shares_outstanding is not None
+        else None
+    )
+    intrinsic_value_per_share = (
+        calculate_intrinsic_value_per_share(equity_value, diluted_shares_outstanding)
+        if equity_value is not None and diluted_shares_outstanding is not None
+        else None
+    )
+    has_complete_bridge = (
+        intrinsic_value_per_share is not None
+        and net_debt is not None
+        and non_operating_assets is not None
+    )
+    bridge_quality = "ok" if has_complete_bridge else "estimated" if intrinsic_value_per_share is not None else "missing"
+    valuation_method = "intrinsic_equity_per_share" if intrinsic_value_per_share is not None else "enterprise_value_no_share_bridge"
+    estimated_value = intrinsic_value_per_share if intrinsic_value_per_share is not None else enterprise_value
+    comparable_value = intrinsic_value_per_share
+    upside_pct = ((comparable_value - current_price) / current_price) * 100 if comparable_value is not None and current_price > 0 else 0.0
+    status = (
+        "Bridge Incomplete"
+        if comparable_value is None
+        else "Undervalued" if current_price > 0 and comparable_value > current_price else "Overvalued"
+    )
 
     report_id = _report_id(
         ticker=ticker,
@@ -163,14 +198,22 @@ def _build_dcf_outputs(
         terminal_growth=terminal_growth,
         fcff=base_fcff,
         esg_penalty=esg_penalty,
+        net_debt=net_debt,
+        non_operating_assets=non_operating_assets,
+        diluted_shares_outstanding=diluted_shares_outstanding,
     )
     summary = DCFSummary(
         report_id=report_id,
         ticker=ticker,
         estimated_value=round(float(estimated_value), 2),
+        intrinsic_value_per_share=round(float(intrinsic_value_per_share), 2) if intrinsic_value_per_share is not None else None,
+        enterprise_value=round(float(enterprise_value), 2),
+        equity_value=round(float(equity_value), 2) if equity_value is not None else None,
+        valuation_method=valuation_method,
+        bridge_quality=bridge_quality,
         current_price=round(float(current_price), 2),
         upside_pct=round(float(upside_pct), 2),
-        status="Undervalued" if current_price > 0 and estimated_value > current_price else "Overvalued",
+        status=status,
         generated_at=generated_at,
     )
     assumption_summary = DCFAssumptionSummary(
@@ -183,7 +226,7 @@ def _build_dcf_outputs(
         fcff_used=round(float(base_fcff), 4),
         esg_penalty_used=round(float(esg_penalty), 4),
         terminal_growth_used=round(float(terminal_growth), 6),
-        enterprise_value_index=round(float(enterprise_value * agency_discount), 2),
+        enterprise_value_index=round(float(enterprise_value), 2),
     )
     full_report = DCFFullReport(
         summary=summary,
@@ -202,6 +245,13 @@ def _build_dcf_outputs(
         present_value_of_terminal=round(float(pv_terminal), 4),
         present_value_of_fcff=round(float(pv_fcff), 4),
         enterprise_value=round(float(enterprise_value), 4),
+        equity_value=round(float(equity_value), 4) if equity_value is not None else None,
+        intrinsic_value_per_share=round(float(intrinsic_value_per_share), 4) if intrinsic_value_per_share is not None else None,
+        net_debt=round(float(net_debt), 4) if net_debt is not None else None,
+        non_operating_assets=round(float(non_operating_assets), 4) if non_operating_assets is not None else None,
+        diluted_shares_outstanding=round(float(diluted_shares_outstanding), 4) if diluted_shares_outstanding is not None else None,
+        valuation_method=valuation_method,
+        bridge_quality=bridge_quality,
         agency_discount=round(float(agency_discount), 6),
         dcf_multiple=round(float(dcf_multiple), 6),
         baseline_multiple=round(float(baseline_multiple), 6),
@@ -219,9 +269,16 @@ def _report_id(
     terminal_growth: float,
     fcff: float,
     esg_penalty: float,
+    net_debt: float | None,
+    non_operating_assets: float | None,
+    diluted_shares_outstanding: float | None,
 ) -> str:
     digest = hashlib.sha256(
-        f"{ticker}|{growth_used:.8f}|{margin_used:.8f}|{wacc:.8f}|{terminal_growth:.8f}|{fcff:.8f}|{esg_penalty:.8f}".encode(
+        (
+            f"{ticker}|{growth_used:.8f}|{margin_used:.8f}|{wacc:.8f}|{terminal_growth:.8f}|"
+            f"{fcff:.8f}|{esg_penalty:.8f}|{net_debt}|{non_operating_assets}|"
+            f"{diluted_shares_outstanding}"
+        ).encode(
             "utf-8"
         )
     ).hexdigest()

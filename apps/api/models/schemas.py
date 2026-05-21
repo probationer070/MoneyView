@@ -13,6 +13,12 @@ from .schema_parts.common import (
     PeriodEnum,
     SentimentEnum,
 )
+from .schema_parts.dev_monitor import (
+    ClientPerformanceEventRequest,
+    PerformanceEvent,
+    PerformanceEventListResponse,
+    PerformanceSummary,
+)
 from .schema_parts.corporate import (
     DCFAssumptionSummary,
     DCFFullReport,
@@ -81,6 +87,10 @@ __all__ = [
     "APIResponse",
     "ComparisonUniverseEnum",
     "LogTailResponse",
+    "PerformanceEvent",
+    "PerformanceEventListResponse",
+    "PerformanceSummary",
+    "ClientPerformanceEventRequest",
     "PeriodEnum",
     "SentimentEnum",
     "CorporateCompany",

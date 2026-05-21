@@ -2,6 +2,7 @@
 
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { fetchApi } from "@/lib/api";
+import { useDevMonitorPageLoad } from "@/hooks/useDevMonitorPageLoad";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -9,10 +10,16 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { NewsFeedList, type NewsArticle } from "./components/NewsFeedList";
 
 export default function NewsPage() {
+  useDevMonitorPageLoad({ component: "news" });
   const pageSize = 5;
   const newsQuery = useInfiniteQuery<NewsArticle[]>({
     queryKey: ["market-news-feed"],
-    queryFn: ({ pageParam = 0 }) => fetchApi<NewsArticle[]>(`/news/feed?limit=${pageSize}&offset=${pageParam}`),
+    queryFn: ({ pageParam = 0 }) => fetchApi<NewsArticle[]>(`/news/feed?limit=${pageSize}&offset=${pageParam}`, {
+      monitor: {
+        operation: "frontend.query.news_feed",
+        component: "news_page",
+      },
+    }),
     initialPageParam: 0,
     getNextPageParam: (lastPage, allPages) => (
       lastPage.length === pageSize ? allPages.length * pageSize : undefined

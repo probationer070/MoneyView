@@ -63,7 +63,7 @@ export function DcfCoreModulesGraph({
           onClick={() => onOpenDetail("backendFairValue")}
           className="rounded-[var(--radius)] p-2 text-left transition hover:bg-[var(--surface)]"
         >
-          <div className="text-xs text-[var(--text-muted)]">Backend Fair Value</div>
+          <div className="text-xs text-[var(--text-muted)]">Intrinsic DCF Value</div>
           <div className="text-2xl font-black">
             {dcfResult ? moneyText(dcfResult.estimated_value) : "N/A"}
           </div>

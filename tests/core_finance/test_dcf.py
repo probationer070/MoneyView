@@ -15,6 +15,8 @@ from packages.core_finance.dcf import (
     calculate_growth_rate,
     calculate_terminal_value,
     calculate_npv,
+    calculate_equity_value,
+    calculate_intrinsic_value_per_share,
 )
 
 
@@ -100,3 +102,26 @@ class TestCalculateNpv:
 
     def test_empty_cash_flows(self):
         assert calculate_npv(cash_flows=[], discount_rate=0.1) == 0.0
+
+
+class TestEquityBridge:
+    def test_calculate_equity_value_subtracts_net_debt_and_adds_non_operating_assets(self):
+        equity_value = calculate_equity_value(
+            enterprise_value=1000.0,
+            net_debt=250.0,
+            non_operating_assets=40.0,
+        )
+
+        assert equity_value == pytest.approx(790.0)
+
+    def test_calculate_intrinsic_value_per_share_divides_by_diluted_shares(self):
+        value = calculate_intrinsic_value_per_share(
+            equity_value=790.0,
+            diluted_shares_outstanding=10.0,
+        )
+
+        assert value == pytest.approx(79.0)
+
+    def test_calculate_intrinsic_value_per_share_rejects_invalid_share_count(self):
+        with pytest.raises(ValueError, match="Diluted shares outstanding must be greater than zero"):
+            calculate_intrinsic_value_per_share(equity_value=790.0, diluted_shares_outstanding=0.0)

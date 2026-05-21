@@ -294,7 +294,8 @@ Base path: `/api/v1/corporate`
 
 - **Request body:** `ValuationAssumptions`
 - **Response:** `APIResponse[dict]`
-- **Purpose:** Return a lightweight non-streaming DCF summary for compatibility paths.
+- **Purpose:** Return a lightweight non-streaming intrinsic DCF summary for compatibility paths.
+- **Output note:** `current_price` is comparison context only; intrinsic value is derived from FCFF, terminal value, and bridge fields when available.
 - **Persistence touched:** reads current metrics and market price inputs; no canonical DCF persistence
 - **Classification:** heavy
 - **Consumers:** Corporate valuation requests that do not need the full report
@@ -304,6 +305,7 @@ Base path: `/api/v1/corporate`
 - **Request body:** `ValuationAssumptions`
 - **Response:** `APIResponse[DCFFullReport]`
 - **Purpose:** Return the full DCF report for one ticker on explicit request.
+- **Output note:** includes enterprise value, optional equity value, optional intrinsic value per share, bridge input fields, `valuation_method`, and `bridge_quality`.
 - **Persistence touched:** reads current metrics and price inputs; no canonical DCF persistence
 - **Classification:** heavy
 - **Consumers:** Corporate full-report workflows
@@ -312,7 +314,7 @@ Base path: `/api/v1/corporate`
 
 - **Request body:** `CorporateDcfBatchRequest`
 - **Response:** `APIResponse[list[DCFFullReport]]`
-- **Purpose:** Compute full DCF reports for a batch of tickers.
+- **Purpose:** Compute full intrinsic DCF reports for a batch of tickers.
 - **Persistence touched:** reads `corporate_metrics` and market price inputs
 - **Classification:** heavy
 - **Consumers:** bulk corporate report workflows
@@ -323,6 +325,7 @@ Base path: `/api/v1/corporate`
 - **Response:** `text/event-stream`
 - **Purpose:** Stream DCF phase output without sending the full report in one blocking payload.
 - **Transport behavior:** emits `phase1`, `phase2`, and `complete` events
+- **Output note:** phase 1 includes intrinsic value and bridge quality fields; phase 2 includes high-level assumptions.
 - **Persistence touched:** reads current metrics and price inputs; no canonical DCF persistence
 - **Classification:** heavy, streaming
 - **Consumers:** incremental DCF UX and transport-progress observability

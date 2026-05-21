@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Callable
 from zoneinfo import ZoneInfo
 
+from apps.api.core.dev_monitor import perf_timer
 from apps.api.models.schemas import (
     CorporateComparisonHistoryPoint,
     CorporateComparisonHistoryResponse,
@@ -17,6 +18,7 @@ from apps.api.models.schemas import (
     CorporateMetrics,
 )
 from apps.api.services.db import get_db
+from packages.core_finance.dcf import calculate_equity_value
 from packages.core_finance.expected_return import (
     ExpectedReturnInputs,
     calculate_expected_return_result,
@@ -326,37 +328,36 @@ def _dcf_snapshot(
     risk_free_rate: float,
     equity_risk_premium: float,
 ) -> dict[str, float | str]:
-    current_price = price_loader(ticker)
-    base_fcff = max(float(metrics.fcff), 1.0)
-    wacc = max(float(metrics.wacc) / 100, 0.001)
-    growth_rate = float(metrics.growth) / 100
-    terminal_growth = min(growth_rate, wacc - 0.005)
-    terminal_growth = max(terminal_growth, -0.1)
+    with perf_timer(scope="calculation", operation="calculation.dcf_upside", ticker=ticker, component="corporate_comparison"):
+        current_price = price_loader(ticker)
+        base_fcff = max(float(metrics.fcff), 1.0)
+        wacc = max(float(metrics.wacc) / 100, 0.001)
+        growth_rate = float(metrics.growth) / 100
+        terminal_growth = min(growth_rate, wacc - 0.005)
+        terminal_growth = max(terminal_growth, -0.1)
 
-    projected_fcff = [base_fcff * ((1 + growth_rate) ** year) for year in range(1, 6)]
-    pv_fcff = sum(cash_flow / ((1 + wacc) ** year) for year, cash_flow in enumerate(projected_fcff, start=1))
-    terminal_cash_flow = projected_fcff[-1] * (1 + terminal_growth)
-    terminal_value = terminal_cash_flow / max(wacc - terminal_growth, 0.005)
-    pv_terminal = terminal_value / ((1 + wacc) ** 5)
-    enterprise_value = pv_fcff + pv_terminal
-    agency_discount = 1 - min(max(float(metrics.esg_penalty), 0), 80) / 400
-    dcf_multiple = enterprise_value / base_fcff
-    baseline_multiple = 1 / max(wacc - terminal_growth, 0.005)
-    fcff_scale = base_fcff / 92.0
-    if current_price > 0:
-        estimated_value = current_price * (dcf_multiple / baseline_multiple) * agency_discount * fcff_scale
-    else:
-        estimated_value = enterprise_value * agency_discount
-
-    expected_returns = calculate_expected_return_result(
-        ExpectedReturnInputs(
-            current_price=current_price,
-            intrinsic_value=estimated_value,
-            risk_free_rate=risk_free_rate,
-            equity_risk_premium=equity_risk_premium,
-            beta=_levered_beta_from_metrics(metrics),
+        projected_fcff = [base_fcff * ((1 + growth_rate) ** year) for year in range(1, 6)]
+        pv_fcff = sum(cash_flow / ((1 + wacc) ** year) for year, cash_flow in enumerate(projected_fcff, start=1))
+        terminal_cash_flow = projected_fcff[-1] * (1 + terminal_growth)
+        terminal_value = terminal_cash_flow / max(wacc - terminal_growth, 0.005)
+        pv_terminal = terminal_value / ((1 + wacc) ** 5)
+        enterprise_value = pv_fcff + pv_terminal
+        estimated_value = calculate_equity_value(
+            enterprise_value=enterprise_value,
+            net_debt=0.0,
+            non_operating_assets=0.0,
         )
-    )
+
+    with perf_timer(scope="metric", operation="metric.expected_vs_market", ticker=ticker, component="corporate_comparison"):
+        expected_returns = calculate_expected_return_result(
+            ExpectedReturnInputs(
+                current_price=current_price,
+                intrinsic_value=current_price,
+                risk_free_rate=risk_free_rate,
+                equity_risk_premium=equity_risk_premium,
+                beta=_levered_beta_from_metrics(metrics),
+            )
+        )
 
     return {
         "estimated_value": round(float(estimated_value), 2),
@@ -366,7 +367,7 @@ def _dcf_snapshot(
         "stock_expected_return": round(float(expected_returns.stock_expected_return * 100), 2),
         "market_expected_return": round(float(expected_returns.market_expected_return * 100), 2),
         "expected_return_spread": round(float(expected_returns.expected_return_spread * 100), 2),
-        "status": "Undervalued" if current_price > 0 and estimated_value > current_price else "Overvalued",
+        "status": "Bridge Incomplete",
     }
 
 

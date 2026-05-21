@@ -3,6 +3,7 @@
 import React, { useEffect, useRef } from "react";
 import { createChart, IChartApi, ISeriesApi, ColorType, CrosshairMode, CandlestickSeries, HistogramSeries, LineSeries } from "lightweight-charts";
 import { TVCandle, TVVolume, sanitizeTooltip } from "@/lib/transformers";
+import { emitClientPerformanceEvent } from "@/lib/api";
 
 export interface TVLineSeries {
     title: string;
@@ -37,112 +38,177 @@ const TVChart: React.FC<TVChartProps> = ({
     const volumeSeriesRef = useRef<ISeriesApi<"Histogram"> | null>(null);
     const lineSeriesRefs = useRef<Array<ISeriesApi<"Line">>>([]);
     const safeTickerName = sanitizeTooltip(tickerName);
+    const mountedAtRef = useRef<number | null>(null);
+    const hasReportedRenderRef = useRef(false);
+    const pointCount = data.length;
+    const volumePointCount = volumeData?.length ?? 0;
 
     useEffect(() => {
+        if (mountedAtRef.current == null) {
+            mountedAtRef.current = typeof performance !== "undefined" ? performance.now() : Date.now();
+        }
         if (!chartContainerRef.current) return;
-
-        // 1. Initialize Chart
-        const chart = createChart(chartContainerRef.current, {
-            height: height,
-            layout: {
-                background: { type: ColorType.Solid, color: "transparent" },
-                textColor: "#9DA5A2",
-            },
-            grid: {
-                vertLines: { color: "rgba(100, 100, 100, 0.1)" },
-                horzLines: { color: "rgba(100, 100, 100, 0.1)" },
-            },
-            crosshair: {
-                mode: CrosshairMode.Normal,
-            },
-            rightPriceScale: {
-                borderColor: "rgba(100, 100, 100, 0.2)",
-            },
-            timeScale: {
-                borderColor: "rgba(100, 100, 100, 0.2)",
-            },
-        });
-
-        // 2. Candlestick Series setup (v5 API Migration)
-        const candleSeries = chart.addSeries(CandlestickSeries, {
-            upColor: upColor ?? colorAccent,
-            downColor,
-            borderVisible: false,
-            wickUpColor: upColor ?? colorAccent,
-            wickDownColor: downColor,
-        });
-
-        // 3. Volume Histogram Series setup (v5 API Migration)
-        const volumeSeries = chart.addSeries(HistogramSeries, {
-            color: colorAccent,
-            priceFormat: {
-                type: "volume",
-            },
-            priceScaleId: "", // Sets as overlay
-        });
-        
-        // Scale overlay margins
-        chart.priceScale("").applyOptions({
-            scaleMargins: {
-                top: 0.8, 
-                bottom: 0,
-            },
-        });
-
-        chartRef.current = chart;
-        candleSeriesRef.current = candleSeries;
-        volumeSeriesRef.current = volumeSeries;
-        lineSeriesRefs.current = lineSeriesData.map((series) =>
-            chart.addSeries(LineSeries, {
-                color: series.color,
-                lineWidth: 2,
-                priceLineVisible: false,
-                lastValueVisible: false,
-                crosshairMarkerVisible: false,
-            })
-        );
-
-        // Dynamic Resize Observer with requestAnimationFrame Throttling (P1 Risk Block)
-        let animationFrameId: number;
-        const resizeObserver = new ResizeObserver((entries) => {
-            if (entries.length === 0 || entries[0].target !== chartContainerRef.current) return;
-            const newRect = entries[0].contentRect;
-            
-            cancelAnimationFrame(animationFrameId);
-            animationFrameId = requestAnimationFrame(() => {
-                 chart.applyOptions({ width: newRect.width });
+        try {
+            // 1. Initialize Chart
+            const chart = createChart(chartContainerRef.current, {
+                height: height,
+                layout: {
+                    background: { type: ColorType.Solid, color: "transparent" },
+                    textColor: "#9DA5A2",
+                },
+                grid: {
+                    vertLines: { color: "rgba(100, 100, 100, 0.1)" },
+                    horzLines: { color: "rgba(100, 100, 100, 0.1)" },
+                },
+                crosshair: {
+                    mode: CrosshairMode.Normal,
+                },
+                rightPriceScale: {
+                    borderColor: "rgba(100, 100, 100, 0.2)",
+                },
+                timeScale: {
+                    borderColor: "rgba(100, 100, 100, 0.2)",
+                },
             });
-        });
 
-        resizeObserver.observe(chartContainerRef.current);
+            // 2. Candlestick Series setup (v5 API Migration)
+            const candleSeries = chart.addSeries(CandlestickSeries, {
+                upColor: upColor ?? colorAccent,
+                downColor,
+                borderVisible: false,
+                wickUpColor: upColor ?? colorAccent,
+                wickDownColor: downColor,
+            });
 
-        // Cleanup instance securely preventing silent canvas WebGL memory leak
-        return () => {
-            resizeObserver.disconnect();
-            cancelAnimationFrame(animationFrameId);
-            chart.remove();
-        };
-    }, [colorAccent, downColor, height, lineSeriesData, upColor]); // Explicit rigid dependency bounds
+            // 3. Volume Histogram Series setup (v5 API Migration)
+            const volumeSeries = chart.addSeries(HistogramSeries, {
+                color: colorAccent,
+                priceFormat: {
+                    type: "volume",
+                },
+                priceScaleId: "", // Sets as overlay
+            });
+            
+            // Scale overlay margins
+            chart.priceScale("").applyOptions({
+                scaleMargins: {
+                    top: 0.8, 
+                    bottom: 0,
+                },
+            });
+
+            chartRef.current = chart;
+            candleSeriesRef.current = candleSeries;
+            volumeSeriesRef.current = volumeSeries;
+            lineSeriesRefs.current = lineSeriesData.map((series) =>
+                chart.addSeries(LineSeries, {
+                    color: series.color,
+                    lineWidth: 2,
+                    priceLineVisible: false,
+                    lastValueVisible: false,
+                    crosshairMarkerVisible: false,
+                })
+            );
+
+            // Dynamic Resize Observer with requestAnimationFrame Throttling (P1 Risk Block)
+            let animationFrameId: number;
+            const resizeObserver = new ResizeObserver((entries) => {
+                if (entries.length === 0 || entries[0].target !== chartContainerRef.current) return;
+                const newRect = entries[0].contentRect;
+                
+                cancelAnimationFrame(animationFrameId);
+                animationFrameId = requestAnimationFrame(() => {
+                     chart.applyOptions({ width: newRect.width });
+                });
+            });
+
+            resizeObserver.observe(chartContainerRef.current);
+            if (!hasReportedRenderRef.current) {
+                hasReportedRenderRef.current = true;
+                const startedAt = mountedAtRef.current ?? (typeof performance !== "undefined" ? performance.now() : Date.now());
+                const durationMs = Number(((typeof performance !== "undefined" ? performance.now() : Date.now()) - startedAt).toFixed(1));
+                void emitClientPerformanceEvent({
+                    level: "info",
+                    scope: "chart",
+                    operation: "chart.render",
+                    status: durationMs >= 1000 ? "slow" : "success",
+                    duration_ms: durationMs,
+                    ticker: tickerName ?? null,
+                    route: typeof window !== "undefined" ? window.location.pathname : null,
+                    component: "tv_chart",
+                    metadata: {
+                        point_count: pointCount,
+                        volume_points: volumePointCount,
+                        line_series_count: lineSeriesData.length,
+                    },
+                });
+            }
+
+            // Cleanup instance securely preventing silent canvas WebGL memory leak
+            return () => {
+                resizeObserver.disconnect();
+                cancelAnimationFrame(animationFrameId);
+                chart.remove();
+            };
+        } catch (error) {
+            void emitClientPerformanceEvent({
+                level: "error",
+                scope: "chart",
+                operation: "chart.render_error",
+                status: "error",
+                ticker: tickerName ?? null,
+                route: typeof window !== "undefined" ? window.location.pathname : null,
+                component: "tv_chart",
+                error_code: "lightweight_chart_init_error",
+                message: error instanceof Error ? error.message : "Unknown chart initialization failure",
+                metadata: {
+                    point_count: pointCount,
+                    volume_points: volumePointCount,
+                    line_series_count: lineSeriesData.length,
+                },
+            });
+            throw error;
+        }
+    }, [colorAccent, downColor, height, lineSeriesData, pointCount, tickerName, upColor, volumePointCount]); // Explicit rigid dependency bounds
 
     // ----------------------------------------------------
     // Execute Data Updates seamlessly off main render
     // ----------------------------------------------------
     useEffect(() => {
-        if (candleSeriesRef.current && data?.length) {
-            candleSeriesRef.current.setData(data);
+        try {
+            if (candleSeriesRef.current && data?.length) {
+                candleSeriesRef.current.setData(data);
+            }
+            if (volumeSeriesRef.current && volumeData?.length) {
+                volumeSeriesRef.current.setData(volumeData);
+            }
+            lineSeriesRefs.current.forEach((series, index) => {
+                series.setData(lineSeriesData[index]?.data ?? []);
+            });
+            
+            if (chartRef.current) {
+                // Auto fit all updated data smoothly
+                chartRef.current.timeScale().fitContent();
+            }
+        } catch (error) {
+            void emitClientPerformanceEvent({
+                level: "error",
+                scope: "chart",
+                operation: "chart.render_error",
+                status: "error",
+                ticker: tickerName ?? null,
+                route: typeof window !== "undefined" ? window.location.pathname : null,
+                component: "tv_chart",
+                error_code: "lightweight_chart_update_error",
+                message: error instanceof Error ? error.message : "Unknown chart update failure",
+                metadata: {
+                    point_count: pointCount,
+                    volume_points: volumePointCount,
+                    line_series_count: lineSeriesData.length,
+                },
+            });
         }
-        if (volumeSeriesRef.current && volumeData?.length) {
-            volumeSeriesRef.current.setData(volumeData);
-        }
-        lineSeriesRefs.current.forEach((series, index) => {
-            series.setData(lineSeriesData[index]?.data ?? []);
-        });
-        
-        if (chartRef.current) {
-            // Auto fit all updated data smoothly
-            chartRef.current.timeScale().fitContent();
-        }
-    }, [data, lineSeriesData, volumeData]); // Only recompute on strict data matrix swaps
+    }, [data, lineSeriesData, pointCount, tickerName, volumeData, volumePointCount]); // Only recompute on strict data matrix swaps
 
     return (
         <div 

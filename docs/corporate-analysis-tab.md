@@ -8,8 +8,9 @@ The Corporate Analysis tab is the valuation and company-diagnostics workspace at
 
 - `Company Search`
   Searches saved companies and switches the active ticker for analysis.
-- `Backend DCF`
-  Shows the current backend fair value estimate for the selected ticker and opens the detailed DCF explanation modal.
+- `Intrinsic DCF`
+  Shows the current backend intrinsic DCF estimate for the selected ticker and opens the detailed DCF explanation modal.
+  See [DCF Valuation](./dcf-valuation.md) for the full formula walkthrough and MoneyView-specific implementation notes.
 - `Add Company`
   Persists a manual company and ticker so it can be selected for future analysis.
 
@@ -78,7 +79,7 @@ The main analysis surface includes six graph modules:
 - `Risk-Return Minard`
   Maps spread and success probability into a risk-return visual
 - `DCF Core Modules`
-  Breaks the DCF into sustainable growth, terminal value share, FCFF, and backend fair value context
+  Breaks the DCF into sustainable growth, terminal value share, FCFF, and backend intrinsic value context
 
 All of these chart titles or related metrics can open the same calculation-detail modal system.
 
@@ -198,14 +199,15 @@ Use this when deciding whether the current setup is attractive enough to keep mo
 
 - read spread and success probability together
 - if spread looks good but success probability is weak, treat the case as fragile rather than obviously attractive
+- see [Risk-Return Minard Chart](./risk-return-minard.md) for the current MoneyView calculation formula and scenario-construction details
 
 #### `DCF Core Modules`
 
-Use this when you need to understand what is actually driving the fair-value result.
+Use this when you need to understand what is actually driving the intrinsic-value result.
 
 - check sustainable growth first
 - then review terminal value share and FCFF support
-- if fair value looks too sensitive to terminal assumptions, do not treat the point estimate as stable
+- if intrinsic value looks too sensitive to terminal assumptions, do not treat the point estimate as stable
 
 ### 3. Use the calculation detail modal for verification
 
@@ -260,7 +262,7 @@ Important interpretation rule:
 - `GET /api/v1/detail/{ticker}/ohlcv`
   Provides 5-year historical price data for the detail modal used by Corporate Analysis
 - `POST /api/v1/corporate/dcf/{ticker}`
-  Returns the backend DCF result used by the fair-value widgets
+  Returns the backend DCF result used by the intrinsic-value widgets
 - `GET /api/v1/corporate/comparison`
   Returns live comparison rows and comparison metadata for the bottom comparison table
 

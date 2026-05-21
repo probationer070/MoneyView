@@ -567,10 +567,10 @@ export function buildCalculationDetails({
       ],
     },
     backendDcf: {
-      title: `${companyName} Backend DCF`,
+      title: `${companyName} Intrinsic DCF`,
       timeHorizon: "Current realtime assumption set sent to the backend DCF endpoint; market price uses the latest available quote/cache point.",
       summary: [
-        { label: "Estimated Fair Value", value: dcfData ? moneyText(dcfData.estimated_value) : "Calculating", source: "Backend DCF engine" },
+        { label: "Intrinsic DCF Value", value: dcfData ? moneyText(dcfData.estimated_value) : "Calculating", source: "Backend DCF engine" },
         { label: "Current Price", value: dcfData ? moneyText(dcfData.current_price) : "Loading", source: "Yahoo Finance / local OHLCV cache" },
         { label: "Upside / Downside", value: dcfData ? pct(dcfData.upside_pct) : "Loading", source: "Realtime calculation" },
         { label: "Status", value: dcfData?.status ?? "Calculating", source: "DCF value-vs-price rule" },
@@ -582,8 +582,8 @@ export function buildCalculationDetails({
         { label: "Terminal Growth", value: pct(clamp(assumptions.growth, -10, 10)), source: "Growth input clamped to backend boundary" },
         { label: "FCFF", value: `${moneyText(assumptions.fcff)}B`, source: "Realtime Assumptions control" },
       ],
-      formula: `Backend DCF request = growth ${pct(assumptions.growth)}, WACC ${pct(assumptions.wacc)}, terminal growth ${pct(clamp(assumptions.growth, -10, 10))}, FCFF ${moneyText(assumptions.fcff)}B`,
-      result: dcfData ? `${moneyText(dcfData.estimated_value)} fair value, ${pct(dcfData.upside_pct)} versus current price` : "Calculating",
+      formula: `Intrinsic DCF request = growth ${pct(assumptions.growth)}, WACC ${pct(assumptions.wacc)}, terminal growth ${pct(clamp(assumptions.growth, -10, 10))}, FCFF ${moneyText(assumptions.fcff)}B`,
+      result: dcfData ? `${moneyText(dcfData.estimated_value)} intrinsic value, ${pct(dcfData.upside_pct)} versus current price` : "Calculating",
       sourcing: [
         { label: "DCF endpoint", value: `/corporate/dcf/${assumptions.ticker}`, source: "FastAPI backend" },
         { label: "Assumptions", value: "Debounced ticker inputs", source: "Corporate Analysis UI" },
@@ -592,7 +592,7 @@ export function buildCalculationDetails({
       simulation: [
         { label: "1", value: `Send growth ${pct(assumptions.growth)}, WACC ${pct(assumptions.wacc)}, FCFF ${moneyText(assumptions.fcff)}B`, source: "DCF request payload" },
         { label: "2", value: dcfData ? `${moneyText(dcfData.estimated_value)} / ${moneyText(dcfData.current_price)} - 1` : "Waiting for backend result", source: dcfData ? pct(dcfData.upside_pct) : "Loading" },
-        { label: "3", value: dcfData ? `${moneyText(dcfData.estimated_value)} fair value` : "Calculating", source: "Final Backend DCF result" },
+        { label: "3", value: dcfData ? `${moneyText(dcfData.estimated_value)} intrinsic value` : "Calculating", source: "Final Backend DCF result" },
       ],
     },
     sustainableGrowth: {
@@ -806,12 +806,12 @@ export function buildCalculationDetails({
     },
     dcfCoreModules: {
       title: `${companyName} DCF Core Modules`,
-      timeHorizon: "Current realtime assumption set; FCFF uses LTM or normalized annual-report input; backend fair value uses the latest available price/cache point.",
+      timeHorizon: "Current realtime assumption set; FCFF uses LTM or normalized annual-report input; current price is comparison context only.",
       summary: [
         { label: "Sustainable Growth", value: pct(derived.sustainableGrowth), source: "Reinvestment x ROIC" },
         { label: "Terminal Value Share", value: pct(derived.terminalValueShare), source: "Growth and WACC scenario formula" },
         { label: "FCFF Magnitude", value: `${moneyText(assumptions.fcff)}B`, source: sourceLabel },
-        { label: "Backend Fair Value", value: dcfData ? moneyText(dcfData.estimated_value) : "N/A", source: "Backend DCF engine" },
+        { label: "Intrinsic DCF Value", value: dcfData ? moneyText(dcfData.estimated_value) : "N/A", source: "Backend DCF engine" },
       ],
       components: [
         { label: "Reinvestment Rate", value: pct(assumptions.reinvestment), source: "Sustainable growth component" },
@@ -888,10 +888,10 @@ export function buildCalculationDetails({
       ],
     },
     backendFairValue: {
-      title: `${companyName} Backend Fair Value`,
+      title: `${companyName} Intrinsic DCF Value`,
       timeHorizon: "Current backend DCF response using debounced realtime assumptions and the latest available market price/cache point.",
       summary: [
-        { label: "Backend Fair Value", value: dcfData ? moneyText(dcfData.estimated_value) : "N/A", source: "Backend DCF engine | Period: current debounced request" },
+        { label: "Intrinsic DCF Value", value: dcfData ? moneyText(dcfData.estimated_value) : "N/A", source: "Backend DCF engine | Period: current debounced request" },
         { label: "Current Price", value: dcfData ? moneyText(dcfData.current_price) : "Loading", source: "Yahoo Finance / local OHLCV cache | Period: latest available quote/cache point" },
         { label: "Upside / Downside", value: dcfData ? pct(dcfData.upside_pct) : "Loading", source: "Fair value vs current price | Period: current backend response" },
         { label: "Status", value: dcfData?.status ?? "Calculating", source: "Backend valuation classification | Period: current backend response" },
@@ -903,7 +903,7 @@ export function buildCalculationDetails({
         { label: "Terminal Growth", value: pct(clamp(assumptions.growth, -10, 10)), source: "Growth clamped to backend terminal-growth boundary | Period: current DCF request" },
         { label: "FCFF", value: `${moneyText(assumptions.fcff)}B`, source: "DCF payload | Period: LTM or normalized annual report" },
       ],
-      formula: "Backend Fair Value = backend DCF endpoint output; Upside = estimated value / current price - 1",
+      formula: "Intrinsic DCF Value = backend DCF endpoint output from FCFF, terminal value, and the equity bridge; Upside = intrinsic value / current price - 1",
       result: dcfData ? moneyText(dcfData.estimated_value) : "N/A",
       sourcing: [
         { label: "DCF endpoint", value: `/corporate/dcf/${assumptions.ticker}`, source: "FastAPI backend" },
@@ -913,7 +913,7 @@ export function buildCalculationDetails({
       simulation: [
         { label: "1", value: `POST growth ${pct(assumptions.growth)}, WACC ${pct(assumptions.wacc)}, terminal growth ${pct(clamp(assumptions.growth, -10, 10))}`, source: "Backend DCF request" },
         { label: "2", value: dcfData ? `${moneyText(dcfData.estimated_value)} / ${moneyText(dcfData.current_price)} - 1` : "Waiting for backend result", source: dcfData ? pct(dcfData.upside_pct) : "Loading" },
-        { label: "3", value: dcfData ? moneyText(dcfData.estimated_value) : "N/A", source: "Final Backend Fair Value" },
+        { label: "3", value: dcfData ? moneyText(dcfData.estimated_value) : "N/A", source: "Final Intrinsic DCF Value" },
       ],
     },
   };

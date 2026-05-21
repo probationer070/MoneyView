@@ -5,6 +5,7 @@ from hashlib import sha256
 
 from cachetools import TTLCache
 
+from apps.api.core.dev_monitor import emit_cache_event
 from apps.api.models.schemas import AttributionRequest, AttributionResult, ReportPayload, ReportSummaryRequest
 
 ATTRIBUTION_CACHE_MAXSIZE = int(os.getenv("MONEYVIEW_ATTRIBUTION_CACHE_MAXSIZE", "128"))
@@ -69,19 +70,55 @@ class CacheService:
     def get_attribution(self, cache_key: str) -> AttributionResult | None:
         cached = self._attribution_cache.get(cache_key)
         if cached is None:
+            emit_cache_event(
+                operation="cache.miss",
+                status="cache_miss",
+                component="portfolio.attribution_cache",
+                metadata={"cache_key": cache_key, "ttl_seconds": ATTRIBUTION_CACHE_TTL_SECONDS, "source": "ttl_cache"},
+            )
             return None
+        emit_cache_event(
+            operation="cache.hit",
+            status="cache_hit",
+            component="portfolio.attribution_cache",
+            metadata={"cache_key": cache_key, "ttl_seconds": ATTRIBUTION_CACHE_TTL_SECONDS, "source": "ttl_cache"},
+        )
         result = AttributionResult.model_validate(cached)
         result.metadata.cache_hit = True
         return result
 
     def set_attribution(self, cache_key: str, result: AttributionResult) -> None:
         self._attribution_cache[cache_key] = result.model_dump()
+        emit_cache_event(
+            operation="cache.write",
+            status="success",
+            component="portfolio.attribution_cache",
+            metadata={"cache_key": cache_key, "ttl_seconds": ATTRIBUTION_CACHE_TTL_SECONDS, "source": "ttl_cache"},
+        )
 
     def get_report(self, cache_key: str) -> ReportPayload | None:
         cached = self._report_cache.get(cache_key)
         if cached is None:
+            emit_cache_event(
+                operation="cache.miss",
+                status="cache_miss",
+                component="portfolio.report_cache",
+                metadata={"cache_key": cache_key, "ttl_seconds": REPORT_CACHE_TTL_SECONDS, "source": "ttl_cache"},
+            )
             return None
+        emit_cache_event(
+            operation="cache.hit",
+            status="cache_hit",
+            component="portfolio.report_cache",
+            metadata={"cache_key": cache_key, "ttl_seconds": REPORT_CACHE_TTL_SECONDS, "source": "ttl_cache"},
+        )
         return ReportPayload.model_validate(cached)
 
     def set_report(self, cache_key: str, payload: ReportPayload) -> None:
         self._report_cache[cache_key] = payload.model_dump()
+        emit_cache_event(
+            operation="cache.write",
+            status="success",
+            component="portfolio.report_cache",
+            metadata={"cache_key": cache_key, "ttl_seconds": REPORT_CACHE_TTL_SECONDS, "source": "ttl_cache"},
+        )

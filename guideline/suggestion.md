@@ -1,898 +1,182 @@
-````markdown
-# MoneyView Dev Monitor — Functional Detail Plan
+# DCF (Discounted Cash Flow) Valuation Analysis
 
-## Purpose
-
-Add a development-only observability system to MoneyView that shows:
-
-- structured backend logs
-- real-time operation latency
-- per-ticker data collection time
-- database query time
-- metric calculation time
-- API response time
-- frontend chart/render timing
-- data-quality warnings
-- slow operation detection
-
-This feature is for local debugging, performance analysis, and data-quality auditing.
+## Executive Summary
+While the conceptual skeleton of the standard DCF framework is theoretically sound and aligned with academic textbooks, severe architectural deviations occur in MoneyView's actual implementation. The final value calculation ceases to be a genuine intrinsic valuation, mutating instead into a market-price-dependent relative valuation that introduces unverified constants and structural inconsistencies.
 
 ---
 
-# 1. Feature Scope
+## ✅ Methodological Merits (Standard DCF Flow)
+The fundamental blueprint correctly captures the standard corporate finance workflow:
+$$\text{FCFF} \rightarrow \text{Growth Forecasting} \rightarrow \text{Explicit Period Discounting} \rightarrow \text{Terminal Value} \rightarrow \text{Enterprise Value}$$
 
-## Included
-
-### Backend observability
-- API request start/end timing
-- SQLite query timing
-- yfinance fetch timing
-- cache hit/miss logging
-- ROIC/WACC calculation timing
-- DCF calculation timing
-- attribution calculation timing
-- Monte Carlo backend timing
-- data normalization timing
-- missing-field and invalid-metric warnings
-
-### Frontend observability
-- React Query request timing
-- page load timing
-- chart render timing
-- Monte Carlo worker timing
-- chart failure events
-- frontend validation failures
-
-### Real-time display
-- terminal logs
-- JSONL file logs
-- in-memory recent event buffer
-- SSE streaming
-- `/dev/monitor` dashboard
+| Component | Evaluation |
+| :--- | :--- |
+| **$\text{FCFF} = \text{EBIT} \times (1 - t) + \text{D&A} - \text{Capex} - \Delta\text{NWC}$** | Standard textbook definition; mathematically correct. |
+| **$\text{Growth} = \text{Reinvestment Rate} \times \text{ROIC}$** | Standard formula for sustainable growth rate. |
+| **Gordon Growth Model for Terminal Value** | Appropriately utilized for perpetuity capture. |
+| **Condition: $\text{WACC} > \text{Terminal Growth}$** | Essential constraint; system alerts are properly configured. |
+| **5-Year Explicit Forecast Period** | Aligned with standard corporate valuation practices. |
 
 ---
 
-## Excluded for now
+## 🔴 Critical Issues
 
-- remote telemetry
-- cloud logging
-- user analytics
-- production monitoring
-- authentication-based admin dashboard
-- distributed tracing tools such as OpenTelemetry, Jaeger, or Grafana
+### 1. The `estimated_value` Formula (Core Flaw)
+When a market price is available, the system calculates valuation using the following logic:
+$$\text{dcf\_multiple} = \frac{\text{enterprise\_value}}{\text{base\_fcff}}$$
+$$\text{baseline\_multiple} = \frac{1}{\text{wacc} - \text{terminal\_growth}}$$
+$$\text{fcff\_scale} = \frac{\text{base\_fcff}}{92.0}$$
+$$\text{estimated\_value} = \text{current\_price} \times \left(\frac{\text{dcf\_multiple}}{\text{baseline\_multiple}}\right) \times \text{agency\_discount} \times \text{fcff\_scale}$$
 
----
+*   **Dependency on `current_price`:** This breaks the core axiom of a DCF model. The fundamental purpose of DCF is to independently derive intrinsic value from future cash flows. Multiplying by the current market price introduces a circular logic preset ("the market price is inherently correct"), which completely distorts the output if the asset is severely over- or undervalued.
+*   **The `92.0` Magic Number:** The denominator `92.0` is an entirely ungrounded, hardcoded scaler. Altering this single number shifts the final valuation linearly, yet it lacks any financial or empirical justification in the documentation.
+*   **Misapplied Multiples:** The ratio $\frac{\text{dcf\_multiple}}{\text{baseline\_multiple}}$ measures how much the market-implied multiple deviates from the theoretical Gordon Growth multiple. Consequently, this methodology behaves like a **Relative Valuation** (multiples-based pricing) disguised as a DCF.
 
-# 2. Feature Flag
+### 2. Flawed `agency_discount` Design
+$$\text{agency\_discount} = 1 - \frac{\text{clamp}(\text{esg\_penalty}, 0, 80)}{400}$$
+*   $\text{esg\_penalty} = 80 \text{ (Max)} \rightarrow \text{discount} = 1 - 0.2 = 0.8 \rightarrow \text{Maximum } 20\% \text{ haircut.}$
+*   $\text{esg\_penalty} = 0 \rightarrow \text{discount} = 1.0 \rightarrow \text{No haircut.}$
 
-The monitor must be development-only.
+*   **Arbitrary Parameters:** There is no financial rationale explaining why ESG risks should max out at a $20\%$ discount, nor why the denominator is set exactly to `400` (shifting it to `300` or `500` changes the maximum haircut to $26.7\%$ or $16\%$ respectively with no underlying logic).
+*   **Incorrect Integration of ESG:** Academically, ESG and governance risks should be captured by adjusting the cost of capital ($\text{WACC}$) or constructing explicit cash flow probability scenarios. Applying an arbitrary linear discount *post-valuation* lacks theoretical validity.
+*   **Inconsistency Across Tools:** Similar to the Minard chart's $\text{esgPenalty} \times 0.25$, ESG acts as an independent input variable here but yields completely different, non-standardized impacts depending on the specific module design.
 
-## Environment variable
+### 3. Omission of the Enterprise-Value-to-Equity-Value Bridge
+The documentation outlines the standard textbook concluding sequence:
+$$\text{Equity Value} = \text{Enterprise Value} - \text{Net Debt} + \text{Non-Operating Assets}$$
+$$\text{Intrinsic Value Per Share} = \frac{\text{Equity Value}}{\text{Diluted Shares Outstanding}}$$
 
-```env
-MONEYVIEW_DEV_MONITOR=true
-````
+However, the actual codebase skips this bridge entirely when calculating `estimated_value` via price multiples. By failing to subtract Net Debt, highly leveraged firms will appear systematically overvalued compared to cash-rich peers.
 
-## Behavior
-
-If disabled:
-
-```text
-/api/v1/dev/* → disabled or 404
-/dev/monitor → disabled page or 404
-performance events → file/terminal only if explicitly enabled
-```
-
-Recommended:
-
-```text
-Default = disabled
-Development launcher = enabled
-Production/Tauri release = disabled
-```
+### 4. Rigid Single-Value Growth Modeling
+$$\text{projected\_fcff\_t} = \text{base\_fcff} \times (1 + \text{growth\_used})^t$$
+The model applies an identical `growth_used` rate across all 5 explicit years.
+*   **Lack of Multi-Stage Nuance:** Industry standard practices typically leverage a 3-stage model (Initial High Growth $\rightarrow$ Transition/Deceleration $\rightarrow$ Stable Perpetuity Convergence). A flat growth rate tends to undervalue mature firms while heavily overvaluing high-growth startups.
+*   **Ambiguous Inputs:** It remains unclear whether `growth_used` is dynamically bound to the sustainable growth formula ($\text{Reinvestment Rate} \times \text{ROIC}$) or overridden by manual user input.
 
 ---
 
-# 3. Core Data Model
+## 🟡 Design Concerns
 
-## 3.1 PerformanceEvent
+### 5. Terminal Value Concentration
+As demonstrated in the system's own example:
+*   $\text{PV of Explicit FCFF} = 448.08 \quad (26.8\%)$
+*   $\text{PV of Terminal Value} = 1,222.82 \quad (73.2\%)$
+*   $\text{Enterprise Value} = 1,670.90$
 
-All logging and visualization should use one shared event model.
+While a $73\%$ Terminal Value concentration is structurally common in DCFs, it highlights how incredibly fragile and sensitive the output is to minor adjustments in terminal growth ($g$) or $\text{WACC}$. The current user interface provides no interactive sensitivity matrix (e.g., a WACC vs. g table) to visually communicate this volatility.
 
-```ts
-type PerformanceEvent = {
-  id: string;
-  timestamp: string;
-
-  requestId?: string;
-  parentId?: string;
-
-  level: "debug" | "info" | "warn" | "error";
-
-  scope:
-    | "api"
-    | "db"
-    | "external"
-    | "cache"
-    | "normalization"
-    | "metric"
-    | "calculation"
-    | "page_load"
-    | "worker"
-    | "chart"
-    | "data_quality"
-    | "system";
-
-  operation: string;
-
-  status:
-    | "start"
-    | "success"
-    | "error"
-    | "slow"
-    | "invalid"
-    | "cache_hit"
-    | "cache_miss"
-    | "warning"
-    | "canceled";
-
-  durationMs?: number;
-
-  ticker?: string;
-  route?: string;
-  method?: string;
-  table?: string;
-  provider?: string;
-  component?: string;
-
-  message?: string;
-  warningCode?: string;
-  errorCode?: string;
-
-  metadata?: Record<string, unknown>;
-};
-```
+### 6. Bifurcated Fallback Logic
+When `current_price` is unavailable, the engine falls back to:
+$$\text{estimated\_value} = \text{enterprise\_value} \times \text{agency\_discount}$$
+This creates a severe user experience hazard. The calculation engine switches to an entirely different mathematical logic depending on data availability. Because both outputs share the exact same `estimated_value` label, users cannot reliably compare cross-company outputs.
 
 ---
 
-# 4. Backend Functional Requirements
+## 📊 Comparative Synthesis: Minard Chart vs. DCF
 
-## 4.1 Request ID Middleware
-
-Every API request must receive a request ID.
-
-### Behavior
-
-For every request:
-
-```text
-create request_id
-attach request_id to request.state
-add request_id to response header
-emit api.request_start
-emit api.request_complete
-```
-
-### Response header
-
-```http
-X-Request-ID: req_20260502_141231_a8f2
-```
+| Dimension | Minard Chart | DCF Model |
+| :--- | :--- | :--- |
+| **Theoretical Foundation** | Weak (Heuristic / Visual-First) | Strong (Academic Textbook Standard) |
+| **Implementation Deviation** | Moderate | **Severe** |
+| **Primary Magic Number** | `2.3`, `0.25` | `92.0` (Highly Critical) |
+| **Nomenclature Misuse** | "Probability" & "NPV" are pseudo-metrics | Market price bypasses true "DCF" definition |
+| **ESG Risk Treatment** | Arbitrary post-hoc multiplier | Arbitrary post-hoc linear discount |
+| **Risk of User Misinterpretation** | Moderate | **High** (Masked by the authoritative "DCF" label) |
 
 ---
 
-## 4.2 API Timing
+## Conclusion & Recommendations
+The standard structural framing of the DCF is correct, but the final `estimated_value` calculation logic abandons true DCF principles. Merging market-price-dependent multiples with unverified scaling constants (`92.0`) and arbitrary post-hoc ESG adjustments damages the integrity of the valuation output. 
 
-Each route should emit:
+### Urgent Remediation Steps:
+1.  **Deconstruct the Magic Number:** Replace the arbitrary `92.0` scalar with a transparent, economically grounded normalization factor, or remove it entirely.
+2.  **Separate the Valuation Labels:** Clearly differentiate intrinsic valuations from relative market-price adjustments by assigning distinct labels (e.g., `Intrinsic DCF Value` vs. `Market Adjusted Target Price`).
+3.  **Integrate the Debt Bridge:** Ensure Net Debt and diluted share counts are uniformly factored into the per-share value calculation to prevent structural biases against debt-heavy balance sheets.
 
-```text
-api.request_start
-api.request_complete
-api.request_error
-```
 
-### Captured fields
 
-* route path
-* HTTP method
-* status code
-* duration
-* request ID
-* response size if available
-* error message if failed
+
+
+# Risk-Return Minard Chart Analysis
+
+### Overall Evaluation
+While this chart is explicitly designated as a front-end visualization tool, its mathematical formulation contains several critical flaws.
 
 ---
 
-## 4.3 Database Timing
+### 🔴 Critical Issues
 
-Every repository/database operation should be wrapped in a timer.
+#### 1. Arbitrariness of the `successProbability` Formula
+$$\text{successProbability} = \text{clamp}(55 + \text{spread} \times 2.3 + \text{growth} - \text{esgPenalty} \times 0.25, 5, 95)$$
 
-### Required metadata
+*   **Ungrounded Coefficients:** The coefficients `2.3` and `0.25` are set without any empirical or theoretical basis. There is no clear justification for choosing `2.3` over `2.0` or `2.5`.
+*   **Flawed Aggregation:** Directly summing `spread` and `growth` assumes that a 1%p change in spread has the exact same economic impact as a 1%p change in growth, which is economically unrealistic.
+*   **Negligible ESG Impact:** The coefficient of `0.25` for `esgPenalty` is far too weak. Even a severe penalty of 20 results in a mere -5 point reduction.
+*   **Misleading Output:** Although the output mimics a probability, it is not a statistically derived probability, which poses a high risk of misleading users.
 
-* table name
-* operation type
+#### 2. Lack of Consistency in Segment NPV Formulas
+| Segment | Formula | Issues |
+| :--- | :--- | :--- |
+| **Inflation** | $\text{spread} \times 12 - 18$ | Why `-18`? The constant lacks justification. |
+| **FX** | $\text{spread} \times 10 - 6$ | Why `-6`? The constant lacks justification. |
+| **Demand** | $\text{spread} \times 9 + \text{growth}$ | Why is `growth` added here? |
+| **Margin** | $\text{spread} \times 11 + \text{roic}$ | Why is `roic` added directly? |
 
-  * select
-  * insert
-  * update
-  * delete
-  * upsert
-* rows returned or affected
-* duration
-* request ID
+*   The multipliers vary arbitrarily from 9 to 12 across segments with no stated rationale.
+*   Directly adding `roic` to the **Margin** segment creates a distortion: it suggests that higher ROIC always reduces margin risk. In reality, margin pressure can often peak when ROIC is at its highest.
+*   Using a fixed constant of `-18` for **Inflation** forces the NPV into negative territory when the spread is low, but what a negative NPV represents here remains undefined.
 
-### Example event
+#### 3. Asymmetry in Failure Probability Calculation
+*   $\text{Inflation fail} = 100 - \text{successProbability} + 12 \rightarrow 39.2$
+*   $\text{Margin fail} = 96 - \text{successProbability} \rightarrow 23.2$
 
-```json
-{
-  "scope": "db",
-  "operation": "select_watchlist",
-  "table": "watchlist",
-  "durationMs": 12.4,
-  "status": "success",
-  "metadata": {
-    "rows": 37
-  }
-}
-```
+The baseline constants differ completely between segments (e.g., $100 - p + 12$ for Inflation vs. $96 - p$ for Margin). 
 
----
+Specifically for **Margin**, there is no logical reason to use `96` instead of `100`. While the sum of success and failure happens to equal 100 by mathematical coincidence, the underlying logic lacks consistency:
+*   **Inflation:** $\text{success} + \text{fail} = (p - 12) + (100 - p + 12) = 100$ (Valid)
+*   **FX:** $\text{success} + \text{fail} = (p - 5) + (100 - p + 5) = 100$ (Valid)
+*   **Margin:** $\text{success} + \text{fail} = (p + 4) + (96 - p) = 100$ (Valid)
 
-## 4.4 External Provider Timing
+Even though the total equals 100, using a different base constant (`96` vs. `100`) breaks architectural consistency. Furthermore, without a clamp on the segment-adjusted success rate, the failure probability could turn negative if `successProbability` reaches high values.
+*   *Example:* If $\text{successProbability} = 95$ (the maximum clamp value):
+    *   $\text{Margin success} = 95 + 4 = 99$
+    *   $\text{Margin fail} = 96 - 95 = 1$
+    *   $\text{Total} = 100$ (Mathematically valid, but there is no mechanism to prevent the adjusted success rate from escalating to 99).
 
-Every yfinance call should emit one event per ticker and data type.
+#### 4. Visual Deception of `strokeWidth`
+$$\text{strokeWidth} = \max(2, \text{successProbability} / 18)$$
 
-### Required operations
+*   If $\text{successProbability} = 72.8 \rightarrow \text{strokeWidth} = 4.04$
+*   If $\text{successProbability} = 50.0 \rightarrow \text{strokeWidth} = 2.78$
 
-```text
-fetch_quote
-fetch_history
-fetch_income_statement
-fetch_balance_sheet
-fetch_cashflow
-fetch_info
-fetch_news
-```
-
-### Required metadata
-
-* ticker
-* provider
-* duration
-* cache hit/miss
-* missing fields
-* retry count if applicable
-* error if failed
-
-### Example
-
-```json
-{
-  "scope": "external",
-  "operation": "fetch_balance_sheet",
-  "ticker": "AAPL",
-  "provider": "yfinance",
-  "durationMs": 842,
-  "status": "success",
-  "metadata": {
-    "cache": "miss",
-    "rows": 4,
-    "missingFields": []
-  }
-}
-```
+The visual variance is far too subtle for users to accurately perceive the difference in thickness. Conversely, a thicker line inherently implies a "good" status, creating a potential **visual bias** without providing meaningful data granularity.
 
 ---
 
-## 4.5 Cache Logging
+### 🟡 Design Concerns
 
-Cache access should emit:
+#### 5. Misuse of the Term "NPV"
+Even if accompanying documentation states "this is not actual NPV," labeling the Y-axis as **npv** will inevitably confuse users. Reusing the term NPV—which has a strict, universally accepted definition based on Discounted Cash Flow (DCF)—creates a significant communication risk.
 
-```text
-cache.lookup
-cache.hit
-cache.miss
-cache.write
-cache.stale
-```
+#### 6. Diluted ESG Penalty Impact
+With a formula of $\text{esgPenalty} \times 0.25$, an extreme penalty of 40 yields only a -10 point deduction. This effectively neutralizes the variable, rendering the independent ESG/Governance risk input practically meaningless.
 
-### Required metadata
-
-* cache key
-* ticker if applicable
-* cache age
-* TTL
-* source
-* fallback used
+#### 7. Artificial Independence of the Four Risk Segments
+Inflation, FX, Demand, and Margin are deeply intertwined macroeconomic variables (e.g., Inflation $\rightarrow$ Margin Pressure $\rightarrow$ Reduced Demand). Plotting them as independent scenarios along the X-axis completely ignores their systemic correlations.
 
 ---
 
-## 4.6 Metric Calculation Logging
+### ✅ Valid Points
 
-Each important metric must emit a timing event.
-
-### Metrics to log
-
-* ROIC
-* WACC
-* ROIC - WACC
-* DCF upside
-* Expected vs Market
-* Volatility
-* Beta
-* VaR
-* CVaR
-* attribution effects
-
-### Required metadata
-
-* ticker
-* metric name
-* duration
-* quality
-* calculation version
-* warnings
-
-### Example
-
-```json
-{
-  "scope": "metric",
-  "operation": "calculate_roic",
-  "ticker": "TSLA",
-  "durationMs": 4.2,
-  "status": "invalid",
-  "metadata": {
-    "quality": "invalid",
-    "reason": "near_zero_invested_capital",
-    "calculationVersion": "roic_v2_average_invested_capital"
-  }
-}
-```
+| Item | Evaluation |
+| :--- | :--- |
+| $\text{spread} = \text{ROIC} - \text{WACC}$ | Standard, mathematically sound metric for economic value creation. |
+| $\text{clamp}(5, 95)$ Application | Reasonable constraint to prevent unrealistic extreme values (0% or 100%). |
+| Color-coding based on spread sign | Intuitive and highly effective for immediate visual distinction. |
+| Explicit "Visual Diagnostic Tool" disclaimer | Appropriate framing to manage user expectations and limit liability. |
 
 ---
 
-## 4.7 Data Quality Logging
-
-ROIC/WACC validation should emit warnings.
-
-### Warning examples
-
-```text
-missing_operating_income
-missing_total_debt
-missing_total_equity
-missing_cash
-near_zero_invested_capital
-negative_invested_capital
-invalid_tax_rate
-beta_out_of_range
-cost_of_debt_unavailable
-currency_mismatch
-```
-
-### UI behavior
-
-These warnings should appear in:
-
-* `/dev/monitor`
-* calculation audit modal
-* terminal logs
-* JSONL logs
-
----
-
-## 4.8 Page Load Group Logging
-
-Backend should support grouped traces.
-
-### Example groups
-
-```text
-market_overview_load
-portfolio_load
-corporate_metrics_load
-corporate_comparison_load
-monte_carlo_run
-news_feed_load
-```
-
-### Required behavior
-
-A group should contain multiple child events.
-
-Example:
-
-```text
-portfolio_load
-├─ get_watchlist
-├─ get_latest_metrics
-├─ get_attribution
-├─ get_news
-└─ response_complete
-```
-
----
-
-# 5. Frontend Functional Requirements
-
-## 5.1 Dev Monitor Route
-
-Create:
-
-```text
-apps/web/app/dev/monitor/page.tsx
-```
-
-### Page sections
-
-```text
-Header
-KPI Row
-Live Operation Latency
-Per-Ticker Fetch Latency
-Page Load Timeline
-Metric Calculation Latency
-Slow Operations
-Data Quality Warnings
-Live Log Stream
-```
-
----
-
-## 5.2 SSE Client Hook
-
-Create:
-
-```text
-apps/web/app/dev/monitor/hooks/usePerformanceStream.ts
-```
-
-### Responsibilities
-
-* connect to `/api/v1/dev/log-stream`
-* append incoming events
-* reconnect on disconnect
-* expose connection state
-* pause/resume stream
-* clear local buffer
-* cap event count
-
-### Hook API
-
-```ts
-type UsePerformanceStreamResult = {
-  events: PerformanceEvent[];
-  connectionStatus: "connecting" | "connected" | "disconnected" | "error";
-  pause: () => void;
-  resume: () => void;
-  clear: () => void;
-  isPaused: boolean;
-};
-```
-
----
-
-## 5.3 Monitor Controls
-
-The monitor page should support:
-
-* pause stream
-* resume stream
-* clear logs
-* export visible events
-* filter by scope
-* filter by ticker
-* filter by route
-* show slow only
-* show errors only
-* search operation name
-
----
-
-# 6. Visualization Requirements
-
-## 6.1 KPI Row
-
-Display:
-
-* active requests
-* average API latency
-* p95 API latency
-* slow operations count
-* error count
-* cache hit rate
-* latest event time
-
----
-
-## 6.2 Operation Latency Bar Chart
-
-Purpose:
-
-Show most recent operation durations.
-
-### Data
-
-```ts
-type OperationLatencyRow = {
-  label: string;
-  scope: string;
-  durationMs: number;
-  status: "success" | "slow" | "error";
-};
-```
-
-### Display
-
-Horizontal bars sorted by latest or duration.
-
----
-
-## 6.3 Per-Ticker Fetch Latency Bar Chart
-
-Purpose:
-
-Identify slow yfinance tickers.
-
-### Data
-
-```ts
-type TickerFetchLatencyRow = {
-  ticker: string;
-  operation: string;
-  provider: string;
-  durationMs: number;
-  cacheStatus: "hit" | "miss" | "stale" | "unknown";
-  status: "success" | "slow" | "error";
-};
-```
-
-### Display
-
-* ticker label
-* operation label
-* duration
-* cache badge
-* status badge
-
----
-
-## 6.4 Page Load Timeline
-
-Purpose:
-
-Show where full page loading time is spent.
-
-### Data
-
-```ts
-type PageLoadTimelineRow = {
-  page: string;
-  step: string;
-  durationMs: number;
-  requestId?: string;
-  status: "success" | "slow" | "error";
-};
-```
-
-### Display
-
-Grouped timeline per request/page.
-
----
-
-## 6.5 Metric Calculation Latency
-
-Purpose:
-
-Show calculation costs for ROIC/WACC/DCF/Attribution.
-
-### Data
-
-```ts
-type MetricCalculationRow = {
-  ticker?: string;
-  metric: string;
-  durationMs: number;
-  quality?: string;
-  warnings?: string[];
-};
-```
-
----
-
-## 6.6 Data Quality Warning Panel
-
-Purpose:
-
-Make invalid financial data visible.
-
-### Display fields
-
-* ticker
-* metric
-* warning code
-* message
-* source
-* timestamp
-* request ID
-* link to audit if available
-
----
-
-## 6.7 Live Log Stream
-
-Purpose:
-
-Show raw event sequence.
-
-### Display
-
-Monospace compact rows:
-
-```text
-time | level | scope | operation | ticker | duration | status
-```
-
----
-
-# 7. Backend Dev APIs
-
-## 7.1 SSE Stream
-
-```text
-GET /api/v1/dev/log-stream
-```
-
-Streams live `PerformanceEvent`.
-
----
-
-## 7.2 Recent Events
-
-```text
-GET /api/v1/dev/performance/recent?limit=500
-```
-
-Returns recent ring-buffer events.
-
----
-
-## 7.3 Slow Operations
-
-```text
-GET /api/v1/dev/performance/slow?limit=100
-```
-
-Returns events above threshold.
-
----
-
-## 7.4 Errors
-
-```text
-GET /api/v1/dev/performance/errors?limit=100
-```
-
-Returns recent errors.
-
----
-
-## 7.5 Summary
-
-```text
-GET /api/v1/dev/performance/summary
-```
-
-Returns aggregate stats.
-
-Example:
-
-```json
-{
-  "activeRequests": 2,
-  "avgApiLatencyMs": 842,
-  "p95ApiLatencyMs": 2100,
-  "slowOperations": 4,
-  "errors": 1,
-  "cacheHitRate": 0.62
-}
-```
-
----
-
-## 7.6 Client Event Intake
-
-```text
-POST /api/v1/dev/performance/client-event
-```
-
-Used for frontend events:
-
-* chart render time
-* worker time
-* page load time
-* UI error
-
----
-
-# 8. File Logging Requirements
-
-## 8.1 Location
-
-```text
-logs/performance/YYYY-MM-DD.jsonl
-```
-
-## 8.2 Format
-
-Each line is one event.
-
-```jsonl
-{"timestamp":"...","scope":"api","operation":"request_complete","durationMs":1842}
-{"timestamp":"...","scope":"external","operation":"fetch_balance_sheet","ticker":"AAPL","durationMs":842}
-```
-
-## 8.3 Retention
-
-Recommended:
-
-```text
-retain 14 days
-rotate daily
-cap file size if necessary
-```
-
----
-
-# 9. Slow Threshold Defaults
-
-```ts
-const SLOW_THRESHOLDS_MS = {
-  api: 3000,
-  db: 100,
-  external: 1500,
-  cache: 50,
-  normalization: 300,
-  metric: 500,
-  calculation: 1000,
-  page_load: 5000,
-  worker: 3000,
-  chart: 500,
-};
-```
-
----
-
-# 10. Implementation Steps
-
-## Phase 1 — Backend Event Foundation
-
-* Add `PerformanceEvent` model
-* Add request ID middleware
-* Add `log_event`
-* Add `perf_timer`
-* Add terminal formatted output
-* Add JSONL file output
-* Add in-memory ring buffer
-
----
-
-## Phase 2 — Backend Instrumentation
-
-Add timers around:
-
-* API routes
-* repository functions
-* yfinance fetch functions
-* cache lookup/write
-* financial statement normalization
-* ROIC/WACC calculation
-* DCF calculation
-* attribution
-* Monte Carlo backend execution
-
----
-
-## Phase 3 — Dev APIs
-
-Add:
-
-* `/api/v1/dev/log-stream`
-* `/api/v1/dev/performance/recent`
-* `/api/v1/dev/performance/slow`
-* `/api/v1/dev/performance/errors`
-* `/api/v1/dev/performance/summary`
-* `/api/v1/dev/performance/client-event`
-
----
-
-## Phase 4 — Frontend Monitor Shell
-
-Add:
-
-* `/dev/monitor`
-* `usePerformanceStream`
-* monitor header
-* KPI row
-* live log stream
-* filters
-
----
-
-## Phase 5 — Visualization Panels
-
-Add:
-
-* OperationLatencyBars
-* TickerFetchLatencyBars
-* PageLoadTimeline
-* MetricCalculationBars
-* DataQualityWarnings
-* SlowOperationsTable
-
----
-
-## Phase 6 — Frontend Event Capture
-
-Instrument:
-
-* page load timing
-* React Query timing
-* chart render timing
-* Monte Carlo worker timing
-* chart error boundaries
-
----
-
-## Phase 7 — Polish
-
-Add:
-
-* pause/resume
-* export JSONL
-* clear buffer
-* reconnect indicator
-* slow-only filter
-* error-only filter
-* ticker filter
-* route filter
-
----
-
-# 11. Acceptance Criteria
-
-The feature is complete when:
-
-* every API request has a request ID
-* API route duration is visible in terminal and `/dev/monitor`
-* DB query time is visible
-* yfinance per-ticker fetch time is visible
-* ROIC/WACC calculation timing and warnings are visible
-* slow operations are automatically flagged
-* `/dev/monitor` shows real-time bar charts
-* logs are saved as JSONL
-* the monitor can be disabled by environment variable
-* no secrets or large raw financial payloads are logged by default
-
----
-
-# 12. Final Functional Rule
-
-Every important operation must answer:
-
-```text
-What ran?
-When did it run?
-How long did it take?
-Which ticker/table/route was involved?
-Did it use cache?
-Did it succeed?
-Was it slow?
-Did it produce suspicious data?
-Where can I inspect the details?
-```
-
-```
-```
+### Summary
+This chart serves well as an exploratory scenario visualization tool, but the underlying mathematical formulas are arbitrary and lack rigorous justification. The core risk lies in using precise financial terms like **"Probability"** and **"NPV"** without adhering to their actual definitions. If this tool is deployed for high-stakes decision-making, it poses a severe risk of users overrelying on flawed, pseudo-quantitative data.

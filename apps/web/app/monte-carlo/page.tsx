@@ -21,7 +21,8 @@ import {
   TabButton,
 } from "./components";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { getApiBaseUrl } from "@/lib/api";
+import { emitClientPerformanceEvent, getApiBaseUrl } from "@/lib/api";
+import { useDevMonitorPageLoad } from "@/hooks/useDevMonitorPageLoad";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { normalizeCorrelationResult, normalizeMonteCarloResult, normalizeValuationResult } from "./lib/resultNormalization";
 
@@ -133,6 +134,7 @@ function downloadCsv(filename: string, rows: Array<Record<string, string | numbe
 }
 
 export default function MonteCarloPage() {
+  useDevMonitorPageLoad({ component: "monte_carlo" });
   // Page-level state owns worker lifecycle, tab selection, and all simulation inputs/results.
   const [activeTab, setActiveTab] = useState<SimulationTab>("path");
   const [input, setInput] = useState<PathSimulationInput>(defaultInput);
@@ -153,6 +155,12 @@ export default function MonteCarloPage() {
   const workerRef = useRef<Worker | null>(null);
   const activeRequestIdRef = useRef<string | null>(null);
   const activeRequestKindRef = useRef<"path" | "valuation" | "correlation" | null>(null);
+  const activeWorkerStartedAtRef = useRef<number | null>(null);
+  const activeWorkerEventRef = useRef<{
+    operation: string;
+    ticker: string | null;
+    metadata: Record<string, unknown>;
+  } | null>(null);
   const latestInitialInvestmentRef = useRef(defaultInput.initialInvestment);
   const priceLookupRequestSeqRef = useRef(0);
   const priceLookupTickerRef = useRef(defaultValuationInput.ticker);
@@ -162,6 +170,52 @@ export default function MonteCarloPage() {
   useEffect(() => {
     latestInitialInvestmentRef.current = input.initialInvestment;
   }, [input.initialInvestment]);
+
+  const beginWorkerEvent = (
+    operation: string,
+    {
+      ticker = null,
+      metadata = {},
+    }: {
+      ticker?: string | null;
+      metadata?: Record<string, unknown>;
+    } = {},
+  ) => {
+    activeWorkerStartedAtRef.current = typeof performance !== "undefined" ? performance.now() : Date.now();
+    activeWorkerEventRef.current = { operation, ticker, metadata };
+    void emitClientPerformanceEvent({
+      level: "info",
+      scope: "worker",
+      operation,
+      status: "start",
+      ticker,
+      route: "/monte-carlo",
+      component: "monte_carlo_worker",
+      metadata,
+    });
+  };
+
+  const completeWorkerEvent = (status: "success" | "error" | "canceled", message?: string | null) => {
+    if (!activeWorkerEventRef.current) {
+      return;
+    }
+    const startedAt = activeWorkerStartedAtRef.current ?? (typeof performance !== "undefined" ? performance.now() : Date.now());
+    const durationMs = Number((((typeof performance !== "undefined" ? performance.now() : Date.now()) - startedAt)).toFixed(1));
+    void emitClientPerformanceEvent({
+      level: status === "error" ? "error" : "info",
+      scope: "worker",
+      operation: activeWorkerEventRef.current.operation,
+      status,
+      duration_ms: durationMs,
+      ticker: activeWorkerEventRef.current.ticker,
+      route: "/monte-carlo",
+      component: "monte_carlo_worker",
+      message: message ?? null,
+      metadata: activeWorkerEventRef.current.metadata,
+    });
+    activeWorkerStartedAtRef.current = null;
+    activeWorkerEventRef.current = null;
+  };
 
   // One shared worker handles path, valuation, and correlation jobs.
   useEffect(() => {
@@ -182,6 +236,7 @@ export default function MonteCarloPage() {
         setProgress(100);
         setErrorMessage(null);
         setStatus("idle");
+        completeWorkerEvent("success");
         activeRequestIdRef.current = null;
         activeRequestKindRef.current = null;
         return;
@@ -191,6 +246,7 @@ export default function MonteCarloPage() {
         setValuationRunState({ result: normalized.result, warnings: normalized.warnings });
         setValuationProgress(100);
         setValuationStatus("idle");
+        completeWorkerEvent("success");
         activeRequestIdRef.current = null;
         activeRequestKindRef.current = null;
         return;
@@ -200,6 +256,7 @@ export default function MonteCarloPage() {
         setCorrelationRunState({ result: normalized.result, warnings: normalized.warnings });
         setCorrelationProgress(100);
         setCorrelationStatus("idle");
+        completeWorkerEvent("success");
         activeRequestIdRef.current = null;
         activeRequestKindRef.current = null;
         return;
@@ -210,10 +267,14 @@ export default function MonteCarloPage() {
         setErrorMessage(message.error);
         setStatus("error");
       }
+      completeWorkerEvent("error", message.error);
       activeRequestIdRef.current = null;
       activeRequestKindRef.current = null;
     };
     return () => {
+      if (activeRequestIdRef.current) {
+        completeWorkerEvent("canceled", "Worker terminated during page cleanup.");
+      }
       worker.terminate();
       workerRef.current = null;
     };
@@ -364,10 +425,18 @@ export default function MonteCarloPage() {
     if (!workerRef.current) return;
     if (activeRequestIdRef.current) {
       workerRef.current.postMessage({ type: "cancel", requestId: activeRequestIdRef.current });
+      completeWorkerEvent("canceled", "Superseded by a new path simulation request.");
     }
     const requestId = crypto.randomUUID();
     activeRequestIdRef.current = requestId;
     activeRequestKindRef.current = "path";
+    beginWorkerEvent("worker.path_simulation", {
+      metadata: {
+        simulation_count: input.simulationCount,
+        execution_mode: input.executionMode,
+        investment_horizon_years: input.investmentHorizonYears,
+      },
+    });
     setPathRunState((current) => ({ ...current, warnings: [] }));
     setErrorMessage(null);
     setStatus("loading");
@@ -379,10 +448,18 @@ export default function MonteCarloPage() {
     if (!workerRef.current) return;
     if (activeRequestIdRef.current) {
       workerRef.current.postMessage({ type: "cancel", requestId: activeRequestIdRef.current });
+      completeWorkerEvent("canceled", "Superseded by a new valuation simulation request.");
     }
     const requestId = crypto.randomUUID();
     activeRequestIdRef.current = requestId;
     activeRequestKindRef.current = "valuation";
+    beginWorkerEvent("worker.valuation_simulation", {
+      ticker: valuationInput.ticker.trim().toUpperCase() || null,
+      metadata: {
+        simulation_count: valuationInput.simulationCount,
+        forecast_period_years: valuationInput.forecastPeriodYears,
+      },
+    });
     setValuationRunState((current) => ({ ...current, warnings: [] }));
     setValuationStatus("loading");
     setValuationProgress(0);
@@ -393,10 +470,17 @@ export default function MonteCarloPage() {
     if (!workerRef.current) return;
     if (activeRequestIdRef.current) {
       workerRef.current.postMessage({ type: "cancel", requestId: activeRequestIdRef.current });
+      completeWorkerEvent("canceled", "Superseded by a new correlation simulation request.");
     }
     const requestId = crypto.randomUUID();
     activeRequestIdRef.current = requestId;
     activeRequestKindRef.current = "correlation";
+    beginWorkerEvent("worker.correlation_simulation", {
+      metadata: {
+        asset_count: correlationInput.assets.length,
+        simulation_count: correlationInput.simulationCount,
+      },
+    });
     setCorrelationRunState((current) => ({ ...current, warnings: [] }));
     setCorrelationStatus("loading");
     setCorrelationProgress(0);
@@ -406,6 +490,7 @@ export default function MonteCarloPage() {
   const cancelPathSimulation = () => {
     if (!workerRef.current || !activeRequestIdRef.current) return;
     workerRef.current.postMessage({ type: "cancel", requestId: activeRequestIdRef.current });
+    completeWorkerEvent("canceled", "Path simulation canceled from the UI.");
     activeRequestIdRef.current = null;
     activeRequestKindRef.current = null;
     setStatus("cancelled");
@@ -415,6 +500,7 @@ export default function MonteCarloPage() {
   const cancelValuationSimulation = () => {
     if (!workerRef.current || !activeRequestIdRef.current) return;
     workerRef.current.postMessage({ type: "cancel", requestId: activeRequestIdRef.current });
+    completeWorkerEvent("canceled", "Valuation simulation canceled from the UI.");
     activeRequestIdRef.current = null;
     activeRequestKindRef.current = null;
     setValuationStatus("cancelled");

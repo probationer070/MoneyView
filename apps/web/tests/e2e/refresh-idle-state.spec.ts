@@ -187,7 +187,7 @@ test("corporate renders cached calculation results without auto-fetch and refres
   await page.goto("/corporate", { waitUntil: "domcontentloaded" });
 
   await expect(page.getByRole("heading", { name: /Corporate Analysis/i })).toBeVisible({ timeout: 60_000 });
-  await expect(page.getByRole("button", { name: /Backend DCF/i })).toContainText("$199.9");
+  await expect(page.getByRole("button", { name: /^Intrinsic DCF(?! Value)/i })).toContainText("$199.9");
   await expect(page.getByText("Last updated")).toHaveCount(3);
   await expect(page.getByRole("cell", { name: "AAPL" }).first()).toBeVisible();
   await page.waitForTimeout(300);
@@ -199,7 +199,7 @@ test("corporate renders cached calculation results without auto-fetch and refres
 
   await page.getByRole("button", { name: "Refresh DCF" }).click();
   await expect.poll(() => stats.dcfRequests).toBe(1);
-  await expect(page.getByRole("button", { name: /Backend DCF/i })).toContainText("$240.5");
+  await expect(page.getByRole("button", { name: /^Intrinsic DCF(?! Value)/i })).toContainText("$240.5");
 
   await page.getByRole("button", { name: "Refresh source data" }).click();
   await expect.poll(() => stats.metricHistoryRequests).toBe(1);
@@ -226,7 +226,7 @@ test("corporate page refresh restores the selected ticker without auto-fetching 
 
   await expect(page.getByRole("heading", { name: /Corporate Analysis/i })).toBeVisible({ timeout: 60_000 });
   await expect(page.getByText(/Microsoft: life cycle/i)).toBeVisible();
-  await expect(page.getByRole("button", { name: /Backend DCF/i })).toContainText("Refresh to calculate");
+  await expect(page.getByRole("button", { name: /^Intrinsic DCF(?! Value)/i })).toContainText("Refresh to calculate");
   await page.waitForTimeout(300);
   expect(stats.dcfRequests).toBe(0);
   expect(stats.comparisonRequests).toBe(0);
@@ -300,8 +300,8 @@ test("corporate page refresh labels stale source-data cache for a different sele
   await page.goto("/corporate", { waitUntil: "domcontentloaded" });
 
   await expect(page.getByText(/Microsoft: life cycle/i)).toBeVisible({ timeout: 60_000 });
-  await expect(page.getByRole("button", { name: /Backend DCF/i })).toContainText("Refresh to calculate");
-  await expect(page.getByRole("button", { name: /Backend DCF/i })).not.toContainText("$199.9");
+  await expect(page.getByRole("button", { name: /^Intrinsic DCF(?! Value)/i })).toContainText("Refresh to calculate");
+  await expect(page.getByRole("button", { name: /^Intrinsic DCF(?! Value)/i })).not.toContainText("$199.9");
   await expect(page.getByText("Cached source data is for AAPL. Refresh for MSFT.")).toBeVisible();
   await expect(page.getByText("Growth Rate now stays on the stable CAGR path. Annual growth rates remain available in View Details for context.")).toBeVisible();
   await page.waitForTimeout(300);

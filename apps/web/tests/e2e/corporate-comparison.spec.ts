@@ -83,7 +83,7 @@ test("corporate comparison sorting reorders non-benchmark rows and metric clicks
   await page.getByRole("button", { name: "240.5" }).click();
   const calculationDialog = page.getByRole("dialog");
   await expect(calculationDialog).toBeVisible();
-  await expect(calculationDialog.getByRole("heading", { name: /Apple Backend Fair Value/i })).toBeVisible();
+    await expect(calculationDialog.getByRole("heading", { name: /Apple Intrinsic DCF Value/i })).toBeVisible();
   await expect(calculationDialog.getByText("Calculation Formula")).toBeVisible();
   await expect(calculationDialog.getByText("Result Summary: value, inputs used")).toBeVisible();
   await expect(calculationDialog.getByText("Calculation transparency and data lineage")).toBeVisible();

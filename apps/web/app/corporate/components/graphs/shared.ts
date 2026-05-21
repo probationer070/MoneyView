@@ -66,6 +66,11 @@ export interface RiskReturnPoint {
 
 export interface DcfResult {
   estimated_value: number;
+  intrinsic_value_per_share?: number | null;
+  enterprise_value?: number;
+  equity_value?: number | null;
+  valuation_method?: string;
+  bridge_quality?: string;
 }
 
 export function pct(value: number) {

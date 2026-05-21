@@ -8,7 +8,7 @@ Phase 1:
 - endpoint: `POST /api/v1/corporate/dcf/{ticker}/stream`
 - event: `phase1`
 - payload: summary only
-- fields: `report_id`, `ticker`, `estimated_value`, `current_price`, `upside_pct`, `status`, `generated_at`
+- fields: `report_id`, `ticker`, `estimated_value`, `intrinsic_value_per_share`, `enterprise_value`, `equity_value`, `valuation_method`, `bridge_quality`, `current_price`, `upside_pct`, `status`, `generated_at`
 
 Phase 2:
 - endpoint: `POST /api/v1/corporate/dcf/{ticker}/stream`
@@ -20,7 +20,7 @@ Phase 3:
 - endpoint: `POST /api/v1/corporate/dcf/{ticker}/report`
 - trigger: explicit user action
 - payload: full report only
-- fields include `projection_rows`, `wacc_breakdown`, terminal-value components, and valuation intermediates
+- fields include `projection_rows`, `wacc_breakdown`, terminal-value components, enterprise-to-equity bridge fields, and valuation intermediates
 
 ## Ownership
 

@@ -9,6 +9,8 @@ import numpy as np
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
+from apps.api.core.dev_monitor import perf_timer
+
 router = APIRouter()
 
 
@@ -260,43 +262,46 @@ def _correlation_model(rng: np.random.Generator, sample_count: int) -> dict[str,
 
 @router.post("/analyze", response_model=MonteCarloResponse)
 async def analyze_monte_carlo(request: MonteCarloRequest):
-    rng = np.random.default_rng(request.seed)
-    steps = max(1, int(request.horizon_years * request.steps_per_year))
-    dt = request.horizon_years / steps
-    jump_lambda = request.jump_probability / request.horizon_years
-    if request.jump_probability_monthly is not None:
-        jump_lambda = -12 * math.log(max(1 - request.jump_probability_monthly, 1e-9))
-    jump_mean = request.jump_intensity
-    if request.jump_intensity_multiplier is not None:
-        jump_mean = -request.volatility * request.jump_intensity_multiplier
-    paths = np.empty((request.path_count, steps + 1))
-    paths[:, 0] = request.current_price
-    drift = (request.expected_return - 0.5 * request.volatility ** 2) * dt
-    diffusion_scale = request.volatility * math.sqrt(dt)
-    for step in range(1, steps + 1):
-        shocks = rng.standard_normal(request.path_count)
-        jump_occurs = rng.random(request.path_count) < jump_lambda * dt
-        jumps = np.where(
-            jump_occurs,
-            rng.normal(jump_mean, request.jump_volatility, request.path_count),
-            0.0,
-        )
-        paths[:, step] = paths[:, step - 1] * np.exp(drift + diffusion_scale * shocks + jumps)
+    with perf_timer(scope="calculation", operation="calculation.monte_carlo_backend", ticker=request.ticker.upper(), component="monte_carlo", metadata={"path_count": request.path_count, "steps_per_year": request.steps_per_year, "seed": request.seed}):
+        rng = np.random.default_rng(request.seed)
+        steps = max(1, int(request.horizon_years * request.steps_per_year))
+        dt = request.horizon_years / steps
+        jump_lambda = request.jump_probability / request.horizon_years
+        if request.jump_probability_monthly is not None:
+            jump_lambda = -12 * math.log(max(1 - request.jump_probability_monthly, 1e-9))
+        jump_mean = request.jump_intensity
+        if request.jump_intensity_multiplier is not None:
+            jump_mean = -request.volatility * request.jump_intensity_multiplier
+        paths = np.empty((request.path_count, steps + 1))
+        paths[:, 0] = request.current_price
+        drift = (request.expected_return - 0.5 * request.volatility ** 2) * dt
+        diffusion_scale = request.volatility * math.sqrt(dt)
+        for step in range(1, steps + 1):
+            shocks = rng.standard_normal(request.path_count)
+            jump_occurs = rng.random(request.path_count) < jump_lambda * dt
+            jumps = np.where(
+                jump_occurs,
+                rng.normal(jump_mean, request.jump_volatility, request.path_count),
+                0.0,
+            )
+            paths[:, step] = paths[:, step - 1] * np.exp(drift + diffusion_scale * shocks + jumps)
 
-    terminal_returns = paths[:, -1] / request.current_price - 1
-    mean = float(terminal_returns.mean())
-    std = float(terminal_returns.std(ddof=1))
-    fair_values, valuation_summary = _valuation_distribution(request, rng, request.path_count)
-    return MonteCarloResponse(
-        ticker=request.ticker.upper(),
-        model="GBM + Jump-Diffusion with DCF valuation sampling and Cholesky correlation model",
-        path_summary=_path_summary(paths, request.horizon_years),
-        sample_paths=_sample_paths(paths, request.horizon_years),
-        risk_metrics=_risk_metrics(terminal_returns, request.risk_free_rate, request.horizon_years),
-        histogram=_histogram(terminal_returns),
-        normal_fit=_normal_fit_rows(terminal_returns, mean, std),
-        cdf_comparison=_cdf_comparison(terminal_returns, mean, std),
-        valuation=valuation_summary,
-        valuation_distribution=_histogram(fair_values / request.current_price - 1),
-        correlation=_correlation_model(rng, request.path_count),
-    )
+        terminal_returns = paths[:, -1] / request.current_price - 1
+        mean = float(terminal_returns.mean())
+        std = float(terminal_returns.std(ddof=1))
+        fair_values, valuation_summary = _valuation_distribution(request, rng, request.path_count)
+        with perf_timer(scope="metric", operation="metric.volatility_var_cvar", ticker=request.ticker.upper(), component="monte_carlo"):
+            risk_metrics = _risk_metrics(terminal_returns, request.risk_free_rate, request.horizon_years)
+        return MonteCarloResponse(
+            ticker=request.ticker.upper(),
+            model="GBM + Jump-Diffusion with DCF valuation sampling and Cholesky correlation model",
+            path_summary=_path_summary(paths, request.horizon_years),
+            sample_paths=_sample_paths(paths, request.horizon_years),
+            risk_metrics=risk_metrics,
+            histogram=_histogram(terminal_returns),
+            normal_fit=_normal_fit_rows(terminal_returns, mean, std),
+            cdf_comparison=_cdf_comparison(terminal_returns, mean, std),
+            valuation=valuation_summary,
+            valuation_distribution=_histogram(fair_values / request.current_price - 1),
+            correlation=_correlation_model(rng, request.path_count),
+        )

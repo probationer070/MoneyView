@@ -28,6 +28,7 @@ _ROOT = Path(__file__).resolve().parents[3]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
+from apps.api.core.dev_monitor import emit_cache_event, perf_timer
 from apps.api.models.schemas import DeltaBadge, IndexQuote, MarketDataQuality, MarketIndexDetail, MarketRegimeContext, MarketVolumeSummary, StockOHLCV, StockPriceLookup, TechnicalIndicators
 from apps.api.services.db import get_db
 
@@ -306,6 +307,13 @@ class MarketDataService:
     ) -> tuple[List[StockOHLCV], MarketDataQuality]:
         ticker = ticker.upper()
         freshness_rule = self._freshness_rule(period)
+        emit_cache_event(
+            operation="cache.lookup",
+            status="success",
+            ticker=ticker,
+            component="market_data.ohlcv",
+            metadata={"table": table, "requested_period": period, "source": "sqlite"},
+        )
 
         with get_db() as conn:
             tickers = self._query_tickers(ticker, table)
@@ -319,6 +327,14 @@ class MarketDataService:
             ).fetchall()
 
         if not rows:
+            emit_cache_event(
+                operation="cache.miss",
+                status="cache_miss",
+                ticker=ticker,
+                component="market_data.ohlcv",
+                metadata={"table": table, "requested_period": period, "source": "sqlite"},
+                message="No cached OHLCV rows were available.",
+            )
             logger.info("OHLCV cache miss for %s; fetching live data", ticker)
             live_rows = self._fetch_live_ohlcv_cached(ticker, period=period, table=table)
             latest_date = live_rows[-1].date if live_rows else None
@@ -337,6 +353,21 @@ class MarketDataService:
         cached_rows = list(reversed(self._rows_to_ohlcv(rows)))
         latest_cached_date = cached_rows[-1].date if cached_rows else None
         if not rows_fresh or not rows_cover_period:
+            emit_cache_event(
+                operation="cache.stale",
+                status="warning",
+                ticker=ticker,
+                component="market_data.ohlcv",
+                metadata={
+                    "table": table,
+                    "requested_period": period,
+                    "source": "sqlite",
+                    "latest_cached_date": latest_cached_date,
+                    "rows_fresh": rows_fresh,
+                    "rows_cover_period": rows_cover_period,
+                },
+                message="Cached OHLCV rows were stale or incomplete.",
+            )
             latest = self._latest_row_date(rows)
             oldest = self._oldest_row_date(rows)
             logger.info(
@@ -350,6 +381,13 @@ class MarketDataService:
             if live_rows:
                 live_rows = live_rows[-freshness_rule.days:]
                 latest_live_date = live_rows[-1].date if live_rows else latest_cached_date
+                emit_cache_event(
+                    operation="cache.write",
+                    status="success",
+                    ticker=ticker,
+                    component="market_data.ohlcv",
+                    metadata={"table": table, "requested_period": period, "source": "live_refresh", "rows": len(live_rows)},
+                )
                 return live_rows, self._build_data_quality(
                     source="live_refresh",
                     freshness_status="live_refresh",
@@ -359,6 +397,14 @@ class MarketDataService:
                     used_stale_cache_fallback=False,
                     detail_note="Local cache was incomplete or stale, so the service refreshed this detail payload from the live provider.",
                 )
+            emit_cache_event(
+                operation="cache.fallback",
+                status="warning",
+                ticker=ticker,
+                component="market_data.ohlcv",
+                metadata={"table": table, "requested_period": period, "source": "cache_fallback", "fallback_used": True},
+                message="Live refresh failed; stale cached OHLCV rows were returned.",
+            )
             return cached_rows, self._build_data_quality(
                 source="cache_fallback",
                 freshness_status="stale_cache",
@@ -369,6 +415,19 @@ class MarketDataService:
                 detail_note="Live refresh was unavailable, so this detail payload fell back to the latest cached history.",
             )
 
+        emit_cache_event(
+            operation="cache.hit",
+            status="cache_hit",
+            ticker=ticker,
+            component="market_data.ohlcv",
+            metadata={
+                "table": table,
+                "requested_period": period,
+                "source": "sqlite",
+                "rows": len(cached_rows),
+                "latest_cached_date": latest_cached_date,
+            },
+        )
         return cached_rows, self._build_data_quality(
             source="cache",
             freshness_status="fresh_cache",
@@ -464,7 +523,16 @@ class MarketDataService:
         backoff_seconds = base_backoff_seconds or float(os.getenv("MONEYVIEW_PRICE_FETCH_BACKOFF_SECONDS", "0.5"))
         last_rows: List[StockOHLCV] = []
         for attempt in range(1, max_attempts + 1):
-            last_rows = self._fetch_live_ohlcv_cached(ticker, period=period, table=self._table_for_ticker(ticker))
+            with perf_timer(
+                scope="external",
+                operation="external.fetch_history_retry",
+                ticker=ticker.upper(),
+                provider="yfinance",
+                component="market_data",
+                metadata={"requested_period": period, "retry_count": attempt - 1, "max_attempts": max_attempts},
+            ) as metadata:
+                last_rows = self._fetch_live_ohlcv_cached(ticker, period=period, table=self._table_for_ticker(ticker))
+                metadata["rows"] = len(last_rows)
             if last_rows:
                 if attempt > 1:
                     logger.info("Recovered live OHLCV fetch for %s on retry %d", ticker, attempt)
@@ -499,6 +567,21 @@ class MarketDataService:
                 fetched_at, rows = cached
                 age_seconds = (now - fetched_at).total_seconds()
                 if age_seconds < PROVIDER_FETCH_CACHE_TTL_SECONDS:
+                    emit_cache_event(
+                        operation="cache.hit",
+                        status="cache_hit",
+                        ticker=normalized_ticker,
+                        provider="yfinance",
+                        component="market_data.provider_cache",
+                        metadata={
+                            "table": resolved_table,
+                            "requested_period": period,
+                            "source": "provider_ttl_cache",
+                            "cache_age_seconds": round(age_seconds, 2),
+                            "ttl_seconds": PROVIDER_FETCH_CACHE_TTL_SECONDS,
+                            "rows": len(rows),
+                        },
+                    )
                     logger.info(
                         "OHLCV provider cache hit for %s period=%s age_seconds=%.2f",
                         normalized_ticker,
@@ -506,12 +589,65 @@ class MarketDataService:
                         age_seconds,
                     )
                     return self._copy_bars(rows)
+                emit_cache_event(
+                    operation="cache.stale",
+                    status="warning",
+                    ticker=normalized_ticker,
+                    provider="yfinance",
+                    component="market_data.provider_cache",
+                    metadata={
+                        "table": resolved_table,
+                        "requested_period": period,
+                        "source": "provider_ttl_cache",
+                        "cache_age_seconds": round(age_seconds, 2),
+                        "ttl_seconds": PROVIDER_FETCH_CACHE_TTL_SECONDS,
+                        "rows": len(rows),
+                    },
+                    message="Provider TTL cache entry expired and will be refreshed.",
+                )
                 self._provider_fetch_cache.pop(key, None)
+            else:
+                emit_cache_event(
+                    operation="cache.miss",
+                    status="cache_miss",
+                    ticker=normalized_ticker,
+                    provider="yfinance",
+                    component="market_data.provider_cache",
+                    metadata={
+                        "table": resolved_table,
+                        "requested_period": period,
+                        "source": "provider_ttl_cache",
+                        "ttl_seconds": PROVIDER_FETCH_CACHE_TTL_SECONDS,
+                    },
+                )
 
-        rows = self._fetch_live_ohlcv(normalized_ticker, period)
+        with perf_timer(
+            scope="external",
+            operation="external.fetch_history",
+            ticker=normalized_ticker,
+            provider="yfinance",
+            component="market_data",
+            metadata={"requested_period": period, "table": resolved_table, "retry_count": 0},
+        ) as metadata:
+            rows = self._fetch_live_ohlcv(normalized_ticker, period)
+            metadata["rows"] = len(rows)
         if rows:
             with self._refresh_lock:
                 self._provider_fetch_cache[key] = (now, self._copy_bars(rows))
+            emit_cache_event(
+                operation="cache.write",
+                status="success",
+                ticker=normalized_ticker,
+                provider="yfinance",
+                component="market_data.provider_cache",
+                metadata={
+                    "table": resolved_table,
+                    "requested_period": period,
+                    "source": "provider_ttl_cache",
+                    "ttl_seconds": PROVIDER_FETCH_CACHE_TTL_SECONDS,
+                    "rows": len(rows),
+                },
+            )
         return rows
 
     def _refresh_ohlcv_in_background(
@@ -644,11 +780,23 @@ class MarketDataService:
             logger.warning("yfinance import failed for latest quote %s: %s", ticker, exc)
         else:
             try:
-                fast_info = getattr(yf.Ticker(ticker), "fast_info", {}) or {}
-                for key in ("last_price", "regular_market_price", "lastPrice", "regularMarketPrice"):
-                    price = fast_info.get(key) if hasattr(fast_info, "get") else None
-                    if price is not None and float(price) > 0:
-                        return float(price)
+                with perf_timer(
+                    scope="external",
+                    operation="external.fetch_quote",
+                    ticker=ticker,
+                    provider="yfinance",
+                    component="market_data",
+                    metadata={"cache_status": "unknown", "retry_count": 0, "missing_fields": []},
+                ) as metadata:
+                    fast_info = getattr(yf.Ticker(ticker), "fast_info", {}) or {}
+                    missing_fields: list[str] = []
+                    for key in ("last_price", "regular_market_price", "lastPrice", "regularMarketPrice"):
+                        price = fast_info.get(key) if hasattr(fast_info, "get") else None
+                        if price is not None and float(price) > 0:
+                            metadata["matched_field"] = key
+                            return float(price)
+                        missing_fields.append(key)
+                    metadata["missing_fields"] = missing_fields
             except YAHOO_PROVIDER_ERRORS as exc:
                 logger.warning("yfinance latest quote fetch failed for %s: %s", ticker, exc)
 

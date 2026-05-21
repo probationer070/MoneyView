@@ -6,6 +6,7 @@ import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { RefreshCw } from "lucide-react";
 import { fetchApi } from "@/lib/api";
+import { useDevMonitorPageLoad } from "@/hooks/useDevMonitorPageLoad";
 import type {
   CorporateDcfBatchRequest,
   CorporateMetricAudit,
@@ -120,6 +121,7 @@ const CalculationDetailModal = dynamic(
 );
 
 export default function CorporateAnalysisPage() {
+  useDevMonitorPageLoad({ component: "corporate" });
   // Local UI state: selected ticker assumptions, search input, add-company form, and active modal.
   const queryClient = useQueryClient();
   const router = useRouter();
@@ -221,13 +223,23 @@ export default function CorporateAnalysisPage() {
   // Company search data combines server-side saved companies with local presets.
   const companiesQuery = useQuery<CorporateCompany[]>({
     queryKey: ["corporate-companies"],
-    queryFn: () => fetchApi<CorporateCompany[]>("/corporate/companies"),
+    queryFn: () => fetchApi<CorporateCompany[]>("/corporate/companies", {
+      monitor: {
+        operation: "frontend.query.corporate_companies",
+        component: "corporate_page",
+      },
+    }),
     staleTime: 60_000,
     refetchOnWindowFocus: false,
   });
   const watchlistQuery = useQuery<WatchlistHolding[]>({
     queryKey: ["corporate-watchlist-holdings"],
-    queryFn: () => fetchApi<WatchlistHolding[]>("/portfolio/watchlist"),
+    queryFn: () => fetchApi<WatchlistHolding[]>("/portfolio/watchlist", {
+      monitor: {
+        operation: "frontend.query.corporate_watchlist",
+        component: "corporate_page",
+      },
+    }),
     staleTime: 60_000,
     refetchOnWindowFocus: false,
   });
@@ -249,7 +261,14 @@ export default function CorporateAnalysisPage() {
   const metricsHistoryQuery = useQuery<CorporateMetricHistoryApi>({
     queryKey: ["corporate-metric-history", sourceDataRequestedTicker ?? "idle", sourceDataRefreshToken ?? "idle"],
     queryFn: ({ signal }) =>
-      fetchApi<CorporateMetricHistoryApi>(`/corporate/metrics/${sourceDataRequestedTicker}/history`, { signal }),
+      fetchApi<CorporateMetricHistoryApi>(`/corporate/metrics/${sourceDataRequestedTicker}/history`, {
+        signal,
+        monitor: {
+          operation: "frontend.query.corporate_metric_history",
+          component: "corporate_page",
+          ticker: sourceDataRequestedTicker,
+        },
+      }),
     placeholderData: (previous) => previous,
     staleTime: 5 * 60_000,
     enabled: Boolean(sourceDataRequestedTicker && sourceDataRefreshToken),
@@ -258,7 +277,14 @@ export default function CorporateAnalysisPage() {
   const quarterlyStatementsQuery = useQuery<QuarterlyStatementsApi>({
     queryKey: ["corporate-quarterly-statements", sourceDataRequestedTicker ?? "idle", sourceDataRefreshToken ?? "idle"],
     queryFn: ({ signal }) =>
-      fetchApi<QuarterlyStatementsApi>(`/corporate/metrics/${sourceDataRequestedTicker}/quarterly-statements`, { signal }),
+      fetchApi<QuarterlyStatementsApi>(`/corporate/metrics/${sourceDataRequestedTicker}/quarterly-statements`, {
+        signal,
+        monitor: {
+          operation: "frontend.query.corporate_quarterly_statements",
+          component: "corporate_page",
+          ticker: sourceDataRequestedTicker,
+        },
+      }),
     placeholderData: (previous) => previous,
     staleTime: 5 * 60_000,
     enabled: Boolean(sourceDataRequestedTicker && sourceDataRefreshToken),
@@ -271,6 +297,11 @@ export default function CorporateAnalysisPage() {
         params: {
           roic_basis: roicBasis,
           ...(roicBasis === "annual" ? { roic_year: Number(roicYear) } : {}),
+        },
+        monitor: {
+          operation: "frontend.query.corporate_metric_audit",
+          component: "corporate_page",
+          ticker: assumptions.ticker,
         },
       }),
     staleTime: 5 * 60_000,
@@ -402,6 +433,11 @@ export default function CorporateAnalysisPage() {
       fetchApi<StockPriceRow[]>("/market/index/%5EGSPC", {
         params: { period: "5y" },
         signal,
+        monitor: {
+          operation: "frontend.query.corporate_market_index",
+          component: "corporate_page",
+          ticker: "^GSPC",
+        },
       }),
     placeholderData: (previous) => previous,
     staleTime: 5 * 60_000,
@@ -484,6 +520,11 @@ export default function CorporateAnalysisPage() {
           benchmark_ticker: comparisonRequestedSnapshot?.comparisonBenchmarkTicker ?? DEFAULT_PORTFOLIO_BENCHMARK_TICKER,
           custom_tickers: comparisonRequestedSnapshot?.comparisonCustomTickersInput ?? "",
         },
+        monitor: {
+          operation: "frontend.query.corporate_comparison",
+          component: "corporate_page",
+          ticker: assumptions.ticker,
+        },
       }),
     placeholderData: (previous) => previous,
     staleTime: 60_000,
@@ -495,6 +536,11 @@ export default function CorporateAnalysisPage() {
       fetchApi<StockPriceRow[]>(`/detail/${sourceDataRequestedTicker}/ohlcv`, {
         params: { period: "5y" },
         signal,
+        monitor: {
+          operation: "frontend.query.corporate_historical_prices",
+          component: "corporate_page",
+          ticker: sourceDataRequestedTicker,
+        },
       }),
     placeholderData: (previous) => previous,
     staleTime: 5 * 60_000,
@@ -924,7 +970,7 @@ export default function CorporateAnalysisPage() {
                   </div>
                 )}
               </div>
-              {/* Backend DCF: quick link into the backend valuation detail modal. */}
+              {/* Backend DCF: quick link into the intrinsic valuation detail modal. */}
               <button
                 type="button"
                 onClick={() => setActiveCalculation("backendDcf")}
@@ -932,8 +978,8 @@ export default function CorporateAnalysisPage() {
               >
                 <div className="text-xs text-[var(--text-muted)]">
                   <InfoTooltip
-                    label="Backend DCF"
-                    description="Backend fair value from the DCF engine using debounced realtime assumptions, current market price, FCFF, WACC, and terminal growth."
+                    label="Intrinsic DCF"
+                    description="Backend intrinsic value from projected FCFF, WACC, terminal growth, and the enterprise-to-equity bridge. Current market price is used only for upside comparison."
                   />
                 </div>
                 <div className="font-bold text-[var(--text-primary)]">

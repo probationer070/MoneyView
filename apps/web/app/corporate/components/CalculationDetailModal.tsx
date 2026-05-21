@@ -239,7 +239,7 @@ export function CalculationDetailModal({
   formatNumber2,
   formatPct,
 }: CalculationDetailModalProps) {
-  const showDcfFullReport = detail.title.includes("Backend DCF") || detail.title.includes("Backend Fair Value");
+  const showDcfFullReport = detail.title.includes("Backend DCF") || detail.title.includes("Backend Fair Value") || detail.title.includes("Intrinsic DCF");
   const dataLineageRows = [...detail.sourcing, ...detail.summary.slice(0, 3)];
   const rawDataAccessRows: CalculationRow[] = [
     ...detail.simulation.map((row) => ({
@@ -473,7 +473,13 @@ export function CalculationDetailModal({
                           ["PV of Terminal", formatNumber(dcfFullReport.present_value_of_terminal), "Discounted terminal value"],
                           ["PV of FCFF", formatNumber(dcfFullReport.present_value_of_fcff), "Discounted phase-one FCFF rows"],
                           ["Enterprise Value", formatNumber(dcfFullReport.enterprise_value), "PV of FCFF plus PV of terminal value"],
-                          ["Agency Discount", formatNumber2(dcfFullReport.agency_discount), "ESG penalty adjustment"],
+                          ["Equity Value", dcfFullReport.equity_value == null ? "Unavailable" : formatNumber(dcfFullReport.equity_value), "Enterprise value minus net debt plus non-operating assets"],
+                          ["Intrinsic Value / Share", dcfFullReport.intrinsic_value_per_share == null ? "Unavailable" : formatNumber(dcfFullReport.intrinsic_value_per_share), "Equity value divided by diluted shares"],
+                          ["Bridge Quality", dcfFullReport.bridge_quality, dcfFullReport.valuation_method],
+                          ["Net Debt", dcfFullReport.net_debt == null ? "Unavailable" : formatNumber(dcfFullReport.net_debt), "Enterprise-to-equity bridge input"],
+                          ["Non-operating Assets", dcfFullReport.non_operating_assets == null ? "Unavailable" : formatNumber(dcfFullReport.non_operating_assets), "Enterprise-to-equity bridge input"],
+                          ["Diluted Shares", dcfFullReport.diluted_shares_outstanding == null ? "Unavailable" : formatNumber(dcfFullReport.diluted_shares_outstanding), "Per-share bridge input"],
+                          ["Agency Discount", formatNumber2(dcfFullReport.agency_discount), "Diagnostic only; not applied to intrinsic value"],
                           ["Risk-free Rate", formatPct(dcfFullReport.wacc_breakdown.risk_free_rate * 100), "Full-report WACC breakdown"],
                           ["Equity Risk Premium", formatPct(dcfFullReport.wacc_breakdown.equity_risk_premium * 100), "Full-report WACC breakdown"],
                           ["Country Risk Premium", formatPct(dcfFullReport.wacc_breakdown.country_risk_premium * 100), "Full-report WACC breakdown"],

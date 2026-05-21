@@ -71,6 +71,36 @@ def calculate_npv(cash_flows: list[float], discount_rate: float) -> float:
     return float(np.sum(cf / (1 + discount_rate) ** t))
 
 
+def calculate_equity_value(
+    enterprise_value: float,
+    net_debt: float = 0.0,
+    non_operating_assets: float = 0.0,
+) -> float:
+    """
+    Bridge enterprise value to equity value.
+
+    Equity Value = Enterprise Value - Net Debt + Non-operating Assets
+    """
+    return enterprise_value - net_debt + non_operating_assets
+
+
+def calculate_intrinsic_value_per_share(
+    equity_value: float,
+    diluted_shares_outstanding: float,
+) -> float:
+    """
+    Intrinsic equity value per diluted share.
+
+    Raises ValueError when share count is unavailable or invalid.
+    """
+    if diluted_shares_outstanding <= 0:
+        raise ValueError(
+            f"Diluted shares outstanding must be greater than zero. "
+            f"Got {diluted_shares_outstanding:.4f}."
+        )
+    return equity_value / diluted_shares_outstanding
+
+
 def multi_stage_dcf(
     explicit_fcff:   list[float],
     terminal_cf:     float,
