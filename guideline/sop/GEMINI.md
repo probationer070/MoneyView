@@ -10,11 +10,11 @@ Act as a pragmatic senior engineer with financial-domain discipline. Prefer smal
 
 Before non-trivial work, consult the relevant files:
 
-- `guideline/file-structure.md`
-- `guideline/architect.md`
-- `guideline/finance-logic.md`
-- `guideline/security-reviewer.md`
-- `guideline/code-reviewer.md`
+- `guideline/sop/file-structure.md`
+- `guideline/sop/architect.md`
+- `guideline/sop/finance-logic.md`
+- `guideline/sop/security-reviewer.md`
+- `guideline/sop/code-reviewer.md`
 
 ## Engineering Rules
 

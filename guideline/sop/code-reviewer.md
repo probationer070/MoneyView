@@ -6,9 +6,9 @@ Purpose: provide the final quality gate for architecture, correctness, security,
 
 - Changed files and relevant surrounding code
 - New or changed tests
-- `guideline/file-structure.md`
-- `guideline/security-reviewer.md`
-- `guideline/finance-logic.md` for finance logic changes
+- `guideline/sop/file-structure.md`
+- `guideline/sop/security-reviewer.md`
+- `guideline/sop/finance-logic.md` for finance logic changes
 
 ## Review Checklist
 

@@ -2,10 +2,12 @@
 
 Use this file for repo-wide behavior. More specific `AGENTS.md` files in subdirectories override or extend these rules for their subtree.
 
+For a map of every documentation file in the repo — architecture, design, tabs, SOPs, and where to find what — start at `docs/INDEX.md`.
+
 ## Primary Workflow
 
 - Build context before editing. Start with `rg --files`, `rg`, and targeted file reads.
-- Read `guideline/file-structure.md` before proposing file moves, new modules, or ownership changes.
+- Read `guideline/sop/file-structure.md` before proposing file moves, new modules, or ownership changes.
 - Keep route handlers thin, frontend logic in `apps/web`, and business logic in backend services or shared packages.
 - Prefer targeted verification first, then broader verification.
 
@@ -14,7 +16,7 @@ Use this file for repo-wide behavior. More specific `AGENTS.md` files in subdire
 - When asked to understand the repo, identify the owning layer first: `apps/api`, `apps/web`, `packages`, `tests`, `guideline`, or `docs`.
 - For structure questions, prefer concise maps of responsibilities over file-by-file dumps.
 - Use existing docs before inferring architecture from scattered implementation details:
-  - `guideline/file-structure.md`
+  - `guideline/sop/file-structure.md`
   - `docs/architecture/`
   - relevant local `AGENTS.md`
 

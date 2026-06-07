@@ -23,6 +23,8 @@ src
 config/.env
 config/*.local.env
 
+.claude/skills/*
+
 # Local data/runtime artifacts
 data/cache/
 data/raw/

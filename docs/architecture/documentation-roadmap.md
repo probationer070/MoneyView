@@ -121,7 +121,7 @@ Use this mapping to decide which docs need review after code changes:
 Architecture docs should be grounded in these sources first:
 
 - `README.md`
-- `guideline/file-structure.md`
+- `guideline/sop/file-structure.md`
 - `apps/api/routes/`
 - `apps/api/services/`
 - `apps/api/models/` and `apps/api/schemas/`

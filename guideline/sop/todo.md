@@ -2,12 +2,12 @@
 
 Purpose: track the active MoneyView financial-logic remediation plan, with DCF correctness as the first priority.
 
-Status snapshot: as of 2026-05-21, the active work is the Financial Logic Remediation plan from `guideline/suggestion.md`. The previous MoneyView Dev Monitor track is preserved as archived context because its core observability foundation is already present.
+Status snapshot: as of 2026-05-21, the active work is the Financial Logic Remediation plan from `guideline/sop/suggestion.md`. The previous MoneyView Dev Monitor track is preserved as archived context because its core observability foundation is already present.
 
 Planning sources:
-- `guideline/suggestion.md` - primary critique and remediation source.
-- `guideline/finance-logic.md` - finance modeling standards.
-- `guideline/file-structure.md` - ownership boundaries.
+- `guideline/sop/suggestion.md` - primary critique and remediation source.
+- `guideline/sop/finance-logic.md` - finance modeling standards.
+- `guideline/sop/file-structure.md` - ownership boundaries.
 - `docs/dcf-valuation.md` - DCF user-facing explanation.
 - `docs/risk-return-minard.md` - Risk-Return Minard calculation and limitations.
 

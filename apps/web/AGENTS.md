@@ -10,9 +10,9 @@ Apply the repo-root `AGENTS.md` first, then these web-specific rules.
 
 ## Read Before Editing
 
-- `guideline/file-structure.md`
-- `guideline/architect.md`
-- `guideline/build-error-resolver.md`
+- `guideline/sop/file-structure.md`
+- `guideline/sop/architect.md`
+- `guideline/sop/build-error-resolver.md`
 - relevant notes under `docs/architecture/`
 
 ## Ownership
