@@ -54,6 +54,9 @@ jobs:
           curl -LsSf https://astral.sh/uv/install.sh | sh
           export PATH="$HOME/.local/bin:$PATH"
           uv sync --frozen --extra dev
+          # TestClient(app) without lifespan never calls init_db();
+          # locally data/processed/moneyview.db already exists, in CI it does not.
+          uv run python -c "from apps.api.services.db import init_db; init_db()"
           uv run pytest tests/core_finance/ tests/api/ -q
 
   build-push:
