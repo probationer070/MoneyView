@@ -88,10 +88,13 @@ jobs:
             -o /tmp/trivy.tar.gz
           tar -xzf /tmp/trivy.tar.gz -C /usr/local/bin trivy
 
-      - name: Scan — CRITICAL (block only if fix available)
+      - name: Scan — CRITICAL CVE (block only if fix available)
         run: |
+          # --scanners vuln: CVE gate only. Source-secret scanning is gitleaks' job;
+          # trivy's secret scanner false-positives on yt-dlp's bundled sample AWS key.
           trivy image \
             --input /tmp/moneyview-api.tar \
+            --scanners vuln \
             --severity CRITICAL \
             --ignore-unfixed \
             --exit-code 1 \
