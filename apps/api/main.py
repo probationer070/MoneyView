@@ -156,6 +156,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from prometheus_fastapi_instrumentator import Instrumentator
+
+Instrumentator().instrument(app).expose(app)
+
 app.include_router(market_router, prefix="/api/v1/market", tags=["Market"])
 app.include_router(portfolio_router, prefix="/api/v1/portfolio", tags=["Portfolio"])
 app.include_router(detail_router, prefix="/api/v1/detail", tags=["Detail"])

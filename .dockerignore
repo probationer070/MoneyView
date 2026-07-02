@@ -1,0 +1,17 @@
+.venv
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+data/
+.git
+.gitignore
+tests/
+*.md
+apikey.json
+Microsoft/
+guideline/
+docs/
+scripts/
+yt_extractor/
+run.cmd
