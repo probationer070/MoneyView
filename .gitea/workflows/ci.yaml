@@ -120,9 +120,11 @@ jobs:
             '{"hosts":{($h):{"tls":"enabled","user":$u,"pass":$p}}}' \
             > ~/.regctl/config.json
           # Harbor's vuln-gate returns 412 on manifest HEAD for unscanned images.
-          # Delete :edge first so regctl import starts fresh without a manifest check.
+          # Remove only the edge TAG (not the artifact!) before import: deleting the
+          # artifact would also destroy the previous release's sha-* tag and make
+          # GitOps rollback impossible (ERR-063).
           curl -sf -u "$HARBOR_USER:$HARBOR_PASS" -X DELETE \
-            "https://$HARBOR_HOST/api/v2.0/projects/moneyview/repositories/api/artifacts/edge" \
+            "https://$HARBOR_HOST/api/v2.0/projects/moneyview/repositories/api/artifacts/edge/tags/edge" \
             || true
           regctl image import \
             "$HARBOR_HOST/moneyview/api:edge" \
