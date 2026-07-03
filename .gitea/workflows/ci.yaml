@@ -41,8 +41,10 @@ jobs:
           wget -qO /usr/local/bin/hadolint \
             https://github.com/hadolint/hadolint/releases/download/v2.12.0/hadolint-Linux-x86_64
           chmod +x /usr/local/bin/hadolint
-      - name: Lint Dockerfile
-        run: hadolint Dockerfile
+      - name: Lint Dockerfiles
+        run: |
+          hadolint Dockerfile
+          hadolint apps/web/Dockerfile
 
   test:
     runs-on: ubuntu-latest
@@ -176,7 +178,76 @@ jobs:
           rm -f /tmp/cosign.key
           echo "Signed: $HARBOR_HOST/moneyview/api@${IMAGE_DIGEST}"
 
-      - name: Update moneyview-manifests image tag
+      - name: Build web and export to Docker archive
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./apps/web/Dockerfile
+          platforms: linux/amd64
+          push: false
+          outputs: type=docker,dest=/tmp/moneyview-web.tar
+          provenance: false
+
+      - name: Scan web — CRITICAL CVE (block only if fix available)
+        run: |
+          trivy image \
+            --input /tmp/moneyview-web.tar \
+            --scanners vuln \
+            --severity CRITICAL \
+            --ignore-unfixed \
+            --exit-code 1 \
+            --format table
+
+      - name: Push web to Harbor via regctl
+        if: github.event_name == 'push'
+        env:
+          HARBOR_HOST: ${{ secrets.HARBOR_URL }}
+          HARBOR_USER: ${{ secrets.HARBOR_USERNAME }}
+          HARBOR_PASS: ${{ secrets.HARBOR_PASSWORD }}
+        run: |
+          # ~/.regctl/config.json already written by the api push step.
+          # Same tag-only DELETE as the api image (ERR-063: never delete the artifact).
+          curl -sf -u "$HARBOR_USER:$HARBOR_PASS" -X DELETE \
+            "https://$HARBOR_HOST/api/v2.0/projects/moneyview/repositories/web/artifacts/edge/tags/edge" \
+            || true
+          regctl image import \
+            "$HARBOR_HOST/moneyview/web:edge" \
+            /tmp/moneyview-web.tar
+
+      - name: Add web SHA tag via Harbor API
+        if: github.event_name == 'push'
+        env:
+          HARBOR_HOST: ${{ secrets.HARBOR_URL }}
+          HARBOR_USER: ${{ secrets.HARBOR_USERNAME }}
+          HARBOR_PASS: ${{ secrets.HARBOR_PASSWORD }}
+        run: |
+          curl -sf \
+            -u "$HARBOR_USER:$HARBOR_PASS" \
+            -H "Content-Type: application/json" \
+            -X POST \
+            "https://$HARBOR_HOST/api/v2.0/projects/moneyview/repositories/web/artifacts/edge/tags" \
+            -d "{\"name\":\"sha-${SHORT_SHA}\"}"
+          echo "Tagged web as sha-${SHORT_SHA}"
+
+      - name: Sign web image by digest
+        if: github.event_name == 'push'
+        env:
+          HARBOR_HOST: ${{ secrets.HARBOR_URL }}
+          COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
+          COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
+        run: |
+          # Docker credentials still valid from the api sign step (cosign login).
+          WEB_DIGEST=$(regctl image digest "$HARBOR_HOST/moneyview/web:edge")
+          echo "$COSIGN_PRIVATE_KEY" > /tmp/cosign.key
+          COSIGN_PASSWORD="$COSIGN_PASSWORD" cosign sign \
+            --key /tmp/cosign.key \
+            --tlog-upload=false \
+            --yes \
+            "$HARBOR_HOST/moneyview/web@${WEB_DIGEST}"
+          rm -f /tmp/cosign.key
+          echo "Signed: $HARBOR_HOST/moneyview/web@${WEB_DIGEST}"
+
+      - name: Update moneyview-manifests image tags
         if: github.event_name == 'push'
         env:
           HARBOR_HOST: ${{ secrets.HARBOR_URL }}
@@ -188,5 +259,10 @@ jobs:
           cd /tmp/manifests
           sed -i "s|image: .*/moneyview/api:.*|image: ${HARBOR_HOST}/moneyview/api:sha-${SHORT_SHA}|" apps/moneyview/deployment.yaml
           git add apps/moneyview/deployment.yaml
-          git diff --cached --quiet || git commit -m "ci: update moneyview/api to sha-${SHORT_SHA}"
+          # web deployment may not exist yet on the very first run (bootstrap order)
+          if [ -f apps/moneyview/web-deployment.yaml ]; then
+            sed -i "s|image: .*/moneyview/web:.*|image: ${HARBOR_HOST}/moneyview/web:sha-${SHORT_SHA}|" apps/moneyview/web-deployment.yaml
+            git add apps/moneyview/web-deployment.yaml
+          fi
+          git diff --cached --quiet || git commit -m "ci: update moneyview images to sha-${SHORT_SHA}"
           git push

@@ -15,3 +15,8 @@ docs/
 scripts/
 yt_extractor/
 run.cmd
+**/node_modules
+**/.next
+apps/web/tests
+apps/web/*.log
+apps/web/tsconfig.tsbuildinfo

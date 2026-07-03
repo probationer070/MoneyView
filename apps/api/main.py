@@ -149,6 +149,8 @@ app.add_middleware(
         "http://127.0.0.1:3000",
         "http://127.0.0.1:3001",
         "http://127.0.0.1:3101",
+        "http://localhost:9080",
+        "http://127.0.0.1:9080",
         "tauri://localhost",
     ],
     allow_credentials=True,

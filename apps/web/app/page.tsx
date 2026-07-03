@@ -1,5 +1,5 @@
-import { apiBaseUrlForPort, fetchApi } from "@/lib/api";
-import { readBackendPort } from "@/lib/server/backendPort";
+import { fetchApi } from "@/lib/api";
+import { serverApiBaseUrl } from "@/lib/server/backendPort";
 import { MarketOverviewClient, type MarketIndexQuote } from "@/components/market/MarketOverviewClient";
 import { PageHeader } from "@/components/ui/PageHeader";
 
@@ -8,8 +8,7 @@ export const dynamic = "force-dynamic";
 export default async function MarketOverview() {
   let indices: MarketIndexQuote[] = [];
   let fetchError: string | null = null;
-  const backendPort = readBackendPort();
-  const apiBaseUrl = apiBaseUrlForPort(backendPort);
+  const apiBaseUrl = serverApiBaseUrl();
 
   try {
     indices = await fetchApi<MarketIndexQuote[]>("/market/indices", { baseUrl: apiBaseUrl });

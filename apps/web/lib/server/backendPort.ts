@@ -19,4 +19,17 @@ export function readBackendPort(): number {
   return DEFAULT_BACKEND_PORT;
 }
 
+/**
+ * SSR-side API base URL. In the D10 container the deployment sets
+ * API_BASE_URL_INTERNAL to the in-cluster service address; in local desktop
+ * mode the env var is absent and the dynamic port file keeps working.
+ */
+export function serverApiBaseUrl(): string {
+  const internal = process.env.API_BASE_URL_INTERNAL;
+  if (internal) {
+    return internal;
+  }
+  return `http://127.0.0.1:${readBackendPort()}`;
+}
+
 export { DEFAULT_BACKEND_PORT };

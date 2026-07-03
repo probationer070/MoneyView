@@ -1,5 +1,5 @@
-import { apiBaseUrlForPort, fetchApi } from "@/lib/api";
-import { readBackendPort } from "@/lib/server/backendPort";
+import { fetchApi } from "@/lib/api";
+import { serverApiBaseUrl } from "@/lib/server/backendPort";
 import { OHLCVChartCard } from "@/components/charts/OHLCVChartCard";
 import { DeltaBadge } from "@/components/ui/DeltaBadge";
 import { transformToTVCandles, transformToTVVolume } from "@/lib/transformers";
@@ -36,8 +36,7 @@ interface Technicals {
 
 export default async function TickerDetailPage({ params }: PageProps) {
   const ticker = decodeURIComponent(params.ticker).toUpperCase();
-  const backendPort = readBackendPort();
-  const apiBaseUrl = apiBaseUrlForPort(backendPort);
+  const apiBaseUrl = serverApiBaseUrl();
 
   // Parallel fetching from FastAPI
   const [ohlcv, technicals] = await Promise.all([
