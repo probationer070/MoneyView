@@ -67,21 +67,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
       - name: Set short SHA
         run: echo "SHORT_SHA=$(echo '${{ github.sha }}' | cut -c1-7)" >> "$GITHUB_ENV"
 
+      # Plain docker build on the host daemon: shares the host image cache, so
+      # cached base images need no Docker Hub CDN fetch (a flaky DNS lookup in
+      # the buildx container driver killed runs #7/#8), and no extra buildkitd
+      # container competes for the small WSL VM's memory.
       - name: Build and export to Docker archive
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./Dockerfile
-          platforms: linux/amd64
-          push: false
-          outputs: type=docker,dest=/tmp/moneyview-api.tar
-          provenance: false
+        run: |
+          docker build -f Dockerfile -t moneyview-ci/api:build .
+          docker save -o /tmp/moneyview-api.tar moneyview-ci/api:build
 
       - name: Install trivy
         run: |
@@ -179,14 +175,9 @@ jobs:
           echo "Signed: $HARBOR_HOST/moneyview/api@${IMAGE_DIGEST}"
 
       - name: Build web and export to Docker archive
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./apps/web/Dockerfile
-          platforms: linux/amd64
-          push: false
-          outputs: type=docker,dest=/tmp/moneyview-web.tar
-          provenance: false
+        run: |
+          docker build -f apps/web/Dockerfile -t moneyview-ci/web:build .
+          docker save -o /tmp/moneyview-web.tar moneyview-ci/web:build
 
       - name: Scan web — CRITICAL CVE (block only if fix available)
         run: |
