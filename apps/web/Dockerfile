@@ -18,6 +18,11 @@ COPY --from=deps /repo/apps/web/node_modules ./apps/web/node_modules
 WORKDIR /repo/apps/web
 ARG NEXT_PUBLIC_API_BASE_URL=http://localhost:9080
 ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL
+# Cap build memory: the CI runner shares a 7.5GB WSL VM with the whole D2-D10
+# stack; an uncapped next build (worker per CPU) OOM-kills buildkit.
+ENV NODE_OPTIONS=--max-old-space-size=2048 \
+    NEXT_BUILD_CPUS=2 \
+    NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
 FROM node:22-alpine
