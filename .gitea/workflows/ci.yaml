@@ -155,9 +155,14 @@ jobs:
         if: github.event_name == 'push'
         env:
           HARBOR_HOST: ${{ secrets.HARBOR_URL }}
+          HARBOR_USER: ${{ secrets.HARBOR_USERNAME }}
+          HARBOR_PASS: ${{ secrets.HARBOR_PASSWORD }}
           COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
           COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
         run: |
+          # cosign uses Docker credential config, not regctl's — login explicitly
+          # or the signature blob push is anonymous and Harbor returns UNAUTHORIZED.
+          cosign login "$HARBOR_HOST" -u "$HARBOR_USER" -p "$HARBOR_PASS"
           IMAGE_DIGEST=$(regctl image digest "$HARBOR_HOST/moneyview/api:edge")
           echo "IMAGE_DIGEST=$IMAGE_DIGEST" >> "$GITHUB_ENV"
           echo "$COSIGN_PRIVATE_KEY" > /tmp/cosign.key
