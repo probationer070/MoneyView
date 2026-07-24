@@ -133,6 +133,16 @@ The hazard is silent success, not failure. **Current-code reality (verified 2026
 plan must **pin a single serializer across both processes** and add explicit round-trip contract
 tests for **NaN, Inf, and naive/aware datetime** (and the Decimal-absence assertion above).
 
+**Decision (2026-07-24, implementation):** the fidelity test caught a concrete failure — pydantic
+2.12.5 `model_dump_json()` coerces `NaN`/`±Inf` to JSON `null`, and `model_validate_json()` then
+**rejects `null` for a float field** with a `ValidationError`, so raw pydantic is *not* round-trip
+stable for non-finite floats. Resolution (option A, portfolio owner): the single pinned serializer
+(`apps/api/compute/serialization.py::dumps_model`/`loads_model`, used identically on both ends)
+maps non-finite floats to a shared JSON sentinel `{"__nonfinite__": "nan"|"inf"|"-inf"}`. This is
+**one shared serialization policy, not a per-endpoint encoder** — it is the *only* serializer on
+either side of the hop, which is exactly what §A-3 asks for. compute-service therefore
+hand-serializes its response with `dumps_model` rather than using FastAPI's default serializer.
+
 ### A-4. Retry policy — idempotent AND cheap
 "Retry idempotent reads" is insufficient: DCF/Monte Carlo are idempotent but expensive; retrying a
 30 s Monte Carlo on timeout doubles load and times out again.

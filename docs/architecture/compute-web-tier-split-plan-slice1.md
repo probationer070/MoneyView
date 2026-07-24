@@ -10,7 +10,7 @@
 
 ## Global Constraints
 
-- **Serializer invariant:** exactly ONE serializer crosses the boundary — pydantic `model_dump_json()` / `Model.model_validate_json()`. No `orjson`, no stdlib `json.dumps` on domain models, no per-endpoint custom encoders. (Spec §A-3.)
+- **Serializer invariant:** exactly ONE serializer crosses the boundary — `dumps_model()` / `loads_model()` in `apps/api/compute/serialization.py`, used identically on BOTH ends (BFF encodes the request / decodes the response; compute-service decodes the request / encodes the response). It is **one shared serialization policy, not a per-endpoint encoder**. It builds on pydantic (`model_dump(mode="python")` / `model_validate`) plus stdlib `json`, and maps non-finite floats (`NaN`/`+Inf`/`-Inf`) to a shared JSON sentinel `{"__nonfinite__": "nan"|"inf"|"-inf"}` so the round-trip is stable — because raw pydantic `model_dump_json()` coerces those to `null` and `model_validate_json()` then rejects `null` for a float field (verified on pydantic 2.12.5). No `orjson`. Compute-service must NOT fall back to FastAPI's default response serializer for this operation — it hand-serializes with `dumps_model`. (Spec §A-3; decision 2026-07-24.)
 - **No Decimal across the boundary:** a contract test must assert the operation's request/response models declare no `Decimal` field. Decimal is not used in the repo today; the guard keeps it absent. (Spec §A-3.)
 - **Coarse interface:** `/attribution` is already 1 route = 1 service call (`_portfolio_analytics.build_attribution(payload)`); Slice 1 must preserve that 1:1 mapping. The BFF must never loop over compute calls. (Spec §A-1.)
 - **Config keys (exact names):** `MONEYVIEW_COMPUTE_CLIENT_MODE` (`inprocess`|`http`, default `inprocess`), `MONEYVIEW_COMPUTE_SERVICE_BASE_URL` (default `http://127.0.0.1:8600`), `MONEYVIEW_COMPUTE_CONNECT_TIMEOUT` (default `2.0`), `MONEYVIEW_COMPUTE_TIMEOUT` (default `30.0`), `MONEYVIEW_COMPUTE_STREAM_READ_TIMEOUT` (default `300.0`). The stream timeout is defined now for the seam even though Slice 1 has no streaming operation. (Spec §ComputeClient settings.)
@@ -109,6 +109,7 @@ git commit -m "docs: compute route audit (spec A-1) — attribution is slice-1 c
 
 ```python
 # tests/api/compute/test_serialization_fidelity.py
+import enum
 import math
 from datetime import datetime, timezone
 
@@ -123,21 +124,29 @@ from apps.api.compute.serialization import (
 from apps.api.models.schemas import AttributionRequest, AttributionResult
 
 
+class _Flavor(str, enum.Enum):
+    RED = "red"
+
+
 class _FidelityProbe(BaseModel):
     nan_value: float
     pos_inf: float
     neg_inf: float
     aware_dt: datetime
     naive_dt: datetime
+    flavor: _Flavor
+    ratios: list[float]
 
 
-def test_nan_inf_datetime_round_trip_is_stable():
+def test_nan_inf_datetime_enum_round_trip_is_stable():
     probe = _FidelityProbe(
         nan_value=float("nan"),
         pos_inf=float("inf"),
         neg_inf=float("-inf"),
         aware_dt=datetime(2026, 7, 24, 12, 0, tzinfo=timezone.utc),
         naive_dt=datetime(2026, 7, 24, 12, 0),
+        flavor=_Flavor.RED,
+        ratios=[1.5, float("nan"), float("inf")],
     )
     restored = loads_model(_FidelityProbe, dumps_model(probe))
 
@@ -148,6 +157,26 @@ def test_nan_inf_datetime_round_trip_is_stable():
     assert restored.aware_dt.tzinfo is not None
     assert restored.naive_dt == probe.naive_dt
     assert restored.naive_dt.tzinfo is None
+    assert restored.flavor is _Flavor.RED
+    # non-finite floats survive inside a nested list too
+    assert restored.ratios[0] == 1.5
+    assert math.isnan(restored.ratios[1])
+    assert restored.ratios[2] == float("inf")
+
+
+def test_dumps_model_output_is_strict_json_no_bare_nan():
+    # The wire payload must be strict JSON — NO bare NaN/Infinity tokens, which a
+    # strict decoder on the other hop would reject. Non-finite values live in the
+    # sentinel object instead.
+    probe = _FidelityProbe(
+        nan_value=float("nan"), pos_inf=float("inf"), neg_inf=float("-inf"),
+        aware_dt=datetime(2026, 7, 24, 12, 0, tzinfo=timezone.utc),
+        naive_dt=datetime(2026, 7, 24, 12, 0), flavor=_Flavor.RED, ratios=[1.0],
+    )
+    raw = dumps_model(probe)
+    assert "NaN" not in raw
+    assert "Infinity" not in raw
+    assert "__nonfinite__" in raw
 
 
 def test_decimal_absence_guard_passes_on_boundary_models():
@@ -177,12 +206,23 @@ Expected: FAIL with `ModuleNotFoundError: No module named 'apps.api.compute.seri
 # apps/api/compute/serialization.py
 """The single serializer that crosses the compute boundary (spec §A-3).
 
-Exactly one encoder is used on both ends — pydantic's own JSON serializer — so a
-value encoded by one process is decoded identically by the other. No orjson, no
-stdlib json on domain models, no per-endpoint encoders.
+One shared serialization policy is used on BOTH ends so a value encoded by one
+process is decoded identically by the other. It builds on pydantic
+(`model_dump(mode="python")` / `model_validate`) plus stdlib `json`.
+
+JSON has no NaN/Inf: raw pydantic `model_dump_json()` coerces non-finite floats
+to `null`, and `model_validate_json()` then rejects `null` for a float field
+(verified pydantic 2.12.5). So non-finite floats are mapped to a shared sentinel
+object `{"__nonfinite__": "nan"|"inf"|"-inf"}` on the way out and restored on the
+way in. This is one shared policy, NOT a per-endpoint encoder — the same two
+functions are the only serializer on either side of the hop. No orjson.
 """
 from __future__ import annotations
 
+import enum
+import json
+import math
+from datetime import date, datetime
 from decimal import Decimal
 from typing import TypeVar, get_args, get_origin
 
@@ -190,13 +230,55 @@ from pydantic import BaseModel
 
 T = TypeVar("T", bound=BaseModel)
 
+_NONFINITE_KEY = "__nonfinite__"
+
+
+def _encode(obj: object) -> object:
+    """Make a pydantic `mode="python"` dump strictly JSON-safe.
+
+    pydantic's python dump preserves float('nan')/inf and leaves datetime/enum as
+    Python objects; convert each leaf to a JSON-native form. Non-finite floats
+    become the shared sentinel so they survive the round trip.
+    """
+    if isinstance(obj, float):
+        if math.isnan(obj):
+            return {_NONFINITE_KEY: "nan"}
+        if math.isinf(obj):
+            return {_NONFINITE_KEY: "inf" if obj > 0 else "-inf"}
+        return obj
+    if isinstance(obj, enum.Enum):
+        return _encode(obj.value)
+    if isinstance(obj, (datetime, date)):
+        return obj.isoformat()
+    if isinstance(obj, (list, tuple)):
+        return [_encode(item) for item in obj]
+    if isinstance(obj, dict):
+        return {key: _encode(value) for key, value in obj.items()}
+    return obj
+
+
+def _decode(obj: object) -> object:
+    if isinstance(obj, dict):
+        if len(obj) == 1 and _NONFINITE_KEY in obj:
+            token = obj[_NONFINITE_KEY]
+            mapping = {"nan": float("nan"), "inf": float("inf"), "-inf": float("-inf")}
+            if token not in mapping:
+                raise ValueError(f"unknown non-finite sentinel token: {token!r}")
+            return mapping[token]
+        return {key: _decode(value) for key, value in obj.items()}
+    if isinstance(obj, list):
+        return [_decode(item) for item in obj]
+    return obj
+
 
 def dumps_model(model: BaseModel) -> str:
-    return model.model_dump_json()
+    # allow_nan=False: every non-finite float was already sentinel-encoded, so if
+    # one slips through json.dumps raises instead of emitting a bare NaN token.
+    return json.dumps(_encode(model.model_dump(mode="python")), allow_nan=False)
 
 
 def loads_model(model_type: type[T], raw: str) -> T:
-    return model_type.model_validate_json(raw)
+    return model_type.model_validate(_decode(json.loads(raw)))
 
 
 def _annotation_mentions_decimal(annotation: object) -> bool:
@@ -225,7 +307,7 @@ def assert_no_decimal_fields(model_type: type[BaseModel], _seen: set | None = No
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `python -m pytest tests/api/compute/test_serialization_fidelity.py -v`
-Expected: PASS (3 tests). If `test_nan_inf_datetime_round_trip_is_stable` fails, pydantic's JSON round-trip is lossy on this version — STOP and record it as an ERR before proceeding, because the whole serializer invariant depends on it.
+Expected: PASS (5 tests). The sentinel scheme makes the round-trip stable: `test_nan_inf_datetime_enum_round_trip_is_stable` proves NaN/Inf/datetime/enum (incl. non-finite inside a nested list) survive; `test_dumps_model_output_is_strict_json_no_bare_nan` proves the wire payload is strict JSON (no bare `NaN`/`Infinity` tokens). If the round-trip test still fails, do NOT weaken it — report DONE_WITH_CONCERNS/BLOCKED with the exact observed encode/decode behavior; the whole serializer invariant depends on this.
 
 - [ ] **Step 5: Commit**
 
@@ -371,7 +453,7 @@ git commit -m "feat: compute-seam config getters and uniform ComputeError"
 
 **Interfaces:**
 - Consumes: `PortfolioAnalyticsService.build_attribution` (existing), `dumps_model`/`loads_model` (Task 2), `set_current_request_id`/`reset_current_request_id` (existing in `apps.api.core.dev_monitor`).
-- Produces: ASGI app `compute_app` serving `POST /compute/portfolio/attribution`. Request body = an `AttributionRequest` JSON (domain model, NOT the web envelope). Response body = an `AttributionResult` JSON (domain model). On `ValueError` from the service → HTTP 422 with `{"detail": "<msg>"}`. Sets response header `X-Compute-Duration-Ms` (server compute time) and echoes `X-Request-ID`.
+- Produces: ASGI app `compute_app` serving `POST /compute/portfolio/attribution`. Request body = a `dumps_model`-encoded `AttributionRequest` (domain model, NOT the web envelope), decoded with `loads_model`. Response body = a `dumps_model`-encoded `AttributionResult` (domain model), hand-serialized — NOT via FastAPI's default serializer. On `ValueError` from the service → HTTP 422 with `{"detail": "<msg>"}`. Sets response header `X-Compute-Duration-Ms` (server compute time) and echoes `X-Request-ID`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -428,6 +510,20 @@ def test_compute_attribution_echoes_request_id():
         headers={"X-Request-ID": "corr-123"},
     )
     assert resp.headers.get("X-Request-ID") == "corr-123"
+
+
+def test_compute_response_decodes_with_shared_serializer():
+    # The server hand-serializes with dumps_model; the client decodes with
+    # loads_model. Lock that the response body is exactly what loads_model reads,
+    # so the "single serializer, both ends" invariant is exercised here.
+    from apps.api.compute.serialization import loads_model
+    from apps.api.models.schemas import AttributionResult
+
+    client = TestClient(compute_app)
+    resp = client.post("/compute/portfolio/attribution", json=_valid_request_json())
+    assert resp.status_code == 200
+    restored = loads_model(AttributionResult, resp.text)
+    assert restored.metadata.method == "brinson_fachler_arithmetic"
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -439,13 +535,20 @@ Expected: FAIL with `ModuleNotFoundError: No module named 'apps.api.compute_serv
 
 ```python
 # apps/api/compute_service/routes/portfolio.py
-"""compute-service portfolio operations. Domain models only — no web envelope."""
+"""compute-service portfolio operations. Domain models only — no web envelope.
+
+Uses the shared serializer (dumps_model/loads_model) on BOTH the request and the
+response — NOT FastAPI's default pydantic serializer — so the "single serializer,
+both ends" invariant (spec §A-3) holds even for non-finite floats. FastAPI's
+default response serializer would coerce NaN/Inf to null and break the round trip.
+"""
 from __future__ import annotations
 
 import time
 
-from fastapi import APIRouter, Body, HTTPException, Response
+from fastapi import APIRouter, HTTPException, Request, Response
 
+from apps.api.compute.serialization import dumps_model, loads_model
 from apps.api.models.schemas import AttributionRequest, AttributionResult
 from apps.api.services.market_data import MarketDataService
 from apps.api.services.portfolio_service import PortfolioAnalyticsService
@@ -454,16 +557,27 @@ router = APIRouter()
 _analytics = PortfolioAnalyticsService(MarketDataService())
 
 
-@router.post("/portfolio/attribution", response_model=AttributionResult)
-async def compute_attribution(response: Response, payload: AttributionRequest = Body(...)):
+@router.post("/portfolio/attribution")
+async def compute_attribution(request: Request) -> Response:
     started = time.perf_counter()
+    payload = loads_model(AttributionRequest, (await request.body()).decode("utf-8"))
     try:
         result = _analytics.build_attribution(payload)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    response.headers["X-Compute-Duration-Ms"] = str(round((time.perf_counter() - started) * 1000, 1))
-    return result
+    duration_ms = round((time.perf_counter() - started) * 1000, 1)
+    return Response(
+        content=dumps_model(result),
+        media_type="application/json",
+        headers={"X-Compute-Duration-Ms": str(duration_ms)},
+    )
 ```
+
+Note: this handler reads the raw body and validates with `loads_model` (rather
+than a `payload: AttributionRequest = Body(...)` parameter) because the BFF sends
+a `dumps_model`-encoded body whose non-finite sentinels FastAPI's automatic
+parsing would not understand. `response_model=` is intentionally omitted — the
+handler hand-serializes, so FastAPI must not re-serialize `result`.
 
 ```python
 # apps/api/compute_service/main.py
@@ -528,7 +642,7 @@ if __name__ == "__main__":
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `python -m pytest tests/api/compute/test_compute_service_app.py -v`
-Expected: PASS (3 tests)
+Expected: PASS (4 tests)
 
 - [ ] **Step 5: Commit**
 
