@@ -81,6 +81,15 @@ def _annotation_mentions_decimal(annotation: object) -> bool:
     return any(_annotation_mentions_decimal(arg) for arg in get_args(annotation))
 
 
+def _iter_nested_models(annotation: object):
+    """Yield every BaseModel subclass appearing anywhere in annotation's generic tree."""
+    origin = get_origin(annotation) or annotation
+    if isinstance(origin, type) and issubclass(origin, BaseModel):
+        yield origin
+    for arg in get_args(annotation):
+        yield from _iter_nested_models(arg)
+
+
 def assert_no_decimal_fields(model_type: type[BaseModel], _seen: set | None = None) -> None:
     """Recursively assert no field on model_type (or nested BaseModels) is Decimal."""
     seen = _seen if _seen is not None else set()
@@ -92,7 +101,5 @@ def assert_no_decimal_fields(model_type: type[BaseModel], _seen: set | None = No
         assert not _annotation_mentions_decimal(annotation), (
             f"{model_type.__name__}.{name} uses Decimal — not allowed across the compute boundary"
         )
-        for arg in (annotation, *get_args(annotation)):
-            origin = get_origin(arg) or arg
-            if isinstance(origin, type) and issubclass(origin, BaseModel):
-                assert_no_decimal_fields(origin, seen)
+        for nested in _iter_nested_models(annotation):
+            assert_no_decimal_fields(nested, seen)

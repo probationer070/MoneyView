@@ -82,3 +82,17 @@ def test_decimal_absence_guard_catches_a_decimal_field():
 
     with pytest.raises(AssertionError):
         assert_no_decimal_fields(_Bad)
+
+
+def test_decimal_absence_guard_catches_decimal_in_doubly_nested_generic():
+    from decimal import Decimal
+    from typing import Optional
+
+    class _Bad(BaseModel):
+        price: Decimal
+
+    class _Wrapper(BaseModel):
+        bads: Optional[list[_Bad]] = None
+
+    with pytest.raises(AssertionError):
+        assert_no_decimal_fields(_Wrapper)
