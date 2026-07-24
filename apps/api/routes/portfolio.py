@@ -19,6 +19,8 @@ from apps.api.models.schemas import (
     WatchlistSyncStatus,
     WatchlistSyncResult,
 )
+from apps.api.compute.client import get_compute_client
+from apps.api.compute.errors import ComputeError
 from apps.api.services.db import get_db
 from apps.api.services.market_data import MarketDataService
 from apps.api.services.news_service import NewsService
@@ -206,9 +208,10 @@ async def get_portfolio_attribution(payload: AttributionRequest = Body(...)):
     Portfolio-level arithmetic Brinson-Fachler attribution.
 
     Returns domain schemas only and avoids chart-specific shaping in the API layer.
+    Compute runs behind the ComputeClient seam (in-process or compute-service).
     """
     try:
-        result = _portfolio_analytics.build_attribution(payload)
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        result = await get_compute_client().build_attribution(payload)
+    except ComputeError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
     return APIResponse(data=result)
