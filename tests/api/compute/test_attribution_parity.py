@@ -74,3 +74,20 @@ def test_attribution_route_still_returns_422_in_http_mode():
     resp = client.post("/api/v1/portfolio/attribution", json=bad)
     assert resp.status_code == 422
     assert "allow_synthetic_fallback=true" in resp.json()["detail"]
+
+
+def test_route_dispatches_through_injected_compute_client():
+    """Tripwire: proves the route consults get_compute_client(), not the old
+    direct _portfolio_analytics path. A reverted rewire would ignore the injected
+    client and return 200 from the normal path, failing this test."""
+    from apps.api.compute.errors import ComputeError
+
+    class _SpyComputeClient:
+        async def build_attribution(self, request):
+            raise ComputeError(status_code=418, detail="spy-marker")
+
+    client = TestClient(app)
+    set_compute_client_for_test(_SpyComputeClient())
+    resp = client.post("/api/v1/portfolio/attribution", json=_GOLDEN)
+    assert resp.status_code == 418
+    assert resp.json()["detail"] == "spy-marker"
