@@ -263,6 +263,8 @@ export async function fetchApi<T>(
   if (monitor) {
     const durationMs = Number((nowMs() - startedAt).toFixed(1));
     const slowThresholdMs = monitor.slowThresholdMs ?? DEFAULT_FRONTEND_API_SLOW_THRESHOLD_MS;
+    const rawLength = response.headers.get("content-length");
+    const responseBytes = rawLength === null ? null : Number.parseInt(rawLength, 10);
     void emitClientPerformanceEvent({
       level: "info",
       scope: monitorScope,
@@ -277,6 +279,7 @@ export async function fetchApi<T>(
       metadata: {
         endpoint,
         status_code: response.status,
+        bytes: Number.isFinite(responseBytes as number) ? responseBytes : null,
         ...(monitor.metadata ?? {}),
       },
     });
