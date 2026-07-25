@@ -465,11 +465,31 @@ def breakdown_by_scope(events: list[PerformanceEvent]) -> ScopeBreakdown:
         if span.status == "slow":
             slow_counts[span.scope] = slow_counts.get(span.scope, 0) + 1
 
-    root_total = root.total_ms or 0.0
+    if root.id == SYNTHETIC_ROOT_ID:
+        # Multiple independent top-level spans (e.g. several requests sharing
+        # one buffer): the denominator is total measured wall time across
+        # them, not root.total_ms -- that's a max() over unrelated spans, not
+        # a real duration to compare against (mirrors the exemption
+        # _assign_self_ms already applies for the same reason).
+        known_child_totals = [child.total_ms for child in root.children if child.total_ms is not None]
+        total_known = len(known_child_totals) > 0
+        root_total = sum(known_child_totals) if total_known else 0.0
+    else:
+        total_known = root.total_ms is not None
+        root_total = root.total_ms if total_known else 0.0
+
     sum_self = sum(sum(values) for values in totals.values())
-    raw_unattributed = root_total - sum_self
-    overlap_detected = raw_unattributed < -EPSILON_MS
-    unattributed = round(max(0.0, raw_unattributed), 1)
+    if total_known:
+        raw_unattributed = root_total - sum_self
+        overlap_detected = raw_unattributed < -EPSILON_MS
+        unattributed = round(max(0.0, raw_unattributed), 1)
+    else:
+        # An in-flight/partial root (or a synthetic root none of whose
+        # children have a known duration) has no measured total to compare
+        # against. "Unmeasured" must not become "measured zero" feeding the
+        # overlap comparison (spec 04.9).
+        overlap_detected = False
+        unattributed = 0.0
 
     rows = [
         ScopeRow(
@@ -499,7 +519,17 @@ def list_requests(events: list[PerformanceEvent], limit: int, buffer_limit: int)
     rows: list[RequestSummaryRow] = []
     for request_id, request_events in grouped.items():
         spans = normalize_spans(request_events)
-        root_span = next((span for span in spans if span.parent_id is None), None)
+        # A request can have more than one parent-less span when its true
+        # root was evicted from the ring buffer, leaving an orphan fragment
+        # alongside the real root (spec 04.9). These are fragments of one
+        # request's tree, not separate requests, so the fallback total is the
+        # MAX known total among them -- the largest fragment is the closest
+        # approximation to the request's real duration, not an arbitrary
+        # first-in-input-order pick.
+        known_root_totals = [
+            span.total_ms for span in spans if span.parent_id is None and span.total_ms is not None
+        ]
+        fallback_total_ms = max(known_root_totals) if known_root_totals else None
         api_event = next(
             (event for event in request_events if event.scope == "api" and event.duration_ms is not None),
             None,
@@ -511,7 +541,7 @@ def list_requests(events: list[PerformanceEvent], limit: int, buffer_limit: int)
                 method=next((event.method for event in request_events if event.method), None),
                 started_at=min(event.timestamp for event in request_events),
                 ended_at=max(event.timestamp for event in request_events),
-                total_ms=(api_event.duration_ms if api_event else (root_span.total_ms if root_span else None)),
+                total_ms=(api_event.duration_ms if api_event else fallback_total_ms),
                 span_count=len(spans),
                 ticker_count=len({event.ticker for event in request_events if event.ticker}),
                 status=(api_event.status if api_event else "unknown"),

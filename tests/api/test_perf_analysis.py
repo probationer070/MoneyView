@@ -455,3 +455,51 @@ def test_empty_input_returns_valid_dtos():
     index = list_requests([], limit=10, buffer_limit=100)
     assert index.requests == []
     assert index.buffer_used == 0
+
+
+def test_partial_root_reports_zero_total_without_overlap():
+    """A real root with total_ms is None (in-flight request) must not be
+    coerced to 0.0 and then compared against sum(self_ms) -- that would flip
+    overlap_detected on for an ordinary in-flight request (spec 04.9)."""
+    events = [
+        ev("root", scope="api", id="r", ms=None),
+        ev("calc", scope="calculation", id="c", parent="r", ms=60.0),
+    ]
+    breakdown = breakdown_by_scope(events)
+    assert breakdown.total_ms == 0.0
+    assert breakdown.unattributed_ms == 0.0
+    assert breakdown.overlap_detected is False
+    assert len(breakdown.scopes) > 0
+
+
+def test_synthetic_root_denominator_sums_independent_top_level_spans():
+    """Two unrelated top-level spans (e.g. two requests sharing one buffer)
+    build a synthetic root whose total_ms is a max() over them -- not a real
+    duration. The denominator must be the sum of the children's own totals
+    instead, or this reports bogus overlap on the default (no request_id)
+    call path every time the buffer holds more than one request."""
+    events = [
+        ev("root_a", scope="api", id="ra", ms=100.0),
+        ev("root_b", scope="calculation", id="rb", ms=50.0),
+    ]
+    breakdown = breakdown_by_scope(events)
+    assert breakdown.total_ms == 150.0
+    assert breakdown.overlap_detected is False
+    assert (
+        sum(row.self_ms for row in breakdown.scopes) + breakdown.unattributed_ms
+        == breakdown.total_ms
+    )
+
+
+def test_list_requests_total_ms_uses_max_across_parentless_fragments():
+    """When a request has no completed api-scope event and more than one
+    parent-less span (true root evicted from the ring buffer, leaving an
+    orphan fragment alongside it), the fallback total must be the MAX known
+    total among them, not an arbitrary first-in-input-order pick."""
+    events = [
+        ev("orphan", id="o1", ms=15.0, request_id="req-1"),
+        ev("root", id="r1", ms=500.0, request_id="req-1"),
+    ]
+    index = list_requests(events, limit=10, buffer_limit=100)
+    row = index.requests[0]
+    assert row.total_ms == 500.0
