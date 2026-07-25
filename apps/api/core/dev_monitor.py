@@ -21,6 +21,7 @@ _DEFAULT_PERFORMANCE_LOG_DIRECTORY = Path("data/cache/logs/performance")
 _RECENT_EVENT_LIMIT = 2000
 _DEFAULT_LIMIT = 500
 _DEFAULT_RETENTION_DAYS = 7
+_DEFAULT_EVENT_LIMIT = 20_000
 _current_request_id: ContextVar[str | None] = ContextVar("moneyview_dev_monitor_request_id", default=None)
 
 
@@ -47,6 +48,16 @@ def get_dev_monitor_retention_days() -> int:
         return max(1, int(raw_value))
     except ValueError:
         return _DEFAULT_RETENTION_DAYS
+
+
+def get_dev_monitor_event_limit() -> int:
+    raw_value = os.getenv("MONEYVIEW_DEV_MONITOR_EVENT_LIMIT", "").strip()
+    if not raw_value:
+        return _DEFAULT_EVENT_LIMIT
+    try:
+        return max(1, int(raw_value))
+    except ValueError:
+        return _DEFAULT_EVENT_LIMIT
 
 
 def slow_threshold_ms_for_scope(scope: str) -> float:
@@ -130,7 +141,7 @@ class ActiveDevMonitorSink(DevMonitorSink):
         flush_interval_ms: int = 500,
     ):
         self.log_path = log_path
-        self._recent_limit = recent_limit if recent_limit is not None else _RECENT_EVENT_LIMIT
+        self._recent_limit = recent_limit if recent_limit is not None else get_dev_monitor_event_limit()
         self._recent_events: deque[PerformanceEvent] = deque(maxlen=self._recent_limit)
         self._sequenced_events: deque[tuple[int, PerformanceEvent]] = deque(maxlen=self._recent_limit)
         self._next_sequence = 0

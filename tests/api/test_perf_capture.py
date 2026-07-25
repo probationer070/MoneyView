@@ -5,7 +5,7 @@ import threading
 from pathlib import Path
 
 from apps.api.core import dev_monitor
-from apps.api.core.dev_monitor import ActiveDevMonitorSink
+from apps.api.core.dev_monitor import ActiveDevMonitorSink, get_dev_monitor_event_limit
 from apps.api.models.schema_parts.dev_monitor import PerformanceEvent
 
 
@@ -151,3 +151,23 @@ def test_shutdown_flushes_pending_events_and_stops_background_thread(tmp_path):
     assert len(log_path.read_text(encoding="utf-8").strip().splitlines()) == 1
     assert sink._flusher is not None
     assert not sink._flusher.is_alive()
+
+
+def test_event_limit_defaults_to_twenty_thousand(monkeypatch):
+    monkeypatch.delenv("MONEYVIEW_DEV_MONITOR_EVENT_LIMIT", raising=False)
+    assert get_dev_monitor_event_limit() == 20_000
+
+
+def test_event_limit_reads_env_and_falls_back_on_garbage(monkeypatch):
+    monkeypatch.setenv("MONEYVIEW_DEV_MONITOR_EVENT_LIMIT", "500")
+    assert get_dev_monitor_event_limit() == 500
+    monkeypatch.setenv("MONEYVIEW_DEV_MONITOR_EVENT_LIMIT", "not-a-number")
+    assert get_dev_monitor_event_limit() == 20_000
+
+
+def test_sink_sizes_deques_from_event_limit(monkeypatch, tmp_path):
+    monkeypatch.setenv("MONEYVIEW_DEV_MONITOR_EVENT_LIMIT", "5")
+    sink = ActiveDevMonitorSink(log_path=tmp_path / "perf.jsonl", synchronous=True)
+    for index in range(10):
+        sink.emit(_event(f"op{index}"))
+    assert len(sink.recent(limit=100)) == 5
