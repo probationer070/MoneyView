@@ -137,6 +137,7 @@ class ActiveDevMonitorSink(DevMonitorSink):
         self._lock = threading.Lock()
         self._pending: list[PerformanceEvent] = []
         self._pending_lock = threading.Lock()
+        self._write_lock = threading.Lock()
         self._persistence_enabled = True
         self._synchronous = synchronous
         self._flush_events = max(1, flush_events)
@@ -179,12 +180,18 @@ class ActiveDevMonitorSink(DevMonitorSink):
         self._stopping = True
         self._wake.set()
         self.flush()
+        if self._flusher is not None:
+            self._flusher.join(timeout=5.0)
+        self.flush()
 
     def _flush_loop(self) -> None:
         while not self._stopping:
             self._wake.wait(timeout=self._flush_interval_s)
             self._wake.clear()
-            self._write_pending()
+            try:
+                self._write_pending()
+            except Exception as error:  # noqa: BLE001 - flusher thread must never die silently
+                self._disable_persistence(error)
 
     def recent(self, limit: int = _DEFAULT_LIMIT) -> list[PerformanceEvent]:
         bounded_limit = max(0, min(limit, self._recent_limit))
@@ -244,22 +251,23 @@ class ActiveDevMonitorSink(DevMonitorSink):
         return newest_sequence, events
 
     def _write_pending(self) -> None:
-        with self._pending_lock:
-            if not self._pending or not self._persistence_enabled:
-                self._pending.clear()
-                return
-            batch = self._pending
-            self._pending = []
-        try:
-            self.log_path.parent.mkdir(parents=True, exist_ok=True)
-            with self.log_path.open("a", encoding="utf-8") as handle:
-                for event in batch:
-                    handle.write(event.model_dump_json())
-                    handle.write("\n")
-        except OSError as error:
-            self._disable_persistence(error)
+        with self._write_lock:
+            with self._pending_lock:
+                if not self._pending or not self._persistence_enabled:
+                    self._pending.clear()
+                    return
+                batch = self._pending
+                self._pending = []
+            try:
+                self.log_path.parent.mkdir(parents=True, exist_ok=True)
+                with self.log_path.open("a", encoding="utf-8") as handle:
+                    for event in batch:
+                        handle.write(event.model_dump_json())
+                        handle.write("\n")
+            except Exception as error:  # noqa: BLE001 - any write failure (disk, permission, encoding) disables persistence
+                self._disable_persistence(error)
 
-    def _disable_persistence(self, error: OSError) -> None:
+    def _disable_persistence(self, error: Exception) -> None:
         with self._pending_lock:
             if not self._persistence_enabled:
                 return
@@ -310,6 +318,9 @@ _sink: DevMonitorSink = NoOpDevMonitorSink()
 
 def reset_dev_monitor_sink() -> None:
     global _sink
+    shutdown = getattr(_sink, "shutdown", None)
+    if callable(shutdown):
+        shutdown()
     _sink = NoOpDevMonitorSink()
 
 
