@@ -6,11 +6,14 @@ in the route layer before these functions are called (spec 02.3).
 """
 from __future__ import annotations
 
+import statistics
 from dataclasses import dataclass, field
 from datetime import datetime
 
 from apps.api.models.schema_parts.dev_monitor import PerformanceEvent
 from apps.api.models.schema_parts.perf_analysis import (
+    CacheReport,
+    CacheRow,
     CollapsedNode,
     RequestIndex,
     RequestSummaryRow,
@@ -18,11 +21,15 @@ from apps.api.models.schema_parts.perf_analysis import (
     ScopeBreakdown,
     ScopeRow,
     SpanNode,
+    TickerCostRow,
+    TickerCostTable,
 )
 
 EPSILON_MS = 1.0
 WATERFALL_SPAN_CAP = 2000
 SYNTHETIC_ROOT_ID = "__synthetic_root__"
+CV_UNIFORM_MAX = 0.15
+CV_SKEWED_MIN = 0.5
 
 
 def _typed(event: PerformanceEvent, key: str, expected: type):
@@ -556,3 +563,99 @@ def list_requests(events: list[PerformanceEvent], limit: int, buffer_limit: int)
         buffer_used=len(events),
         buffer_limit=buffer_limit,
     )
+
+
+def _percentile(values: list[float], fraction: float) -> float:
+    if not values:
+        return 0.0
+    ordered = sorted(values)
+    index = max(0, min(len(ordered) - 1, int(len(ordered) * fraction) - 1))
+    return round(ordered[index], 1)
+
+
+def _classify(cv: float) -> str:
+    if cv < CV_UNIFORM_MAX:
+        return "uniform"
+    if cv > CV_SKEWED_MIN:
+        return "skewed"
+    return "mixed"
+
+
+def rollup_by_ticker(events: list[PerformanceEvent]) -> TickerCostTable:
+    spans, root = _spans_with_self_ms(events)
+    if root is None:
+        return TickerCostTable()
+
+    accumulator: dict[str, TickerCostRow] = {}
+    for span in spans:
+        if not span.ticker:
+            continue
+        row = accumulator.setdefault(span.ticker, TickerCostRow(ticker=span.ticker, self_ms=0.0, span_count=0))
+        self_ms = span.self_ms or 0.0
+        row.self_ms = round(row.self_ms + self_ms, 1)
+        row.span_count += 1
+        if span.scope == "db":
+            row.db_ms = round(row.db_ms + self_ms, 1)
+        elif span.scope == "calculation":
+            row.calculation_ms = round(row.calculation_ms + self_ms, 1)
+        elif span.scope == "external":
+            row.external_ms = round(row.external_ms + self_ms, 1)
+        if span.cache_state == "hit":
+            row.cache_hits += 1
+        elif span.cache_state == "miss":
+            row.cache_misses += 1
+        row.rows_read += span.rows or 0
+        if span.bytes is not None:
+            row.bytes = (row.bytes or 0) + span.bytes
+        if span.series_points is not None:
+            row.series_points = (row.series_points or 0) + span.series_points
+
+    rows = sorted(accumulator.values(), key=lambda row: row.self_ms, reverse=True)
+    costs = [row.self_ms for row in rows]
+    mean_cost = statistics.fmean(costs) if costs else 0.0
+    cv = (
+        round(statistics.stdev(costs) / mean_cost, 4)
+        if len(costs) > 1 and mean_cost > 0
+        else 0.0
+    )
+    return TickerCostTable(
+        rows=rows,
+        ticker_count=len(rows),
+        total_self_ms=round(sum(costs), 1),
+        p50_ms=_percentile(costs, 0.5),
+        p95_ms=_percentile(costs, 0.95),
+        max_ms=round(max(costs), 1) if costs else 0.0,
+        cv=cv,
+        distribution=_classify(cv),
+    )
+
+
+def cache_effectiveness(events: list[PerformanceEvent]) -> CacheReport:
+    hits: dict[str, int] = {}
+    miss_costs: dict[str, list[float]] = {}
+    for event in events:
+        if event.scope != "cache":
+            continue
+        component = event.component or "unknown"
+        if event.status == "cache_hit":
+            hits[component] = hits.get(component, 0) + 1
+        elif event.status == "cache_miss":
+            miss_costs.setdefault(component, []).append(event.duration_ms or 0.0)
+
+    rows: list[CacheRow] = []
+    for component in sorted(set(hits) | set(miss_costs)):
+        hit_count = hits.get(component, 0)
+        misses = miss_costs.get(component, [])
+        total = hit_count + len(misses)
+        avg_miss = round(statistics.fmean(misses), 1) if misses else 0.0
+        rows.append(
+            CacheRow(
+                component=component,
+                hits=hit_count,
+                misses=len(misses),
+                hit_rate=round(hit_count / total, 4) if total else 0.0,
+                avg_miss_cost_ms=avg_miss,
+                estimated_time_saved_ms=round(hit_count * avg_miss, 1),
+            )
+        )
+    return CacheReport(caches=rows)

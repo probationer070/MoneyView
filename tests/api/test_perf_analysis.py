@@ -7,8 +7,10 @@ from apps.api.services.perf_analysis import (
     WATERFALL_SPAN_CAP,
     breakdown_by_scope,
     build_waterfall,
+    cache_effectiveness,
     list_requests,
     normalize_spans,
+    rollup_by_ticker,
     span_bytes,
     span_closes,
     span_rows,
@@ -25,6 +27,7 @@ def ev(
     id: str | None = None,
     parent: str | None = None,
     ticker: str | None = None,
+    component: str | None = None,
     status: str = "success",
     request_id: str = "req-1",
     offset_ms: float = 0.0,
@@ -40,6 +43,7 @@ def ev(
         status=status,
         duration_ms=ms,
         ticker=ticker,
+        component=component,
         timestamp=BASE_TIME + timedelta(milliseconds=offset_ms),
         metadata=metadata,
     )
@@ -503,3 +507,87 @@ def test_list_requests_total_ms_uses_max_across_parentless_fragments():
     index = list_requests(events, limit=10, buffer_limit=100)
     row = index.requests[0]
     assert row.total_ms == 500.0
+
+
+def _ticker_events(costs: dict[str, float]) -> list[PerformanceEvent]:
+    events = [ev("api.request_complete", scope="api", id="r", ms=sum(costs.values()) + 10.0)]
+    for index, (ticker, cost) in enumerate(costs.items()):
+        events.append(
+            ev(f"ticker.metrics-{index}", id=f"t{index}", parent="r", ms=cost, ticker=ticker, rows=1)
+        )
+    return events
+
+
+def test_uniform_distribution_classification():
+    table = rollup_by_ticker(_ticker_events({f"T{i}": 20.0 for i in range(10)}))
+    assert table.cv < 0.15
+    assert table.distribution == "uniform"
+    assert table.ticker_count == 10
+
+
+def test_skewed_distribution_classification():
+    costs = {f"T{i}": 5.0 for i in range(10)}
+    costs["OUTLIER"] = 400.0
+    table = rollup_by_ticker(_ticker_events(costs))
+    assert table.cv > 0.5
+    assert table.distribution == "skewed"
+
+
+def test_mixed_distribution_classification():
+    costs = {f"T{i}": 10.0 + (i * 4.0) for i in range(10)}
+    table = rollup_by_ticker(_ticker_events(costs))
+    assert 0.15 <= table.cv <= 0.5
+    assert table.distribution == "mixed"
+
+
+def test_single_ticker_and_zero_mean_are_uniform():
+    assert rollup_by_ticker(_ticker_events({"ONLY": 10.0})).distribution == "uniform"
+    assert rollup_by_ticker(_ticker_events({"A": 0.0, "B": 0.0})).cv == 0.0
+    assert rollup_by_ticker([]).distribution == "uniform"
+
+
+def test_rollup_splits_self_time_by_scope_and_sums_rows():
+    events = [
+        ev("api.request_complete", scope="api", id="r", ms=100.0),
+        ev("ticker.metrics", scope="calculation", id="c", parent="r", ms=30.0, ticker="AAPL", rows=1),
+        ev("db.select", scope="db", id="d", parent="c", ms=12.0, ticker="AAPL", rows=862),
+    ]
+    table = rollup_by_ticker(events)
+    row = next(row for row in table.rows if row.ticker == "AAPL")
+    assert row.calculation_ms == 18.0
+    assert row.db_ms == 12.0
+    assert row.rows_read == 863
+    assert row.span_count == 2
+
+
+def test_rollup_counts_cache_hits_and_misses():
+    """Nothing in the brief exercises the cache_state hit/miss branches inside
+    rollup_by_ticker; later instrumentation tasks are the first real emitters
+    of span-level cache_state, so pin the counting behavior here now.
+    """
+    events = [
+        ev("api.request_complete", scope="api", id="r", ms=20.0),
+        ev("ticker.metrics-hit", id="h", parent="r", ms=5.0, ticker="AAPL", cache_state="hit"),
+        ev("ticker.metrics-miss", id="m", parent="r", ms=5.0, ticker="AAPL", cache_state="miss"),
+    ]
+    table = rollup_by_ticker(events)
+    row = next(row for row in table.rows if row.ticker == "AAPL")
+    assert row.cache_hits == 1
+    assert row.cache_misses == 1
+
+
+def test_cache_effectiveness_formula():
+    events = [
+        ev("cache.get", scope="cache", id="h1", ms=1.0, status="cache_hit", component="attr"),
+        ev("cache.get", scope="cache", id="h2", ms=1.0, status="cache_hit", component="attr"),
+        ev("cache.get", scope="cache", id="m1", ms=400.0, status="cache_miss", component="attr"),
+        ev("cache.get", scope="cache", id="m2", ms=200.0, status="cache_miss", component="attr"),
+    ]
+    report = cache_effectiveness(events)
+    row = report.caches[0]
+    assert row.component == "attr"
+    assert row.hits == 2
+    assert row.misses == 2
+    assert row.hit_rate == 0.5
+    assert row.avg_miss_cost_ms == 300.0
+    assert row.estimated_time_saved_ms == 600.0
