@@ -5,7 +5,9 @@ from datetime import datetime, timedelta, timezone
 from apps.api.models.schema_parts.dev_monitor import PerformanceEvent
 from apps.api.services.perf_analysis import (
     WATERFALL_SPAN_CAP,
+    breakdown_by_scope,
     build_waterfall,
+    list_requests,
     normalize_spans,
     span_bytes,
     span_closes,
@@ -395,3 +397,61 @@ def _flatten(node):
             continue
         result.extend(_flatten(child))
     return result
+
+
+def test_breakdown_uses_self_time_and_conserves_total():
+    events = [
+        ev("root", scope="api", id="r", ms=100.0),
+        ev("calc", scope="calculation", id="c", parent="r", ms=60.0),
+        ev("query", scope="db", id="d", parent="c", ms=25.0),
+    ]
+    breakdown = breakdown_by_scope(events)
+    by_scope = {row.scope: row.self_ms for row in breakdown.scopes}
+    assert by_scope["api"] == 40.0
+    assert by_scope["calculation"] == 35.0
+    assert by_scope["db"] == 25.0
+    assert sum(by_scope.values()) + breakdown.unattributed_ms == 100.0
+    assert sum(row.pct_of_total for row in breakdown.scopes) <= 100.0
+
+
+def test_overlapping_siblings_set_overlap_detected_and_clamp_to_zero():
+    events = [
+        ev("root", scope="api", id="r", ms=100.0),
+        ev("a", scope="db", id="a", parent="r", ms=80.0),
+        ev("b", scope="db", id="b", parent="r", ms=80.0),
+    ]
+    breakdown = breakdown_by_scope(events)
+    assert breakdown.overlap_detected is True
+    assert breakdown.unattributed_ms == 0.0
+
+
+def test_rounding_noise_does_not_set_overlap_detected():
+    events = [
+        ev("root", scope="api", id="r", ms=100.0),
+        ev("a", scope="db", id="a", parent="r", ms=100.4),
+    ]
+    breakdown = breakdown_by_scope(events)
+    assert breakdown.overlap_detected is False
+    assert breakdown.unattributed_ms == 0.0
+
+
+def test_list_requests_reports_buffer_occupancy():
+    events = [
+        ev("api.request_complete", scope="api", id="r1", ms=100.0, request_id="req-a"),
+        ev("ticker.metrics", id="t1", parent="r1", ms=10.0, ticker="AAPL", request_id="req-a"),
+        ev("api.request_complete", scope="api", id="r2", ms=50.0, request_id="req-b"),
+    ]
+    index = list_requests(events, limit=10, buffer_limit=20_000)
+    assert index.buffer_used == 3
+    assert index.buffer_limit == 20_000
+    assert {row.request_id for row in index.requests} == {"req-a", "req-b"}
+    row_a = next(row for row in index.requests if row.request_id == "req-a")
+    assert row_a.ticker_count == 1
+    assert row_a.span_count == 2
+
+
+def test_empty_input_returns_valid_dtos():
+    assert breakdown_by_scope([]).total_ms == 0.0
+    index = list_requests([], limit=10, buffer_limit=100)
+    assert index.requests == []
+    assert index.buffer_used == 0

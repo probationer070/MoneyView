@@ -12,7 +12,11 @@ from datetime import datetime
 from apps.api.models.schema_parts.dev_monitor import PerformanceEvent
 from apps.api.models.schema_parts.perf_analysis import (
     CollapsedNode,
+    RequestIndex,
+    RequestSummaryRow,
     RequestWaterfall,
+    ScopeBreakdown,
+    ScopeRow,
     SpanNode,
 )
 
@@ -435,4 +439,90 @@ def build_waterfall(events: list[PerformanceEvent], request_id: str) -> RequestW
         truncated=truncated,
         overlap_detected=overlap_detected,
         root=node,
+    )
+
+
+def _spans_with_self_ms(events: list[PerformanceEvent]) -> tuple[list[Span], Span | None]:
+    spans = normalize_spans(events)
+    if not spans:
+        return [], None
+    root, _ = _build_tree(spans)
+    _assign_self_ms(root)
+    return spans, root
+
+
+def breakdown_by_scope(events: list[PerformanceEvent]) -> ScopeBreakdown:
+    spans, root = _spans_with_self_ms(events)
+    if root is None:
+        return ScopeBreakdown()
+
+    totals: dict[str, list[float]] = {}
+    counts: dict[str, int] = {}
+    slow_counts: dict[str, int] = {}
+    for span in spans:
+        totals.setdefault(span.scope, []).append(span.self_ms or 0.0)
+        counts[span.scope] = counts.get(span.scope, 0) + 1
+        if span.status == "slow":
+            slow_counts[span.scope] = slow_counts.get(span.scope, 0) + 1
+
+    root_total = root.total_ms or 0.0
+    sum_self = sum(sum(values) for values in totals.values())
+    raw_unattributed = root_total - sum_self
+    overlap_detected = raw_unattributed < -EPSILON_MS
+    unattributed = round(max(0.0, raw_unattributed), 1)
+
+    rows = [
+        ScopeRow(
+            scope=scope,
+            self_ms=round(sum(values), 1),
+            pct_of_total=round((sum(values) / root_total * 100.0), 1) if root_total else 0.0,
+            event_count=counts.get(scope, 0),
+            slow_count=slow_counts.get(scope, 0),
+        )
+        for scope, values in totals.items()
+    ]
+    rows.sort(key=lambda row: row.self_ms, reverse=True)
+    return ScopeBreakdown(
+        scopes=rows,
+        total_ms=round(root_total, 1),
+        unattributed_ms=unattributed,
+        overlap_detected=overlap_detected,
+    )
+
+
+def list_requests(events: list[PerformanceEvent], limit: int, buffer_limit: int) -> RequestIndex:
+    grouped: dict[str, list[PerformanceEvent]] = {}
+    for event in events:
+        if event.request_id:
+            grouped.setdefault(event.request_id, []).append(event)
+
+    rows: list[RequestSummaryRow] = []
+    for request_id, request_events in grouped.items():
+        spans = normalize_spans(request_events)
+        root_span = next((span for span in spans if span.parent_id is None), None)
+        api_event = next(
+            (event for event in request_events if event.scope == "api" and event.duration_ms is not None),
+            None,
+        )
+        rows.append(
+            RequestSummaryRow(
+                request_id=request_id,
+                route=next((event.route for event in request_events if event.route), None),
+                method=next((event.method for event in request_events if event.method), None),
+                started_at=min(event.timestamp for event in request_events),
+                ended_at=max(event.timestamp for event in request_events),
+                total_ms=(api_event.duration_ms if api_event else (root_span.total_ms if root_span else None)),
+                span_count=len(spans),
+                ticker_count=len({event.ticker for event in request_events if event.ticker}),
+                status=(api_event.status if api_event else "unknown"),
+                partial=any(span.partial for span in spans),
+            )
+        )
+
+    rows.sort(key=lambda row: row.started_at, reverse=True)
+    return RequestIndex(
+        requests=rows[:limit],
+        limit=limit,
+        buffer_used=len(events),
+        buffer_limit=buffer_limit,
     )
