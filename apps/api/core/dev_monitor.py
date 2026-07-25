@@ -445,8 +445,9 @@ def perf_timer(
     threshold_ms = slow_threshold_ms if slow_threshold_ms is not None else slow_threshold_ms_for_scope(scope)
     span_id = uuid4().hex
     effective_parent = parent_id if parent_id is not None else _current_span_id.get()
+    effective_request_id = request_id if request_id is not None else get_current_request_id()
     event_context = {
-        "request_id": request_id,
+        "request_id": effective_request_id,
         "parent_id": effective_parent,
         "level": level,
         "scope": scope,

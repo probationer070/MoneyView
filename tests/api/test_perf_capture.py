@@ -379,3 +379,60 @@ def test_comparison_fanout_emits_per_ticker_spans(monkeypatch, tmp_path):
     assert all(span.ticker for span in metrics_spans)
     terminal = next(event for event in fanout if event.duration_ms is not None)
     assert isinstance(terminal.metadata.get("fanout_size"), int)
+
+
+def test_comparison_fanout_spans_reach_per_request_view(monkeypatch, tmp_path):
+    # Fix round 1: perf_timer used to emit every span with request_id=None, so
+    # request-scoped views (list_requests / waterfall/{request_id}) silently
+    # dropped the fan-out spans even though they were captured in the buffer.
+    sink = _enable(monkeypatch, tmp_path)
+    monkeypatch.setattr(db_service, "_DB_PATH", tmp_path / "moneyview.db")
+    db_service.init_db()
+    with db_service.get_db() as conn:
+        conn.execute(
+            """INSERT INTO watchlist (ticker, name, sector, group_name, weight)
+               VALUES (?, ?, ?, ?, ?)""",
+            ("AAPL", "Apple", "Technology", "core", 0.4),
+        )
+        conn.execute(
+            """INSERT INTO watchlist (ticker, name, sector, group_name, weight)
+               VALUES (?, ?, ?, ?, ?)""",
+            ("MSFT", "Microsoft", "Technology", "core", 0.2),
+        )
+    monkeypatch.setattr(corporate_metrics_service, "metrics_for_ticker", _fake_metrics_for_ticker)
+    monkeypatch.setattr(corporate_metrics_service, "latest_market_price", lambda ticker: 100.0)
+
+    client = TestClient(app)
+    client.get("/api/v1/corporate/comparison?mode=live")
+
+    events = sink.recent(limit=20_000)
+    complete = next(event for event in events if event.operation == "api.request_complete")
+    request_id = complete.request_id
+    assert request_id, "api.request_complete carried no request_id"
+
+    scoped = [event for event in events if event.request_id == request_id]
+    assert any(event.operation == "fanout.comparison" for event in scoped), (
+        "fanout.comparison span did not carry the ambient request_id"
+    )
+    assert any(event.operation == "ticker.metrics" for event in scoped), (
+        "ticker.metrics span did not carry the ambient request_id"
+    )
+
+
+def test_perf_timer_explicit_request_id_overrides_ambient(monkeypatch, tmp_path):
+    # Fix round 1: an explicitly passed request_id must win over the ambient
+    # contextvar, mirroring how parent_id already behaves.
+    sink = _enable(monkeypatch, tmp_path)
+    token = dev_monitor.set_current_request_id("ambient-request")
+    try:
+        with perf_timer(
+            scope="calculation",
+            operation="explicit_request_id_probe",
+            request_id="explicit-request",
+        ):
+            pass
+    finally:
+        dev_monitor.reset_current_request_id(token)
+
+    event = next(event for event in sink.recent(limit=50) if event.operation == "explicit_request_id_probe")
+    assert event.request_id == "explicit-request"
