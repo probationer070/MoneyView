@@ -111,20 +111,47 @@ class DevMonitorSink:
     def events_after(self, last_sequence: int) -> tuple[int, list[PerformanceEvent]]:
         return last_sequence, []
 
+    def flush(self) -> None:
+        return None
+
 
 class NoOpDevMonitorSink(DevMonitorSink):
     pass
 
 
 class ActiveDevMonitorSink(DevMonitorSink):
-    def __init__(self, *, log_path: Path, recent_limit: int = _RECENT_EVENT_LIMIT):
+    def __init__(
+        self,
+        *,
+        log_path: Path,
+        recent_limit: int | None = None,
+        synchronous: bool = False,
+        flush_events: int = 200,
+        flush_interval_ms: int = 500,
+    ):
         self.log_path = log_path
-        self._recent_limit = recent_limit
-        self._recent_events: deque[PerformanceEvent] = deque(maxlen=recent_limit)
-        self._sequenced_events: deque[tuple[int, PerformanceEvent]] = deque(maxlen=recent_limit)
+        self._recent_limit = recent_limit if recent_limit is not None else _RECENT_EVENT_LIMIT
+        self._recent_events: deque[PerformanceEvent] = deque(maxlen=self._recent_limit)
+        self._sequenced_events: deque[tuple[int, PerformanceEvent]] = deque(maxlen=self._recent_limit)
         self._next_sequence = 0
         self._lock = threading.Lock()
+        self._pending: list[PerformanceEvent] = []
+        self._pending_lock = threading.Lock()
+        self._persistence_enabled = True
+        self._synchronous = synchronous
+        self._flush_events = max(1, flush_events)
+        self._flush_interval_s = max(0.01, flush_interval_ms / 1000.0)
+        self._wake = threading.Event()
+        self._stopping = False
+        self._flusher: threading.Thread | None = None
         self._cleanup_old_jsonl_logs()
+        if not synchronous:
+            self._flusher = threading.Thread(target=self._flush_loop, name="dev-monitor-flush", daemon=True)
+            self._flusher.start()
+
+    @property
+    def persistence_enabled(self) -> bool:
+        return self._persistence_enabled
 
     def emit(self, event: PerformanceEvent) -> PerformanceEvent:
         sanitized_event = event.model_copy(update={"metadata": _sanitize_metadata(event.metadata)})
@@ -132,9 +159,32 @@ class ActiveDevMonitorSink(DevMonitorSink):
             self._next_sequence += 1
             self._recent_events.append(sanitized_event)
             self._sequenced_events.append((self._next_sequence, sanitized_event))
-            self._append_jsonl(sanitized_event)
+        should_flush_now = False
+        with self._pending_lock:
+            if self._persistence_enabled:
+                self._pending.append(sanitized_event)
+                should_flush_now = self._synchronous or len(self._pending) >= self._flush_events
+        if should_flush_now:
+            if self._synchronous:
+                self._write_pending()
+            else:
+                self._wake.set()
         self._emit_terminal(sanitized_event)
         return sanitized_event
+
+    def flush(self) -> None:
+        self._write_pending()
+
+    def shutdown(self) -> None:
+        self._stopping = True
+        self._wake.set()
+        self.flush()
+
+    def _flush_loop(self) -> None:
+        while not self._stopping:
+            self._wake.wait(timeout=self._flush_interval_s)
+            self._wake.clear()
+            self._write_pending()
 
     def recent(self, limit: int = _DEFAULT_LIMIT) -> list[PerformanceEvent]:
         bounded_limit = max(0, min(limit, self._recent_limit))
@@ -193,11 +243,33 @@ class ActiveDevMonitorSink(DevMonitorSink):
             events = [event for sequence, event in self._sequenced_events if sequence > last_sequence]
         return newest_sequence, events
 
-    def _append_jsonl(self, event: PerformanceEvent) -> None:
-        self.log_path.parent.mkdir(parents=True, exist_ok=True)
-        with self.log_path.open("a", encoding="utf-8") as handle:
-            handle.write(event.model_dump_json())
-            handle.write("\n")
+    def _write_pending(self) -> None:
+        with self._pending_lock:
+            if not self._pending or not self._persistence_enabled:
+                self._pending.clear()
+                return
+            batch = self._pending
+            self._pending = []
+        try:
+            self.log_path.parent.mkdir(parents=True, exist_ok=True)
+            with self.log_path.open("a", encoding="utf-8") as handle:
+                for event in batch:
+                    handle.write(event.model_dump_json())
+                    handle.write("\n")
+        except OSError as error:
+            self._disable_persistence(error)
+
+    def _disable_persistence(self, error: OSError) -> None:
+        with self._pending_lock:
+            if not self._persistence_enabled:
+                return
+            self._persistence_enabled = False
+            self._pending.clear()
+        logger.error(
+            "dev.monitor persistence disabled for this session path=%s error=%s",
+            self.log_path,
+            error,
+        )
 
     def _cleanup_old_jsonl_logs(self) -> None:
         retention_days = get_dev_monitor_retention_days()

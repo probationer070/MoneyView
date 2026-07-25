@@ -113,6 +113,7 @@ def test_dev_monitor_sink_writes_jsonl_and_recent_events_when_enabled(monkeypatc
     stored_event = emit_performance_event(event)
 
     recent = get_dev_monitor_sink().recent()
+    get_dev_monitor_sink().flush()
     lines = _read_jsonl(log_path)
 
     assert len(recent) == 1
@@ -167,6 +168,7 @@ def test_perf_timer_classifies_slow_and_error(monkeypatch, tmp_path):
     except RuntimeError:
         pass
 
+    get_dev_monitor_sink().flush()
     lines = _read_jsonl(log_path)
 
     assert len(lines) == 2
@@ -189,6 +191,7 @@ def test_request_middleware_emits_monitor_events_with_existing_request_id(monkey
     assert response.status_code == 200
     assert response.headers["X-Request-ID"] == "dev-monitor-request"
 
+    get_dev_monitor_sink().flush()
     lines = _read_jsonl(log_path)
     operations = [line["operation"] for line in lines]
 
@@ -224,6 +227,7 @@ def test_db_instrumentation_emits_select_and_write_events(monkeypatch, tmp_path)
         reset_current_request_id(request_token)
 
     assert row is not None
+    get_dev_monitor_sink().flush()
     lines = _read_jsonl(log_path)
     insert_event = next(line for line in lines if line["table"] == "portfolio_preferences" and line["metadata"]["operation_type"] in {"insert", "replace"})
     select_event = next(line for line in lines if line["operation"] == "db.select_portfolio_preferences")
@@ -245,6 +249,7 @@ def test_request_path_db_events_reuse_existing_request_id(monkeypatch, tmp_path)
     response = client.get("/api/v1/portfolio/preferences", headers={"X-Request-ID": "portfolio-pref-request"})
 
     assert response.status_code == 200
+    get_dev_monitor_sink().flush()
     lines = _read_jsonl(log_path)
     db_events = [line for line in lines if line["scope"] == "db" and line["table"] == "portfolio_preferences"]
 
@@ -262,6 +267,7 @@ def test_page_load_group_events_emit_for_portfolio_routes(monkeypatch, tmp_path)
     response = client.get("/api/v1/portfolio/preferences", headers={"X-Request-ID": "page-load-request"})
 
     assert response.status_code == 200
+    get_dev_monitor_sink().flush()
     lines = _read_jsonl(log_path)
     page_events = [line for line in lines if line["scope"] == "page_load" and line["component"] == "portfolio"]
     assert any(event["status"] == "start" for event in page_events)
@@ -287,6 +293,7 @@ def test_market_data_emits_cache_and_provider_events(monkeypatch, tmp_path):
 
     assert bars
     assert quality.source in {"live_fetch", "live_refresh"}
+    get_dev_monitor_sink().flush()
     lines = _read_jsonl(log_path)
     operations = {(line["scope"], line["operation"], line["status"]) for line in lines}
     assert ("cache", "cache.lookup", "success") in operations
@@ -327,6 +334,7 @@ def test_metric_audit_emits_data_quality_and_metric_events(monkeypatch, tmp_path
     audit = metric_audit_for_ticker("AAPL", fallback, has_saved_metrics=False, bundle_loader=lambda ticker, endpoint: None)
 
     assert audit.source_mode == "default_model"
+    get_dev_monitor_sink().flush()
     lines = _read_jsonl(log_path)
     assert any(line["scope"] == "metric" and line["operation"] == "metric.metric_audit" for line in lines)
     assert any(line["scope"] == "data_quality" and line["operation"] == "data_quality.roic" for line in lines)
@@ -347,6 +355,7 @@ def test_monte_carlo_emits_backend_and_risk_metric_events(monkeypatch, tmp_path)
     )
 
     assert response.status_code == 200
+    get_dev_monitor_sink().flush()
     lines = _read_jsonl(log_path)
     assert any(line["scope"] == "calculation" and line["operation"] == "calculation.monte_carlo_backend" for line in lines)
     assert any(line["scope"] == "metric" and line["operation"] == "metric.volatility_var_cvar" for line in lines)

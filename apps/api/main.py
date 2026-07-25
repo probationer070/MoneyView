@@ -119,6 +119,13 @@ async def lifespan(app: FastAPI):
     task_corporate_snapshot.cancel()
     task_stock_prewarm.cancel()
 
+    from apps.api.core.dev_monitor import get_dev_monitor_sink
+
+    sink = get_dev_monitor_sink()
+    shutdown = getattr(sink, "shutdown", None)
+    if callable(shutdown):
+        shutdown()
+
     logger.info("Tearing down SQLite connections and WAL truncate.")
     try:
         with get_db() as conn:
