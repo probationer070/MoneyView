@@ -98,21 +98,21 @@ def normalize_spans(events: list[PerformanceEvent]) -> list[Span]:
     metadata.closes_span_id, never on name matching (spec 03.3).
     """
     spans: dict[str, Span] = {}
-    terminals: list[tuple[str, PerformanceEvent]] = []
+    terminals: list[tuple[str, int, PerformanceEvent]] = []
 
     for order, event in enumerate(events):
         closes = span_closes(event)
         if closes is not None:
-            terminals.append((closes, event))
+            terminals.append((closes, order, event))
             continue
         spans[event.id] = _span_from(event, order)
 
-    for start_id, terminal in terminals:
+    for start_id, order, terminal in terminals:
         start_span = spans.get(start_id)
         if start_span is None:
             # Start event evicted from the ring buffer: keep the terminal as its
             # own span rather than dropping the measurement.
-            orphan = _span_from(terminal, len(spans))
+            orphan = _span_from(terminal, order)
             orphan.partial = True
             spans[terminal.id] = orphan
             continue

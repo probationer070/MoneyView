@@ -126,7 +126,10 @@ def test_analysis_module_is_pure():
 
     If it does, the hand-built-event-list tests in this file stop being trustworthy.
     """
-    source = Path("apps/api/services/perf_analysis.py").read_text(encoding="utf-8")
+    module_path = (
+        Path(__file__).resolve().parents[2] / "apps/api/services/perf_analysis.py"
+    )
+    source = module_path.read_text(encoding="utf-8")
     tree = ast.parse(source)
     imported: set[str] = set()
     for node in ast.walk(tree):
@@ -137,5 +140,49 @@ def test_analysis_module_is_pure():
     assert "os" not in imported
     assert "subprocess" not in imported
     assert "pathlib" not in imported
+    assert "time" not in imported
     assert "get_dev_monitor_sink" not in source
     assert "datetime.now" not in source
+    assert "apps.api.routes" not in source
+    assert "apps/api/routes" not in source
+
+
+def test_evicted_start_gets_distinct_order_from_siblings():
+    """The terminal's parent (start) was evicted from the ring buffer: its
+    measurement must survive as a partial span, and that span's `order` must be
+    the terminal's real input-sequence index, not a value derived from
+    dict size, so ties resolve by true input order (spec 07.1 case 10).
+    """
+    events = [
+        ev("fanout", id="t1", parent="s1", ms=100.0, closes_span_id="s1"),
+        ev("child", id="c1", parent="s1", ms=20.0),
+    ]
+    spans = {span.id: span for span in normalize_spans(events)}
+    assert set(spans) == {"c1", "t1"}
+    assert spans["t1"].total_ms == 100.0
+    assert spans["t1"].partial is True
+    assert spans["t1"].order != spans["c1"].order
+    assert spans["t1"].order == 0
+    assert spans["c1"].order == 1
+
+
+def test_span_node_round_trips_nested_span_and_collapsed_node():
+    """SpanNode.model_rebuild() resolves the recursive Union["SpanNode",
+    CollapsedNode] forward-ref. Nothing else in the suite imports this module,
+    so verify the union actually serializes both branches.
+    """
+    from apps.api.models.schema_parts.perf_analysis import CollapsedNode, SpanNode
+
+    child = SpanNode(id="child", operation="op", scope="calculation", status="success")
+    collapsed = CollapsedNode(collapsed_count=3, total_ms=42.0, deepest_scope="db")
+    root = SpanNode(
+        id="root",
+        operation="root-op",
+        scope="api",
+        status="success",
+        children=[child, collapsed],
+    )
+
+    dumped = root.model_dump()
+    assert dumped["children"][0]["id"] == "child"
+    assert dumped["children"][1]["collapsed_count"] == 3
