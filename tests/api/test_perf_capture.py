@@ -5,9 +5,11 @@ import json
 import threading
 from pathlib import Path
 
+from fastapi.testclient import TestClient
 from starlette.concurrency import run_in_threadpool
 
 from apps.api.core import dev_monitor
+from apps.api.main import app
 from apps.api.core.dev_monitor import (
     ActiveDevMonitorSink,
     emit_performance_event,
@@ -302,3 +304,26 @@ def test_emit_performance_event_keeps_explicit_parent_id(monkeypatch, tmp_path):
         )
         emitted = emit_performance_event(explicit_event)
     assert emitted.parent_id == "explicit-parent"
+
+
+def test_middleware_terminal_event_carries_closes_span_id_and_bytes(monkeypatch, tmp_path):
+    sink = _enable(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        client.get("/api/v1/dev/performance/summary")
+    events = sink.recent(limit=200)
+    start = next(event for event in events if event.operation == "api.request_start")
+    complete = next(event for event in events if event.operation == "api.request_complete")
+    assert complete.metadata["closes_span_id"] == start.id
+    assert isinstance(complete.metadata["bytes"], int)
+
+
+def test_streaming_response_reports_null_bytes(monkeypatch, tmp_path):
+    sink = _enable(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        client.get("/api/v1/dev/log-stream?once=true")
+    complete = next(
+        event
+        for event in sink.recent(limit=200)
+        if event.operation == "api.request_complete" and "log-stream" in (event.route or "")
+    )
+    assert complete.metadata["bytes"] is None

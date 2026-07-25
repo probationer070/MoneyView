@@ -17,6 +17,21 @@ from apps.api.models.schema_parts.dev_monitor import PerformanceEvent
 logger = setup_logger(__name__)
 
 
+def _response_bytes(response) -> int | None:
+    """Response size from Content-Length. None for streaming responses.
+
+    Buffering a StreamingResponse to measure it would change the behaviour
+    under measurement, so streams deliberately report no size (spec 03.5.2).
+    """
+    raw_length = response.headers.get("content-length")
+    if raw_length is None:
+        return None
+    try:
+        return int(raw_length)
+    except (TypeError, ValueError):
+        return None
+
+
 def _page_load_component_for_path(path: str) -> str | None:
     if path.startswith("/api/v1/market") or path.startswith("/api/v1/stock") or path.startswith("/api/v1/detail"):
         return "market_overview"
@@ -138,7 +153,12 @@ class StructuralMiddleware(BaseHTTPMiddleware):
                             method=request.method,
                             duration_ms=duration_ms,
                             message="Unhandled request exception",
-                            metadata={"client_ip": client_ip, "status_code": 500},
+                            metadata={
+                                "client_ip": client_ip,
+                                "status_code": 500,
+                                "closes_span_id": request_event_id,
+                                "bytes": None,
+                            },
                         )
                     )
                     page_component = _page_load_component_for_path(request.url.path)
@@ -189,7 +209,12 @@ class StructuralMiddleware(BaseHTTPMiddleware):
                         route=request.url.path,
                         method=request.method,
                         duration_ms=duration_ms,
-                        metadata={"client_ip": client_ip, "status_code": response.status_code},
+                        metadata={
+                            "client_ip": client_ip,
+                            "status_code": response.status_code,
+                            "closes_span_id": request_event_id,
+                            "bytes": _response_bytes(response),
+                        },
                     )
                 )
                 page_component = _page_load_component_for_path(request.url.path)
