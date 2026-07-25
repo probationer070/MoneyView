@@ -160,7 +160,7 @@ export default function PerformanceAnalysisPage() {
       <Card>
         <SectionHeader title="Waterfall" />
         {waterfallQuery.data ? (
-          <>
+          <div data-testid="waterfall-panel">
             <div className="flex gap-2 mb-2">
               {waterfallQuery.data.partial ? (
                 <StatusBadge status="stale" label="partial — some spans evicted" />
@@ -173,7 +173,7 @@ export default function PerformanceAnalysisPage() {
               root={waterfallQuery.data.root}
               totalMs={waterfallQuery.data.total_ms ?? 0}
             />
-          </>
+          </div>
         ) : (
           <EmptyState title="Select a request" description="Pick a row above to inspect its shape." />
         )}

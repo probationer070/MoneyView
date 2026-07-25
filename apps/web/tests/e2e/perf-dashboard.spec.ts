@@ -110,8 +110,12 @@ test("clock_skew renders a marker and never a negative-width bar", async ({ page
         data: {
           request_id: "req-1", route: "/x", total_ms: 100, span_count: 2,
           partial: true, truncated: false, overlap_detected: false,
+          // total_ms is negative -- a skewed clock can produce this before
+          // clamping. This is the only value that genuinely exercises the
+          // Math.max(0.5, ...) floor: a positive total_ms would already be
+          // non-negative without it.
           root: spanNode({
-            children: [spanNode({ id: "c", operation: "skewed", parent_id: "root", clock_skew: true, offset_ms: 0, total_ms: 10, self_ms: 10 })],
+            children: [spanNode({ id: "c", operation: "skewed", parent_id: "root", clock_skew: true, offset_ms: 0, total_ms: -10, self_ms: 10 })],
           }),
         },
       }),
@@ -119,11 +123,58 @@ test("clock_skew renders a marker and never a negative-width bar", async ({ page
   );
   await page.goto("/dev/performance");
   await page.getByText("/x").click();
-  await expect(page.getByText(/partial/).first()).toBeVisible();
+  const waterfallPanel = page.getByTestId("waterfall-panel");
+  // Scoped to the waterfall panel specifically: the requests-table row also
+  // renders a "partial" badge (this fixture's request row has partial: true),
+  // so an unscoped getByText(/partial/) would ambiguously match both, and
+  // .first() would silently bind to the table's badge instead of the
+  // waterfall's -- deleting the waterfall's own badge would not fail this.
+  await expect(waterfallPanel.getByText("partial — some spans evicted")).toBeVisible();
+  await expect(waterfallPanel.locator('[title="clock skew: bounds clamped to parent"]')).toBeVisible();
   const widths = await page.locator(".absolute.h-3").evaluateAll((nodes) =>
     nodes.map((node) => Number.parseFloat((node as HTMLElement).style.width))
   );
   expect(widths.every((width) => width >= 0)).toBe(true);
+});
+
+test("a child overrunning its parent window renders a bar clamped to the track", async ({ page }) => {
+  await mockDefaults(page, {
+    requests: {
+      ...EMPTY_INDEX, buffer_used: 1,
+      requests: [{
+        request_id: "req-1", route: "/x", method: "GET", started_at: new Date().toISOString(),
+        ended_at: null, total_ms: 100, span_count: 2, ticker_count: 0, status: "success", partial: false,
+      }],
+    },
+  });
+  await page.route("**/performance/waterfall/*", (route) =>
+    route.fulfill({
+      status: 200,
+      body: JSON.stringify({
+        data: {
+          request_id: "req-1", route: "/x", total_ms: 100, span_count: 2,
+          partial: false, truncated: false, overlap_detected: false,
+          // _assign_offsets clamps a child's START into the parent window but
+          // never its DURATION ("the dominant real trigger" per its
+          // docstring): offset_ms 60 + total_ms 80 on a root total_ms of 100
+          // would put the bar at 60%-140% without a containment fix.
+          root: spanNode({
+            total_ms: 100,
+            children: [spanNode({ id: "c", operation: "overrun", parent_id: "root", offset_ms: 60, total_ms: 80, self_ms: 80 })],
+          }),
+        },
+      }),
+    })
+  );
+  await page.goto("/dev/performance");
+  await page.getByText("/x").click();
+  const bars = await page.locator(".absolute.h-3").evaluateAll((nodes) =>
+    nodes.map((node) => {
+      const style = (node as HTMLElement).style;
+      return { left: Number.parseFloat(style.left), width: Number.parseFloat(style.width) };
+    })
+  );
+  expect(bars.every((bar) => bar.left + bar.width <= 100.001)).toBe(true);
 });
 
 test("overlap_detected renders a note and a non-negative unattributed value", async ({ page }) => {
@@ -161,6 +212,24 @@ test("the dashboard does not instrument its own requests", async ({ page }) => {
     clientEvents.push(route.request().url());
     return route.fulfill({ status: 200, body: "{}" });
   });
+  // Make the client-event path genuinely reachable: emitClientPerformanceEvent
+  // first calls isClientDevMonitorEnabled(), which fetches this endpoint. The
+  // e2e harness never sets MONEYVIEW_DEV_MONITOR=true, so without this mock
+  // the real API 404s /summary and emitClientPerformanceEvent returns before
+  // it could ever hit /client-event -- clientEvents would be [] regardless of
+  // whether a fetcher smuggled in a `monitor:` option. Mock it "enabled" so
+  // the assertion below actually exercises the rule it claims to guard.
+  await page.route("**/performance/summary", (route) =>
+    route.fulfill({
+      status: 200,
+      body: JSON.stringify({
+        data: {
+          active_requests: 0, avg_api_latency_ms: 0, p95_api_latency_ms: 0,
+          slow_operations: 0, errors: 0, cache_hit_rate: 0,
+        },
+      }),
+    })
+  );
   await mockDefaults(page);
   await page.goto("/dev/performance");
   await expect(page.getByText("No requests recorded yet")).toBeVisible();
