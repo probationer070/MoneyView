@@ -69,17 +69,23 @@ class PortfolioAnalyticsService:
             weights = np.array(request.weights, dtype=float)
             synthetic_tickers: set[str] = set()
             ticker_return_values = []
-            for ticker in tickers:
-                ticker_return, synthetic_used = self.data.scalar_return(
-                    ticker,
-                    request.period,
-                    date_from=request.date_from,
-                    as_of_date=request.as_of_date,
-                    allow_synthetic_fallback=request.allow_synthetic_fallback,
-                )
-                if synthetic_used:
-                    synthetic_tickers.add(ticker)
-                ticker_return_values.append(ticker_return)
+            with perf_timer(
+                scope="calculation",
+                operation="fanout.attribution",
+                emit_start=True,
+            ) as span_metadata:
+                span_metadata["fanout_size"] = len(tickers)
+                for ticker in tickers:
+                    ticker_return, synthetic_used = self.data.scalar_return(
+                        ticker,
+                        request.period,
+                        date_from=request.date_from,
+                        as_of_date=request.as_of_date,
+                        allow_synthetic_fallback=request.allow_synthetic_fallback,
+                    )
+                    if synthetic_used:
+                        synthetic_tickers.add(ticker)
+                    ticker_return_values.append(ticker_return)
             ticker_returns = np.array(ticker_return_values, dtype=float)
 
             portfolio_return = aggregate_weighted_return(weights, ticker_returns)

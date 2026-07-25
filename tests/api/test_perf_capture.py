@@ -21,6 +21,7 @@ from apps.api.models.schema_parts.dev_monitor import PerformanceEvent
 from apps.api.models.schemas import CorporateMetrics
 from apps.api.services import corporate_metrics_service
 from apps.api.services import db as db_service
+from apps.api.services.portfolio.cache_service import CacheService
 
 
 def _event(operation: str = "op") -> PerformanceEvent:
@@ -436,3 +437,32 @@ def test_perf_timer_explicit_request_id_overrides_ambient(monkeypatch, tmp_path)
 
     event = next(event for event in sink.recent(limit=50) if event.operation == "explicit_request_id_probe")
     assert event.request_id == "explicit-request"
+
+
+def test_attribution_fanout_emits_series_spans(monkeypatch, tmp_path):
+    # CacheService._attribution_cache is a class-level TTLCache shared across the
+    # whole process and not reset between tests. If an earlier test already cached
+    # a result under this exact payload's cache key, build_attribution would return
+    # early on the cache hit and no fan-out/series spans would be emitted -- a false
+    # failure unrelated to instrumentation. Clear it explicitly rather than relying
+    # on test collection order or inventing a "unique" payload.
+    CacheService._attribution_cache.clear()
+    sink = _enable(monkeypatch, tmp_path)
+    payload = {
+        "tickers": ["AAPL", "MSFT"],
+        "weights": [0.5, 0.5],
+        "benchmark": "^GSPC",
+        "period": "1y",
+        "currency": "USD",
+        "attribution_method": "brinson_fachler_arithmetic",
+        "allow_synthetic_fallback": True,
+        "allow_benchmark_proxy": True,
+    }
+    client = TestClient(app)
+    client.post("/api/v1/portfolio/attribution", json=payload)
+    events = sink.recent(limit=20_000)
+    assert any(event.operation == "fanout.attribution" for event in events)
+    series = [event for event in events if event.operation == "ticker.series"]
+    assert series, "no ticker.series spans emitted"
+    terminal = next(event for event in series if event.duration_ms is not None)
+    assert isinstance(terminal.metadata.get("series_points"), int)

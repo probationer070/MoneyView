@@ -6,6 +6,7 @@ from typing import Dict, List
 
 import numpy as np
 
+from apps.api.core.dev_monitor import perf_timer
 from apps.api.models.schemas import PeriodEnum
 from apps.api.services.db import get_db
 from apps.api.services.market_data import MARKET_INDICES, MarketDataService
@@ -55,31 +56,37 @@ class DataProvider:
         date_from: date | None = None,
         as_of_date: date | None = None,
     ) -> np.ndarray:
-        limit = PERIOD_TO_DAYS.get(period, PERIOD_TO_DAYS[PeriodEnum.five_year])
-        table = self.table_for_ticker(ticker)
-        where_clause = "WHERE ticker = ?"
-        params: list = [ticker]
-        if date_from is not None:
-            where_clause += " AND date >= ?"
-            params.append(date_from.isoformat())
-        if as_of_date is not None:
-            where_clause += " AND date <= ?"
-            params.append(as_of_date.isoformat())
-        params.append(limit)
+        with perf_timer(scope="db", operation="ticker.series", ticker=ticker) as span_metadata:
+            limit = PERIOD_TO_DAYS.get(period, PERIOD_TO_DAYS[PeriodEnum.five_year])
+            table = self.table_for_ticker(ticker)
+            where_clause = "WHERE ticker = ?"
+            params: list = [ticker]
+            if date_from is not None:
+                where_clause += " AND date >= ?"
+                params.append(date_from.isoformat())
+            if as_of_date is not None:
+                where_clause += " AND date <= ?"
+                params.append(as_of_date.isoformat())
+            params.append(limit)
 
-        with get_db() as conn:
-            rows = conn.execute(
-                f"""SELECT date, close FROM {table}
-                    {where_clause}
-                    ORDER BY date DESC
-                    LIMIT ?""",
-                tuple(params),
-            ).fetchall()
+            with get_db() as conn:
+                rows = conn.execute(
+                    f"""SELECT date, close FROM {table}
+                        {where_clause}
+                        ORDER BY date DESC
+                        LIMIT ?""",
+                    tuple(params),
+                ).fetchall()
 
-        if not rows:
-            return np.array([], dtype=float)
-        closes = [float(row["close"] or 0.0) for row in reversed(rows)]
-        return np.array(closes, dtype=float)
+            if not rows:
+                series = np.array([], dtype=float)
+            else:
+                closes = [float(row["close"] or 0.0) for row in reversed(rows)]
+                series = np.array(closes, dtype=float)
+
+            span_metadata["series_points"] = int(series.size)
+            span_metadata["bytes"] = int(series.nbytes)
+            return series
 
     def scalar_return(
         self,
