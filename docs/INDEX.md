@@ -68,6 +68,15 @@ but check `docs/architecture/` first for the authoritative system description.
 | `moneyview-analysis-and-improvements.md` | Historical analysis and improvement notes |
 | `markdown-organization-design.md` | Design spec for this documentation reorganization |
 
+## Design Specs (`docs/superpowers/specs/`)
+
+Dated design specs produced by the brainstorming workflow, each covering one
+sub-project and feeding an implementation plan.
+
+| Spec | Topic |
+| --- | --- |
+| `2026-07-25-perf-instrumentation/` | Performance instrumentation, analysis API, perf dashboard, and baseline runner (sub-project 1 of 4) |
+
 ## Process SOPs (`guideline/sop/`)
 
 MoneyView-specific operating procedures for AI agents and contributors. Read

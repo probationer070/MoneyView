@@ -65,6 +65,34 @@ Principles:
 - [ ] Move any decision-relevant financial scoring out of `apps/web` and into backend or shared finance logic.
 - [ ] Replace arbitrary segment constants with documented scenario assumptions or remove the pseudo-quantitative segment model.
 
+## Active Track - Performance Instrumentation (sub-project 1 of 4)
+
+Design spec: `docs/superpowers/specs/2026-07-25-perf-instrumentation/`
+
+Goal: measure where time actually goes across the four reported slow surfaces
+before optimizing anything. Changes no application behavior.
+
+Context established 2026-07-25: the watchlist holds 138 tickers over 120,647 price
+rows, and `/corporate/comparison` and `/portfolio/attribution` both fan out serially
+across all of them. The telemetry substrate already exists (span trees, per-statement
+SQL timing, cache events, JSONL persistence) but is aggregated into six scalars and
+otherwise discarded. The JSONL write path costs 199.9 us/event, so buffering is a
+precondition for per-ticker spans rather than an optimization.
+
+- [ ] Buffered event sink + `flush()` + failure policy (spec 03)
+- [ ] Span context contextvar + `closes_span_id` pairing (spec 03)
+- [ ] Six fan-out wrap sites + response bytes (spec 03)
+- [ ] Ring buffer limit 2,000 -> 20,000, env-configurable (spec 03)
+- [ ] Pure analysis functions + DTOs (spec 04)
+- [ ] Five analysis endpoints (spec 05)
+- [ ] `/dev/performance` dashboard (spec 06)
+- [ ] Test matrices (spec 07)
+- [ ] Baseline runner + ranked bottleneck report (spec 08)
+
+Deferred to sub-projects 2-4: on-demand loading, UI/UX redesign, stock-add
+availability pre-check. The per-ticker cache is deliberately part of #2, so it lands
+with a measured before/after.
+
 ## Archived Track - MoneyView Dev Monitor
 
 Completed basis retained from the previous active plan:
