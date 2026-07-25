@@ -11,6 +11,7 @@ from contextvars import ContextVar, Token
 from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from apps.api.core.logger import setup_logger
 from apps.api.models.schema_parts.dev_monitor import PerformanceEvent, PerformanceSummary
@@ -23,6 +24,7 @@ _DEFAULT_LIMIT = 500
 _DEFAULT_RETENTION_DAYS = 7
 _DEFAULT_EVENT_LIMIT = 20_000
 _current_request_id: ContextVar[str | None] = ContextVar("moneyview_dev_monitor_request_id", default=None)
+_current_span_id: ContextVar[str | None] = ContextVar("moneyview_dev_monitor_span_id", default=None)
 
 
 def is_dev_monitor_enabled() -> bool:
@@ -74,6 +76,10 @@ def reset_current_request_id(token: Token[str | None]) -> None:
 
 def get_current_request_id() -> str | None:
     return _current_request_id.get()
+
+
+def get_current_span_id() -> str | None:
+    return _current_span_id.get()
 
 
 def _sanitize_metadata(metadata: dict[str, Any] | None) -> dict[str, Any]:
@@ -343,6 +349,13 @@ def get_dev_monitor_sink() -> DevMonitorSink:
 
 
 def emit_performance_event(event: PerformanceEvent) -> PerformanceEvent:
+    if event.parent_id is None:
+        current_span_id = _current_span_id.get()
+        # Guard against self-parenting: a span's own terminal event must never
+        # become its own child (that would be a cycle, and tree-building in a
+        # later task walks these parent links).
+        if current_span_id is not None and current_span_id != event.id:
+            event = event.model_copy(update={"parent_id": current_span_id})
     return get_dev_monitor_sink().emit(event)
 
 
@@ -430,9 +443,11 @@ def perf_timer(
     **event_fields: Any,
 ) -> Iterator[dict[str, Any]]:
     threshold_ms = slow_threshold_ms if slow_threshold_ms is not None else slow_threshold_ms_for_scope(scope)
+    span_id = uuid4().hex
+    effective_parent = parent_id if parent_id is not None else _current_span_id.get()
     event_context = {
         "request_id": request_id,
-        "parent_id": parent_id,
+        "parent_id": effective_parent,
         "level": level,
         "scope": scope,
         "operation": operation,
@@ -443,46 +458,57 @@ def perf_timer(
     start_event: PerformanceEvent | None = None
     if emit_start and is_dev_monitor_enabled():
         start_event = emit_performance_event(
-            PerformanceEvent(
-                **event_context,
-                status="start",
-            )
+            PerformanceEvent(**event_context, id=span_id, status="start")
         )
 
     started_at = time.perf_counter()
     mutable_metadata = event_context["metadata"]
+    span_token = _current_span_id.set(span_id)
+    error: Exception | None = None
 
     try:
         yield mutable_metadata
     except Exception as exc:
-        duration_ms = round((time.perf_counter() - started_at) * 1000, 1)
+        error = exc
+    finally:
+        _current_span_id.reset(span_token)
+
+    duration_ms = round((time.perf_counter() - started_at) * 1000, 1)
+
+    if error is not None:
         error_metadata = dict(mutable_metadata)
-        error_metadata.setdefault("exception_type", type(exc).__name__)
+        error_metadata.setdefault("exception_type", type(error).__name__)
+        if start_event is not None:
+            error_metadata["closes_span_id"] = span_id
         emit_performance_event(
             PerformanceEvent(
                 **_event_payload(
                     event_context,
-                    parent_id=start_event.id if start_event else parent_id,
+                    parent_id=span_id if start_event else effective_parent,
                     metadata=error_metadata,
                     level="error",
                     status="error",
                     duration_ms=duration_ms,
-                    message=message or str(exc),
+                    **({} if start_event else {"id": span_id}),
+                    message=message or str(error),
                 )
             )
         )
-        raise
+        raise error
 
-    duration_ms = round((time.perf_counter() - started_at) * 1000, 1)
     status = "slow" if duration_ms >= threshold_ms else "success"
+    terminal_metadata = dict(mutable_metadata)
+    if start_event is not None:
+        terminal_metadata["closes_span_id"] = span_id
     emit_performance_event(
         PerformanceEvent(
             **_event_payload(
                 event_context,
-                parent_id=start_event.id if start_event else parent_id,
-                metadata=dict(mutable_metadata),
+                parent_id=span_id if start_event else effective_parent,
+                metadata=terminal_metadata,
                 status=status,
                 duration_ms=duration_ms,
+                **({} if start_event else {"id": span_id}),
             )
         )
     )

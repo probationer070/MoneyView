@@ -1,11 +1,20 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import threading
 from pathlib import Path
 
+from starlette.concurrency import run_in_threadpool
+
 from apps.api.core import dev_monitor
-from apps.api.core.dev_monitor import ActiveDevMonitorSink, get_dev_monitor_event_limit
+from apps.api.core.dev_monitor import (
+    ActiveDevMonitorSink,
+    emit_performance_event,
+    get_current_span_id,
+    get_dev_monitor_event_limit,
+    perf_timer,
+)
 from apps.api.models.schema_parts.dev_monitor import PerformanceEvent
 
 
@@ -171,3 +180,125 @@ def test_sink_sizes_deques_from_event_limit(monkeypatch, tmp_path):
     for index in range(10):
         sink.emit(_event(f"op{index}"))
     assert len(sink.recent(limit=100)) == 5
+
+
+def _enable(monkeypatch, tmp_path):
+    monkeypatch.setenv("MONEYVIEW_DEV_MONITOR", "true")
+    monkeypatch.setenv("MONEYVIEW_DEV_MONITOR_LOG_PATH", str(tmp_path))
+    dev_monitor.reset_dev_monitor_sink()
+    return dev_monitor.get_dev_monitor_sink()
+
+
+def test_perf_timer_auto_parents_nested_spans(monkeypatch, tmp_path):
+    sink = _enable(monkeypatch, tmp_path)
+    with perf_timer(scope="calculation", operation="outer"):
+        with perf_timer(scope="db", operation="inner"):
+            pass
+    events = {event.operation: event for event in sink.recent(limit=50)}
+    assert events["inner"].parent_id == events["outer"].id
+
+
+def test_explicit_parent_id_overrides_context(monkeypatch, tmp_path):
+    sink = _enable(monkeypatch, tmp_path)
+    with perf_timer(scope="calculation", operation="outer"):
+        with perf_timer(scope="db", operation="inner", parent_id="explicit-parent"):
+            pass
+    inner = next(event for event in sink.recent(limit=50) if event.operation == "inner")
+    assert inner.parent_id == "explicit-parent"
+
+
+def test_span_context_resets_after_exception(monkeypatch, tmp_path):
+    sink = _enable(monkeypatch, tmp_path)
+    with perf_timer(scope="calculation", operation="outer"):
+        try:
+            with perf_timer(scope="db", operation="raiser"):
+                raise ValueError("boom")
+        except ValueError:
+            pass
+        with perf_timer(scope="db", operation="sibling"):
+            pass
+    events = {event.operation: event for event in sink.recent(limit=50) if event.duration_ms is not None}
+    assert events["sibling"].parent_id == events["outer"].id
+
+
+def test_original_exception_propagates(monkeypatch, tmp_path):
+    _enable(monkeypatch, tmp_path)
+    try:
+        with perf_timer(scope="db", operation="raiser"):
+            raise ValueError("boom")
+    except ValueError as error:
+        assert str(error) == "boom"
+    else:
+        raise AssertionError("expected ValueError to propagate")
+
+
+def test_emit_start_terminal_carries_closes_span_id(monkeypatch, tmp_path):
+    sink = _enable(monkeypatch, tmp_path)
+    with perf_timer(scope="calculation", operation="fanout.comparison", emit_start=True):
+        pass
+    events = sink.recent(limit=50)
+    start = next(event for event in events if event.status == "start")
+    terminal = next(event for event in events if event.duration_ms is not None)
+    assert terminal.metadata["closes_span_id"] == start.id
+
+
+def test_emit_start_error_path_carries_closes_span_id(monkeypatch, tmp_path):
+    sink = _enable(monkeypatch, tmp_path)
+    try:
+        with perf_timer(scope="calculation", operation="fanout.comparison", emit_start=True):
+            raise ValueError("boom")
+    except ValueError:
+        pass
+    events = sink.recent(limit=50)
+    start = next(event for event in events if event.status == "start")
+    terminal = next(event for event in events if event.status == "error")
+    assert terminal.metadata["closes_span_id"] == start.id
+
+
+def test_span_parent_survives_threadpool(monkeypatch, tmp_path):
+    """FastAPI runs sync handlers in a threadpool; contextvars must propagate.
+
+    Failure mode is silent: spans lose their parent and appear as orphans,
+    which reads as missing data rather than as a bug.
+    """
+    sink = _enable(monkeypatch, tmp_path)
+
+    def sync_handler_body():
+        assert get_current_span_id() is not None
+        with perf_timer(scope="db", operation="inner"):
+            pass
+
+    async def scenario():
+        with perf_timer(scope="api", operation="outer"):
+            await run_in_threadpool(sync_handler_body)
+
+    asyncio.run(scenario())
+    events = {event.operation: event for event in sink.recent(limit=50)}
+    assert events["inner"].parent_id == events["outer"].id
+
+
+def test_emit_performance_event_defaults_parent_from_current_span(monkeypatch, tmp_path):
+    # Correction 1: events that bypass perf_timer entirely (raw PerformanceEvent
+    # construction, as done by InstrumentedCursor SQL spans and emit_cache_event)
+    # must still pick up the enclosing span as their parent.
+    sink = _enable(monkeypatch, tmp_path)
+    with perf_timer(scope="calculation", operation="outer") as _metadata:
+        bare_event = emit_performance_event(_event("bare"))
+    events = {event.operation: event for event in sink.recent(limit=50)}
+    assert bare_event.parent_id == events["outer"].id
+
+
+def test_emit_performance_event_keeps_explicit_parent_id(monkeypatch, tmp_path):
+    # Correction 1: an explicit parent_id on the event must win over the contextvar.
+    _enable(monkeypatch, tmp_path)
+    with perf_timer(scope="calculation", operation="outer"):
+        explicit_event = PerformanceEvent(
+            level="info",
+            scope="db",
+            operation="explicit",
+            status="success",
+            duration_ms=1.0,
+            parent_id="explicit-parent",
+        )
+        emitted = emit_performance_event(explicit_event)
+    assert emitted.parent_id == "explicit-parent"
