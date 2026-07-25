@@ -591,3 +591,51 @@ def test_cache_effectiveness_formula():
     assert row.hit_rate == 0.5
     assert row.avg_miss_cost_ms == 300.0
     assert row.estimated_time_saved_ms == 600.0
+
+
+def test_cache_effectiveness_counts_all_misses_but_averages_only_known_costs():
+    """An unmeasured miss (duration_ms is None) must still count toward
+    `misses` and `hit_rate`, but must not be folded into the cost average as
+    a 0.0ms miss -- that would silently drag avg_miss_cost_ms and
+    estimated_time_saved_ms down (same bug class as the breakdown_by_scope
+    Critical fixed in an earlier task: unmeasured is not measured-zero).
+    """
+    events = [
+        ev("cache.get", scope="cache", id="h1", ms=1.0, status="cache_hit", component="attr"),
+        ev("cache.get", scope="cache", id="m1", ms=None, status="cache_miss", component="attr"),
+        ev("cache.get", scope="cache", id="m2", ms=100.0, status="cache_miss", component="attr"),
+        ev("cache.get", scope="cache", id="m3", ms=200.0, status="cache_miss", component="attr"),
+    ]
+    report = cache_effectiveness(events)
+    row = report.caches[0]
+    assert row.misses == 3
+    assert row.hit_rate == 0.25
+    assert row.avg_miss_cost_ms == 150.0
+    assert row.estimated_time_saved_ms == 150.0
+
+
+def test_cache_effectiveness_unmeasured_only_miss_reports_zero_cost_without_raising():
+    events = [
+        ev("cache.get", scope="cache", id="m1", ms=None, status="cache_miss", component="attr"),
+    ]
+    report = cache_effectiveness(events)
+    row = report.caches[0]
+    assert row.misses == 1
+    assert row.avg_miss_cost_ms == 0.0
+    assert row.estimated_time_saved_ms == 0.0
+
+
+def test_rollup_percentiles_and_total_use_known_costs():
+    """Pins p50_ms, p95_ms, max_ms, and total_self_ms, none of which the
+    brief's tests ever assert. _percentile uses nearest-rank-by-truncation
+    (matching apps/api/core/dev_monitor.py:252): for the 10 costs
+    [10, 20, ..., 100], p50's index is int(10*0.5)-1 == 4 (the 5th smallest,
+    50.0) and p95's index is int(10*0.95)-1 == 8 (the 9th smallest, 90.0) --
+    not the textbook interpolated median or the max.
+    """
+    costs = {f"T{i}": (i + 1) * 10.0 for i in range(10)}
+    table = rollup_by_ticker(_ticker_events(costs))
+    assert table.total_self_ms == 550.0
+    assert table.p50_ms == 50.0
+    assert table.p95_ms == 90.0
+    assert table.max_ms == 100.0

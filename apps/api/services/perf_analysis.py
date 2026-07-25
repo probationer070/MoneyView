@@ -632,6 +632,7 @@ def rollup_by_ticker(events: list[PerformanceEvent]) -> TickerCostTable:
 
 def cache_effectiveness(events: list[PerformanceEvent]) -> CacheReport:
     hits: dict[str, int] = {}
+    miss_counts: dict[str, int] = {}
     miss_costs: dict[str, list[float]] = {}
     for event in events:
         if event.scope != "cache":
@@ -640,19 +641,26 @@ def cache_effectiveness(events: list[PerformanceEvent]) -> CacheReport:
         if event.status == "cache_hit":
             hits[component] = hits.get(component, 0) + 1
         elif event.status == "cache_miss":
-            miss_costs.setdefault(component, []).append(event.duration_ms or 0.0)
+            miss_counts[component] = miss_counts.get(component, 0) + 1
+            # An unmeasured miss (duration_ms is None) still counts as a miss,
+            # but must not be folded into the cost average as a 0.0ms miss --
+            # that would silently understate avg_miss_cost_ms and the time
+            # saved by every hit (spec 04.9: unmeasured is not measured-zero).
+            if event.duration_ms is not None:
+                miss_costs.setdefault(component, []).append(event.duration_ms)
 
     rows: list[CacheRow] = []
-    for component in sorted(set(hits) | set(miss_costs)):
+    for component in sorted(set(hits) | set(miss_counts)):
         hit_count = hits.get(component, 0)
-        misses = miss_costs.get(component, [])
-        total = hit_count + len(misses)
-        avg_miss = round(statistics.fmean(misses), 1) if misses else 0.0
+        miss_count = miss_counts.get(component, 0)
+        known_costs = miss_costs.get(component, [])
+        total = hit_count + miss_count
+        avg_miss = round(statistics.fmean(known_costs), 1) if known_costs else 0.0
         rows.append(
             CacheRow(
                 component=component,
                 hits=hit_count,
-                misses=len(misses),
+                misses=miss_count,
                 hit_rate=round(hit_count / total, 4) if total else 0.0,
                 avg_miss_cost_ms=avg_miss,
                 estimated_time_saved_ms=round(hit_count * avg_miss, 1),
