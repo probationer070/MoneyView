@@ -146,8 +146,32 @@ def _start_ms(span: Span) -> float:
     return span.end_time.timestamp() * 1000.0 - duration
 
 
+def _creates_cycle(span: Span, parent: Span, by_id: dict[str, Span]) -> bool:
+    """True if attaching `span` under `parent` would put span in its own
+    ancestry (a<->b mutual cycles, and a self-parenting a.parent_id == a.id).
+
+    Walks the static parent_id chain -- not the children lists being built --
+    so a cycle elsewhere in the graph can't make this walk loop forever
+    either. Bounded by the span count: a parent_id chain visiting more
+    distinct spans than exist must already be revisiting one, i.e. is itself
+    a cycle, so treat exceeding the bound the same as finding span again.
+    """
+    current = parent
+    steps = 0
+    limit = len(by_id) + 1
+    while current is not None:
+        if current.id == span.id:
+            return True
+        if steps >= limit:
+            return True
+        steps += 1
+        current = by_id.get(current.parent_id) if current.parent_id is not None else None
+    return False
+
+
 def _build_tree(spans: list[Span]) -> tuple[Span, bool]:
-    """Return (root, partial). Orphans attach to a synthetic root."""
+    """Return (root, partial). Orphans and cycle-broken spans attach to a
+    synthetic root."""
     by_id = {span.id: span for span in spans}
     roots: list[Span] = []
     partial = any(span.partial for span in spans)
@@ -162,12 +186,16 @@ def _build_tree(spans: list[Span]) -> tuple[Span, bool]:
             partial = True
             roots.append(span)
             continue
+        if _creates_cycle(span, parent, by_id):
+            # This project has shipped a self-parenting-span bug before (in
+            # contextvar propagation). Linking would make the recursive tree
+            # walks loop forever, so break the cycle instead: treat span as
+            # orphaned and attach it directly under the (synthetic) root.
+            span.orphaned = True
+            partial = True
+            roots.append(span)
+            continue
         parent.children.append(span)
-
-    if not roots:
-        # Every span claims a parent that exists -- only possible with a cycle.
-        # Treat them all as roots rather than returning nothing.
-        roots = list(spans)
 
     if len(roots) == 1 and not roots[0].orphaned:
         root = roots[0]
@@ -190,8 +218,10 @@ def _build_tree(spans: list[Span]) -> tuple[Span, bool]:
     return root, partial
 
 
-def _assign_self_ms(span: Span) -> None:
+def _assign_self_ms(span: Span) -> bool:
     """self_ms = total_ms minus the sum of direct children's total_ms.
+    Returns True if overlap was detected in this span or any descendant, so
+    the caller can surface it on RequestWaterfall.overlap_detected.
 
     A partial child (total_ms is None) contributes 0 to that sum: we have no
     measurement for it, and treating it as 0 keeps the parent's own self_ms
@@ -201,22 +231,65 @@ def _assign_self_ms(span: Span) -> None:
     visible on the child node itself, so the diagnostic isn't lost, just not
     double-charged to every ancestor. self_ms is None only when the span's
     own total_ms is None (spec 04.3).
+
+    A child with a NEGATIVE total_ms also contributes 0 -- and is flagged
+    clock_skew=True directly, since a negative duration is itself the skew --
+    rather than being subtracted, which would otherwise inflate the parent's
+    self_ms past its own total.
+
+    When the (non-negative) children_total still exceeds the parent's own
+    total_ms, that is ordinary async-sibling overlap: fan-out children that
+    run concurrently each report their own wall-clock duration, so their sum
+    can legitimately exceed the parent's wall-clock span. That is the
+    dominant real trigger for a negative raw self-time, not a bogus
+    duration. self_ms is clamped to 0 in that case and overlap_detected is
+    flagged rather than silently absorbed (spec 04.9). The synthetic
+    multi-root wrapper is excluded from that flag: its total_ms is a max()
+    over unrelated top-level spans, not a real duration to compare against,
+    so summed children legitimately exceeding it is not "overlap".
     """
+    overlap = False
     for child in span.children:
-        _assign_self_ms(child)
+        if _assign_self_ms(child):
+            overlap = True
     if span.total_ms is None:
         span.self_ms = None
-        return
-    children_total = sum(child.total_ms or 0.0 for child in span.children)
-    span.self_ms = round(max(0.0, span.total_ms - children_total), 1)
+        return overlap
+
+    children_total = 0.0
+    for child in span.children:
+        total = child.total_ms
+        if total is None:
+            continue
+        if total < 0:
+            child.clock_skew = True
+            continue
+        children_total += total
+
+    raw_self = span.total_ms - children_total
+    if span.id != SYNTHETIC_ROOT_ID and raw_self < -EPSILON_MS:
+        overlap = True
+    span.self_ms = round(max(0.0, raw_self), 1)
+    return overlap
 
 
 def _assign_offsets(span: Span, root_start_ms: float, parent_span: Span | None) -> None:
     raw_offset = _start_ms(span) - root_start_ms
-    parent_limit = (parent_span.total_ms or 0.0) if parent_span else (span.total_ms or 0.0)
     parent_offset = parent_span.offset_ms if parent_span else 0.0
-    clamped = max(parent_offset, min(raw_offset, parent_offset + parent_limit))
-    span.clock_skew = abs(clamped - raw_offset) > EPSILON_MS
+    if parent_span is not None and parent_span.total_ms is None:
+        # Partial parent (still in flight, or its start was evicted from the
+        # ring buffer): there is no known window to clamp into. Enforce only
+        # the lower bound -- a child can't be reported before its parent
+        # starts -- rather than collapsing every child to a zero-width
+        # window and flagging ordinary partial-parent structure as clock
+        # skew (spec 04.9: partial is a diagnostic, not skew).
+        clamped = max(parent_offset, raw_offset)
+    else:
+        parent_limit = parent_span.total_ms if parent_span else (span.total_ms or 0.0)
+        clamped = max(parent_offset, min(raw_offset, parent_offset + parent_limit))
+    # OR, not overwrite: a child's clock_skew may already have been set by
+    # _assign_self_ms (a negative total_ms) and must survive this pass.
+    span.clock_skew = span.clock_skew or (abs(clamped - raw_offset) > EPSILON_MS)
     span.offset_ms = round(max(0.0, clamped), 1)
     for child in span.children:
         _assign_offsets(child, root_start_ms, span)
@@ -259,11 +332,24 @@ def _depth_map(span: Span, depth: int, acc: list[tuple[int, Span]]) -> None:
         _depth_map(child, depth + 1, acc)
 
 
-def _truncate(root: Span, cap: int) -> bool:
-    """Collapse deepest leaf-sibling groups until the tree fits under cap.
+def _subtree_size(span: Span) -> int:
+    return 1 + sum(_subtree_size(child) for child in span.children)
 
-    Detail deep in the tree is the least informative at a glance, so it goes
-    first. Each collapsed group leaves exactly one marker behind.
+
+def _truncate(root: Span, cap: int) -> bool:
+    """Collapse subtrees until the tree fits under cap (spec 04.10 step 4:
+    "repeat until under the cap").
+
+    Pass 1 collapses whole leaf-sibling groups first -- detail deep in a
+    bushy tree is the least informative at a glance, so it goes first, and
+    collapsing only leaves keeps every non-leaf ancestor's own structure
+    intact. But a tree isn't always bushy: long parent-child chains (e.g.
+    each of many tickers contributing its own deep, mostly-linear span chain
+    rather than a wide fan-out) have no leaf-sibling group of size >= 2
+    anywhere, so pass 1 alone can leave the tree over cap. Pass 2 falls back
+    to collapsing whole child subtrees -- leaf or not -- deepest first,
+    repeating until the actual node count is at or under the cap. Each
+    collapsed group leaves exactly one marker behind per span.
     """
     nodes: list[tuple[int, Span]] = []
     _depth_map(root, 0, nodes)
@@ -289,6 +375,37 @@ def _truncate(root: Span, cap: int) -> bool:
             drop[0].scope,
         )
         remaining -= len(drop)
+
+    while remaining > cap:
+        nodes = []
+        _depth_map(root, 0, nodes)
+        removed_this_pass = 0
+        for _, span in sorted(nodes, key=lambda pair: pair[0], reverse=True):
+            if remaining <= cap:
+                break
+            if not span.children:
+                continue
+            drop = []
+            dropped_size = 0
+            for child in span.children:
+                if remaining - dropped_size <= cap:
+                    break
+                dropped_size += _subtree_size(child)
+                drop.append(child)
+            if not drop:
+                continue
+            dropped_ids = set(id(child) for child in drop)
+            span.children = [child for child in span.children if id(child) not in dropped_ids]
+            prior_count, prior_ms, prior_scope = span.collapsed or (0, 0.0, drop[0].scope)
+            span.collapsed = (
+                prior_count + dropped_size,
+                round(prior_ms + sum(child.total_ms or 0.0 for child in drop), 1),
+                prior_scope,
+            )
+            remaining -= dropped_size
+            removed_this_pass += dropped_size
+        if removed_this_pass == 0:
+            break  # nothing left to collapse; stop rather than spin forever
     return True
 
 
@@ -304,17 +421,18 @@ def build_waterfall(events: list[PerformanceEvent], request_id: str) -> RequestW
         )
 
     root, partial = _build_tree(spans)
-    _assign_self_ms(root)
+    overlap_detected = _assign_self_ms(root)
     _assign_offsets(root, _start_ms(root), None)
     truncated = _truncate(root, WATERFALL_SPAN_CAP)
     node = _to_node(root)  # _to_node emits CollapsedNode markers from span.collapsed
-    route = next((span.operation for span in spans if span.scope == "api"), None)
+    route = next((event.route for event in events if event.route), None)
     return RequestWaterfall(
         request_id=request_id,
-        route=next((event.route for event in events if event.route), route),
+        route=route,
         total_ms=root.total_ms,
         span_count=len(spans),
         partial=partial,
         truncated=truncated,
+        overlap_detected=overlap_detected,
         root=node,
     )

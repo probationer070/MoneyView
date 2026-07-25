@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 from apps.api.models.schema_parts.dev_monitor import PerformanceEvent
 from apps.api.services.perf_analysis import (
+    WATERFALL_SPAN_CAP,
     build_waterfall,
     normalize_spans,
     span_bytes,
@@ -217,13 +218,22 @@ def test_orphan_attaches_to_synthetic_root_and_is_flagged():
 
 
 def test_children_ordered_by_reconstructed_start_then_input_order():
+    """"late" and "late-tied" share the same reconstructed start (offset_ms=90,
+    ms=10.0), so the ordering among them can only come from input order
+    (late's order index is smaller), not from a coincidentally-stable sort.
+    """
     events = [
         ev("root", id="r", ms=100.0, offset_ms=100),
         ev("late", id="b", parent="r", ms=10.0, offset_ms=90),
         ev("early", id="a", parent="r", ms=10.0, offset_ms=50),
+        ev("late-tied", id="c", parent="r", ms=10.0, offset_ms=90),
     ]
     waterfall = build_waterfall(events, "req-1")
-    assert [child.operation for child in waterfall.root.children] == ["early", "late"]
+    assert [child.operation for child in waterfall.root.children] == [
+        "early",
+        "late",
+        "late-tied",
+    ]
 
 
 def test_child_outside_parent_bounds_is_clamped_and_flagged():
@@ -254,6 +264,128 @@ def test_empty_events_returns_valid_waterfall():
     waterfall = build_waterfall([], "req-missing")
     assert waterfall.span_count == 0
     assert waterfall.root.operation == "(no spans)"
+
+
+def test_two_node_parent_cycle_is_broken_and_returns_waterfall():
+    """a.parent=b, b.parent=a: linking either span under the other would
+    make the recursive tree walks loop forever. Both must survive as
+    orphans under the synthetic root rather than raising.
+    """
+    events = [
+        ev("a", id="a", parent="b", ms=10.0),
+        ev("b", id="b", parent="a", ms=10.0),
+    ]
+    waterfall = build_waterfall(events, "req-1")
+    assert waterfall.span_count == 2
+    assert waterfall.partial is True
+    flattened = _flatten(waterfall.root)
+    operations = {node.operation for node in flattened if node.operation in {"a", "b"}}
+    assert operations == {"a", "b"}
+
+
+def test_self_parenting_span_is_broken_and_returns_waterfall():
+    """a.parent=a: this project has shipped exactly this bug once, in
+    contextvar span-context propagation.
+    """
+    events = [ev("a", id="a", parent="a", ms=10.0)]
+    waterfall = build_waterfall(events, "req-1")
+    assert waterfall.span_count == 1
+    assert waterfall.partial is True
+    flattened = _flatten(waterfall.root)
+    assert any(node.operation == "a" for node in flattened)
+
+
+def test_truncation_falls_back_to_subtree_collapse_for_non_bushy_trees():
+    """Three long chains hanging off root -- no leaf-sibling group anywhere
+    has >= 2 members, so the leaf-group pass alone cannot bring the tree
+    under cap. This is reachable in the real workload: ~138 tickers each
+    contributing their own mostly-linear span chain is closer to this shape
+    than to one bushy fan-out.
+    """
+    events = [ev("root", id="r", ms=10_000.0, offset_ms=10_000)]
+    chain_depth = 700
+    for chain in range(3):
+        parent_id = "r"
+        for level in range(chain_depth):
+            span_id = f"c{chain}-{level}"
+            events.append(
+                ev(f"op{chain}-{level}", id=span_id, parent=parent_id, ms=1.0, offset_ms=level)
+            )
+            parent_id = span_id
+    waterfall = build_waterfall(events, "req-1")
+    assert waterfall.truncated is True
+    flattened = _flatten(waterfall.root)
+    assert len(flattened) <= WATERFALL_SPAN_CAP
+
+
+def test_overlapping_async_children_flag_overlap_without_forcing_self_ms_negative():
+    events = [
+        ev("root", id="r", ms=100.0, offset_ms=100),
+        ev("child-a", id="a", parent="r", ms=80.0, offset_ms=90),
+        ev("child-b", id="b", parent="r", ms=80.0, offset_ms=95),
+    ]
+    waterfall = build_waterfall(events, "req-1")
+    assert waterfall.root.self_ms == 0.0
+    assert waterfall.overlap_detected is True
+
+
+def test_negative_child_duration_excluded_from_self_ms_and_flags_clock_skew():
+    events = [
+        ev("root", id="r", ms=100.0, offset_ms=100),
+        ev("bad", id="b", parent="r", ms=-30.0, offset_ms=50),
+    ]
+    waterfall = build_waterfall(events, "req-1")
+    root = waterfall.root
+    child = root.children[0]
+    assert root.self_ms == 100.0
+    assert child.clock_skew is True
+
+
+def test_partial_child_self_ms_contributes_zero_not_none():
+    """Reviewer's exact pinning case: parent totals 100ms; one child never
+    terminated (unpaired start, so total_ms is None) but consumed 60ms of
+    wall time before the request ended. The partial child contributes 0 to
+    the parent's children_total (spec 04.9: excluded from timing math), so
+    parent.self_ms is 100.0, not corrupted by the child's real-but-unknown
+    duration.
+    """
+    events = [
+        ev("root", id="r", ms=100.0, offset_ms=100),
+        ev("unpaired", id="u", parent="r", status="start", offset_ms=60),
+    ]
+    waterfall = build_waterfall(events, "req-1")
+    assert waterfall.root.self_ms == 100.0
+
+
+def test_partial_parent_does_not_clamp_child_offset_to_clock_skew():
+    """An unpaired api.request_start (partial: no total_ms) with two db
+    children that do have durations. A partial parent has no known window to
+    clamp into, so its children keep their reconstructed offsets rather than
+    being collapsed to 0 and flagged as clock skew (spec 04.9: partial is a
+    diagnostic, not skew).
+    """
+    events = [
+        ev("api.request_start", scope="api", id="s1", status="start"),
+        ev("db.query", id="c1", parent="s1", ms=20.0, offset_ms=50),
+        ev("db.query", id="c2", parent="s1", ms=20.0, offset_ms=90),
+    ]
+    waterfall = build_waterfall(events, "req-1")
+    for child in waterfall.root.children:
+        assert child.clock_skew is False
+        assert child.offset_ms >= 0.0
+
+
+def test_route_is_none_without_fallback_to_arbitrary_api_span_operation():
+    """route must come only from an event's own `route` field. It must never
+    fall back to an arbitrary api-scope span's operation name -- Task 9
+    filters by route, so a fabricated value would land in a filter field.
+    """
+    events = [
+        ev("api.request_start", scope="api", id="s1", status="start"),
+        ev("api.request_complete", scope="api", id="t1", parent="s1", ms=250.0, closes_span_id="s1"),
+    ]
+    waterfall = build_waterfall(events, "req-1")
+    assert waterfall.route is None
 
 
 def _flatten(node):

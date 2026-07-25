@@ -62,6 +62,7 @@ class RequestWaterfall(BaseModel):
     span_count: int
     partial: bool = False
     truncated: bool = False
+    overlap_detected: bool = False
     root: SpanNode
 
 
