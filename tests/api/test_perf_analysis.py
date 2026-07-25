@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 from apps.api.models.schema_parts.dev_monitor import PerformanceEvent
 from apps.api.services.perf_analysis import (
+    build_waterfall,
     normalize_spans,
     span_bytes,
     span_closes,
@@ -186,3 +187,79 @@ def test_span_node_round_trips_nested_span_and_collapsed_node():
     dumped = root.model_dump()
     assert dumped["children"][0]["id"] == "child"
     assert dumped["children"][1]["collapsed_count"] == 3
+
+
+def test_self_ms_subtracts_direct_children_at_every_level():
+    events = [
+        ev("root", id="r", ms=100.0, offset_ms=100),
+        ev("mid", id="m", parent="r", ms=60.0, offset_ms=70),
+        ev("leaf", id="l", parent="m", ms=25.0, offset_ms=40),
+    ]
+    waterfall = build_waterfall(events, "req-1")
+    root = waterfall.root
+    mid = root.children[0]
+    leaf = mid.children[0]
+    assert root.self_ms == 40.0
+    assert mid.self_ms == 35.0
+    assert leaf.self_ms == 25.0
+
+
+def test_orphan_attaches_to_synthetic_root_and_is_flagged():
+    events = [
+        ev("root", id="r", ms=100.0),
+        ev("lost", id="x", parent="evicted-parent", ms=10.0),
+    ]
+    waterfall = build_waterfall(events, "req-1")
+    flattened = _flatten(waterfall.root)
+    lost = next(node for node in flattened if node.operation == "lost")
+    assert lost.orphaned is True
+    assert waterfall.partial is True
+
+
+def test_children_ordered_by_reconstructed_start_then_input_order():
+    events = [
+        ev("root", id="r", ms=100.0, offset_ms=100),
+        ev("late", id="b", parent="r", ms=10.0, offset_ms=90),
+        ev("early", id="a", parent="r", ms=10.0, offset_ms=50),
+    ]
+    waterfall = build_waterfall(events, "req-1")
+    assert [child.operation for child in waterfall.root.children] == ["early", "late"]
+
+
+def test_child_outside_parent_bounds_is_clamped_and_flagged():
+    events = [
+        ev("root", id="r", ms=100.0, offset_ms=100),
+        ev("skewed", id="s", parent="r", ms=10.0, offset_ms=500),
+    ]
+    waterfall = build_waterfall(events, "req-1")
+    child = waterfall.root.children[0]
+    assert child.clock_skew is True
+    assert child.offset_ms >= 0.0
+    assert child.offset_ms <= (waterfall.root.total_ms or 0.0)
+
+
+def test_waterfall_truncates_deepest_first_with_collapsed_node():
+    events = [ev("root", id="r", ms=5000.0, offset_ms=5000)]
+    parent_id = "r"
+    for index in range(2_100):
+        events.append(ev(f"child{index}", id=f"c{index}", parent=parent_id, ms=1.0, offset_ms=index))
+    waterfall = build_waterfall(events, "req-1")
+    assert waterfall.truncated is True
+    collapsed = [node for node in waterfall.root.children if hasattr(node, "collapsed_count")]
+    assert len(collapsed) == 1
+    assert collapsed[0].collapsed_count > 0
+
+
+def test_empty_events_returns_valid_waterfall():
+    waterfall = build_waterfall([], "req-missing")
+    assert waterfall.span_count == 0
+    assert waterfall.root.operation == "(no spans)"
+
+
+def _flatten(node):
+    result = [node]
+    for child in node.children:
+        if hasattr(child, "collapsed_count"):
+            continue
+        result.extend(_flatten(child))
+    return result
