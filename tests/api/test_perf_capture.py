@@ -18,6 +18,9 @@ from apps.api.core.dev_monitor import (
     perf_timer,
 )
 from apps.api.models.schema_parts.dev_monitor import PerformanceEvent
+from apps.api.models.schemas import CorporateMetrics
+from apps.api.services import corporate_metrics_service
+from apps.api.services import db as db_service
 
 
 def _event(operation: str = "op") -> PerformanceEvent:
@@ -327,3 +330,52 @@ def test_streaming_response_reports_null_bytes(monkeypatch, tmp_path):
         if event.operation == "api.request_complete" and "log-stream" in (event.route or "")
     )
     assert complete.metadata["bytes"] is None
+
+
+def _fake_metrics_for_ticker(ticker: str, **_kwargs: object) -> CorporateMetrics:
+    return CorporateMetrics(
+        ticker=ticker,
+        growth=6,
+        roic=18,
+        wacc=10,
+        debt_ratio=18,
+        unlevered_beta=1.05,
+        crp=0.8,
+        reinvestment=34,
+        fcff=92,
+        innovation=82,
+        market_share=64,
+        governance=74,
+        esg_penalty=22,
+    )
+
+
+def test_comparison_fanout_emits_per_ticker_spans(monkeypatch, tmp_path):
+    sink = _enable(monkeypatch, tmp_path)
+    monkeypatch.setattr(db_service, "_DB_PATH", tmp_path / "moneyview.db")
+    db_service.init_db()
+    with db_service.get_db() as conn:
+        conn.execute(
+            """INSERT INTO watchlist (ticker, name, sector, group_name, weight)
+               VALUES (?, ?, ?, ?, ?)""",
+            ("AAPL", "Apple", "Technology", "core", 0.4),
+        )
+        conn.execute(
+            """INSERT INTO watchlist (ticker, name, sector, group_name, weight)
+               VALUES (?, ?, ?, ?, ?)""",
+            ("MSFT", "Microsoft", "Technology", "core", 0.2),
+        )
+    monkeypatch.setattr(corporate_metrics_service, "metrics_for_ticker", _fake_metrics_for_ticker)
+    monkeypatch.setattr(corporate_metrics_service, "latest_market_price", lambda ticker: 100.0)
+
+    client = TestClient(app)
+    client.get("/api/v1/corporate/comparison?mode=live")
+
+    events = sink.recent(limit=20_000)
+    fanout = [event for event in events if event.operation == "fanout.comparison"]
+    metrics_spans = [event for event in events if event.operation == "ticker.metrics"]
+    assert fanout, "fanout.comparison span missing"
+    assert metrics_spans, "no per-ticker metrics spans emitted"
+    assert all(span.ticker for span in metrics_spans)
+    terminal = next(event for event in fanout if event.duration_ms is not None)
+    assert isinstance(terminal.metadata.get("fanout_size"), int)
