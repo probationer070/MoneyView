@@ -95,7 +95,8 @@ negative-width bar, never dropped.
 # apps/api/services/perf_analysis.py
 
 def normalize_spans(events: list[PerformanceEvent]) -> list[Span]
-def list_requests(events: list[PerformanceEvent], limit: int) -> RequestIndex
+def list_requests(events: list[PerformanceEvent], limit: int,
+                  buffer_limit: int) -> RequestIndex
 def build_waterfall(events: list[PerformanceEvent], request_id: str) -> RequestWaterfall
 def rollup_by_ticker(events: list[PerformanceEvent]) -> TickerCostTable
 def breakdown_by_scope(events: list[PerformanceEvent]) -> ScopeBreakdown
@@ -111,6 +112,20 @@ def span_closes(event) -> str | None
 ```
 
 No function takes a `route`, `window`, or filter argument. See §02.3.
+
+### 4.5.1 Why `list_requests` takes `buffer_limit`
+
+`buffer_limit` is **data, not an HTTP concept** — it is the ring buffer's configured
+capacity, which the function cannot derive from the event list and must not read
+from the sink itself (that would break purity, §02.5). The route reads it via
+`get_dev_monitor_event_limit()` and passes it in.
+
+`buffer_used` is simply `len(events)`, computed inside the function.
+
+Together they let the dashboard state occupancy without a second request and
+without touching raw events (§06.3). Occupancy is also the explanation for
+`partial` and for requests missing from the index entirely: a full buffer means
+older events were evicted.
 
 ---
 
@@ -157,6 +172,8 @@ class RequestSummaryRow(BaseModel):
 class RequestIndex(BaseModel):
     requests: list[RequestSummaryRow]
     limit: int
+    buffer_used: int          # len(events) passed in
+    buffer_limit: int         # configured ring buffer capacity
 
 class RequestWaterfall(BaseModel):
     request_id: str
@@ -356,4 +373,7 @@ current `/dev/monitor` page; the new report supersedes it for analysis.
 - [ ] Truncation produces `CollapsedNode` with correct `collapsed_count` and summed
       `total_ms`; `truncated: true`.
 - [ ] Empty event list returns valid empty DTOs for all six functions.
-- [ ] `perf_analysis.py` imports no sink, no `os`, no `datetime.now`.
+- [ ] `perf_analysis.py` imports no sink, no `os`, no `datetime.now`, and no
+      `subprocess` — environment metadata is the runner's job (§08.4.1).
+- [ ] `list_requests` populates `buffer_used` from `len(events)` and echoes the
+      `buffer_limit` argument; it never reads the sink.

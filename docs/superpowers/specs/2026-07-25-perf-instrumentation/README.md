@@ -68,6 +68,10 @@ Decisions taken during design, with the reasoning that produced them.
 | D16 | Per-ticker cache deferred to sub-project #2 | Likely correct, but unproven. If the fan-out is DCF-bound rather than IO-bound, a memo cache buys nothing and adds invalidation complexity. |
 | D17 | Overhead budget ≤ 3%, derived from two passes | Stating overhead requires measuring with the flag off and on, not assuming instrumentation is free. |
 | D18 | Timing assertions excluded from the unit suite | Flaky under load. Overhead is measured by the runner and reported, not asserted in pytest. |
+| D19 | Filter order fixed and documented: `request_id` → `route` → `window` | `window` is time-relative, so ordering is observable: a named request older than the window is excluded, deliberately. Any future *selective* filter (top-N, sampling) would be order-dependent, so the chain is pinned now (§05.2.1). |
+| D20 | Buffer occupancy ships on `RequestIndex`, not `APIMeta` or a client-side count | `/requests` is already fetched every load and refresh, so it costs nothing extra; and since the dashboard receives only aggregated DTOs, no client-side array corresponds to buffer contents. Occupancy also *explains* the index — a full buffer is why older requests are missing (§05.1.1). |
+| D21 | A frontend fixture per diagnostic state, not just `partial` | The likely regression is one of the five getting error styling or being dropped — exactly what the diagnostic/error distinction exists to prevent. `clock_skew` and `overlap_detected` assert rendered *values* (non-negative width, non-negative percentage), since those are where the clamping rules would fail visibly (§07.4.1). |
+| D22 | Environment metadata is captured by the runner, never by analysis | Watchlist size, DB counts, git SHA, and clock reads are I/O, subprocess, config, or clock — each forbidden by the Analysis contract. Putting them in a DTO would hand the analysis layer the capabilities the contract removes, and §07.1's hand-built-list tests would stop being trustworthy (§08.4.1). |
 
 ---
 

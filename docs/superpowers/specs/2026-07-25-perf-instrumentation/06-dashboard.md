@@ -95,6 +95,21 @@ split.
 └──────────────────────────────────────────────────────────────────┘
 ```
 
+### 6.3.1 Where the header's buffer figure comes from
+
+`buffer 6,842 / 20,000` is read from **`RequestIndex.buffer_used` and
+`RequestIndex.buffer_limit`** on the `/performance/requests` response (§05.1.1).
+
+It is **not** inferred client-side. The dashboard never receives raw events
+(§06.5), so no array it holds corresponds to buffer contents — any figure derived
+from a payload length would be measuring the DTO, not the buffer.
+
+The header is the right place for it because occupancy is the *precondition* for
+trusting everything below: a full buffer is why older requests are missing from the
+picker and why some are flagged `partial`. When `buffer_used >= buffer_limit`, the
+header adds a `StatusBadge` reading "buffer full — older events evicted", which is a
+diagnostic state, not an error (§06.7).
+
 ---
 
 ## 6.4 Per-stock panel: distribution first, not rank first
@@ -221,3 +236,8 @@ Network error or 500 → `ErrorState` with retry, matching the existing monitor 
       table, with the table collapsed by default.
 - [ ] Auto-refresh is off; `[Refresh]` re-fetches all panels.
 - [ ] Dashboard fetchers emit no performance events of their own.
+- [ ] Header buffer figure reads `RequestIndex.buffer_used` / `buffer_limit`, never
+      a client-side array length.
+- [ ] `buffer_used >= buffer_limit` shows the "buffer full" badge as a diagnostic
+      state, not an error.
+- [ ] All five diagnostic states render with non-error styling (§07.4.1).

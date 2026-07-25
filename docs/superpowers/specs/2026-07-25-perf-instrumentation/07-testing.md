@@ -114,6 +114,9 @@ the request, asserting the emitted span's `parent_id` equals the request span's 
 | 6 | Handler passes **pre-filtered** events | patched function receives only matching `request_id` |
 | 7 | `_filter_events` location | lives in the route module, not `perf_analysis.py` |
 | 8 | Existing endpoints unchanged | `/recent`, `/slow`, `/errors`, `/summary` behavior identical |
+| 9 | **Filter order** (§05.2.1) | `request_id` → `route` → `window`; a request older than `window` is excluded even when its `request_id` is given |
+| 10 | `waterfall/{request_id}` ignores age | an old request still resolves; endpoint accepts no `window` |
+| 11 | `RequestIndex.buffer_used / buffer_limit` | populated from `len(events)` and `get_dev_monitor_event_limit()`; not hard-coded |
 
 ---
 
@@ -126,10 +129,33 @@ the request, asserting the emitted span's `parent_id` equals the request span's 
 | 1 | API returns 404 | `EmptyState` with the enable instruction; **not** `ErrorState` |
 | 2 | API returns empty DTOs | `EmptyState` "no requests recorded yet" |
 | 3 | Fixture DTOs | all six panels render |
-| 4 | Fixture with `partial: true` | `StatusBadge` visible on the affected panel |
-| 5 | Fixture with `CollapsedNode` | renders "⋯ N spans collapsed", not an empty node |
-| 6 | Per-stock panel order | distribution + percentiles + histogram appear before the table; table collapsed |
-| 7 | No self-instrumentation | dashboard fetches emit no `POST /performance/client-event` |
+| 4 | Fixture with `CollapsedNode` | renders "⋯ N spans collapsed", not an empty node |
+| 5 | Per-stock panel order | distribution + percentiles + histogram appear before the table; table collapsed |
+| 6 | No self-instrumentation | dashboard fetches emit no `POST /performance/client-event` |
+| 7 | `buffer_used >= buffer_limit` fixture | header shows "buffer full — older events evicted" badge |
+
+### 7.4.1 Diagnostic-state fixtures — one per state
+
+§06.7 defines five diagnostic states and requires each to render as a **non-error**
+indicator. Testing only `partial` would leave four untested, and the likely
+regression is precisely that one of them gets styled as an error or silently
+dropped — which is what the diagnostic/error distinction exists to prevent.
+
+One fixture per state, each asserting the indicator is present **and** carries
+non-error styling:
+
+| # | Fixture | Renders | Asserts |
+| --- | --- | --- | --- |
+| a | `RequestWaterfall.partial: true` | `StatusBadge` variant `stale` on the affected panel | visible; **not** `ErrorState`, not error variant |
+| b | `RequestWaterfall.truncated: true` | inline "truncated at 2,000 spans" note | visible; waterfall still renders its retained spans |
+| c | `SpanNode.clock_skew: true` on one child | marker on that bar + tooltip | marker present; **bar width ≥ 0** (never negative) |
+| d | `SpanNode.orphaned: true` | span grouped under "orphaned spans" with tooltip | grouped, not dropped from the tree |
+| e | `ScopeBreakdown.overlap_detected: true` | note beside unattributed: "spans overlapped (concurrent execution)" | visible; `unattributed_ms` renders as `0`, not negative |
+
+Fixtures c and e are the two that would fail loudly in production if the clamping
+rules in §04.3 and §04.7 were implemented wrong — a negative-width bar and a
+negative percentage respectively — so they assert the rendered *value*, not just the
+presence of a badge.
 
 ---
 

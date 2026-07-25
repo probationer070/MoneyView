@@ -82,8 +82,16 @@ Capture never imports from Analysis, Routes, or View.
 - No HTTP concepts — filtering happens in the route *before* the call
 
 The last point matters: `rollup_by_ticker(events)` takes no `request_id`, `route`,
-or `window` parameter. Routes filter, then call. This keeps the analysis layer
-testable with hand-built lists and reusable by the offline benchmark runner.
+or `window` parameter. Routes filter, then call, in a documented order (§05.2.1).
+This keeps the analysis layer testable with hand-built lists and reusable by the
+offline benchmark runner.
+
+**Corollary — environment metadata is never analysis output.** Watchlist size, DB
+row counts, git SHA, compute mode, and wall-clock timestamps are I/O, subprocess
+calls, configuration, or clock reads. Each is forbidden by the contract above, so
+none appears in an analysis DTO. Capturing them is the **runner's** responsibility
+(§08.4.1). The one value a caller passes *in* rather than an analysis function
+reading it out is `buffer_limit` — plain data, supplied by the route (§04.5.1).
 
 The JSONL reader is an **adapter**, not analysis code:
 `load_events_from_jsonl(day_range) -> list[PerformanceEvent]`. It re-validates into

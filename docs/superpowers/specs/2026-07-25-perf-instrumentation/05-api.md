@@ -10,7 +10,7 @@ Extends `apps/api/routes/dev_monitor.py`. All new endpoints sit behind the exist
 
 | Method | Path | Returns | Query params |
 | --- | --- | --- | --- |
-| GET | `/api/v1/dev/performance/requests` | `RequestIndex` | `limit` (1–200, default 50) |
+| GET | `/api/v1/dev/performance/requests` | `RequestIndex` (incl. `buffer_used` / `buffer_limit`) | `limit` (1–200, default 50) |
 | GET | `/api/v1/dev/performance/waterfall/{request_id}` | `RequestWaterfall` | — |
 | GET | `/api/v1/dev/performance/by-ticker` | `TickerCostTable` | `request_id?`, `route?`, `window?` |
 | GET | `/api/v1/dev/performance/breakdown` | `ScopeBreakdown` | `request_id?` |
@@ -40,6 +40,26 @@ Existing endpoints are unchanged: `/performance/recent`, `/performance/slow`,
 
 An empty buffer returns **200 with an empty DTO**, not 404 — "nothing recorded yet"
 is a valid answer and the dashboard renders it as an empty state.
+
+### 5.1.1 Buffer occupancy is supplied by `/requests`
+
+The dashboard header displays ring buffer occupancy (§06.3). That figure comes from
+**`RequestIndex.buffer_used` / `RequestIndex.buffer_limit`** on the
+`/performance/requests` response — not from `APIMeta`, not from
+`/performance/summary`, and never inferred client-side from array lengths.
+
+Rationale:
+
+- `/requests` is already fetched on page load and on every manual refresh, so
+  occupancy costs no additional request.
+- Inferring it from a payload length would be wrong by construction: the dashboard
+  receives aggregated DTOs, never raw events (§06.5), so no client-side array
+  corresponds to buffer contents.
+- Occupancy belongs with the request index specifically because it **explains** that
+  index: a full buffer is why older requests are absent and why some are `partial`.
+
+The route supplies `buffer_limit` from `get_dev_monitor_event_limit()`; the analysis
+function computes `buffer_used` as `len(events)` (§04.5.1).
 
 ---
 
@@ -74,6 +94,51 @@ async def get_performance_by_ticker(
 
 `_filter_events()` is a small private helper in the route module — **not** in
 `perf_analysis.py`, which must stay free of HTTP concepts (§02.3).
+
+### 5.2.1 Filter application order
+
+Filters apply in a **fixed order**, narrowest-scope first:
+
+```
+1. request_id   (exact match on PerformanceEvent.request_id)
+2. route        (exact match on PerformanceEvent.route)
+3. window       (timestamp >= now - window seconds)
+```
+
+```python
+def _filter_events(
+    events: list[PerformanceEvent],
+    *,
+    request_id: str | None = None,
+    route: str | None = None,
+    window: int | None = None,
+) -> list[PerformanceEvent]:
+    """Apply filters in the documented order: request_id, then route, then window."""
+```
+
+The order is documented because it is **not** always commutative, and future
+filters could make that worse:
+
+- `request_id` and `route` are pure conjunctive predicates — order between them
+  does not change the result set.
+- `window` is time-relative. Applying it *after* `request_id` means a specific
+  request older than the window is **excluded**. That is deliberate: `window`
+  bounds the aggregate views to recent activity, and a caller asking for both a
+  specific request and a window is asking for their intersection, not for
+  `request_id` to override.
+- Any filter that is **selective rather than conjunctive** — a top-N, a sample, a
+  "slowest request only" — would produce different results depending on where it
+  sits in the chain. Fixing the order now means such a filter must state its
+  position explicitly rather than inheriting an accidental one.
+
+Rule for adding a filter: append it to the end of the chain unless it is
+selective, in which case its position must be argued for in this section and
+covered by a test asserting the order.
+
+**Note on `window` and `request_id` together:** callers wanting a specific request
+regardless of age should omit `window`. The `waterfall/{request_id}` endpoint takes
+no `window` parameter for exactly this reason — inspecting a named request must
+never depend on how long ago it ran.
 
 ### `recent()` limit note
 
@@ -144,5 +209,10 @@ here.
 - [ ] Each handler calls its analysis function exactly once, with pre-filtered
       events (assert via patch).
 - [ ] `_filter_events` lives in the route module, not `perf_analysis.py`.
+- [ ] Filters apply in the documented order: `request_id` → `route` → `window`.
+- [ ] A request older than `window` is excluded even when its `request_id` is given.
+- [ ] `waterfall/{request_id}` accepts no `window` and resolves regardless of age.
+- [ ] `RequestIndex` carries `buffer_used` and `buffer_limit`, sourced from
+      `len(events)` and `get_dev_monitor_event_limit()`.
 - [ ] No new fetcher in `devMonitor.ts` passes `monitor:` to `fetchApi`.
 - [ ] Existing `/performance/recent|slow|errors|summary` behavior unchanged.

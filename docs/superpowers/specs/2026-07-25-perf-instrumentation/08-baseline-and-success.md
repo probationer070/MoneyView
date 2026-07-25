@@ -92,6 +92,42 @@ goes, and the correct response is another span — not a published conclusion.
 
 ---
 
+### 8.4.1 Environment metadata is the runner's responsibility
+
+The report header carries environment metadata — watchlist size, DB row counts,
+database file size, event limit, compute mode, git SHA. **None of it comes from the
+analysis API, and none of it appears in any analysis DTO.**
+
+This is a purity boundary, not an oversight (§02.3, §02.5):
+
+| Value | Source | Why not analysis |
+| --- | --- | --- |
+| watchlist size, DB row counts, DB file size | SQLite query by the runner | requires I/O; analysis performs none |
+| git SHA | `git rev-parse HEAD` by the runner | requires a subprocess |
+| event limit | `get_dev_monitor_event_limit()` | configuration, read by the caller |
+| compute mode | `MONEYVIEW_COMPUTE_MODE` | environment, read by the caller |
+| timestamps in the header | runner's wall clock | analysis reads no clock |
+
+Analysis functions take `list[PerformanceEvent]` and return DTOs derived **only**
+from those events. Every value above is either I/O, a subprocess, configuration, or
+a clock read — each explicitly forbidden by the Analysis contract. Adding any of
+them to a DTO would require the analysis layer to acquire exactly the capabilities
+the contract removes, and the unit tests in §07.1 would stop being trustworthy,
+because they build event lists by hand with no environment at all.
+
+**Consequence for readers of a DTO:** a `TickerCostTable` says nothing about which
+database produced it. That context lives in the report header, and it is the
+runner's job to capture it. The dashboard, by the same rule, shows only what the
+events contain — with the single exception of `buffer_limit`, which the *route*
+passes in as data (§04.5.1).
+
+**Consequence for comparing runs:** because environment capture is the runner's job,
+two reports are only comparable if their headers match. The runner records the
+header precisely so a later run against a changed dataset is not silently compared
+against an older baseline (§08.2).
+
+---
+
 ## 8.5 Report format
 
 Written to `docs/perf/YYYY-MM-DD-baseline.md`, committed.
@@ -198,4 +234,7 @@ memory.
 - [ ] Report written to `docs/perf/` with every criterion stamped ✅/❌.
 - [ ] Runner uses the public analysis functions — no duplicated calculation.
 - [ ] Non-zero exit when criteria 1–4 fail.
-- [ ] Report header records watchlist size, DB row counts, and git sha.
+- [ ] Report header records watchlist size, DB row counts, DB file size, event
+      limit, compute mode, and git sha — **collected by the runner**, not read from
+      any analysis DTO.
+- [ ] No analysis DTO contains environment metadata (§08.4.1).
