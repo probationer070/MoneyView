@@ -303,38 +303,6 @@ export default function DevMonitorPage() {
     [fetchLatencyEvents]
   );
 
-  const pageLoadGroups = useMemo(() => {
-    const pageRequests = new Map<string, { requestId: string; route: string; component: string; timestamp: string; totalDurationMs: number | null }>();
-    for (const event of visibleEvents) {
-      if (event.scope !== "page_load" || !event.request_id || event.status === "start") continue;
-      const current = pageRequests.get(event.request_id);
-      if (!current || new Date(event.timestamp).getTime() > new Date(current.timestamp).getTime()) {
-        pageRequests.set(event.request_id, {
-          requestId: event.request_id,
-          route: event.route ?? "unknown route",
-          component: event.component ?? stringMetadata(event, "request_group") ?? "page",
-          timestamp: event.timestamp,
-          totalDurationMs: event.duration_ms ?? null,
-        });
-      }
-    }
-
-    return Array.from(pageRequests.values())
-      .sort((left, right) => new Date(right.timestamp).getTime() - new Date(left.timestamp).getTime())
-      .slice(0, 6)
-      .map((pageRequest) => {
-        const steps = visibleEvents
-          .filter((event) => event.request_id === pageRequest.requestId && event.duration_ms != null && event.status !== "start")
-          .sort((left, right) => new Date(left.timestamp).getTime() - new Date(right.timestamp).getTime())
-          .slice(-6);
-        return {
-          ...pageRequest,
-          steps,
-          maxStepDurationMs: Math.max(1, ...steps.map((event) => event.duration_ms ?? 0)),
-        };
-      });
-  }, [visibleEvents]);
-
   const metricPanelGroups = useMemo(() => {
     const definitions = [
       { key: "roic", label: "ROIC", matches: ["roic"] },
@@ -657,62 +625,7 @@ export default function DevMonitorPage() {
         </Card>
       </section>
 
-      <section className="grid grid-cols-1 gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-        <Card padding="lg">
-          <SectionTitle
-            title="Page-Load Timelines"
-            description="Recent request groups reconstructed from page-load monitor events and related timed steps."
-          />
-          {pageLoadGroups.length === 0 ? (
-            <EmptyState
-              icon={<Activity className="h-6 w-6" />}
-              title="No page-load request groups yet"
-              description="Open monitor-relevant MoneyView screens to capture grouped request timelines."
-            />
-          ) : (
-            <div className="space-y-4">
-              {pageLoadGroups.map((group) => (
-                <div key={group.requestId} className="rounded-[var(--radius-md)] border border-[var(--border-soft)] bg-[var(--bg-surface)] p-4">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="overflow-inline-ellipsis text-sm font-semibold text-[var(--text-primary)]">
-                        {group.component} · {group.route}
-                      </div>
-                      <div className="mt-1 text-[length:var(--type-helper)] text-[var(--text-muted)]">
-                        request {group.requestId} · {formatTimestamp(group.timestamp)}
-                      </div>
-                    </div>
-                    <div className="text-right text-sm text-[var(--text-secondary)]">
-                      total {formatDuration(group.totalDurationMs)}
-                    </div>
-                  </div>
-                  <div className="mt-4 space-y-2">
-                    {group.steps.map((event) => (
-                      <div key={event.id} className="grid grid-cols-[minmax(0,1fr)_6rem] items-center gap-3">
-                        <div>
-                          <div className="flex items-center justify-between gap-2 text-[length:var(--type-helper)] text-[var(--text-muted)]">
-                            <span className="overflow-inline-ellipsis">{event.operation}</span>
-                            <span>{event.scope}</span>
-                          </div>
-                          <div className="mt-1 h-2 overflow-hidden rounded-full bg-[var(--bg-subtle)]">
-                            <div
-                              className="h-full rounded-full bg-[linear-gradient(90deg,var(--state-info),var(--state-success))]"
-                              style={{ width: durationBarWidth(event.duration_ms ?? 0, group.maxStepDurationMs) }}
-                            />
-                          </div>
-                        </div>
-                        <div className="text-right text-[length:var(--type-helper)] tabular-nums text-[var(--text-primary)]">
-                          {formatDuration(event.duration_ms)}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </Card>
-
+      <section className="grid grid-cols-1 gap-6">
         <Card padding="lg">
           <SectionTitle
             title="Metric Timing"
