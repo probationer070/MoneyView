@@ -1,5 +1,8 @@
 from datetime import UTC, date, datetime
 
+import pytest
+
+from apps.api.services import db as db_service
 from apps.api.services.acquisition.state import (
     AcquisitionStatus,
     read_state,
@@ -8,6 +11,16 @@ from apps.api.services.acquisition.state import (
 )
 
 NOW = datetime(2026, 7, 27, 9, 0, tzinfo=UTC)
+
+
+@pytest.fixture(autouse=True)
+def _isolated_db(tmp_path, monkeypatch):
+    """Point db_service._DB_PATH at a temp file so these tests never touch the
+    real project database, and so a fresh clone/CI run has acquisition_state
+    without needing init_db() run by hand."""
+    db_path = tmp_path / "moneyview.db"
+    monkeypatch.setattr(db_service, "_DB_PATH", db_path)
+    db_service.init_db()
 
 
 def test_status_enum_is_the_single_definition_site():
