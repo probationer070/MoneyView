@@ -236,6 +236,15 @@ Network error or 500 → `ErrorState` with retry, matching the existing monitor 
       table, with the table collapsed by default.
 - [ ] Auto-refresh is off; `[Refresh]` re-fetches all panels.
 - [ ] Dashboard fetchers emit no performance events of their own.
+      **Amendment 2026-07-27:** this has two halves, and only the frontend one was
+      originally implemented. No `devMonitor.ts` fetcher passes `monitor:` to
+      `fetchApi`, but middleware still instrumented `/api/v1/dev/*`, so the request
+      index listed the request that fetched it and a refresh evicted the traffic under
+      inspection. Now suppressed via a contextvar checked in `emit_performance_event`,
+      which also covers db and cache events raised inside those handlers — skipping
+      only the request span would leave those unparented (§03.2.2).
+      `POST /dev/performance/client-event` is exempt: it exists to persist the
+      browser's spans, so it resets the token around its own emit.
 - [ ] Header buffer figure reads `RequestIndex.buffer_used` / `buffer_limit`, never
       a client-side array length.
 - [ ] `buffer_used >= buffer_limit` shows the "buffer full" badge as a diagnostic
