@@ -1357,59 +1357,72 @@ git commit -m "feat: acquisition runner with backfill, delta and corporate actio
 Create `tests/api/acquisition/test_triggers.py`:
 
 ```python
+import pytest
 from fastapi.testclient import TestClient
 
 from apps.api.main import app
-from apps.api.services.acquisition.state import read_state
+from apps.api.services.acquisition.state import AcquisitionStatus, read_state
+from apps.api.services.db import get_db
 
 TICKER = "TESTTRIG"
+PAYLOAD = {"ticker": TICKER, "name": "Trigger Test", "sector": "Tech",
+           "group_name": "custom", "weight": 1.0}
 
 
-def test_adding_a_watchlist_item_schedules_acquisition(monkeypatch):
-    """Today POST /watchlist writes one row and returns, acquiring nothing -- so the
-    natural acquisition event triggers no acquisition and every fetch instead happens
-    in-band while a user waits."""
+@pytest.fixture(autouse=True)
+def _no_real_acquisition(monkeypatch):
+    """Every test here POSTs to /watchlist, which schedules acquisition for real. Left
+    unpatched that spawns a thread which fetches TESTTRIG live from Yahoo -- a network
+    call from the test suite, for a ticker that does not exist. Global constraint: no
+    test may make a network call.
+    """
     scheduled: list[tuple[str, str]] = []
     monkeypatch.setattr(
         "apps.api.routes.portfolio.schedule_acquisition",
         lambda data_class, subject: scheduled.append((data_class, subject)),
     )
+    return scheduled
+
+
+@pytest.fixture(autouse=True)
+def _clean_test_rows():
+    """TESTTRIG would otherwise be left in the real watchlist table and show up in the
+    running app. Cleans both the watchlist row and the acquisition_state row."""
+    yield
+    with get_db() as conn:
+        conn.execute("DELETE FROM watchlist WHERE ticker = ?", (TICKER,))
+        conn.execute("DELETE FROM acquisition_state WHERE subject = ?", (TICKER,))
+
+
+def test_adding_a_watchlist_item_schedules_acquisition(_no_real_acquisition):
+    """Today POST /watchlist writes one row and returns, acquiring nothing -- so the
+    natural acquisition event triggers no acquisition and every fetch instead happens
+    in-band while a user waits."""
     with TestClient(app) as client:
-        response = client.post(
-            "/api/v1/portfolio/watchlist",
-            json={"ticker": TICKER, "name": "Trigger Test", "sector": "Tech",
-                  "group_name": "custom", "weight": 1.0},
-        )
+        response = client.post("/api/v1/portfolio/watchlist", json=PAYLOAD)
     assert response.status_code == 200
-    assert ("equity_bars", TICKER) in scheduled
+    assert ("equity_bars", TICKER) in _no_real_acquisition
 
 
-def test_adding_a_watchlist_item_does_not_block_on_acquisition(monkeypatch):
-    """The route must enqueue and return. Acquisition on the request path is the
-    inversion this design exists to remove."""
+def test_a_scheduling_failure_does_not_fail_the_request(monkeypatch):
+    """Acquisition is best-effort and off the request path, so a scheduling failure must
+    never fail a user's watchlist write. Design 10: no acquisition failure propagates
+    into a request."""
     def _explode(data_class, subject):
-        raise RuntimeError("acquisition must not run inline")
+        raise RuntimeError("scheduling is broken")
 
     monkeypatch.setattr("apps.api.routes.portfolio.schedule_acquisition", _explode)
     with TestClient(app) as client:
-        response = client.post(
-            "/api/v1/portfolio/watchlist",
-            json={"ticker": TICKER, "name": "Trigger Test", "sector": "Tech",
-                  "group_name": "custom", "weight": 1.0},
-        )
+        response = client.post("/api/v1/portfolio/watchlist", json=PAYLOAD)
     assert response.status_code == 200
 
 
 def test_removing_a_watchlist_item_marks_it_no_longer_refreshed():
     with TestClient(app) as client:
-        client.post(
-            "/api/v1/portfolio/watchlist",
-            json={"ticker": TICKER, "name": "Trigger Test", "sector": "Tech",
-                  "group_name": "custom", "weight": 1.0},
-        )
+        client.post("/api/v1/portfolio/watchlist", json=PAYLOAD)
         response = client.delete(f"/api/v1/portfolio/watchlist/{TICKER}")
     assert response.status_code == 200
-    assert read_state("equity_bars", TICKER).status == "retired"
+    assert read_state("equity_bars", TICKER).status == AcquisitionStatus.RETIRED
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -1464,15 +1477,30 @@ In `upsert_watchlist_item`, replace the line `mark_watchlist_state("user_mutatio
     # Adding a stock is the natural moment to acquire its history: one 10-year backfill,
     # once, off the request path. Without this the next comparison discovers the ticker
     # and pays a live fetch in-band while a user waits.
-    schedule_acquisition("equity_bars", normalized.ticker)
+    #
+    # Guarded because acquisition is best-effort: a scheduling failure must never fail
+    # the user's watchlist write, which is the operation they actually asked for
+    # (design 10 -- no acquisition failure propagates into a request).
+    try:
+        schedule_acquisition("equity_bars", normalized.ticker)
+    except Exception as error:  # noqa: BLE001 - best-effort, never fails the write
+        logger.warning("watchlist.schedule_acquisition_failed ticker=%s error=%s",
+                       normalized.ticker, error)
 ```
 
 In `delete_watchlist_item`, replace the line `mark_watchlist_state("user_mutation")` with:
 
 ```python
     mark_watchlist_state("user_mutation")
-    retire_subject("equity_bars", normalized_ticker)
+    try:
+        retire_subject("equity_bars", normalized_ticker)
+    except Exception as error:  # noqa: BLE001 - best-effort, never fails the delete
+        logger.warning("watchlist.retire_subject_failed ticker=%s error=%s",
+                       normalized_ticker, error)
 ```
+
+`apps/api/routes/portfolio.py` already defines `logger`; if it does not, add
+`from apps.api.core.logger import setup_logger` and `logger = setup_logger(__name__)`.
 
 - [ ] **Step 4: Run test to verify it passes**
 
