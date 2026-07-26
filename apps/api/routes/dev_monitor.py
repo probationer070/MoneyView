@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 
-from apps.api.core.dev_monitor import emit_performance_event, get_current_request_id, get_dev_monitor_event_limit, get_dev_monitor_sink, is_dev_monitor_enabled
+from apps.api.core.dev_monitor import emit_performance_event, get_current_request_id, get_dev_monitor_event_limit, get_dev_monitor_sink, is_dev_monitor_enabled, reset_events_suppressed, set_events_suppressed
 from apps.api.models.schemas import APIMeta, APIResponse, ClientPerformanceEventRequest, PerformanceEvent, PerformanceEventListResponse, PerformanceSummary
 from apps.api.models.schema_parts.perf_analysis import (
     CacheReport,
@@ -89,25 +89,32 @@ async def get_performance_summary():
 @router.post("/performance/client-event", response_model=APIResponse[PerformanceEvent])
 async def post_client_performance_event(payload: ClientPerformanceEventRequest):
     _require_dev_monitor()
-    event = emit_performance_event(
-        PerformanceEvent(
-            request_id=get_current_request_id(),
-            level=payload.level,
-            scope=payload.scope,
-            operation=payload.operation,
-            status=payload.status,
-            duration_ms=payload.duration_ms,
-            ticker=payload.ticker,
-            route=payload.route,
-            method=payload.method,
-            provider=payload.provider,
-            component=payload.component,
-            warning_code=payload.warning_code,
-            error_code=payload.error_code,
-            message=payload.message,
-            metadata=payload.metadata,
+    # Dev routes are uninstrumented so the dashboard does not record its own fetches
+    # (spec 06.9), but this endpoint exists precisely to persist the browser's spans.
+    # Opt back in for this one deliberate emit, or every frontend span is discarded.
+    suppression_token = set_events_suppressed(False)
+    try:
+        event = emit_performance_event(
+            PerformanceEvent(
+                request_id=get_current_request_id(),
+                level=payload.level,
+                scope=payload.scope,
+                operation=payload.operation,
+                status=payload.status,
+                duration_ms=payload.duration_ms,
+                ticker=payload.ticker,
+                route=payload.route,
+                method=payload.method,
+                provider=payload.provider,
+                component=payload.component,
+                warning_code=payload.warning_code,
+                error_code=payload.error_code,
+                message=payload.message,
+                metadata=payload.metadata,
+            )
         )
-    )
+    finally:
+        reset_events_suppressed(suppression_token)
     return APIResponse(data=event, meta=_response_meta())
 
 

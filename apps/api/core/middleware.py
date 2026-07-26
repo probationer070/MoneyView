@@ -11,9 +11,15 @@ from apps.api.core.dev_monitor import (
     is_dev_monitor_enabled,
     reset_current_request_id,
     reset_current_span_id,
+    reset_events_suppressed,
     set_current_request_id,
     set_current_span_id,
+    set_events_suppressed,
 )
+
+# Requests under this prefix are not instrumented: they serve the dashboard that reads
+# the event buffer, so recording them would pollute the data they return (spec 06.9).
+_UNINSTRUMENTED_PATH_PREFIX = "/api/v1/dev"
 from apps.api.core.logger import setup_logger
 from apps.api.models.schema_parts.dev_monitor import PerformanceEvent
 
@@ -109,6 +115,12 @@ class StructuralMiddleware(BaseHTTPMiddleware):
         # 3. Execution mapping
         start_time = time.time()
         page_load_event_id: str | None = None
+        # The dashboard reads the buffer it would otherwise write to, so instrumenting
+        # its own fetches makes the request index list the request that fetched it, and
+        # a refresh evicts the traffic you opened the page to inspect (spec 06.9).
+        # Covers db and cache events raised inside these handlers too, not just the
+        # request span -- suppressing only the span would leave those unparented.
+        suppression_token = set_events_suppressed(path.startswith(_UNINSTRUMENTED_PATH_PREFIX))
         if is_dev_monitor_enabled():
             request_event = emit_performance_event(
                 PerformanceEvent(
@@ -277,6 +289,7 @@ class StructuralMiddleware(BaseHTTPMiddleware):
             response.headers["X-Request-ID"] = request_id
             return response
         finally:
+            reset_events_suppressed(suppression_token)
             if span_token is not None:
                 reset_current_span_id(span_token)
             reset_current_request_id(request_token)

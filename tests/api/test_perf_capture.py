@@ -311,10 +311,12 @@ def test_emit_performance_event_keeps_explicit_parent_id(monkeypatch, tmp_path):
 
 
 def test_middleware_terminal_event_carries_closes_span_id_and_bytes(monkeypatch, tmp_path):
+    # Deliberately not a /dev/* route: those are uninstrumented so the dashboard does
+    # not record its own fetches (spec 06.9), so they emit nothing to assert on.
     sink = _enable(monkeypatch, tmp_path)
     with TestClient(app) as client:
-        client.get("/api/v1/dev/performance/summary")
-    events = sink.recent(limit=200)
+        client.get("/api/v1/portfolio/watchlist")
+    events = sink.recent(limit=500)
     start = next(event for event in events if event.operation == "api.request_start")
     complete = next(event for event in events if event.operation == "api.request_complete")
     assert complete.metadata["closes_span_id"] == start.id
@@ -354,6 +356,61 @@ def test_page_load_span_pairs_into_one_span_not_two(monkeypatch, tmp_path):
     assert len(page_load_spans) == 1
     assert page_load_spans[0].partial is False
     assert page_load_spans[0].total_ms is not None
+
+
+def test_dev_routes_emit_no_events_of_their_own(monkeypatch, tmp_path):
+    """Spec 06.9: dashboard fetchers emit no performance events of their own. The
+    frontend guard was implemented, but middleware instrumented /dev/* regardless, so
+    opening the dashboard filled the buffer with dashboard traffic and the request index
+    listed the very request that fetched it.
+    """
+    sink = _enable(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        client.get("/api/v1/portfolio/watchlist")  # real traffic, must still be recorded
+        before = len(sink.recent(limit=5000))
+        for _ in range(3):
+            client.get("/api/v1/dev/performance/summary")
+            client.get("/api/v1/dev/performance/requests")
+        after = sink.recent(limit=5000)
+
+    assert len(after) == before, "dev routes must not add events to the buffer they display"
+    assert not [event for event in after if (event.route or "").startswith("/api/v1/dev")]
+
+
+def test_normal_routes_are_still_instrumented(monkeypatch, tmp_path):
+    """Guard against over-suppression: only /dev/* is exempt."""
+    sink = _enable(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        client.get("/api/v1/portfolio/watchlist")
+    events = sink.recent(limit=5000)
+
+    assert [event for event in events if event.operation == "api.request_start"]
+    assert [event for event in events if (event.route or "").startswith("/api/v1/portfolio")]
+
+
+def test_client_event_endpoint_still_records_despite_being_a_dev_route(monkeypatch, tmp_path):
+    """The frontend submits its page_load spans through POST /dev/performance/client-event.
+    That emission is the endpoint's whole purpose, so suppressing /dev/* wholesale would
+    silently discard every browser-side span."""
+    sink = _enable(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/dev/performance/client-event",
+            json={
+                "level": "info",
+                "scope": "page_load",
+                "operation": "page_load.frontend.portfolio",
+                "status": "success",
+                "duration_ms": 42.0,
+                "component": "portfolio",
+            },
+        )
+    assert response.status_code == 200
+    recorded = [
+        event for event in sink.recent(limit=5000)
+        if event.operation == "page_load.frontend.portfolio"
+    ]
+    assert len(recorded) == 1, "the client's own span must survive dev-route suppression"
 
 
 def test_request_waterfall_has_exactly_one_root(monkeypatch, tmp_path):
@@ -405,16 +462,25 @@ def test_point_in_time_cache_event_is_not_partial(monkeypatch, tmp_path):
     assert spans["start-1"].partial is True
 
 
-def test_streaming_response_reports_null_bytes(monkeypatch, tmp_path):
-    sink = _enable(monkeypatch, tmp_path)
-    with TestClient(app) as client:
-        client.get("/api/v1/dev/log-stream?once=true")
-    complete = next(
-        event
-        for event in sink.recent(limit=200)
-        if event.operation == "api.request_complete" and "log-stream" in (event.route or "")
-    )
-    assert complete.metadata["bytes"] is None
+def test_streaming_response_reports_null_bytes():
+    """Spec 03.5.2: streaming responses report `bytes: None` rather than a wrong number,
+    because buffering them to measure size would change the behaviour under measurement.
+
+    Tested against the helper rather than through a route. Both streaming endpoints in
+    the app are now unsuitable vehicles -- the log stream is a /dev/* route and so
+    uninstrumented (spec 06.9), and the DCF stream needs five required assumptions and
+    runs a real valuation. Neither of those facts has anything to do with the rule being
+    asserted, and coupling the test to them is what broke it once already.
+    """
+    from starlette.responses import JSONResponse, StreamingResponse
+
+    from apps.api.core.middleware import _response_bytes
+
+    async def _chunks():
+        yield b"data: one\n\n"
+
+    assert _response_bytes(StreamingResponse(_chunks(), media_type="text/event-stream")) is None
+    assert isinstance(_response_bytes(JSONResponse({"ok": True})), int)
 
 
 def _fake_metrics_for_ticker(ticker: str, **_kwargs: object) -> CorporateMetrics:

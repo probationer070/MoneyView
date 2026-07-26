@@ -24,6 +24,7 @@ _DEFAULT_RETENTION_DAYS = 7
 _DEFAULT_EVENT_LIMIT = 20_000
 _current_request_id: ContextVar[str | None] = ContextVar("moneyview_dev_monitor_request_id", default=None)
 _current_span_id: ContextVar[str | None] = ContextVar("moneyview_dev_monitor_span_id", default=None)
+_events_suppressed: ContextVar[bool] = ContextVar("moneyview_dev_monitor_suppressed", default=False)
 
 
 def is_dev_monitor_enabled() -> bool:
@@ -79,6 +80,24 @@ def get_current_request_id() -> str | None:
 
 def get_current_span_id() -> str | None:
     return _current_span_id.get()
+
+
+def set_events_suppressed(suppressed: bool) -> Token[bool]:
+    """Stop instrumentation being recorded for the current request.
+
+    The dashboard reads the same buffer it writes to, so instrumenting its own fetches
+    means the request index lists the request that fetched it, and refreshing the page
+    evicts the traffic you opened it to look at (spec 06.9).
+
+    This suppresses *incidental* instrumentation only. A caller deliberately recording
+    an event -- notably the client-event endpoint, which exists to persist browser-side
+    spans -- resets the token around its own emit.
+    """
+    return _events_suppressed.set(suppressed)
+
+
+def reset_events_suppressed(token: Token[bool]) -> None:
+    _events_suppressed.reset(token)
 
 
 def set_current_span_id(span_id: str | None) -> Token[str | None]:
@@ -359,6 +378,10 @@ def get_dev_monitor_sink() -> DevMonitorSink:
 
 
 def emit_performance_event(event: PerformanceEvent) -> PerformanceEvent:
+    # Returned unrecorded rather than raising or returning None: callers read `.id` off
+    # the result to pair terminal events, so the shape of the return must not change.
+    if _events_suppressed.get():
+        return event
     if event.parent_id is None:
         current_span_id = _current_span_id.get()
         # Guard against self-parenting: a span's own terminal event must never
