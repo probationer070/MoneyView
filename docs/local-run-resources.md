@@ -60,10 +60,19 @@ must be set **for the API process** before it starts. Without it,
 `is_dev_monitor_enabled()` returns false, every `/api/v1/dev/performance/*` endpoint
 returns 404, and both pages render an "is disabled" empty state.
 
-`scripts/start_local.ps1` (what `run MoneyView` invokes) **does not set this flag**, and
-there is no `.env` file in the repository. So by default the dashboards render as empty
-shells. This is working as designed — the flag is off because instrumentation is not
-free — but nothing currently tells you the switch exists.
+Use the launcher switch, which scopes the variable to the backend window:
+
+```cmd
+run MoneyView -DevMonitor
+```
+
+The startup banner then prints both dashboard URLs. Without the switch it prints a line
+naming the flag, so a blank dashboard is never a mystery.
+
+Historical note: before 2026-07-27 the launcher had no such switch and set nothing, so
+the dashboards rendered as empty shells with no indication that a flag existed. If you
+are reading an older report or transcript that says the dashboards "don't work", that
+is why.
 
 ### The flag is not free
 
@@ -91,6 +100,13 @@ that something is actually bound rather than trusting the log line:
 ```powershell
 Get-NetTCPConnection -State Listen | Where-Object { $_.LocalPort -eq 3000 }
 ```
+
+`scripts/start_local.ps1` now runs `Clear-OrphanedWebServers` before starting the
+frontend, which clears exactly this case. It is deliberately narrow: it returns early if
+anything is already listening on the target port, so a healthy server is never killed,
+and it only considers node processes whose command line names this repository's web
+root, so unrelated node processes are never candidates. It reports each process it
+clears, with its memory, rather than acting silently.
 
 The failure was not reproducible — four hypotheses were tested and disproven; see
 `ERROR-LOG.md`, entry *"`next dev` reached 5 GB and never bound its port"*. What is

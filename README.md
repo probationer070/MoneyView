@@ -174,9 +174,15 @@ Two developer dashboards exist and are **not linked from any navigation**:
 | `http://localhost:3000/dev/performance` | Request waterfalls, scope breakdown, per-ticker cost, cache effectiveness |
 | `http://localhost:3000/dev/monitor` | Live event tail and latency panels |
 
-Both need `MONEYVIEW_DEV_MONITOR=true` set for the API process. `run MoneyView` does not
-set it, so by default these pages render an empty "disabled" state. The flag costs
-12–19% request latency and up to 128 MB, so it is off deliberately.
+Both require server-side instrumentation, which is **off by default** because it costs
+12–19% request latency and up to 128 MB. Turn it on for a run:
+
+```cmd
+run MoneyView -DevMonitor
+```
+
+The startup banner then prints the dashboard URLs. Without the switch it tells you the
+dashboards are disabled and names the flag, rather than leaving you with a blank page.
 
 See [`docs/local-run-resources.md`](docs/local-run-resources.md) for measured figures,
 the measurement method, and operational hazards (notably: a `next dev` that logs
