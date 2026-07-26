@@ -138,21 +138,62 @@ whole request the ambient span id stays `None`, and every event emitted outside 
 `perf_timer` block (all cache events, and `db.*` from `InstrumentedCursor`) is
 therefore parented to nothing. The gap 03.2 identifies is closed for nested
 `perf_timer` spans and left open at the request root.
-Fix: Pending decision at time of writing. The shape of the fix is established by an
-exact in-repo precedent: `dev_monitor` already exports
-`set_current_request_id`/`reset_current_request_id`, which `middleware.py:83` and
-`:270` use to scope the request id across the request. `_current_span_id` has only a
-getter (`get_current_span_id:80`), so the fix is to add the matching
-setter/resetter and have middleware scope the request span id the same way.
-Blast radius is why this is not a drive-by change: it converts every waterfall from
-flat to nested, which changes criterion 2's denominator, the dashboard's tree
-rendering, and any test or fixture asserting the current flat shape.
-Files changed: none yet (record only).
+Fix: Added `set_current_span_id`/`reset_current_span_id` to `dev_monitor.py`,
+mirroring the existing `set_current_request_id`/`reset_current_request_id` pair, and
+`middleware.py` now scopes the request span id across the request the same way
+`middleware.py:83`/`:270` already scope the request id — set immediately after the
+`api.request_start` event is emitted (so it does not parent itself), reset in the
+same `finally`. Verified: a `/portfolio/watchlist` request went from 423 roots to
+exactly 1, and `RequestWaterfall.partial` from `True` to `False`, so baseline
+criterion 3 passes. Full suite unchanged at the same 6 pre-existing failures, 199
+passed — the flat-to-nested change broke no existing test or fixture.
+Files changed: `apps/api/core/dev_monitor.py`, `apps/api/core/middleware.py`,
+`tests/api/test_perf_capture.py` (`test_request_waterfall_has_exactly_one_root`).
 Prevention: The acceptance check in spec 03.10 is "an inner span's `parent_id`
 equals the outer span's `id`" — satisfied by `perf_timer`-to-`perf_timer` nesting,
 which is what the test asserts. It does not cover *directly emitted* events inside a
 request, which is the majority of spans by count. A test asserting that a request's
 waterfall has exactly one root would have caught this immediately.
+
+## 2026-07-26: page_load spans duplicate the api.request interval, so criterion 2 reports a sentinel as a PASS
+
+Date: 2026-07-26
+Command: `python scripts/benchmark_scenarios.py tab_switch --iterations 3`
+Failure: With the waterfall correctly nested (see the entry above), the baseline
+report shows `overlap_detected: True` and scope percentages that sum to 110.8%
+(`page_load` 98.8% + `db` 10.9% + `api` 1.1%), violating spec 04.12's "percentages
+sum to <= 100%". Because spec 04.7 forces `unattributed_ms = 0` whenever overlap is
+detected, **criterion 2 prints `unattributed 0.0 / PASS` when the true figure is not
+computable.** This is the same trap as the hardcoded `partial=False`: a criterion
+that reads green for a reason unrelated to the thing it measures. Criterion 2 has now
+been un-trustworthy for three distinct reasons in one session, each hidden by the
+previous one.
+Root cause: `middleware.py` emits a `page_load.<component>` span whose duration is
+computed from the same `process_time` as `api.request_complete` — the two spans cover
+the *identical* interval for the same request — and parents page_load under
+`api.request_start`. Self time is total minus children's totals, so a child that is
+exactly as long as its parent's whole window consumes the entire budget: `page_load`
+takes ~100% of self time, and the `db.*` spans (siblings of page_load, also children
+of the request) add their self time on top, pushing the sum past the root total.
+`api.request_*` and `page_load.*` are two labels for one interval, not a parent and a
+child. Spec 03.5 lists them as separate span rows (#1 and #9) without noting that the
+server-side page_load event measures nothing the request span does not.
+This was previously masked: before the request span became the ambient parent, 420 of
+421 spans were roots, so `breakdown_by_scope` used its synthetic-root denominator
+(the sum of all root durations) — a number large enough that no overlap was ever
+detected. Fixing the parenting made a pre-existing double-count visible.
+Fix: Not fixed — needs a spec decision on what the server-side `page_load` span is
+for. Options: (a) drop it and derive page-load grouping from the `request_group`
+metadata already on the request span, since the frontend's `useDevMonitorPageLoad`
+emits the real multi-request page-load span; (b) keep it as a grouping label excluded
+from self-time accounting; (c) keep it and have `breakdown_by_scope` treat
+same-interval parent/child pairs as one span.
+Files changed: none (record only).
+Prevention: Two spans that measure the same interval will always break self-time
+accounting, whatever their nesting. A span map should state, per span, which interval
+it owns exclusively — and spec 04.12's "percentages sum to <= 100%" check should run
+against a real captured request, not only hand-built fixtures, since the hand-built
+trees in the unit tests never contained a same-interval pair.
 
 ## 2026-07-26: RecursionError in waterfall truncation on a deep non-bushy tree
 

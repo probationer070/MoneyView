@@ -1,6 +1,7 @@
 import time
 import uuid
 import logging
+from contextvars import Token
 from typing import Dict
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -9,7 +10,9 @@ from apps.api.core.dev_monitor import (
     emit_performance_event,
     is_dev_monitor_enabled,
     reset_current_request_id,
+    reset_current_span_id,
     set_current_request_id,
+    set_current_span_id,
 )
 from apps.api.core.logger import setup_logger
 from apps.api.models.schema_parts.dev_monitor import PerformanceEvent
@@ -82,6 +85,7 @@ class StructuralMiddleware(BaseHTTPMiddleware):
         request.state.request_id = request_id
         request_token = set_current_request_id(request_id)
         request_event_id: str | None = None
+        span_token: Token[str | None] | None = None
 
         # 2. Rate Limiting (Throttle by IP + Route specific overrides)
         client_ip = request.client.host if request.client else "127.0.0.1"
@@ -119,6 +123,12 @@ class StructuralMiddleware(BaseHTTPMiddleware):
                 )
             )
             request_event_id = request_event.id
+            # Make the request span the ambient parent for everything downstream.
+            # perf_timer does this for its own spans, but the request span is emitted
+            # directly, so without this every event emitted outside a perf_timer block
+            # (cache events, db.* from InstrumentedCursor) has no parent and becomes
+            # its own root, flattening the waterfall (spec 03.2).
+            span_token = set_current_span_id(request_event_id)
             page_component = _page_load_component_for_path(path)
             if page_component is not None:
                 page_load_event = emit_performance_event(
@@ -267,4 +277,6 @@ class StructuralMiddleware(BaseHTTPMiddleware):
             response.headers["X-Request-ID"] = request_id
             return response
         finally:
+            if span_token is not None:
+                reset_current_span_id(span_token)
             reset_current_request_id(request_token)

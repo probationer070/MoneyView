@@ -356,6 +356,37 @@ def test_page_load_span_pairs_into_one_span_not_two(monkeypatch, tmp_path):
     assert page_load_spans[0].total_ms is not None
 
 
+def test_request_waterfall_has_exactly_one_root(monkeypatch, tmp_path):
+    """Spec 03.2: an event with no explicit parent_id takes the ambient span. The
+    request-level span is emitted through raw emit_performance_event, not perf_timer,
+    so it must scope the span contextvar itself -- otherwise every directly emitted
+    event in the request (all cache events, all db.* from InstrumentedCursor) parents
+    to nothing and becomes its own root.
+
+    A flat waterfall is not merely ugly: with >1 root, breakdown_by_scope switches to
+    its synthetic-root denominator (the SUM of unrelated root durations), so
+    criterion 2's unattributed_ms is computed against a meaningless total.
+    """
+    from apps.api.services.perf_analysis import build_waterfall, normalize_spans
+
+    sink = _enable(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        client.get("/api/v1/portfolio/watchlist")
+    events = [event for event in sink.recent(limit=2000) if event.request_id]
+    by_request: dict[str, list] = {}
+    for event in events:
+        by_request.setdefault(event.request_id, []).append(event)
+    request_id, scoped = max(by_request.items(), key=lambda item: len(item[1]))
+
+    roots = [span for span in normalize_spans(scoped) if span.parent_id is None]
+    assert [span.operation for span in roots] == ["api.request_start"]
+
+    waterfall = build_waterfall(scoped, request_id)
+    assert waterfall.partial is False
+    assert waterfall.root.operation == "api.request_start"
+    assert waterfall.root.id != "__synthetic_root__"
+
+
 def test_point_in_time_cache_event_is_not_partial(monkeypatch, tmp_path):
     """`partial` means a span we expected to close that did not (spec 04.9). A cache
     hit/miss is emitted once, complete, with no duration -- it was never a span, so

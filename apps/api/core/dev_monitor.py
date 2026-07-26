@@ -81,6 +81,17 @@ def get_current_span_id() -> str | None:
     return _current_span_id.get()
 
 
+def set_current_span_id(span_id: str | None) -> Token[str | None]:
+    """For span emitters that do not go through `perf_timer` -- notably the
+    request-level span in middleware, which every other span in a request should
+    hang from (spec 03.2)."""
+    return _current_span_id.set(span_id)
+
+
+def reset_current_span_id(token: Token[str | None]) -> None:
+    _current_span_id.reset(token)
+
+
 def _sanitize_metadata(metadata: dict[str, Any] | None) -> dict[str, Any]:
     if not metadata:
         return {}
