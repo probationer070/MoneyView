@@ -328,7 +328,7 @@ class MarketDataService:
                 message="No cached OHLCV rows were available.",
             )
             logger.info("OHLCV cache miss for %s; fetching live data", ticker)
-            live_rows = self._fetch_live_ohlcv_cached(ticker, period=period, table=table)
+            live_rows = self._fill_ohlcv_cache(ticker, period=period, table=table, reason="miss")
             latest_date = live_rows[-1].date if live_rows else None
             return live_rows, self._build_data_quality(
                 source="live_fetch",
@@ -369,7 +369,7 @@ class MarketDataService:
                 oldest.isoformat() if oldest else "unknown",
                 period,
             )
-            live_rows = self._fetch_live_ohlcv_cached(ticker, period=period, table=table)
+            live_rows = self._fill_ohlcv_cache(ticker, period=period, table=table, reason="stale")
             if live_rows:
                 live_rows = live_rows[-freshness_rule.days:]
                 latest_live_date = live_rows[-1].date if live_rows else latest_cached_date
@@ -468,6 +468,28 @@ class MarketDataService:
             return False
         freshness_rule = MarketDataFreshnessRule("custom", period) if isinstance(period, int) else period
         return (latest - oldest).days >= freshness_rule.minimum_span_days
+
+    def _fill_ohlcv_cache(self, ticker: str, *, period: str, table: str, reason: str):
+        """Fetch live rows to fill the cache, emitting the fill's duration.
+
+        The `cache.miss` / `cache.stale` events are emitted when the miss is *detected*,
+        so they can never carry the cost of the fetch they trigger -- which is exactly
+        the cost each later hit avoids. Without this span `avg_miss_cost_ms` and
+        `estimated_time_saved_ms` are structurally 0.0 and the cache's value is
+        unmeasurable.
+        """
+        started = time.perf_counter()
+        try:
+            return self._fetch_live_ohlcv_cached(ticker, period=period, table=table)
+        finally:
+            emit_cache_event(
+                operation="cache.populate",
+                status="cache_populate",
+                ticker=ticker,
+                component="market_data.ohlcv",
+                duration_ms=round((time.perf_counter() - started) * 1000, 1),
+                metadata={"table": table, "requested_period": period, "reason": reason},
+            )
 
     def _select_ohlcv_rows(self, conn, ticker: str, table: str, limit: int):
         """Read the most recent `limit` bars, canonical ticker first.

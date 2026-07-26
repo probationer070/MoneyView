@@ -108,12 +108,17 @@ class ScopeBreakdown(BaseModel):
 
 class CacheRow(BaseModel):
     """estimated_time_saved_ms assumes a miss would have cost this cache's observed
-    average miss cost. Defensible for a TTL cache over stable data; wrong if miss
-    costs are bimodal (cold vs. warm SQLite page cache)."""
+    average fill cost. Defensible for a TTL cache over stable data; wrong if fill
+    costs are bimodal (cold vs. warm SQLite page cache).
+
+    avg_miss_cost_ms is sourced from `cache.populate` spans, which wrap the fetch a
+    miss triggers. `fills` is how many timed fills back that average -- a large
+    `misses` with `fills == 0` means the cost is unmeasured, not zero."""
 
     component: str
     hits: int
     misses: int
+    fills: int = 0
     hit_rate: float
     avg_miss_cost_ms: float
     estimated_time_saved_ms: float

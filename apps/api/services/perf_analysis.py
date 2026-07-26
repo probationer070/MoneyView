@@ -641,6 +641,7 @@ def cache_effectiveness(events: list[PerformanceEvent]) -> CacheReport:
     hits: dict[str, int] = {}
     miss_counts: dict[str, int] = {}
     miss_costs: dict[str, list[float]] = {}
+    fill_costs: dict[str, list[float]] = {}
     for event in events:
         if event.scope != "cache":
             continue
@@ -655,12 +656,18 @@ def cache_effectiveness(events: list[PerformanceEvent]) -> CacheReport:
             # saved by every hit (spec 04.9: unmeasured is not measured-zero).
             if event.duration_ms is not None:
                 miss_costs.setdefault(component, []).append(event.duration_ms)
+        elif event.status == "cache_populate" and event.duration_ms is not None:
+            fill_costs.setdefault(component, []).append(event.duration_ms)
 
     rows: list[CacheRow] = []
-    for component in sorted(set(hits) | set(miss_counts)):
+    for component in sorted(set(hits) | set(miss_counts) | set(fill_costs)):
         hit_count = hits.get(component, 0)
         miss_count = miss_counts.get(component, 0)
-        known_costs = miss_costs.get(component, [])
+        # A populate span measures the fetch a miss triggered; a duration on the miss
+        # event itself only measures miss *detection*, which is near-zero and would
+        # understate what a hit saves. Prefer the fill whenever it was measured.
+        fills = fill_costs.get(component, [])
+        known_costs = fills or miss_costs.get(component, [])
         total = hit_count + miss_count
         avg_miss = round(statistics.fmean(known_costs), 1) if known_costs else 0.0
         rows.append(
@@ -668,6 +675,7 @@ def cache_effectiveness(events: list[PerformanceEvent]) -> CacheReport:
                 component=component,
                 hits=hit_count,
                 misses=miss_count,
+                fills=len(fills),
                 hit_rate=round(hit_count / total, 4) if total else 0.0,
                 avg_miss_cost_ms=avg_miss,
                 estimated_time_saved_ms=round(hit_count * avg_miss, 1),

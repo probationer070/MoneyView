@@ -593,6 +593,43 @@ def test_cache_effectiveness_formula():
     assert row.estimated_time_saved_ms == 600.0
 
 
+def test_cache_effectiveness_takes_fill_cost_from_populate_events():
+    """A miss event is emitted at the moment the miss is *detected*, so it cannot carry
+    the cost of the fill that follows it -- which is why avg_miss_cost_ms read 0.0 on
+    every real run. `cache.populate` wraps the fill and carries that duration, and the
+    fill cost is what each subsequent hit actually saves.
+    """
+    events = [
+        ev("cache.lookup", scope="cache", id="l1", status="success", component="ohlcv"),
+        ev("cache.hit", scope="cache", id="h1", status="cache_hit", component="ohlcv"),
+        ev("cache.hit", scope="cache", id="h2", status="cache_hit", component="ohlcv"),
+        ev("cache.miss", scope="cache", id="m1", status="cache_miss", component="ohlcv"),
+        ev("cache.populate", scope="cache", id="p1", ms=120.0, status="cache_populate", component="ohlcv"),
+    ]
+    report = cache_effectiveness(events)
+    row = report.caches[0]
+
+    assert row.hits == 2
+    assert row.misses == 1
+    assert row.fills == 1
+    assert row.avg_miss_cost_ms == 120.0
+    assert row.estimated_time_saved_ms == 240.0  # 2 hits x 120ms of avoided fill
+
+
+def test_cache_effectiveness_populate_outranks_a_timed_miss():
+    """When both are present the populate span is authoritative: it measures the fill,
+    whereas a duration on the miss event only measures miss detection."""
+    events = [
+        ev("cache.hit", scope="cache", id="h1", status="cache_hit", component="ohlcv"),
+        ev("cache.miss", scope="cache", id="m1", ms=0.3, status="cache_miss", component="ohlcv"),
+        ev("cache.populate", scope="cache", id="p1", ms=90.0, status="cache_populate", component="ohlcv"),
+    ]
+    row = cache_effectiveness(events).caches[0]
+
+    assert row.avg_miss_cost_ms == 90.0
+    assert row.estimated_time_saved_ms == 90.0
+
+
 def test_cache_effectiveness_counts_all_misses_but_averages_only_known_costs():
     """An unmeasured miss (duration_ms is None) must still count toward
     `misses` and `hit_rate`, but must not be folded into the cost average as
