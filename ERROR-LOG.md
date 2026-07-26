@@ -155,6 +155,45 @@ which is what the test asserts. It does not cover *directly emitted* events insi
 request, which is the majority of spans by count. A test asserting that a request's
 waterfall has exactly one root would have caught this immediately.
 
+## 2026-07-27: `next dev` reached 5 GB and never bound its port — observed once, NOT reproducible
+
+Date: 2026-07-27
+Command: `cd apps/web && NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8111 npm.cmd exec -- next dev --port 3111`
+Failure: The dev server logged `✓ Ready in 1184ms` but never listened on the port
+(`curl` returned `http 000`, `Get-NetTCPConnection` showed nothing on 3111). The node
+process grew to **5,081 MB**. Free system RAM fell from 7.3 GB to **2.6 GB** and
+returned to 7.5 GB the instant the process was killed, so the memory was real and
+attributable, not an accounting artifact.
+Root cause: **unknown — not reproducible.** Four hypotheses were tested and each was
+disproven by measurement:
+
+| Hypothesis | Test | Result |
+| --- | --- | --- |
+| `/dev/performance` is expensive to compile | clean start, request the page | **OK**, 1,379 MB, served in <3 s |
+| Restarting on a just-killed port | kill the listener, restart immediately on the same port | **OK**, bound fine, 1,329 MB |
+| `NEXT_PUBLIC_*` change invalidates the build cache and forces a cold rebuild | start with the env var set, request the page | **OK**, 1,474 MB, served in <4 s |
+| A `tailwindcss` resolution failure seen in one log | compare logs across runs | **Investigator artifact.** The error appeared only in a run launched via PowerShell `Start-Process`, which ignores `Set-Location`, so npm ran from the repo root and Next resolved from `apps/` instead of `apps/web`. No bash-launched run logged it. |
+
+Leading remaining explanation, untested: two dev servers briefly sharing the single
+1.2 GB `.next` cache during a kill-then-restart sequence, or a one-off Turbopack
+pathology. Recorded rather than guessed at further.
+Fix: None — there is no confirmed defect in this repository to fix. What is confirmed
+is an **operational hazard**: a `next dev` that fails to bind does not exit. It keeps
+running, holds gigabytes, and is invisible unless you check, because the log still
+says "Ready".
+Files changed: none (record only).
+Prevention: After starting the dev server, assert something is actually listening on
+the port rather than trusting the "Ready" line — they are not the same claim. When
+killing dev servers, verify the process count afterwards; `taskkill //F //PID` via
+`ps -W` has silently failed in this environment, whereas
+`Get-Process node | Stop-Process -Force` works. A `run moneyview` preflight that
+detects and clears orphaned `next dev` processes would turn this from a silent
+multi-gigabyte leak into a startup message.
+Correction to earlier figures in this session: `next dev` steady state is **~1.3-1.5 GB**
+across its four processes, not the ~940 MB first reported from a home-page-only
+measurement. Backend (uvicorn + app) is ~156 MB, plus up to ~128 MB when the dev
+monitor ring buffer fills.
+
 ## 2026-07-27: Concurrent baseline runs silently overwrite one report, producing a plausible but false baseline
 
 Date: 2026-07-27
