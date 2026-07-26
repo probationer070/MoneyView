@@ -378,18 +378,41 @@ tests over declarations:
 
 ---
 
-## 12. Open decisions
+## 12. Decisions (resolved 2026-07-27)
 
-1. **EDGAR in v1, or a follow-up?** The 7× round-trip reduction and the filing-event
-   boundary both come from EDGAR, so a v1 without it keeps the `Event` boundary
-   unimplemented and statements on a guessed quarterly cadence. Against that, it adds
-   CIK mapping and a US-only caveat to the first slice. Recommendation: include it,
-   because `Event(edgar_submissions)` is the only trigger that makes "quarterly on
-   earnings release" real rather than approximate.
-2. **In-band read fallback.** §9 recommends no. Flagged as the decision most worth
-   challenging, because it trades cold-start experience for observability.
-3. **Backfill depth.** 10 years is the working figure. It does not reach the 2008
-   Lehman or 1997 IMF crises; §13 argues that is acceptable.
+1. **EDGAR is in v1.** The 7× round-trip reduction and the filing-event boundary both
+   come from EDGAR, so a v1 without it would keep the `Event` boundary unimplemented
+   and statements on a guessed quarterly cadence. It costs CIK mapping and a US-only
+   caveat in the first slice, which is the right price:
+   `Event(edgar_submissions)` is the only trigger that makes "quarterly on earnings
+   release" a **detected event** rather than an approximation.
+2. **No in-band read fallback.** Reads query SQLite and return `never_acquired`; they
+   never fetch. The cost is real — a cold start shows empty panels until the warmer
+   runs — and it was the decision most worth challenging. It stands because a fallback
+   lets a dead warmer go unnoticed indefinitely: the system would appear to work while
+   silently degrading to exactly the architecture this design replaces, and the failure
+   would surface as mysterious slowness rather than as a broken job. Making the absence
+   visible is the point.
+3. **Backfill depth is 10 years.** ~2,520 rows per ticker, ~350k rows and ~50 MB across
+   the watchlist. It does not reach the 2008 Lehman or 1997 IMF crises; §13 explains why
+   that is acceptable — a crisis view needs depth on index and macro series, not on
+   per-stock history that truncates at IPO anyway.
+
+### 12.1 Evidence from the sub-project 1 baseline
+
+The 2026-07-27 baseline strengthened the case for this design rather than changing it:
+
+- The statement cache scores a **structural 0% hit rate** — `ttl=300s` is shorter than
+  one 138-ticker sweep and `maxsize=48` is smaller than the 139-ticker universe. Either
+  alone forces it.
+- Fixing that cache did not solve the problem, it **exposed the next bottleneck**:
+  `external.fetch_quote` runs 1,400 times at 369.7 ms, **92.4% of `comparison_138`**.
+  Live price quotes are fetched per ticker per request with no cache at all.
+
+That second point is the design's own thesis demonstrated: point-fixing one cache moved
+the cost rather than removing it, because the read path was still doing acquisition.
+Both defects disappear under §9 — a read that never fetches cannot have a fetch
+bottleneck.
 
 ---
 
