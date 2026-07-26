@@ -99,3 +99,102 @@ def test_api_benchmark_smoke():
     assert "GET /api/v1/detail/AAPL/technicals?period=5y" in names
     assert "GET /api/v1/detail/AAPL/monte-carlo?paths=1000&horizon_days=252" in names
     assert all(result.status_code == 200 for result in results)
+
+
+def test_benchmark_scenarios_module_exposes_scenarios_and_report():
+    import scripts.benchmark_scenarios as runner
+
+    assert set(runner.SCENARIOS) == {
+        "portfolio_page_load",
+        "comparison_138",
+        "attribution_138",
+        "single_stock_detail",
+        "tab_switch",
+    }
+    assert callable(runner.render_report)
+    assert callable(runner.collect_environment)
+
+
+def test_report_stamps_every_criterion():
+    import scripts.benchmark_scenarios as runner
+
+    report = runner.render_report(
+        environment={"watchlist": 138, "stocks_rows": 120647, "db_bytes": 27_000_000,
+                     "event_limit": 20000, "compute_mode": "in_process", "git_sha": "abc1234"},
+        results=[
+            runner.ScenarioResult(
+                name="comparison_138", p50_off_ms=3180.0, p50_on_ms=3271.0, p95_on_ms=3410.0,
+                iterations=10, breakdown=None, ticker_table=None, orphans=0,
+                partial=False, truncated=False, reproducibility_delta_pct=2.0,
+            )
+        ],
+    )
+    for criterion in ["criterion 1", "criterion 2", "criterion 3", "criterion 4", "criterion 5"]:
+        assert criterion in report.lower()
+
+
+def test_report_ranks_operations_and_renders_cache_section():
+    """Criterion 5 ranks operations, not tickers (spec 08.5), and the cache section
+    must appear even when every miss cost is unmeasured, so a 0.0 reads as a known
+    gap rather than as a measured zero."""
+    import scripts.benchmark_scenarios as runner
+    from apps.api.models.schema_parts.perf_analysis import (
+        CacheReport,
+        CacheRow,
+        ScopeBreakdown,
+        ScopeRow,
+    )
+
+    report = runner.render_report(
+        environment={"watchlist": 138, "stocks_rows": 120647, "db_bytes": 27_000_000,
+                     "event_limit": 20000, "compute_mode": "in_process", "git_sha": "abc1234"},
+        results=[
+            runner.ScenarioResult(
+                name="comparison_138", p50_off_ms=3180.0, p50_on_ms=3271.0, p95_on_ms=3410.0,
+                iterations=10,
+                breakdown=ScopeBreakdown(
+                    scopes=[ScopeRow(scope="db", self_ms=892.0, pct_of_total=28.0,
+                                     event_count=138, slow_count=0)],
+                    total_ms=3180.0, unattributed_ms=0.0,
+                ),
+                ticker_table=None, orphans=0, partial=False, truncated=False,
+                reproducibility_delta_pct=2.0,
+                cache_report=CacheReport(caches=[
+                    CacheRow(component="statement_metrics", hits=3, misses=1, hit_rate=0.75,
+                             avg_miss_cost_ms=0.0, estimated_time_saved_ms=0.0),
+                ]),
+                top_spans=[runner.OperationCost(
+                    operation="db.select_corporate_metrics", self_ms=892.0, count=138,
+                )],
+            )
+        ],
+    )
+    assert "Top spans by self time" in report
+    assert "db.select_corporate_metrics" in report
+    assert "6.5 ms" in report  # 892 ms / 138 calls
+    assert "statement_metrics" in report
+    assert "unmeasured, not zero" in report
+
+
+def test_criteria_gate_covers_unattributed_and_partial():
+    """Spec 08.6: exit non-zero when ANY of criteria 1-4 fail. Criterion 2
+    (unattributed) and the `partial` half of criterion 3 were stamped in the report
+    but left out of the gate."""
+    import scripts.benchmark_scenarios as runner
+    from apps.api.models.schema_parts.perf_analysis import ScopeBreakdown
+
+    def _result(**overrides):
+        defaults = dict(
+            name="x", p50_off_ms=100.0, p50_on_ms=101.0, p95_on_ms=110.0, iterations=10,
+            breakdown=None, ticker_table=None, orphans=0, partial=False, truncated=False,
+            reproducibility_delta_pct=1.0,
+        )
+        return runner.ScenarioResult(**{**defaults, **overrides})
+
+    assert runner.criteria_failed([_result()]) is False
+
+    unattributed = _result(breakdown=ScopeBreakdown(total_ms=100.0, unattributed_ms=50.0))
+    assert unattributed.unattributed_pct == 50.0
+    assert runner.criteria_failed([unattributed]) is True
+
+    assert runner.criteria_failed([_result(partial=True)]) is True

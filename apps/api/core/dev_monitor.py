@@ -19,7 +19,6 @@ from apps.api.models.schema_parts.dev_monitor import PerformanceEvent, Performan
 logger = setup_logger(__name__)
 
 _DEFAULT_PERFORMANCE_LOG_DIRECTORY = Path("data/cache/logs/performance")
-_RECENT_EVENT_LIMIT = 2000
 _DEFAULT_LIMIT = 500
 _DEFAULT_RETENTION_DAYS = 7
 _DEFAULT_EVENT_LIMIT = 20_000

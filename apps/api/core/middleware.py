@@ -104,6 +104,7 @@ class StructuralMiddleware(BaseHTTPMiddleware):
 
         # 3. Execution mapping
         start_time = time.time()
+        page_load_event_id: str | None = None
         if is_dev_monitor_enabled():
             request_event = emit_performance_event(
                 PerformanceEvent(
@@ -120,7 +121,7 @@ class StructuralMiddleware(BaseHTTPMiddleware):
             request_event_id = request_event.id
             page_component = _page_load_component_for_path(path)
             if page_component is not None:
-                emit_performance_event(
+                page_load_event = emit_performance_event(
                     PerformanceEvent(
                         request_id=request_id,
                         parent_id=request_event_id,
@@ -134,6 +135,7 @@ class StructuralMiddleware(BaseHTTPMiddleware):
                         metadata={"request_group": page_component},
                     )
                 )
+                page_load_event_id = page_load_event.id
         try:
             try:
                 response = await call_next(request)
@@ -175,7 +177,11 @@ class StructuralMiddleware(BaseHTTPMiddleware):
                                 method=request.method,
                                 component=page_component,
                                 duration_ms=duration_ms,
-                                metadata={"request_group": page_component, "status_code": 500},
+                                metadata={
+                                    "request_group": page_component,
+                                    "status_code": 500,
+                                    "closes_span_id": page_load_event_id,
+                                },
                             )
                         )
                 logger.exception(
@@ -231,7 +237,11 @@ class StructuralMiddleware(BaseHTTPMiddleware):
                             method=request.method,
                             component=page_component,
                             duration_ms=duration_ms,
-                            metadata={"request_group": page_component, "status_code": response.status_code},
+                            metadata={
+                                "request_group": page_component,
+                                "status_code": response.status_code,
+                                "closes_span_id": page_load_event_id,
+                            },
                         )
                     )
 

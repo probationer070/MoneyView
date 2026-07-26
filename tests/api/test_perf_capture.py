@@ -321,6 +321,59 @@ def test_middleware_terminal_event_carries_closes_span_id_and_bytes(monkeypatch,
     assert isinstance(complete.metadata["bytes"], int)
 
 
+def test_middleware_page_load_terminal_carries_closes_span_id(monkeypatch, tmp_path):
+    """Spec 03.3/03.10: closes_span_id must be present on terminal events from BOTH
+    emit conventions. page_load emits a start event just like api.request_*, so an
+    unpaired page_load terminal is a sibling of its own span's children -- and its
+    start span stays `partial` forever, which fails baseline criterion 3 on every
+    scenario that loads a page.
+    """
+    sink = _enable(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        client.get("/api/v1/portfolio/watchlist")
+    events = sink.recent(limit=500)
+    start = next(
+        event for event in events if event.scope == "page_load" and event.status == "start"
+    )
+    terminal = next(
+        event for event in events if event.scope == "page_load" and event.status != "start"
+    )
+    assert terminal.metadata["closes_span_id"] == start.id
+
+
+def test_page_load_span_pairs_into_one_span_not_two(monkeypatch, tmp_path):
+    """The pairing above must actually collapse: an unpaired page_load double-counts
+    its self time in the operation rollup the baseline report ranks."""
+    from apps.api.services.perf_analysis import normalize_spans
+
+    sink = _enable(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        client.get("/api/v1/portfolio/watchlist")
+    spans = normalize_spans(sink.recent(limit=500))
+    page_load_spans = [span for span in spans if span.scope == "page_load"]
+    assert len(page_load_spans) == 1
+    assert page_load_spans[0].partial is False
+    assert page_load_spans[0].total_ms is not None
+
+
+def test_point_in_time_cache_event_is_not_partial(monkeypatch, tmp_path):
+    """`partial` means a span we expected to close that did not (spec 04.9). A cache
+    hit/miss is emitted once, complete, with no duration -- it was never a span, so
+    flagging it partial made baseline criterion 3 unreachable."""
+    from apps.api.services.perf_analysis import normalize_spans
+
+    _enable(monkeypatch, tmp_path)
+    cache_event = PerformanceEvent(
+        id="cache-1", level="info", scope="cache", operation="cache.hit", status="cache_hit"
+    )
+    unpaired_start = PerformanceEvent(
+        id="start-1", level="info", scope="api", operation="api.request_start", status="start"
+    )
+    spans = {span.id: span for span in normalize_spans([cache_event, unpaired_start])}
+    assert spans["cache-1"].partial is False
+    assert spans["start-1"].partial is True
+
+
 def test_streaming_response_reports_null_bytes(monkeypatch, tmp_path):
     sink = _enable(monkeypatch, tmp_path)
     with TestClient(app) as client:

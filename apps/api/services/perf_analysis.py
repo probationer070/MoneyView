@@ -103,7 +103,14 @@ def _span_from(event: PerformanceEvent, order: int) -> Span:
         bytes=span_bytes(event),
         series_points=span_series_points(event),
         cache_state=span_cache_state(event),
-        partial=event.duration_ms is None,
+        # `partial` means a span we expected to close that did not (spec 04.9),
+        # so only a start event can be partial. A point-in-time event (a cache
+        # hit/miss) is emitted once, complete, and simply has no duration --
+        # treating it as unfinished made baseline criterion 3 unreachable for
+        # every scenario that touches the cache. "start" is set at exactly the
+        # three start-event emit sites (dev_monitor.perf_timer, middleware's
+        # api.request_start and page_load.*).
+        partial=event.duration_ms is None and event.status == "start",
         order=order,
     )
 
