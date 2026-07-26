@@ -123,6 +123,24 @@ def test_naive_datetime_is_rejected():
         assert "timezone-aware" in str(error)
     else:
         raise AssertionError("a naive datetime must be rejected")
+
+
+def test_out_of_range_hour_or_minute_is_rejected_at_construction():
+    """A boundary is declared once in the registry and then silently governs every
+    freshness decision for that class. `Daily(at_hour=24)` would raise deep inside
+    `replace()` at the first acquisition, far from the typo. Fail at declaration."""
+    for kwargs in ({"at_hour": 24}, {"at_hour": -1}, {"at_hour": 0, "at_minute": 60}):
+        try:
+            Daily(**kwargs)
+        except ValueError as error:
+            assert "0" in str(error)
+        else:
+            raise AssertionError(f"{kwargs} must be rejected at construction")
+
+
+def test_valid_boundary_extremes_are_accepted():
+    assert Daily(at_hour=23, at_minute=59).at_hour == 23
+    assert Daily(at_hour=0, at_minute=0).at_minute == 0
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -173,6 +191,15 @@ class Daily:
     at_minute: int = 0
     business_days: bool = False
 
+    def __post_init__(self) -> None:
+        # A boundary is declared once and then silently governs every freshness decision
+        # for its class, so a typo must fail at declaration rather than deep inside
+        # `replace()` at the first acquisition, far from its cause.
+        if not 0 <= self.at_hour <= 23:
+            raise ValueError(f"at_hour must be 0-23, got {self.at_hour}")
+        if not 0 <= self.at_minute <= 59:
+            raise ValueError(f"at_minute must be 0-59, got {self.at_minute}")
+
     def most_recent_instant(self, now: datetime) -> datetime:
         if now.tzinfo is None:
             raise ValueError("Boundary comparisons require a timezone-aware datetime (UTC)")
@@ -190,7 +217,7 @@ class Daily:
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `python -m pytest tests/api/acquisition/test_boundaries.py -v`
-Expected: PASS (6 tests)
+Expected: PASS (8 tests)
 
 - [ ] **Step 5: Commit**
 
@@ -211,11 +238,18 @@ git commit -m "feat: UTC daily freshness boundary primitive"
 **Interfaces:**
 - Consumes: `apps.api.services.db.get_db`.
 - Produces:
+  - `AcquisitionStatus(StrEnum)` — the single home for every status value:
+    `NEVER_ACQUIRED`, `OK`, `EMPTY`, `FAILED`, `RETIRED`. `StrEnum` so `== "ok"` still
+    holds and SQLite binds it without `.value`, while typos become `AttributeError` at
+    import rather than a silently-unmatched string at runtime.
   - `AcquisitionState(data_class, subject, last_checked_at, last_success_at, covered_from, covered_to, status, detail)` — a frozen dataclass; datetimes are timezone-aware UTC or `None`.
   - `read_state(data_class: str, subject: str) -> AcquisitionState`
-  - `record_check(data_class: str, subject: str, *, now: datetime, status: str, detail: str | None = None) -> None`
+  - `record_check(data_class: str, subject: str, *, now: datetime, status: AcquisitionStatus, detail: str | None = None) -> None`
   - `record_success(data_class: str, subject: str, *, now: datetime, covered_from: date, covered_to: date) -> None`
-  - `STATUS_NEVER_ACQUIRED = "never_acquired"`, `STATUS_OK = "ok"`, `STATUS_EMPTY = "empty"`, `STATUS_FAILED = "failed"`
+
+**Note:** every status lives in this enum, including `RETIRED`, which the watchlist-remove
+trigger in Task 8 uses. Nothing else in the codebase may define a status string — a
+second definition site is how `"retired"` and `"retire"` end up both existing.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -225,9 +259,7 @@ Create `tests/api/acquisition/test_state.py`:
 from datetime import UTC, date, datetime
 
 from apps.api.services.acquisition.state import (
-    STATUS_EMPTY,
-    STATUS_NEVER_ACQUIRED,
-    STATUS_OK,
+    AcquisitionStatus,
     read_state,
     record_check,
     record_success,
@@ -236,22 +268,32 @@ from apps.api.services.acquisition.state import (
 NOW = datetime(2026, 7, 27, 9, 0, tzinfo=UTC)
 
 
+def test_status_enum_is_the_single_definition_site():
+    """Consolidated deliberately: a second definition site is how "retired" and
+    "retire" end up both existing. StrEnum keeps `== "ok"` true and lets SQLite bind
+    the member directly, so nothing downstream needs `.value`."""
+    assert AcquisitionStatus.OK == "ok"
+    assert {member.value for member in AcquisitionStatus} == {
+        "never_acquired", "ok", "empty", "failed", "retired",
+    }
+
+
 def test_unknown_subject_reads_as_never_acquired():
     """`never_acquired` and "acquired, found nothing" must be distinguishable: it is
     what lets a read report an explicit state instead of an empty list the UI cannot
     tell apart from "this stock has no data"."""
     state = read_state("equity_bars", "TEST_UNKNOWN_TICKER")
-    assert state.status == STATUS_NEVER_ACQUIRED
+    assert state.status == AcquisitionStatus.NEVER_ACQUIRED
     assert state.last_checked_at is None
     assert state.covered_to is None
 
 
 def test_record_check_marks_the_ask_without_claiming_success():
-    record_check("equity_bars", "TEST_CHECK", now=NOW, status=STATUS_EMPTY, detail="no bars")
+    record_check("equity_bars", "TEST_CHECK", now=NOW, status=AcquisitionStatus.EMPTY, detail="no bars")
     state = read_state("equity_bars", "TEST_CHECK")
     assert state.last_checked_at == NOW
     assert state.last_success_at is None
-    assert state.status == STATUS_EMPTY
+    assert state.status == AcquisitionStatus.EMPTY
     assert state.detail == "no bars"
 
 
@@ -261,7 +303,7 @@ def test_record_success_sets_coverage_and_both_timestamps():
         covered_from=date(2016, 7, 27), covered_to=date(2026, 7, 24),
     )
     state = read_state("equity_bars", "TEST_OK")
-    assert state.status == STATUS_OK
+    assert state.status == AcquisitionStatus.OK
     assert state.last_checked_at == NOW
     assert state.last_success_at == NOW
     assert state.covered_from == date(2016, 7, 27)
@@ -326,13 +368,23 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
+from enum import StrEnum
 
 from apps.api.services.db import get_db
 
-STATUS_NEVER_ACQUIRED = "never_acquired"
-STATUS_OK = "ok"
-STATUS_EMPTY = "empty"
-STATUS_FAILED = "failed"
+class AcquisitionStatus(StrEnum):
+    """The single definition site for every status value.
+
+    StrEnum, so `status == "ok"` still holds for existing comparisons and SQLite binds
+    a member without `.value`, while a typo becomes an AttributeError at import instead
+    of a string that silently matches nothing.
+    """
+
+    NEVER_ACQUIRED = "never_acquired"
+    OK = "ok"
+    EMPTY = "empty"
+    FAILED = "failed"
+    RETIRED = "retired"
 
 
 @dataclass(frozen=True)
@@ -343,7 +395,7 @@ class AcquisitionState:
     last_success_at: datetime | None = None
     covered_from: date | None = None
     covered_to: date | None = None
-    status: str = STATUS_NEVER_ACQUIRED
+    status: str = AcquisitionStatus.NEVER_ACQUIRED
     detail: str | None = None
 
 
@@ -380,7 +432,12 @@ def read_state(data_class: str, subject: str) -> AcquisitionState:
 
 
 def record_check(
-    data_class: str, subject: str, *, now: datetime, status: str, detail: str | None = None
+    data_class: str,
+    subject: str,
+    *,
+    now: datetime,
+    status: AcquisitionStatus,
+    detail: str | None = None,
 ) -> None:
     """Record that we asked. Deliberately leaves last_success_at and coverage alone:
     a failed refresh must not blank data that is still being served."""
@@ -416,7 +473,7 @@ def record_success(
                    detail = NULL""",
             (
                 data_class, subject, now.isoformat(), now.isoformat(),
-                covered_from.isoformat(), covered_to.isoformat(), STATUS_OK,
+                covered_from.isoformat(), covered_to.isoformat(), AcquisitionStatus.OK,
             ),
         )
 ```
@@ -427,7 +484,7 @@ the recorded history a backfill established.
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `python -m pytest tests/api/acquisition/test_state.py -v`
-Expected: PASS (4 tests)
+Expected: PASS (5 tests)
 
 - [ ] **Step 5: Commit**
 
@@ -457,7 +514,7 @@ from datetime import UTC, datetime
 
 from apps.api.services.acquisition.boundaries import Daily
 from apps.api.services.acquisition.freshness import needs_acquisition
-from apps.api.services.acquisition.state import STATUS_EMPTY, STATUS_OK, AcquisitionState
+from apps.api.services.acquisition.state import AcquisitionState, AcquisitionStatus
 
 BOUNDARY = Daily(at_hour=0)
 NOW = datetime(2026, 7, 27, 9, 0, tzinfo=UTC)  # boundary today was 00:00
@@ -474,12 +531,12 @@ def test_never_acquired_needs_acquisition():
 
 def test_asked_after_the_boundary_does_not_need_acquisition():
     asked = datetime(2026, 7, 27, 1, 0, tzinfo=UTC)
-    assert needs_acquisition(_state(last_checked_at=asked, status=STATUS_OK), BOUNDARY, NOW) is False
+    assert needs_acquisition(_state(last_checked_at=asked, status=AcquisitionStatus.OK), BOUNDARY, NOW) is False
 
 
 def test_asked_before_the_boundary_needs_acquisition():
     asked = datetime(2026, 7, 26, 23, 0, tzinfo=UTC)
-    assert needs_acquisition(_state(last_checked_at=asked, status=STATUS_OK), BOUNDARY, NOW) is True
+    assert needs_acquisition(_state(last_checked_at=asked, status=AcquisitionStatus.OK), BOUNDARY, NOW) is True
 
 
 def test_asked_and_found_nothing_still_counts_as_asked():
@@ -488,13 +545,13 @@ def test_asked_and_found_nothing_still_counts_as_asked():
     can never be satisfied and retries every request, all day. Asking "did I ask" is
     satisfied immediately and waits for the next boundary."""
     asked = datetime(2026, 7, 27, 1, 0, tzinfo=UTC)
-    state = _state(last_checked_at=asked, last_success_at=None, status=STATUS_EMPTY)
+    state = _state(last_checked_at=asked, last_success_at=None, status=AcquisitionStatus.EMPTY)
     assert needs_acquisition(state, BOUNDARY, NOW) is False
 
 
 def test_asked_exactly_at_the_boundary_counts_as_asked():
     asked = datetime(2026, 7, 27, 0, 0, tzinfo=UTC)
-    assert needs_acquisition(_state(last_checked_at=asked, status=STATUS_OK), BOUNDARY, NOW) is False
+    assert needs_acquisition(_state(last_checked_at=asked, status=AcquisitionStatus.OK), BOUNDARY, NOW) is False
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -1066,7 +1123,23 @@ def test_first_acquisition_backfills_and_records_coverage():
     assert result.reason == "backfill"
     assert calls[0].start == date(2016, 7, 27)
     assert saved == [("TEST_RUNNER_NEW", [_row("2026-07-24")])]
-    assert read_state("equity_bars", "TEST_RUNNER_NEW").covered_to == date(2026, 7, 27)
+    # The last row is 2026-07-24 even though `today` is 2026-07-27: coverage records
+    # what exists, so the next delta re-asks for the 25th onward rather than skipping it.
+    assert read_state("equity_bars", "TEST_RUNNER_NEW").covered_to == date(2026, 7, 24)
+
+
+def test_coverage_records_the_last_real_bar_not_the_requested_end():
+    """A lagging provider returns bars only through Wednesday while today is Friday.
+    Recording covered_to=today would claim coverage that does not exist, and the next
+    delta would start Saturday -- Thursday and Friday lost permanently, with nothing
+    ever asking for them again."""
+    result = acquire(
+        "equity_bars", "TEST_RUNNER_LAG", now=NOW,
+        fetcher=lambda ticker, fetch_range, **_: [_row("2026-07-22"), _row("2026-07-23")],
+        action_probe=lambda ticker, **_: None, saver=lambda t, r: None,
+    )
+    assert result.fetched_rows == 2
+    assert read_state("equity_bars", "TEST_RUNNER_LAG").covered_to == date(2026, 7, 23)
 
 
 def test_second_call_within_the_same_boundary_window_is_skipped():
@@ -1161,7 +1234,7 @@ failure policy in perf spec 03.8.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 
 from apps.api.core.logger import setup_logger
 from apps.api.services.acquisition.freshness import needs_acquisition
@@ -1169,8 +1242,7 @@ from apps.api.services.acquisition.ranges import plan_range
 from apps.api.services.acquisition.registry import get_data_class
 from apps.api.services.acquisition.sources.bars import fetch_bars, latest_action_date
 from apps.api.services.acquisition.state import (
-    STATUS_EMPTY,
-    STATUS_FAILED,
+    AcquisitionStatus,
     read_state,
     record_check,
     record_success,
@@ -1224,26 +1296,32 @@ def acquire(
 
     fetch_range = plan_range(state, today=today, full_refetch=full_refetch)
     if fetch_range is None:
-        record_check(data_class_name, subject, now=now, status=state.status or STATUS_EMPTY)
+        record_check(data_class_name, subject, now=now, status=state.status or AcquisitionStatus.EMPTY)
         return AcquisitionResult(data_class_name, subject, 0, "current", skipped=True)
 
     try:
         rows = fetcher(subject, fetch_range)
     except Exception as error:  # noqa: BLE001 - never propagate into a caller
         logger.warning("acquisition.fetch_failed subject=%s error=%s", subject, error)
-        record_check(data_class_name, subject, now=now, status=STATUS_FAILED, detail=str(error))
+        record_check(data_class_name, subject, now=now, status=AcquisitionStatus.FAILED, detail=str(error))
         return AcquisitionResult(data_class_name, subject, 0, fetch_range.reason, skipped=False)
 
     if not rows:
         # Asked and found nothing: a holiday, a gap, or a delisting. Recording the ask
         # is what stops it being retried on every request for the rest of the day.
-        record_check(data_class_name, subject, now=now, status=STATUS_EMPTY)
+        record_check(data_class_name, subject, now=now, status=AcquisitionStatus.EMPTY)
         return AcquisitionResult(data_class_name, subject, 0, fetch_range.reason, skipped=False)
 
     (saver or _default_saver)(subject, rows)
+    # Coverage records what EXISTS, not what was requested. If the provider lags and
+    # returns bars only through Wednesday while `today` is Friday, recording
+    # covered_to=today would claim coverage that is not there -- the next delta would
+    # start Saturday and Thursday and Friday would be lost permanently, with nothing
+    # ever asking for them again.
+    covered_to = max(date.fromisoformat(row.date[:10]) for row in rows)
     record_success(
         data_class_name, subject, now=now,
-        covered_from=fetch_range.start, covered_to=today,
+        covered_from=fetch_range.start, covered_to=covered_to,
     )
     return AcquisitionResult(data_class_name, subject, len(rows), fetch_range.reason, skipped=False)
 ```
@@ -1251,7 +1329,7 @@ def acquire(
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `python -m pytest tests/api/acquisition/test_runner.py -v`
-Expected: PASS (5 tests)
+Expected: PASS (6 tests)
 
 - [ ] **Step 5: Commit**
 
@@ -1344,9 +1422,6 @@ Expected: FAIL with `AttributeError: <module 'apps.api.routes.portfolio'> has no
 Append to `apps/api/services/acquisition/runner.py`:
 
 ```python
-STATUS_RETIRED = "retired"
-
-
 def schedule_acquisition(data_class: str, subject: str) -> None:
     """Enqueue acquisition without blocking the caller.
 
@@ -1371,7 +1446,7 @@ def retire_subject(data_class: str, subject: str) -> None:
     ticker is then free."""
     from datetime import UTC, datetime
 
-    record_check(data_class, subject, now=datetime.now(UTC), status=STATUS_RETIRED)
+    record_check(data_class, subject, now=datetime.now(UTC), status=AcquisitionStatus.RETIRED)
 ```
 
 - [ ] **Step 3b: Wire the routes**
@@ -1428,6 +1503,36 @@ git commit -m "feat: watchlist add and remove drive acquisition"
 - [ ] A market holiday or delisted ticker is asked once per boundary, not per request
 - [ ] A new split triggers a full refetch rather than a delta append
 - [ ] No read path gained a provider call
+
+## Deferred improvements (review, 2026-07-27)
+
+Raised in review and deliberately deferred. Recorded here with the reasoning so they are
+decisions rather than omissions. The three "must fix" items from the same review —
+coverage from real rows, `Daily` argument validation, and one home for statuses — are
+already folded into Tasks 1, 2 and 7 above.
+
+### Phase 2
+
+| Improvement | Why deferred |
+| --- | --- |
+| **Fully declarative registry** — `fetcher`, `saver`, `planner`, `action_probe` as `DataClass` fields, so the runner never branches per class | Highest ROI of the set, and the right shape. Deferred only because Phase 1 has **one** fetcher: with a single implementation the indirection is unexercised, and a second data class is what proves the seam is in the right place rather than merely plausible. Phase 2 adds EDGAR statements, whose fetcher, planner and cadence all differ — that is the moment to lift them into the registry, guided by a real second case instead of a guessed one. Task 7 already takes `fetcher`, `action_probe` and `saver` as parameters, so the move is mechanical. |
+| **Idempotency / duplicate-acquisition guard** — an `acquisition_lock` or in-flight set per `(data_class, subject)` | Real: a double-click on watchlist-add starts two threads for one ticker. Harmless today because writes are `INSERT OR REPLACE` and coverage widens rather than overwrites, so the cost is duplicate work, not corruption. It becomes a correctness issue once a scheduled warmer can overlap a trigger, which is Phase 3. |
+| **Validation before persistence** — duplicate dates, missing dates, impossible OHLC (`high < low`), negative volume, unsorted rows | Belongs between fetch and persist as its own stage. Deferred because the rules deserve their own tests and would roughly double Task 7. Worth doing before any *derived* class (PER/PSR/PBR) reads these rows, since a bad bar propagates silently into every ratio built on it. |
+| **Acquisition event history** — an append-only log beside the latest-status row | The current table answers "what is true now"; debugging a flaky provider needs "what happened over the last week". Cheap to add later precisely because it is append-only and nothing reads it for correctness. |
+
+### Long-term
+
+| Improvement | Note |
+| --- | --- |
+| **Typed subject objects** — `TickerSubject`, `IndexSubject`, `MacroSeries` instead of bare `str` | Correct, and the value grows sharply once macro series (`CPI_US`, `FedFunds`) sit alongside tickers in the same table, where nothing currently stops `CPI_US` reaching a yfinance fetcher. Phase 1 has two subject kinds that are both tickers, so the types would carry no information yet. |
+| **`AcquisitionContext`** bundling `now`, `logger`, `fetcher`, `saver` | Signatures will keep growing; this is the standard remedy. Introduce it when the registry becomes fully declarative, so the two changes land together rather than churning the same call sites twice. |
+| **Pipeline-staged runner** — Planner → Fetcher → Validator → Persister → Recorder | The natural end state, and it composes with the validation stage above. The procedural runner is easier to read at five steps; formalise the stages when there are enough classes that the sequence genuinely varies between them. |
+| **Provider capability flags** — `supports_delta`, `supports_actions`, `supports_intraday` | Prevents provider-specific branches in the runner. Needed once a second provider exists: Stooq (no corporate actions) and EDGAR (no delta at all, and no concept of a bar) both differ from yfinance in exactly these dimensions. |
+| **Split `acquisition_state` from `acquisition_metrics`** — provider latency, row counts, ETags, error codes | Keeps the state table focused on the freshness decision. Fits naturally with the metrics item below. |
+| **Acquisition metrics** — rows fetched, provider latency, save latency, planning latency | This project already has span-based telemetry with a dashboard and a baseline runner, so the acquisition layer should emit `perf_timer` spans rather than invent a parallel metrics path. Deliberately not in Phase 1: instrumentation currently costs 191-466 µs per event and the baseline's criterion 1 already fails at 12-19% overhead, so adding spans before that budget is understood would make the number worse and harder to attribute. |
+| **`Clock` abstraction** instead of `datetime.now(UTC)` | Phase 1 already takes `now` as a parameter in every pure module — `boundaries`, `freshness`, `ranges` and `acquire` — so the testability benefit is largely banked. A `Clock` object becomes worthwhile when a scheduler needs to be driven deterministically in tests, which arrives with the Phase 3 warmer. |
+
+---
 
 ## Deliberately not in Phase 1
 
