@@ -32,6 +32,20 @@ def _frame() -> pd.DataFrame:
     )
 
 
+def _indexed_frame() -> pd.DataFrame:
+    """Shaped like real yfinance output: a DatetimeIndex named 'Date', no 'Date' column."""
+    frame = pd.DataFrame(
+        {
+            "Open": [1.0, 2.0], "High": [1.5, 2.5], "Low": [0.5, 1.5],
+            "Close": [1.2, 2.2], "Volume": [100, 200],
+        },
+        index=pd.DatetimeIndex(
+            [pd.Timestamp("2026-07-24"), pd.Timestamp("2026-07-25")], name="Date"
+        ),
+    )
+    return frame
+
+
 def test_fetch_bars_passes_start_and_end_not_period():
     """The whole point of this phase: a bounded range instead of a whole period."""
     fake = _FakeTicker("AAPL", _frame())
@@ -45,6 +59,22 @@ def test_fetch_bars_passes_start_and_end_not_period():
     assert rows[0].close == 1.2
 
 
+def test_fetch_bars_handles_datetime_index_shaped_like_real_yfinance_output():
+    """Real yfinance.Ticker.history() returns a DatetimeIndex named 'Date', not a
+    'Date' column. Without this test, the `frame.reset_index()` branch that handles
+    that shape is never exercised by the suite."""
+    fake = _FakeTicker("AAPL", _indexed_frame())
+    rows = fetch_bars(
+        "AAPL",
+        FetchRange(date(2026, 7, 24), date(2026, 7, 26), "delta"),
+        ticker_factory=lambda symbol: fake,
+    )
+    assert [row.date for row in rows] == ["2026-07-24", "2026-07-25"]
+    assert rows[0].close == 1.2
+    assert rows[1].close == 2.2
+    assert rows[0].volume == 100
+
+
 def test_empty_frame_returns_no_rows_without_raising():
     """A holiday, a delisting, or a gap all produce an empty frame. That is `empty`,
     not a failure, and must not raise."""
@@ -54,9 +84,11 @@ def test_empty_frame_returns_no_rows_without_raising():
 
 
 def test_latest_action_date_reads_the_most_recent_split_or_dividend():
+    """Index is deliberately not in ascending order: the newest action is NOT last,
+    so this fails if `max(...)` is ever swapped for `.index[-1]`."""
     actions = pd.DataFrame(
-        {"Dividends": [0.0, 0.24], "Stock Splits": [4.0, 0.0]},
-        index=[pd.Timestamp("2020-08-31"), pd.Timestamp("2026-05-15")],
+        {"Dividends": [0.24, 0.0], "Stock Splits": [0.0, 4.0]},
+        index=[pd.Timestamp("2026-05-15"), pd.Timestamp("2020-08-31")],
     )
     fake = _FakeTicker("AAPL", actions=actions)
     assert latest_action_date("AAPL", ticker_factory=lambda symbol: fake) == date(2026, 5, 15)

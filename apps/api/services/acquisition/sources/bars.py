@@ -9,11 +9,8 @@ from __future__ import annotations
 from datetime import date
 from typing import Callable
 
-from apps.api.core.logger import setup_logger
 from apps.api.models.schemas import StockOHLCV
 from apps.api.services.acquisition.ranges import FetchRange
-
-logger = setup_logger(__name__)
 
 
 def _default_ticker_factory(symbol: str):
