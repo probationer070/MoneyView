@@ -76,6 +76,7 @@ sub-project and feeding an implementation plan.
 | Spec | Topic |
 | --- | --- |
 | `2026-07-25-perf-instrumentation/` | Performance instrumentation, analysis API, perf dashboard, and baseline runner (sub-project 1 of 4) |
+| `2026-07-27-data-acquisition-design.md` | Data acquisition registry, per-class freshness boundaries, incremental backfill, and provider recommendations (sub-project 2 of 4) |
 
 ## Process SOPs (`guideline/sop/`)
 

@@ -15,6 +15,7 @@ Usage:
 """
 from __future__ import annotations
 
+import json
 import math
 import os
 import sqlite3
@@ -455,7 +456,63 @@ def _progress(message: str) -> None:
     print(message, file=sys.stderr, flush=True)
 
 
-def render_report(*, environment: dict, results: list[ScenarioResult]) -> str:
+def load_previous_baseline(output_dir: Path, today: str) -> dict | None:
+    """Most recent baseline sidecar strictly before `today`, or None.
+
+    A JSON sidecar rather than re-parsing the markdown: the report's formatting is
+    meant to change as the report improves, and a trend line that silently breaks on a
+    heading rename is worse than no trend line.
+    """
+    if not output_dir.exists():
+        return None
+    earlier = sorted(
+        path for path in output_dir.glob("*-baseline.json") if path.name < f"{today}-baseline.json"
+    )
+    if not earlier:
+        return None
+    try:
+        return json.loads(earlier[-1].read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
+def write_baseline_sidecar(output_dir: Path, today: str, environment: dict, results: list[ScenarioResult]) -> Path:
+    path = output_dir / f"{today}-baseline.json"
+    path.write_text(
+        json.dumps(
+            {
+                "date": today,
+                "environment": environment,
+                "scenarios": {
+                    result.name: {
+                        "p50_off_ms": result.p50_off_ms,
+                        "p50_on_ms": result.p50_on_ms,
+                        "p95_on_ms": result.p95_on_ms,
+                        "overhead_pct": result.overhead_pct,
+                        "span_count": result.span_count,
+                        "iterations": result.iterations,
+                    }
+                    for result in results
+                },
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    return path
+
+
+def _environment_differences(current: dict, previous: dict) -> list[str]:
+    """Spec 08.4.1: two reports are only comparable if their headers match."""
+    watched = ("watchlist", "stocks_rows", "event_limit", "compute_mode", "git_sha")
+    return [
+        f"{key}: {previous.get(key)!r} -> {current.get(key)!r}"
+        for key in watched
+        if previous.get(key) != current.get(key)
+    ]
+
+
+def render_report(*, environment: dict, results: list[ScenarioResult], previous: dict | None = None) -> str:
     lines = [
         f"# Performance Baseline — {date.today().isoformat()}",
         "",
@@ -494,6 +551,28 @@ def render_report(*, environment: dict, results: list[ScenarioResult]) -> str:
             f"| {result.name} | {result.p50_off_ms:.1f}ms | {result.p50_on_ms:.1f}ms | "
             f"{result.overhead_pct}% | {_stamp(result.overhead_pct <= OVERHEAD_BUDGET_PCT)} |"
         )
+
+    if previous is not None:
+        prior = previous.get("scenarios", {})
+        lines += ["", f"## Trend vs previous baseline ({previous.get('date', 'unknown')})",
+                  "_A p50 alone cannot say whether a change helped. Negative is faster._",
+                  "| scenario | previous p50 on | this p50 on | delta |",
+                  "| --- | --- | --- | --- |"]
+        for result in results:
+            was = prior.get(result.name, {}).get("p50_on_ms")
+            if was is None:
+                lines.append(f"| {result.name} | — | {result.p50_on_ms:.1f}ms | _new_ |")
+                continue
+            delta = (result.p50_on_ms - was) / was * 100.0 if was else 0.0
+            lines.append(
+                f"| {result.name} | {was:.1f}ms | {result.p50_on_ms:.1f}ms | {delta:+.1f}% |"
+            )
+        differences = _environment_differences(environment, previous.get("environment", {}))
+        if differences:
+            lines += ["",
+                      "**These runs are not directly comparable** — the environment changed, and",
+                      "spec 08.4.1 makes header parity the basis for comparing two reports:"]
+            lines += [f"- {difference}" for difference in differences]
 
     lines += [
         "",
@@ -685,11 +764,16 @@ def main(argv: list[str]) -> int:
         _progress(f"[{name}] p50 off {_p(off_samples, 0.5)} ms · on {first} ms · "
                   f"overhead {results[-1].overhead_pct}%")
 
-    report = render_report(environment=environment, results=results)
     output_dir = Path("docs/perf")
     output_dir.mkdir(parents=True, exist_ok=True)
-    output_path = output_dir / f"{date.today().isoformat()}-baseline.md"
+    today = date.today().isoformat()
+    # Read the previous sidecar before writing today's, or the trend compares to itself.
+    previous = load_previous_baseline(output_dir, today)
+
+    report = render_report(environment=environment, results=results, previous=previous)
+    output_path = output_dir / f"{today}-baseline.md"
     output_path.write_text(report, encoding="utf-8")
+    write_baseline_sidecar(output_dir, today, environment, results)
     print(f"wrote {output_path}")
     return 1 if criteria_failed(results) else 0
 

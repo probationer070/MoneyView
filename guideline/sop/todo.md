@@ -137,9 +137,12 @@ they look:
 ### Nice to have
 
 - [ ] 8. Flamegraph (SVG)
-- [ ] 9. Compare against the previous baseline — trend beats absolute numbers
+- [x] 9. Compare against the previous baseline — trend beats absolute numbers. Reads a
+      `YYYY-MM-DD-baseline.json` sidecar rather than re-parsing the markdown, and warns
+      when the environment differs (spec 08.4.1 header parity).
 - [ ] 10. Separate CPU from wait time within `external.*` spans
-- [ ] 11. Total emitted spans per scenario, beside cache hits and request counts
+- [x] 11. Total emitted spans per scenario — covered by item 7's
+      `emitted N events / M spans (K per iteration)` line.
 - [x] 12. **Critical path** — done, and promoted out of "nice to have" because the span
       tree already carried `offset_ms` and durations, so it cost far less than its tier
       suggested. Renders between "Top spans" and "Per ticker" as the reviewer proposed.

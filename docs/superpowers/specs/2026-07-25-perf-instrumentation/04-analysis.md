@@ -299,6 +299,7 @@ A finite ring buffer makes partial data normal, not exceptional.
 | **Orphaned span** — `parent_id` not present in the event set | Attach to a synthetic root, set `orphaned: true`. Never dropped, never a crash. |
 | **Partial request** — some events evicted | `partial: true` on the DTO; the UI must label it. A waterfall missing a third of its spans that *looks* complete is worse than no waterfall. |
 | **Unpaired start** — terminal missing or in flight | Span with `total_ms = None`, `partial: true`. Excluded from timing math. |
+| **Point-in-time event** — a cache hit/miss, emitted once, complete, with no duration | `partial: false`. Amendment 2026-07-27: `partial` was originally `duration_ms is None`, which flagged every cache event as unfinished — 592 of 912 spans on a healthy buffer — and made baseline criterion 3 unreachable for any scenario touching the cache. `partial` now means *a span we expected to close that did not*, so only a start event can be partial: `duration_ms is None and status == "start"`. `status == "start"` is written at exactly the three start-event emit sites (§03.2, §03.3), which makes it an exact discriminator. |
 | **`start` events** (`duration_ms = None`) | Structure only; never enter timing math. |
 | **Truncated waterfall** — exceeds span cap | Deepest-first collapse; elided subtree replaced by a `CollapsedNode`; `truncated: true`. |
 | **Empty input** | Valid empty DTO. Never an exception. |
@@ -336,9 +337,23 @@ Groups `scope == "cache"` events by `component`.
 
 ```
 hit_rate                = hits / (hits + misses)
-avg_miss_cost_ms        = mean(duration_ms of miss events)
+avg_miss_cost_ms        = mean(duration_ms of cache.populate events)   # see 4.11.1
 estimated_time_saved_ms = hits × avg_miss_cost_ms
+fills                   = count of timed cache.populate events
 ```
+
+### 4.11.1 Amendment (2026-07-27): the fill, not the miss
+
+The original formula averaged `duration_ms` of **miss** events, and produced
+`avg_miss_cost_ms = 0.0` on every real run. A miss event is emitted at the moment the
+miss is *detected*, so it can never carry the cost of the fetch it triggers — which is
+precisely the cost each later hit avoids. The hit ratio was the only knowable figure.
+
+A `cache.populate` event (status `cache_populate`, §03.5) now wraps the fill and
+carries its duration. `cache_effectiveness` prefers populate durations and falls back
+to a timed miss only when no populate span exists. `CacheRow.fills` reports how many
+timed fills back the average, so `misses=539, fills=0` reads as *unmeasured* rather
+than as a zero cost — the same distinction §4.9 draws elsewhere.
 
 The last line is an **estimate**, and its assumption is written into the DTO
 docstring:

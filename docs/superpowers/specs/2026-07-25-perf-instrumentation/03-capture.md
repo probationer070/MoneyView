@@ -55,6 +55,28 @@ Rules:
 - The emitted event's `id` **is** `span_id`, so children resolve to a real node.
 - `emit()` reads the contextvar only when the event has no explicit `parent_id`.
 
+### 3.2.2 Amendment (2026-07-27): the request span must scope the contextvar too
+
+`perf_timer` closing the gap is not sufficient. The **request-level** span — the one
+every other span in a request should hang from — is emitted by `middleware.py` through
+raw `emit_performance_event`, not `perf_timer`, so it never set the contextvar. For the
+whole request the ambient span id stayed `None`, and every event emitted *outside* a
+`perf_timer` block (all cache events, and `db.*` from `InstrumentedCursor`) was
+parented to nothing. Measured on one `GET /portfolio/watchlist`: **423 spans, 423
+roots.**
+
+That is not cosmetic. With more than one root, `breakdown_by_scope` switches to its
+synthetic-root denominator — the *sum* of all root durations rather than the request's
+real duration — so criterion 2 computed `unattributed_ms` against a meaningless total
+and reported a flattering `0.0 / PASS`. Baseline criterion 3 also failed permanently
+via `_build_tree`'s `len(roots) > 1`.
+
+`dev_monitor` therefore exports `set_current_span_id`/`reset_current_span_id`,
+mirroring the existing `set_current_request_id`/`reset_current_request_id` pair, and
+middleware scopes the request span id exactly as it already scopes the request id
+(`middleware.py:83`/`:270`): set immediately after `api.request_start` is emitted so it
+does not parent itself, reset in the same `finally`.
+
 ### 3.2.1 Threadpool propagation — the risk that needs a test
 
 FastAPI runs **sync** route handlers in a threadpool. The design depends on
@@ -94,6 +116,16 @@ Terminal events set `metadata.closes_span_id = <start event id>`. Three emit sit
 | `perf_timer` success path | `dev_monitor.py:380` | add `closes_span_id` when `start_event` exists |
 | `perf_timer` error path | `dev_monitor.py:363` | same |
 | middleware complete + error | `middleware.py:126`, `:177` | add `closes_span_id = request_event_id` |
+| **page_load complete + error** | `middleware.py` page_load terminals | add `closes_span_id = page_load_event_id` — amendment 2026-07-27 |
+
+**Amendment (2026-07-27).** The table above originally listed only the `api.request_*`
+middleware terminals, so this section's own fix covered one emit convention and left
+the other open — the exact failure mode it exists to prevent. `page_load.*` emits a
+start event (§3.5 row 9) whose terminal set no `closes_span_id`, so the start span
+stayed `partial` forever and its terminal became a *separate* span: `page_load.portfolio`
+reported 6 spans for 3 requests and double-counted its self time in the published
+ranking. Both the complete and error paths now capture the page_load start event's id
+and pair against it.
 
 `normalize_spans()` then pairs exactly rather than guessing (§04.2).
 
@@ -171,6 +203,7 @@ span for.
 | 1 | `api.request_*` | `middleware.py:95` | `api` | yes (exists) | **+ `bytes`** |
 | 2 | `db.<op>_<table>` | `services/db.py:85` | `db` | no | `rows` (exists) |
 | 3 | `cache.*` | `dev_monitor.py:266` | `cache` | no | exists |
+| 3b | `cache.populate` | `market_data` fill sites, `corporate_statement_metrics` fill | `cache` | no | `duration_ms`, `reason` — **added 2026-07-27** |
 | 4 | `fanout.comparison` | `corporate_comparison.py:46` | `calculation` | **yes** | `fanout_size` |
 | 5 | `ticker.metrics` | `routes/corporate.py` `_metrics_for_ticker` | `calculation` | no | `ticker`, `rows` |
 | 6 | `ticker.price` | `routes/corporate.py` `_latest_market_price` | `calculation` | no | `ticker`, `cache_state` |
@@ -314,3 +347,14 @@ than publishing inflated numbers.
       buffer still serving.
 - [ ] `bytes` is `None` for both `StreamingResponse` endpoints, integer elsewhere.
 - [ ] Event limit honors `MONEYVIEW_DEV_MONITOR_EVENT_LIMIT`.
+
+Added by the 2026-07-27 amendments:
+
+- [ ] A request's waterfall has **exactly one root**, and that root is
+      `api.request_start` — the check that would have caught §3.2.2 immediately. The
+      original §3.10 check ("an inner span's `parent_id` equals the outer span's `id`")
+      is satisfied by `perf_timer`-to-`perf_timer` nesting and does not cover directly
+      emitted events, which are the majority of spans by count.
+- [ ] `closes_span_id` present on `page_load.*` terminals, not only `api.request_*`.
+- [ ] A point-in-time cache event is not flagged `partial` (§04.9).
+- [ ] `cache.populate` carries a `duration_ms` on both the miss and stale fill paths.

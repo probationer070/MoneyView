@@ -155,16 +155,25 @@ p50 3,180 ms · p95 3,410 ms · N=10
 | external    |     307 |  9%  |
 | unattributed|     273 |  8%  ✅ (criterion 2: ≤15%)
 
-### Per-stock cost
+### Top spans by self time
+| operation                    | kind   | self_ms | count | per-call |
+| db.select_corporate_metrics  | leaf   |     892 |   138 |   6.5 ms |
+| page_load.portfolio          | parent |   1,171 |    60 | 195.3 ms |
+...
+
+### Critical path (slowest request)
+api.request_start — 837.8 ms · 100% of request
+  └─ page_load.portfolio — 830.0 ms · 99% of request
+    └─ db.select_indices — 640.0 ms · 76% of request
+
+### Attributed self-time per ticker
 138 tickers · distribution: uniform (cv 0.09)
 p50 18.2 ms · p95 24.1 ms · max 31.0 ms
 outliers (>p95): 7
 
-### Top spans by self time
-| operation                    | self_ms | count | per-call |
-| db.select_corporate_metrics  |     892 |   138 |   6.5 ms |
-| ticker.price                 |     418 |   138 |   3.0 ms |
-...
+### Cache effectiveness
+| component      | hits | misses | fills | hit_rate | avg_miss_ms | est. saved_ms |
+| ohlcv          | 2780 |      4 |     4 |   0.9986 |       412.5 |     1,146,750 |
 
 ### Diagnostics
 orphans: 0 ✅ · partial: false ✅ · truncated: false · overlap_detected: false
@@ -180,6 +189,26 @@ run 1 p50 3,180 ms · run 2 p50 3,244 ms · delta 2.0% ✅
 
 Every criterion is stamped ✅/❌ in the report so pass/fail is not a judgment call.
 
+### 8.5.1 Amendment (2026-07-27): sections added after review
+
+The format above is the original design. A review of the first real report added the
+following, all implemented:
+
+| Section | Why |
+| --- | --- |
+| **Measurement conditions** (header) | The runner freezes OHLCV freshness, neutralises the rate limiter, and raises the statement cache TTL and maxsize. Each changes what is measured, and §8.2 makes header parity the basis for comparing runs. The reviewer singled this out as what makes the benchmark trustworthy — do not trim it. |
+| **Trend vs previous baseline** | Trend beats absolute numbers. Read from a `YYYY-MM-DD-baseline.json` sidecar, not by re-parsing the markdown, whose formatting is meant to change. Warns when the environment differs, per §8.4.1. |
+| **Critical path** | Self time says where CPU goes; the critical path says what *determines latency*. They diverge wherever work overlaps. Placed between "Top spans" and the per-ticker table. |
+| `kind` column on top spans | A parent's self time is only what its children did not account for. **Criterion 5 now ranks leaves**, because ranking parents names a call tree rather than code to change. |
+| **Cache effectiveness** | Absent from the original format entirely, despite §8.1 naming `cache_effectiveness` as one of the four functions the runner consumes. |
+| Renamed **"Attributed self-time per ticker"** | Was "Per-stock cost". It reported `p50 0.0 ms / max 1702 ms`, which reads as broken instrumentation. It is attributed self time, not end-to-end ticker latency, and zero-duration events inject 0 ms tickers. Now states how many tickers carry measured cost. |
+| Variability line | `mean · stdev · MAD · 95% CI`. A p50 alone cannot say whether two runs differ or the machine was noisy. |
+| Emitted event/span counts | Overhead scales with **span count**, not request duration, which is why it ranges 1%–18% across scenarios. The percentage is illegible without the count that drives it. |
+| `overlap_detected` explanation | It is *bad*, it means scope percentages exceed 100%, and it **invalidates criterion 2** — §04.7 forces `unattributed_ms = 0` when overlap is detected, so criterion 2 prints PASS while the true figure is uncomputable. |
+
+Still open: flamegraph (SVG), CPU-versus-wait split inside `external.*` spans, and
+true end-to-end per-ticker latency.
+
 ---
 
 ## 8.6 Runner structure
@@ -194,7 +223,18 @@ def collect_events(request_id: str) -> list[PerformanceEvent]   # sink, post-flu
 def analyse(events) -> dict             # calls the SAME public analysis functions
 def render_report(results) -> str       # markdown
 def main(argv) -> int                   # writes docs/perf/<date>-baseline.md
+
+# Added 2026-07-27
+def criteria_failed(results) -> bool                    # the criteria 1-4 exit gate
+def load_previous_baseline(dir, today) -> dict | None   # trend input, JSON sidecar
+def write_baseline_sidecar(dir, today, env, results)    # machine-readable companion
+def _critical_path(node) -> list[tuple[str, float]]     # longest-duration chain
+def _waterfall_diagnostics(events) -> dict              # criterion 3 + operation rollup
 ```
+
+`criteria_failed` exists as a named function because the exit gate is testable only if
+it is separable from a run. It originally omitted criterion 2 and the `partial` half of
+criterion 3, so two criteria were stamped in the report but could not fail the build.
 
 Usage:
 

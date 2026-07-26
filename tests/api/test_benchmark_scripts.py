@@ -207,6 +207,67 @@ def test_criterion_5_ranks_leaves_not_parents():
     assert "page_load.portfolio" not in ranked, "a parent span must not be ranked as a bottleneck"
 
 
+def test_trend_section_compares_against_the_previous_baseline(tmp_path):
+    """Trend beats absolute numbers: a p50 alone cannot say whether a change helped.
+    Read from a JSON sidecar rather than by re-parsing the markdown, which would break
+    on any formatting change."""
+    import json
+
+    import scripts.benchmark_scenarios as runner
+
+    (tmp_path / "2026-07-20-baseline.json").write_text(json.dumps({
+        "date": "2026-07-20",
+        "environment": _ENVIRONMENT,
+        "scenarios": {"tab_switch": {"p50_on_ms": 900.0, "overhead_pct": 20.0}},
+    }), encoding="utf-8")
+
+    previous = runner.load_previous_baseline(tmp_path, "2026-07-27")
+    assert previous is not None and previous["date"] == "2026-07-20"
+
+    report = runner.render_report(
+        environment=_ENVIRONMENT,
+        results=[
+            runner.ScenarioResult(
+                name="tab_switch", p50_off_ms=711.1, p50_on_ms=837.8, p95_on_ms=900.0,
+                iterations=20, breakdown=None, ticker_table=None, orphans=0, partial=False,
+                truncated=False, reproducibility_delta_pct=2.0,
+            )
+        ],
+        previous=previous,
+    )
+    assert "2026-07-20" in report
+    assert "-6.9%" in report  # 837.8 vs 900.0
+
+
+def test_trend_section_warns_when_environments_differ(tmp_path):
+    """Spec 08.4.1: two reports are only comparable if their headers match. A silent
+    comparison across a changed dataset is worse than no comparison."""
+    import json
+
+    import scripts.benchmark_scenarios as runner
+
+    changed = dict(_ENVIRONMENT, watchlist=50, git_sha="0000000")
+    (tmp_path / "2026-07-20-baseline.json").write_text(json.dumps({
+        "date": "2026-07-20",
+        "environment": changed,
+        "scenarios": {"tab_switch": {"p50_on_ms": 900.0, "overhead_pct": 20.0}},
+    }), encoding="utf-8")
+
+    report = runner.render_report(
+        environment=_ENVIRONMENT,
+        results=[
+            runner.ScenarioResult(
+                name="tab_switch", p50_off_ms=711.1, p50_on_ms=837.8, p95_on_ms=900.0,
+                iterations=20, breakdown=None, ticker_table=None, orphans=0, partial=False,
+                truncated=False, reproducibility_delta_pct=2.0,
+            )
+        ],
+        previous=runner.load_previous_baseline(tmp_path, "2026-07-27"),
+    )
+    assert "not directly comparable" in report
+    assert "watchlist" in report
+
+
 def test_report_explains_overlap_and_reports_span_counts():
     """`overlap_detected: True` is unreadable as good or bad without a note, and an
     overhead percentage is illegible without the span count that drives it."""

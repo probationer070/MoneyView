@@ -3109,6 +3109,22 @@ git commit -m "feat: /dev/performance analysis dashboard with diagnostic-state r
 
 ## Task 13: Baseline runner, first report, and doc updates
 
+> **Status 2026-07-27: implemented, with amendments.** The runner, its tests, and the
+> report exist. Reviewing the sketch against spec 08.8 found five gaps that made
+> success criteria unable to fail — criterion 3 read hardcoded `partial=False` /
+> `truncated=False` literals, `cache_effectiveness` was never called, criterion 5 ranked
+> tickers rather than operations, criterion 2 and the `partial` half of criterion 3 were
+> absent from the exit gate, and `get_dev_monitor_event_limit()` was not used. Self-review
+> note 4 below correctly predicted the orphan-counting problem.
+>
+> Running it then exposed four instrumentation defects, all fixed: unparented
+> request-level spans (423 roots in one request), unpaired `page_load.*` terminals,
+> `partial` flagging every duration-less event, and untimed cache fills.
+>
+> **Still open:** a trustworthy baseline run. Three concurrent runs contaminated the
+> first attempts and a Yahoo rate limit spoiled the retry. See `ERROR-LOG.md` and the
+> Performance Report Review track in `guideline/sop/todo.md`.
+
 Implements spec §08.
 
 **Files:**
