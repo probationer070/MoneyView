@@ -478,18 +478,19 @@ class MarketDataService:
         `estimated_time_saved_ms` are structurally 0.0 and the cache's value is
         unmeasurable.
         """
-        started = time.perf_counter()
-        try:
+        # perf_timer, not an emit afterwards: it establishes span context for the body,
+        # so the external fetch nests *beneath* this span. Emitting after the fetch made
+        # cache.populate a sibling of the work it timed, and both self-times then counted
+        # in full -- 2791 ms twice against a 3446 ms request, which tripped
+        # overlap_detected and made criterion 2 uncomputable.
+        with perf_timer(
+            scope="cache",
+            operation="cache.populate",
+            ticker=ticker,
+            component="market_data.ohlcv",
+            metadata={"table": table, "requested_period": period, "reason": reason},
+        ):
             return self._fetch_live_ohlcv_cached(ticker, period=period, table=table)
-        finally:
-            emit_cache_event(
-                operation="cache.populate",
-                status="cache_populate",
-                ticker=ticker,
-                component="market_data.ohlcv",
-                duration_ms=round((time.perf_counter() - started) * 1000, 1),
-                metadata={"table": table, "requested_period": period, "reason": reason},
-            )
 
     def _select_ohlcv_rows(self, conn, ticker: str, table: str, limit: int):
         """Read the most recent `limit` bars, canonical ticker first.

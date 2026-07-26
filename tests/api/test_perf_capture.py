@@ -323,39 +323,44 @@ def test_middleware_terminal_event_carries_closes_span_id_and_bytes(monkeypatch,
     assert isinstance(complete.metadata["bytes"], int)
 
 
-def test_middleware_page_load_terminal_carries_closes_span_id(monkeypatch, tmp_path):
-    """Spec 03.3/03.10: closes_span_id must be present on terminal events from BOTH
-    emit conventions. page_load emits a start event just like api.request_*, so an
-    unpaired page_load terminal is a sibling of its own span's children -- and its
-    start span stays `partial` forever, which fails baseline criterion 3 on every
-    scenario that loads a page.
+def test_server_emits_no_page_load_spans(monkeypatch, tmp_path):
+    """The server-side page_load span was a label wearing a span's costume: its
+    duration came from the same `process_time` as api.request_complete, so it measured
+    the identical interval while nested beneath it. That double-counted every request.
+
+    The `page_load` scope itself stays valid -- useDevMonitorPageLoad emits
+    page_load.frontend.* with a browser-measured duration spanning several requests,
+    which no server span can observe.
     """
     sink = _enable(monkeypatch, tmp_path)
     with TestClient(app) as client:
         client.get("/api/v1/portfolio/watchlist")
-    events = sink.recent(limit=500)
-    start = next(
-        event for event in events if event.scope == "page_load" and event.status == "start"
-    )
-    terminal = next(
-        event for event in events if event.scope == "page_load" and event.status != "start"
-    )
-    assert terminal.metadata["closes_span_id"] == start.id
+    page_load_events = [event for event in sink.recent(limit=2000) if event.scope == "page_load"]
+
+    assert page_load_events == []
 
 
-def test_page_load_span_pairs_into_one_span_not_two(monkeypatch, tmp_path):
-    """The pairing above must actually collapse: an unpaired page_load double-counts
-    its self time in the operation rollup the baseline report ranks."""
-    from apps.api.services.perf_analysis import normalize_spans
+def test_request_waterfall_reports_no_overlap(monkeypatch, tmp_path):
+    """The assertion that decides whether criterion 2 is measurable at all.
+
+    `overlap_detected` means children's self time sums past their parent's duration, and
+    spec 04.7 then forces `unattributed_ms = 0` -- so criterion 2 printed PASS while the
+    true figure was uncomputable. Scope percentages summed to 162.9% on one scenario.
+    """
+    from apps.api.services.perf_analysis import build_waterfall
 
     sink = _enable(monkeypatch, tmp_path)
     with TestClient(app) as client:
         client.get("/api/v1/portfolio/watchlist")
-    spans = normalize_spans(sink.recent(limit=500))
-    page_load_spans = [span for span in spans if span.scope == "page_load"]
-    assert len(page_load_spans) == 1
-    assert page_load_spans[0].partial is False
-    assert page_load_spans[0].total_ms is not None
+    events = [event for event in sink.recent(limit=2000) if event.request_id]
+    by_request: dict[str, list] = {}
+    for event in events:
+        by_request.setdefault(event.request_id, []).append(event)
+    request_id, scoped = max(by_request.items(), key=lambda item: len(item[1]))
+
+    assert build_waterfall(scoped, request_id).overlap_detected is False
+
+
 
 
 def test_dev_routes_emit_no_events_of_their_own(monkeypatch, tmp_path):

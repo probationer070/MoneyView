@@ -16,14 +16,14 @@ from apps.api.core.dev_monitor import (
     set_current_span_id,
     set_events_suppressed,
 )
-
-# Requests under this prefix are not instrumented: they serve the dashboard that reads
-# the event buffer, so recording them would pollute the data they return (spec 06.9).
-_UNINSTRUMENTED_PATH_PREFIX = "/api/v1/dev"
 from apps.api.core.logger import setup_logger
 from apps.api.models.schema_parts.dev_monitor import PerformanceEvent
 
 logger = setup_logger(__name__)
+
+# Requests under this prefix are not instrumented: they serve the dashboard that reads
+# the event buffer, so recording them would pollute the data they return (spec 06.9).
+_UNINSTRUMENTED_PATH_PREFIX = "/api/v1/dev"
 
 
 def _response_bytes(response) -> int | None:
@@ -40,21 +40,6 @@ def _response_bytes(response) -> int | None:
     except (TypeError, ValueError):
         return None
 
-
-def _page_load_component_for_path(path: str) -> str | None:
-    if path.startswith("/api/v1/market") or path.startswith("/api/v1/stock") or path.startswith("/api/v1/detail"):
-        return "market_overview"
-    if path.startswith("/api/v1/portfolio"):
-        return "portfolio"
-    if path.startswith("/api/v1/corporate/metrics"):
-        return "corporate_metrics"
-    if path.startswith("/api/v1/corporate/comparison"):
-        return "corporate_comparison"
-    if path.startswith("/api/v1/monte-carlo"):
-        return "monte_carlo"
-    if path.startswith("/api/v1/news"):
-        return "news_feed"
-    return None
 
 class RateLimiter:
     """In-memory Token Bucket rate limiter per IP/Client."""
@@ -114,7 +99,6 @@ class StructuralMiddleware(BaseHTTPMiddleware):
 
         # 3. Execution mapping
         start_time = time.time()
-        page_load_event_id: str | None = None
         # The dashboard reads the buffer it would otherwise write to, so instrumenting
         # its own fetches makes the request index list the request that fetched it, and
         # a refresh evicts the traffic you opened the page to inspect (spec 06.9).
@@ -141,23 +125,6 @@ class StructuralMiddleware(BaseHTTPMiddleware):
             # (cache events, db.* from InstrumentedCursor) has no parent and becomes
             # its own root, flattening the waterfall (spec 03.2).
             span_token = set_current_span_id(request_event_id)
-            page_component = _page_load_component_for_path(path)
-            if page_component is not None:
-                page_load_event = emit_performance_event(
-                    PerformanceEvent(
-                        request_id=request_id,
-                        parent_id=request_event_id,
-                        level="info",
-                        scope="page_load",
-                        operation=f"page_load.{page_component}",
-                        status="start",
-                        route=path,
-                        method=request.method,
-                        component=page_component,
-                        metadata={"request_group": page_component},
-                    )
-                )
-                page_load_event_id = page_load_event.id
         try:
             try:
                 response = await call_next(request)
@@ -185,27 +152,6 @@ class StructuralMiddleware(BaseHTTPMiddleware):
                             },
                         )
                     )
-                    page_component = _page_load_component_for_path(request.url.path)
-                    if page_component is not None:
-                        emit_performance_event(
-                            PerformanceEvent(
-                                request_id=request_id,
-                                parent_id=request_event_id,
-                                level="error",
-                                scope="page_load",
-                                operation=f"page_load.{page_component}",
-                                status="error",
-                                route=request.url.path,
-                                method=request.method,
-                                component=page_component,
-                                duration_ms=duration_ms,
-                                metadata={
-                                    "request_group": page_component,
-                                    "status_code": 500,
-                                    "closes_span_id": page_load_event_id,
-                                },
-                            )
-                        )
                 logger.exception(
                     "request.failed method=%s path=%s duration_ms=%.1f client_ip=%s",
                     request.method,
@@ -245,27 +191,6 @@ class StructuralMiddleware(BaseHTTPMiddleware):
                         },
                     )
                 )
-                page_component = _page_load_component_for_path(request.url.path)
-                if page_component is not None:
-                    emit_performance_event(
-                        PerformanceEvent(
-                            request_id=request_id,
-                            parent_id=request_event_id,
-                            level="warn" if process_time > 1.0 else "info",
-                            scope="page_load",
-                            operation=f"page_load.{page_component}",
-                            status="slow" if process_time > 1.0 else "success",
-                            route=request.url.path,
-                            method=request.method,
-                            component=page_component,
-                            duration_ms=duration_ms,
-                            metadata={
-                                "request_group": page_component,
-                                "status_code": response.status_code,
-                                "closes_span_id": page_load_event_id,
-                            },
-                        )
-                    )
 
             log_level = logging.WARNING if process_time > 1.0 else logging.INFO
             logger.log(

@@ -656,7 +656,11 @@ def cache_effectiveness(events: list[PerformanceEvent]) -> CacheReport:
             # saved by every hit (spec 04.9: unmeasured is not measured-zero).
             if event.duration_ms is not None:
                 miss_costs.setdefault(component, []).append(event.duration_ms)
-        elif event.status == "cache_populate" and event.duration_ms is not None:
+        # Matched on operation, not status: a fill is timed with perf_timer so that the
+        # provider fetch nests beneath it rather than beside it, and perf_timer's
+        # terminal carries success/slow. duration_ms is the span total, which is the
+        # whole fill -- exactly what a later hit avoids.
+        elif event.operation == "cache.populate" and event.duration_ms is not None:
             fill_costs.setdefault(component, []).append(event.duration_ms)
 
     rows: list[CacheRow] = []

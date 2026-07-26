@@ -604,7 +604,7 @@ def test_cache_effectiveness_takes_fill_cost_from_populate_events():
         ev("cache.hit", scope="cache", id="h1", status="cache_hit", component="ohlcv"),
         ev("cache.hit", scope="cache", id="h2", status="cache_hit", component="ohlcv"),
         ev("cache.miss", scope="cache", id="m1", status="cache_miss", component="ohlcv"),
-        ev("cache.populate", scope="cache", id="p1", ms=120.0, status="cache_populate", component="ohlcv"),
+        ev("cache.populate", scope="cache", id="p1", ms=120.0, status="success", component="ohlcv"),
     ]
     report = cache_effectiveness(events)
     row = report.caches[0]
@@ -622,7 +622,7 @@ def test_cache_effectiveness_populate_outranks_a_timed_miss():
     events = [
         ev("cache.hit", scope="cache", id="h1", status="cache_hit", component="ohlcv"),
         ev("cache.miss", scope="cache", id="m1", ms=0.3, status="cache_miss", component="ohlcv"),
-        ev("cache.populate", scope="cache", id="p1", ms=90.0, status="cache_populate", component="ohlcv"),
+        ev("cache.populate", scope="cache", id="p1", ms=90.0, status="success", component="ohlcv"),
     ]
     row = cache_effectiveness(events).caches[0]
 

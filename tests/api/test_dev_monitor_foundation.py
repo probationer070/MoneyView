@@ -257,22 +257,6 @@ def test_request_path_db_events_reuse_existing_request_id(monkeypatch, tmp_path)
     assert all(event["request_id"] == "portfolio-pref-request" for event in db_events)
 
 
-def test_page_load_group_events_emit_for_portfolio_routes(monkeypatch, tmp_path):
-    log_path = tmp_path / "page-load.jsonl"
-    monkeypatch.setenv("MONEYVIEW_DEV_MONITOR", "true")
-    monkeypatch.setenv("MONEYVIEW_DEV_MONITOR_LOG_PATH", str(log_path))
-    reset_dev_monitor_sink()
-
-    client = TestClient(app)
-    response = client.get("/api/v1/portfolio/preferences", headers={"X-Request-ID": "page-load-request"})
-
-    assert response.status_code == 200
-    get_dev_monitor_sink().flush()
-    lines = _read_jsonl(log_path)
-    page_events = [line for line in lines if line["scope"] == "page_load" and line["component"] == "portfolio"]
-    assert any(event["status"] == "start" for event in page_events)
-    assert any(event["status"] in {"success", "slow"} for event in page_events)
-
 
 def test_market_data_emits_cache_and_provider_events(monkeypatch, tmp_path):
     log_path = tmp_path / "market-data-events.jsonl"
