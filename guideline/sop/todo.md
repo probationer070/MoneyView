@@ -105,6 +105,27 @@ Headline findings so far (all recorded in `ERROR-LOG.md`):
 
 ## Active Track - Performance Report Review (2026-07-27)
 
+### Resolved 2026-07-27 (post-review)
+
+- [x] `overlap_detected` cleared, so **criterion 2 measures something for the first
+      time**. Two same-interval span pairs caused it, not one: the server-side
+      `page_load` span (a URL-prefix label sharing `process_time` with
+      `api.request_complete`), and `cache.populate`, which was emitted in a `finally`
+      *after* the fetch and so became a sibling of the span it timed rather than its
+      parent. Verified: scope percentages now sum to 100.0% where they summed to 162.9%.
+- [x] `/dev/monitor` Page-Load Timelines panel removed, grid collapsed so Metric Timing
+      is not stranded in the narrow column.
+- [x] Dev routes no longer record their own traffic (spec 06.9).
+- [x] Dashboards reachable: `run MoneyView -DevMonitor`, with URLs in the startup banner.
+
+**New finding, unresolved.** With overlap gone, `tab_switch` shows `api` self time at
+**91.3%** and `db` at 8.7%. Criterion 2 passes because that time is attributed to the
+`api` scope rather than to `unattributed`, but it means ~9/10 of the request happens
+inside the handler with no child span naming it. Spec 08.4's guidance for a blind spot
+is another span, not a published conclusion -- so sub-project 2 should not treat the
+current attribution as sufficient for deciding what to optimise.
+
+
 Reviewer feedback on `docs/perf/2026-07-27-baseline.md`, prioritised by the reviewer.
 Verdict: no fundamental flaws; these close the gap to a professional performance report.
 
