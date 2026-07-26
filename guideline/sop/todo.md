@@ -121,18 +121,18 @@ they look:
 - [x] 1a. `cache.populate` status + `CacheRow.fills`; `cache_effectiveness` takes fill
       cost from populate spans, not from the miss event (which times *detection*)
 - [x] 1b. Emit `cache.populate` with duration at both `market_data` fill sites
-- [ ] 1c. Emit `cache.populate` on the statement-bundle fill path
-- [ ] 2. Rank **leaf** spans in criterion 5, not parents — parents trace, leaves optimise
-- [ ] 3. Rename per-stock to "attributed self-time per ticker", or measure end-to-end
-      ticker latency; `p50 0.0 ms / max 1702 ms` reads as broken instrumentation
+- [x] 1c. Emit `cache.populate` on the statement-bundle fill path
+- [x] 2. Rank **leaf** spans in criterion 5, not parents — parents trace, leaves optimise
+- [x] 3. Renamed to "Attributed self-time per ticker", with a line reporting how many
+      tickers carry measured cost. End-to-end per-ticker latency remains future work.
 
 ### Should fix
 
-- [ ] 4. Explain `overlap_detected` in the report — currently unreadable as good or bad
-- [ ] 5. Add variability: std dev, MAD, 95% CI alongside p50/p95/N
-- [ ] 6. One sentence on why overhead varies 1%-17%: it scales with emitted span count,
+- [x] 4. Explain `overlap_detected` in the report — currently unreadable as good or bad
+- [x] 5. Add variability: std dev, MAD, 95% CI alongside p50/p95/N
+- [x] 6. One sentence on why overhead varies 1%-17%: it scales with emitted span count,
       not request duration
-- [ ] 7. Report emitted event/span counts, which is what makes an overhead % legible
+- [x] 7. Report emitted event/span counts, which is what makes an overhead % legible
 
 ### Nice to have
 
@@ -140,11 +140,12 @@ they look:
 - [ ] 9. Compare against the previous baseline — trend beats absolute numbers
 - [ ] 10. Separate CPU from wait time within `external.*` spans
 - [ ] 11. Total emitted spans per scenario, beside cache hits and request counts
-- [ ] 12. **Critical path** analysis, inserted between "Top spans" and "Per stock".
-      Self-time says where CPU goes; critical path says what determines latency. The
-      reviewer rates this ★★★★★ value at low priority only because of implementation
-      cost — the span tree already carries offsets and durations, so it is computable
-      from data we capture today.
+- [x] 12. **Critical path** — done, and promoted out of "nice to have" because the span
+      tree already carried `offset_ms` and durations, so it cost far less than its tier
+      suggested. Renders between "Top spans" and "Per ticker" as the reviewer proposed.
+      Descends into the longest child at each level rather than summing siblings, since
+      overlapping siblings do not each add to elapsed time. Reports the slowest request
+      rather than an average path, which would be a chain no request actually took.
 
 ### Explicitly not changing
 

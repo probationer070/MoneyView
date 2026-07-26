@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 import os
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Callable, Optional
@@ -151,6 +152,11 @@ def get_yahoo_statement_bundle(ticker: str, endpoint: str) -> Optional[dict[str,
         metadata={"endpoint": endpoint, "source": "statement_ttl_cache", "ttl_seconds": YAHOO_STATEMENT_CACHE_TTL_SECONDS},
     )
     logger.info("corporate.statement_cache ticker=%s endpoint=%s cache_hit=false", ticker, endpoint)
+    # The miss event above is emitted at detection, so it cannot carry the cost of the
+    # fetch it triggers -- the cost each later hit avoids. Timed from here and emitted
+    # as cache.populate beside the cache.write below. Failure paths return None without
+    # emitting: a fetch that produced nothing is not a fill.
+    fill_started = time.perf_counter()
     try:
         import yfinance as yf
     except ImportError as exc:
@@ -209,6 +215,15 @@ def get_yahoo_statement_bundle(ticker: str, endpoint: str) -> Optional[dict[str,
         "fetched_at": now,
     }
     _YAHOO_STATEMENT_CACHE[ticker] = bundle
+    emit_cache_event(
+        operation="cache.populate",
+        status="cache_populate",
+        ticker=ticker,
+        provider="yfinance",
+        component="corporate_statement_bundle",
+        duration_ms=round((time.perf_counter() - fill_started) * 1000, 1),
+        metadata={"endpoint": endpoint, "source": "statement_ttl_cache"},
+    )
     emit_cache_event(
         operation="cache.write",
         status="success",

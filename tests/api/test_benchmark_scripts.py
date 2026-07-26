@@ -101,6 +101,10 @@ def test_api_benchmark_smoke():
     assert all(result.status_code == 200 for result in results)
 
 
+_ENVIRONMENT = {"watchlist": 138, "stocks_rows": 120647, "db_bytes": 27_000_000,
+                "event_limit": 20000, "compute_mode": "in_process", "git_sha": "abc1234"}
+
+
 def test_benchmark_scenarios_module_exposes_scenarios_and_report():
     import scripts.benchmark_scenarios as runner
 
@@ -174,6 +178,60 @@ def test_report_ranks_operations_and_renders_cache_section():
     assert "6.5 ms" in report  # 892 ms / 138 calls
     assert "statement_metrics" in report
     assert "unmeasured, not zero" in report
+
+
+def test_criterion_5_ranks_leaves_not_parents():
+    """A parent's self time is only what its children did not account for, so ranking
+    parents names a call tree rather than code to change. page_load.portfolio taking
+    76% of a request is a nesting artefact, not a cost centre."""
+    import scripts.benchmark_scenarios as runner
+
+    parent = runner.OperationCost(operation="page_load.portfolio", self_ms=11718.0, count=60, leaf_count=0)
+    leaf = runner.OperationCost(operation="db.select_stocks", self_ms=603.1, count=2780, leaf_count=2780)
+    assert parent.kind == "parent"
+    assert leaf.kind == "leaf"
+
+    report = runner.render_report(
+        environment=_ENVIRONMENT,
+        results=[
+            runner.ScenarioResult(
+                name="portfolio_page_load", p50_off_ms=515.0, p50_on_ms=594.3, p95_on_ms=624.6,
+                iterations=20, breakdown=None, ticker_table=None, orphans=0, partial=False,
+                truncated=False, reproducibility_delta_pct=1.6,
+                top_spans=[parent, leaf], leaf_spans=[leaf],
+            )
+        ],
+    )
+    ranked = report.split("## Ranked bottlenecks")[1]
+    assert "db.select_stocks" in ranked
+    assert "page_load.portfolio" not in ranked, "a parent span must not be ranked as a bottleneck"
+
+
+def test_report_explains_overlap_and_reports_span_counts():
+    """`overlap_detected: True` is unreadable as good or bad without a note, and an
+    overhead percentage is illegible without the span count that drives it."""
+    import scripts.benchmark_scenarios as runner
+
+    report = runner.render_report(
+        environment=_ENVIRONMENT,
+        results=[
+            runner.ScenarioResult(
+                name="tab_switch", p50_off_ms=711.1, p50_on_ms=837.8, p95_on_ms=900.0,
+                iterations=20, breakdown=None, ticker_table=None, orphans=0, partial=False,
+                truncated=False, reproducibility_delta_pct=2.0, overlap_detected=True,
+                event_count=21347, span_count=18000,
+                samples_on=[830.0, 840.0, 835.0, 845.0],
+                critical_path=[("api.request_start", 837.8), ("db.select_indices", 640.0)],
+                slowest_request_ms=837.8,
+            )
+        ],
+    )
+    assert "invalidates criterion 2" in report          # item 4
+    assert "95% CI" in report                            # item 5
+    assert "scales" in report and "span" in report       # item 6
+    assert "21347 events" in report                      # item 7
+    assert "Critical path" in report                     # item 12
+    assert "db.select_indices" in report
 
 
 def test_criteria_gate_covers_unattributed_and_partial():

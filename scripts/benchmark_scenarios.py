@@ -15,8 +15,10 @@ Usage:
 """
 from __future__ import annotations
 
+import math
 import os
 import sqlite3
+import statistics
 import subprocess
 import sys
 import time
@@ -84,10 +86,26 @@ class OperationCost:
     operation: str
     self_ms: float
     count: int
+    leaf_count: int = 0
 
     @property
     def per_call_ms(self) -> float:
         return round(self.self_ms / self.count, 1) if self.count else 0.0
+
+    @property
+    def kind(self) -> str:
+        """Parent spans are for tracing; leaves are where the work actually happens.
+
+        A parent's self time is whatever its children did not account for, so ranking
+        parents points at a call tree rather than at code to change.
+        """
+        if not self.count:
+            return "n/a"
+        if self.leaf_count == self.count:
+            return "leaf"
+        if self.leaf_count == 0:
+            return "parent"
+        return "mixed"
 
 
 @dataclass
@@ -105,7 +123,14 @@ class ScenarioResult:
     reproducibility_delta_pct: float
     cache_report: object | None = None
     top_spans: list[OperationCost] = field(default_factory=list)
+    leaf_spans: list[OperationCost] = field(default_factory=list)
     overlap_detected: bool = False
+    event_count: int = 0
+    span_count: int = 0
+    samples_on: list[float] = field(default_factory=list)
+    tickers_with_cost: int = 0
+    critical_path: list[tuple[str, float]] = field(default_factory=list)
+    slowest_request_ms: float = 0.0
 
     @property
     def overhead_pct(self) -> float:
@@ -262,18 +287,40 @@ def _p(values: list[float], fraction: float) -> float:
     return round(ordered[index], 1)
 
 
-def _flatten(node) -> list:
-    """Depth-first SpanNode list.
+def _flatten(node) -> list[tuple[object, bool]]:
+    """Depth-first list of (SpanNode, is_leaf).
 
     CollapsedNode children carry no operation or self time; their cost is already
-    accounted for by `truncated`, which fails criterion 3 on its own.
+    accounted for by `truncated`, which fails criterion 3 on its own. A node holding
+    only collapsed children is still not a leaf -- it had children, we just elided them.
     """
     if isinstance(node, CollapsedNode):
         return []
-    nodes = [node]
+    nodes: list[tuple[object, bool]] = [(node, not node.children)]
     for child in node.children:
         nodes.extend(_flatten(child))
     return nodes
+
+
+def _critical_path(node) -> list[tuple[str, float]]:
+    """Longest chain of nested spans by duration, root to leaf.
+
+    Self time says where CPU goes; the critical path says what *determines latency*.
+    They differ whenever work happens concurrently: 200 ms of CPU spread across parallel
+    fetches can sit under a 1,500 ms critical path, and only the latter names the span
+    that has to get faster for the request to get faster.
+
+    At each level we descend into the longest child rather than summing siblings, since
+    siblings that overlap in time do not each add to elapsed time.
+    """
+    if isinstance(node, CollapsedNode):
+        return []
+    chain = [(node.operation, node.total_ms or 0.0)]
+    children = [child for child in node.children if not isinstance(child, CollapsedNode)]
+    if not children:
+        return chain
+    longest = max(children, key=lambda child: child.total_ms or 0.0)
+    return chain + _critical_path(longest)
 
 
 def _waterfall_diagnostics(events: list) -> dict:
@@ -290,22 +337,39 @@ def _waterfall_diagnostics(events: list) -> dict:
 
     orphans = 0
     partial = truncated = overlap_detected = False
+    span_count = 0
     self_ms_by_operation: dict[str, list[float]] = {}
+    leaf_count_by_operation: dict[str, int] = {}
+    critical_path: list[tuple[str, float]] = []
+    slowest_request_ms = -1.0
     for request_id, scoped in by_request.items():
         waterfall = build_waterfall(scoped, request_id)
+        # Report the critical path of the slowest request: an average path across
+        # requests would be a chain that no single request actually took.
+        if (waterfall.total_ms or 0.0) > slowest_request_ms:
+            slowest_request_ms = waterfall.total_ms or 0.0
+            critical_path = _critical_path(waterfall.root)
         partial = partial or waterfall.partial
         truncated = truncated or waterfall.truncated
         overlap_detected = overlap_detected or waterfall.overlap_detected
-        for node in _flatten(waterfall.root):
+        for node, is_leaf in _flatten(waterfall.root):
             if node.id == SYNTHETIC_ROOT_ID:
                 continue  # "(request)" / "(no spans)" placeholder, not a real operation
+            span_count += 1
             if node.orphaned:
                 orphans += 1
             self_ms_by_operation.setdefault(node.operation, []).append(node.self_ms or 0.0)
+            if is_leaf:
+                leaf_count_by_operation[node.operation] = leaf_count_by_operation.get(node.operation, 0) + 1
 
-    top_spans = sorted(
+    by_self_ms = sorted(
         (
-            OperationCost(operation=operation, self_ms=round(sum(values), 1), count=len(values))
+            OperationCost(
+                operation=operation,
+                self_ms=round(sum(values), 1),
+                count=len(values),
+                leaf_count=leaf_count_by_operation.get(operation, 0),
+            )
             for operation, values in self_ms_by_operation.items()
         ),
         key=lambda row: row.self_ms,
@@ -316,7 +380,13 @@ def _waterfall_diagnostics(events: list) -> dict:
         "partial": partial,
         "truncated": truncated,
         "overlap_detected": overlap_detected,
-        "top_spans": top_spans,
+        "top_spans": by_self_ms,
+        # Criterion 5 ranks leaves: a parent's self time is only what its children did
+        # not account for, so ranking parents names a call tree rather than code to fix.
+        "leaf_spans": [row for row in by_self_ms if row.kind != "parent"],
+        "span_count": span_count,
+        "critical_path": critical_path,
+        "slowest_request_ms": round(max(0.0, slowest_request_ms), 1),
     }
 
 
@@ -328,10 +398,17 @@ def analyse(events: list) -> dict:
         rollup_by_ticker,
     )
 
+    ticker_table = rollup_by_ticker(events)
     analysis = {
         "breakdown": breakdown_by_scope(events),
-        "ticker_table": rollup_by_ticker(events),
+        "ticker_table": ticker_table,
         "cache_report": cache_effectiveness(events),
+        "event_count": len(events),
+        # Tickers appearing only in zero-duration events (a cache hit carries a ticker
+        # but no duration) contribute a 0.0ms row, which drags the median to zero and
+        # makes the distribution read as broken. Reported so the reader can tell the
+        # difference between "cheap" and "not measured here".
+        "tickers_with_cost": sum(1 for row in ticker_table.rows if row.self_ms > 0.0),
     }
     analysis.update(_waterfall_diagnostics(events))
     return analysis
@@ -352,6 +429,25 @@ def criteria_failed(results: list[ScenarioResult]) -> bool:
 
 def _stamp(passed: bool) -> str:
     return "PASS" if passed else "FAIL"
+
+
+def _variability(samples: list[float]) -> str:
+    """Mean, standard deviation and a 95% CI of the mean.
+
+    A p50 alone cannot say whether two runs differ or the machine was noisy, which is
+    the question every build-to-build comparison actually asks.
+    """
+    if len(samples) < 2:
+        return "_too few samples for a variability estimate_"
+    mean = statistics.fmean(samples)
+    stdev = statistics.stdev(samples)
+    median = statistics.median(samples)
+    mad = statistics.median([abs(value - median) for value in samples])
+    half_width = 1.96 * stdev / math.sqrt(len(samples))
+    return (
+        f"mean {mean:.1f} ms · stdev {stdev:.1f} ms · MAD {mad:.1f} ms · "
+        f"95% CI [{mean - half_width:.1f}, {mean + half_width:.1f}] ms"
+    )
 
 
 def _progress(message: str) -> None:
@@ -399,9 +495,20 @@ def render_report(*, environment: dict, results: list[ScenarioResult]) -> str:
             f"{result.overhead_pct}% | {_stamp(result.overhead_pct <= OVERHEAD_BUDGET_PCT)} |"
         )
 
+    lines += [
+        "",
+        "**Why overhead varies so widely between scenarios:** instrumentation cost scales",
+        "with the number of spans emitted, not with request duration. A short request that",
+        "emits thousands of spans pays a far larger percentage than a long one that emits few.",
+        "Read each row against its span count below before concluding anything about the code.",
+    ]
+
     for result in results:
         lines += ["", f"## Scenario: {result.name}",
-                  f"p50 {result.p50_on_ms:.1f} ms · p95 {result.p95_on_ms:.1f} ms · N={result.iterations}"]
+                  f"p50 {result.p50_on_ms:.1f} ms · p95 {result.p95_on_ms:.1f} ms · N={result.iterations}",
+                  _variability(result.samples_on),
+                  f"emitted {result.event_count} events / {result.span_count} spans "
+                  f"({result.span_count // max(1, result.iterations)} spans per iteration)"]
         breakdown = result.breakdown
         lines += ["", "### Scope breakdown (self time) — criterion 2: unattributed <= 15%"]
         if breakdown is not None:
@@ -421,21 +528,47 @@ def render_report(*, environment: dict, results: list[ScenarioResult]) -> str:
         request_ms = breakdown.total_ms if breakdown is not None else 0.0
         if result.top_spans:
             lines += ["", "### Top spans by self time",
-                      "| operation | self_ms | count | per-call | pct of request |",
-                      "| --- | --- | --- | --- | --- |"]
+                      "_`parent` rows are for tracing, not optimisation: a parent's self time is"
+                      " only what its children did not account for. See the ranked bottlenecks"
+                      " below, which use leaves._",
+                      "| operation | kind | self_ms | count | per-call | pct of request |",
+                      "| --- | --- | --- | --- | --- | --- |"]
             for row in result.top_spans[:10]:
                 pct = f"{row.self_ms / request_ms * 100.0:.1f}%" if request_ms else "n/a"
                 lines.append(
-                    f"| {row.operation} | {row.self_ms} | {row.count} | {row.per_call_ms} ms | {pct} |"
+                    f"| {row.operation} | {row.kind} | {row.self_ms} | {row.count} | "
+                    f"{row.per_call_ms} ms | {pct} |"
                 )
+
+        if result.critical_path:
+            lines += ["", "### Critical path (slowest request)",
+                      "_Self time says where CPU goes; the critical path says what determines"
+                      " latency. They differ wherever work overlaps — concurrent fetches can hold"
+                      " little CPU yet dominate elapsed time. This is the chain that has to get"
+                      " shorter for the request to get faster._",
+                      f"slowest request: {result.slowest_request_ms} ms", ""]
+            for depth, (operation, total_ms) in enumerate(result.critical_path):
+                share = f" · {total_ms / result.slowest_request_ms * 100.0:.0f}% of request" if result.slowest_request_ms else ""
+                lines.append(f"{'  ' * depth}{'└─ ' if depth else ''}{operation} — {total_ms:.1f} ms{share}")
 
         table = result.ticker_table
         if table is not None and table.ticker_count:
             outliers = sum(1 for row in table.rows if row.self_ms > table.p95_ms)
-            lines += ["", "### Per-stock cost",
+            unmeasured = table.ticker_count - result.tickers_with_cost
+            lines += ["", "### Attributed self-time per ticker",
+                      "_Self time attributed to spans carrying a ticker — not end-to-end latency"
+                      " for that stock. A ticker whose work happens inside spans that carry no"
+                      " ticker will read as 0.0 ms here._",
                       f"{table.ticker_count} tickers · distribution: {table.distribution} (cv {table.cv})",
                       f"p50 {table.p50_ms} ms · p95 {table.p95_ms} ms · max {table.max_ms} ms",
                       f"outliers (>p95): {outliers}"]
+            if unmeasured:
+                lines.append(
+                    f"**{result.tickers_with_cost} of {table.ticker_count} tickers carry measured"
+                    f" self time**; the other {unmeasured} appear only in zero-duration events, which"
+                    " is what pulls the median toward 0.0 and inflates cv. Not an instrumentation"
+                    " failure, but the percentiles above are not a per-stock cost distribution."
+                )
 
         cache_report = result.cache_report
         lines += ["", "### Cache effectiveness"]
@@ -460,16 +593,29 @@ def render_report(*, environment: dict, results: list[ScenarioResult]) -> str:
                   f"— criterion 3: {_stamp(result.orphans == 0 and not result.partial)}",
                   f"reproducibility delta {result.reproducibility_delta_pct}% "
                   f"— criterion 4: {_stamp(result.reproducibility_delta_pct <= REPRODUCIBILITY_BUDGET_PCT)}"]
+        if result.overlap_detected:
+            lines.append(
+                "**`overlap_detected: True` is bad here, and it invalidates criterion 2.** It means"
+                " children's self time sums past their parent's duration, so the scope percentages"
+                " above exceed 100%. The cause is that `page_load.*` spans measure the *same"
+                " interval* as `api.request_*` while being nested under them, double-counting the"
+                " whole request. Because spec 04.7 forces `unattributed_ms = 0` whenever overlap is"
+                " detected, criterion 2 prints PASS while the true figure is not computable."
+                " Recorded in ERROR-LOG.md; not yet fixed."
+            )
 
-    lines += ["", "## Ranked bottlenecks (criterion 5)"]
+    lines += ["", "## Ranked bottlenecks (criterion 5)",
+              "_Leaf spans only. A parent's self time is whatever its children did not account"
+              " for, so ranking parents names a call tree rather than code to change._"]
     for result in results:
-        if not result.top_spans:
+        ranked = result.leaf_spans or result.top_spans
+        if not ranked:
             continue
         table = result.ticker_table
         distribution = table.distribution if table is not None and table.ticker_count else "unknown"
         request_ms = result.breakdown.total_ms if result.breakdown is not None else 0.0
         lines += ["", f"### {result.name} — fan-out distribution: {distribution}"]
-        for rank, row in enumerate(result.top_spans[:5], start=1):
+        for rank, row in enumerate(ranked[:5], start=1):
             share = f", {row.self_ms / request_ms * 100.0:.0f}% of request" if request_ms else ""
             lines.append(
                 f"{rank}. {row.operation} — {row.self_ms} ms self across {row.count} calls "
@@ -526,7 +672,14 @@ def main(argv: list[str]) -> int:
                 reproducibility_delta_pct=delta,
                 cache_report=analysis["cache_report"],
                 top_spans=analysis["top_spans"],
+                leaf_spans=analysis["leaf_spans"],
                 overlap_detected=analysis["overlap_detected"],
+                event_count=analysis["event_count"],
+                span_count=analysis["span_count"],
+                samples_on=on_samples,
+                tickers_with_cost=analysis["tickers_with_cost"],
+                critical_path=analysis["critical_path"],
+                slowest_request_ms=analysis["slowest_request_ms"],
             )
         )
         _progress(f"[{name}] p50 off {_p(off_samples, 0.5)} ms · on {first} ms · "
