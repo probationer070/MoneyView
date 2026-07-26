@@ -118,6 +118,14 @@ Headline findings so far (all recorded in `ERROR-LOG.md`):
 - [x] Dev routes no longer record their own traffic (spec 06.9).
 - [x] Dashboards reachable: `run MoneyView -DevMonitor`, with URLs in the startup banner.
 
+**Baseline regenerated 2026-07-27 (post-fix).** 4 of 5 scenarios now report
+`overlap_detected: False`, where all 5 were True before; every overhead is positive, so
+criterion 1 is a valid measurement on all five. `single_stock_detail` still overlaps, but
+marginally: its scopes sum to **100.3%**, not the 162.9% the structural duplication
+produced. That residue is a different and much smaller class -- most likely a child span
+measuring fractionally longer than its parent's window rather than two spans sharing an
+interval -- and is unresolved.
+
 **New finding, unresolved.** With overlap gone, `tab_switch` shows `api` self time at
 **91.3%** and `db` at 8.7%. Criterion 2 passes because that time is attributed to the
 `api` scope rather than to `unattributed`, but it means ~9/10 of the request happens
