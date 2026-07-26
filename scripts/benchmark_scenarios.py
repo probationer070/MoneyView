@@ -140,6 +140,17 @@ class ScenarioResult:
         return round((self.p50_on_ms - self.p50_off_ms) / self.p50_off_ms * 100.0, 1)
 
     @property
+    def overhead_valid(self) -> bool:
+        """Instrumented code cannot be faster than uninstrumented code.
+
+        A negative overhead means something contaminated the comparison -- pass
+        ordering, CPU contention, a provider rate limit. It must not be stamped PASS
+        just because it is under budget; being under budget is exactly how this failure
+        mode disguises itself.
+        """
+        return self.overhead_pct >= 0.0
+
+    @property
     def unattributed_pct(self) -> float:
         breakdown = self.breakdown
         if breakdown is None or not breakdown.total_ms:
@@ -421,6 +432,7 @@ def criteria_failed(results: list[ScenarioResult]) -> bool:
     """
     return any(
         result.overhead_pct > OVERHEAD_BUDGET_PCT                       # 1
+        or not result.overhead_valid                                    # 1 (sign)
         or result.unattributed_pct > UNATTRIBUTED_BUDGET_PCT            # 2
         or result.orphans > 0 or result.partial                         # 3
         or result.reproducibility_delta_pct > REPRODUCIBILITY_BUDGET_PCT  # 4
@@ -533,6 +545,12 @@ def render_report(*, environment: dict, results: list[ScenarioResult], previous:
         "  current daily data, takes the frozen path.",
         "- **Global rate limiter neutralised**: the runner fires bursts no real user would, and",
         "  429s would otherwise truncate a scenario partway through.",
+        "- **A discarded priming pass runs before pass A.** Process-level state (the statement",
+        "  cache, SQLite page cache, lazily imported modules) outlives a single pass, so without",
+        "  priming whichever pass ran first paid first-touch costs the later ones inherited warm.",
+        "  That biased the overhead comparison enough to produce negative percentages. A residual",
+        "  ordering effect may remain, which is why a negative overhead is now stamped INVALID",
+        "  rather than PASS.",
         f"- **Statement cache TTL raised to {STATEMENT_CACHE_TTL_SECONDS}s** (default 300s) **and maxsize to",
         f"  {STATEMENT_CACHE_MAXSIZE}** (default 48), so the untimed warm-up's 138 live Yahoo fetches survive into",
         "  the timed iterations. At the defaults the cache scores a measured **0% hit rate** on this",
@@ -547,10 +565,20 @@ def render_report(*, environment: dict, results: list[ScenarioResult], previous:
         "| --- | --- | --- | --- | --- |",
     ]
     for result in results:
+        if not result.overhead_valid:
+            verdict = "INVALID (negative)"
+        else:
+            verdict = _stamp(result.overhead_pct <= OVERHEAD_BUDGET_PCT)
         lines.append(
             f"| {result.name} | {result.p50_off_ms:.1f}ms | {result.p50_on_ms:.1f}ms | "
-            f"{result.overhead_pct}% | {_stamp(result.overhead_pct <= OVERHEAD_BUDGET_PCT)} |"
+            f"{result.overhead_pct}% | {verdict} |"
         )
+    if any(not result.overhead_valid for result in results):
+        lines += ["",
+                  "**INVALID rows measured instrumented code as *faster* than uninstrumented,",
+                  "which is impossible.** The comparison was contaminated — by pass ordering,",
+                  "CPU contention from another process, or a provider rate limit. Treat those",
+                  "scenarios as unmeasured rather than as passing."]
 
     if previous is not None:
         prior = previous.get("scenarios", {})
@@ -726,6 +754,15 @@ def main(argv: list[str]) -> int:
     for name in names:
         scenario = SCENARIOS[name]
         iterations = override or scenario.iterations
+        # Priming pass, discarded. Each run_pass warms its own client, but process-level
+        # state -- the statement TTLCache, SQLite page cache, lazily imported modules --
+        # persists across passes, so whichever pass runs FIRST pays first-touch costs the
+        # later passes inherit warm. That biased pass A slow and produced overhead
+        # percentages that were negative, which then stamped PASS for being under budget.
+        # One discarded pass puts A and B on equal footing.
+        _progress(f"[{name}] priming pass (discarded)")
+        run_pass(scenario, instrumented=False, iterations=1)
+
         _progress(f"[{name}] pass A: uninstrumented, N={iterations}")
         off_samples, _ = run_pass(scenario, instrumented=False, iterations=iterations)
         _progress(f"[{name}] pass B: instrumented, N={iterations}")

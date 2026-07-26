@@ -207,6 +207,33 @@ def test_criterion_5_ranks_leaves_not_parents():
     assert "page_load.portfolio" not in ranked, "a parent span must not be ranked as a bottleneck"
 
 
+def test_negative_overhead_is_invalid_not_a_pass():
+    """Instrumented code cannot outrun uninstrumented code. A negative overhead means
+    the measurement is contaminated -- yet it reads as the best possible result and was
+    being stamped PASS. Guard the sign as well as the magnitude, the same way spec 08.4
+    treats an over-budget overhead as making the report untrustworthy."""
+    import scripts.benchmark_scenarios as runner
+
+    def _result(p50_off, p50_on):
+        return runner.ScenarioResult(
+            name="x", p50_off_ms=p50_off, p50_on_ms=p50_on, p95_on_ms=p50_on,
+            iterations=10, breakdown=None, ticker_table=None, orphans=0, partial=False,
+            truncated=False, reproducibility_delta_pct=1.0,
+        )
+
+    negative = _result(1000.0, 950.0)
+    assert negative.overhead_pct == -5.0
+    assert negative.overhead_valid is False
+    assert runner.criteria_failed([negative]) is True, "a negative overhead must not pass"
+
+    healthy = _result(1000.0, 1020.0)
+    assert healthy.overhead_valid is True
+    assert runner.criteria_failed([healthy]) is False
+
+    report = runner.render_report(environment=_ENVIRONMENT, results=[negative])
+    assert "INVALID" in report
+
+
 def test_trend_section_compares_against_the_previous_baseline(tmp_path):
     """Trend beats absolute numbers: a p50 alone cannot say whether a change helped.
     Read from a JSON sidecar rather than by re-parsing the markdown, which would break
