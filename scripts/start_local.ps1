@@ -18,6 +18,11 @@
 
 .EXAMPLE
   powershell -ExecutionPolicy Bypass -File scripts/start_local.ps1 -AutoPort -OpenBrowser
+
+.EXAMPLE
+  # Enable the /dev/performance and /dev/monitor dashboards.
+  # Off by default: instrumentation costs 12-19% request latency and up to 128 MB.
+  powershell -ExecutionPolicy Bypass -File scripts/start_local.ps1 -DevMonitor
 #>
 
 [CmdletBinding()]
@@ -29,7 +34,8 @@ param(
     [switch]$BuildWeb,
     [switch]$ProductionWeb,
     [switch]$OpenBrowser,
-    [switch]$CheckOnly
+    [switch]$CheckOnly,
+    [switch]$DevMonitor
 )
 
 $ErrorActionPreference = "Stop"
@@ -306,13 +312,61 @@ function ConvertTo-SingleQuotedPowerShellLiteral {
     return "'" + ($Value -replace "'", "''") + "'"
 }
 
+function Clear-OrphanedWebServers {
+    <#
+      A `next dev` that fails to bind its port does not exit. It keeps running, holds
+      gigabytes (one was observed at 5 GB), and stays invisible because its own log
+      still says "Ready" -- "ready" and "listening" are different claims. Left behind,
+      it also competes with the server this script is about to start.
+
+      Only processes whose command line names THIS repository's web root are considered,
+      and only when nothing is actually listening on the target port, so a healthy server
+      is never killed and no unrelated node process is ever touched.
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string]$WebRoot,
+        [Parameter(Mandatory = $true)][int]$WebPort
+    )
+
+    $listening = @(Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue |
+        Where-Object { $_.LocalPort -eq $WebPort })
+    if ($listening.Count -gt 0) {
+        return  # something is serving the port; leave it alone
+    }
+
+    $candidates = @(Get-CimInstance Win32_Process -Filter "Name='node.exe'" -ErrorAction SilentlyContinue |
+        Where-Object { $_.CommandLine -and $_.CommandLine -like "*next*" -and $_.CommandLine -like "*$WebRoot*" })
+    if ($candidates.Count -eq 0) {
+        return
+    }
+
+    foreach ($candidate in $candidates) {
+        $megabytes = [math]::Round($candidate.WorkingSetSize / 1MB, 0)
+        Write-Host "Clearing orphaned next-server (pid $($candidate.ProcessId), $megabytes MB) that is not listening on port $WebPort." -ForegroundColor Yellow
+        Stop-Process -Id $candidate.ProcessId -Force -ErrorAction SilentlyContinue
+    }
+    Start-Sleep -Seconds 2
+}
+
 function Start-LocalProcessWindow {
     param(
         [Parameter(Mandatory = $true)][string]$Title,
         [Parameter(Mandatory = $true)][string]$WorkingDirectory,
         [Parameter(Mandatory = $true)][string]$Command,
-        [Parameter(Mandatory = $true)][string]$LogPath
+        [Parameter(Mandatory = $true)][string]$LogPath,
+        [hashtable]$EnvironmentVariables
     )
+
+    # Set inside the spawned window rather than the launcher's own process, so the
+    # variable scopes to exactly the service that needs it and does not leak into the
+    # other window or outlive the run.
+    $environmentLines = ""
+    if ($EnvironmentVariables) {
+        foreach ($name in ($EnvironmentVariables.Keys | Sort-Object)) {
+            $quotedValue = ConvertTo-SingleQuotedPowerShellLiteral -Value ([string]$EnvironmentVariables[$name])
+            $environmentLines += "`$env:$name = $quotedValue`r`n"
+        }
+    }
 
     $quotedDir = ConvertTo-SingleQuotedPowerShellLiteral -Value $WorkingDirectory
     $quotedLog = ConvertTo-SingleQuotedPowerShellLiteral -Value $LogPath
@@ -321,7 +375,7 @@ function Start-LocalProcessWindow {
     $wrappedCommand = @"
 `$Host.UI.RawUI.WindowTitle = '$windowTitle'
 Set-Location -LiteralPath $quotedDir
-`$logPath = $quotedLog
+$environmentLines`$logPath = $quotedLog
 `$commandToRun = $quotedCommand
 try {
     Invoke-Expression `$commandToRun 2>&1 | Tee-Object -FilePath `$logPath -Append
@@ -473,9 +527,14 @@ if (-not (Test-HttpOk -Url $apiHealthUrl)) {
     else {
         "python -m uvicorn apps.api.main:app --host 127.0.0.1 --port $ApiPort --reload"
     }
-    $backendProcess = Start-LocalProcessWindow -Title "MoneyView API Server :$ApiPort" -WorkingDirectory $repoRoot -Command $backendCommand -LogPath $backendLog
+    # Scoped to the backend window only: the flag gates server-side instrumentation, and
+    # the frontend reads nothing from it.
+    $backendEnvironment = if ($DevMonitor) { @{ MONEYVIEW_DEV_MONITOR = "true" } } else { $null }
+    $backendProcess = Start-LocalProcessWindow -Title "MoneyView API Server :$ApiPort" -WorkingDirectory $repoRoot -Command $backendCommand -LogPath $backendLog -EnvironmentVariables $backendEnvironment
     Wait-StartupTarget -Process $backendProcess -Name "backend" -Url $apiHealthUrl -LogPath $backendLog -TimeoutSeconds 30
 }
+
+Clear-OrphanedWebServers -WebRoot $webRoot -WebPort $WebPort
 
 $webCommand = if ($ProductionWeb) {
     "npm.cmd exec -- next start --port $WebPort"
@@ -492,6 +551,13 @@ Write-Host "MoneyView local runtime requested." -ForegroundColor Green
 Write-Host "Backend health: $apiHealthUrl"
 Write-Host "Frontend:       $frontendUrl"
 Write-Host "Portfolio:      $frontendUrl/portfolio"
+if ($DevMonitor) {
+    Write-Host "Perf dashboard: $frontendUrl/dev/performance" -ForegroundColor Cyan
+    Write-Host "Event monitor:  $frontendUrl/dev/monitor" -ForegroundColor Cyan
+}
+else {
+    Write-Host "Dev dashboards: disabled. Re-run with -DevMonitor for $frontendUrl/dev/performance" -ForegroundColor DarkGray
+}
 Write-Host "API log:        $backendLog"
 Write-Host "next-server log:$frontendLog"
 Write-Host ""
