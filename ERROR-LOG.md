@@ -155,6 +155,125 @@ which is what the test asserts. It does not cover *directly emitted* events insi
 request, which is the majority of spans by count. A test asserting that a request's
 waterfall has exactly one root would have caught this immediately.
 
+## 2026-07-27: Concurrent baseline runs silently overwrite one report, producing a plausible but false baseline
+
+Date: 2026-07-27
+Command: `python scripts/benchmark_scenarios.py` (three overlapping invocations)
+Failure: Three full baseline runs executed concurrently and all wrote to the same
+`docs/perf/2026-07-27-baseline.md`, last writer winning. The surviving report looked
+complete and well-formed, with every criterion stamped — but every timing figure in it
+was measured while one or two identical benchmarks contended for the same CPU, network
+and SQLite file. Detected by reading the same file twice minutes apart and getting
+different numbers for one scenario: `comparison_138` showed
+`247.2ms -> 245.2ms -> -0.8%` and then `252.2ms -> 239.1ms -> -5.2%`. A report that
+changes when nothing re-ran it is not a baseline.
+Root cause: two independent gaps.
+1. `main()` writes to a date-stamped path with no lock, no uniqueness and no
+   check for a running instance, so concurrent runs clobber each other in silence.
+2. Operator error compounded it: `taskkill //F //PID` via `ps -W | awk '{print $1}'`
+   did not actually terminate the runs. The kill reported
+   `killed; remaining: 2`, which was misread as unrelated leftover processes rather
+   than as the kill having failed. Two runs believed to be dead ran to completion
+   (both `EXIT=1`). `Get-Process python | Stop-Process -Force` worked where taskkill
+   did not.
+Fix: Not yet fixed in the runner. Immediate remedy was to kill all Python processes
+via PowerShell, verify a count of exactly 0, relaunch a single run, and verify a count
+of exactly 1 before trusting anything.
+What survived the contamination: structural properties of the span tree are unaffected
+by CPU contention, so these findings stand — criterion 3 PASS on all five scenarios
+(orphans 0, partial False), `overlap_detected: True` on all five, scope percentages
+summing to 162.9% on `comparison_138`, and the statement cache hit rate of 94%
+(223 hits / 14 misses). Only the millisecond values are void.
+Files changed: none yet (record only).
+Prevention: A benchmark that writes a committed artifact must refuse to run
+concurrently — an exclusive lockfile, or a PID/started-at header the reader can check.
+Separately: after issuing a kill, assert the process count is zero rather than reading
+a non-zero remainder as unrelated. "Probably not mine" is not verification.
+
+## 2026-07-27: Two-pass overhead yields negative percentages because in-process caches carry across passes
+
+Date: 2026-07-27
+Command: `python scripts/benchmark_scenarios.py`
+Failure: Criterion 1 reported **negative overhead** — `comparison_138` at -0.8% then
+-5.2%, `tab_switch` at -0.8%, `attribution_138` at -11.4% on an earlier run. The
+report stamped these as `PASS`, since -5.2% is comfortably under the 3% budget.
+Instrumented code cannot be faster than uninstrumented code; a negative figure means
+the measurement is invalid, yet it reads as the best possible result.
+Root cause: spec 08.3 defines `overhead_pct = (p50_B - p50_A) / p50_A * 100` with pass
+A (flag off) run before pass B (flag on). Both passes run in **one process**, and the
+process holds caches that outlive a pass: `_YAHOO_STATEMENT_CACHE`,
+`_provider_fetch_cache`, SQLite page cache, and imported-module state. Pass A therefore
+pays cold-cache costs that pass B inherits warm, so the ordering alone biases B faster.
+The per-pass warm-up call reduces this but cannot remove it, because the warm-up only
+warms what that one scenario touches, and the first pass of the first scenario warms
+the process for everything after it. The formula assumes the two passes are independent
+samples; sequential passes sharing a process are not.
+Fix: Not yet fixed. Recommended: keep one warm-up before both passes, then
+**interleave** iterations A/B/A/B rather than running all of A then all of B, so any
+monotonic drift (cache warming, thermal, background load) cancels between the two
+arms instead of accruing entirely to the first. Running each pass in a fresh
+subprocess is the stricter alternative but pays the ~6 min cold statement sweep twice.
+Files changed: none yet (record only).
+Prevention: A criterion whose failure mode is a *better-looking* number is dangerous.
+Guard the sign as well as the magnitude: a negative overhead should stamp the
+measurement invalid rather than PASS, in the same way spec 08.4 treats an over-budget
+overhead as making the report untrustworthy.
+
+## 2026-07-26: Statement cache has TWO independent 0%-hit-rate causes — TTL shorter than the sweep, and maxsize smaller than the universe
+
+Date: 2026-07-26
+Command: `python scripts/benchmark_scenarios.py` (full baseline; surfaced while
+measuring `comparison_138`)
+Failure: The Yahoo statement cache achieved **587 misses and 0 hits** across a full
+baseline run — a 0% hit rate, with not one `cache_hit=true` line in 4.7 MB of logs.
+Every iteration of `GET /corporate/comparison?mode=live` re-fetched all 138 tickers
+live from Yahoo at ~2.5 s each.
+Root cause: arithmetic, not a bug in the cache itself — and there are **two
+independent causes, either one sufficient on its own** to force 0%:
+
+**(1) TTL (300 s) is shorter than one sweep (357 s).**
+`YAHOO_STATEMENT_CACHE_TTL_SECONDS` defaults to **300 s**
+(`corporate_statement_metrics.py:29`), and `_YAHOO_STATEMENT_CACHE` is a module-level
+`TTLCache` (`:31`) checked again by hand against the same 300 s (`:122`). But one
+serial sweep of the 138-ticker watchlist takes **357 s** — measured from the first to
+the 138th `cache_hit=false` line, 23:04:24 to 23:10:21. The sweep is 57 s longer than
+the TTL, so ticker #1's entry has already expired by the time ticker #138 is fetched,
+and the next request misses on all 138 again.
+
+**(2) `maxsize` (48) is smaller than the universe (139).**
+`YAHOO_STATEMENT_CACHE_MAXSIZE` defaults to **48** (`:30`). A 138-ticker sweep
+therefore evicts its own first ~90 entries before it finishes, so capacity alone
+defeats any TTL however long. This was found only after raising the TTL to 86400 s
+produced *still* 0 hits / 539 misses — proof the two causes are independent.
+Verified at runtime: `TTL=86400, MAXSIZE=48`.
+
+**The cache cannot produce a hit for a full-universe fan-out; it is structurally
+impossible at these defaults, not mistuned.** It only ever helps a single-ticker
+request repeated inside 5 minutes. Neither `48` nor `300` was ever derived from the
+universe size or the sweep duration.
+With both raised (`ttl=86400`, `maxsize=4096`) the same fan-out measured a **94% hit
+rate — 223 hits / 14 misses**, and `comparison_138` fell from a ~357 s cold sweep into
+the hundreds of milliseconds warm.
+This is a production defect, not a benchmark artifact, and it is a strong candidate
+for the root cause of reported symptom S2 (spec 01.1): every `mode=live` comparison
+costs 138 serial live fetches, ~6 minutes, with zero cache benefit no matter how
+often it is called.
+Fix: Not fixed — the remedy is a product decision that belongs to sub-project 2,
+which owns the per-ticker cache and on-demand loading. Options: (a) raise the TTL
+well above the sweep duration (it is already env-configurable via
+`MONEYVIEW_YAHOO_STATEMENT_CACHE_TTL_SECONDS`, so this needs no code change);
+(b) persist statement bundles to SQLite so they survive both the TTL and process
+restarts; (c) make the comparison fan-out not require live statements at all.
+Note that (a) alone converts the cost from "every request" to "every 5+ minutes",
+which is a large win but still leaves one user paying 6 minutes.
+Files changed: none (record only).
+Prevention: A TTL cache in front of a serial fan-out must have a TTL longer than the
+fan-out takes to complete, or its hit rate is zero by construction. Any TTL guarding
+a batch operation should be asserted against the measured duration of that batch. A
+hit-rate assertion on `cache_effectiveness` output for the comparison path would have
+caught this — and would have been visible from day one had the baseline runner's cache
+section (spec 08.1, omitted until today) been present.
+
 ## 2026-07-26: page_load spans duplicate the api.request interval, so criterion 2 reports a sentinel as a PASS
 
 Date: 2026-07-26

@@ -33,6 +33,23 @@ _REPO_ROOT = str(Path(__file__).resolve().parent.parent)
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
+# Must precede the first `apps` import: corporate_statement_metrics reads both of these
+# into module-level constants and builds its TTLCache at import time.
+#
+# TWO independent defaults each force a 0% statement-cache hit rate on a 138-ticker
+# fan-out, so both must be raised or the timed iterations measure Yahoo network latency
+# instead of the DB+compute cost this baseline exists to measure:
+#   ttl=300s     < one 138-ticker sweep (measured 357s), so ticker #1 expires before
+#                  ticker #138 is fetched.
+#   maxsize=48   < the 139-ticker universe, so the sweep evicts its own first 90
+#                  entries before it finishes -- capacity alone defeats any TTL.
+# Recorded as production defects in ERROR-LOG.md; raising them here only stops them
+# from corrupting the measurement.
+STATEMENT_CACHE_TTL_SECONDS = "86400"
+STATEMENT_CACHE_MAXSIZE = "4096"
+os.environ.setdefault("MONEYVIEW_YAHOO_STATEMENT_CACHE_TTL_SECONDS", STATEMENT_CACHE_TTL_SECONDS)
+os.environ.setdefault("MONEYVIEW_YAHOO_STATEMENT_CACHE_MAXSIZE", STATEMENT_CACHE_MAXSIZE)
+
 # Imported after the bootstrap above. Models only -- reads no environment, so it
 # cannot race the MONEYVIEW_DEV_MONITOR toggling in run_pass().
 from apps.api.models.schema_parts.perf_analysis import CollapsedNode  # noqa: E402
@@ -363,9 +380,14 @@ def render_report(*, environment: dict, results: list[ScenarioResult]) -> str:
         "  current daily data, takes the frozen path.",
         "- **Global rate limiter neutralised**: the runner fires bursts no real user would, and",
         "  429s would otherwise truncate a scenario partway through.",
-        "- **Statement-metrics cache warmed by the untimed warm-up call**: the first pass over",
-        "  138 tickers fetches statements live (~2.5 s each). Timed iterations measure the warm",
-        "  path.",
+        f"- **Statement cache TTL raised to {STATEMENT_CACHE_TTL_SECONDS}s** (default 300s) **and maxsize to",
+        f"  {STATEMENT_CACHE_MAXSIZE}** (default 48), so the untimed warm-up's 138 live Yahoo fetches survive into",
+        "  the timed iterations. At the defaults the cache scores a measured **0% hit rate** on this",
+        "  fan-out, for two independent reasons: one 138-ticker sweep takes ~357s so ticker #1",
+        "  expires before #138 is fetched, and maxsize 48 < 139 tickers so the sweep evicts its own",
+        "  first 90 entries anyway. Without both raised the timed samples measure Yahoo network",
+        "  latency, not the DB+compute fan-out. **Production still runs the defaults**, so the p50",
+        "  below is the warm-cache cost and is NOT what a user experiences today -- see ERROR-LOG.md.",
         "",
         "## Overhead (criterion 1: <= 3%)",
         "| scenario | p50 off | p50 on | overhead | |",
