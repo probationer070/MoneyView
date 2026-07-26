@@ -160,6 +160,28 @@ The launcher:
 - stops with an explicit backend or frontend startup error if a process does not complete
 - opens the app in the browser
 
+### Resource cost and developer tools
+
+`run MoneyView` uses roughly **1.5–1.7 GB of RAM** (about 85% of that is `next dev`;
+the FastAPI backend is ~156 MB). CPU is bursty during route compilation, then idle.
+If you are using MoneyView rather than developing the frontend, `npm run build && npm run start`
+in `apps/web` is substantially lighter.
+
+Two developer dashboards exist and are **not linked from any navigation**:
+
+| URL | What |
+| --- | --- |
+| `http://localhost:3000/dev/performance` | Request waterfalls, scope breakdown, per-ticker cost, cache effectiveness |
+| `http://localhost:3000/dev/monitor` | Live event tail and latency panels |
+
+Both need `MONEYVIEW_DEV_MONITOR=true` set for the API process. `run MoneyView` does not
+set it, so by default these pages render an empty "disabled" state. The flag costs
+12–19% request latency and up to 128 MB, so it is off deliberately.
+
+See [`docs/local-run-resources.md`](docs/local-run-resources.md) for measured figures,
+the measurement method, and operational hazards (notably: a `next dev` that logs
+"Ready" but never binds its port does not exit, and has reached 5 GB).
+
 Direct launcher fallback:
 
 ```powershell
