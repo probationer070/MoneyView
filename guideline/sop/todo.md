@@ -88,9 +88,10 @@ precondition for per-ticker spans rather than an optimization.
 - [x] `/dev/performance` dashboard (spec 06)
 - [x] Test matrices (spec 07)
 - [x] Baseline runner + ranked bottleneck report (spec 08)
-- [ ] **A trustworthy baseline run** — blocked. Three concurrent runs contaminated the
-      first attempts, then Yahoo rate-limited us. Needs one uncontended run once the
-      throttle clears. See `ERROR-LOG.md`.
+- [x] **A trustworthy baseline run** — `docs/perf/2026-07-27-baseline.md`, committed.
+      Validated before reading: one process only, zero rate limits, and no negative
+      overheads. Earlier attempts were void (three concurrent runs, then a Yahoo rate
+      limit); see `ERROR-LOG.md`.
 
 Headline findings so far (all recorded in `ERROR-LOG.md`):
 - The statement cache scores a structural **0% hit rate** (0 hits / 539 misses):
