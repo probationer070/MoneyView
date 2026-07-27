@@ -157,6 +157,9 @@ async def upsert_watchlist_item(item: WatchlistItem = Body(...)):
     )
 
     with get_db() as conn:
+        existing = conn.execute(
+            "SELECT ticker FROM watchlist WHERE ticker = ?", (normalized.ticker,)
+        ).fetchone()
         conn.execute(
             """INSERT OR REPLACE INTO watchlist (ticker, name, sector, group_name, weight)
                VALUES (?, ?, ?, ?, ?)""",
@@ -164,17 +167,24 @@ async def upsert_watchlist_item(item: WatchlistItem = Body(...)):
         )
     mark_watchlist_state("user_mutation")
     # Adding a stock is the natural moment to acquire its history: one 10-year backfill,
-    # once, off the request path. Without this the next comparison discovers the ticker
-    # and pays a live fetch in-band while a user waits.
+    # off the request path. Without it the next comparison discovers the ticker and pays
+    # a live fetch in-band while a user waits.
+    #
+    # Only on a genuinely new row. This endpoint is an upsert and is also the metadata
+    # and weight edit path -- a sector change, "normalize allocations", the allocation
+    # auto-save -- so scheduling per call would turn one bulk allocation edit into N
+    # concurrent live provider fetches. Concurrent live fetching is what earned a Yahoo
+    # rate limit that invalidated a day of measurements (see acquisition/sources/bars.py).
     #
     # Guarded because acquisition is best-effort: a scheduling failure must never fail
     # the user's watchlist write, which is the operation they actually asked for
     # (design 10 -- no acquisition failure propagates into a request).
-    try:
-        schedule_acquisition("equity_bars", normalized.ticker)
-    except Exception as error:  # noqa: BLE001 - best-effort, never fails the write
-        logger.warning("watchlist.schedule_acquisition_failed ticker=%s error=%s",
-                       normalized.ticker, error)
+    if existing is None:
+        try:
+            schedule_acquisition("equity_bars", normalized.ticker)
+        except Exception as error:  # noqa: BLE001 - best-effort, never fails the write
+            logger.warning("watchlist.schedule_acquisition_failed ticker=%s error=%s",
+                           normalized.ticker, error)
     return normalized
 
 

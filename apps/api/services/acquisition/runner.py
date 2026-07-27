@@ -20,6 +20,7 @@ from apps.api.services.acquisition.state import (
     AcquisitionStatus,
     read_state,
     record_check,
+    record_retired,
     record_success,
 )
 
@@ -123,6 +124,4 @@ def schedule_acquisition(data_class: str, subject: str) -> None:
 def retire_subject(data_class: str, subject: str) -> None:
     """Stop refreshing a subject. Rows are retained: storage is cheap and re-adding the
     ticker is then free."""
-    from datetime import UTC, datetime
-
-    record_check(data_class, subject, now=datetime.now(UTC), status=AcquisitionStatus.RETIRED)
+    record_retired(data_class, subject)

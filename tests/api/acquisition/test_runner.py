@@ -1,3 +1,4 @@
+import threading
 from datetime import UTC, date, datetime
 
 import pytest
@@ -5,7 +6,7 @@ import pytest
 from apps.api.models.schemas import StockOHLCV
 from apps.api.services import db as db_service
 from apps.api.services.acquisition.ranges import FetchRange
-from apps.api.services.acquisition.runner import acquire
+from apps.api.services.acquisition.runner import acquire, schedule_acquisition
 from apps.api.services.acquisition.state import read_state, record_success
 
 NOW = datetime(2026, 7, 27, 9, 0, tzinfo=UTC)
@@ -131,3 +132,31 @@ def test_a_provider_failure_records_the_ask_and_preserves_prior_success():
     state = read_state("equity_bars", "TEST_RUNNER_FAIL")
     assert state.status == "failed"
     assert state.covered_to == date(2026, 7, 24)  # prior data still served
+
+
+def test_a_failure_inside_the_scheduled_thread_stays_contained(monkeypatch):
+    """The in-thread guard, not the thread-start guard: a raise inside the background
+    run is the common failure, and an unhandled one would kill the thread with a
+    traceback on stderr and no record that acquisition was even attempted."""
+    subject = "TEST_THREAD_FAIL"
+    reached = threading.Event()
+
+    def _explode(data_class, subject_arg, **_):
+        reached.set()
+        raise RuntimeError("acquisition blew up in the thread")
+
+    # An exception leaving _run reaches threading.excepthook. Recording it is what makes
+    # this test fail on an unguarded _run: an escaped thread exception is otherwise only
+    # a warning, which a green suite would happily print and ignore.
+    escaped: list[object] = []
+    monkeypatch.setattr(threading, "excepthook", lambda args: escaped.append(args))
+    monkeypatch.setattr("apps.api.services.acquisition.runner.acquire", _explode)
+
+    schedule_acquisition("equity_bars", subject)  # must not raise into the caller
+
+    spawned = [t for t in threading.enumerate() if t.name == f"acquire-{subject}"]
+    assert reached.wait(timeout=5), "the patched acquire was never reached"
+    for thread in spawned:
+        thread.join(timeout=5)
+        assert not thread.is_alive()
+    assert escaped == [], "the failure escaped _run instead of being contained"

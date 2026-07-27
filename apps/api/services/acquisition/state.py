@@ -93,6 +93,26 @@ def record_check(
         )
 
 
+def record_retired(data_class: str, subject: str) -> None:
+    """Mark a subject as no longer refreshed, without advancing the freshness clock.
+
+    Deliberately not record_check: `record_check` means "we asked the provider", and
+    freshness reads nothing but last_checked_at. Stamping it here would make a remove
+    then re-add inside one boundary window report "fresh" and acquire nothing, leaving a
+    ticker that is back on the watchlist with no bars until the next boundary and
+    nothing asking again. Coverage is left alone because the rows are retained.
+    """
+    with get_db() as conn:
+        conn.execute(
+            """INSERT INTO acquisition_state (data_class, subject, status, detail)
+               VALUES (?, ?, ?, NULL)
+               ON CONFLICT(data_class, subject) DO UPDATE SET
+                   status = excluded.status,
+                   detail = NULL""",
+            (data_class, subject, AcquisitionStatus.RETIRED),
+        )
+
+
 def record_success(
     data_class: str, subject: str, *, now: datetime, covered_from: date, covered_to: date
 ) -> None:
