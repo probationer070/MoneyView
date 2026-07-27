@@ -1,5 +1,4 @@
 import sys
-import tempfile
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -47,14 +46,8 @@ def _reset_market_data_state() -> None:
     MarketDataService._provider_fetch_cache.clear()
 
 
-def _db_path() -> Path:
-    temp_root = Path(r"E:\MoneyView\data\processed")
-    temp_root.mkdir(parents=True, exist_ok=True)
-    return temp_root / f"test-stock-price-{next(tempfile._get_candidate_names())}.db"
-
-
-def test_get_stock_price_lookup_returns_fetching_on_cold_miss(monkeypatch):
-    db_path = _db_path()
+def test_get_stock_price_lookup_returns_fetching_on_cold_miss(monkeypatch, tmp_path):
+    db_path = tmp_path / "moneyview.db"
     monkeypatch.setattr(db_service, "_DB_PATH", db_path)
     db_service.init_db()
     _reset_market_data_state()
@@ -76,8 +69,8 @@ def test_get_stock_price_lookup_returns_fetching_on_cold_miss(monkeypatch):
     assert scheduled == [("AAPL", "1mo", "stocks")]
 
 
-def test_get_stock_price_lookup_returns_stale_cache_and_schedules_refresh(monkeypatch):
-    db_path = _db_path()
+def test_get_stock_price_lookup_returns_stale_cache_and_schedules_refresh(monkeypatch, tmp_path):
+    db_path = tmp_path / "moneyview.db"
     monkeypatch.setattr(db_service, "_DB_PATH", db_path)
     db_service.init_db()
     _reset_market_data_state()
@@ -104,8 +97,8 @@ def test_get_stock_price_lookup_returns_stale_cache_and_schedules_refresh(monkey
     assert scheduled == [("AAPL", "1mo", "stocks")]
 
 
-def test_get_stock_price_lookup_returns_not_found_after_failed_background_refresh(monkeypatch):
-    db_path = _db_path()
+def test_get_stock_price_lookup_returns_not_found_after_failed_background_refresh(monkeypatch, tmp_path):
+    db_path = tmp_path / "moneyview.db"
     monkeypatch.setattr(db_service, "_DB_PATH", db_path)
     db_service.init_db()
     _reset_market_data_state()
