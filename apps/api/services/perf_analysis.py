@@ -314,34 +314,55 @@ def _assign_offsets(span: Span, root_start_ms: float, parent_span: Span | None) 
 
 
 def _to_node(span: Span) -> SpanNode:
-    node = SpanNode(
-        id=span.id,
-        parent_id=span.parent_id,
-        operation=span.operation,
-        scope=span.scope,
-        status=span.status,
-        total_ms=span.total_ms,
-        self_ms=span.self_ms,
-        offset_ms=span.offset_ms,
-        clock_skew=span.clock_skew,
-        orphaned=span.orphaned,
-        ticker=span.ticker,
-        table=span.table,
-        component=span.component,
-        rows=span.rows,
-        bytes=span.bytes,
-        series_points=span.series_points,
-        cache_state=span.cache_state,
-        children=[_to_node(child) for child in span.children],
-    )
-    # The collapsed marker lives in the DTO so the UI cannot render an elided
-    # subtree as "no children" (spec 04.10).
-    if span.collapsed is not None:
-        count, total_ms, scope = span.collapsed
-        node.children.append(
-            CollapsedNode(collapsed_count=count, total_ms=total_ms, deepest_scope=scope)
+    """Build the DTO tree bottom-up with an explicit stack.
+
+    Deliberately not recursive: the comprehension form cost two Python frames
+    per level (the call plus the comprehension's own frame), so a ~670-deep
+    span chain exhausted the default 1000-frame stack and raised
+    RecursionError instead of truncating -- the exact outcome truncation
+    exists to prevent. Depth is now bounded by the heap. Keyed on id() because
+    Span is a mutable dataclass and is not hashable.
+    """
+    order: list[Span] = []
+    stack = [span]
+    while stack:
+        current = stack.pop()
+        order.append(current)
+        stack.extend(current.children)
+
+    built: dict[int, SpanNode] = {}
+    # reversed(order) guarantees every child is built before its parent: a
+    # parent is always appended before the children it pushes.
+    for current in reversed(order):
+        node = SpanNode(
+            id=current.id,
+            parent_id=current.parent_id,
+            operation=current.operation,
+            scope=current.scope,
+            status=current.status,
+            total_ms=current.total_ms,
+            self_ms=current.self_ms,
+            offset_ms=current.offset_ms,
+            clock_skew=current.clock_skew,
+            orphaned=current.orphaned,
+            ticker=current.ticker,
+            table=current.table,
+            component=current.component,
+            rows=current.rows,
+            bytes=current.bytes,
+            series_points=current.series_points,
+            cache_state=current.cache_state,
+            children=[built[id(child)] for child in current.children],
         )
-    return node
+        # The collapsed marker lives in the DTO so the UI cannot render an elided
+        # subtree as "no children" (spec 04.10).
+        if current.collapsed is not None:
+            count, total_ms, scope = current.collapsed
+            node.children.append(
+                CollapsedNode(collapsed_count=count, total_ms=total_ms, deepest_scope=scope)
+            )
+        built[id(current)] = node
+    return built[id(span)]
 
 
 def _depth_map(span: Span, depth: int, acc: list[tuple[int, Span]]) -> None:
