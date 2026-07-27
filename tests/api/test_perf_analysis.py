@@ -324,6 +324,26 @@ def test_truncation_falls_back_to_subtree_collapse_for_non_bushy_trees():
     assert len(flattened) <= WATERFALL_SPAN_CAP
 
 
+def test_a_chain_far_deeper_than_the_recursion_limit_truncates_instead_of_raising():
+    """Depth 2000 is past the reach of every recursive walker in perf_analysis:
+    _assign_self_ms, _assign_offsets and _depth_map each burn one frame per
+    level against CPython's 1000-frame default, and _to_node burned two. A
+    single deep chain is the realistic shape -- one ticker's mostly-linear
+    span chain -- not a synthetic worst case, and the whole point of
+    truncation is that an oversized tree degrades rather than explodes."""
+    events = [ev("root", id="r", ms=10_000.0, offset_ms=10_000)]
+    parent_id = "r"
+    for level in range(2000):
+        span_id = f"deep-{level}"
+        events.append(ev(f"op-{level}", id=span_id, parent=parent_id, ms=1.0, offset_ms=level))
+        parent_id = span_id
+
+    waterfall = build_waterfall(events, "req-1")
+
+    assert waterfall.truncated is True
+    assert len(_flatten(waterfall.root)) <= WATERFALL_SPAN_CAP
+
+
 def test_overlapping_async_children_flag_overlap_without_forcing_self_ms_negative():
     events = [
         ev("root", id="r", ms=100.0, offset_ms=100),
@@ -395,11 +415,19 @@ def test_route_is_none_without_fallback_to_arbitrary_api_span_operation():
 
 
 def _flatten(node):
-    result = [node]
-    for child in node.children:
-        if hasattr(child, "collapsed_count"):
-            continue
-        result.extend(_flatten(child))
+    # Explicit stack: this helper is exercised against depth-2000+ trees by
+    # the recursion-limit regression test, and a recursive walker here would
+    # RecursionError on the assertion itself even once perf_analysis.py's
+    # own walkers are fixed.
+    result = []
+    stack = [node]
+    while stack:
+        current = stack.pop()
+        result.append(current)
+        for child in reversed(current.children):
+            if hasattr(child, "collapsed_count"):
+                continue
+            stack.append(child)
     return result
 
 

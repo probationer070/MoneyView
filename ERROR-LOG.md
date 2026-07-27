@@ -532,3 +532,31 @@ Prevention: a model default is not "leave this alone" when the persister uses
 `INSERT OR REPLACE` -- it is a value that gets written. When adding a producer for an
 existing table, enumerate every column the persister writes and confirm the producer
 populates each one, not just the ones the new feature reads.
+
+## 2026-07-28: Deep span trees crashed /dev/perf analysis instead of truncating
+
+Date: 2026-07-28
+Command: `python -m pytest tests/api -q`
+Failure: `test_truncation_falls_back_to_subtree_collapse_for_non_bushy_trees` failed with
+`RecursionError: maximum recursion depth exceeded` at `apps/api/services/perf_analysis.py:335`.
+The user-visible defect: a request producing a deep, narrow span tree crashed waterfall
+analysis rather than truncating it -- the exact outcome the truncation path exists to
+produce. The test had been carried as a known failure across several branches without being
+diagnosed.
+Root cause: `perf_analysis.py` contained five recursive tree walkers. `_to_node` spent two
+Python frames per level -- the call plus its list comprehension's own frame -- so a 668-level
+chain reached ~1,336 frames against CPython's 1,000-frame default. `_assign_self_ms`,
+`_assign_offsets` and `_depth_map` walk the same depth at one frame per level and merely had
+not reached their own ceiling yet; measured max depth on the failing input was 701 for each.
+Fix: all four converted to explicit-stack iterative traversals, preserving each one's
+sequencing contract -- post-order with an overlap accumulator for `_assign_self_ms`,
+pre-order for `_assign_offsets`, and exact DFS append order for `_depth_map`, which
+`_truncate` consumes positionally. `_subtree_size` was left recursive: it is only ever
+invoked on already-collapsed subtrees, measured at depth 1. Regression test builds a
+depth-2,000 chain, which fails on all four walkers before the change.
+Files changed: `apps/api/services/perf_analysis.py`, `tests/api/test_perf_analysis.py`.
+Prevention: recursion depth in a tree walker is bounded by input, not by code review.
+When a module walks user- or telemetry-shaped trees, frames-per-level is the number that
+matters and it is not visible from reading one function -- the comprehension inside
+`_to_node` doubled it invisibly. Prefer explicit stacks for any traversal whose depth is
+attacker- or workload-determined, and measure depth rather than assuming it.

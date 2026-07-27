@@ -266,51 +266,63 @@ def _assign_self_ms(span: Span) -> bool:
     over unrelated top-level spans, not a real duration to compare against,
     so summed children legitimately exceeding it is not "overlap".
     """
+    order: list[Span] = []
+    stack = [span]
+    while stack:
+        current = stack.pop()
+        order.append(current)
+        stack.extend(current.children)
+
     overlap = False
-    for child in span.children:
-        if _assign_self_ms(child):
+    # reversed(order) is post-order: a parent's children are all processed
+    # before it, which is what lets it subtract their settled total_ms.
+    for current in reversed(order):
+        if current.total_ms is None:
+            current.self_ms = None
+            continue
+
+        children_total = 0.0
+        for child in current.children:
+            total = child.total_ms
+            if total is None:
+                continue
+            if total < 0:
+                child.clock_skew = True
+                continue
+            children_total += total
+
+        raw_self = current.total_ms - children_total
+        if current.id != SYNTHETIC_ROOT_ID and raw_self < -EPSILON_MS:
             overlap = True
-    if span.total_ms is None:
-        span.self_ms = None
-        return overlap
-
-    children_total = 0.0
-    for child in span.children:
-        total = child.total_ms
-        if total is None:
-            continue
-        if total < 0:
-            child.clock_skew = True
-            continue
-        children_total += total
-
-    raw_self = span.total_ms - children_total
-    if span.id != SYNTHETIC_ROOT_ID and raw_self < -EPSILON_MS:
-        overlap = True
-    span.self_ms = round(max(0.0, raw_self), 1)
+        current.self_ms = round(max(0.0, raw_self), 1)
     return overlap
 
 
 def _assign_offsets(span: Span, root_start_ms: float, parent_span: Span | None) -> None:
-    raw_offset = _start_ms(span) - root_start_ms
-    parent_offset = parent_span.offset_ms if parent_span else 0.0
-    if parent_span is not None and parent_span.total_ms is None:
-        # Partial parent (still in flight, or its start was evicted from the
-        # ring buffer): there is no known window to clamp into. Enforce only
-        # the lower bound -- a child can't be reported before its parent
-        # starts -- rather than collapsing every child to a zero-width
-        # window and flagging ordinary partial-parent structure as clock
-        # skew (spec 04.9: partial is a diagnostic, not skew).
-        clamped = max(parent_offset, raw_offset)
-    else:
-        parent_limit = parent_span.total_ms if parent_span else (span.total_ms or 0.0)
-        clamped = max(parent_offset, min(raw_offset, parent_offset + parent_limit))
-    # OR, not overwrite: a child's clock_skew may already have been set by
-    # _assign_self_ms (a negative total_ms) and must survive this pass.
-    span.clock_skew = span.clock_skew or (abs(clamped - raw_offset) > EPSILON_MS)
-    span.offset_ms = round(max(0.0, clamped), 1)
-    for child in span.children:
-        _assign_offsets(child, root_start_ms, span)
+    # Explicit stack, pre-order: a child clamps against its parent's
+    # offset_ms, so the parent must be assigned before its children pop.
+    stack: list[tuple[Span, Span | None]] = [(span, parent_span)]
+    while stack:
+        current, parent = stack.pop()
+        raw_offset = _start_ms(current) - root_start_ms
+        parent_offset = parent.offset_ms if parent else 0.0
+        if parent is not None and parent.total_ms is None:
+            # Partial parent (still in flight, or its start was evicted from the
+            # ring buffer): there is no known window to clamp into. Enforce only
+            # the lower bound -- a child can't be reported before its parent
+            # starts -- rather than collapsing every child to a zero-width
+            # window and flagging ordinary partial-parent structure as clock
+            # skew (spec 04.9: partial is a diagnostic, not skew).
+            clamped = max(parent_offset, raw_offset)
+        else:
+            parent_limit = parent.total_ms if parent else (current.total_ms or 0.0)
+            clamped = max(parent_offset, min(raw_offset, parent_offset + parent_limit))
+        # OR, not overwrite: a child's clock_skew may already have been set by
+        # _assign_self_ms (a negative total_ms) and must survive this pass.
+        current.clock_skew = current.clock_skew or (abs(clamped - raw_offset) > EPSILON_MS)
+        current.offset_ms = round(max(0.0, clamped), 1)
+        for child in current.children:
+            stack.append((child, current))
 
 
 def _to_node(span: Span) -> SpanNode:
@@ -366,9 +378,15 @@ def _to_node(span: Span) -> SpanNode:
 
 
 def _depth_map(span: Span, depth: int, acc: list[tuple[int, Span]]) -> None:
-    acc.append((depth, span))
-    for child in span.children:
-        _depth_map(child, depth + 1, acc)
+    # reversed() on push so the pop order matches the recursive form's DFS
+    # sequence exactly -- _truncate consumes acc in order, so this is a
+    # behavioural requirement, not a style choice.
+    stack = [(span, depth)]
+    while stack:
+        current, current_depth = stack.pop()
+        acc.append((current_depth, current))
+        for child in reversed(current.children):
+            stack.append((child, current_depth + 1))
 
 
 def _subtree_size(span: Span) -> int:
