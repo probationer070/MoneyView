@@ -32,6 +32,18 @@ def _frame() -> pd.DataFrame:
     )
 
 
+def _action_frame() -> pd.DataFrame:
+    """yfinance.history() always returns Dividends and Stock Splits alongside OHLCV."""
+    return pd.DataFrame(
+        {
+            "Date": [pd.Timestamp("2026-07-24"), pd.Timestamp("2026-07-25")],
+            "Open": [1.0, 2.0], "High": [1.5, 2.5], "Low": [0.5, 1.5],
+            "Close": [1.2, 2.2], "Volume": [100, 200],
+            "Dividends": [0.0, 0.24], "Stock Splits": [4.0, 0.0],
+        }
+    )
+
+
 def _indexed_frame() -> pd.DataFrame:
     """Shaped like real yfinance output: a DatetimeIndex named 'Date', no 'Date' column."""
     frame = pd.DataFrame(
@@ -73,6 +85,35 @@ def test_fetch_bars_handles_datetime_index_shaped_like_real_yfinance_output():
     assert rows[0].close == 1.2
     assert rows[1].close == 2.2
     assert rows[0].volume == 100
+
+
+def test_fetch_bars_carries_dividends_and_splits_through():
+    """`_save_ohlcv_rows` writes row.dividends and row.stock_splits with INSERT OR
+    REPLACE against UNIQUE(ticker, date). Leaving them at the schema default means every
+    acquisition silently overwrites the stored dividend and split for a date with 0.0 --
+    destroying the only record of a corporate action the app keeps, on the very rows a
+    corporate action caused to be refetched."""
+    fake = _FakeTicker("AAPL", _action_frame())
+    rows = fetch_bars(
+        "AAPL",
+        FetchRange(date(2026, 7, 24), date(2026, 7, 26), "corporate_action"),
+        ticker_factory=lambda symbol: fake,
+    )
+    assert [row.stock_splits for row in rows] == [4.0, 0.0]
+    assert [row.dividends for row in rows] == [0.0, 0.24]
+
+
+def test_fetch_bars_defaults_actions_to_zero_when_the_provider_omits_them():
+    """An index frame has no Dividends/Stock Splits columns. Absent must read as 0.0,
+    not raise."""
+    fake = _FakeTicker("^GSPC", _frame())
+    rows = fetch_bars(
+        "^GSPC",
+        FetchRange(date(2026, 7, 24), date(2026, 7, 26), "delta"),
+        ticker_factory=lambda symbol: fake,
+    )
+    assert [row.dividends for row in rows] == [0.0, 0.0]
+    assert [row.stock_splits for row in rows] == [0.0, 0.0]
 
 
 def test_empty_frame_returns_no_rows_without_raising():

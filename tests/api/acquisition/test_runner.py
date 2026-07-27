@@ -1,11 +1,13 @@
 import threading
 from datetime import UTC, date, datetime
 
+import pandas as pd
 import pytest
 
 from apps.api.models.schemas import StockOHLCV
 from apps.api.services import db as db_service
 from apps.api.services.acquisition.ranges import FetchRange
+from apps.api.services.acquisition.sources import bars
 from apps.api.services.acquisition.runner import acquire, schedule_acquisition
 from apps.api.services.acquisition.state import read_state, record_success
 
@@ -97,7 +99,81 @@ def test_a_new_corporate_action_forces_a_full_refetch_not_an_append():
         saver=lambda t, r: None,
     )
     assert result.reason == "corporate_action"
-    assert calls[0].start == date(2016, 7, 27)
+    # 2016-01-01, not today-10y: the refetch has to reach everything already stored.
+    # Starting at today-10y would leave the head of the series on the OLD adjustment
+    # factor while the rest is rewritten with the new one -- the mixed-adjustment
+    # corruption this path exists to prevent.
+    assert calls[0].start == date(2016, 1, 1)
+
+
+def test_the_second_acquisition_after_a_boundary_fetches_only_the_delta():
+    """The reason this subsystem exists: the steady-state update must transfer the two
+    days since the last bar, not re-download ten years. Nothing else exercises the delta
+    branch through `acquire` -- test_ranges covers plan_range in isolation, so a runner
+    that ignored the plan and always backfilled would keep the suite green."""
+    calls: list[FetchRange] = []
+
+    def fetcher(ticker, fetch_range, **_):
+        calls.append(fetch_range)
+        return [_row("2026-07-24")] if fetch_range.reason == "backfill" else [_row("2026-07-27")]
+
+    common = dict(action_probe=lambda ticker, **_: None, saver=lambda t, r: None)
+    first = acquire("equity_bars", "TEST_RUNNER_DELTA", now=NOW, fetcher=fetcher, **common)
+    # 00:00 UTC the next day is the boundary, so this crosses exactly one.
+    later = datetime(2026, 7, 28, 9, 0, tzinfo=UTC)
+    second = acquire("equity_bars", "TEST_RUNNER_DELTA", now=later, fetcher=fetcher, **common)
+
+    assert first.reason == "backfill"
+    assert second.reason == "delta"
+    # covered_to + 1 day, not `today - 10y`: resumes at the first day not already stored.
+    assert calls[1].start == date(2026, 7, 25)
+    assert calls[1].end_exclusive == date(2026, 7, 29)  # yfinance `end` is exclusive
+    state = read_state("equity_bars", "TEST_RUNNER_DELTA")
+    assert state.covered_from == date(2016, 7, 27)  # the backfilled head survives the delta
+    assert state.covered_to == date(2026, 7, 27)
+
+
+def test_the_default_fetcher_probe_and_saver_wire_together_end_to_end(monkeypatch):
+    """Every other runner test injects all three seams, so the production defaults --
+    fetch_bars, latest_action_date, and the saver that writes the `stocks` table reads
+    serve from -- are never executed. Only the ticker factory is faked, so no network
+    call is made."""
+    frame = pd.DataFrame(
+        {
+            "Open": [1.0], "High": [1.5], "Low": [0.5], "Close": [1.2], "Volume": [100],
+            "Dividends": [0.24], "Stock Splits": [0.0],
+        },
+        index=pd.DatetimeIndex([pd.Timestamp("2026-07-24")], name="Date"),
+    )
+
+    class _FakeTicker:
+        history_calls: list[dict] = []
+
+        def history(self, **kwargs):
+            _FakeTicker.history_calls.append(kwargs)
+            return frame
+
+        @property
+        def actions(self):
+            return pd.DataFrame()
+
+    monkeypatch.setattr(bars, "_default_ticker_factory", lambda symbol: _FakeTicker())
+    result = acquire("equity_bars", "TEST_RUNNER_DEFAULTS", now=NOW)
+
+    assert result.fetched_rows == 1
+    assert _FakeTicker.history_calls == [
+        {"start": "2016-07-27", "end": "2026-07-28", "auto_adjust": True}
+    ]
+    with db_service.get_db() as conn:
+        row = conn.execute(
+            "SELECT close, dividends FROM stocks WHERE ticker = ? AND date = ?",
+            ("TEST_RUNNER_DEFAULTS", "2026-07-24"),
+        ).fetchone()
+    # The runner must write to the table `get_stock_ohlcv` reads, or it acquires into a void.
+    assert row is not None, "the default saver did not write to `stocks`"
+    assert row["close"] == 1.2
+    assert row["dividends"] == 0.24
+    assert read_state("equity_bars", "TEST_RUNNER_DEFAULTS").covered_to == date(2026, 7, 24)
 
 
 def test_an_empty_result_records_the_ask_so_it_is_not_retried_all_day():

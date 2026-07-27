@@ -68,6 +68,46 @@ def test_record_success_sets_coverage_and_both_timestamps():
     assert state.covered_to == date(2026, 7, 24)
 
 
+def test_a_delta_widens_coverage_forward_without_discarding_the_backfilled_head():
+    """A delta calls record_success with covered_from = the delta's own start, which is
+    ten years later than the backfill's. Plain assignment would move covered_from
+    forward to it -- the state row would then claim the series begins in 2026 while ten
+    years of rows sit in `stocks`, and the next corporate-action refetch (which starts
+    at covered_from) would rewrite only the tail, leaving the head on the old adjustment
+    factor. MIN() is what keeps the head."""
+    record_success(
+        "equity_bars", "TEST_WIDEN", now=NOW,
+        covered_from=date(2016, 7, 27), covered_to=date(2026, 7, 24),
+    )
+    later = datetime(2026, 7, 28, 9, 0, tzinfo=UTC)
+    record_success(
+        "equity_bars", "TEST_WIDEN", now=later,
+        covered_from=date(2026, 7, 25), covered_to=date(2026, 7, 27),
+    )
+    state = read_state("equity_bars", "TEST_WIDEN")
+    assert state.covered_from == date(2016, 7, 27)
+    assert state.covered_to == date(2026, 7, 27)
+
+
+def test_a_short_late_provider_response_never_narrows_recorded_coverage():
+    """The other direction: coverage records what exists, and rows are never deleted, so
+    a later success returning less than a previous one must not retract covered_to.
+    Without MAX(), a provider serving a truncated window once would make the next delta
+    re-ask for days already stored and mark the tail as uncovered."""
+    record_success(
+        "equity_bars", "TEST_NARROW", now=NOW,
+        covered_from=date(2016, 1, 1), covered_to=date(2026, 7, 24),
+    )
+    later = datetime(2026, 7, 28, 9, 0, tzinfo=UTC)
+    record_success(
+        "equity_bars", "TEST_NARROW", now=later,
+        covered_from=date(2020, 1, 1), covered_to=date(2026, 7, 20),
+    )
+    state = read_state("equity_bars", "TEST_NARROW")
+    assert state.covered_from == date(2016, 1, 1)
+    assert state.covered_to == date(2026, 7, 24)
+
+
 def test_a_later_failed_check_preserves_the_earlier_success():
     """A failed refresh must never blank a working panel: reads keep serving the last
     good rows, and staleness stays derivable from last_success_at."""

@@ -473,3 +473,62 @@ Prevention: the boundary-based design makes `last_checked_at` the single input t
 freshness decision, so any writer that sets it is asserting "the provider was asked".
 Before reusing a recorder, check whether its *name* is true of the new caller. When a
 field governs a decision alone, its writers should be enumerable and each one justified.
+
+## 2026-07-27: Corporate-action refetch started at today-10y, leaving the head of the series on the old adjustment factor
+
+Date: 2026-07-27
+Command: whole-subsystem review of the Phase 1 acquisition path; no test failed
+Failure: Silent and progressive. On a split or dividend, `acquire` correctly chose a full
+refetch over a delta append, but the refetch did not reach the start of the stored series.
+Every day between the original backfill and the corporate action, the un-refetched head
+grew by one day. Those rows kept the pre-action adjustment factor while everything after
+them was rewritten with the post-action one, so a single series held two adjustment bases
+with no marker at the seam. `record_success`'s `MIN()` then preserved the older
+`covered_from`, so the state row went on asserting a continuous, consistently-adjusted
+series over rows that were not. It degrades returns, volatility, and every DCF input built
+on them, and it looks like data rather than like an error.
+Root cause: `plan_range` returned `FetchRange(_backfill_start(today, backfill_years), ...)`
+for the `full_refetch` branch, ignoring `state.covered_from`. `_backfill_start` is relative
+to *today*, but `covered_from` was `today - 10y` as of the day of the ORIGINAL backfill, so
+the two drift apart by exactly the age of the stored series.
+Fix: the `full_refetch` branch now starts at
+`min(state.covered_from, _backfill_start(today, backfill_years))` -- `min` rather than
+`covered_from` alone so a subject with shallower-than-ten-year coverage is still refetched
+to the full backfill depth rather than truncated to whatever happens to be stored. Two
+regression tests cover both directions. `test_runner.py`'s existing corporate-action test
+had encoded the bug: its fixture seeded `covered_from=2016-01-01` while asserting the
+refetch started at `2016-07-27`; the assertion was corrected, not the fixture.
+Files changed: `apps/api/services/acquisition/ranges.py`,
+`tests/api/acquisition/test_ranges.py`, `tests/api/acquisition/test_runner.py`.
+Prevention: when a code path exists to restore a global invariant (here: one adjustment
+basis per series), its range must be derived from what is stored, never from a window
+recomputed against the current date. A test whose fixture and assertion disagree about the
+same quantity is asserting the implementation, not the intent -- treat that mismatch as a
+finding rather than reading past it.
+
+## 2026-07-27: fetch_bars zeroed dividends and stock_splits, erasing them on every acquisition
+
+Date: 2026-07-27
+Command: whole-subsystem review of the Phase 1 acquisition path; no test failed
+Failure: Silent data destruction on the write path. `stocks.dividends` and
+`stocks.stock_splits` were reset to `0.0` for every date an acquisition touched. Worst
+case is the exact case this subsystem cares about: a split triggers a full refetch, the
+refetch rewrites the whole series, and the record of the split that caused it is wiped
+from every row in the process.
+Root cause: `fetch_bars` built each `StockOHLCV` from Open/High/Low/Close/Volume only and
+left `dividends` and `stock_splits` at their schema defaults of `0.0`
+(`apps/api/models/schema_parts/market.py:34-35`), even though `yfinance.Ticker.history()`
+returns `Dividends` and `Stock Splits` columns in the same frame. `_save_ohlcv_rows`
+(`apps/api/services/market_data.py:980-990`) writes both columns with `INSERT OR REPLACE`
+against `UNIQUE(ticker, date)`, so the whole row is replaced -- the defaults were persisted
+over real values rather than being ignored as unset.
+Fix: `fetch_bars` now carries `Dividends` and `Stock Splits` through, defaulting to `0.0`
+only when the columns are genuinely absent (index frames have neither). Two regression
+tests: values are carried through, and an action-free frame still yields zeros without
+raising.
+Files changed: `apps/api/services/acquisition/sources/bars.py`,
+`tests/api/acquisition/test_bars_source.py`.
+Prevention: a model default is not "leave this alone" when the persister uses
+`INSERT OR REPLACE` -- it is a value that gets written. When adding a producer for an
+existing table, enumerate every column the persister writes and confirm the producer
+populates each one, not just the ones the new feature reads.

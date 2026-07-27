@@ -44,3 +44,34 @@ def test_full_refetch_overrides_existing_coverage():
     assert plan is not None
     assert plan.start == date(2016, 7, 27)
     assert plan.reason == "corporate_action"
+
+
+def test_full_refetch_starts_at_covered_from_when_the_stored_series_is_older():
+    """The stored series starts at `today - 10y` as of the day of the ORIGINAL backfill,
+    which drifts later every day. A refetch fixed at today's `today - 10y` therefore
+    leaves the head of the series holding the OLD adjustment factor while everything
+    after it gets the NEW one -- the exact mixed-adjustment corruption this path exists
+    to prevent -- and record_success's MIN() then keeps claiming the older covered_from,
+    so the state row asserts a continuous, consistently-adjusted series over rows that
+    are not."""
+    plan = plan_range(
+        _state(covered_from=date(2016, 1, 1), covered_to=date(2026, 7, 24)),
+        today=TODAY,
+        full_refetch=True,
+    )
+    assert plan is not None
+    assert plan.start == date(2016, 1, 1)
+    assert plan.reason == "corporate_action"
+
+
+def test_full_refetch_never_narrows_the_backfill_depth():
+    """The other direction: a subject whose stored coverage is SHORTER than ten years
+    must still be refetched to the full backfill depth, not truncated to what happens to
+    be stored."""
+    plan = plan_range(
+        _state(covered_from=date(2020, 1, 1), covered_to=date(2026, 7, 24)),
+        today=TODAY,
+        full_refetch=True,
+    )
+    assert plan is not None
+    assert plan.start == date(2016, 7, 27)

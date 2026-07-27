@@ -210,13 +210,25 @@ holiday or for a delisted ticker, which is the existing refetch-storm bug.
 - [x] Task 6 — data-class registry (`equity_bars`, `index_bars`)
 - [x] Task 7 — the runner: decide, plan, fetch, persist, record
 - [x] Task 8 — watchlist add schedules a backfill; remove retires the subject
-- [x] `pytest tests/api/acquisition` — 48 passed
-- [x] `pytest tests/api -q` — 6 failed / 259 passed, the six pre-existing failures only
+- [x] `pytest tests/api/acquisition` — 56 passed
+- [x] `pytest tests/api -q` — 6 failed / 267 passed, the six pre-existing failures only
 
-Two defects were caught in review before the phase closed, both recorded in
-`ERROR-LOG.md`: the add-trigger fired on every *edit* of the upsert route (N concurrent
-live fetches per bulk allocation change), and retiring a ticker stamped `last_checked_at`,
-which silently suppressed re-acquisition on a same-day re-add.
+Four defects were caught in review before the phase closed, all recorded in
+`ERROR-LOG.md`. Two in Task 8: the add-trigger fired on every *edit* of the upsert route
+(N concurrent live fetches per bulk allocation change), and retiring a ticker stamped
+`last_checked_at`, which silently suppressed re-acquisition on a same-day re-add. Two more
+in the closing whole-subsystem review, both on the corporate-action path: the full refetch
+started at `today - 10y` rather than at `covered_from`, so the head of the series kept the
+old adjustment factor while the tail was rewritten with the new one; and `fetch_bars` left
+`dividends`/`stock_splits` at their model defaults, which `INSERT OR REPLACE` then wrote
+over the stored values — erasing the record of the very split that triggered the refetch.
+
+That review also confirmed three things clean, worth not re-deriving: `_save_ohlcv_rows`
+uses `INSERT OR REPLACE` against `UNIQUE(ticker, date)`, so a refetch replaces rather than
+duplicates; the runner writes to the `stocks` table `get_stock_ohlcv` reads, so Phase 1
+does not acquire into a void; and saving before `record_success` is the safe crash
+ordering. The suite now also exercises the delta path and the production
+fetcher/probe/saver defaults end-to-end, which nothing did before.
 
 **Not in Phase 1, by decision:** statements, macro rates, news and valuation ratios;
 a scheduled warmer (so `index_bars` is declared but never acquired yet); replacing the

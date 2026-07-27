@@ -46,6 +46,12 @@ def fetch_bars(
                 low=float(record.get("Low") or 0),
                 close=float(record.get("Close") or 0),
                 volume=int(record.get("Volume") or 0),
+                # Carried, not defaulted: the saver writes these with INSERT OR REPLACE
+                # against UNIQUE(ticker, date), so leaving them at 0.0 would overwrite
+                # the stored dividend and split for every date it touches. Indices have
+                # no such columns, hence `or 0`.
+                dividends=float(record.get("Dividends") or 0),
+                stock_splits=float(record.get("Stock Splits") or 0),
             )
         )
     return rows
