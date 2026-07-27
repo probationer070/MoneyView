@@ -51,7 +51,9 @@ These four statements summarize the whole proposal. Each is checkable against th
 4. **Production behavior changes in exactly two places, both intentional and both
    named.** Workstream B changes it deliberately — a deep span tree currently raises
    `RecursionError` and will instead truncate, which is the behavior the test always
-   specified. Workstream D adds a startup gate that is inert unless
+   specified; this touches four functions in `perf_analysis.py`, none of which change
+   signature or output for any tree shallow enough to work today. Workstream D adds a
+   startup gate that is inert unless
    `MONEYVIEW_DISABLE_STARTUP_JOBS` is set, so default production startup is byte-for-byte
    the same. Every other workstream is test-only.
 
@@ -164,16 +166,42 @@ near the limit.
 ### Evidence
 
 Isolated run of the single test reproduces `RecursionError: maximum recursion depth
-exceeded` at `perf_analysis.py:335`, with the failing span reported as `c0-478` — the
-478th link of the chain, well short of any tree a truncation test should be unable to
-handle.
+exceeded` at `perf_analysis.py:335`. The test builds three chains of depth 700 (2,101
+spans).
+
+`perf_analysis.py` contains **five** recursive tree walkers, not one. Instrumenting each
+with a depth counter under a lifted recursion limit shows why only one of them fails:
+
+| Walker | Max depth on this input | Python frames per level | Raises today |
+| --- | --- | --- | --- |
+| `_assign_self_ms` | 701 | 1 | no |
+| `_assign_offsets` | 701 | 1 | no |
+| `_depth_map` | 701 | 1 | no |
+| `_to_node` | 668 | **2** — the list comprehension gets its own frame | **yes** |
+| `_subtree_size` | 1 | 2 | no — only called on already-collapsed children |
+
+`_to_node` is not distinguished by being recursive; it is distinguished by consuming two
+frames per level, which puts 668 levels at roughly 1,336 frames against CPython's default
+1,000-frame limit. The other three walk the same 701 levels on one frame each and survive
+with margin.
 
 ### Design
 
-Convert `_to_node` to an explicit-stack iterative walk: materialize nodes bottom-up into a
-map keyed by span id, then attach each node's children as its parent is constructed. Tree
-depth becomes heap-bound rather than stack-bound. The function signature, its return type,
-and every caller are unchanged.
+Convert `_to_node`, `_assign_self_ms`, `_assign_offsets` and `_depth_map` to explicit-stack
+iterative walks. For `_to_node`: materialize nodes bottom-up into a map keyed by span id,
+then attach each node's children as its parent is constructed. The other three are
+straightforward stack-driven traversals. Tree depth becomes heap-bound rather than
+stack-bound in all four. No signature, return type, or caller changes.
+
+`_subtree_size` is deliberately left recursive: it is only ever invoked on subtrees that
+truncation has already collapsed, measured at depth 1 on this input. Converting it would be
+change without cause.
+
+**Why all four rather than only the one that fails.** Converting `_to_node` alone makes the
+failing test pass but moves the cliff from roughly 500 levels to roughly 1,000, where the
+remaining three fail together — which is the same objection this section raises against
+`sys.setrecursionlimit()`. The acceptance criterion below is "deep span trees no longer
+raise `RecursionError`", and only the four-walker version satisfies it as written.
 
 An explicit stack is chosen over raising `sys.setrecursionlimit()` because increasing the
 recursion limit only postpones the failure and couples correctness to interpreter
@@ -191,12 +219,14 @@ produced incorrect behavior.
 
 ### Verification
 
-The existing test passes without modification. A supplementary test asserts a chain deeper
-than the former recursion ceiling produces a correctly-shaped tree.
+The existing test passes without modification. A supplementary test builds a chain of depth
+2,000 — beyond the reach of all four walkers today — and asserts it truncates to a
+correctly-shaped tree instead of raising.
 
 ### Acceptance
 
 ✓ Deep span trees no longer raise `RecursionError`; they truncate as specified.
+✓ A depth-2,000 chain, which fails on all four walkers before the change, passes after it.
 ✓ Waterfall child ordering is byte-identical to the pre-change output for existing
 fixtures.
 
