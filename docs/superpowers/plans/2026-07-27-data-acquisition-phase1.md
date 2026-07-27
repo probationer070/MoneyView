@@ -70,7 +70,7 @@ where the bugs live — be tested exhaustively without a database or a network.
 - Produces: `Daily(at_hour: int, at_minute: int = 0, business_days: bool = False)` with
   `most_recent_instant(now: datetime) -> datetime`. All datetimes are timezone-aware UTC.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/api/acquisition/__init__.py` (empty) and `tests/api/acquisition/test_boundaries.py`:
 
@@ -143,12 +143,12 @@ def test_valid_boundary_extremes_are_accepted():
     assert Daily(at_hour=0, at_minute=0).at_minute == 0
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python -m pytest tests/api/acquisition/test_boundaries.py -v`
 Expected: FAIL with `ModuleNotFoundError: No module named 'apps.api.services.acquisition'`
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 Create `apps/api/services/acquisition/__init__.py` as an empty file.
 
@@ -214,12 +214,12 @@ class Daily:
         return candidate
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `python -m pytest tests/api/acquisition/test_boundaries.py -v`
 Expected: PASS (8 tests)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/api/services/acquisition/__init__.py apps/api/services/acquisition/boundaries.py tests/api/acquisition/
@@ -251,7 +251,7 @@ git commit -m "feat: UTC daily freshness boundary primitive"
 trigger in Task 8 uses. Nothing else in the codebase may define a status string — a
 second definition site is how `"retired"` and `"retire"` end up both existing.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/api/acquisition/test_state.py`:
 
@@ -326,12 +326,12 @@ def test_a_later_failed_check_preserves_the_earlier_success():
     assert state.status == "failed"
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python -m pytest tests/api/acquisition/test_state.py -v`
 Expected: FAIL with `ModuleNotFoundError: No module named 'apps.api.services.acquisition.state'`
 
-- [ ] **Step 3a: Add the table to the schema**
+- [x] **Step 3a: Add the table to the schema**
 
 In `apps/api/services/db.py`, inside the `_CREATE_SCHEMA_SQL` string, append this block
 before the closing `"""` of that string:
@@ -353,7 +353,7 @@ CREATE TABLE IF NOT EXISTS acquisition_state (
 `data_class` plus `subject` is the primary key, so an upsert is a single statement and
 the freshness question is one indexed lookup rather than six bespoke checks.
 
-- [ ] **Step 3b: Write the accessors**
+- [x] **Step 3b: Write the accessors**
 
 Create `apps/api/services/acquisition/state.py`:
 
@@ -481,12 +481,12 @@ def record_success(
 `covered_from`/`covered_to` widen rather than overwrite, so a later delta cannot shrink
 the recorded history a backfill established.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `python -m pytest tests/api/acquisition/test_state.py -v`
 Expected: PASS (5 tests)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/api/services/db.py apps/api/services/acquisition/state.py tests/api/acquisition/test_state.py
@@ -505,7 +505,7 @@ git commit -m "feat: acquisition_state table and accessors"
 - Consumes: `Daily` from Task 1, `AcquisitionState` from Task 2.
 - Produces: `needs_acquisition(state: AcquisitionState, boundary: Boundary, now: datetime) -> bool`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/api/acquisition/test_freshness.py`:
 
@@ -554,12 +554,12 @@ def test_asked_exactly_at_the_boundary_counts_as_asked():
     assert needs_acquisition(_state(last_checked_at=asked, status=AcquisitionStatus.OK), BOUNDARY, NOW) is False
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python -m pytest tests/api/acquisition/test_freshness.py -v`
 Expected: FAIL with `ModuleNotFoundError: No module named 'apps.api.services.acquisition.freshness'`
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 Create `apps/api/services/acquisition/freshness.py`:
 
@@ -586,12 +586,12 @@ def needs_acquisition(state: AcquisitionState, boundary: Boundary, now: datetime
     return state.last_checked_at < boundary.most_recent_instant(now)
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `python -m pytest tests/api/acquisition/test_freshness.py -v`
 Expected: PASS (5 tests)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/api/services/acquisition/freshness.py tests/api/acquisition/test_freshness.py
@@ -613,7 +613,7 @@ git commit -m "feat: boundary-based freshness rule"
   - `plan_range(state: AcquisitionState, *, today: date, backfill_years: int = 10, full_refetch: bool = False) -> FetchRange | None`
   - `BACKFILL_YEARS = 10`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/api/acquisition/test_ranges.py`:
 
@@ -666,12 +666,12 @@ def test_full_refetch_overrides_existing_coverage():
     assert plan.reason == "corporate_action"
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python -m pytest tests/api/acquisition/test_ranges.py -v`
 Expected: FAIL with `ModuleNotFoundError: No module named 'apps.api.services.acquisition.ranges'`
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 Create `apps/api/services/acquisition/ranges.py`:
 
@@ -726,12 +726,12 @@ def plan_range(
     return FetchRange(state.covered_to + timedelta(days=1), end_exclusive, "delta")
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `python -m pytest tests/api/acquisition/test_ranges.py -v`
 Expected: PASS (5 tests)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/api/services/acquisition/ranges.py tests/api/acquisition/test_ranges.py
@@ -754,7 +754,7 @@ git commit -m "feat: backfill and delta range planning"
   - `latest_action_date(ticker: str, *, ticker_factory=None) -> date | None`
   - `ticker_factory` defaults to `yfinance.Ticker` and exists so tests inject a fake. No test may hit the network.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/api/acquisition/test_bars_source.py`:
 
@@ -828,12 +828,12 @@ def test_latest_action_date_is_none_when_there_are_no_actions():
     assert latest_action_date("AAPL", ticker_factory=lambda symbol: fake) is None
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python -m pytest tests/api/acquisition/test_bars_source.py -v`
 Expected: FAIL with `ModuleNotFoundError: No module named 'apps.api.services.acquisition.sources'`
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 Create `apps/api/services/acquisition/sources/__init__.py` as an empty file.
 
@@ -914,12 +914,12 @@ def latest_action_date(
     return max(entry.date() for entry in actions.index.to_pydatetime())
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `python -m pytest tests/api/acquisition/test_bars_source.py -v`
 Expected: PASS (4 tests)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/api/services/acquisition/sources/ tests/api/acquisition/test_bars_source.py
@@ -948,7 +948,7 @@ Declaring it now is what proves the registry handles `GLOBAL` scope and a second
 without the runner gaining a branch. Indices keep being served by the existing
 `market_data` read path in the meantime.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/api/acquisition/test_registry.py`:
 
@@ -990,12 +990,12 @@ def test_unknown_data_class_raises_with_a_useful_message():
         raise AssertionError("an unknown data class must raise")
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python -m pytest tests/api/acquisition/test_registry.py -v`
 Expected: FAIL with `ModuleNotFoundError: No module named 'apps.api.services.acquisition.registry'`
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 Create `apps/api/services/acquisition/registry.py`:
 
@@ -1060,12 +1060,12 @@ def get_data_class(name: str) -> DataClass:
     return REGISTRY[name]
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `python -m pytest tests/api/acquisition/test_registry.py -v`
 Expected: PASS (5 tests)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/api/services/acquisition/registry.py tests/api/acquisition/test_registry.py
@@ -1086,7 +1086,7 @@ git commit -m "feat: data class registry with equity and index bars"
   - `AcquisitionResult(data_class, subject, fetched_rows, reason, skipped)` — frozen dataclass
   - `acquire(data_class_name: str, subject: str, *, now: datetime, fetcher=fetch_bars, action_probe=latest_action_date, saver=None) -> AcquisitionResult`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/api/acquisition/test_runner.py`:
 
@@ -1213,12 +1213,12 @@ def test_a_provider_failure_records_the_ask_and_preserves_prior_success():
     assert state.covered_to == date(2026, 7, 24)  # prior data still served
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python -m pytest tests/api/acquisition/test_runner.py -v`
 Expected: FAIL with `ModuleNotFoundError: No module named 'apps.api.services.acquisition.runner'`
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 Create `apps/api/services/acquisition/runner.py`:
 
@@ -1326,12 +1326,12 @@ def acquire(
     return AcquisitionResult(data_class_name, subject, len(rows), fetch_range.reason, skipped=False)
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `python -m pytest tests/api/acquisition/test_runner.py -v`
 Expected: PASS (6 tests)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/api/services/acquisition/runner.py tests/api/acquisition/test_runner.py
@@ -1352,7 +1352,7 @@ git commit -m "feat: acquisition runner with backfill, delta and corporate actio
   the added ticker; `DELETE /portfolio/watchlist/{ticker}` records that it is no longer
   refreshed.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/api/acquisition/test_triggers.py`:
 
@@ -1425,12 +1425,12 @@ def test_removing_a_watchlist_item_marks_it_no_longer_refreshed():
     assert read_state("equity_bars", TICKER).status == AcquisitionStatus.RETIRED
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python -m pytest tests/api/acquisition/test_triggers.py -v`
 Expected: FAIL with `AttributeError: <module 'apps.api.routes.portfolio'> has no attribute 'schedule_acquisition'`
 
-- [ ] **Step 3a: Add the scheduling helper**
+- [x] **Step 3a: Add the scheduling helper**
 
 Append to `apps/api/services/acquisition/runner.py`:
 
@@ -1462,7 +1462,7 @@ def retire_subject(data_class: str, subject: str) -> None:
     record_check(data_class, subject, now=datetime.now(UTC), status=AcquisitionStatus.RETIRED)
 ```
 
-- [ ] **Step 3b: Wire the routes**
+- [x] **Step 3b: Wire the routes**
 
 In `apps/api/routes/portfolio.py`, add to the imports at the top of the file:
 
@@ -1502,18 +1502,18 @@ In `delete_watchlist_item`, replace the line `mark_watchlist_state("user_mutatio
 `apps/api/routes/portfolio.py` already defines `logger`; if it does not, add
 `from apps.api.core.logger import setup_logger` and `logger = setup_logger(__name__)`.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `python -m pytest tests/api/acquisition/test_triggers.py -v`
 Expected: PASS (3 tests)
 
-- [ ] **Step 5: Run the full suite**
+- [x] **Step 5: Run the full suite**
 
 Run: `python -m pytest tests/api -q`
 Expected: the six pre-existing failures documented in `guideline/sop/todo.md` and no
 others. If a new failure appears, it belongs to this change.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add apps/api/services/acquisition/runner.py apps/api/routes/portfolio.py tests/api/acquisition/test_triggers.py
@@ -1522,15 +1522,33 @@ git commit -m "feat: watchlist add and remove drive acquisition"
 
 ---
 
+### Task 8 — corrections applied during implementation
+
+The Task 8 code above is the plan as written. Four things in it were wrong and were
+corrected before the commit; the shipped code differs from the listing accordingly.
+
+| Plan text | Correction |
+| --- | --- |
+| "`portfolio.py` already defines `logger`" | It did not. `setup_logger` import and `logger = setup_logger(__name__)` were added, placed as in `routes/corporate.py`. |
+| `with TestClient(app) as client:` | The context-manager form runs the lifespan (`main.py:106`), which spawns `corporate_snapshot_cycle` and `stock_prewarm_cycle` — both make live provider calls, against this plan's own no-network-in-tests constraint. Uses the bare `TestClient(app)` form, as every existing test in the repo does. |
+| `_clean_test_rows` fixture | It wrote to and deleted from the **real** project database. Replaced with the autouse `_isolated_db` fixture Tasks 2–7 already use (`monkeypatch db_service._DB_PATH` + `init_db()`), so nothing touches the real DB at all. |
+| `schedule_acquisition` called unconditionally | This endpoint is an upsert and is also the client's metadata/weight edit path, so scheduling per call turned one bulk allocation edit into N concurrent live fetches. Now gated on the row being genuinely new. See `ERROR-LOG.md`, 2026-07-27. |
+
+One further defect was found in review and fixed in the same round: `retire_subject`
+called `record_check`, which stamps `last_checked_at` — the sole input to the freshness
+decision — so a remove-then-re-add inside one boundary window silently acquired nothing.
+`state.record_retired` now sets the status without advancing that clock. Both defects are
+recorded in `ERROR-LOG.md`.
+
 ## Phase 1 completion checklist
 
-- [ ] `python -m pytest tests/api/acquisition -v` — all tasks' tests pass
-- [ ] `python -m pytest tests/api -q` — only the six pre-existing failures
-- [ ] Adding a watchlist ticker performs one 10-year backfill, off the request path
-- [ ] A second acquisition inside the same boundary window is skipped
-- [ ] A market holiday or delisted ticker is asked once per boundary, not per request
-- [ ] A new split triggers a full refetch rather than a delta append
-- [ ] No read path gained a provider call
+- [x] `python -m pytest tests/api/acquisition -v` — all tasks' tests pass
+- [x] `python -m pytest tests/api -q` — only the six pre-existing failures
+- [x] Adding a watchlist ticker performs one 10-year backfill, off the request path
+- [x] A second acquisition inside the same boundary window is skipped
+- [x] A market holiday or delisted ticker is asked once per boundary, not per request
+- [x] A new split triggers a full refetch rather than a delta append
+- [x] No read path gained a provider call
 
 ## Deferred improvements (review, 2026-07-27)
 

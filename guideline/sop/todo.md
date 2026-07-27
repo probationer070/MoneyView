@@ -189,6 +189,40 @@ Deferred to sub-projects 2-4: on-demand loading, UI/UX redesign, stock-add
 availability pre-check. The per-ticker cache is deliberately part of #2, so it lands
 with a measured before/after.
 
+## Active Track - Data Acquisition (sub-project 2 of 4)
+
+Design spec: `docs/superpowers/specs/2026-07-27-data-acquisition-design.md`
+Phase 1 plan: `docs/superpowers/plans/2026-07-27-data-acquisition-phase1.md`
+
+Goal: reusable acquisition machinery — boundary-based freshness, an `acquisition_state`
+table, a registry, and a runner — so daily bars arrive incrementally instead of being
+re-downloaded on the read path. Freshness asks *"have I asked since the last boundary?"*,
+never *"do I hold a bar dated >= X"*: the latter can never be satisfied on a market
+holiday or for a delisted ticker, which is the existing refetch-storm bug.
+
+### Phase 1 - complete 2026-07-27 (commits 981acc1..95c3739)
+
+- [x] Task 1 — UTC `Daily` boundary primitive, validated at construction
+- [x] Task 2 — `acquisition_state` table, accessors, `AcquisitionStatus` StrEnum
+- [x] Task 3 — the boundary-based freshness rule
+- [x] Task 4 — backfill (10y) versus delta range planning
+- [x] Task 5 — yfinance range fetch and corporate-action probe, injected for tests
+- [x] Task 6 — data-class registry (`equity_bars`, `index_bars`)
+- [x] Task 7 — the runner: decide, plan, fetch, persist, record
+- [x] Task 8 — watchlist add schedules a backfill; remove retires the subject
+- [x] `pytest tests/api/acquisition` — 48 passed
+- [x] `pytest tests/api -q` — 6 failed / 259 passed, the six pre-existing failures only
+
+Two defects were caught in review before the phase closed, both recorded in
+`ERROR-LOG.md`: the add-trigger fired on every *edit* of the upsert route (N concurrent
+live fetches per bulk allocation change), and retiring a ticker stamped `last_checked_at`,
+which silently suppressed re-acquisition on a same-day re-add.
+
+**Not in Phase 1, by decision:** statements, macro rates, news and valuation ratios;
+a scheduled warmer (so `index_bars` is declared but never acquired yet); replacing the
+read path — `market_data.get_stock_ohlcv` still serves reads exactly as before.
+Phase 2/long-term deferrals are tabled at the end of the plan with their reasoning.
+
 ## Archived Track - MoneyView Dev Monitor
 
 Completed basis retained from the previous active plan:
