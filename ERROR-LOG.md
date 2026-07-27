@@ -415,3 +415,61 @@ before returning (reuse the A-3 sentinel serializer, or a shared response class
 that replaces non-finite floats with null), rather than relying on each route to be
 NaN-free. A route-level test that feeds a NaN through `/market/indices` and asserts
 a 200 with nulls (not a 500) would catch regressions.
+
+## 2026-07-27: Watchlist upsert scheduled a live acquisition on every metadata/weight edit
+
+Date: 2026-07-27
+Command: code review of Task 8 (`git diff 1eb6d5d..754f3b4`); no test failed
+Failure: Silent. `POST /api/v1/portfolio/watchlist` spawned an unbounded daemon thread
+(`apps/api/services/acquisition/runner.py:120`) on **every** call, each thread making two
+live provider calls (`latest_action_date` + `fetch_bars`). Nothing errored -- the route
+returned 200 immediately after its SQLite write, and the fan-out happened after the
+response.
+Root cause: the endpoint is named and documented as "add or update" and is an
+`INSERT OR REPLACE` upsert, but the trigger was wired as if it were an add-only route.
+The web client uses the same endpoint for pure metadata and weight edits
+(`apps/web/app/portfolio/page.tsx:1497` `persistWatchlistItem`), including two loops that
+POST once per holding: "normalize allocations" (`:1714`) and the allocation auto-save
+(`:1789`). One bulk allocation edit on an N-holding portfolio therefore became N
+concurrent live fetches -- against a rule `apps/api/services/acquisition/sources/bars.py:3-5`
+states explicitly, because concurrent live fetching had already earned a Yahoo rate limit
+that invalidated a day of measurements during sub-project 1.
+Fix: `upsert_watchlist_item` now SELECTs the ticker inside the existing transaction before
+the `INSERT OR REPLACE` and schedules acquisition only when the row is genuinely new.
+Regression test: two POSTs for one ticker (the second changing weight) must schedule
+exactly once, and must still persist the edit.
+Files changed: `apps/api/routes/portfolio.py`, `tests/api/acquisition/test_triggers.py`
+(commit 95c3739).
+Prevention: when attaching a side effect to an HTTP route, check what the **client**
+actually calls it for, not what the route is named. An upsert reached by an edit loop is a
+fan-out multiplier. Any new trigger that spawns a thread per request needs a test that
+calls the route twice and asserts the side effect fired once.
+
+## 2026-07-27: Retiring a watchlist ticker advanced the freshness clock, silently suppressing re-acquisition
+
+Date: 2026-07-27
+Command: code review of Task 8 (`git diff 1eb6d5d..754f3b4`); no test failed
+Failure: Silent, and only observable a boundary window later. Remove a ticker, re-add it
+the same UTC day, and acquisition reported `skipped=True` and fetched nothing, while
+`acquisition_state.status` still read `'retired'` for a ticker that was back on the
+watchlist. Worst case: add a new ticker -> the background `acquire` raises before writing
+any state (swallowed at `runner.py:117`) -> delete -> re-add -> the ticker holds zero bars
+until the next 00:00 UTC, with nothing asking again.
+Root cause: `retire_subject` called `record_check`, which stamps `last_checked_at = now`
+(`apps/api/services/acquisition/state.py:84-93`). `needs_acquisition`
+(`apps/api/services/acquisition/freshness.py:18-20`) reads nothing but `last_checked_at`,
+so the stamp is indistinguishable from a successful ask. Semantic mismatch: `record_check`
+means "we asked the provider", and retiring is not an ask -- it was reused because it was
+the only writer that set a status without touching coverage.
+Fix: added `record_retired(data_class, subject)` to `state.py`, an upsert that sets
+`status = RETIRED` and `detail = NULL` and touches none of `last_checked_at`,
+`last_success_at`, `covered_from`, `covered_to`. `retire_subject` calls it. Three
+regression tests: the timestamp is unchanged after a prior check; a never-seen subject
+still reports `needs_acquisition is True`; a prior success keeps its coverage.
+Files changed: `apps/api/services/acquisition/state.py`,
+`apps/api/services/acquisition/runner.py`, `tests/api/acquisition/test_state.py`
+(commit 95c3739).
+Prevention: the boundary-based design makes `last_checked_at` the single input to every
+freshness decision, so any writer that sets it is asserting "the provider was asked".
+Before reusing a recorder, check whether its *name* is true of the new caller. When a
+field governs a decision alone, its writers should be enumerable and each one justified.
