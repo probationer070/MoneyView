@@ -99,3 +99,30 @@ def acquire(
         covered_from=fetch_range.start, covered_to=covered_to,
     )
     return AcquisitionResult(data_class_name, subject, len(rows), fetch_range.reason, skipped=False)
+
+
+def schedule_acquisition(data_class: str, subject: str) -> None:
+    """Enqueue acquisition without blocking the caller.
+
+    Phase 1 runs it on a daemon thread. That is sufficient for a local-first
+    single-process app and keeps the write path non-blocking; a scheduled warmer for the
+    whole registry arrives with the later phases.
+    """
+    import threading
+    from datetime import UTC, datetime
+
+    def _run() -> None:
+        try:
+            acquire(data_class, subject, now=datetime.now(UTC))
+        except Exception as error:  # noqa: BLE001 - a background failure must stay contained
+            logger.warning("acquisition.scheduled_failed subject=%s error=%s", subject, error)
+
+    threading.Thread(target=_run, name=f"acquire-{subject}", daemon=True).start()
+
+
+def retire_subject(data_class: str, subject: str) -> None:
+    """Stop refreshing a subject. Rows are retained: storage is cheap and re-adding the
+    ticker is then free."""
+    from datetime import UTC, datetime
+
+    record_check(data_class, subject, now=datetime.now(UTC), status=AcquisitionStatus.RETIRED)

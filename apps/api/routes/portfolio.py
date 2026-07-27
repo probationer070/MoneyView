@@ -21,6 +21,8 @@ from apps.api.models.schemas import (
 )
 from apps.api.compute.client import get_compute_client
 from apps.api.compute.errors import ComputeError
+from apps.api.core.logger import setup_logger
+from apps.api.services.acquisition.runner import retire_subject, schedule_acquisition
 from apps.api.services.db import get_db
 from apps.api.services.market_data import MarketDataService
 from apps.api.services.news_service import NewsService
@@ -37,6 +39,7 @@ _API_ROOT = Path(__file__).resolve().parents[1]
 _WATCHLIST_JSON = _API_ROOT / "services" / "webscrap" / "stock_targets.json"
 
 router = APIRouter()
+logger = setup_logger(__name__)
 _mkt = MarketDataService()
 _news = NewsService()
 _portfolio_analytics = PortfolioAnalyticsService(_mkt)
@@ -160,6 +163,18 @@ async def upsert_watchlist_item(item: WatchlistItem = Body(...)):
             (normalized.ticker, normalized.name, normalized.sector, normalized.group_name, normalized.weight),
         )
     mark_watchlist_state("user_mutation")
+    # Adding a stock is the natural moment to acquire its history: one 10-year backfill,
+    # once, off the request path. Without this the next comparison discovers the ticker
+    # and pays a live fetch in-band while a user waits.
+    #
+    # Guarded because acquisition is best-effort: a scheduling failure must never fail
+    # the user's watchlist write, which is the operation they actually asked for
+    # (design 10 -- no acquisition failure propagates into a request).
+    try:
+        schedule_acquisition("equity_bars", normalized.ticker)
+    except Exception as error:  # noqa: BLE001 - best-effort, never fails the write
+        logger.warning("watchlist.schedule_acquisition_failed ticker=%s error=%s",
+                       normalized.ticker, error)
     return normalized
 
 
@@ -199,6 +214,11 @@ async def delete_watchlist_item(ticker: str):
             raise HTTPException(status_code=404, detail=f"watchlist ticker not found: {normalized_ticker}")
         conn.execute("DELETE FROM watchlist WHERE ticker = ?", (normalized_ticker,))
     mark_watchlist_state("user_mutation")
+    try:
+        retire_subject("equity_bars", normalized_ticker)
+    except Exception as error:  # noqa: BLE001 - best-effort, never fails the delete
+        logger.warning("watchlist.retire_subject_failed ticker=%s error=%s",
+                       normalized_ticker, error)
     return {"status": "ok", "ticker": normalized_ticker}
 
 
