@@ -1,5 +1,5 @@
 import threading
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timezone
 
 import pandas as pd
 import pytest
@@ -8,8 +8,9 @@ from apps.api.models.schemas import StockOHLCV
 from apps.api.services import db as db_service
 from apps.api.services.acquisition.ranges import FetchRange
 from apps.api.services.acquisition.sources import bars
-from apps.api.services.acquisition.runner import acquire, schedule_acquisition
-from apps.api.services.acquisition.state import read_state, record_success
+from apps.api.services.acquisition.sources.quote_facts import QuoteFacts
+from apps.api.services.acquisition.runner import acquire, acquire_point_in_time, schedule_acquisition
+from apps.api.services.acquisition.state import AcquisitionStatus, read_state, record_success
 
 NOW = datetime(2026, 7, 27, 9, 0, tzinfo=UTC)
 
@@ -236,3 +237,111 @@ def test_a_failure_inside_the_scheduled_thread_stays_contained(monkeypatch):
         thread.join(timeout=5)
         assert not thread.is_alive()
     assert escaped == [], "the failure escaped _run instead of being contained"
+
+
+def test_point_in_time_skips_entirely_when_fresh():
+    """Idempotence: inside the boundary, no network work and no state change."""
+    now = datetime(2026, 7, 30, 12, 0, tzinfo=timezone.utc)
+    record_success("statements", "AAPL", now=now, covered_from=date(2024, 1, 1), covered_to=date(2025, 9, 30))
+    calls = []
+
+    result = acquire_point_in_time(
+        "statements", "AAPL", now=now,
+        fetcher=lambda subject: calls.append(subject) or [],
+        saver=lambda subject, rows: calls.append("saved"),
+        coverage=lambda rows: (date(2024, 1, 1), date(2025, 9, 30)),
+    )
+
+    assert result.skipped is True
+    assert result.reason == "fresh"
+    assert calls == []
+
+
+def test_point_in_time_saves_and_records_coverage():
+    now = datetime(2026, 7, 30, 12, 0, tzinfo=timezone.utc)
+    saved = {}
+
+    result = acquire_point_in_time(
+        "statements", "AAPL", now=now,
+        fetcher=lambda subject: ["row"],
+        saver=lambda subject, rows: saved.update({subject: rows}),
+        coverage=lambda rows: (date(2024, 9, 30), date(2025, 9, 30)),
+    )
+
+    assert result.skipped is False
+    assert saved == {"AAPL": ["row"]}
+    state = read_state("statements", "AAPL")
+    assert state.status == AcquisitionStatus.OK
+    assert state.covered_to == date(2025, 9, 30)
+
+
+def test_point_in_time_records_failure_without_touching_stored_data():
+    now = datetime(2026, 7, 30, 12, 0, tzinfo=timezone.utc)
+
+    def explode(subject):
+        raise RuntimeError("provider down")
+
+    result = acquire_point_in_time(
+        "statements", "AAPL", now=now,
+        fetcher=explode,
+        saver=lambda subject, rows: pytest.fail("saver must not run on a failed fetch"),
+        coverage=lambda rows: (date(2024, 1, 1), date(2025, 1, 1)),
+    )
+
+    assert result.skipped is False
+    state = read_state("statements", "AAPL")
+    assert state.status == AcquisitionStatus.FAILED
+    assert state.last_success_at is None
+    # Advanced deliberately: freshness asks "have I asked", so a delisted ticker is not
+    # retried forever. Under Weekly that suppresses retry for up to seven days.
+    assert state.last_checked_at == now
+
+
+def test_point_in_time_acquires_again_once_the_boundary_has_passed():
+    """The other half of idempotence: fresh means skip, stale means fetch. Without this,
+    a boundary that never expires would pass the skip test and silently freeze the data."""
+    acquired_at = datetime(2026, 7, 27, 12, 0, tzinfo=timezone.utc)      # Monday
+    record_success("statements", "AAPL", now=acquired_at,
+                   covered_from=date(2024, 1, 1), covered_to=date(2025, 9, 30))
+    calls = []
+
+    # The following Monday: a new Weekly boundary has passed.
+    result = acquire_point_in_time(
+        "statements", "AAPL", now=datetime(2026, 8, 3, 12, 0, tzinfo=timezone.utc),
+        fetcher=lambda subject: calls.append(subject) or ["row"],
+        saver=lambda subject, rows: None,
+        coverage=lambda rows: (date(2024, 1, 1), date(2025, 9, 30)),
+    )
+
+    assert result.skipped is False
+    assert calls == ["AAPL"]
+
+
+def test_point_in_time_counts_a_single_dataclass_payload():
+    """Quote facts arrive as one frozen dataclass, not a list. Counting must not assume
+    __len__ exists."""
+    now = datetime(2026, 7, 30, 12, 0, tzinfo=timezone.utc)
+    facts = QuoteFacts("AAPL", 4_000.0, 100.0, "USD")
+
+    result = acquire_point_in_time(
+        "market_cap", "AAPL", now=now,
+        fetcher=lambda subject: facts,
+        saver=lambda subject, payload: None,
+        coverage=lambda payload: (now.date(), now.date()),
+    )
+
+    assert result.fetched_rows == 1
+
+
+def test_point_in_time_records_empty_when_the_provider_returns_nothing():
+    now = datetime(2026, 7, 30, 12, 0, tzinfo=timezone.utc)
+
+    result = acquire_point_in_time(
+        "statements", "AAPL", now=now,
+        fetcher=lambda subject: [],
+        saver=lambda subject, rows: pytest.fail("saver must not run on an empty fetch"),
+        coverage=lambda rows: (date(2024, 1, 1), date(2025, 1, 1)),
+    )
+
+    assert result.skipped is False
+    assert read_state("statements", "AAPL").status == AcquisitionStatus.EMPTY

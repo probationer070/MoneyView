@@ -1,7 +1,12 @@
 """Acquisition orchestration.
 
-Reads the registry, asks the freshness question, plans a range, fetches, persists, and
-records what happened. Holds no per-class logic: adding a data class is a registry row.
+Two shapes. `acquire` is range-shaped -- it plans a fetch window, probes corporate
+actions, and derives coverage from bar dates. `acquire_point_in_time` is for classes with
+no range, where the provider returns whatever periods it currently reports. Both share the
+freshness question and the state records and hold no other per-class logic.
+
+A source protocol gets extracted when a third shape appears; with two, an abstraction
+would be guessing.
 
 No acquisition failure ever propagates into a request. Precedent: the telemetry sink's
 failure policy in perf spec 03.8.
@@ -100,6 +105,51 @@ def acquire(
         covered_from=fetch_range.start, covered_to=covered_to,
     )
     return AcquisitionResult(data_class_name, subject, len(rows), fetch_range.reason, skipped=False)
+
+
+def acquire_point_in_time(
+    data_class_name: str,
+    subject: str,
+    *,
+    now: datetime,
+    fetcher,
+    saver,
+    coverage,
+) -> AcquisitionResult:
+    """Acquire a data class that has no date range to plan.
+
+    `acquire` above is range-shaped: it plans a fetch window, probes for corporate actions
+    and derives coverage from bar dates. Statements and quote facts have none of that --
+    the provider returns whatever periods it currently reports. What is genuinely shared
+    is the freshness question and the state records, which is all this reuses.
+
+    `coverage` maps the fetched rows to (covered_from, covered_to) for record_success.
+    """
+    declared = get_data_class(data_class_name)
+    state = read_state(data_class_name, subject)
+
+    if not needs_acquisition(state, declared.boundary, now):
+        return AcquisitionResult(data_class_name, subject, 0, "fresh", skipped=True)
+
+    try:
+        rows = fetcher(subject)
+    except Exception as error:  # noqa: BLE001 - never propagate into a caller
+        logger.warning("acquisition.fetch_failed data_class=%s subject=%s error=%s",
+                       data_class_name, subject, error)
+        record_check(data_class_name, subject, now=now, status=AcquisitionStatus.FAILED, detail=str(error))
+        return AcquisitionResult(data_class_name, subject, 0, "failed", skipped=False)
+
+    if not rows:
+        record_check(data_class_name, subject, now=now, status=AcquisitionStatus.EMPTY)
+        return AcquisitionResult(data_class_name, subject, 0, "empty", skipped=False)
+
+    saver(subject, rows)
+    covered_from, covered_to = coverage(rows)
+    record_success(data_class_name, subject, now=now, covered_from=covered_from, covered_to=covered_to)
+    # Statements arrive as a list; quote facts arrive as a single frozen dataclass with no
+    # __len__. Both are legitimate point-in-time payloads, so count defensively.
+    fetched = len(rows) if hasattr(rows, "__len__") else 1
+    return AcquisitionResult(data_class_name, subject, fetched, "acquired", skipped=False)
 
 
 def schedule_acquisition(data_class: str, subject: str) -> None:
