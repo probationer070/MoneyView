@@ -652,6 +652,7 @@ def test_manual_refresh_keeps_multiple_intraday_versions_for_same_kst_day(tmp_pa
     assert int(version_count["version_count"]) == 2
 
 
+@pytest.mark.virgin_db
 def test_init_db_adds_comparison_universe_columns_for_legacy_snapshot_tables(tmp_path, monkeypatch):
     db_path = tmp_path / "moneyview.db"
     monkeypatch.setattr(db_service, "_DB_PATH", db_path)
