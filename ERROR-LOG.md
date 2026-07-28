@@ -560,3 +560,57 @@ When a module walks user- or telemetry-shaped trees, frames-per-level is the num
 matters and it is not visible from reading one function -- the comprehension inside
 `_to_node` doubled it invisibly. Prefer explicit stacks for any traversal whose depth is
 attacker- or workload-determined, and measure depth rather than assuming it.
+
+## 2026-07-28: Four tests never executed on any machine without an `E:` drive
+
+Date: 2026-07-28
+Command: `python -m pytest tests/api -q`
+Failure: Four tests in `test_corporate_companies_registry.py` and
+`test_stock_price_lookup.py` errored in setup rather than failing an assertion, and were
+carried in the branch baseline as part of "6 known failures". Because they died before
+reaching their bodies, their assertions had never run -- on any machine, including the one
+where the path existed, nothing verified that the code under test was correct. A setup
+error and a real failure look nearly identical in a `-q` summary line, which is why this
+survived several branches.
+Root cause: both files built their temp directory under a hardcoded `E:\MoneyView` root via
+private helpers that also called `tempfile._get_candidate_names()`. The drive letter is one
+developer's machine; the private tempfile API is not a supported interface.
+Fix: both files take pytest's `tmp_path` fixture. The private helpers and the `tempfile`
+import were deleted.
+Files changed: `tests/api/test_corporate_companies_registry.py`,
+`tests/api/test_stock_price_lookup.py`.
+Prevention: an errored test is not a failing test -- it is an *unrun* test, and a baseline
+that counts the two together hides how much of the suite is dead. Never hardcode an absolute
+path in a test; `tmp_path` exists for exactly this. When adopting an inherited baseline of
+known failures, check whether each one fails in its body or dies in setup before agreeing to
+carry it.
+
+## 2026-07-28: The API test suite read the developer's real database, so results depended on the machine
+
+Date: 2026-07-28
+Command: `python -m pytest tests/api -q`
+Failure: `test_dev_monitor_foundation.py::test_market_data_emits_cache_and_provider_events`
+and two tests in `test_perf_capture.py` traded places depending on execution order -- one
+set passed only when the other ran first. Every failure was a plain assertion error with no
+indication that machine state was involved. The suite took 403 seconds.
+Root cause: nothing pointed `apps/api/services/db.py`'s `_DB_PATH` away from
+`data/processed/moneyview.db`, so every test read one developer's real data -- 142 tickers
+and 1,307 AAPL rows, empty on a fresh clone. A test asserting "this fetch was live" then
+passed or failed on whether some earlier test had warmed that shared cache, not on the code.
+The same shared cache also hid real network traffic: once the database was isolated, a
+single `/api/v1/portfolio/watchlist` request in `test_perf_capture.py` missed cache on every
+ticker and fetched live yfinance data, emitting 3,889 dev-monitor events instead of 440 and
+evicting `api.request_start` from the fixed `recent(limit=N)` windows two tests read.
+Fix: `tests/conftest.py` gained an autouse `_isolated_db` fixture pointing `_DB_PATH` at
+`tmp_path`, with a `virgin_db` marker for the one migration test that needs an isolated but
+uninitialised file. `test_perf_capture.py` serves the watchlist from canned bars.
+`MONEYVIEW_DISABLE_STARTUP_JOBS` stops the lifespan's live-data warmers under pytest.
+Files changed: `tests/conftest.py`, `pyproject.toml`, `tests/api/test_corporate_comparison.py`,
+`tests/api/test_perf_capture.py`, `apps/api/main.py`, `tests/api/test_startup_jobs_gate.py`.
+Prevention: the diagnosis here took far longer than the fix because the evidence -- a 403s
+runtime and two failures that alternated -- was ambient rather than reported. Both invariants
+are now enforced in `tests/conftest.py` instead of trusted: `_forbid_the_real_database`
+fails any test that opens the production SQLite file, and `_forbid_network` fails any test
+that resolves or connects to a non-loopback host. Both were verified against a deliberately
+violating test before being committed. Checking a file's mtime by hand after a run, or
+inferring hermeticity from wall-clock time, is not a control.

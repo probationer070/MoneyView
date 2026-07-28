@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+import socket
+import sqlite3
 from pathlib import Path
 from uuid import uuid4
 
@@ -66,6 +68,75 @@ def _isolated_db(request, tmp_path, monkeypatch):
     monkeypatch.setattr(db_service, "_DB_PATH", tmp_path / "moneyview.db")
     if "virgin_db" not in request.keywords:
         db_service.init_db()
+
+
+@pytest.fixture(autouse=True, scope="session")
+def _forbid_network():
+    """Fail any test that opens a non-loopback socket.
+
+    Two of the six inherited failures were caused by tests silently reaching
+    yfinance: results depended on network weather and on whether the developer's
+    cache happened to be warm. That was only ever caught by noticing a suite that
+    took 403 seconds, which is not a control. This makes the plan's "no test may
+    make a network call" constraint enforced rather than merely asserted.
+
+    Loopback is allowed: apps/api/main.py's find_available_port probes 127.0.0.1
+    and must keep working. There is deliberately no opt-out marker -- a test that
+    genuinely needs the network should be a visible edit to this fixture, not a
+    decorator someone reaches for under deadline.
+    """
+    real_connect = socket.socket.connect
+    real_connect_ex = socket.socket.connect_ex
+    real_getaddrinfo = socket.getaddrinfo
+    local = {"127.0.0.1", "::1", "localhost"}
+
+    def _host_of(address):
+        return str(address[0]) if isinstance(address, tuple) and address else str(address)
+
+    def guarded_connect(self, address, *args, **kwargs):
+        if _host_of(address) not in local:
+            raise AssertionError(f"test made a network call to {_host_of(address)}")
+        return real_connect(self, address, *args, **kwargs)
+
+    def guarded_connect_ex(self, address, *args, **kwargs):
+        if _host_of(address) not in local:
+            raise AssertionError(f"test made a network call to {_host_of(address)}")
+        return real_connect_ex(self, address, *args, **kwargs)
+
+    def guarded_getaddrinfo(host, *args, **kwargs):
+        if str(host) not in local:
+            raise AssertionError(f"test resolved {host} -- network calls are not allowed")
+        return real_getaddrinfo(host, *args, **kwargs)
+
+    socket.socket.connect = guarded_connect
+    socket.socket.connect_ex = guarded_connect_ex
+    socket.getaddrinfo = guarded_getaddrinfo
+    yield
+    socket.socket.connect = real_connect
+    socket.socket.connect_ex = real_connect_ex
+    socket.getaddrinfo = real_getaddrinfo
+
+
+@pytest.fixture(autouse=True, scope="session")
+def _forbid_the_real_database():
+    """Fail any test that opens data/processed/moneyview.db.
+
+    _isolated_db redirects _DB_PATH, but a test that builds its own connection
+    string bypasses it entirely -- which is how the suite came to depend on one
+    developer's 142 tickers and 1,307 AAPL rows without anyone noticing. Checking
+    the file's mtime by hand after a run is not a control either.
+    """
+    real_connect = sqlite3.connect
+    forbidden = (Path.cwd() / "data" / "processed" / "moneyview.db").resolve()
+
+    def guarded_connect(database, *args, **kwargs):
+        if str(database) != ":memory:" and Path(str(database)).resolve() == forbidden:
+            raise AssertionError(f"test opened the real database at {forbidden}")
+        return real_connect(database, *args, **kwargs)
+
+    sqlite3.connect = guarded_connect
+    yield
+    sqlite3.connect = real_connect
 
 
 @pytest.fixture(autouse=True, scope="session")
