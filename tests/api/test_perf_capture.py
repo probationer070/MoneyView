@@ -5,11 +5,14 @@ import json
 import threading
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 from starlette.concurrency import run_in_threadpool
 
 from apps.api.core import dev_monitor
 from apps.api.main import app
+from apps.api.models.schema_parts.market import StockOHLCV
+from apps.api.routes import portfolio as portfolio_routes
 from apps.api.core.dev_monitor import (
     ActiveDevMonitorSink,
     emit_performance_event,
@@ -186,6 +189,28 @@ def test_sink_sizes_deques_from_event_limit(monkeypatch, tmp_path):
     for index in range(10):
         sink.emit(_event(f"op{index}"))
     assert len(sink.recent(limit=100)) == 5
+
+
+@pytest.fixture(autouse=True)
+def _canned_watchlist_bars(monkeypatch):
+    """Serve /api/v1/portfolio/watchlist from canned bars instead of yfinance.
+
+    Every TestClient test in this file requests the watchlist, and
+    apps/api/routes/portfolio.py:62 calls _mkt.get_stock_ohlcv per row. Against
+    the isolated empty database each of those is a cache miss, so one request
+    fetched live data for the whole default watchlist: a network call, 33
+    seconds, and 3,889 dev-monitor events instead of 440. The flood evicted
+    api.request_start from the fixed recent(limit=500) and recent(limit=2000)
+    windows two tests read, so they saw a request with no root span.
+
+    The stub does not weaken those tests: they assert on request-level spans and
+    on db.* events from InstrumentedCursor, both of which still flow.
+    """
+    bars = [
+        StockOHLCV(date=f"2026-07-{day:02d}", open=10.0, high=11.0, low=9.0, close=10.0 + day, volume=1_000)
+        for day in range(1, 21)
+    ]
+    monkeypatch.setattr(portfolio_routes._mkt, "get_stock_ohlcv", lambda *args, **kwargs: bars)
 
 
 def _enable(monkeypatch, tmp_path):

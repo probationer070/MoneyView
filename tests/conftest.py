@@ -66,3 +66,19 @@ def _isolated_db(request, tmp_path, monkeypatch):
     monkeypatch.setattr(db_service, "_DB_PATH", tmp_path / "moneyview.db")
     if "virgin_db" not in request.keywords:
         db_service.init_db()
+
+
+@pytest.fixture(autouse=True, scope="session")
+def _disable_startup_jobs():
+    """Stop the FastAPI lifespan starting its live-data warmers under pytest.
+
+    corporate_snapshot_cycle and stock_prewarm_cycle both fetch from the
+    network on startup, and prewarm's asyncio.to_thread worker cannot be
+    cancelled -- it outlives the TestClient block that started it and keeps
+    emitting into the dev-monitor sink, evicting the events a test asserts on
+    from its fixed recent(limit=N) window. Session-scoped and set before any
+    TestClient is constructed.
+    """
+    os.environ["MONEYVIEW_DISABLE_STARTUP_JOBS"] = "1"
+    yield
+    os.environ.pop("MONEYVIEW_DISABLE_STARTUP_JOBS", None)
