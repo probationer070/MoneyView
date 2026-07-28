@@ -211,7 +211,8 @@ holiday or for a delisted ticker, which is the existing refetch-storm bug.
 - [x] Task 7 — the runner: decide, plan, fetch, persist, record
 - [x] Task 8 — watchlist add schedules a backfill; remove retires the subject
 - [x] `pytest tests/api/acquisition` — 56 passed
-- [x] `pytest tests/api -q` — 6 failed / 267 passed, the six pre-existing failures only
+- [x] `pytest tests/api -q` — 6 failed / 267 passed at the time; superseded, see the
+      hermetic-test-suite track below: the baseline is now 0 failed / 274 passed
 
 Four defects were caught in review before the phase closed, all recorded in
 `ERROR-LOG.md`. Two in Task 8: the add-trigger fired on every *edit* of the upsert route
@@ -234,6 +235,53 @@ fetcher/probe/saver defaults end-to-end, which nothing did before.
 a scheduled warmer (so `index_bars` is declared but never acquired yet); replacing the
 read path — `market_data.get_stock_ohlcv` still serves reads exactly as before.
 Phase 2/long-term deferrals are tabled at the end of the plan with their reasoning.
+
+## Completed Track - Hermetic Test Suite (2026-07-28)
+
+Plan: `docs/superpowers/plans/2026-07-28-hermetic-test-suite.md`.
+Spec: `docs/superpowers/specs/2026-07-28-test-suite-failures-design.md`.
+
+**The baseline is now 0 failed / 274 passed, and must not be re-inherited.** A "6 known
+failures" baseline had been carried across branches undiagnosed. Runtime dropped from 403s
+to ~20s. Verified over three consecutive full runs, one reverse-file-order run, and each
+formerly order-sensitive test in isolation; `data/processed/moneyview.db` mtime is unchanged
+across a full run.
+
+Three root causes, none of them the tests they were blamed on:
+
+- **A hardcoded `E:\MoneyView` temp root.** Four tests had never executed on any machine
+  without that drive — they errored in setup, so their assertions had never run at all.
+  Replaced with `tmp_path` (Task 1).
+- **Recursive tree walkers in `apps/api/services/perf_analysis.py`.** `_to_node`,
+  `_assign_self_ms`, `_assign_offsets` and `_depth_map` are now explicit stacks, so a deep
+  span tree truncates instead of raising `RecursionError` (Tasks 2-3, `ERROR-LOG.md`
+  2026-07-28). **`_subtree_size` was deliberately left recursive** — it is only ever invoked
+  on already-collapsed subtrees and measured depth 1 on the failing input. Do not "fix" it
+  from reading the diff alone.
+- **Tests sharing the developer's real database.** `tests/conftest.py::_isolated_db` is
+  autouse and points `db._DB_PATH` at `tmp_path`, so a test asserting "this fetch was live"
+  no longer passes or fails on machine state. The `virgin_db` marker opts out of schema
+  creation only, never out of path isolation; its one legitimate use is the migration test
+  in `test_corporate_comparison.py` (Tasks 4-5).
+
+Two consequences worth knowing before touching this again:
+
+- `MONEYVIEW_DISABLE_STARTUP_JOBS` gates `corporate_snapshot_cycle` and
+  `stock_prewarm_cycle` in `apps/api/main.py`'s lifespan. It is read at call time and is
+  inert unless set to `1`/`true`/`yes`, so production startup is unchanged. `wal_flush_cycle`
+  is not gated. The surviving `asyncio.to_thread` prewarm worker still cannot be cancelled —
+  a CPython constraint, documented rather than fixed; the real remedy is a cooperative stop
+  flag inside `prewarm_configured_tickers`.
+- Isolating the database made cold-cache network fetches visible where a warm real database
+  had hidden them. `tests/api/test_perf_capture.py` now serves the watchlist from canned
+  bars: one request against an empty database emitted 3,889 dev-monitor events instead of
+  440, evicting `api.request_start` from the fixed `recent(limit=N)` windows two tests read.
+
+Known, out of scope, still open: `/dev/perf` returns 500 on a deep span tree.
+`RequestWaterfall.model_dump_json()` hits pydantic's "Circular reference detected (depth
+exceeded)" at a chain depth of roughly 50, and `apps/api/routes/dev_monitor.py:162` returns
+that model through FastAPI. `perf_analysis` itself no longer raises `RecursionError`, but the
+endpoint fails earlier for a different reason. Pre-existing and unaffected by this work.
 
 ## Archived Track - MoneyView Dev Monitor
 
