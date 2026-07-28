@@ -46,3 +46,6 @@ pytest-*
 # ignoring it costs nothing locally.
 docs/perf/*-baseline.md
 docs/perf/*-baseline.json
+
+# Local virtualenvs (uv creates .venv; never part of the repo)
+.venv/
