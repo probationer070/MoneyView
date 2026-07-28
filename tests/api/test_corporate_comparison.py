@@ -11,7 +11,30 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from apps.api.main import app
 from apps.api.models.schemas import CorporateMetrics
 from apps.api.services import db as db_service
-from apps.api.services.corporate_comparison import build_corporate_comparison_response
+from apps.api.services.acquisition.sources.quote_facts import QuoteFacts
+from apps.api.services.acquisition.sources.statements import StatementRow
+from apps.api.services.acquisition.state import record_success
+from apps.api.services.corporate_comparison import (
+    METRIC_SCHEMA_VERSION,
+    _load_company_universe_data,
+    acquire_comparison_datasets,
+    build_corporate_comparison_response,
+    save_corporate_comparison_snapshot,
+)
+
+
+def _stub_metrics_loader(ticker: str) -> CorporateMetrics:
+    return CorporateMetrics(
+        ticker=ticker, growth=6, roic=18, wacc=10, debt_ratio=18, unlevered_beta=1.05,
+        crp=0.8, reinvestment=34, fcff=92, innovation=82, market_share=64, governance=74,
+        esg_penalty=22,
+    )
+
+
+def _seed_fresh_acquisition(tickers: list[str], *, now: datetime) -> None:
+    for ticker in tickers:
+        record_success("statements", ticker, now=now, covered_from=now.date(), covered_to=now.date())
+        record_success("market_cap", ticker, now=now, covered_from=now.date(), covered_to=now.date())
 
 
 def _seed_watchlist() -> None:
@@ -91,7 +114,6 @@ def test_corporate_comparison_defaults_to_portfolio_plus_benchmark_snapshot(tmp_
     assert payload["comparison_reference_return_method"] == "capm_beta_reference"
     assert payload["snapshot"]["mode"] == "snapshot"
     assert payload["snapshot"]["snapshot_source"] == "scheduled_kst_daily"
-    assert payload["snapshot"]["snapshot_versions_for_day"] == 1
     assert payload["snapshot"]["snapshot_available"] is True
     assert payload["snapshot"]["snapshot_cadence"] == "daily_kst_0000"
     assert payload["snapshot"]["snapshot_retention_days"] == 365
@@ -140,6 +162,10 @@ def test_corporate_comparison_watchlist_plus_benchmark_includes_zero_weight_watc
     client = TestClient(app)
     # Reads never write (Task 8): a snapshot must be created explicitly before a
     # snapshot-mode read has anything to return.
+    # The button now acquires stale datasets before computing (Task 9); seed every
+    # ticker in this universe as fresh so the acquisition step is a no-op and the
+    # test does not depend on the network.
+    _seed_fresh_acquisition(["AAPL", "MSFT", "GOOGL", "^GSPC"], now=datetime.now(timezone.utc))
     refresh = client.post("/api/v1/corporate/comparison/snapshot?comparison_universe=watchlist_plus_benchmark")
     assert refresh.status_code == 200
 
@@ -161,6 +187,10 @@ def test_corporate_comparison_custom_universe_persists_snapshot_metadata(tmp_pat
     _patch_comparison_sources(monkeypatch)
 
     client = TestClient(app)
+    # The button now acquires stale datasets before computing (Task 9); seed every
+    # ticker in this universe as fresh so the acquisition step is a no-op and the
+    # test does not depend on the network.
+    _seed_fresh_acquisition(["NVDA", "TSLA", "^IXIC"], now=datetime.now(timezone.utc))
     response = client.post(
         "/api/v1/corporate/comparison/snapshot"
         "?comparison_universe=custom&benchmark_ticker=%5EIXIC&custom_tickers=NVDA,TSLA"
@@ -195,6 +225,10 @@ def test_corporate_comparison_live_mode_returns_live_rows_without_overwriting_sn
     _patch_comparison_sources(monkeypatch)
 
     client = TestClient(app)
+    # The button now acquires stale datasets before computing (Task 9); seed every
+    # ticker in this universe as fresh so the acquisition step is a no-op and the
+    # test does not depend on the network.
+    _seed_fresh_acquisition(["AAPL", "MSFT", "^GSPC"], now=datetime.now(timezone.utc))
     refresh = client.post("/api/v1/corporate/comparison/snapshot")
     assert refresh.status_code == 200
 
@@ -205,7 +239,6 @@ def test_corporate_comparison_live_mode_returns_live_rows_without_overwriting_sn
     assert payload["snapshot"]["snapshot_available"] is True
     assert payload["snapshot"]["snapshot_source"] == "manual_refresh"
     assert payload["snapshot"]["comparison_universe"] == "portfolio_plus_benchmark"
-    assert payload["snapshot"]["snapshot_versions_for_day"] == 1
     assert [row["ticker"] for row in payload["rows"]] == ["^GSPC", "AAPL", "MSFT"]
 
 
@@ -263,7 +296,6 @@ def test_corporate_comparison_history_returns_timeline_points(tmp_path, monkeypa
     assert len(payload["points"]) == 2
     assert payload["points"][0]["as_of_date"] == "2026-04-11"
     assert payload["points"][0]["snapshot_source"] == "manual_refresh"
-    assert payload["points"][0]["snapshot_versions_for_day"] == 1
     assert payload["points"][0]["stock_count"] == 2
     assert payload["points"][0]["market_expected_return"] == 9.7
 
@@ -542,7 +574,6 @@ def test_corporate_comparison_snapshot_uses_kst_business_date_and_365_day_retent
     assert first.snapshot.as_of_date == "2026-04-11"
     assert first.snapshot.snapshot_retention_days == 365
     assert first.snapshot.snapshot_cadence == "daily_kst_0000"
-    assert first.snapshot.snapshot_versions_for_day == 1
 
     with db_service.get_db() as conn:
         conn.execute(
@@ -603,7 +634,6 @@ def test_corporate_comparison_snapshot_uses_kst_business_date_and_365_day_retent
         equity_risk_premium=0.055,
     )
     assert second.snapshot.as_of_date == "2026-04-12"
-    assert second.snapshot.snapshot_versions_for_day == 1
 
     with db_service.get_db() as conn:
         remaining_dates = [
@@ -664,8 +694,6 @@ def test_manual_refresh_keeps_multiple_intraday_versions_for_same_kst_day(tmp_pa
     )
 
     assert first.snapshot.as_of_date == second.snapshot.as_of_date == "2026-04-11"
-    assert first.snapshot.snapshot_versions_for_day == 1
-    assert second.snapshot.snapshot_versions_for_day == 2
     assert first.snapshot.snapshot_version != second.snapshot.snapshot_version
 
     with db_service.get_db() as conn:
@@ -779,6 +807,9 @@ def test_init_db_adds_comparison_universe_columns_for_legacy_snapshot_tables(tmp
     assert "comparison_universe" in legacy_columns
     assert {"universe_key", "comparison_universe", "benchmark_ticker", "custom_tickers"}.issubset(v2_columns)
     assert {"universe_key", "comparison_universe", "benchmark_ticker", "custom_tickers"}.issubset(v3_columns)
+    # metric_schema_version is new in Task 9; this legacy v3 table was created without it,
+    # so its presence here proves the guarded ALTER TABLE migration actually ran.
+    assert "metric_schema_version" in v3_columns
     assert {
         "idx_corporate_comparison_snapshots_v3_universe_date",
         "idx_corporate_comparison_snapshots_v3_ticker_universe_date",
@@ -876,3 +907,118 @@ def test_a_snapshot_from_an_earlier_date_is_returned_and_is_not_marked_stale():
 
     assert response.rows != []
     assert response.snapshot.snapshot_is_stale is False
+
+
+def test_a_snapshot_records_the_metric_schema_version():
+    """Snapshots are immutable and comparable. Two computed by different metric code are
+    not like for like, and without this field that difference is invisible -- the
+    comparison feature would blame the company for a change in the code."""
+    save_corporate_comparison_snapshot(
+        snapshot_source="manual",
+        comparison_universe="portfolio_plus_benchmark",
+        benchmark_ticker="^GSPC",
+        custom_tickers=[],
+        metrics_loader=_stub_metrics_loader,
+        price_loader=lambda ticker: 10.0,
+        default_companies={},
+        risk_free_rate=0.042,
+        equity_risk_premium=0.055,
+    )
+
+    with db_service.get_db() as conn:
+        row = conn.execute(
+            "SELECT metric_schema_version, snapshot_version FROM corporate_comparison_snapshots_v3 LIMIT 1"
+        ).fetchone()
+
+    assert row["metric_schema_version"] == METRIC_SCHEMA_VERSION
+    assert "|" in row["snapshot_version"]
+
+
+def test_snapshots_are_immutable_a_second_save_adds_rather_than_updates():
+    for _ in range(2):
+        save_corporate_comparison_snapshot(
+            snapshot_source="manual",
+            comparison_universe="portfolio_plus_benchmark",
+            benchmark_ticker="^GSPC",
+            custom_tickers=[],
+            metrics_loader=_stub_metrics_loader,
+            price_loader=lambda ticker: 10.0,
+            default_companies={},
+            risk_free_rate=0.042,
+            equity_risk_premium=0.055,
+        )
+
+    with db_service.get_db() as conn:
+        ids = conn.execute(
+            "SELECT DISTINCT snapshot_version FROM corporate_comparison_snapshots_v3"
+        ).fetchall()
+
+    assert len(ids) == 2
+
+
+def test_the_button_acquires_nothing_when_every_dataset_is_fresh(tmp_path, monkeypatch):
+    """Idempotence, stated in the spec: re-running acquisition within the freshness boundary
+    performs no network work and does not modify local state."""
+    db_path = tmp_path / "moneyview.db"
+    monkeypatch.setattr(db_service, "_DB_PATH", db_path)
+    db_service.init_db()
+    _seed_watchlist()
+
+    now = datetime(2026, 7, 30, 12, 0, tzinfo=timezone.utc)
+    _seed_fresh_acquisition(["AAPL", "MSFT", "^GSPC"], now=now)
+
+    company_data = _load_company_universe_data({})
+    calls = []
+    acquire_comparison_datasets(
+        comparison_universe="portfolio_plus_benchmark",
+        benchmark_ticker="^GSPC",
+        custom_tickers=[],
+        company_registry=company_data.registry,
+        watchlist_payload=company_data.watchlist_rows,
+        now=now,
+        statements_fetcher=lambda ticker: calls.append(ticker) or [],
+        quote_facts_fetcher=lambda ticker: calls.append(ticker) or None,
+    )
+    assert calls == []
+
+
+def test_the_button_acquires_a_stale_ticker(tmp_path, monkeypatch):
+    """The other half: fresh means skip, stale means fetch. Without this, a boundary that
+    never expires would pass the idempotence test and silently freeze the data."""
+    db_path = tmp_path / "moneyview.db"
+    monkeypatch.setattr(db_service, "_DB_PATH", db_path)
+    db_service.init_db()
+    _seed_watchlist()
+
+    now = datetime(2026, 7, 30, 12, 0, tzinfo=timezone.utc)
+    # AAPL and ^GSPC are fresh; MSFT was never acquired, so it is stale.
+    _seed_fresh_acquisition(["AAPL", "^GSPC"], now=now)
+
+    company_data = _load_company_universe_data({})
+    calls = []
+
+    def fake_statements_fetcher(ticker: str) -> list[StatementRow]:
+        calls.append(("statements", ticker))
+        return [
+            StatementRow(
+                ticker=ticker, statement_type="income", frequency="annual",
+                period_end="2025-12-31", line_item="revenue", value=100.0,
+            )
+        ]
+
+    def fake_quote_facts_fetcher(ticker: str) -> QuoteFacts:
+        calls.append(("market_cap", ticker))
+        return QuoteFacts(ticker=ticker, market_cap=1000.0, shares_outstanding=10.0, currency="USD")
+
+    acquire_comparison_datasets(
+        comparison_universe="portfolio_plus_benchmark",
+        benchmark_ticker="^GSPC",
+        custom_tickers=[],
+        company_registry=company_data.registry,
+        watchlist_payload=company_data.watchlist_rows,
+        now=now,
+        statements_fetcher=fake_statements_fetcher,
+        quote_facts_fetcher=fake_quote_facts_fetcher,
+    )
+
+    assert calls == [("statements", "MSFT"), ("market_cap", "MSFT")]

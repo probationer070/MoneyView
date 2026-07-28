@@ -150,7 +150,6 @@ export interface CorporateComparisonSnapshotMeta {
   as_of_date: string;
   generated_at: string;
   snapshot_version: string;
-  snapshot_versions_for_day: number;
   snapshot_available: boolean;
   snapshot_source: string;
   comparison_universe: string;
@@ -175,7 +174,6 @@ export interface CorporateComparisonHistoryPoint {
   as_of_date: string;
   generated_at: string;
   snapshot_version: string;
-  snapshot_versions_for_day: number;
   snapshot_source: string;
   comparison_universe: string;
   benchmark_ticker: string;
@@ -2241,7 +2239,7 @@ export default function PortfolioPage() {
                             {formatDateLabel(point.as_of_date)} - {point.snapshot_source}
                           </p>
                           <p className="text-xs text-[var(--text-muted)]">
-                            Benchmark {point.benchmark_ticker}. Versions that day: {point.snapshot_versions_for_day}. Stocks summarized: {point.stock_count}.
+                            Benchmark {point.benchmark_ticker}. Stocks summarized: {point.stock_count}.
                           </p>
                         </div>
                         <div className="flex flex-wrap items-center gap-2">

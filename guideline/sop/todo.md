@@ -285,6 +285,63 @@ exceeded)" at a chain depth of roughly 50, and `apps/api/routes/dev_monitor.py:1
 that model through FastAPI. `perf_analysis` itself no longer raises `RecursionError`, but the
 endpoint fails earlier for a different reason. Pre-existing and unaffected by this work.
 
+## Completed Track - Statements Acquisition and Manual Snapshots (2026-07-29)
+
+Design: `docs/superpowers/specs/2026-07-28-statements-acquisition-and-manual-snapshots-design.md`
+Plan: `docs/superpowers/plans/2026-07-28-statements-acquisition-and-manual-snapshots.md`
+
+Nine tasks, all committed. **Statements and market cap are now acquisition data
+classes** (`"statements"` under a `Weekly` boundary, `"market_cap"` under `Daily`),
+declared in `apps/api/services/acquisition/registry.py` alongside the two bar classes,
+fetched via `fetch_statements`/`fetch_quote_facts` and persisted to
+`corporate_statements`/`corporate_quote_facts` through `acquire_point_in_time`. **Metric
+computation is network-free** -- `load_statement_bundle` reads only the local store, so
+`corporate_metrics_service` never touches the network; acquisition is the only step that
+does, and it only runs from the one place a network call is wanted.
+
+**`POST /comparison/snapshot` is the one button** (`apps/api/services/corporate_comparison.py:
+acquire_comparison_datasets`, wired in `apps/api/routes/corporate.py:
+refresh_corporate_comparison_snapshot`): it acquires only the datasets whose freshness
+boundary has expired, then computes and persists. One action, not two -- a separate
+fetch button would let a snapshot be generated from statements the user forgot to
+refresh. Idempotent: pressing it twice in a row does no network work the second time and
+persists a new immutable row from unchanged local data.
+
+**Snapshots are manual-only and immutable.** The scheduled daily snapshot cycle is gone;
+a snapshot exists only because a user asked for one. Once persisted a snapshot row is
+never updated -- `save_corporate_comparison_snapshot` always does a plain `INSERT` (never
+`INSERT OR REPLACE`) against `corporate_comparison_snapshots_v3`, so a new observation is
+always a new row, and a `snapshot_version` collision would raise rather than silently
+overwrite history.
+
+**`METRIC_SCHEMA_VERSION` must be bumped by hand whenever metric semantics change** -- a
+formula, a fallback, an input source. It is not a database schema version and not a
+payload format version; it exists so two snapshots computed by different metric code are
+never silently compared as like for like. Stored per row in the new
+`metric_schema_version` column (guarded `ALTER TABLE` migration for pre-existing
+databases); old rows default to `1`.
+
+Deferred, not oversights:
+- **A filing-aware boundary.** `Weekly` bounds statement staleness to seven days; it does
+  not model each company's actual filing cadence.
+- **`needs_acquisition` distinguishing `FAILED` from `EMPTY`.** A failure currently
+  advances `last_checked_at`, so a transient provider error suppresses retry for a whole
+  boundary window. Fixing it changes freshness for every data class, not just these two.
+- **The `snapshot_version` to `snapshot_id` rename.** The field's business-date component
+  is gone -- snapshots are manual, so there is no day for the old name to describe -- but
+  the *name* was kept deliberately: it is a query parameter on two routes (`GET
+  /comparison/snapshot-version`, `DELETE /comparison/snapshot-version`) and an identity key
+  across five frontend files (`corporateTypes.ts`, `SnapshotHistoryModal.tsx`,
+  `StockDetailModal.tsx`, `portfolioMetrics.ts`, `PortfolioSnapshotSummary.tsx`). The
+  rename must move all seven call sites in one change or it ships a broken snapshot-history
+  modal, delete flow, and stock-detail timeline.
+- **`snapshot_is_stale` is now always `False`** from every backend construction site --
+  manual-only snapshots have no cadence to be late for. The frontend's stale-warning
+  banner (`apps/web/app/portfolio/components/PortfolioSnapshotSummary.tsx:160`,
+  `apps/web/app/portfolio/portfolioMetrics.ts:198`) is therefore permanently inert. Left
+  in place rather than removed: it is dead code, not misleading code, and removing it is a
+  presentational decision outside this task's scope.
+
 ## Archived Track - MoneyView Dev Monitor
 
 Completed basis retained from the previous active plan:

@@ -148,7 +148,6 @@ export interface CorporateComparisonSnapshotApi {
   as_of_date: string;
   generated_at: string;
   snapshot_version: string;
-  snapshot_versions_for_day: number;
   snapshot_available: boolean;
   snapshot_source: string;
   comparison_universe: "portfolio_plus_benchmark" | "watchlist_plus_benchmark" | "custom";

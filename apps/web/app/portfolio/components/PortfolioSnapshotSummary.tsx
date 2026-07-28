@@ -8,7 +8,6 @@ export interface SnapshotMeta {
   comparison_universe: string;
   benchmark_ticker: string;
   generated_at: string;
-  snapshot_versions_for_day: number;
   custom_tickers: string[];
   snapshot_is_stale: boolean;
 }
@@ -33,7 +32,6 @@ export interface HistoryPoint {
   as_of_date: string;
   generated_at: string;
   snapshot_version: string;
-  snapshot_versions_for_day: number;
   snapshot_source: string;
   comparison_universe: string;
   benchmark_ticker: string;
@@ -137,7 +135,7 @@ export function PortfolioSnapshotSummary({
           Market expected return: {activeComparisonData.market_expected_return.toFixed(2)}%. Primary stock return: {activeComparisonData.stock_expected_return_method.replaceAll("_", " ")}. Reference return: {activeComparisonData.comparison_reference_return_method.replaceAll("_", " ")}.
         </p>
         <p title={activeComparisonData.snapshot.generated_at}>
-          Generated: {formatSyncTimestamp(activeComparisonData.snapshot.generated_at)}. Versions for this KST day: {activeComparisonData.snapshot.snapshot_versions_for_day}. Holdings summarized: {portfolioSnapshotSummary.stockCount}.
+          Generated: {formatSyncTimestamp(activeComparisonData.snapshot.generated_at)}. Holdings summarized: {portfolioSnapshotSummary.stockCount}.
         </p>
       </div>
       <div className="mt-3 rounded-[var(--radius)] border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">

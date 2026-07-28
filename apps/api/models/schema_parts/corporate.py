@@ -230,7 +230,6 @@ class CorporateComparisonSnapshotMeta(BaseModel):
     as_of_date: str = ""
     generated_at: str = ""
     snapshot_version: str = ""
-    snapshot_versions_for_day: int = 0
     snapshot_available: bool = False
     snapshot_source: str = ""
     comparison_universe: ComparisonUniverseEnum = ComparisonUniverseEnum.portfolio_plus_benchmark
@@ -259,7 +258,6 @@ class CorporateComparisonHistoryPoint(BaseModel):
     as_of_date: str
     generated_at: str = ""
     snapshot_version: str = ""
-    snapshot_versions_for_day: int = 1
     snapshot_source: str = ""
     comparison_universe: ComparisonUniverseEnum = ComparisonUniverseEnum.portfolio_plus_benchmark
     benchmark_ticker: str = "^GSPC"

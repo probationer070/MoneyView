@@ -72,8 +72,6 @@ export function SnapshotHistoryModal({
               >
                 Version {point.snapshot_version}
               </span>
-              <span aria-hidden="true">•</span>
-              <span>{point.snapshot_versions_for_day} saved version{point.snapshot_versions_for_day === 1 ? "" : "s"} that day</span>
             </div>
           ),
           content: (

@@ -16,6 +16,10 @@ from apps.api.models.schemas import (
     CorporateComparisonStockHistoryResponse,
     CorporateMetrics,
 )
+from apps.api.services.acquisition.runner import acquire_point_in_time
+from apps.api.services.acquisition.sources.quote_facts import fetch_quote_facts
+from apps.api.services.acquisition.sources.statements import fetch_statements
+from apps.api.services.acquisition.store import save_quote_facts, save_statements, statement_coverage
 from apps.api.services.db import get_db
 from packages.core_finance.dcf import calculate_equity_value
 from packages.core_finance.expected_return import (
@@ -34,6 +38,12 @@ DEFAULT_COMPARISON_UNIVERSE = "portfolio_plus_benchmark"
 DEFAULT_BENCHMARK_TICKER = "^GSPC"
 BENCHMARK_GROUP_NAME = "benchmark"
 DEFAULT_TAX_RATE = 0.21
+
+# Bumped by hand whenever metric SEMANTICS change -- a formula, a fallback, an input
+# source. Not a database schema version and not a payload format version. It exists
+# because snapshots are immutable and comparable: two computed by different metric code
+# are not like for like, and the comparison feature must be able to see that.
+METRIC_SCHEMA_VERSION = 1
 
 
 @dataclass(frozen=True)
@@ -75,7 +85,6 @@ def build_corporate_comparison_response(
         if latest_snapshot_meta is not None:
             live.snapshot.snapshot_source = str(latest_snapshot_meta["snapshot_source"] or "")
             live.snapshot.snapshot_version = str(latest_snapshot_meta["snapshot_version"] or "")
-            live.snapshot.snapshot_versions_for_day = int(latest_snapshot_meta["snapshot_versions_for_day"] or 0)
         return live
 
     # Reads never write. The former fallback computed and persisted a snapshot when today's
@@ -115,7 +124,6 @@ def _empty_snapshot_response(
         snapshot=CorporateComparisonSnapshotMeta(
             mode="snapshot",
             snapshot_version="",
-            snapshot_versions_for_day=0,
             snapshot_available=False,
             snapshot_source="",
             comparison_universe=comparison_universe,
@@ -172,8 +180,8 @@ def save_corporate_comparison_snapshot(
                        group_name, weight, roic, wacc, roic_minus_wacc, dcf_value, current_price,
                        dcf_implied_return, capm_expected_return, stock_expected_return,
                        market_expected_return, expected_return_spread, stock_expected_return_source,
-                       has_price_data
-                   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                       has_price_data, metric_schema_version
+                   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     snapshot_version,
                     snapshot_date,
@@ -203,16 +211,12 @@ def save_corporate_comparison_snapshot(
                     row.expected_return_spread,
                     row.stock_expected_return_source,
                     1 if row.has_price_data else 0,
+                    METRIC_SCHEMA_VERSION,
                 ),
             )
         conn.execute(
             "DELETE FROM corporate_comparison_snapshots_v3 WHERE snapshot_date < ?",
             ((_now_kst() - timedelta(days=SNAPSHOT_RETENTION_DAYS)).date().isoformat(),),
-        )
-        snapshot_versions_for_day = _count_snapshot_versions_for_day(
-            conn,
-            snapshot_date=snapshot_date,
-            universe_key=universe_key,
         )
 
     response.snapshot = CorporateComparisonSnapshotMeta(
@@ -220,7 +224,6 @@ def save_corporate_comparison_snapshot(
         as_of_date=snapshot_date,
         generated_at=snapshot_taken_at,
         snapshot_version=snapshot_version,
-        snapshot_versions_for_day=snapshot_versions_for_day,
         snapshot_available=bool(response.rows),
         snapshot_source=snapshot_source,
         comparison_universe=comparison_universe,
@@ -266,7 +269,6 @@ def _build_live_response(
             as_of_date=_snapshot_business_date(),
             generated_at=generated_at,
             snapshot_version="",
-            snapshot_versions_for_day=0,
             snapshot_available=False,
             snapshot_source="",
             comparison_universe=comparison_universe,
@@ -436,12 +438,7 @@ def _load_snapshot_response(
                ORDER BY group_name, ticker""",
             (str(version_row["snapshot_version"]),),
         ).fetchall()
-        snapshot_versions_for_day = _count_snapshot_versions_for_day(
-            conn,
-            snapshot_date=snapshot_date,
-            universe_key=universe_key,
-        )
-    return _rows_to_response(rows, snapshot_versions_for_day=snapshot_versions_for_day)
+    return _rows_to_response(rows)
 
 
 def _load_latest_snapshot_response(
@@ -492,18 +489,11 @@ def _load_latest_snapshot_meta(
             "snapshot_date": str(latest["snapshot_date"]),
             "snapshot_taken_at": str(latest["snapshot_taken_at"]),
             "snapshot_source": str(latest["snapshot_source"] or ""),
-            "snapshot_versions_for_day": _count_snapshot_versions_for_day(
-                conn,
-                snapshot_date=str(latest["snapshot_date"]),
-                universe_key=universe_key,
-            ),
         }
 
 
 def _rows_to_response(
     rows: list[object],
-    *,
-    snapshot_versions_for_day: int = 1,
 ) -> CorporateComparisonResponse | None:
     if not rows:
         return None
@@ -552,7 +542,6 @@ def _rows_to_response(
             as_of_date=snapshot_date,
             generated_at=snapshot_taken_at,
             snapshot_version=snapshot_version,
-            snapshot_versions_for_day=snapshot_versions_for_day,
             snapshot_available=True,
             snapshot_source=snapshot_source,
             comparison_universe=comparison_universe,
@@ -600,23 +589,14 @@ def load_corporate_comparison_history(
                    FROM corporate_comparison_snapshots_v3
                    WHERE universe_key = ?
                ),
-               version_counts AS (
-                   SELECT snapshot_date, COUNT(DISTINCT snapshot_version) AS snapshot_versions_for_day
-                   FROM corporate_comparison_snapshots_v3
-                   WHERE universe_key = ?
-                   GROUP BY snapshot_date
-               ),
                latest_versions AS (
-                   SELECT versions.*, version_counts.snapshot_versions_for_day
+                   SELECT *
                    FROM versions
-                   JOIN version_counts
-                     ON version_counts.snapshot_date = versions.snapshot_date
                    WHERE version_rank = 1
                )
                SELECT lv.snapshot_date,
                       lv.snapshot_taken_at,
                       lv.snapshot_version,
-                      lv.snapshot_versions_for_day,
                       lv.snapshot_source,
                       lv.comparison_universe,
                       lv.benchmark_ticker,
@@ -629,13 +609,12 @@ def load_corporate_comparison_history(
                FROM latest_versions lv
                JOIN corporate_comparison_snapshots_v3 s
                  ON s.snapshot_version = lv.snapshot_version
-               GROUP BY lv.snapshot_date, lv.snapshot_taken_at, lv.snapshot_version, lv.snapshot_versions_for_day,
+               GROUP BY lv.snapshot_date, lv.snapshot_taken_at, lv.snapshot_version,
                         lv.snapshot_source, lv.comparison_universe, lv.benchmark_ticker,
                         lv.risk_free_rate, lv.equity_risk_premium
                ORDER BY lv.snapshot_date DESC
                LIMIT ?""",
             (
-                universe_key,
                 universe_key,
                 BENCHMARK_GROUP_NAME,
                 BENCHMARK_GROUP_NAME,
@@ -649,7 +628,6 @@ def load_corporate_comparison_history(
             as_of_date=str(row["snapshot_date"]),
             generated_at=str(row["snapshot_taken_at"] or ""),
             snapshot_version=str(row["snapshot_version"] or ""),
-            snapshot_versions_for_day=int(row["snapshot_versions_for_day"] or 1),
             snapshot_source=str(row["snapshot_source"] or ""),
             comparison_universe=str(row["comparison_universe"] or comparison_universe),
             benchmark_ticker=str(row["benchmark_ticker"] or normalized_benchmark),
@@ -689,17 +667,7 @@ def load_corporate_comparison_snapshot_version(*, snapshot_version: str) -> Corp
         ).fetchall()
         if not rows:
             return None
-        first = rows[0]
-        snapshot_versions_for_day = _count_snapshot_versions_for_day(
-            conn,
-            snapshot_date=str(first["snapshot_date"]),
-            universe_key=_comparison_universe_key(
-                comparison_universe=str(first["comparison_universe"] or DEFAULT_COMPARISON_UNIVERSE),
-                benchmark_ticker=str(first["benchmark_ticker"] or DEFAULT_BENCHMARK_TICKER),
-                custom_tickers=_normalize_custom_tickers(str(first["custom_tickers"] or "").split(",")),
-            ),
-        )
-    return _rows_to_response(rows, snapshot_versions_for_day=snapshot_versions_for_day)
+    return _rows_to_response(rows)
 
 
 def delete_corporate_comparison_snapshot_version(*, snapshot_version: str) -> int:
@@ -968,17 +936,56 @@ def _comparison_universe_key(
 
 
 def _snapshot_version_id(*, universe_key: str, snapshot_taken_at: str) -> str:
-    return f"{_snapshot_business_date()}|{universe_key}|{snapshot_taken_at}"
+    # The business-date component is gone: snapshots are manual, so there is no day for an
+    # identifier to belong to. Renaming this field to snapshot_id is deferred -- the name is
+    # a query parameter on two routes and an identity key across five frontend files, and
+    # moving it is an API break with no behavioural gain.
+    return f"{snapshot_taken_at}|{universe_key}"
 
 
-def _count_snapshot_versions_for_day(conn, *, snapshot_date: str, universe_key: str) -> int:
-    row = conn.execute(
-        """SELECT COUNT(DISTINCT snapshot_version) AS version_count
-           FROM corporate_comparison_snapshots_v3
-           WHERE snapshot_date = ? AND universe_key = ?""",
-        (snapshot_date, universe_key),
-    ).fetchone()
-    return int(row["version_count"] or 0) if row is not None else 0
+def acquire_comparison_datasets(
+    *,
+    comparison_universe: str,
+    benchmark_ticker: str,
+    custom_tickers: list[str],
+    company_registry: dict,
+    watchlist_payload: dict,
+    now: datetime,
+    statements_fetcher=fetch_statements,
+    quote_facts_fetcher=fetch_quote_facts,
+) -> None:
+    """Refresh only the datasets whose freshness boundaries have expired, then return.
+
+    One button, not two: separate fetch and compute buttons would let a snapshot be
+    generated from statements the user forgot to refresh -- the false-precision problem
+    relocated rather than solved. In the common case no acquisition occurs.
+
+    The fetchers are injected so this is testable without a network. That is not only
+    convenience: acquire_point_in_time catches Exception broadly, so the suite's network
+    guard would be swallowed into a FAILED status and the test would pass while silently
+    recording failures.
+    """
+    universe_rows = _resolve_comparison_universe_rows(
+        comparison_universe=comparison_universe,
+        benchmark_ticker=benchmark_ticker,
+        custom_tickers=custom_tickers,
+        company_registry=company_registry,
+        watchlist_payload=watchlist_payload,
+    )
+    for row in universe_rows:
+        ticker = str(row["ticker"])
+        acquire_point_in_time(
+            "statements", ticker, now=now,
+            fetcher=statements_fetcher,
+            saver=save_statements,
+            coverage=statement_coverage,
+        )
+        acquire_point_in_time(
+            "market_cap", ticker, now=now,
+            fetcher=quote_facts_fetcher,
+            saver=save_quote_facts,
+            coverage=lambda facts: (now.date(), now.date()),
+        )
 
 
 def _levered_beta_from_metrics(metrics: CorporateMetrics) -> float:

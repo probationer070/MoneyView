@@ -425,6 +425,7 @@ CREATE TABLE IF NOT EXISTS corporate_comparison_snapshots_v3 (
     expected_return_spread       REAL NOT NULL DEFAULT 0.0,
     stock_expected_return_source TEXT DEFAULT 'dcf_implied_upside',
     has_price_data               INTEGER NOT NULL DEFAULT 1,
+    metric_schema_version        INTEGER NOT NULL DEFAULT 1,
     PRIMARY KEY (snapshot_version, ticker)
 );
 CREATE INDEX IF NOT EXISTS idx_corporate_comparison_snapshots_v3_lookup
@@ -630,6 +631,7 @@ def _ensure_schema_compatibility(conn: sqlite3.Connection) -> None:
             expected_return_spread       REAL NOT NULL DEFAULT 0.0,
             stock_expected_return_source TEXT DEFAULT 'dcf_implied_upside',
             has_price_data               INTEGER NOT NULL DEFAULT 1,
+            metric_schema_version        INTEGER NOT NULL DEFAULT 1,
             PRIMARY KEY (snapshot_version, ticker)
         )"""
     )
@@ -660,6 +662,8 @@ def _ensure_schema_compatibility(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE corporate_comparison_snapshots_v3 ADD COLUMN dcf_implied_return REAL NOT NULL DEFAULT 0.0")
     if "capm_expected_return" not in v3_columns:
         conn.execute("ALTER TABLE corporate_comparison_snapshots_v3 ADD COLUMN capm_expected_return REAL NOT NULL DEFAULT 0.0")
+    if "metric_schema_version" not in v3_columns:
+        conn.execute("ALTER TABLE corporate_comparison_snapshots_v3 ADD COLUMN metric_schema_version INTEGER NOT NULL DEFAULT 1")
     v3_row = conn.execute("SELECT 1 FROM corporate_comparison_snapshots_v3 LIMIT 1").fetchone()
     if v3_row is None:
         conn.execute(
