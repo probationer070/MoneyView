@@ -30,6 +30,10 @@ PerformanceEventStatus = Literal[
     "invalid",
     "cache_hit",
     "cache_miss",
+    # Wraps the fill that follows a miss, and carries its duration. A miss event is
+    # emitted when the miss is *detected*, so it can never carry the cost of the fetch
+    # it triggers -- which is what a subsequent hit actually saves.
+    "cache_populate",
     "warning",
     "canceled",
 ]

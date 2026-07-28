@@ -433,6 +433,18 @@ CREATE INDEX IF NOT EXISTS idx_corporate_comparison_snapshots_v3_universe_date
     ON corporate_comparison_snapshots_v3(universe_key, snapshot_date DESC, snapshot_taken_at DESC, snapshot_version);
 CREATE INDEX IF NOT EXISTS idx_corporate_comparison_snapshots_v3_ticker_universe_date
     ON corporate_comparison_snapshots_v3(ticker, universe_key, snapshot_date DESC, snapshot_taken_at DESC);
+
+CREATE TABLE IF NOT EXISTS acquisition_state (
+    data_class      TEXT NOT NULL,
+    subject         TEXT NOT NULL,
+    last_checked_at TEXT,
+    last_success_at TEXT,
+    covered_from    TEXT,
+    covered_to      TEXT,
+    status          TEXT NOT NULL DEFAULT 'never_acquired',
+    detail          TEXT,
+    PRIMARY KEY (data_class, subject)
+);
 """
 
 

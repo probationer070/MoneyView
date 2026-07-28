@@ -23,6 +23,8 @@ src
 config/.env
 config/*.local.env
 
+.claude/skills/*
+
 # Local data/runtime artifacts
 data/cache/
 data/raw/
@@ -35,3 +37,12 @@ pytest-*
 *.db
 *.sqlite
 *.sqlite3
+
+# Generated performance baselines. Spec 08.5 wants trustworthy baselines committed, so
+# these are ignored by default and a good one is added deliberately with `git add -f`.
+# A run can be invalidated by contention, provider rate limits, or a changed dataset,
+# and an accidentally committed invalid baseline is worse than none -- it looks
+# authoritative. The JSON sidecar feeding the trend section is read from disk, so
+# ignoring it costs nothing locally.
+docs/perf/*-baseline.md
+docs/perf/*-baseline.json

@@ -316,15 +316,7 @@ class MarketDataService:
         )
 
         with get_db() as conn:
-            tickers = self._query_tickers(ticker, table)
-            placeholders = ",".join("?" for _ in tickers)
-            rows = conn.execute(
-                f"""SELECT * FROM {table}
-                    WHERE ticker IN ({placeholders})
-                    ORDER BY date DESC
-                    LIMIT ?""",
-                (*tickers, freshness_rule.days),
-            ).fetchall()
+            rows = self._select_ohlcv_rows(conn, ticker, table, freshness_rule.days)
 
         if not rows:
             emit_cache_event(
@@ -336,7 +328,7 @@ class MarketDataService:
                 message="No cached OHLCV rows were available.",
             )
             logger.info("OHLCV cache miss for %s; fetching live data", ticker)
-            live_rows = self._fetch_live_ohlcv_cached(ticker, period=period, table=table)
+            live_rows = self._fill_ohlcv_cache(ticker, period=period, table=table, reason="miss")
             latest_date = live_rows[-1].date if live_rows else None
             return live_rows, self._build_data_quality(
                 source="live_fetch",
@@ -377,7 +369,7 @@ class MarketDataService:
                 oldest.isoformat() if oldest else "unknown",
                 period,
             )
-            live_rows = self._fetch_live_ohlcv_cached(ticker, period=period, table=table)
+            live_rows = self._fill_ohlcv_cache(ticker, period=period, table=table, reason="stale")
             if live_rows:
                 live_rows = live_rows[-freshness_rule.days:]
                 latest_live_date = live_rows[-1].date if live_rows else latest_cached_date
@@ -477,6 +469,57 @@ class MarketDataService:
         freshness_rule = MarketDataFreshnessRule("custom", period) if isinstance(period, int) else period
         return (latest - oldest).days >= freshness_rule.minimum_span_days
 
+    def _fill_ohlcv_cache(self, ticker: str, *, period: str, table: str, reason: str):
+        """Fetch live rows to fill the cache, emitting the fill's duration.
+
+        The `cache.miss` / `cache.stale` events are emitted when the miss is *detected*,
+        so they can never carry the cost of the fetch they trigger -- which is exactly
+        the cost each later hit avoids. Without this span `avg_miss_cost_ms` and
+        `estimated_time_saved_ms` are structurally 0.0 and the cache's value is
+        unmeasurable.
+        """
+        # perf_timer, not an emit afterwards: it establishes span context for the body,
+        # so the external fetch nests *beneath* this span. Emitting after the fetch made
+        # cache.populate a sibling of the work it timed, and both self-times then counted
+        # in full -- 2791 ms twice against a 3446 ms request, which tripped
+        # overlap_detected and made criterion 2 uncomputable.
+        with perf_timer(
+            scope="cache",
+            operation="cache.populate",
+            ticker=ticker,
+            component="market_data.ohlcv",
+            metadata={"table": table, "requested_period": period, "reason": reason},
+        ):
+            return self._fetch_live_ohlcv_cached(ticker, period=period, table=table)
+
+    def _select_ohlcv_rows(self, conn, ticker: str, table: str, limit: int):
+        """Read the most recent `limit` bars, canonical ticker first.
+
+        `ORDER BY date DESC` is satisfiable directly from idx_<table>_ticker_date only
+        when the IN clause holds a single value; with several values SQLite must add
+        "USE TEMP B-TREE FOR ORDER BY", measured at 8.9ms/call against 0.2ms for the
+        single-value form. Index aliases match no rows in current databases, so paying
+        that sort on every index read bought nothing. Aliases are therefore retried
+        only when the canonical ticker comes back empty, which keeps older databases
+        that stored display names ("S&P 500") as the ticker working.
+        """
+
+        def _query(values: List[str]):
+            placeholders = ",".join("?" for _ in values)
+            return conn.execute(
+                f"""SELECT * FROM {table}
+                    WHERE ticker IN ({placeholders})
+                    ORDER BY date DESC
+                    LIMIT ?""",
+                (*values, limit),
+            ).fetchall()
+
+        rows = _query([ticker])
+        if rows:
+            return rows
+        aliases = [alias for alias in self._query_tickers(ticker, table) if alias != ticker]
+        return _query(aliases) if aliases else rows
+
     @staticmethod
     def _query_tickers(ticker: str, table: str) -> List[str]:
         if table != "indices":
@@ -501,15 +544,7 @@ class MarketDataService:
     ):
         freshness_rule = self._freshness_rule(period)
         with get_db() as conn:
-            tickers = self._query_tickers(ticker.upper(), table)
-            placeholders = ",".join("?" for _ in tickers)
-            return conn.execute(
-                f"""SELECT * FROM {table}
-                    WHERE ticker IN ({placeholders})
-                    ORDER BY date DESC
-                    LIMIT ?""",
-                (*tickers, freshness_rule.days),
-            ).fetchall()
+            return self._select_ohlcv_rows(conn, ticker.upper(), table, freshness_rule.days)
 
     def _fetch_live_ohlcv_with_retry(
         self,

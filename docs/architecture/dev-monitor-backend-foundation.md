@@ -122,7 +122,7 @@ Normalization rules:
 
 Design decisions:
 
-- Keep `id` even though the D1 checklist does not name it explicitly. The source plan in `guideline/suggestion.md` includes it, and D3 SSE plus frontend buffering need a stable event key.
+- Keep `id` even though the D1 checklist does not name it explicitly. The source plan in `guideline/sop/suggestion.md` includes it, and D3 SSE plus frontend buffering need a stable event key.
 - Store `timestamp` as UTC and serialize to ISO 8601 with timezone.
 - Use snake_case in Python even though the original note uses mixed casing. If dev APIs later want camelCase for TypeScript, convert at the API boundary or in shared-type generation.
 - Keep `metadata` JSON-serializable only. Allowed values should be scalars, lists, and nested dictionaries of the same. Do not attach raw provider payloads, cookies, headers, or large DataFrames.

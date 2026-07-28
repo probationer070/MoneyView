@@ -256,4 +256,4 @@ intrinsic_value_per_share = 1,520.90 / 10 = 152.09
 
 - [Corporate Analysis Tab](./corporate-analysis-tab.md)
 - [DCF Partial Streaming](./architecture/dcf-streaming.md)
-- [Finance Logic SOP](../guideline/finance-logic.md)
+- [Finance Logic SOP](../guideline/sop/finance-logic.md)

@@ -110,14 +110,41 @@ async def lifespan(app: FastAPI):
     logger.info("Database ready.")
 
     task_wal = asyncio.create_task(wal_flush_cycle())
-    task_corporate_snapshot = asyncio.create_task(corporate_snapshot_cycle())
-    task_stock_prewarm = asyncio.create_task(stock_prewarm_cycle())
+
+    # Read at call time, not import time, so a test process that sets this in
+    # conftest still takes effect on an already-imported module.
+    #
+    # These two cycles fetch live market data on startup. Under pytest that
+    # means real network traffic, and stock_prewarm_cycle's asyncio.to_thread
+    # worker cannot be cancelled -- it outlives the TestClient block, keeps
+    # emitting into the dev-monitor sink, and evicts the events a test is
+    # asserting on from its recent(limit=N) window.
+    startup_jobs_disabled = os.getenv("MONEYVIEW_DISABLE_STARTUP_JOBS", "").lower() in {
+        "1", "true", "yes",
+    }
+    background = [task_wal]
+    if not startup_jobs_disabled:
+        background.append(asyncio.create_task(corporate_snapshot_cycle()))
+        background.append(asyncio.create_task(stock_prewarm_cycle()))
 
     yield
 
-    task_wal.cancel()
-    task_corporate_snapshot.cancel()
-    task_stock_prewarm.cancel()
+    for task in background:
+        task.cancel()
+    # Await the cancellations so shutdown does not return while they are still
+    # propagating. An in-flight asyncio.to_thread worker still cannot be killed
+    # -- that is a CPython constraint, not something this gather fixes -- so a
+    # prewarm started before shutdown can still outlive the app in production.
+    # The real fix is a cooperative stop flag inside prewarm_configured_tickers,
+    # which is out of scope here.
+    await asyncio.gather(*background, return_exceptions=True)
+
+    from apps.api.core.dev_monitor import get_dev_monitor_sink
+
+    sink = get_dev_monitor_sink()
+    shutdown = getattr(sink, "shutdown", None)
+    if callable(shutdown):
+        shutdown()
 
     logger.info("Tearing down SQLite connections and WAL truncate.")
     try:

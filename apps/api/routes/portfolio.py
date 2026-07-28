@@ -19,6 +19,10 @@ from apps.api.models.schemas import (
     WatchlistSyncStatus,
     WatchlistSyncResult,
 )
+from apps.api.compute.client import get_compute_client
+from apps.api.compute.errors import ComputeError
+from apps.api.core.logger import setup_logger
+from apps.api.services.acquisition.runner import retire_subject, schedule_acquisition
 from apps.api.services.db import get_db
 from apps.api.services.market_data import MarketDataService
 from apps.api.services.news_service import NewsService
@@ -35,6 +39,7 @@ _API_ROOT = Path(__file__).resolve().parents[1]
 _WATCHLIST_JSON = _API_ROOT / "services" / "webscrap" / "stock_targets.json"
 
 router = APIRouter()
+logger = setup_logger(__name__)
 _mkt = MarketDataService()
 _news = NewsService()
 _portfolio_analytics = PortfolioAnalyticsService(_mkt)
@@ -152,12 +157,34 @@ async def upsert_watchlist_item(item: WatchlistItem = Body(...)):
     )
 
     with get_db() as conn:
+        existing = conn.execute(
+            "SELECT ticker FROM watchlist WHERE ticker = ?", (normalized.ticker,)
+        ).fetchone()
         conn.execute(
             """INSERT OR REPLACE INTO watchlist (ticker, name, sector, group_name, weight)
                VALUES (?, ?, ?, ?, ?)""",
             (normalized.ticker, normalized.name, normalized.sector, normalized.group_name, normalized.weight),
         )
     mark_watchlist_state("user_mutation")
+    # Adding a stock is the natural moment to acquire its history: one 10-year backfill,
+    # off the request path. Without it the next comparison discovers the ticker and pays
+    # a live fetch in-band while a user waits.
+    #
+    # Only on a genuinely new row. This endpoint is an upsert and is also the metadata
+    # and weight edit path -- a sector change, "normalize allocations", the allocation
+    # auto-save -- so scheduling per call would turn one bulk allocation edit into N
+    # concurrent live provider fetches. Concurrent live fetching is what earned a Yahoo
+    # rate limit that invalidated a day of measurements (see acquisition/sources/bars.py).
+    #
+    # Guarded because acquisition is best-effort: a scheduling failure must never fail
+    # the user's watchlist write, which is the operation they actually asked for
+    # (design 10 -- no acquisition failure propagates into a request).
+    if existing is None:
+        try:
+            schedule_acquisition("equity_bars", normalized.ticker)
+        except Exception as error:  # noqa: BLE001 - best-effort, never fails the write
+            logger.warning("watchlist.schedule_acquisition_failed ticker=%s error=%s",
+                           normalized.ticker, error)
     return normalized
 
 
@@ -197,6 +224,11 @@ async def delete_watchlist_item(ticker: str):
             raise HTTPException(status_code=404, detail=f"watchlist ticker not found: {normalized_ticker}")
         conn.execute("DELETE FROM watchlist WHERE ticker = ?", (normalized_ticker,))
     mark_watchlist_state("user_mutation")
+    try:
+        retire_subject("equity_bars", normalized_ticker)
+    except Exception as error:  # noqa: BLE001 - best-effort, never fails the delete
+        logger.warning("watchlist.retire_subject_failed ticker=%s error=%s",
+                       normalized_ticker, error)
     return {"status": "ok", "ticker": normalized_ticker}
 
 
@@ -206,9 +238,10 @@ async def get_portfolio_attribution(payload: AttributionRequest = Body(...)):
     Portfolio-level arithmetic Brinson-Fachler attribution.
 
     Returns domain schemas only and avoids chart-specific shaping in the API layer.
+    Compute runs behind the ComputeClient seam (in-process or compute-service).
     """
     try:
-        result = _portfolio_analytics.build_attribution(payload)
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        result = await get_compute_client().build_attribution(payload)
+    except ComputeError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
     return APIResponse(data=result)

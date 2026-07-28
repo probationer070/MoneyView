@@ -4,8 +4,8 @@ Purpose: define the technical design before implementation and keep MoneyView's 
 
 ## Read First
 
-- `guideline/file-structure.md`
-- `guideline/finance-logic.md`
+- `guideline/sop/file-structure.md`
+- `guideline/sop/finance-logic.md`
 - Existing route, service, schema, and package files related to the task
 - Existing tests for the affected area
 

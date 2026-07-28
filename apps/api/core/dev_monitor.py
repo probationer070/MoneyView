@@ -11,6 +11,7 @@ from contextvars import ContextVar, Token
 from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from apps.api.core.logger import setup_logger
 from apps.api.models.schema_parts.dev_monitor import PerformanceEvent, PerformanceSummary
@@ -18,10 +19,12 @@ from apps.api.models.schema_parts.dev_monitor import PerformanceEvent, Performan
 logger = setup_logger(__name__)
 
 _DEFAULT_PERFORMANCE_LOG_DIRECTORY = Path("data/cache/logs/performance")
-_RECENT_EVENT_LIMIT = 2000
 _DEFAULT_LIMIT = 500
 _DEFAULT_RETENTION_DAYS = 7
+_DEFAULT_EVENT_LIMIT = 20_000
 _current_request_id: ContextVar[str | None] = ContextVar("moneyview_dev_monitor_request_id", default=None)
+_current_span_id: ContextVar[str | None] = ContextVar("moneyview_dev_monitor_span_id", default=None)
+_events_suppressed: ContextVar[bool] = ContextVar("moneyview_dev_monitor_suppressed", default=False)
 
 
 def is_dev_monitor_enabled() -> bool:
@@ -49,6 +52,16 @@ def get_dev_monitor_retention_days() -> int:
         return _DEFAULT_RETENTION_DAYS
 
 
+def get_dev_monitor_event_limit() -> int:
+    raw_value = os.getenv("MONEYVIEW_DEV_MONITOR_EVENT_LIMIT", "").strip()
+    if not raw_value:
+        return _DEFAULT_EVENT_LIMIT
+    try:
+        return max(1, int(raw_value))
+    except ValueError:
+        return _DEFAULT_EVENT_LIMIT
+
+
 def slow_threshold_ms_for_scope(scope: str) -> float:
     return 1000.0 if scope == "api" else 250.0
 
@@ -63,6 +76,39 @@ def reset_current_request_id(token: Token[str | None]) -> None:
 
 def get_current_request_id() -> str | None:
     return _current_request_id.get()
+
+
+def get_current_span_id() -> str | None:
+    return _current_span_id.get()
+
+
+def set_events_suppressed(suppressed: bool) -> Token[bool]:
+    """Stop instrumentation being recorded for the current request.
+
+    The dashboard reads the same buffer it writes to, so instrumenting its own fetches
+    means the request index lists the request that fetched it, and refreshing the page
+    evicts the traffic you opened it to look at (spec 06.9).
+
+    This suppresses *incidental* instrumentation only. A caller deliberately recording
+    an event -- notably the client-event endpoint, which exists to persist browser-side
+    spans -- resets the token around its own emit.
+    """
+    return _events_suppressed.set(suppressed)
+
+
+def reset_events_suppressed(token: Token[bool]) -> None:
+    _events_suppressed.reset(token)
+
+
+def set_current_span_id(span_id: str | None) -> Token[str | None]:
+    """For span emitters that do not go through `perf_timer` -- notably the
+    request-level span in middleware, which every other span in a request should
+    hang from (spec 03.2)."""
+    return _current_span_id.set(span_id)
+
+
+def reset_current_span_id(token: Token[str | None]) -> None:
+    _current_span_id.reset(token)
 
 
 def _sanitize_metadata(metadata: dict[str, Any] | None) -> dict[str, Any]:
@@ -111,20 +157,48 @@ class DevMonitorSink:
     def events_after(self, last_sequence: int) -> tuple[int, list[PerformanceEvent]]:
         return last_sequence, []
 
+    def flush(self) -> None:
+        return None
+
 
 class NoOpDevMonitorSink(DevMonitorSink):
     pass
 
 
 class ActiveDevMonitorSink(DevMonitorSink):
-    def __init__(self, *, log_path: Path, recent_limit: int = _RECENT_EVENT_LIMIT):
+    def __init__(
+        self,
+        *,
+        log_path: Path,
+        recent_limit: int | None = None,
+        synchronous: bool = False,
+        flush_events: int = 200,
+        flush_interval_ms: int = 500,
+    ):
         self.log_path = log_path
-        self._recent_limit = recent_limit
-        self._recent_events: deque[PerformanceEvent] = deque(maxlen=recent_limit)
-        self._sequenced_events: deque[tuple[int, PerformanceEvent]] = deque(maxlen=recent_limit)
+        self._recent_limit = recent_limit if recent_limit is not None else get_dev_monitor_event_limit()
+        self._recent_events: deque[PerformanceEvent] = deque(maxlen=self._recent_limit)
+        self._sequenced_events: deque[tuple[int, PerformanceEvent]] = deque(maxlen=self._recent_limit)
         self._next_sequence = 0
         self._lock = threading.Lock()
+        self._pending: list[PerformanceEvent] = []
+        self._pending_lock = threading.Lock()
+        self._write_lock = threading.Lock()
+        self._persistence_enabled = True
+        self._synchronous = synchronous
+        self._flush_events = max(1, flush_events)
+        self._flush_interval_s = max(0.01, flush_interval_ms / 1000.0)
+        self._wake = threading.Event()
+        self._stopping = False
+        self._flusher: threading.Thread | None = None
         self._cleanup_old_jsonl_logs()
+        if not synchronous:
+            self._flusher = threading.Thread(target=self._flush_loop, name="dev-monitor-flush", daemon=True)
+            self._flusher.start()
+
+    @property
+    def persistence_enabled(self) -> bool:
+        return self._persistence_enabled
 
     def emit(self, event: PerformanceEvent) -> PerformanceEvent:
         sanitized_event = event.model_copy(update={"metadata": _sanitize_metadata(event.metadata)})
@@ -132,9 +206,38 @@ class ActiveDevMonitorSink(DevMonitorSink):
             self._next_sequence += 1
             self._recent_events.append(sanitized_event)
             self._sequenced_events.append((self._next_sequence, sanitized_event))
-            self._append_jsonl(sanitized_event)
+        should_flush_now = False
+        with self._pending_lock:
+            if self._persistence_enabled:
+                self._pending.append(sanitized_event)
+                should_flush_now = self._synchronous or len(self._pending) >= self._flush_events
+        if should_flush_now:
+            if self._synchronous:
+                self._write_pending()
+            else:
+                self._wake.set()
         self._emit_terminal(sanitized_event)
         return sanitized_event
+
+    def flush(self) -> None:
+        self._write_pending()
+
+    def shutdown(self) -> None:
+        self._stopping = True
+        self._wake.set()
+        self.flush()
+        if self._flusher is not None:
+            self._flusher.join(timeout=5.0)
+        self.flush()
+
+    def _flush_loop(self) -> None:
+        while not self._stopping:
+            self._wake.wait(timeout=self._flush_interval_s)
+            self._wake.clear()
+            try:
+                self._write_pending()
+            except Exception as error:  # noqa: BLE001 - flusher thread must never die silently
+                self._disable_persistence(error)
 
     def recent(self, limit: int = _DEFAULT_LIMIT) -> list[PerformanceEvent]:
         bounded_limit = max(0, min(limit, self._recent_limit))
@@ -193,11 +296,34 @@ class ActiveDevMonitorSink(DevMonitorSink):
             events = [event for sequence, event in self._sequenced_events if sequence > last_sequence]
         return newest_sequence, events
 
-    def _append_jsonl(self, event: PerformanceEvent) -> None:
-        self.log_path.parent.mkdir(parents=True, exist_ok=True)
-        with self.log_path.open("a", encoding="utf-8") as handle:
-            handle.write(event.model_dump_json())
-            handle.write("\n")
+    def _write_pending(self) -> None:
+        with self._write_lock:
+            with self._pending_lock:
+                if not self._pending or not self._persistence_enabled:
+                    self._pending.clear()
+                    return
+                batch = self._pending
+                self._pending = []
+            try:
+                self.log_path.parent.mkdir(parents=True, exist_ok=True)
+                with self.log_path.open("a", encoding="utf-8") as handle:
+                    for event in batch:
+                        handle.write(event.model_dump_json())
+                        handle.write("\n")
+            except Exception as error:  # noqa: BLE001 - any write failure (disk, permission, encoding) disables persistence
+                self._disable_persistence(error)
+
+    def _disable_persistence(self, error: Exception) -> None:
+        with self._pending_lock:
+            if not self._persistence_enabled:
+                return
+            self._persistence_enabled = False
+            self._pending.clear()
+        logger.error(
+            "dev.monitor persistence disabled for this session path=%s error=%s",
+            self.log_path,
+            error,
+        )
 
     def _cleanup_old_jsonl_logs(self) -> None:
         retention_days = get_dev_monitor_retention_days()
@@ -238,6 +364,9 @@ _sink: DevMonitorSink = NoOpDevMonitorSink()
 
 def reset_dev_monitor_sink() -> None:
     global _sink
+    shutdown = getattr(_sink, "shutdown", None)
+    if callable(shutdown):
+        shutdown()
     _sink = NoOpDevMonitorSink()
 
 
@@ -249,6 +378,17 @@ def get_dev_monitor_sink() -> DevMonitorSink:
 
 
 def emit_performance_event(event: PerformanceEvent) -> PerformanceEvent:
+    # Returned unrecorded rather than raising or returning None: callers read `.id` off
+    # the result to pair terminal events, so the shape of the return must not change.
+    if _events_suppressed.get():
+        return event
+    if event.parent_id is None:
+        current_span_id = _current_span_id.get()
+        # Guard against self-parenting: a span's own terminal event must never
+        # become its own child (that would be a cycle, and tree-building in a
+        # later task walks these parent links).
+        if current_span_id is not None and current_span_id != event.id:
+            event = event.model_copy(update={"parent_id": current_span_id})
     return get_dev_monitor_sink().emit(event)
 
 
@@ -336,9 +476,12 @@ def perf_timer(
     **event_fields: Any,
 ) -> Iterator[dict[str, Any]]:
     threshold_ms = slow_threshold_ms if slow_threshold_ms is not None else slow_threshold_ms_for_scope(scope)
+    span_id = uuid4().hex
+    effective_parent = parent_id if parent_id is not None else _current_span_id.get()
+    effective_request_id = request_id if request_id is not None else get_current_request_id()
     event_context = {
-        "request_id": request_id,
-        "parent_id": parent_id,
+        "request_id": effective_request_id,
+        "parent_id": effective_parent,
         "level": level,
         "scope": scope,
         "operation": operation,
@@ -349,46 +492,57 @@ def perf_timer(
     start_event: PerformanceEvent | None = None
     if emit_start and is_dev_monitor_enabled():
         start_event = emit_performance_event(
-            PerformanceEvent(
-                **event_context,
-                status="start",
-            )
+            PerformanceEvent(**event_context, id=span_id, status="start")
         )
 
     started_at = time.perf_counter()
     mutable_metadata = event_context["metadata"]
+    span_token = _current_span_id.set(span_id)
+    error: Exception | None = None
 
     try:
         yield mutable_metadata
     except Exception as exc:
-        duration_ms = round((time.perf_counter() - started_at) * 1000, 1)
+        error = exc
+    finally:
+        _current_span_id.reset(span_token)
+
+    duration_ms = round((time.perf_counter() - started_at) * 1000, 1)
+
+    if error is not None:
         error_metadata = dict(mutable_metadata)
-        error_metadata.setdefault("exception_type", type(exc).__name__)
+        error_metadata.setdefault("exception_type", type(error).__name__)
+        if start_event is not None:
+            error_metadata["closes_span_id"] = span_id
         emit_performance_event(
             PerformanceEvent(
                 **_event_payload(
                     event_context,
-                    parent_id=start_event.id if start_event else parent_id,
+                    parent_id=span_id if start_event else effective_parent,
                     metadata=error_metadata,
                     level="error",
                     status="error",
                     duration_ms=duration_ms,
-                    message=message or str(exc),
+                    **({} if start_event else {"id": span_id}),
+                    message=message or str(error),
                 )
             )
         )
-        raise
+        raise error
 
-    duration_ms = round((time.perf_counter() - started_at) * 1000, 1)
     status = "slow" if duration_ms >= threshold_ms else "success"
+    terminal_metadata = dict(mutable_metadata)
+    if start_event is not None:
+        terminal_metadata["closes_span_id"] = span_id
     emit_performance_event(
         PerformanceEvent(
             **_event_payload(
                 event_context,
-                parent_id=start_event.id if start_event else parent_id,
-                metadata=dict(mutable_metadata),
+                parent_id=span_id if start_event else effective_parent,
+                metadata=terminal_metadata,
                 status=status,
                 duration_ms=duration_ms,
+                **({} if start_event else {"id": span_id}),
             )
         )
     )

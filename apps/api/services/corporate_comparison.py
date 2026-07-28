@@ -284,39 +284,45 @@ def _build_live_rows(
     )
 
     rows: list[CorporateComparisonRow] = []
-    for row in universe_rows:
-        ticker = str(row["ticker"] or "").upper().strip()
-        if not ticker:
-            continue
-        metrics = metrics_loader(ticker)
-        dcf = _dcf_snapshot(
-            ticker=ticker,
-            metrics=metrics,
-            price_loader=price_loader,
-            risk_free_rate=risk_free_rate,
-            equity_risk_premium=equity_risk_premium,
-        )
-        rows.append(
-            CorporateComparisonRow(
+    with perf_timer(
+        scope="calculation",
+        operation="fanout.comparison",
+        emit_start=True,
+    ) as span_metadata:
+        span_metadata["fanout_size"] = len(universe_rows)
+        for row in universe_rows:
+            ticker = str(row["ticker"] or "").upper().strip()
+            if not ticker:
+                continue
+            metrics = metrics_loader(ticker)
+            dcf = _dcf_snapshot(
                 ticker=ticker,
-                name=str(row["name"] or company_data.registry.get(ticker, {}).get("name") or ticker),
-                sector=str(row["sector"] or company_data.registry.get(ticker, {}).get("sector", "")),
-                group_name=str(row["group_name"] or "custom"),
-                weight=float(row["weight"] or 0.0),
-                roic=round(float(metrics.roic), 2),
-                wacc=round(float(metrics.wacc), 2),
-                roic_minus_wacc=round(float(metrics.roic - metrics.wacc), 2),
-                dcf_value=float(dcf["estimated_value"]),
-                current_price=float(dcf["current_price"]),
-                dcf_implied_return=float(dcf["dcf_implied_return"]),
-                capm_expected_return=float(dcf["capm_expected_return"]),
-                stock_expected_return=float(dcf["stock_expected_return"]),
-                market_expected_return=float(dcf["market_expected_return"]),
-                expected_return_spread=float(dcf["expected_return_spread"]),
-                stock_expected_return_source=STOCK_EXPECTED_RETURN_METHOD,
-                has_price_data=float(dcf["current_price"]) > 0,
+                metrics=metrics,
+                price_loader=price_loader,
+                risk_free_rate=risk_free_rate,
+                equity_risk_premium=equity_risk_premium,
             )
-        )
+            rows.append(
+                CorporateComparisonRow(
+                    ticker=ticker,
+                    name=str(row["name"] or company_data.registry.get(ticker, {}).get("name") or ticker),
+                    sector=str(row["sector"] or company_data.registry.get(ticker, {}).get("sector", "")),
+                    group_name=str(row["group_name"] or "custom"),
+                    weight=float(row["weight"] or 0.0),
+                    roic=round(float(metrics.roic), 2),
+                    wacc=round(float(metrics.wacc), 2),
+                    roic_minus_wacc=round(float(metrics.roic - metrics.wacc), 2),
+                    dcf_value=float(dcf["estimated_value"]),
+                    current_price=float(dcf["current_price"]),
+                    dcf_implied_return=float(dcf["dcf_implied_return"]),
+                    capm_expected_return=float(dcf["capm_expected_return"]),
+                    stock_expected_return=float(dcf["stock_expected_return"]),
+                    market_expected_return=float(dcf["market_expected_return"]),
+                    expected_return_spread=float(dcf["expected_return_spread"]),
+                    stock_expected_return_source=STOCK_EXPECTED_RETURN_METHOD,
+                    has_price_data=float(dcf["current_price"]) > 0,
+                )
+            )
     return rows
 
 

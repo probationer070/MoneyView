@@ -7,7 +7,7 @@ Purpose: reproduce, diagnose, fix, and document build/test failures without mask
 - Latest terminal output or CI logs
 - Relevant test files
 - Relevant source files
-- `guideline/code-reviewer.md`
+- `guideline/sop/code-reviewer.md`
 
 ## Process
 

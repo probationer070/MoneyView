@@ -1,6 +1,7 @@
 import time
 import uuid
 import logging
+from contextvars import Token
 from typing import Dict
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -9,28 +10,36 @@ from apps.api.core.dev_monitor import (
     emit_performance_event,
     is_dev_monitor_enabled,
     reset_current_request_id,
+    reset_current_span_id,
+    reset_events_suppressed,
     set_current_request_id,
+    set_current_span_id,
+    set_events_suppressed,
 )
 from apps.api.core.logger import setup_logger
 from apps.api.models.schema_parts.dev_monitor import PerformanceEvent
 
 logger = setup_logger(__name__)
 
+# Requests under this prefix are not instrumented: they serve the dashboard that reads
+# the event buffer, so recording them would pollute the data they return (spec 06.9).
+_UNINSTRUMENTED_PATH_PREFIX = "/api/v1/dev"
 
-def _page_load_component_for_path(path: str) -> str | None:
-    if path.startswith("/api/v1/market") or path.startswith("/api/v1/stock") or path.startswith("/api/v1/detail"):
-        return "market_overview"
-    if path.startswith("/api/v1/portfolio"):
-        return "portfolio"
-    if path.startswith("/api/v1/corporate/metrics"):
-        return "corporate_metrics"
-    if path.startswith("/api/v1/corporate/comparison"):
-        return "corporate_comparison"
-    if path.startswith("/api/v1/monte-carlo"):
-        return "monte_carlo"
-    if path.startswith("/api/v1/news"):
-        return "news_feed"
-    return None
+
+def _response_bytes(response) -> int | None:
+    """Response size from Content-Length. None for streaming responses.
+
+    Buffering a StreamingResponse to measure it would change the behaviour
+    under measurement, so streams deliberately report no size (spec 03.5.2).
+    """
+    raw_length = response.headers.get("content-length")
+    if raw_length is None:
+        return None
+    try:
+        return int(raw_length)
+    except (TypeError, ValueError):
+        return None
+
 
 class RateLimiter:
     """In-memory Token Bucket rate limiter per IP/Client."""
@@ -67,6 +76,7 @@ class StructuralMiddleware(BaseHTTPMiddleware):
         request.state.request_id = request_id
         request_token = set_current_request_id(request_id)
         request_event_id: str | None = None
+        span_token: Token[str | None] | None = None
 
         # 2. Rate Limiting (Throttle by IP + Route specific overrides)
         client_ip = request.client.host if request.client else "127.0.0.1"
@@ -89,6 +99,12 @@ class StructuralMiddleware(BaseHTTPMiddleware):
 
         # 3. Execution mapping
         start_time = time.time()
+        # The dashboard reads the buffer it would otherwise write to, so instrumenting
+        # its own fetches makes the request index list the request that fetched it, and
+        # a refresh evicts the traffic you opened the page to inspect (spec 06.9).
+        # Covers db and cache events raised inside these handlers too, not just the
+        # request span -- suppressing only the span would leave those unparented.
+        suppression_token = set_events_suppressed(path.startswith(_UNINSTRUMENTED_PATH_PREFIX))
         if is_dev_monitor_enabled():
             request_event = emit_performance_event(
                 PerformanceEvent(
@@ -103,22 +119,12 @@ class StructuralMiddleware(BaseHTTPMiddleware):
                 )
             )
             request_event_id = request_event.id
-            page_component = _page_load_component_for_path(path)
-            if page_component is not None:
-                emit_performance_event(
-                    PerformanceEvent(
-                        request_id=request_id,
-                        parent_id=request_event_id,
-                        level="info",
-                        scope="page_load",
-                        operation=f"page_load.{page_component}",
-                        status="start",
-                        route=path,
-                        method=request.method,
-                        component=page_component,
-                        metadata={"request_group": page_component},
-                    )
-                )
+            # Make the request span the ambient parent for everything downstream.
+            # perf_timer does this for its own spans, but the request span is emitted
+            # directly, so without this every event emitted outside a perf_timer block
+            # (cache events, db.* from InstrumentedCursor) has no parent and becomes
+            # its own root, flattening the waterfall (spec 03.2).
+            span_token = set_current_span_id(request_event_id)
         try:
             try:
                 response = await call_next(request)
@@ -138,26 +144,14 @@ class StructuralMiddleware(BaseHTTPMiddleware):
                             method=request.method,
                             duration_ms=duration_ms,
                             message="Unhandled request exception",
-                            metadata={"client_ip": client_ip, "status_code": 500},
+                            metadata={
+                                "client_ip": client_ip,
+                                "status_code": 500,
+                                "closes_span_id": request_event_id,
+                                "bytes": None,
+                            },
                         )
                     )
-                    page_component = _page_load_component_for_path(request.url.path)
-                    if page_component is not None:
-                        emit_performance_event(
-                            PerformanceEvent(
-                                request_id=request_id,
-                                parent_id=request_event_id,
-                                level="error",
-                                scope="page_load",
-                                operation=f"page_load.{page_component}",
-                                status="error",
-                                route=request.url.path,
-                                method=request.method,
-                                component=page_component,
-                                duration_ms=duration_ms,
-                                metadata={"request_group": page_component, "status_code": 500},
-                            )
-                        )
                 logger.exception(
                     "request.failed method=%s path=%s duration_ms=%.1f client_ip=%s",
                     request.method,
@@ -189,26 +183,14 @@ class StructuralMiddleware(BaseHTTPMiddleware):
                         route=request.url.path,
                         method=request.method,
                         duration_ms=duration_ms,
-                        metadata={"client_ip": client_ip, "status_code": response.status_code},
+                        metadata={
+                            "client_ip": client_ip,
+                            "status_code": response.status_code,
+                            "closes_span_id": request_event_id,
+                            "bytes": _response_bytes(response),
+                        },
                     )
                 )
-                page_component = _page_load_component_for_path(request.url.path)
-                if page_component is not None:
-                    emit_performance_event(
-                        PerformanceEvent(
-                            request_id=request_id,
-                            parent_id=request_event_id,
-                            level="warn" if process_time > 1.0 else "info",
-                            scope="page_load",
-                            operation=f"page_load.{page_component}",
-                            status="slow" if process_time > 1.0 else "success",
-                            route=request.url.path,
-                            method=request.method,
-                            component=page_component,
-                            duration_ms=duration_ms,
-                            metadata={"request_group": page_component, "status_code": response.status_code},
-                        )
-                    )
 
             log_level = logging.WARNING if process_time > 1.0 else logging.INFO
             logger.log(
@@ -232,4 +214,7 @@ class StructuralMiddleware(BaseHTTPMiddleware):
             response.headers["X-Request-ID"] = request_id
             return response
         finally:
+            reset_events_suppressed(suppression_token)
+            if span_token is not None:
+                reset_current_span_id(span_token)
             reset_current_request_id(request_token)

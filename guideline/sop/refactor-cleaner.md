@@ -6,8 +6,8 @@ Purpose: reduce complexity without changing behavior.
 
 - Existing tests and lint output
 - Code paths affected by the refactor
-- `guideline/file-structure.md`
-- `guideline/code-reviewer.md`
+- `guideline/sop/file-structure.md`
+- `guideline/sop/code-reviewer.md`
 
 ## Refactor Rules
 

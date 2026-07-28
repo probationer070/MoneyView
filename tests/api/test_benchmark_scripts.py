@@ -99,3 +99,248 @@ def test_api_benchmark_smoke():
     assert "GET /api/v1/detail/AAPL/technicals?period=5y" in names
     assert "GET /api/v1/detail/AAPL/monte-carlo?paths=1000&horizon_days=252" in names
     assert all(result.status_code == 200 for result in results)
+
+
+_ENVIRONMENT = {"watchlist": 138, "stocks_rows": 120647, "db_bytes": 27_000_000,
+                "event_limit": 20000, "compute_mode": "in_process", "git_sha": "abc1234"}
+
+
+def test_benchmark_scenarios_module_exposes_scenarios_and_report():
+    import scripts.benchmark_scenarios as runner
+
+    assert set(runner.SCENARIOS) == {
+        "portfolio_page_load",
+        "comparison_138",
+        "attribution_138",
+        "single_stock_detail",
+        "tab_switch",
+    }
+    assert callable(runner.render_report)
+    assert callable(runner.collect_environment)
+
+
+def test_report_stamps_every_criterion():
+    import scripts.benchmark_scenarios as runner
+
+    report = runner.render_report(
+        environment={"watchlist": 138, "stocks_rows": 120647, "db_bytes": 27_000_000,
+                     "event_limit": 20000, "compute_mode": "in_process", "git_sha": "abc1234"},
+        results=[
+            runner.ScenarioResult(
+                name="comparison_138", p50_off_ms=3180.0, p50_on_ms=3271.0, p95_on_ms=3410.0,
+                iterations=10, breakdown=None, ticker_table=None, orphans=0,
+                partial=False, truncated=False, reproducibility_delta_pct=2.0,
+            )
+        ],
+    )
+    for criterion in ["criterion 1", "criterion 2", "criterion 3", "criterion 4", "criterion 5"]:
+        assert criterion in report.lower()
+
+
+def test_report_ranks_operations_and_renders_cache_section():
+    """Criterion 5 ranks operations, not tickers (spec 08.5), and the cache section
+    must appear even when every miss cost is unmeasured, so a 0.0 reads as a known
+    gap rather than as a measured zero."""
+    import scripts.benchmark_scenarios as runner
+    from apps.api.models.schema_parts.perf_analysis import (
+        CacheReport,
+        CacheRow,
+        ScopeBreakdown,
+        ScopeRow,
+    )
+
+    report = runner.render_report(
+        environment={"watchlist": 138, "stocks_rows": 120647, "db_bytes": 27_000_000,
+                     "event_limit": 20000, "compute_mode": "in_process", "git_sha": "abc1234"},
+        results=[
+            runner.ScenarioResult(
+                name="comparison_138", p50_off_ms=3180.0, p50_on_ms=3271.0, p95_on_ms=3410.0,
+                iterations=10,
+                breakdown=ScopeBreakdown(
+                    scopes=[ScopeRow(scope="db", self_ms=892.0, pct_of_total=28.0,
+                                     event_count=138, slow_count=0)],
+                    total_ms=3180.0, unattributed_ms=0.0,
+                ),
+                ticker_table=None, orphans=0, partial=False, truncated=False,
+                reproducibility_delta_pct=2.0,
+                cache_report=CacheReport(caches=[
+                    CacheRow(component="statement_metrics", hits=3, misses=1, hit_rate=0.75,
+                             avg_miss_cost_ms=0.0, estimated_time_saved_ms=0.0),
+                ]),
+                top_spans=[runner.OperationCost(
+                    operation="db.select_corporate_metrics", self_ms=892.0, count=138,
+                )],
+            )
+        ],
+    )
+    assert "Top spans by self time" in report
+    assert "db.select_corporate_metrics" in report
+    assert "6.5 ms" in report  # 892 ms / 138 calls
+    assert "statement_metrics" in report
+    assert "unmeasured, not zero" in report
+
+
+def test_criterion_5_ranks_leaves_not_parents():
+    """A parent's self time is only what its children did not account for, so ranking
+    parents names a call tree rather than code to change. page_load.portfolio taking
+    76% of a request is a nesting artefact, not a cost centre."""
+    import scripts.benchmark_scenarios as runner
+
+    parent = runner.OperationCost(operation="page_load.portfolio", self_ms=11718.0, count=60, leaf_count=0)
+    leaf = runner.OperationCost(operation="db.select_stocks", self_ms=603.1, count=2780, leaf_count=2780)
+    assert parent.kind == "parent"
+    assert leaf.kind == "leaf"
+
+    report = runner.render_report(
+        environment=_ENVIRONMENT,
+        results=[
+            runner.ScenarioResult(
+                name="portfolio_page_load", p50_off_ms=515.0, p50_on_ms=594.3, p95_on_ms=624.6,
+                iterations=20, breakdown=None, ticker_table=None, orphans=0, partial=False,
+                truncated=False, reproducibility_delta_pct=1.6,
+                top_spans=[parent, leaf], leaf_spans=[leaf],
+            )
+        ],
+    )
+    ranked = report.split("## Ranked bottlenecks")[1]
+    assert "db.select_stocks" in ranked
+    assert "page_load.portfolio" not in ranked, "a parent span must not be ranked as a bottleneck"
+
+
+def test_negative_overhead_is_invalid_not_a_pass():
+    """Instrumented code cannot outrun uninstrumented code. A negative overhead means
+    the measurement is contaminated -- yet it reads as the best possible result and was
+    being stamped PASS. Guard the sign as well as the magnitude, the same way spec 08.4
+    treats an over-budget overhead as making the report untrustworthy."""
+    import scripts.benchmark_scenarios as runner
+
+    def _result(p50_off, p50_on):
+        return runner.ScenarioResult(
+            name="x", p50_off_ms=p50_off, p50_on_ms=p50_on, p95_on_ms=p50_on,
+            iterations=10, breakdown=None, ticker_table=None, orphans=0, partial=False,
+            truncated=False, reproducibility_delta_pct=1.0,
+        )
+
+    negative = _result(1000.0, 950.0)
+    assert negative.overhead_pct == -5.0
+    assert negative.overhead_valid is False
+    assert runner.criteria_failed([negative]) is True, "a negative overhead must not pass"
+
+    healthy = _result(1000.0, 1020.0)
+    assert healthy.overhead_valid is True
+    assert runner.criteria_failed([healthy]) is False
+
+    report = runner.render_report(environment=_ENVIRONMENT, results=[negative])
+    assert "INVALID" in report
+
+
+def test_trend_section_compares_against_the_previous_baseline(tmp_path):
+    """Trend beats absolute numbers: a p50 alone cannot say whether a change helped.
+    Read from a JSON sidecar rather than by re-parsing the markdown, which would break
+    on any formatting change."""
+    import json
+
+    import scripts.benchmark_scenarios as runner
+
+    (tmp_path / "2026-07-20-baseline.json").write_text(json.dumps({
+        "date": "2026-07-20",
+        "environment": _ENVIRONMENT,
+        "scenarios": {"tab_switch": {"p50_on_ms": 900.0, "overhead_pct": 20.0}},
+    }), encoding="utf-8")
+
+    previous = runner.load_previous_baseline(tmp_path, "2026-07-27")
+    assert previous is not None and previous["date"] == "2026-07-20"
+
+    report = runner.render_report(
+        environment=_ENVIRONMENT,
+        results=[
+            runner.ScenarioResult(
+                name="tab_switch", p50_off_ms=711.1, p50_on_ms=837.8, p95_on_ms=900.0,
+                iterations=20, breakdown=None, ticker_table=None, orphans=0, partial=False,
+                truncated=False, reproducibility_delta_pct=2.0,
+            )
+        ],
+        previous=previous,
+    )
+    assert "2026-07-20" in report
+    assert "-6.9%" in report  # 837.8 vs 900.0
+
+
+def test_trend_section_warns_when_environments_differ(tmp_path):
+    """Spec 08.4.1: two reports are only comparable if their headers match. A silent
+    comparison across a changed dataset is worse than no comparison."""
+    import json
+
+    import scripts.benchmark_scenarios as runner
+
+    changed = dict(_ENVIRONMENT, watchlist=50, git_sha="0000000")
+    (tmp_path / "2026-07-20-baseline.json").write_text(json.dumps({
+        "date": "2026-07-20",
+        "environment": changed,
+        "scenarios": {"tab_switch": {"p50_on_ms": 900.0, "overhead_pct": 20.0}},
+    }), encoding="utf-8")
+
+    report = runner.render_report(
+        environment=_ENVIRONMENT,
+        results=[
+            runner.ScenarioResult(
+                name="tab_switch", p50_off_ms=711.1, p50_on_ms=837.8, p95_on_ms=900.0,
+                iterations=20, breakdown=None, ticker_table=None, orphans=0, partial=False,
+                truncated=False, reproducibility_delta_pct=2.0,
+            )
+        ],
+        previous=runner.load_previous_baseline(tmp_path, "2026-07-27"),
+    )
+    assert "not directly comparable" in report
+    assert "watchlist" in report
+
+
+def test_report_explains_overlap_and_reports_span_counts():
+    """`overlap_detected: True` is unreadable as good or bad without a note, and an
+    overhead percentage is illegible without the span count that drives it."""
+    import scripts.benchmark_scenarios as runner
+
+    report = runner.render_report(
+        environment=_ENVIRONMENT,
+        results=[
+            runner.ScenarioResult(
+                name="tab_switch", p50_off_ms=711.1, p50_on_ms=837.8, p95_on_ms=900.0,
+                iterations=20, breakdown=None, ticker_table=None, orphans=0, partial=False,
+                truncated=False, reproducibility_delta_pct=2.0, overlap_detected=True,
+                event_count=21347, span_count=18000,
+                samples_on=[830.0, 840.0, 835.0, 845.0],
+                critical_path=[("api.request_start", 837.8), ("db.select_indices", 640.0)],
+                slowest_request_ms=837.8,
+            )
+        ],
+    )
+    assert "invalidates criterion 2" in report          # item 4
+    assert "95% CI" in report                            # item 5
+    assert "scales" in report and "span" in report       # item 6
+    assert "21347 events" in report                      # item 7
+    assert "Critical path" in report                     # item 12
+    assert "db.select_indices" in report
+
+
+def test_criteria_gate_covers_unattributed_and_partial():
+    """Spec 08.6: exit non-zero when ANY of criteria 1-4 fail. Criterion 2
+    (unattributed) and the `partial` half of criterion 3 were stamped in the report
+    but left out of the gate."""
+    import scripts.benchmark_scenarios as runner
+    from apps.api.models.schema_parts.perf_analysis import ScopeBreakdown
+
+    def _result(**overrides):
+        defaults = dict(
+            name="x", p50_off_ms=100.0, p50_on_ms=101.0, p95_on_ms=110.0, iterations=10,
+            breakdown=None, ticker_table=None, orphans=0, partial=False, truncated=False,
+            reproducibility_delta_pct=1.0,
+        )
+        return runner.ScenarioResult(**{**defaults, **overrides})
+
+    assert runner.criteria_failed([_result()]) is False
+
+    unattributed = _result(breakdown=ScopeBreakdown(total_ms=100.0, unattributed_ms=50.0))
+    assert unattributed.unattributed_pct == 50.0
+    assert runner.criteria_failed([unattributed]) is True
+
+    assert runner.criteria_failed([_result(partial=True)]) is True

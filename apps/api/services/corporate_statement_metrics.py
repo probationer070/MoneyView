@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 import os
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Callable, Optional
@@ -151,64 +152,81 @@ def get_yahoo_statement_bundle(ticker: str, endpoint: str) -> Optional[dict[str,
         metadata={"endpoint": endpoint, "source": "statement_ttl_cache", "ttl_seconds": YAHOO_STATEMENT_CACHE_TTL_SECONDS},
     )
     logger.info("corporate.statement_cache ticker=%s endpoint=%s cache_hit=false", ticker, endpoint)
-    try:
-        import yfinance as yf
-    except ImportError as exc:
-        logger.warning(
-            "corporate.statement_import_failed ticker=%s endpoint=%s python_executable=%s error=%s",
-            ticker,
-            endpoint,
-            sys.executable,
-            exc,
-        )
-        return None
+    # The miss event above is emitted at detection, so it cannot carry the cost of the
+    # fetch it triggers -- the cost each later hit avoids. cache.populate below measures
+    # that fill.
+    #
+    # perf_timer, not an emit afterwards: it establishes span context for the body,
+    # so external.fetch_income_statement nests *beneath* this span. Emitting after the
+    # fetch made cache.populate a sibling of the work it timed, and both self-times then
+    # counted in full, tripping overlap_detected and making criterion 2 uncomputable.
+    # Early returns inside the block are fine: the context manager still closes.
+    with perf_timer(
+        scope="cache",
+        operation="cache.populate",
+        ticker=ticker,
+        provider="yfinance",
+        component="corporate_statement_bundle",
+        metadata={"endpoint": endpoint, "source": "statement_ttl_cache"},
+    ):
+        try:
+            import yfinance as yf
+        except ImportError as exc:
+            logger.warning(
+                "corporate.statement_import_failed ticker=%s endpoint=%s python_executable=%s error=%s",
+                ticker,
+                endpoint,
+                sys.executable,
+                exc,
+            )
+            return None
 
-    try:
-        with perf_timer(
-            scope="external",
-            operation="external.fetch_income_statement",
-            ticker=ticker,
-            provider="yfinance",
-            component="corporate_statement_bundle",
-            metadata={"endpoint": endpoint, "retry_count": 0, "missing_fields": []},
-        ) as metadata:
-            yahoo_ticker = yf.Ticker(ticker)
-            income = yahoo_ticker.financials
-            balance = yahoo_ticker.balance_sheet
-            cashflow = yahoo_ticker.cashflow
-            quarterly_income = yahoo_ticker.quarterly_financials
-            quarterly_balance = yahoo_ticker.quarterly_balance_sheet
-            quarterly_cashflow = yahoo_ticker.quarterly_cashflow
-            missing_fields = []
-            try:
-                info = yahoo_ticker.info or {}
-            except (AttributeError, KeyError, TypeError, ValueError) as exc:
-                logger.warning("corporate.statement_info_fetch_failed ticker=%s endpoint=%s error=%s", ticker, endpoint, exc)
-                info = {}
-                missing_fields.append("info")
-            metadata["missing_fields"] = missing_fields
-            metadata["annual_income_shape"] = _frame_shape(income)
-            metadata["annual_balance_shape"] = _frame_shape(balance)
-            metadata["annual_cashflow_shape"] = _frame_shape(cashflow)
-            metadata["quarterly_income_shape"] = _frame_shape(quarterly_income)
-            metadata["quarterly_balance_shape"] = _frame_shape(quarterly_balance)
-            metadata["quarterly_cashflow_shape"] = _frame_shape(quarterly_cashflow)
-    except (AttributeError, KeyError, TypeError, ValueError) as exc:
-        logger.warning("corporate.statement_fetch_failed ticker=%s endpoint=%s error=%s", ticker, endpoint, exc)
-        return None
+        try:
+            with perf_timer(
+                scope="external",
+                operation="external.fetch_income_statement",
+                ticker=ticker,
+                provider="yfinance",
+                component="corporate_statement_bundle",
+                metadata={"endpoint": endpoint, "retry_count": 0, "missing_fields": []},
+            ) as metadata:
+                yahoo_ticker = yf.Ticker(ticker)
+                income = yahoo_ticker.financials
+                balance = yahoo_ticker.balance_sheet
+                cashflow = yahoo_ticker.cashflow
+                quarterly_income = yahoo_ticker.quarterly_financials
+                quarterly_balance = yahoo_ticker.quarterly_balance_sheet
+                quarterly_cashflow = yahoo_ticker.quarterly_cashflow
+                missing_fields = []
+                try:
+                    info = yahoo_ticker.info or {}
+                except (AttributeError, KeyError, TypeError, ValueError) as exc:
+                    logger.warning("corporate.statement_info_fetch_failed ticker=%s endpoint=%s error=%s", ticker, endpoint, exc)
+                    info = {}
+                    missing_fields.append("info")
+                metadata["missing_fields"] = missing_fields
+                metadata["annual_income_shape"] = _frame_shape(income)
+                metadata["annual_balance_shape"] = _frame_shape(balance)
+                metadata["annual_cashflow_shape"] = _frame_shape(cashflow)
+                metadata["quarterly_income_shape"] = _frame_shape(quarterly_income)
+                metadata["quarterly_balance_shape"] = _frame_shape(quarterly_balance)
+                metadata["quarterly_cashflow_shape"] = _frame_shape(quarterly_cashflow)
+        except (AttributeError, KeyError, TypeError, ValueError) as exc:
+            logger.warning("corporate.statement_fetch_failed ticker=%s endpoint=%s error=%s", ticker, endpoint, exc)
+            return None
 
-    bundle = {
-        "ticker": ticker,
-        "income": income,
-        "balance": balance,
-        "cashflow": cashflow,
-        "quarterly_income": quarterly_income,
-        "quarterly_balance": quarterly_balance,
-        "quarterly_cashflow": quarterly_cashflow,
-        "info": info,
-        "fetched_at": now,
-    }
-    _YAHOO_STATEMENT_CACHE[ticker] = bundle
+        bundle = {
+            "ticker": ticker,
+            "income": income,
+            "balance": balance,
+            "cashflow": cashflow,
+            "quarterly_income": quarterly_income,
+            "quarterly_balance": quarterly_balance,
+            "quarterly_cashflow": quarterly_cashflow,
+            "info": info,
+            "fetched_at": now,
+        }
+        _YAHOO_STATEMENT_CACHE[ticker] = bundle
     emit_cache_event(
         operation="cache.write",
         status="success",

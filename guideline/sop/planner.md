@@ -5,10 +5,10 @@ Purpose: convert high-level requirements into ordered, testable implementation s
 ## Read First
 
 - User request or feature ticket
-- `guideline/architect.md`
-- `guideline/file-structure.md`
+- `guideline/sop/architect.md`
+- `guideline/sop/file-structure.md`
 - Relevant source and tests
-- check `guideline/todo.md` for existing tasks
+- check `guideline/sop/todo.md` for existing tasks
 
 ## Output
 
@@ -68,6 +68,6 @@ A task is done when:
 - relevant tests or checks pass
 - docs/contracts are updated when needed
 - residual risks are stated clearly
-- update `guideline/todo.md` with new tasks
-- review `guideline/security-reviewer.md` when the change touches secrets, file access, SQL, HTML/report generation, or dependency risk
+- update `guideline/sop/todo.md` with new tasks
+- review `guideline/sop/security-reviewer.md` when the change touches secrets, file access, SQL, HTML/report generation, or dependency risk
 - update security-related docs/checklists if the change introduces a new security-sensitive workflow or verification requirement

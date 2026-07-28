@@ -1,0 +1,53 @@
+{
+  "date": "2026-07-27",
+  "environment": {
+    "watchlist": 139,
+    "stocks_rows": 65093,
+    "db_bytes": 10682368,
+    "event_limit": 20000,
+    "compute_mode": "in_process",
+    "git_sha": "10f3600"
+  },
+  "scenarios": {
+    "portfolio_page_load": {
+      "p50_off_ms": 524.3,
+      "p50_on_ms": 608.0,
+      "p95_on_ms": 663.0,
+      "overhead_pct": 16.0,
+      "span_count": 8620,
+      "iterations": 20
+    },
+    "comparison_138": {
+      "p50_off_ms": 53475.7,
+      "p50_on_ms": 54062.5,
+      "p95_on_ms": 62997.5,
+      "overhead_pct": 1.1,
+      "span_count": 12590,
+      "iterations": 10
+    },
+    "attribution_138": {
+      "p50_off_ms": 510.1,
+      "p50_on_ms": 608.5,
+      "p95_on_ms": 620.8,
+      "overhead_pct": 19.3,
+      "span_count": 4250,
+      "iterations": 10
+    },
+    "single_stock_detail": {
+      "p50_off_ms": 51.3,
+      "p50_on_ms": 58.5,
+      "p95_on_ms": 62.1,
+      "overhead_pct": 14.0,
+      "span_count": 520,
+      "iterations": 20
+    },
+    "tab_switch": {
+      "p50_off_ms": 754.7,
+      "p50_on_ms": 843.9,
+      "p95_on_ms": 991.7,
+      "overhead_pct": 11.8,
+      "span_count": 9080,
+      "iterations": 20
+    }
+  }
+}

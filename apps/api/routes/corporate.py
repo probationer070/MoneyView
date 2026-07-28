@@ -10,6 +10,7 @@ from typing import Literal, Optional
 from fastapi import APIRouter, Body, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 
+from apps.api.core.dev_monitor import perf_timer
 from apps.api.core.logger import setup_logger
 from apps.api.core.transport_progress import log_transport_phase
 from apps.api.models.schemas import (
@@ -83,18 +84,24 @@ def _metrics_for_ticker(
     growth_year: Optional[int] = None,
     roic_year: Optional[int] = None,
 ) -> CorporateMetrics:
-    return corporate_metrics_service.metrics_for_ticker(
-        ticker,
-        growth_basis=growth_basis,
-        roic_basis=roic_basis,
-        growth_year=growth_year,
-        roic_year=roic_year,
-        bundle_loader=_get_yahoo_statement_bundle,
-    )
+    with perf_timer(scope="calculation", operation="ticker.metrics", ticker=ticker) as span_metadata:
+        metrics = corporate_metrics_service.metrics_for_ticker(
+            ticker,
+            growth_basis=growth_basis,
+            roic_basis=roic_basis,
+            growth_year=growth_year,
+            roic_year=roic_year,
+            bundle_loader=_get_yahoo_statement_bundle,
+        )
+        span_metadata["rows"] = 1
+        return metrics
 
 
 def _latest_market_price(ticker: str) -> float:
-    return corporate_metrics_service.latest_market_price(ticker)
+    with perf_timer(scope="calculation", operation="ticker.price", ticker=ticker) as span_metadata:
+        price = corporate_metrics_service.latest_market_price(ticker)
+        span_metadata["cache_state"] = "n/a"
+        return price
 
 
 def _seed_watchlist_from_json_if_empty() -> None:
