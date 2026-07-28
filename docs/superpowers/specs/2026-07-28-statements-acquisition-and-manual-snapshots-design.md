@@ -23,16 +23,33 @@ meaningless: two adjacent snapshots differ by when they were computed, not by wh
 
 ## Design
 
+### Architectural invariant
+
+> Metric computation never performs acquisition. All network access is confined to the
+> acquisition layer. Every metric is computed exclusively from locally stored data.
+
+This is the governing rule of the design. Everything below follows from it, and any future
+change that reintroduces a fetch beneath the metric layer violates it regardless of how
+convenient the fetch is.
+
+Two properties follow directly:
+
+**Reproducibility.** Given identical locally stored acquisition data, metric computation
+always produces identical outputs regardless of process restart, network availability, or
+execution time.
+
+**Offline execution.** Once acquisition has completed, all comparison metrics can be computed
+entirely offline.
+
 ### Layering
 
 ```
 Yahoo → Acquisition → Local stores → Metrics
 ```
 
-Metric code stops knowing where data comes from. Every input to a computation is local, so
-the same stored data yields the same WACC today and tomorrow. That determinism is the
-primary architectural gain: it makes the metric layer reproducible, testable offline, and
-debuggable without a network.
+Metric code stops knowing where data comes from. That determinism is the primary
+architectural gain: it makes the metric layer reproducible, testable offline, and debuggable
+without a network.
 
 ### Statements become a data class
 
@@ -42,9 +59,10 @@ later row, and adding a class is "a row, not a pipeline".
 | File | Change |
 | --- | --- |
 | `acquisition/boundaries.py` | Add `Weekly(weekday, at_hour, at_minute)` — invalid once the next occurrence of that weekday/time UTC passes. Same shape and purity as `Daily`. |
+| | **`Weekly` does not model filing cadence.** Filings are quarterly and irregular per company. `Weekly` is a freshness policy: it bounds maximum staleness to seven days until a filing-aware boundary is introduced. Nothing in this design assumes statements change weekly. |
 | `acquisition/registry.py` | Add `statements`: `Scope.PER_TICKER`, `boundary=Weekly(weekday=0, at_hour=0)`, `store="corporate_statements"`. Add `market_cap`: `Scope.PER_TICKER`, `boundary=Daily(at_hour=0)`, `store="corporate_quote_facts"`. |
 | `acquisition/sources/` | A statements source beside the bars source, returning normalised rows. |
-| new table | `corporate_statements(ticker, statement_type, frequency, period_end, line_item, value, fetched_at)` — normalised rather than a blob, so it is queryable and satisfies `finance-logic.md`'s reproducibility-key requirement. |
+| new table | `corporate_statements(ticker, statement_type, frequency, period_end, line_item, value, fetched_at)` — normalised rather than a blob. A normalised schema allows deterministic querying, partial updates, and future metrics without requiring schema changes or blob deserialisation, and satisfies `finance-logic.md`'s reproducibility-key requirement. |
 | new table | `corporate_quote_facts(ticker, market_cap, shares_outstanding, currency, fetched_at)` |
 | `corporate_statement_metrics.py` | `get_yahoo_statement_bundle` reads the local store. The module-level `TTLCache` is deleted. |
 
@@ -83,8 +101,13 @@ at `corporate_statement_metrics.py:68`.
 
 ### Snapshots become manual-only
 
-A snapshot is created only when the user presses the button. Nothing creates one on a
-schedule, and no read path creates one as a side effect.
+Snapshot creation becomes exclusively user initiated. No schedule creates one, and no read
+path creates one as a side effect.
+
+**Snapshots are immutable.** Once persisted, a snapshot is never modified. A newer snapshot
+represents a new observation rather than an update to an existing one. This is what makes
+snapshot-to-snapshot comparison trustworthy: a stored snapshot is evidence of what the
+numbers were when it was taken, and nothing rewrites history.
 
 **Deleted:**
 
@@ -108,19 +131,68 @@ schedule, and no read path creates one as a side effect.
 Snapshots become a deliberate record of "the picture when I asked", which is what gives
 snapshot-to-snapshot comparison real semantics later.
 
+### What "version" means on a snapshot
+
+The existing `snapshot_version` is not a version of anything. `corporate_comparison.py:993`
+builds it as `"{business_date}|{universe_key}|{snapshot_taken_at}"` — an instance identifier.
+Under manual-only snapshots its business-date component and the companion
+`snapshot_versions_for_day` counter both lose their meaning, since there is no daily cadence
+to count within. Two separate fields are needed and are defined here so implementations
+cannot diverge:
+
+- **`snapshot_id`** — identity of one observation: `"{snapshot_taken_at}|{universe_key}"`.
+  Replaces the current `snapshot_version` string; the business-date component is dropped and
+  `snapshot_versions_for_day` is retired.
+- **`metric_schema_version`** — an integer, bumped by hand whenever metric *semantics* change
+  (a formula, a fallback, an input source). It is not a database schema version and not a
+  payload format version.
+
+`metric_schema_version` exists because snapshots are immutable and comparable. Two snapshots
+computed by different metric code are not comparable as like for like, and without this field
+that difference is invisible — the comparison feature would silently attribute a change in
+the code to a change in the company.
+
+### Idempotence
+
+> Re-running acquisition within the freshness boundary performs no network work and does not
+> modify local state.
+
+Pressing the button twice in a row is therefore cheap and safe: the second press recomputes
+from unchanged local data and persists a new immutable snapshot, without touching the network.
+
 ### Data flow on a button press
 
 1. Resolve the comparison universe (unchanged).
 2. For each ticker, `needs_acquisition(state, boundary, now)` per data class.
-3. Acquire only what is stale. Usually nothing.
-4. Compute from local stores. No network.
-5. Persist the snapshot with its source and version.
+3. Refresh only datasets whose freshness boundaries have expired. In the common case, no
+   acquisition occurs.
+4. Compute exclusively from local stores. Network access is prohibited during metric
+   computation.
+5. Persist the snapshot with its source, `snapshot_id`, and `metric_schema_version`.
 
 ### Error handling
 
-- **A ticker fails to acquire.** Record the failure in `acquisition_state`, keep the last
-  stored statements, and mark that row's metrics with the existing quality-rule machinery.
-  One bad ticker must not fail the snapshot.
+- **A ticker fails to acquire.** One bad ticker must not fail the snapshot. This follows the
+  existing convention in `runner.py:82` rather than inventing a new one — stated explicitly
+  so implementations cannot differ:
+  - `last_checked_at` — **advanced to now**, via `record_check`. The freshness rule asks "have
+    I asked since the boundary?", deliberately tracking our own action rather than the
+    provider's output, so that a delisted ticker is not retried forever.
+  - `last_success_at` — **unchanged**. Only `record_success` advances it.
+  - `status` — `AcquisitionStatus.FAILED`; `detail` — the error string.
+  - stored statements for that ticker — **untouched**. The previous good data survives.
+
+  The row's metrics then flow through the existing quality-rule machinery, so a stale or
+  missing input is reported rather than hidden.
+
+  **Consequence, inherited and amplified:** because a failure advances `last_checked_at`, a
+  transient network error suppresses the retry until the next boundary. For `equity_bars` on
+  `Daily` that is up to a day. For `statements` on `Weekly` it is up to **seven days**, and
+  the user has no way to force it, since there is only one button. This is a real cost of the
+  weekly boundary and is not addressed here. The clean remedy is to let the freshness rule
+  distinguish `FAILED` from `EMPTY` — a holiday or delisting genuinely means "do not ask
+  again", but a network error does not — which is a change to `needs_acquisition` affecting
+  every data class and therefore belongs in its own piece of work.
 - **No statements stored for a ticker at all.** The row reports missing inputs through the
   existing `inputs_used` / quality path rather than fabricating a value.
 - **Snapshot persistence fails.** Surface the error. Do not fall back to recomputing, which is
@@ -135,6 +207,11 @@ snapshot-to-snapshot comparison real semantics later.
 - Read path: `mode=snapshot` with no snapshot returns the empty state and **makes no network
   call and writes no snapshot** — the regression guard for the deleted fallback.
 - Button: acquires only stale tickers; a second press within the boundary acquires nothing.
+- Idempotence: a second acquisition run inside the boundary performs no network work and
+  leaves `acquisition_state` and the stores byte-identical.
+- Reproducibility: the same stored data computed twice, in separate processes, yields
+  identical metric output.
+- Immutability: persisting a new snapshot leaves every earlier snapshot row unchanged.
 - The suite's existing `_forbid_network` guard already fails any test that reaches the network,
   so "the comparison is local" is enforced rather than asserted.
 
@@ -143,8 +220,9 @@ snapshot-to-snapshot comparison real semantics later.
 - A new filing is reflected up to 7 days late, bounded by the `Weekly` boundary, with no way
   to force it sooner — the accepted cost of a single button. A per-ticker
   expected-next-filing boundary is the refinement, deferred.
-- The first press, or the first after a filing season, fetches every stale ticker and takes
-  minutes. It is explicit and user-initiated, unlike the behaviour being deleted.
+- The first press after installation — or after the freshness boundary expires for many
+  tickers — may acquire all stale datasets before computing the snapshot, and takes minutes.
+  It is explicit and user-initiated, unlike the behaviour being deleted.
 - A process restart no longer costs a cold sweep, because the store is on disk rather than in
   memory.
 
