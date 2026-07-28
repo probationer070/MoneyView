@@ -297,15 +297,25 @@ This is a production defect, not a benchmark artifact, and it is a strong candid
 for the root cause of reported symptom S2 (spec 01.1): every `mode=live` comparison
 costs 138 serial live fetches, ~6 minutes, with zero cache benefit no matter how
 often it is called.
-Fix: Not fixed — the remedy is a product decision that belongs to sub-project 2,
-which owns the per-ticker cache and on-demand loading. Options: (a) raise the TTL
-well above the sweep duration (it is already env-configurable via
-`MONEYVIEW_YAHOO_STATEMENT_CACHE_TTL_SECONDS`, so this needs no code change);
-(b) persist statement bundles to SQLite so they survive both the TTL and process
-restarts; (c) make the comparison fan-out not require live statements at all.
-Note that (a) alone converts the cost from "every request" to "every 5+ minutes",
-which is a large win but still leaves one user paying 6 minutes.
-Files changed: none (record only).
+Fix: Partially fixed 2026-07-28 — option (a), applied to the defaults rather than left to
+an env var, because the defaults are what production runs. TTL 300s -> 86400s and maxsize
+48 -> 4096, both now carrying the derivation in a comment: TTL must exceed the 357s sweep,
+maxsize must exceed the 139-ticker watchlist. Two tests in
+`tests/api/test_corporate_metric_audit.py` pin those invariants and were verified to fail
+at the old values.
+**What this does not fix:** the cache is a module-level `TTLCache`, so a process restart
+still costs one cold ~357s sweep. Options (b) persist statement bundles to SQLite and
+(c) make the comparison fan-out not require live statements remain open, and both belong
+to sub-project 2, which owns the per-ticker cache and on-demand loading.
+**What the longer TTL costs:** the bundle carries yfinance `info`, and `market_cap` is read
+from it (`corporate_statement_metrics.py:1483`) into the WACC capital-structure weights
+(`:1170`), so those weights can now be built from a market cap up to a day old. Accepted
+because every price input in this app is a daily bar, so finance-logic.md's "use market
+values for capital structure" is still satisfied with yesterday's close. The clean fix is
+to split statements (quarterly) from quote-derived fields (intraday) into separate
+freshness classes; bundling them is what forces one TTL to serve both.
+Files changed: `apps/api/services/corporate_statement_metrics.py`,
+`tests/api/test_corporate_metric_audit.py`.
 Prevention: A TTL cache in front of a serial fan-out must have a TTL longer than the
 fan-out takes to complete, or its hit rate is zero by construction. Any TTL guarding
 a batch operation should be asserted against the measured duration of that batch. A

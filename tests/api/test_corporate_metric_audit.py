@@ -1,4 +1,5 @@
 import sys
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from pathlib import Path
 
@@ -14,6 +15,7 @@ from apps.api.services.corporate_statement_metrics import (
     WACC_QUALITY_RULES,
     WACC_SANITY_RULE,
     WACC_WARNING_RULES,
+    YAHOO_STATEMENT_CACHE_TTL_SECONDS,
     _YAHOO_STATEMENT_CACHE,
     get_yahoo_statement_bundle,
     metric_audit_for_ticker,
@@ -359,3 +361,40 @@ def test_metric_audit_surfaces_fallback_tax_rate_and_keeps_unified_payload(tmp_p
     assert "No valid positive statement tax rate found." in payload["roic"]["warnings"]
     tax_rate = next(item for item in payload["roic"]["inputs_used"] if item["field"] == "tax_rate")
     assert tax_rate["source"] == "fallback_default"
+
+
+# The comparison fan-out's cost is set by two cache parameters that must be derived from the
+# workload, not chosen. Both were wrong (300s / 48) and each alone forced a 0% hit rate across
+# a full baseline run -- 587 misses, 0 hits (ERROR-LOG 2026-07-26). These two tests pin the
+# derivation so a later "tidy up the magic numbers" cannot silently restore a 0% cache.
+
+# Measured wall-clock of one serial 138-ticker sweep of /corporate/comparison?mode=live.
+MEASURED_FULL_SWEEP_SECONDS = 357
+
+# The watchlist the sweep walks. The cache must hold a whole sweep with room to spare.
+MEASURED_WATCHLIST_SIZE = 139
+
+
+def test_statement_cache_ttl_outlives_one_full_sweep():
+    """A TTL shorter than the fan-out it guards has a zero hit rate by construction:
+    ticker #1 expires before ticker #138 is fetched, so the next request misses on all
+    138 again. 300s against a 357s sweep did exactly that."""
+    assert YAHOO_STATEMENT_CACHE_TTL_SECONDS > MEASURED_FULL_SWEEP_SECONDS
+
+
+def test_statement_cache_holds_a_full_sweep_without_evicting_itself():
+    """Capacity defeats any TTL, however long. At maxsize 48 a 139-ticker sweep evicts its
+    own first ~90 entries before finishing, so raising the TTL to 86400s still measured 0
+    hits. The cache must outlive the sweep that fills it."""
+    _YAHOO_STATEMENT_CACHE.clear()
+    try:
+        for index in range(MEASURED_WATCHLIST_SIZE):
+            _YAHOO_STATEMENT_CACHE[f"TICKER{index}"] = {"fetched_at": datetime.now(timezone.utc)}
+
+        assert "TICKER0" in _YAHOO_STATEMENT_CACHE, (
+            f"the sweep evicted its own first entry: maxsize={_YAHOO_STATEMENT_CACHE.maxsize} "
+            f"is below the {MEASURED_WATCHLIST_SIZE}-ticker watchlist it has to hold"
+        )
+        assert len(_YAHOO_STATEMENT_CACHE) == MEASURED_WATCHLIST_SIZE
+    finally:
+        _YAHOO_STATEMENT_CACHE.clear()

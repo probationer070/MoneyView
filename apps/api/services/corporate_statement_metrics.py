@@ -27,8 +27,21 @@ YAHOO_STATEMENT_END_YEAR = 2025
 DEFAULT_RISK_FREE_RATE = 0.042
 DEFAULT_EQUITY_RISK_PREMIUM = 0.055
 KOREA_COUNTRY_RISK_PREMIUM = 0.8
-YAHOO_STATEMENT_CACHE_TTL_SECONDS = int(os.getenv("MONEYVIEW_YAHOO_STATEMENT_CACHE_TTL_SECONDS", "300"))
-YAHOO_STATEMENT_CACHE_MAXSIZE = int(os.getenv("MONEYVIEW_YAHOO_STATEMENT_CACHE_MAXSIZE", "48"))
+# Both defaults are derived from the workload rather than picked. A full watchlist sweep of
+# /corporate/comparison?mode=live fetches every ticker serially and takes ~357s measured. A TTL
+# shorter than that sweep expires ticker #1 before ticker #138 is fetched, and a maxsize smaller
+# than the watchlist makes the sweep evict its own first ~90 entries -- either alone forces a 0%
+# hit rate by construction, which is exactly what 300s/48 did (ERROR-LOG 2026-07-26). At these
+# values the same fan-out measured 94% hits, 223/14.
+#
+# The cost of the long TTL: the bundle carries yfinance `info`, and market_cap is read from it
+# (:1483) into the WACC capital-structure weights (:1170), so those weights can be built from a
+# market cap up to a day old. That is consistent with an app whose price data is daily bars, and
+# finance-logic.md still gets its market value -- yesterday's close rather than an intraday tick.
+# Splitting statements (quarterly) from quote-derived fields (intraday) into separate freshness
+# classes is the real fix and is not this.
+YAHOO_STATEMENT_CACHE_TTL_SECONDS = int(os.getenv("MONEYVIEW_YAHOO_STATEMENT_CACHE_TTL_SECONDS", "86400"))
+YAHOO_STATEMENT_CACHE_MAXSIZE = int(os.getenv("MONEYVIEW_YAHOO_STATEMENT_CACHE_MAXSIZE", "4096"))
 _YAHOO_STATEMENT_CACHE = TTLCache(maxsize=YAHOO_STATEMENT_CACHE_MAXSIZE, ttl=YAHOO_STATEMENT_CACHE_TTL_SECONDS)
 
 
