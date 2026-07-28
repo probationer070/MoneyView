@@ -11,8 +11,6 @@ from starlette.concurrency import run_in_threadpool
 
 from apps.api.core import dev_monitor
 from apps.api.main import app
-from apps.api.models.schema_parts.market import StockOHLCV
-from apps.api.routes import portfolio as portfolio_routes
 from apps.api.core.dev_monitor import (
     ActiveDevMonitorSink,
     emit_performance_event,
@@ -21,7 +19,9 @@ from apps.api.core.dev_monitor import (
     perf_timer,
 )
 from apps.api.models.schema_parts.dev_monitor import PerformanceEvent
+from apps.api.models.schema_parts.market import StockOHLCV
 from apps.api.models.schemas import CorporateMetrics
+from apps.api.routes import portfolio as portfolio_routes
 from apps.api.services import corporate_metrics_service
 from apps.api.services import db as db_service
 from apps.api.services.portfolio.cache_service import CacheService
