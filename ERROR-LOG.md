@@ -309,10 +309,12 @@ is deleted and the local store is the only cache, so the two-layers-with-differe
 invalidation problem no longer exists. Options (b) and (c) are both satisfied -- bundles
 persist to SQLite and survive restarts, and the comparison fan-out no longer requires
 live statements.
-**What this does not fix:** the cache is a module-level `TTLCache`, so a process restart
-still costs one cold ~357s sweep. Options (b) persist statement bundles to SQLite and
-(c) make the comparison fan-out not require live statements remain open, and both belong
-to sub-project 2, which owns the per-ticker cache and on-demand loading.
+**What this does not fix** (written 2026-07-28 against the partial fix; superseded by the
+paragraph above, and kept for the record rather than as a statement of current behaviour):
+the cache is a module-level `TTLCache`, so a process restart still costs one cold ~357s
+sweep. Options (b) persist statement bundles to SQLite and (c) make the comparison fan-out
+not require live statements remain open, and both belong to sub-project 2, which owns the
+per-ticker cache and on-demand loading.
 **What the longer TTL costs:** the bundle carries yfinance `info`, and `market_cap` is read
 from it (`corporate_statement_metrics.py:1483`) into the WACC capital-structure weights
 (`:1170`), so those weights can now be built from a market cap up to a day old. Accepted
