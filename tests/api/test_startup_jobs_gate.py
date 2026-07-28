@@ -18,17 +18,15 @@ from apps.api import main as api_main
 
 
 def _drive_lifespan(monkeypatch, env_value):
-    """Run one full lifespan cycle with the startup cycles stubbed out.
+    """Run one full lifespan cycle with the startup cycle stubbed out.
 
-    Returns (started, shutdown_seconds): which cycles the lifespan launched, and
-    how long shutdown took while the prewarm worker was still blocked.
+    Returns (started, shutdown_seconds): whether stock_prewarm_cycle launched -- the
+    only startup cycle the gate covers now that corporate_snapshot_cycle is gone
+    (Task 8: snapshots become manual-only) -- and how long shutdown took while the
+    prewarm worker was still blocked.
     """
     started: list[str] = []
     release = threading.Event()
-
-    async def fake_corporate_snapshot_cycle():
-        started.append("corporate_snapshot")
-        await asyncio.sleep(3600)
 
     async def fake_stock_prewarm_cycle():
         started.append("stock_prewarm")
@@ -37,7 +35,6 @@ def _drive_lifespan(monkeypatch, env_value):
         # measurement happens while the worker is genuinely still running.
         await asyncio.to_thread(release.wait, 30)
 
-    monkeypatch.setattr(api_main, "corporate_snapshot_cycle", fake_corporate_snapshot_cycle)
     monkeypatch.setattr(api_main, "stock_prewarm_cycle", fake_stock_prewarm_cycle)
     if env_value is None:
         monkeypatch.delenv("MONEYVIEW_DISABLE_STARTUP_JOBS", raising=False)
@@ -63,7 +60,7 @@ def test_startup_cycles_run_unless_the_gate_is_explicitly_set(monkeypatch, env_v
     """A stray or falsy variable must not silently disable warming in production."""
     started, _ = _drive_lifespan(monkeypatch, env_value)
 
-    assert sorted(started) == ["corporate_snapshot", "stock_prewarm"]
+    assert started == ["stock_prewarm"]
 
 
 @pytest.mark.parametrize("env_value", ["1", "true", "TRUE", "yes"])

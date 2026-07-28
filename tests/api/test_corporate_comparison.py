@@ -11,6 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from apps.api.main import app
 from apps.api.models.schemas import CorporateMetrics
 from apps.api.services import db as db_service
+from apps.api.services.corporate_comparison import build_corporate_comparison_response
 
 
 def _seed_watchlist() -> None:
@@ -57,6 +58,26 @@ def test_corporate_comparison_defaults_to_portfolio_plus_benchmark_snapshot(tmp_
     db_service.init_db()
     _seed_watchlist()
     _patch_comparison_sources(monkeypatch)
+
+    # Reads never write (Task 8): a snapshot must be created explicitly before a
+    # snapshot-mode read has anything to return.
+    from apps.api.services import corporate_comparison as comparison_service
+
+    comparison_service.save_corporate_comparison_snapshot(
+        snapshot_source="scheduled_kst_daily",
+        comparison_universe="portfolio_plus_benchmark",
+        benchmark_ticker="^GSPC",
+        custom_tickers=[],
+        metrics_loader=lambda ticker, **_: {
+            "AAPL": CorporateMetrics(ticker="AAPL", growth=6, roic=18, wacc=10, debt_ratio=18, unlevered_beta=1.05, crp=0.8, reinvestment=34, fcff=92, innovation=82, market_share=64, governance=74, esg_penalty=22),
+            "MSFT": CorporateMetrics(ticker="MSFT", growth=7, roic=22, wacc=9, debt_ratio=15, unlevered_beta=0.95, crp=0.8, reinvestment=34, fcff=92, innovation=82, market_share=64, governance=74, esg_penalty=22),
+            "^GSPC": CorporateMetrics(ticker="^GSPC", growth=5, roic=10, wacc=8, debt_ratio=0, unlevered_beta=1.0, crp=0.0, reinvestment=20, fcff=92, innovation=40, market_share=100, governance=70, esg_penalty=10),
+        }[ticker],
+        price_loader=lambda _ticker: 100.0,
+        default_companies={},
+        risk_free_rate=0.042,
+        equity_risk_premium=0.055,
+    )
 
     client = TestClient(app)
     response = client.get("/api/v1/corporate/comparison")
@@ -117,6 +138,11 @@ def test_corporate_comparison_watchlist_plus_benchmark_includes_zero_weight_watc
     _patch_comparison_sources(monkeypatch)
 
     client = TestClient(app)
+    # Reads never write (Task 8): a snapshot must be created explicitly before a
+    # snapshot-mode read has anything to return.
+    refresh = client.post("/api/v1/corporate/comparison/snapshot?comparison_universe=watchlist_plus_benchmark")
+    assert refresh.status_code == 200
+
     response = client.get("/api/v1/corporate/comparison?comparison_universe=watchlist_plus_benchmark")
 
     assert response.status_code == 200
@@ -757,3 +783,96 @@ def test_init_db_adds_comparison_universe_columns_for_legacy_snapshot_tables(tmp
         "idx_corporate_comparison_snapshots_v3_universe_date",
         "idx_corporate_comparison_snapshots_v3_ticker_universe_date",
     }.issubset(v3_indexes)
+
+
+def test_reading_a_comparison_never_writes_a_snapshot():
+    """The deleted fallback: a read used to compute and persist a snapshot when today's
+    was missing -- a multi-minute sweep inside a request the user never asked for."""
+    with db_service.get_db() as conn:
+        before = conn.execute("SELECT COUNT(*) AS n FROM corporate_comparison_snapshots_v3").fetchone()["n"]
+
+    build_corporate_comparison_response(
+        mode="snapshot",
+        comparison_universe="portfolio_plus_benchmark",
+        benchmark_ticker="^GSPC",
+        custom_tickers=[],
+        metrics_loader=lambda ticker, **kwargs: pytest.fail("a read must not compute metrics"),
+        price_loader=lambda ticker: 0.0,
+        default_companies={},
+        risk_free_rate=0.042,
+        equity_risk_premium=0.055,
+    )
+
+    with db_service.get_db() as conn:
+        after = conn.execute("SELECT COUNT(*) AS n FROM corporate_comparison_snapshots_v3").fetchone()["n"]
+    assert after == before
+
+
+def test_reading_with_no_snapshot_returns_an_empty_state():
+    response = build_corporate_comparison_response(
+        mode="snapshot",
+        comparison_universe="portfolio_plus_benchmark",
+        benchmark_ticker="^GSPC",
+        custom_tickers=[],
+        metrics_loader=lambda ticker, **kwargs: pytest.fail("a read must not compute metrics"),
+        price_loader=lambda ticker: 0.0,
+        default_companies={},
+        risk_free_rate=0.042,
+        equity_risk_premium=0.055,
+    )
+
+    assert response.rows == []
+    assert response.snapshot.snapshot_available is False
+
+
+def test_the_lifespan_starts_no_snapshot_cycle():
+    import apps.api.main as api_main
+
+    assert not hasattr(api_main, "corporate_snapshot_cycle")
+
+
+def test_a_snapshot_from_an_earlier_date_is_returned_and_is_not_marked_stale():
+    """Manual-only snapshots have no cadence to be late for. Under the old daily cadence a
+    snapshot not taken today meant a missed refresh; now it means the user last asked then,
+    which is exactly what a snapshot is for."""
+    from apps.api.services import corporate_comparison as comparison_service
+
+    # Build one via save_corporate_comparison_snapshot, then age it by moving its
+    # snapshot_date to an earlier day directly in SQLite -- the same seeding style the
+    # other snapshot tests in this file already use.
+    saved = comparison_service.save_corporate_comparison_snapshot(
+        snapshot_source="manual_refresh",
+        comparison_universe="portfolio_plus_benchmark",
+        benchmark_ticker="^GSPC",
+        custom_tickers=[],
+        metrics_loader=lambda ticker: CorporateMetrics(
+            ticker=ticker, growth=5, roic=10, wacc=8, debt_ratio=0, unlevered_beta=1.0,
+            crp=0.0, reinvestment=20, fcff=92, innovation=40, market_share=100,
+            governance=70, esg_penalty=10,
+        ),
+        price_loader=lambda _ticker: 100.0,
+        default_companies={},
+        risk_free_rate=0.042,
+        equity_risk_premium=0.055,
+    )
+
+    with db_service.get_db() as conn:
+        conn.execute(
+            "UPDATE corporate_comparison_snapshots_v3 SET snapshot_date = ? WHERE snapshot_version = ?",
+            ("2020-01-01", saved.snapshot.snapshot_version),
+        )
+
+    response = build_corporate_comparison_response(
+        mode="snapshot",
+        comparison_universe="portfolio_plus_benchmark",
+        benchmark_ticker="^GSPC",
+        custom_tickers=[],
+        metrics_loader=lambda ticker, **kwargs: pytest.fail("a read must not compute metrics"),
+        price_loader=lambda ticker: 0.0,
+        default_companies={},
+        risk_free_rate=0.042,
+        equity_risk_premium=0.055,
+    )
+
+    assert response.rows != []
+    assert response.snapshot.snapshot_is_stale is False

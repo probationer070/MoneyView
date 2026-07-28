@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Callable
@@ -79,37 +78,55 @@ def build_corporate_comparison_response(
             live.snapshot.snapshot_versions_for_day = int(latest_snapshot_meta["snapshot_versions_for_day"] or 0)
         return live
 
-    snapshot = _load_snapshot_response(
-        snapshot_date=_snapshot_business_date(),
+    # Reads never write. The former fallback computed and persisted a snapshot when today's
+    # was missing, which put a multi-minute live sweep inside a request the user never made.
+    # Snapshot creation is exclusively user-initiated now.
+    latest = _load_latest_snapshot_response(
         comparison_universe=comparison_universe,
         benchmark_ticker=benchmark_ticker,
         custom_tickers=custom_tickers,
     )
-    if snapshot is not None:
-        return snapshot
+    if latest is not None:
+        return latest
+    return _empty_snapshot_response(
+        comparison_universe=comparison_universe,
+        benchmark_ticker=benchmark_ticker,
+        custom_tickers=custom_tickers,
+        risk_free_rate=risk_free_rate,
+        equity_risk_premium=equity_risk_premium,
+    )
 
-    latest_snapshot = _load_latest_snapshot_response(
-        comparison_universe=comparison_universe,
-        benchmark_ticker=benchmark_ticker,
-        custom_tickers=custom_tickers,
-    )
-    try:
-        return save_corporate_comparison_snapshot(
-            snapshot_source="scheduled_kst_daily",
+
+def _empty_snapshot_response(
+    *,
+    comparison_universe: str,
+    benchmark_ticker: str,
+    custom_tickers: list[str],
+    risk_free_rate: float,
+    equity_risk_premium: float,
+) -> CorporateComparisonResponse:
+    """The explicit empty state for `mode=snapshot` when no snapshot has ever been taken."""
+    return CorporateComparisonResponse(
+        market_expected_return=_market_expected_return_pct(risk_free_rate, equity_risk_premium),
+        risk_free_rate=round(risk_free_rate * 100, 2),
+        equity_risk_premium=round(equity_risk_premium * 100, 2),
+        stock_expected_return_method=STOCK_EXPECTED_RETURN_METHOD,
+        comparison_reference_return_method=REFERENCE_EXPECTED_RETURN_METHOD,
+        snapshot=CorporateComparisonSnapshotMeta(
+            mode="snapshot",
+            snapshot_version="",
+            snapshot_versions_for_day=0,
+            snapshot_available=False,
+            snapshot_source="",
             comparison_universe=comparison_universe,
-            benchmark_ticker=benchmark_ticker,
-            custom_tickers=custom_tickers,
-            metrics_loader=metrics_loader,
-            price_loader=price_loader,
-            default_companies=default_companies,
-            risk_free_rate=risk_free_rate,
-            equity_risk_premium=equity_risk_premium,
-        )
-    except (sqlite3.Error, ValueError, KeyError):
-        if latest_snapshot is not None:
-            latest_snapshot.snapshot.snapshot_is_stale = True
-            return latest_snapshot
-        raise
+            benchmark_ticker=_normalize_benchmark_ticker(benchmark_ticker),
+            custom_tickers=_normalize_custom_tickers(custom_tickers),
+            snapshot_cadence=SNAPSHOT_CADENCE,
+            snapshot_retention_days=SNAPSHOT_RETENTION_DAYS,
+            snapshot_is_stale=False,
+        ),
+        rows=[],
+    )
 
 
 def save_corporate_comparison_snapshot(
@@ -440,15 +457,12 @@ def _load_latest_snapshot_response(
     )
     if latest is None:
         return None
-    response = _load_snapshot_response(
+    return _load_snapshot_response(
         snapshot_date=str(latest["snapshot_date"]),
         comparison_universe=comparison_universe,
         benchmark_ticker=benchmark_ticker,
         custom_tickers=custom_tickers,
     )
-    if response is not None and str(latest["snapshot_date"]) != _snapshot_business_date():
-        response.snapshot.snapshot_is_stale = True
-    return response
 
 
 def _load_latest_snapshot_meta(
@@ -546,42 +560,11 @@ def _rows_to_response(
             custom_tickers=custom_tickers,
             snapshot_cadence=SNAPSHOT_CADENCE,
             snapshot_retention_days=SNAPSHOT_RETENTION_DAYS,
-            snapshot_is_stale=snapshot_date != _snapshot_business_date(),
+            # Manual-only snapshots have no cadence to be late for: a snapshot dated before
+            # today is the normal case (the user last asked then), not a missed refresh.
+            snapshot_is_stale=False,
         ),
         rows=response_rows,
-    )
-
-
-def ensure_daily_snapshot_current(
-    *,
-    comparison_universe: str = DEFAULT_COMPARISON_UNIVERSE,
-    benchmark_ticker: str = DEFAULT_BENCHMARK_TICKER,
-    custom_tickers: list[str] | None = None,
-    metrics_loader: Callable[..., CorporateMetrics],
-    price_loader: Callable[[str], float],
-    default_companies: dict[str, dict[str, str]],
-    risk_free_rate: float,
-    equity_risk_premium: float,
-) -> CorporateComparisonResponse | None:
-    normalized_custom_tickers = custom_tickers or []
-    current_date = _snapshot_business_date()
-    if _load_snapshot_response(
-        snapshot_date=current_date,
-        comparison_universe=comparison_universe,
-        benchmark_ticker=benchmark_ticker,
-        custom_tickers=normalized_custom_tickers,
-    ) is not None:
-        return None
-    return save_corporate_comparison_snapshot(
-        snapshot_source="scheduled_kst_daily",
-        comparison_universe=comparison_universe,
-        benchmark_ticker=benchmark_ticker,
-        custom_tickers=normalized_custom_tickers,
-        metrics_loader=metrics_loader,
-        price_loader=price_loader,
-        default_companies=default_companies,
-        risk_free_rate=risk_free_rate,
-        equity_risk_premium=equity_risk_premium,
     )
 
 
@@ -808,12 +791,6 @@ def load_corporate_comparison_stock_history(
         custom_tickers=normalized_custom_tickers,
         points=points,
     )
-
-
-def seconds_until_next_kst_midnight() -> float:
-    now = _now_kst()
-    next_midnight = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
-    return max((next_midnight - now).total_seconds(), 1.0)
 
 
 def _now_utc() -> datetime:

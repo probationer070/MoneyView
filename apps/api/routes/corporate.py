@@ -35,7 +35,6 @@ from apps.api.services.corporate_comparison import (
     DEFAULT_SNAPSHOT_MODE,
     build_corporate_comparison_response,
     delete_corporate_comparison_snapshot_version,
-    ensure_daily_snapshot_current,
     load_corporate_comparison_history,
     load_corporate_comparison_snapshot_version,
     load_corporate_comparison_stock_history,
@@ -107,21 +106,6 @@ def _latest_market_price(ticker: str) -> float:
 def _seed_watchlist_from_json_if_empty() -> None:
     """Populate watchlist-backed companies without requiring Portfolio tab first."""
     corporate_metrics_service.seed_watchlist_from_json_if_empty(_WATCHLIST_JSON)
-
-
-def ensure_corporate_comparison_daily_snapshot() -> CorporateComparisonResponse | None:
-    """Ensure the current KST business-date snapshot exists."""
-    _seed_watchlist_from_json_if_empty()
-    return ensure_daily_snapshot_current(
-        comparison_universe=DEFAULT_COMPARISON_UNIVERSE,
-        benchmark_ticker=DEFAULT_BENCHMARK_TICKER,
-        custom_tickers=[],
-        metrics_loader=_metrics_for_ticker,
-        price_loader=_latest_market_price,
-        default_companies=DEFAULT_COMPANIES,
-        risk_free_rate=DEFAULT_RISK_FREE_RATE,
-        equity_risk_premium=DEFAULT_EQUITY_RISK_PREMIUM,
-    )
 
 
 def _metric_percent_for_valuation(
