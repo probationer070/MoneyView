@@ -55,3 +55,39 @@ class Daily:
             while candidate.weekday() >= 5:  # 5 = Saturday, 6 = Sunday
                 candidate -= timedelta(days=1)
         return candidate
+
+
+@dataclass(frozen=True)
+class Weekly:
+    """Invalid once the next occurrence of `weekday` at `at_hour:at_minute` UTC passes.
+
+    This is a freshness policy, not a model of anything's publication cadence. Statements
+    are filed quarterly and irregularly per company; Weekly simply bounds how stale a held
+    copy may be to seven days, until a filing-aware boundary exists. Nothing may read it as
+    "this data changes weekly".
+
+    `weekday` follows Python: Monday is 0, Sunday is 6.
+    """
+
+    weekday: int
+    at_hour: int = 0
+    at_minute: int = 0
+
+    def __post_init__(self) -> None:
+        if not 0 <= self.weekday <= 6:
+            raise ValueError(f"weekday must be 0-6 (Monday is 0), got {self.weekday}")
+        if not 0 <= self.at_hour <= 23:
+            raise ValueError(f"at_hour must be 0-23, got {self.at_hour}")
+        if not 0 <= self.at_minute <= 59:
+            raise ValueError(f"at_minute must be 0-59, got {self.at_minute}")
+
+    def most_recent_instant(self, now: datetime) -> datetime:
+        if now.tzinfo is None:
+            raise ValueError("Boundary comparisons require a timezone-aware datetime (UTC)")
+        candidate = now.replace(
+            hour=self.at_hour, minute=self.at_minute, second=0, microsecond=0
+        )
+        candidate -= timedelta(days=(candidate.weekday() - self.weekday) % 7)
+        if candidate > now:
+            candidate -= timedelta(days=7)
+        return candidate
