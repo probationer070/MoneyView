@@ -108,6 +108,28 @@ def _forbid_network():
             raise AssertionError(f"test resolved {host} -- network calls are not allowed")
         return real_getaddrinfo(host, *args, **kwargs)
 
+    # curl_cffi drives libcurl through cffi and never touches Python's socket
+    # module, so the three patches above are blind to it. yfinance 1.2 uses it
+    # as its HTTP transport -- exactly the traffic this fixture exists to stop.
+    # Found on 2026-07-29: a test reached the real Yahoo API with all three
+    # socket patches active. Curl.perform is the single chokepoint every
+    # curl_cffi request funnels through, sync or async. Nothing in this project
+    # uses curl_cffi for anything local, so every call through it is a network
+    # call and is refused outright.
+    try:
+        from curl_cffi import Curl
+    except ImportError:  # pragma: no cover - curl_cffi arrives with yfinance
+        Curl = None
+    else:
+        real_perform = Curl.perform
+
+        def guarded_perform(self, *args, **kwargs):
+            raise AssertionError(
+                "test made a network call through curl_cffi -- network calls are not allowed"
+            )
+
+        Curl.perform = guarded_perform
+
     socket.socket.connect = guarded_connect
     socket.socket.connect_ex = guarded_connect_ex
     socket.getaddrinfo = guarded_getaddrinfo
@@ -115,6 +137,8 @@ def _forbid_network():
     socket.socket.connect = real_connect
     socket.socket.connect_ex = real_connect_ex
     socket.getaddrinfo = real_getaddrinfo
+    if Curl is not None:
+        Curl.perform = real_perform
 
 
 @pytest.fixture(autouse=True, scope="session")

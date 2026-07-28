@@ -630,3 +630,40 @@ fails any test that opens the production SQLite file, and `_forbid_network` fail
 that resolves or connects to a non-loopback host. Both were verified against a deliberately
 violating test before being committed. Checking a file's mtime by hand after a run, or
 inferring hermeticity from wall-clock time, is not a control.
+
+## 2026-07-29: The suite's network guard was blind to yfinance's actual transport
+
+Date: 2026-07-29
+Command: `python -m pytest tests/api/test_corporate_metric_audit.py -q` (the RED step of
+Task 7 of the statements-acquisition plan)
+Failure: Silent, and the worst shape -- no failure at all. A test that called the old
+`get_yahoo_statement_bundle` reached the **live Yahoo API** and came back with a real HTTP
+404, while `tests/conftest.py`'s session-scoped `_forbid_network` fixture was active and
+reported nothing. The fixture exists precisely to make "no test may make a network call"
+enforced rather than asserted, and it had been treated as proof: on 2026-07-28 a 274-test
+run under a throwaway no-network plugin reported "0 blocked attempts", which was read as
+evidence that no test touches the network. It was evidence of no test touching a **socket**.
+Root cause: `_forbid_network` patches `socket.socket.connect`, `socket.socket.connect_ex`
+and `socket.getaddrinfo`. yfinance 1.2.0 does not use any of them -- its HTTP transport is
+`curl_cffi` 0.13/0.15, which drives libcurl through cffi and never enters Python's `socket`
+module. Every one of the three patches is structurally incapable of seeing a yfinance
+request. The guard was not weak, it was aimed at the wrong layer, and nothing in a green
+suite could reveal that: the guard's silence is identical whether no call was made or a
+call was made through a path it cannot observe.
+Fix: patch `curl_cffi.Curl.perform` in the same fixture and refuse it outright. `perform`
+is the single chokepoint every curl_cffi request funnels through, sync or async, so it
+covers `requests.Session`, `AsyncSession` and raw `Curl` alike. Nothing in this project
+uses curl_cffi for anything local, so no allowlist is needed -- any call through it is a
+network call. Guarded with `try: from curl_cffi import Curl / except ImportError` since
+curl_cffi arrives only as a yfinance dependency, and restored after `yield`.
+Files changed: `tests/conftest.py`, `tests/api/test_suite_guards.py` (new).
+Prevention: the guards are now tested rather than assumed. `tests/api/test_suite_guards.py`
+asserts that a public-host socket connect, a public-host DNS resolution, and a `curl_cffi`
+request are each refused, and that loopback still works (`find_available_port` in
+`apps/api/main.py` depends on it). The curl_cffi test was mutation-verified: with
+`Curl.perform = guarded_perform` removed from the fixture, it fails with "DID NOT RAISE"
+and the request goes out to the network, so it cannot pass vacuously.
+The general lesson is broader than curl_cffi: a guard that patches a *mechanism* only
+covers callers that use that mechanism. Before trusting one as proof of an invariant,
+confirm the code you mean to block actually travels through the layer you patched --
+"nothing was blocked" and "nothing was attempted" are indistinguishable from the outside.
