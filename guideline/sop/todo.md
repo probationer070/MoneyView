@@ -271,7 +271,9 @@ Two consequences worth knowing before touching this again:
   inert unless set to `1`/`true`/`yes`, so production startup is unchanged. `wal_flush_cycle`
   is not gated. The surviving `asyncio.to_thread` prewarm worker still cannot be cancelled —
   a CPython constraint, documented rather than fixed; the real remedy is a cooperative stop
-  flag inside `prewarm_configured_tickers`.
+  flag inside `prewarm_configured_tickers`. `tests/api/test_startup_jobs_gate.py` covers the
+  un-gated branch that the rest of the suite never takes (conftest disables startup jobs
+  session-wide), including that shutdown does not block on that uncancellable worker.
 - Isolating the database made cold-cache network fetches visible where a warm real database
   had hidden them. `tests/api/test_perf_capture.py` now serves the watchlist from canned
   bars: one request against an empty database emitted 3,889 dev-monitor events instead of
