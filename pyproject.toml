@@ -51,6 +51,9 @@ addopts = "-p no:cacheprovider"
 filterwarnings = [
     "ignore:Pandas requires version '1\\.3\\.6' or newer of 'bottleneck'.*:UserWarning",
 ]
+markers = [
+    "virgin_db: test needs an isolated but uninitialised database file (it creates its own schema)",
+]
 
 [tool.coverage.run]
 source = ["apps", "packages"]

@@ -6,6 +6,8 @@ from uuid import uuid4
 
 import pytest
 
+from apps.api.services import db as db_service
+
 
 def pytest_configure(config):
     if config.option.basetemp:
@@ -40,3 +42,27 @@ def _reset_rate_limiter():
     _clear()
     yield
     _clear()
+
+
+@pytest.fixture(autouse=True)
+def _isolated_db(request, tmp_path, monkeypatch):
+    """Give every test its own SQLite file instead of the developer's real one.
+
+    apps/api/services/db.py:30 defines _DB_PATH as a module attribute read at
+    call time, so pointing it at tmp_path redirects get_db() and init_db()
+    for the duration of the test and unwinds automatically.
+
+    Without this, tests read data/processed/moneyview.db -- 142 tickers and
+    1,307 AAPL rows on a developer machine, empty on a fresh clone -- so a
+    test asserting "this fetch was live" passes or fails depending on whose
+    machine it runs on rather than on the code. That is what made
+    test_market_data_emits_cache_and_provider_events alternate with an
+    unrelated failure depending on execution order.
+
+    virgin_db opts out of schema creation only, never out of path isolation:
+    a test that exercises a migration needs an empty database file, not a
+    shared one.
+    """
+    monkeypatch.setattr(db_service, "_DB_PATH", tmp_path / "moneyview.db")
+    if "virgin_db" not in request.keywords:
+        db_service.init_db()
