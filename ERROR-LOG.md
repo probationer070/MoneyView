@@ -303,6 +303,12 @@ an env var, because the defaults are what production runs. TTL 300s -> 86400s an
 maxsize must exceed the 139-ticker watchlist. Two tests in
 `tests/api/test_corporate_metric_audit.py` pin those invariants and were verified to fail
 at the old values.
+
+Fully resolved 2026-07-28 by moving statements into the acquisition layer: the TTLCache
+is deleted and the local store is the only cache, so the two-layers-with-different-
+invalidation problem no longer exists. Options (b) and (c) are both satisfied -- bundles
+persist to SQLite and survive restarts, and the comparison fan-out no longer requires
+live statements.
 **What this does not fix:** the cache is a module-level `TTLCache`, so a process restart
 still costs one cold ~357s sweep. Options (b) persist statement bundles to SQLite and
 (c) make the comparison fan-out not require live statements remain open, and both belong

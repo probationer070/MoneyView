@@ -1,6 +1,4 @@
 import sys
-from datetime import datetime, timezone
-from types import SimpleNamespace
 from pathlib import Path
 
 import pandas as pd
@@ -11,12 +9,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from apps.api.main import app
 from apps.api.models.schemas import CorporateMetrics
 from apps.api.services import db as db_service
+from apps.api.services.acquisition.sources.statements import StatementRow
+from apps.api.services.acquisition.store import save_statements
 from apps.api.services.corporate_statement_metrics import (
     WACC_QUALITY_RULES,
     WACC_SANITY_RULE,
     WACC_WARNING_RULES,
-    YAHOO_STATEMENT_CACHE_TTL_SECONDS,
-    _YAHOO_STATEMENT_CACHE,
     get_yahoo_statement_bundle,
     metric_audit_for_ticker,
 )
@@ -131,35 +129,6 @@ def test_metric_audit_uses_default_model_fallback_when_provider_and_saved_metric
     assert audit.spread.inputs_used[1].field == "wacc"
     assert audit.growth.calculation_version == "growth_v2_stable_cagr"
     assert audit.roic.calculation_version == "roic_v3_stable_invested_capital"
-
-
-def test_yahoo_statement_bundle_returns_none_for_known_provider_missing_data(monkeypatch):
-    class MissingDataTicker:
-        @property
-        def financials(self):
-            raise ValueError("provider returned malformed statement payload")
-
-    _YAHOO_STATEMENT_CACHE.clear()
-    monkeypatch.setitem(sys.modules, "yfinance", SimpleNamespace(Ticker=lambda ticker: MissingDataTicker()))
-
-    assert get_yahoo_statement_bundle("KNOWNMISS", "audit") is None
-
-
-def test_yahoo_statement_bundle_does_not_hide_unexpected_provider_bug(monkeypatch):
-    class BuggyTicker:
-        @property
-        def financials(self):
-            raise RuntimeError("unexpected provider bug")
-
-    _YAHOO_STATEMENT_CACHE.clear()
-    monkeypatch.setitem(sys.modules, "yfinance", SimpleNamespace(Ticker=lambda ticker: BuggyTicker()))
-
-    try:
-        get_yahoo_statement_bundle("BUGGY", "audit")
-    except RuntimeError as exc:
-        assert str(exc) == "unexpected provider bug"
-    else:
-        raise AssertionError("unexpected provider bugs should not be converted to missing data")
 
 
 def test_metric_audit_marks_missing_roic_when_yahoo_years_do_not_overlap(tmp_path, monkeypatch):
@@ -363,38 +332,32 @@ def test_metric_audit_surfaces_fallback_tax_rate_and_keeps_unified_payload(tmp_p
     assert tax_rate["source"] == "fallback_default"
 
 
-# The comparison fan-out's cost is set by two cache parameters that must be derived from the
-# workload, not chosen. Both were wrong (300s / 48) and each alone forced a 0% hit rate across
-# a full baseline run -- 587 misses, 0 hits (ERROR-LOG 2026-07-26). These two tests pin the
-# derivation so a later "tidy up the magic numbers" cannot silently restore a 0% cache.
+def test_bundle_comes_from_the_local_store_and_never_the_network():
+    """The architectural invariant: metric computation never acquires. The suite's
+    _forbid_network guard fails any test that reaches out, so this passing IS the proof."""
+    save_statements("LOCAL", [StatementRow("LOCAL", "income", "annual", "2025-09-30", "Total Revenue", 42.0)])
 
-# Measured wall-clock of one serial 138-ticker sweep of /corporate/comparison?mode=live.
-MEASURED_FULL_SWEEP_SECONDS = 357
+    bundle = get_yahoo_statement_bundle("LOCAL", "audit")
 
-# The watchlist the sweep walks. The cache must hold a whole sweep with room to spare.
-MEASURED_WATCHLIST_SIZE = 139
+    assert bundle["income"].loc["Total Revenue", "2025-09-30"] == 42.0
 
 
-def test_statement_cache_ttl_outlives_one_full_sweep():
-    """A TTL shorter than the fan-out it guards has a zero hit rate by construction:
-    ticker #1 expires before ticker #138 is fetched, so the next request misses on all
-    138 again. 300s against a 357s sweep did exactly that."""
-    assert YAHOO_STATEMENT_CACHE_TTL_SECONDS > MEASURED_FULL_SWEEP_SECONDS
+def test_a_ticker_with_nothing_stored_returns_none():
+    assert get_yahoo_statement_bundle("NEVERSTORED", "audit") is None
 
 
-def test_statement_cache_holds_a_full_sweep_without_evicting_itself():
-    """Capacity defeats any TTL, however long. At maxsize 48 a 139-ticker sweep evicts its
-    own first ~90 entries before finishing, so raising the TTL to 86400s still measured 0
-    hits. The cache must outlive the sweep that fills it."""
-    _YAHOO_STATEMENT_CACHE.clear()
-    try:
-        for index in range(MEASURED_WATCHLIST_SIZE):
-            _YAHOO_STATEMENT_CACHE[f"TICKER{index}"] = {"fetched_at": datetime.now(timezone.utc)}
+def test_the_same_stored_data_yields_identical_metrics_twice():
+    """Reproducibility, stated in the spec: given identical locally stored acquisition
+    data, metric computation always produces identical outputs regardless of process
+    restart, network availability, or execution time. Within one process the strongest
+    available check is that two computations over unchanged storage agree exactly."""
+    save_statements("REPRO", [
+        StatementRow("REPRO", "income", "annual", "2025-09-30", "Total Revenue", 100.0),
+        StatementRow("REPRO", "income", "annual", "2024-09-30", "Total Revenue", 90.0),
+    ])
 
-        assert "TICKER0" in _YAHOO_STATEMENT_CACHE, (
-            f"the sweep evicted its own first entry: maxsize={_YAHOO_STATEMENT_CACHE.maxsize} "
-            f"is below the {MEASURED_WATCHLIST_SIZE}-ticker watchlist it has to hold"
-        )
-        assert len(_YAHOO_STATEMENT_CACHE) == MEASURED_WATCHLIST_SIZE
-    finally:
-        _YAHOO_STATEMENT_CACHE.clear()
+    first = get_yahoo_statement_bundle("REPRO", "audit")
+    second = get_yahoo_statement_bundle("REPRO", "audit")
+
+    assert first["income"].equals(second["income"])
+    assert first["info"] == second["info"]
