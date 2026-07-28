@@ -445,6 +445,35 @@ CREATE TABLE IF NOT EXISTS acquisition_state (
     detail          TEXT,
     PRIMARY KEY (data_class, subject)
 );
+
+-- Statements are stored one row per line item per period, not as a serialised blob, so
+-- they can be queried deterministically, updated in part, and grown with new metrics
+-- without a schema change or a deserialisation step.
+CREATE TABLE IF NOT EXISTS corporate_statements (
+    ticker         TEXT NOT NULL,
+    statement_type TEXT NOT NULL,
+    frequency      TEXT NOT NULL,
+    period_end     TEXT NOT NULL,
+    line_item      TEXT NOT NULL,
+    value          REAL,
+    fetched_at     TEXT NOT NULL,
+    PRIMARY KEY (ticker, statement_type, frequency, period_end, line_item)
+);
+
+CREATE INDEX IF NOT EXISTS idx_corporate_statements_lookup
+    ON corporate_statements(ticker, statement_type, frequency, period_end);
+
+-- Quote-derived facts are a separate class from statements because they have a different
+-- natural frequency. Market cap is acquired here, never derived from shares outstanding:
+-- the balance-sheet share count is absent for ETFs, aggregates share classes, and counts
+-- ordinary shares rather than ADRs.
+CREATE TABLE IF NOT EXISTS corporate_quote_facts (
+    ticker              TEXT PRIMARY KEY,
+    market_cap          REAL,
+    shares_outstanding  REAL,
+    currency            TEXT DEFAULT '',
+    fetched_at          TEXT NOT NULL
+);
 """
 
 

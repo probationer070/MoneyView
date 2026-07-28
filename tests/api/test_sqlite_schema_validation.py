@@ -6,6 +6,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from scripts.validate_sqlite_schema import validate_sqlite_schema
+from apps.api.services import db as db_service
 
 
 def _workspace_db_path() -> Path:
@@ -123,3 +124,36 @@ def test_validate_sqlite_schema_fails_missing_required_column():
         assert "Table 'indicators' missing column 'source'" in result.errors
     finally:
         _remove_sqlite_file(db_path)
+
+
+def test_init_db_creates_the_statement_and_quote_fact_stores():
+    with db_service.get_db() as conn:
+        tables = {
+            row["name"]
+            for row in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ).fetchall()
+        }
+
+    assert {"corporate_statements", "corporate_quote_facts"} <= tables
+
+
+def test_corporate_statements_is_keyed_by_line_item_within_a_period():
+    """One row per line item per period per statement, so a refetch replaces rather than
+    duplicates -- the same INSERT OR REPLACE contract the bars table relies on."""
+    with db_service.get_db() as conn:
+        conn.execute(
+            """INSERT OR REPLACE INTO corporate_statements
+                   (ticker, statement_type, frequency, period_end, line_item, value, fetched_at)
+               VALUES ('AAPL', 'income', 'annual', '2025-09-30', 'Total Revenue', 1.0, '2026-07-28T00:00:00+00:00')"""
+        )
+        conn.execute(
+            """INSERT OR REPLACE INTO corporate_statements
+                   (ticker, statement_type, frequency, period_end, line_item, value, fetched_at)
+               VALUES ('AAPL', 'income', 'annual', '2025-09-30', 'Total Revenue', 2.0, '2026-07-28T01:00:00+00:00')"""
+        )
+        rows = conn.execute(
+            "SELECT value FROM corporate_statements WHERE ticker='AAPL'"
+        ).fetchall()
+
+    assert [row["value"] for row in rows] == [2.0]
