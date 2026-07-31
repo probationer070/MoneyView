@@ -721,3 +721,40 @@ one test must cross that seam with the production wiring -- a test that injects 
 boundary the change moved cannot see the change. Note also that
 `test_periods_are_newest_first` asserted the string column form and therefore encoded the
 bug; a test that pins an incidental representation will defend it.
+
+## 2026-07-31: Quick Start failed -- 2,619 orphaned postcss workers saturated the machine
+
+Date: 2026-07-31
+Command: `run moneyview` (`scripts/start_local.ps1`)
+Failure: `Quick Start failed. The frontend process did not become healthy within 45 seconds
+for http://localhost:3000.` The log looked contradictory: Next reported `Ready in 453ms` and
+then `Compiling / ...`, with no error. Raising the timeout would not have helped -- the
+compile never finished. Fifteen minutes later `/` still had not compiled, and the dev
+server's own log (`apps/web/.next/dev/logs/next-development.log`) held exactly two lines, the
+second being `Compiling / ...` at t+4s.
+Root cause: Turbopack's PostCSS transform spawns a separate node process per invocation
+(`apps/web/.next/dev/build/postcss.js <n>`) and, against the stale 1.3 GB `.next` cache
+present at the time, never reaped them. `Get-Process node` showed **2,631 node processes
+holding 58 GB of working set**, all spawned inside the twelve minutes since startup, 2,619 of
+them that postcss worker. The machine had no capacity left, so the first page compile could
+not progress. The health check was reporting a real failure; its message just pointed at the
+timeout rather than the cause.
+Fix: kill the orphaned workers and delete the stale build cache.
+```powershell
+Get-CimInstance Win32_Process -Filter "Name='node.exe'" |
+  Where-Object { $_.CommandLine -like "*MoneyViewpps\web*" } |
+  ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
+Remove-Item -Recurse -Force apps\web\.next
+```
+With a clean cache the same `npm run dev` served `/` with HTTP 200 in under 10 seconds and
+held steady at 4 node processes. `/` 5.4s, `/corporate` 1.5s, `/portfolio` 1.0s.
+Files changed: none -- environment state only. Nothing in the repository was at fault, and
+the branch under test had changed four lines of frontend code, none CSS-related.
+Prevention: when a Next dev server reports `Ready` and then hangs on `Compiling`, count node
+processes before touching the timeout -- `(Get-Process node).Count` in the low thousands is
+the signal, and the process command line names the culprit transform. The general trap: a
+health-check timeout names the symptom it observed, never the resource exhaustion that caused
+it, so a "did not become healthy in N seconds" message is not evidence that N is too small.
+Two orphan classes are worth checking after any failed start, because `start_local.ps1` tears
+down the process it launched but not the workers that process spawned: node workers under
+`apps/web`, and a stray `npm exec -- next dev` wrapper holding port 3000.
