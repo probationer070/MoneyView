@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+import urllib.error
 
 import pytest
 
@@ -65,11 +66,68 @@ def test_the_source_never_persists():
         assert conn.execute("SELECT COUNT(*) AS n FROM news").fetchone()["n"] == 0
 
 
-def test_real_crawler_propagates_provider_failures(monkeypatch):
-    """With the real StockNewsCrawler, a network failure (e.g., urlopen timeout) must
-    propagate so acquire_point_in_time records FAILED, not EMPTY. The crawler's blanket
-    catch would hide provider failures, making a ticker look like it has no news and
-    suppress retry for an hour."""
+def test_feedparser_bozo_with_no_entries_raises(monkeypatch):
+    """When feedparser's bozo flag is set and no entries were parsed, a fetch failure
+    occurred. This must raise so acquire_point_in_time records FAILED, not EMPTY."""
+    import feedparser
+
+    def parse_with_error(*args, **kwargs):
+        # Simulate feedparser.parse() on a failed fetch: bozo=True, bozo_exception set, entries=[]
+        exc = urllib.error.URLError("Connection timeout")
+        return SimpleNamespace(bozo=True, bozo_exception=exc, entries=[])
+
+    monkeypatch.setattr(feedparser, "parse", parse_with_error)
+
+    from apps.api.services.webscrap.Crawler.StockNewsCrawler import StockNewsCrawler
+
+    crawler = StockNewsCrawler()
+    with pytest.raises(urllib.error.URLError):
+        fetch_news("TEST", crawler=crawler)
+
+
+def test_feedparser_bozo_with_entries_still_parses(monkeypatch):
+    """When feedparser's bozo flag is set but entries are present, the feed is malformed
+    but usable. Do not raise; parse what came back. feedparser sets bozo for warnings too."""
+    import feedparser
+
+    def parse_malformed_but_usable(*args, **kwargs):
+        # bozo=True (well-formedness warning) but we got useful entries
+        entry = SimpleNamespace(title="News headline", link="http://example.com", published="2026-07-31")
+        return SimpleNamespace(bozo=True, bozo_exception=None, entries=[entry])
+
+    monkeypatch.setattr(feedparser, "parse", parse_malformed_but_usable)
+
+    from apps.api.services.webscrap.Crawler.StockNewsCrawler import StockNewsCrawler
+
+    crawler = StockNewsCrawler()
+    articles = fetch_news("TEST", crawler=crawler)
+
+    assert len(articles) == 1
+    assert articles[0].headline == "News headline"
+
+
+def test_feedparser_no_bozo_with_no_entries_returns_empty(monkeypatch):
+    """When feedparser has bozo=False and entries=[], this is a genuine no-news ticker.
+    Return [] without raising, so acquire_point_in_time records EMPTY not FAILED."""
+    import feedparser
+
+    def parse_empty_but_successful(*args, **kwargs):
+        # bozo=False (successful fetch), entries=[] (no news for this ticker)
+        return SimpleNamespace(bozo=False, bozo_exception=None, entries=[])
+
+    monkeypatch.setattr(feedparser, "parse", parse_empty_but_successful)
+
+    from apps.api.services.webscrap.Crawler.StockNewsCrawler import StockNewsCrawler
+
+    crawler = StockNewsCrawler()
+    articles = fetch_news("NOPE", crawler=crawler)
+
+    assert articles == []
+
+
+def test_urllib_fallback_still_raises_on_error(monkeypatch):
+    """When feedparser is not installed, the urllib+ElementTree fallback is used.
+    A network error in that path must still propagate."""
     import sys
     import urllib.request
 

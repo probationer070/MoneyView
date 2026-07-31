@@ -34,7 +34,20 @@ class StockNewsCrawler:
         try:
             import feedparser
 
-            entries = feedparser.parse(url).entries[offset:offset + limit]
+            parsed = feedparser.parse(url)
+
+            # Distinguish a failed fetch from a genuinely empty feed.
+            # feedparser sets bozo=True on errors but doesn't raise; it stores the error
+            # in bozo_exception and returns entries=[]. If bozo is True and we got zero
+            # entries, the fetch failed.
+            if parsed.bozo and not parsed.entries:
+                exc = parsed.bozo_exception
+                if isinstance(exc, Exception):
+                    raise exc
+                else:
+                    raise RuntimeError(f"Feed parse failed for {ticker}: {exc}")
+
+            entries = parsed.entries[offset:offset + limit]
             for entry in entries:
                 title = getattr(entry, "title", "")
                 link = getattr(entry, "link", "")
