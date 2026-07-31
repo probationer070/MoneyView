@@ -133,6 +133,14 @@ def acquire_point_in_time(
 
     try:
         rows = fetcher(subject)
+    except AssertionError:
+        # A provider never raises AssertionError; a bug or a test guard does. Recording it
+        # as a data-acquisition failure would bury it -- and specifically, the suite's
+        # _forbid_network guard raises AssertionError, so swallowing it here would let a
+        # test reach the network and still go green with a FAILED row nobody reads. This
+        # preserves the same "an unexpected bug propagates" guarantee the sources get from
+        # catching only (AttributeError, KeyError, TypeError, ValueError).
+        raise
     except Exception as error:  # noqa: BLE001 - never propagate into a caller
         logger.warning("acquisition.fetch_failed data_class=%s subject=%s error=%s",
                        data_class_name, subject, error)

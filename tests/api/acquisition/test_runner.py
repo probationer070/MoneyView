@@ -297,6 +297,27 @@ def test_point_in_time_records_failure_without_touching_stored_data():
     assert state.last_checked_at == now
 
 
+def test_an_assertion_error_propagates_instead_of_becoming_a_failed_status():
+    """The suite's _forbid_network guard raises AssertionError. If the broad except
+    swallowed it into a FAILED row, a test could reach the real network and still go
+    green -- the guard's whole value depends on this not happening. No provider raises
+    AssertionError, so nothing legitimate is caught by letting it through."""
+    now = datetime(2026, 7, 30, 12, 0, tzinfo=timezone.utc)
+
+    def guard_trips(subject):
+        raise AssertionError("test made a network call to query1.finance.yahoo.com")
+
+    with pytest.raises(AssertionError, match="network call"):
+        acquire_point_in_time(
+            "statements", "AAPL", now=now,
+            fetcher=guard_trips,
+            saver=lambda subject, rows: pytest.fail("saver must not run"),
+            coverage=lambda rows: (date(2024, 1, 1), date(2025, 1, 1)),
+        )
+
+    assert read_state("statements", "AAPL").status != AcquisitionStatus.FAILED
+
+
 def test_point_in_time_acquires_again_once_the_boundary_has_passed():
     """The other half of idempotence: fresh means skip, stale means fetch. Without this,
     a boundary that never expires would pass the skip test and silently freeze the data."""
