@@ -12,8 +12,8 @@ from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException, Query
 
-from apps.api.models.schemas import NewsArticle
-from apps.api.models.schema_parts.news import NewsAcquireRequest, NewsAcquireResponse
+from apps.api.models.schemas import APIResponse, NewsArticle
+from apps.api.models.schema_parts.news import BulkNewsResponse, NewsAcquireRequest, NewsAcquireResponse
 from apps.api.services.acquisition.runner import acquire_point_in_time
 from apps.api.services.acquisition.sources.news import fetch_news
 from apps.api.services.acquisition.state import read_state
@@ -36,6 +36,21 @@ async def get_news_feed(
 ):
     """Return news articles filtered by ticker or keyword."""
     return _svc.get_news(ticker=ticker, limit=limit, keyword=q, offset=offset)
+
+
+@router.get("/feed/bulk", response_model=APIResponse[BulkNewsResponse])
+async def get_news_feed_bulk(
+    tickers: str = Query(..., description="comma-separated tickers"),
+    per_ticker: int = Query(default=3, ge=1, le=20),
+):
+    """One request for the whole tile grid, with acquisition state per ticker."""
+    requested = [part for part in tickers.split(",") if part.strip()]
+    if not requested:
+        raise HTTPException(status_code=400, detail="tickers is required")
+    if len(requested) > MAX_ACQUIRE_TICKERS:
+        raise HTTPException(status_code=400,
+                            detail=f"at most {MAX_ACQUIRE_TICKERS} tickers per request")
+    return APIResponse(data=BulkNewsResponse(tickers=_svc.get_news_bulk(requested, per_ticker=per_ticker)))
 
 
 @router.post("/crawl", response_model=List[NewsArticle])

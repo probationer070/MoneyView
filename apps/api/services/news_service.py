@@ -104,6 +104,38 @@ class NewsService:
             ))
         return articles[offset:offset + limit]
 
+    def get_news_bulk(self, tickers: List[str], per_ticker: int = 3) -> dict:
+        """One query per ticker inside one request, plus the acquisition state join.
+
+        Newest first. published_date is TEXT DEFAULT '', so the CASE pins undated rows
+        last explicitly rather than relying on '' sorting below any date -- an undated
+        article must never displace a dated one from a three-item tile.
+        """
+        normalized = [str(t).upper().strip() for t in tickers if str(t).strip()]
+        out: dict[str, dict] = {}
+        with get_db() as conn:
+            for ticker in dict.fromkeys(normalized):
+                rows = conn.execute(
+                    """SELECT * FROM news
+                       WHERE ticker = ?
+                       ORDER BY CASE WHEN published_date IS NULL OR published_date = ''
+                                     THEN 1 ELSE 0 END,
+                                published_date DESC,
+                                id DESC
+                       LIMIT ?""",
+                    (ticker, per_ticker),
+                ).fetchall()
+                state = conn.execute(
+                    "SELECT last_checked_at FROM acquisition_state"
+                    " WHERE data_class = 'news' AND subject = ?",
+                    (ticker,),
+                ).fetchone()
+                out[ticker] = {
+                    "articles": [NewsArticle(**dict(row)) for row in rows],
+                    "last_checked_at": state["last_checked_at"] if state else None,
+                }
+        return out
+
     def save_article(self, article: NewsArticle) -> bool:
         """Persist a single article; skip if duplicate (hash collision)."""
         h = self._hash(article.headline, article.url)

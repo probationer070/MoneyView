@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -34,6 +34,15 @@ class NewsAcquireResult(BaseModel):
 class NewsAcquireResponse(BaseModel):
     results: List[NewsAcquireResult]
     skipped_unknown: List[str] = Field(default_factory=list)
+
+
+class BulkNewsEntry(BaseModel):
+    articles: List[NewsArticle]
+    last_checked_at: Optional[str] = None
+
+
+class BulkNewsResponse(BaseModel):
+    tickers: Dict[str, BulkNewsEntry]
 
 
 class TechnicalIndicators(BaseModel):
