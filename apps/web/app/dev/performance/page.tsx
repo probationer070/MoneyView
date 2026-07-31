@@ -32,7 +32,18 @@ export default function PerformanceAnalysisPage() {
 
   // Auto-refresh is off by default: this page inspects a specific run, and
   // background repolling would churn the ring buffer mid-analysis.
-  const common = { refetchOnWindowFocus: false, refetchInterval: false as const };
+  //
+  // retry overrides the app-wide `retry: 3`. When the backend runs without
+  // MONEYVIEW_DEV_MONITOR the gate returns 404 deterministically, so retrying
+  // costs three round trips plus exponential backoff -- about seven seconds of
+  // blank page before the "instrumentation disabled" message can appear. That
+  // delay is what makes these dashboards look broken rather than switched off.
+  const common = {
+    refetchOnWindowFocus: false,
+    refetchInterval: false as const,
+    retry: (failureCount: number, error: unknown) =>
+      !isNotFoundError(error) && failureCount < 3,
+  };
 
   const requestsQuery = useQuery({
     queryKey: ["perf-requests"],
@@ -61,7 +72,17 @@ export default function PerformanceAnalysisPage() {
     ...common,
   });
 
-  if (requestsQuery.isLoading) return <LoadingState />;
+  // Rendered inside the page shell rather than bare: a bare skeleton is a few
+  // near-invisible grey bars at the top of an empty viewport, which reads as a
+  // page that failed rather than one that is still loading.
+  if (requestsQuery.isLoading) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 py-6">
+        <PageHeader title="Performance Analysis" subtitle="Where time is spent" />
+        <LoadingState variant="spinner" label="Loading performance data..." />
+      </div>
+    );
+  }
 
   if (isNotFoundError(requestsQuery.error)) {
     return (

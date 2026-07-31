@@ -556,7 +556,9 @@ if ($DevMonitor) {
     Write-Host "Event monitor:  $frontendUrl/dev/monitor" -ForegroundColor Cyan
 }
 else {
-    Write-Host "Dev dashboards: disabled. Re-run with -DevMonitor for $frontendUrl/dev/performance" -ForegroundColor DarkGray
+    Write-Host "Dev dashboards: DISABLED (/dev/performance and /dev/monitor will show 'instrumentation disabled')" -ForegroundColor Yellow
+    Write-Host "                Re-run with -DevMonitor to collect and view them." -ForegroundColor Yellow
+    Write-Host "                Off by default: instrumentation costs 12-19% request latency." -ForegroundColor DarkGray
 }
 Write-Host "API log:        $backendLog"
 Write-Host "next-server log:$frontendLog"
