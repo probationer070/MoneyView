@@ -91,3 +91,29 @@ class Weekly:
         if candidate > now:
             candidate -= timedelta(days=7)
         return candidate
+
+
+@dataclass(frozen=True)
+class Hourly:
+    """Invalid once the next occurrence of `:at_minute` UTC passes.
+
+    News is the only class using this, and the choice is a rate-limit decision as much as
+    a freshness one: the refresh button is the control a user is most likely to press
+    repeatedly, so the boundary is what stands between an impatient click and unbounded
+    provider load. Daily would leave the button inert for 23 hours out of 24; per-press
+    crawling would remove the limit entirely.
+    """
+
+    at_minute: int = 0
+
+    def __post_init__(self) -> None:
+        if not 0 <= self.at_minute <= 59:
+            raise ValueError(f"at_minute must be 0-59, got {self.at_minute}")
+
+    def most_recent_instant(self, now: datetime) -> datetime:
+        if now.tzinfo is None:
+            raise ValueError("Boundary comparisons require a timezone-aware datetime (UTC)")
+        candidate = now.replace(minute=self.at_minute, second=0, microsecond=0)
+        if candidate > now:
+            candidate -= timedelta(hours=1)
+        return candidate
