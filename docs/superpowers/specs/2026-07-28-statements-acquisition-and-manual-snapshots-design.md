@@ -41,7 +41,16 @@ execution time.
 **Offline execution.** Once acquisition has completed, all comparison metrics can be computed
 entirely offline.
 
-> **Correction, 2026-07-31 — the invariant above is not yet met in full.** The whole-branch
+> **Correction, 2026-07-31 — found, then closed.** The gap below was fixed the same day; the
+> record is kept because the way it hid is the useful part. `latest_market_price` now reads
+> `get_latest_stored_price`, a direct bars-table read that never fetches, and
+> `test_a_live_comparison_computes_with_no_network_at_all` exercises the whole route with
+> nothing stubbed but the database. Verified by mutation: restoring the old loader makes that
+> test fail with `test resolved query1.finance.yahoo.com`. The visible consequence is
+> deliberate — the comparison shows the last stored close rather than a live intraday quote,
+> which is what makes a snapshot reproducible.
+>
+> **The gap as found.** The whole-branch
 > review traced a surviving live fetch beneath the metric layer, and it is real:
 > `price_loader=_latest_market_price` (`routes/corporate.py:163,205`) reaches
 > `MarketDataService.get_latest_stock_price`, which calls `_fetch_live_quote_price` ->
@@ -57,12 +66,10 @@ entirely offline.
 > silent at exactly the boundary where the violation lives. That is the same failure shape as
 > the socket guard being blind to curl_cffi.
 >
-> Until this is closed, the accurate statement of scope is: **statements and quote facts are
-> acquired and read locally; the latest market price is still a live read.** Closing it is
-> tracked in `guideline/sop/todo.md`. The two candidate fixes are to serve the price from the
-> already-existing `equity_bars` local store (cheap, but changes the displayed price from
-> live intraday to last stored close, which is a product decision), or to add a price data
-> class with its own freshness boundary.
+> Note that neither `get_latest_stock_price` nor `get_stock_ohlcv` was usable as the fix:
+> the first tries a live quote, and the second refreshes from the provider when local bars
+> are stale. Reading the bars table directly was the only option that actually holds the
+> invariant.
 
 ### Layering
 

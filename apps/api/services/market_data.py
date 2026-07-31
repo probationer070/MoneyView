@@ -808,6 +808,28 @@ class MarketDataService:
             return 0.0
         return float(bars[-1].close)
 
+    def get_latest_stored_price(self, ticker: str) -> float:
+        """Return the newest locally stored close, without any network access.
+
+        get_latest_stock_price above tries a live quote first and then falls back to
+        get_stock_ohlcv, which itself refreshes from the provider when local bars are
+        stale. Neither is usable beneath the metric layer: the architectural invariant is
+        that metric computation reads only what acquisition already stored, so that a
+        snapshot is reproducible and the same stored data always yields the same numbers.
+        Reads the bars table directly for that reason -- 0.0 when nothing is stored, which
+        the existing has_price_data handling already treats as a missing price.
+        """
+        normalized_ticker = ticker.upper().strip()
+        if not normalized_ticker:
+            return 0.0
+
+        table = self._table_for_ticker(normalized_ticker)
+        with get_db() as conn:
+            rows = self._select_ohlcv_rows(conn, normalized_ticker, table, limit=1)
+        if not rows:
+            return 0.0
+        return float(rows[0]["close"] or 0.0)
+
     def _fetch_live_quote_price(self, ticker: str) -> float | None:
         try:
             import yfinance as yf

@@ -144,20 +144,56 @@ def test_get_latest_stock_price_falls_back_to_ohlcv_close(monkeypatch):
     assert service.get_latest_stock_price("aapl") == 100.0
 
 
-def test_corporate_latest_market_price_uses_latest_quote_loader(monkeypatch):
+def test_corporate_latest_market_price_reads_only_stored_bars(monkeypatch):
+    """Changed 2026-07-31: this asserted delegation to get_latest_stock_price, which
+    fetches a live quote and refreshes stale bars from the provider. That put a network
+    call inside metric computation, so a comparison or DCF was not reproducible and a
+    snapshot of it was not the evidence it claimed to be. The metric layer now reads the
+    stored close only."""
     from apps.api.services import corporate_metrics_service
 
-    calls: list[tuple[str, str]] = []
+    calls: list[str] = []
 
     class StubMarketDataService:
-        def get_latest_stock_price(self, ticker: str, *, period: str = "1mo") -> float:
-            calls.append((ticker, period))
+        def get_latest_stored_price(self, ticker: str) -> float:
+            calls.append(ticker)
             return 212.34
+
+        def get_latest_stock_price(self, ticker: str, *, period: str = "1mo") -> float:
+            raise AssertionError("metric computation must not request a live quote")
 
     monkeypatch.setattr(corporate_metrics_service, "_MKT", StubMarketDataService())
 
     assert corporate_metrics_service.latest_market_price("AAPL") == 212.34
-    assert calls == [("AAPL", "1mo")]
+    assert calls == ["AAPL"]
+
+
+def test_get_latest_stored_price_never_touches_the_network(tmp_path, monkeypatch):
+    """The seam test the branch was missing. Every other price test injects a stub at the
+    loader boundary, so the suite's network guard stays silent at exactly the point the
+    violation lived. This one calls the real method with the real bars table."""
+    db_path = tmp_path / "moneyview.db"
+    monkeypatch.setattr(db_service, "_DB_PATH", db_path)
+    db_service.init_db()
+
+    with db_service.get_db() as conn:
+        for day, close in (("2026-07-29", 100.0), ("2026-07-30", 123.45)):
+            conn.execute(
+                """INSERT INTO stocks (ticker, date, open, high, low, close, volume)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                ("AAPL", day, close, close, close, close, 1_000),
+            )
+
+    # No monkeypatching of the fetch path: if this reaches out, _forbid_network fails it.
+    assert MarketDataService().get_latest_stored_price("aapl") == 123.45
+
+
+def test_get_latest_stored_price_is_zero_when_nothing_is_stored(tmp_path, monkeypatch):
+    db_path = tmp_path / "moneyview.db"
+    monkeypatch.setattr(db_service, "_DB_PATH", db_path)
+    db_service.init_db()
+
+    assert MarketDataService().get_latest_stored_price("NOTHINGSTORED") == 0.0
 
 
 def test_stock_price_endpoint_returns_202_for_fetching_lookup(monkeypatch):

@@ -14,6 +14,7 @@ from apps.api.services import db as db_service
 from apps.api.services.acquisition.sources.quote_facts import QuoteFacts
 from apps.api.services.acquisition.sources.statements import StatementRow
 from apps.api.services.acquisition.state import record_success
+from apps.api.services.acquisition.store import save_quote_facts, save_statements
 from apps.api.services.corporate_comparison import (
     METRIC_SCHEMA_VERSION,
     acquire_comparison_datasets,
@@ -1059,3 +1060,52 @@ def test_the_button_acquires_a_stale_ticker(tmp_path, monkeypatch):
     )
 
     assert calls == [("statements", "MSFT"), ("market_cap", "MSFT")]
+
+
+def test_a_live_comparison_computes_with_no_network_at_all(tmp_path, monkeypatch):
+    """The architectural invariant, end to end and unstubbed.
+
+    Every other test in this file injects _metrics_for_ticker and _latest_market_price,
+    which leaves the suite's network guard silent at exactly the boundary a violation
+    would live at -- and one did live there until 2026-07-31: the price loader fetched a
+    live quote per ticker inside metric computation. Nothing is patched here except the
+    database, so if any part of the metric path reaches out, _forbid_network fails this.
+    """
+    db_path = tmp_path / "moneyview.db"
+    monkeypatch.setattr(db_service, "_DB_PATH", db_path)
+    db_service.init_db()
+    _seed_watchlist()
+
+    for ticker in ("AAPL", "MSFT", "^GSPC"):
+        rows = []
+        for year, revenue in ((2024, 1_000_000.0), (2025, 1_100_000.0)):
+            period = f"{year}-12-31"
+            for item, value in (
+                ("Total Revenue", revenue),
+                ("Operating Income", revenue * 0.1),
+                ("Pretax Income", revenue * 0.1),
+                ("Tax Provision", revenue * 0.025),
+            ):
+                rows.append(StatementRow(ticker, "income", "annual", period, item, value))
+            for item, value in (("Total Debt", 2_000_000.0), ("Stockholders Equity", 8_000_000.0)):
+                rows.append(StatementRow(ticker, "balance", "annual", period, item, value))
+        save_statements(ticker, rows)
+        save_quote_facts(ticker, QuoteFacts(ticker, 9_000_000.0, 1_000.0, "USD", beta=1.1))
+
+    with db_service.get_db() as conn:
+        for ticker in ("AAPL", "MSFT"):
+            conn.execute(
+                """INSERT INTO stocks (ticker, date, open, high, low, close, volume)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (ticker, "2026-07-30", 120.0, 130.0, 119.0, 123.45, 1_000),
+            )
+
+    client = TestClient(app)
+    response = client.get("/api/v1/corporate/comparison?mode=live")
+
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert payload["snapshot"]["mode"] == "live"
+    # The stored close, not a live quote.
+    aapl = next(row for row in payload["rows"] if row["ticker"] == "AAPL")
+    assert aapl["current_price"] == 123.45

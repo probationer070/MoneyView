@@ -322,23 +322,16 @@ never silently compared as like for like. Stored per row in the new
 `metric_schema_version` column (guarded `ALTER TABLE` migration for pre-existing
 databases); old rows default to `1`.
 
-**Open and material — the invariant is not yet met in full.** `price_loader=_latest_market_price`
-(`apps/api/routes/corporate.py:163,205`) reaches `MarketDataService.get_latest_stock_price`,
-which calls `_fetch_live_quote_price` -> `yf.Ticker(ticker).fast_info` before falling back to
-local OHLCV. That is a live network call per universe ticker inside metric computation, and
-its result feeds `dcf_implied_return`, `stock_expected_return` and `expected_return_spread`.
-The design never mentioned the price path, so no task closed it, and the suite cannot detect
-it because every test injects a `price_loader` stub — the network guard is silent at exactly
-the boundary where the violation lives.
-
-Two ways to close it, and the choice is a product decision, not a technical one:
-1. Serve the price from the `equity_bars` local store that already exists. Cheap, and makes
-   snapshots genuinely reproducible — but the comparison would show the last stored close
-   rather than a live intraday price.
-2. Add a price data class with its own freshness boundary, acquired by the same button.
-
-Until then the honest statement of scope is: statements and quote facts are acquired and read
-locally; the latest market price is still a live read.
+- [x] **The price path no longer fetches during metric computation.** `latest_market_price`
+      previously reached `get_latest_stock_price`, which tries a live `yf.Ticker().fast_info`
+      quote per ticker before falling back to local OHLCV, feeding `dcf_implied_return`,
+      `stock_expected_return` and `expected_return_spread`. It now calls
+      `MarketDataService.get_latest_stored_price`, a direct bars-table read.
+      `get_stock_ohlcv` was not usable either — it refreshes from the provider when local
+      bars are stale. **Deliberate visible change: the comparison and DCF now show the last
+      stored close, not a live intraday quote.** That is what makes a snapshot reproducible.
+      Prices refresh when acquisition runs, not when someone opens the page. The stock price
+      lookup endpoint still serves live quotes; only the metric path changed.
 
 Deferred, not oversights:
 - **A filing-aware boundary.** `Weekly` bounds statement staleness to seven days; it does

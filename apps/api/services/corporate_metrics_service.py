@@ -240,7 +240,15 @@ def metrics_for_ticker(
 
 
 def latest_market_price(ticker: str) -> float:
-    return _MKT.get_latest_stock_price(ticker, period="1mo")
+    """The price the metric layer computes with: the newest locally stored close.
+
+    Deliberately not get_latest_stock_price, which fetches a live quote and refreshes
+    stale bars from the provider. Metric computation never acquires -- a comparison or a
+    DCF built from a live intraday quote is not reproducible, and a snapshot of it is not
+    the evidence it claims to be. Prices refresh when acquisition runs, not when someone
+    opens the page.
+    """
+    return _MKT.get_latest_stored_price(ticker)
 
 
 def seed_watchlist_from_json_if_empty(watchlist_json: Path = WATCHLIST_JSON) -> None:
