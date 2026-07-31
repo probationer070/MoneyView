@@ -159,3 +159,16 @@ def test_record_retired_preserves_prior_success_and_coverage():
     assert state.last_success_at == NOW
     assert state.covered_from == date(2016, 1, 1)
     assert state.covered_to == date(2026, 7, 24)
+
+
+def test_the_subject_key_is_case_insensitive():
+    """The store upper-cases on both write and read. If state keyed a different case than
+    the data it describes, a lowercase caller would write rows under one key and record
+    freshness under another -- the shape of the defect that already bit the store once."""
+    record_success(
+        "statements", "aapl", now=NOW,
+        covered_from=date(2024, 1, 1), covered_to=date(2025, 1, 1),
+    )
+
+    assert read_state("statements", "AAPL").last_success_at == NOW
+    assert read_state("statements", "aapl").last_success_at == NOW

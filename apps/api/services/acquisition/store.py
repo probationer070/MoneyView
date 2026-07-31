@@ -109,5 +109,7 @@ def load_statement_bundle(ticker: str) -> dict[str, object] | None:
         "currency": facts["currency"] if facts else "",
         "beta": facts["beta"] if facts else None,
     }
-    bundle["fetched_at"] = datetime.fromisoformat(rows[0]["fetched_at"])
+    # The newest write, not whatever row SQLite happened to return first: the query has
+    # no ORDER BY, so rows[0] was arbitrary and the reported age could be any of them.
+    bundle["fetched_at"] = max(datetime.fromisoformat(row["fetched_at"]) for row in rows)
     return bundle

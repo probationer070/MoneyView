@@ -50,7 +50,19 @@ def _parse_date(raw: str | None) -> date | None:
     return date.fromisoformat(raw) if raw else None
 
 
+def _normalize_subject(subject: str) -> str:
+    """Every subject is a ticker, and the store upper-cases on both write and read.
+
+    Keying state in a different case than the data it describes is what produced the
+    store's silent-data-loss defect: rows written under one key and read under another
+    while state recorded success. Normalising here keeps one keying authority rather
+    than relying on every caller to remember.
+    """
+    return subject.upper()
+
+
 def read_state(data_class: str, subject: str) -> AcquisitionState:
+    subject = _normalize_subject(subject)
     with get_db() as conn:
         row = conn.execute(
             """SELECT last_checked_at, last_success_at, covered_from, covered_to, status, detail
@@ -81,6 +93,7 @@ def record_check(
 ) -> None:
     """Record that we asked. Deliberately leaves last_success_at and coverage alone:
     a failed refresh must not blank data that is still being served."""
+    subject = _normalize_subject(subject)
     with get_db() as conn:
         conn.execute(
             """INSERT INTO acquisition_state (data_class, subject, last_checked_at, status, detail)
@@ -102,6 +115,7 @@ def record_retired(data_class: str, subject: str) -> None:
     ticker that is back on the watchlist with no bars until the next boundary and
     nothing asking again. Coverage is left alone because the rows are retained.
     """
+    subject = _normalize_subject(subject)
     with get_db() as conn:
         conn.execute(
             """INSERT INTO acquisition_state (data_class, subject, status, detail)
@@ -116,6 +130,7 @@ def record_retired(data_class: str, subject: str) -> None:
 def record_success(
     data_class: str, subject: str, *, now: datetime, covered_from: date, covered_to: date
 ) -> None:
+    subject = _normalize_subject(subject)
     with get_db() as conn:
         conn.execute(
             """INSERT INTO acquisition_state
