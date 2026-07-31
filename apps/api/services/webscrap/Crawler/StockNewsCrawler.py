@@ -32,29 +32,29 @@ class StockNewsCrawler:
         results: List[RiskNews] = []
 
         try:
-            try:
-                import feedparser
+            import feedparser
 
-                entries = feedparser.parse(url).entries[offset:offset + limit]
-                for entry in entries:
-                    title = getattr(entry, "title", "")
-                    link = getattr(entry, "link", "")
-                    published = getattr(entry, "published", "")
-                    if not title:
-                        continue
-                    results.append(
-                        RiskNews(
-                            source="Google News",
-                            title=title,
-                            url=link,
-                            date=self._normalize_date(published),
-                            matched_keywords=[query],
-                        )
+            entries = feedparser.parse(url).entries[offset:offset + limit]
+            for entry in entries:
+                title = getattr(entry, "title", "")
+                link = getattr(entry, "link", "")
+                published = getattr(entry, "published", "")
+                if not title:
+                    continue
+                results.append(
+                    RiskNews(
+                        source="Google News",
+                        title=title,
+                        url=link,
+                        date=self._normalize_date(published),
+                        matched_keywords=[query],
                     )
-                return results
-            except ImportError:
-                pass
+                )
+            return results
+        except ImportError:
+            pass
 
+        try:
             request = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
             with urllib.request.urlopen(request, timeout=10) as response:
                 xml_payload = response.read()
@@ -74,7 +74,7 @@ class StockNewsCrawler:
                         matched_keywords=[query],
                     )
                 )
+            return results
         except Exception as exc:
             logger.warning("Stock news crawl failed for %s: %s", ticker, exc)
-
-        return results
+            raise

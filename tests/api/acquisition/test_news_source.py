@@ -63,3 +63,26 @@ def test_the_source_never_persists():
 
     with db_service.get_db() as conn:
         assert conn.execute("SELECT COUNT(*) AS n FROM news").fetchone()["n"] == 0
+
+
+def test_real_crawler_propagates_provider_failures(monkeypatch):
+    """With the real StockNewsCrawler, a network failure (e.g., urlopen timeout) must
+    propagate so acquire_point_in_time records FAILED, not EMPTY. The crawler's blanket
+    catch would hide provider failures, making a ticker look like it has no news and
+    suppress retry for an hour."""
+    import sys
+    import urllib.request
+
+    # Hide feedparser to force fallback to urllib
+    monkeypatch.setitem(sys.modules, "feedparser", None)
+
+    def raise_timeout(*args, **kwargs):
+        raise urllib.error.URLError("Connection timeout")
+
+    monkeypatch.setattr(urllib.request, "urlopen", raise_timeout)
+
+    from apps.api.services.webscrap.Crawler.StockNewsCrawler import StockNewsCrawler
+
+    crawler = StockNewsCrawler()
+    with pytest.raises(urllib.error.URLError):
+        fetch_news("TEST", crawler=crawler)
