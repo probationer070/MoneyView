@@ -1,11 +1,14 @@
-from datetime import date
+from datetime import date, datetime, timezone
 
 import pandas as pd
 
+from apps.api.models.schemas import NewsArticle
 from apps.api.services.acquisition.sources.quote_facts import QuoteFacts
 from apps.api.services.acquisition.sources.statements import StatementRow
 from apps.api.services.acquisition.store import (
     load_statement_bundle,
+    news_coverage,
+    save_news,
     save_quote_facts,
     save_statements,
     statement_coverage,
@@ -95,3 +98,54 @@ def test_a_lowercase_subject_round_trips():
     assert bundle["ticker"] == "AAPL"
     assert bundle["income"].loc["Total Revenue", "2025-09-30"] == 100.0
     assert bundle["info"]["marketCap"] == 4_000.0
+
+
+def test_save_news_persists_and_dedupes_by_hash():
+    articles = [
+        NewsArticle(ticker="AAPL", headline="Same headline", url="https://x/1",
+                    source="s", published_date="2026-07-31"),
+        NewsArticle(ticker="AAPL", headline="Same headline", url="https://x/1",
+                    source="s", published_date="2026-07-31"),
+        NewsArticle(ticker="AAPL", headline="Other", url="https://x/2",
+                    source="s", published_date="2026-07-30"),
+    ]
+
+    save_news("AAPL", articles)
+    save_news("AAPL", articles)  # a second acquisition of the same articles
+
+    from apps.api.services.db import get_db as db_get_db
+    with db_get_db() as conn:
+        rows = conn.execute("SELECT headline FROM news WHERE ticker = 'AAPL'").fetchall()
+
+    assert len(rows) == 2
+
+
+def test_save_news_normalises_the_subject_ticker():
+    """The subject is the authority, as in save_statements. If writes stored 'aapl' while
+    reads upper-case, rows would be unreadable while acquisition_state said OK."""
+    save_news("aapl", [NewsArticle(ticker="whatever", headline="H", url="u",
+                                   source="s", published_date="2026-07-31")])
+
+    from apps.api.services.db import get_db as db_get_db
+    with db_get_db() as conn:
+        assert conn.execute(
+            "SELECT COUNT(*) AS n FROM news WHERE ticker = 'AAPL'"
+        ).fetchone()["n"] == 1
+
+
+def test_news_coverage_spans_the_published_dates():
+    articles = [
+        NewsArticle(ticker="A", headline="a", url="1", source="s", published_date="2026-07-28"),
+        NewsArticle(ticker="A", headline="b", url="2", source="s", published_date="2026-07-31"),
+    ]
+
+    assert news_coverage(articles) == (date(2026, 7, 28), date(2026, 7, 31))
+
+
+def test_news_coverage_falls_back_to_today_when_no_article_is_dated():
+    """An undated batch still happened today. Returning a wrong date range would corrupt
+    the coverage record that a later range-planning class may depend on."""
+    today = datetime.now(timezone.utc).date()
+    articles = [NewsArticle(ticker="A", headline="a", url="1", source="s", published_date="")]
+
+    assert news_coverage(articles) == (today, today)

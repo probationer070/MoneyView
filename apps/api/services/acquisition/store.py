@@ -5,10 +5,12 @@ so moving statements onto disk changes no metric code.
 """
 from __future__ import annotations
 
+import hashlib
 from datetime import date, datetime, timezone
 
 import pandas as pd
 
+from apps.api.models.schemas import NewsArticle
 from apps.api.services.acquisition.sources.quote_facts import QuoteFacts
 from apps.api.services.acquisition.sources.statements import StatementRow
 from apps.api.services.db import get_db
@@ -56,6 +58,49 @@ def save_quote_facts(ticker: str, facts: QuoteFacts) -> None:
                VALUES (?, ?, ?, ?, ?, ?)""",
             (ticker, facts.market_cap, facts.shares_outstanding, facts.currency, facts.beta,
              datetime.now(timezone.utc).isoformat()),
+        )
+
+
+def news_coverage(articles: list[NewsArticle]) -> tuple[date, date]:
+    published = []
+    for article in articles:
+        if not article.published_date:
+            continue
+        try:
+            published.append(date.fromisoformat(article.published_date))
+        except ValueError:
+            # A provider date we cannot parse is not a date. Guessing one would put a
+            # fabricated range into the coverage record.
+            continue
+    if not published:
+        today = datetime.now(timezone.utc).date()
+        return today, today
+    return min(published), max(published)
+
+
+def save_news(ticker: str, articles: list[NewsArticle]) -> None:
+    # Same rule as save_statements: the subject parameter is authoritative, not
+    # article.ticker. acquisition_state is keyed by subject and the bulk read upper-cases,
+    # so a disagreement stores rows nobody can read while the state table reports OK.
+    ticker = ticker.upper()
+    with get_db() as conn:
+        conn.executemany(
+            """INSERT OR IGNORE INTO news
+                   (ticker, headline, url, source, published_date, sentiment, importance, hash)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            [
+                (
+                    ticker,
+                    article.headline,
+                    article.url,
+                    article.source,
+                    article.published_date,
+                    article.sentiment.value,
+                    article.importance,
+                    hashlib.md5(f"{article.headline}{article.url}".encode()).hexdigest(),
+                )
+                for article in articles
+            ],
         )
 
 
