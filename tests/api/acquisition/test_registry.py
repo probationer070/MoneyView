@@ -4,8 +4,8 @@ from apps.api.services.acquisition.boundaries import Weekly
 from apps.api.services.acquisition.registry import REGISTRY, Scope, get_data_class
 
 
-def test_the_registry_declares_the_four_current_data_classes():
-    assert set(REGISTRY) == {"equity_bars", "index_bars", "statements", "market_cap"}
+def test_the_registry_declares_the_five_current_data_classes():
+    assert set(REGISTRY) == {"equity_bars", "index_bars", "statements", "market_cap", "news"}
 
 
 def test_equity_bars_is_per_ticker_and_stores_to_stocks():

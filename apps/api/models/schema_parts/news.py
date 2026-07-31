@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from typing import Optional
+from typing import List, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from .common import SentimentEnum
 
@@ -18,6 +18,22 @@ class NewsArticle(BaseModel):
     published_date: str = ""
     sentiment: SentimentEnum = SentimentEnum.neutral
     importance: int = 1
+
+
+class NewsAcquireRequest(BaseModel):
+    tickers: List[str]
+
+
+class NewsAcquireResult(BaseModel):
+    ticker: str
+    status: str          # acquired | fresh | empty | failed
+    articles: int = 0
+    detail: Optional[str] = None
+
+
+class NewsAcquireResponse(BaseModel):
+    results: List[NewsAcquireResult]
+    skipped_unknown: List[str] = Field(default_factory=list)
 
 
 class TechnicalIndicators(BaseModel):

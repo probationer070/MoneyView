@@ -1,15 +1,15 @@
 """One declaration per data class; the runner reads this table and holds no per-class
 logic. Adding a macro series or another index is a row, not a pipeline.
 
-Statements and market cap are now declared alongside the two bar classes. Macro rates,
-news and the derived valuation ratios arrive in later phases as further rows.
+Statements, market cap and news are now declared alongside the two bar classes. Macro
+rates and the derived valuation ratios arrive in later phases as further rows.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
 
-from apps.api.services.acquisition.boundaries import Boundary, Daily, Weekly
+from apps.api.services.acquisition.boundaries import Boundary, Daily, Hourly, Weekly
 
 
 class Scope(str, Enum):
@@ -68,6 +68,16 @@ REGISTRY: dict[str, DataClass] = {
         scope=Scope.PER_TICKER,
         boundary=_DAILY_UTC,
         store="corporate_quote_facts",
+        calendar="us_equity",
+    ),
+    # Hourly is a rate-limit decision as much as a freshness one: the refresh button is
+    # the control most likely to be pressed repeatedly, and the boundary is what bounds
+    # the provider load that results.
+    "news": DataClass(
+        name="news",
+        scope=Scope.PER_TICKER,
+        boundary=Hourly(at_minute=0),
+        store="news",
         calendar="us_equity",
     ),
 }
