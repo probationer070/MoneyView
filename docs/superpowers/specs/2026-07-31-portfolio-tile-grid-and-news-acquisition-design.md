@@ -40,8 +40,9 @@ Read from the live database on 2026-07-31, and these numbers drove several decis
   fallback.
 - **239 news rows across 45 distinct tickers**. Most watchlist stocks have no stored news at
   all, so "no news" is the common tile state, not an edge case.
-- A batch crawl of all 139 tickers would take minutes. Scoping the refresh to visible tiles
-  keeps it in the seconds.
+- A single-ticker crawl measured **0.8–1.0 s** against the running app, so all 139 would take
+  about **two minutes**. Scoping the refresh to visible tiles keeps it near eleven seconds.
+  See Batch execution for the full measurement and what it decided.
 
 ## Architecture
 
