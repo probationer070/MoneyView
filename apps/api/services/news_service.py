@@ -131,7 +131,10 @@ class NewsService:
                     (ticker,),
                 ).fetchone()
                 out[ticker] = {
-                    "articles": [NewsArticle(**dict(row)) for row in rows],
+                    "articles": [
+                        NewsArticle(**{**dict(row), "published_date": row["published_date"] or ""})
+                        for row in rows
+                    ],
                     "last_checked_at": state["last_checked_at"] if state else None,
                 }
         return out

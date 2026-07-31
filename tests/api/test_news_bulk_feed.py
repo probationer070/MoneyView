@@ -49,19 +49,32 @@ def test_last_checked_at_distinguishes_checked_empty_from_never_checked(tmp_path
 
 
 def test_articles_are_newest_first_with_undated_last(tmp_path, monkeypatch):
-    """An undated article must never displace a dated one from a three-item tile."""
+    """An undated article must never displace a dated one from a three-item tile, whether the
+    missing date is stored as '' or as NULL. SQLite's own ORDER BY ... DESC already satisfies
+    this today -- NULL sorts below every value and '' sorts below any date string -- so this
+    test would pass even with the CASE clause deleted. The CASE exists to make that ordering an
+    explicit, guaranteed contract rather than an accident of SQLite's collation, and this test
+    is what should fail if a future change (e.g. switching published_date's storage or default)
+    ever breaks the guarantee that undated articles sort last.
+
+    This is also the regression guard for a real bug the NULL row surfaced: get_news_bulk built
+    NewsArticle straight from the raw row (NewsArticle(**dict(row))), and published_date is a
+    plain `str` field, so a NULL column 500'd the whole bulk endpoint before ordering was ever
+    reached. Fixed by coercing published_date the same way get_news already does, elsewhere in
+    this file. Without the NULL row here, that path goes untested."""
     monkeypatch.setattr(db_service, "_DB_PATH", tmp_path / "moneyview.db")
     db_service.init_db()
-    _insert("AAPL", "undated", "", "u0")
+    _insert("AAPL", "undated-empty", "", "u0")
+    _insert("AAPL", "undated-null", None, "u3")
     _insert("AAPL", "older", "2026-07-28", "u1")
     _insert("AAPL", "newest", "2026-07-31", "u2")
 
     client = TestClient(app)
-    payload = client.get("/api/v1/news/feed/bulk?tickers=AAPL&per_ticker=3").json()["data"]
+    payload = client.get("/api/v1/news/feed/bulk?tickers=AAPL&per_ticker=4").json()["data"]
 
-    assert [a["headline"] for a in payload["tickers"]["AAPL"]["articles"]] == [
-        "newest", "older", "undated",
-    ]
+    headlines = [a["headline"] for a in payload["tickers"]["AAPL"]["articles"]]
+    assert headlines[:2] == ["newest", "older"]
+    assert set(headlines[2:]) == {"undated-empty", "undated-null"}
 
 
 def test_per_ticker_limit_is_applied(tmp_path, monkeypatch):
