@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef } from "react";
-import type { ReactNode } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from "react";
 import clsx from "clsx";
 import { IconButton } from "@/components/ui/IconButton";
 import { X } from "lucide-react";
@@ -19,14 +19,53 @@ export function SidePanel({ open, title, onClose, children }: SidePanelProps) {
 
   const handleKeyDown = useCallback(
     (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onClose();
+      }
     },
     [onClose],
   );
 
+  const handleDialogKeyDown = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== "Tab") return;
+
+    const dialog = panelRef.current;
+    if (!dialog) return;
+
+    const focusableElements = Array.from(
+      dialog.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      )
+    ).filter((element) => !element.hasAttribute("disabled") && element.tabIndex !== -1);
+
+    if (focusableElements.length === 0) {
+      event.preventDefault();
+      dialog.focus();
+      return;
+    }
+
+    const firstFocusableElement = focusableElements[0];
+    const lastFocusableElement = focusableElements[focusableElements.length - 1];
+    const activeElement = document.activeElement;
+
+    if (event.shiftKey && activeElement === firstFocusableElement) {
+      event.preventDefault();
+      lastFocusableElement.focus();
+      return;
+    }
+
+    if (!event.shiftKey && activeElement === lastFocusableElement) {
+      event.preventDefault();
+      firstFocusableElement.focus();
+    }
+  }, []);
+
   useEffect(() => {
     if (!open) return;
-    previouslyFocusedRef.current = document.activeElement as HTMLElement | null;
+    previouslyFocusedRef.current = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
     document.addEventListener("keydown", handleKeyDown);
     panelRef.current?.focus();
     return () => {
@@ -44,6 +83,7 @@ export function SidePanel({ open, title, onClose, children }: SidePanelProps) {
       aria-modal="true"
       aria-label={title}
       tabIndex={-1}
+      onKeyDown={handleDialogKeyDown}
       data-testid="portfolio-side-panel"
       className={clsx(
         "absolute inset-y-0 right-0 z-30 w-full max-w-[480px] overflow-y-auto",
