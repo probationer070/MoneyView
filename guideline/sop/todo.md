@@ -341,6 +341,17 @@ Deferred, not oversights:
   `apps/web/app/portfolio/portfolioMetrics.ts:198`) is therefore permanently inert. Left
   in place rather than removed: it is dead code, not misleading code, and removing it is a
   presentational decision outside this task's scope.
+- **The generated shared types are stale.** Dropping `snapshot_versions_for_day` from the
+  backend models left `packages/shared-types/generated/portfolio.schema.json` and
+  `portfolio.ts` still declaring it. Confirmed inert -- nothing in `apps/web` imports the
+  corporate-comparison types from the generated file. Not regenerated here because the two
+  artifacts must move together and only half can be produced offline:
+  `python scripts/export_schema.py` works, but the second step
+  (`npx json2ts packages/shared-types/generated/portfolio.schema.json > .../portfolio.ts`)
+  needs a network install. Regenerating only the JSON would leave the pair inconsistent,
+  which is worse than the current consistent staleness. The JSON regeneration also carries
+  a large unrelated Pydantic-version reformatting (`allOf` wrappers and redundant `const`
+  keys disappear under Pydantic 2.13), so it belongs in its own commit.
 
 ## Archived Track - MoneyView Dev Monitor
 

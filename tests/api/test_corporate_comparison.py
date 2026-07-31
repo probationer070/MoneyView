@@ -16,9 +16,9 @@ from apps.api.services.acquisition.sources.statements import StatementRow
 from apps.api.services.acquisition.state import record_success
 from apps.api.services.corporate_comparison import (
     METRIC_SCHEMA_VERSION,
-    _load_company_universe_data,
     acquire_comparison_datasets,
     build_corporate_comparison_response,
+    load_company_universe_data,
     save_corporate_comparison_snapshot,
 )
 
@@ -935,25 +935,48 @@ def test_a_snapshot_records_the_metric_schema_version():
 
 
 def test_snapshots_are_immutable_a_second_save_adds_rather_than_updates():
-    for _ in range(2):
-        save_corporate_comparison_snapshot(
+    """A newer snapshot is a new observation, never an update to the old one.
+
+    Counting rows would only prove multiplicity. This saves twice at different prices,
+    then re-reads the FIRST snapshot's stored rows and asserts they are byte-identical
+    to what was written -- the earlier observation survives as evidence. The assertion
+    that the second snapshot's values actually differ keeps the first assertion honest:
+    without it, both snapshots could be identical and the test would pass vacuously.
+    """
+
+    def _save(price: float):
+        return save_corporate_comparison_snapshot(
             snapshot_source="manual",
             comparison_universe="portfolio_plus_benchmark",
             benchmark_ticker="^GSPC",
             custom_tickers=[],
             metrics_loader=_stub_metrics_loader,
-            price_loader=lambda ticker: 10.0,
+            price_loader=lambda ticker: price,
             default_companies={},
             risk_free_rate=0.042,
             equity_risk_premium=0.055,
         )
 
-    with db_service.get_db() as conn:
-        ids = conn.execute(
-            "SELECT DISTINCT snapshot_version FROM corporate_comparison_snapshots_v3"
-        ).fetchall()
+    def _rows_for(version: str) -> list[tuple]:
+        with db_service.get_db() as conn:
+            return [
+                tuple(row)
+                for row in conn.execute(
+                    "SELECT * FROM corporate_comparison_snapshots_v3"
+                    " WHERE snapshot_version = ? ORDER BY ticker",
+                    (version,),
+                ).fetchall()
+            ]
 
-    assert len(ids) == 2
+    first_version = _save(10.0).snapshot.snapshot_version
+    first_rows = _rows_for(first_version)
+    assert first_rows != []
+
+    second_version = _save(20.0).snapshot.snapshot_version
+    assert second_version != first_version
+
+    assert _rows_for(first_version) == first_rows
+    assert _rows_for(second_version) != first_rows
 
 
 def test_the_button_acquires_nothing_when_every_dataset_is_fresh(tmp_path, monkeypatch):
@@ -967,7 +990,7 @@ def test_the_button_acquires_nothing_when_every_dataset_is_fresh(tmp_path, monke
     now = datetime(2026, 7, 30, 12, 0, tzinfo=timezone.utc)
     _seed_fresh_acquisition(["AAPL", "MSFT", "^GSPC"], now=now)
 
-    company_data = _load_company_universe_data({})
+    company_data = load_company_universe_data({})
     calls = []
     acquire_comparison_datasets(
         comparison_universe="portfolio_plus_benchmark",
@@ -994,7 +1017,7 @@ def test_the_button_acquires_a_stale_ticker(tmp_path, monkeypatch):
     # AAPL and ^GSPC are fresh; MSFT was never acquired, so it is stale.
     _seed_fresh_acquisition(["AAPL", "^GSPC"], now=now)
 
-    company_data = _load_company_universe_data({})
+    company_data = load_company_universe_data({})
     calls = []
 
     def fake_statements_fetcher(ticker: str) -> list[StatementRow]:

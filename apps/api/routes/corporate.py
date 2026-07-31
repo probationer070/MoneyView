@@ -33,10 +33,10 @@ from apps.api.services.corporate_comparison import (
     DEFAULT_BENCHMARK_TICKER,
     DEFAULT_COMPARISON_UNIVERSE,
     DEFAULT_SNAPSHOT_MODE,
-    _load_company_universe_data,
     acquire_comparison_datasets,
     build_corporate_comparison_response,
     delete_corporate_comparison_snapshot_version,
+    load_company_universe_data,
     load_corporate_comparison_history,
     load_corporate_comparison_snapshot_version,
     load_corporate_comparison_stock_history,
@@ -186,7 +186,7 @@ async def refresh_corporate_comparison_snapshot(
     # One button: refresh only the datasets whose freshness boundaries have expired, then
     # compute. Separate fetch and compute buttons would let a snapshot be generated from
     # statements the user forgot to refresh.
-    company_data = _load_company_universe_data(DEFAULT_COMPANIES)
+    company_data = load_company_universe_data(DEFAULT_COMPANIES)
     acquire_comparison_datasets(
         comparison_universe=comparison_universe,
         benchmark_ticker=benchmark_ticker,

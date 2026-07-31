@@ -47,7 +47,7 @@ METRIC_SCHEMA_VERSION = 1
 
 
 @dataclass(frozen=True)
-class _CompanyUniverseData:
+class CompanyUniverseData:
     registry: dict[str, dict[str, object]]
     watchlist_rows: list[dict[str, object]]
 
@@ -293,7 +293,7 @@ def _build_live_rows(
     risk_free_rate: float,
     equity_risk_premium: float,
 ) -> list[CorporateComparisonRow]:
-    company_data = _load_company_universe_data(default_companies)
+    company_data = load_company_universe_data(default_companies)
     universe_rows = _resolve_comparison_universe_rows(
         comparison_universe=comparison_universe,
         benchmark_ticker=benchmark_ticker,
@@ -774,10 +774,10 @@ def _snapshot_business_date() -> str:
 
 
 def _load_company_registry(default_companies: dict[str, dict[str, str]]) -> dict[str, dict[str, object]]:
-    return _load_company_universe_data(default_companies).registry
+    return load_company_universe_data(default_companies).registry
 
 
-def _load_company_universe_data(default_companies: dict[str, dict[str, str]]) -> _CompanyUniverseData:
+def load_company_universe_data(default_companies: dict[str, dict[str, str]]) -> CompanyUniverseData:
     registry: dict[str, dict[str, object]] = {
         ticker.upper(): {
             "ticker": ticker.upper(),
@@ -835,7 +835,7 @@ def _load_company_universe_data(default_companies: dict[str, dict[str, str]]) ->
             "weight": float(existing.get("weight", 0.0)),
         }
 
-    return _CompanyUniverseData(registry=registry, watchlist_rows=watchlist_payload)
+    return CompanyUniverseData(registry=registry, watchlist_rows=watchlist_payload)
 
 
 def _resolve_comparison_universe_rows(
