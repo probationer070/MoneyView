@@ -2,6 +2,7 @@ import sys
 from pathlib import Path
 
 import pandas as pd
+import pytest
 from fastapi.testclient import TestClient
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -17,6 +18,7 @@ from apps.api.services.corporate_statement_metrics import (
     WACC_WARNING_RULES,
     get_yahoo_statement_bundle,
     metric_audit_for_ticker,
+    yahoo_statement_metrics,
 )
 
 
@@ -340,6 +342,47 @@ def test_bundle_comes_from_the_local_store_and_never_the_network():
     bundle = get_yahoo_statement_bundle("LOCAL", "audit")
 
     assert bundle["income"].loc["Total Revenue", "2025-09-30"] == 42.0
+
+
+def test_stored_statements_actually_drive_the_metric_layer(tmp_path, monkeypatch):
+    """The seam the other store tests miss: they assert on the frame, not on what the
+    metric layer makes of it.
+
+    load_statement_bundle labels frame columns with period_end, which SQLite returns as
+    TEXT. _safe_statement_year does getattr(col, "year", 0), so a str column yields 0,
+    every row is dropped as older than YAHOO_STATEMENT_START_YEAR, and every
+    statement-derived metric silently falls back -- while the audit still reports
+    source_mode="yahoo_finance". Frame-level round-trip assertions pass throughout.
+    """
+    _init_test_db(tmp_path, monkeypatch)
+
+    rows = []
+    for year, revenue, operating in ((2024, 1_000_000.0, 100_000.0), (2025, 1_100_000.0, 120_000.0)):
+        period = f"{year}-12-31"
+        for item, value in (
+            ("Total Revenue", revenue),
+            ("Operating Income", operating),
+            ("Pretax Income", operating),
+            ("Tax Provision", operating * 0.25),
+        ):
+            rows.append(StatementRow("SEAM", "income", "annual", period, item, value))
+        for item, value in (("Total Debt", 2_000_000.0), ("Stockholders Equity", 8_000_000.0)):
+            rows.append(StatementRow("SEAM", "balance", "annual", period, item, value))
+    save_statements("SEAM", rows)
+
+    fallback = CorporateMetrics(
+        ticker="SEAM", growth=6, roic=18, wacc=10, debt_ratio=18, unlevered_beta=1.05,
+        crp=0.8, reinvestment=34, fcff=92, innovation=82, market_share=64, governance=74,
+        esg_penalty=22,
+    )
+
+    # No bundle_loader argument: this must exercise the production default.
+    metrics = yahoo_statement_metrics("SEAM", fallback)
+
+    assert metrics is not None, "stored statements produced no metrics at all"
+    # Revenue grew 10% across the two stored years. If the columns were unreadable this
+    # would silently be the fallback's 6.
+    assert metrics.growth == pytest.approx(10.0, abs=0.5)
 
 
 def test_a_ticker_with_nothing_stored_returns_none():

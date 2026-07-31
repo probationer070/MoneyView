@@ -75,7 +75,13 @@ def _frame(rows: list, statement_type: str, frequency: str) -> pd.DataFrame:
         ]
         for period in periods
     }
-    return pd.DataFrame(values, index=line_items)
+    frame = pd.DataFrame(values, index=line_items)
+    # Columns must be Timestamps, not the TEXT period_end SQLite hands back. The metric
+    # layer reads the period off the column label with getattr(col, "year", 0), so a str
+    # column silently yields year 0, every row is dropped as pre-2000, and every
+    # statement-derived metric falls back while the audit still claims Yahoo provenance.
+    frame.columns = pd.to_datetime(frame.columns)
+    return frame
 
 
 def load_statement_bundle(ticker: str) -> dict[str, object] | None:

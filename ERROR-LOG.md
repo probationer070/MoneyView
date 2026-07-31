@@ -669,3 +669,41 @@ The general lesson is broader than curl_cffi: a guard that patches a *mechanism*
 covers callers that use that mechanism. Before trusting one as proof of an invariant,
 confirm the code you mean to block actually travels through the layer you patched --
 "nothing was blocked" and "nothing was attempted" are indistinguishable from the outside.
+
+## 2026-07-31: The local statement store's frames were unreadable by the metric layer
+
+Date: 2026-07-31
+Command: `python -m pytest tests/core_finance/ tests/api/ -q` (376 passed -- the suite was
+green throughout, which is the point of this entry)
+Failure: Silent, and total. After the statements-acquisition branch rewired corporate
+metrics to read the local store instead of a live provider fetch, every statement-derived
+metric -- growth, ROIC, WACC, debt ratio, reinvestment, FCFF, innovation -- silently fell
+back to deterministic assumptions for every ticker, no matter how much data acquisition
+had correctly stored. Nothing raised. The metric audit continued to report
+`source_mode="yahoo_finance"`, claiming statement provenance for figures that were entirely
+fallback. Reproduced end to end with a five-year store round trip: `revenue_years=[]` while
+the rows sat correctly in SQLite.
+Root cause: `apps/api/services/acquisition/store.py:_frame` labelled DataFrame columns with
+`period_end`, which SQLite returns as TEXT. The metric layer takes the period off the column
+label with `_safe_statement_year`'s `int(getattr(date_index, "year", 0))`
+(`corporate_statement_metrics.py:149-153`). A `str` has no `.year`, so it returned `0`, and
+`_statement_year_value_items` then dropped every row as older than
+`YAHOO_STATEMENT_START_YEAR`. The pre-branch bundle came straight from yfinance, whose
+frames carry `pd.Timestamp` columns; the source converts Timestamp to string on the way in
+and nothing converted back on the way out.
+Fix: `_frame` now sets `frame.columns = pd.to_datetime(frame.columns)`, with a comment
+naming the `getattr(col, "year", 0)` coupling that makes the label type load-bearing.
+Files changed: `apps/api/services/acquisition/store.py`,
+`tests/api/test_corporate_metric_audit.py`, `tests/api/acquisition/test_store.py`
+Prevention: The real defect was a missing test seam, and it was specified that way in the
+plan. Every metric test injected `bundle_loader=` with frames built by `pd.Timestamp(period)`,
+and the three tests that did exercise the store asserted only at frame level
+(`bundle["income"].loc["Total Revenue", "2025-09-30"] == 42.0`), which passes with string
+columns. No test anywhere ran the metric layer over a bundle the store had actually
+produced. `test_stored_statements_actually_drive_the_metric_layer` now does, calling
+`yahoo_statement_metrics` with no `bundle_loader` argument so it must use the production
+default. The general rule: when a task replaces the implementation behind a seam, at least
+one test must cross that seam with the production wiring -- a test that injects at the same
+boundary the change moved cannot see the change. Note also that
+`test_periods_are_newest_first` asserted the string column form and therefore encoded the
+bug; a test that pins an incidental representation will defend it.

@@ -39,13 +39,19 @@ def test_bundle_rebuilds_the_shape_metric_code_expects():
     assert bundle["info"]["marketCap"] == 4_000.0
 
 
-def test_periods_are_newest_first():
-    """Metric code reads the first column as the latest period. Ordering is load-bearing."""
+def test_periods_are_newest_first_and_are_timestamps():
+    """Metric code reads the first column as the latest period. Ordering is load-bearing.
+
+    So is the label TYPE: the metric layer takes the year off the column with
+    getattr(col, "year", 0), so a str label yields year 0 and every row is silently
+    discarded. This test asserted the str form until 2026-07-31 and so encoded the bug.
+    """
     save_statements("AAPL", _rows())
 
     columns = list(load_statement_bundle("AAPL")["income"].columns)
 
-    assert columns == ["2025-09-30", "2024-09-30"]
+    assert columns == [pd.Timestamp("2025-09-30"), pd.Timestamp("2024-09-30")]
+    assert [column.year for column in columns] == [2025, 2024]
 
 
 def test_a_missing_value_round_trips_as_nan_not_zero():
