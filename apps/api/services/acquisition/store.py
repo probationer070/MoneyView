@@ -52,9 +52,9 @@ def save_quote_facts(ticker: str, facts: QuoteFacts) -> None:
     with get_db() as conn:
         conn.execute(
             """INSERT OR REPLACE INTO corporate_quote_facts
-                   (ticker, market_cap, shares_outstanding, currency, fetched_at)
-               VALUES (?, ?, ?, ?, ?)""",
-            (ticker, facts.market_cap, facts.shares_outstanding, facts.currency,
+                   (ticker, market_cap, shares_outstanding, currency, beta, fetched_at)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (ticker, facts.market_cap, facts.shares_outstanding, facts.currency, facts.beta,
              datetime.now(timezone.utc).isoformat()),
         )
 
@@ -93,7 +93,7 @@ def load_statement_bundle(ticker: str) -> dict[str, object] | None:
             (ticker,),
         ).fetchall()
         facts = conn.execute(
-            "SELECT market_cap, shares_outstanding, currency FROM corporate_quote_facts WHERE ticker = ?",
+            "SELECT market_cap, shares_outstanding, currency, beta FROM corporate_quote_facts WHERE ticker = ?",
             (ticker,),
         ).fetchone()
 
@@ -107,6 +107,7 @@ def load_statement_bundle(ticker: str) -> dict[str, object] | None:
         "marketCap": facts["market_cap"] if facts else None,
         "sharesOutstanding": facts["shares_outstanding"] if facts else None,
         "currency": facts["currency"] if facts else "",
+        "beta": facts["beta"] if facts else None,
     }
     bundle["fetched_at"] = datetime.fromisoformat(rows[0]["fetched_at"])
     return bundle

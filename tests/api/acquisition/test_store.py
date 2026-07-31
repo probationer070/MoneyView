@@ -62,6 +62,16 @@ def test_a_missing_value_round_trips_as_nan_not_zero():
     assert pd.isna(value)
 
 
+def test_beta_round_trips_into_the_bundle_info():
+    """corporate_statement_metrics reads info["beta"] for the levered beta behind WACC.
+    Before this was stored, the bundle's info carried only three keys, so info.get("beta")
+    was always None and every ticker's cost of equity quietly used the derived fallback."""
+    save_statements("BETA", [StatementRow("BETA", "income", "annual", "2025-09-30", "Total Revenue", 1.0)])
+    save_quote_facts("BETA", QuoteFacts("BETA", 4_000.0, 100.0, "USD", beta=1.21))
+
+    assert load_statement_bundle("BETA")["info"]["beta"] == 1.21
+
+
 def test_an_unknown_ticker_returns_none():
     assert load_statement_bundle("NOPE") is None
 

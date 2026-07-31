@@ -796,6 +796,13 @@ def test_init_db_adds_comparison_universe_columns_for_legacy_snapshot_tables(tmp
             """
         )
 
+        # A row computed before metric_schema_version existed, to check what it migrates to.
+        conn.execute(
+            """INSERT INTO corporate_comparison_snapshots_v3
+                   (snapshot_version, snapshot_date, universe_key, snapshot_taken_at, ticker)
+               VALUES ('legacy|key', '2026-07-01', 'key', '2026-07-01T00:00:00+00:00', 'AAPL')"""
+        )
+
     db_service.init_db()
 
     with db_service.get_db() as conn:
@@ -803,6 +810,9 @@ def test_init_db_adds_comparison_universe_columns_for_legacy_snapshot_tables(tmp
         v2_columns = {row["name"] for row in conn.execute("PRAGMA table_info(corporate_comparison_snapshots_v2)")}
         v3_columns = {row["name"] for row in conn.execute("PRAGMA table_info(corporate_comparison_snapshots_v3)")}
         v3_indexes = {row["name"] for row in conn.execute("PRAGMA index_list(corporate_comparison_snapshots_v3)")}
+        legacy_schema_version = conn.execute(
+            "SELECT metric_schema_version FROM corporate_comparison_snapshots_v3 WHERE ticker = 'AAPL'"
+        ).fetchone()["metric_schema_version"]
 
     assert "comparison_universe" in legacy_columns
     assert {"universe_key", "comparison_universe", "benchmark_ticker", "custom_tickers"}.issubset(v2_columns)
@@ -810,6 +820,10 @@ def test_init_db_adds_comparison_universe_columns_for_legacy_snapshot_tables(tmp
     # metric_schema_version is new in Task 9; this legacy v3 table was created without it,
     # so its presence here proves the guarded ALTER TABLE migration actually ran.
     assert "metric_schema_version" in v3_columns
+    # Rows predating the column migrate to 0, not to the current version. Stamping them
+    # with METRIC_SCHEMA_VERSION would make pre- and post-change snapshots compare as like
+    # for like, which is the one thing the column exists to prevent.
+    assert legacy_schema_version == 0
     assert {
         "idx_corporate_comparison_snapshots_v3_universe_date",
         "idx_corporate_comparison_snapshots_v3_ticker_universe_date",

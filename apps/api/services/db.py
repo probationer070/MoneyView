@@ -473,6 +473,7 @@ CREATE TABLE IF NOT EXISTS corporate_quote_facts (
     market_cap          REAL,
     shares_outstanding  REAL,
     currency            TEXT DEFAULT '',
+    beta                REAL,
     fetched_at          TEXT NOT NULL
 );
 """
@@ -663,7 +664,13 @@ def _ensure_schema_compatibility(conn: sqlite3.Connection) -> None:
     if "capm_expected_return" not in v3_columns:
         conn.execute("ALTER TABLE corporate_comparison_snapshots_v3 ADD COLUMN capm_expected_return REAL NOT NULL DEFAULT 0.0")
     if "metric_schema_version" not in v3_columns:
-        conn.execute("ALTER TABLE corporate_comparison_snapshots_v3 ADD COLUMN metric_schema_version INTEGER NOT NULL DEFAULT 1")
+        # 0, not METRIC_SCHEMA_VERSION: these rows were computed before the column existed,
+        # and stamping them with the current version would make pre- and post-change
+        # snapshots indistinguishable -- exactly what the column exists to prevent.
+        conn.execute("ALTER TABLE corporate_comparison_snapshots_v3 ADD COLUMN metric_schema_version INTEGER NOT NULL DEFAULT 0")
+    quote_facts_columns = {row["name"] for row in conn.execute("PRAGMA table_info(corporate_quote_facts)")}
+    if "beta" not in quote_facts_columns:
+        conn.execute("ALTER TABLE corporate_quote_facts ADD COLUMN beta REAL")
     v3_row = conn.execute("SELECT 1 FROM corporate_comparison_snapshots_v3 LIMIT 1").fetchone()
     if v3_row is None:
         conn.execute(
