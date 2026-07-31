@@ -104,6 +104,10 @@ def acquire_news_batch(tickers, *, now, fetcher=fetch_news) -> list[dict]:
 @router.post("/acquire", response_model=NewsAcquireResponse)
 async def acquire_news(request: NewsAcquireRequest):
     """Refresh news for the given tickers, through the acquisition layer."""
+    # Deliberately on the raw request size, not the deduped/known count: this is a cheap
+    # pre-guard ahead of the watchlist query below. A post-dedupe cap was considered and
+    # rejected -- the frontend already sends a unique-by-ticker list, so it buys no real
+    # protection while letting an oversized raw payload reach the DB first.
     if len(request.tickers) > MAX_ACQUIRE_TICKERS:
         raise HTTPException(status_code=400,
                             detail=f"at most {MAX_ACQUIRE_TICKERS} tickers per request")
