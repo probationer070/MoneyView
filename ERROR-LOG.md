@@ -652,12 +652,26 @@ module. Every one of the three patches is structurally incapable of seeing a yfi
 request. The guard was not weak, it was aimed at the wrong layer, and nothing in a green
 suite could reveal that: the guard's silence is identical whether no call was made or a
 call was made through a path it cannot observe.
-Fix: patch `curl_cffi.Curl.perform` in the same fixture and refuse it outright. `perform`
-is the single chokepoint every curl_cffi request funnels through, sync or async, so it
-covers `requests.Session`, `AsyncSession` and raw `Curl` alike. Nothing in this project
-uses curl_cffi for anything local, so no allowlist is needed -- any call through it is a
-network call. Guarded with `try: from curl_cffi import Curl / except ImportError` since
-curl_cffi arrives only as a yfinance dependency, and restored after `yield`.
+Fix: patch `curl_cffi.Curl.perform` in the same fixture and refuse it outright. Nothing in
+this project uses curl_cffi for anything local, so no allowlist is needed -- any call
+through it is a network call. Guarded with `try: from curl_cffi import Curl / except
+ImportError` since curl_cffi arrives only as a yfinance dependency, and restored after
+`yield`.
+
+**Correction, 2026-07-31.** This entry originally claimed `perform` was "the single
+chokepoint every curl_cffi request funnels through, sync or async, so it covers
+`requests.Session`, `AsyncSession` and raw `Curl` alike." That was asserted, not verified,
+and it is false. In curl_cffi 0.13.0 `Curl.perform` is called only from the **sync**
+`Session` (`requests/session.py:593,640`) and `websockets.py:358`; `AsyncSession` (which
+begins at `session.py:685`) dispatches through `AsyncCurl.add_handle`
+(`session.py:1025,1069` -> `aio.py:237`) and never calls `perform`. The async path was
+therefore still open, and libcurl opens its socket in C so the three socket patches could
+not see it either. The fixture now also patches `AsyncCurl.add_handle`, and
+`test_an_async_curl_cffi_request_is_refused` pins it -- mutation-verified: with the
+`add_handle` patch removed the test fails and the request goes out. Note what happened
+here: this entry's own closing lesson is "confirm the code you mean to block actually
+travels through the layer you patched," and the Fix paragraph directly above it then made
+exactly that unverified claim about a second layer.
 Files changed: `tests/conftest.py`, `tests/api/test_suite_guards.py` (new).
 Prevention: the guards are now tested rather than assumed. `tests/api/test_suite_guards.py`
 asserts that a public-host socket connect, a public-host DNS resolution, and a `curl_cffi`

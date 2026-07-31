@@ -112,23 +112,38 @@ def _forbid_network():
     # module, so the three patches above are blind to it. yfinance 1.2 uses it
     # as its HTTP transport -- exactly the traffic this fixture exists to stop.
     # Found on 2026-07-29: a test reached the real Yahoo API with all three
-    # socket patches active. Curl.perform is the single chokepoint every
-    # curl_cffi request funnels through, sync or async. Nothing in this project
-    # uses curl_cffi for anything local, so every call through it is a network
-    # call and is refused outright.
+    # socket patches active.
+    #
+    # Two chokepoints are needed, not one. Verified against curl_cffi 0.13.0:
+    # Curl.perform is called only from the SYNC Session (session.py:593,640) and
+    # websockets.py:358. AsyncSession dispatches through
+    # AsyncCurl.add_handle (session.py:1025,1069 -> aio.py:237) and never calls
+    # perform. Patching perform alone left the async path open -- the same
+    # mistake in miniature as patching socket alone, and corrected on 2026-07-31.
+    # Nothing in this project uses curl_cffi for anything local, so every call
+    # through either entry point is a network call and is refused outright.
     try:
         from curl_cffi import Curl
+        from curl_cffi.aio import AsyncCurl
     except ImportError:  # pragma: no cover - curl_cffi arrives with yfinance
         Curl = None
+        AsyncCurl = None
     else:
         real_perform = Curl.perform
+        real_add_handle = AsyncCurl.add_handle
 
         def guarded_perform(self, *args, **kwargs):
             raise AssertionError(
                 "test made a network call through curl_cffi -- network calls are not allowed"
             )
 
+        def guarded_add_handle(self, *args, **kwargs):
+            raise AssertionError(
+                "test made an async network call through curl_cffi -- network calls are not allowed"
+            )
+
         Curl.perform = guarded_perform
+        AsyncCurl.add_handle = guarded_add_handle
 
     socket.socket.connect = guarded_connect
     socket.socket.connect_ex = guarded_connect_ex
@@ -139,6 +154,7 @@ def _forbid_network():
     socket.getaddrinfo = real_getaddrinfo
     if Curl is not None:
         Curl.perform = real_perform
+        AsyncCurl.add_handle = real_add_handle
 
 
 @pytest.fixture(autouse=True, scope="session")
