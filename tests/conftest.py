@@ -167,9 +167,9 @@ def _forbid_the_real_database():
 def _disable_startup_jobs():
     """Stop the FastAPI lifespan starting its live-data warmers under pytest.
 
-    corporate_snapshot_cycle and stock_prewarm_cycle both fetch from the
-    network on startup, and prewarm's asyncio.to_thread worker cannot be
-    cancelled -- it outlives the TestClient block that started it and keeps
+    stock_prewarm_cycle fetches from the network on startup, and its
+    asyncio.to_thread worker cannot be cancelled -- it outlives the
+    TestClient block that started it and keeps
     emitting into the dev-monitor sink, evicting the events a test asserts on
     from its fixed recent(limit=N) window. Session-scoped and set before any
     TestClient is constructed.

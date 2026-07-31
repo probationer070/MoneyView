@@ -266,8 +266,9 @@ Three root causes, none of them the tests they were blamed on:
 
 Two consequences worth knowing before touching this again:
 
-- `MONEYVIEW_DISABLE_STARTUP_JOBS` gates `corporate_snapshot_cycle` and
-  `stock_prewarm_cycle` in `apps/api/main.py`'s lifespan. It is read at call time and is
+- `MONEYVIEW_DISABLE_STARTUP_JOBS` gates `stock_prewarm_cycle` in `apps/api/main.py`'s
+  lifespan -- the only job it still covers, since Task 8 deleted
+  `corporate_snapshot_cycle`. It is read at call time and is
   inert unless set to `1`/`true`/`yes`, so production startup is unchanged. `wal_flush_cycle`
   is not gated. The surviving `asyncio.to_thread` prewarm worker still cannot be cancelled —
   a CPython constraint, documented rather than fixed; the real remedy is a cooperative stop
