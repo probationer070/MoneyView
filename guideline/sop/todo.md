@@ -322,6 +322,24 @@ never silently compared as like for like. Stored per row in the new
 `metric_schema_version` column (guarded `ALTER TABLE` migration for pre-existing
 databases); old rows default to `1`.
 
+**Open and material — the invariant is not yet met in full.** `price_loader=_latest_market_price`
+(`apps/api/routes/corporate.py:163,205`) reaches `MarketDataService.get_latest_stock_price`,
+which calls `_fetch_live_quote_price` -> `yf.Ticker(ticker).fast_info` before falling back to
+local OHLCV. That is a live network call per universe ticker inside metric computation, and
+its result feeds `dcf_implied_return`, `stock_expected_return` and `expected_return_spread`.
+The design never mentioned the price path, so no task closed it, and the suite cannot detect
+it because every test injects a `price_loader` stub — the network guard is silent at exactly
+the boundary where the violation lives.
+
+Two ways to close it, and the choice is a product decision, not a technical one:
+1. Serve the price from the `equity_bars` local store that already exists. Cheap, and makes
+   snapshots genuinely reproducible — but the comparison would show the last stored close
+   rather than a live intraday price.
+2. Add a price data class with its own freshness boundary, acquired by the same button.
+
+Until then the honest statement of scope is: statements and quote facts are acquired and read
+locally; the latest market price is still a live read.
+
 Deferred, not oversights:
 - **A filing-aware boundary.** `Weekly` bounds statement staleness to seven days; it does
   not model each company's actual filing cadence.
@@ -342,6 +360,13 @@ Deferred, not oversights:
   `apps/web/app/portfolio/portfolioMetrics.ts:198`) is therefore permanently inert. Left
   in place rather than removed: it is dead code, not misleading code, and removing it is a
   presentational decision outside this task's scope.
+- **`SNAPSHOT_CADENCE = "daily_kst_0000"` is now a false statement.** Emitted on every
+  snapshot response (`corporate_comparison.py:33`, used at `:132, :232, :277, :550`) and
+  defaulted in the model at `schema_parts/corporate.py:238`. Snapshots are manual-only;
+  there is no daily KST cadence. Unlike `snapshot_is_stale`, which is merely inert, this is
+  an assertion about system behaviour that is untrue — it is only Minor because the
+  frontend declares the field without rendering it. Removing it changes the API contract,
+  so it belongs with the `snapshot_version` rename in one deliberate contract change.
 - **The generated shared types are stale.** Dropping `snapshot_versions_for_day` from the
   backend models left `packages/shared-types/generated/portfolio.schema.json` and
   `portfolio.ts` still declaring it. Confirmed inert -- nothing in `apps/web` imports the

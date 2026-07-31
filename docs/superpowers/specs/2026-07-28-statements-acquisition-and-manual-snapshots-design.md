@@ -41,6 +41,29 @@ execution time.
 **Offline execution.** Once acquisition has completed, all comparison metrics can be computed
 entirely offline.
 
+> **Correction, 2026-07-31 — the invariant above is not yet met in full.** The whole-branch
+> review traced a surviving live fetch beneath the metric layer, and it is real:
+> `price_loader=_latest_market_price` (`routes/corporate.py:163,205`) reaches
+> `MarketDataService.get_latest_stock_price`, which calls `_fetch_live_quote_price` ->
+> `yf.Ticker(ticker).fast_info` **before** consulting local OHLCV. `_build_live_rows` calls it
+> once per universe ticker, and the result feeds `dcf_implied_return`,
+> `stock_expected_return` and `expected_return_spread`. So a `mode=live` read performs N
+> network calls inside metric computation, and reproducibility is false for every
+> price-dependent metric.
+>
+> This design never mentioned the price path — it reasoned only about statements and quote
+> facts — so the plan never listed it as a call site to close, and no task did. The test suite
+> cannot see it either: every test injects a `price_loader` stub, so the network guard is
+> silent at exactly the boundary where the violation lives. That is the same failure shape as
+> the socket guard being blind to curl_cffi.
+>
+> Until this is closed, the accurate statement of scope is: **statements and quote facts are
+> acquired and read locally; the latest market price is still a live read.** Closing it is
+> tracked in `guideline/sop/todo.md`. The two candidate fixes are to serve the price from the
+> already-existing `equity_bars` local store (cheap, but changes the displayed price from
+> live intraday to last stored close, which is a product decision), or to add a price data
+> class with its own freshness boundary.
+
 ### Layering
 
 ```
