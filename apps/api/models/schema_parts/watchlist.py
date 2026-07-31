@@ -64,3 +64,6 @@ class PortfolioStock(BaseModel):
     last_close: float
     delta: DeltaBadge
     sparkline: List[float] = Field(default_factory=list)
+    # Insertion order. watchlist has no created_at, so this is the only recency signal,
+    # and the portfolio grid's no-weights fallback needs it.
+    id: int = 0
