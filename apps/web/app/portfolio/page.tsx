@@ -1135,22 +1135,35 @@ export default function PortfolioPage() {
     setRefreshSummary(null);
   }, [gridFilter, gridSearch]);
 
+  // What the grid was showing when Refresh was pressed. Clearing on a filter change only
+  // retires a summary already on screen; the crawl takes ~11s, so a result can still land
+  // after the user has moved on and read as though it described the tiles now in front of
+  // them. Qualifying the line beats dropping it: which tickers failed is the part worth
+  // reading, and dropping would throw exactly that away.
+  const refreshSubjectRef = useRef<{ filter: GridFilter; search: string } | null>(null);
+  const qualifyRefreshSummary = (summary: string) => {
+    const subject = refreshSubjectRef.current;
+    if (!subject || (subject.filter === gridFilter && subject.search === gridSearch)) return summary;
+    return `${summary} · for the stocks visible when you pressed Refresh`;
+  };
+
   const refreshNews = useMutation({
     // The visible set is captured here, when Refresh is pressed. A filter change while
     // the batch is in flight must not alter what it acquires, or the reported counts
     // would describe a set the user can no longer see.
     mutationFn: () => acquireNews(visibleTickers),
     onMutate: () => {
+      refreshSubjectRef.current = { filter: gridFilter, search: gridSearch };
       // Drop the previous run's line immediately so a stale summary cannot sit under a
       // spinning refresh icon and read as this run's result.
       setRefreshSummary(null);
     },
     onSuccess: (response) => {
-      setRefreshSummary(summarizeAcquisition(response));
+      setRefreshSummary(qualifyRefreshSummary(summarizeAcquisition(response)));
       void queryClient.invalidateQueries({ queryKey: ["portfolio-news"] });
     },
     onError: (error) => {
-      setRefreshSummary(error instanceof Error ? error.message : "Refresh failed");
+      setRefreshSummary(qualifyRefreshSummary(error instanceof Error ? error.message : "Refresh failed"));
     },
   });
 
