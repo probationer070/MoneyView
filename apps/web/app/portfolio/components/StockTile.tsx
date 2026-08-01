@@ -54,33 +54,33 @@ export function StockTile({ stock, news, lastCheckedAt, showWeight, onOpen }: St
       data-testid={`stock-tile-${stock.ticker}`}
       className="flex flex-col gap-0 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] text-left transition-colors hover:border-[var(--border-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--state-info)]"
     >
-      <div className="flex flex-col gap-1 p-3">
-        <div className="flex items-baseline justify-between gap-2">
+      <span className="flex flex-col gap-1 p-3">
+        <span className="flex items-baseline justify-between gap-2">
           <span className="font-bold text-[var(--text-primary)]">{stock.ticker}</span>
           <DeltaBadge value={stock.delta?.delta_pct} />
-        </div>
+        </span>
         <span className="text-lg tabular-nums text-[var(--text-primary)]">
           {formatClose(stock.last_close)}
         </span>
-        <div className="flex items-center justify-between gap-2">
-          <div className="min-w-0 flex-1">
+        <span className="flex items-center justify-between gap-2">
+          <span className="block min-w-0 flex-1">
             <Sparkline data={stock.sparkline} />
-          </div>
+          </span>
           {showWeight ? (
             <span className="shrink-0 text-[length:var(--type-helper)] text-[var(--text-muted)]">
               wt {stock.weight.toFixed(1)}%
             </span>
           ) : null}
-        </div>
-      </div>
+        </span>
+      </span>
 
-      <div className="border-t border-[var(--border)] p-3">
+      <span className="block border-t border-[var(--border)] p-3">
         {news.length === 0 ? (
-          <p className="text-[length:var(--type-helper)] text-[var(--text-muted)]">
+          <span className="block text-[length:var(--type-helper)] text-[var(--text-muted)]">
             {lastCheckedAt
               ? `No recent news · last checked ${new Date(lastCheckedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
               : "Never checked for news"}
-          </p>
+          </span>
         ) : (
           <span className="flex flex-col gap-1.5">
             {news.slice(0, 3).map((article) => (
@@ -91,7 +91,7 @@ export function StockTile({ stock, news, lastCheckedAt, showWeight, onOpen }: St
             ))}
           </span>
         )}
-      </div>
+      </span>
     </button>
   );
 }
