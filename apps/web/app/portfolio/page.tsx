@@ -936,6 +936,53 @@ export default function PortfolioPage() {
   const totalInvestmentAutoSaveInFlightRef = useRef(false);
   const allocationSectionRef = useRef<HTMLElement | null>(null);
   const weightInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  // Which rail panel is open. Lifted out of PortfolioShell (which stays uncontrolled when
+  // these props are omitted) so page actions can open a panel programmatically.
+  const [openPanel, setOpenPanel] = useState<string | null>(null);
+  // A pending scroll/focus request against the allocation panel. SidePanel renders null
+  // while closed, so allocationSectionRef and weightInputRefs are null until the panel has
+  // mounted -- a requestAnimationFrame issued in the same tick as the open would still find
+  // nothing. Routing the request through state instead means the consuming effect runs in
+  // the commit that mounted the panel, and React attaches refs during commit, before
+  // effects. The token makes a repeated request re-fire when the panel is already open.
+  const [allocationFocusRequest, setAllocationFocusRequest] = useState<
+    { ticker: string | null; token: number } | null
+  >(null);
+
+  const requestAllocationFocus = useCallback((ticker: string | null) => {
+    // Close the stock detail modal if it is what asked for this. It would otherwise cover
+    // the panel it just opened, and its focus trap would pull focus straight back off the
+    // weight input. No-op when nothing is selected, as from the holdings toolbar.
+    setSelectedStockContext(null);
+    setOpenPanel("allocation");
+    // The weight input is only rendered while its row is in edit mode (same gate the
+    // double-click path uses), so without this the focus below would still have nothing
+    // to land on.
+    if (ticker) setEditingAllocationTicker(ticker);
+    setAllocationFocusRequest((current) => ({ ticker, token: (current?.token ?? 0) + 1 }));
+  }, []);
+
+  useEffect(() => {
+    if (!allocationFocusRequest) return;
+    allocationSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    // The focus is deferred a frame, the scroll is not. SidePanel focuses its own container
+    // when it opens, and the closing detail modal restores focus as it unmounts -- both land
+    // after this effect, so focusing the input here would just be overwritten. By now the
+    // panel has mounted and its refs are attached, which is what the earlier
+    // requestAnimationFrame-at-click-time could not guarantee.
+    const { ticker } = allocationFocusRequest;
+    const frame = requestAnimationFrame(() => {
+      if (!ticker) return;
+      const input = weightInputRefs.current[ticker];
+      input?.focus();
+      input?.select();
+    });
+    // Deliberately not cleared here: clearing re-runs this effect, and the cleanup below
+    // would then cancel the frame we just scheduled. The token is what makes a repeated
+    // request re-fire, so the request can simply stay put until the next one replaces it.
+    return () => cancelAnimationFrame(frame);
+  }, [allocationFocusRequest]);
+
   const normalizedBenchmarkTicker = portfolioComparisonBenchmarkTicker.trim().toUpperCase() || DEFAULT_PORTFOLIO_BENCHMARK_TICKER;
   const normalizedCustomTickersInput = portfolioComparisonCustomTickersInput.toUpperCase();
   const debouncedBenchmarkTicker = useDebounce(normalizedBenchmarkTicker, 400);
@@ -1062,19 +1109,42 @@ export default function PortfolioPage() {
     () => visibleStocks.map((stock) => stock.ticker),
     [visibleStocks],
   );
+  // The news query key follows a debounced search so typing four characters is one
+  // round-trip instead of four. refreshNews deliberately keeps using the undebounced
+  // visibleTickers, so the press-time capture still matches exactly what is on screen.
+  const debouncedGridSearch = useDebounce(gridSearch, 400);
+  const newsQueryTickers = useMemo(
+    () => selectVisibleStocks(watchlist, gridFilter, debouncedGridSearch).stocks.map((stock) => stock.ticker),
+    [watchlist, gridFilter, debouncedGridSearch],
+  );
 
   const bulkNewsQuery = useQuery({
-    queryKey: ["portfolio-news", visibleTickers],
-    queryFn: () => fetchBulkNews(visibleTickers),
-    enabled: visibleTickers.length > 0,
+    queryKey: ["portfolio-news", newsQueryTickers],
+    queryFn: () => fetchBulkNews(newsQueryTickers),
+    enabled: newsQueryTickers.length > 0,
+    // Keep the last good news on the tiles while a new key resolves. Without this the data
+    // is undefined for every new key and each tile falls back to the "never checked"
+    // placeholder, so the whole grid blanks on every search or filter change.
+    placeholderData: (previous) => previous,
     refetchOnWindowFocus: false,
   });
+
+  useEffect(() => {
+    // The summary describes the set that was visible when Refresh was pressed. Once the
+    // filter or search moves it no longer describes what the user is looking at.
+    setRefreshSummary(null);
+  }, [gridFilter, gridSearch]);
 
   const refreshNews = useMutation({
     // The visible set is captured here, when Refresh is pressed. A filter change while
     // the batch is in flight must not alter what it acquires, or the reported counts
     // would describe a set the user can no longer see.
     mutationFn: () => acquireNews(visibleTickers),
+    onMutate: () => {
+      // Drop the previous run's line immediately so a stale summary cannot sit under a
+      // spinning refresh icon and read as this run's result.
+      setRefreshSummary(null);
+    },
     onSuccess: (response) => {
       setRefreshSummary(summarizeAcquisition(response));
       void queryClient.invalidateQueries({ queryKey: ["portfolio-news"] });
@@ -1969,9 +2039,7 @@ export default function PortfolioPage() {
       setAddToWatchlistOnly(false);
       setNewWeightPercent(stock.weight > 0 ? (stock.weight * 100).toFixed(1) : "5");
       setMutationMessage(`Prepared ${stock.ticker} in Manual Add so you can save it back into the portfolio with an allocation.`);
-      requestAnimationFrame(() => {
-        allocationSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-      });
+      requestAllocationFocus(null);
       return;
     }
 
@@ -1980,12 +2048,7 @@ export default function PortfolioPage() {
         ? `${watchlistStock.ticker} already has a saved allocation. Adjust the weight below if needed.`
         : `Allocation controls opened for ${watchlistStock.ticker}. Set a positive weight to include it in portfolio testing.`,
     );
-    requestAnimationFrame(() => {
-      allocationSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-      const input = weightInputRefs.current[watchlistStock.ticker];
-      input?.focus();
-      input?.select();
-    });
+    requestAllocationFocus(watchlistStock.ticker);
   };
 
   const benchmarkQuickActions = PORTFOLIO_BENCHMARK_PRESETS.filter((preset) => ["sp500", "kospi", "kosdaq"].includes(preset.id));
@@ -2510,10 +2573,6 @@ export default function PortfolioPage() {
             />
           </section>
         </div>
-
-        {mutationMessage && (
-          <p className="mt-4 text-sm text-[var(--text-muted)]">{mutationMessage}</p>
-        )}
       </section>
     </>
   );
@@ -2552,7 +2611,7 @@ export default function PortfolioPage() {
           <ActionButton
             label="Add"
             size="sm"
-            onClick={() => allocationSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+            onClick={() => requestAllocationFocus(null)}
           />
           <ActionButton
             label={syncWatchlistMutation.isPending ? "Syncing..." : "Sync"}
@@ -2709,13 +2768,19 @@ export default function PortfolioPage() {
           { id: "attribution", icon: <PieChart className="h-4 w-4" />, label: "Attribution" },
           { id: "allocation", icon: <SlidersHorizontal className="h-4 w-4" />, label: "Allocation workspace" },
           { id: "holdings", icon: <TableIcon className="h-4 w-4" />, label: "Holdings table" },
-          { id: "refresh-news", icon: <RefreshCw className="h-4 w-4" />, label: "Refresh news for visible stocks" },
+          {
+            id: "refresh-news",
+            icon: <RefreshCw className={`h-4 w-4 ${refreshNews.isPending ? "animate-spin" : ""}`} />,
+            label: "Refresh news for visible stocks",
+          },
         ]}
         onRailAction={(id) => {
           if (id !== "refresh-news") return false;
           if (!refreshNews.isPending) refreshNews.mutate();
           return true;
         }}
+        openPanel={openPanel}
+        onOpenPanelChange={setOpenPanel}
         panels={{
           snapshot: { title: "Latest Snapshot Summary", body: snapshotPanelBody },
           attribution: { title: "Attribution", body: attributionPanelBody },
@@ -2766,6 +2831,14 @@ export default function PortfolioPage() {
             </div>
           </header>
         </div>
+        {/* Mutation feedback lives in the shell, not in a panel: its writers are spread
+            across the holdings panel (Sync, delete), the stock detail modal (sector edit,
+            add to portfolio) and the allocation panel, and only one panel mounts at a time. */}
+        {mutationMessage ? (
+          <p data-testid="portfolio-mutation-message" className="px-4 pt-3 text-sm text-[var(--text-muted)]">
+            {mutationMessage}
+          </p>
+        ) : null}
         {refreshSummary ? (
           <p data-testid="news-refresh-summary" className="px-4 pt-3 text-[length:var(--type-helper)] text-[var(--text-muted)]">
             {refreshSummary}
