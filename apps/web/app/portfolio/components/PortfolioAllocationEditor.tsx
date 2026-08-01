@@ -15,6 +15,8 @@ export interface PortfolioStock {
   last_close: number;
   delta: WatchlistDelta;
   sparkline: number[];
+  // Mirrors PortfolioStock in ../page; the two must stay structurally identical.
+  id: number;
 }
 
 export interface AllocationRow {

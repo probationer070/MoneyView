@@ -85,6 +85,9 @@ export interface PortfolioStock {
   last_close: number;
   delta: WatchlistDelta;
   sparkline: number[];
+  // Watchlist insertion order. The only recency signal the row carries, and the
+  // tile grid's no-weights fallback orders by it. 0 means "not a watchlist row".
+  id: number;
 }
 
 interface WatchlistItemPayload {
@@ -445,6 +448,7 @@ function buildBrowserPortfolioStock(company: CorporateCompany, existingStock?: P
     last_close: 0,
     delta: { delta_pct: 0 },
     sparkline: [],
+    id: 0,
   };
 }
 
