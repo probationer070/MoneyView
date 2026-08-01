@@ -9,7 +9,6 @@ export interface SnapshotMeta {
   benchmark_ticker: string;
   generated_at: string;
   custom_tickers: string[];
-  snapshot_is_stale: boolean;
 }
 
 export interface ComparisonData {
@@ -153,11 +152,6 @@ export function PortfolioSnapshotSummary({
           <span className="overflow-mono-block rounded-[var(--radius-sm)] bg-[var(--surface-muted)] px-2 py-1 text-xs text-[var(--text-primary)]" title={activeComparisonData.snapshot.custom_tickers.join(", ") || "None"}>
             {activeComparisonData.snapshot.custom_tickers.join(", ") || "None"}
           </span>
-        </p>
-      )}
-      {activeComparisonData.snapshot.snapshot_is_stale && (
-        <p className="mt-2 text-sm text-amber-800">
-          Current view is using the latest available saved snapshot because the current daily snapshot was not available.
         </p>
       )}
       <div className="mt-3 flex flex-col gap-2 sm:flex-row">
