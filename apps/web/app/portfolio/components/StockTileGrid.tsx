@@ -83,7 +83,9 @@ export function StockTileGrid({
         />
       </div>
 
-      {isFallback ? (
+      {/* An empty watchlist is fallback-eligible but has nothing to show, and the banner
+          would then contradict the empty state directly below it. */}
+      {isFallback && visible.length > 0 ? (
         <p data-testid="grid-fallback-banner" className="text-[length:var(--type-helper)] text-[var(--text-muted)]">
           No weights set — showing {FALLBACK_TILE_COUNT} most recent. Set allocation weights
           to make this your holdings view.
