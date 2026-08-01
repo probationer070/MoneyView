@@ -23,6 +23,20 @@ function formatClose(lastClose: number): string {
   })}$`;
 }
 
+// The button's accessible name is its action, not its contents: ticker, price and delta
+// only. A missing price or delta is omitted outright rather than voiced as 0.
+function tileLabel(stock: PortfolioStock): string {
+  const parts: string[] = [stock.ticker];
+  if (Number.isFinite(stock.last_close)) {
+    parts.push(formatClose(stock.last_close));
+  }
+  const deltaPct = stock.delta?.delta_pct;
+  if (typeof deltaPct === "number" && Number.isFinite(deltaPct)) {
+    parts.push(`${deltaPct < 0 ? "down" : "up"} ${Math.abs(deltaPct).toFixed(1)}%`);
+  }
+  return `Open details for ${parts.join(", ")}`;
+}
+
 interface StockTileProps {
   stock: PortfolioStock;
   news: NewsArticle[];
@@ -36,6 +50,7 @@ export function StockTile({ stock, news, lastCheckedAt, showWeight, onOpen }: St
     <button
       type="button"
       onClick={() => onOpen(stock)}
+      aria-label={tileLabel(stock)}
       data-testid={`stock-tile-${stock.ticker}`}
       className="flex flex-col gap-0 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] text-left transition-colors hover:border-[var(--border-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--state-info)]"
     >
@@ -67,14 +82,14 @@ export function StockTile({ stock, news, lastCheckedAt, showWeight, onOpen }: St
               : "Never checked for news"}
           </p>
         ) : (
-          <ul className="flex flex-col gap-1.5">
+          <span className="flex flex-col gap-1.5">
             {news.slice(0, 3).map((article) => (
-              <li key={article.url || article.headline} className="flex gap-2 text-[length:var(--type-helper)]">
+              <span key={article.url || article.headline} className="flex gap-2 text-[length:var(--type-helper)]">
                 <span className="line-clamp-2 flex-1 text-[var(--text-primary)]">{article.headline}</span>
                 <span className="shrink-0 text-[var(--text-muted)]">{relativeAge(article.published_date)}</span>
-              </li>
+              </span>
             ))}
-          </ul>
+          </span>
         )}
       </div>
     </button>
