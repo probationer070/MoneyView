@@ -197,6 +197,24 @@ test("a tile's headlines are readable by assistive tech, not just by eye", async
   await expect(page.locator(`#${describedBy}`)).toContainText("AAPL headline one");
 });
 
+test("a tile's button holds only phrasing content", async ({ page }) => {
+  await mockPortfolioPageApi(page);
+  await gotoGrid(page);
+
+  // A <button> may contain phrasing content only. Browsers do not repair this the way they
+  // close a stray <p>, so an invalid tile renders exactly right and stays broken; nothing
+  // but an assertion notices. The tile's own wrappers are spans, but its children reach
+  // shared components, which is where the flow elements came back.
+  // AAPL carries both a delta and a five-point sparkline, so the badge and the chart are
+  // actually rendered; a tile missing either would pass without proving anything.
+  const flowInsideTheButton = await page
+    .getByTestId("stock-tile-AAPL")
+    .locator("div, p, section, article, ul, ol, li, table, h1, h2, h3, h4, h5, h6")
+    .count();
+
+  expect(flowInsideTheButton).toBe(0);
+});
+
 test("search filters the grid", async ({ page }) => {
   await mockPortfolioPageApi(page);
   await gotoGrid(page);

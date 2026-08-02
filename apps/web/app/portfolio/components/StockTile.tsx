@@ -1,7 +1,7 @@
 "use client";
 
-import { Sparkline } from "@/components/ui/Sparkline";
 import { DeltaBadge } from "@/components/ui/DeltaBadge";
+import { TileSparkline } from "./TileSparkline";
 import type { NewsArticle, PortfolioStock } from "../page";
 
 function relativeAge(published: string): string {
@@ -84,7 +84,7 @@ export function StockTile({ stock, news, lastCheckedAt, showWeight, onOpen }: St
         </span>
         <span className="flex items-center justify-between gap-2">
           <span className="block min-w-0 flex-1">
-            <Sparkline data={stock.sparkline} />
+            <TileSparkline data={stock.sparkline} />
           </span>
           {showWeight ? (
             <span className="shrink-0 text-[length:var(--type-helper)] text-[var(--text-muted)]">
