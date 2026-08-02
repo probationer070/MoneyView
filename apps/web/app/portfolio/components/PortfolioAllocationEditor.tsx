@@ -1,23 +1,10 @@
 "use client";
 
 import React from "react";
-
-export interface WatchlistDelta {
-  delta_pct: number;
-}
-
-export interface PortfolioStock {
-  ticker: string;
-  name: string;
-  sector: string;
-  group_name: string;
-  weight: number;
-  last_close: number;
-  delta: WatchlistDelta;
-  sparkline: number[];
-  // Mirrors PortfolioStock in ../page; the two must stay structurally identical.
-  id: number;
-}
+// The type, not a copy of it: a clone had to be kept structurally identical to ../page by
+// hand, and nothing would have failed if it drifted. `import type` is erased at compile
+// time, so importing from the route module adds no runtime cycle -- StockTile does the same.
+import type { PortfolioStock } from "../page";
 
 export interface AllocationRow {
   stock: PortfolioStock;
