@@ -159,10 +159,11 @@ test("clicking a holding opens the stock detail modal", async ({ page }) => {
   await expect(stockDetailDialog.getByRole("heading", { name: "4/11/2026", exact: true })).toBeVisible();
   await expect(stockDetailDialog.getByText("13.20%").first()).toBeVisible();
 
-  // Closed through the button rather than Escape: with a rail panel open behind it the
-  // modal never sees the Escape keydown. That is a live defect, recorded in ERROR-LOG.md
-  // and task-12-report.md, not something this spec should bless.
-  await stockDetailDialog.getByRole("button", { name: "Close modal" }).click();
+  // Escape closes the modal even with the holdings rail panel open behind it. Both
+  // overlays listen on `document`, and ModalShell's listener used to be re-registered
+  // mid-dispatch -- which the DOM skips for that keypress (ERROR-LOG.md 2026-08-02).
+  await expect(page.getByTestId("portfolio-side-panel")).toBeVisible();
+  await page.keyboard.press("Escape");
   await expect(portfolioModal(page)).toHaveCount(0);
 });
 

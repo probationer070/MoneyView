@@ -781,12 +781,15 @@ during dispatch is skipped and a listener added during dispatch is not in the sn
 the modal's handler is never invoked for that keypress. Verified by wrapping
 `document.addEventListener` in a Playwright init script and logging invocations: with a panel
 open the Escape produced `["sidepanel"]` only.
-Fix: NOT APPLIED. Task 12 was test-only and forbidden from changing production code; the
-call belongs to the owner. The spec now closes that modal through its Close button, with a
-comment pointing here. Two candidate fixes: give `ModalShell` a ref-based listener so
-registration does not depend on `onClose`'s identity, or memoise the `onClose` callbacks at
-every call site the way `PortfolioShell.closePanel` already is.
-Files changed: `apps/web/tests/e2e/portfolio-watchlist.spec.ts` (spec only).
+Fix: APPLIED 2026-08-02. `ModalShell` now reads `onClose` from a ref, so `handleEscape` is
+`useCallback([])` and the effect depends on `open` alone. Registration no longer moves when a
+caller re-renders, so nothing is added or removed mid-dispatch. Fixed in the component rather
+than by memoising `onClose` at each call site, because the defect belongs to every
+`ModalShell` caller and a per-site fix leaves the next one broken.
+Files changed: `apps/web/components/ui/ModalShell.tsx` (fix),
+`apps/web/tests/e2e/portfolio-watchlist.spec.ts` (the spec now presses Escape with the
+holdings rail panel open behind the modal — the exact configuration that reproduced it —
+instead of clicking Close).
 Prevention: a `document`-level key handler whose effect depends on a prop callback is only
 safe while it is the sole such handler. `SidePanel` already carries a comment about keeping
 `onClose` stable; `ModalShell` needs the same property, and it is not enough to fix one call

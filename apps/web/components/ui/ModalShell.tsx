@@ -33,15 +33,23 @@ export function ModalShell({
   const titleId = useId();
   const subtitleId = useId();
 
-  const handleEscape = useCallback(
-    (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        onClose();
-      }
-    },
-    [onClose]
-  );
+  // The listener must not depend on onClose's identity. Every caller passes an inline
+  // arrow, so a [onClose] dependency re-ran this effect on every render; when another
+  // document-level Escape handler (a side panel) closes above us, React flushes that
+  // discrete update mid-dispatch and our removeEventListener + addEventListener lands
+  // inside the DOM's dispatch. A listener removed during dispatch is skipped and one
+  // added during dispatch is not in the snapshot, so the modal never saw that keypress.
+  // Reading onClose from a ref keeps registration tied to `open` alone.
+  // ERROR-LOG.md 2026-08-02.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
+  const handleEscape = useCallback((e: KeyboardEvent) => {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      onCloseRef.current();
+    }
+  }, []);
 
   useEffect(() => {
     if (!open) return;
