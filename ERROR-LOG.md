@@ -838,10 +838,18 @@ header, but the app shell's `<main>` wraps it in `p-4 pt-20 lg:p-20`. On `lg` th
 padding above and below a 656px block inside a 720px viewport: 816px total, 96px over. Below
 `lg` the padding is 80px/16px, which still overflows. The `4rem` in the calc does not
 correspond to any single measurement in the surrounding layout.
-Fix: NOT APPLIED - production change, owner's call. Either make the shell size against the
-padded content box (`h-full` on a `<main>` that is itself viewport-height) or subtract the
-real padding.
-Files changed: none.
+Fix: APPLIED 2026-08-02. `AppShell`'s `<main>` now publishes its vertical padding as
+`--main-pad-top` / `--main-pad-bottom` and consumes those same variables for its own
+`pt-`/`pb-` utilities, so the numbers exist in one place. `PortfolioShell` is
+`h-[calc(100vh - var(--main-pad-top,0px) - var(--main-pad-bottom,0px))]`. Chosen over
+`h-full` on a viewport-height `<main>`, which would have made every page's `<main>` a
+fixed-height box and moved the scrolling surface for all of them. The fallbacks keep the
+shell sane if it is ever rendered outside `AppShell`. Verified at 1280x720 (the reported
+case, `lg`: 80px + 80px) and below `lg` (80px + 16px), where the old constant was also
+wrong, by a different amount.
+Files changed: `apps/web/components/ui/AppShell.tsx`,
+`apps/web/app/portfolio/components/PortfolioShell.tsx`,
+`apps/web/tests/e2e/portfolio-tile-grid.spec.ts`.
 Prevention: `100vh - <constant>` is a guess about an ancestor's box. Assert the containment
 instead of trusting the arithmetic: `documentElement.scrollHeight <= clientHeight` is one
 line and it is what "one scrolling region" actually means to a user.

@@ -34,7 +34,11 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
-      <main className="flex-1 p-4 pt-20 lg:ml-64 lg:p-20">
+      {/* The vertical padding is published as custom properties because a page that wants
+          to fill the viewport has to subtract it, and a descendant cannot measure this box
+          in CSS. PortfolioShell reads both. Keep the padding utilities and the variables in
+          step: the variables are the source of truth, the utilities consume them. */}
+      <main className="flex-1 px-4 pt-[var(--main-pad-top)] pb-[var(--main-pad-bottom)] [--main-pad-bottom:1rem] [--main-pad-top:5rem] lg:ml-64 lg:px-20 lg:[--main-pad-bottom:5rem]">
         {children}
       </main>
     </div>

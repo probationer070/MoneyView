@@ -62,10 +62,17 @@ test("the grid scroll region is the only vertically scrolling region on the page
     return results;
   });
 
-  // NOTE: this covers scroll containers, which is what the shell owns. The document
-  // itself still overflows by the app shell's vertical padding (see task-12-report.md);
-  // closing that needs a production change and is not asserted here.
   expect(scrollable).toEqual(["portfolio-scroll-region"]);
+
+  // Counting scroll containers is not what "one scrolling region" means to a user: the
+  // document is a scrolling surface too, and it overflowed by the app shell's vertical
+  // padding, so the rail could be scrolled partly out of view while this assertion above
+  // still passed. Assert the containment rather than trusting the shell's height
+  // arithmetic (ERROR-LOG.md 2026-08-02).
+  const documentOverflow = await page.evaluate(
+    () => document.documentElement.scrollHeight - document.documentElement.clientHeight,
+  );
+  expect(documentOverflow).toBe(0);
 });
 
 test("a rail icon opens its panel and Escape closes it", async ({ page }) => {

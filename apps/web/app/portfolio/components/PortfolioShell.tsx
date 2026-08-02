@@ -40,8 +40,13 @@ export function PortfolioShell({
   // arrow would re-run it on every render, pulling focus back out of the panel.
   const closePanel = useCallback(() => onOpenPanelChange(null), [onOpenPanelChange]);
 
+  // Height is the viewport minus the app shell's own vertical padding, read from the
+  // variables AppShell publishes. The previous `100vh - 4rem` matched no measurement in the
+  // surrounding layout and left the document overflowing by the difference, so the rail
+  // could be scrolled out of view even though this shell owned the only scroll container
+  // (ERROR-LOG.md 2026-08-02).
   return (
-    <div className="flex h-[calc(100vh-4rem)] flex-col lg:flex-row">
+    <div className="flex h-[calc(100vh_-_var(--main-pad-top,0px)_-_var(--main-pad-bottom,0px))] flex-col lg:flex-row">
       {/* Positioning context for the panel. This wrapper does NOT scroll: SidePanel is
           `absolute inset-y-0`, and an absolutely positioned child of a scroll container is
           laid out against the whole scrollable content box, so a panel opened while the
