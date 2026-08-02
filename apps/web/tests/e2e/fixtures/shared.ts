@@ -7,6 +7,10 @@ export type PortfolioStockFixture = {
   last_close: number;
   delta: { delta_pct: number };
   sparkline: number[];
+  // Watchlist insertion order, mirroring PortfolioStock.id on the API. The tile grid's
+  // no-weights fallback sorts by it, so a fixture row without one makes that sort compare
+  // NaN and silently order by nothing.
+  id: number;
 };
 
 export const marketOverviewFixture = [
@@ -475,6 +479,7 @@ export const portfolioPartialWeightsFixture: PortfolioStockFixture[] = [
     last_close: 210.4,
     delta: { delta_pct: 1.2 },
     sparkline: [200, 202, 204, 208, 210.4],
+    id: 1,
   },
   {
     ticker: "MSFT",
@@ -485,6 +490,7 @@ export const portfolioPartialWeightsFixture: PortfolioStockFixture[] = [
     last_close: 415.3,
     delta: { delta_pct: 0.7 },
     sparkline: [406, 408, 410, 412, 415.3],
+    id: 2,
   },
   {
     ticker: "NVDA",
@@ -495,6 +501,7 @@ export const portfolioPartialWeightsFixture: PortfolioStockFixture[] = [
     last_close: 119.2,
     delta: { delta_pct: 2.4 },
     sparkline: [111, 113, 116, 118, 119.2],
+    id: 3,
   },
   {
     ticker: "GOOGL",
@@ -505,6 +512,7 @@ export const portfolioPartialWeightsFixture: PortfolioStockFixture[] = [
     last_close: 172.1,
     delta: { delta_pct: -0.3 },
     sparkline: [170, 171, 173, 172.5, 172.1],
+    id: 4,
   },
   {
     ticker: "AMZN",
@@ -515,6 +523,7 @@ export const portfolioPartialWeightsFixture: PortfolioStockFixture[] = [
     last_close: 189.6,
     delta: { delta_pct: 0.5 },
     sparkline: [184, 186, 187, 188, 189.6],
+    id: 5,
   },
 ];
 

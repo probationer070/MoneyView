@@ -758,3 +758,85 @@ it, so a "did not become healthy in N seconds" message is not evidence that N is
 Two orphan classes are worth checking after any failed start, because `start_local.ps1` tears
 down the process it launched but not the workers that process spawned: node workers under
 `apps/web`, and a stray `npm exec -- next dev` wrapper holding port 3000.
+
+## 2026-08-02: Escape never reaches the stock detail modal when a rail panel is open behind it
+
+Date: 2026-08-02
+Command: `cd apps/web && npx playwright test portfolio-watchlist.spec.ts` (test `clicking a
+holding opens the stock detail modal`)
+Failure: open the Watchlist Holdings rail panel, click a holding card, press Escape. The
+side panel closes and the stock detail modal stays open. A second Escape closes the modal.
+With no panel open, one Escape closes the modal as it always did. Not caught before Task 12
+because the same spec was already failing earlier, at `gotoPortfolio`, so the Escape
+assertion never ran.
+Root cause: both `SidePanel` and `ModalShell` register a `keydown` listener on `document`.
+`SidePanel`'s `handleKeyDown` is stable (`onClose` is a `useCallback` in `PortfolioShell`),
+so it is registered once. `ModalShell`'s `handleEscape` is `useCallback([onClose])` and every
+caller passes an inline arrow (`onClose={() => setSelectedStockContext(null)}`), so its
+effect re-runs on every render and re-subscribes each time. During the Escape dispatch the
+SidePanel handler runs first and closes the panel; React 19 flushes that discrete update
+synchronously, `ModalShell`'s effect re-runs mid-dispatch and calls
+`removeEventListener` + `addEventListener`. Per the DOM dispatch algorithm a listener removed
+during dispatch is skipped and a listener added during dispatch is not in the snapshot, so
+the modal's handler is never invoked for that keypress. Verified by wrapping
+`document.addEventListener` in a Playwright init script and logging invocations: with a panel
+open the Escape produced `["sidepanel"]` only.
+Fix: NOT APPLIED. Task 12 was test-only and forbidden from changing production code; the
+call belongs to the owner. The spec now closes that modal through its Close button, with a
+comment pointing here. Two candidate fixes: give `ModalShell` a ref-based listener so
+registration does not depend on `onClose`'s identity, or memoise the `onClose` callbacks at
+every call site the way `PortfolioShell.closePanel` already is.
+Files changed: `apps/web/tests/e2e/portfolio-watchlist.spec.ts` (spec only).
+Prevention: a `document`-level key handler whose effect depends on a prop callback is only
+safe while it is the sole such handler. `SidePanel` already carries a comment about keeping
+`onClose` stable; `ModalShell` needs the same property, and it is not enough to fix one call
+site because the defect is in the component. When two overlay layers both listen on
+`document`, assert both close paths in a test that has both layers open.
+
+## 2026-08-02: The apply-to-snapshot confirmation renders in a panel the user is not looking at
+
+Date: 2026-08-02
+Command: `cd apps/web && npx playwright test portfolio-watchlist.spec.ts` (test `weight
+editing and sync or import controls are visible and actionable`)
+Failure: with `Apply allocation changes to snapshot` checked, editing a weight in the
+allocation panel saves and updates the snapshot, but the confirmation
+`Saved allocation changes and updated the <date> snapshot.` never appears. The action is
+performed from the Portfolio Allocation Workspace panel; the message is written to
+`portfolioComparisonMessage`, which is rendered only inside `snapshotPanelBody`
+(`apps/web/app/portfolio/page.tsx:2354`). Only one panel mounts at a time, so the message
+exists but is unmounted at the moment it is set. The failure mode on the error path is worse:
+`Failed to update the snapshot after saving allocation changes.` is equally invisible.
+Root cause: Task 11 moved the stacked sections into single-mount rail panels and lifted
+`mutationMessage` to the shell for exactly this reason (see the comment at
+`apps/web/app/portfolio/page.tsx:2848`), but `portfolioComparisonMessage` was left behind in
+the snapshot panel while one of its writers stayed in the allocation panel.
+Fix: NOT APPLIED - production change, owner's call. The likely fix is to render
+`portfolioComparisonMessage` in the shell next to `portfolio-mutation-message`, or to route
+the apply-to-snapshot outcome through `setMutationMessage`. The spec now switches to the
+snapshot panel to read it.
+Files changed: `apps/web/tests/e2e/portfolio-watchlist.spec.ts` (spec only).
+Prevention: when a panel body writes user feedback, check which panel renders the state it
+writes to. Anything written by more than one panel, or by a modal, belongs in the shell.
+
+## 2026-08-02: The portfolio page still scrolls at the document level despite its single scroll region
+
+Date: 2026-08-02
+Command: `cd apps/web && npx playwright test portfolio-tile-grid.spec.ts` (test `the grid
+scroll region is the only vertically scrolling region on the page`)
+Failure: `document.documentElement.scrollHeight` is 816 against a `clientHeight` of 720 on
+`/portfolio` at 1280x720 - the page scrolls 96px behind the shell. Exactly one *scroll
+container* exists (`portfolio-scroll-region`, the acceptance criterion as written), but the
+document is a second vertically scrolling surface, so the rail and the grid can be scrolled
+partly out of view.
+Root cause: `PortfolioShell`'s root is `h-[calc(100vh-4rem)]`, which subtracts the 4rem
+header, but the app shell's `<main>` wraps it in `p-4 pt-20 lg:p-20`. On `lg` that is 80px of
+padding above and below a 656px block inside a 720px viewport: 816px total, 96px over. Below
+`lg` the padding is 80px/16px, which still overflows. The `4rem` in the calc does not
+correspond to any single measurement in the surrounding layout.
+Fix: NOT APPLIED - production change, owner's call. Either make the shell size against the
+padded content box (`h-full` on a `<main>` that is itself viewport-height) or subtract the
+real padding.
+Files changed: none.
+Prevention: `100vh - <constant>` is a guess about an ancestor's box. Assert the containment
+instead of trusting the arithmetic: `documentElement.scrollHeight <= clientHeight` is one
+line and it is what "one scrolling region" actually means to a user.

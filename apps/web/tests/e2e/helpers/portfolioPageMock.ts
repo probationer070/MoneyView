@@ -23,6 +23,38 @@ export type PortfolioPageMockOptions = {
   failNewsFeed?: boolean;
   excludeComparisonTickers?: string[];
   nullMetricTicker?: string;
+  /**
+   * Replaces the seed watchlist for this page only. The shared fixture keeps its real
+   * weights because other specs assert against them; a spec that needs a different
+   * universe (no weights, more rows than the fallback cap) passes its own here instead
+   * of mutating the fixture out from under everyone else.
+   */
+  watchlist?: PortfolioStockFixture[];
+  /** Holds POST /news/acquire open so a spec can observe the in-flight state. */
+  acquireDelayMs?: number;
+};
+
+// Per-ticker news shape. AAPL has articles, MSFT is checked-but-empty, GOOGL has never
+// been checked: the three states a tile has to tell apart. Every other ticker is
+// never-checked, which is what an unseeded watchlist row really looks like.
+const NEWS_ARTICLES_BY_TICKER: Record<string, Array<{ headline: string; url: string }>> = {
+  AAPL: [
+    { headline: "AAPL headline one", url: "https://example.com/news/aapl/1" },
+    { headline: "AAPL headline two", url: "https://example.com/news/aapl/2" },
+    { headline: "AAPL headline three", url: "https://example.com/news/aapl/3" },
+  ],
+};
+const NEWS_LAST_CHECKED_BY_TICKER: Record<string, string | null> = {
+  AAPL: "2026-04-11T14:00:00Z",
+  MSFT: "2026-04-11T14:00:00Z",
+};
+
+// Outcome per ticker for POST /news/acquire, covering all four statuses the contract
+// defines. Anything not named lands on "empty", which summarizes as already-current.
+const ACQUIRE_OUTCOME_BY_TICKER: Record<string, { status: string; articles: number; detail: string | null }> = {
+  AAPL: { status: "acquired", articles: 3, detail: null },
+  MSFT: { status: "fresh", articles: 0, detail: null },
+  GOOGL: { status: "failed", articles: 0, detail: "provider timeout" },
 };
 
 function buildAttribution(weights: number[], tickers: string[]) {
@@ -95,7 +127,7 @@ function buildAttribution(weights: number[], tickers: string[]) {
 }
 
 export async function mockPortfolioPageApi(page: Page, stats?: PortfolioPageMockStats, options?: PortfolioPageMockOptions) {
-  let watchlist: PortfolioStock[] = cloneFixture(portfolioPartialWeightsFixture);
+  let watchlist: PortfolioStock[] = cloneFixture(options?.watchlist ?? portfolioPartialWeightsFixture);
   let companyRegistry = [
     { ticker: "AAPL", name: "Apple Inc.", sector: "Technology", source: "portfolio" },
     { ticker: "MSFT", name: "Microsoft Corp.", sector: "Technology", source: "portfolio" },
@@ -534,15 +566,19 @@ export async function mockPortfolioPageApi(page: Page, stats?: PortfolioPageMock
 
     if (pathname === `${API_PREFIX}/portfolio/watchlist` && method === "POST") {
       const payload = JSON.parse(route.request().postData() ?? "{}");
+      const existingRow = watchlist.find((item) => item.ticker === payload.ticker);
       const nextRow: PortfolioStock = {
         ticker: payload.ticker,
         name: payload.name,
         sector: payload.sector,
         group_name: payload.group_name,
         weight: payload.weight,
-        last_close: watchlist.find((item) => item.ticker === payload.ticker)?.last_close ?? 100,
+        last_close: existingRow?.last_close ?? 100,
         delta: { delta_pct: 1.1 },
-        sparkline: watchlist.find((item) => item.ticker === payload.ticker)?.sparkline ?? [95, 97, 99, 100],
+        sparkline: existingRow?.sparkline ?? [95, 97, 99, 100],
+        // An upsert keeps its row id; a genuinely new ticker takes the next one, the way
+        // an autoincrement primary key behaves.
+        id: existingRow?.id ?? watchlist.reduce((max, item) => Math.max(max, item.id), 0) + 1,
       };
       watchlist = [...watchlist.filter((item) => item.ticker !== payload.ticker), nextRow];
       companyRegistry = [
@@ -614,6 +650,7 @@ export async function mockPortfolioPageApi(page: Page, stats?: PortfolioPageMock
           last_close: 119.2,
           delta: { delta_pct: 2.4 },
           sparkline: [111, 113, 116, 118, 119.2],
+          id: 1,
         },
       ];
       syncStatus = {
@@ -685,6 +722,49 @@ export async function mockPortfolioPageApi(page: Page, stats?: PortfolioPageMock
 
     if (pathname === `${API_PREFIX}/news/crawl/stock` && method === "POST") {
       return json(route, []);
+    }
+
+    // GET /news/feed/bulk is declared response_model=APIResponse[BulkNewsResponse], so it
+    // is enveloped. POST /news/acquire returns NewsAcquireResponse bare. The two differ on
+    // the wire and the mock has to differ with them.
+    if (pathname === `${API_PREFIX}/news/feed/bulk` && method === "GET") {
+      const requested = (url.searchParams.get("tickers") ?? "")
+        .split(",")
+        .map((ticker) => ticker.trim().toUpperCase())
+        .filter(Boolean);
+      const tickers: Record<string, { articles: unknown[]; last_checked_at: string | null }> = {};
+      for (const ticker of requested) {
+        tickers[ticker] = {
+          articles: (NEWS_ARTICLES_BY_TICKER[ticker] ?? []).map((article, index) => ({
+            id: index + 1,
+            ticker,
+            headline: article.headline,
+            url: article.url,
+            source: "Mock News",
+            published_date: "2026-04-11",
+            sentiment: "neutral",
+            importance: 1,
+          })),
+          last_checked_at: NEWS_LAST_CHECKED_BY_TICKER[ticker] ?? null,
+        };
+      }
+      return json(route, { status: "ok", data: { tickers } });
+    }
+
+    if (pathname === `${API_PREFIX}/news/acquire` && method === "POST") {
+      const payload = JSON.parse(route.request().postData() ?? "{}");
+      const requested: string[] = (payload.tickers ?? []).map((ticker: string) => String(ticker).toUpperCase());
+      const body = {
+        results: requested.map((ticker) => ({
+          ticker,
+          ...(ACQUIRE_OUTCOME_BY_TICKER[ticker] ?? { status: "empty", articles: 0, detail: null }),
+        })),
+        skipped_unknown: [] as string[],
+      };
+      if (options?.acquireDelayMs) {
+        await new Promise((resolve) => setTimeout(resolve, options.acquireDelayMs));
+      }
+      return json(route, body);
     }
 
     return route.continue();
