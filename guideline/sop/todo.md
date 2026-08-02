@@ -239,51 +239,41 @@ Phase 2/long-term deferrals are tabled at the end of the plan with their reasoni
 ## Follow-ups - Portfolio Tile Grid and News Acquisition (2026-08-02)
 
 Plan: `docs/superpowers/plans/2026-07-31-portfolio-tile-grid-and-news-acquisition.md`.
-Branch `feat-statements-acquisition`. Two defects were found during the run, confirmed, and
-deliberately left unfixed because the correct fix is outside the plan's scope. Both are
-written up in full in `ERROR-LOG.md` (2026-08-02 entries).
+Branch `feat-statements-acquisition`. The plan's twelve tasks are complete. Five follow-ups
+were left open at the end of the run because each needed a change outside the plan's scope;
+**all five are now closed** (2026-08-02), each with a test written before the fix. The two
+that were true defects keep their full write-ups in `ERROR-LOG.md`.
 
-- **`ModalShell` loses the Escape keypress when another `document` keydown listener closes
-  above it.** `ModalShell`'s effect depends on `onClose`'s identity and every caller passes
-  an inline arrow, so it re-subscribes on every render; a listener re-added mid-dispatch is
-  not in the DOM's snapshot for that keypress. Reproduced on `/portfolio` with a rail panel
-  open behind the stock detail modal (a second Escape works). **Affects every `ModalShell`
-  caller, not just portfolio** - it just needed a second overlay to become observable. Not
-  fixed here because the plan forbade touching `ModalShell.tsx` ("other pages depend on
-  it"), and fixing one call site's `onClose` would leave the component defective. The fix
-  is a ref-based listener inside `ModalShell` so registration does not depend on a prop
-  callback's identity; do it once, in the component.
-- **`/portfolio` scrolls 96px at the document level.** `PortfolioShell`'s root is
-  `h-[calc(100vh-4rem)]` but `AppShell`'s `<main>` wraps it in `p-4 pt-20 lg:p-20`, so at
-  1280x720 the document is 816px against a 720px viewport. The acceptance criterion ("one
-  scrolling region") is met as written and as tested - exactly one scroll *container*
-  exists - but the document is a second scrolling surface, so the rail can be scrolled
-  partly out of view. Not fixed here because the sound fix changes shared app-shell layout
-  and would need every page re-verified. The `4rem` in that calc corresponds to no single
-  measurement in the surrounding layout and should be replaced, not adjusted.
-- **`StockTile` still nests `<div>`s inside its `<button>`**, through `DeltaBadge` and
-  `Sparkline`/`ResponsiveChart`. Commits `a5a70d6` and `c7da4e8` converted every wrapper
-  this file owns to `<span>`, and their messages say full validity is not reachable from
-  here because the remaining `<div>`s belong to shared components. Browsers do not
-  auto-correct this the way they close a `<p>`, so nothing renders wrong today; recorded
-  only so it is not rediscovered as new. Fixing it means letting `DeltaBadge` and the
-  chart wrapper render a `<span>`, which is a shared-component change.
-- **Two e2e specs assert accessible names that production no longer emits.** Both were
-  already failing before this branch and both are in files it never touched.
-  `market-overview.live.spec.ts:22,28,34` waits for a button named "Close market detail";
-  `ModalShell.tsx:159` renders `label="Close modal"` and no file in `apps/web` emits the
-  former. `simulation-lab-price-autofill.spec.ts:6` waits for a button matching
-  `/Corporate Valuation/i` which never resolves even though the page renders and the text
-  is present, so its accessible name differs too. Evidence they are not this branch's
-  doing: `git diff --name-only <merge-base>..HEAD` is empty for
-  `components/market/MarketOverviewClient.tsx`, `components/data/SparklineCard.tsx`,
-  `components/ui/ModalShell.tsx`, `app/monte-carlo/**`, `lib/api.ts`,
-  `components/ui/PageHeader.tsx`, `components/ui/AppShell.tsx` and `app/layout.tsx`;
-  `MarketOverviewClient.tsx` last changed in `d91788e` (2026-05-21). Left for whoever owns
-  those specs. Note the other `market-overview.live` test passes against the real backend,
-  so the live path itself is healthy.
-- **`PortfolioAllocationEditor.tsx` clones the `PortfolioStock` type instead of importing
-  it from `../page`.** Cosmetic, pre-existing, noticed during Task 11.
+- [x] **`ModalShell` lost the Escape keypress when another `document` keydown listener
+  closed above it.** Its effect depended on `onClose`'s identity and every caller passes an
+  inline arrow, so it re-subscribed on every render; a listener re-added mid-dispatch is not
+  in the DOM's snapshot for that keypress. Affected every `ModalShell` caller - it just
+  needed a second overlay to become observable. Fixed in the component with a ref-held
+  `onClose`, so registration depends on `open` alone. `portfolio-watchlist.spec.ts` now
+  presses Escape with a rail panel open behind the modal instead of clicking Close.
+- [x] **`/portfolio` scrolled 96px at the document level.** `PortfolioShell` was
+  `h-[calc(100vh-4rem)]` inside an `AppShell` `<main>` padded `p-4 pt-20 lg:p-20`. `AppShell`
+  now publishes that padding as `--main-pad-top` / `--main-pad-bottom` and uses those same
+  variables for its own utilities, and the shell subtracts them - so the constant is gone
+  rather than corrected. The spec asserts `documentElement.scrollHeight - clientHeight === 0`,
+  which is what "one scrolling region" means to a user; counting scroll *containers* passed
+  the whole time.
+- [x] **`StockTile` nested `<div>`s inside its `<button>`.** The recorded fix - let
+  `DeltaBadge` and the chart wrapper render a `<span>` - could not work: `ResponsiveContainer`
+  and the chart wrapper are rendered by recharts itself, so no prop of ours reaches them.
+  `DeltaBadge` is now a `<span>` (it was already `inline-flex`, so the box is unchanged) and
+  the tile draws its sparkline as one inline `<svg>` (`TileSparkline`), which is phrasing
+  content and needs no `ResizeObserver`. The shared recharts `Sparkline` is untouched for the
+  four sites that render it in flow content. A spec counts flow elements inside the tile
+  button, since a browser renders the invalid nesting perfectly and never complains.
+- [x] **Two e2e specs asserted accessible names production no longer emits.** Both queries
+  were wrong, not the pages. The Simulation Lab tab strip is a real tablist - `TabButton`
+  renders `role="tab"` - so `getByRole("button", …)` could never match; that one helper gated
+  all five `simulation-lab-price-autofill` tests, not just the one line originally noted. The
+  market detail dialog is a `ModalShell`, whose close control is labelled `"Close modal"`.
+- [x] **`PortfolioAllocationEditor.tsx` cloned the `PortfolioStock` type** instead of
+  importing it. Replaced with `import type { PortfolioStock } from "../page"`, which is
+  erased at compile time and so adds no runtime cycle; `StockTile` already did this.
 
 ## Completed Track - Hermetic Test Suite (2026-07-28)
 
