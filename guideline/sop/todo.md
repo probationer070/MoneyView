@@ -236,6 +236,34 @@ a scheduled warmer (so `index_bars` is declared but never acquired yet); replaci
 read path — `market_data.get_stock_ohlcv` still serves reads exactly as before.
 Phase 2/long-term deferrals are tabled at the end of the plan with their reasoning.
 
+## Follow-ups - Portfolio Tile Grid and News Acquisition (2026-08-02)
+
+Plan: `docs/superpowers/plans/2026-07-31-portfolio-tile-grid-and-news-acquisition.md`.
+Branch `feat-statements-acquisition`. Two defects were found during the run, confirmed, and
+deliberately left unfixed because the correct fix is outside the plan's scope. Both are
+written up in full in `ERROR-LOG.md` (2026-08-02 entries).
+
+- **`ModalShell` loses the Escape keypress when another `document` keydown listener closes
+  above it.** `ModalShell`'s effect depends on `onClose`'s identity and every caller passes
+  an inline arrow, so it re-subscribes on every render; a listener re-added mid-dispatch is
+  not in the DOM's snapshot for that keypress. Reproduced on `/portfolio` with a rail panel
+  open behind the stock detail modal (a second Escape works). **Affects every `ModalShell`
+  caller, not just portfolio** - it just needed a second overlay to become observable. Not
+  fixed here because the plan forbade touching `ModalShell.tsx` ("other pages depend on
+  it"), and fixing one call site's `onClose` would leave the component defective. The fix
+  is a ref-based listener inside `ModalShell` so registration does not depend on a prop
+  callback's identity; do it once, in the component.
+- **`/portfolio` scrolls 96px at the document level.** `PortfolioShell`'s root is
+  `h-[calc(100vh-4rem)]` but `AppShell`'s `<main>` wraps it in `p-4 pt-20 lg:p-20`, so at
+  1280x720 the document is 816px against a 720px viewport. The acceptance criterion ("one
+  scrolling region") is met as written and as tested - exactly one scroll *container*
+  exists - but the document is a second scrolling surface, so the rail can be scrolled
+  partly out of view. Not fixed here because the sound fix changes shared app-shell layout
+  and would need every page re-verified. The `4rem` in that calc corresponds to no single
+  measurement in the surrounding layout and should be replaced, not adjusted.
+- **`PortfolioAllocationEditor.tsx` clones the `PortfolioStock` type instead of importing
+  it from `../page`.** Cosmetic, pre-existing, noticed during Task 11.
+
 ## Completed Track - Hermetic Test Suite (2026-07-28)
 
 Plan: `docs/superpowers/plans/2026-07-28-hermetic-test-suite.md`.

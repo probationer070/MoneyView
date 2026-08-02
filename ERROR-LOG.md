@@ -810,11 +810,13 @@ Root cause: Task 11 moved the stacked sections into single-mount rail panels and
 `mutationMessage` to the shell for exactly this reason (see the comment at
 `apps/web/app/portfolio/page.tsx:2848`), but `portfolioComparisonMessage` was left behind in
 the snapshot panel while one of its writers stayed in the allocation panel.
-Fix: NOT APPLIED - production change, owner's call. The likely fix is to render
-`portfolioComparisonMessage` in the shell next to `portfolio-mutation-message`, or to route
-the apply-to-snapshot outcome through `setMutationMessage`. The spec now switches to the
-snapshot panel to read it.
-Files changed: `apps/web/tests/e2e/portfolio-watchlist.spec.ts` (spec only).
+Fix: APPLIED in `8d80c1c` after the report. The sole render site inside `snapshotPanelBody`
+was removed and `portfolioComparisonMessage` now renders at the shell level next to
+`portfolio-mutation-message`, with `data-testid="portfolio-comparison-message"`. The spec's
+workaround - switching to the snapshot panel to read it - is now unnecessary but still
+passes, since the message is visible from every panel.
+Files changed: `apps/web/tests/e2e/portfolio-watchlist.spec.ts` (spec, in `8f0cac5`),
+`apps/web/app/portfolio/page.tsx` (fix, in `8d80c1c`).
 Prevention: when a panel body writes user feedback, check which panel renders the state it
 writes to. Anything written by more than one panel, or by a modal, belongs in the shell.
 
