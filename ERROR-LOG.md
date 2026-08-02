@@ -842,3 +842,38 @@ Files changed: none.
 Prevention: `100vh - <constant>` is a guess about an ancestor's box. Assert the containment
 instead of trusting the arithmetic: `documentElement.scrollHeight <= clientHeight` is one
 line and it is what "one scrolling region" actually means to a user.
+
+## 2026-08-02: StockNewsCrawler reported every provider failure as "no news"
+
+Date: 2026-08-02
+Command: `python -m pytest tests/api/acquisition/test_news_source.py -q` (writing the
+FAILED-vs-EMPTY tests for the news acquisition source, plan task 2)
+Failure: silent, and it never raised. `StockNewsCrawler.crawl()` wrapped its whole body in
+`except Exception: logger.warning(...)` and then fell through to `return results`, so a
+network error, a 429, or a malformed feed all returned `[]` - byte-identical to a ticker that
+genuinely has no news. Through the new `fetch_news` acquisition source that would have been
+recorded as a successful acquisition of zero articles: `last_checked_at` advanced, the tile
+said "checked, no news", and the freshness boundary then suppressed retries for an hour. The
+user would be told there is no news when in fact nobody could reach the provider.
+Root cause: two compounding defects. (1) The broad `except Exception` around the entire method
+converted every failure into the empty-success value instead of propagating. (2) `feedparser`
+does not raise at all - on a fetch or parse error it sets `bozo=True`, stores the cause in
+`bozo_exception`, and returns an object with `entries == []`. So even after removing the broad
+catch, the feedparser path still silently produced `[]`; the flag has to be read explicitly.
+Fix: `apps/api/services/webscrap/Crawler/StockNewsCrawler.py` - raise `bozo_exception` when
+`parsed.bozo` is true and `parsed.entries` is empty (that conjunction is what distinguishes a
+failed fetch from a feed that merely has a non-fatal quirk), and re-raise from the `urllib`
+fallback rather than returning a partial list. `ImportError` still falls through to the
+fallback, which is the one case where continuing is correct. Commits `67975ed`, `3ba2d43`.
+The pre-existing caller `NewsService.crawl_stock_and_save` (`news_service.py:216-218`) has its
+own `except Exception -> return []`, so its behaviour is deliberately unchanged; only the
+acquisition source sees the exception, which is the point.
+Files changed: `apps/api/services/webscrap/Crawler/StockNewsCrawler.py`,
+`tests/api/acquisition/test_news_source.py`.
+Prevention: a fetch function must never use its empty-success value as its error value - the
+caller cannot tell them apart, and here the difference decides whether a retry ever happens.
+When wrapping a third-party parser, check how IT reports failure before deciding you have
+handled failure: `feedparser` reports through a flag, not an exception, so a correct-looking
+`try/except` around it catches nothing. The tests now assert the FAILED path by injecting a
+crawler that raises AND one that returns a bozo result, because only the second would have
+caught defect (2).

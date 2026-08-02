@@ -151,6 +151,13 @@ def acquire_point_in_time(
         record_check(data_class_name, subject, now=now, status=AcquisitionStatus.EMPTY)
         return AcquisitionResult(data_class_name, subject, 0, "empty", skipped=False)
 
+    # The save and the freshness record are two separate connections and two separate
+    # commits, deliberately. A crash in between leaves rows saved with no freshness row,
+    # which the next run repairs by itself: the subject simply looks stale, gets re-fetched,
+    # and every saver is idempotent (INSERT OR IGNORE on the news hash, INSERT OR REPLACE
+    # for statements and quote facts). The cost of that window is one wasted crawl, never a
+    # wrong figure. Do not merge these into one transaction to "fix" it -- holding a write
+    # lock across the save would serialise a batch that is otherwise free to interleave.
     saver(subject, rows)
     covered_from, covered_to = coverage(rows)
     record_success(data_class_name, subject, now=now, covered_from=covered_from, covered_to=covered_to)

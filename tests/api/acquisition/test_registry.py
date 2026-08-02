@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from apps.api.services.acquisition.boundaries import Weekly
+from apps.api.services.acquisition.boundaries import Hourly, Weekly
 from apps.api.services.acquisition.registry import REGISTRY, Scope, get_data_class
 
 
@@ -42,6 +42,17 @@ def test_statements_is_declared_with_a_weekly_boundary():
     assert declared.scope is Scope.PER_TICKER
     assert declared.store == "corporate_statements"
     assert isinstance(declared.boundary, Weekly)
+
+
+def test_news_is_declared_with_an_hourly_boundary_on_the_hour():
+    """The boundary is the only thing bounding provider load behind a Refresh button the
+    user can press repeatedly, so pin it here rather than leaving it to be inferred from
+    the endpoint's fresh/stale behaviour at particular clock values."""
+    declared = get_data_class("news")
+
+    assert declared.scope is Scope.PER_TICKER
+    assert declared.store == "news"
+    assert declared.boundary == Hourly(at_minute=0)
 
 
 def test_market_cap_is_a_separate_class_from_statements():
