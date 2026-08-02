@@ -2351,9 +2351,6 @@ export default function PortfolioPage() {
             )}
           </div>
 
-          {portfolioComparisonMessage && (
-            <p className="mt-3 text-sm text-[var(--text-muted)]">{portfolioComparisonMessage}</p>
-          )}
           {comparisonView.showSelectedSnapshotLoading && selectedHistoryPoint && (
             <div className="mt-3 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)]">
               <LoadingState
@@ -2850,6 +2847,14 @@ export default function PortfolioPage() {
         {mutationMessage ? (
           <p data-testid="portfolio-mutation-message" className="px-4 pt-3 text-sm text-[var(--text-muted)]">
             {mutationMessage}
+          </p>
+        ) : null}
+        {/* Same reason: normalize-weights and save-allocation both write this from the
+            allocation panel, but it used to render only inside the snapshot panel, so
+            "Failed to update the snapshot after saving allocation changes." was never seen. */}
+        {portfolioComparisonMessage ? (
+          <p data-testid="portfolio-comparison-message" className="px-4 pt-3 text-sm text-[var(--text-muted)]">
+            {portfolioComparisonMessage}
           </p>
         ) : null}
         {refreshSummary ? (
