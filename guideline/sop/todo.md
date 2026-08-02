@@ -261,6 +261,27 @@ written up in full in `ERROR-LOG.md` (2026-08-02 entries).
   partly out of view. Not fixed here because the sound fix changes shared app-shell layout
   and would need every page re-verified. The `4rem` in that calc corresponds to no single
   measurement in the surrounding layout and should be replaced, not adjusted.
+- **`StockTile` still nests `<div>`s inside its `<button>`**, through `DeltaBadge` and
+  `Sparkline`/`ResponsiveChart`. Commits `a5a70d6` and `c7da4e8` converted every wrapper
+  this file owns to `<span>`, and their messages say full validity is not reachable from
+  here because the remaining `<div>`s belong to shared components. Browsers do not
+  auto-correct this the way they close a `<p>`, so nothing renders wrong today; recorded
+  only so it is not rediscovered as new. Fixing it means letting `DeltaBadge` and the
+  chart wrapper render a `<span>`, which is a shared-component change.
+- **Two e2e specs assert accessible names that production no longer emits.** Both were
+  already failing before this branch and both are in files it never touched.
+  `market-overview.live.spec.ts:22,28,34` waits for a button named "Close market detail";
+  `ModalShell.tsx:159` renders `label="Close modal"` and no file in `apps/web` emits the
+  former. `simulation-lab-price-autofill.spec.ts:6` waits for a button matching
+  `/Corporate Valuation/i` which never resolves even though the page renders and the text
+  is present, so its accessible name differs too. Evidence they are not this branch's
+  doing: `git diff --name-only <merge-base>..HEAD` is empty for
+  `components/market/MarketOverviewClient.tsx`, `components/data/SparklineCard.tsx`,
+  `components/ui/ModalShell.tsx`, `app/monte-carlo/**`, `lib/api.ts`,
+  `components/ui/PageHeader.tsx`, `components/ui/AppShell.tsx` and `app/layout.tsx`;
+  `MarketOverviewClient.tsx` last changed in `d91788e` (2026-05-21). Left for whoever owns
+  those specs. Note the other `market-overview.live` test passes against the real backend,
+  so the live path itself is healthy.
 - **`PortfolioAllocationEditor.tsx` clones the `PortfolioStock` type instead of importing
   it from `../page`.** Cosmetic, pre-existing, noticed during Task 11.
 

@@ -152,6 +152,44 @@ test("an empty tile says whether it was ever checked", async ({ page }) => {
   await expect(page.getByTestId("stock-tile-GOOGL")).toContainText("Never checked for news");
 });
 
+test("a tile the news response says nothing about does not claim it was never checked", async ({ page }) => {
+  // "Never checked" is a statement about the data. A ticker missing from the response is
+  // not that -- it is us not knowing yet, which is the normal state for a ticker the
+  // newest keystroke revealed before the debounced query has caught up. Asserted here by
+  // omitting GOOGL from the payload entirely rather than by racing the debounce.
+  await mockPortfolioPageApi(page);
+  // Registered AFTER the base mock on purpose: Playwright matches handlers most-recently-
+  // added first, so this is what makes the override win the bulk-news GET.
+  await page.route("**/api/v1/news/feed/bulk**", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        status: "ok",
+        data: { tickers: { AAPL: { articles: [], last_checked_at: "2026-08-02T05:00:00Z" } } },
+      }),
+    });
+  });
+  await gotoGrid(page);
+
+  await expect(page.getByTestId("stock-tile-AAPL")).toContainText("No recent news · last checked");
+  await expect(page.getByTestId("stock-tile-GOOGL")).toContainText("News not loaded yet");
+  await expect(page.getByTestId("stock-tile-GOOGL")).not.toContainText("Never checked");
+});
+
+test("a tile's headlines are readable by assistive tech, not just by eye", async ({ page }) => {
+  // aria-label names the button, and an explicit name suppresses the descendant text, so
+  // the headlines would be announced nowhere without the description. This asserts the
+  // wiring the feature depends on: the tile's whole point is the headlines.
+  await mockPortfolioPageApi(page);
+  await gotoGrid(page);
+
+  const tile = page.getByTestId("stock-tile-AAPL");
+  const describedBy = await tile.getAttribute("aria-describedby");
+  expect(describedBy).toBeTruthy();
+  await expect(page.locator(`#${describedBy}`)).toContainText("AAPL headline one");
+});
+
 test("search filters the grid", async ({ page }) => {
   await mockPortfolioPageApi(page);
   await gotoGrid(page);

@@ -108,7 +108,11 @@ export function StockTileGrid({
               key={stock.ticker}
               stock={stock}
               news={newsByTicker[stock.ticker]?.articles ?? []}
-              lastCheckedAt={newsByTicker[stock.ticker]?.last_checked_at ?? null}
+              // No entry at all is passed through as undefined, NOT as null. The bulk news
+              // query is keyed on the debounced search, so a ticker the newest keystroke
+              // just revealed is legitimately absent for a moment; null would claim it had
+              // never been checked. StockTile renders the two apart.
+              lastCheckedAt={newsByTicker[stock.ticker]?.last_checked_at}
               showWeight={!isFallback}
               onOpen={onOpenStock}
             />

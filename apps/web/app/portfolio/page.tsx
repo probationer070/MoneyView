@@ -936,8 +936,9 @@ export default function PortfolioPage() {
   const totalInvestmentAutoSaveInFlightRef = useRef(false);
   const allocationSectionRef = useRef<HTMLElement | null>(null);
   const weightInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
-  // Which rail panel is open. Lifted out of PortfolioShell (which stays uncontrolled when
-  // these props are omitted) so page actions can open a panel programmatically.
+  // Which rail panel is open. Owned here rather than inside PortfolioShell so page actions
+  // can open a panel programmatically, not just a rail click. setOpenPanel is referentially
+  // stable, which is what keeps SidePanel's Escape listener from re-registering.
   const [openPanel, setOpenPanel] = useState<string | null>(null);
   // A pending scroll/focus request against the allocation panel. SidePanel renders null
   // while closed, so allocationSectionRef and weightInputRefs are null until the panel has

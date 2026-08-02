@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback } from "react";
 import type { ReactNode } from "react";
 import clsx from "clsx";
 import { IconButton } from "@/components/ui/IconButton";
@@ -17,12 +17,12 @@ interface PortfolioShellProps {
   panels: Record<string, { title: string; body: ReactNode }>;
   onRailAction?: (id: string) => boolean; // return true if handled as an action, not a panel
   /**
-   * Optional controlled open panel. Omit both this and `onOpenPanelChange` to keep the
-   * uncontrolled behaviour; pass them to let a parent open a panel programmatically
-   * (e.g. before scrolling to something that only exists once the panel has mounted).
+   * Which panel is open. Owned by the parent, because opening one is not always a rail
+   * click: adding a stock from the detail modal has to open the allocation panel before
+   * it can focus a weight input that only exists once that panel has mounted.
    */
-  openPanel?: string | null;
-  onOpenPanelChange?: (id: string | null) => void;
+  openPanel: string | null;
+  onOpenPanelChange: (id: string | null) => void;
   children: ReactNode;
 }
 
@@ -34,22 +34,11 @@ export function PortfolioShell({
   onOpenPanelChange,
   children,
 }: PortfolioShellProps) {
-  const [uncontrolledPanel, setUncontrolledPanel] = useState<string | null>(null);
-  const isControlled = openPanel !== undefined;
-  const activeId = isControlled ? openPanel : uncontrolledPanel;
-  const active = activeId ? panels[activeId] : undefined;
-
-  const setActivePanel = useCallback(
-    (next: string | null) => {
-      if (!isControlled) setUncontrolledPanel(next);
-      onOpenPanelChange?.(next);
-    },
-    [isControlled, onOpenPanelChange],
-  );
+  const active = openPanel ? panels[openPanel] : undefined;
 
   // Stable identity: SidePanel's Escape effect depends on onClose, and an inline
   // arrow would re-run it on every render, pulling focus back out of the panel.
-  const closePanel = useCallback(() => setActivePanel(null), [setActivePanel]);
+  const closePanel = useCallback(() => onOpenPanelChange(null), [onOpenPanelChange]);
 
   return (
     <div className="flex h-[calc(100vh-4rem)] flex-col lg:flex-row">
@@ -86,10 +75,10 @@ export function PortfolioShell({
             key={item.id}
             icon={item.icon}
             label={item.label}
-            variant={activeId === item.id ? "outlined" : "ghost"}
+            variant={openPanel === item.id ? "outlined" : "ghost"}
             onClick={() => {
               if (onRailAction?.(item.id)) return;
-              setActivePanel(activeId === item.id ? null : item.id);
+              onOpenPanelChange(openPanel === item.id ? null : item.id);
             }}
           />
         ))}
