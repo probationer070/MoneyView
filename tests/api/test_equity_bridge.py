@@ -108,6 +108,26 @@ def test_net_debt_is_negative_for_a_cash_rich_balance_sheet():
     assert bridge.net_debt.value == pytest.approx(-50.0)
 
 
+def test_net_debt_prefers_the_broader_cash_label_when_both_are_present():
+    # _CASH_LABELS orders "Cash Cash Equivalents And Short Term Investments" before
+    # "Cash And Cash Equivalents" because the former is the broader measure the bridge
+    # wants. Both labels must be present at once to prove the order is honoured --
+    # a test with only one label present would pass even if the tuple were reversed.
+    bundle = _bundle(
+        balance=_frame(
+            {
+                "Total Debt": [20 * BILLION],
+                "Cash Cash Equivalents And Short Term Investments": [15 * BILLION],
+                "Cash And Cash Equivalents": [3 * BILLION],
+            },
+            ["2025-09-30"],
+        )
+    )
+    bridge = load_equity_bridge("TEST", bundle_loader=_loader(bundle))
+    # 20 - 15 = 5 if the broader label wins; 20 - 3 = 17 if the order were reversed.
+    assert bridge.net_debt.value == pytest.approx(5.0)
+
+
 def test_non_operating_assets_degrade_to_estimated_when_absent():
     # This term degrades rather than going missing: omitting it understates equity value
     # by a bounded, usually immaterial amount, where substituting net debt would not be.
@@ -120,6 +140,38 @@ def test_non_operating_assets_degrade_to_estimated_when_absent():
     bridge = load_equity_bridge("TEST", bundle_loader=_loader(bundle))
     assert bridge.non_operating_assets.value is None
     assert bridge.non_operating_assets.quality == "estimated"
+
+
+def test_non_operating_assets_is_ok_when_investments_and_advances_present():
+    # No test previously covered the ok-quality success path at all.
+    bundle = _bundle(
+        balance=_frame(
+            {"Investments And Advances": [12 * BILLION]},
+            ["2025-09-30"],
+        )
+    )
+    bridge = load_equity_bridge("TEST", bundle_loader=_loader(bundle))
+    assert bridge.non_operating_assets.value == pytest.approx(12.0)
+    assert bridge.non_operating_assets.quality == "ok"
+    assert bridge.non_operating_assets.source == BridgeSource.INVESTMENTS_ADVANCES
+    assert bridge.non_operating_assets.as_of == "2025-09-30"
+
+
+def test_non_operating_assets_prefers_investments_and_advances_over_long_term_equity_investment():
+    # _INVESTMENT_LABELS orders "Investments And Advances" before "Long Term Equity
+    # Investment". Both labels must be present at once to prove the order is honoured.
+    bundle = _bundle(
+        balance=_frame(
+            {
+                "Investments And Advances": [8 * BILLION],
+                "Long Term Equity Investment": [2 * BILLION],
+            },
+            ["2025-09-30"],
+        )
+    )
+    bridge = load_equity_bridge("TEST", bundle_loader=_loader(bundle))
+    # 8.0 if the first label wins; 2.0 if the order were reversed.
+    assert bridge.non_operating_assets.value == pytest.approx(8.0)
 
 
 def test_diluted_shares_prefer_the_income_statement_over_shares_outstanding():
