@@ -306,6 +306,12 @@ class CorporateComparisonHistoryPoint(BaseModel):
     comparison_universe: ComparisonUniverseEnum = ComparisonUniverseEnum.portfolio_plus_benchmark
     benchmark_ticker: str = "^GSPC"
     stock_count: int = 0
+    # 0 for snapshots taken before the column existed. The metric definition behind
+    # average_dcf_value changed at version 2 -- rows before it averaged enterprise values,
+    # rows from it average intrinsic per-share values -- so a reader comparing two points
+    # across that boundary is comparing two different financial quantities, not one
+    # quantity that moved.
+    metric_schema_version: int = 0
     # None, not 0.0: both averages exclude bridge_quality = 'missing' rows, so on a
     # snapshot where every non-benchmark row is missing SQL AVG returns NULL over zero
     # rows. Coercing that to 0.0 rendered an absent average as a real $0.0 and a 0.00%

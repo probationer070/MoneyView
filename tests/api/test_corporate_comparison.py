@@ -182,7 +182,9 @@ def test_an_estimated_bridge_still_produces_a_value():
     assert dcf["estimated_value"] == pytest.approx(158.53, abs=0.01)
 
 
-def _insert_snapshot_rows(rows: list[tuple[str, str, float, float]]) -> str:
+def _insert_snapshot_rows(
+    rows: list[tuple[str, str, float, float]], *, metric_schema_version: int = 2
+) -> str:
     """Write snapshot rows directly, bypassing the builder, so the aggregate SQL is what
     is under test rather than the row construction that feeds it.
 
@@ -212,7 +214,8 @@ def _insert_snapshot_rows(rows: list[tuple[str, str, float, float]]) -> str:
                 ("v1", "2026-08-03", universe_key, "portfolio_plus_benchmark", "^GSPC", "",
                  taken_at, "manual", 4.2, 5.5, "dcf_implied_upside", ticker, ticker,
                  "Technology", "core", 0.1, 18.0, 10.0, 8.0, dcf_value, 100.0, 5.0, 9.0,
-                 5.0, 9.0, expected_return_spread, "dcf_implied_upside", 1, 2, bridge_quality),
+                 5.0, 9.0, expected_return_spread, "dcf_implied_upside", 1,
+                 metric_schema_version, bridge_quality),
             )
     return universe_key
 
@@ -275,6 +278,23 @@ def test_legacy_rows_with_an_empty_bridge_quality_stay_in_the_aggregates(
     db_service.init_db()
     _insert_snapshot_rows([("AAA", "", 100.0, -4.0), ("BBB", "", 200.0, -4.0)])
     assert _history_average_dcf_value() == pytest.approx(150.0)
+
+
+def test_the_history_point_reports_the_stored_metric_schema_version(tmp_path, monkeypatch):
+    monkeypatch.setattr(db_service, "_DB_PATH", tmp_path / "moneyview.db")
+    db_service.init_db()
+    _insert_snapshot_rows([("AAA", "ok", 100.0, 3.0)], metric_schema_version=2)
+    assert _history_point().metric_schema_version == 2
+
+
+def test_a_snapshot_predating_the_column_reports_version_zero(tmp_path, monkeypatch):
+    # Rows written before metric_schema_version existed carry 0, and the history must say so
+    # rather than claiming the current version. Averages either side of that boundary are
+    # different quantities; 0 is what makes the boundary visible.
+    monkeypatch.setattr(db_service, "_DB_PATH", tmp_path / "moneyview.db")
+    db_service.init_db()
+    _insert_snapshot_rows([("AAA", "ok", 100.0, 3.0)], metric_schema_version=0)
+    assert _history_point().metric_schema_version == 0
 
 
 def test_the_metric_schema_version_is_bumped():

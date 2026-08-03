@@ -659,7 +659,8 @@ def load_corporate_comparison_history(
                       AVG(CASE WHEN s.group_name != ? AND s.bridge_quality != 'missing' THEN s.expected_return_spread END) AS average_expected_return_spread,
                       AVG(CASE WHEN s.group_name != ? THEN s.roic_minus_wacc END) AS average_roic_minus_wacc,
                       AVG(CASE WHEN s.group_name != ? AND s.bridge_quality != 'missing' THEN s.dcf_value END) AS average_dcf_value,
-                      COUNT(CASE WHEN s.group_name != ? THEN 1 END) AS stock_count
+                      COUNT(CASE WHEN s.group_name != ? THEN 1 END) AS stock_count,
+                      MAX(s.metric_schema_version) AS metric_schema_version
                FROM latest_versions lv
                JOIN corporate_comparison_snapshots_v3 s
                  ON s.snapshot_version = lv.snapshot_version
@@ -692,6 +693,10 @@ def load_corporate_comparison_history(
             average_expected_return_spread=_rounded_or_none(row["average_expected_return_spread"]),
             average_roic_minus_wacc=round(float(row["average_roic_minus_wacc"] or 0.0), 2),
             average_dcf_value=_rounded_or_none(row["average_dcf_value"]),
+            # MAX, not MIN: every row of a snapshot is written in one transaction so they
+            # necessarily share a version, and if that invariant is ever broken the newer
+            # definition should surface rather than a stale one masking a mixed snapshot.
+            metric_schema_version=int(row["metric_schema_version"] or 0),
             market_expected_return=_market_expected_return_pct(
                 float(row["risk_free_rate"] or 0.0) / 100,
                 float(row["equity_risk_premium"] or 0.0) / 100,
