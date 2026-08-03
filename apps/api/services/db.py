@@ -426,6 +426,7 @@ CREATE TABLE IF NOT EXISTS corporate_comparison_snapshots_v3 (
     stock_expected_return_source TEXT DEFAULT 'dcf_implied_upside',
     has_price_data               INTEGER NOT NULL DEFAULT 1,
     metric_schema_version        INTEGER NOT NULL DEFAULT 1,
+    bridge_quality               TEXT NOT NULL DEFAULT '',
     PRIMARY KEY (snapshot_version, ticker)
 );
 CREATE INDEX IF NOT EXISTS idx_corporate_comparison_snapshots_v3_lookup
@@ -633,6 +634,7 @@ def _ensure_schema_compatibility(conn: sqlite3.Connection) -> None:
             stock_expected_return_source TEXT DEFAULT 'dcf_implied_upside',
             has_price_data               INTEGER NOT NULL DEFAULT 1,
             metric_schema_version        INTEGER NOT NULL DEFAULT 1,
+            bridge_quality               TEXT NOT NULL DEFAULT '',
             PRIMARY KEY (snapshot_version, ticker)
         )"""
     )
@@ -668,6 +670,13 @@ def _ensure_schema_compatibility(conn: sqlite3.Connection) -> None:
         # and stamping them with the current version would make pre- and post-change
         # snapshots indistinguishable -- exactly what the column exists to prevent.
         conn.execute("ALTER TABLE corporate_comparison_snapshots_v3 ADD COLUMN metric_schema_version INTEGER NOT NULL DEFAULT 0")
+    if "bridge_quality" not in v3_columns:
+        # '' , not 'missing': these rows were computed before the bridge existed. The
+        # aggregate filter excludes only 'missing', so legacy rows stay in every
+        # historical average exactly as they read today. Defaulting them to 'missing'
+        # would silently rewrite the history this column exists to preserve -- the same
+        # reasoning as metric_schema_version defaulting to 0 above.
+        conn.execute("ALTER TABLE corporate_comparison_snapshots_v3 ADD COLUMN bridge_quality TEXT NOT NULL DEFAULT ''")
     quote_facts_columns = {row["name"] for row in conn.execute("PRAGMA table_info(corporate_quote_facts)")}
     if "beta" not in quote_facts_columns:
         conn.execute("ALTER TABLE corporate_quote_facts ADD COLUMN beta REAL")

@@ -20,8 +20,10 @@ from apps.api.services.acquisition.runner import acquire_point_in_time
 from apps.api.services.acquisition.sources.quote_facts import fetch_quote_facts
 from apps.api.services.acquisition.sources.statements import fetch_statements
 from apps.api.services.acquisition.store import save_quote_facts, save_statements, statement_coverage
+from apps.api.services.corporate_statement_metrics import _pick_worst_quality
 from apps.api.services.db import get_db
-from packages.core_finance.dcf import calculate_equity_value
+from apps.api.services.equity_bridge import load_equity_bridge
+from packages.core_finance.dcf import calculate_equity_value, calculate_intrinsic_value_per_share
 from packages.core_finance.expected_return import (
     ExpectedReturnInputs,
     calculate_expected_return_result,
@@ -43,7 +45,7 @@ DEFAULT_TAX_RATE = 0.21
 # source. Not a database schema version and not a payload format version. It exists
 # because snapshots are immutable and comparable: two computed by different metric code
 # are not like for like, and the comparison feature must be able to see that.
-METRIC_SCHEMA_VERSION = 1
+METRIC_SCHEMA_VERSION = 2
 
 
 @dataclass(frozen=True)
@@ -180,8 +182,8 @@ def save_corporate_comparison_snapshot(
                        group_name, weight, roic, wacc, roic_minus_wacc, dcf_value, current_price,
                        dcf_implied_return, capm_expected_return, stock_expected_return,
                        market_expected_return, expected_return_spread, stock_expected_return_source,
-                       has_price_data, metric_schema_version
-                   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                       has_price_data, metric_schema_version, bridge_quality
+                   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     snapshot_version,
                     snapshot_date,
@@ -212,6 +214,7 @@ def save_corporate_comparison_snapshot(
                     row.stock_expected_return_source,
                     1 if row.has_price_data else 0,
                     METRIC_SCHEMA_VERSION,
+                    row.bridge_quality,
                 ),
             )
         conn.execute(
@@ -340,6 +343,7 @@ def _build_live_rows(
                     expected_return_spread=float(dcf["expected_return_spread"]),
                     stock_expected_return_source=STOCK_EXPECTED_RETURN_METHOD,
                     has_price_data=float(dcf["current_price"]) > 0,
+                    bridge_quality=str(dcf["bridge_quality"]),
                 )
             )
     return rows
@@ -352,6 +356,7 @@ def _dcf_snapshot(
     price_loader: Callable[[str], float],
     risk_free_rate: float,
     equity_risk_premium: float,
+    bridge_loader=load_equity_bridge,
 ) -> dict[str, float | str]:
     with perf_timer(scope="calculation", operation="calculation.dcf_upside", ticker=ticker, component="corporate_comparison"):
         current_price = price_loader(ticker)
@@ -367,17 +372,48 @@ def _dcf_snapshot(
         terminal_value = terminal_cash_flow / max(wacc - terminal_growth, 0.005)
         pv_terminal = terminal_value / ((1 + wacc) ** 5)
         enterprise_value = pv_fcff + pv_terminal
-        estimated_value = calculate_equity_value(
-            enterprise_value=enterprise_value,
-            net_debt=0.0,
-            non_operating_assets=0.0,
+
+        bridge = bridge_loader(ticker)
+        net_debt = bridge.net_debt.value
+        non_operating_assets = bridge.non_operating_assets.value
+        shares = bridge.diluted_shares_outstanding.value
+        bridge_quality = _pick_worst_quality(
+            bridge.net_debt.quality,
+            bridge.non_operating_assets.quality,
+            bridge.diluted_shares_outstanding.quality,
+        )
+        equity_value = (
+            calculate_equity_value(
+                enterprise_value=enterprise_value,
+                net_debt=net_debt,
+                non_operating_assets=non_operating_assets or 0.0,
+            )
+            if net_debt is not None
+            else None
+        )
+        intrinsic_value_per_share = (
+            calculate_intrinsic_value_per_share(equity_value, shares)
+            if equity_value is not None and shares is not None and shares > 0
+            else None
+        )
+        estimated_value = (
+            intrinsic_value_per_share
+            if intrinsic_value_per_share is not None
+            else enterprise_value
         )
 
     with perf_timer(scope="metric", operation="metric.expected_vs_market", ticker=ticker, component="corporate_comparison"):
         expected_returns = calculate_expected_return_result(
             ExpectedReturnInputs(
                 current_price=current_price,
-                intrinsic_value=current_price,
+                # The real intrinsic value, not the current price. Passing the price made
+                # dcf_implied_return = f(price, price) = 0, and stock_expected_return is
+                # assigned from it, so three columns were constant for every ticker.
+                intrinsic_value=(
+                    intrinsic_value_per_share
+                    if intrinsic_value_per_share is not None
+                    else current_price
+                ),
                 risk_free_rate=risk_free_rate,
                 equity_risk_premium=equity_risk_premium,
                 beta=_levered_beta_from_metrics(metrics),
@@ -392,7 +428,13 @@ def _dcf_snapshot(
         "stock_expected_return": round(float(expected_returns.stock_expected_return * 100), 2),
         "market_expected_return": round(float(expected_returns.market_expected_return * 100), 2),
         "expected_return_spread": round(float(expected_returns.expected_return_spread * 100), 2),
-        "status": "Bridge Incomplete",
+        "status": (
+            "Bridge Incomplete"
+            if intrinsic_value_per_share is None
+            else "Undervalued" if current_price > 0 and intrinsic_value_per_share > current_price
+            else "Overvalued"
+        ),
+        "bridge_quality": bridge_quality,
     }
 
 
@@ -432,7 +474,7 @@ def _load_snapshot_response(
                       weight, roic, wacc, roic_minus_wacc, dcf_value, current_price,
                       dcf_implied_return, capm_expected_return, stock_expected_return,
                       market_expected_return, expected_return_spread, stock_expected_return_source,
-                      has_price_data
+                      has_price_data, bridge_quality
                FROM corporate_comparison_snapshots_v3
                WHERE snapshot_version = ?
                ORDER BY group_name, ticker""",
@@ -527,6 +569,7 @@ def _rows_to_response(
             expected_return_spread=float(row["expected_return_spread"]),
             stock_expected_return_source=str(row["stock_expected_return_source"] or STOCK_EXPECTED_RETURN_METHOD),
             has_price_data=bool(row["has_price_data"]),
+            bridge_quality=str(row["bridge_quality"]),
         )
         for row in rows
     ]
@@ -602,9 +645,9 @@ def load_corporate_comparison_history(
                       lv.benchmark_ticker,
                       lv.risk_free_rate,
                       lv.equity_risk_premium,
-                      AVG(CASE WHEN s.group_name != ? THEN s.expected_return_spread END) AS average_expected_return_spread,
+                      AVG(CASE WHEN s.group_name != ? AND s.bridge_quality != 'missing' THEN s.expected_return_spread END) AS average_expected_return_spread,
                       AVG(CASE WHEN s.group_name != ? THEN s.roic_minus_wacc END) AS average_roic_minus_wacc,
-                      AVG(CASE WHEN s.group_name != ? THEN s.dcf_value END) AS average_dcf_value,
+                      AVG(CASE WHEN s.group_name != ? AND s.bridge_quality != 'missing' THEN s.dcf_value END) AS average_dcf_value,
                       COUNT(CASE WHEN s.group_name != ? THEN 1 END) AS stock_count
                FROM latest_versions lv
                JOIN corporate_comparison_snapshots_v3 s
@@ -659,7 +702,7 @@ def load_corporate_comparison_snapshot_version(*, snapshot_version: str) -> Corp
                       weight, roic, wacc, roic_minus_wacc, dcf_value, current_price,
                       dcf_implied_return, capm_expected_return, stock_expected_return,
                       market_expected_return, expected_return_spread, stock_expected_return_source,
-                      has_price_data
+                      has_price_data, bridge_quality
                FROM corporate_comparison_snapshots_v3
                WHERE snapshot_version = ?
                ORDER BY group_name, ticker""",

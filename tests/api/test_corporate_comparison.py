@@ -10,6 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from apps.api.main import app
 from apps.api.models.schemas import CorporateMetrics
+from apps.api.models.schema_parts.corporate import BridgeInputMeta, BridgeSource
 from apps.api.services import db as db_service
 from apps.api.services.acquisition.sources.quote_facts import QuoteFacts
 from apps.api.services.acquisition.sources.statements import StatementRow
@@ -17,11 +18,15 @@ from apps.api.services.acquisition.state import record_success
 from apps.api.services.acquisition.store import save_quote_facts, save_statements
 from apps.api.services.corporate_comparison import (
     METRIC_SCHEMA_VERSION,
+    _comparison_universe_key,
+    _dcf_snapshot,
     acquire_comparison_datasets,
     build_corporate_comparison_response,
     load_company_universe_data,
+    load_corporate_comparison_history,
     save_corporate_comparison_snapshot,
 )
+from apps.api.services.equity_bridge import EquityBridge
 
 
 def _stub_metrics_loader(ticker: str) -> CorporateMetrics:
@@ -74,6 +79,148 @@ def _patch_comparison_sources(monkeypatch):
 
     monkeypatch.setattr(corporate_route, "_metrics_for_ticker", fake_metrics)
     monkeypatch.setattr(corporate_route, "_latest_market_price", lambda ticker: 100.0 if ticker else 0.0)
+
+
+def _meta(value, quality="ok", source=BridgeSource.TOTAL_DEBT_LESS_CASH):
+    return BridgeInputMeta(value=value, source=source, quality=quality, as_of="2025-09-30")
+
+
+def _resolved_bridge(net_debt=60.0, non_op=0.0, shares=15.0):
+    return EquityBridge(
+        net_debt=_meta(net_debt),
+        non_operating_assets=_meta(non_op, source=BridgeSource.INVESTMENTS_ADVANCES),
+        diluted_shares_outstanding=_meta(shares, source=BridgeSource.DILUTED_AVERAGE_SHARES),
+    )
+
+
+def _starved_bridge():
+    absent = BridgeInputMeta(value=None, source=BridgeSource.UNAVAILABLE, quality="missing")
+    return EquityBridge(absent, absent, absent)
+
+
+def _snapshot(bridge, *, price=100.0):
+    return _dcf_snapshot(
+        ticker="AAPL",
+        metrics=_stub_metrics_loader("AAPL"),
+        price_loader=lambda _t: price,
+        risk_free_rate=0.042,
+        equity_risk_premium=0.055,
+        bridge_loader=lambda _t: bridge,
+    )
+
+
+def test_a_resolved_bridge_produces_a_per_share_value_not_an_enterprise_value():
+    # net_debt was hardcoded 0.0 at line 372, so estimated_value was enterprise value
+    # under a per-share label and status was permanently "Bridge Incomplete".
+    dcf = _snapshot(_resolved_bridge(net_debt=60.0, non_op=0.0, shares=15.0))
+    assert dcf["bridge_quality"] == "ok"
+    assert dcf["status"] in {"Undervalued", "Overvalued"}
+    # fcff is 92 (billions), so enterprise value is in the thousands of billions. A
+    # per-share value divided by 15B shares cannot land in that range.
+    assert dcf["estimated_value"] < 1000.0
+
+
+def test_an_unresolved_bridge_reports_missing_and_falls_back_to_enterprise_value():
+    dcf = _snapshot(_starved_bridge())
+    assert dcf["bridge_quality"] == "missing"
+    assert dcf["status"] == "Bridge Incomplete"
+    assert dcf["estimated_value"] > 1000.0
+
+
+def test_the_dcf_implied_return_is_no_longer_pinned_at_zero():
+    # _dcf_snapshot passed intrinsic_value=current_price, so dcf_implied_return was
+    # f(price, price) = 0. stock_expected_return is assigned from it and
+    # expected_return_spread derived from that, so three columns were constant.
+    few_shares = _snapshot(_resolved_bridge(shares=1.0))
+    many_shares = _snapshot(_resolved_bridge(shares=1000.0))
+    assert few_shares["dcf_implied_return"] != many_shares["dcf_implied_return"]
+    assert few_shares["dcf_implied_return"] != 0.0
+    assert few_shares["stock_expected_return"] == few_shares["dcf_implied_return"]
+
+
+def test_an_estimated_bridge_still_produces_a_value():
+    bridge = EquityBridge(
+        net_debt=_meta(60.0),
+        non_operating_assets=BridgeInputMeta(
+            value=None, source=BridgeSource.UNAVAILABLE, quality="estimated"
+        ),
+        diluted_shares_outstanding=_meta(15.0, source=BridgeSource.DILUTED_AVERAGE_SHARES),
+    )
+    dcf = _snapshot(bridge)
+    assert dcf["bridge_quality"] == "estimated"
+    assert dcf["status"] in {"Undervalued", "Overvalued"}
+
+
+def _insert_snapshot_rows(rows: list[tuple[str, str, float]]) -> str:
+    """Write snapshot rows directly, bypassing the builder, so the aggregate SQL is what
+    is under test rather than the row construction that feeds it."""
+    universe_key = _comparison_universe_key(
+        comparison_universe="portfolio_plus_benchmark",
+        benchmark_ticker="^GSPC",
+        custom_tickers=[],
+    )
+    taken_at = datetime(2026, 8, 3, 12, 0, tzinfo=timezone.utc).isoformat()
+    with db_service.get_db() as conn:
+        for ticker, bridge_quality, dcf_value in rows:
+            conn.execute(
+                """INSERT INTO corporate_comparison_snapshots_v3 (
+                       snapshot_version, snapshot_date, universe_key, comparison_universe,
+                       benchmark_ticker, custom_tickers, snapshot_taken_at, snapshot_source,
+                       risk_free_rate, equity_risk_premium, stock_expected_return_method,
+                       ticker, name, sector, group_name, weight, roic, wacc, roic_minus_wacc,
+                       dcf_value, current_price, dcf_implied_return, capm_expected_return,
+                       stock_expected_return, market_expected_return, expected_return_spread,
+                       stock_expected_return_source, has_price_data, metric_schema_version,
+                       bridge_quality
+                   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                             ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                ("v1", "2026-08-03", universe_key, "portfolio_plus_benchmark", "^GSPC", "",
+                 taken_at, "manual", 4.2, 5.5, "dcf_implied_upside", ticker, ticker,
+                 "Technology", "core", 0.1, 18.0, 10.0, 8.0, dcf_value, 100.0, 5.0, 9.0,
+                 5.0, 9.0, -4.0, "dcf_implied_upside", 1, 2, bridge_quality),
+            )
+    return universe_key
+
+
+def _history_average_dcf_value():
+    history = load_corporate_comparison_history(
+        comparison_universe="portfolio_plus_benchmark",
+        benchmark_ticker="^GSPC",
+        custom_tickers=[],
+    )
+    return history.points[0].average_dcf_value
+
+
+def test_missing_rows_are_excluded_from_the_aggregates_but_estimated_rows_are_not(
+    tmp_path, monkeypatch
+):
+    # The exclusion rule must be "bridge_quality = 'missing'", never "!= 'ok'". An
+    # estimated row carries a defensible number and the label that says so.
+    monkeypatch.setattr(db_service, "_DB_PATH", tmp_path / "moneyview.db")
+    db_service.init_db()
+    _insert_snapshot_rows([
+        ("AAA", "ok", 100.0),
+        ("BBB", "estimated", 200.0),
+        ("CCC", "missing", 999999.0),
+    ])
+    assert _history_average_dcf_value() == pytest.approx(150.0)
+
+
+def test_legacy_rows_with_an_empty_bridge_quality_stay_in_the_aggregates(
+    tmp_path, monkeypatch
+):
+    # Rows written before the column existed carry ''. Every historical average must read
+    # exactly as it does today, not be reinterpreted as missing.
+    monkeypatch.setattr(db_service, "_DB_PATH", tmp_path / "moneyview.db")
+    db_service.init_db()
+    _insert_snapshot_rows([("AAA", "", 100.0), ("BBB", "", 200.0)])
+    assert _history_average_dcf_value() == pytest.approx(150.0)
+
+
+def test_the_metric_schema_version_is_bumped():
+    # Metric semantics changed, so snapshots from before and after must never compare as
+    # like-for-like.
+    assert METRIC_SCHEMA_VERSION == 2
 
 
 def test_corporate_comparison_defaults_to_portfolio_plus_benchmark_snapshot(tmp_path, monkeypatch):
