@@ -84,6 +84,26 @@ def calculate_equity_value(
     return enterprise_value - net_debt + non_operating_assets
 
 
+def calculate_net_debt(
+    total_debt: float | None,
+    cash_and_equivalents: float | None,
+) -> float | None:
+    """
+    Net Debt = Total Debt - Cash and Equivalents
+
+    None if either input is missing. A missing cash balance is not a zero cash
+    balance, and returning total debt unadjusted would overstate net debt by the
+    entire cash position -- a real number handed to a bridge that should report a
+    missing input.
+
+    A negative result is valid and must be preserved: a company holding more cash
+    than debt raises equity value above enterprise value.
+    """
+    if total_debt is None or cash_and_equivalents is None:
+        return None
+    return float(total_debt) - float(cash_and_equivalents)
+
+
 def calculate_intrinsic_value_per_share(
     equity_value: float,
     diluted_shares_outstanding: float,

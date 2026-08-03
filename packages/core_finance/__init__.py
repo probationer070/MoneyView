@@ -11,6 +11,7 @@ from .dcf import (
     calculate_terminal_value,
     calculate_npv,
     calculate_equity_value,
+    calculate_net_debt,
     calculate_intrinsic_value_per_share,
     multi_stage_dcf,
 )
@@ -47,7 +48,7 @@ from .corporate_statement_metrics import (
 
 __all__ = [
     "calculate_fcff", "calculate_growth_rate", "calculate_terminal_value",
-    "calculate_npv", "calculate_equity_value", "calculate_intrinsic_value_per_share", "multi_stage_dcf",
+    "calculate_npv", "calculate_equity_value", "calculate_net_debt", "calculate_intrinsic_value_per_share", "multi_stage_dcf",
     "unlever_beta", "relever_beta", "bottom_up_beta",
     "calculate_crp", "calculate_wacc", "decompose_hurdle_rate", "wacc_sensitivity",
     "payback_period", "sensitivity_analysis", "monte_carlo_npv",

@@ -16,6 +16,7 @@ from packages.core_finance.dcf import (
     calculate_terminal_value,
     calculate_npv,
     calculate_equity_value,
+    calculate_net_debt,
     calculate_intrinsic_value_per_share,
 )
 
@@ -125,3 +126,23 @@ class TestEquityBridge:
     def test_calculate_intrinsic_value_per_share_rejects_invalid_share_count(self):
         with pytest.raises(ValueError, match="Diluted shares outstanding must be greater than zero"):
             calculate_intrinsic_value_per_share(equity_value=790.0, diluted_shares_outstanding=0.0)
+
+    def test_calculate_net_debt_subtracts_cash_from_total_debt(self):
+        assert calculate_net_debt(1000.0, 250.0) == 750.0
+
+    def test_calculate_net_debt_is_negative_when_cash_exceeds_debt(self):
+        # A cash-rich company has negative net debt, which correctly RAISES equity value
+        # above enterprise value. Clamping this at zero would undervalue every such issuer.
+        assert calculate_net_debt(100.0, 400.0) == -300.0
+
+    def test_calculate_net_debt_is_none_when_total_debt_is_missing(self):
+        assert calculate_net_debt(None, 250.0) is None
+
+    def test_calculate_net_debt_is_none_when_cash_is_missing(self):
+        # A missing cash balance is not a zero cash balance. Returning total debt here
+        # would hand a real number to the bridge and overstate net debt by all the cash.
+        assert calculate_net_debt(1000.0, None) is None
+
+    def test_calculate_net_debt_accepts_a_genuine_zero_cash_balance(self):
+        # Zero is data; None is absence. They must not collapse into the same branch.
+        assert calculate_net_debt(1000.0, 0.0) == 1000.0
