@@ -929,3 +929,54 @@ items are related by an inexact identity (`Net Debt = Total Debt - Cash`), the r
 formula must be written explicitly at the point of use, keeping the sign/expression tied
 to what that specific consumer needs (gross vs. net), rather than folded into a general
 alias-lookup helper.
+
+## 2026-08-03: The comparison table's expected-return columns were structurally pinned at zero
+
+Date: 2026-08-03
+Command: `python -m pytest tests/api/test_corporate_comparison.py -k "dcf_implied_return" -v`
+(writing the failing tests for DCF data-completeness plan task 6)
+Failure: silent, and it never raised. `_dcf_snapshot` in
+`apps/api/services/corporate_comparison.py` called
+`calculate_expected_return_result` with `intrinsic_value=current_price` — the same value
+already passed as `current_price`. `dcf_implied_return` is a function of the gap between
+intrinsic value and current price, so `f(price, price)` evaluated to `0.0` for every
+ticker, every snapshot, unconditionally. `stock_expected_return` is assigned directly from
+`dcf_implied_return`, and `expected_return_spread` is derived from `stock_expected_return`
+minus `market_expected_return`, so the defect propagated into three columns of the
+comparison table that all read as plausible percentages while carrying no signal at all.
+Compounding it, `net_debt=0.0` and `non_operating_assets=0.0` were hardcoded in the same
+function (rather than read from the equity bridge), so even the enterprise value produced
+there was mislabeled as a per-share `estimated_value` and `status` was hardcoded to the
+literal string `"Bridge Incomplete"` for every row, regardless of whether a bridge could
+have resolved.
+Root cause: `_dcf_snapshot` predates the equity-bridge loader built for the single-ticker
+DCF endpoint (`apps/api/services/corporate_dcf.py`, task 4 of this plan) and was never
+wired to it. Lacking a real net debt, share count, or non-operating-assets figure, whoever
+wrote the comparison path passed the only per-share number in scope — `current_price` — as
+a placeholder for intrinsic value, which zeroes the implied-return formula by
+construction rather than by a bug in the formula itself.
+Fix: `_dcf_snapshot` now takes a keyword-only `bridge_loader=load_equity_bridge` and calls
+it per ticker, mirroring the pattern already established in
+`corporate_dcf._build_dcf_outputs`. `net_debt`, `non_operating_assets`, and
+`diluted_shares_outstanding` come from the resolved `EquityBridge`; `equity_value` and
+`intrinsic_value_per_share` are computed for real via `calculate_equity_value` and
+`calculate_intrinsic_value_per_share`, and that intrinsic value — not `current_price` — is
+what feeds `calculate_expected_return_result`. `status` is now `"Undervalued"` /
+`"Overvalued"` / `"Bridge Incomplete"` based on whether the bridge actually resolved.
+Because the aggregate averages (`average_dcf_value`, `average_expected_return_spread`) are
+computed in SQL over persisted snapshot rows rather than in Python over live rows, a new
+`bridge_quality` column was added to `corporate_comparison_snapshots_v3` (guarded
+`ALTER TABLE`, default `''` so pre-existing rows keep reading exactly as they do today) so
+those aggregates can exclude `bridge_quality = 'missing'` rows without also excluding
+`'estimated'` rows, which carry a defensible number. `METRIC_SCHEMA_VERSION` was bumped
+1 -> 2 so snapshots computed before and after this fix are never compared as like for like.
+Files changed: `apps/api/services/corporate_comparison.py`, `apps/api/services/db.py`,
+`tests/api/test_corporate_comparison.py`.
+Prevention: when a formula call site is passed the same variable for two logically
+distinct parameters (here, `current_price` filling both `current_price` and
+`intrinsic_value`), treat it as a placeholder that was never replaced, not a valid
+default — a spread/delta formula fed identical arguments always degenerates to zero or
+one, and that degenerate case produces no error, just a column of numbers that all look
+individually plausible. Grep for `_dcf_snapshot`-shaped functions that compute an
+enterprise-to-equity bridge inline instead of calling the shared `load_equity_bridge`
+loader; duplicated bridge logic is where a hardcoded `0.0` is most likely to hide.
