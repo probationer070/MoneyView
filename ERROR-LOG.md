@@ -963,6 +963,20 @@ it per ticker, mirroring the pattern already established in
 `calculate_intrinsic_value_per_share`, and that intrinsic value — not `current_price` — is
 what feeds `calculate_expected_return_result`. `status` is now `"Undervalued"` /
 `"Overvalued"` / `"Bridge Incomplete"` based on whether the bridge actually resolved.
+
+Correction (2026-08-03, whole-branch review): **the `status` change is internal only and
+no consumer can observe it.** `_dcf_snapshot` returns `"status"` in a plain dict, but
+`CorporateComparisonRow` (`apps/api/models/schema_parts/corporate.py`) has no `status`
+field and never has, `_build_live_rows` does not read the key, and it is not persisted to
+`corporate_comparison_snapshots_v3`. The `status: str` that the UI renders belongs to
+`DCFSummary`, a different model built by `corporate_dcf.py` for the single-ticker DCF
+endpoint. The key was dead before this change and is still dead after it; the change
+turned a constant into a computed verdict that nothing reads. **The observable fixes in
+the comparison table are `dcf_value`, `bridge_quality`, and the three expected-return
+columns** (`dcf_implied_return`, `stock_expected_return`, `expected_return_spread`) — not
+`status`. No field was added to surface it: a verdict derivable from `dcf_value`,
+`current_price` and `bridge_quality`, which the row already carries, does not need its own
+column. The computation site now carries a comment saying so.
 Because the aggregate averages (`average_dcf_value`, `average_expected_return_spread`) are
 computed in SQL over persisted snapshot rows rather than in Python over live rows, a new
 `bridge_quality` column was added to `corporate_comparison_snapshots_v3` (guarded

@@ -428,6 +428,12 @@ def _dcf_snapshot(
         "stock_expected_return": round(float(expected_returns.stock_expected_return * 100), 2),
         "market_expected_return": round(float(expected_returns.market_expected_return * 100), 2),
         "expected_return_spread": round(float(expected_returns.expected_return_spread * 100), 2),
+        # Internal only: CorporateComparisonRow has no status field and never has, and
+        # _build_live_rows above does not read this key, so nothing in the comparison
+        # table or the persisted snapshot can observe this verdict. The DCFSummary.status
+        # the UI does render belongs to the single-ticker DCF endpoint, a different model
+        # built by corporate_dcf.py. Do not assume this reaches the UI; surfacing it would
+        # take a new field on the row, the snapshot table and the frontend types.
         "status": (
             "Bridge Incomplete"
             if intrinsic_value_per_share is None

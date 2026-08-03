@@ -129,6 +129,9 @@ def test_a_resolved_bridge_produces_a_per_share_value_not_an_enterprise_value():
     # vs. 158.53 applying it), so the exact value is asserted instead: (2438 - 60) / 15.
     dcf = _snapshot(_resolved_bridge(net_debt=60.0, non_op=0.0, shares=15.0))
     assert dcf["bridge_quality"] == "ok"
+    # _dcf_snapshot's "status" is internal: CorporateComparisonRow has no status field,
+    # so this verdict is not surfaced by the comparison table. Asserted because it is
+    # real behaviour of this function, not because a user can see it.
     assert dcf["status"] in {"Undervalued", "Overvalued"}
     assert dcf["estimated_value"] == pytest.approx(158.53, abs=0.01)
 
@@ -136,6 +139,7 @@ def test_a_resolved_bridge_produces_a_per_share_value_not_an_enterprise_value():
 def test_an_unresolved_bridge_reports_missing_and_falls_back_to_enterprise_value():
     dcf = _snapshot(_starved_bridge())
     assert dcf["bridge_quality"] == "missing"
+    # Internal only, as above: not surfaced by CorporateComparisonRow.
     assert dcf["status"] == "Bridge Incomplete"
     # The unbridged enterprise value itself, not merely "some large number" -- pins the
     # fallback to the one value it is supposed to be, not to anything above a threshold.
@@ -167,6 +171,7 @@ def test_an_estimated_bridge_still_produces_a_value():
     )
     dcf = _snapshot(bridge)
     assert dcf["bridge_quality"] == "estimated"
+    # Internal only, as above: not surfaced by CorporateComparisonRow.
     assert dcf["status"] in {"Undervalued", "Overvalued"}
     # Same net_debt and shares as the "ok" resolved-bridge fixture above, with
     # non_operating_assets absent. Asserting the same 158.53 here is the actual test of

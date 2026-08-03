@@ -107,7 +107,13 @@ governance stay diagnostic-only`) -- this entry is the pointer, not the duplicat
     `expected_return_spread` for every row, alongside a hardcoded `net_debt=0.0`
     and a constant `"Bridge Incomplete"` status. Both lived in the same function
     and were fixed in the same change, so they share one `ERROR-LOG.md` entry
-    rather than getting two.
+    rather than getting two. **Correction: the `status` part of that fix is
+    internal only.** `CorporateComparisonRow` has no `status` field and never
+    has, `_build_live_rows` does not read the key, and it is not persisted, so
+    no consumer can observe the verdict `_dcf_snapshot` now computes — the
+    `status` the UI renders belongs to `DCFSummary` on the single-ticker DCF
+    endpoint. The observable fixes in the comparison table are `dcf_value`,
+    `bridge_quality`, and the three expected-return columns.
   - The unit mismatch: `metrics.fcff` is stored in billions while balance-sheet
     figures and `sharesOutstanding` are raw, so an unscaled bridge would have been
     wrong by a factor of `1e9`. This one **never shipped** -- caught in design, so
