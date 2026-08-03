@@ -24,6 +24,7 @@ from apps.api.services.corporate_comparison import (
     build_corporate_comparison_response,
     load_company_universe_data,
     load_corporate_comparison_history,
+    load_corporate_comparison_snapshot_version,
     save_corporate_comparison_snapshot,
 )
 from apps.api.services.equity_bridge import EquityBridge
@@ -109,22 +110,36 @@ def _snapshot(bridge, *, price=100.0):
     )
 
 
+# The fixture's own numbers, computed independently of _dcf_snapshot: _stub_metrics_loader
+# gives fcff=92, growth=6%, wacc=10%, which the same five-year-plus-terminal-value formula
+# in _dcf_snapshot turns into one fixed enterprise value. Held here as a named constant so
+# every exact-value assertion below is traceable to arithmetic done once, by hand, rather
+# than re-derived ad hoc per test (and rather than re-importing _dcf_snapshot's own DCF
+# math, which would make the assertion tautological against the code it is checking).
+# base_fcff=92; growth=0.06; wacc=0.10; terminal_growth=min(0.06, 0.095)=0.06
+# projected = [92*1.06**y for y in 1..5]; pv_fcff = sum(cf / 1.10**y)
+# terminal_value = projected[-1]*1.06 / (0.10-0.06); pv_terminal = terminal_value / 1.10**5
+_FIXTURE_ENTERPRISE_VALUE = 2438.0  # round(pv_fcff + pv_terminal, 2)
+
+
 def test_a_resolved_bridge_produces_a_per_share_value_not_an_enterprise_value():
     # net_debt was hardcoded 0.0 at line 372, so estimated_value was enterprise value
-    # under a per-share label and status was permanently "Bridge Incomplete".
+    # under a per-share label and status was permanently "Bridge Incomplete". A bound of
+    # "< 1000.0" passes whether or not net_debt is actually subtracted (162.5 ignoring it
+    # vs. 158.53 applying it), so the exact value is asserted instead: (2438 - 60) / 15.
     dcf = _snapshot(_resolved_bridge(net_debt=60.0, non_op=0.0, shares=15.0))
     assert dcf["bridge_quality"] == "ok"
     assert dcf["status"] in {"Undervalued", "Overvalued"}
-    # fcff is 92 (billions), so enterprise value is in the thousands of billions. A
-    # per-share value divided by 15B shares cannot land in that range.
-    assert dcf["estimated_value"] < 1000.0
+    assert dcf["estimated_value"] == pytest.approx(158.53, abs=0.01)
 
 
 def test_an_unresolved_bridge_reports_missing_and_falls_back_to_enterprise_value():
     dcf = _snapshot(_starved_bridge())
     assert dcf["bridge_quality"] == "missing"
     assert dcf["status"] == "Bridge Incomplete"
-    assert dcf["estimated_value"] > 1000.0
+    # The unbridged enterprise value itself, not merely "some large number" -- pins the
+    # fallback to the one value it is supposed to be, not to anything above a threshold.
+    assert dcf["estimated_value"] == pytest.approx(_FIXTURE_ENTERPRISE_VALUE, abs=0.01)
 
 
 def test_the_dcf_implied_return_is_no_longer_pinned_at_zero():
@@ -136,6 +151,10 @@ def test_the_dcf_implied_return_is_no_longer_pinned_at_zero():
     assert few_shares["dcf_implied_return"] != many_shares["dcf_implied_return"]
     assert few_shares["dcf_implied_return"] != 0.0
     assert few_shares["stock_expected_return"] == few_shares["dcf_implied_return"]
+    # Exact values: per_share = (2438 - 60) / shares; dcf_implied_return =
+    # (per_share / current_price - 1) * 100, current_price = 100.0 (the _snapshot default).
+    assert few_shares["dcf_implied_return"] == pytest.approx(2278.0, abs=0.01)
+    assert many_shares["dcf_implied_return"] == pytest.approx(-97.62, abs=0.01)
 
 
 def test_an_estimated_bridge_still_produces_a_value():
@@ -149,11 +168,22 @@ def test_an_estimated_bridge_still_produces_a_value():
     dcf = _snapshot(bridge)
     assert dcf["bridge_quality"] == "estimated"
     assert dcf["status"] in {"Undervalued", "Overvalued"}
+    # Same net_debt and shares as the "ok" resolved-bridge fixture above, with
+    # non_operating_assets absent. Asserting the same 158.53 here is the actual test of
+    # the deliberate "sums as 0.0 when estimated" exception -- without it, an
+    # implementation that instead treated an estimated-but-absent non_operating_assets as
+    # disqualifying (falling back to enterprise value, ~2438) would still pass this test
+    # on the status/quality checks alone.
+    assert dcf["estimated_value"] == pytest.approx(158.53, abs=0.01)
 
 
-def _insert_snapshot_rows(rows: list[tuple[str, str, float]]) -> str:
+def _insert_snapshot_rows(rows: list[tuple[str, str, float, float]]) -> str:
     """Write snapshot rows directly, bypassing the builder, so the aggregate SQL is what
-    is under test rather than the row construction that feeds it."""
+    is under test rather than the row construction that feeds it.
+
+    Each row is (ticker, bridge_quality, dcf_value, expected_return_spread) -- both of the
+    aggregate columns the 'missing' exclusion is supposed to filter, not just one of them.
+    """
     universe_key = _comparison_universe_key(
         comparison_universe="portfolio_plus_benchmark",
         benchmark_ticker="^GSPC",
@@ -161,7 +191,7 @@ def _insert_snapshot_rows(rows: list[tuple[str, str, float]]) -> str:
     )
     taken_at = datetime(2026, 8, 3, 12, 0, tzinfo=timezone.utc).isoformat()
     with db_service.get_db() as conn:
-        for ticker, bridge_quality, dcf_value in rows:
+        for ticker, bridge_quality, dcf_value, expected_return_spread in rows:
             conn.execute(
                 """INSERT INTO corporate_comparison_snapshots_v3 (
                        snapshot_version, snapshot_date, universe_key, comparison_universe,
@@ -177,33 +207,41 @@ def _insert_snapshot_rows(rows: list[tuple[str, str, float]]) -> str:
                 ("v1", "2026-08-03", universe_key, "portfolio_plus_benchmark", "^GSPC", "",
                  taken_at, "manual", 4.2, 5.5, "dcf_implied_upside", ticker, ticker,
                  "Technology", "core", 0.1, 18.0, 10.0, 8.0, dcf_value, 100.0, 5.0, 9.0,
-                 5.0, 9.0, -4.0, "dcf_implied_upside", 1, 2, bridge_quality),
+                 5.0, 9.0, expected_return_spread, "dcf_implied_upside", 1, 2, bridge_quality),
             )
     return universe_key
 
 
-def _history_average_dcf_value():
+def _history_point():
     history = load_corporate_comparison_history(
         comparison_universe="portfolio_plus_benchmark",
         benchmark_ticker="^GSPC",
         custom_tickers=[],
     )
-    return history.points[0].average_dcf_value
+    return history.points[0]
+
+
+def _history_average_dcf_value():
+    return _history_point().average_dcf_value
 
 
 def test_missing_rows_are_excluded_from_the_aggregates_but_estimated_rows_are_not(
     tmp_path, monkeypatch
 ):
     # The exclusion rule must be "bridge_quality = 'missing'", never "!= 'ok'". An
-    # estimated row carries a defensible number and the label that says so.
+    # estimated row carries a defensible number and the label that says so. The missing
+    # row's spread (12345.0) is far enough from the other two that its inclusion could not
+    # round to the same two-decimal average by coincidence.
     monkeypatch.setattr(db_service, "_DB_PATH", tmp_path / "moneyview.db")
     db_service.init_db()
     _insert_snapshot_rows([
-        ("AAA", "ok", 100.0),
-        ("BBB", "estimated", 200.0),
-        ("CCC", "missing", 999999.0),
+        ("AAA", "ok", 100.0, 3.0),
+        ("BBB", "estimated", 200.0, 5.0),
+        ("CCC", "missing", 999999.0, 12345.0),
     ])
-    assert _history_average_dcf_value() == pytest.approx(150.0)
+    point = _history_point()
+    assert point.average_dcf_value == pytest.approx(150.0)
+    assert point.average_expected_return_spread == pytest.approx(4.0)
 
 
 def test_legacy_rows_with_an_empty_bridge_quality_stay_in_the_aggregates(
@@ -213,7 +251,7 @@ def test_legacy_rows_with_an_empty_bridge_quality_stay_in_the_aggregates(
     # exactly as it does today, not be reinterpreted as missing.
     monkeypatch.setattr(db_service, "_DB_PATH", tmp_path / "moneyview.db")
     db_service.init_db()
-    _insert_snapshot_rows([("AAA", "", 100.0), ("BBB", "", 200.0)])
+    _insert_snapshot_rows([("AAA", "", 100.0, -4.0), ("BBB", "", 200.0, -4.0)])
     assert _history_average_dcf_value() == pytest.approx(150.0)
 
 
@@ -221,6 +259,57 @@ def test_the_metric_schema_version_is_bumped():
     # Metric semantics changed, so snapshots from before and after must never compare as
     # like-for-like.
     assert METRIC_SCHEMA_VERSION == 2
+
+
+def test_a_resolved_bridge_quality_survives_persistence_and_read_back(tmp_path, monkeypatch):
+    """The four _dcf_snapshot tests above inject a fake bridge_loader directly and never
+    touch the database. Every other test in this file that goes through
+    save_corporate_comparison_snapshot runs against an empty statement store, where the
+    bridge always resolves to "missing" -- so nothing before this test exercised a
+    resolved bridge_quality surviving INSERT -> SELECT -> _rows_to_response. A SELECT that
+    forgot to list bridge_quality would read every row back as "missing" regardless of
+    what was written, and no existing test would notice.
+
+    Monkeypatching corporate_comparison.load_equity_bridge does not exercise this: it is
+    captured as _dcf_snapshot's `bridge_loader=load_equity_bridge` default argument value
+    once, at module-import time, and reassigning the module attribute afterward has no
+    effect on a default already bound into the function object. Verified directly:
+    `def f(loader=real): ...; real = patched; f()` still calls the original `real`, not
+    `patched`, because the default is resolved to the function object at def time, not
+    looked up by name at call time. So this test instead seeds real statement rows for one
+    ticker, which makes the actual (unpatched) load_equity_bridge resolve a genuine "ok"
+    bridge through the same local-store path production uses.
+    """
+    db_path = tmp_path / "moneyview.db"
+    monkeypatch.setattr(db_service, "_DB_PATH", db_path)
+    db_service.init_db()
+    _seed_watchlist()
+
+    save_statements("AAPL", [
+        StatementRow("AAPL", "balance", "annual", "2025-12-31", "Total Debt", 5_000_000_000.0),
+        StatementRow("AAPL", "balance", "annual", "2025-12-31", "Cash And Cash Equivalents", 1_000_000_000.0),
+        StatementRow("AAPL", "balance", "annual", "2025-12-31", "Investments And Advances", 500_000_000.0),
+        StatementRow("AAPL", "income", "annual", "2025-12-31", "Diluted Average Shares", 2_000_000_000.0),
+    ])
+
+    saved = save_corporate_comparison_snapshot(
+        snapshot_source="manual",
+        comparison_universe="portfolio_plus_benchmark",
+        benchmark_ticker="^GSPC",
+        custom_tickers=[],
+        metrics_loader=_stub_metrics_loader,
+        price_loader=lambda ticker: 100.0,
+        default_companies={},
+        risk_free_rate=0.042,
+        equity_risk_premium=0.055,
+    )
+
+    reloaded = load_corporate_comparison_snapshot_version(
+        snapshot_version=saved.snapshot.snapshot_version
+    )
+    aapl = next(row for row in reloaded.rows if row.ticker == "AAPL")
+    assert aapl.bridge_quality == "ok"
+    assert aapl.bridge_quality != "missing"
 
 
 def test_corporate_comparison_defaults_to_portfolio_plus_benchmark_snapshot(tmp_path, monkeypatch):
@@ -976,6 +1065,79 @@ def test_init_db_adds_comparison_universe_columns_for_legacy_snapshot_tables(tmp
         "idx_corporate_comparison_snapshots_v3_universe_date",
         "idx_corporate_comparison_snapshots_v3_ticker_universe_date",
     }.issubset(v3_indexes)
+
+
+@pytest.mark.virgin_db
+def test_init_db_migrates_legacy_rows_to_an_empty_bridge_quality_not_missing(tmp_path, monkeypatch):
+    """The '' default is the constraint this task cared most about: it is what stops every
+    historical average being silently rewritten when the column is introduced. A test that
+    only ever inserts '' explicitly (as the other legacy-rows test in this file does) would
+    pass unchanged even if the guarded ALTER TABLE defaulted to 'missing' instead -- this
+    test instead exercises the ALTER itself, on a table that predates the column, the same
+    way test_init_db_adds_comparison_universe_columns_for_legacy_snapshot_tables above
+    exercises the metric_schema_version migration."""
+    db_path = tmp_path / "moneyview.db"
+    monkeypatch.setattr(db_service, "_DB_PATH", db_path)
+
+    with sqlite3.connect(str(db_path)) as conn:
+        conn.executescript(
+            """
+            CREATE TABLE corporate_comparison_snapshots_v3 (
+                snapshot_version             TEXT NOT NULL,
+                snapshot_date                TEXT NOT NULL,
+                universe_key                 TEXT NOT NULL,
+                comparison_universe          TEXT NOT NULL DEFAULT 'portfolio_plus_benchmark',
+                benchmark_ticker             TEXT DEFAULT '^GSPC',
+                custom_tickers               TEXT DEFAULT '',
+                snapshot_taken_at            TEXT NOT NULL,
+                snapshot_source              TEXT DEFAULT 'auto_daily',
+                risk_free_rate               REAL NOT NULL DEFAULT 0.0,
+                equity_risk_premium          REAL NOT NULL DEFAULT 0.0,
+                stock_expected_return_method TEXT DEFAULT 'dcf_implied_upside',
+                ticker                       TEXT NOT NULL,
+                name                         TEXT DEFAULT '',
+                sector                       TEXT DEFAULT '',
+                group_name                   TEXT DEFAULT 'custom',
+                weight                       REAL DEFAULT 0.0,
+                roic                         REAL NOT NULL DEFAULT 0.0,
+                wacc                         REAL NOT NULL DEFAULT 0.0,
+                roic_minus_wacc              REAL NOT NULL DEFAULT 0.0,
+                dcf_value                    REAL NOT NULL DEFAULT 0.0,
+                current_price                REAL NOT NULL DEFAULT 0.0,
+                dcf_implied_return           REAL NOT NULL DEFAULT 0.0,
+                capm_expected_return         REAL NOT NULL DEFAULT 0.0,
+                stock_expected_return        REAL NOT NULL DEFAULT 0.0,
+                market_expected_return       REAL NOT NULL DEFAULT 0.0,
+                expected_return_spread       REAL NOT NULL DEFAULT 0.0,
+                stock_expected_return_source TEXT DEFAULT 'dcf_implied_upside',
+                has_price_data               INTEGER NOT NULL DEFAULT 1,
+                metric_schema_version        INTEGER NOT NULL DEFAULT 1,
+                PRIMARY KEY (snapshot_version, ticker)
+            );
+            """
+        )
+
+        # A row computed before bridge_quality existed, to check what it migrates to.
+        conn.execute(
+            """INSERT INTO corporate_comparison_snapshots_v3
+                   (snapshot_version, snapshot_date, universe_key, snapshot_taken_at, ticker)
+               VALUES ('legacy|key', '2026-07-01', 'key', '2026-07-01T00:00:00+00:00', 'AAPL')"""
+        )
+
+    db_service.init_db()
+
+    with db_service.get_db() as conn:
+        v3_columns = {row["name"] for row in conn.execute("PRAGMA table_info(corporate_comparison_snapshots_v3)")}
+        legacy_bridge_quality = conn.execute(
+            "SELECT bridge_quality FROM corporate_comparison_snapshots_v3 WHERE ticker = 'AAPL'"
+        ).fetchone()["bridge_quality"]
+
+    # bridge_quality is new here; its presence proves the guarded ALTER TABLE ran.
+    assert "bridge_quality" in v3_columns
+    # Rows predating the column migrate to '', not 'missing'. Defaulting them to 'missing'
+    # would flip the aggregate exclusion rule (bridge_quality != 'missing') on every
+    # historical row at once, silently rewriting every average computed before this task.
+    assert legacy_bridge_quality == ""
 
 
 def test_reading_a_comparison_never_writes_a_snapshot():
