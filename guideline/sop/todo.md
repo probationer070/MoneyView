@@ -84,24 +84,35 @@ governance stay diagnostic-only`) -- this entry is the pointer, not the duplicat
       remain diagnostic-only. **Decision: diagnostic-only, and it must stay that
       way.** `esg_penalty`/`governance` are a hash of `f"{ticker}:{sector}"`
       (`corporate_metrics_service.py:145-146`), not a measured input --
-      `agency_discount` (`corporate_dcf.py:150`) is derived from that hash, reported
+      `agency_discount` (`corporate_dcf.py:154`) is derived from that hash, reported
       in `DCFFullReport`, and never multiplied into a valuation output. Wiring either
       into WACC or cash-flow scenarios would let renaming a ticker move its intrinsic
       value. Enforced by `test_esg_penalty_moves_no_valuation_output` in
       `tests/api/test_corporate_dcf_bridge.py`, not left to memory. Revisit only if
       ESG becomes a real acquisition data class with a measured source.
 
-  Three defects surfaced closing this phase, each with a full write-up in
-  `ERROR-LOG.md` (2026-08-03): `Total Debt`/`Net Debt` had been read as an alias
-  pair in three sites in `corporate_statement_metrics.py`, understating `debt_ratio`
-  and every WACC weight derived from it (`_gross_debt_map` now recovers gross debt as
-  `Net Debt + cash` only where `Total Debt` itself is absent -- deliberately the
-  gross expression, since `equity_bridge.py` reads the same two lines to produce
-  *net* debt, where the cash term does cancel); and `_dcf_snapshot` in
-  `corporate_comparison.py` passed `intrinsic_value=current_price` into the
-  expected-return formula, structurally zeroing `dcf_implied_return`,
-  `stock_expected_return`, and `expected_return_spread` for every row, alongside
-  hardcoded `net_debt=0.0` and a constant `"Bridge Incomplete"` status.
+  Three problems were identified closing this phase; two shipped as defects and
+  are recorded in `ERROR-LOG.md` (2026-08-03), one was caught in design and never
+  shipped:
+  - `Total Debt`/`Net Debt` had been read as an alias pair in three sites in
+    `corporate_statement_metrics.py`, understating `debt_ratio` and every WACC
+    weight derived from it (`_gross_debt_map` now recovers gross debt as `Net
+    Debt + cash` only where `Total Debt` itself is absent -- deliberately the
+    gross expression, since `equity_bridge.py` reads the same two lines to
+    produce *net* debt, where the cash term does cancel). Its own `ERROR-LOG.md`
+    entry.
+  - `_dcf_snapshot` in `corporate_comparison.py` passed
+    `intrinsic_value=current_price` into the expected-return formula,
+    structurally zeroing `dcf_implied_return`, `stock_expected_return`, and
+    `expected_return_spread` for every row, alongside a hardcoded `net_debt=0.0`
+    and a constant `"Bridge Incomplete"` status. Both lived in the same function
+    and were fixed in the same change, so they share one `ERROR-LOG.md` entry
+    rather than getting two.
+  - The unit mismatch: `metrics.fcff` is stored in billions while balance-sheet
+    figures and `sharesOutstanding` are raw, so an unscaled bridge would have been
+    wrong by a factor of `1e9`. This one **never shipped** -- caught in design, so
+    `equity_bridge.py` was written scaled from the start (the `_BILLION` divisor).
+    Correctly has no `ERROR-LOG.md` entry: nothing to log when nothing broke.
 
   Also confirmed and now covered by tests in both `test_corporate_dcf_bridge.py` and
   `test_corporate_dcf_streaming.py`: the Phase 1 invariant that `current_price`
