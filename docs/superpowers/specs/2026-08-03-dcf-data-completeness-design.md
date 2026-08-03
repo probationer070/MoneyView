@@ -8,9 +8,16 @@ is deliberately excluded — see [Not in scope](#not-in-scope).
 ## Design principle
 
 Equity-bridge inputs are derived exclusively from locally stored statements and quote facts.
-No acquisition pipeline, no persistence layer, no SQL schema change. This phase converts raw
-data the statements track already stores into valuation inputs carrying explicit quality
+No acquisition pipeline, no new table, no migration of existing values. This phase converts
+raw data the statements track already stores into valuation inputs carrying explicit quality
 metadata — nothing more.
+
+One exception, and it is additive: `corporate_comparison_snapshots_v3` gains a
+`bridge_quality` column. The aggregates it governs are computed in SQL over that table
+(`corporate_comparison.py:605-607`), not in Python over live rows, so a value that is not
+persisted cannot be filtered on. It follows the guarded `PRAGMA table_info` /
+`ALTER TABLE ... ADD COLUMN` pattern the table already uses for four other columns
+(`db.py:639-670`). No existing column is altered and no stored value is rewritten.
 
 Every decision below follows from that. Where a choice would have required new storage, new
 fetching, or a migration, it was rejected; the [Rejected alternatives](#rejected-alternatives)
@@ -334,8 +341,15 @@ removed or renamed, and no type is widened. Nothing in this phase is breaking.
 **Snapshots and caches.** Snapshot rows are immutable and inserted, never replaced, so no
 stored history is rewritten; existing rows keep `metric_schema_version = 1` and stay
 readable alongside new `2` rows. The statement cache is keyed by ticker and holds raw
-provider frames, not derived metrics, so nothing in it needs invalidating — this phase
-changes how stored data is *read*, never what is stored.
+provider frames, not derived metrics, so nothing in it needs invalidating.
+
+**The `bridge_quality` column defaults to `''` for pre-existing rows, not to `'missing'`.**
+`db.py:666-670` already sets this precedent for `metric_schema_version`, which defaults to
+`0` rather than the current version precisely so rows computed before the column existed stay
+distinguishable. The aggregate filter excludes only `bridge_quality = 'missing'`, so legacy
+rows carrying `''` remain in the aggregates and every historical average reads exactly as it
+does today. Defaulting them to `'missing'` would silently rewrite the history the column
+exists to preserve.
 
 ### `corporate_statement_metrics.py`
 
