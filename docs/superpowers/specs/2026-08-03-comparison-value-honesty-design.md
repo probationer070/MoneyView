@@ -9,21 +9,49 @@ needed frontend work outside its scope. They share one root cause, so they share
 
 ## Design principle
 
-`dcf_value` is no longer a single quantity. Making it honest is a presentation problem, not
-a valuation one: the backend already computes and persists everything needed to tell the two
-apart. This spec adds one backend field that is already stored but never selected, and spends
-the rest of its effort making the frontend stop conflating two kinds of number.
+`dcf_value` is no longer a single quantity. Making it honest is a presentation problem, not a
+valuation one: the backend already computes and persists everything needed to tell the two
+apart. This spec adds one backend field that is already stored but never selected, and focuses
+the remaining work on frontend presentation.
 
 No formula changes. No new acquisition. No migration.
+
+## Invariant
+
+> **Every value displayed in the DCF column, used for DCF sorting, or plotted against current
+> price must be an intrinsic value per share. An enterprise value is never presented as a
+> per-share value.**
+
+Every decision below follows from this one rule, and it is the rule to evaluate them against.
+
+## `bridge_quality` semantics
+
+Defined once here; later sections reference this table rather than restating it.
+
+| `bridge_quality` | What `dcf_value` holds | Meaning | Shown in the DCF column |
+|---|---|---|---|
+| `ok` | intrinsic value per share | Every bridge input resolved from its preferred source | **yes** |
+| `estimated` | intrinsic value per share | At least one input came from a documented fallback — Yahoo's reported `Net Debt` line, or `sharesOutstanding` in place of the diluted average | **yes** |
+| `missing` | enterprise value, in billions | The bridge did not resolve; no per-share value could be produced | **no** — suppressed |
+| absent | intrinsic value per share, or enterprise value | A legacy snapshot, or a payload from a backend predating the field | **yes** — see [Compatibility](#compatibility) |
+
+`estimated` is displayed because it *is* a per-share value. The fallback affects how much to
+trust the figure, not what quantity it is, so the invariant does not exclude it.
 
 ## Problem
 
 ### The comparison table renders two quantities in one column
 
 `corporate_comparison.py:399-403` sets `estimated_value` to the intrinsic per-share value when
-the bridge resolves, and to enterprise value otherwise. Both land in `dcf_value`. With the
-current fixtures a resolved row carries ≈ $158 and an unresolved one ≈ 2438 — the latter being
-billions of currency, not a share price.
+the bridge resolves, and to enterprise value otherwise. Both land in `dcf_value`.
+
+These are **different financial quantities**, not one quantity at two scales. Enterprise value
+is what the whole firm's operations are worth; intrinsic value per share is that figure bridged
+to equity and divided by the share count. Comparing them, ranking them against each other, or
+plotting them on one axis is meaningless no matter how close the numbers happen to fall. With
+the current fixtures the gap is wide enough to notice — ≈ $158 against ≈ 2438 — but a company
+with few shares outstanding would produce two similar numbers that are still not comparable,
+and that case is the dangerous one because nothing looks wrong.
 
 Three consumers treat them as one:
 
@@ -51,8 +79,8 @@ a market event.
 
 | Question | Decision |
 |---|---|
-| Unbridged `dcf_value` in the table | **Suppressed.** Render `—`, exclude from sort and from the scatter. An enterprise value in a `$`/share column is the exact defect the preceding work existed to remove; a footnote beside it would still let it sort and plot against real per-share values. |
-| `estimated` rows | **Keep their number.** Their net debt came from Yahoo's reported `Net Debt` line or their share count from `sharesOutstanding` — defensible figures, and genuinely per-share. Only `missing` is suppressed. |
+| Unbridged `dcf_value` in the table | **Suppressed.** Render `—`, exclude from sort and from the scatter. An enterprise value in a `$`/share column is the defect the preceding work existed to remove; a footnote beside it would still let it sort and plot against real per-share values. |
+| `estimated` rows | **Keep their number** — per the semantics table, they are per-share values. Only `missing` is suppressed. |
 | Where the rule lives | One exported helper, `bridgedDcfValue`. Every consumer calls it; none re-implements the `missing` check. |
 | Sort placement of suppressed rows | **Last in both directions.** Not `Number(null) → 0`, which would bury them mid-table among genuinely small values. |
 | History discontinuity | **Expose `metric_schema_version` and mark the boundary.** All history stays readable; a divider says the step is a definition change. |
@@ -62,9 +90,9 @@ a market event.
 
 An install where statement acquisition has never run will show `—` down the whole DCF column.
 That is the correct outcome, not a regression: the column currently shows a plausible dollar
-figure for every such row, and every one of those figures is wrong by three orders of
-magnitude. A blank column that prompts the user to acquire statements is better than a full one
-that misinforms.
+figure for every such row, and not one of those figures is the quantity the column claims to
+hold. A suppressed value that prompts the user to acquire statements is better than a displayed
+one that misinforms.
 
 ### Why `MAX` for the history version
 
@@ -104,12 +132,12 @@ consume it:
 
 ```ts
 /**
- * The row's DCF value when it is genuinely a per-share price, and null when it is not.
+ * The row's DCF value when it is an intrinsic value per share, and null when it is not.
  *
- * When the equity bridge does not resolve, dcf_value falls back to enterprise value in
- * billions -- a number three orders of magnitude away from a share price, and meaningless
- * in a $ cell, a sort against per-share values, or a scatter axis paired with current_price.
- * `estimated` still resolves to a real per-share value and is returned as one.
+ * When the equity bridge does not resolve, dcf_value falls back to enterprise value -- a
+ * different financial quantity, not a smaller one. It cannot go in a $/share cell, be ranked
+ * against per-share values, or share an axis with current_price, however close the numbers
+ * happen to fall. `estimated` is a real per-share value and is returned as one.
  */
 export function bridgedDcfValue(
   row: { dcf_value: number; bridge_quality?: string },
@@ -118,9 +146,29 @@ export function bridgedDcfValue(
 }
 ```
 
-A row whose `bridge_quality` is absent entirely — a legacy snapshot, or a payload from an older
-backend — returns its value unchanged. Suppressing on absence would blank the column for every
-historical snapshot, which is a bigger lie than the one being fixed.
+**This helper is the only place that decides whether a DCF value may be presented.** No
+component may branch on `bridge_quality` to make that decision itself — if a fourth quality
+tier is ever added, one edit here must cover every consumer. Reading `bridge_quality` to
+*display the quality itself* as a labelled datum is a different thing and remains fine;
+`CalculationDetailModal.tsx:478` does exactly that on the DCF report surface and is untouched
+by this spec.
+
+A row whose `bridge_quality` is absent returns its value unchanged — see below.
+
+### Compatibility
+
+`bridge_quality` and `metric_schema_version` are both optional additions, which makes every
+deployment order safe:
+
+| Backend | Frontend | Result |
+|---|---|---|
+| old | new | `bridge_quality` absent on every row; `bridgedDcfValue` returns the value; today's behaviour exactly |
+| new | old | the extra fields are ignored; today's behaviour exactly |
+| new | new | suppression and the history divider are active |
+
+The absent case is deliberately permissive. Suppressing on absence would blank the DCF column
+for every snapshot saved before this field existed, which distorts more history than the
+mislabelling being fixed.
 
 ### Type declarations
 
@@ -138,17 +186,42 @@ Optional, not required, so no existing construction site or fixture breaks.
 | Site | Change |
 |---|---|
 | `CorporateComparisonTable.tsx:90` | `bridgedDcfValue(row)` — render `—` with a `title` when null, `formatMoney` otherwise |
-| `corporateDerivedViews.ts:28-37` | `sortComparisonRows` — when `sortKey === "dcf_value"`, null rows sort last regardless of direction; other sort keys unaffected |
+| `corporateDerivedViews.ts:28-37` | `sortComparisonRows` — see the ordering contract below; other sort keys unaffected |
 | `corporateDerivedViews.ts:75-85` | `buildSimilarComparisonScatterPeers` — drop null-DCF rows |
 | `corporateDerivedViews.ts:87-96` | `buildSimilarComparisonScatterSelected` — return `[]` when the selected row's value is null |
 | `TargetStockComparisonSection.tsx:426` | the chart's `dcf_value` dataKey feeds from the filtered builders above; verify no separate path bypasses them |
 
+### The DCF sort ordering contract
+
+Applies only when `sortKey === "dcf_value"`. The other two sort keys are untouched.
+
+```
+both values present   ->  numeric comparison, then reversed for "desc" as today
+one value null        ->  the null row is ALWAYS the greater, in both directions
+both values null      ->  equal; their relative order is not specified
+```
+
+"Always greater" is not the same as sorting by a sentinel. `Number(null)` is `0`, which would
+place suppressed rows among genuinely small per-share values in one direction and at the far end
+in the other. The null check must happen before the numeric comparison, and must not be
+reversed by the direction flag.
+
+The consequence to hold in mind: suppressed rows sit at the bottom whether the user asks for
+ascending or descending. That is intentional — they have no position in a per-share ranking, so
+the honest place for them is out of the ranking entirely, in a consistent spot.
+
 ### The history divider
 
 `apps/web/app/portfolio/components/SnapshotHistoryModal.tsx` renders a divider between two
-adjacent points whose `metric_schema_version` differs, worded so it reads as a definition
-change rather than a data gap. The points themselves are unchanged — every average stays
-visible and every version stays readable.
+adjacent points whose `metric_schema_version` differs. The points themselves are unchanged —
+every average stays visible and every version stays readable.
+
+The wording is fixed here so it does not drift:
+
+> **Metric definition changed. Values before and after this point are not directly comparable.**
+
+It states a fact about the data rather than warning of an error, because nothing is wrong with
+either side — only with comparing across them.
 
 The modal already carries a `NO_BRIDGED_ROWS_TITLE` constant and an `== null` guard on both
 averages from the preceding work; this addition sits beside them and does not alter either.
@@ -162,10 +235,15 @@ three-line unit tests under any other rule. They must instead be exercised end t
 the same logic through the DOM. That is the cost of the standing rule and it is accepted here
 rather than worked around.
 
-The mock fixture carries three rows so every branch is reachable in one page load:
-- one `bridge_quality: "ok"` row with a per-share `dcf_value`
-- one `"estimated"` row, which must render its number like the `ok` row
-- one `"missing"` row, which must render `—`
+`corporatePageMock.ts` already sets `bridge_quality: "ok"` on its rows (`:39`, `:96`), so the
+field is present and only the other two tiers need adding. The fixture must end up carrying all
+three so every branch is reachable in one page load:
+- an `ok` row with a per-share `dcf_value` — already there
+- an `estimated` row, which must render its number exactly like the `ok` row
+- a `missing` row, which must render `—`
+
+The `estimated` row is the one that would be lost to a careless implementation: a check written
+as `bridge_quality !== "ok"` passes every test that only distinguishes `ok` from `missing`.
 
 **Playwright** (`apps/web/tests/e2e/`):
 - The `missing` row's DCF cell renders `—`, and the `ok` and `estimated` rows render currency.
@@ -205,10 +283,10 @@ Rejected because the chart still draws the step as a valuation move for everyone
 which is where the misreading happens.
 
 **Suppress `estimated` rows along with `missing` ones.**
-Simpler rule, one branch instead of two. Rejected because an `estimated` value is a real
-per-share price — its net debt came from Yahoo's reported `Net Debt` line, or its share count
-from `sharesOutstanding` rather than the diluted average. Hiding it would discard sound data and
-blank the column for most tickers.
+Simpler rule, one branch instead of two. Rejected because the invariant is about *which
+quantity* a number is, and an `estimated` row's number is an intrinsic value per share — see the
+semantics table. Its fallback source affects confidence, not units. Hiding it would discard
+sound data and suppress the column for most tickers.
 
 **Backfill `metric_schema_version` on legacy rows to the current value.**
 Would remove the `0` case entirely. Rejected for the reason the column exists: stamping old rows
@@ -217,6 +295,11 @@ precisely what it was added to prevent (`db.py`, the `metric_schema_version` mig
 
 ## Not in scope
 
+- **Export paths.** Checked: the corporate page has no CSV export, table copy, or snapshot
+  download — the only matches for those terms are the TypeScript `export` keyword. So there is
+  no second surface where a raw `dcf_value` could escape the suppression rule, and nothing to
+  change. Recorded so the next reader does not repeat the search. If an export is added later,
+  it must consume `bridgedDcfValue` like every other presentation path.
 - Regenerating `packages/shared-types/generated/portfolio.ts`, now stale on both the new
   nullability and this field. Confirmed inert — nothing in `apps/web` imports corporate types
   from it — and regenerating needs a network install for `json2ts`.
