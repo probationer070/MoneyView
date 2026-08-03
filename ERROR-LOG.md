@@ -888,3 +888,44 @@ handled failure: `feedparser` reports through a flag, not an exception, so a cor
 `try/except` around it catches nothing. The tests now assert the FAILED path by injecting a
 crawler that raises AND one that returns a bozo result, because only the second would have
 caught defect (2).
+
+## 2026-08-03: Yahoo's Net Debt line was silently read as Total Debt, understating WACC weights
+
+Date: 2026-08-03
+Command: `python -m pytest tests/api/test_statement_debt_extraction.py -v` (writing the
+failing tests for DCF data-completeness plan task 5)
+Failure: silent, and it never raised. Three sites in `corporate_statement_metrics.py`
+called `_statement_map(balance, ("Total Debt", "Net Debt"))`, treating the two labels as
+an alias pair - whichever one Yahoo provided was read into `debt_by_year` unchanged. But
+`Net Debt` is `Total Debt` minus cash, not a synonym. For a cash-rich company the two
+differ by most of the balance sheet: with total debt 100B and cash 90B, Yahoo's `Net Debt`
+line reads 10B, and reading that as total debt understated `debt_ratio` by 90% of the
+balance sheet (9.09% measured instead of the true 50%), corrupting every capital-structure
+weight and the WACC derived from it. `test_total_debt_is_recovered_from_net_debt_plus_cash`
+asserted `debt_ratio == 50.0` and observed `9.09`.
+Root cause: `_statement_map`'s alias-tuple mechanism assumes every label in the tuple
+denotes the same underlying quantity under a different Yahoo field name (true for most of
+its other callers, e.g. `"Pretax Income"` vs `"Income Before Tax"`). `Total Debt` and
+`Net Debt` do not satisfy that assumption - they are related but numerically distinct
+quantities - so treating them as aliases silently substituted the wrong figure whenever
+Yahoo omitted the `Total Debt` line.
+Fix: added `_gross_debt_map(balance, quarterly_balance)` in
+`apps/api/services/corporate_statement_metrics.py`, which reads `Total Debt` and
+`Net Debt` as separate series and recovers gross debt as `Net Debt + cash` only for years
+where `Total Debt` itself is absent, so coverage does not drop. This is deliberately the
+gross-debt expression: the cash term does not cancel here, unlike
+`apps/api/services/equity_bridge.py`, which reads the same two line items to produce NET
+debt (where the cash term does cancel). The two modules were kept independent on purpose -
+same inputs, two different consumers, two different expressions; no shared helper was
+extracted between them. All three call sites (`yahoo_statement_metrics`,
+`metric_audit_for_ticker`, `yahoo_metric_history`) now call `_gross_debt_map` instead of
+aliasing the two labels through `_statement_map`/`_quarterly_balance_map` directly.
+Files changed: `apps/api/services/corporate_statement_metrics.py`,
+`tests/api/test_statement_debt_extraction.py`.
+Prevention: an alias tuple passed to `_statement_map` must denote the same quantity under
+every label, never merely a *related* quantity - a WACC input derived from a proxy value
+is wrong in a way that produces a plausible number and raises no error. When two line
+items are related by an inexact identity (`Net Debt = Total Debt - Cash`), the recovery
+formula must be written explicitly at the point of use, keeping the sign/expression tied
+to what that specific consumer needs (gross vs. net), rather than folded into a general
+alias-lookup helper.
