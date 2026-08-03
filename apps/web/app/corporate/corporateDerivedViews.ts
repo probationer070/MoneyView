@@ -25,6 +25,23 @@ interface CorporateDerivedSnapshot {
 
 type ChartRecord = Record<string, string | number | boolean | null | undefined>;
 
+/**
+ * The row's DCF value when it is an intrinsic value per share, and null when it is not.
+ *
+ * When the equity bridge does not resolve, dcf_value falls back to enterprise value -- a
+ * different financial quantity, not a smaller one. It cannot go in a $/share cell, be ranked
+ * against per-share values, or share an axis with current_price, however close the numbers
+ * happen to fall. `estimated` is a real per-share value and is returned as one.
+ *
+ * This is the only place that decides whether a DCF value may be presented. Do not branch on
+ * bridge_quality elsewhere: a fourth quality tier must be one edit, not a search.
+ */
+export function bridgedDcfValue(
+  row: { dcf_value: number; bridge_quality?: string },
+): number | null {
+  return row.bridge_quality === "missing" ? null : row.dcf_value;
+}
+
 export function sortComparisonRows(
   rows: CorporateComparisonRowApi[] = [],
   sortKey: ComparisonSortKey,

@@ -29,6 +29,7 @@ interface ComparisonRow {
   market_expected_return: number;
   expected_return_spread: number;
   has_price_data: boolean;
+  bridge_quality?: string;
 }
 
 interface ComparisonData {

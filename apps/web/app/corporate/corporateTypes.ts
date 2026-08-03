@@ -141,6 +141,7 @@ export interface CorporateComparisonRowApi {
   expected_return_spread: number;
   stock_expected_return_source: string;
   has_price_data: boolean;
+  bridge_quality?: string;
 }
 
 export interface CorporateComparisonSnapshotApi {

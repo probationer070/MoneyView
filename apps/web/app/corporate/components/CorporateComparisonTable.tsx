@@ -1,6 +1,7 @@
 "use client";
 
 import type { CalculationDetailKey } from "./calculationDetailTypes";
+import { bridgedDcfValue } from "../corporateDerivedViews";
 
 export interface ComparisonTableRow {
   ticker: string;
@@ -16,6 +17,7 @@ export interface ComparisonTableRow {
   market_expected_return: number;
   expected_return_spread: number;
   has_price_data: boolean;
+  bridge_quality?: string;
 }
 
 interface CorporateComparisonTableProps {
@@ -85,9 +87,10 @@ export function CorporateComparisonTable({
                   type="button"
                   onClick={() => onOpenCalculationForTicker(row.ticker, "backendFairValue")}
                   disabled={row.group_name === "benchmark"}
+                  title={bridgedDcfValue(row) === null ? "The equity bridge did not resolve for this ticker, so no intrinsic value per share is available." : undefined}
                   className={`font-bold tabular-nums text-[var(--text-primary)] ${row.group_name === "benchmark" ? "cursor-default" : "underline decoration-dotted underline-offset-4 hover:opacity-80"}`}
                 >
-                  {formatMoney(row.dcf_value)}
+                  {bridgedDcfValue(row) === null ? "—" : formatMoney(row.dcf_value)}
                 </button>
               </td>
               <td className="px-4 py-3 text-right tabular-nums">{row.has_price_data ? formatMoney(row.current_price) : "N/A"}</td>
