@@ -51,12 +51,68 @@ Principles:
 - [x] Add regression tests proving DCF value does not depend on current price.
 - [x] Add regression tests for explicit enterprise-to-equity bridge math.
 
-### Phase 2 - DCF Data Completeness
+### Phase 2 - DCF Data Completeness (items 1-3 complete 2026-08-03)
 
-- [ ] Source net debt, non-operating assets, and diluted share count from Yahoo statement/profile data where available.
-- [ ] Add quality metadata for each bridge input so the UI can distinguish primary, estimated, and missing values.
-- [ ] Decide whether ESG/governance risk should adjust WACC, cash-flow scenarios, or remain diagnostic-only.
-- [ ] Add a WACC versus terminal-growth sensitivity table for terminal-value concentration risk.
+Plan: `.superpowers/sdd/2026-08-03-dcf-data-completeness/`. Full rationale and worked
+extraction rules are recorded in `docs/dcf-valuation.md` (`Where the bridge inputs
+come from`, `Units: everything in billions`, `Bridge input quality`, `ESG and
+governance stay diagnostic-only`) -- this entry is the pointer, not the duplicate.
+
+- [x] Source net debt, non-operating assets, and diluted share count from Yahoo
+      statement/profile data where available. `apps/api/services/equity_bridge.py`
+      (`load_equity_bridge`) reads the local statement bundle only -- it acquires
+      nothing, so metric computation stays network-free. `net_debt = Total Debt -
+      Cash` (falling back to Yahoo's own `Net Debt` line); `non_operating_assets =
+      Investments And Advances` (falling back to `Long Term Equity Investment`);
+      `diluted_shares_outstanding = Diluted Average Shares` (falling back to
+      `info["sharesOutstanding"]`). Everything is divided by `1e9` at read time so
+      `equity_value / diluted_shares_outstanding` yields dollars per share with no
+      further scaling. Wired into both `corporate_dcf._build_dcf_outputs` (a request
+      value still wins, reported `source="request"`) and
+      `corporate_comparison._dcf_snapshot`, replacing the hardcoded
+      `net_debt=0.0`/`intrinsic_value=current_price` placeholders there.
+- [x] Add quality metadata for each bridge input so the UI can distinguish primary,
+      estimated, and missing values. `BridgeSource` and `BridgeInputMeta` (`value`,
+      `source`, `quality`, `as_of`) in `apps/api/models/schema_parts/corporate.py`.
+      `bridge_quality` on `DCFSummary`, `DCFFullReport`, and
+      `CorporateComparisonRow` is the worst of the three input qualities. Added a
+      `bridge_quality` column to `corporate_comparison_snapshots_v3` (guarded `ALTER
+      TABLE`, defaults to `''` for pre-existing rows); `average_dcf_value` and
+      `average_expected_return_spread` now exclude `bridge_quality = 'missing'` rows,
+      `average_roic_minus_wacc` stays unfiltered. `METRIC_SCHEMA_VERSION` 1 -> 2.
+- [x] Decide whether ESG/governance risk should adjust WACC, cash-flow scenarios, or
+      remain diagnostic-only. **Decision: diagnostic-only, and it must stay that
+      way.** `esg_penalty`/`governance` are a hash of `f"{ticker}:{sector}"`
+      (`corporate_metrics_service.py:145-146`), not a measured input --
+      `agency_discount` (`corporate_dcf.py:150`) is derived from that hash, reported
+      in `DCFFullReport`, and never multiplied into a valuation output. Wiring either
+      into WACC or cash-flow scenarios would let renaming a ticker move its intrinsic
+      value. Enforced by `test_esg_penalty_moves_no_valuation_output` in
+      `tests/api/test_corporate_dcf_bridge.py`, not left to memory. Revisit only if
+      ESG becomes a real acquisition data class with a measured source.
+
+  Three defects surfaced closing this phase, each with a full write-up in
+  `ERROR-LOG.md` (2026-08-03): `Total Debt`/`Net Debt` had been read as an alias
+  pair in three sites in `corporate_statement_metrics.py`, understating `debt_ratio`
+  and every WACC weight derived from it (`_gross_debt_map` now recovers gross debt as
+  `Net Debt + cash` only where `Total Debt` itself is absent -- deliberately the
+  gross expression, since `equity_bridge.py` reads the same two lines to produce
+  *net* debt, where the cash term does cancel); and `_dcf_snapshot` in
+  `corporate_comparison.py` passed `intrinsic_value=current_price` into the
+  expected-return formula, structurally zeroing `dcf_implied_return`,
+  `stock_expected_return`, and `expected_return_spread` for every row, alongside
+  hardcoded `net_debt=0.0` and a constant `"Bridge Incomplete"` status.
+
+  Also confirmed and now covered by tests in both `test_corporate_dcf_bridge.py` and
+  `test_corporate_dcf_streaming.py`: the Phase 1 invariant that `current_price`
+  informs `upside_pct` and `status` only, and never reaches a valuation input,
+  survived Phase 2's wiring intact.
+
+- [ ] Add a WACC versus terminal-growth sensitivity table for terminal-value
+      concentration risk. Deferred deliberately, not an oversight: a sensitivity
+      chart is only worth building once the bridge it charts has real data in it,
+      which items 1-3 above are what just delivered. Tracked as its own open item
+      rather than closed alongside the rest of Phase 2.
 
 ### Phase 3 - Risk-Return Minard Remediation
 

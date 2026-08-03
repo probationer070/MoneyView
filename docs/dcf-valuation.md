@@ -182,6 +182,94 @@ If the share bridge is missing, `upside_pct` is held at `0.0` and `status` is `B
 
 The full report still exposes `agency_discount` as a diagnostic field, but the current intrinsic valuation does not apply a post-hoc ESG haircut to enterprise value. ESG and governance risk should be handled by WACC policy, cash-flow scenarios, or explicit risk diagnostics instead of an unexplained scalar.
 
+### Where the bridge inputs come from
+
+`apps/api/services/equity_bridge.py` reads the three bridge inputs from the locally
+stored statement bundle rather than leaving them `None` or requiring a caller-supplied
+override:
+
+- `net_debt = Total Debt - Cash`, where cash is `Cash Cash Equivalents And Short Term
+  Investments`, falling back to `Cash And Cash Equivalents` when the first line is not
+  reported. Cash enters the bridge in exactly one term -- inside `net_debt` -- not
+  also inside `non_operating_assets`, which reads a different balance-sheet line
+  (investments, not cash). If `Total Debt` is unavailable, the bridge falls back to
+  Yahoo's own `Net Debt` line directly; that branch is `estimated`, not `ok`, because
+  Yahoo does not document how it derives that figure and the definition varies by
+  sector.
+- `non_operating_assets = Investments And Advances`, falling back to `Long Term Equity
+  Investment`. When neither is reported, the term is `estimated` and summed as `0.0`
+  rather than blocking the whole bridge -- omitting it understates equity value by a
+  bounded amount that is immaterial for most issuers.
+- `diluted_shares_outstanding = Diluted Average Shares` from the income statement
+  (`ok`), falling back to `info["sharesOutstanding"]` (`estimated`) -- that figure is a
+  basic share count, not a diluted one, so using it is a real but named approximation.
+
+Across all three inputs, the latest reported period wins: annual and quarterly frames
+are both scanned, and whichever has the newer period end supplies the value. That
+period end is recorded as `as_of`, so a stale balance-sheet figure is visible rather
+than silently treated as current.
+
+A request-supplied override (`net_debt`, `non_operating_assets`, or
+`diluted_shares_outstanding` on the API request) always wins over the stored value,
+reported with `source = "request"` and `quality = "ok"` -- the store only fills
+whatever the caller leaves `None`.
+
+### Units: everything in billions
+
+The bridge divides every quantity by `1e9` at read time, so `net_debt`,
+`non_operating_assets`, and `diluted_shares_outstanding` are all expressed in
+billions -- of currency for the first two, of shares for the third. Enterprise value
+is already computed in billions, so `equity_value / diluted_shares_outstanding`
+yields dollars per share directly with no further scaling. Scaling happens once, at
+read time in `equity_bridge.py`; the stored statement values themselves stay verbatim
+as the provider reported them, so no migration of stored data is needed.
+
+### Bridge input quality
+
+Each bridge input carries a `quality` alongside its `value`:
+
+- `ok` -- read directly from the documented line item MoneyView expects.
+- `estimated` -- a value exists, but it came from a fallback whose definition is
+  either undocumented (Yahoo's own `Net Debt` line), not quite what the field
+  promises (`sharesOutstanding` is basic, not diluted), or assumed to be zero when
+  absent (`non_operating_assets`). An `estimated` value is usable and bounded: it
+  will not produce a missing or wildly wrong per-share value, only a slightly
+  approximate one.
+- `missing` -- nothing at all was available, from the store or a fallback. A
+  `missing` net debt or share count blocks the per-share bridge outright rather than
+  guessing; `non_operating_assets` never reports `missing`, because that term
+  degrades to `estimated`/`0.0` instead.
+
+`DCFSummary.bridge_quality` and `DCFFullReport.bridge_quality` report the worst of the
+three input qualities (`ok` is better than `estimated`, which is better than
+`missing`), so one degraded input is visible on the whole payload, not only on the
+field it degraded.
+
+### ESG and governance stay diagnostic-only
+
+`esg_penalty` and `governance` on `CorporateMetrics` are not measured from any data
+source. `apps/api/services/corporate_metrics_service.py` computes both as a
+deterministic hash of the ticker and sector strings:
+
+```text
+seed = sum(ord(char) for char in f"{ticker}:{sector}")
+esg_penalty = round(8.0 + (seed % 32), 2)
+governance  = round(52.0 + (seed % 38), 2)
+```
+
+Because `esg_penalty` is a function of the *spelling* of the ticker, nothing that
+moves a valuation may be derived from it: renaming a ticker would change its
+intrinsic value with no change to the underlying business. `agency_discount`
+(computed from `esg_penalty` in `corporate_dcf.py` and reported in `DCFFullReport`)
+stays reported and inert -- it is never multiplied into enterprise value, equity
+value, WACC, or any cash-flow scenario. `test_esg_penalty_moves_no_valuation_output`
+in `tests/api/test_corporate_dcf_bridge.py` enforces exactly this: two runs that
+differ only in ticker/sector spelling produce different `agency_discount` values but
+identical enterprise, equity, and per-share values. Revisit this decision only if ESG
+becomes a real acquisition data class with a measured source -- until then, ESG and
+governance risk belong in WACC policy or explicit risk diagnostics, never in an
+unexplained scalar baked into the DCF math.
+
 ## Worked Example
 
 Assume:
