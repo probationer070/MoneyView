@@ -92,6 +92,10 @@ def test_dcf_stream_endpoint_emits_phase1_and_phase2_without_full_report(monkeyp
     assert "event: phase2" in body
     assert '"phase":"phase1"' in body
     assert '"phase":"phase2"' in body
+    # No bridge params are supplied, so the store is consulted -- and since the test
+    # database is empty by construction, it resolves to "missing". Stated here so a
+    # future test that seeds the store has something to fail against.
+    assert '"bridge_quality":"missing"' in body
     assert "projection_rows" not in body
     assert "wacc_breakdown" not in body
 
@@ -129,6 +133,11 @@ def test_dcf_value_does_not_depend_on_current_price(monkeypatch):
     assert second["current_price"] == 300.0
     assert first["estimated_value"] == second["estimated_value"]
     assert first["enterprise_value"] == second["enterprise_value"]
+    # No bridge params are supplied, so the store is consulted -- and since the test
+    # database is empty by construction, it resolves to "missing". Stated here so a
+    # future test that seeds the store has something to fail against.
+    assert first["bridge_quality"] == "missing"
+    assert second["bridge_quality"] == "missing"
 
 
 def test_dcf_full_report_uses_explicit_equity_bridge(monkeypatch):
