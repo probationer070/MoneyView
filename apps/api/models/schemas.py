@@ -20,6 +20,8 @@ from .schema_parts.dev_monitor import (
     PerformanceSummary,
 )
 from .schema_parts.corporate import (
+    BridgeInputMeta,
+    BridgeSource,
     DCFAssumptionSummary,
     DCFFullReport,
     DCFProjectionRow,
@@ -85,6 +87,8 @@ from .schema_parts.watchlist import (
 __all__ = [
     "APIMeta",
     "APIResponse",
+    "BridgeInputMeta",
+    "BridgeSource",
     "ComparisonUniverseEnum",
     "LogTailResponse",
     "PerformanceEvent",

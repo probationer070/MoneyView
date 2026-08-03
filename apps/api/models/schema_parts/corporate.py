@@ -1,10 +1,41 @@
 from __future__ import annotations
 
+from enum import StrEnum
 from typing import List
 
 from pydantic import BaseModel, Field
 
 from .common import ComparisonUniverseEnum
+
+
+class BridgeSource(StrEnum):
+    """Where one enterprise-to-equity bridge input came from.
+
+    A closed set, not a free-form string: this value is rendered in the UI, and
+    free-form provenance strings drift apart across call sites.
+    """
+
+    REQUEST = "request"
+    TOTAL_DEBT_LESS_CASH = "total_debt_less_cash"
+    NET_DEBT_PLUS_CASH = "net_debt_plus_cash"
+    INVESTMENTS_ADVANCES = "investments_and_advances"
+    DILUTED_AVERAGE_SHARES = "diluted_average_shares"
+    SHARES_OUTSTANDING = "shares_outstanding"
+    UNAVAILABLE = "unavailable"
+
+
+class BridgeInputMeta(BaseModel):
+    """One bridge input with its provenance.
+
+    `value` is in billions -- of currency for the two money terms, of shares for
+    the share count -- so equity_value / diluted_shares yields dollars per share
+    directly. Scaling happens once, in equity_bridge.py, at read time.
+    """
+
+    value: float | None = None
+    source: str = BridgeSource.UNAVAILABLE
+    quality: str = "missing"
+    as_of: str | None = None
 
 
 class ValuationAssumptions(BaseModel):
@@ -36,6 +67,9 @@ class DCFSummary(BaseModel):
     equity_value: float | None = None
     valuation_method: str = "enterprise_value_no_share_bridge"
     bridge_quality: str = "missing"
+    net_debt_meta: BridgeInputMeta = Field(default_factory=BridgeInputMeta)
+    non_operating_assets_meta: BridgeInputMeta = Field(default_factory=BridgeInputMeta)
+    diluted_shares_meta: BridgeInputMeta = Field(default_factory=BridgeInputMeta)
     current_price: float
     upside_pct: float
     status: str
@@ -96,6 +130,9 @@ class DCFFullReport(BaseModel):
     diluted_shares_outstanding: float | None = None
     valuation_method: str = "enterprise_value_no_share_bridge"
     bridge_quality: str = "missing"
+    net_debt_meta: BridgeInputMeta = Field(default_factory=BridgeInputMeta)
+    non_operating_assets_meta: BridgeInputMeta = Field(default_factory=BridgeInputMeta)
+    diluted_shares_meta: BridgeInputMeta = Field(default_factory=BridgeInputMeta)
     agency_discount: float
     dcf_multiple: float
     baseline_multiple: float
@@ -221,6 +258,10 @@ class CorporateComparisonRow(BaseModel):
     expected_return_spread: float
     stock_expected_return_source: str = "dcf_implied_upside"
     has_price_data: bool = True
+    # Beside has_price_data, and for the same reason: the three return fields above are
+    # typed float and feed non-optional aggregates, so they cannot become None when the
+    # bridge does not resolve. This flag says the numbers next to it are not meaningful.
+    bridge_quality: str = "missing"
 
 
 class CorporateComparisonSnapshotMeta(BaseModel):
