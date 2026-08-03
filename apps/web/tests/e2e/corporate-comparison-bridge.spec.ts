@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { mockCorporatePageApi } from "./helpers/corporatePageMock";
+import { CORPORATE_COMPARISON_CURRENT_PRICES, mockCorporatePageApi } from "./helpers/corporatePageMock";
 
 // XPath string literals: ticker and column-header values used here never contain a
 // double quote, so a plain wrap is safe.
@@ -97,14 +97,18 @@ async function plottedTickers(page: Page): Promise<string[]> {
   const slope = (last.value - first.value) / (last.x - first.x);
   const priceForPixel = (px: number) => first.value + (px - first.x) * slope;
 
-  // current_price per ticker, straight from the fixture in corporatePageMock.ts. Prices are
-  // unique across these rows, so nearest-match against the decoded value is unambiguous.
-  const currentPriceByTicker: Record<string, number> = {
-    AAPL: 210.4,
-    MSFT: 415.3,
-    ESTM: 250.0,
-    MISS: 240.0,
-  };
+  // current_price per ticker is imported from the same fixture module the mock serves
+  // (CORPORATE_COMPARISON_CURRENT_PRICES in corporatePageMock.ts), not restated here, so a
+  // future change to a fixture price cannot silently drift out of sync with this decode.
+  const currentPriceByTicker = CORPORATE_COMPARISON_CURRENT_PRICES;
+
+  // The tightest gap between any two known candidate prices is $10 (MISS 240.0 vs
+  // ESTM 250.0). Half of that -- $5 -- is comfortably inside "clearly meant this ticker"
+  // while still catching a decode gone wrong before it silently resolves to a neighbor:
+  // the tick-to-pixel scale reconstructed above has only sub-cent rounding noise in
+  // practice (verified against the fixture values directly), so a genuine match should
+  // land within a few cents, not dollars, of its ticker's price.
+  const MAX_TICKER_MATCH_DISTANCE_USD = 5;
 
   const pointCxValues = await section
     .locator("path.recharts-symbols")
@@ -112,9 +116,20 @@ async function plottedTickers(page: Page): Promise<string[]> {
 
   return pointCxValues.map((cx) => {
     const decodedPrice = priceForPixel(cx);
-    const [closestTicker] = Object.entries(currentPriceByTicker).reduce((best, candidate) =>
-      Math.abs(candidate[1] - decodedPrice) < Math.abs(best[1] - decodedPrice) ? candidate : best);
-    return closestTicker;
+    const byDistance = Object.entries(currentPriceByTicker)
+      .map(([ticker, price]) => ({ ticker, price, distance: Math.abs(price - decodedPrice) }))
+      .sort((a, b) => a.distance - b.distance);
+    const [closest, nextClosest] = byDistance;
+    if (closest.distance > MAX_TICKER_MATCH_DISTANCE_USD) {
+      throw new Error(
+        `Scatter point decoded to current_price ~$${decodedPrice.toFixed(2)} (from cx=${cx}), which is not `
+        + `within $${MAX_TICKER_MATCH_DISTANCE_USD} of any known ticker. It falls roughly between `
+        + `${closest.ticker} ($${closest.price}, off by $${closest.distance.toFixed(2)}) and `
+        + `${nextClosest.ticker} ($${nextClosest.price}, off by $${nextClosest.distance.toFixed(2)}) -- `
+        + `the pixel decode is unreliable here, not a plotted-ticker fact.`,
+      );
+    }
+    return closest.ticker;
   });
 }
 

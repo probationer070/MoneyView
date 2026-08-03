@@ -11,6 +11,18 @@ import type {
 } from "../../../../../packages/shared-types";
 import { API_PREFIX, json, nowIso } from "./mockUtils";
 
+// current_price for the "Technology" sector comparison rows (AAPL/MSFT/ESTM/MISS), shared
+// between the fixture below and any test that needs to identify a specific ticker's data
+// point independently (e.g. by decoding a chart's rendered pixel position). Exported so
+// those tests derive the value from this single source instead of restating it as a
+// separate literal that can silently drift out of sync with the fixture.
+export const CORPORATE_COMPARISON_CURRENT_PRICES: Record<string, number> = {
+  AAPL: 210.4,
+  MSFT: 415.3,
+  ESTM: 250.0,
+  MISS: 240.0,
+};
+
 export type CorporatePageMockStats = {
   dcfRequests: number;
   dcfFullReportRequests: number;
@@ -296,7 +308,7 @@ export async function mockCorporatePageApi(page: Page, stats?: CorporatePageMock
         roic_minus_wacc: 8,
         dcf_value: 240.5,
         bridge_quality: "ok",
-        current_price: 210.4,
+        current_price: CORPORATE_COMPARISON_CURRENT_PRICES.AAPL,
         dcf_implied_return: 14.31,
         capm_expected_return: 11.26,
         stock_expected_return: 14.31,
@@ -316,7 +328,7 @@ export async function mockCorporatePageApi(page: Page, stats?: CorporatePageMock
         roic_minus_wacc: 13,
         dcf_value: 460.2,
         bridge_quality: "ok",
-        current_price: 415.3,
+        current_price: CORPORATE_COMPARISON_CURRENT_PRICES.MSFT,
         dcf_implied_return: 10.81,
         capm_expected_return: 10.39,
         stock_expected_return: 10.81,
@@ -339,7 +351,7 @@ export async function mockCorporatePageApi(page: Page, stats?: CorporatePageMock
         // written `!== "ok"` instead of `=== "missing"`.
         dcf_value: 300.0,
         bridge_quality: "estimated",
-        current_price: 250.0,
+        current_price: CORPORATE_COMPARISON_CURRENT_PRICES.ESTM,
         dcf_implied_return: 20.0,
         capm_expected_return: 11.0,
         stock_expected_return: 20.0,
@@ -363,7 +375,7 @@ export async function mockCorporatePageApi(page: Page, stats?: CorporatePageMock
         // which is exactly what the sort test detects.
         dcf_value: 2438.0,
         bridge_quality: "missing",
-        current_price: 240.0,
+        current_price: CORPORATE_COMPARISON_CURRENT_PRICES.MISS,
         dcf_implied_return: 0.0,
         capm_expected_return: 11.0,
         stock_expected_return: 0.0,
