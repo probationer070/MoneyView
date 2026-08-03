@@ -1,7 +1,11 @@
+import ast
+import pathlib
+
 import pandas as pd
 import pytest
 
 from apps.api.models.schema_parts.corporate import BridgeSource
+from apps.api.services import equity_bridge
 from apps.api.services.equity_bridge import load_equity_bridge
 
 BILLION = 1_000_000_000.0
@@ -122,7 +126,11 @@ def test_net_debt_falls_back_to_the_net_debt_line_at_estimated_quality():
     bridge = load_equity_bridge("TEST", bundle_loader=_loader(bundle))
     assert bridge.net_debt.value == pytest.approx(55.0)
     assert bridge.net_debt.quality == "estimated"
-    assert bridge.net_debt.source == BridgeSource.NET_DEBT_PLUS_CASH
+    # The value returned is Yahoo's Net Debt line verbatim, with no cash added, so the
+    # provenance string rendered in the UI must say that and not describe an addition
+    # that does not happen.
+    assert bridge.net_debt.source == BridgeSource.REPORTED_NET_DEBT
+    assert bridge.net_debt.source == "reported_net_debt"
 
 
 def test_net_debt_is_missing_when_cash_is_absent():
@@ -252,8 +260,31 @@ def test_a_zero_value_is_data_not_absence():
     assert bridge.net_debt.quality == "ok"
 
 
+def test_no_source_is_written_as_a_string_literal():
+    # The intent behind the test below is "no free-form provenance string can reach the
+    # UI", but that cannot be decided from a BridgeInputMeta: BridgeSource is a StrEnum
+    # and Pydantic coerces the member to a plain str at the model boundary, so
+    # `type(meta.source)` is `str` and `isinstance(meta.source, BridgeSource)` is False
+    # whether the caller passed the member or typed the literal. The property is checked
+    # here instead, where it is decidable -- at the one module that assigns provenance.
+    tree = ast.parse(pathlib.Path(equity_bridge.__file__).read_text(encoding="utf-8"))
+    assigned = [
+        keyword.value
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        for keyword in node.keywords
+        if keyword.arg == "source"
+    ]
+    assert assigned, "no source= arguments found; the parse or the module moved"
+    for value in assigned:
+        assert isinstance(value, ast.Attribute), f"source= is not an attribute: {ast.dump(value)}"
+        assert isinstance(value.value, ast.Name) and value.value.id == "BridgeSource"
+        assert value.attr in BridgeSource.__members__
+
+
 def test_every_emitted_source_is_a_bridge_source_member():
-    # No free-form provenance string can reach the UI.
+    # Values only: a member and a hand-typed literal equal to it are indistinguishable
+    # here, which is what the AST test above covers.
     bundle = _bundle(
         balance=_frame(
             {"Total Debt": [10 * BILLION], "Cash And Cash Equivalents": [5 * BILLION]},

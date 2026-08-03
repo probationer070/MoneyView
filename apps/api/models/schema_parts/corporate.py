@@ -17,7 +17,10 @@ class BridgeSource(StrEnum):
 
     REQUEST = "request"
     TOTAL_DEBT_LESS_CASH = "total_debt_less_cash"
-    NET_DEBT_PLUS_CASH = "net_debt_plus_cash"
+    # Yahoo's own Net Debt line, taken verbatim. No cash is added to it: recovering
+    # total debt as NetDebt + cash and then netting the same cash back out is just
+    # NetDebt, so the name has to say what the value is, not how it was once derived.
+    REPORTED_NET_DEBT = "reported_net_debt"
     INVESTMENTS_ADVANCES = "investments_and_advances"
     DILUTED_AVERAGE_SHARES = "diluted_average_shares"
     SHARES_OUTSTANDING = "shares_outstanding"

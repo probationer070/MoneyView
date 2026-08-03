@@ -1,3 +1,4 @@
+import pandas as pd
 import pytest
 
 from apps.api.models.schema_parts.corporate import (
@@ -6,8 +7,10 @@ from apps.api.models.schema_parts.corporate import (
     ValuationAssumptions,
 )
 from apps.api.services.corporate_dcf import _build_dcf_outputs
-from apps.api.services.equity_bridge import EquityBridge
+from apps.api.services.equity_bridge import EquityBridge, load_equity_bridge
 from apps.api.models.schemas import CorporateMetrics
+
+BILLION = 1_000_000_000.0
 
 
 def _metrics(ticker="TEST"):
@@ -44,6 +47,20 @@ def _bridge(net_debt=60.0, non_op=5.0, shares=15.0):
     )
 
 
+def _raw_dollar_bundle(*, total_debt, cash, shares):
+    """A statement bundle in raw dollars, as the store holds it -- values verbatim as the
+    provider reported them, with Timestamp columns."""
+    def frame(rows):
+        return pd.DataFrame(rows, index=pd.to_datetime(["2025-09-30"])).T
+
+    return {
+        "ticker": "TEST",
+        "balance": frame({"Total Debt": [total_debt], "Cash And Cash Equivalents": [cash]}),
+        "income": frame({"Diluted Average Shares": [shares]}),
+        "info": {},
+    }
+
+
 def _outputs(params, bridge):
     return _build_dcf_outputs(
         ticker="TEST",
@@ -76,7 +93,28 @@ def test_the_per_share_value_is_in_dollars_not_billionths_of_a_dollar():
     # fcff and enterprise_value are in billions; net debt and the share count are scaled
     # to billions at read time, so the quotient is dollars per share. Feeding raw dollars
     # here would be wrong by 1e9 and would still return a plausible small number.
-    summary, _, full = _outputs(_params(), _bridge(net_debt=60.0, non_op=0.0, shares=15.0))
+    #
+    # The bridge is loaded for real from a raw-dollar bundle rather than handed the
+    # already-scaled 60.0 / 15.0. An injected pre-scaled bridge exercises only the
+    # subtraction: _build_dcf_outputs does no scaling itself, so with the 1e9 divisor
+    # deleted from equity_bridge.py the assertion below would still have held. Going
+    # through load_equity_bridge is what makes the two layers agree on units, and it is
+    # the only test that checks that agreement -- test_equity_bridge.py covers the
+    # bridge's own scaling, and nothing else covers the seam.
+    bundle = _raw_dollar_bundle(total_debt=100 * BILLION, cash=40 * BILLION, shares=15 * BILLION)
+    summary, _, full = _build_dcf_outputs(
+        ticker="TEST",
+        params=_params(),
+        current_price_loader=lambda t: 100.0,
+        metrics_loader=lambda t: _metrics(t),
+        risk_free_rate=0.042,
+        equity_risk_premium=0.055,
+        country_risk_premium=0.008,
+        bridge_loader=lambda t: load_equity_bridge("TEST", bundle_loader=lambda tk, ep: bundle),
+    )
+    # 60.0 and 15.0 are billions, written by this test rather than read back out of the
+    # bridge: unscaled, the same bundle yields 6e10 and 1.5e10 and a per-share value of
+    # about -4 dollars, which fails both assertions.
     expected = (full.enterprise_value - 60.0) / 15.0
     assert summary.intrinsic_value_per_share == pytest.approx(expected, rel=1e-6)
     assert summary.intrinsic_value_per_share > 1.0

@@ -110,7 +110,7 @@ def _net_debt_input(bundle: dict) -> BridgeInputMeta:
     if reported is not None:
         return BridgeInputMeta(
             value=_scaled(reported),
-            source=BridgeSource.NET_DEBT_PLUS_CASH,
+            source=BridgeSource.REPORTED_NET_DEBT,
             quality="estimated",
             as_of=reported_period,
         )

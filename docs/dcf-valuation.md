@@ -209,6 +209,14 @@ are both scanned, and whichever has the newer period end supplies the value. Tha
 period end is recorded as `as_of`, so a stale balance-sheet figure is visible rather
 than silently treated as current.
 
+`net_debt` is the one input built from two line items, and both must come off the
+**same** balance-sheet date. The bridge resolves the newest period for which a debt
+figure and a cash figure both exist, and reads both terms from it; `as_of` is that
+shared date. If no period carries both, `net_debt` is `missing` -- the two terms are
+never paired across dates. Resolving each independently would subtract, say, September
+cash from June debt whenever one line stops reporting before the other, which understates
+net debt while still reporting `ok`.
+
 A request-supplied override (`net_debt`, `non_operating_assets`, or
 `diluted_shares_outstanding` on the API request) always wins over the stored value,
 reported with `source = "request"` and `quality = "ok"` -- the store only fills
