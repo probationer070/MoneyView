@@ -15,6 +15,9 @@ from apps.api.models.schemas import (
     CorporateMetrics,
     ValuationAssumptions,
 )
+from apps.api.models.schema_parts.corporate import BridgeInputMeta, BridgeSource
+from apps.api.services.corporate_statement_metrics import _pick_worst_quality
+from apps.api.services.equity_bridge import load_equity_bridge
 
 DEFAULT_EQUITY_RISK_PREMIUM = 0.055
 DEFAULT_COUNTRY_RISK_PREMIUM = 0.8
@@ -113,6 +116,7 @@ def _build_dcf_outputs(
     risk_free_rate: float,
     equity_risk_premium: float,
     country_risk_premium: float,
+    bridge_loader=load_equity_bridge,
 ) -> tuple[DCFSummary, DCFAssumptionSummary, DCFFullReport]:
     ticker = ticker.upper()
     current_price = current_price_loader(ticker)
@@ -151,36 +155,70 @@ def _build_dcf_outputs(
     dcf_multiple = enterprise_value / base_fcff
     baseline_multiple = 1 / max(wacc - terminal_growth, 0.005)
     fcff_scale = 1.0
-    net_debt = float(params.net_debt) if params.net_debt is not None else None
-    non_operating_assets = float(params.non_operating_assets) if params.non_operating_assets is not None else None
-    diluted_shares_outstanding = (
-        float(params.diluted_shares_outstanding)
-        if params.diluted_shares_outstanding is not None
-        else None
+
+    # Request wins, store fills -- the same precedent line 119 sets for fcff and
+    # esg_penalty. Keeping the request fields is what lets the DCF what-if simulator
+    # override an assumption; the store is what makes the bridge resolve when nobody does.
+    needs_store = (
+        params.net_debt is None
+        or params.non_operating_assets is None
+        or params.diluted_shares_outstanding is None
     )
-    bridge_net_debt = net_debt if net_debt is not None else 0.0
-    bridge_non_operating_assets = non_operating_assets if non_operating_assets is not None else 0.0
+    bridge = bridge_loader(ticker) if needs_store else None
+
+    def _resolve(requested: float | None, stored: BridgeInputMeta) -> BridgeInputMeta:
+        if requested is None:
+            return stored
+        # The caller asserted this figure, so it is ok by definition and its provenance
+        # is the request -- not whatever the store happened to hold.
+        return BridgeInputMeta(
+            value=float(requested), source=BridgeSource.REQUEST, quality="ok"
+        )
+
+    net_debt_meta = _resolve(
+        params.net_debt, bridge.net_debt if bridge else BridgeInputMeta()
+    )
+    non_operating_assets_meta = _resolve(
+        params.non_operating_assets,
+        bridge.non_operating_assets if bridge else BridgeInputMeta(),
+    )
+    diluted_shares_meta = _resolve(
+        params.diluted_shares_outstanding,
+        bridge.diluted_shares_outstanding if bridge else BridgeInputMeta(),
+    )
+
+    net_debt = net_debt_meta.value
+    non_operating_assets = non_operating_assets_meta.value
+    diluted_shares_outstanding = diluted_shares_meta.value
+
+    bridge_quality = _pick_worst_quality(
+        net_debt_meta.quality, non_operating_assets_meta.quality, diluted_shares_meta.quality
+    )
+
+    # An absent non-operating-assets term sums as zero -- that is what "estimated" means
+    # here. An absent net debt or share count does not: those are "missing", and the
+    # per-share value must not be produced at all.
     equity_value = (
         calculate_equity_value(
             enterprise_value=enterprise_value,
-            net_debt=bridge_net_debt,
-            non_operating_assets=bridge_non_operating_assets,
+            net_debt=net_debt,
+            non_operating_assets=non_operating_assets or 0.0,
         )
-        if diluted_shares_outstanding is not None
+        if net_debt is not None
         else None
     )
     intrinsic_value_per_share = (
         calculate_intrinsic_value_per_share(equity_value, diluted_shares_outstanding)
-        if equity_value is not None and diluted_shares_outstanding is not None
+        if equity_value is not None
+        and diluted_shares_outstanding is not None
+        and diluted_shares_outstanding > 0
         else None
     )
-    has_complete_bridge = (
-        intrinsic_value_per_share is not None
-        and net_debt is not None
-        and non_operating_assets is not None
+    valuation_method = (
+        "intrinsic_equity_per_share"
+        if intrinsic_value_per_share is not None
+        else "enterprise_value_no_share_bridge"
     )
-    bridge_quality = "ok" if has_complete_bridge else "estimated" if intrinsic_value_per_share is not None else "missing"
-    valuation_method = "intrinsic_equity_per_share" if intrinsic_value_per_share is not None else "enterprise_value_no_share_bridge"
     estimated_value = intrinsic_value_per_share if intrinsic_value_per_share is not None else enterprise_value
     comparable_value = intrinsic_value_per_share
     upside_pct = ((comparable_value - current_price) / current_price) * 100 if comparable_value is not None and current_price > 0 else 0.0
@@ -206,11 +244,14 @@ def _build_dcf_outputs(
         report_id=report_id,
         ticker=ticker,
         estimated_value=round(float(estimated_value), 2),
-        intrinsic_value_per_share=round(float(intrinsic_value_per_share), 2) if intrinsic_value_per_share is not None else None,
+        intrinsic_value_per_share=round(float(intrinsic_value_per_share), 4) if intrinsic_value_per_share is not None else None,
         enterprise_value=round(float(enterprise_value), 2),
         equity_value=round(float(equity_value), 2) if equity_value is not None else None,
         valuation_method=valuation_method,
         bridge_quality=bridge_quality,
+        net_debt_meta=net_debt_meta,
+        non_operating_assets_meta=non_operating_assets_meta,
+        diluted_shares_meta=diluted_shares_meta,
         current_price=round(float(current_price), 2),
         upside_pct=round(float(upside_pct), 2),
         status=status,
@@ -252,6 +293,9 @@ def _build_dcf_outputs(
         diluted_shares_outstanding=round(float(diluted_shares_outstanding), 4) if diluted_shares_outstanding is not None else None,
         valuation_method=valuation_method,
         bridge_quality=bridge_quality,
+        net_debt_meta=net_debt_meta,
+        non_operating_assets_meta=non_operating_assets_meta,
+        diluted_shares_meta=diluted_shares_meta,
         agency_discount=round(float(agency_discount), 6),
         dcf_multiple=round(float(dcf_multiple), 6),
         baseline_multiple=round(float(baseline_multiple), 6),

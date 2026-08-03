@@ -146,7 +146,7 @@ def test_dcf_full_report_uses_explicit_equity_bridge(monkeypatch):
     assert payload["equity_value"] == 1306.87
     assert payload["intrinsic_value_per_share"] == 130.687
     assert payload["summary"]["estimated_value"] == 130.69
-    assert payload["summary"]["intrinsic_value_per_share"] == 130.69
+    assert payload["summary"]["intrinsic_value_per_share"] == 130.687
     assert payload["valuation_method"] == "intrinsic_equity_per_share"
     assert payload["bridge_quality"] == "ok"
     assert payload["summary"]["status"] == "Overvalued"
