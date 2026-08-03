@@ -185,7 +185,7 @@ Optional, not required, so no existing construction site or fixture breaks.
 
 | Site | Change |
 |---|---|
-| `CorporateComparisonTable.tsx:90` | `bridgedDcfValue(row)` — render `—` with a `title` when null, `formatMoney` otherwise |
+| `CorporateComparisonTable.tsx:83-92` | `bridgedDcfValue(row)` — render `—` with a `title` when null, `formatMoney` otherwise. **Keep the button enabled**: the cell is a button opening the calculation detail modal, which is exactly where "why is there no value here" is answered — `CalculationDetailModal.tsx:478` shows the bridge quality. Disabling it would remove the explanation along with the number. |
 | `corporateDerivedViews.ts:28-37` | `sortComparisonRows` — see the ordering contract below; other sort keys unaffected |
 | `corporateDerivedViews.ts:75-85` | `buildSimilarComparisonScatterPeers` — drop null-DCF rows |
 | `corporateDerivedViews.ts:87-96` | `buildSimilarComparisonScatterSelected` — return `[]` when the selected row's value is null |
@@ -212,16 +212,32 @@ the honest place for them is out of the ranking entirely, in a consistent spot.
 
 ### The history divider
 
-`apps/web/app/portfolio/components/SnapshotHistoryModal.tsx` renders a divider between two
-adjacent points whose `metric_schema_version` differs. The points themselves are unchanged —
-every average stays visible and every version stays readable.
+`apps/web/app/portfolio/components/SnapshotHistoryModal.tsx` renders a `TimelineList` whose
+items are grouped by date (`:51-61`), so there is no flat list of adjacent rows to insert a
+divider row between — two points from the same day sit in one group, and points from different
+days sit in different groups. A literal divider would have to be threaded through both cases.
 
-The wording is fixed here so it does not drift:
+The same information, in the structure the component already has:
+
+1. **Every point carries its metric version** as a chip beside the existing
+   `Version {snapshot_version}` chip in the `meta` slot (`:72-81`).
+2. **The point where the version changes** — compared against the chronologically preceding
+   point in the flat `history.points` array, not against its neighbour within a date group —
+   additionally carries the notice.
+
+The notice wording is fixed here so it does not drift:
 
 > **Metric definition changed. Values before and after this point are not directly comparable.**
 
-It states a fact about the data rather than warning of an error, because nothing is wrong with
-either side — only with comparing across them.
+It states a fact about the data rather than warning of an error: nothing is wrong with either
+side, only with comparing across them.
+
+Computing the boundary against the flat array rather than the rendered grouping matters. Two
+snapshots taken on the same day with different metric versions land in one date group, and a
+comparison against the previous item *within* the group would miss the boundary whenever it
+falls at a group edge.
+
+The points themselves are unchanged — every average stays visible and every version readable.
 
 The modal already carries a `NO_BRIDGED_ROWS_TITLE` constant and an `== null` guard on both
 averages from the preceding work; this addition sits beside them and does not alter either.
