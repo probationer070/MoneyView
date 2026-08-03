@@ -189,6 +189,40 @@ def _prefer_annual_map(annual: dict[int, float], quarterly: dict[int, float]) ->
     return combined
 
 
+def _gross_debt_map(balance, quarterly_balance) -> dict[int, float]:
+    """Total debt by year, recovering it from Net Debt + cash where the line is absent.
+
+    "Total Debt" and "Net Debt" were previously read as an alias pair, but net debt is
+    total debt MINUS cash -- for a cash-rich company they differ by most of the balance
+    sheet, and the substitution silently understated every WACC weight.
+
+    Note this is gross debt: the cash term does not cancel here. The equity bridge reads
+    the same two line items to produce NET debt, where it does. Two consumers, two
+    expressions; do not merge them.
+    """
+    total = _prefer_annual_map(
+        _statement_map(balance, ("Total Debt",)),
+        _quarterly_balance_map(quarterly_balance, ("Total Debt",)),
+    )
+    net = _prefer_annual_map(
+        _statement_map(balance, ("Net Debt",)),
+        _quarterly_balance_map(quarterly_balance, ("Net Debt",)),
+    )
+    cash = _prefer_annual_map(
+        _statement_map(balance, ("Cash Cash Equivalents And Short Term Investments",
+                                "Cash And Cash Equivalents")),
+        _quarterly_balance_map(quarterly_balance,
+                               ("Cash Cash Equivalents And Short Term Investments",
+                                "Cash And Cash Equivalents")),
+    )
+    recovered = {
+        year: net[year] + cash[year]
+        for year in set(net) & set(cash)
+        if year not in total
+    }
+    return {**recovered, **total}
+
+
 def _current_statement_years(values: dict[int, float]) -> dict[int, float]:
     return {
         year: value
@@ -655,10 +689,7 @@ def yahoo_statement_metrics(
             _quarterly_flow_map(quarterly_income, ("Interest Expense", "Interest Expense Non Operating")),
         ).items()
     }
-    debt_by_year = _prefer_annual_map(
-        _statement_map(balance, ("Total Debt", "Net Debt")),
-        _quarterly_balance_map(quarterly_balance, ("Total Debt", "Net Debt")),
-    )
+    debt_by_year = _gross_debt_map(balance, quarterly_balance)
     equity_by_year = _prefer_annual_map(
         _statement_map(balance, ("Stockholders Equity", "Total Equity Gross Minority Interest")),
         _quarterly_balance_map(quarterly_balance, ("Stockholders Equity", "Total Equity Gross Minority Interest")),
@@ -1307,10 +1338,7 @@ def metric_audit_for_ticker(
                     _quarterly_flow_map(quarterly_income, ("Interest Expense", "Interest Expense Non Operating")),
                 ).items()
             }
-            debt_by_year = _prefer_annual_map(
-                _statement_map(balance, ("Total Debt", "Net Debt")),
-                _quarterly_balance_map(quarterly_balance, ("Total Debt", "Net Debt")),
-            )
+            debt_by_year = _gross_debt_map(balance, quarterly_balance)
             equity_by_year = _prefer_annual_map(
                 _statement_map(balance, ("Stockholders Equity", "Total Equity Gross Minority Interest")),
                 _quarterly_balance_map(quarterly_balance, ("Stockholders Equity", "Total Equity Gross Minority Interest")),
@@ -1547,10 +1575,7 @@ def yahoo_metric_history(ticker: str, bundle_loader=get_yahoo_statement_bundle) 
         _statement_map(income, ("Tax Provision", "Income Tax Expense")),
         _quarterly_flow_map(quarterly_income, ("Tax Provision", "Income Tax Expense")),
     )
-    debt_by_year = _prefer_annual_map(
-        _statement_map(balance, ("Total Debt", "Net Debt")),
-        _quarterly_balance_map(quarterly_balance, ("Total Debt", "Net Debt")),
-    )
+    debt_by_year = _gross_debt_map(balance, quarterly_balance)
     equity_by_year = _prefer_annual_map(
         _statement_map(balance, ("Stockholders Equity", "Total Equity Gross Minority Interest")),
         _quarterly_balance_map(quarterly_balance, ("Stockholders Equity", "Total Equity Gross Minority Interest")),
