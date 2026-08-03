@@ -184,9 +184,12 @@ export interface CorporateComparisonHistoryPoint {
   comparison_universe: string;
   benchmark_ticker: string;
   stock_count: number;
-  average_expected_return_spread: number;
+  // Nullable: both averages cover only the rows whose equity bridge resolved, so a
+  // snapshot with no such rows has no average at all. Render an unavailable state,
+  // never a zero.
+  average_expected_return_spread: number | null;
   average_roic_minus_wacc: number;
-  average_dcf_value: number;
+  average_dcf_value: number | null;
   market_expected_return: number;
 }
 

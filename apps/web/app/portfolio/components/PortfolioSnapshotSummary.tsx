@@ -35,9 +35,11 @@ export interface HistoryPoint {
   comparison_universe: string;
   benchmark_ticker: string;
   stock_count: number;
-  average_expected_return_spread: number;
+  // Nullable for the same reason as on CorporateComparisonHistoryPoint in page.tsx: an
+  // average over zero bridge-resolved rows is absent, not zero.
+  average_expected_return_spread: number | null;
   average_roic_minus_wacc: number;
-  average_dcf_value: number;
+  average_dcf_value: number | null;
   market_expected_return: number;
 }
 

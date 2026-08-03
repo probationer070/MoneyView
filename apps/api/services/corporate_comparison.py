@@ -438,6 +438,11 @@ def _dcf_snapshot(
     }
 
 
+def _rounded_or_none(value: object) -> float | None:
+    """Round a SQL aggregate, preserving NULL as None rather than collapsing it to 0.0."""
+    return None if value is None else round(float(value), 2)
+
+
 def _market_expected_return_pct(risk_free_rate: float, equity_risk_premium: float) -> float:
     return round(calculate_market_expected_return(risk_free_rate, equity_risk_premium) * 100, 2)
 
@@ -675,9 +680,12 @@ def load_corporate_comparison_history(
             comparison_universe=str(row["comparison_universe"] or comparison_universe),
             benchmark_ticker=str(row["benchmark_ticker"] or normalized_benchmark),
             stock_count=int(row["stock_count"] or 0),
-            average_expected_return_spread=round(float(row["average_expected_return_spread"] or 0.0), 2),
+            # NULL stays None. Both of these average only the rows whose bridge resolved,
+            # so a snapshot where every non-benchmark row is 'missing' averages nothing --
+            # and an average over zero rows is absent, not zero.
+            average_expected_return_spread=_rounded_or_none(row["average_expected_return_spread"]),
             average_roic_minus_wacc=round(float(row["average_roic_minus_wacc"] or 0.0), 2),
-            average_dcf_value=round(float(row["average_dcf_value"] or 0.0), 2),
+            average_dcf_value=_rounded_or_none(row["average_dcf_value"]),
             market_expected_return=_market_expected_return_pct(
                 float(row["risk_free_rate"] or 0.0) / 100,
                 float(row["equity_risk_premium"] or 0.0) / 100,

@@ -17,6 +17,11 @@ function formatDateLabel(value: string) {
   return datePart ?? value;
 }
 
+// Both bridge-dependent averages arrive null when no row in the snapshot had a resolved
+// equity bridge. That is an absent average, not a zero one, so it must not be styled as a
+// signal or printed as a number.
+const NO_BRIDGED_ROWS_TITLE = "No holding in this snapshot had a resolved equity bridge, so this average covers no rows.";
+
 interface SnapshotHistoryModalProps {
   history: CorporateComparisonHistoryResponse | undefined;
   loading: boolean;
@@ -78,9 +83,15 @@ export function SnapshotHistoryModal({
             <div className="grid grid-cols-2 gap-3 text-xs md:grid-cols-4 xl:grid-cols-5">
               <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2">
                 <div className="text-[var(--text-muted)]">Avg Spread</div>
-                <div className={`mt-1 font-bold tabular-nums ${point.average_expected_return_spread >= 0 ? "text-[var(--delta-up)]" : "text-[var(--delta-down)]"}`}>
-                  {point.average_expected_return_spread.toFixed(2)}%
-                </div>
+                {point.average_expected_return_spread == null ? (
+                  <div className="mt-1 font-bold text-[var(--text-muted)]" title={NO_BRIDGED_ROWS_TITLE}>
+                    Not available
+                  </div>
+                ) : (
+                  <div className={`mt-1 font-bold tabular-nums ${point.average_expected_return_spread >= 0 ? "text-[var(--delta-up)]" : "text-[var(--delta-down)]"}`}>
+                    {point.average_expected_return_spread.toFixed(2)}%
+                  </div>
+                )}
               </div>
               <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2">
                 <div className="text-[var(--text-muted)]">Avg ROIC - WACC</div>
@@ -90,9 +101,15 @@ export function SnapshotHistoryModal({
               </div>
               <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2">
                 <div className="text-[var(--text-muted)]">Avg DCF</div>
-                <div className="mt-1 font-bold tabular-nums text-[var(--text-primary)]">
-                  ${point.average_dcf_value.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
-                </div>
+                {point.average_dcf_value == null ? (
+                  <div className="mt-1 font-bold text-[var(--text-muted)]" title={NO_BRIDGED_ROWS_TITLE}>
+                    Not available
+                  </div>
+                ) : (
+                  <div className="mt-1 font-bold tabular-nums text-[var(--text-primary)]">
+                    ${point.average_dcf_value.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+                  </div>
+                )}
               </div>
               <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2">
                 <div className="text-[var(--text-muted)]">Market Return</div>

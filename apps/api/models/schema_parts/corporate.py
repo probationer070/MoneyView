@@ -303,9 +303,13 @@ class CorporateComparisonHistoryPoint(BaseModel):
     comparison_universe: ComparisonUniverseEnum = ComparisonUniverseEnum.portfolio_plus_benchmark
     benchmark_ticker: str = "^GSPC"
     stock_count: int = 0
-    average_expected_return_spread: float = 0.0
+    # None, not 0.0: both averages exclude bridge_quality = 'missing' rows, so on a
+    # snapshot where every non-benchmark row is missing SQL AVG returns NULL over zero
+    # rows. Coercing that to 0.0 rendered an absent average as a real $0.0 and a 0.00%
+    # spread. stock_count stays the full row count, so it cannot signal the difference.
+    average_expected_return_spread: float | None = None
     average_roic_minus_wacc: float = 0.0
-    average_dcf_value: float = 0.0
+    average_dcf_value: float | None = None
     market_expected_return: float = 0.0
 
 

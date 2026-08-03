@@ -244,6 +244,23 @@ def test_missing_rows_are_excluded_from_the_aggregates_but_estimated_rows_are_no
     assert point.average_expected_return_spread == pytest.approx(4.0)
 
 
+def test_an_all_missing_snapshot_reports_no_average_rather_than_zero(tmp_path, monkeypatch):
+    # The ordinary state on any install where statement acquisition has never run: every
+    # non-benchmark row is 'missing', so both bridge-dependent aggregates average zero
+    # rows and SQL AVG returns NULL. Coercing that to 0.0 printed $0.0 as a real average
+    # and styled a 0.00% spread as a signal. stock_count still reports the full row count,
+    # so it cannot distinguish "average of nothing" from "average happens to be zero".
+    monkeypatch.setattr(db_service, "_DB_PATH", tmp_path / "moneyview.db")
+    db_service.init_db()
+    _insert_snapshot_rows([("AAA", "missing", 100.0, 3.0), ("BBB", "missing", 200.0, 5.0)])
+    point = _history_point()
+    assert point.average_dcf_value is None
+    assert point.average_expected_return_spread is None
+    # Not bridge-dependent: its NULL semantics are unchanged, and both rows are non-benchmark.
+    assert point.average_roic_minus_wacc == pytest.approx(8.0)
+    assert point.stock_count == 2
+
+
 def test_legacy_rows_with_an_empty_bridge_quality_stay_in_the_aggregates(
     tmp_path, monkeypatch
 ):
