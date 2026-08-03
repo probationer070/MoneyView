@@ -48,6 +48,19 @@ export function sortComparisonRows(
   sortDirection: "desc" | "asc",
 ) {
   return [...rows].sort((left, right) => {
+    if (sortKey === "dcf_value") {
+      // A row with no per-share value has no position in a per-share ranking, so it goes
+      // last whichever way the user sorts. This check must precede the numeric comparison
+      // and must NOT be reversed by sortDirection: Number(null) is 0, which would bury
+      // these rows among genuinely small values in one direction.
+      const leftValue = bridgedDcfValue(left);
+      const rightValue = bridgedDcfValue(right);
+      if (leftValue === null && rightValue === null) return 0;
+      if (leftValue === null) return 1;
+      if (rightValue === null) return -1;
+      const dcfDelta = leftValue - rightValue;
+      return sortDirection === "asc" ? dcfDelta : -dcfDelta;
+    }
     const delta = Number(left[sortKey]) - Number(right[sortKey]);
     return sortDirection === "asc" ? delta : -delta;
   });
@@ -92,6 +105,9 @@ export function buildSimilarComparisonBarData(rows: CorporateComparisonRowApi[],
 export function buildSimilarComparisonScatterPeers(rows: CorporateComparisonRowApi[], selectedTicker: string) {
   return rows
     .filter((row) => row.ticker !== selectedTicker)
+    // An enterprise value on an axis paired with current_price is not an outlier point,
+    // it is a different quantity sharing an axis.
+    .filter((row) => bridgedDcfValue(row) !== null)
     .map((row) => ({
       ticker: row.ticker,
       current_price: Number(row.current_price.toFixed(2)),
@@ -102,7 +118,7 @@ export function buildSimilarComparisonScatterPeers(rows: CorporateComparisonRowA
 }
 
 export function buildSimilarComparisonScatterSelected(row: CorporateComparisonRowApi | null) {
-  return row
+  return row && bridgedDcfValue(row) !== null
     ? [{
       ticker: row.ticker,
       current_price: Number(row.current_price.toFixed(2)),
