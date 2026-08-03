@@ -71,6 +71,44 @@ def test_a_newer_quarterly_period_beats_the_annual_one():
     assert bridge.net_debt.as_of == "2025-09-30"
 
 
+def test_net_debt_uses_one_balance_sheet_date_when_the_two_series_end_differently():
+    # The store pads absent (line_item, period) cells with NaN, so a ticker whose debt
+    # line stops before its cash line is ordinary. Resolving the newest debt and the
+    # newest cash independently pairs June debt with September cash: 100 - 40 = 60,
+    # understating net debt by the cash that accrued in between, at quality "ok", with
+    # only the debt date in as_of. Both terms must come off 2025-06-30: 100 - 20 = 80.
+    bundle = _bundle(
+        quarterly_balance=_frame(
+            {
+                "Total Debt": [None, 100 * BILLION],
+                "Cash And Cash Equivalents": [40 * BILLION, 20 * BILLION],
+            },
+            ["2025-09-30", "2025-06-30"],
+        )
+    )
+    bridge = load_equity_bridge("TEST", bundle_loader=_loader(bundle))
+    assert bridge.net_debt.value == pytest.approx(80.0)
+    assert bridge.net_debt.as_of == "2025-06-30"
+    assert bridge.net_debt.quality == "ok"
+
+
+def test_net_debt_is_missing_when_no_period_carries_both_terms():
+    # Never pair across dates: if debt is reported only for one period and cash only for
+    # another, there is no balance sheet on which the subtraction is defined.
+    bundle = _bundle(
+        quarterly_balance=_frame(
+            {
+                "Total Debt": [None, 100 * BILLION],
+                "Cash And Cash Equivalents": [40 * BILLION, None],
+            },
+            ["2025-09-30", "2025-06-30"],
+        )
+    )
+    bridge = load_equity_bridge("TEST", bundle_loader=_loader(bundle))
+    assert bridge.net_debt.value is None
+    assert bridge.net_debt.quality == "missing"
+
+
 def test_net_debt_falls_back_to_the_net_debt_line_at_estimated_quality():
     # Recovering total debt as NetDebt + cash and then netting cash back out is just
     # NetDebt, so this branch does rely on Yahoo's undocumented definition. It must be

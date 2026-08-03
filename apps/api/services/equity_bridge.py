@@ -42,31 +42,42 @@ class EquityBridge:
     diluted_shares_outstanding: BridgeInputMeta
 
 
-def _latest(frames: list[object], labels: tuple[str, ...]) -> tuple[float | None, str | None]:
-    """The newest reported value for the first matching label, across every frame.
+def _by_period(frames: list[object], labels: tuple[str, ...]) -> dict[pd.Timestamp, float]:
+    """Every reported value for the first matching label, keyed by period end.
 
-    A balance sheet is a point-in-time snapshot, so the most recent period wins -- a
-    quarterly figure beats an older annual one. Returns the value and its period end.
+    The store pads absent (line_item, period) cells with NaN, so one label can stop
+    reporting part way along a frame's columns while another keeps going. Those cells
+    are dropped here, which is what lets a caller ask which periods actually carry a
+    figure rather than only which period is newest overall. An earlier frame wins a
+    period the later ones also report, matching the annual-before-quarterly order the
+    callers pass.
     """
-    best_value: float | None = None
-    best_period: pd.Timestamp | None = None
+    values: dict[pd.Timestamp, float] = {}
     for frame in frames:
         if frame is None or not isinstance(frame, pd.DataFrame) or frame.empty:
             continue
         for label in labels:
             if label not in frame.index:
                 continue
-            series = frame.loc[label]
-            for period, raw in series.items():
+            for period, raw in frame.loc[label].items():
                 if raw is None or pd.isna(raw):
                     continue
-                if best_period is None or period > best_period:
-                    best_period = period
-                    best_value = float(raw)
+                values.setdefault(period, float(raw))
             break  # first matching label wins within a frame
-    if best_value is None or best_period is None:
+    return values
+
+
+def _latest(frames: list[object], labels: tuple[str, ...]) -> tuple[float | None, str | None]:
+    """The newest reported value for the first matching label, across every frame.
+
+    A balance sheet is a point-in-time snapshot, so the most recent period wins -- a
+    quarterly figure beats an older annual one. Returns the value and its period end.
+    """
+    values = _by_period(frames, labels)
+    if not values:
         return None, None
-    return best_value, str(best_period.date())
+    period = max(values)
+    return values[period], str(period.date())
 
 
 def _scaled(value: float | None) -> float | None:
@@ -75,16 +86,22 @@ def _scaled(value: float | None) -> float | None:
 
 def _net_debt_input(bundle: dict) -> BridgeInputMeta:
     balances = [bundle.get("balance"), bundle.get("quarterly_balance")]
-    total_debt, debt_period = _latest(balances, _TOTAL_DEBT_LABELS)
-    cash, cash_period = _latest(balances, _CASH_LABELS)
+    debt_by_period = _by_period(balances, _TOTAL_DEBT_LABELS)
+    cash_by_period = _by_period(balances, _CASH_LABELS)
 
-    net_debt = calculate_net_debt(total_debt, cash)
-    if net_debt is not None:
+    # Both terms must come off the same balance sheet. Resolving each independently --
+    # newest debt against newest cash -- pairs figures from different dates whenever one
+    # line stops reporting before the other, which the store's NaN padding makes ordinary.
+    # June debt minus September cash understates net debt, reports quality "ok", and puts
+    # only one of the two dates in as_of, so nothing downstream can see the mismatch.
+    co_dated = debt_by_period.keys() & cash_by_period.keys()
+    if co_dated:
+        period = max(co_dated)
         return BridgeInputMeta(
-            value=_scaled(net_debt),
+            value=_scaled(calculate_net_debt(debt_by_period[period], cash_by_period[period])),
             source=BridgeSource.TOTAL_DEBT_LESS_CASH,
             quality="ok",
-            as_of=debt_period or cash_period,
+            as_of=str(period.date()),
         )
 
     # Falling back to the reported Net Debt line means relying on a definition we cannot
