@@ -185,7 +185,7 @@ Optional, not required, so no existing construction site or fixture breaks.
 
 | Site | Change |
 |---|---|
-| `CorporateComparisonTable.tsx:83-92` | `bridgedDcfValue(row)` — render `—` with a `title` when null, `formatMoney` otherwise. **Keep the button enabled**: the cell is a button opening the calculation detail modal, which is exactly where "why is there no value here" is answered — `CalculationDetailModal.tsx:478` shows the bridge quality. Disabling it would remove the explanation along with the number. |
+| `CorporateComparisonTable.tsx:83-92` | `bridgedDcfValue(row)` — render `—` with a `title` when null, `formatMoney` otherwise. **Keep the button enabled.** ⚠️ **The justification originally given here was wrong — see the correction below.** |
 | `corporateDerivedViews.ts:28-37` | `sortComparisonRows` — see the ordering contract below; other sort keys unaffected |
 | `corporateDerivedViews.ts:75-85` | `buildSimilarComparisonScatterPeers` — drop null-DCF rows |
 | `corporateDerivedViews.ts:87-96` | `buildSimilarComparisonScatterSelected` — return `[]` when the selected row's value is null |
@@ -311,14 +311,66 @@ precisely what it was added to prevent (`db.py`, the `metric_schema_version` mig
 
 ## Not in scope
 
-- **Export paths.** Checked: the corporate page has no CSV export, table copy, or snapshot
-  download — the only matches for those terms are the TypeScript `export` keyword. So there is
-  no second surface where a raw `dcf_value` could escape the suppression rule, and nothing to
-  change. Recorded so the next reader does not repeat the search. If an export is added later,
-  it must consume `bridgedDcfValue` like every other presentation path.
+- **Export paths.** ⚠️ **This entry was false and is corrected below.** It originally read:
+  *"Checked: the corporate page has no CSV export, table copy, or snapshot download — the only
+  matches for those terms are the TypeScript `export` keyword."* Three CSV exports are wired at
+  `page.tsx:1270-1272` (`downloadRawDatasetCsv`, `downloadHistoricalPriceCsv`,
+  `downloadQuarterlyStatementsCsv`, defined at `corporateUtils.ts:253/260/267`), and
+  `corporateDerivedViews.ts:208` pushes the entire backend DCF response — `estimated_value`
+  included — into the raw-dataset CSV. See the correction section below.
 - Regenerating `packages/shared-types/generated/portfolio.ts`, now stale on both the new
   nullability and this field. Confirmed inert — nothing in `apps/web` imports corporate types
   from it — and regenerating needs a network install for `json2ts`.
 - The `snapshot_version` → `snapshot_id` rename and removing the dead `SNAPSHOT_CADENCE`.
 - `_dcf_snapshot`'s unread `status` key. Documented as internal-only; wiring it to the UI is a
   contract change with no requester.
+
+---
+
+## Corrections, found by the final whole-branch review (2026-08-05)
+
+Two claims above were wrong. Both are corrected in place with a ⚠️ marker rather than quietly
+edited, because a spec that silently rewrites its own history teaches the next reader to trust
+claims that were never checked.
+
+### 1. The suppressed cell's destination discloses the number it suppresses
+
+The consumer table justified keeping the DCF cell's button enabled on the grounds that the
+modal behind it is "exactly where 'why is there no value here' is answered". **It is not.**
+
+`CorporateComparisonTable.tsx:88` opens the `backendFairValue` detail. That block
+(`buildCalculationDetails.ts:891-916`) renders `moneyText(dcfData.estimated_value)` under the
+label **"Intrinsic DCF Value"** three times — the summary row, the `result`, and simulation
+step 3 — plus `${estimated_value} / ${current_price} - 1` in step 2. `estimated_value` carries
+the *same* enterprise-value fallback as `dcf_value` (`apps/api/services/corporate_dcf.py:222`,
+`corporate_comparison.py:399-403`). The bridge quality the justification pointed at
+(`CalculationDetailModal.tsx:478`) belongs to `dcfFullReport`, populated only by a separate
+`handleViewFullDcfReport` action under a different key.
+
+So clicking the `—` this branch added surfaces the suppressed enterprise value one level
+deeper, mislabelled as an intrinsic per-share value. **The button stays enabled** — disabling
+it is not the fix and would remove a working navigation — but the stated reason was false and
+the leak is real.
+
+### 2. `estimated_value` is a second unguarded surface, on five sites
+
+The invariant was enforced on the field named `dcf_value`. The identical quantity ships as
+`estimated_value` and is rendered raw at:
+
+| Site | Rendered as |
+|---|---|
+| `buildCalculationDetails.ts:894` | "Intrinsic DCF Value", the suppressed cell's own destination |
+| `buildCalculationDetails.ts:915` | simulation step 2, the upside arithmetic |
+| `TargetStockComparisonSection.tsx:515` | Batch DCF Reports, "Fair Value", beside Current Price and Upside |
+| `graphs/DcfCoreModulesGraph.tsx:66-68` | a 2xl KPI tile, "Intrinsic DCF Value" |
+| `page.tsx:986` | the headline "Intrinsic DCF" tile, whose tooltip claims the value comes from the bridge |
+
+None of these lines are in this branch's range — they are pre-existing, and the branch neither
+introduced nor worsened them. But the invariant as written is page-wide, and it does not hold
+page-wide. The discriminator is already on every payload (`bridge_quality` and
+`intrinsic_value_per_share`; `graphs/shared.ts:67-74` even declares both and reads neither), so
+the fix is mechanical rather than an acquisition problem.
+
+Tracked as its own item in `guideline/sop/todo.md` rather than absorbed here: extending the
+rule to five surfaces plus a CSV is a scope change, not a review nit, and it deserves its own
+plan and its own tests.

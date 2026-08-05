@@ -994,3 +994,67 @@ one, and that degenerate case produces no error, just a column of numbers that a
 individually plausible. Grep for `_dcf_snapshot`-shaped functions that compute an
 enterprise-to-equity bridge inline instead of calling the shared `load_equity_bridge`
 loader; duplicated bridge logic is where a hardcoded `0.0` is most likely to hide.
+
+## 2026-08-05: The comparison table presented enterprise values as intrinsic values per share
+
+Date: 2026-08-05
+Command: No failing command. Found by reading the corporate comparison table against the
+DCF payload's own `bridge_quality` field; every suite was green throughout.
+Failure: The "DCF Value" column rendered `dcf_value` as a dollars-per-share figure for
+every row. For any ticker whose enterprise-to-equity bridge did not resolve, `dcf_value`
+holds an **enterprise value in billions** instead. `AAPL` at `$240.50` and a bridgeless
+ticker at `$2,438.00` sat in the same column, formatted identically, with nothing marking
+the second as a different financial quantity. The same value also ranked in the DCF sort
+(sorting first under "descending", since it is numerically the largest) and plotted on a
+scatter axis paired with `current_price`. In the snapshot history, `average_dcf_value`
+moved by an order of magnitude the day the bridge shipped, drawn as a valuation move.
+Root cause: Two causes, one structural and one presentational.
+
+`dcf_value` is deliberately a union of two quantities -- `intrinsic_value_per_share` when
+the bridge resolves, `enterprise_value` when it does not (`apps/api/services/corporate_dcf.py:222`,
+`corporate_comparison.py:399-403`). That fallback was introduced as a backwards-compatible
+alias so no consumer broke when the bridge landed, and it is defensible on its own terms.
+What was missing is that **no consumer was ever taught the difference.** `bridge_quality`
+was computed, persisted, and returned on the payload, but none of the three table row
+interfaces in `apps/web/app/corporate/` declared it, so nothing in the table *could*
+distinguish the cases even in principle.
+
+The scale of the two quantities is what made it survive review: they are three orders of
+magnitude apart for a large-cap, which reads as an outlier rather than a unit error. That
+framing is itself the trap. Enterprise value and intrinsic value per share are different
+financial quantities, not one quantity at two scales -- the objection holds for a company
+of any size, including one where the two numbers happen to land close enough that nothing
+looks wrong at all.
+Fix: `bridgedDcfValue` in `apps/web/app/corporate/corporateDerivedViews.ts` is now the
+single place that decides whether a DCF value may be presented; it returns `null` for
+`bridge_quality === "missing"` and the value otherwise. The table cell, the sort
+comparator, and both scatter builders consume it. Suppressed rows sort last in **both**
+directions -- via an explicit null branch ahead of the numeric comparison, not a sentinel,
+because `Number(null)` is `0` and would bury them among genuinely small per-share values
+in one direction. `metric_schema_version` now reaches the frontend and the snapshot
+history marks the point where the metric definition changed.
+
+`estimated` rows keep their number: the fallback input affects confidence, not units. A
+guard written `!== "ok"` instead of `=== "missing"` is a defect, and every fixture carries
+an `estimated` row so that specific wrong implementation fails a test.
+Files changed: `apps/web/app/corporate/corporateDerivedViews.ts`,
+`apps/web/app/corporate/corporateTypes.ts`,
+`apps/web/app/corporate/components/CorporateComparisonTable.tsx`,
+`apps/web/app/corporate/components/TargetStockComparisonSection.tsx`,
+`apps/web/app/portfolio/components/SnapshotHistoryModal.tsx`,
+`apps/web/app/portfolio/components/PortfolioSnapshotSummary.tsx`,
+`apps/web/app/portfolio/page.tsx`, `apps/api/models/schema_parts/corporate.py`,
+`apps/api/services/corporate_comparison.py`, plus fixtures and two new Playwright specs.
+Prevention: A field whose meaning depends on another field is only safe if every consumer
+receives both. When adding a fallback that changes what a value *means* rather than how
+precise it is, the discriminator must be added to every consumer's type in the same
+change -- not merely returned on the payload, where it is invisible to the code that
+matters. Grep test: for any such field, every presentation site must reach it through one
+named helper; if `grep` finds the raw field rendered anywhere outside that helper's
+callers, the rule is already broken.
+
+This entry's own scope is a live example. The rule was enforced on the field named
+`dcf_value` while the identical quantity ships as `estimated_value` and is still rendered
+raw on five surfaces -- one of them the modal the suppressed cell opens. Tracked in
+`guideline/sop/todo.md`. Policing a value by *field name* rather than by *quantity* is how
+half a fix ships looking whole.

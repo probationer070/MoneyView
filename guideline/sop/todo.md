@@ -125,6 +125,107 @@ governance stay diagnostic-only`) -- this entry is the pointer, not the duplicat
   informs `upside_pct` and `status` only, and never reaches a valuation input,
   survived Phase 2's wiring intact.
 
+### Phase 2b - Comparison Value Honesty (complete 2026-08-05)
+
+Plan and per-task reports: `.superpowers/sdd/2026-08-03-comparison-value-honesty/`.
+Design: `docs/superpowers/specs/2026-08-03-comparison-value-honesty-design.md`.
+
+Phase 2 made `bridge_quality` truthful. It did not stop the UI presenting the value the
+flag was warning about. `dcf_value` carries an intrinsic value per share when the equity
+bridge resolves and an **enterprise value in billions** when it does not, and every
+presentation path treated the two as one number.
+
+**The invariant this phase establishes:** every value displayed in the DCF column, used
+for DCF sorting, or plotted against current price must be an intrinsic value per share.
+An enterprise value is never presented as a per-share value. These are different
+financial quantities, not one quantity at two scales — the argument holds regardless of
+how close the numbers happen to fall, and does not depend on company size.
+
+- [x] `bridgedDcfValue` in `apps/web/app/corporate/corporateDerivedViews.ts` is now the
+      **only** place that decides whether a DCF value may be presented. It returns `null`
+      for `bridge_quality === "missing"` and the value otherwise. A guard written
+      `!== "ok"` is a defect: it would suppress `estimated` rows, whose numbers are real
+      per-share values reached through a documented fallback input — the fallback affects
+      confidence, not units. Every fixture in this phase carries an `estimated` row for
+      exactly that reason. Reading `bridge_quality` to display the quality as its own
+      labelled datum is different and remains fine (`CalculationDetailModal.tsx:478`).
+- [x] Three consumers wired to it: the table cell (suppressed to an em dash, and the cell
+      stays an enabled button because the modal behind it is where "why is there no value
+      here" gets answered), the sort comparator, and both scatter builders.
+- [x] Unbridged rows sort last in **both** directions. Not via a sentinel — `Number(null)`
+      is `0`, which would bury them among genuinely small per-share values in one
+      direction and place them at the far end in the other. The null check precedes the
+      numeric comparison and is not reversed by the direction flag. The fixture's `MISS`
+      row deliberately carries the largest `dcf_value` in the fixture so a broken
+      suppression is detectable in both directions.
+- [x] `metric_schema_version` reaches the frontend. The column had been stored per row
+      since Phase 2 but the history query never selected it, so a client had no way to see
+      that `average_dcf_value` means enterprise value before version 2 and intrinsic value
+      per share from version 2 on. `MAX` over the snapshot's rows: they share a version by
+      construction, and if that invariant ever breaks the newer definition should surface
+      rather than a stale one masking a mixed snapshot.
+- [x] The snapshot history marks the boundary rather than drawing it as a valuation move.
+      Computed against the **flat points array**, not within a date group — the points
+      arrive newest-first (`corporate_comparison.py:670`, `ORDER BY snapshot_date DESC`),
+      so the chronologically preceding point is `points[index + 1]`, and the notice lands
+      on the first point of the new definition rather than the last of the old. Older
+      averages are still shown: hiding them would discard history the user deliberately
+      saved and leave blanks with no explanation.
+
+  Two things worth carrying forward, neither a defect:
+  - **The plan's own test fixture could not catch the bug the plan was written to
+    prevent.** It placed the version boundary *inside* a date group, where a within-group
+    implementation and a flat-array one behave identically; only a boundary at a group
+    *edge* distinguishes them. A fourth fixture point at a group edge was added during
+    implementation and is what makes the rule genuinely covered. The lesson generalises:
+    a fixture that exercises a rule is not the same as a fixture that discriminates
+    against the rule's plausible wrong implementation.
+  - **The date grouping is defensive against a payload the backend does not produce.**
+    The history query keeps only `version_rank = 1` per `snapshot_date`, so at most one
+    point per date can arrive today. The same-day half of the boundary rule is therefore
+    currently unreachable. Correct and cheap, but do not read the code as evidence that
+    same-day snapshots are returned.
+
+  Recorded in `ERROR-LOG.md` (2026-08-05). It qualifies as a silent failure producing wrong
+  output: the column rendered a plausible-looking dollar figure that was a different
+  financial quantity, and no suite ever went red. The entry's Prevention names the general
+  rule — a field whose meaning depends on another field is only safe if every consumer
+  receives both, and the discriminator must land in every consumer's type in the same
+  change that introduces the fallback.
+
+- [ ] **The same quantity is still unguarded under the name `estimated_value`.** Found by
+      the final whole-branch review, after four scoped reviews missed it. `estimated_value`
+      carries the identical enterprise-value fallback as `dcf_value`
+      (`apps/api/services/corporate_dcf.py:222`, `corporate_comparison.py:399-403`) and is rendered raw at
+      `buildCalculationDetails.ts:894` and `:915`, `TargetStockComparisonSection.tsx:515`,
+      `graphs/DcfCoreModulesGraph.tsx:66-68`, and `page.tsx:986` — four of them labelled
+      "Intrinsic DCF Value" or "Fair Value". `corporateDerivedViews.ts:208` also pushes the
+      whole DCF response into the raw-dataset CSV (`page.tsx:1270`).
+
+      The worst of these is `buildCalculationDetails.ts:894`: it is the destination of the
+      very cell Phase 2b suppressed. Clicking the new `—` shows the suppressed enterprise
+      value one level deeper, labelled "Intrinsic DCF Value". The spec's justification for
+      keeping that button enabled was written on the assumption that the modal explains the
+      absence; it does the opposite. Both errors are corrected in place in
+      `docs/superpowers/specs/2026-08-03-comparison-value-honesty-design.md`.
+
+      Not a regression — none of these lines were touched by Phase 2b. But the invariant as
+      stated is page-wide and does not hold page-wide. The discriminator is already on every
+      payload (`graphs/shared.ts:67-74` declares both `bridge_quality` and
+      `intrinsic_value_per_share` and reads neither), so this is mechanical, not an
+      acquisition problem. Needs its own plan and its own tests.
+
+      **The generalisable lesson:** Phase 2b policed a *field name*. The defect is a
+      *quantity*. Any rule of the form "this value must not be shown" has to be written
+      against every field carrying that value, or it ships looking complete while half the
+      surfaces still leak.
+
+- [ ] `HistoryPoint` in `apps/web/app/portfolio/components/PortfolioSnapshotSummary.tsx`
+      is a hand-copied duplicate of `CorporateComparisonHistoryPoint` in
+      `apps/web/app/portfolio/page.tsx`. Adding `metric_schema_version` required editing
+      both. They will drift again on the next field. Low priority, but the next person to
+      add a history field should collapse them rather than copy a third time.
+
 - [ ] Add a WACC versus terminal-growth sensitivity table for terminal-value
       concentration risk. Deferred deliberately, not an oversight: a sensitivity
       chart is only worth building once the bridge it charts has real data in it,
@@ -432,7 +533,10 @@ formula, a fallback, an input source. It is not a database schema version and no
 payload format version; it exists so two snapshots computed by different metric code are
 never silently compared as like for like. Stored per row in the new
 `metric_schema_version` column (guarded `ALTER TABLE` migration for pre-existing
-databases); old rows default to `1`.
+databases); rows that predate the column backfill to `0` (`db.py:672`), which is what
+keeps them distinguishable from any real version. The `CREATE TABLE` default is `1`
+(`db.py:428`), but every insert supplies the value explicitly, so that default is a
+floor rather than an observed value.
 
 - [x] **The price path no longer fetches during metric computation.** `latest_market_price`
       previously reached `get_latest_stock_price`, which tries a live `yf.Ticker().fast_info`
