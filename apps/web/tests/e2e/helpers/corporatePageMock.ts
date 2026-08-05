@@ -38,7 +38,51 @@ export type CorporatePageMockOptions = {
   failQuarterlyStatements?: boolean;
   failOhlcv?: boolean;
   failDcfFullReport?: boolean;
+  /**
+   * bridge_quality for the single-ticker DCF summary (stream, report, and POST /dcf/AAPL).
+   * The bulk-report handler always derives its own per-ticker quality from the ticker name,
+   * so one bulk table can carry all three states at once.
+   */
+  dcfBridgeQuality?: BridgeQuality;
 };
+
+export type BridgeQuality = "ok" | "estimated" | "missing";
+
+/**
+ * Rewrites a summary into what corporate_dcf.py actually emits for the given bridge state,
+ * rather than flipping bridge_quality alone. A test that asserts a value is suppressed has to
+ * run against a payload the backend can really produce, or it proves nothing.
+ *
+ * For "missing": the bridge does not resolve, so equity value and the per-share value are
+ * absent, estimated_value falls back to enterprise value (corporate_dcf.py:222), and
+ * upside_pct is set to 0.0 rather than left out (corporate_dcf.py:224).
+ */
+function withBridgeQuality<T extends DcfSummary>(summary: T, quality: BridgeQuality): T {
+  if (quality !== "missing") {
+    return { ...summary, bridge_quality: quality };
+  }
+  return {
+    ...summary,
+    bridge_quality: "missing",
+    valuation_method: "enterprise_value_no_share_bridge",
+    intrinsic_value_per_share: null,
+    equity_value: null,
+    estimated_value: summary.enterprise_value,
+    upside_pct: 0.0,
+    status: "Bridge Incomplete",
+  };
+}
+
+/**
+ * The bulk table's per-ticker bridge state, matching the comparison fixture's convention:
+ * MISS has no bridge, ESTM has an estimated one, everything else resolves cleanly. A mixed
+ * table is what catches a guard written `!== "ok"`, which would wrongly suppress ESTM.
+ */
+function bulkBridgeQuality(ticker: string): BridgeQuality {
+  if (ticker === "MISS") return "missing";
+  if (ticker === "ESTM") return "estimated";
+  return "ok";
+}
 
 const mockDcfSummary: DcfSummary = {
   report_id: "mockdcf001",
@@ -110,11 +154,6 @@ const mockDcfFullReport: DcfFullReport = {
   dcf_multiple: 15.9,
   baseline_multiple: 12.5,
   fcff_scale: 1,
-};
-
-const mockDcfPhase1Event: DcfPhase1Event = {
-  phase: "phase1",
-  summary: mockDcfSummary,
 };
 
 const mockDcfPhase2Event: DcfPhase2Event = {
@@ -217,6 +256,12 @@ const mockMetricAudit = (ticker: string): CorporateMetricAudit => ({
 });
 
 export async function mockCorporatePageApi(page: Page, stats?: CorporatePageMockStats, options?: CorporatePageMockOptions) {
+  const singleBridge = options?.dcfBridgeQuality ?? "ok";
+  const dcfSummary = withBridgeQuality(mockDcfSummary, singleBridge);
+  const dcfSummaryResponse = withBridgeQuality(mockDcfSummaryResponse, singleBridge);
+  const dcfFullReport = { ...mockDcfFullReport, summary: dcfSummary };
+  const dcfPhase1Event: DcfPhase1Event = { phase: "phase1", summary: dcfSummary };
+
   let comparisonSnapshot = {
     mode: "snapshot",
     as_of_date: "2026-04-11",
@@ -613,7 +658,7 @@ export async function mockCorporatePageApi(page: Page, stats?: CorporatePageMock
         contentType: "text/event-stream",
         body: [
           "event: phase1",
-          `data: ${JSON.stringify(mockDcfPhase1Event)}`,
+          `data: ${JSON.stringify(dcfPhase1Event)}`,
           "",
           "event: phase2",
           `data: ${JSON.stringify(mockDcfPhase2Event)}`,
@@ -636,7 +681,7 @@ export async function mockCorporatePageApi(page: Page, stats?: CorporatePageMock
       }
       return json(route, {
         status: "ok",
-        data: mockDcfFullReport,
+        data: dcfFullReport,
       });
     }
 
@@ -646,7 +691,9 @@ export async function mockCorporatePageApi(page: Page, stats?: CorporatePageMock
       const tickers = Array.isArray(payload.tickers) ? payload.tickers : [];
       return json(route, tickers.map((ticker: string, index: number) => ({
         ...mockDcfFullReport,
-        summary: {
+        // withBridgeQuality is applied last so the "missing" rewrite overrides the per-index
+        // estimated_value/upside_pct/status values above it, exactly as the backend would.
+        summary: withBridgeQuality({
           ...mockDcfFullReport.summary,
           report_id: `mockdcf-bulk-${index + 1}`,
           ticker,
@@ -655,7 +702,7 @@ export async function mockCorporatePageApi(page: Page, stats?: CorporatePageMock
           upside_pct: mockDcfFullReport.summary.upside_pct - index * 1.1,
           status: index === 0 ? "Undervalued" : index === 1 ? "Fairly Valued" : "Watch",
           generated_at: nowIso(),
-        },
+        }, bulkBridgeQuality(ticker)),
         assumptions: {
           ...mockDcfFullReport.assumptions,
           report_id: `mockdcf-bulk-${index + 1}`,
@@ -669,7 +716,7 @@ export async function mockCorporatePageApi(page: Page, stats?: CorporatePageMock
       if (stats) stats.dcfRequests += 1;
       return json(route, {
         status: "ok",
-        data: mockDcfSummaryResponse,
+        data: dcfSummaryResponse,
       });
     }
 

@@ -2,6 +2,7 @@
 
 import type { DcfFullReport } from "../../../../../packages/shared-types";
 import type { BenchmarkPreset } from "@/lib/benchmarkPresets";
+import { bridgedEstimatedValue, bridgedUpsidePct, UNBRIDGED_PLACEHOLDER, UNBRIDGED_REASON } from "@/lib/bridgeQuality";
 import { Bar, BarChart, CartesianGrid, Cell, Scatter, ScatterChart, Tooltip, XAxis, YAxis, ZAxis } from "recharts";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { ResponsiveChart } from "@/components/ui/ResponsiveChart";
@@ -500,7 +501,13 @@ export function TargetStockComparisonSection({
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[var(--border)]/60">
-                      {bulkDcfReports.map((report) => (
+                      {bulkDcfReports.map((report) => {
+                        // Both numbers come from the helpers, not the raw fields: an
+                        // unresolved bridge leaves estimated_value an enterprise value and
+                        // upside_pct a hardcoded 0.0 that would read as fairly valued.
+                        const fairValue = bridgedEstimatedValue(report.summary);
+                        const upside = bridgedUpsidePct(report.summary);
+                        return (
                         <tr key={report.summary.report_id}>
                           <td className="px-4 py-3 font-bold text-[var(--text-primary)]">
                             <button
@@ -512,14 +519,17 @@ export function TargetStockComparisonSection({
                             </button>
                           </td>
                           <td className="px-4 py-3 text-[var(--text-muted)]">{report.summary.report_id}</td>
-                          <td className="px-4 py-3 text-right font-semibold tabular-nums">{formatMoney(report.summary.estimated_value)}</td>
+                          <td className="px-4 py-3 text-right font-semibold tabular-nums" title={fairValue === null ? UNBRIDGED_REASON : undefined}>
+                            {fairValue === null ? UNBRIDGED_PLACEHOLDER : formatMoney(fairValue)}
+                          </td>
                           <td className="px-4 py-3 text-right tabular-nums">{formatMoney(report.summary.current_price)}</td>
-                          <td className={`px-4 py-3 text-right font-semibold tabular-nums ${report.summary.upside_pct >= 0 ? "text-[var(--delta-up)]" : "text-[var(--delta-down)]"}`}>
-                            {formatPct2(report.summary.upside_pct)}
+                          <td className={`px-4 py-3 text-right font-semibold tabular-nums ${upside === null ? "text-[var(--text-muted)]" : upside >= 0 ? "text-[var(--delta-up)]" : "text-[var(--delta-down)]"}`} title={upside === null ? UNBRIDGED_REASON : undefined}>
+                            {upside === null ? UNBRIDGED_PLACEHOLDER : formatPct2(upside)}
                           </td>
                           <td className="px-4 py-3 text-[var(--text-muted)]">{report.summary.status}</td>
                         </tr>
-                      ))}
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>

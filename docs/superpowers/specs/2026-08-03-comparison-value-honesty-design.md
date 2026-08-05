@@ -354,6 +354,15 @@ the leak is real.
 
 ### 2. `estimated_value` is a second unguarded surface, on five sites
 
+> **CLOSED 2026-08-05.** Fixed in a follow-up branch via `apps/web/lib/bridgeQuality.ts`.
+> The count below is understated and left as written: there were ten render expressions
+> across six files, not five sites. `buildCalculationDetails.ts` has three detail blocks
+> rather than one, and `components/workbenches/DCFWorkbench.tsx:186` — "Implied Fair Value",
+> live on `/detail/[ticker]` — appears in no row of this table, because the search that
+> produced it was scoped to `app/corporate/`. `upside_pct` was suppressed at the same sites;
+> it is hardcoded to `0.0` on an unresolved bridge and rendered as `+0.00%` in the positive
+> colour. See `ERROR-LOG.md` and `guideline/sop/todo.md`.
+
 The invariant was enforced on the field named `dcf_value`. The identical quantity ships as
 `estimated_value` and is rendered raw at:
 

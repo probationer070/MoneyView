@@ -6,6 +6,7 @@ import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { RefreshCw } from "lucide-react";
 import { fetchApi } from "@/lib/api";
+import { bridgedEstimatedValue, UNBRIDGED_PLACEHOLDER, UNBRIDGED_REASON } from "@/lib/bridgeQuality";
 import { useDevMonitorPageLoad } from "@/hooks/useDevMonitorPageLoad";
 import type {
   CorporateDcfBatchRequest,
@@ -892,6 +893,10 @@ export default function CorporateAnalysisPage() {
     "Current slider/browser values and saved presets remain manual override layers.",
   ].join(" ");
 
+  // null when the equity bridge did not resolve, in which case estimated_value is an
+  // enterprise value and must not be shown under the "Intrinsic DCF" label.
+  const bridgedFairValue = dcfData ? bridgedEstimatedValue(dcfData) : null;
+
   const calculationDetails = buildCalculationDetails({
     companyName,
     assumptions,
@@ -982,8 +987,15 @@ export default function CorporateAnalysisPage() {
                     description="Backend intrinsic value from projected FCFF, WACC, terminal growth, and the enterprise-to-equity bridge. Current market price is used only for upside comparison."
                   />
                 </div>
-                <div className="font-bold text-[var(--text-primary)]">
-                  {dcfData ? moneyText(dcfData.estimated_value) : "Refresh to calculate"}
+                <div
+                  className="font-bold text-[var(--text-primary)]"
+                  title={dcfData && bridgedFairValue === null ? UNBRIDGED_REASON : undefined}
+                >
+                  {!dcfData
+                    ? "Refresh to calculate"
+                    : bridgedFairValue === null
+                      ? UNBRIDGED_PLACEHOLDER
+                      : moneyText(bridgedFairValue)}
                   {dcfStreamStatus === "streaming" ? " ..." : ""}
                 </div>
               </button>

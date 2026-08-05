@@ -193,32 +193,40 @@ how close the numbers happen to fall, and does not depend on company size.
   receives both, and the discriminator must land in every consumer's type in the same
   change that introduces the fallback.
 
-- [ ] **The same quantity is still unguarded under the name `estimated_value`.** Found by
-      the final whole-branch review, after four scoped reviews missed it. `estimated_value`
-      carries the identical enterprise-value fallback as `dcf_value`
-      (`apps/api/services/corporate_dcf.py:222`, `corporate_comparison.py:399-403`) and is rendered raw at
-      `buildCalculationDetails.ts:894` and `:915`, `TargetStockComparisonSection.tsx:515`,
-      `graphs/DcfCoreModulesGraph.tsx:66-68`, and `page.tsx:986` — four of them labelled
-      "Intrinsic DCF Value" or "Fair Value". `corporateDerivedViews.ts:208` also pushes the
-      whole DCF response into the raw-dataset CSV (`page.tsx:1270`).
+- [x] **The same quantity is no longer unguarded under the name `estimated_value`.**
+      (done 2026-08-05) Every render site now goes through `apps/web/lib/bridgeQuality.ts`,
+      and `bridgedDcfValue` delegates to the same `isBridgeUnresolved` predicate, so the two
+      field names carrying this quantity cannot diverge again.
 
-      The worst of these is `buildCalculationDetails.ts:894`: it is the destination of the
-      very cell Phase 2b suppressed. Clicking the new `—` shows the suppressed enterprise
-      value one level deeper, labelled "Intrinsic DCF Value". The spec's justification for
-      keeping that button enabled was written on the assumption that the modal explains the
-      absence; it does the opposite. Both errors are corrected in place in
-      `docs/superpowers/specs/2026-08-03-comparison-value-honesty-design.md`.
+      **The count in this item was wrong, and worth recording.** It said five sites; there
+      were ten render expressions across six files. `buildCalculationDetails.ts` has three
+      separate detail blocks (`backendDcf`, `dcfCoreModules`, `backendFairValue`), not the
+      one the line numbers suggested, and `components/workbenches/DCFWorkbench.tsx:186` —
+      "Implied Fair Value", live on `/detail/[ticker]` — was in none of the four reviews,
+      because every earlier search had been scoped to `app/corporate/`.
 
-      Not a regression — none of these lines were touched by Phase 2b. But the invariant as
-      stated is page-wide and does not hold page-wide. The discriminator is already on every
-      payload (`graphs/shared.ts:67-74` declares both `bridge_quality` and
-      `intrinsic_value_per_share` and reads neither), so this is mechanical, not an
-      acquisition problem. Needs its own plan and its own tests.
+      `upside_pct` was suppressed in the same pass. `corporate_dcf.py:224` sets it to `0.0`
+      when the bridge fails, so an unbridged ticker rendered `+0.00%` in the positive colour:
+      a fairly-valued reading for a comparison that never happened. It is a second fabricated
+      quantity, not a presentation detail of the first.
+
+      The raw-dataset CSV (`corporateDerivedViews.ts:208`) was left alone deliberately.
+      `pushRecord` emits every key, so `bridge_quality`, `intrinsic_value_per_share`,
+      `enterprise_value`, and `valuation_method` accompany `estimated_value` in the same
+      `backend_dcf` block. That record carries its own discriminator, which is the condition
+      the rule asks for; blanking a field there would remove information from a raw export.
+
+      Coverage: `apps/web/tests/e2e/corporate-estimated-value-bridge.spec.ts`, 4 tests.
+      Break/restore verified against both wrong implementations — a guard that never fires
+      fails 3 of them, and one written `!== "ok"` fails the 2 that pin `estimated` as a real
+      per-share value.
 
       **The generalisable lesson:** Phase 2b policed a *field name*. The defect is a
       *quantity*. Any rule of the form "this value must not be shown" has to be written
       against every field carrying that value, or it ships looking complete while half the
-      surfaces still leak.
+      surfaces still leak. The corollary this follow-up added: scope the search to the
+      quantity too. Four reviews missed `DCFWorkbench.tsx` because they searched the
+      directory where the bug was found rather than the repo.
 
 - [ ] `HistoryPoint` in `apps/web/app/portfolio/components/PortfolioSnapshotSummary.tsx`
       is a hand-copied duplicate of `CorporateComparisonHistoryPoint` in

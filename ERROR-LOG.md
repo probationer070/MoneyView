@@ -1058,3 +1058,26 @@ This entry's own scope is a live example. The rule was enforced on the field nam
 raw on five surfaces -- one of them the modal the suppressed cell opens. Tracked in
 `guideline/sop/todo.md`. Policing a value by *field name* rather than by *quantity* is how
 half a fix ships looking whole.
+
+**Remainder closed 2026-08-05.** `estimated_value` now reaches every render site through
+`apps/web/lib/bridgeQuality.ts`, and `bridgedDcfValue` delegates to the same predicate so
+the two field names cannot diverge again. Counting the sites first was worth doing: the
+open item said five, and there were ten render expressions across six files.
+`buildCalculationDetails.ts` holds three separate detail blocks rather than one, and
+`components/workbenches/DCFWorkbench.tsx:186` -- "Implied Fair Value" on the live
+`/detail/[ticker]` route -- had never been found by any review, because every earlier search
+had been scoped to `app/corporate/`.
+
+`upside_pct` was suppressed in the same pass. It is a second fabricated quantity, not a
+presentation detail of the first: `corporate_dcf.py:224` sets it to `0.0` when the bridge
+does not resolve, so an unbridged ticker rendered `+0.00%` in the positive colour -- a
+fairly-valued reading for a comparison that never happened. Suppressing the value while
+leaving that in place would have looked like a rendering bug rather than a fix.
+
+The raw-dataset CSV (`corporateDerivedViews.ts:208`) was deliberately left alone.
+`pushRecord` emits every key of the response, so `bridge_quality`,
+`intrinsic_value_per_share`, `enterprise_value`, and `valuation_method` all land in the same
+`backend_dcf` block. That record is self-describing, which is the condition the Prevention
+rule above actually asks for; blanking a field there would remove information from a raw
+export rather than add honesty to it. The rule is about values presented *without* their
+discriminator, not about every occurrence of the number.

@@ -8,6 +8,7 @@ import type {
   RawDatasetRow,
   WatchlistHolding,
 } from "./corporateTypes";
+import { isBridgeUnresolved } from "@/lib/bridgeQuality";
 import { numberText, numberText2, pct } from "./corporateUtils";
 
 interface CorporateDerivedSnapshot {
@@ -33,13 +34,15 @@ type ChartRecord = Record<string, string | number | boolean | null | undefined>;
  * against per-share values, or share an axis with current_price, however close the numbers
  * happen to fall. `estimated` is a real per-share value and is returned as one.
  *
- * This is the only place that decides whether a DCF value may be presented. Do not branch on
- * bridge_quality elsewhere: a fourth quality tier must be one edit, not a search.
+ * This is the only place that decides whether a comparison row's DCF value may be presented.
+ * Do not branch on bridge_quality elsewhere: a fourth quality tier must be one edit, not a
+ * search. The test itself lives in lib/bridgeQuality, shared with the estimated_value
+ * surfaces, which carry the same quantity under a different field name.
  */
 export function bridgedDcfValue(
   row: { dcf_value: number; bridge_quality?: string },
 ): number | null {
-  return row.bridge_quality === "missing" ? null : row.dcf_value;
+  return isBridgeUnresolved(row.bridge_quality) ? null : row.dcf_value;
 }
 
 export function sortComparisonRows(
