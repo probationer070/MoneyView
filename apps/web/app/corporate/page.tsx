@@ -463,7 +463,6 @@ export default function CorporateAnalysisPage() {
     const bottomUpKe = RISK_FREE_RATE + leveredBeta * impliedErp + KOREA_COUNTRY_RISK_PREMIUM;
     const spread = assumptions.roic - assumptions.wacc;
     const sustainableGrowth = (assumptions.reinvestment / 100) * assumptions.roic;
-    const terminalValueShare = clamp(62 + assumptions.growth * 1.8 - assumptions.wacc * 1.2, 20, 88);
     const successProbability = clamp(55 + spread * 2.3 + assumptions.growth - assumptions.esgPenalty * 0.25, 5, 95);
     const agencyRisk = clamp(100 - assumptions.governance + assumptions.esgPenalty, 0, 100);
     const lifeCyclePosition = clamp(35 + assumptions.growth * 2.5 - assumptions.debtRatio * 0.3, 0, 100);
@@ -494,7 +493,6 @@ export default function CorporateAnalysisPage() {
       bottomUpKe,
       spread,
       sustainableGrowth,
-      terminalValueShare,
       successProbability,
       agencyRisk,
       lifeCyclePosition,
@@ -1180,7 +1178,6 @@ export default function CorporateAnalysisPage() {
             successProbability={derived.successProbability}
             riskReturn={riskReturn}
             sustainableGrowth={derived.sustainableGrowth}
-            terminalValueShare={derived.terminalValueShare}
             fcff={assumptions.fcff}
             dcfResult={dcfData ?? undefined}
             onOpenDetail={setActiveCalculation}

@@ -766,6 +766,7 @@ def test_corporate_bulk_dcf_reports_returns_full_reports_for_requested_tickers(t
                 "bridge_quality": "ok",
                 "current_price": current_price,
                 "upside_pct": 25.0,
+                "terminal_value_share_pct": 70.71,
                 "status": "Undervalued",
                 "generated_at": "2026-04-11T12:00:00Z",
             },
@@ -804,6 +805,27 @@ def test_corporate_bulk_dcf_reports_returns_full_reports_for_requested_tickers(t
             "diluted_shares_outstanding": 10.0,
             "valuation_method": "intrinsic_equity_per_share",
             "bridge_quality": "ok",
+            # 1034.1 / 1462.4. Kept consistent with the two values above rather than
+            # picked: a fixture whose parts disagree cannot fail on a wrong one.
+            "terminal_value_share_pct": 70.71,
+            # A 1x1 grid at the base assumptions -- enough for the route to serialize the
+            # nested model, without hand-typing 25 cells into a fixture that is standing in
+            # for the builder rather than testing it.
+            "sensitivity": {
+                "wacc_values": [assumptions.wacc],
+                "terminal_growth_values": [assumptions.terminal_growth_rate],
+                "cells": [
+                    {
+                        "wacc": assumptions.wacc,
+                        "terminal_growth": assumptions.terminal_growth_rate,
+                        "is_base": True,
+                        "enterprise_value": 1462.4,
+                        "terminal_value_share_pct": 70.71,
+                        "intrinsic_value_per_share": 125.0,
+                        "undefined_reason": None,
+                    },
+                ],
+            },
             "agency_discount": 0.945,
             "dcf_multiple": 15.9,
             "baseline_multiple": 12.5,

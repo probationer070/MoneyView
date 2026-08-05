@@ -4,12 +4,18 @@ import hashlib
 from datetime import datetime, timezone
 from typing import Callable
 
-from packages.core_finance.dcf import calculate_equity_value, calculate_intrinsic_value_per_share
+from packages.core_finance.dcf import (
+    calculate_equity_value,
+    calculate_intrinsic_value_per_share,
+    sensitivity_grid,
+)
 
 from apps.api.models.schemas import (
     DCFAssumptionSummary,
     DCFFullReport,
     DCFProjectionRow,
+    DCFSensitivityCell,
+    DCFSensitivityGrid,
     DCFSummary,
     DCFWaccBreakdown,
     CorporateMetrics,
@@ -151,6 +157,9 @@ def _build_dcf_outputs(
     terminal_value = terminal_cash_flow / max(wacc - terminal_growth, 0.005)
     pv_terminal = terminal_value / ((1 + wacc) ** 5)
     enterprise_value = pv_fcff + pv_terminal
+    # The measured share, not a proxy for it: how much of this enterprise value is the
+    # discounted perpetuity rather than the five explicit years.
+    terminal_value_share_pct = pv_terminal / enterprise_value * 100
     agency_discount = 1 - min(max(esg_penalty, 0), 80) / 400
     dcf_multiple = enterprise_value / base_fcff
     baseline_multiple = 1 / max(wacc - terminal_growth, 0.005)
@@ -195,24 +204,11 @@ def _build_dcf_outputs(
         net_debt_meta.quality, non_operating_assets_meta.quality, diluted_shares_meta.quality
     )
 
-    # An absent non-operating-assets term sums as zero -- that is what "estimated" means
-    # here. An absent net debt or share count does not: those are "missing", and the
-    # per-share value must not be produced at all.
-    equity_value = (
-        calculate_equity_value(
-            enterprise_value=enterprise_value,
-            net_debt=net_debt,
-            non_operating_assets=non_operating_assets or 0.0,
-        )
-        if net_debt is not None
-        else None
-    )
-    intrinsic_value_per_share = (
-        calculate_intrinsic_value_per_share(equity_value, diluted_shares_outstanding)
-        if equity_value is not None
-        and diluted_shares_outstanding is not None
-        and diluted_shares_outstanding > 0
-        else None
+    equity_value, intrinsic_value_per_share = _bridge_to_per_share(
+        enterprise_value,
+        net_debt=net_debt,
+        non_operating_assets=non_operating_assets,
+        diluted_shares_outstanding=diluted_shares_outstanding,
     )
     valuation_method = (
         "intrinsic_equity_per_share"
@@ -226,6 +222,40 @@ def _build_dcf_outputs(
         "Bridge Incomplete"
         if comparable_value is None
         else "Undervalued" if current_price > 0 and comparable_value > current_price else "Overvalued"
+    )
+
+    # Built from the assumptions the report actually used, so the centre cell reproduces
+    # the valuation above rather than a neighbouring one. terminal_growth is already
+    # clamped to at most wacc - 0.005, which is what keeps that centre inside the model.
+    grid = sensitivity_grid(
+        projected_fcff_values,
+        base_wacc=wacc,
+        base_terminal_growth=terminal_growth,
+    )
+
+    def _cell(cell: dict) -> DCFSensitivityCell:
+        _, per_share = _bridge_to_per_share(
+            cell["enterprise_value"],
+            net_debt=net_debt,
+            non_operating_assets=non_operating_assets,
+            diluted_shares_outstanding=diluted_shares_outstanding,
+        )
+        return DCFSensitivityCell(
+            wacc=cell["wacc"],
+            terminal_growth=cell["terminal_growth"],
+            is_base=cell["is_base"],
+            enterprise_value=cell["enterprise_value"],
+            terminal_value_share_pct=cell["tv_share_pct"],
+            intrinsic_value_per_share=(
+                round(float(per_share), 4) if per_share is not None else None
+            ),
+            undefined_reason=cell["undefined_reason"],
+        )
+
+    sensitivity = DCFSensitivityGrid(
+        wacc_values=grid["wacc_values"],
+        terminal_growth_values=grid["terminal_growth_values"],
+        cells=[_cell(cell) for cell in grid["cells"]],
     )
 
     report_id = _report_id(
@@ -254,6 +284,7 @@ def _build_dcf_outputs(
         diluted_shares_meta=diluted_shares_meta,
         current_price=round(float(current_price), 2),
         upside_pct=round(float(upside_pct), 2),
+        terminal_value_share_pct=round(float(terminal_value_share_pct), 2),
         status=status,
         generated_at=generated_at,
     )
@@ -296,12 +327,49 @@ def _build_dcf_outputs(
         net_debt_meta=net_debt_meta,
         non_operating_assets_meta=non_operating_assets_meta,
         diluted_shares_meta=diluted_shares_meta,
+        terminal_value_share_pct=round(float(terminal_value_share_pct), 2),
+        sensitivity=sensitivity,
         agency_discount=round(float(agency_discount), 6),
         dcf_multiple=round(float(dcf_multiple), 6),
         baseline_multiple=round(float(baseline_multiple), 6),
         fcff_scale=round(float(fcff_scale), 6),
     )
     return summary, assumption_summary, full_report
+
+
+def _bridge_to_per_share(
+    enterprise_value: float | None,
+    *,
+    net_debt: float | None,
+    non_operating_assets: float | None,
+    diluted_shares_outstanding: float | None,
+) -> tuple[float | None, float | None]:
+    """Carry one enterprise value across the equity bridge.
+
+    Returns `(equity_value, intrinsic_value_per_share)`, either of which is None when
+    the bridge cannot produce it.
+
+    An absent non-operating-assets term sums as zero -- that is what "estimated" means
+    here. An absent net debt or share count does not: those are "missing", and the
+    per-share value must not be produced at all.
+
+    One home for that rule, because the headline valuation and every sensitivity cell
+    both run through it. Two copies would let the grid show per-share numbers for a
+    ticker whose headline value is suppressed as unbridged.
+    """
+    if enterprise_value is None or net_debt is None:
+        return None, None
+
+    equity_value = calculate_equity_value(
+        enterprise_value=enterprise_value,
+        net_debt=net_debt,
+        non_operating_assets=non_operating_assets or 0.0,
+    )
+    if diluted_shares_outstanding is None or diluted_shares_outstanding <= 0:
+        return equity_value, None
+    return equity_value, calculate_intrinsic_value_per_share(
+        equity_value, diluted_shares_outstanding
+    )
 
 
 def _report_id(

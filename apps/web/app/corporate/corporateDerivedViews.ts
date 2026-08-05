@@ -17,7 +17,6 @@ interface CorporateDerivedSnapshot {
   bottomUpKe: number;
   spread: number;
   sustainableGrowth: number;
-  terminalValueShare: number;
   successProbability: number;
   agencyRisk: number;
   lifeCyclePosition: number;
@@ -192,7 +191,6 @@ export function buildRawDatasetRows({
     bottomUpKe: pct(derived.bottomUpKe),
     spread: pct(derived.spread),
     sustainableGrowth: pct(derived.sustainableGrowth),
-    terminalValueShare: pct(derived.terminalValueShare),
     successProbability: pct(derived.successProbability),
     failureProbability: `${(100 - derived.successProbability).toFixed(2)}%`,
     agencyRisk: numberText(derived.agencyRisk),

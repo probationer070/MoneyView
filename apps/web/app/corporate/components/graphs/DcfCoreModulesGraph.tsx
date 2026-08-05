@@ -6,13 +6,11 @@ import { type DcfResult, type DetailKey, moneyText, pct } from "./shared";
 
 export function DcfCoreModulesGraph({
   sustainableGrowth,
-  terminalValueShare,
   fcff,
   dcfResult,
   onOpenDetail,
 }: {
   sustainableGrowth: number;
-  terminalValueShare: number;
   fcff: number;
   dcfResult?: DcfResult;
   onOpenDetail: (key: DetailKey) => void;
@@ -52,7 +50,15 @@ export function DcfCoreModulesGraph({
           className="rounded-[var(--radius)] p-2 text-left transition hover:bg-[var(--surface)]"
         >
           <div className="text-xs text-[var(--text-muted)]">Terminal Value Share</div>
-          <div className="text-2xl font-black">{pct(terminalValueShare)}</div>
+          {/* Measured by the backend as PV(terminal) / enterprise value. It is a property
+              of a valuation that ran, so without a DCF result there is no share to show --
+              the assumption sliders alone cannot produce one. The nullish check also covers
+              a result restored from a sessionStorage cache written before this field. */}
+          <div className="text-2xl font-black">
+            {dcfResult?.terminal_value_share_pct == null
+              ? "N/A"
+              : pct(dcfResult.terminal_value_share_pct)}
+          </div>
         </button>
         <button
           type="button"

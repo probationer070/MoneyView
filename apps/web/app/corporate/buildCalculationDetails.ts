@@ -29,7 +29,6 @@ interface DerivedSnapshot {
   bottomUpKe: number;
   spread: number;
   sustainableGrowth: number;
-  terminalValueShare: number;
   successProbability: number;
   agencyRisk: number;
   lifeCyclePosition: number;
@@ -150,6 +149,18 @@ export function buildCalculationDetails({
     if (!dcfData) return pending;
     const upside = bridgedUpsidePct(dcfData);
     return upside === null ? UNBRIDGED_PLACEHOLDER : pct(upside);
+  };
+  // Measured by the backend as PV(terminal) / enterprise value. Unlike fair value it does
+  // not depend on the equity bridge -- concentration is a property of the enterprise
+  // valuation -- but it does require a valuation to have run.
+  //
+  // The presence check is a runtime one rather than a null check on a typed number: a result
+  // restored from the sessionStorage cache can have been written by a build that predates
+  // this field, and the type it is read back as cannot know that.
+  const terminalShareText = (pending: string) => {
+    if (!dcfData) return pending;
+    const share = dcfData.terminal_value_share_pct;
+    return share == null ? "N/A" : pct(share);
   };
 
   const assumptionDetail = ({
@@ -824,19 +835,19 @@ export function buildCalculationDetails({
       timeHorizon: "Current realtime assumption set; FCFF uses LTM or normalized annual-report input; current price is comparison context only.",
       summary: [
         { label: "Sustainable Growth", value: pct(derived.sustainableGrowth), source: "Reinvestment x ROIC" },
-        { label: "Terminal Value Share", value: pct(derived.terminalValueShare), source: "Growth and WACC scenario formula" },
+        { label: "Terminal Value Share", value: terminalShareText("Calculating"), source: "Backend DCF engine" },
         { label: "FCFF Magnitude", value: `${moneyText(assumptions.fcff)}B`, source: sourceLabel },
         { label: "Intrinsic DCF Value", value: fairValueText("N/A"), source: "Backend DCF engine" },
       ],
       components: [
         { label: "Reinvestment Rate", value: pct(assumptions.reinvestment), source: "Sustainable growth component" },
         { label: "ROIC", value: pct(assumptions.roic), source: "Sustainable growth component" },
-        { label: "Growth", value: pct(assumptions.growth), source: "Terminal value share component" },
-        { label: "WACC", value: pct(assumptions.wacc), source: "Terminal value share component" },
+        { label: "Growth", value: pct(assumptions.growth), source: "Projected FCFF component" },
+        { label: "WACC", value: pct(assumptions.wacc), source: "Discount rate and terminal denominator" },
         { label: "FCFF", value: `${moneyText(assumptions.fcff)}B`, source: "Yahoo annual free cash flow values averaged from 2021 onward when available" },
       ],
-      formula: "Sustainable Growth = reinvestment x ROIC / 100; Terminal Value Share = clamp(62 + growth x 1.8 - WACC x 1.2, 20, 88)",
-      result: `${pct(derived.sustainableGrowth)} sustainable growth; ${pct(derived.terminalValueShare)} terminal value share`,
+      formula: "Sustainable Growth = reinvestment x ROIC / 100; Terminal Value Share = PV(terminal value) / enterprise value",
+      result: `${pct(derived.sustainableGrowth)} sustainable growth; ${terminalShareText("terminal value share calculating")} terminal value share`,
       sourcing: [
         { label: "FCFF", value: `${moneyText(assumptions.fcff)}B`, source: "Yahoo annual free cash flow values averaged from 2021 onward when available" },
         { label: "DCF endpoint", value: `/corporate/dcf/${assumptions.ticker}`, source: "FastAPI backend" },
@@ -844,35 +855,35 @@ export function buildCalculationDetails({
       ],
       simulation: [
         { label: "1", value: `${pct(assumptions.reinvestment)} x ${pct(assumptions.roic)} / 100`, source: pct(derived.sustainableGrowth) },
-        { label: "2", value: `62.0 + ${numberText(assumptions.growth)} x 1.8 - ${numberText(assumptions.wacc)} x 1.2`, source: pct(derived.terminalValueShare) },
+        { label: "2", value: "PV(terminal value) / enterprise value", source: terminalShareText("Waiting for backend result") },
         { label: "3", value: dcfData ? `${fairValueText("N/A")} vs ${moneyText(dcfData.current_price)}` : "Waiting for backend result", source: upsideText("Loading") },
       ],
     },
     terminalValueShare: {
       title: `${companyName} Terminal Value Share`,
-      timeHorizon: "Current realtime DCF scenario using the active growth and WACC assumptions; terminal share is bounded to a 20.0%-88.0% sanity range.",
+      timeHorizon: "Measured from the backend DCF that ran against the current assumption set. Not bounded: a share near 100% is a real reading about this valuation, and clamping it would hide the concentration it is reporting.",
       summary: [
-        { label: "Terminal Value Share", value: pct(derived.terminalValueShare), source: "DCF Core Modules scenario formula | Period: current realtime scenario" },
+        { label: "Terminal Value Share", value: terminalShareText("Calculating"), source: "Backend DCF engine | Period: current realtime scenario" },
         { label: "Growth Rate", value: pct(assumptions.growth), source: "Yahoo annual revenue growth rates averaged from 2021 onward when available | Period: current override can replace backend value" },
         { label: "WACC", value: pct(assumptions.wacc), source: "Yahoo statement averages plus Yahoo beta and model rate inputs | Period: current model snapshot" },
-        { label: "Clamp Range", value: "20.0%-88.0%", source: "Terminal-value concentration guardrail | Period: model policy" },
+        { label: "What it measures", value: "Share of enterprise value from the perpetuity", source: "Terminal-value concentration | Period: model definition" },
       ],
       components: [
-        { label: "Base terminal share", value: "62.0%", source: "Model anchor | Period: stable scenario baseline" },
-        { label: "Growth contribution", value: pct(assumptions.growth * 1.8), source: `${pct(assumptions.growth)} x 1.8 | Period: current assumption state` },
-        { label: "WACC drag", value: pct(assumptions.wacc * 1.2), source: `${pct(assumptions.wacc)} x 1.2 | Period: current assumption state` },
+        { label: "PV of terminal value", value: "Terminal value discounted over the 5-year forecast", source: "Numerator | Period: current realtime scenario" },
+        { label: "Enterprise value", value: "PV of explicit FCFF + PV of terminal value", source: "Denominator | Period: current realtime scenario" },
+        { label: "Terminal denominator", value: `WACC - terminal growth, from ${pct(assumptions.wacc)} WACC`, source: "What the share is most sensitive to | Period: current assumption state" },
       ],
-      formula: "Terminal Value Share = clamp(62 + growth x 1.8 - WACC x 1.2, 20, 88)",
-      result: pct(derived.terminalValueShare),
+      formula: "Terminal Value Share = PV(terminal value) / enterprise value",
+      result: terminalShareText("Calculating"),
       sourcing: [
         { label: "Growth Rate", value: pct(assumptions.growth), source: "Yahoo annual revenue growth rates from 2021 onward / saved fallback / browser override" },
         { label: "WACC", value: pct(assumptions.wacc), source: "Yahoo-derived WACC / saved fallback / browser override" },
-        { label: "Terminal model", value: "Bounded terminal concentration scenario", source: "MoneyView frontend DCF core module" },
+        { label: "Terminal model", value: "Gordon growth perpetuity", source: "packages/core_finance/dcf.py" },
       ],
       simulation: [
-        { label: "1", value: `${numberText(assumptions.growth)} x 1.8`, source: pct(assumptions.growth * 1.8) },
-        { label: "2", value: `${numberText(assumptions.wacc)} x 1.2`, source: pct(assumptions.wacc * 1.2) },
-        { label: "3", value: `clamp(62.0 + ${numberText(assumptions.growth * 1.8)} - ${numberText(assumptions.wacc * 1.2)}, 20.0, 88.0)`, source: pct(derived.terminalValueShare) },
+        { label: "1", value: "Discount the 5 explicit FCFF years at WACC", source: "PV of explicit forecast" },
+        { label: "2", value: "Discount the Gordon terminal value over the same 5 years", source: "PV of terminal value" },
+        { label: "3", value: "PV(terminal) / (PV(explicit) + PV(terminal))", source: terminalShareText("Waiting for backend result") },
       ],
     },
     fcffMagnitude: {

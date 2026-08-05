@@ -155,3 +155,104 @@ def multi_stage_dcf(
         "terminal_value":   round(tv, 2),
         "tv_share_pct":     round(tv_share, 2),
     }
+
+
+# Why a cell of the sensitivity grid carries no valuation. Both are states of the model,
+# not errors: the Gordon growth formula has no value at these points, and a grid that
+# sweeps around a base assumption is built to reach them.
+WACC_NOT_POSITIVE = "wacc_not_positive"
+WACC_NOT_ABOVE_TERMINAL_GROWTH = "wacc_not_above_terminal_growth"
+
+# Steps either side of the base assumption, on both axes. Symmetric and shared so the
+# corners of the grid are a uniform 2pp move in the WACC-minus-growth spread, which is
+# what the table is read for.
+SENSITIVITY_OFFSETS = (-0.01, -0.005, 0.0, 0.005, 0.01)
+
+
+def sensitivity_axis(base: float) -> list[float]:
+    """One axis of the sensitivity grid, centred on `base`.
+
+    Rounded because these values are rendered as headers and matched against cell
+    coordinates: 0.09 + 0.005 is 0.09500000000000001 in binary floating point.
+    """
+    return [round(base + offset, 10) for offset in SENSITIVITY_OFFSETS]
+
+
+def sensitivity_cell(
+    explicit_fcff:   list[float],
+    wacc:            float,
+    terminal_growth: float,
+) -> dict:
+    """Value one (WACC, terminal growth) point of a sensitivity grid.
+
+    Returns multi_stage_dcf's keys plus `undefined_reason`, which is None for a cell
+    that has a valuation.
+
+    Where the model has no value, every number is None -- including `pv_explicit`,
+    which is arithmetically computable at a negative discount rate. A cell is
+    reported whole or not at all: half a valuation under a heading that reads like a
+    whole one is the failure this grid exists to expose. Nor is the denominator
+    floored at some epsilon, which would report a large finite value at precisely
+    the point where the honest answer is that there is none.
+
+    Terminal cash flow is derived per cell, since CF_{n+1} = CF_n x (1+g) moves with
+    the axis.
+    """
+    if wacc <= 0:
+        return _undefined_cell(WACC_NOT_POSITIVE)
+    if wacc <= terminal_growth:
+        return _undefined_cell(WACC_NOT_ABOVE_TERMINAL_GROWTH)
+
+    valued = multi_stage_dcf(
+        explicit_fcff=explicit_fcff,
+        terminal_cf=explicit_fcff[-1] * (1 + terminal_growth),
+        wacc=wacc,
+        terminal_growth=terminal_growth,
+    )
+    return {**valued, "undefined_reason": None}
+
+
+def _undefined_cell(reason: str) -> dict:
+    return {
+        "pv_explicit":      None,
+        "pv_terminal":      None,
+        "enterprise_value": None,
+        "terminal_value":   None,
+        "tv_share_pct":     None,
+        "undefined_reason": reason,
+    }
+
+
+def sensitivity_grid(
+    explicit_fcff:         list[float],
+    base_wacc:             float,
+    base_terminal_growth:  float,
+) -> dict:
+    """WACC x terminal-growth sensitivity grid around a base valuation.
+
+    The explicit forecast does not depend on either axis, so the same cash flows are
+    revalued at every point and only the discounting and terminal leg move.
+
+    Cells are row-major with WACC on the outer axis. `is_base` marks the centre by
+    position rather than by comparing floats, and the centre cell reproduces the
+    valuation at the base assumptions exactly.
+    """
+    wacc_values = sensitivity_axis(base_wacc)
+    terminal_growth_values = sensitivity_axis(base_terminal_growth)
+    centre = SENSITIVITY_OFFSETS.index(0.0)
+
+    cells: list[dict] = []
+    for row, wacc in enumerate(wacc_values):
+        for column, terminal_growth in enumerate(terminal_growth_values):
+            cells.append({
+                "wacc":            wacc,
+                "terminal_growth": terminal_growth,
+                "is_base":         row == centre and column == centre,
+                **sensitivity_cell(explicit_fcff, wacc, terminal_growth),
+            })
+
+    return {
+        "wacc_values":            wacc_values,
+        "terminal_growth_values": terminal_growth_values,
+        "cells":                  cells,
+    }

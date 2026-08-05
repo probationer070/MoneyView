@@ -249,11 +249,52 @@ how close the numbers happen to fall, and does not depend on company size.
       did. The alias was dropped rather than kept: nothing outside the file referenced it,
       so it bought indirection and no callers.
 
-- [ ] Add a WACC versus terminal-growth sensitivity table for terminal-value
-      concentration risk. Deferred deliberately, not an oversight: a sensitivity
-      chart is only worth building once the bridge it charts has real data in it,
-      which items 1-3 above are what just delivered. Tracked as its own open item
-      rather than closed alongside the rest of Phase 2.
+- [x] Add a WACC versus terminal-growth sensitivity table for terminal-value
+      concentration risk. (done 2026-08-05) `sensitivity_cell` / `sensitivity_grid` in
+      `packages/core_finance/dcf.py`, carried on `DCFFullReport.sensitivity`, rendered by
+      `apps/web/app/corporate/components/DcfSensitivityTable.tsx` inside the existing Full
+      DCF Report section. 5x5, centred on the reported assumptions, +/-50bp and +/-100bp on
+      both axes.
+
+      **The table could not be built on the number the app was already showing.**
+      `page.tsx:466` computed "Terminal Value Share" as
+      `clamp(62 + growth x 1.8 - WACC x 1.2, 20, 88)` -- a linear function of two sliders,
+      labelled as a ratio it never computed, with a clamp that made the readings a
+      concentration metric exists to surface unreachable. The grid's centre cell would have
+      contradicted the tile above it. `terminal_value_share_pct` is now measured on the
+      backend as `PV(terminal) / enterprise value` and every surface reads it from there.
+      Recorded in `ERROR-LOG.md` (2026-08-05).
+
+      **Three properties the grid holds, each pinned by a test:**
+      - Cells where WACC is not above terminal growth carry *no* numbers, not the service's
+        `max(wacc - g, 0.005)` clamp — which would report ~200x the terminal cash flow where
+        the Gordon model has no value. Reachable from ordinary inputs: terminal growth is
+        clamped to at most `wacc - 0.005`, so the tightest possible centre is a 0.5pp spread
+        and the axes reach 2pp past it.
+      - The centre cell reproduces the reported enterprise value, to the grid's own rounding
+        step. The two go through different code, and a centre that disagreed would bracket a
+        valuation nobody ran.
+      - Per-share values are suppressed across every cell when the bridge does not resolve,
+        via the same `_bridge_to_per_share` helper the headline valuation uses. Enterprise
+        value and the terminal share stay: concentration does not need a bridge.
+
+      **A cell has two distinct absences and they render differently.** `n/a` means the
+      model has no value at those assumptions — true for every ticker. `—` means this
+      ticker has no equity bridge — true at every point in the grid. Collapsing them would
+      report a per-ticker data gap as a property of the model.
+
+      **Second defect found in the same pass:** the corporate page restores DCF results from
+      `sessionStorage`, so adding a required field broke on payloads written by an earlier
+      build (`pct(undefined)` threw and blanked the page). A required field on a type whose
+      values can arrive from a cache older than the type is a runtime problem, not a typing
+      one. Also in `ERROR-LOG.md`.
+
+      Coverage: 18 tests in `tests/core_finance/test_dcf.py`, 11 in
+      `tests/api/test_corporate_dcf_sensitivity.py`, 5 in
+      `apps/web/tests/e2e/corporate-dcf-sensitivity.spec.ts`. Break/restore verified against
+      three wrong implementations: inheriting the service clamp (6 backend failures,
+      including `assert 21000.0 != 21000.0` — the fabricated value exactly), falling an
+      unbridged cell back to enterprise value, and rendering both absences alike.
 
 ### Phase 3 - Risk-Return Minard Remediation
 

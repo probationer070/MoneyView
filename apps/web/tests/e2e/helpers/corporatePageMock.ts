@@ -6,6 +6,7 @@ import type {
   DcfFullReport,
   DcfPhase1Event,
   DcfPhase2Event,
+  DcfSensitivityGrid,
   DcfSummary,
   DcfSummaryResponse,
 } from "../../../../../packages/shared-types";
@@ -95,6 +96,9 @@ const mockDcfSummary: DcfSummary = {
   bridge_quality: "ok",
   current_price: 210.4,
   upside_pct: 14.31,
+  // 1034.1 / 1462.4, the present_value_of_terminal and enterprise_value below. Derived
+  // rather than picked so the tile, the base grid cell, and the full report agree.
+  terminal_value_share_pct: 70.71,
   status: "Undervalued",
   generated_at: "2026-04-11T12:00:00Z",
 };
@@ -123,6 +127,41 @@ const mockDcfSummaryResponse: DcfSummaryResponse = {
   enterprise_value_index: mockDcfAssumptions.enterprise_value_index,
 };
 
+/**
+ * A 3x3 grid, deliberately not the 5x5 the backend emits: the table is meant to render
+ * whatever axes it is given, and a component that hardcoded five columns would pass
+ * against a 5x5 fixture.
+ *
+ * Centred on WACC 4% / terminal growth 3%, a 1pp spread. That is what puts three cells
+ * past the point where the Gordon model has a value -- every pairing where WACC is at or
+ * below terminal growth -- so the undefined region is covered without a contrived fixture.
+ * The base cell restates the report's own enterprise value, share, and per-share value.
+ */
+const mockSensitivityGrid: DcfSensitivityGrid = {
+  wacc_values: [0.03, 0.04, 0.05],
+  terminal_growth_values: [0.02, 0.03, 0.04],
+  cells: [
+    { wacc: 0.03, terminal_growth: 0.02, is_base: false, enterprise_value: 1580.2, terminal_value_share_pct: 74.12, intrinsic_value_per_share: 264.0, undefined_reason: null },
+    { wacc: 0.03, terminal_growth: 0.03, is_base: false, enterprise_value: null, terminal_value_share_pct: null, intrinsic_value_per_share: null, undefined_reason: "wacc_not_above_terminal_growth" },
+    { wacc: 0.03, terminal_growth: 0.04, is_base: false, enterprise_value: null, terminal_value_share_pct: null, intrinsic_value_per_share: null, undefined_reason: "wacc_not_above_terminal_growth" },
+    { wacc: 0.04, terminal_growth: 0.02, is_base: false, enterprise_value: 1180.6, terminal_value_share_pct: 62.55, intrinsic_value_per_share: 184.1, undefined_reason: null },
+    { wacc: 0.04, terminal_growth: 0.03, is_base: true, enterprise_value: 1462.4, terminal_value_share_pct: 70.71, intrinsic_value_per_share: 240.5, undefined_reason: null },
+    { wacc: 0.04, terminal_growth: 0.04, is_base: false, enterprise_value: null, terminal_value_share_pct: null, intrinsic_value_per_share: null, undefined_reason: "wacc_not_above_terminal_growth" },
+    { wacc: 0.05, terminal_growth: 0.02, is_base: false, enterprise_value: 998.4, terminal_value_share_pct: 55.02, intrinsic_value_per_share: 147.7, undefined_reason: null },
+    { wacc: 0.05, terminal_growth: 0.03, is_base: false, enterprise_value: 1140.8, terminal_value_share_pct: 60.63, intrinsic_value_per_share: 176.1, undefined_reason: null },
+    { wacc: 0.05, terminal_growth: 0.04, is_base: false, enterprise_value: 1420.6, terminal_value_share_pct: 69.88, intrinsic_value_per_share: 232.1, undefined_reason: null },
+  ],
+};
+
+/** What the backend emits when the bridge does not resolve: no per-share value anywhere,
+ *  while enterprise value and the terminal share stay, since neither needs the bridge. */
+function unbridgedGrid(grid: DcfSensitivityGrid): DcfSensitivityGrid {
+  return {
+    ...grid,
+    cells: grid.cells.map((cell) => ({ ...cell, intrinsic_value_per_share: null })),
+  };
+}
+
 const mockDcfFullReport: DcfFullReport = {
   summary: mockDcfSummary,
   assumptions: mockDcfAssumptions,
@@ -150,6 +189,8 @@ const mockDcfFullReport: DcfFullReport = {
   diluted_shares_outstanding: 5,
   valuation_method: "intrinsic_equity_per_share",
   bridge_quality: "ok",
+  terminal_value_share_pct: 70.71,
+  sensitivity: mockSensitivityGrid,
   agency_discount: 0.945,
   dcf_multiple: 15.9,
   baseline_multiple: 12.5,
@@ -259,7 +300,11 @@ export async function mockCorporatePageApi(page: Page, stats?: CorporatePageMock
   const singleBridge = options?.dcfBridgeQuality ?? "ok";
   const dcfSummary = withBridgeQuality(mockDcfSummary, singleBridge);
   const dcfSummaryResponse = withBridgeQuality(mockDcfSummaryResponse, singleBridge);
-  const dcfFullReport = { ...mockDcfFullReport, summary: dcfSummary };
+  const dcfFullReport: DcfFullReport = {
+    ...mockDcfFullReport,
+    summary: dcfSummary,
+    sensitivity: singleBridge === "missing" ? unbridgedGrid(mockSensitivityGrid) : mockSensitivityGrid,
+  };
   const dcfPhase1Event: DcfPhase1Event = { phase: "phase1", summary: dcfSummary };
 
   let comparisonSnapshot = {

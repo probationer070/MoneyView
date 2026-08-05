@@ -66,6 +66,9 @@ export interface RiskReturnPoint {
 
 export interface DcfResult {
   estimated_value: number;
+  // Optional because a DCF result restored from sessionStorage can predate the field. The
+  // backend always sends it; a cache written by an earlier build does not.
+  terminal_value_share_pct?: number;
   intrinsic_value_per_share?: number | null;
   enterprise_value?: number;
   equity_value?: number | null;

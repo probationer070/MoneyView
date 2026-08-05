@@ -689,6 +689,23 @@ Expose local runtime-health and sensitivity context without requiring the user t
 - Meaning: breakdown of sustainable growth, terminal value share, FCFF, and backend intrinsic-value context.
 - Source: backend DCF result plus active assumptions.
 - Ownership: backend DCF methodology; frontend graph composition.
+- Corrected 2026-08-05: this entry was accurate for every tile except `Terminal Value Share`,
+  which until then was computed in the browser as `clamp(62 + growth x 1.8 - WACC x 1.2, 20, 88)`
+  and had no connection to any terminal value. It is now measured by the backend as
+  `PV(terminal value) / enterprise value` and arrives on the DCF summary, so the "Source" and
+  "Ownership" lines above are true of it as well. See `ERROR-LOG.md` (2026-08-05).
+- The tile reads `N/A` until a DCF has run: a share of enterprise value is a property of a
+  valuation, and the assumption sliders alone cannot produce one.
+
+### WACC x Terminal Growth Sensitivity
+
+- Meaning: the same five projected FCFF years revalued across a 5x5 grid of discount rate and
+  perpetuity growth, showing intrinsic value per share and the terminal-value share at each point.
+- Source: `DCFFullReport.sensitivity`, built by `sensitivity_grid` in `packages/core_finance/dcf.py`.
+- Ownership: backend; the frontend renders whatever axes the payload carries.
+- Caveat: cells where WACC is not above terminal growth carry no values at all. That is the
+  Gordon growth model having no value at those assumptions, not missing data, and it is
+  rendered `n/a` — distinct from `—`, which means this ticker's equity bridge did not resolve.
 
 ## 5.3 Backend DCF summary and reports
 

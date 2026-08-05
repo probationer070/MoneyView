@@ -75,6 +75,10 @@ class DCFSummary(BaseModel):
     diluted_shares_meta: BridgeInputMeta = Field(default_factory=BridgeInputMeta)
     current_price: float
     upside_pct: float
+    # Share of enterprise value carried by the discounted terminal value. A high reading
+    # says the valuation rests on the perpetuity assumption rather than on the explicit
+    # forecast -- the concentration risk the sensitivity grid puts a range around.
+    terminal_value_share_pct: float
     status: str
     generated_at: str
 
@@ -114,6 +118,40 @@ class DCFWaccBreakdown(BaseModel):
     country_risk_premium: float
 
 
+class DCFSensitivityCell(BaseModel):
+    """One (WACC, terminal growth) point of the sensitivity grid.
+
+    When `undefined_reason` is set every value is None together. The Gordon growth
+    model has no value at those points and the grid is swept precisely to reach them,
+    so an absent cell is a result and not a gap -- see `sensitivity_cell` in
+    packages/core_finance/dcf.py for why nothing partial is reported either.
+
+    `intrinsic_value_per_share` additionally stays None whenever the equity bridge did
+    not resolve, on the same rule the headline valuation follows: an enterprise value
+    is never presented as a per-share value.
+    """
+
+    wacc: float
+    terminal_growth: float
+    is_base: bool = False
+    enterprise_value: float | None = None
+    terminal_value_share_pct: float | None = None
+    intrinsic_value_per_share: float | None = None
+    undefined_reason: str | None = None
+
+
+class DCFSensitivityGrid(BaseModel):
+    """WACC x terminal-growth grid around the reported assumptions.
+
+    `cells` is row-major with WACC on the outer axis, so cell (row, column) is at
+    index `row * len(terminal_growth_values) + column`.
+    """
+
+    wacc_values: List[float]
+    terminal_growth_values: List[float]
+    cells: List[DCFSensitivityCell] = Field(default_factory=list)
+
+
 class DCFFullReport(BaseModel):
     """Phase 3 DCF report containing the full backend valuation breakdown."""
 
@@ -136,6 +174,8 @@ class DCFFullReport(BaseModel):
     net_debt_meta: BridgeInputMeta = Field(default_factory=BridgeInputMeta)
     non_operating_assets_meta: BridgeInputMeta = Field(default_factory=BridgeInputMeta)
     diluted_shares_meta: BridgeInputMeta = Field(default_factory=BridgeInputMeta)
+    terminal_value_share_pct: float
+    sensitivity: DCFSensitivityGrid
     agency_discount: float
     dcf_multiple: float
     baseline_multiple: float

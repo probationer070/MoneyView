@@ -36,7 +36,6 @@ export function CorporateDiagnosticsSection({
   successProbability,
   riskReturn,
   sustainableGrowth,
-  terminalValueShare,
   fcff,
   dcfResult,
   onOpenDetail,
@@ -56,7 +55,6 @@ export function CorporateDiagnosticsSection({
   successProbability: number;
   riskReturn: RiskReturnPoint[];
   sustainableGrowth: number;
-  terminalValueShare: number;
   fcff: number;
   dcfResult?: DcfResult;
   onOpenDetail: (key: DetailKey) => void;
@@ -115,7 +113,6 @@ export function CorporateDiagnosticsSection({
 
         <DcfCoreModulesGraph
           sustainableGrowth={sustainableGrowth}
-          terminalValueShare={terminalValueShare}
           fcff={fcff}
           dcfResult={dcfResult}
           onOpenDetail={onOpenDetail}

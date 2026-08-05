@@ -1131,3 +1131,80 @@ of its own and never shares wording with a real value. The second half of the ru
 that asserts the spec's sentence verbatim cannot catch a wrong sentence. It pins drift, not
 truth. Something in the loop has to check the claim against the data's own semantics, and
 here that was only ever going to be a reader asking what a `0` means.
+
+
+## 2026-08-05: "Terminal Value Share" was a frontend formula unrelated to any terminal value
+
+Date: 2026-08-05
+Command: none -- found while implementing the WACC x terminal-growth sensitivity table
+(`guideline/sop/todo.md`, Phase 2 item 4). No suite was red.
+Failure: `apps/web/app/corporate/page.tsx:466` computed
+
+    const terminalValueShare = clamp(62 + assumptions.growth * 1.8 - assumptions.wacc * 1.2, 20, 88);
+
+and rendered it as "Terminal Value Share" on the DCF Core Modules tile, with the tooltip
+"estimates how much enterprise value comes from terminal assumptions" and a dedicated
+calculation-detail modal describing a "62.0% model anchor", a "growth contribution", a
+"WACC drag", and a "20.0%-88.0% terminal-value concentration guardrail".
+
+None of that is a terminal value share. The quantity is PV(terminal value) / enterprise
+value; this expression is a linear function of two assumption sliders that never touches
+either. It cannot equal the real share except by coincidence, moves the wrong way in
+general, and the 20-88 clamp guarantees it can never report the readings that matter most --
+a valuation that is 95% perpetuity is exactly what a concentration metric exists to show,
+and this one could not say so.
+Root cause: A frontend "derived metrics" layer computing what looks like a financial
+quantity, in the one place `guideline/sop/finance-logic.md` forbids ("Keep financial math in
+`apps/api`, `apps/api/core`, or `packages/core_finance`, never in `apps/web`"). The real
+inputs already existed on the backend: `corporate_dcf.py` had `pv_terminal` and
+`enterprise_value` on adjacent lines, and `packages/core_finance/dcf.py:149` already computed
+`tv_share_pct` in `multi_stage_dcf` -- a function nothing called.
+
+It survived because a plausible-looking percentage in a labelled tile is indistinguishable
+from a measured one. `docs/architecture/visualization-metrics.md:690` recorded its source as
+"backend DCF result plus active assumptions" and its ownership as "backend DCF methodology",
+which was wrong in both halves and read as confirmation.
+Fix: `terminal_value_share_pct` is now measured in `corporate_dcf.py` as
+`pv_terminal / enterprise_value * 100` and carried on `DCFSummary`, so the streamed payload
+has it. Every frontend site reads it from there. The derived-metrics entry, its type, its
+text view, and both calculation-detail blocks describing the old formula are deleted. The
+tile shows "N/A" before a DCF has run: a share of enterprise value is a property of a
+valuation, and the sliders alone cannot produce one -- which is what the old formula
+pretended they could.
+
+The sensitivity grid that prompted this ships alongside, in
+`packages/core_finance/dcf.py` (`sensitivity_cell`, `sensitivity_grid`) and on
+`DCFFullReport.sensitivity`. Cells where WACC is not above terminal growth carry no numbers
+at all rather than the service's `max(wacc - g, 0.005)` clamp, which would report roughly
+200x the terminal cash flow at points where the Gordon model has no value.
+Files changed: `packages/core_finance/dcf.py`, `apps/api/services/corporate_dcf.py`,
+`apps/api/models/schema_parts/corporate.py`, `apps/api/models/schemas.py`,
+`packages/shared-types/corporate.ts`, `apps/web/app/corporate/page.tsx`,
+`apps/web/app/corporate/buildCalculationDetails.ts`,
+`apps/web/app/corporate/corporateDerivedViews.ts`,
+`apps/web/app/corporate/components/DcfSensitivityTable.tsx` (new),
+`apps/web/app/corporate/components/CalculationDetailModal.tsx`,
+`apps/web/app/corporate/components/CorporateDiagnosticsSection.tsx`,
+`apps/web/app/corporate/components/graphs/DcfCoreModulesGraph.tsx`, plus fixtures, two new
+test files and `docs/architecture/visualization-metrics.md`.
+Prevention: A label is a claim about what a number is. "Terminal Value Share" asserts a
+specific ratio, and the check is whether the code computes that ratio -- not whether the
+output looks reasonable, which a clamped linear function of plausible inputs always will.
+
+The concrete rule, narrower than the SOP's placement rule and the one that would have caught
+this: a frontend expression may combine values for presentation, but must not introduce
+numeric constants that stand in for a modelling assumption. `62`, `1.8`, `1.2`, `20` and `88`
+are all model parameters, and a model parameter in `apps/web` means a model lives there. Grep
+test for the rest of this layer: any `derived.*` entry whose formula contains a literal other
+than a unit conversion is a candidate, and the same file still holds `successProbability`,
+`agencyRisk`, `lifeCyclePosition` and `leveredBetaRiskScore`, all built the same way. They are
+tracked under Phase 3 in `guideline/sop/todo.md`; this entry is the precedent for what that
+work has to establish about each of them -- either a real derivation or an honest name.
+
+A second defect surfaced while fixing this one, and is the reason the frontend suite went red
+rather than the change shipping quietly: the corporate page restores DCF results from
+`sessionStorage`, so a payload written by an earlier build has no `terminal_value_share_pct`
+at all and `pct(undefined)` threw, blanking the page. Adding a required field to a type whose
+values can arrive from a cache older than the type is a runtime problem, not a typing one --
+the render sites now check presence at runtime, and `DcfResult.terminal_value_share_pct` is
+declared optional to say why.
