@@ -172,6 +172,20 @@ how close the numbers happen to fall, and does not depend on company size.
       averages are still shown: hiding them would discard history the user deliberately
       saved and leave blanks with no explanation.
 
+      **Amended 2026-08-05: the notice over-claimed at one of its two boundaries.** Version
+      `0` is written only by the backfill at `db.py:672`, which added the column to rows
+      computed before it existed. A `0 -> 1` edge therefore means the earlier definition was
+      never recorded, not that it differed — and the shipped notice told the user it changed.
+      That edge is not hypothetical: it is the *first* boundary on any install carrying
+      pre-column history. A boundary whose preceding point is version `0` now reads "Metric
+      definition before this point was not recorded, so whether values are comparable across
+      it is unknown." The reverse direction is not handled because it cannot occur — `0` is
+      only ever backfilled onto older rows. Recorded in `ERROR-LOG.md` (2026-08-05).
+
+      The original spec fixed one sentence for a comparison that has three outcomes, not two:
+      changed, unchanged, and unknown. Pinning wording is right; pinning it before the cases
+      are enumerated is how a spec ends up mandating a false statement.
+
   Two things worth carrying forward, neither a defect:
   - **The plan's own test fixture could not catch the bug the plan was written to
     prevent.** It placed the version boundary *inside* a date group, where a within-group
@@ -228,11 +242,12 @@ how close the numbers happen to fall, and does not depend on company size.
       quantity too. Four reviews missed `DCFWorkbench.tsx` because they searched the
       directory where the bug was found rather than the repo.
 
-- [ ] `HistoryPoint` in `apps/web/app/portfolio/components/PortfolioSnapshotSummary.tsx`
-      is a hand-copied duplicate of `CorporateComparisonHistoryPoint` in
-      `apps/web/app/portfolio/page.tsx`. Adding `metric_schema_version` required editing
-      both. They will drift again on the next field. Low priority, but the next person to
-      add a history field should collapse them rather than copy a third time.
+- [x] `HistoryPoint` in `apps/web/app/portfolio/components/PortfolioSnapshotSummary.tsx`
+      was a hand-copied duplicate of `CorporateComparisonHistoryPoint` in
+      `apps/web/app/portfolio/page.tsx`. (done 2026-08-05) The component now imports the
+      canonical type from `../page`, matching what `SnapshotHistoryModal.tsx:10` already
+      did. The alias was dropped rather than kept: nothing outside the file referenced it,
+      so it bought indirection and no callers.
 
 - [ ] Add a WACC versus terminal-growth sensitivity table for terminal-value
       concentration risk. Deferred deliberately, not an oversight: a sensitivity

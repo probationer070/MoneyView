@@ -54,16 +54,25 @@ export function SnapshotHistoryModal({
   // arrives newest-first (the history query in corporate_comparison.py ends
   // `ORDER BY lv.snapshot_date DESC`), so the chronologically preceding point is the NEXT
   // entry, and the notice lands on the first point of the new definition.
-  const versionBoundaryIds = useMemo(() => {
-    const ids = new Set<string>();
+  //
+  // A boundary out of version 0 says less than the others. 0 is written only by the
+  // backfill in db.py that added the column to rows computed before it existed, so it
+  // means the earlier definition went unrecorded -- not that it differed. Claiming a
+  // change there would assert something no stored value supports.
+  const versionBoundaryNotices = useMemo(() => {
+    const notices = new Map<string, string>();
     const points = history?.points ?? [];
     points.forEach((point, index) => {
       const previous = points[index + 1];
-      if (previous && previous.metric_schema_version !== point.metric_schema_version) {
-        ids.add(point.snapshot_version);
-      }
+      if (!previous || previous.metric_schema_version === point.metric_schema_version) return;
+      notices.set(
+        point.snapshot_version,
+        previous.metric_schema_version === 0
+          ? "Metric definition before this point was not recorded, so whether values are comparable across it is unknown."
+          : "Metric definition changed. Values before and after this point are not directly comparable.",
+      );
     });
-    return ids;
+    return notices;
   }, [history?.points]);
 
   const groupedTimeline = useMemo(() => {
@@ -100,9 +109,9 @@ export function SnapshotHistoryModal({
                   Metric schema v{point.metric_schema_version}
                 </span>
               </div>
-              {versionBoundaryIds.has(point.snapshot_version) ? (
+              {versionBoundaryNotices.has(point.snapshot_version) ? (
                 <p className="text-[11px] text-[var(--text-muted)]">
-                  Metric definition changed. Values before and after this point are not directly comparable.
+                  {versionBoundaryNotices.get(point.snapshot_version)}
                 </p>
               ) : null}
             </div>
@@ -177,7 +186,7 @@ export function SnapshotHistoryModal({
         };
       }),
     }));
-  }, [activeSnapshotVersion, deletingSnapshotVersion, effectiveBenchmarkTicker, history?.points, onDeleteSnapshot, onSelectSnapshot, versionBoundaryIds]);
+  }, [activeSnapshotVersion, deletingSnapshotVersion, effectiveBenchmarkTicker, history?.points, onDeleteSnapshot, onSelectSnapshot, versionBoundaryNotices]);
 
   return (
     <ModalShell

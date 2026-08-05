@@ -1081,3 +1081,53 @@ The raw-dataset CSV (`corporateDerivedViews.ts:208`) was deliberately left alone
 rule above actually asks for; blanking a field there would remove information from a raw
 export rather than add honesty to it. The rule is about values presented *without* their
 discriminator, not about every occurrence of the number.
+
+## 2026-08-05: Snapshot history claimed a metric definition changed when it was never recorded
+
+Date: 2026-08-05
+Command: `npx playwright test snapshot-history-metric-version` (passing -- the suite
+asserted the wrong wording, so nothing was red)
+Failure: The snapshot history modal printed "Metric definition changed. Values before and
+after this point are not directly comparable." at every point whose `metric_schema_version`
+differed from the chronologically preceding point's. That includes the `0 -> 1` edge, where
+the claim is not supported by anything stored. Version `0` is written only by the migration
+at `apps/api/services/db.py:672`, which added the column to rows computed before it existed
+-- so a `0` means the earlier definition went **unrecorded**, not that it **differed**. It may
+well have been the same definition. The notice asserted a change no stored value evidences.
+
+The edge is not a corner case: on any install carrying pre-column history it is the first
+boundary the user meets, and it sits at the oldest end of the timeline where the user is
+least able to check the claim independently.
+Root cause: The design spec fixed one sentence of notice wording
+(`docs/superpowers/specs/2026-08-03-comparison-value-honesty-design.md:230`) before
+enumerating the cases the comparison actually produces. Comparing two version numbers has
+three outcomes -- changed, unchanged, and unknown -- and the spec provided text for two of
+them. The implementation was faithful to the spec, and the test asserted the spec's sentence
+literally, so both agreed with each other and neither agreed with the data. The version-`0`
+semantics were correctly documented in three other places (`db.py:669-671`,
+`corporate.py:311-314`, the fixture comment in the spec's own e2e test) and still did not
+reach the sentence that reports them to the user.
+Fix: `versionBoundaryIds: Set<string>` became `versionBoundaryNotices: Map<string, string>`
+in `apps/web/app/portfolio/components/SnapshotHistoryModal.tsx`. A boundary whose *preceding*
+point is version `0` now reads "Metric definition before this point was not recorded, so
+whether values are comparable across it is unknown." Every other boundary keeps the original
+sentence. The reverse direction (a newer point at `0`) is deliberately not handled: `0` is
+only ever backfilled onto older rows and every write since sets `METRIC_SCHEMA_VERSION`, so
+the branch would be unreachable code guarding an impossible state.
+
+The two notices are matched literally and separately in the spec, and each is asserted to
+appear exactly once against a fixture containing one boundary of each kind. Break/restore
+verified against both wrong implementations: collapsing to the old single notice fails on
+`CHANGED_NOTICE` count 2, and labelling every boundary "unrecorded" fails on count 0.
+Files changed: `apps/web/app/portfolio/components/SnapshotHistoryModal.tsx`,
+`apps/web/tests/e2e/snapshot-history-metric-version.spec.ts`,
+`docs/superpowers/specs/2026-08-03-comparison-value-honesty-design.md` (amended in place,
+with the original wording left visible).
+Prevention: Fixing user-facing wording in a spec is right -- it is what stops the text
+drifting -- but the wording can only be fixed once the cases are enumerated. Before pinning a
+sentence to a computed condition, list every value that condition can take and write the
+sentence for each; a sentinel value like `0`, `''`, or `-1` that means "unrecorded" is a case
+of its own and never shares wording with a real value. The second half of the rule: a test
+that asserts the spec's sentence verbatim cannot catch a wrong sentence. It pins drift, not
+truth. Something in the loop has to check the claim against the data's own semantics, and
+here that was only ever going to be a reader asking what a `0` means.

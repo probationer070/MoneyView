@@ -1,6 +1,7 @@
 "use client";
 
 import { AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
+import type { CorporateComparisonHistoryPoint } from "../page";
 
 export interface SnapshotMeta {
   as_of_date: string;
@@ -27,30 +28,11 @@ export interface SnapshotSummary {
   flaggedMetricsCount: number;
 }
 
-export interface HistoryPoint {
-  as_of_date: string;
-  generated_at: string;
-  snapshot_version: string;
-  snapshot_source: string;
-  comparison_universe: string;
-  benchmark_ticker: string;
-  stock_count: number;
-  // Nullable for the same reason as on CorporateComparisonHistoryPoint in page.tsx: an
-  // average over zero bridge-resolved rows is absent, not zero.
-  average_expected_return_spread: number | null;
-  average_roic_minus_wacc: number;
-  average_dcf_value: number | null;
-  // Kept in step with CorporateComparisonHistoryPoint in page.tsx, which supplies the
-  // points this prop receives.
-  metric_schema_version: number;
-  market_expected_return: number;
-}
-
 interface PortfolioSnapshotSummaryProps {
   activeComparisonData: ComparisonData;
   portfolioSnapshotSummary: SnapshotSummary;
-  selectedHistoryPoint: HistoryPoint | null;
-  setSelectedHistoryPoint: (point: HistoryPoint | null) => void;
+  selectedHistoryPoint: CorporateComparisonHistoryPoint | null;
+  setSelectedHistoryPoint: (point: CorporateComparisonHistoryPoint | null) => void;
   formatDateLabel: (date: string) => string;
   portfolioComparisonUniverseLabel: (universe: string) => string;
   metricToneClass: (value: number | null) => string;

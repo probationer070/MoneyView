@@ -5,7 +5,11 @@ import { openPortfolioPanel, portfolioModal } from "./helpers/portfolioPanels";
 
 // Wording fixed by the design spec. Asserting it literally means a drift in the component
 // text fails here rather than shipping a differently-worded warning.
-const BOUNDARY_NOTICE = /Metric definition changed\. Values before and after this point are not directly comparable\./;
+const CHANGED_NOTICE = /Metric definition changed\. Values before and after this point are not directly comparable\./;
+// A boundary out of version 0 makes a weaker claim, and the two must not be interchangeable:
+// 0 means the earlier definition went unrecorded, so comparability is unknown rather than
+// known-broken. Matching each literally is what keeps one notice from standing in for the other.
+const UNRECORDED_NOTICE = /Metric definition before this point was not recorded, so whether values are comparable across it is unknown\./;
 
 type HistoryPointSeed = {
   as_of_date: string;
@@ -115,7 +119,7 @@ function historyItem(dialog: Locator, seed: HistoryPointSeed): Locator {
   return dialog.locator("article").filter({ hasText: snapshotVersionOf(seed) });
 }
 
-test("the point where the metric definition changed says so", async ({ page }) => {
+test("each metric-version boundary claims only what the stored versions support", async ({ page }) => {
   // Snapshots before version 2 averaged enterprise values; from version 2 they average
   // intrinsic per-share values. The step between them is a definition change, not a
   // market move, and nothing said so.
@@ -123,12 +127,17 @@ test("the point where the metric definition changed says so", async ({ page }) =
   const dialog = await openSnapshotHistory(page);
 
   // One boundary per version change, each on the FIRST point of the new definition rather
-  // than the last point of the old one.
-  await expect(dialog.getByText(BOUNDARY_NOTICE)).toHaveCount(2);
-  await expect(historyItem(dialog, NEW_DEFINITION)).toContainText(BOUNDARY_NOTICE);
-  await expect(historyItem(dialog, EARLIER_OLD_DEFINITION)).toContainText(BOUNDARY_NOTICE);
-  await expect(historyItem(dialog, SAME_DAY_OLD_DEFINITION)).not.toContainText(BOUNDARY_NOTICE);
-  await expect(historyItem(dialog, UNVERSIONED)).not.toContainText(BOUNDARY_NOTICE);
+  // than the last point of the old one -- and each carrying the notice its two versions
+  // justify. v1 -> v2 is a recorded change; v0 -> v1 is a recorded version meeting an
+  // unrecorded one.
+  await expect(dialog.getByText(CHANGED_NOTICE)).toHaveCount(1);
+  await expect(dialog.getByText(UNRECORDED_NOTICE)).toHaveCount(1);
+  await expect(historyItem(dialog, NEW_DEFINITION)).toContainText(CHANGED_NOTICE);
+  await expect(historyItem(dialog, EARLIER_OLD_DEFINITION)).toContainText(UNRECORDED_NOTICE);
+  await expect(historyItem(dialog, SAME_DAY_OLD_DEFINITION)).not.toContainText(CHANGED_NOTICE);
+  await expect(historyItem(dialog, SAME_DAY_OLD_DEFINITION)).not.toContainText(UNRECORDED_NOTICE);
+  await expect(historyItem(dialog, UNVERSIONED)).not.toContainText(CHANGED_NOTICE);
+  await expect(historyItem(dialog, UNVERSIONED)).not.toContainText(UNRECORDED_NOTICE);
 
   // Every point carries its own metric version, not just the ones at a boundary.
   await expect(historyItem(dialog, NEW_DEFINITION)).toContainText("Metric schema v2");
@@ -147,5 +156,6 @@ test("a history at one metric version shows no boundary", async ({ page }) => {
   // Both points really did render, so "no notice" is the rule at work rather than an
   // empty timeline.
   await expect(dialog.getByText("Metric schema v2")).toHaveCount(2);
-  await expect(dialog.getByText(BOUNDARY_NOTICE)).toHaveCount(0);
+  await expect(dialog.getByText(CHANGED_NOTICE)).toHaveCount(0);
+  await expect(dialog.getByText(UNRECORDED_NOTICE)).toHaveCount(0);
 });

@@ -232,6 +232,19 @@ The notice wording is fixed here so it does not drift:
 It states a fact about the data rather than warning of an error: nothing is wrong with either
 side, only with comparing across them.
 
+> **AMENDED 2026-08-05.** One boundary does not support that sentence. Version `0` is written
+> only by the backfill in `db.py` that added the column to rows computed before it existed, so a
+> `0 -> 1` edge means the earlier definition was never recorded — not that it differed. As
+> originally specified the notice asserted a change no stored value evidences, and it fired on
+> every install carrying pre-column history. A boundary whose *preceding* point is version `0`
+> instead reads:
+>
+> > **Metric definition before this point was not recorded, so whether values are comparable
+> > across it is unknown.**
+>
+> The reverse direction is not handled because it cannot occur: `0` is only ever backfilled onto
+> older rows, and every write since sets `METRIC_SCHEMA_VERSION`.
+
 Computing the boundary against the flat array rather than the rendered grouping matters. Two
 snapshots taken on the same day with different metric versions land in one date group, and a
 comparison against the previous item *within* the group would miss the boundary whenever it
