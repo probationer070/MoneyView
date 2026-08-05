@@ -5,7 +5,6 @@ import {
   CompanyStatusGraph,
   DcfCoreModulesGraph,
   HurdleRateDecompositionGraph,
-  RiskReturnMinardGraph,
   ValueDriverMatrixGraph,
 } from "./CorporateGraphs";
 import type {
@@ -15,7 +14,6 @@ import type {
   HealthRadarPoint,
   HurdleBarPoint,
   RegionalHurdlePoint,
-  RiskReturnPoint,
   ValueMatrixPoint,
   WaccCurvePoint,
 } from "./graphs/shared";
@@ -32,9 +30,6 @@ export function CorporateDiagnosticsSection({
   betaTreemapProxy,
   waccCurve,
   valueMatrix,
-  derivedSpread,
-  successProbability,
-  riskReturn,
   sustainableGrowth,
   fcff,
   dcfResult,
@@ -51,9 +46,6 @@ export function CorporateDiagnosticsSection({
   betaTreemapProxy: BetaPoint[];
   waccCurve: WaccCurvePoint[];
   valueMatrix: ValueMatrixPoint[];
-  derivedSpread: number;
-  successProbability: number;
-  riskReturn: RiskReturnPoint[];
   sustainableGrowth: number;
   fcff: number;
   dcfResult?: DcfResult;
@@ -66,7 +58,7 @@ export function CorporateDiagnosticsSection({
           <div>
             <h2 className="text-sm font-bold text-[var(--text-primary)]">Core Diagnostics</h2>
             <p className="mt-1 text-sm text-[var(--text-muted)]">
-              Company Status Diagnosis, Hurdle Rate Decomposition, 4-Quadrant Value Driver Matrix, and Risk-Return Minard Chart are part of the main Corporate Analysis dashboard and should remain visible in the chart section below.
+              Company Status Diagnosis, Hurdle Rate Decomposition, 4-Quadrant Value Driver Matrix, and DCF Core Modules are part of the main Corporate Analysis dashboard and should remain visible in the chart section below.
             </p>
           </div>
           <div className="text-xs text-[var(--text-muted)]">
@@ -101,13 +93,6 @@ export function CorporateDiagnosticsSection({
         <ValueDriverMatrixGraph
           companyName={companyName}
           valueMatrix={valueMatrix}
-          onOpenDetail={onOpenDetail}
-        />
-
-        <RiskReturnMinardGraph
-          derivedSpread={derivedSpread}
-          successProbability={successProbability}
-          riskReturn={riskReturn}
           onOpenDetail={onOpenDetail}
         />
 

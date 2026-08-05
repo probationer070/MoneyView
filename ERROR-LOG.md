@@ -1208,3 +1208,95 @@ at all and `pct(undefined)` threw, blanking the page. Adding a required field to
 values can arrive from a cache older than the type is a runtime problem, not a typing one --
 the render sites now check presence at runtime, and `DcfResult.terminal_value_share_pct` is
 declared optional to say why.
+
+## 2026-08-06: "Success Probability" was a slider formula, and its Minard chart ranked risks identically for every ticker
+
+Date: 2026-08-06
+Command: none -- found while closing Phase 3 items 1, 2 and 4 (`guideline/sop/todo.md`). No
+suite was red.
+Failure: three related claims on the Corporate Analysis dashboard, none of them computed.
+
+1. `apps/web/app/corporate/page.tsx:466` computed
+
+       const successProbability = clamp(55 + spread * 2.3 + assumptions.growth - assumptions.esgPenalty * 0.25, 5, 95);
+
+   and rendered it as a "Success Probability" KPI card in bold percent, hardcoded to the
+   positive colour (`text-[var(--delta-up)]`) whatever the value, captioned "Above 60% is good;
+   current status is Good/Weak". Its complement was labelled "Failure Probability" and drawn as
+   a distribution area. No probability model existed anywhere in the codebase to produce
+   either.
+
+2. The Risk-Return Minard chart plotted four "risk exposure segments" -- Inflation, FX, Demand,
+   Margin -- with no inflation, FX or demand series anywhere in the calculation. Each segment's
+   Y value was `spread` times a per-segment constant (`12`, `10`, `9`, `11`) plus an offset
+   (`-18`, `-6`, `+growth`, `+roic`), and each segment's success/failure pair was the page score
+   plus a fixed offset (`-12`, `-5`, `0`, `+4`). That fixed ladder made the chart's headline
+   reading -- which risk hurts most -- a constant: Inflation always worst, Margin always best,
+   for every ticker and every setting of every slider.
+
+3. The Y series was named `npv`, tooltipped as approximating expected return, and plotted on a
+   percent-formatted axis (`fmtPctTick`). Nothing was projected and nothing was discounted, so
+   the axis showed a percent of nothing.
+
+`CorporateComparisonTable.tsx:117` also wired the backend `expected_return_spread` cell to open
+the Minard modal, so clicking a real per-ticker number opened an explanation of a frontend score
+derived from the assumption sliders -- the same values for every row.
+Root cause: the same defect class as the 2026-08-05 "Terminal Value Share" entry: a frontend
+"derived metrics" layer introducing numeric constants that stand in for modelling assumptions,
+in the one place `guideline/sop/finance-logic.md` forbids financial math. `55`, `2.3`, `0.25`,
+`5`, `95`, `12`, `10`, `9`, `11`, `-18`, `-6`, `-12`, `-5` and `+4` are all model parameters.
+
+What let it stand longer than the terminal-share defect: `docs/risk-return-minard.md` disclosed
+every one of these limitations accurately, in a "Known Limitations" section, including "the
+chart uses finance-heavy labels like `successProbability` and `npv` even though the underlying
+calculations are simplified scenario proxies". An honest caveat in a doc does not reach the
+person reading the card, and its existence made the surface look reviewed. A disclosure is not a
+fix; it is a record that no fix was applied.
+Fix: removed rather than relabelled, per Phase 3 item 4's own alternative. Relabelling could not
+work on any of the three: a score with no model has no honest percent to show, the segment
+constants had no rationale to document, and renaming a data key does not make a percent axis
+mean something. Deleted the KPI card, both detail modals, the graph component and its dynamic
+import, the `RiskReturnPoint` type and both `DetailKey` entries, the `successProbability` /
+`failureProbability` fields and the `risk_return_minard` series from the downloadable raw
+dataset, and the orphaned "Success probability penalty" step left behind in the ESG penalty
+modal. The comparison table's `expected_return_spread` cell is now plain text like the two
+expected-return cells before it, since it has no calculation detail of its own.
+
+Nothing replaced it. Value response to assumptions is already covered by measured surfaces: the
+WACC x terminal-growth sensitivity grid, the Beta + WACC curve, and the value driver matrix.
+`ROIC - WACC` was the chart's only real input and remains as its own card, with audit quality
+state attached.
+Files changed: `apps/web/app/corporate/page.tsx`,
+`apps/web/app/corporate/buildCalculationDetails.ts`,
+`apps/web/app/corporate/corporateDerivedViews.ts`,
+`apps/web/app/corporate/components/CorporateGraphs.tsx`,
+`apps/web/app/corporate/components/CorporateDiagnosticsSection.tsx`,
+`apps/web/app/corporate/components/CorporateComparisonTable.tsx`,
+`apps/web/app/corporate/components/calculationDetailTypes.ts`,
+`apps/web/app/corporate/components/graphs/shared.ts`,
+`apps/web/app/corporate/components/graphs/RiskReturnMinardGraph.tsx` (deleted),
+`apps/web/tests/e2e/corporate-probability-labels.spec.ts` (new),
+`apps/web/tests/e2e/corporate-viewport.spec.ts`,
+`apps/web/tests/e2e/responsive-accessibility.spec.ts`, `docs/risk-return-minard.md`,
+`docs/architecture/visualization-metrics.md`, `docs/tabs/corporate-analysis-tab.txt`,
+`docs/design/MoneyView_Chart_System.md`, `docs/INDEX.md`.
+Prevention: two rules, both narrower than "keep financial math out of `apps/web`".
+
+A metric named for a statistical object -- probability, expectation, variance, confidence --
+asserts that such an object was estimated. If no distribution or observed frequency exists in
+the codebase, the name is unavailable regardless of how the number is scaled or clamped. Colour
+and caption carry the same weight as the label: a value hardcoded to the positive colour is a
+claim that the number is good.
+
+Second, a chart whose category axis has no per-category data is not a chart of those categories.
+The test is cheap and mechanical: change one input and check whether the ranking across
+categories can change. Here it could not, for any input -- which means the four segment names
+were decoration over a single scalar.
+
+`apps/web/tests/e2e/corporate-probability-labels.spec.ts` pins the absence of these labels on
+both the dashboard and the exportable dataset. Each assertion first confirms the surface
+rendered, because an absence check that passes against a blank page proves nothing.
+
+Phase 3 item 3 remains open and covers the rest of this layer: `agencyRisk`,
+`lifeCyclePosition` and `leveredBetaRiskScore` still feed the Company Status radar from
+`apps/web`, built the same way.

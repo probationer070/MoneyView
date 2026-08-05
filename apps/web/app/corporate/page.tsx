@@ -463,7 +463,6 @@ export default function CorporateAnalysisPage() {
     const bottomUpKe = RISK_FREE_RATE + leveredBeta * impliedErp + KOREA_COUNTRY_RISK_PREMIUM;
     const spread = assumptions.roic - assumptions.wacc;
     const sustainableGrowth = (assumptions.reinvestment / 100) * assumptions.roic;
-    const successProbability = clamp(55 + spread * 2.3 + assumptions.growth - assumptions.esgPenalty * 0.25, 5, 95);
     const agencyRisk = clamp(100 - assumptions.governance + assumptions.esgPenalty, 0, 100);
     const lifeCyclePosition = clamp(35 + assumptions.growth * 2.5 - assumptions.debtRatio * 0.3, 0, 100);
     const leveredBetaRiskScore = clamp(100 - Math.max(leveredBeta - 1, 0) * 35, 0, 100);
@@ -493,7 +492,6 @@ export default function CorporateAnalysisPage() {
       bottomUpKe,
       spread,
       sustainableGrowth,
-      successProbability,
       agencyRisk,
       lifeCyclePosition,
       leveredBetaRiskScore,
@@ -842,13 +840,6 @@ export default function CorporateAnalysisPage() {
     { name: "Peer C", growth: 2.1, spread: 7.2, efficiency: 68, fcff: 60 },
   ];
 
-  const riskReturn = [
-    { risk: "Inflation", npv: derived.spread * 12 - 18, success: Number((derived.successProbability - 12).toFixed(1)), fail: Number((100 - derived.successProbability + 12).toFixed(2)) },
-    { risk: "FX", npv: derived.spread * 10 - 6, success: Number((derived.successProbability - 5).toFixed(1)), fail: Number((100 - derived.successProbability + 5).toFixed(2)) },
-    { risk: "Demand", npv: derived.spread * 9 + assumptions.growth, success: Number(derived.successProbability.toFixed(1)), fail: Number((100 - derived.successProbability).toFixed(2)) },
-    { risk: "Margin", npv: derived.spread * 11 + assumptions.roic, success: Number((derived.successProbability + 4).toFixed(1)), fail: Number((96 - derived.successProbability).toFixed(2)) },
-  ];
-
   // Downloadable raw dataset mirrors the assumptions, derived metrics, and chart inputs.
   const rawDatasetRows: RawDatasetRow[] = buildRawDatasetRows({
     assumptions,
@@ -863,7 +854,6 @@ export default function CorporateAnalysisPage() {
     betaTreemapProxy,
     waccCurve,
     valueMatrix,
-    riskReturn,
   });
 
   const annualGrowthRates = annualMetricRows(metricsHistoryData?.annual_growth_rates ?? []);
@@ -919,7 +909,6 @@ export default function CorporateAnalysisPage() {
     betaTreemapProxy,
     waccCurve,
     valueMatrix,
-    riskReturn,
   });
 
   const activeCalculationDetail = activeCalculation ? calculationDetails[activeCalculation] : null;
@@ -1099,7 +1088,7 @@ export default function CorporateAnalysisPage() {
 
         {/* Dashboard surface: KPI cards first, then the diagnostic chart suite as a clearly visible section. */}
         <div className="space-y-4 xl:col-span-4">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
             <button
               type="button"
               onClick={() => setActiveCalculation("spread")}
@@ -1146,20 +1135,6 @@ export default function CorporateAnalysisPage() {
               <div className="mt-1 text-3xl font-black text-[var(--text-primary)]">{numberText2(derived.leveredBeta)}</div>
               <div className="mt-2 text-xs text-[var(--text-muted)]">Hamada adjusted</div>
             </button>
-            <button
-              type="button"
-              onClick={() => setActiveCalculation("failureProbability")}
-              className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4 text-left transition hover:border-[var(--surface)]"
-            >
-              <div className="text-xs font-semibold text-[var(--text-muted)]">
-                <InfoTooltip
-                  label="Success Probability"
-                  description={`Scenario score from spread, growth, and agency/ESG penalty. Current basis: spread ${pct(derived.spread)}, growth ${pct(assumptions.growth)}, penalty ${numberText(assumptions.esgPenalty)}. Above 60% is good; current status is ${derived.successProbability >= 60 ? "Good" : "Weak"}.`}
-                />
-              </div>
-              <div className="mt-1 text-3xl font-black text-[var(--delta-up)]">{pct(derived.successProbability)}</div>
-              <div className="mt-2 text-xs text-[var(--text-muted)]">Risk-return scenario</div>
-            </button>
           </div>
 
           <CorporateDiagnosticsSection
@@ -1174,9 +1149,6 @@ export default function CorporateAnalysisPage() {
             betaTreemapProxy={betaTreemapProxy}
             waccCurve={waccCurve}
             valueMatrix={valueMatrix}
-            derivedSpread={derived.spread}
-            successProbability={derived.successProbability}
-            riskReturn={riskReturn}
             sustainableGrowth={derived.sustainableGrowth}
             fcff={assumptions.fcff}
             dcfResult={dcfData ?? undefined}

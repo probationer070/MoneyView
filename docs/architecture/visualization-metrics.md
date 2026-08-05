@@ -623,15 +623,13 @@ Expose local runtime-health and sensitivity context without requiring the user t
 - Ownership: quant-engine methodology.
 - Drill-down: calculation-detail modal.
 
-### `Success Probability`
+### `Success Probability` — removed 2026-08-06
 
-- Meaning: scenario-style score summarizing whether spread, growth, and penalties imply a favorable setup.
-- Source: current Corporate page derives and labels this score.
-- Ownership:
-  - frontend currently computes the displayed score and associated chart copy
-  - the score is a UI-level decision-support metric, not part of canonical `core_finance`
-- Important note: because this remains primarily UI-defined today, this document is the canonical specification until the logic is moved to a shared backend/service layer.
-- Drill-down: calculation-detail modal.
+The card showed `clamp(55 + spread x 2.3 + growth - esgPenalty x 0.25, 5, 95)` under a
+probability label, in percent, always in the positive colour, captioned "Above 60% is good".
+No probability model produced it and none was planned, so the card, its complement
+(`Failure Probability`), and the Risk-Return Minard chart they fed were removed rather than
+relabelled. See `docs/risk-return-minard.md` for the full record.
 
 ### Metric audit quality badges and drill-down
 
@@ -677,12 +675,14 @@ Expose local runtime-health and sensitivity context without requiring the user t
 - Source: active derived inputs.
 - Ownership: frontend chart composition over backend/engine-owned metrics.
 
-### Risk-Return Minard
+### Risk-Return Minard — removed 2026-08-06
 
-- Meaning: visual placement of spread and success probability in risk-return space.
-- Source: derived values on the page.
-- Ownership: hybrid, with `Success Probability` still UI-defined.
-- Caveat: this is a frontend heuristic scenario chart, not a statistically calibrated probability model or audited NPV model.
+Its four "risk exposure segments" (Inflation, FX, Demand, Margin) carried no per-factor data:
+each segment's Y value was the ROIC - WACC spread times a per-segment constant, plotted on a
+percent-formatted axis under the series name `npv`, and each segment's failure share was the
+page's success score plus a fixed offset — so the ranking across segments was the same for
+every ticker and every assumption setting. Value response to assumptions is covered by the
+WACC x Terminal Growth Sensitivity grid below, on measured values.
 
 ### DCF Core Modules
 

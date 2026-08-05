@@ -17,7 +17,6 @@ interface CorporateDerivedSnapshot {
   bottomUpKe: number;
   spread: number;
   sustainableGrowth: number;
-  successProbability: number;
   agencyRisk: number;
   lifeCyclePosition: number;
   healthScore: number;
@@ -156,7 +155,6 @@ export function buildRawDatasetRows({
   betaTreemapProxy,
   waccCurve,
   valueMatrix,
-  riskReturn,
 }: {
   assumptions: CorporateAssumptions;
   derived: CorporateDerivedSnapshot;
@@ -170,7 +168,6 @@ export function buildRawDatasetRows({
   betaTreemapProxy: ChartRecord[];
   waccCurve: ChartRecord[];
   valueMatrix: ChartRecord[];
-  riskReturn: ChartRecord[];
 }) {
   const rows: RawDatasetRow[] = [];
   const pushRecord = (dataset: string, record: object, source: string) => {
@@ -191,8 +188,6 @@ export function buildRawDatasetRows({
     bottomUpKe: pct(derived.bottomUpKe),
     spread: pct(derived.spread),
     sustainableGrowth: pct(derived.sustainableGrowth),
-    successProbability: pct(derived.successProbability),
-    failureProbability: `${(100 - derived.successProbability).toFixed(2)}%`,
     agencyRisk: numberText(derived.agencyRisk),
     lifeCyclePosition: numberText(derived.lifeCyclePosition),
     healthScore: numberText(derived.healthScore),
@@ -213,6 +208,5 @@ export function buildRawDatasetRows({
   pushSeries("beta_wacc_curve_beta_components", betaTreemapProxy, "Bottom-up Beta chart dataset");
   pushSeries("wacc_curve", waccCurve, "WACC U-Curve chart dataset");
   pushSeries("value_driver_matrix", valueMatrix, "4-Quadrant Value Driver Matrix dataset");
-  pushSeries("risk_return_minard", riskReturn, "Risk-Return Minard chart dataset");
   return rows;
 }

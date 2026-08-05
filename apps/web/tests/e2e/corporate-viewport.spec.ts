@@ -31,8 +31,9 @@ test("corporate graphs stay visible across mobile and desktop viewports without 
   await expect(page.getByText("Company Status Diagnosis").first()).toBeVisible({ timeout: 60_000 });
   await expect(page.getByText("Hurdle Rate Decomposition").first()).toBeVisible({ timeout: 60_000 });
   await expect(page.getByText("4-Quadrant Value Driver Matrix").first()).toBeVisible({ timeout: 60_000 });
-  await page.getByText("Risk-Return Minard Chart").first().scrollIntoViewIfNeeded();
-  await expect(page.getByText("Risk-Return Minard Chart").first()).toBeVisible({ timeout: 60_000 });
+  // Last chart in the diagnostics grid, so reaching it proves the whole grid laid out.
+  await page.getByText("DCF Core Modules").first().scrollIntoViewIfNeeded();
+  await expect(page.getByText("DCF Core Modules").first()).toBeVisible({ timeout: 60_000 });
   await expectNoHorizontalOverflow(page);
 
   await page.setViewportSize({ width: 1440, height: 1100 });
@@ -40,7 +41,7 @@ test("corporate graphs stay visible across mobile and desktop viewports without 
 
   await expect(page.getByText("Core Diagnostics")).toBeVisible({ timeout: 60_000 });
   await expect(page.getByText("Target Stock Comparison")).toBeVisible({ timeout: 60_000 });
-  await expect(page.getByText("Risk-Return Minard Chart").first()).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByText("DCF Core Modules").first()).toBeVisible({ timeout: 60_000 });
   await expectNoHorizontalOverflow(page);
 
   expect(stats.dcfRequests).toBe(0);

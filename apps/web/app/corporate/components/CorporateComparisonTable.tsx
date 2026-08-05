@@ -111,15 +111,12 @@ export function CorporateComparisonTable({
                 </td>
                 <td className="px-4 py-3 text-right tabular-nums">{formatPct2(row.capm_expected_return)}</td>
                 <td className="px-4 py-3 text-right tabular-nums">{formatPct2(row.market_expected_return)}</td>
-                <td className="px-4 py-3 text-right">
-                  <button
-                    type="button"
-                    onClick={() => onOpenCalculationForTicker(row.ticker, "riskReturnMinard")}
-                    disabled={row.group_name === "benchmark"}
-                    className={`font-bold tabular-nums ${row.expected_return_spread >= 0 ? "text-[var(--delta-up)]" : "text-[var(--delta-down)]"} ${row.group_name === "benchmark" ? "cursor-default" : "underline decoration-dotted underline-offset-4 hover:opacity-80"}`}
-                  >
-                    {formatPct2(row.expected_return_spread)}
-                  </button>
+                {/* Plain text, like the two expected-return cells before it. This spread had
+                    opened the Risk-Return Minard modal, which described a frontend scenario
+                    score built from the assumption sliders -- not this backend number, and not
+                    this row's ticker. It has no calculation detail of its own to link to. */}
+                <td className={`px-4 py-3 text-right font-bold tabular-nums ${row.expected_return_spread >= 0 ? "text-[var(--delta-up)]" : "text-[var(--delta-down)]"}`}>
+                  {formatPct2(row.expected_return_spread)}
                 </td>
               </tr>
             );

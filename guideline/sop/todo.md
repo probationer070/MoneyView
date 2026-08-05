@@ -298,10 +298,40 @@ how close the numbers happen to fall, and does not depend on company size.
 
 ### Phase 3 - Risk-Return Minard Remediation
 
-- [ ] Rename `npv` to a scenario-return label in frontend data structures and chart copy.
-- [ ] Rename `successProbability` to a scenario score unless a calibrated probability model is introduced.
-- [ ] Move any decision-relevant financial scoring out of `apps/web` and into backend or shared finance logic.
-- [ ] Replace arbitrary segment constants with documented scenario assumptions or remove the pseudo-quantitative segment model.
+- [x] **Items 1, 2 and 4 closed together 2026-08-06 by removing the segment model**, which is
+      the alternative item 4 already allowed. They are one object: `npv`, `successProbability`
+      and the four segment constants were the same chart, and none of the three could be fixed
+      by renaming.
+
+      No calibrated probability model was introduced, so item 2's condition was not met and the
+      score had no honest percent to show. Item 4's constants (`12`, `10`, `9`, `11`, `-18`,
+      `-6`) had no rationale to document — writing one would have been fabrication. Item 1's
+      `npv` sat on a percent-formatted axis over nothing projected and nothing discounted, so
+      renaming the key would not have made the axis mean anything.
+
+      What the segment model actually was: each segment's Y value was `spread` times a per-
+      segment constant, and each segment's failure share was the page score plus a fixed offset,
+      so the ranking across Inflation / FX / Demand / Margin was **the same for every ticker and
+      every slider setting**. The category axis carried no per-category data.
+
+      Removed: the `Success Probability` KPI card, the `failureProbability` and
+      `riskReturnMinard` detail modals, `RiskReturnMinardGraph.tsx`, the `RiskReturnPoint` type,
+      both `DetailKey` entries, and the `successProbability` / `failureProbability` /
+      `risk_return_minard` entries in the downloadable raw dataset. The comparison table's
+      `expected_return_spread` cell no longer opens the Minard modal — it had been explaining a
+      slider-derived score for a backend per-ticker number.
+
+      Nothing replaced it; the sensitivity grid, WACC curve and value driver matrix already
+      cover assumption response with measured values. Full record in `ERROR-LOG.md` and
+      `docs/risk-return-minard.md`; the honesty invariant is pinned by
+      `apps/web/tests/e2e/corporate-probability-labels.spec.ts`.
+- [ ] Move any decision-relevant financial scoring out of `apps/web` and into backend or shared
+      finance logic. **Still open** — this is the item the removal did not touch. `agencyRisk`,
+      `lifeCyclePosition` and `leveredBetaRiskScore` remain in the `derived` block of
+      `apps/web/app/corporate/page.tsx`, built from the same kind of magic constants, and feed
+      `healthScore` and the Company Status radar (whose `peer` values are hardcoded per axis
+      too). The two ERROR-LOG entries dated 2026-08-05 and 2026-08-06 are the precedent for
+      what this work has to establish about each: a real derivation, or an honest name.
 
 ## Active Track - Performance Instrumentation (sub-project 1 of 4)
 

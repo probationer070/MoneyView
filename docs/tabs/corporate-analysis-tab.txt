@@ -119,7 +119,6 @@ Cards
 - `ROIC - WACC`
 - `Bottom-up Ke`
 - `Levered Beta`
-- `Success Probability`
 
 Design Notes
 - These cards are the top summary layer for the chosen company.
@@ -128,7 +127,10 @@ Design Notes
   - is value creation positive
   - is required return too high
   - is leverage risk elevated
-  - is the scenario robust or fragile
+- A fourth card, `Success Probability`, was removed on 2026-08-06: it was a linear function of
+  the assumption sliders shown under a probability label. Whether the setup is robust or
+  fragile is now read from the WACC x terminal-growth sensitivity grid in the full DCF report,
+  which answers it with measured values instead of a score.
 - When audit metadata is available, the displayed spread and supporting ROIC/WACC values can carry explicit quality state instead of pretending all values are equally reliable.
 
 4. Diagnostic Graph Suite
@@ -138,7 +140,6 @@ Graphs
 - Hurdle Rate Decomposition
 - Beta + WACC Curve
 - Value Driver Matrix
-- Risk-Return Minard
 - DCF Core Modules
 
 Design Notes

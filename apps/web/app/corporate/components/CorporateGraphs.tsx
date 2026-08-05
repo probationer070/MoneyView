@@ -48,13 +48,6 @@ export const HurdleRateDecompositionGraph = dynamic(
   },
 );
 
-export const RiskReturnMinardGraph = dynamic(
-  () => import("./graphs/RiskReturnMinardGraph").then((mod) => mod.RiskReturnMinardGraph),
-  {
-    loading: () => <GraphLoadingCard className="lg:col-span-4" title="Risk-Return Minard Chart" chartHeightClassName="h-80" />,
-  },
-);
-
 export const ValueDriverMatrixGraph = dynamic(
   () => import("./graphs/ValueDriverMatrixGraph").then((mod) => mod.ValueDriverMatrixGraph),
   {

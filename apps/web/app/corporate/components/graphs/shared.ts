@@ -8,8 +8,6 @@ export type DetailKey =
   | "bottomUpKe"
   | "betaWaccCurve"
   | "valueDriverMatrix"
-  | "riskReturnMinard"
-  | "failureProbability"
   | "dcfCoreModules"
   | "sustainableGrowth"
   | "terminalValueShare"
@@ -55,13 +53,6 @@ export interface ValueMatrixPoint {
   spread: number;
   efficiency: number;
   fcff: number;
-}
-
-export interface RiskReturnPoint {
-  risk: string;
-  npv: number;
-  success: number;
-  fail: number;
 }
 
 export interface DcfResult {

@@ -83,8 +83,8 @@ test("corporate and simulation lab remain usable on narrower widths", async ({ p
 
   await expect(page.getByRole("heading", { name: /Corporate Analysis/i })).toBeVisible({ timeout: 60_000 });
   await expect(page.getByText("Core Diagnostics")).toBeVisible();
-  await page.getByText("Risk-Return Minard Chart").first().scrollIntoViewIfNeeded();
-  await expect(page.getByText("Risk-Return Minard Chart").first()).toBeVisible();
+  await page.getByText("DCF Core Modules").first().scrollIntoViewIfNeeded();
+  await expect(page.getByText("DCF Core Modules").first()).toBeVisible();
   await expectNoHorizontalOverflow(page);
 
   await page.setViewportSize({ width: 375, height: 812 });

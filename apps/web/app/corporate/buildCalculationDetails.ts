@@ -29,7 +29,6 @@ interface DerivedSnapshot {
   bottomUpKe: number;
   spread: number;
   sustainableGrowth: number;
-  successProbability: number;
   agencyRisk: number;
   lifeCyclePosition: number;
   leveredBetaRiskScore: number;
@@ -54,13 +53,6 @@ interface ValueMatrixPoint {
   growth: number;
   spread: number;
   fcff: number;
-}
-
-interface RiskReturnPoint {
-  risk: string;
-  npv: number;
-  success: number;
-  fail: number;
 }
 
 interface RegionalMinardPoint {
@@ -108,7 +100,6 @@ interface BuildCalculationDetailsArgs {
   betaTreemapProxy: BetaTreemapPoint[];
   waccCurve: WaccCurvePoint[];
   valueMatrix: ValueMatrixPoint[];
-  riskReturn: RiskReturnPoint[];
 }
 
 export function buildCalculationDetails({
@@ -135,7 +126,6 @@ export function buildCalculationDetails({
   betaTreemapProxy,
   waccCurve,
   valueMatrix,
-  riskReturn,
 }: BuildCalculationDetailsArgs): Record<CalculationDetailKey, CalculationDetail> {
   // Every fair-value and upside string below is one of these two, never the raw field. When
   // the equity bridge does not resolve, estimated_value is an enterprise value and upside_pct
@@ -435,33 +425,6 @@ export function buildCalculationDetails({
         { label: "4", value: `${pct(riskFreeRate)} + ${pct(derived.leveredBeta * impliedErp)} + ${pct(koreaCountryRiskPremium)}`, source: pct(derived.bottomUpKe) },
       ],
     },
-    failureProbability: {
-      title: `${companyName} Failure Probability`,
-      timeHorizon: "Current realtime risk-return scenario projected across Inflation, FX, Demand, and Margin risk segments.",
-      summary: [
-        { label: "Failure Probability", value: pct2(100 - derived.successProbability), source: "100 - success probability" },
-        { label: "Success Probability", value: pct(derived.successProbability), source: "Risk-return scenario score" },
-        { label: "Spread", value: pct(derived.spread), source: "ROIC - WACC" },
-        { label: "ESG / Agency Penalty", value: numberText(assumptions.esgPenalty), source: "Risk penalty input" },
-      ],
-      components: riskReturn.map((item) => ({
-        label: item.risk,
-        value: `fail ${pct2(item.fail)}, success ${pct(item.success)}, NPV ${numberText(item.npv)}`,
-        source: "Risk-return segment simulation",
-      })),
-      formula: "Failure Probability = 100 - clamp(55 + spread x 2.3 + growth - ESG penalty x 0.25, 5, 95)",
-      result: pct2(100 - derived.successProbability),
-      sourcing: [
-        { label: "Spread", value: pct(derived.spread), source: "Realtime ROIC and WACC | Period: current assumption state" },
-        { label: "Growth", value: pct(assumptions.growth), source: "Yahoo annual revenue growth rates averaged from 2021 onward, or current override" },
-        { label: "ESG / Agency Penalty", value: numberText(assumptions.esgPenalty), source: "Governance risk input / SQLite corporate_metrics | Period: latest governance review" },
-      ],
-      simulation: [
-        { label: "1", value: `Success = 55.0 + ${numberText(derived.spread)} x 2.3 + ${numberText(assumptions.growth)} - ${numberText(assumptions.esgPenalty)} x 0.25`, source: pct(derived.successProbability) },
-        { label: "2", value: `100.00% - ${pct2(derived.successProbability)}`, source: pct2(100 - derived.successProbability) },
-        { label: "3", value: pct2(100 - derived.successProbability), source: "Final Failure Probability" },
-      ],
-    },
     reinvestment: assumptionDetail({
       title: "Reinvestment Rate",
       label: "Reinvestment Rate",
@@ -530,8 +493,7 @@ export function buildCalculationDetails({
       formula: "Agency Risk = clamp(100 - Governance Quality + ESG / Agency Penalty, 0, 100)",
       simulation: [
         { label: "1", value: `100.0 - ${numberText(assumptions.governance)} + ${numberText(assumptions.esgPenalty)}`, source: numberText(derived.agencyRisk) },
-        { label: "2", value: `Success probability penalty = ${numberText(assumptions.esgPenalty)} x 0.25`, source: numberText(assumptions.esgPenalty * 0.25) },
-        { label: "3", value: numberText(assumptions.esgPenalty), source: "Final ESG / Agency Penalty assumption" },
+        { label: "2", value: numberText(assumptions.esgPenalty), source: "Final ESG / Agency Penalty assumption" },
       ],
     }),
     spread: {
@@ -800,34 +762,6 @@ export function buildCalculationDetails({
         { label: "1", value: `X = growth = ${pct(assumptions.growth)}`, source: "Matrix X-axis" },
         { label: "2", value: `Y = ${pct(assumptions.roic)} - ${pct(assumptions.wacc)}`, source: pct(derived.spread) },
         { label: "3", value: `Bubble = clamp(${numberText(assumptions.fcff)} / 1.6, 10.0, 100.0)`, source: numberText(clamp(assumptions.fcff / 1.6, 10, 100)) },
-      ],
-    },
-    riskReturnMinard: {
-      title: `${companyName} Risk-Return Minard Chart`,
-      timeHorizon: "Current realtime assumptions projected across static risk segments: Inflation, FX, Demand, and Margin.",
-      summary: [
-        { label: "Success Probability", value: pct(derived.successProbability), source: "Scenario score" },
-        { label: "Failure Probability", value: pct2(100 - derived.successProbability), source: "100 - success probability" },
-        { label: "X-axis", value: "Risk exposure segments", source: "Inflation, FX, Demand, and Margin are ordered scenario exposures used to compare expected return against failure probability." },
-        { label: "Spread", value: pct(derived.spread), source: "ROIC - WACC" },
-        { label: "Growth", value: pct(assumptions.growth), source: "Realtime Assumptions" },
-      ],
-      components: riskReturn.map((item) => ({
-        label: item.risk,
-        value: `NPV ${numberText(item.npv)}, success ${pct(item.success)}, fail ${pct2(item.fail)}`,
-        source: "X-axis risk exposure segment; NPV approximates expected return path and failure area quantifies downside probability.",
-      })),
-      formula: "X-axis = risk exposure segment; Success Probability = clamp(55 + spread x 2.3 + growth - ESG penalty x 0.25, 5, 95); NPV path varies by segment",
-      result: pct(derived.successProbability),
-      sourcing: [
-        { label: "Spread", value: pct(derived.spread), source: "Realtime ROIC and WACC" },
-        { label: "Growth", value: pct(assumptions.growth), source: "Yahoo annual revenue growth rates averaged from 2021 onward when available" },
-        { label: "ESG / Agency Penalty", value: numberText(assumptions.esgPenalty), source: "Governance risk input / SQLite corporate_metrics" },
-      ],
-      simulation: [
-        { label: "1", value: `55.0 + ${numberText(derived.spread)} x 2.3 + ${numberText(assumptions.growth)} - ${numberText(assumptions.esgPenalty)} x 0.25`, source: pct(derived.successProbability) },
-        { label: "2", value: `Demand NPV = ${numberText(derived.spread)} x 9.0 + ${numberText(assumptions.growth)}`, source: numberText(derived.spread * 9 + assumptions.growth) },
-        { label: "3", value: `Failure area = 100.00% - ${pct2(derived.successProbability)}`, source: pct2(100 - derived.successProbability) },
       ],
     },
     dcfCoreModules: {
