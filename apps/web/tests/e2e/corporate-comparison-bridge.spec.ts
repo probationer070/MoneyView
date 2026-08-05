@@ -51,13 +51,19 @@ async function tickerOrder(page: Page): Promise<string[]> {
   return texts.map((text) => text.trim());
 }
 
-// Selecting AAPL's ticker button (CorporateComparisonTable's onSelectTicker) makes it the
+// Clicking a ticker button (CorporateComparisonTable's onSelectTicker) makes that ticker the
 // explicit target for the "Similar Stocks" charts, rather than relying on whatever ticker
-// happened to be active from a prior session. AAPL, ESTM and MISS all share the
-// "Technology" sector in the fixture, so this deterministically pulls both into the peer
-// set the scatter builders draw from.
-async function selectSimilarComparison(page: Page) {
-  await rowCell(page, "AAPL", "Ticker").getByRole("button").click();
+// happened to be active from a prior session. AAPL, MSFT, ESTM and MISS all share the
+// "Technology" sector in the fixture, so any of them deterministically pulls the others into
+// the peer set the scatter builders draw from.
+//
+// The click is read back before returning: the Similar Stocks panel prints the ticker it is
+// comparing (TargetStockComparisonSection's "Compares X with Y" line, fed by the same
+// selectedComparisonRow the scatter builders consume), so a click that lands on the button
+// without moving the charts' target cannot pass for a selection.
+async function selectSimilarComparison(page: Page, ticker: string) {
+  await rowCell(page, ticker, "Ticker").getByRole("button").click();
+  await expect(page.getByText(`Compares ${ticker} with`)).toBeVisible();
 }
 
 function parseTickValue(text: string): number {
@@ -81,6 +87,28 @@ function parseTickValue(text: string): number {
 async function plottedTickers(page: Page): Promise<string[]> {
   const heading = page.getByRole("heading", { name: "Price Vs Fair Value Map" });
   const section = heading.locator("xpath=ancestor::section[1]");
+
+  // A dataset change makes recharts animate the layer, and for the duration of that animation
+  // the DOM holds a mix of the outgoing points at their OLD coordinates and the incoming ones
+  // at their new ones -- old coordinates that decode perfectly well to the wrong tickers. The
+  // mix is motionless while it lasts, so "the same twice in a row" only means "settled" when
+  // the two reads are further apart than the animation itself (recharts' Scatter default is
+  // 400ms, hence 600). The axis is read afterwards for the same reason.
+  const SCATTER_SETTLE_INTERVAL_MS = 600;
+  const readPointCxValues = () => section
+    .locator("path.recharts-symbols")
+    .evaluateAll((elements) => elements.map((element) => Number(element.getAttribute("cx"))));
+
+  let previousCxValues = await readPointCxValues();
+  let pointCxValues: number[] = [];
+  for (let attempt = 0; ; attempt += 1) {
+    await page.waitForTimeout(SCATTER_SETTLE_INTERVAL_MS);
+    pointCxValues = await readPointCxValues();
+    if (pointCxValues.length === previousCxValues.length
+      && pointCxValues.every((cx, index) => cx === previousCxValues[index])) break;
+    if (attempt >= 20) throw new Error("Scatter points never stopped changing, so no plotted position can be decoded.");
+    previousCxValues = pointCxValues;
+  }
 
   const ticks = await section
     .locator(".recharts-xAxis-tick-labels .recharts-cartesian-axis-tick-label text")
@@ -109,10 +137,6 @@ async function plottedTickers(page: Page): Promise<string[]> {
   // practice (verified against the fixture values directly), so a genuine match should
   // land within a few cents, not dollars, of its ticker's price.
   const MAX_TICKER_MATCH_DISTANCE_USD = 5;
-
-  const pointCxValues = await section
-    .locator("path.recharts-symbols")
-    .evaluateAll((elements) => elements.map((element) => Number(element.getAttribute("cx"))));
 
   return pointCxValues.map((cx) => {
     const decodedPrice = priceForPixel(cx);
@@ -188,9 +212,22 @@ test("a suppressed row is not plotted against current price", async ({ page }) =
   // not an outlier point, it is a different quantity sharing an axis.
   await mockCorporatePageApi(page);
   await gotoComparison(page);
-  await selectSimilarComparison(page);
+  await selectSimilarComparison(page, "AAPL");
 
   const plotted = await plottedTickers(page);
   expect(plotted).not.toContain("MISS");
   expect(plotted).toContain("ESTM");
+
+  // With an `ok` row selected, MISS is held off the chart by the PEER filter alone -- the
+  // selected row is fed to the chart by a separate builder, whose own guard never sees a
+  // suppressed row and so is never exercised. Making MISS itself the selected ticker is one
+  // click in the product (this same button), and it is the only way that branch runs.
+  await selectSimilarComparison(page, "MISS");
+
+  const plottedWithMissSelected = await plottedTickers(page);
+  expect(plottedWithMissSelected).not.toContain("MISS");
+  // MISS being absent has to be a fact about MISS, not about an empty chart: its three
+  // same-sector peers all carry per-share values and are all still plotted, so the chart is
+  // populated and it is only the selected point that was withheld.
+  expect([...plottedWithMissSelected].sort()).toEqual(["AAPL", "ESTM", "MSFT"]);
 });
