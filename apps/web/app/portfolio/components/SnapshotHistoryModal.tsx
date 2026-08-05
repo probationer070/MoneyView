@@ -48,6 +48,24 @@ export function SnapshotHistoryModal({
   const customTickersLabel = history?.custom_tickers.length ? history.custom_tickers.join(", ") : "None";
   const historySubtitle = `Grouped saved snapshots for ${effectiveComparisonUniverse} against ${effectiveBenchmarkTicker}.`;
 
+  // The version boundary is computed against the flat points array, not against a point's
+  // neighbour inside its date group: two snapshots from the same day can straddle the
+  // boundary, and a within-group comparison would miss it at every group edge. The array
+  // arrives newest-first (the history query in corporate_comparison.py ends
+  // `ORDER BY lv.snapshot_date DESC`), so the chronologically preceding point is the NEXT
+  // entry, and the notice lands on the first point of the new definition.
+  const versionBoundaryIds = useMemo(() => {
+    const ids = new Set<string>();
+    const points = history?.points ?? [];
+    points.forEach((point, index) => {
+      const previous = points[index + 1];
+      if (previous && previous.metric_schema_version !== point.metric_schema_version) {
+        ids.add(point.snapshot_version);
+      }
+    });
+    return ids;
+  }, [history?.points]);
+
   const groupedTimeline = useMemo(() => {
     const groups = new Map<string, CorporateComparisonHistoryPoint[]>();
 
@@ -70,13 +88,23 @@ export function SnapshotHistoryModal({
           subtitle: `${point.stock_count} holdings reviewed against ${point.benchmark_ticker || effectiveBenchmarkTicker}`,
           active: isActive,
           meta: (
-            <div className="flex min-w-0 flex-wrap items-center gap-2">
-              <span
-                className="overflow-inline-ellipsis max-w-full rounded-[var(--radius-sm)] bg-[var(--surface-muted)] px-2 py-1 font-mono text-[11px] text-[var(--text-primary)]"
-                title={point.snapshot_version}
-              >
-                Version {point.snapshot_version}
-              </span>
+            <div className="min-w-0 space-y-2">
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <span
+                  className="overflow-inline-ellipsis max-w-full rounded-[var(--radius-sm)] bg-[var(--surface-muted)] px-2 py-1 font-mono text-[11px] text-[var(--text-primary)]"
+                  title={point.snapshot_version}
+                >
+                  Version {point.snapshot_version}
+                </span>
+                <span className="overflow-inline-ellipsis max-w-full rounded-[var(--radius-sm)] bg-[var(--surface-muted)] px-2 py-1 font-mono text-[11px] text-[var(--text-primary)]">
+                  Metric schema v{point.metric_schema_version}
+                </span>
+              </div>
+              {versionBoundaryIds.has(point.snapshot_version) ? (
+                <p className="text-[11px] text-[var(--text-muted)]">
+                  Metric definition changed. Values before and after this point are not directly comparable.
+                </p>
+              ) : null}
             </div>
           ),
           content: (
@@ -149,7 +177,7 @@ export function SnapshotHistoryModal({
         };
       }),
     }));
-  }, [activeSnapshotVersion, deletingSnapshotVersion, effectiveBenchmarkTicker, history?.points, onDeleteSnapshot, onSelectSnapshot]);
+  }, [activeSnapshotVersion, deletingSnapshotVersion, effectiveBenchmarkTicker, history?.points, onDeleteSnapshot, onSelectSnapshot, versionBoundaryIds]);
 
   return (
     <ModalShell

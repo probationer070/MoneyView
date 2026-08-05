@@ -612,6 +612,9 @@ export const snapshotHistoryFixture = {
       average_expected_return_spread: 2.86,
       average_roic_minus_wacc: 10.5,
       average_dcf_value: 350.35,
+      // The endpoint always sends this now, so the mock does too; both points share a
+      // version, which is what a history with no definition change looks like.
+      metric_schema_version: 2,
       market_expected_return: 9.7,
     },
     {
@@ -625,6 +628,7 @@ export const snapshotHistoryFixture = {
       average_expected_return_spread: 2.4,
       average_roic_minus_wacc: 9.8,
       average_dcf_value: 340.1,
+      metric_schema_version: 2,
       market_expected_return: 9.7,
     },
   ],

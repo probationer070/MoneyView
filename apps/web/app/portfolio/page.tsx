@@ -190,6 +190,9 @@ export interface CorporateComparisonHistoryPoint {
   average_expected_return_spread: number | null;
   average_roic_minus_wacc: number;
   average_dcf_value: number | null;
+  // Which definition average_dcf_value carries: enterprise value below 2, intrinsic value
+  // per share from 2 on. 0 means the snapshot predates the stored column.
+  metric_schema_version: number;
   market_expected_return: number;
 }
 

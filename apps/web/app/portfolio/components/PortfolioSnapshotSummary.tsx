@@ -40,6 +40,9 @@ export interface HistoryPoint {
   average_expected_return_spread: number | null;
   average_roic_minus_wacc: number;
   average_dcf_value: number | null;
+  // Kept in step with CorporateComparisonHistoryPoint in page.tsx, which supplies the
+  // points this prop receives.
+  metric_schema_version: number;
   market_expected_return: number;
 }
 
