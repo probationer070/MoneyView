@@ -303,10 +303,18 @@ an env var, because the defaults are what production runs. TTL 300s -> 86400s an
 maxsize must exceed the 139-ticker watchlist. Two tests in
 `tests/api/test_corporate_metric_audit.py` pin those invariants and were verified to fail
 at the old values.
-**What this does not fix:** the cache is a module-level `TTLCache`, so a process restart
-still costs one cold ~357s sweep. Options (b) persist statement bundles to SQLite and
-(c) make the comparison fan-out not require live statements remain open, and both belong
-to sub-project 2, which owns the per-ticker cache and on-demand loading.
+
+Fully resolved 2026-07-28 by moving statements into the acquisition layer: the TTLCache
+is deleted and the local store is the only cache, so the two-layers-with-different-
+invalidation problem no longer exists. Options (b) and (c) are both satisfied -- bundles
+persist to SQLite and survive restarts, and the comparison fan-out no longer requires
+live statements.
+**What this does not fix** (written 2026-07-28 against the partial fix; superseded by the
+paragraph above, and kept for the record rather than as a statement of current behaviour):
+the cache is a module-level `TTLCache`, so a process restart still costs one cold ~357s
+sweep. Options (b) persist statement bundles to SQLite and (c) make the comparison fan-out
+not require live statements remain open, and both belong to sub-project 2, which owns the
+per-ticker cache and on-demand loading.
 **What the longer TTL costs:** the bundle carries yfinance `info`, and `market_cap` is read
 from it (`corporate_statement_metrics.py:1483`) into the WACC capital-structure weights
 (`:1170`), so those weights can now be built from a market cap up to a day old. Accepted
@@ -357,6 +365,14 @@ emits the real multi-request page-load span; (b) keep it as a grouping label exc
 from self-time accounting; (c) keep it and have `breakdown_by_scope` treat
 same-interval parent/child pairs as one span.
 Files changed: none (record only).
+
+**Fixed in `f1484b9`** ("remove same-interval span duplication, making criterion 2
+measurable") — option (a). The server-side `page_load.<component>` span is gone from
+`middleware.py`; `page_load` survives only as a scope name in the allowed-scopes literal
+(`schema_parts/dev_monitor.py:19`), which is what the frontend's `useDevMonitorPageLoad`
+emits against, and that one measures a real multi-request interval the request span does
+not cover. Verified 2026-08-06: no `page_load` emission remains anywhere in `apps/api`.
+This "Fix:" line was left reading "Not fixed" for that whole period.
 Prevention: Two spans that measure the same interval will always break self-time
 accounting, whatever their nesting. A span map should state, per span, which interval
 it owns exclusively — and spec 04.12's "percentages sum to <= 100%" check should run
@@ -383,6 +399,14 @@ tree *depth*.
 Fix: Not fixed here — out of scope for Task 13, which only surfaced it while
 verifying that the perf suite was green. Belongs to Task 6 (spec §04.10).
 Files changed: none (record only).
+
+**Fixed in `d7ada0b`** ("convert the remaining perf_analysis tree walkers to explicit
+stacks"), as Task 6 predicted. `_to_node`, `_assign_offsets`, `_assign_self_ms` and
+`_depth_map` are all explicit-stack walks now, each carrying a docstring naming this
+failure, and `test_a_chain_far_deeper_than_the_recursion_limit_truncates_instead_of_raising`
+pins a depth-2000 chain — past the reach of every one of them at CPython's 1000-frame
+default. Verified 2026-08-06: `tests/api/test_perf_analysis.py` is 45 passed.
+This "Fix:" line was left reading "Not fixed" for that whole period.
 Prevention: This corrects an earlier claim in this session that the full-suite
 baseline was "1 known failure". Verified by stashing: `python -m pytest tests/api -q`
 reports **6 pre-existing failures** at `196c565` — this one, the known
@@ -425,6 +449,46 @@ before returning (reuse the A-3 sentinel serializer, or a shared response class
 that replaces non-finite floats with null), rather than relying on each route to be
 NaN-free. A route-level test that feeds a NaN through `/market/indices` and asserts
 a 200 with nulls (not a 500) would catch regressions.
+
+**Fixed 2026-08-06, with a correction to the diagnosis above.** Writing the suggested
+regression test found that `/market/indices` no longer reproduces: it declares
+`response_model=List[IndexQuote]`, and FastAPI serializes those through pydantic's own
+JSON writer, which emits `null` for non-finite floats and never reaches Starlette's
+`json.dumps`. Whether that was true on 2026-07-26 or arrived with a later dependency bump
+is not recoverable from the repo -- either way the entry's "the underlying route bug
+remains open" had been false for some unknown period, and re-reading the entry could not
+have revealed that. Only executing the test it asked for did.
+
+The hazard itself was real and still live, one layer over: the protection comes from the
+`response_model=`, not from the route or the data. Of 56 routes, 8 declare no
+`response_model`, and 3 of those return live-derived floats -- `POST /corporate/dcf/{ticker}`,
+`/corporate/metrics/{ticker}/history`, `/corporate/metrics/{ticker}/quarterly-statements`.
+A NaN in any of them still 500'd, confirmed by test before the fix with the same
+`ValueError: Out of range float values are not JSON compliant` traceback.
+
+Fixed by the shared response class this entry's own Prevention section proposed:
+`apps/api/core/responses.py` defines `NonFiniteSafeJSONResponse`, which replaces non-finite
+floats with `null` and is now the app's `default_response_class`. That makes both kinds of
+route agree instead of leaving the outcome to whether a route happens to declare a model.
+`allow_nan=False` is kept in the renderer so anything the walk misses still raises rather
+than emitting a bare `NaN` token.
+
+Null, not 0.0: `guideline/sop/finance-logic.md` prohibits standing a real figure in for an
+absent one, and a NaN delta rendered as 0.0% would read as "unchanged". This is also why
+the web boundary does not reuse the compute boundary's sentinel encoder -- that value has
+to survive a round trip back into a pydantic model, whereas this one is read by a
+TypeScript client that expects a number or null.
+
+Files changed: `apps/api/core/responses.py` (new), `apps/api/main.py`,
+`tests/api/test_nonfinite_json_boundary.py` (new).
+Prevention (revised): the original Prevention was right about the fix and wrong about the
+verification -- it proposed testing `/market/indices`, the one route that was already
+immune, so that test would have passed on day one and proved nothing. When a defect is a
+serialization-boundary property rather than a route's own logic, the test has to target
+what actually decides the outcome. Here that is the presence of a `response_model`, so the
+regression test exercises a route without one. Both cases are pinned, so a future
+dependency bump that changes either path fails a test instead of changing behaviour
+silently.
 
 ## 2026-07-27: Watchlist upsert scheduled a live acquisition on every metadata/weight edit
 
@@ -624,3 +688,752 @@ fails any test that opens the production SQLite file, and `_forbid_network` fail
 that resolves or connects to a non-loopback host. Both were verified against a deliberately
 violating test before being committed. Checking a file's mtime by hand after a run, or
 inferring hermeticity from wall-clock time, is not a control.
+
+## 2026-07-29: The suite's network guard was blind to yfinance's actual transport
+
+Date: 2026-07-29
+Command: `python -m pytest tests/api/test_corporate_metric_audit.py -q` (the RED step of
+Task 7 of the statements-acquisition plan)
+Failure: Silent, and the worst shape -- no failure at all. A test that called the old
+`get_yahoo_statement_bundle` reached the **live Yahoo API** and came back with a real HTTP
+404, while `tests/conftest.py`'s session-scoped `_forbid_network` fixture was active and
+reported nothing. The fixture exists precisely to make "no test may make a network call"
+enforced rather than asserted, and it had been treated as proof: on 2026-07-28 a 274-test
+run under a throwaway no-network plugin reported "0 blocked attempts", which was read as
+evidence that no test touches the network. It was evidence of no test touching a **socket**.
+Root cause: `_forbid_network` patches `socket.socket.connect`, `socket.socket.connect_ex`
+and `socket.getaddrinfo`. yfinance 1.2.0 does not use any of them -- its HTTP transport is
+`curl_cffi` 0.13/0.15, which drives libcurl through cffi and never enters Python's `socket`
+module. Every one of the three patches is structurally incapable of seeing a yfinance
+request. The guard was not weak, it was aimed at the wrong layer, and nothing in a green
+suite could reveal that: the guard's silence is identical whether no call was made or a
+call was made through a path it cannot observe.
+Fix: patch `curl_cffi.Curl.perform` in the same fixture and refuse it outright. Nothing in
+this project uses curl_cffi for anything local, so no allowlist is needed -- any call
+through it is a network call. Guarded with `try: from curl_cffi import Curl / except
+ImportError` since curl_cffi arrives only as a yfinance dependency, and restored after
+`yield`.
+
+**Correction, 2026-07-31.** This entry originally claimed `perform` was "the single
+chokepoint every curl_cffi request funnels through, sync or async, so it covers
+`requests.Session`, `AsyncSession` and raw `Curl` alike." That was asserted, not verified,
+and it is false. In curl_cffi 0.13.0 `Curl.perform` is called only from the **sync**
+`Session` (`requests/session.py:593,640`) and `websockets.py:358`; `AsyncSession` (which
+begins at `session.py:685`) dispatches through `AsyncCurl.add_handle`
+(`session.py:1025,1069` -> `aio.py:237`) and never calls `perform`. The async path was
+therefore still open, and libcurl opens its socket in C so the three socket patches could
+not see it either. The fixture now also patches `AsyncCurl.add_handle`, and
+`test_an_async_curl_cffi_request_is_refused` pins it -- mutation-verified: with the
+`add_handle` patch removed the test fails and the request goes out. Note what happened
+here: this entry's own closing lesson is "confirm the code you mean to block actually
+travels through the layer you patched," and the Fix paragraph directly above it then made
+exactly that unverified claim about a second layer.
+Files changed: `tests/conftest.py`, `tests/api/test_suite_guards.py` (new).
+Prevention: the guards are now tested rather than assumed. `tests/api/test_suite_guards.py`
+asserts that a public-host socket connect, a public-host DNS resolution, and a `curl_cffi`
+request are each refused, and that loopback still works (`find_available_port` in
+`apps/api/main.py` depends on it). The curl_cffi test was mutation-verified: with
+`Curl.perform = guarded_perform` removed from the fixture, it fails with "DID NOT RAISE"
+and the request goes out to the network, so it cannot pass vacuously.
+The general lesson is broader than curl_cffi: a guard that patches a *mechanism* only
+covers callers that use that mechanism. Before trusting one as proof of an invariant,
+confirm the code you mean to block actually travels through the layer you patched --
+"nothing was blocked" and "nothing was attempted" are indistinguishable from the outside.
+
+## 2026-07-31: The local statement store's frames were unreadable by the metric layer
+
+Date: 2026-07-31
+Command: `python -m pytest tests/core_finance/ tests/api/ -q` (376 passed -- the suite was
+green throughout, which is the point of this entry)
+Failure: Silent, and total. After the statements-acquisition branch rewired corporate
+metrics to read the local store instead of a live provider fetch, every statement-derived
+metric -- growth, ROIC, WACC, debt ratio, reinvestment, FCFF, innovation -- silently fell
+back to deterministic assumptions for every ticker, no matter how much data acquisition
+had correctly stored. Nothing raised. The metric audit continued to report
+`source_mode="yahoo_finance"`, claiming statement provenance for figures that were entirely
+fallback. Reproduced end to end with a five-year store round trip: `revenue_years=[]` while
+the rows sat correctly in SQLite.
+Root cause: `apps/api/services/acquisition/store.py:_frame` labelled DataFrame columns with
+`period_end`, which SQLite returns as TEXT. The metric layer takes the period off the column
+label with `_safe_statement_year`'s `int(getattr(date_index, "year", 0))`
+(`corporate_statement_metrics.py:149-153`). A `str` has no `.year`, so it returned `0`, and
+`_statement_year_value_items` then dropped every row as older than
+`YAHOO_STATEMENT_START_YEAR`. The pre-branch bundle came straight from yfinance, whose
+frames carry `pd.Timestamp` columns; the source converts Timestamp to string on the way in
+and nothing converted back on the way out.
+Fix: `_frame` now sets `frame.columns = pd.to_datetime(frame.columns)`, with a comment
+naming the `getattr(col, "year", 0)` coupling that makes the label type load-bearing.
+Files changed: `apps/api/services/acquisition/store.py`,
+`tests/api/test_corporate_metric_audit.py`, `tests/api/acquisition/test_store.py`
+Prevention: The real defect was a missing test seam, and it was specified that way in the
+plan. Every metric test injected `bundle_loader=` with frames built by `pd.Timestamp(period)`,
+and the three tests that did exercise the store asserted only at frame level
+(`bundle["income"].loc["Total Revenue", "2025-09-30"] == 42.0`), which passes with string
+columns. No test anywhere ran the metric layer over a bundle the store had actually
+produced. `test_stored_statements_actually_drive_the_metric_layer` now does, calling
+`yahoo_statement_metrics` with no `bundle_loader` argument so it must use the production
+default. The general rule: when a task replaces the implementation behind a seam, at least
+one test must cross that seam with the production wiring -- a test that injects at the same
+boundary the change moved cannot see the change. Note also that
+`test_periods_are_newest_first` asserted the string column form and therefore encoded the
+bug; a test that pins an incidental representation will defend it.
+
+## 2026-07-31: Quick Start failed -- 2,619 orphaned postcss workers saturated the machine
+
+Date: 2026-07-31
+Command: `run moneyview` (`scripts/start_local.ps1`)
+Failure: `Quick Start failed. The frontend process did not become healthy within 45 seconds
+for http://localhost:3000.` The log looked contradictory: Next reported `Ready in 453ms` and
+then `Compiling / ...`, with no error. Raising the timeout would not have helped -- the
+compile never finished. Fifteen minutes later `/` still had not compiled, and the dev
+server's own log (`apps/web/.next/dev/logs/next-development.log`) held exactly two lines, the
+second being `Compiling / ...` at t+4s.
+Root cause: Turbopack's PostCSS transform spawns a separate node process per invocation
+(`apps/web/.next/dev/build/postcss.js <n>`) and, against the stale 1.3 GB `.next` cache
+present at the time, never reaped them. `Get-Process node` showed **2,631 node processes
+holding 58 GB of working set**, all spawned inside the twelve minutes since startup, 2,619 of
+them that postcss worker. The machine had no capacity left, so the first page compile could
+not progress. The health check was reporting a real failure; its message just pointed at the
+timeout rather than the cause.
+Fix: kill the orphaned workers and delete the stale build cache.
+```powershell
+Get-CimInstance Win32_Process -Filter "Name='node.exe'" |
+  Where-Object { $_.CommandLine -like "*MoneyViewpps\web*" } |
+  ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
+Remove-Item -Recurse -Force apps\web\.next
+```
+With a clean cache the same `npm run dev` served `/` with HTTP 200 in under 10 seconds and
+held steady at 4 node processes. `/` 5.4s, `/corporate` 1.5s, `/portfolio` 1.0s.
+Files changed: none -- environment state only. Nothing in the repository was at fault, and
+the branch under test had changed four lines of frontend code, none CSS-related.
+Prevention: when a Next dev server reports `Ready` and then hangs on `Compiling`, count node
+processes before touching the timeout -- `(Get-Process node).Count` in the low thousands is
+the signal, and the process command line names the culprit transform. The general trap: a
+health-check timeout names the symptom it observed, never the resource exhaustion that caused
+it, so a "did not become healthy in N seconds" message is not evidence that N is too small.
+Two orphan classes are worth checking after any failed start, because `start_local.ps1` tears
+down the process it launched but not the workers that process spawned: node workers under
+`apps/web`, and a stray `npm exec -- next dev` wrapper holding port 3000.
+
+## 2026-08-02: Escape never reaches the stock detail modal when a rail panel is open behind it
+
+Date: 2026-08-02
+Command: `cd apps/web && npx playwright test portfolio-watchlist.spec.ts` (test `clicking a
+holding opens the stock detail modal`)
+Failure: open the Watchlist Holdings rail panel, click a holding card, press Escape. The
+side panel closes and the stock detail modal stays open. A second Escape closes the modal.
+With no panel open, one Escape closes the modal as it always did. Not caught before Task 12
+because the same spec was already failing earlier, at `gotoPortfolio`, so the Escape
+assertion never ran.
+Root cause: both `SidePanel` and `ModalShell` register a `keydown` listener on `document`.
+`SidePanel`'s `handleKeyDown` is stable (`onClose` is a `useCallback` in `PortfolioShell`),
+so it is registered once. `ModalShell`'s `handleEscape` is `useCallback([onClose])` and every
+caller passes an inline arrow (`onClose={() => setSelectedStockContext(null)}`), so its
+effect re-runs on every render and re-subscribes each time. During the Escape dispatch the
+SidePanel handler runs first and closes the panel; React 19 flushes that discrete update
+synchronously, `ModalShell`'s effect re-runs mid-dispatch and calls
+`removeEventListener` + `addEventListener`. Per the DOM dispatch algorithm a listener removed
+during dispatch is skipped and a listener added during dispatch is not in the snapshot, so
+the modal's handler is never invoked for that keypress. Verified by wrapping
+`document.addEventListener` in a Playwright init script and logging invocations: with a panel
+open the Escape produced `["sidepanel"]` only.
+Fix: APPLIED 2026-08-02. `ModalShell` now reads `onClose` from a ref, so `handleEscape` is
+`useCallback([])` and the effect depends on `open` alone. Registration no longer moves when a
+caller re-renders, so nothing is added or removed mid-dispatch. Fixed in the component rather
+than by memoising `onClose` at each call site, because the defect belongs to every
+`ModalShell` caller and a per-site fix leaves the next one broken.
+Files changed: `apps/web/components/ui/ModalShell.tsx` (fix),
+`apps/web/tests/e2e/portfolio-watchlist.spec.ts` (the spec now presses Escape with the
+holdings rail panel open behind the modal — the exact configuration that reproduced it —
+instead of clicking Close).
+Prevention: a `document`-level key handler whose effect depends on a prop callback is only
+safe while it is the sole such handler. `SidePanel` already carries a comment about keeping
+`onClose` stable; `ModalShell` needs the same property, and it is not enough to fix one call
+site because the defect is in the component. When two overlay layers both listen on
+`document`, assert both close paths in a test that has both layers open.
+
+## 2026-08-02: The apply-to-snapshot confirmation renders in a panel the user is not looking at
+
+Date: 2026-08-02
+Command: `cd apps/web && npx playwright test portfolio-watchlist.spec.ts` (test `weight
+editing and sync or import controls are visible and actionable`)
+Failure: with `Apply allocation changes to snapshot` checked, editing a weight in the
+allocation panel saves and updates the snapshot, but the confirmation
+`Saved allocation changes and updated the <date> snapshot.` never appears. The action is
+performed from the Portfolio Allocation Workspace panel; the message is written to
+`portfolioComparisonMessage`, which is rendered only inside `snapshotPanelBody`
+(`apps/web/app/portfolio/page.tsx:2354`). Only one panel mounts at a time, so the message
+exists but is unmounted at the moment it is set. The failure mode on the error path is worse:
+`Failed to update the snapshot after saving allocation changes.` is equally invisible.
+Root cause: Task 11 moved the stacked sections into single-mount rail panels and lifted
+`mutationMessage` to the shell for exactly this reason (see the comment at
+`apps/web/app/portfolio/page.tsx:2848`), but `portfolioComparisonMessage` was left behind in
+the snapshot panel while one of its writers stayed in the allocation panel.
+Fix: APPLIED in `8d80c1c` after the report. The sole render site inside `snapshotPanelBody`
+was removed and `portfolioComparisonMessage` now renders at the shell level next to
+`portfolio-mutation-message`, with `data-testid="portfolio-comparison-message"`. The spec's
+workaround - switching to the snapshot panel to read it - is now unnecessary but still
+passes, since the message is visible from every panel.
+Files changed: `apps/web/tests/e2e/portfolio-watchlist.spec.ts` (spec, in `8f0cac5`),
+`apps/web/app/portfolio/page.tsx` (fix, in `8d80c1c`).
+Prevention: when a panel body writes user feedback, check which panel renders the state it
+writes to. Anything written by more than one panel, or by a modal, belongs in the shell.
+
+## 2026-08-02: The portfolio page still scrolls at the document level despite its single scroll region
+
+Date: 2026-08-02
+Command: `cd apps/web && npx playwright test portfolio-tile-grid.spec.ts` (test `the grid
+scroll region is the only vertically scrolling region on the page`)
+Failure: `document.documentElement.scrollHeight` is 816 against a `clientHeight` of 720 on
+`/portfolio` at 1280x720 - the page scrolls 96px behind the shell. Exactly one *scroll
+container* exists (`portfolio-scroll-region`, the acceptance criterion as written), but the
+document is a second vertically scrolling surface, so the rail and the grid can be scrolled
+partly out of view.
+Root cause: `PortfolioShell`'s root is `h-[calc(100vh-4rem)]`, which subtracts the 4rem
+header, but the app shell's `<main>` wraps it in `p-4 pt-20 lg:p-20`. On `lg` that is 80px of
+padding above and below a 656px block inside a 720px viewport: 816px total, 96px over. Below
+`lg` the padding is 80px/16px, which still overflows. The `4rem` in the calc does not
+correspond to any single measurement in the surrounding layout.
+Fix: APPLIED 2026-08-02. `AppShell`'s `<main>` now publishes its vertical padding as
+`--main-pad-top` / `--main-pad-bottom` and consumes those same variables for its own
+`pt-`/`pb-` utilities, so the numbers exist in one place. `PortfolioShell` is
+`h-[calc(100vh - var(--main-pad-top,0px) - var(--main-pad-bottom,0px))]`. Chosen over
+`h-full` on a viewport-height `<main>`, which would have made every page's `<main>` a
+fixed-height box and moved the scrolling surface for all of them. The fallbacks keep the
+shell sane if it is ever rendered outside `AppShell`. Verified at 1280x720 (the reported
+case, `lg`: 80px + 80px) and below `lg` (80px + 16px), where the old constant was also
+wrong, by a different amount.
+Files changed: `apps/web/components/ui/AppShell.tsx`,
+`apps/web/app/portfolio/components/PortfolioShell.tsx`,
+`apps/web/tests/e2e/portfolio-tile-grid.spec.ts`.
+Prevention: `100vh - <constant>` is a guess about an ancestor's box. Assert the containment
+instead of trusting the arithmetic: `documentElement.scrollHeight <= clientHeight` is one
+line and it is what "one scrolling region" actually means to a user.
+
+## 2026-08-02: StockNewsCrawler reported every provider failure as "no news"
+
+Date: 2026-08-02
+Command: `python -m pytest tests/api/acquisition/test_news_source.py -q` (writing the
+FAILED-vs-EMPTY tests for the news acquisition source, plan task 2)
+Failure: silent, and it never raised. `StockNewsCrawler.crawl()` wrapped its whole body in
+`except Exception: logger.warning(...)` and then fell through to `return results`, so a
+network error, a 429, or a malformed feed all returned `[]` - byte-identical to a ticker that
+genuinely has no news. Through the new `fetch_news` acquisition source that would have been
+recorded as a successful acquisition of zero articles: `last_checked_at` advanced, the tile
+said "checked, no news", and the freshness boundary then suppressed retries for an hour. The
+user would be told there is no news when in fact nobody could reach the provider.
+Root cause: two compounding defects. (1) The broad `except Exception` around the entire method
+converted every failure into the empty-success value instead of propagating. (2) `feedparser`
+does not raise at all - on a fetch or parse error it sets `bozo=True`, stores the cause in
+`bozo_exception`, and returns an object with `entries == []`. So even after removing the broad
+catch, the feedparser path still silently produced `[]`; the flag has to be read explicitly.
+Fix: `apps/api/services/webscrap/Crawler/StockNewsCrawler.py` - raise `bozo_exception` when
+`parsed.bozo` is true and `parsed.entries` is empty (that conjunction is what distinguishes a
+failed fetch from a feed that merely has a non-fatal quirk), and re-raise from the `urllib`
+fallback rather than returning a partial list. `ImportError` still falls through to the
+fallback, which is the one case where continuing is correct. Commits `67975ed`, `3ba2d43`.
+The pre-existing caller `NewsService.crawl_stock_and_save` (`news_service.py:216-218`) has its
+own `except Exception -> return []`, so its behaviour is deliberately unchanged; only the
+acquisition source sees the exception, which is the point.
+Files changed: `apps/api/services/webscrap/Crawler/StockNewsCrawler.py`,
+`tests/api/acquisition/test_news_source.py`.
+Prevention: a fetch function must never use its empty-success value as its error value - the
+caller cannot tell them apart, and here the difference decides whether a retry ever happens.
+When wrapping a third-party parser, check how IT reports failure before deciding you have
+handled failure: `feedparser` reports through a flag, not an exception, so a correct-looking
+`try/except` around it catches nothing. The tests now assert the FAILED path by injecting a
+crawler that raises AND one that returns a bozo result, because only the second would have
+caught defect (2).
+
+## 2026-08-03: Yahoo's Net Debt line was silently read as Total Debt, understating WACC weights
+
+Date: 2026-08-03
+Command: `python -m pytest tests/api/test_statement_debt_extraction.py -v` (writing the
+failing tests for DCF data-completeness plan task 5)
+Failure: silent, and it never raised. Three sites in `corporate_statement_metrics.py`
+called `_statement_map(balance, ("Total Debt", "Net Debt"))`, treating the two labels as
+an alias pair - whichever one Yahoo provided was read into `debt_by_year` unchanged. But
+`Net Debt` is `Total Debt` minus cash, not a synonym. For a cash-rich company the two
+differ by most of the balance sheet: with total debt 100B and cash 90B, Yahoo's `Net Debt`
+line reads 10B, and reading that as total debt understated `debt_ratio` by 90% of the
+balance sheet (9.09% measured instead of the true 50%), corrupting every capital-structure
+weight and the WACC derived from it. `test_total_debt_is_recovered_from_net_debt_plus_cash`
+asserted `debt_ratio == 50.0` and observed `9.09`.
+Root cause: `_statement_map`'s alias-tuple mechanism assumes every label in the tuple
+denotes the same underlying quantity under a different Yahoo field name (true for most of
+its other callers, e.g. `"Pretax Income"` vs `"Income Before Tax"`). `Total Debt` and
+`Net Debt` do not satisfy that assumption - they are related but numerically distinct
+quantities - so treating them as aliases silently substituted the wrong figure whenever
+Yahoo omitted the `Total Debt` line.
+Fix: added `_gross_debt_map(balance, quarterly_balance)` in
+`apps/api/services/corporate_statement_metrics.py`, which reads `Total Debt` and
+`Net Debt` as separate series and recovers gross debt as `Net Debt + cash` only for years
+where `Total Debt` itself is absent, so coverage does not drop. This is deliberately the
+gross-debt expression: the cash term does not cancel here, unlike
+`apps/api/services/equity_bridge.py`, which reads the same two line items to produce NET
+debt (where the cash term does cancel). The two modules were kept independent on purpose -
+same inputs, two different consumers, two different expressions; no shared helper was
+extracted between them. All three call sites (`yahoo_statement_metrics`,
+`metric_audit_for_ticker`, `yahoo_metric_history`) now call `_gross_debt_map` instead of
+aliasing the two labels through `_statement_map`/`_quarterly_balance_map` directly.
+Files changed: `apps/api/services/corporate_statement_metrics.py`,
+`tests/api/test_statement_debt_extraction.py`.
+Prevention: an alias tuple passed to `_statement_map` must denote the same quantity under
+every label, never merely a *related* quantity - a WACC input derived from a proxy value
+is wrong in a way that produces a plausible number and raises no error. When two line
+items are related by an inexact identity (`Net Debt = Total Debt - Cash`), the recovery
+formula must be written explicitly at the point of use, keeping the sign/expression tied
+to what that specific consumer needs (gross vs. net), rather than folded into a general
+alias-lookup helper.
+
+## 2026-08-03: The comparison table's expected-return columns were structurally pinned at zero
+
+Date: 2026-08-03
+Command: `python -m pytest tests/api/test_corporate_comparison.py -k "dcf_implied_return" -v`
+(writing the failing tests for DCF data-completeness plan task 6)
+Failure: silent, and it never raised. `_dcf_snapshot` in
+`apps/api/services/corporate_comparison.py` called
+`calculate_expected_return_result` with `intrinsic_value=current_price` — the same value
+already passed as `current_price`. `dcf_implied_return` is a function of the gap between
+intrinsic value and current price, so `f(price, price)` evaluated to `0.0` for every
+ticker, every snapshot, unconditionally. `stock_expected_return` is assigned directly from
+`dcf_implied_return`, and `expected_return_spread` is derived from `stock_expected_return`
+minus `market_expected_return`, so the defect propagated into three columns of the
+comparison table that all read as plausible percentages while carrying no signal at all.
+Compounding it, `net_debt=0.0` and `non_operating_assets=0.0` were hardcoded in the same
+function (rather than read from the equity bridge), so even the enterprise value produced
+there was mislabeled as a per-share `estimated_value` and `status` was hardcoded to the
+literal string `"Bridge Incomplete"` for every row, regardless of whether a bridge could
+have resolved.
+Root cause: `_dcf_snapshot` predates the equity-bridge loader built for the single-ticker
+DCF endpoint (`apps/api/services/corporate_dcf.py`, task 4 of this plan) and was never
+wired to it. Lacking a real net debt, share count, or non-operating-assets figure, whoever
+wrote the comparison path passed the only per-share number in scope — `current_price` — as
+a placeholder for intrinsic value, which zeroes the implied-return formula by
+construction rather than by a bug in the formula itself.
+Fix: `_dcf_snapshot` now takes a keyword-only `bridge_loader=load_equity_bridge` and calls
+it per ticker, mirroring the pattern already established in
+`corporate_dcf._build_dcf_outputs`. `net_debt`, `non_operating_assets`, and
+`diluted_shares_outstanding` come from the resolved `EquityBridge`; `equity_value` and
+`intrinsic_value_per_share` are computed for real via `calculate_equity_value` and
+`calculate_intrinsic_value_per_share`, and that intrinsic value — not `current_price` — is
+what feeds `calculate_expected_return_result`. `status` is now `"Undervalued"` /
+`"Overvalued"` / `"Bridge Incomplete"` based on whether the bridge actually resolved.
+
+Correction (2026-08-03, whole-branch review): **the `status` change is internal only and
+no consumer can observe it.** `_dcf_snapshot` returns `"status"` in a plain dict, but
+`CorporateComparisonRow` (`apps/api/models/schema_parts/corporate.py`) has no `status`
+field and never has, `_build_live_rows` does not read the key, and it is not persisted to
+`corporate_comparison_snapshots_v3`. The `status: str` that the UI renders belongs to
+`DCFSummary`, a different model built by `corporate_dcf.py` for the single-ticker DCF
+endpoint. The key was dead before this change and is still dead after it; the change
+turned a constant into a computed verdict that nothing reads. **The observable fixes in
+the comparison table are `dcf_value`, `bridge_quality`, and the three expected-return
+columns** (`dcf_implied_return`, `stock_expected_return`, `expected_return_spread`) — not
+`status`. No field was added to surface it: a verdict derivable from `dcf_value`,
+`current_price` and `bridge_quality`, which the row already carries, does not need its own
+column. The computation site now carries a comment saying so.
+Because the aggregate averages (`average_dcf_value`, `average_expected_return_spread`) are
+computed in SQL over persisted snapshot rows rather than in Python over live rows, a new
+`bridge_quality` column was added to `corporate_comparison_snapshots_v3` (guarded
+`ALTER TABLE`, default `''` so pre-existing rows keep reading exactly as they do today) so
+those aggregates can exclude `bridge_quality = 'missing'` rows without also excluding
+`'estimated'` rows, which carry a defensible number. `METRIC_SCHEMA_VERSION` was bumped
+1 -> 2 so snapshots computed before and after this fix are never compared as like for like.
+Files changed: `apps/api/services/corporate_comparison.py`, `apps/api/services/db.py`,
+`tests/api/test_corporate_comparison.py`.
+Prevention: when a formula call site is passed the same variable for two logically
+distinct parameters (here, `current_price` filling both `current_price` and
+`intrinsic_value`), treat it as a placeholder that was never replaced, not a valid
+default — a spread/delta formula fed identical arguments always degenerates to zero or
+one, and that degenerate case produces no error, just a column of numbers that all look
+individually plausible. Grep for `_dcf_snapshot`-shaped functions that compute an
+enterprise-to-equity bridge inline instead of calling the shared `load_equity_bridge`
+loader; duplicated bridge logic is where a hardcoded `0.0` is most likely to hide.
+
+## 2026-08-05: The comparison table presented enterprise values as intrinsic values per share
+
+Date: 2026-08-05
+Command: No failing command. Found by reading the corporate comparison table against the
+DCF payload's own `bridge_quality` field; every suite was green throughout.
+Failure: The "DCF Value" column rendered `dcf_value` as a dollars-per-share figure for
+every row. For any ticker whose enterprise-to-equity bridge did not resolve, `dcf_value`
+holds an **enterprise value in billions** instead. `AAPL` at `$240.50` and a bridgeless
+ticker at `$2,438.00` sat in the same column, formatted identically, with nothing marking
+the second as a different financial quantity. The same value also ranked in the DCF sort
+(sorting first under "descending", since it is numerically the largest) and plotted on a
+scatter axis paired with `current_price`. In the snapshot history, `average_dcf_value`
+moved by an order of magnitude the day the bridge shipped, drawn as a valuation move.
+Root cause: Two causes, one structural and one presentational.
+
+`dcf_value` is deliberately a union of two quantities -- `intrinsic_value_per_share` when
+the bridge resolves, `enterprise_value` when it does not (`apps/api/services/corporate_dcf.py:222`,
+`corporate_comparison.py:399-403`). That fallback was introduced as a backwards-compatible
+alias so no consumer broke when the bridge landed, and it is defensible on its own terms.
+What was missing is that **no consumer was ever taught the difference.** `bridge_quality`
+was computed, persisted, and returned on the payload, but none of the three table row
+interfaces in `apps/web/app/corporate/` declared it, so nothing in the table *could*
+distinguish the cases even in principle.
+
+The scale of the two quantities is what made it survive review: they are three orders of
+magnitude apart for a large-cap, which reads as an outlier rather than a unit error. That
+framing is itself the trap. Enterprise value and intrinsic value per share are different
+financial quantities, not one quantity at two scales -- the objection holds for a company
+of any size, including one where the two numbers happen to land close enough that nothing
+looks wrong at all.
+Fix: `bridgedDcfValue` in `apps/web/app/corporate/corporateDerivedViews.ts` is now the
+single place that decides whether a DCF value may be presented; it returns `null` for
+`bridge_quality === "missing"` and the value otherwise. The table cell, the sort
+comparator, and both scatter builders consume it. Suppressed rows sort last in **both**
+directions -- via an explicit null branch ahead of the numeric comparison, not a sentinel,
+because `Number(null)` is `0` and would bury them among genuinely small per-share values
+in one direction. `metric_schema_version` now reaches the frontend and the snapshot
+history marks the point where the metric definition changed.
+
+`estimated` rows keep their number: the fallback input affects confidence, not units. A
+guard written `!== "ok"` instead of `=== "missing"` is a defect, and every fixture carries
+an `estimated` row so that specific wrong implementation fails a test.
+Files changed: `apps/web/app/corporate/corporateDerivedViews.ts`,
+`apps/web/app/corporate/corporateTypes.ts`,
+`apps/web/app/corporate/components/CorporateComparisonTable.tsx`,
+`apps/web/app/corporate/components/TargetStockComparisonSection.tsx`,
+`apps/web/app/portfolio/components/SnapshotHistoryModal.tsx`,
+`apps/web/app/portfolio/components/PortfolioSnapshotSummary.tsx`,
+`apps/web/app/portfolio/page.tsx`, `apps/api/models/schema_parts/corporate.py`,
+`apps/api/services/corporate_comparison.py`, plus fixtures and two new Playwright specs.
+Prevention: A field whose meaning depends on another field is only safe if every consumer
+receives both. When adding a fallback that changes what a value *means* rather than how
+precise it is, the discriminator must be added to every consumer's type in the same
+change -- not merely returned on the payload, where it is invisible to the code that
+matters. Grep test: for any such field, every presentation site must reach it through one
+named helper; if `grep` finds the raw field rendered anywhere outside that helper's
+callers, the rule is already broken.
+
+This entry's own scope is a live example. The rule was enforced on the field named
+`dcf_value` while the identical quantity ships as `estimated_value` and is still rendered
+raw on five surfaces -- one of them the modal the suppressed cell opens. Tracked in
+`guideline/sop/todo.md`. Policing a value by *field name* rather than by *quantity* is how
+half a fix ships looking whole.
+
+**Remainder closed 2026-08-05.** `estimated_value` now reaches every render site through
+`apps/web/lib/bridgeQuality.ts`, and `bridgedDcfValue` delegates to the same predicate so
+the two field names cannot diverge again. Counting the sites first was worth doing: the
+open item said five, and there were ten render expressions across six files.
+`buildCalculationDetails.ts` holds three separate detail blocks rather than one, and
+`components/workbenches/DCFWorkbench.tsx:186` -- "Implied Fair Value" on the live
+`/detail/[ticker]` route -- had never been found by any review, because every earlier search
+had been scoped to `app/corporate/`.
+
+`upside_pct` was suppressed in the same pass. It is a second fabricated quantity, not a
+presentation detail of the first: `corporate_dcf.py:224` sets it to `0.0` when the bridge
+does not resolve, so an unbridged ticker rendered `+0.00%` in the positive colour -- a
+fairly-valued reading for a comparison that never happened. Suppressing the value while
+leaving that in place would have looked like a rendering bug rather than a fix.
+
+The raw-dataset CSV (`corporateDerivedViews.ts:208`) was deliberately left alone.
+`pushRecord` emits every key of the response, so `bridge_quality`,
+`intrinsic_value_per_share`, `enterprise_value`, and `valuation_method` all land in the same
+`backend_dcf` block. That record is self-describing, which is the condition the Prevention
+rule above actually asks for; blanking a field there would remove information from a raw
+export rather than add honesty to it. The rule is about values presented *without* their
+discriminator, not about every occurrence of the number.
+
+## 2026-08-05: Snapshot history claimed a metric definition changed when it was never recorded
+
+Date: 2026-08-05
+Command: `npx playwright test snapshot-history-metric-version` (passing -- the suite
+asserted the wrong wording, so nothing was red)
+Failure: The snapshot history modal printed "Metric definition changed. Values before and
+after this point are not directly comparable." at every point whose `metric_schema_version`
+differed from the chronologically preceding point's. That includes the `0 -> 1` edge, where
+the claim is not supported by anything stored. Version `0` is written only by the migration
+at `apps/api/services/db.py:672`, which added the column to rows computed before it existed
+-- so a `0` means the earlier definition went **unrecorded**, not that it **differed**. It may
+well have been the same definition. The notice asserted a change no stored value evidences.
+
+The edge is not a corner case: on any install carrying pre-column history it is the first
+boundary the user meets, and it sits at the oldest end of the timeline where the user is
+least able to check the claim independently.
+Root cause: The design spec fixed one sentence of notice wording
+(`docs/superpowers/specs/2026-08-03-comparison-value-honesty-design.md:230`) before
+enumerating the cases the comparison actually produces. Comparing two version numbers has
+three outcomes -- changed, unchanged, and unknown -- and the spec provided text for two of
+them. The implementation was faithful to the spec, and the test asserted the spec's sentence
+literally, so both agreed with each other and neither agreed with the data. The version-`0`
+semantics were correctly documented in three other places (`db.py:669-671`,
+`corporate.py:311-314`, the fixture comment in the spec's own e2e test) and still did not
+reach the sentence that reports them to the user.
+Fix: `versionBoundaryIds: Set<string>` became `versionBoundaryNotices: Map<string, string>`
+in `apps/web/app/portfolio/components/SnapshotHistoryModal.tsx`. A boundary whose *preceding*
+point is version `0` now reads "Metric definition before this point was not recorded, so
+whether values are comparable across it is unknown." Every other boundary keeps the original
+sentence. The reverse direction (a newer point at `0`) is deliberately not handled: `0` is
+only ever backfilled onto older rows and every write since sets `METRIC_SCHEMA_VERSION`, so
+the branch would be unreachable code guarding an impossible state.
+
+The two notices are matched literally and separately in the spec, and each is asserted to
+appear exactly once against a fixture containing one boundary of each kind. Break/restore
+verified against both wrong implementations: collapsing to the old single notice fails on
+`CHANGED_NOTICE` count 2, and labelling every boundary "unrecorded" fails on count 0.
+Files changed: `apps/web/app/portfolio/components/SnapshotHistoryModal.tsx`,
+`apps/web/tests/e2e/snapshot-history-metric-version.spec.ts`,
+`docs/superpowers/specs/2026-08-03-comparison-value-honesty-design.md` (amended in place,
+with the original wording left visible).
+Prevention: Fixing user-facing wording in a spec is right -- it is what stops the text
+drifting -- but the wording can only be fixed once the cases are enumerated. Before pinning a
+sentence to a computed condition, list every value that condition can take and write the
+sentence for each; a sentinel value like `0`, `''`, or `-1` that means "unrecorded" is a case
+of its own and never shares wording with a real value. The second half of the rule: a test
+that asserts the spec's sentence verbatim cannot catch a wrong sentence. It pins drift, not
+truth. Something in the loop has to check the claim against the data's own semantics, and
+here that was only ever going to be a reader asking what a `0` means.
+
+
+## 2026-08-05: "Terminal Value Share" was a frontend formula unrelated to any terminal value
+
+Date: 2026-08-05
+Command: none -- found while implementing the WACC x terminal-growth sensitivity table
+(`guideline/sop/todo.md`, Phase 2 item 4). No suite was red.
+Failure: `apps/web/app/corporate/page.tsx:466` computed
+
+    const terminalValueShare = clamp(62 + assumptions.growth * 1.8 - assumptions.wacc * 1.2, 20, 88);
+
+and rendered it as "Terminal Value Share" on the DCF Core Modules tile, with the tooltip
+"estimates how much enterprise value comes from terminal assumptions" and a dedicated
+calculation-detail modal describing a "62.0% model anchor", a "growth contribution", a
+"WACC drag", and a "20.0%-88.0% terminal-value concentration guardrail".
+
+None of that is a terminal value share. The quantity is PV(terminal value) / enterprise
+value; this expression is a linear function of two assumption sliders that never touches
+either. It cannot equal the real share except by coincidence, moves the wrong way in
+general, and the 20-88 clamp guarantees it can never report the readings that matter most --
+a valuation that is 95% perpetuity is exactly what a concentration metric exists to show,
+and this one could not say so.
+Root cause: A frontend "derived metrics" layer computing what looks like a financial
+quantity, in the one place `guideline/sop/finance-logic.md` forbids ("Keep financial math in
+`apps/api`, `apps/api/core`, or `packages/core_finance`, never in `apps/web`"). The real
+inputs already existed on the backend: `corporate_dcf.py` had `pv_terminal` and
+`enterprise_value` on adjacent lines, and `packages/core_finance/dcf.py:149` already computed
+`tv_share_pct` in `multi_stage_dcf` -- a function nothing called.
+
+It survived because a plausible-looking percentage in a labelled tile is indistinguishable
+from a measured one. `docs/architecture/visualization-metrics.md:690` recorded its source as
+"backend DCF result plus active assumptions" and its ownership as "backend DCF methodology",
+which was wrong in both halves and read as confirmation.
+Fix: `terminal_value_share_pct` is now measured in `corporate_dcf.py` as
+`pv_terminal / enterprise_value * 100` and carried on `DCFSummary`, so the streamed payload
+has it. Every frontend site reads it from there. The derived-metrics entry, its type, its
+text view, and both calculation-detail blocks describing the old formula are deleted. The
+tile shows "N/A" before a DCF has run: a share of enterprise value is a property of a
+valuation, and the sliders alone cannot produce one -- which is what the old formula
+pretended they could.
+
+The sensitivity grid that prompted this ships alongside, in
+`packages/core_finance/dcf.py` (`sensitivity_cell`, `sensitivity_grid`) and on
+`DCFFullReport.sensitivity`. Cells where WACC is not above terminal growth carry no numbers
+at all rather than the service's `max(wacc - g, 0.005)` clamp, which would report roughly
+200x the terminal cash flow at points where the Gordon model has no value.
+Files changed: `packages/core_finance/dcf.py`, `apps/api/services/corporate_dcf.py`,
+`apps/api/models/schema_parts/corporate.py`, `apps/api/models/schemas.py`,
+`packages/shared-types/corporate.ts`, `apps/web/app/corporate/page.tsx`,
+`apps/web/app/corporate/buildCalculationDetails.ts`,
+`apps/web/app/corporate/corporateDerivedViews.ts`,
+`apps/web/app/corporate/components/DcfSensitivityTable.tsx` (new),
+`apps/web/app/corporate/components/CalculationDetailModal.tsx`,
+`apps/web/app/corporate/components/CorporateDiagnosticsSection.tsx`,
+`apps/web/app/corporate/components/graphs/DcfCoreModulesGraph.tsx`, plus fixtures, two new
+test files and `docs/architecture/visualization-metrics.md`.
+Prevention: A label is a claim about what a number is. "Terminal Value Share" asserts a
+specific ratio, and the check is whether the code computes that ratio -- not whether the
+output looks reasonable, which a clamped linear function of plausible inputs always will.
+
+The concrete rule, narrower than the SOP's placement rule and the one that would have caught
+this: a frontend expression may combine values for presentation, but must not introduce
+numeric constants that stand in for a modelling assumption. `62`, `1.8`, `1.2`, `20` and `88`
+are all model parameters, and a model parameter in `apps/web` means a model lives there. Grep
+test for the rest of this layer: any `derived.*` entry whose formula contains a literal other
+than a unit conversion is a candidate, and the same file still holds `successProbability`,
+`agencyRisk`, `lifeCyclePosition` and `leveredBetaRiskScore`, all built the same way. They are
+tracked under Phase 3 in `guideline/sop/todo.md`; this entry is the precedent for what that
+work has to establish about each of them -- either a real derivation or an honest name.
+
+A second defect surfaced while fixing this one, and is the reason the frontend suite went red
+rather than the change shipping quietly: the corporate page restores DCF results from
+`sessionStorage`, so a payload written by an earlier build has no `terminal_value_share_pct`
+at all and `pct(undefined)` threw, blanking the page. Adding a required field to a type whose
+values can arrive from a cache older than the type is a runtime problem, not a typing one --
+the render sites now check presence at runtime, and `DcfResult.terminal_value_share_pct` is
+declared optional to say why.
+
+## 2026-08-06: "Success Probability" was a slider formula, and its Minard chart ranked risks identically for every ticker
+
+Date: 2026-08-06
+Command: none -- found while closing Phase 3 items 1, 2 and 4 (`guideline/sop/todo.md`). No
+suite was red.
+Failure: three related claims on the Corporate Analysis dashboard, none of them computed.
+
+1. `apps/web/app/corporate/page.tsx:466` computed
+
+       const successProbability = clamp(55 + spread * 2.3 + assumptions.growth - assumptions.esgPenalty * 0.25, 5, 95);
+
+   and rendered it as a "Success Probability" KPI card in bold percent, hardcoded to the
+   positive colour (`text-[var(--delta-up)]`) whatever the value, captioned "Above 60% is good;
+   current status is Good/Weak". Its complement was labelled "Failure Probability" and drawn as
+   a distribution area. No probability model existed anywhere in the codebase to produce
+   either.
+
+2. The Risk-Return Minard chart plotted four "risk exposure segments" -- Inflation, FX, Demand,
+   Margin -- with no inflation, FX or demand series anywhere in the calculation. Each segment's
+   Y value was `spread` times a per-segment constant (`12`, `10`, `9`, `11`) plus an offset
+   (`-18`, `-6`, `+growth`, `+roic`), and each segment's success/failure pair was the page score
+   plus a fixed offset (`-12`, `-5`, `0`, `+4`). That fixed ladder made the chart's headline
+   reading -- which risk hurts most -- a constant: Inflation always worst, Margin always best,
+   for every ticker and every setting of every slider.
+
+3. The Y series was named `npv`, tooltipped as approximating expected return, and plotted on a
+   percent-formatted axis (`fmtPctTick`). Nothing was projected and nothing was discounted, so
+   the axis showed a percent of nothing.
+
+`CorporateComparisonTable.tsx:117` also wired the backend `expected_return_spread` cell to open
+the Minard modal, so clicking a real per-ticker number opened an explanation of a frontend score
+derived from the assumption sliders -- the same values for every row.
+Root cause: the same defect class as the 2026-08-05 "Terminal Value Share" entry: a frontend
+"derived metrics" layer introducing numeric constants that stand in for modelling assumptions,
+in the one place `guideline/sop/finance-logic.md` forbids financial math. `55`, `2.3`, `0.25`,
+`5`, `95`, `12`, `10`, `9`, `11`, `-18`, `-6`, `-12`, `-5` and `+4` are all model parameters.
+
+What let it stand longer than the terminal-share defect: `docs/risk-return-minard.md` disclosed
+every one of these limitations accurately, in a "Known Limitations" section, including "the
+chart uses finance-heavy labels like `successProbability` and `npv` even though the underlying
+calculations are simplified scenario proxies". An honest caveat in a doc does not reach the
+person reading the card, and its existence made the surface look reviewed. A disclosure is not a
+fix; it is a record that no fix was applied.
+Fix: removed rather than relabelled, per Phase 3 item 4's own alternative. Relabelling could not
+work on any of the three: a score with no model has no honest percent to show, the segment
+constants had no rationale to document, and renaming a data key does not make a percent axis
+mean something. Deleted the KPI card, both detail modals, the graph component and its dynamic
+import, the `RiskReturnPoint` type and both `DetailKey` entries, the `successProbability` /
+`failureProbability` fields and the `risk_return_minard` series from the downloadable raw
+dataset, and the orphaned "Success probability penalty" step left behind in the ESG penalty
+modal. The comparison table's `expected_return_spread` cell is now plain text like the two
+expected-return cells before it, since it has no calculation detail of its own.
+
+Nothing replaced it. Value response to assumptions is already covered by measured surfaces: the
+WACC x terminal-growth sensitivity grid, the Beta + WACC curve, and the value driver matrix.
+`ROIC - WACC` was the chart's only real input and remains as its own card, with audit quality
+state attached.
+Files changed: `apps/web/app/corporate/page.tsx`,
+`apps/web/app/corporate/buildCalculationDetails.ts`,
+`apps/web/app/corporate/corporateDerivedViews.ts`,
+`apps/web/app/corporate/components/CorporateGraphs.tsx`,
+`apps/web/app/corporate/components/CorporateDiagnosticsSection.tsx`,
+`apps/web/app/corporate/components/CorporateComparisonTable.tsx`,
+`apps/web/app/corporate/components/calculationDetailTypes.ts`,
+`apps/web/app/corporate/components/graphs/shared.ts`,
+`apps/web/app/corporate/components/graphs/RiskReturnMinardGraph.tsx` (deleted),
+`apps/web/tests/e2e/corporate-probability-labels.spec.ts` (new),
+`apps/web/tests/e2e/corporate-viewport.spec.ts`,
+`apps/web/tests/e2e/responsive-accessibility.spec.ts`, `docs/risk-return-minard.md`,
+`docs/architecture/visualization-metrics.md`, `docs/tabs/corporate-analysis-tab.txt`,
+`docs/design/MoneyView_Chart_System.md`, `docs/INDEX.md`.
+Prevention: two rules, both narrower than "keep financial math out of `apps/web`".
+
+A metric named for a statistical object -- probability, expectation, variance, confidence --
+asserts that such an object was estimated. If no distribution or observed frequency exists in
+the codebase, the name is unavailable regardless of how the number is scaled or clamped. Colour
+and caption carry the same weight as the label: a value hardcoded to the positive colour is a
+claim that the number is good.
+
+Second, a chart whose category axis has no per-category data is not a chart of those categories.
+The test is cheap and mechanical: change one input and check whether the ranking across
+categories can change. Here it could not, for any input -- which means the four segment names
+were decoration over a single scalar.
+
+`apps/web/tests/e2e/corporate-probability-labels.spec.ts` pins the absence of these labels on
+both the dashboard and the exportable dataset. Each assertion first confirms the surface
+rendered, because an absence check that passes against a blank page proves nothing.
+
+Phase 3 item 3 covers the rest of this layer: `agencyRisk`, `lifeCyclePosition` and
+`leveredBetaRiskScore` still feed the Company Status radar from `apps/web`, built the same
+way. (Closed later the same day by the entry below, which removed all three.)
+
+## 2026-08-06: The Company Status radar scored slider formulas against a hardcoded peer polygon
+
+Date: 2026-08-06
+Command: `npx playwright test --project=chromium` (the stale-locator half; the scoring defect
+itself was found by closing Phase 3 item 3 in `guideline/sop/todo.md`, with no suite red)
+Failure: the "Company Status Diagnosis" radar headlined a composite `healthScore` badge, and
+neither the axes nor the baseline they were scored against were measured.
+
+1. Three of the four default axes were browser formulas over the assumption sliders:
+
+       lifeCyclePosition   = clamp(35 + growth * 2.5 - debtRatio * 0.3, 0, 100)
+       leveredBetaRiskScore = clamp(100 - max(leveredBeta - 1, 0) * 35, 0, 100)
+       agencyRisk          = clamp(100 - governance + esgPenalty, 0, 100)
+
+   `35`, `2.5`, `0.3`, `35` and the implicit unit-equivalence of `governance` and `esgPenalty`
+   are all model parameters. Nothing named a life cycle stage was observed.
+
+2. `healthScore` averaged `growth * 2` (a percentage), `marketShare` (a 0-100 input),
+   `lifeCyclePosition` and `leveredBetaRiskScore` into one number, badged green above 65.
+   The four terms are not in the same unit, so the mean is not in any unit. An
+   `includeSubjectiveHealth` toggle switched a further three axes in, changing the score's
+   composition and therefore what the badge's threshold meant.
+
+3. The `peer` polygon each axis was scored against was seven hardcoded constants -- 58, 62, 60,
+   70, 66, 65, 62 -- the same shape for every ticker. A radar exists to make one comparison,
+   and that comparison could not vary with the company being viewed.
+
+The `company_status_radar` series, including the `peer` column, was written to the downloadable
+raw dataset, so the constants left the app as data.
+Root cause: the same defect class as the two entries above it -- a frontend "derived metrics"
+block introducing numeric constants that stand in for modelling assumptions. This is the
+remainder of the layer the 2026-08-06 Success Probability removal explicitly did not touch, and
+it stood for the same reason: the surface looked reviewed because it was drawn, labelled and
+documented like the measured charts beside it.
+
+New in this one: the hardcoded `peer` baseline. A composite score at least discloses that it is
+a score. A peer polygon asserts an observed comparison group, and there was none.
+Fix: removed rather than rebased on real data, matching the precedent. Deleted
+`CompanyStatusGraph.tsx` and its dynamic import, the `companyStatus` detail modal and both
+`DetailKey` / `CalculationDetailKey` entries, the `HealthRadarPoint` type, the
+`includeSubjectiveHealth` state and its toggle, the `agencyRisk` / `lifeCyclePosition` /
+`leveredBetaRiskScore` / `healthScore` fields of the `derived` block, and the
+`company_status_radar` series from the raw dataset. The page subtitle no longer advertises
+"life cycle" or "project risk".
+
+Nothing replaced it. Operating and leverage quality is read from the metric surfaces that carry
+audit quality state, and assumption response from the sensitivity grid, WACC curve and value
+driver matrix.
+Files changed: `apps/web/app/corporate/page.tsx`,
+`apps/web/app/corporate/buildCalculationDetails.ts`,
+`apps/web/app/corporate/corporateDerivedViews.ts`,
+`apps/web/app/corporate/components/CorporateGraphs.tsx`,
+`apps/web/app/corporate/components/CorporateDiagnosticsSection.tsx`,
+`apps/web/app/corporate/components/calculationDetailTypes.ts`,
+`apps/web/app/corporate/components/graphs/shared.ts`,
+`apps/web/app/corporate/components/graphs/CompanyStatusGraph.tsx` (deleted),
+`apps/web/app/corporate/components/graphs/HurdleRateDecompositionGraph.tsx`,
+`apps/web/tests/e2e/corporate-composite-score.spec.ts` (new),
+`apps/web/tests/e2e/refresh-idle-state.spec.ts`,
+`apps/web/tests/e2e/corporate-viewport.spec.ts`,
+`apps/web/tests/e2e/high-risk-render-regression.spec.ts`,
+`apps/web/tests/e2e/responsive-accessibility.spec.ts`,
+`docs/architecture/visualization-metrics.md`, `docs/design/MoneyView_Chart_System.md`,
+`docs/tabs/corporate-analysis-tab.txt`.
+Prevention: a hardcoded comparison baseline is the same defect as a fabricated metric, and is
+easier to miss because it hides in a prop rather than a formula. Before drawing any "vs peer",
+"vs benchmark" or "vs industry" series, check that the baseline varies with the entity on
+screen. If it cannot, the chart has one series, not two, and must not be drawn as a comparison.
+
+Separately, this run found a stale test locator that the removal itself introduced:
+`refresh-idle-state.spec.ts` used `/Microsoft: life cycle/i` in three places as its "the
+selected company is MSFT" marker, borrowing wording from the page subtitle. Changing the
+subtitle failed two tests that assert nothing about life cycles. The marker now matches the
+current subtitle. The general point is that a test should locate a surface by what that test is
+about; borrowing incidental copy makes an unrelated change look like a regression.
+
+That the two failures were only discovered now is the more useful record: `952d487` was
+committed with `tsc` green and the Playwright suite never run, and the entry above it says so in
+its own Command line ("none -- No suite was red"). A UI-string change is exactly what a
+typecheck cannot see.

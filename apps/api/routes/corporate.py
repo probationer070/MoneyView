@@ -33,9 +33,10 @@ from apps.api.services.corporate_comparison import (
     DEFAULT_BENCHMARK_TICKER,
     DEFAULT_COMPARISON_UNIVERSE,
     DEFAULT_SNAPSHOT_MODE,
+    acquire_comparison_datasets,
     build_corporate_comparison_response,
     delete_corporate_comparison_snapshot_version,
-    ensure_daily_snapshot_current,
+    load_company_universe_data,
     load_corporate_comparison_history,
     load_corporate_comparison_snapshot_version,
     load_corporate_comparison_stock_history,
@@ -109,21 +110,6 @@ def _seed_watchlist_from_json_if_empty() -> None:
     corporate_metrics_service.seed_watchlist_from_json_if_empty(_WATCHLIST_JSON)
 
 
-def ensure_corporate_comparison_daily_snapshot() -> CorporateComparisonResponse | None:
-    """Ensure the current KST business-date snapshot exists."""
-    _seed_watchlist_from_json_if_empty()
-    return ensure_daily_snapshot_current(
-        comparison_universe=DEFAULT_COMPARISON_UNIVERSE,
-        benchmark_ticker=DEFAULT_BENCHMARK_TICKER,
-        custom_tickers=[],
-        metrics_loader=_metrics_for_ticker,
-        price_loader=_latest_market_price,
-        default_companies=DEFAULT_COMPANIES,
-        risk_free_rate=DEFAULT_RISK_FREE_RATE,
-        equity_risk_premium=DEFAULT_EQUITY_RISK_PREMIUM,
-    )
-
-
 def _metric_percent_for_valuation(
     metric_name: str,
     value: float,
@@ -195,11 +181,26 @@ async def refresh_corporate_comparison_snapshot(
 ):
     """Recompute and persist today's comparison snapshot."""
     _seed_watchlist_from_json_if_empty()
+    parsed_custom_tickers = [ticker for ticker in custom_tickers.split(",") if ticker.strip()]
+
+    # One button: refresh only the datasets whose freshness boundaries have expired, then
+    # compute. Separate fetch and compute buttons would let a snapshot be generated from
+    # statements the user forgot to refresh.
+    company_data = load_company_universe_data(DEFAULT_COMPANIES)
+    acquire_comparison_datasets(
+        comparison_universe=comparison_universe,
+        benchmark_ticker=benchmark_ticker,
+        custom_tickers=parsed_custom_tickers,
+        company_registry=company_data.registry,
+        watchlist_payload=company_data.watchlist_rows,
+        now=datetime.now(timezone.utc),
+    )
+
     response = save_corporate_comparison_snapshot(
         snapshot_source="manual_refresh",
         comparison_universe=comparison_universe,
         benchmark_ticker=benchmark_ticker,
-        custom_tickers=[ticker for ticker in custom_tickers.split(",") if ticker.strip()],
+        custom_tickers=parsed_custom_tickers,
         metrics_loader=_metrics_for_ticker,
         price_loader=_latest_market_price,
         default_companies=DEFAULT_COMPANIES,

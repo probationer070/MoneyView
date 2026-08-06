@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import type { CorporateMetricAudit, DcfFullReport } from "../../../../../packages/shared-types";
 import type { CalculationDetail, CalculationRow, RawDatasetRow } from "./calculationDetailTypes";
+import { DcfSensitivityTable } from "./DcfSensitivityTable";
 import { ModalShell } from "@/components/ui/ModalShell";
 import { ActionButton } from "@/components/ui/ActionButton";
 import { StatusBadge, type StatusVariant } from "@/components/ui/StatusBadge";
@@ -493,6 +494,11 @@ export function CalculationDetailModal({
                       </tbody>
                     </table>
                   </div>
+                  <DcfSensitivityTable
+                    sensitivity={dcfFullReport.sensitivity}
+                    formatNumber={formatNumber}
+                    formatPct={formatPct}
+                  />
                 </>
               ) : (
                 <EmptyState

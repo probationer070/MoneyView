@@ -41,6 +41,36 @@ execution time.
 **Offline execution.** Once acquisition has completed, all comparison metrics can be computed
 entirely offline.
 
+> **Correction, 2026-07-31 — found, then closed.** The gap below was fixed the same day; the
+> record is kept because the way it hid is the useful part. `latest_market_price` now reads
+> `get_latest_stored_price`, a direct bars-table read that never fetches, and
+> `test_a_live_comparison_computes_with_no_network_at_all` exercises the whole route with
+> nothing stubbed but the database. Verified by mutation: restoring the old loader makes that
+> test fail with `test resolved query1.finance.yahoo.com`. The visible consequence is
+> deliberate — the comparison shows the last stored close rather than a live intraday quote,
+> which is what makes a snapshot reproducible.
+>
+> **The gap as found.** The whole-branch
+> review traced a surviving live fetch beneath the metric layer, and it is real:
+> `price_loader=_latest_market_price` (`routes/corporate.py:163,205`) reaches
+> `MarketDataService.get_latest_stock_price`, which calls `_fetch_live_quote_price` ->
+> `yf.Ticker(ticker).fast_info` **before** consulting local OHLCV. `_build_live_rows` calls it
+> once per universe ticker, and the result feeds `dcf_implied_return`,
+> `stock_expected_return` and `expected_return_spread`. So a `mode=live` read performs N
+> network calls inside metric computation, and reproducibility is false for every
+> price-dependent metric.
+>
+> This design never mentioned the price path — it reasoned only about statements and quote
+> facts — so the plan never listed it as a call site to close, and no task did. The test suite
+> cannot see it either: every test injects a `price_loader` stub, so the network guard is
+> silent at exactly the boundary where the violation lives. That is the same failure shape as
+> the socket guard being blind to curl_cffi.
+>
+> Note that neither `get_latest_stock_price` nor `get_stock_ohlcv` was usable as the fix:
+> the first tries a live quote, and the second refreshes from the provider when local bars
+> are stale. Reading the bars table directly was the only option that actually holds the
+> invariant.
+
 ### Layering
 
 ```

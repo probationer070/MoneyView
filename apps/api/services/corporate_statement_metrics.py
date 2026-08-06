@@ -1,13 +1,9 @@
 from __future__ import annotations
 
-import sys
-import os
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Callable, Optional
-
-from cachetools import TTLCache
 
 from apps.api.core.dev_monitor import emit_cache_event, emit_data_quality_warning_event, perf_timer
 from apps.api.core.logger import setup_logger
@@ -18,6 +14,7 @@ from apps.api.models.schemas import (
     CorporateMetricAuditInput,
     CorporateMetrics,
 )
+from apps.api.services.acquisition.store import load_statement_bundle
 from packages.core_finance.corporate_statement_metrics import NumericRule
 
 logger = setup_logger(__name__)
@@ -27,22 +24,6 @@ YAHOO_STATEMENT_END_YEAR = 2025
 DEFAULT_RISK_FREE_RATE = 0.042
 DEFAULT_EQUITY_RISK_PREMIUM = 0.055
 KOREA_COUNTRY_RISK_PREMIUM = 0.8
-# Both defaults are derived from the workload rather than picked. A full watchlist sweep of
-# /corporate/comparison?mode=live fetches every ticker serially and takes ~357s measured. A TTL
-# shorter than that sweep expires ticker #1 before ticker #138 is fetched, and a maxsize smaller
-# than the watchlist makes the sweep evict its own first ~90 entries -- either alone forces a 0%
-# hit rate by construction, which is exactly what 300s/48 did (ERROR-LOG 2026-07-26). At these
-# values the same fan-out measured 94% hits, 223/14.
-#
-# The cost of the long TTL: the bundle carries yfinance `info`, and market_cap is read from it
-# (:1483) into the WACC capital-structure weights (:1170), so those weights can be built from a
-# market cap up to a day old. That is consistent with an app whose price data is daily bars, and
-# finance-logic.md still gets its market value -- yesterday's close rather than an intraday tick.
-# Splitting statements (quarterly) from quote-derived fields (intraday) into separate freshness
-# classes is the real fix and is not this.
-YAHOO_STATEMENT_CACHE_TTL_SECONDS = int(os.getenv("MONEYVIEW_YAHOO_STATEMENT_CACHE_TTL_SECONDS", "86400"))
-YAHOO_STATEMENT_CACHE_MAXSIZE = int(os.getenv("MONEYVIEW_YAHOO_STATEMENT_CACHE_MAXSIZE", "4096"))
-_YAHOO_STATEMENT_CACHE = TTLCache(maxsize=YAHOO_STATEMENT_CACHE_MAXSIZE, ttl=YAHOO_STATEMENT_CACHE_TTL_SECONDS)
 
 
 @dataclass(frozen=True)
@@ -101,173 +82,44 @@ WACC_QUALITY_RULES = (
 )
 
 
-def _frame_shape(frame) -> tuple[int, int]:
-    if frame is None or getattr(frame, "empty", True):
-        return (0, 0)
-    return tuple(int(value) for value in frame.shape)
-
-
-def _frame_periods(frame) -> list[str]:
-    if frame is None or getattr(frame, "empty", True):
-        return []
-    periods: list[str] = []
-    for raw_period in frame.columns:
-        period = raw_period.date().isoformat() if hasattr(raw_period, "date") else str(raw_period)
-        periods.append(period)
-    return periods
-
-
 def get_yahoo_statement_bundle(ticker: str, endpoint: str) -> Optional[dict[str, object]]:
+    """Read the locally stored statement bundle.
+
+    Metric computation never acquires: this reads what the acquisition layer stored and
+    nothing else. A ticker with nothing stored returns None, which flows through the
+    existing quality rules as a missing input rather than triggering a fetch.
+    """
     ticker = ticker.upper()
-    now = datetime.now(timezone.utc)
     emit_cache_event(
         operation="cache.lookup",
         status="success",
         ticker=ticker,
-        provider="yfinance",
+        provider="local_store",
         component="corporate_statement_bundle",
-        metadata={"endpoint": endpoint, "ttl_seconds": YAHOO_STATEMENT_CACHE_TTL_SECONDS},
+        metadata={"endpoint": endpoint},
     )
-    cached = _YAHOO_STATEMENT_CACHE.get(ticker)
-    if cached:
-        fetched_at = cached.get("fetched_at")
-        if isinstance(fetched_at, datetime):
-            age_seconds = (now - fetched_at).total_seconds()
-            if age_seconds < YAHOO_STATEMENT_CACHE_TTL_SECONDS:
-                emit_cache_event(
-                    operation="cache.hit",
-                    status="cache_hit",
-                    ticker=ticker,
-                    provider="yfinance",
-                    component="corporate_statement_bundle",
-                    metadata={
-                        "endpoint": endpoint,
-                        "cache_age_seconds": round(age_seconds, 2),
-                        "ttl_seconds": YAHOO_STATEMENT_CACHE_TTL_SECONDS,
-                        "source": "statement_ttl_cache",
-                    },
-                )
-                logger.info(
-                    "corporate.statement_cache ticker=%s endpoint=%s cache_hit=true fetched_at=%s age_seconds=%.2f",
-                    ticker,
-                    endpoint,
-                    fetched_at.isoformat(),
-                    age_seconds,
-                )
-                return cached
+    bundle = load_statement_bundle(ticker)
+    if bundle is None:
+        emit_cache_event(
+            operation="cache.miss",
+            status="cache_miss",
+            ticker=ticker,
+            provider="local_store",
+            component="corporate_statement_bundle",
+            metadata={"endpoint": endpoint, "source": "corporate_statements"},
+        )
+        logger.info("corporate.statement_store ticker=%s endpoint=%s stored=false", ticker, endpoint)
+        return None
 
     emit_cache_event(
-        operation="cache.miss",
-        status="cache_miss",
+        operation="cache.hit",
+        status="cache_hit",
         ticker=ticker,
-        provider="yfinance",
+        provider="local_store",
         component="corporate_statement_bundle",
-        metadata={"endpoint": endpoint, "source": "statement_ttl_cache", "ttl_seconds": YAHOO_STATEMENT_CACHE_TTL_SECONDS},
+        metadata={"endpoint": endpoint, "source": "corporate_statements"},
     )
-    logger.info("corporate.statement_cache ticker=%s endpoint=%s cache_hit=false", ticker, endpoint)
-    # The miss event above is emitted at detection, so it cannot carry the cost of the
-    # fetch it triggers -- the cost each later hit avoids. cache.populate below measures
-    # that fill.
-    #
-    # perf_timer, not an emit afterwards: it establishes span context for the body,
-    # so external.fetch_income_statement nests *beneath* this span. Emitting after the
-    # fetch made cache.populate a sibling of the work it timed, and both self-times then
-    # counted in full, tripping overlap_detected and making criterion 2 uncomputable.
-    # Early returns inside the block are fine: the context manager still closes.
-    with perf_timer(
-        scope="cache",
-        operation="cache.populate",
-        ticker=ticker,
-        provider="yfinance",
-        component="corporate_statement_bundle",
-        metadata={"endpoint": endpoint, "source": "statement_ttl_cache"},
-    ):
-        try:
-            import yfinance as yf
-        except ImportError as exc:
-            logger.warning(
-                "corporate.statement_import_failed ticker=%s endpoint=%s python_executable=%s error=%s",
-                ticker,
-                endpoint,
-                sys.executable,
-                exc,
-            )
-            return None
-
-        try:
-            with perf_timer(
-                scope="external",
-                operation="external.fetch_income_statement",
-                ticker=ticker,
-                provider="yfinance",
-                component="corporate_statement_bundle",
-                metadata={"endpoint": endpoint, "retry_count": 0, "missing_fields": []},
-            ) as metadata:
-                yahoo_ticker = yf.Ticker(ticker)
-                income = yahoo_ticker.financials
-                balance = yahoo_ticker.balance_sheet
-                cashflow = yahoo_ticker.cashflow
-                quarterly_income = yahoo_ticker.quarterly_financials
-                quarterly_balance = yahoo_ticker.quarterly_balance_sheet
-                quarterly_cashflow = yahoo_ticker.quarterly_cashflow
-                missing_fields = []
-                try:
-                    info = yahoo_ticker.info or {}
-                except (AttributeError, KeyError, TypeError, ValueError) as exc:
-                    logger.warning("corporate.statement_info_fetch_failed ticker=%s endpoint=%s error=%s", ticker, endpoint, exc)
-                    info = {}
-                    missing_fields.append("info")
-                metadata["missing_fields"] = missing_fields
-                metadata["annual_income_shape"] = _frame_shape(income)
-                metadata["annual_balance_shape"] = _frame_shape(balance)
-                metadata["annual_cashflow_shape"] = _frame_shape(cashflow)
-                metadata["quarterly_income_shape"] = _frame_shape(quarterly_income)
-                metadata["quarterly_balance_shape"] = _frame_shape(quarterly_balance)
-                metadata["quarterly_cashflow_shape"] = _frame_shape(quarterly_cashflow)
-        except (AttributeError, KeyError, TypeError, ValueError) as exc:
-            logger.warning("corporate.statement_fetch_failed ticker=%s endpoint=%s error=%s", ticker, endpoint, exc)
-            return None
-
-        bundle = {
-            "ticker": ticker,
-            "income": income,
-            "balance": balance,
-            "cashflow": cashflow,
-            "quarterly_income": quarterly_income,
-            "quarterly_balance": quarterly_balance,
-            "quarterly_cashflow": quarterly_cashflow,
-            "info": info,
-            "fetched_at": now,
-        }
-        _YAHOO_STATEMENT_CACHE[ticker] = bundle
-    emit_cache_event(
-        operation="cache.write",
-        status="success",
-        ticker=ticker,
-        provider="yfinance",
-        component="corporate_statement_bundle",
-        metadata={"endpoint": endpoint, "source": "statement_ttl_cache", "ttl_seconds": YAHOO_STATEMENT_CACHE_TTL_SECONDS},
-    )
-    logger.info(
-        "corporate.statement_fetch ticker=%s endpoint=%s annual_income_shape=%s annual_balance_shape=%s "
-        "annual_cashflow_shape=%s quarterly_income_shape=%s quarterly_balance_shape=%s quarterly_cashflow_shape=%s "
-        "annual_income_periods=%s annual_balance_periods=%s annual_cashflow_periods=%s "
-        "quarterly_income_periods=%s quarterly_balance_periods=%s quarterly_cashflow_periods=%s",
-        ticker,
-        endpoint,
-        _frame_shape(income),
-        _frame_shape(balance),
-        _frame_shape(cashflow),
-        _frame_shape(quarterly_income),
-        _frame_shape(quarterly_balance),
-        _frame_shape(quarterly_cashflow),
-        _frame_periods(income),
-        _frame_periods(balance),
-        _frame_periods(cashflow),
-        _frame_periods(quarterly_income),
-        _frame_periods(quarterly_balance),
-        _frame_periods(quarterly_cashflow),
-    )
+    logger.info("corporate.statement_store ticker=%s endpoint=%s stored=true", ticker, endpoint)
     return bundle
 
 
@@ -335,6 +187,40 @@ def _prefer_annual_map(annual: dict[int, float], quarterly: dict[int, float]) ->
     combined = dict(quarterly)
     combined.update(annual)
     return combined
+
+
+def _gross_debt_map(balance, quarterly_balance) -> dict[int, float]:
+    """Total debt by year, recovering it from Net Debt + cash where the line is absent.
+
+    "Total Debt" and "Net Debt" were previously read as an alias pair, but net debt is
+    total debt MINUS cash -- for a cash-rich company they differ by most of the balance
+    sheet, and the substitution silently understated every WACC weight.
+
+    Note this is gross debt: the cash term does not cancel here. The equity bridge reads
+    the same two line items to produce NET debt, where it does. Two consumers, two
+    expressions; do not merge them.
+    """
+    total = _prefer_annual_map(
+        _statement_map(balance, ("Total Debt",)),
+        _quarterly_balance_map(quarterly_balance, ("Total Debt",)),
+    )
+    net = _prefer_annual_map(
+        _statement_map(balance, ("Net Debt",)),
+        _quarterly_balance_map(quarterly_balance, ("Net Debt",)),
+    )
+    cash = _prefer_annual_map(
+        _statement_map(balance, ("Cash Cash Equivalents And Short Term Investments",
+                                "Cash And Cash Equivalents")),
+        _quarterly_balance_map(quarterly_balance,
+                               ("Cash Cash Equivalents And Short Term Investments",
+                                "Cash And Cash Equivalents")),
+    )
+    recovered = {
+        year: net[year] + cash[year]
+        for year in set(net) & set(cash)
+        if year not in total
+    }
+    return {**recovered, **total}
 
 
 def _current_statement_years(values: dict[int, float]) -> dict[int, float]:
@@ -803,10 +689,7 @@ def yahoo_statement_metrics(
             _quarterly_flow_map(quarterly_income, ("Interest Expense", "Interest Expense Non Operating")),
         ).items()
     }
-    debt_by_year = _prefer_annual_map(
-        _statement_map(balance, ("Total Debt", "Net Debt")),
-        _quarterly_balance_map(quarterly_balance, ("Total Debt", "Net Debt")),
-    )
+    debt_by_year = _gross_debt_map(balance, quarterly_balance)
     equity_by_year = _prefer_annual_map(
         _statement_map(balance, ("Stockholders Equity", "Total Equity Gross Minority Interest")),
         _quarterly_balance_map(quarterly_balance, ("Stockholders Equity", "Total Equity Gross Minority Interest")),
@@ -1455,10 +1338,7 @@ def metric_audit_for_ticker(
                     _quarterly_flow_map(quarterly_income, ("Interest Expense", "Interest Expense Non Operating")),
                 ).items()
             }
-            debt_by_year = _prefer_annual_map(
-                _statement_map(balance, ("Total Debt", "Net Debt")),
-                _quarterly_balance_map(quarterly_balance, ("Total Debt", "Net Debt")),
-            )
+            debt_by_year = _gross_debt_map(balance, quarterly_balance)
             equity_by_year = _prefer_annual_map(
                 _statement_map(balance, ("Stockholders Equity", "Total Equity Gross Minority Interest")),
                 _quarterly_balance_map(quarterly_balance, ("Stockholders Equity", "Total Equity Gross Minority Interest")),
@@ -1695,10 +1575,7 @@ def yahoo_metric_history(ticker: str, bundle_loader=get_yahoo_statement_bundle) 
         _statement_map(income, ("Tax Provision", "Income Tax Expense")),
         _quarterly_flow_map(quarterly_income, ("Tax Provision", "Income Tax Expense")),
     )
-    debt_by_year = _prefer_annual_map(
-        _statement_map(balance, ("Total Debt", "Net Debt")),
-        _quarterly_balance_map(quarterly_balance, ("Total Debt", "Net Debt")),
-    )
+    debt_by_year = _gross_debt_map(balance, quarterly_balance)
     equity_by_year = _prefer_annual_map(
         _statement_map(balance, ("Stockholders Equity", "Total Equity Gross Minority Interest")),
         _quarterly_balance_map(quarterly_balance, ("Stockholders Equity", "Total Equity Gross Minority Interest")),

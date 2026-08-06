@@ -83,6 +83,7 @@ async def get_watchlist():
                 last_close=last_close,
                 delta=DeltaBadge.compute(last_close, previous_close),
                 sparkline=sparkline,
+                id=int(row["id"]),
             )
         )
     return result

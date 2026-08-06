@@ -106,6 +106,26 @@ class ScopeBreakdown(BaseModel):
     overlap_detected: bool = False
 
 
+class ExternalCpuWaitSplit(BaseModel):
+    """How much of `external.*` elapsed time was work, and how much was waiting.
+
+    Both answers point at different fixes: wait says cut round trips, CPU says the
+    response parsing is the cost. Only spans that actually measured their CPU are in
+    `cpu_ms`/`wait_ms`. `unmeasured_spans` counts the rest -- spans whose CPU could not
+    be attributed because they ran on the event loop thread -- and `unmeasured_ms` is
+    their elapsed time. Reading those as 0 CPU would report their whole duration as
+    wait, which is a claim rather than a measurement, so they are excluded from the
+    split and reported alongside it: a split over 3 of 400 spans says nothing about
+    the workload, and the counts are what makes that visible.
+    """
+
+    cpu_ms: float = 0.0
+    wait_ms: float = 0.0
+    measured_spans: int = 0
+    unmeasured_spans: int = 0
+    unmeasured_ms: float = 0.0
+
+
 class CacheRow(BaseModel):
     """estimated_time_saved_ms assumes a miss would have cost this cache's observed
     average fill cost. Defensible for a TTL cache over stable data; wrong if fill

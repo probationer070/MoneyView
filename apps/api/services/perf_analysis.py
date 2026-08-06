@@ -15,6 +15,7 @@ from apps.api.models.schema_parts.perf_analysis import (
     CacheReport,
     CacheRow,
     CollapsedNode,
+    ExternalCpuWaitSplit,
     RequestIndex,
     RequestSummaryRow,
     RequestWaterfall,
@@ -70,6 +71,8 @@ class Span:
     status: str
     total_ms: float | None
     end_time: datetime
+    # None means the span's CPU was not attributable, not that it used none.
+    cpu_ms: float | None = None
     ticker: str | None = None
     table: str | None = None
     component: str | None = None
@@ -96,6 +99,7 @@ def _span_from(event: PerformanceEvent, order: int) -> Span:
         status=event.status,
         total_ms=event.duration_ms,
         end_time=event.timestamp,
+        cpu_ms=event.cpu_ms,
         ticker=event.ticker,
         table=event.table,
         component=event.component,
@@ -108,8 +112,9 @@ def _span_from(event: PerformanceEvent, order: int) -> Span:
         # hit/miss) is emitted once, complete, and simply has no duration --
         # treating it as unfinished made baseline criterion 3 unreachable for
         # every scenario that touches the cache. "start" is set at exactly the
-        # three start-event emit sites (dev_monitor.perf_timer, middleware's
-        # api.request_start and page_load.*).
+        # two start-event emit sites (dev_monitor.perf_timer and middleware's
+        # api.request_start). page_load.* was a third until f1484b9 removed it
+        # for measuring the same interval as api.request_*.
         partial=event.duration_ms is None and event.status == "start",
         order=order,
     )
@@ -725,3 +730,37 @@ def cache_effectiveness(events: list[PerformanceEvent]) -> CacheReport:
             )
         )
     return CacheReport(caches=rows)
+
+
+def external_cpu_wait_split(events: list[PerformanceEvent]) -> ExternalCpuWaitSplit:
+    """Split `external.*` elapsed time into thread CPU and waiting.
+
+    Spans whose CPU could not be attributed (they ran on the event loop thread, where
+    thread CPU includes whatever else the loop ran) are counted, not folded in at zero.
+    """
+    cpu_ms = 0.0
+    wait_ms = 0.0
+    measured = 0
+    unmeasured = 0
+    unmeasured_ms = 0.0
+
+    for span in normalize_spans(events):
+        if span.scope != "external" or span.total_ms is None:
+            continue
+        if span.cpu_ms is None:
+            unmeasured += 1
+            unmeasured_ms += span.total_ms
+            continue
+        measured += 1
+        cpu_ms += span.cpu_ms
+        # Clamped at the source, so this cannot go negative without a clock going
+        # backwards; max() keeps a skewed sample from subtracting from the total.
+        wait_ms += max(0.0, span.total_ms - span.cpu_ms)
+
+    return ExternalCpuWaitSplit(
+        cpu_ms=round(cpu_ms, 1),
+        wait_ms=round(wait_ms, 1),
+        measured_spans=measured,
+        unmeasured_spans=unmeasured,
+        unmeasured_ms=round(unmeasured_ms, 1),
+    )

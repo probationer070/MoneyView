@@ -1,10 +1,44 @@
 from __future__ import annotations
 
+from enum import StrEnum
 from typing import List
 
 from pydantic import BaseModel, Field
 
 from .common import ComparisonUniverseEnum
+
+
+class BridgeSource(StrEnum):
+    """Where one enterprise-to-equity bridge input came from.
+
+    A closed set, not a free-form string: this value is rendered in the UI, and
+    free-form provenance strings drift apart across call sites.
+    """
+
+    REQUEST = "request"
+    TOTAL_DEBT_LESS_CASH = "total_debt_less_cash"
+    # Yahoo's own Net Debt line, taken verbatim. No cash is added to it: recovering
+    # total debt as NetDebt + cash and then netting the same cash back out is just
+    # NetDebt, so the name has to say what the value is, not how it was once derived.
+    REPORTED_NET_DEBT = "reported_net_debt"
+    INVESTMENTS_ADVANCES = "investments_and_advances"
+    DILUTED_AVERAGE_SHARES = "diluted_average_shares"
+    SHARES_OUTSTANDING = "shares_outstanding"
+    UNAVAILABLE = "unavailable"
+
+
+class BridgeInputMeta(BaseModel):
+    """One bridge input with its provenance.
+
+    `value` is in billions -- of currency for the two money terms, of shares for
+    the share count -- so equity_value / diluted_shares yields dollars per share
+    directly. Scaling happens once, in equity_bridge.py, at read time.
+    """
+
+    value: float | None = None
+    source: str = BridgeSource.UNAVAILABLE
+    quality: str = "missing"
+    as_of: str | None = None
 
 
 class ValuationAssumptions(BaseModel):
@@ -36,8 +70,15 @@ class DCFSummary(BaseModel):
     equity_value: float | None = None
     valuation_method: str = "enterprise_value_no_share_bridge"
     bridge_quality: str = "missing"
+    net_debt_meta: BridgeInputMeta = Field(default_factory=BridgeInputMeta)
+    non_operating_assets_meta: BridgeInputMeta = Field(default_factory=BridgeInputMeta)
+    diluted_shares_meta: BridgeInputMeta = Field(default_factory=BridgeInputMeta)
     current_price: float
     upside_pct: float
+    # Share of enterprise value carried by the discounted terminal value. A high reading
+    # says the valuation rests on the perpetuity assumption rather than on the explicit
+    # forecast -- the concentration risk the sensitivity grid puts a range around.
+    terminal_value_share_pct: float
     status: str
     generated_at: str
 
@@ -77,6 +118,40 @@ class DCFWaccBreakdown(BaseModel):
     country_risk_premium: float
 
 
+class DCFSensitivityCell(BaseModel):
+    """One (WACC, terminal growth) point of the sensitivity grid.
+
+    When `undefined_reason` is set every value is None together. The Gordon growth
+    model has no value at those points and the grid is swept precisely to reach them,
+    so an absent cell is a result and not a gap -- see `sensitivity_cell` in
+    packages/core_finance/dcf.py for why nothing partial is reported either.
+
+    `intrinsic_value_per_share` additionally stays None whenever the equity bridge did
+    not resolve, on the same rule the headline valuation follows: an enterprise value
+    is never presented as a per-share value.
+    """
+
+    wacc: float
+    terminal_growth: float
+    is_base: bool = False
+    enterprise_value: float | None = None
+    terminal_value_share_pct: float | None = None
+    intrinsic_value_per_share: float | None = None
+    undefined_reason: str | None = None
+
+
+class DCFSensitivityGrid(BaseModel):
+    """WACC x terminal-growth grid around the reported assumptions.
+
+    `cells` is row-major with WACC on the outer axis, so cell (row, column) is at
+    index `row * len(terminal_growth_values) + column`.
+    """
+
+    wacc_values: List[float]
+    terminal_growth_values: List[float]
+    cells: List[DCFSensitivityCell] = Field(default_factory=list)
+
+
 class DCFFullReport(BaseModel):
     """Phase 3 DCF report containing the full backend valuation breakdown."""
 
@@ -96,6 +171,11 @@ class DCFFullReport(BaseModel):
     diluted_shares_outstanding: float | None = None
     valuation_method: str = "enterprise_value_no_share_bridge"
     bridge_quality: str = "missing"
+    net_debt_meta: BridgeInputMeta = Field(default_factory=BridgeInputMeta)
+    non_operating_assets_meta: BridgeInputMeta = Field(default_factory=BridgeInputMeta)
+    diluted_shares_meta: BridgeInputMeta = Field(default_factory=BridgeInputMeta)
+    terminal_value_share_pct: float
+    sensitivity: DCFSensitivityGrid
     agency_discount: float
     dcf_multiple: float
     baseline_multiple: float
@@ -221,6 +301,10 @@ class CorporateComparisonRow(BaseModel):
     expected_return_spread: float
     stock_expected_return_source: str = "dcf_implied_upside"
     has_price_data: bool = True
+    # Beside has_price_data, and for the same reason: the three return fields above are
+    # typed float and feed non-optional aggregates, so they cannot become None when the
+    # bridge does not resolve. This flag says the numbers next to it are not meaningful.
+    bridge_quality: str = "missing"
 
 
 class CorporateComparisonSnapshotMeta(BaseModel):
@@ -230,7 +314,6 @@ class CorporateComparisonSnapshotMeta(BaseModel):
     as_of_date: str = ""
     generated_at: str = ""
     snapshot_version: str = ""
-    snapshot_versions_for_day: int = 0
     snapshot_available: bool = False
     snapshot_source: str = ""
     comparison_universe: ComparisonUniverseEnum = ComparisonUniverseEnum.portfolio_plus_benchmark
@@ -259,14 +342,23 @@ class CorporateComparisonHistoryPoint(BaseModel):
     as_of_date: str
     generated_at: str = ""
     snapshot_version: str = ""
-    snapshot_versions_for_day: int = 1
     snapshot_source: str = ""
     comparison_universe: ComparisonUniverseEnum = ComparisonUniverseEnum.portfolio_plus_benchmark
     benchmark_ticker: str = "^GSPC"
     stock_count: int = 0
-    average_expected_return_spread: float = 0.0
+    # 0 for snapshots taken before the column existed. The metric definition behind
+    # average_dcf_value changed at version 2 -- rows before it averaged enterprise values,
+    # rows from it average intrinsic per-share values -- so a reader comparing two points
+    # across that boundary is comparing two different financial quantities, not one
+    # quantity that moved.
+    metric_schema_version: int = 0
+    # None, not 0.0: both averages exclude bridge_quality = 'missing' rows, so on a
+    # snapshot where every non-benchmark row is missing SQL AVG returns NULL over zero
+    # rows. Coercing that to 0.0 rendered an absent average as a real $0.0 and a 0.00%
+    # spread. stock_count stays the full row count, so it cannot signal the difference.
+    average_expected_return_spread: float | None = None
     average_roic_minus_wacc: float = 0.0
-    average_dcf_value: float = 0.0
+    average_dcf_value: float | None = None
     market_expected_return: float = 0.0
 
 

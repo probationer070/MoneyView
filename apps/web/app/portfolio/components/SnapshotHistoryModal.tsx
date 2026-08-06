@@ -17,6 +17,11 @@ function formatDateLabel(value: string) {
   return datePart ?? value;
 }
 
+// Both bridge-dependent averages arrive null when no row in the snapshot had a resolved
+// equity bridge. That is an absent average, not a zero one, so it must not be styled as a
+// signal or printed as a number.
+const NO_BRIDGED_ROWS_TITLE = "No holding in this snapshot had a resolved equity bridge, so this average covers no rows.";
+
 interface SnapshotHistoryModalProps {
   history: CorporateComparisonHistoryResponse | undefined;
   loading: boolean;
@@ -43,6 +48,33 @@ export function SnapshotHistoryModal({
   const customTickersLabel = history?.custom_tickers.length ? history.custom_tickers.join(", ") : "None";
   const historySubtitle = `Grouped saved snapshots for ${effectiveComparisonUniverse} against ${effectiveBenchmarkTicker}.`;
 
+  // The version boundary is computed against the flat points array, not against a point's
+  // neighbour inside its date group: two snapshots from the same day can straddle the
+  // boundary, and a within-group comparison would miss it at every group edge. The array
+  // arrives newest-first (the history query in corporate_comparison.py ends
+  // `ORDER BY lv.snapshot_date DESC`), so the chronologically preceding point is the NEXT
+  // entry, and the notice lands on the first point of the new definition.
+  //
+  // A boundary out of version 0 says less than the others. 0 is written only by the
+  // backfill in db.py that added the column to rows computed before it existed, so it
+  // means the earlier definition went unrecorded -- not that it differed. Claiming a
+  // change there would assert something no stored value supports.
+  const versionBoundaryNotices = useMemo(() => {
+    const notices = new Map<string, string>();
+    const points = history?.points ?? [];
+    points.forEach((point, index) => {
+      const previous = points[index + 1];
+      if (!previous || previous.metric_schema_version === point.metric_schema_version) return;
+      notices.set(
+        point.snapshot_version,
+        previous.metric_schema_version === 0
+          ? "Metric definition before this point was not recorded, so whether values are comparable across it is unknown."
+          : "Metric definition changed. Values before and after this point are not directly comparable.",
+      );
+    });
+    return notices;
+  }, [history?.points]);
+
   const groupedTimeline = useMemo(() => {
     const groups = new Map<string, CorporateComparisonHistoryPoint[]>();
 
@@ -65,24 +97,38 @@ export function SnapshotHistoryModal({
           subtitle: `${point.stock_count} holdings reviewed against ${point.benchmark_ticker || effectiveBenchmarkTicker}`,
           active: isActive,
           meta: (
-            <div className="flex min-w-0 flex-wrap items-center gap-2">
-              <span
-                className="overflow-inline-ellipsis max-w-full rounded-[var(--radius-sm)] bg-[var(--surface-muted)] px-2 py-1 font-mono text-[11px] text-[var(--text-primary)]"
-                title={point.snapshot_version}
-              >
-                Version {point.snapshot_version}
-              </span>
-              <span aria-hidden="true">•</span>
-              <span>{point.snapshot_versions_for_day} saved version{point.snapshot_versions_for_day === 1 ? "" : "s"} that day</span>
+            <div className="min-w-0 space-y-2">
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <span
+                  className="overflow-inline-ellipsis max-w-full rounded-[var(--radius-sm)] bg-[var(--surface-muted)] px-2 py-1 font-mono text-[11px] text-[var(--text-primary)]"
+                  title={point.snapshot_version}
+                >
+                  Version {point.snapshot_version}
+                </span>
+                <span className="overflow-inline-ellipsis max-w-full rounded-[var(--radius-sm)] bg-[var(--surface-muted)] px-2 py-1 font-mono text-[11px] text-[var(--text-primary)]">
+                  Metric schema v{point.metric_schema_version}
+                </span>
+              </div>
+              {versionBoundaryNotices.has(point.snapshot_version) ? (
+                <p className="text-[11px] text-[var(--text-muted)]">
+                  {versionBoundaryNotices.get(point.snapshot_version)}
+                </p>
+              ) : null}
             </div>
           ),
           content: (
             <div className="grid grid-cols-2 gap-3 text-xs md:grid-cols-4 xl:grid-cols-5">
               <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2">
                 <div className="text-[var(--text-muted)]">Avg Spread</div>
-                <div className={`mt-1 font-bold tabular-nums ${point.average_expected_return_spread >= 0 ? "text-[var(--delta-up)]" : "text-[var(--delta-down)]"}`}>
-                  {point.average_expected_return_spread.toFixed(2)}%
-                </div>
+                {point.average_expected_return_spread == null ? (
+                  <div className="mt-1 font-bold text-[var(--text-muted)]" title={NO_BRIDGED_ROWS_TITLE}>
+                    Not available
+                  </div>
+                ) : (
+                  <div className={`mt-1 font-bold tabular-nums ${point.average_expected_return_spread >= 0 ? "text-[var(--delta-up)]" : "text-[var(--delta-down)]"}`}>
+                    {point.average_expected_return_spread.toFixed(2)}%
+                  </div>
+                )}
               </div>
               <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2">
                 <div className="text-[var(--text-muted)]">Avg ROIC - WACC</div>
@@ -92,9 +138,15 @@ export function SnapshotHistoryModal({
               </div>
               <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2">
                 <div className="text-[var(--text-muted)]">Avg DCF</div>
-                <div className="mt-1 font-bold tabular-nums text-[var(--text-primary)]">
-                  ${point.average_dcf_value.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
-                </div>
+                {point.average_dcf_value == null ? (
+                  <div className="mt-1 font-bold text-[var(--text-muted)]" title={NO_BRIDGED_ROWS_TITLE}>
+                    Not available
+                  </div>
+                ) : (
+                  <div className="mt-1 font-bold tabular-nums text-[var(--text-primary)]">
+                    ${point.average_dcf_value.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+                  </div>
+                )}
               </div>
               <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2">
                 <div className="text-[var(--text-muted)]">Market Return</div>
@@ -134,7 +186,7 @@ export function SnapshotHistoryModal({
         };
       }),
     }));
-  }, [activeSnapshotVersion, deletingSnapshotVersion, effectiveBenchmarkTicker, history?.points, onDeleteSnapshot, onSelectSnapshot]);
+  }, [activeSnapshotVersion, deletingSnapshotVersion, effectiveBenchmarkTicker, history?.points, onDeleteSnapshot, onSelectSnapshot, versionBoundaryNotices]);
 
   return (
     <ModalShell

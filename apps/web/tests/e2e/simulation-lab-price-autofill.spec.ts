@@ -3,7 +3,7 @@ import { expect, test, type Page } from "@playwright/test";
 async function openCorporateValuationTab(page: Page) {
   await page.goto("/monte-carlo", { waitUntil: "domcontentloaded" });
   await expect(page.getByRole("heading", { name: /Simulation Lab/i })).toBeVisible({ timeout: 60_000 });
-  await page.getByRole("button", { name: /Corporate Valuation/i }).click();
+  await page.getByRole("tab", { name: /Corporate Valuation/i }).click();
   await expect(page.getByLabel("Ticker")).toBeVisible();
 }
 
@@ -35,7 +35,7 @@ test("simulation lab keeps heavy runs idle on first load and only looks up price
   await expect(page.getByText("No analysis run yet").first()).toBeVisible();
   await expect(page.getByRole("button", { name: "Run Path Simulation" })).toBeVisible();
 
-  await page.getByRole("button", { name: /Corporate Valuation/i }).click();
+  await page.getByRole("tab", { name: /Corporate Valuation/i }).click();
   await expect(page.getByText("No analysis run yet").first()).toBeVisible();
   await expect(page.getByText("Run the valuation engine to generate fair value distribution, undervaluation probability, z-score, and DCF uncertainty summaries.")).toBeVisible();
   await page.waitForTimeout(300);
@@ -49,7 +49,7 @@ test("simulation lab keeps heavy runs idle on first load and only looks up price
   await expect(page.getByText("AAPL price loaded from cache.")).toBeVisible();
   expect(priceLookupRequests).toBe(1);
 
-  await page.getByRole("button", { name: /Correlation Model/i }).click();
+  await page.getByRole("tab", { name: /Correlation Model/i }).click();
   await expect(page.getByText("No analysis run yet").first()).toBeVisible();
   await expect(page.getByText("Run the portfolio correlation engine to generate efficient frontier, correlation matrix, and sensitivity diagnostics.")).toBeVisible();
   await expect(page.getByRole("button", { name: "Run Correlation Analysis" })).toBeVisible();

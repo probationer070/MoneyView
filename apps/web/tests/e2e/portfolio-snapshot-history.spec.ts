@@ -1,12 +1,15 @@
 import { expect, test } from "@playwright/test";
 import { mockPortfolioPageApi } from "./helpers/portfolioPageMock";
+import { openPortfolioPanel, portfolioModal } from "./helpers/portfolioPanels";
 
 test("portfolio snapshot history modal renders timeline data deterministically", async ({ page }) => {
   await mockPortfolioPageApi(page);
   await page.goto("/portfolio", { waitUntil: "domcontentloaded" });
 
   await expect(page.getByRole("heading", { name: "Portfolio", exact: true })).toBeVisible({ timeout: 60_000 });
-  await expect(page.getByText("Latest Snapshot Summary")).toBeVisible();
+  await openPortfolioPanel(page, "snapshot");
+  // The panel header carries the same title as the section inside it.
+  await expect(page.getByText("Latest Snapshot Summary").first()).toBeVisible();
   await expect(page.getByRole("heading", { name: "Saved Snapshot List" })).toBeVisible();
   await expect(page.getByRole("button", { name: "View All Saved Snapshots" })).toBeVisible();
   await page.getByRole("button", { name: "Refresh Analysis" }).click();
@@ -20,7 +23,7 @@ test("portfolio snapshot history modal renders timeline data deterministically",
   await openSnapshotHistoryButton.focus();
   await expect(openSnapshotHistoryButton).toBeFocused();
   await openSnapshotHistoryButton.click();
-  const snapshotHistoryDialog = page.getByRole("dialog");
+  const snapshotHistoryDialog = portfolioModal(page);
   await expect(snapshotHistoryDialog).toBeVisible();
   await expect(snapshotHistoryDialog.getByRole("button", { name: "Close modal" })).toBeFocused();
   await expect(snapshotHistoryDialog.getByRole("heading", { name: "Snapshot History" })).toBeVisible();
@@ -49,11 +52,12 @@ test("portfolio snapshot and version identifiers stay bounded on narrow widths",
   await page.goto("/portfolio", { waitUntil: "domcontentloaded" });
 
   await expect(page.getByRole("heading", { name: "Portfolio", exact: true })).toBeVisible({ timeout: 60_000 });
-  await expect(page.getByText("Latest Snapshot Summary")).toBeVisible();
+  await openPortfolioPanel(page, "snapshot");
+  await expect(page.getByText("Latest Snapshot Summary").first()).toBeVisible();
   await expect(page.getByText(/Latest saved comparison snapshot loads automatically when holdings exist\.|Last updated/)).toBeVisible();
 
   await page.getByRole("button", { name: "Open Snapshot History" }).click();
-  const snapshotHistoryDialog = page.getByRole("dialog");
+  const snapshotHistoryDialog = portfolioModal(page);
   await expect(snapshotHistoryDialog).toBeVisible();
   const historyOverflow = await snapshotHistoryDialog.evaluate((element) => ({
     clientWidth: element.clientWidth,
@@ -64,9 +68,10 @@ test("portfolio snapshot and version identifiers stay bounded on narrow widths",
   await snapshotHistoryDialog.getByRole("button", { name: "Close modal" }).click();
   await expect(snapshotHistoryDialog).toHaveCount(0);
 
+  await openPortfolioPanel(page, "allocation");
   await page.getByLabel("Stock browser search").fill("AAPL");
-  await page.getByRole("button", { name: "Open Detail" }).first().click();
-  const stockDetailDialog = page.getByRole("dialog");
+  await page.getByRole("button", { name: "Open Detail", exact: true }).first().click();
+  const stockDetailDialog = portfolioModal(page);
   await expect(stockDetailDialog).toBeVisible();
   await expect(stockDetailDialog.getByText(/Saved snapshot metrics from/)).toBeVisible();
   await expect(stockDetailDialog.getByText(/Version/).first()).toBeVisible();

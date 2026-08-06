@@ -20,6 +20,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from apps.api.core.logger import configure_logging, setup_logger
 from apps.api.core.middleware import StructuralMiddleware
+from apps.api.core.responses import NonFiniteSafeJSONResponse
 from apps.api.core.transport_progress import TransportProgressMiddleware
 from apps.api.routes import (
     corporate_router,
@@ -78,20 +79,6 @@ async def wal_flush_cycle() -> None:
             logger.warning("Non-fatal background WAL checkpoint error: %s", exc)
 
 
-async def corporate_snapshot_cycle() -> None:
-    """Materialize the KST-daily corporate comparison snapshot on startup and at each midnight boundary."""
-    from apps.api.routes.corporate import ensure_corporate_comparison_daily_snapshot
-    from apps.api.services.corporate_comparison import seconds_until_next_kst_midnight
-
-    while True:
-        try:
-            await asyncio.to_thread(ensure_corporate_comparison_daily_snapshot)
-            logger.info("Corporate comparison KST-daily snapshot ensured.")
-        except Exception as exc:
-            logger.warning("Non-fatal corporate snapshot cycle error: %s", exc)
-        await asyncio.sleep(seconds_until_next_kst_midnight())
-
-
 async def stock_prewarm_cycle() -> None:
     """Schedule background cache hydration for configured tickers on startup."""
     try:
@@ -114,7 +101,7 @@ async def lifespan(app: FastAPI):
     # Read at call time, not import time, so a test process that sets this in
     # conftest still takes effect on an already-imported module.
     #
-    # These two cycles fetch live market data on startup. Under pytest that
+    # This cycle fetches live market data on startup. Under pytest that
     # means real network traffic, and stock_prewarm_cycle's asyncio.to_thread
     # worker cannot be cancelled -- it outlives the TestClient block, keeps
     # emitting into the dev-monitor sink, and evicts the events a test is
@@ -124,7 +111,6 @@ async def lifespan(app: FastAPI):
     }
     background = [task_wal]
     if not startup_jobs_disabled:
-        background.append(asyncio.create_task(corporate_snapshot_cycle()))
         background.append(asyncio.create_task(stock_prewarm_cycle()))
 
     yield
@@ -162,6 +148,7 @@ app = FastAPI(
     description="Financial analytics backend; local-first desktop",
     version="1.0.0",
     lifespan=lifespan,
+    default_response_class=NonFiniteSafeJSONResponse,
 )
 
 app.add_middleware(StructuralMiddleware)

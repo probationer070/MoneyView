@@ -1,6 +1,7 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { mockCorporatePageApi, type CorporatePageMockStats } from "./helpers/corporatePageMock";
 import { mockPortfolioPageApi, type PortfolioPageMockStats } from "./helpers/portfolioPageMock";
+import { openPortfolioPanel } from "./helpers/portfolioPanels";
 
 function corporateStats(): CorporatePageMockStats {
   return {
@@ -68,32 +69,43 @@ test("portfolio analysis and holdings render state survives view and viewport ch
   await page.goto("/portfolio", { waitUntil: "domcontentloaded" });
 
   await expect(page.getByRole("heading", { name: "Portfolio", exact: true })).toBeVisible({ timeout: 60_000 });
-  await expect(page.getByText("Latest Snapshot Summary")).toBeVisible();
+  await openPortfolioPanel(page, "snapshot");
+  await expect(page.getByText("Latest Snapshot Summary").first()).toBeVisible();
   await page.getByRole("button", { name: "Refresh Analysis" }).click();
   await expect.poll(() => stats.comparisonRequests).toBe(2);
   await expect.poll(() => stats.comparisonHistoryRequests).toBe(1);
   await expect.poll(() => stats.attributionRequests).toBe(1);
+
+  await openPortfolioPanel(page, "attribution");
   await expect(page.getByText("Portfolio Return")).toBeVisible();
   await expectChartPanelRendered(page, "Sector Allocation");
   await expectChartPanelRendered(page, "Attribution Effects (%)");
 
+  await openPortfolioPanel(page, "snapshot");
   await page.getByLabel("Portfolio comparison source").selectOption("live");
   await page.getByLabel("Portfolio comparison universe").selectOption("custom");
   await page.getByLabel("Portfolio benchmark ticker").fill("^IXIC");
   await page.getByLabel("Portfolio custom tickers").fill("NVDA, TSLA");
-  await page.getByRole("button", { name: "Table" }).click();
+
+  await openPortfolioPanel(page, "holdings");
+  await page.getByRole("button", { name: "Table", exact: true }).click();
+  await openPortfolioPanel(page, "allocation");
   await expect(page.getByLabel("Portfolio table scroll region")).toBeVisible();
   await expect(page.getByRole("columnheader", { name: "Allocation", exact: true })).toBeVisible();
+  await openPortfolioPanel(page, "holdings");
   await page.getByRole("button", { name: "Graph" }).click();
   await expect(page.getByText("Technology").first()).toBeVisible();
 
   await page.setViewportSize({ width: 390, height: 844 });
-  await expect(page.getByRole("button", { name: "Table", pressed: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Table", exact: true, pressed: true })).toBeVisible();
+  await openPortfolioPanel(page, "snapshot");
   await expect(page.getByLabel("Portfolio comparison source")).toHaveValue("live");
   await expect(page.getByLabel("Portfolio comparison universe")).toHaveValue("custom");
   await expect(page.getByLabel("Portfolio benchmark ticker")).toHaveValue("^IXIC");
   await expect(page.getByLabel("Portfolio custom tickers")).toHaveValue("NVDA, TSLA");
-  await page.getByRole("heading", { name: "Portfolio Allocation Workspace" }).scrollIntoViewIfNeeded();
+  await openPortfolioPanel(page, "allocation");
+  // The panel header repeats the section title, so anchor on the first match.
+  await page.getByRole("heading", { name: "Portfolio Allocation Workspace" }).first().scrollIntoViewIfNeeded();
   await expect(page.getByText("Stock Search Panel")).toBeVisible();
   await expectScrollRegionContained(page.getByLabel("Portfolio table scroll region"));
 });
@@ -106,8 +118,7 @@ test("corporate diagnostics and comparison chart panels stay rendered after dens
   await page.goto("/corporate", { waitUntil: "domcontentloaded" });
 
   await expect(page.getByRole("heading", { name: /Corporate Analysis/i })).toBeVisible({ timeout: 60_000 });
-  await expectChartPanelRendered(page, "Company Status Diagnosis");
-  await page.getByLabel("Include subjective Innovation, Governance, and ESG/Agency inputs").check();
+  await expectChartPanelRendered(page, "Hurdle Rate Decomposition");
   await page.getByRole("button", { name: "Refresh DCF" }).click();
   await expect.poll(() => stats.dcfRequests).toBe(1);
   await page.getByLabel("Comparison universe").selectOption("custom");

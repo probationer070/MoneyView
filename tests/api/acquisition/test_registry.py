@@ -1,10 +1,11 @@
 from datetime import UTC, datetime
 
+from apps.api.services.acquisition.boundaries import Hourly, Weekly
 from apps.api.services.acquisition.registry import REGISTRY, Scope, get_data_class
 
 
-def test_phase_one_declares_equity_and_index_bars():
-    assert set(REGISTRY) == {"equity_bars", "index_bars"}
+def test_the_registry_declares_the_five_current_data_classes():
+    assert set(REGISTRY) == {"equity_bars", "index_bars", "statements", "market_cap", "news"}
 
 
 def test_equity_bars_is_per_ticker_and_stores_to_stocks():
@@ -28,8 +29,37 @@ def test_both_bar_classes_use_the_midnight_utc_boundary():
 
 def test_unknown_data_class_raises_with_a_useful_message():
     try:
-        get_data_class("statements")
+        get_data_class("nonexistent")
     except KeyError as error:
-        assert "statements" in str(error)
+        assert "nonexistent" in str(error)
     else:
         raise AssertionError("an unknown data class must raise")
+
+
+def test_statements_is_declared_with_a_weekly_boundary():
+    declared = get_data_class("statements")
+
+    assert declared.scope is Scope.PER_TICKER
+    assert declared.store == "corporate_statements"
+    assert isinstance(declared.boundary, Weekly)
+
+
+def test_news_is_declared_with_an_hourly_boundary_on_the_hour():
+    """The boundary is the only thing bounding provider load behind a Refresh button the
+    user can press repeatedly, so pin it here rather than leaving it to be inferred from
+    the endpoint's fresh/stale behaviour at particular clock values."""
+    declared = get_data_class("news")
+
+    assert declared.scope is Scope.PER_TICKER
+    assert declared.store == "news"
+    assert declared.boundary == Hourly(at_minute=0)
+
+
+def test_market_cap_is_a_separate_class_from_statements():
+    """Different natural frequencies: a filing is quarterly, a market cap moves with the
+    market. One boundary cannot serve both without making one of them wrong."""
+    statements = get_data_class("statements")
+    market_cap = get_data_class("market_cap")
+
+    assert market_cap.store == "corporate_quote_facts"
+    assert market_cap.boundary != statements.boundary

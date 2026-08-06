@@ -1,5 +1,6 @@
 import type { DcfSummaryResponse as DCFResult } from "../../../../packages/shared-types";
 import type { CalculationDetail, CalculationDetailKey, CalculationRow } from "./components/calculationDetailTypes";
+import { bridgedEstimatedValue, bridgedUpsidePct, UNBRIDGED_PLACEHOLDER } from "@/lib/bridgeQuality";
 import { betaInterpretation, clamp, moneyText, numberText, numberText2, pct, pct2 } from "./calculationDetailFormatters";
 
 interface AnnualMetricPoint {
@@ -28,12 +29,6 @@ interface DerivedSnapshot {
   bottomUpKe: number;
   spread: number;
   sustainableGrowth: number;
-  terminalValueShare: number;
-  successProbability: number;
-  agencyRisk: number;
-  lifeCyclePosition: number;
-  leveredBetaRiskScore: number;
-  healthScore: number;
 }
 
 interface ImpliedErpInputsSnapshot {
@@ -56,14 +51,7 @@ interface ValueMatrixPoint {
   fcff: number;
 }
 
-interface RiskReturnPoint {
-  risk: string;
-  npv: number;
-  success: number;
-  fail: number;
-}
-
-interface RegionalMinardPoint {
+interface RegionalHurdlePoint {
   region: string;
   rf: number;
   erp: number;
@@ -103,12 +91,10 @@ interface BuildCalculationDetailsArgs {
   impliedMarketReturn: number;
   impliedErp: number;
   hasSp500Data: boolean;
-  includeSubjectiveHealth: boolean;
-  regionalMinard: RegionalMinardPoint[];
+  regionalHurdle: RegionalHurdlePoint[];
   betaTreemapProxy: BetaTreemapPoint[];
   waccCurve: WaccCurvePoint[];
   valueMatrix: ValueMatrixPoint[];
-  riskReturn: RiskReturnPoint[];
 }
 
 export function buildCalculationDetails({
@@ -130,13 +116,37 @@ export function buildCalculationDetails({
   impliedMarketReturn,
   impliedErp,
   hasSp500Data,
-  includeSubjectiveHealth,
-  regionalMinard,
+  regionalHurdle,
   betaTreemapProxy,
   waccCurve,
   valueMatrix,
-  riskReturn,
 }: BuildCalculationDetailsArgs): Record<CalculationDetailKey, CalculationDetail> {
+  // Every fair-value and upside string below is one of these two, never the raw field. When
+  // the equity bridge does not resolve, estimated_value is an enterprise value and upside_pct
+  // is a hardcoded 0.0, and this modal is where a suppressed table cell sends the reader.
+  const fairValueText = (pending: string) => {
+    if (!dcfData) return pending;
+    const value = bridgedEstimatedValue(dcfData);
+    return value === null ? UNBRIDGED_PLACEHOLDER : moneyText(value);
+  };
+  const upsideText = (pending: string) => {
+    if (!dcfData) return pending;
+    const upside = bridgedUpsidePct(dcfData);
+    return upside === null ? UNBRIDGED_PLACEHOLDER : pct(upside);
+  };
+  // Measured by the backend as PV(terminal) / enterprise value. Unlike fair value it does
+  // not depend on the equity bridge -- concentration is a property of the enterprise
+  // valuation -- but it does require a valuation to have run.
+  //
+  // The presence check is a runtime one rather than a null check on a typed number: a result
+  // restored from the sessionStorage cache can have been written by a build that predates
+  // this field, and the type it is read back as cannot know that.
+  const terminalShareText = (pending: string) => {
+    if (!dcfData) return pending;
+    const share = dcfData.terminal_value_share_pct;
+    return share == null ? "N/A" : pct(share);
+  };
+
   const assumptionDetail = ({
     title,
     label,
@@ -409,33 +419,6 @@ export function buildCalculationDetails({
         { label: "4", value: `${pct(riskFreeRate)} + ${pct(derived.leveredBeta * impliedErp)} + ${pct(koreaCountryRiskPremium)}`, source: pct(derived.bottomUpKe) },
       ],
     },
-    failureProbability: {
-      title: `${companyName} Failure Probability`,
-      timeHorizon: "Current realtime risk-return scenario projected across Inflation, FX, Demand, and Margin risk segments.",
-      summary: [
-        { label: "Failure Probability", value: pct2(100 - derived.successProbability), source: "100 - success probability" },
-        { label: "Success Probability", value: pct(derived.successProbability), source: "Risk-return scenario score" },
-        { label: "Spread", value: pct(derived.spread), source: "ROIC - WACC" },
-        { label: "ESG / Agency Penalty", value: numberText(assumptions.esgPenalty), source: "Risk penalty input" },
-      ],
-      components: riskReturn.map((item) => ({
-        label: item.risk,
-        value: `fail ${pct2(item.fail)}, success ${pct(item.success)}, NPV ${numberText(item.npv)}`,
-        source: "Risk-return segment simulation",
-      })),
-      formula: "Failure Probability = 100 - clamp(55 + spread x 2.3 + growth - ESG penalty x 0.25, 5, 95)",
-      result: pct2(100 - derived.successProbability),
-      sourcing: [
-        { label: "Spread", value: pct(derived.spread), source: "Realtime ROIC and WACC | Period: current assumption state" },
-        { label: "Growth", value: pct(assumptions.growth), source: "Yahoo annual revenue growth rates averaged from 2021 onward, or current override" },
-        { label: "ESG / Agency Penalty", value: numberText(assumptions.esgPenalty), source: "Governance risk input / SQLite corporate_metrics | Period: latest governance review" },
-      ],
-      simulation: [
-        { label: "1", value: `Success = 55.0 + ${numberText(derived.spread)} x 2.3 + ${numberText(assumptions.growth)} - ${numberText(assumptions.esgPenalty)} x 0.25`, source: pct(derived.successProbability) },
-        { label: "2", value: `100.00% - ${pct2(derived.successProbability)}`, source: pct2(100 - derived.successProbability) },
-        { label: "3", value: pct2(100 - derived.successProbability), source: "Final Failure Probability" },
-      ],
-    },
     reinvestment: assumptionDetail({
       title: "Reinvestment Rate",
       label: "Reinvestment Rate",
@@ -461,15 +444,13 @@ export function buildCalculationDetails({
       unit: "0-100 score",
       rawInputs: [
         { label: "Product / R&D score", value: numberText(assumptions.innovation), source: "Yahoo annual R&D / revenue intensity proxy, scaled to a 0-100 score and averaged from 2021 onward" },
-        { label: "Radar peer baseline", value: "66.0", source: "UI peer benchmark" },
       ],
       source: "Yahoo annual income statement R&D intensity proxy when available; saved/preset score is fallback",
       timeHorizon: "Annual R&D intensity values from fiscal years 2021+ are scaled and averaged; Yahoo does not directly report an Innovation Index.",
       formula: "Innovation Index = clamp((R&D / revenue x 100) x 10, 0, 100), averaged across annual statement years",
       simulation: [
         { label: "1", value: `Normalize raw innovation signal to ${numberText(assumptions.innovation)}`, source: "0-100 scale" },
-        { label: "2", value: `${numberText(assumptions.innovation)} - 66.0`, source: `Peer gap ${numberText(assumptions.innovation - 66)}` },
-        { label: "3", value: numberText(assumptions.innovation), source: "Final Innovation Index assumption" },
+        { label: "2", value: numberText(assumptions.innovation), source: "Final Innovation Index assumption" },
       ],
     }),
     governance: assumptionDetail({
@@ -479,15 +460,12 @@ export function buildCalculationDetails({
       unit: "0-100 score",
       rawInputs: [
         { label: "Governance score", value: numberText(assumptions.governance), source: "Annual Report / proxy statement review" },
-        { label: "ESG / Agency Penalty", value: numberText(assumptions.esgPenalty), source: "Risk penalty input" },
       ],
       source: "Annual Report, proxy statement, and governance review normalized into SQLite corporate_metrics",
       timeHorizon: "Latest annual report or proxy statement cycle.",
       formula: "Governance Quality = normalized governance score on a 0-100 scale",
       simulation: [
-        { label: "1", value: `Agency risk = 100.0 - ${numberText(assumptions.governance)} + ${numberText(assumptions.esgPenalty)}`, source: numberText(derived.agencyRisk) },
-        { label: "2", value: `Clamp ${numberText(derived.agencyRisk)} to 0.0-100.0`, source: numberText(derived.agencyRisk) },
-        { label: "3", value: numberText(assumptions.governance), source: "Final Governance Quality assumption" },
+        { label: "1", value: numberText(assumptions.governance), source: "Final Governance Quality assumption" },
       ],
     }),
     esgPenalty: assumptionDetail({
@@ -497,15 +475,12 @@ export function buildCalculationDetails({
       unit: "0-100 penalty score",
       rawInputs: [
         { label: "Penalty score", value: numberText(assumptions.esgPenalty), source: "ESG / agency risk review" },
-        { label: "Governance offset", value: numberText(assumptions.governance), source: "Governance quality input" },
       ],
       source: "ESG risk review, governance notes, and sector preset normalized into SQLite corporate_metrics",
       timeHorizon: "Latest annual report, controversy, or governance review cycle.",
-      formula: "Agency Risk = clamp(100 - Governance Quality + ESG / Agency Penalty, 0, 100)",
+      formula: "ESG / Agency Penalty = subjective 0-100 penalty score set on this panel",
       simulation: [
-        { label: "1", value: `100.0 - ${numberText(assumptions.governance)} + ${numberText(assumptions.esgPenalty)}`, source: numberText(derived.agencyRisk) },
-        { label: "2", value: `Success probability penalty = ${numberText(assumptions.esgPenalty)} x 0.25`, source: numberText(assumptions.esgPenalty * 0.25) },
-        { label: "3", value: numberText(assumptions.esgPenalty), source: "Final ESG / Agency Penalty assumption" },
+        { label: "1", value: numberText(assumptions.esgPenalty), source: "Final ESG / Agency Penalty assumption" },
       ],
     }),
     spread: {
@@ -570,9 +545,9 @@ export function buildCalculationDetails({
       title: `${companyName} Intrinsic DCF`,
       timeHorizon: "Current realtime assumption set sent to the backend DCF endpoint; market price uses the latest available quote/cache point.",
       summary: [
-        { label: "Intrinsic DCF Value", value: dcfData ? moneyText(dcfData.estimated_value) : "Calculating", source: "Backend DCF engine" },
+        { label: "Intrinsic DCF Value", value: fairValueText("Calculating"), source: "Backend DCF engine" },
         { label: "Current Price", value: dcfData ? moneyText(dcfData.current_price) : "Loading", source: "Yahoo Finance / local OHLCV cache" },
-        { label: "Upside / Downside", value: dcfData ? pct(dcfData.upside_pct) : "Loading", source: "Realtime calculation" },
+        { label: "Upside / Downside", value: upsideText("Loading"), source: "Realtime calculation" },
         { label: "Status", value: dcfData?.status ?? "Calculating", source: "DCF value-vs-price rule" },
       ],
       components: [
@@ -583,7 +558,7 @@ export function buildCalculationDetails({
         { label: "FCFF", value: `${moneyText(assumptions.fcff)}B`, source: "Realtime Assumptions control" },
       ],
       formula: `Intrinsic DCF request = growth ${pct(assumptions.growth)}, WACC ${pct(assumptions.wacc)}, terminal growth ${pct(clamp(assumptions.growth, -10, 10))}, FCFF ${moneyText(assumptions.fcff)}B`,
-      result: dcfData ? `${moneyText(dcfData.estimated_value)} intrinsic value, ${pct(dcfData.upside_pct)} versus current price` : "Calculating",
+      result: dcfData ? `${fairValueText("Calculating")} intrinsic value, ${upsideText("Loading")} versus current price` : "Calculating",
       sourcing: [
         { label: "DCF endpoint", value: `/corporate/dcf/${assumptions.ticker}`, source: "FastAPI backend" },
         { label: "Assumptions", value: "Debounced ticker inputs", source: "Corporate Analysis UI" },
@@ -591,8 +566,8 @@ export function buildCalculationDetails({
       ],
       simulation: [
         { label: "1", value: `Send growth ${pct(assumptions.growth)}, WACC ${pct(assumptions.wacc)}, FCFF ${moneyText(assumptions.fcff)}B`, source: "DCF request payload" },
-        { label: "2", value: dcfData ? `${moneyText(dcfData.estimated_value)} / ${moneyText(dcfData.current_price)} - 1` : "Waiting for backend result", source: dcfData ? pct(dcfData.upside_pct) : "Loading" },
-        { label: "3", value: dcfData ? `${moneyText(dcfData.estimated_value)} intrinsic value` : "Calculating", source: "Final Backend DCF result" },
+        { label: "2", value: dcfData ? `${fairValueText("Calculating")} / ${moneyText(dcfData.current_price)} - 1` : "Waiting for backend result", source: upsideText("Loading") },
+        { label: "3", value: dcfData ? `${fairValueText("Calculating")} intrinsic value` : "Calculating", source: "Final Backend DCF result" },
       ],
     },
     sustainableGrowth: {
@@ -622,61 +597,6 @@ export function buildCalculationDetails({
         { label: "3", value: pct(derived.sustainableGrowth), source: "Final Sustainable Growth" },
       ],
     },
-    companyStatus: {
-      title: `${companyName} Company Status Diagnosis`,
-      timeHorizon: `Current realtime assumption set. Subjective Innovation, Governance, and ESG/Agency inputs are ${includeSubjectiveHealth ? "included" : "excluded"} from the health score; peer baselines are static UI benchmarks.`,
-      summary: [
-        { label: "Health Score", value: numberText(derived.healthScore), source: "Radar composite" },
-        { label: "Subjective inputs", value: includeSubjectiveHealth ? "Included" : "Excluded", source: "Company Status Diagnosis toggle" },
-        { label: "Growth Axis", value: numberText(clamp(assumptions.growth * 7, 0, 100)), source: "How: growth rate x 7 clamped to 0-100 for radar display" },
-        { label: "Market Share", value: numberText(assumptions.marketShare), source: "How: normalized competitive-position input on a 0-100 scale" },
-        { label: "Life Cycle", value: numberText(derived.lifeCyclePosition), source: "How: clamp(35 + growth x 2.5 - debt ratio x 0.3, 0, 100)" },
-        { label: "Levered Beta Risk", value: numberText(derived.leveredBetaRiskScore), source: `How: beta risk score from levered beta ${numberText2(derived.leveredBeta)}` },
-        ...(includeSubjectiveHealth
-          ? [
-            { label: "Innovation", value: numberText(assumptions.innovation), source: "How: normalized product and R&D momentum input on a 0-100 scale" },
-            { label: "Governance", value: numberText(assumptions.governance), source: "How: normalized ownership, disclosure, accountability, and alignment score" },
-            { label: "Agency Risk Score", value: numberText(100 - derived.agencyRisk), source: "How: 100 - clamp(100 - governance + ESG penalty, 0, 100)" },
-          ]
-          : []),
-      ],
-      components: [
-        { label: "Growth", value: numberText(clamp(assumptions.growth * 7, 0, 100)), source: `How: radar axis = clamp(${numberText(assumptions.growth)} x 7.0, 0.0, 100.0); composite contribution = ${numberText(assumptions.growth)} x 2.0. Why: growth captures reinvestment runway and terminal value capacity, but the composite dampens it to avoid letting growth dominate quality factors.` },
-        { label: "Market Share", value: numberText(assumptions.marketShare), source: "How: normalized competitive-position and scale input on a 0.0-100.0 scale. Why: larger share can protect pricing power, margins, and forecast durability." },
-        { label: "Life Cycle", value: numberText(derived.lifeCyclePosition), source: `How: clamp(35.0 + growth ${numberText(assumptions.growth)} x 2.5 - debt ratio ${numberText(assumptions.debtRatio)} x 0.3, 0.0, 100.0). Why: life-cycle stage affects reinvestment needs, maturity risk, and terminal assumptions.` },
-        { label: "Levered Beta Risk", value: numberText(derived.leveredBetaRiskScore), source: `How: clamp(100.0 - max(levered beta ${numberText2(derived.leveredBeta)} - 1.0, 0.0) x 35.0, 0.0, 100.0). Why: higher financial leverage raises equity risk versus unlevered business risk.` },
-        ...(includeSubjectiveHealth
-          ? [
-            { label: "Innovation", value: numberText(assumptions.innovation), source: "How: normalized product, technology, and R&D momentum input on a 0.0-100.0 scale. Why: innovation supports moat renewal, future growth, and optionality." },
-            { label: "Governance", value: numberText(assumptions.governance), source: "How: normalized ownership, disclosure, voting alignment, accountability, and management-quality input on a 0.0-100.0 scale. Why: stronger governance improves capital allocation reliability and reduces agency-cost discounts." },
-            { label: "Agency Risk", value: numberText(100 - derived.agencyRisk), source: `How: raw risk = clamp(100.0 - governance ${numberText(assumptions.governance)} + ESG/agency penalty ${numberText(assumptions.esgPenalty)}, 0.0, 100.0) = ${numberText(derived.agencyRisk)}; displayed score = 100.0 - raw risk. Why: lower governance friction and lower agency costs reduce execution and valuation haircut risk.` },
-          ]
-          : []),
-      ],
-      formula: includeSubjectiveHealth
-        ? "Health Score = average(growth x 2, market share, life cycle, levered beta risk, innovation, governance, 100 - agency risk)"
-        : "Health Score = average(growth x 2, market share, life cycle, levered beta risk)",
-      result: numberText(derived.healthScore),
-      sourcing: [
-        { label: "Growth", value: pct(assumptions.growth), source: "Yahoo annual revenue growth rates averaged from 2021 onward when available | Method: radar axis = growth x 7; composite contribution = growth x 2" },
-        { label: "Life Cycle", value: numberText(derived.lifeCyclePosition), source: "Growth and debt ratio inputs | Method: clamp(35 + growth x 2.5 - debt ratio x 0.3, 0, 100)" },
-        { label: "Levered Beta Risk", value: numberText(derived.leveredBetaRiskScore), source: "Levered beta risk penalty included in Company Status Diagnosis" },
-        { label: "Market Share", value: numberText(assumptions.marketShare), source: "Annual Report / sector preset / SQLite corporate_metrics | Method: normalized 0-100 score" },
-        ...(includeSubjectiveHealth
-          ? [
-            { label: "Agency Risk", value: numberText(derived.agencyRisk), source: "Governance and ESG penalty inputs | Method: clamp(100 - governance + ESG penalty, 0, 100), then invert for the displayed score" },
-            { label: "Governance", value: numberText(assumptions.governance), source: "Proxy statement / governance review / SQLite corporate_metrics | Method: normalized 0-100 score" },
-            { label: "Innovation", value: numberText(assumptions.innovation), source: "Yahoo annual R&D / revenue intensity proxy averaged from 2021 onward when available | Method: normalized 0-100 score" },
-          ]
-          : []),
-      ],
-      simulation: [
-        { label: "1", value: `Growth axis = clamp(${numberText(assumptions.growth)} x 7.0, 0.0, 100.0); composite growth = ${numberText(assumptions.growth)} x 2.0`, source: `${numberText(clamp(assumptions.growth * 7, 0, 100))} axis; ${numberText(assumptions.growth * 2)} composite` },
-        { label: "2", value: `Levered beta risk = clamp(100.0 - max(${numberText2(derived.leveredBeta)} - 1.0, 0.0) x 35.0, 0.0, 100.0)`, source: numberText(derived.leveredBetaRiskScore) },
-        { label: "3", value: `Life cycle = clamp(35.0 + ${numberText(assumptions.growth)} x 2.5 - ${numberText(assumptions.debtRatio)} x 0.3, 0.0, 100.0)`, source: numberText(derived.lifeCyclePosition) },
-        { label: "4", value: includeSubjectiveHealth ? "Composite includes subjective innovation, governance, and agency scores" : "Composite excludes subjective innovation, governance, and agency scores", source: numberText(derived.healthScore) },
-      ],
-    },
     hurdleDecomposition: {
       title: `${companyName} Hurdle Rate Decomposition`,
       timeHorizon: "Current market snapshot for risk-free rate and market-implied ERP, shown across US, EU, Korea, and emerging-market hurdle-rate indicators. Korea uses the fixed Korea CRP assumption.",
@@ -688,7 +608,7 @@ export function buildCalculationDetails({
         { label: "CRP", value: pct(koreaCountryRiskPremium), source: "Fixed South Korea country risk premium" },
         { label: "Bottom-up Ke", value: pct(derived.bottomUpKe), source: "Realtime hurdle-rate model" },
       ],
-      components: regionalMinard.map((region) => ({
+      components: regionalHurdle.map((region) => ({
         label: region.region,
         value: `RF ${pct(region.rf)}, implied ERP ${pct2(region.erp)}, spread ${pct(region.defaultSpread)}, multiplier ${numberText(region.riskMultiplier)}, CRP ${pct(region.crp)}, revenue weight ${numberText(region.revenue)}`,
         source: region.region === "US"
@@ -699,7 +619,7 @@ export function buildCalculationDetails({
       })),
       formula: "Bottom-up Ke = risk-free rate + levered beta x implied ERP + selected-region CRP; Implied ERP = market IRR - risk-free rate",
       result: pct(derived.bottomUpKe),
-      sourcing: regionalMinard.map((region) => ({
+      sourcing: regionalHurdle.map((region) => ({
         label: region.region,
         value: `RF ${pct(region.rf)}, implied ERP ${pct2(region.erp)}, CRP ${pct(region.crp)}`,
         source: region.region === "Korea" ? "Fixed Korea CRP assumption" : "Regional hurdle-rate indicator",
@@ -776,52 +696,24 @@ export function buildCalculationDetails({
         { label: "3", value: `Bubble = clamp(${numberText(assumptions.fcff)} / 1.6, 10.0, 100.0)`, source: numberText(clamp(assumptions.fcff / 1.6, 10, 100)) },
       ],
     },
-    riskReturnMinard: {
-      title: `${companyName} Risk-Return Minard Chart`,
-      timeHorizon: "Current realtime assumptions projected across static risk segments: Inflation, FX, Demand, and Margin.",
-      summary: [
-        { label: "Success Probability", value: pct(derived.successProbability), source: "Scenario score" },
-        { label: "Failure Probability", value: pct2(100 - derived.successProbability), source: "100 - success probability" },
-        { label: "X-axis", value: "Risk exposure segments", source: "Inflation, FX, Demand, and Margin are ordered scenario exposures used to compare expected return against failure probability." },
-        { label: "Spread", value: pct(derived.spread), source: "ROIC - WACC" },
-        { label: "Growth", value: pct(assumptions.growth), source: "Realtime Assumptions" },
-      ],
-      components: riskReturn.map((item) => ({
-        label: item.risk,
-        value: `NPV ${numberText(item.npv)}, success ${pct(item.success)}, fail ${pct2(item.fail)}`,
-        source: "X-axis risk exposure segment; NPV approximates expected return path and failure area quantifies downside probability.",
-      })),
-      formula: "X-axis = risk exposure segment; Success Probability = clamp(55 + spread x 2.3 + growth - ESG penalty x 0.25, 5, 95); NPV path varies by segment",
-      result: pct(derived.successProbability),
-      sourcing: [
-        { label: "Spread", value: pct(derived.spread), source: "Realtime ROIC and WACC" },
-        { label: "Growth", value: pct(assumptions.growth), source: "Yahoo annual revenue growth rates averaged from 2021 onward when available" },
-        { label: "ESG / Agency Penalty", value: numberText(assumptions.esgPenalty), source: "Governance risk input / SQLite corporate_metrics" },
-      ],
-      simulation: [
-        { label: "1", value: `55.0 + ${numberText(derived.spread)} x 2.3 + ${numberText(assumptions.growth)} - ${numberText(assumptions.esgPenalty)} x 0.25`, source: pct(derived.successProbability) },
-        { label: "2", value: `Demand NPV = ${numberText(derived.spread)} x 9.0 + ${numberText(assumptions.growth)}`, source: numberText(derived.spread * 9 + assumptions.growth) },
-        { label: "3", value: `Failure area = 100.00% - ${pct2(derived.successProbability)}`, source: pct2(100 - derived.successProbability) },
-      ],
-    },
     dcfCoreModules: {
       title: `${companyName} DCF Core Modules`,
       timeHorizon: "Current realtime assumption set; FCFF uses LTM or normalized annual-report input; current price is comparison context only.",
       summary: [
         { label: "Sustainable Growth", value: pct(derived.sustainableGrowth), source: "Reinvestment x ROIC" },
-        { label: "Terminal Value Share", value: pct(derived.terminalValueShare), source: "Growth and WACC scenario formula" },
+        { label: "Terminal Value Share", value: terminalShareText("Calculating"), source: "Backend DCF engine" },
         { label: "FCFF Magnitude", value: `${moneyText(assumptions.fcff)}B`, source: sourceLabel },
-        { label: "Intrinsic DCF Value", value: dcfData ? moneyText(dcfData.estimated_value) : "N/A", source: "Backend DCF engine" },
+        { label: "Intrinsic DCF Value", value: fairValueText("N/A"), source: "Backend DCF engine" },
       ],
       components: [
         { label: "Reinvestment Rate", value: pct(assumptions.reinvestment), source: "Sustainable growth component" },
         { label: "ROIC", value: pct(assumptions.roic), source: "Sustainable growth component" },
-        { label: "Growth", value: pct(assumptions.growth), source: "Terminal value share component" },
-        { label: "WACC", value: pct(assumptions.wacc), source: "Terminal value share component" },
+        { label: "Growth", value: pct(assumptions.growth), source: "Projected FCFF component" },
+        { label: "WACC", value: pct(assumptions.wacc), source: "Discount rate and terminal denominator" },
         { label: "FCFF", value: `${moneyText(assumptions.fcff)}B`, source: "Yahoo annual free cash flow values averaged from 2021 onward when available" },
       ],
-      formula: "Sustainable Growth = reinvestment x ROIC / 100; Terminal Value Share = clamp(62 + growth x 1.8 - WACC x 1.2, 20, 88)",
-      result: `${pct(derived.sustainableGrowth)} sustainable growth; ${pct(derived.terminalValueShare)} terminal value share`,
+      formula: "Sustainable Growth = reinvestment x ROIC / 100; Terminal Value Share = PV(terminal value) / enterprise value",
+      result: `${pct(derived.sustainableGrowth)} sustainable growth; ${terminalShareText("terminal value share calculating")} terminal value share`,
       sourcing: [
         { label: "FCFF", value: `${moneyText(assumptions.fcff)}B`, source: "Yahoo annual free cash flow values averaged from 2021 onward when available" },
         { label: "DCF endpoint", value: `/corporate/dcf/${assumptions.ticker}`, source: "FastAPI backend" },
@@ -829,35 +721,35 @@ export function buildCalculationDetails({
       ],
       simulation: [
         { label: "1", value: `${pct(assumptions.reinvestment)} x ${pct(assumptions.roic)} / 100`, source: pct(derived.sustainableGrowth) },
-        { label: "2", value: `62.0 + ${numberText(assumptions.growth)} x 1.8 - ${numberText(assumptions.wacc)} x 1.2`, source: pct(derived.terminalValueShare) },
-        { label: "3", value: dcfData ? `${moneyText(dcfData.estimated_value)} vs ${moneyText(dcfData.current_price)}` : "Waiting for backend result", source: dcfData ? pct(dcfData.upside_pct) : "Loading" },
+        { label: "2", value: "PV(terminal value) / enterprise value", source: terminalShareText("Waiting for backend result") },
+        { label: "3", value: dcfData ? `${fairValueText("N/A")} vs ${moneyText(dcfData.current_price)}` : "Waiting for backend result", source: upsideText("Loading") },
       ],
     },
     terminalValueShare: {
       title: `${companyName} Terminal Value Share`,
-      timeHorizon: "Current realtime DCF scenario using the active growth and WACC assumptions; terminal share is bounded to a 20.0%-88.0% sanity range.",
+      timeHorizon: "Measured from the backend DCF that ran against the current assumption set. Not bounded: a share near 100% is a real reading about this valuation, and clamping it would hide the concentration it is reporting.",
       summary: [
-        { label: "Terminal Value Share", value: pct(derived.terminalValueShare), source: "DCF Core Modules scenario formula | Period: current realtime scenario" },
+        { label: "Terminal Value Share", value: terminalShareText("Calculating"), source: "Backend DCF engine | Period: current realtime scenario" },
         { label: "Growth Rate", value: pct(assumptions.growth), source: "Yahoo annual revenue growth rates averaged from 2021 onward when available | Period: current override can replace backend value" },
         { label: "WACC", value: pct(assumptions.wacc), source: "Yahoo statement averages plus Yahoo beta and model rate inputs | Period: current model snapshot" },
-        { label: "Clamp Range", value: "20.0%-88.0%", source: "Terminal-value concentration guardrail | Period: model policy" },
+        { label: "What it measures", value: "Share of enterprise value from the perpetuity", source: "Terminal-value concentration | Period: model definition" },
       ],
       components: [
-        { label: "Base terminal share", value: "62.0%", source: "Model anchor | Period: stable scenario baseline" },
-        { label: "Growth contribution", value: pct(assumptions.growth * 1.8), source: `${pct(assumptions.growth)} x 1.8 | Period: current assumption state` },
-        { label: "WACC drag", value: pct(assumptions.wacc * 1.2), source: `${pct(assumptions.wacc)} x 1.2 | Period: current assumption state` },
+        { label: "PV of terminal value", value: "Terminal value discounted over the 5-year forecast", source: "Numerator | Period: current realtime scenario" },
+        { label: "Enterprise value", value: "PV of explicit FCFF + PV of terminal value", source: "Denominator | Period: current realtime scenario" },
+        { label: "Terminal denominator", value: `WACC - terminal growth, from ${pct(assumptions.wacc)} WACC`, source: "What the share is most sensitive to | Period: current assumption state" },
       ],
-      formula: "Terminal Value Share = clamp(62 + growth x 1.8 - WACC x 1.2, 20, 88)",
-      result: pct(derived.terminalValueShare),
+      formula: "Terminal Value Share = PV(terminal value) / enterprise value",
+      result: terminalShareText("Calculating"),
       sourcing: [
         { label: "Growth Rate", value: pct(assumptions.growth), source: "Yahoo annual revenue growth rates from 2021 onward / saved fallback / browser override" },
         { label: "WACC", value: pct(assumptions.wacc), source: "Yahoo-derived WACC / saved fallback / browser override" },
-        { label: "Terminal model", value: "Bounded terminal concentration scenario", source: "MoneyView frontend DCF core module" },
+        { label: "Terminal model", value: "Gordon growth perpetuity", source: "packages/core_finance/dcf.py" },
       ],
       simulation: [
-        { label: "1", value: `${numberText(assumptions.growth)} x 1.8`, source: pct(assumptions.growth * 1.8) },
-        { label: "2", value: `${numberText(assumptions.wacc)} x 1.2`, source: pct(assumptions.wacc * 1.2) },
-        { label: "3", value: `clamp(62.0 + ${numberText(assumptions.growth * 1.8)} - ${numberText(assumptions.wacc * 1.2)}, 20.0, 88.0)`, source: pct(derived.terminalValueShare) },
+        { label: "1", value: "Discount the 5 explicit FCFF years at WACC", source: "PV of explicit forecast" },
+        { label: "2", value: "Discount the Gordon terminal value over the same 5 years", source: "PV of terminal value" },
+        { label: "3", value: "PV(terminal) / (PV(explicit) + PV(terminal))", source: terminalShareText("Waiting for backend result") },
       ],
     },
     fcffMagnitude: {
@@ -891,9 +783,9 @@ export function buildCalculationDetails({
       title: `${companyName} Intrinsic DCF Value`,
       timeHorizon: "Current backend DCF response using debounced realtime assumptions and the latest available market price/cache point.",
       summary: [
-        { label: "Intrinsic DCF Value", value: dcfData ? moneyText(dcfData.estimated_value) : "N/A", source: "Backend DCF engine | Period: current debounced request" },
+        { label: "Intrinsic DCF Value", value: fairValueText("N/A"), source: "Backend DCF engine | Period: current debounced request" },
         { label: "Current Price", value: dcfData ? moneyText(dcfData.current_price) : "Loading", source: "Yahoo Finance / local OHLCV cache | Period: latest available quote/cache point" },
-        { label: "Upside / Downside", value: dcfData ? pct(dcfData.upside_pct) : "Loading", source: "Fair value vs current price | Period: current backend response" },
+        { label: "Upside / Downside", value: upsideText("Loading"), source: "Fair value vs current price | Period: current backend response" },
         { label: "Status", value: dcfData?.status ?? "Calculating", source: "Backend valuation classification | Period: current backend response" },
       ],
       components: [
@@ -904,7 +796,7 @@ export function buildCalculationDetails({
         { label: "FCFF", value: `${moneyText(assumptions.fcff)}B`, source: "DCF payload | Period: LTM or normalized annual report" },
       ],
       formula: "Intrinsic DCF Value = backend DCF endpoint output from FCFF, terminal value, and the equity bridge; Upside = intrinsic value / current price - 1",
-      result: dcfData ? moneyText(dcfData.estimated_value) : "N/A",
+      result: fairValueText("N/A"),
       sourcing: [
         { label: "DCF endpoint", value: `/corporate/dcf/${assumptions.ticker}`, source: "FastAPI backend" },
         { label: "Current Price", value: dcfData ? moneyText(dcfData.current_price) : "Loading", source: "Yahoo Finance / local OHLCV cache | Period: latest available quote/cache point" },
@@ -912,8 +804,8 @@ export function buildCalculationDetails({
       ],
       simulation: [
         { label: "1", value: `POST growth ${pct(assumptions.growth)}, WACC ${pct(assumptions.wacc)}, terminal growth ${pct(clamp(assumptions.growth, -10, 10))}`, source: "Backend DCF request" },
-        { label: "2", value: dcfData ? `${moneyText(dcfData.estimated_value)} / ${moneyText(dcfData.current_price)} - 1` : "Waiting for backend result", source: dcfData ? pct(dcfData.upside_pct) : "Loading" },
-        { label: "3", value: dcfData ? moneyText(dcfData.estimated_value) : "N/A", source: "Final Intrinsic DCF Value" },
+        { label: "2", value: dcfData ? `${fairValueText("N/A")} / ${moneyText(dcfData.current_price)} - 1` : "Waiting for backend result", source: upsideText("Loading") },
+        { label: "3", value: fairValueText("N/A"), source: "Final Intrinsic DCF Value" },
       ],
     },
   };

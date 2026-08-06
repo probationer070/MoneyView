@@ -623,15 +623,13 @@ Expose local runtime-health and sensitivity context without requiring the user t
 - Ownership: quant-engine methodology.
 - Drill-down: calculation-detail modal.
 
-### `Success Probability`
+### `Success Probability` — removed 2026-08-06
 
-- Meaning: scenario-style score summarizing whether spread, growth, and penalties imply a favorable setup.
-- Source: current Corporate page derives and labels this score.
-- Ownership:
-  - frontend currently computes the displayed score and associated chart copy
-  - the score is a UI-level decision-support metric, not part of canonical `core_finance`
-- Important note: because this remains primarily UI-defined today, this document is the canonical specification until the logic is moved to a shared backend/service layer.
-- Drill-down: calculation-detail modal.
+The card showed `clamp(55 + spread x 2.3 + growth - esgPenalty x 0.25, 5, 95)` under a
+probability label, in percent, always in the positive colour, captioned "Above 60% is good".
+No probability model produced it and none was planned, so the card, its complement
+(`Failure Probability`), and the Risk-Return Minard chart they fed were removed rather than
+relabelled. See `docs/risk-return-minard.md` for the full record.
 
 ### Metric audit quality badges and drill-down
 
@@ -651,12 +649,14 @@ Expose local runtime-health and sensitivity context without requiring the user t
 
 ## 5.2 Diagnostic graph modules
 
-### Company Status Graph
+### Company Status Graph — removed 2026-08-06
 
-- Meaning: radar-style operating and health profile for the active company.
-- Source: active derived assumptions and/or radar endpoint in workbench flows.
-- Ownership: frontend graph presentation over backend/derived metric inputs.
-- Drill-down: title opens calculation-detail modal; detail page workbench can refresh standalone radar data.
+Its radar axes were not an operating profile. `Life Cycle`, `Levered Beta Risk` and `Agency
+Risk` were browser formulas over the assumption sliders (`35 + growth x 2.5 - debtRatio x 0.3`,
+`100 - max(leveredBeta - 1, 0) x 35`, `100 - governance + esgPenalty`), and the `peer` baseline
+each axis was scored against was a hardcoded constant per axis — the same comparison for every
+company. Their average was presented as a composite `healthScore`. Operating and leverage
+quality is read from the metric surfaces that carry audit quality state instead.
 
 ### Hurdle Rate Decomposition
 
@@ -677,18 +677,37 @@ Expose local runtime-health and sensitivity context without requiring the user t
 - Source: active derived inputs.
 - Ownership: frontend chart composition over backend/engine-owned metrics.
 
-### Risk-Return Minard
+### Risk-Return Minard — removed 2026-08-06
 
-- Meaning: visual placement of spread and success probability in risk-return space.
-- Source: derived values on the page.
-- Ownership: hybrid, with `Success Probability` still UI-defined.
-- Caveat: this is a frontend heuristic scenario chart, not a statistically calibrated probability model or audited NPV model.
+Its four "risk exposure segments" (Inflation, FX, Demand, Margin) carried no per-factor data:
+each segment's Y value was the ROIC - WACC spread times a per-segment constant, plotted on a
+percent-formatted axis under the series name `npv`, and each segment's failure share was the
+page's success score plus a fixed offset — so the ranking across segments was the same for
+every ticker and every assumption setting. Value response to assumptions is covered by the
+WACC x Terminal Growth Sensitivity grid below, on measured values.
 
 ### DCF Core Modules
 
 - Meaning: breakdown of sustainable growth, terminal value share, FCFF, and backend intrinsic-value context.
 - Source: backend DCF result plus active assumptions.
 - Ownership: backend DCF methodology; frontend graph composition.
+- Corrected 2026-08-05: this entry was accurate for every tile except `Terminal Value Share`,
+  which until then was computed in the browser as `clamp(62 + growth x 1.8 - WACC x 1.2, 20, 88)`
+  and had no connection to any terminal value. It is now measured by the backend as
+  `PV(terminal value) / enterprise value` and arrives on the DCF summary, so the "Source" and
+  "Ownership" lines above are true of it as well. See `ERROR-LOG.md` (2026-08-05).
+- The tile reads `N/A` until a DCF has run: a share of enterprise value is a property of a
+  valuation, and the assumption sliders alone cannot produce one.
+
+### WACC x Terminal Growth Sensitivity
+
+- Meaning: the same five projected FCFF years revalued across a 5x5 grid of discount rate and
+  perpetuity growth, showing intrinsic value per share and the terminal-value share at each point.
+- Source: `DCFFullReport.sensitivity`, built by `sensitivity_grid` in `packages/core_finance/dcf.py`.
+- Ownership: backend; the frontend renders whatever axes the payload carries.
+- Caveat: cells where WACC is not above terminal growth carry no values at all. That is the
+  Gordon growth model having no value at those assumptions, not missing data, and it is
+  rendered `n/a` — distinct from `—`, which means this ticker's equity bridge did not resolve.
 
 ## 5.3 Backend DCF summary and reports
 

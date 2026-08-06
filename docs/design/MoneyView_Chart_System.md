@@ -85,11 +85,9 @@
 
 | Chart | Component | Library | Purpose |
 |---|---|---|---|
-| Company Status | `CompanyStatusGraph.tsx` | Recharts | Lifecycle / governance snapshot |
 | Hurdle Rate Decomposition | `HurdleRateDecompositionGraph.tsx` | Recharts ComposedChart | Cost-of-capital breakdown |
 | Beta + WACC Curve | `BetaWaccCurveGraph.tsx` | Recharts | Leverage sensitivity |
 | Value Driver Matrix | `ValueDriverMatrixGraph.tsx` | Recharts | ROIC vs growth positioning |
-| Risk-Return Minard | `RiskReturnMinardGraph.tsx` | Recharts | Multi-variable encoded chart |
 | DCF Core Modules | `DcfCoreModulesGraph.tsx` | Recharts | Valuation decomposition |
 | Diagnostic Radar | `DiagnosticRadar.tsx` | Recharts RadarChart | Multi-dimension profile |
 | Tornado | `TornadoChart.tsx` | Recharts BarChart | Sensitivity ranking |

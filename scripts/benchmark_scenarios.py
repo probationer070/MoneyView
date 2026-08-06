@@ -132,6 +132,7 @@ class ScenarioResult:
     tickers_with_cost: int = 0
     critical_path: list[tuple[str, float]] = field(default_factory=list)
     slowest_request_ms: float = 0.0
+    external_split: object | None = None
 
     @property
     def overhead_pct(self) -> float:
@@ -407,6 +408,7 @@ def analyse(events: list) -> dict:
     from apps.api.services.perf_analysis import (
         breakdown_by_scope,
         cache_effectiveness,
+        external_cpu_wait_split,
         rollup_by_ticker,
     )
 
@@ -415,6 +417,7 @@ def analyse(events: list) -> dict:
         "breakdown": breakdown_by_scope(events),
         "ticker_table": ticker_table,
         "cache_report": cache_effectiveness(events),
+        "external_split": external_cpu_wait_split(events),
         "event_count": len(events),
         # Tickers appearing only in zero-duration events (a cache hit carries a ticker
         # but no duration) contribute a 0.0ms row, which drags the median to zero and
@@ -678,6 +681,27 @@ def render_report(*, environment: dict, results: list[ScenarioResult], previous:
                 )
 
         cache_report = result.cache_report
+        split = result.external_split
+        if split is not None and (split.measured_spans or split.unmeasured_spans):
+            total_split_ms = split.cpu_ms + split.wait_ms
+            cpu_pct = split.cpu_ms / total_split_ms * 100.0 if total_split_ms else 0.0
+            lines += ["", "### External time: CPU vs wait",
+                      "_Wait says cut round trips; CPU says the response parsing is the cost._"]
+            lines += ["| measure | ms | pct |", "| --- | --- | --- |"]
+            lines.append(f"| cpu | {split.cpu_ms} | {cpu_pct:.1f}% |")
+            lines.append(f"| wait | {split.wait_ms} | {100.0 - cpu_pct:.1f}% |")
+            if split.unmeasured_spans:
+                # Never folded into the split above: these spans ran on the event loop
+                # thread, where thread CPU includes whatever else the loop ran, so
+                # calling their CPU 0 would report all of it as wait.
+                lines.append(
+                    f"| unmeasured | {split.unmeasured_ms} | {split.unmeasured_spans} span(s) |"
+                )
+            lines.append(
+                f"_covers {split.measured_spans} of "
+                f"{split.measured_spans + split.unmeasured_spans} external spans_"
+            )
+
         lines += ["", "### Cache effectiveness"]
         if cache_report is not None and cache_report.caches:
             lines += ["| component | hits | misses | hit_rate | avg_miss_ms | est. saved_ms |",
@@ -796,6 +820,7 @@ def main(argv: list[str]) -> int:
                 tickers_with_cost=analysis["tickers_with_cost"],
                 critical_path=analysis["critical_path"],
                 slowest_request_ms=analysis["slowest_request_ms"],
+                external_split=analysis["external_split"],
             )
         )
         _progress(f"[{name}] p50 off {_p(off_samples, 0.5)} ms · on {first} ms · "

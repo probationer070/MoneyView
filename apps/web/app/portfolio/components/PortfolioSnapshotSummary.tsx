@@ -1,6 +1,7 @@
 "use client";
 
 import { AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
+import type { CorporateComparisonHistoryPoint } from "../page";
 
 export interface SnapshotMeta {
   as_of_date: string;
@@ -8,9 +9,7 @@ export interface SnapshotMeta {
   comparison_universe: string;
   benchmark_ticker: string;
   generated_at: string;
-  snapshot_versions_for_day: number;
   custom_tickers: string[];
-  snapshot_is_stale: boolean;
 }
 
 export interface ComparisonData {
@@ -29,26 +28,11 @@ export interface SnapshotSummary {
   flaggedMetricsCount: number;
 }
 
-export interface HistoryPoint {
-  as_of_date: string;
-  generated_at: string;
-  snapshot_version: string;
-  snapshot_versions_for_day: number;
-  snapshot_source: string;
-  comparison_universe: string;
-  benchmark_ticker: string;
-  stock_count: number;
-  average_expected_return_spread: number;
-  average_roic_minus_wacc: number;
-  average_dcf_value: number;
-  market_expected_return: number;
-}
-
 interface PortfolioSnapshotSummaryProps {
   activeComparisonData: ComparisonData;
   portfolioSnapshotSummary: SnapshotSummary;
-  selectedHistoryPoint: HistoryPoint | null;
-  setSelectedHistoryPoint: (point: HistoryPoint | null) => void;
+  selectedHistoryPoint: CorporateComparisonHistoryPoint | null;
+  setSelectedHistoryPoint: (point: CorporateComparisonHistoryPoint | null) => void;
   formatDateLabel: (date: string) => string;
   portfolioComparisonUniverseLabel: (universe: string) => string;
   metricToneClass: (value: number | null) => string;
@@ -137,7 +121,7 @@ export function PortfolioSnapshotSummary({
           Market expected return: {activeComparisonData.market_expected_return.toFixed(2)}%. Primary stock return: {activeComparisonData.stock_expected_return_method.replaceAll("_", " ")}. Reference return: {activeComparisonData.comparison_reference_return_method.replaceAll("_", " ")}.
         </p>
         <p title={activeComparisonData.snapshot.generated_at}>
-          Generated: {formatSyncTimestamp(activeComparisonData.snapshot.generated_at)}. Versions for this KST day: {activeComparisonData.snapshot.snapshot_versions_for_day}. Holdings summarized: {portfolioSnapshotSummary.stockCount}.
+          Generated: {formatSyncTimestamp(activeComparisonData.snapshot.generated_at)}. Holdings summarized: {portfolioSnapshotSummary.stockCount}.
         </p>
       </div>
       <div className="mt-3 rounded-[var(--radius)] border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
@@ -155,11 +139,6 @@ export function PortfolioSnapshotSummary({
           <span className="overflow-mono-block rounded-[var(--radius-sm)] bg-[var(--surface-muted)] px-2 py-1 text-xs text-[var(--text-primary)]" title={activeComparisonData.snapshot.custom_tickers.join(", ") || "None"}>
             {activeComparisonData.snapshot.custom_tickers.join(", ") || "None"}
           </span>
-        </p>
-      )}
-      {activeComparisonData.snapshot.snapshot_is_stale && (
-        <p className="mt-2 text-sm text-amber-800">
-          Current view is using the latest available saved snapshot because the current daily snapshot was not available.
         </p>
       )}
       <div className="mt-3 flex flex-col gap-2 sm:flex-row">

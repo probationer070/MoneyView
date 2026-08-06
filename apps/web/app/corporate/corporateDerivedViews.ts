@@ -8,6 +8,7 @@ import type {
   RawDatasetRow,
   WatchlistHolding,
 } from "./corporateTypes";
+import { isBridgeUnresolved } from "@/lib/bridgeQuality";
 import { numberText, numberText2, pct } from "./corporateUtils";
 
 interface CorporateDerivedSnapshot {
@@ -16,14 +17,28 @@ interface CorporateDerivedSnapshot {
   bottomUpKe: number;
   spread: number;
   sustainableGrowth: number;
-  terminalValueShare: number;
-  successProbability: number;
-  agencyRisk: number;
-  lifeCyclePosition: number;
-  healthScore: number;
 }
 
 type ChartRecord = Record<string, string | number | boolean | null | undefined>;
+
+/**
+ * The row's DCF value when it is an intrinsic value per share, and null when it is not.
+ *
+ * When the equity bridge does not resolve, dcf_value falls back to enterprise value -- a
+ * different financial quantity, not a smaller one. It cannot go in a $/share cell, be ranked
+ * against per-share values, or share an axis with current_price, however close the numbers
+ * happen to fall. `estimated` is a real per-share value and is returned as one.
+ *
+ * This is the only place that decides whether a comparison row's DCF value may be presented.
+ * Do not branch on bridge_quality elsewhere: a fourth quality tier must be one edit, not a
+ * search. The test itself lives in lib/bridgeQuality, shared with the estimated_value
+ * surfaces, which carry the same quantity under a different field name.
+ */
+export function bridgedDcfValue(
+  row: { dcf_value: number; bridge_quality?: string },
+): number | null {
+  return isBridgeUnresolved(row.bridge_quality) ? null : row.dcf_value;
+}
 
 export function sortComparisonRows(
   rows: CorporateComparisonRowApi[] = [],
@@ -31,6 +46,19 @@ export function sortComparisonRows(
   sortDirection: "desc" | "asc",
 ) {
   return [...rows].sort((left, right) => {
+    if (sortKey === "dcf_value") {
+      // A row with no per-share value has no position in a per-share ranking, so it goes
+      // last whichever way the user sorts. This check must precede the numeric comparison
+      // and must NOT be reversed by sortDirection: Number(null) is 0, which would bury
+      // these rows among genuinely small values in one direction.
+      const leftValue = bridgedDcfValue(left);
+      const rightValue = bridgedDcfValue(right);
+      if (leftValue === null && rightValue === null) return 0;
+      if (leftValue === null) return 1;
+      if (rightValue === null) return -1;
+      const dcfDelta = leftValue - rightValue;
+      return sortDirection === "asc" ? dcfDelta : -dcfDelta;
+    }
     const delta = Number(left[sortKey]) - Number(right[sortKey]);
     return sortDirection === "asc" ? delta : -delta;
   });
@@ -75,6 +103,9 @@ export function buildSimilarComparisonBarData(rows: CorporateComparisonRowApi[],
 export function buildSimilarComparisonScatterPeers(rows: CorporateComparisonRowApi[], selectedTicker: string) {
   return rows
     .filter((row) => row.ticker !== selectedTicker)
+    // An enterprise value on an axis paired with current_price is not an outlier point,
+    // it is a different quantity sharing an axis.
+    .filter((row) => bridgedDcfValue(row) !== null)
     .map((row) => ({
       ticker: row.ticker,
       current_price: Number(row.current_price.toFixed(2)),
@@ -85,7 +116,7 @@ export function buildSimilarComparisonScatterPeers(rows: CorporateComparisonRowA
 }
 
 export function buildSimilarComparisonScatterSelected(row: CorporateComparisonRowApi | null) {
-  return row
+  return row && bridgedDcfValue(row) !== null
     ? [{
       ticker: row.ticker,
       current_price: Number(row.current_price.toFixed(2)),
@@ -115,13 +146,11 @@ export function buildRawDatasetRows({
   impliedErp,
   impliedErpInputs,
   dcfData,
-  healthRadar,
-  regionalMinard,
+  regionalHurdle,
   hurdleBars,
   betaTreemapProxy,
   waccCurve,
   valueMatrix,
-  riskReturn,
 }: {
   assumptions: CorporateAssumptions;
   derived: CorporateDerivedSnapshot;
@@ -129,13 +158,11 @@ export function buildRawDatasetRows({
   impliedErp: number;
   impliedErpInputs: ImpliedErpInputs;
   dcfData: DCFResult | null;
-  healthRadar: ChartRecord[];
-  regionalMinard: ChartRecord[];
+  regionalHurdle: ChartRecord[];
   hurdleBars: ChartRecord[];
   betaTreemapProxy: ChartRecord[];
   waccCurve: ChartRecord[];
   valueMatrix: ChartRecord[];
-  riskReturn: ChartRecord[];
 }) {
   const rows: RawDatasetRow[] = [];
   const pushRecord = (dataset: string, record: object, source: string) => {
@@ -156,12 +183,6 @@ export function buildRawDatasetRows({
     bottomUpKe: pct(derived.bottomUpKe),
     spread: pct(derived.spread),
     sustainableGrowth: pct(derived.sustainableGrowth),
-    terminalValueShare: pct(derived.terminalValueShare),
-    successProbability: pct(derived.successProbability),
-    failureProbability: `${(100 - derived.successProbability).toFixed(2)}%`,
-    agencyRisk: numberText(derived.agencyRisk),
-    lifeCyclePosition: numberText(derived.lifeCyclePosition),
-    healthScore: numberText(derived.healthScore),
   }, "Frontend formulas shown in View Details");
   pushRecord("implied_erp_inputs", {
     sp500IndexLevel: numberText(impliedErpInputs.indexLevel),
@@ -173,12 +194,10 @@ export function buildRawDatasetRows({
     impliedErp: pct(impliedErp),
   }, "S&P 500 implied ERP model: price from market API; cash-flow yields and consensus growth path are model assumptions until constituent-level estimates are wired");
   if (dcfData) pushRecord("backend_dcf", dcfData, "FastAPI /corporate/dcf response");
-  pushSeries("company_status_radar", healthRadar, "Company Status Diagnosis chart dataset");
-  pushSeries("hurdle_rate_decomposition", regionalMinard, "Hurdle Rate Decomposition chart dataset");
+  pushSeries("hurdle_rate_decomposition", regionalHurdle, "Hurdle Rate Decomposition chart dataset");
   pushSeries("hurdle_bar_components", hurdleBars, "Bottom-up Ke component dataset");
   pushSeries("beta_wacc_curve_beta_components", betaTreemapProxy, "Bottom-up Beta chart dataset");
   pushSeries("wacc_curve", waccCurve, "WACC U-Curve chart dataset");
   pushSeries("value_driver_matrix", valueMatrix, "4-Quadrant Value Driver Matrix dataset");
-  pushSeries("risk_return_minard", riskReturn, "Risk-Return Minard chart dataset");
   return rows;
 }

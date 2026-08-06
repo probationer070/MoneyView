@@ -6,6 +6,7 @@ import { fetchApi } from "@/lib/api";
 import { RefreshCw } from "lucide-react";
 import { Sliders } from "@/components/ui/Sliders";
 import type { DcfSummaryResponse as DCFResult } from "../../../../packages/shared-types";
+import { bridgedEstimatedValue, bridgedUpsidePct, UNBRIDGED_PLACEHOLDER, UNBRIDGED_REASON } from "@/lib/bridgeQuality";
 
 interface DCFWorkbenchProps {
   ticker: string;
@@ -182,14 +183,26 @@ export const DCFWorkbench: React.FC<DCFWorkbenchProps> = ({ ticker }) => {
             <div className="grid grid-cols-2 gap-4">
               <div className="bg-[var(--bg-subtle)] border border-gray-100 rounded-lg p-4">
                 <span className="text-xs text-[var(--text-muted)] font-semibold uppercase tracking-wider">Implied Fair Value</span>
-                <div className="text-3xl font-black mt-1 tabular-nums text-[var(--text-primary)]">
-                  ${Number.isFinite(displayData.estimated_value) ? (displayData.estimated_value).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : "N/A"}
+                <div
+                  className="text-3xl font-black mt-1 tabular-nums text-[var(--text-primary)]"
+                  title={bridgedEstimatedValue(displayData) === null ? UNBRIDGED_REASON : undefined}
+                >
+                  {(() => {
+                    const fairValue = bridgedEstimatedValue(displayData);
+                    if (fairValue === null) return UNBRIDGED_PLACEHOLDER;
+                    // Pre-existing non-finite guard, kept as it was apart from moving the "$"
+                    // inside it -- it previously rendered the string "$N/A".
+                    if (!Number.isFinite(fairValue)) return "N/A";
+                    return `$${fairValue.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}`;
+                  })()}
                 </div>
               </div>
               <div className="bg-[var(--bg-subtle)] border border-gray-100 rounded-lg p-4">
                 <span className="text-xs text-[var(--text-muted)] font-semibold uppercase tracking-wider">Market Dislocation</span>
-                <div className={`text-3xl font-black mt-1 tabular-nums ${displayData.upside_pct >= 0 ? "text-[var(--surface)]" : "text-[var(--delta-down)]"}`}>
-                  {displayData.upside_pct > 0 ? "+" : ""}{Number.isFinite(displayData.upside_pct) ? displayData.upside_pct.toFixed(1) : "0.0"}%
+                <div className={`text-3xl font-black mt-1 tabular-nums ${bridgedUpsidePct(displayData) === null ? "text-[var(--text-muted)]" : displayData.upside_pct >= 0 ? "text-[var(--surface)]" : "text-[var(--delta-down)]"}`}>
+                  {bridgedUpsidePct(displayData) === null
+                    ? UNBRIDGED_PLACEHOLDER
+                    : `${displayData.upside_pct > 0 ? "+" : ""}${Number.isFinite(displayData.upside_pct) ? displayData.upside_pct.toFixed(1) : "0.0"}%`}
                 </div>
               </div>
             </div>

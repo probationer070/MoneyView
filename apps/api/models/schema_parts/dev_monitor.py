@@ -49,6 +49,11 @@ class PerformanceEvent(BaseModel):
     operation: str
     status: PerformanceEventStatus
     duration_ms: float | None = None
+    # Thread CPU consumed inside the span; wait time is duration_ms - cpu_ms. None
+    # means "not measurable here", never zero: a span that wraps an await shares its
+    # thread with whatever else the loop ran during the wait, so thread CPU cannot be
+    # attributed to it. Only perf_timer sets this, and only off the event loop thread.
+    cpu_ms: float | None = None
     ticker: str | None = None
     route: str | None = None
     method: str | None = None

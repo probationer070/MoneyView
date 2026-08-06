@@ -108,6 +108,43 @@ def _forbid_network():
             raise AssertionError(f"test resolved {host} -- network calls are not allowed")
         return real_getaddrinfo(host, *args, **kwargs)
 
+    # curl_cffi drives libcurl through cffi and never touches Python's socket
+    # module, so the three patches above are blind to it. yfinance 1.2 uses it
+    # as its HTTP transport -- exactly the traffic this fixture exists to stop.
+    # Found on 2026-07-29: a test reached the real Yahoo API with all three
+    # socket patches active.
+    #
+    # Two chokepoints are needed, not one. Verified against curl_cffi 0.13.0:
+    # Curl.perform is called only from the SYNC Session (session.py:593,640) and
+    # websockets.py:358. AsyncSession dispatches through
+    # AsyncCurl.add_handle (session.py:1025,1069 -> aio.py:237) and never calls
+    # perform. Patching perform alone left the async path open -- the same
+    # mistake in miniature as patching socket alone, and corrected on 2026-07-31.
+    # Nothing in this project uses curl_cffi for anything local, so every call
+    # through either entry point is a network call and is refused outright.
+    try:
+        from curl_cffi import Curl
+        from curl_cffi.aio import AsyncCurl
+    except ImportError:  # pragma: no cover - curl_cffi arrives with yfinance
+        Curl = None
+        AsyncCurl = None
+    else:
+        real_perform = Curl.perform
+        real_add_handle = AsyncCurl.add_handle
+
+        def guarded_perform(self, *args, **kwargs):
+            raise AssertionError(
+                "test made a network call through curl_cffi -- network calls are not allowed"
+            )
+
+        def guarded_add_handle(self, *args, **kwargs):
+            raise AssertionError(
+                "test made an async network call through curl_cffi -- network calls are not allowed"
+            )
+
+        Curl.perform = guarded_perform
+        AsyncCurl.add_handle = guarded_add_handle
+
     socket.socket.connect = guarded_connect
     socket.socket.connect_ex = guarded_connect_ex
     socket.getaddrinfo = guarded_getaddrinfo
@@ -115,6 +152,9 @@ def _forbid_network():
     socket.socket.connect = real_connect
     socket.socket.connect_ex = real_connect_ex
     socket.getaddrinfo = real_getaddrinfo
+    if Curl is not None:
+        Curl.perform = real_perform
+        AsyncCurl.add_handle = real_add_handle
 
 
 @pytest.fixture(autouse=True, scope="session")
@@ -143,9 +183,9 @@ def _forbid_the_real_database():
 def _disable_startup_jobs():
     """Stop the FastAPI lifespan starting its live-data warmers under pytest.
 
-    corporate_snapshot_cycle and stock_prewarm_cycle both fetch from the
-    network on startup, and prewarm's asyncio.to_thread worker cannot be
-    cancelled -- it outlives the TestClient block that started it and keeps
+    stock_prewarm_cycle fetches from the network on startup, and its
+    asyncio.to_thread worker cannot be cancelled -- it outlives the
+    TestClient block that started it and keeps
     emitting into the dev-monitor sink, evicting the events a test asserts on
     from its fixed recent(limit=N) window. Session-scoped and set before any
     TestClient is constructed.

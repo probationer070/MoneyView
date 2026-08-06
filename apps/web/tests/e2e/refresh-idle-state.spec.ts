@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { mockCorporatePageApi, type CorporatePageMockStats } from "./helpers/corporatePageMock";
 import { mockPortfolioPageApi, type PortfolioPageMockStats } from "./helpers/portfolioPageMock";
+import { openPortfolioPanel, portfolioModal } from "./helpers/portfolioPanels";
 
 const CORPORATE_DCF_CACHE_KEY = "moneyview:corporate-dcf-cache:v1";
 const CORPORATE_COMPARISON_CACHE_KEY = "moneyview:corporate-comparison-cache:v1";
@@ -96,7 +97,6 @@ test("corporate renders cached calculation results without auto-fetch and refres
           as_of_date: "2026-04-10",
           generated_at: "2026-04-10T10:00:00Z",
           snapshot_version: "cached",
-          snapshot_versions_for_day: 1,
           snapshot_available: true,
           snapshot_source: "cached",
           comparison_universe: "watchlist_plus_benchmark",
@@ -220,12 +220,12 @@ test("corporate page refresh restores the selected ticker without auto-fetching 
 
   await page.getByLabel("Company Search").fill("Microsoft");
   await page.getByRole("button", { name: "Microsoft" }).click();
-  await expect(page.getByText(/Microsoft: life cycle/i)).toBeVisible();
+  await expect(page.getByText(/Microsoft: hurdle rate/i)).toBeVisible();
 
   await page.reload({ waitUntil: "domcontentloaded" });
 
   await expect(page.getByRole("heading", { name: /Corporate Analysis/i })).toBeVisible({ timeout: 60_000 });
-  await expect(page.getByText(/Microsoft: life cycle/i)).toBeVisible();
+  await expect(page.getByText(/Microsoft: hurdle rate/i)).toBeVisible();
   await expect(page.getByRole("button", { name: /^Intrinsic DCF(?! Value)/i })).toContainText("Refresh to calculate");
   await page.waitForTimeout(300);
   expect(stats.dcfRequests).toBe(0);
@@ -299,7 +299,7 @@ test("corporate page refresh labels stale source-data cache for a different sele
 
   await page.goto("/corporate", { waitUntil: "domcontentloaded" });
 
-  await expect(page.getByText(/Microsoft: life cycle/i)).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByText(/Microsoft: hurdle rate/i)).toBeVisible({ timeout: 60_000 });
   await expect(page.getByRole("button", { name: /^Intrinsic DCF(?! Value)/i })).toContainText("Refresh to calculate");
   await expect(page.getByRole("button", { name: /^Intrinsic DCF(?! Value)/i })).not.toContainText("$199.9");
   await expect(page.getByText("Cached source data is for AAPL. Refresh for MSFT.")).toBeVisible();
@@ -324,10 +324,12 @@ test("portfolio first load auto-loads the latest comparison snapshot while histo
   await page.goto("/portfolio", { waitUntil: "domcontentloaded" });
 
   await expect(page.getByRole("heading", { name: "Portfolio", exact: true })).toBeVisible({ timeout: 60_000 });
+  await openPortfolioPanel(page, "snapshot");
   await expect(page.getByText("Saved snapshot history stays idle until you refresh portfolio analysis.")).toBeVisible();
-  await expect(page.getByText("Attribution stays idle on first load. Click Refresh Analysis when you want current portfolio attribution.")).toBeVisible();
-  await expect(page.getByText("Latest Snapshot Summary")).toBeVisible();
+  await expect(page.getByText("Latest Snapshot Summary").first()).toBeVisible();
   await expect(page.getByText(/Market expected return: 9\.70%/)).toBeVisible();
+  await openPortfolioPanel(page, "attribution");
+  await expect(page.getByText("Attribution stays idle on first load. Click Refresh Analysis when you want current portfolio attribution.")).toBeVisible();
   await page.waitForTimeout(300);
   expect(stats.comparisonRequests).toBe(1);
   expect(stats.comparisonHistoryRequests).toBe(0);
@@ -362,7 +364,6 @@ test("portfolio renders cached analysis without auto-fetch, refreshes on demand,
           as_of_date: "2026-04-10",
           generated_at: "2026-04-10T09:00:00Z",
           snapshot_version: "cached-portfolio",
-          snapshot_versions_for_day: 1,
           snapshot_available: true,
           snapshot_source: "cached",
           comparison_universe: "portfolio_plus_benchmark",
@@ -419,7 +420,6 @@ test("portfolio renders cached analysis without auto-fetch, refreshes on demand,
             as_of_date: "2026-04-10",
             generated_at: "2026-04-10T09:00:00Z",
             snapshot_version: "cached-portfolio",
-            snapshot_versions_for_day: 1,
             snapshot_source: "cached",
             comparison_universe: "portfolio_plus_benchmark",
             benchmark_ticker: "^GSPC",
@@ -511,10 +511,13 @@ test("portfolio renders cached analysis without auto-fetch, refreshes on demand,
   await page.goto("/portfolio", { waitUntil: "domcontentloaded" });
 
   await expect(page.getByRole("heading", { name: "Portfolio", exact: true })).toBeVisible({ timeout: 60_000 });
+  await openPortfolioPanel(page, "snapshot");
   await expect(page.getByText("Last updated")).toBeVisible();
-  await expect(page.getByText("Latest Snapshot Summary")).toBeVisible();
+  await expect(page.getByText("Latest Snapshot Summary").first()).toBeVisible();
   await expect(page.getByText("Positive Spread")).toBeVisible();
-  await expect(page.getByText("8.0%")).toBeVisible();
+  // The cached portfolio return renders in the attribution panel.
+  await openPortfolioPanel(page, "attribution");
+  await expect(page.getByText("8.0%").first()).toBeVisible();
   await page.waitForTimeout(300);
   expect(stats.comparisonRequests).toBe(1);
   expect(stats.comparisonHistoryRequests).toBe(0);
@@ -522,12 +525,14 @@ test("portfolio renders cached analysis without auto-fetch, refreshes on demand,
   expect(stats.stockDetailRequests).toBe(0);
   expect(stats.stockSnapshotHistoryRequests).toBe(0);
 
+  await openPortfolioPanel(page, "snapshot");
   await page.getByRole("button", { name: "Refresh Analysis" }).click();
   await expect.poll(() => stats.comparisonRequests).toBe(2);
   await expect.poll(() => stats.comparisonHistoryRequests).toBe(1);
   await expect.poll(() => stats.attributionRequests).toBe(1);
   await expect(page.getByText(/Refreshing portfolio comparison, snapshot history, and attribution\./)).toBeVisible();
 
+  await openPortfolioPanel(page, "allocation");
   await page.getByLabel("Add to Watchlist only").check();
   await page.getByLabel("Ticker", { exact: true }).fill("ORCL");
   await page.getByLabel("Name", { exact: true }).fill("Oracle");
@@ -540,8 +545,9 @@ test("portfolio renders cached analysis without auto-fetch, refreshes on demand,
   expect(stats.stockDetailRequests).toBe(0);
   expect(stats.stockSnapshotHistoryRequests).toBe(0);
 
+  await openPortfolioPanel(page, "holdings");
   await page.locator('[role="button"]').filter({ hasText: "Apple" }).first().click();
-  const stockDetailDialog = page.getByRole("dialog");
+  const stockDetailDialog = portfolioModal(page);
   await expect(stockDetailDialog).toBeVisible();
   await expect.poll(() => stats.stockDetailRequests).toBe(1);
   await expect.poll(() => stats.stockSnapshotHistoryRequests).toBeGreaterThan(0);

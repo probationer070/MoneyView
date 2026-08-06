@@ -80,7 +80,7 @@ Market Overview 탭은 거시 경제 모니터링을 위한 루트 대시보드�
 *   **DCF (할인현금흐름 모형 / Fundamental Valuation)**: 결과적으로 `Free Cash Flow to Firm(기업자유현금흐름) = EBIT(1 - t) + 감가상각 - 자본적지출(CapEx) - 순운전자본증감(ΔNWC)`를 추출한 수, 이를 영속 가치 모형(Gordon Growth Terminal Value)과 복합시켜 산출합니다.
 
 ### 아키텍처적 설계 의도
-*   **Realtime Assumptions UX**: 사용자가 파라미터(성장률, ROIC, WACC) 좌우측 슬라이더를 변경할 때마다 즉시 본질 가치 변동이 차트(레이더, Minard 곡선, DCF Core Modules 블록 분해도 등)에 적용되어야 합니다. 과도한 통신 방어를 위해 프론트엔드의 데바운스(Debounce) 훅을 사용해 무거운 백엔드 계산 빈도를 영리하게 조절했습니다.
+*   **Realtime Assumptions UX**: 사용자가 파라미터(성장률, ROIC, WACC) 좌우측 슬라이더를 변경할 때마다 즉시 본질 가치 변동이 차트(레이더, WACC U-Curve, DCF Core Modules 블록 분해도 등)에 적용되어야 합니다. 과도한 통신 방어를 위해 프론트엔드의 데바운스(Debounce) 훅을 사용해 무거운 백엔드 계산 빈도를 영리하게 조절했습니다.
 *   산식의 신뢰도를 위한 데이터 모달화(Lineage): 숫자 하나를 클릭해 들어가면 어떤 공식이 사용되었는지, 수치의 원본 출처(Source Lineage)가 어느 API인지까지 모달로 해부하여 보여주며 데이터 투명성을 강제하도록 구성하였습니다.
 
 ### 향후 개선점 (Improvements)

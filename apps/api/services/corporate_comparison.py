@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Callable
@@ -17,8 +16,14 @@ from apps.api.models.schemas import (
     CorporateComparisonStockHistoryResponse,
     CorporateMetrics,
 )
+from apps.api.services.acquisition.runner import acquire_point_in_time
+from apps.api.services.acquisition.sources.quote_facts import fetch_quote_facts
+from apps.api.services.acquisition.sources.statements import fetch_statements
+from apps.api.services.acquisition.store import save_quote_facts, save_statements, statement_coverage
+from apps.api.services.corporate_statement_metrics import _pick_worst_quality
 from apps.api.services.db import get_db
-from packages.core_finance.dcf import calculate_equity_value
+from apps.api.services.equity_bridge import load_equity_bridge
+from packages.core_finance.dcf import calculate_equity_value, calculate_intrinsic_value_per_share
 from packages.core_finance.expected_return import (
     ExpectedReturnInputs,
     calculate_expected_return_result,
@@ -36,9 +41,15 @@ DEFAULT_BENCHMARK_TICKER = "^GSPC"
 BENCHMARK_GROUP_NAME = "benchmark"
 DEFAULT_TAX_RATE = 0.21
 
+# Bumped by hand whenever metric SEMANTICS change -- a formula, a fallback, an input
+# source. Not a database schema version and not a payload format version. It exists
+# because snapshots are immutable and comparable: two computed by different metric code
+# are not like for like, and the comparison feature must be able to see that.
+METRIC_SCHEMA_VERSION = 2
+
 
 @dataclass(frozen=True)
-class _CompanyUniverseData:
+class CompanyUniverseData:
     registry: dict[str, dict[str, object]]
     watchlist_rows: list[dict[str, object]]
 
@@ -76,40 +87,56 @@ def build_corporate_comparison_response(
         if latest_snapshot_meta is not None:
             live.snapshot.snapshot_source = str(latest_snapshot_meta["snapshot_source"] or "")
             live.snapshot.snapshot_version = str(latest_snapshot_meta["snapshot_version"] or "")
-            live.snapshot.snapshot_versions_for_day = int(latest_snapshot_meta["snapshot_versions_for_day"] or 0)
         return live
 
-    snapshot = _load_snapshot_response(
-        snapshot_date=_snapshot_business_date(),
+    # Reads never write. The former fallback computed and persisted a snapshot when today's
+    # was missing, which put a multi-minute live sweep inside a request the user never made.
+    # Snapshot creation is exclusively user-initiated now.
+    latest = _load_latest_snapshot_response(
         comparison_universe=comparison_universe,
         benchmark_ticker=benchmark_ticker,
         custom_tickers=custom_tickers,
     )
-    if snapshot is not None:
-        return snapshot
+    if latest is not None:
+        return latest
+    return _empty_snapshot_response(
+        comparison_universe=comparison_universe,
+        benchmark_ticker=benchmark_ticker,
+        custom_tickers=custom_tickers,
+        risk_free_rate=risk_free_rate,
+        equity_risk_premium=equity_risk_premium,
+    )
 
-    latest_snapshot = _load_latest_snapshot_response(
-        comparison_universe=comparison_universe,
-        benchmark_ticker=benchmark_ticker,
-        custom_tickers=custom_tickers,
-    )
-    try:
-        return save_corporate_comparison_snapshot(
-            snapshot_source="scheduled_kst_daily",
+
+def _empty_snapshot_response(
+    *,
+    comparison_universe: str,
+    benchmark_ticker: str,
+    custom_tickers: list[str],
+    risk_free_rate: float,
+    equity_risk_premium: float,
+) -> CorporateComparisonResponse:
+    """The explicit empty state for `mode=snapshot` when no snapshot has ever been taken."""
+    return CorporateComparisonResponse(
+        market_expected_return=_market_expected_return_pct(risk_free_rate, equity_risk_premium),
+        risk_free_rate=round(risk_free_rate * 100, 2),
+        equity_risk_premium=round(equity_risk_premium * 100, 2),
+        stock_expected_return_method=STOCK_EXPECTED_RETURN_METHOD,
+        comparison_reference_return_method=REFERENCE_EXPECTED_RETURN_METHOD,
+        snapshot=CorporateComparisonSnapshotMeta(
+            mode="snapshot",
+            snapshot_version="",
+            snapshot_available=False,
+            snapshot_source="",
             comparison_universe=comparison_universe,
-            benchmark_ticker=benchmark_ticker,
-            custom_tickers=custom_tickers,
-            metrics_loader=metrics_loader,
-            price_loader=price_loader,
-            default_companies=default_companies,
-            risk_free_rate=risk_free_rate,
-            equity_risk_premium=equity_risk_premium,
-        )
-    except (sqlite3.Error, ValueError, KeyError):
-        if latest_snapshot is not None:
-            latest_snapshot.snapshot.snapshot_is_stale = True
-            return latest_snapshot
-        raise
+            benchmark_ticker=_normalize_benchmark_ticker(benchmark_ticker),
+            custom_tickers=_normalize_custom_tickers(custom_tickers),
+            snapshot_cadence=SNAPSHOT_CADENCE,
+            snapshot_retention_days=SNAPSHOT_RETENTION_DAYS,
+            snapshot_is_stale=False,
+        ),
+        rows=[],
+    )
 
 
 def save_corporate_comparison_snapshot(
@@ -155,8 +182,8 @@ def save_corporate_comparison_snapshot(
                        group_name, weight, roic, wacc, roic_minus_wacc, dcf_value, current_price,
                        dcf_implied_return, capm_expected_return, stock_expected_return,
                        market_expected_return, expected_return_spread, stock_expected_return_source,
-                       has_price_data
-                   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                       has_price_data, metric_schema_version, bridge_quality
+                   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     snapshot_version,
                     snapshot_date,
@@ -186,16 +213,13 @@ def save_corporate_comparison_snapshot(
                     row.expected_return_spread,
                     row.stock_expected_return_source,
                     1 if row.has_price_data else 0,
+                    METRIC_SCHEMA_VERSION,
+                    row.bridge_quality,
                 ),
             )
         conn.execute(
             "DELETE FROM corporate_comparison_snapshots_v3 WHERE snapshot_date < ?",
             ((_now_kst() - timedelta(days=SNAPSHOT_RETENTION_DAYS)).date().isoformat(),),
-        )
-        snapshot_versions_for_day = _count_snapshot_versions_for_day(
-            conn,
-            snapshot_date=snapshot_date,
-            universe_key=universe_key,
         )
 
     response.snapshot = CorporateComparisonSnapshotMeta(
@@ -203,7 +227,6 @@ def save_corporate_comparison_snapshot(
         as_of_date=snapshot_date,
         generated_at=snapshot_taken_at,
         snapshot_version=snapshot_version,
-        snapshot_versions_for_day=snapshot_versions_for_day,
         snapshot_available=bool(response.rows),
         snapshot_source=snapshot_source,
         comparison_universe=comparison_universe,
@@ -249,7 +272,6 @@ def _build_live_response(
             as_of_date=_snapshot_business_date(),
             generated_at=generated_at,
             snapshot_version="",
-            snapshot_versions_for_day=0,
             snapshot_available=False,
             snapshot_source="",
             comparison_universe=comparison_universe,
@@ -274,7 +296,7 @@ def _build_live_rows(
     risk_free_rate: float,
     equity_risk_premium: float,
 ) -> list[CorporateComparisonRow]:
-    company_data = _load_company_universe_data(default_companies)
+    company_data = load_company_universe_data(default_companies)
     universe_rows = _resolve_comparison_universe_rows(
         comparison_universe=comparison_universe,
         benchmark_ticker=benchmark_ticker,
@@ -321,6 +343,7 @@ def _build_live_rows(
                     expected_return_spread=float(dcf["expected_return_spread"]),
                     stock_expected_return_source=STOCK_EXPECTED_RETURN_METHOD,
                     has_price_data=float(dcf["current_price"]) > 0,
+                    bridge_quality=str(dcf["bridge_quality"]),
                 )
             )
     return rows
@@ -333,6 +356,7 @@ def _dcf_snapshot(
     price_loader: Callable[[str], float],
     risk_free_rate: float,
     equity_risk_premium: float,
+    bridge_loader=load_equity_bridge,
 ) -> dict[str, float | str]:
     with perf_timer(scope="calculation", operation="calculation.dcf_upside", ticker=ticker, component="corporate_comparison"):
         current_price = price_loader(ticker)
@@ -348,17 +372,48 @@ def _dcf_snapshot(
         terminal_value = terminal_cash_flow / max(wacc - terminal_growth, 0.005)
         pv_terminal = terminal_value / ((1 + wacc) ** 5)
         enterprise_value = pv_fcff + pv_terminal
-        estimated_value = calculate_equity_value(
-            enterprise_value=enterprise_value,
-            net_debt=0.0,
-            non_operating_assets=0.0,
+
+        bridge = bridge_loader(ticker)
+        net_debt = bridge.net_debt.value
+        non_operating_assets = bridge.non_operating_assets.value
+        shares = bridge.diluted_shares_outstanding.value
+        bridge_quality = _pick_worst_quality(
+            bridge.net_debt.quality,
+            bridge.non_operating_assets.quality,
+            bridge.diluted_shares_outstanding.quality,
+        )
+        equity_value = (
+            calculate_equity_value(
+                enterprise_value=enterprise_value,
+                net_debt=net_debt,
+                non_operating_assets=non_operating_assets or 0.0,
+            )
+            if net_debt is not None
+            else None
+        )
+        intrinsic_value_per_share = (
+            calculate_intrinsic_value_per_share(equity_value, shares)
+            if equity_value is not None and shares is not None and shares > 0
+            else None
+        )
+        estimated_value = (
+            intrinsic_value_per_share
+            if intrinsic_value_per_share is not None
+            else enterprise_value
         )
 
     with perf_timer(scope="metric", operation="metric.expected_vs_market", ticker=ticker, component="corporate_comparison"):
         expected_returns = calculate_expected_return_result(
             ExpectedReturnInputs(
                 current_price=current_price,
-                intrinsic_value=current_price,
+                # The real intrinsic value, not the current price. Passing the price made
+                # dcf_implied_return = f(price, price) = 0, and stock_expected_return is
+                # assigned from it, so three columns were constant for every ticker.
+                intrinsic_value=(
+                    intrinsic_value_per_share
+                    if intrinsic_value_per_share is not None
+                    else current_price
+                ),
                 risk_free_rate=risk_free_rate,
                 equity_risk_premium=equity_risk_premium,
                 beta=_levered_beta_from_metrics(metrics),
@@ -373,8 +428,25 @@ def _dcf_snapshot(
         "stock_expected_return": round(float(expected_returns.stock_expected_return * 100), 2),
         "market_expected_return": round(float(expected_returns.market_expected_return * 100), 2),
         "expected_return_spread": round(float(expected_returns.expected_return_spread * 100), 2),
-        "status": "Bridge Incomplete",
+        # Internal only: CorporateComparisonRow has no status field and never has, and
+        # _build_live_rows above does not read this key, so nothing in the comparison
+        # table or the persisted snapshot can observe this verdict. The DCFSummary.status
+        # the UI does render belongs to the single-ticker DCF endpoint, a different model
+        # built by corporate_dcf.py. Do not assume this reaches the UI; surfacing it would
+        # take a new field on the row, the snapshot table and the frontend types.
+        "status": (
+            "Bridge Incomplete"
+            if intrinsic_value_per_share is None
+            else "Undervalued" if current_price > 0 and intrinsic_value_per_share > current_price
+            else "Overvalued"
+        ),
+        "bridge_quality": bridge_quality,
     }
+
+
+def _rounded_or_none(value: object) -> float | None:
+    """Round a SQL aggregate, preserving NULL as None rather than collapsing it to 0.0."""
+    return None if value is None else round(float(value), 2)
 
 
 def _market_expected_return_pct(risk_free_rate: float, equity_risk_premium: float) -> float:
@@ -413,18 +485,13 @@ def _load_snapshot_response(
                       weight, roic, wacc, roic_minus_wacc, dcf_value, current_price,
                       dcf_implied_return, capm_expected_return, stock_expected_return,
                       market_expected_return, expected_return_spread, stock_expected_return_source,
-                      has_price_data
+                      has_price_data, bridge_quality
                FROM corporate_comparison_snapshots_v3
                WHERE snapshot_version = ?
                ORDER BY group_name, ticker""",
             (str(version_row["snapshot_version"]),),
         ).fetchall()
-        snapshot_versions_for_day = _count_snapshot_versions_for_day(
-            conn,
-            snapshot_date=snapshot_date,
-            universe_key=universe_key,
-        )
-    return _rows_to_response(rows, snapshot_versions_for_day=snapshot_versions_for_day)
+    return _rows_to_response(rows)
 
 
 def _load_latest_snapshot_response(
@@ -440,15 +507,12 @@ def _load_latest_snapshot_response(
     )
     if latest is None:
         return None
-    response = _load_snapshot_response(
+    return _load_snapshot_response(
         snapshot_date=str(latest["snapshot_date"]),
         comparison_universe=comparison_universe,
         benchmark_ticker=benchmark_ticker,
         custom_tickers=custom_tickers,
     )
-    if response is not None and str(latest["snapshot_date"]) != _snapshot_business_date():
-        response.snapshot.snapshot_is_stale = True
-    return response
 
 
 def _load_latest_snapshot_meta(
@@ -478,18 +542,11 @@ def _load_latest_snapshot_meta(
             "snapshot_date": str(latest["snapshot_date"]),
             "snapshot_taken_at": str(latest["snapshot_taken_at"]),
             "snapshot_source": str(latest["snapshot_source"] or ""),
-            "snapshot_versions_for_day": _count_snapshot_versions_for_day(
-                conn,
-                snapshot_date=str(latest["snapshot_date"]),
-                universe_key=universe_key,
-            ),
         }
 
 
 def _rows_to_response(
     rows: list[object],
-    *,
-    snapshot_versions_for_day: int = 1,
 ) -> CorporateComparisonResponse | None:
     if not rows:
         return None
@@ -523,6 +580,7 @@ def _rows_to_response(
             expected_return_spread=float(row["expected_return_spread"]),
             stock_expected_return_source=str(row["stock_expected_return_source"] or STOCK_EXPECTED_RETURN_METHOD),
             has_price_data=bool(row["has_price_data"]),
+            bridge_quality=str(row["bridge_quality"]),
         )
         for row in rows
     ]
@@ -538,7 +596,6 @@ def _rows_to_response(
             as_of_date=snapshot_date,
             generated_at=snapshot_taken_at,
             snapshot_version=snapshot_version,
-            snapshot_versions_for_day=snapshot_versions_for_day,
             snapshot_available=True,
             snapshot_source=snapshot_source,
             comparison_universe=comparison_universe,
@@ -546,42 +603,11 @@ def _rows_to_response(
             custom_tickers=custom_tickers,
             snapshot_cadence=SNAPSHOT_CADENCE,
             snapshot_retention_days=SNAPSHOT_RETENTION_DAYS,
-            snapshot_is_stale=snapshot_date != _snapshot_business_date(),
+            # Manual-only snapshots have no cadence to be late for: a snapshot dated before
+            # today is the normal case (the user last asked then), not a missed refresh.
+            snapshot_is_stale=False,
         ),
         rows=response_rows,
-    )
-
-
-def ensure_daily_snapshot_current(
-    *,
-    comparison_universe: str = DEFAULT_COMPARISON_UNIVERSE,
-    benchmark_ticker: str = DEFAULT_BENCHMARK_TICKER,
-    custom_tickers: list[str] | None = None,
-    metrics_loader: Callable[..., CorporateMetrics],
-    price_loader: Callable[[str], float],
-    default_companies: dict[str, dict[str, str]],
-    risk_free_rate: float,
-    equity_risk_premium: float,
-) -> CorporateComparisonResponse | None:
-    normalized_custom_tickers = custom_tickers or []
-    current_date = _snapshot_business_date()
-    if _load_snapshot_response(
-        snapshot_date=current_date,
-        comparison_universe=comparison_universe,
-        benchmark_ticker=benchmark_ticker,
-        custom_tickers=normalized_custom_tickers,
-    ) is not None:
-        return None
-    return save_corporate_comparison_snapshot(
-        snapshot_source="scheduled_kst_daily",
-        comparison_universe=comparison_universe,
-        benchmark_ticker=benchmark_ticker,
-        custom_tickers=normalized_custom_tickers,
-        metrics_loader=metrics_loader,
-        price_loader=price_loader,
-        default_companies=default_companies,
-        risk_free_rate=risk_free_rate,
-        equity_risk_premium=equity_risk_premium,
     )
 
 
@@ -617,42 +643,33 @@ def load_corporate_comparison_history(
                    FROM corporate_comparison_snapshots_v3
                    WHERE universe_key = ?
                ),
-               version_counts AS (
-                   SELECT snapshot_date, COUNT(DISTINCT snapshot_version) AS snapshot_versions_for_day
-                   FROM corporate_comparison_snapshots_v3
-                   WHERE universe_key = ?
-                   GROUP BY snapshot_date
-               ),
                latest_versions AS (
-                   SELECT versions.*, version_counts.snapshot_versions_for_day
+                   SELECT *
                    FROM versions
-                   JOIN version_counts
-                     ON version_counts.snapshot_date = versions.snapshot_date
                    WHERE version_rank = 1
                )
                SELECT lv.snapshot_date,
                       lv.snapshot_taken_at,
                       lv.snapshot_version,
-                      lv.snapshot_versions_for_day,
                       lv.snapshot_source,
                       lv.comparison_universe,
                       lv.benchmark_ticker,
                       lv.risk_free_rate,
                       lv.equity_risk_premium,
-                      AVG(CASE WHEN s.group_name != ? THEN s.expected_return_spread END) AS average_expected_return_spread,
+                      AVG(CASE WHEN s.group_name != ? AND s.bridge_quality != 'missing' THEN s.expected_return_spread END) AS average_expected_return_spread,
                       AVG(CASE WHEN s.group_name != ? THEN s.roic_minus_wacc END) AS average_roic_minus_wacc,
-                      AVG(CASE WHEN s.group_name != ? THEN s.dcf_value END) AS average_dcf_value,
-                      COUNT(CASE WHEN s.group_name != ? THEN 1 END) AS stock_count
+                      AVG(CASE WHEN s.group_name != ? AND s.bridge_quality != 'missing' THEN s.dcf_value END) AS average_dcf_value,
+                      COUNT(CASE WHEN s.group_name != ? THEN 1 END) AS stock_count,
+                      MAX(s.metric_schema_version) AS metric_schema_version
                FROM latest_versions lv
                JOIN corporate_comparison_snapshots_v3 s
                  ON s.snapshot_version = lv.snapshot_version
-               GROUP BY lv.snapshot_date, lv.snapshot_taken_at, lv.snapshot_version, lv.snapshot_versions_for_day,
+               GROUP BY lv.snapshot_date, lv.snapshot_taken_at, lv.snapshot_version,
                         lv.snapshot_source, lv.comparison_universe, lv.benchmark_ticker,
                         lv.risk_free_rate, lv.equity_risk_premium
                ORDER BY lv.snapshot_date DESC
                LIMIT ?""",
             (
-                universe_key,
                 universe_key,
                 BENCHMARK_GROUP_NAME,
                 BENCHMARK_GROUP_NAME,
@@ -666,14 +683,20 @@ def load_corporate_comparison_history(
             as_of_date=str(row["snapshot_date"]),
             generated_at=str(row["snapshot_taken_at"] or ""),
             snapshot_version=str(row["snapshot_version"] or ""),
-            snapshot_versions_for_day=int(row["snapshot_versions_for_day"] or 1),
             snapshot_source=str(row["snapshot_source"] or ""),
             comparison_universe=str(row["comparison_universe"] or comparison_universe),
             benchmark_ticker=str(row["benchmark_ticker"] or normalized_benchmark),
             stock_count=int(row["stock_count"] or 0),
-            average_expected_return_spread=round(float(row["average_expected_return_spread"] or 0.0), 2),
+            # NULL stays None. Both of these average only the rows whose bridge resolved,
+            # so a snapshot where every non-benchmark row is 'missing' averages nothing --
+            # and an average over zero rows is absent, not zero.
+            average_expected_return_spread=_rounded_or_none(row["average_expected_return_spread"]),
             average_roic_minus_wacc=round(float(row["average_roic_minus_wacc"] or 0.0), 2),
-            average_dcf_value=round(float(row["average_dcf_value"] or 0.0), 2),
+            average_dcf_value=_rounded_or_none(row["average_dcf_value"]),
+            # MAX, not MIN: every row of a snapshot is written in one transaction so they
+            # necessarily share a version, and if that invariant is ever broken the newer
+            # definition should surface rather than a stale one masking a mixed snapshot.
+            metric_schema_version=int(row["metric_schema_version"] or 0),
             market_expected_return=_market_expected_return_pct(
                 float(row["risk_free_rate"] or 0.0) / 100,
                 float(row["equity_risk_premium"] or 0.0) / 100,
@@ -698,7 +721,7 @@ def load_corporate_comparison_snapshot_version(*, snapshot_version: str) -> Corp
                       weight, roic, wacc, roic_minus_wacc, dcf_value, current_price,
                       dcf_implied_return, capm_expected_return, stock_expected_return,
                       market_expected_return, expected_return_spread, stock_expected_return_source,
-                      has_price_data
+                      has_price_data, bridge_quality
                FROM corporate_comparison_snapshots_v3
                WHERE snapshot_version = ?
                ORDER BY group_name, ticker""",
@@ -706,17 +729,7 @@ def load_corporate_comparison_snapshot_version(*, snapshot_version: str) -> Corp
         ).fetchall()
         if not rows:
             return None
-        first = rows[0]
-        snapshot_versions_for_day = _count_snapshot_versions_for_day(
-            conn,
-            snapshot_date=str(first["snapshot_date"]),
-            universe_key=_comparison_universe_key(
-                comparison_universe=str(first["comparison_universe"] or DEFAULT_COMPARISON_UNIVERSE),
-                benchmark_ticker=str(first["benchmark_ticker"] or DEFAULT_BENCHMARK_TICKER),
-                custom_tickers=_normalize_custom_tickers(str(first["custom_tickers"] or "").split(",")),
-            ),
-        )
-    return _rows_to_response(rows, snapshot_versions_for_day=snapshot_versions_for_day)
+    return _rows_to_response(rows)
 
 
 def delete_corporate_comparison_snapshot_version(*, snapshot_version: str) -> int:
@@ -810,12 +823,6 @@ def load_corporate_comparison_stock_history(
     )
 
 
-def seconds_until_next_kst_midnight() -> float:
-    now = _now_kst()
-    next_midnight = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
-    return max((next_midnight - now).total_seconds(), 1.0)
-
-
 def _now_utc() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -829,10 +836,10 @@ def _snapshot_business_date() -> str:
 
 
 def _load_company_registry(default_companies: dict[str, dict[str, str]]) -> dict[str, dict[str, object]]:
-    return _load_company_universe_data(default_companies).registry
+    return load_company_universe_data(default_companies).registry
 
 
-def _load_company_universe_data(default_companies: dict[str, dict[str, str]]) -> _CompanyUniverseData:
+def load_company_universe_data(default_companies: dict[str, dict[str, str]]) -> CompanyUniverseData:
     registry: dict[str, dict[str, object]] = {
         ticker.upper(): {
             "ticker": ticker.upper(),
@@ -890,7 +897,7 @@ def _load_company_universe_data(default_companies: dict[str, dict[str, str]]) ->
             "weight": float(existing.get("weight", 0.0)),
         }
 
-    return _CompanyUniverseData(registry=registry, watchlist_rows=watchlist_payload)
+    return CompanyUniverseData(registry=registry, watchlist_rows=watchlist_payload)
 
 
 def _resolve_comparison_universe_rows(
@@ -991,17 +998,56 @@ def _comparison_universe_key(
 
 
 def _snapshot_version_id(*, universe_key: str, snapshot_taken_at: str) -> str:
-    return f"{_snapshot_business_date()}|{universe_key}|{snapshot_taken_at}"
+    # The business-date component is gone: snapshots are manual, so there is no day for an
+    # identifier to belong to. Renaming this field to snapshot_id is deferred -- the name is
+    # a query parameter on two routes and an identity key across five frontend files, and
+    # moving it is an API break with no behavioural gain.
+    return f"{snapshot_taken_at}|{universe_key}"
 
 
-def _count_snapshot_versions_for_day(conn, *, snapshot_date: str, universe_key: str) -> int:
-    row = conn.execute(
-        """SELECT COUNT(DISTINCT snapshot_version) AS version_count
-           FROM corporate_comparison_snapshots_v3
-           WHERE snapshot_date = ? AND universe_key = ?""",
-        (snapshot_date, universe_key),
-    ).fetchone()
-    return int(row["version_count"] or 0) if row is not None else 0
+def acquire_comparison_datasets(
+    *,
+    comparison_universe: str,
+    benchmark_ticker: str,
+    custom_tickers: list[str],
+    company_registry: dict[str, dict[str, object]],
+    watchlist_payload: list[dict[str, object]],
+    now: datetime,
+    statements_fetcher=fetch_statements,
+    quote_facts_fetcher=fetch_quote_facts,
+) -> None:
+    """Refresh only the datasets whose freshness boundaries have expired, then return.
+
+    One button, not two: separate fetch and compute buttons would let a snapshot be
+    generated from statements the user forgot to refresh -- the false-precision problem
+    relocated rather than solved. In the common case no acquisition occurs.
+
+    The fetchers are injected so this is testable without a network. That is not only
+    convenience: acquire_point_in_time catches Exception broadly, so the suite's network
+    guard would be swallowed into a FAILED status and the test would pass while silently
+    recording failures.
+    """
+    universe_rows = _resolve_comparison_universe_rows(
+        comparison_universe=comparison_universe,
+        benchmark_ticker=benchmark_ticker,
+        custom_tickers=custom_tickers,
+        company_registry=company_registry,
+        watchlist_payload=watchlist_payload,
+    )
+    for row in universe_rows:
+        ticker = str(row["ticker"])
+        acquire_point_in_time(
+            "statements", ticker, now=now,
+            fetcher=statements_fetcher,
+            saver=save_statements,
+            coverage=statement_coverage,
+        )
+        acquire_point_in_time(
+            "market_cap", ticker, now=now,
+            fetcher=quote_facts_fetcher,
+            saver=save_quote_facts,
+            coverage=lambda facts: (now.date(), now.date()),
+        )
 
 
 def _levered_beta_from_metrics(metrics: CorporateMetrics) -> float:

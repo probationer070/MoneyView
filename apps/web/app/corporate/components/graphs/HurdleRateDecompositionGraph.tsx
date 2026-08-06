@@ -8,11 +8,11 @@ import { type DetailKey, type HurdleBarPoint, type RegionalHurdlePoint, pct, pct
 
 export function HurdleRateDecompositionGraph({
   hurdleBars,
-  regionalMinard,
+  regionalHurdle,
   onOpenDetail,
 }: {
   hurdleBars: HurdleBarPoint[];
-  regionalMinard: RegionalHurdlePoint[];
+  regionalHurdle: RegionalHurdlePoint[];
   onOpenDetail: (key: DetailKey) => void;
 }) {
   return (
@@ -32,7 +32,7 @@ export function HurdleRateDecompositionGraph({
       </div>
       <div className="h-72 min-h-72 min-w-0">
         <ResponsiveChart className="h-full w-full" minWidth={1} minHeight={1}>
-          <ComposedChart data={regionalMinard} margin={{ top: 20, right: 20, left: 0, bottom: 0 }}>
+          <ComposedChart data={regionalHurdle} margin={{ top: 20, right: 20, left: 0, bottom: 0 }}>
             <CartesianGrid {...GRID_STYLE} />
             <XAxis dataKey="region" {...withCategoryAxisProps()} />
             <YAxis {...withAxisProps({ tickFormatter: (value: number | string) => fmtPctTick(Number(value), 0) })} />

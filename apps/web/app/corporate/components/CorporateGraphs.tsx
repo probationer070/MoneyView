@@ -27,13 +27,6 @@ export const BetaWaccCurveGraph = dynamic(
   },
 );
 
-export const CompanyStatusGraph = dynamic(
-  () => import("./graphs/CompanyStatusGraph").then((mod) => mod.CompanyStatusGraph),
-  {
-    loading: () => <GraphLoadingCard className="lg:col-span-2" title="Company Status Diagnosis" />,
-  },
-);
-
 export const DcfCoreModulesGraph = dynamic(
   () => import("./graphs/DcfCoreModulesGraph").then((mod) => mod.DcfCoreModulesGraph),
   {
@@ -45,13 +38,6 @@ export const HurdleRateDecompositionGraph = dynamic(
   () => import("./graphs/HurdleRateDecompositionGraph").then((mod) => mod.HurdleRateDecompositionGraph),
   {
     loading: () => <GraphLoadingCard className="lg:col-span-2" title="Hurdle Rate Decomposition" />,
-  },
-);
-
-export const RiskReturnMinardGraph = dynamic(
-  () => import("./graphs/RiskReturnMinardGraph").then((mod) => mod.RiskReturnMinardGraph),
-  {
-    loading: () => <GraphLoadingCard className="lg:col-span-4" title="Risk-Return Minard Chart" chartHeightClassName="h-80" />,
   },
 );
 

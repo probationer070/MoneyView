@@ -6,6 +6,7 @@ import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { RefreshCw } from "lucide-react";
 import { fetchApi } from "@/lib/api";
+import { bridgedEstimatedValue, UNBRIDGED_PLACEHOLDER, UNBRIDGED_REASON } from "@/lib/bridgeQuality";
 import { useDevMonitorPageLoad } from "@/hooks/useDevMonitorPageLoad";
 import type {
   CorporateDcfBatchRequest,
@@ -153,7 +154,6 @@ export default function CorporateAnalysisPage() {
   const [latestLoadedMetrics, setLatestLoadedMetrics] = useState<CorporateMetricsApi | null>(null);
   const [roicBasis, setRoicBasis] = useState<RoicBasis>("recent_average");
   const [roicYear, setRoicYear] = useState("2025");
-  const [includeSubjectiveHealth, setIncludeSubjectiveHealth] = useState(false);
   const [comparisonSortKey, setComparisonSortKey] = useState<ComparisonSortKey>("expected_return_spread");
   const [comparisonSortDirection, setComparisonSortDirection] = useState<"desc" | "asc">("desc");
   const [comparisonUniverse, setComparisonUniverse] = useState<ComparisonUniverse>("watchlist_plus_benchmark");
@@ -462,30 +462,6 @@ export default function CorporateAnalysisPage() {
     const bottomUpKe = RISK_FREE_RATE + leveredBeta * impliedErp + KOREA_COUNTRY_RISK_PREMIUM;
     const spread = assumptions.roic - assumptions.wacc;
     const sustainableGrowth = (assumptions.reinvestment / 100) * assumptions.roic;
-    const terminalValueShare = clamp(62 + assumptions.growth * 1.8 - assumptions.wacc * 1.2, 20, 88);
-    const successProbability = clamp(55 + spread * 2.3 + assumptions.growth - assumptions.esgPenalty * 0.25, 5, 95);
-    const agencyRisk = clamp(100 - assumptions.governance + assumptions.esgPenalty, 0, 100);
-    const lifeCyclePosition = clamp(35 + assumptions.growth * 2.5 - assumptions.debtRatio * 0.3, 0, 100);
-    const leveredBetaRiskScore = clamp(100 - Math.max(leveredBeta - 1, 0) * 35, 0, 100);
-    const objectiveHealthInputs = [
-      assumptions.growth * 2,
-      assumptions.marketShare,
-      lifeCyclePosition,
-      leveredBetaRiskScore,
-    ];
-    const subjectiveHealthInputs = [
-      assumptions.innovation,
-      assumptions.governance,
-      100 - agencyRisk,
-    ];
-    const healthInputs = includeSubjectiveHealth
-      ? [...objectiveHealthInputs, ...subjectiveHealthInputs]
-      : objectiveHealthInputs;
-    const healthScore = clamp(
-      healthInputs.reduce((sum, value) => sum + value, 0) / healthInputs.length,
-      0,
-      100,
-    );
 
     return {
       debtToEquity,
@@ -493,14 +469,8 @@ export default function CorporateAnalysisPage() {
       bottomUpKe,
       spread,
       sustainableGrowth,
-      terminalValueShare,
-      successProbability,
-      agencyRisk,
-      lifeCyclePosition,
-      leveredBetaRiskScore,
-      healthScore,
     };
-  }, [assumptions, impliedErp, includeSubjectiveHealth]);
+  }, [assumptions, impliedErp]);
 
   const comparisonQuery = useQuery<CorporateComparisonApi>({
     queryKey: [
@@ -789,27 +759,13 @@ export default function CorporateAnalysisPage() {
   }, [bulkDcfReportUniverseKey]);
 
   // Chart datasets keep each visualization declarative and reuse the same derived model.
-  const healthRadar = [
-    { subject: "Growth", score: clamp(assumptions.growth * 7, 0, 100), peer: 58 },
-    { subject: "Market Share", score: assumptions.marketShare, peer: 62 },
-    { subject: "Life Cycle", score: derived.lifeCyclePosition, peer: 60 },
-    { subject: "Levered Beta Risk", score: derived.leveredBetaRiskScore, peer: 70 },
-    ...(includeSubjectiveHealth
-      ? [
-        { subject: "Innovation", score: assumptions.innovation, peer: 66 },
-        { subject: "Governance", score: assumptions.governance, peer: 65 },
-        { subject: "Agency Risk", score: 100 - derived.agencyRisk, peer: 62 },
-      ]
-      : []),
-  ];
-
   const hurdleBars = [
     { name: "Risk-free", value: RISK_FREE_RATE, fill: "#9DA5A2" },
     { name: "Beta x Implied ERP", value: derived.leveredBeta * impliedErp, fill: "#60CAAD" },
     { name: "CRP", value: KOREA_COUNTRY_RISK_PREMIUM, fill: "#444444" },
   ];
 
-  const regionalMinard = [
+  const regionalHurdle = [
     { region: "US", rf: RISK_FREE_RATE, erp: impliedErp, defaultSpread: 0.0, riskMultiplier: 0.0, crp: 0.0, revenue: 46 },
     { region: "EU", rf: RISK_FREE_RATE + 0.2, erp: impliedErp + 0.4, defaultSpread: 0.3, riskMultiplier: 1.0, crp: 0.3, revenue: 22 },
     { region: "Korea", rf: RISK_FREE_RATE + 0.4, erp: impliedErp + 1.2, defaultSpread: KOREA_COUNTRY_RISK_PREMIUM, riskMultiplier: 1.0, crp: KOREA_COUNTRY_RISK_PREMIUM, revenue: 12 },
@@ -843,13 +799,6 @@ export default function CorporateAnalysisPage() {
     { name: "Peer C", growth: 2.1, spread: 7.2, efficiency: 68, fcff: 60 },
   ];
 
-  const riskReturn = [
-    { risk: "Inflation", npv: derived.spread * 12 - 18, success: Number((derived.successProbability - 12).toFixed(1)), fail: Number((100 - derived.successProbability + 12).toFixed(2)) },
-    { risk: "FX", npv: derived.spread * 10 - 6, success: Number((derived.successProbability - 5).toFixed(1)), fail: Number((100 - derived.successProbability + 5).toFixed(2)) },
-    { risk: "Demand", npv: derived.spread * 9 + assumptions.growth, success: Number(derived.successProbability.toFixed(1)), fail: Number((100 - derived.successProbability).toFixed(2)) },
-    { risk: "Margin", npv: derived.spread * 11 + assumptions.roic, success: Number((derived.successProbability + 4).toFixed(1)), fail: Number((96 - derived.successProbability).toFixed(2)) },
-  ];
-
   // Downloadable raw dataset mirrors the assumptions, derived metrics, and chart inputs.
   const rawDatasetRows: RawDatasetRow[] = buildRawDatasetRows({
     assumptions,
@@ -858,13 +807,11 @@ export default function CorporateAnalysisPage() {
     impliedErp,
     impliedErpInputs,
     dcfData,
-    healthRadar,
-    regionalMinard,
+    regionalHurdle,
     hurdleBars,
     betaTreemapProxy,
     waccCurve,
     valueMatrix,
-    riskReturn,
   });
 
   const annualGrowthRates = annualMetricRows(metricsHistoryData?.annual_growth_rates ?? []);
@@ -892,6 +839,10 @@ export default function CorporateAnalysisPage() {
     "Current slider/browser values and saved presets remain manual override layers.",
   ].join(" ");
 
+  // null when the equity bridge did not resolve, in which case estimated_value is an
+  // enterprise value and must not be shown under the "Intrinsic DCF" label.
+  const bridgedFairValue = dcfData ? bridgedEstimatedValue(dcfData) : null;
+
   const calculationDetails = buildCalculationDetails({
     companyName,
     assumptions,
@@ -911,12 +862,10 @@ export default function CorporateAnalysisPage() {
     impliedMarketReturn,
     impliedErp,
     hasSp500Data: Boolean(sp500Query.data),
-    includeSubjectiveHealth,
-    regionalMinard,
+    regionalHurdle,
     betaTreemapProxy,
     waccCurve,
     valueMatrix,
-    riskReturn,
   });
 
   const activeCalculationDetail = activeCalculation ? calculationDetails[activeCalculation] : null;
@@ -927,7 +876,7 @@ export default function CorporateAnalysisPage() {
       <header className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
         <PageHeader
           title="Corporate Analysis"
-          subtitle={`${companyName}: life cycle, hurdle rate, bottom-up beta, DCF, and project risk`}
+          subtitle={`${companyName}: hurdle rate, bottom-up beta, DCF, and value drivers`}
         />
 
         <div className="flex w-full flex-col gap-2 min-[1300px]:items-end">
@@ -982,8 +931,15 @@ export default function CorporateAnalysisPage() {
                     description="Backend intrinsic value from projected FCFF, WACC, terminal growth, and the enterprise-to-equity bridge. Current market price is used only for upside comparison."
                   />
                 </div>
-                <div className="font-bold text-[var(--text-primary)]">
-                  {dcfData ? moneyText(dcfData.estimated_value) : "Refresh to calculate"}
+                <div
+                  className="font-bold text-[var(--text-primary)]"
+                  title={dcfData && bridgedFairValue === null ? UNBRIDGED_REASON : undefined}
+                >
+                  {!dcfData
+                    ? "Refresh to calculate"
+                    : bridgedFairValue === null
+                      ? UNBRIDGED_PLACEHOLDER
+                      : moneyText(bridgedFairValue)}
                   {dcfStreamStatus === "streaming" ? " ..." : ""}
                 </div>
               </button>
@@ -1089,7 +1045,7 @@ export default function CorporateAnalysisPage() {
 
         {/* Dashboard surface: KPI cards first, then the diagnostic chart suite as a clearly visible section. */}
         <div className="space-y-4 xl:col-span-4">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
             <button
               type="button"
               onClick={() => setActiveCalculation("spread")}
@@ -1136,39 +1092,17 @@ export default function CorporateAnalysisPage() {
               <div className="mt-1 text-3xl font-black text-[var(--text-primary)]">{numberText2(derived.leveredBeta)}</div>
               <div className="mt-2 text-xs text-[var(--text-muted)]">Hamada adjusted</div>
             </button>
-            <button
-              type="button"
-              onClick={() => setActiveCalculation("failureProbability")}
-              className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4 text-left transition hover:border-[var(--surface)]"
-            >
-              <div className="text-xs font-semibold text-[var(--text-muted)]">
-                <InfoTooltip
-                  label="Success Probability"
-                  description={`Scenario score from spread, growth, and agency/ESG penalty. Current basis: spread ${pct(derived.spread)}, growth ${pct(assumptions.growth)}, penalty ${numberText(assumptions.esgPenalty)}. Above 60% is good; current status is ${derived.successProbability >= 60 ? "Good" : "Weak"}.`}
-                />
-              </div>
-              <div className="mt-1 text-3xl font-black text-[var(--delta-up)]">{pct(derived.successProbability)}</div>
-              <div className="mt-2 text-xs text-[var(--text-muted)]">Risk-return scenario</div>
-            </button>
           </div>
 
           <CorporateDiagnosticsSection
             companyName={companyName}
-            healthScore={derived.healthScore}
-            healthRadar={healthRadar}
-            includeSubjectiveHealth={includeSubjectiveHealth}
-            onIncludeSubjectiveHealthChange={setIncludeSubjectiveHealth}
             hurdleBars={hurdleBars}
-            regionalMinard={regionalMinard}
+            regionalHurdle={regionalHurdle}
             assumptionsDebtRatio={assumptions.debtRatio}
             betaTreemapProxy={betaTreemapProxy}
             waccCurve={waccCurve}
             valueMatrix={valueMatrix}
-            derivedSpread={derived.spread}
-            successProbability={derived.successProbability}
-            riskReturn={riskReturn}
             sustainableGrowth={derived.sustainableGrowth}
-            terminalValueShare={derived.terminalValueShare}
             fcff={assumptions.fcff}
             dcfResult={dcfData ?? undefined}
             onOpenDetail={setActiveCalculation}

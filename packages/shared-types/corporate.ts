@@ -9,6 +9,12 @@ export interface DcfSummary {
   bridge_quality: string;
   current_price: number;
   upside_pct: number;
+  /**
+   * Share of enterprise value carried by the discounted terminal value. A high reading
+   * says the valuation rests on the perpetuity assumption rather than on the explicit
+   * forecast.
+   */
+  terminal_value_share_pct: number;
   status: string;
   generated_at: string;
 }
@@ -42,6 +48,31 @@ export interface DcfWaccBreakdown {
   country_risk_premium: number;
 }
 
+/**
+ * One (WACC, terminal growth) point of the sensitivity grid.
+ *
+ * When `undefined_reason` is set every value is null together: the Gordon growth model
+ * has no value at that point, and the grid is swept precisely to reach it.
+ * `intrinsic_value_per_share` is additionally null whenever the equity bridge did not
+ * resolve, on the same rule the headline valuation follows.
+ */
+export interface DcfSensitivityCell {
+  wacc: number;
+  terminal_growth: number;
+  is_base: boolean;
+  enterprise_value: number | null;
+  terminal_value_share_pct: number | null;
+  intrinsic_value_per_share: number | null;
+  undefined_reason: string | null;
+}
+
+/** Row-major with WACC on the outer axis. */
+export interface DcfSensitivityGrid {
+  wacc_values: number[];
+  terminal_growth_values: number[];
+  cells: DcfSensitivityCell[];
+}
+
 export interface DcfFullReport {
   summary: DcfSummary;
   assumptions: DcfAssumptionSummary;
@@ -59,6 +90,8 @@ export interface DcfFullReport {
   diluted_shares_outstanding: number | null;
   valuation_method: string;
   bridge_quality: string;
+  terminal_value_share_pct: number;
+  sensitivity: DcfSensitivityGrid;
   agency_discount: number;
   dcf_multiple: number;
   baseline_multiple: number;

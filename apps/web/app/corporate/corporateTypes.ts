@@ -141,6 +141,7 @@ export interface CorporateComparisonRowApi {
   expected_return_spread: number;
   stock_expected_return_source: string;
   has_price_data: boolean;
+  bridge_quality?: string;
 }
 
 export interface CorporateComparisonSnapshotApi {
@@ -148,7 +149,6 @@ export interface CorporateComparisonSnapshotApi {
   as_of_date: string;
   generated_at: string;
   snapshot_version: string;
-  snapshot_versions_for_day: number;
   snapshot_available: boolean;
   snapshot_source: string;
   comparison_universe: "portfolio_plus_benchmark" | "watchlist_plus_benchmark" | "custom";

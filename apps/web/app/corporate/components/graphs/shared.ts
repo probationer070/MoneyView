@@ -1,26 +1,17 @@
 export const CHART_INITIAL_DIMENSION = { width: 1, height: 1 };
 
 export type DetailKey =
-  | "companyStatus"
   | "hurdleDecomposition"
   | "erp"
   | "crp"
   | "bottomUpKe"
   | "betaWaccCurve"
   | "valueDriverMatrix"
-  | "riskReturnMinard"
-  | "failureProbability"
   | "dcfCoreModules"
   | "sustainableGrowth"
   | "terminalValueShare"
   | "fcffMagnitude"
   | "backendFairValue";
-
-export interface HealthRadarPoint {
-  subject: string;
-  score: number;
-  peer: number;
-}
 
 export interface HurdleBarPoint {
   name: string;
@@ -57,15 +48,11 @@ export interface ValueMatrixPoint {
   fcff: number;
 }
 
-export interface RiskReturnPoint {
-  risk: string;
-  npv: number;
-  success: number;
-  fail: number;
-}
-
 export interface DcfResult {
   estimated_value: number;
+  // Optional because a DCF result restored from sessionStorage can predate the field. The
+  // backend always sends it; a cache written by an earlier build does not.
+  terminal_value_share_pct?: number;
   intrinsic_value_per_share?: number | null;
   enterprise_value?: number;
   equity_value?: number | null;

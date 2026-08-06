@@ -425,6 +425,8 @@ CREATE TABLE IF NOT EXISTS corporate_comparison_snapshots_v3 (
     expected_return_spread       REAL NOT NULL DEFAULT 0.0,
     stock_expected_return_source TEXT DEFAULT 'dcf_implied_upside',
     has_price_data               INTEGER NOT NULL DEFAULT 1,
+    metric_schema_version        INTEGER NOT NULL DEFAULT 1,
+    bridge_quality               TEXT NOT NULL DEFAULT '',
     PRIMARY KEY (snapshot_version, ticker)
 );
 CREATE INDEX IF NOT EXISTS idx_corporate_comparison_snapshots_v3_lookup
@@ -444,6 +446,36 @@ CREATE TABLE IF NOT EXISTS acquisition_state (
     status          TEXT NOT NULL DEFAULT 'never_acquired',
     detail          TEXT,
     PRIMARY KEY (data_class, subject)
+);
+
+-- Statements are stored one row per line item per period, not as a serialised blob, so
+-- they can be queried deterministically, updated in part, and grown with new metrics
+-- without a schema change or a deserialisation step.
+CREATE TABLE IF NOT EXISTS corporate_statements (
+    ticker         TEXT NOT NULL,
+    statement_type TEXT NOT NULL,
+    frequency      TEXT NOT NULL,
+    period_end     TEXT NOT NULL,
+    line_item      TEXT NOT NULL,
+    value          REAL,
+    fetched_at     TEXT NOT NULL,
+    PRIMARY KEY (ticker, statement_type, frequency, period_end, line_item)
+);
+
+CREATE INDEX IF NOT EXISTS idx_corporate_statements_lookup
+    ON corporate_statements(ticker, statement_type, frequency, period_end);
+
+-- Quote-derived facts are a separate class from statements because they have a different
+-- natural frequency. Market cap is acquired here, never derived from shares outstanding:
+-- the balance-sheet share count is absent for ETFs, aggregates share classes, and counts
+-- ordinary shares rather than ADRs.
+CREATE TABLE IF NOT EXISTS corporate_quote_facts (
+    ticker              TEXT PRIMARY KEY,
+    market_cap          REAL,
+    shares_outstanding  REAL,
+    currency            TEXT DEFAULT '',
+    beta                REAL,
+    fetched_at          TEXT NOT NULL
 );
 """
 
@@ -601,6 +633,8 @@ def _ensure_schema_compatibility(conn: sqlite3.Connection) -> None:
             expected_return_spread       REAL NOT NULL DEFAULT 0.0,
             stock_expected_return_source TEXT DEFAULT 'dcf_implied_upside',
             has_price_data               INTEGER NOT NULL DEFAULT 1,
+            metric_schema_version        INTEGER NOT NULL DEFAULT 1,
+            bridge_quality               TEXT NOT NULL DEFAULT '',
             PRIMARY KEY (snapshot_version, ticker)
         )"""
     )
@@ -631,6 +665,21 @@ def _ensure_schema_compatibility(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE corporate_comparison_snapshots_v3 ADD COLUMN dcf_implied_return REAL NOT NULL DEFAULT 0.0")
     if "capm_expected_return" not in v3_columns:
         conn.execute("ALTER TABLE corporate_comparison_snapshots_v3 ADD COLUMN capm_expected_return REAL NOT NULL DEFAULT 0.0")
+    if "metric_schema_version" not in v3_columns:
+        # 0, not METRIC_SCHEMA_VERSION: these rows were computed before the column existed,
+        # and stamping them with the current version would make pre- and post-change
+        # snapshots indistinguishable -- exactly what the column exists to prevent.
+        conn.execute("ALTER TABLE corporate_comparison_snapshots_v3 ADD COLUMN metric_schema_version INTEGER NOT NULL DEFAULT 0")
+    if "bridge_quality" not in v3_columns:
+        # '' , not 'missing': these rows were computed before the bridge existed. The
+        # aggregate filter excludes only 'missing', so legacy rows stay in every
+        # historical average exactly as they read today. Defaulting them to 'missing'
+        # would silently rewrite the history this column exists to preserve -- the same
+        # reasoning as metric_schema_version defaulting to 0 above.
+        conn.execute("ALTER TABLE corporate_comparison_snapshots_v3 ADD COLUMN bridge_quality TEXT NOT NULL DEFAULT ''")
+    quote_facts_columns = {row["name"] for row in conn.execute("PRAGMA table_info(corporate_quote_facts)")}
+    if "beta" not in quote_facts_columns:
+        conn.execute("ALTER TABLE corporate_quote_facts ADD COLUMN beta REAL")
     v3_row = conn.execute("SELECT 1 FROM corporate_comparison_snapshots_v3 LIMIT 1").fetchone()
     if v3_row is None:
         conn.execute(

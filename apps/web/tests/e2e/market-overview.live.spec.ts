@@ -19,19 +19,19 @@ test("market overview detail works against the real local API with instrument-aw
   await expect(page.getByRole("heading", { name: "Daily Volume" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Daily Indicators" })).toBeVisible();
   await expect(page.getByText("Data Quality")).toBeVisible();
-  await page.getByRole("button", { name: "Close market detail" }).click();
+  await page.getByRole("button", { name: "Close modal" }).click();
 
   await page.getByRole("button", { name: "Open detail for Gold" }).click();
   await expect(page.getByRole("dialog", { name: "Gold" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Commodity Context" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Daily Commodity Signals" })).toBeVisible();
-  await page.getByRole("button", { name: "Close market detail" }).click();
+  await page.getByRole("button", { name: "Close modal" }).click();
 
   await page.getByRole("button", { name: "Open detail for USD/KRW" }).click();
   await expect(page.getByRole("dialog", { name: "USD/KRW" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "FX Context" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Daily FX Signals" })).toBeVisible();
-  await page.getByRole("button", { name: "Close market detail" }).click();
+  await page.getByRole("button", { name: "Close modal" }).click();
 
   await page.getByRole("button", { name: "Open detail for Bitcoin" }).click();
   await expect(page.getByRole("dialog", { name: "Bitcoin" })).toBeVisible();

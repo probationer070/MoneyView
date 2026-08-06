@@ -6,10 +6,23 @@ import type {
   DcfFullReport,
   DcfPhase1Event,
   DcfPhase2Event,
+  DcfSensitivityGrid,
   DcfSummary,
   DcfSummaryResponse,
 } from "../../../../../packages/shared-types";
 import { API_PREFIX, json, nowIso } from "./mockUtils";
+
+// current_price for the "Technology" sector comparison rows (AAPL/MSFT/ESTM/MISS), shared
+// between the fixture below and any test that needs to identify a specific ticker's data
+// point independently (e.g. by decoding a chart's rendered pixel position). Exported so
+// those tests derive the value from this single source instead of restating it as a
+// separate literal that can silently drift out of sync with the fixture.
+export const CORPORATE_COMPARISON_CURRENT_PRICES: Record<string, number> = {
+  AAPL: 210.4,
+  MSFT: 415.3,
+  ESTM: 250.0,
+  MISS: 240.0,
+};
 
 export type CorporatePageMockStats = {
   dcfRequests: number;
@@ -26,7 +39,51 @@ export type CorporatePageMockOptions = {
   failQuarterlyStatements?: boolean;
   failOhlcv?: boolean;
   failDcfFullReport?: boolean;
+  /**
+   * bridge_quality for the single-ticker DCF summary (stream, report, and POST /dcf/AAPL).
+   * The bulk-report handler always derives its own per-ticker quality from the ticker name,
+   * so one bulk table can carry all three states at once.
+   */
+  dcfBridgeQuality?: BridgeQuality;
 };
+
+export type BridgeQuality = "ok" | "estimated" | "missing";
+
+/**
+ * Rewrites a summary into what corporate_dcf.py actually emits for the given bridge state,
+ * rather than flipping bridge_quality alone. A test that asserts a value is suppressed has to
+ * run against a payload the backend can really produce, or it proves nothing.
+ *
+ * For "missing": the bridge does not resolve, so equity value and the per-share value are
+ * absent, estimated_value falls back to enterprise value (corporate_dcf.py:222), and
+ * upside_pct is set to 0.0 rather than left out (corporate_dcf.py:224).
+ */
+function withBridgeQuality<T extends DcfSummary>(summary: T, quality: BridgeQuality): T {
+  if (quality !== "missing") {
+    return { ...summary, bridge_quality: quality };
+  }
+  return {
+    ...summary,
+    bridge_quality: "missing",
+    valuation_method: "enterprise_value_no_share_bridge",
+    intrinsic_value_per_share: null,
+    equity_value: null,
+    estimated_value: summary.enterprise_value,
+    upside_pct: 0.0,
+    status: "Bridge Incomplete",
+  };
+}
+
+/**
+ * The bulk table's per-ticker bridge state, matching the comparison fixture's convention:
+ * MISS has no bridge, ESTM has an estimated one, everything else resolves cleanly. A mixed
+ * table is what catches a guard written `!== "ok"`, which would wrongly suppress ESTM.
+ */
+function bulkBridgeQuality(ticker: string): BridgeQuality {
+  if (ticker === "MISS") return "missing";
+  if (ticker === "ESTM") return "estimated";
+  return "ok";
+}
 
 const mockDcfSummary: DcfSummary = {
   report_id: "mockdcf001",
@@ -39,6 +96,9 @@ const mockDcfSummary: DcfSummary = {
   bridge_quality: "ok",
   current_price: 210.4,
   upside_pct: 14.31,
+  // 1034.1 / 1462.4, the present_value_of_terminal and enterprise_value below. Derived
+  // rather than picked so the tile, the base grid cell, and the full report agree.
+  terminal_value_share_pct: 70.71,
   status: "Undervalued",
   generated_at: "2026-04-11T12:00:00Z",
 };
@@ -67,6 +127,41 @@ const mockDcfSummaryResponse: DcfSummaryResponse = {
   enterprise_value_index: mockDcfAssumptions.enterprise_value_index,
 };
 
+/**
+ * A 3x3 grid, deliberately not the 5x5 the backend emits: the table is meant to render
+ * whatever axes it is given, and a component that hardcoded five columns would pass
+ * against a 5x5 fixture.
+ *
+ * Centred on WACC 4% / terminal growth 3%, a 1pp spread. That is what puts three cells
+ * past the point where the Gordon model has a value -- every pairing where WACC is at or
+ * below terminal growth -- so the undefined region is covered without a contrived fixture.
+ * The base cell restates the report's own enterprise value, share, and per-share value.
+ */
+const mockSensitivityGrid: DcfSensitivityGrid = {
+  wacc_values: [0.03, 0.04, 0.05],
+  terminal_growth_values: [0.02, 0.03, 0.04],
+  cells: [
+    { wacc: 0.03, terminal_growth: 0.02, is_base: false, enterprise_value: 1580.2, terminal_value_share_pct: 74.12, intrinsic_value_per_share: 264.0, undefined_reason: null },
+    { wacc: 0.03, terminal_growth: 0.03, is_base: false, enterprise_value: null, terminal_value_share_pct: null, intrinsic_value_per_share: null, undefined_reason: "wacc_not_above_terminal_growth" },
+    { wacc: 0.03, terminal_growth: 0.04, is_base: false, enterprise_value: null, terminal_value_share_pct: null, intrinsic_value_per_share: null, undefined_reason: "wacc_not_above_terminal_growth" },
+    { wacc: 0.04, terminal_growth: 0.02, is_base: false, enterprise_value: 1180.6, terminal_value_share_pct: 62.55, intrinsic_value_per_share: 184.1, undefined_reason: null },
+    { wacc: 0.04, terminal_growth: 0.03, is_base: true, enterprise_value: 1462.4, terminal_value_share_pct: 70.71, intrinsic_value_per_share: 240.5, undefined_reason: null },
+    { wacc: 0.04, terminal_growth: 0.04, is_base: false, enterprise_value: null, terminal_value_share_pct: null, intrinsic_value_per_share: null, undefined_reason: "wacc_not_above_terminal_growth" },
+    { wacc: 0.05, terminal_growth: 0.02, is_base: false, enterprise_value: 998.4, terminal_value_share_pct: 55.02, intrinsic_value_per_share: 147.7, undefined_reason: null },
+    { wacc: 0.05, terminal_growth: 0.03, is_base: false, enterprise_value: 1140.8, terminal_value_share_pct: 60.63, intrinsic_value_per_share: 176.1, undefined_reason: null },
+    { wacc: 0.05, terminal_growth: 0.04, is_base: false, enterprise_value: 1420.6, terminal_value_share_pct: 69.88, intrinsic_value_per_share: 232.1, undefined_reason: null },
+  ],
+};
+
+/** What the backend emits when the bridge does not resolve: no per-share value anywhere,
+ *  while enterprise value and the terminal share stay, since neither needs the bridge. */
+function unbridgedGrid(grid: DcfSensitivityGrid): DcfSensitivityGrid {
+  return {
+    ...grid,
+    cells: grid.cells.map((cell) => ({ ...cell, intrinsic_value_per_share: null })),
+  };
+}
+
 const mockDcfFullReport: DcfFullReport = {
   summary: mockDcfSummary,
   assumptions: mockDcfAssumptions,
@@ -94,15 +189,12 @@ const mockDcfFullReport: DcfFullReport = {
   diluted_shares_outstanding: 5,
   valuation_method: "intrinsic_equity_per_share",
   bridge_quality: "ok",
+  terminal_value_share_pct: 70.71,
+  sensitivity: mockSensitivityGrid,
   agency_discount: 0.945,
   dcf_multiple: 15.9,
   baseline_multiple: 12.5,
   fcff_scale: 1,
-};
-
-const mockDcfPhase1Event: DcfPhase1Event = {
-  phase: "phase1",
-  summary: mockDcfSummary,
 };
 
 const mockDcfPhase2Event: DcfPhase2Event = {
@@ -205,12 +297,21 @@ const mockMetricAudit = (ticker: string): CorporateMetricAudit => ({
 });
 
 export async function mockCorporatePageApi(page: Page, stats?: CorporatePageMockStats, options?: CorporatePageMockOptions) {
+  const singleBridge = options?.dcfBridgeQuality ?? "ok";
+  const dcfSummary = withBridgeQuality(mockDcfSummary, singleBridge);
+  const dcfSummaryResponse = withBridgeQuality(mockDcfSummaryResponse, singleBridge);
+  const dcfFullReport: DcfFullReport = {
+    ...mockDcfFullReport,
+    summary: dcfSummary,
+    sensitivity: singleBridge === "missing" ? unbridgedGrid(mockSensitivityGrid) : mockSensitivityGrid,
+  };
+  const dcfPhase1Event: DcfPhase1Event = { phase: "phase1", summary: dcfSummary };
+
   let comparisonSnapshot = {
     mode: "snapshot",
     as_of_date: "2026-04-11",
     generated_at: "2026-04-11T12:00:00Z",
     snapshot_version: "2026-04-11|portfolio_plus_benchmark|^GSPC||2026-04-11T12:00:00Z",
-    snapshot_versions_for_day: 1,
     snapshot_available: true,
     snapshot_source: "scheduled_kst_daily",
     comparison_universe: "portfolio_plus_benchmark",
@@ -276,6 +377,7 @@ export async function mockCorporatePageApi(page: Page, stats?: CorporatePageMock
         wacc: 8,
         roic_minus_wacc: 2,
         dcf_value: 110,
+        bridge_quality: "ok",
         current_price: 100,
         dcf_implied_return: 10,
         capm_expected_return: 9.7,
@@ -295,7 +397,8 @@ export async function mockCorporatePageApi(page: Page, stats?: CorporatePageMock
         wacc: 10,
         roic_minus_wacc: 8,
         dcf_value: 240.5,
-        current_price: 210.4,
+        bridge_quality: "ok",
+        current_price: CORPORATE_COMPARISON_CURRENT_PRICES.AAPL,
         dcf_implied_return: 14.31,
         capm_expected_return: 11.26,
         stock_expected_return: 14.31,
@@ -314,12 +417,60 @@ export async function mockCorporatePageApi(page: Page, stats?: CorporatePageMock
         wacc: 9,
         roic_minus_wacc: 13,
         dcf_value: 460.2,
-        current_price: 415.3,
+        bridge_quality: "ok",
+        current_price: CORPORATE_COMPARISON_CURRENT_PRICES.MSFT,
         dcf_implied_return: 10.81,
         capm_expected_return: 10.39,
         stock_expected_return: 10.81,
         market_expected_return: 9.7,
         expected_return_spread: 1.11,
+        stock_expected_return_source: "dcf_implied_upside",
+        has_price_data: true,
+      },
+      {
+        ticker: "ESTM",
+        name: "Estimated Bridge Co",
+        sector: "Technology",
+        group_name: "core",
+        weight: 0.1,
+        roic: 15,
+        wacc: 10,
+        roic_minus_wacc: 5,
+        // A real intrinsic value per share, reached through a documented fallback input.
+        // It must render exactly like an `ok` row -- this is the row that catches a guard
+        // written `!== "ok"` instead of `=== "missing"`.
+        dcf_value: 300.0,
+        bridge_quality: "estimated",
+        current_price: CORPORATE_COMPARISON_CURRENT_PRICES.ESTM,
+        dcf_implied_return: 20.0,
+        capm_expected_return: 11.0,
+        stock_expected_return: 20.0,
+        market_expected_return: 9.7,
+        expected_return_spread: 10.3,
+        stock_expected_return_source: "dcf_implied_upside",
+        has_price_data: true,
+      },
+      {
+        ticker: "MISS",
+        name: "No Bridge Co",
+        sector: "Technology",
+        group_name: "core",
+        weight: 0.1,
+        roic: 12,
+        wacc: 10,
+        roic_minus_wacc: 2,
+        // An enterprise value in billions, which is what dcf_value actually holds when the
+        // bridge does not resolve. Deliberately the LARGEST value in the fixture: a
+        // comparator that fails to suppress it sorts it first on "DCF value descending",
+        // which is exactly what the sort test detects.
+        dcf_value: 2438.0,
+        bridge_quality: "missing",
+        current_price: CORPORATE_COMPARISON_CURRENT_PRICES.MISS,
+        dcf_implied_return: 0.0,
+        capm_expected_return: 11.0,
+        stock_expected_return: 0.0,
+        market_expected_return: 9.7,
+        expected_return_spread: -9.7,
         stock_expected_return_source: "dcf_implied_upside",
         has_price_data: true,
       },
@@ -552,7 +703,7 @@ export async function mockCorporatePageApi(page: Page, stats?: CorporatePageMock
         contentType: "text/event-stream",
         body: [
           "event: phase1",
-          `data: ${JSON.stringify(mockDcfPhase1Event)}`,
+          `data: ${JSON.stringify(dcfPhase1Event)}`,
           "",
           "event: phase2",
           `data: ${JSON.stringify(mockDcfPhase2Event)}`,
@@ -575,7 +726,7 @@ export async function mockCorporatePageApi(page: Page, stats?: CorporatePageMock
       }
       return json(route, {
         status: "ok",
-        data: mockDcfFullReport,
+        data: dcfFullReport,
       });
     }
 
@@ -585,7 +736,9 @@ export async function mockCorporatePageApi(page: Page, stats?: CorporatePageMock
       const tickers = Array.isArray(payload.tickers) ? payload.tickers : [];
       return json(route, tickers.map((ticker: string, index: number) => ({
         ...mockDcfFullReport,
-        summary: {
+        // withBridgeQuality is applied last so the "missing" rewrite overrides the per-index
+        // estimated_value/upside_pct/status values above it, exactly as the backend would.
+        summary: withBridgeQuality({
           ...mockDcfFullReport.summary,
           report_id: `mockdcf-bulk-${index + 1}`,
           ticker,
@@ -594,7 +747,7 @@ export async function mockCorporatePageApi(page: Page, stats?: CorporatePageMock
           upside_pct: mockDcfFullReport.summary.upside_pct - index * 1.1,
           status: index === 0 ? "Undervalued" : index === 1 ? "Fairly Valued" : "Watch",
           generated_at: nowIso(),
-        },
+        }, bulkBridgeQuality(ticker)),
         assumptions: {
           ...mockDcfFullReport.assumptions,
           report_id: `mockdcf-bulk-${index + 1}`,
@@ -608,7 +761,7 @@ export async function mockCorporatePageApi(page: Page, stats?: CorporatePageMock
       if (stats) stats.dcfRequests += 1;
       return json(route, {
         status: "ok",
-        data: mockDcfSummaryResponse,
+        data: dcfSummaryResponse,
       });
     }
 
@@ -654,7 +807,6 @@ export async function mockCorporatePageApi(page: Page, stats?: CorporatePageMock
         as_of_date: "2026-04-11",
         generated_at: nowIso(),
         snapshot_version: "2026-04-11|portfolio_plus_benchmark|^GSPC||2026-04-11T12:30:00Z",
-        snapshot_versions_for_day: 2,
         snapshot_source: "manual_refresh",
         comparison_universe: comparisonUniverse,
         benchmark_ticker: benchmarkTicker,
