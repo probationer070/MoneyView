@@ -1300,3 +1300,84 @@ rendered, because an absence check that passes against a blank page proves nothi
 Phase 3 item 3 remains open and covers the rest of this layer: `agencyRisk`,
 `lifeCyclePosition` and `leveredBetaRiskScore` still feed the Company Status radar from
 `apps/web`, built the same way.
+
+## 2026-08-06: The Company Status radar scored slider formulas against a hardcoded peer polygon
+
+Date: 2026-08-06
+Command: `npx playwright test --project=chromium` (the stale-locator half; the scoring defect
+itself was found by closing Phase 3 item 3 in `guideline/sop/todo.md`, with no suite red)
+Failure: the "Company Status Diagnosis" radar headlined a composite `healthScore` badge, and
+neither the axes nor the baseline they were scored against were measured.
+
+1. Three of the four default axes were browser formulas over the assumption sliders:
+
+       lifeCyclePosition   = clamp(35 + growth * 2.5 - debtRatio * 0.3, 0, 100)
+       leveredBetaRiskScore = clamp(100 - max(leveredBeta - 1, 0) * 35, 0, 100)
+       agencyRisk          = clamp(100 - governance + esgPenalty, 0, 100)
+
+   `35`, `2.5`, `0.3`, `35` and the implicit unit-equivalence of `governance` and `esgPenalty`
+   are all model parameters. Nothing named a life cycle stage was observed.
+
+2. `healthScore` averaged `growth * 2` (a percentage), `marketShare` (a 0-100 input),
+   `lifeCyclePosition` and `leveredBetaRiskScore` into one number, badged green above 65.
+   The four terms are not in the same unit, so the mean is not in any unit. An
+   `includeSubjectiveHealth` toggle switched a further three axes in, changing the score's
+   composition and therefore what the badge's threshold meant.
+
+3. The `peer` polygon each axis was scored against was seven hardcoded constants -- 58, 62, 60,
+   70, 66, 65, 62 -- the same shape for every ticker. A radar exists to make one comparison,
+   and that comparison could not vary with the company being viewed.
+
+The `company_status_radar` series, including the `peer` column, was written to the downloadable
+raw dataset, so the constants left the app as data.
+Root cause: the same defect class as the two entries above it -- a frontend "derived metrics"
+block introducing numeric constants that stand in for modelling assumptions. This is the
+remainder of the layer the 2026-08-06 Success Probability removal explicitly did not touch, and
+it stood for the same reason: the surface looked reviewed because it was drawn, labelled and
+documented like the measured charts beside it.
+
+New in this one: the hardcoded `peer` baseline. A composite score at least discloses that it is
+a score. A peer polygon asserts an observed comparison group, and there was none.
+Fix: removed rather than rebased on real data, matching the precedent. Deleted
+`CompanyStatusGraph.tsx` and its dynamic import, the `companyStatus` detail modal and both
+`DetailKey` / `CalculationDetailKey` entries, the `HealthRadarPoint` type, the
+`includeSubjectiveHealth` state and its toggle, the `agencyRisk` / `lifeCyclePosition` /
+`leveredBetaRiskScore` / `healthScore` fields of the `derived` block, and the
+`company_status_radar` series from the raw dataset. The page subtitle no longer advertises
+"life cycle" or "project risk".
+
+Nothing replaced it. Operating and leverage quality is read from the metric surfaces that carry
+audit quality state, and assumption response from the sensitivity grid, WACC curve and value
+driver matrix.
+Files changed: `apps/web/app/corporate/page.tsx`,
+`apps/web/app/corporate/buildCalculationDetails.ts`,
+`apps/web/app/corporate/corporateDerivedViews.ts`,
+`apps/web/app/corporate/components/CorporateGraphs.tsx`,
+`apps/web/app/corporate/components/CorporateDiagnosticsSection.tsx`,
+`apps/web/app/corporate/components/calculationDetailTypes.ts`,
+`apps/web/app/corporate/components/graphs/shared.ts`,
+`apps/web/app/corporate/components/graphs/CompanyStatusGraph.tsx` (deleted),
+`apps/web/app/corporate/components/graphs/HurdleRateDecompositionGraph.tsx`,
+`apps/web/tests/e2e/corporate-composite-score.spec.ts` (new),
+`apps/web/tests/e2e/refresh-idle-state.spec.ts`,
+`apps/web/tests/e2e/corporate-viewport.spec.ts`,
+`apps/web/tests/e2e/high-risk-render-regression.spec.ts`,
+`apps/web/tests/e2e/responsive-accessibility.spec.ts`,
+`docs/architecture/visualization-metrics.md`, `docs/design/MoneyView_Chart_System.md`,
+`docs/tabs/corporate-analysis-tab.txt`.
+Prevention: a hardcoded comparison baseline is the same defect as a fabricated metric, and is
+easier to miss because it hides in a prop rather than a formula. Before drawing any "vs peer",
+"vs benchmark" or "vs industry" series, check that the baseline varies with the entity on
+screen. If it cannot, the chart has one series, not two, and must not be drawn as a comparison.
+
+Separately, this run found a stale test locator that the removal itself introduced:
+`refresh-idle-state.spec.ts` used `/Microsoft: life cycle/i` in three places as its "the
+selected company is MSFT" marker, borrowing wording from the page subtitle. Changing the
+subtitle failed two tests that assert nothing about life cycles. The marker now matches the
+current subtitle. The general point is that a test should locate a surface by what that test is
+about; borrowing incidental copy makes an unrelated change look like a regression.
+
+That the two failures were only discovered now is the more useful record: `952d487` was
+committed with `tsc` green and the Playwright suite never run, and the entry above it says so in
+its own Command line ("none -- No suite was red"). A UI-string change is exactly what a
+typecheck cannot see.

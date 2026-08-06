@@ -220,12 +220,12 @@ test("corporate page refresh restores the selected ticker without auto-fetching 
 
   await page.getByLabel("Company Search").fill("Microsoft");
   await page.getByRole("button", { name: "Microsoft" }).click();
-  await expect(page.getByText(/Microsoft: life cycle/i)).toBeVisible();
+  await expect(page.getByText(/Microsoft: hurdle rate/i)).toBeVisible();
 
   await page.reload({ waitUntil: "domcontentloaded" });
 
   await expect(page.getByRole("heading", { name: /Corporate Analysis/i })).toBeVisible({ timeout: 60_000 });
-  await expect(page.getByText(/Microsoft: life cycle/i)).toBeVisible();
+  await expect(page.getByText(/Microsoft: hurdle rate/i)).toBeVisible();
   await expect(page.getByRole("button", { name: /^Intrinsic DCF(?! Value)/i })).toContainText("Refresh to calculate");
   await page.waitForTimeout(300);
   expect(stats.dcfRequests).toBe(0);
@@ -299,7 +299,7 @@ test("corporate page refresh labels stale source-data cache for a different sele
 
   await page.goto("/corporate", { waitUntil: "domcontentloaded" });
 
-  await expect(page.getByText(/Microsoft: life cycle/i)).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByText(/Microsoft: hurdle rate/i)).toBeVisible({ timeout: 60_000 });
   await expect(page.getByRole("button", { name: /^Intrinsic DCF(?! Value)/i })).toContainText("Refresh to calculate");
   await expect(page.getByRole("button", { name: /^Intrinsic DCF(?! Value)/i })).not.toContainText("$199.9");
   await expect(page.getByText("Cached source data is for AAPL. Refresh for MSFT.")).toBeVisible();

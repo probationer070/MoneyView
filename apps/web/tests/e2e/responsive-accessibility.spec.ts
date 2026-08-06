@@ -88,7 +88,7 @@ test("corporate and simulation lab remain usable on narrower widths", async ({ p
   await expectNoHorizontalOverflow(page);
 
   await page.setViewportSize({ width: 375, height: 812 });
-  await expect(page.getByText("Company Status Diagnosis").first()).toBeVisible();
+  await expect(page.getByText("Hurdle Rate Decomposition").first()).toBeVisible();
   await expectNoHorizontalOverflow(page);
 
   await page.goto("/monte-carlo", { waitUntil: "domcontentloaded" });

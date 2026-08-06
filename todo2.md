@@ -11,38 +11,36 @@ Read this first, pick a section, then open the one file it points you at.
 
 ---
 
-## 1. In flight — uncommitted, finish this first
+## 1. In flight — complete and verified, not yet committed
 
-**Removing the Success Probability score and the Minard segment model.** Started in `952d487`;
-the working tree carries the rest. Almost pure deletion: 11 files, ~170 deletions to ~11
-insertions, `CompanyStatusGraph.tsx` staged for deletion, plus one untracked new spec
-`apps/web/tests/e2e/corporate-composite-score.spec.ts` (66 lines).
+**Removing the composite Health Score and the Company Status radar.** Started in `952d487`
+(which removed the Success Probability score and the Minard segment model); the working tree
+carries the second removal. This closes the last open Phase 3 item in `guideline/sop/todo.md`.
 
 **No plan or spec exists for this one** — it is an ad-hoc continuation, not an SDD run. Don't go
 looking for a brief.
 
-Not done yet: five files still reference the removed model.
-
-```
-apps/web/app/corporate/buildCalculationDetails.ts
-apps/web/app/corporate/components/CorporateComparisonTable.tsx
-apps/web/app/corporate/components/CorporateDiagnosticsSection.tsx
-apps/web/app/corporate/components/graphs/HurdleRateDecompositionGraph.tsx
-apps/web/app/corporate/corporateDerivedViews.ts
-```
-
-State check:
+Finished 2026-08-06. Code, docs and records are all done; the only open step is the commit.
 
 ```bash
 git status --short
-grep -rln "Minard\|successProbability\|success_probability" apps/web/app/corporate/
-cd apps/web && npx tsc --noEmit          # passed as of 2026-08-06
-python -m pytest tests/core_finance/ tests/api/ -q   # from repo root
-cd apps/web && npx playwright test --project=chromium   # NOT run against this tree
+cd apps/web && npx tsc --noEmit                        # clean
+python -m pytest tests/core_finance/ tests/api/ -q     # 491 passed
+cd apps/web && npx playwright test --project=chromium  # 91 passed
 ```
 
-The e2e suite has **not** been run against these changes. Four e2e specs are modified in the
-working tree, so treat their status as unknown, not passing.
+Two things worth knowing if you revisit it:
+
+- Two `refresh-idle-state.spec.ts` tests failed on the first real suite run. Not a product bug:
+  they used `/Microsoft: life cycle/i` as a "MSFT is selected" marker, borrowing wording from
+  the page subtitle that this removal rewrote. Marker now matches the current subtitle.
+  `952d487` was committed with `tsc` green and Playwright never run, which is how a UI-string
+  change got past.
+- `Minard` survives in exactly one place on purpose —
+  `CorporateComparisonTable.tsx:115`, a comment explaining why that cell is now plain text —
+  plus the `FORBIDDEN_LABELS` guards in the two absence specs. Those are the record, not
+  leftovers. `regionalMinard` was renamed to `regionalHurdle`; it was the Hurdle Rate
+  Decomposition dataset wearing a deleted model's name.
 
 ---
 

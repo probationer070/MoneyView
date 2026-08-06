@@ -649,12 +649,14 @@ relabelled. See `docs/risk-return-minard.md` for the full record.
 
 ## 5.2 Diagnostic graph modules
 
-### Company Status Graph
+### Company Status Graph — removed 2026-08-06
 
-- Meaning: radar-style operating and health profile for the active company.
-- Source: active derived assumptions and/or radar endpoint in workbench flows.
-- Ownership: frontend graph presentation over backend/derived metric inputs.
-- Drill-down: title opens calculation-detail modal; detail page workbench can refresh standalone radar data.
+Its radar axes were not an operating profile. `Life Cycle`, `Levered Beta Risk` and `Agency
+Risk` were browser formulas over the assumption sliders (`35 + growth x 2.5 - debtRatio x 0.3`,
+`100 - max(leveredBeta - 1, 0) x 35`, `100 - governance + esgPenalty`), and the `peer` baseline
+each axis was scored against was a hardcoded constant per axis — the same comparison for every
+company. Their average was presented as a composite `healthScore`. Operating and leverage
+quality is read from the metric surfaces that carry audit quality state instead.
 
 ### Hurdle Rate Decomposition
 

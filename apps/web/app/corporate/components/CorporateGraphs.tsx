@@ -27,13 +27,6 @@ export const BetaWaccCurveGraph = dynamic(
   },
 );
 
-export const CompanyStatusGraph = dynamic(
-  () => import("./graphs/CompanyStatusGraph").then((mod) => mod.CompanyStatusGraph),
-  {
-    loading: () => <GraphLoadingCard className="lg:col-span-2" title="Company Status Diagnosis" />,
-  },
-);
-
 export const DcfCoreModulesGraph = dynamic(
   () => import("./graphs/DcfCoreModulesGraph").then((mod) => mod.DcfCoreModulesGraph),
   {

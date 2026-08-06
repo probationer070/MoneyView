@@ -17,9 +17,6 @@ interface CorporateDerivedSnapshot {
   bottomUpKe: number;
   spread: number;
   sustainableGrowth: number;
-  agencyRisk: number;
-  lifeCyclePosition: number;
-  healthScore: number;
 }
 
 type ChartRecord = Record<string, string | number | boolean | null | undefined>;
@@ -149,8 +146,7 @@ export function buildRawDatasetRows({
   impliedErp,
   impliedErpInputs,
   dcfData,
-  healthRadar,
-  regionalMinard,
+  regionalHurdle,
   hurdleBars,
   betaTreemapProxy,
   waccCurve,
@@ -162,8 +158,7 @@ export function buildRawDatasetRows({
   impliedErp: number;
   impliedErpInputs: ImpliedErpInputs;
   dcfData: DCFResult | null;
-  healthRadar: ChartRecord[];
-  regionalMinard: ChartRecord[];
+  regionalHurdle: ChartRecord[];
   hurdleBars: ChartRecord[];
   betaTreemapProxy: ChartRecord[];
   waccCurve: ChartRecord[];
@@ -188,9 +183,6 @@ export function buildRawDatasetRows({
     bottomUpKe: pct(derived.bottomUpKe),
     spread: pct(derived.spread),
     sustainableGrowth: pct(derived.sustainableGrowth),
-    agencyRisk: numberText(derived.agencyRisk),
-    lifeCyclePosition: numberText(derived.lifeCyclePosition),
-    healthScore: numberText(derived.healthScore),
   }, "Frontend formulas shown in View Details");
   pushRecord("implied_erp_inputs", {
     sp500IndexLevel: numberText(impliedErpInputs.indexLevel),
@@ -202,8 +194,7 @@ export function buildRawDatasetRows({
     impliedErp: pct(impliedErp),
   }, "S&P 500 implied ERP model: price from market API; cash-flow yields and consensus growth path are model assumptions until constituent-level estimates are wired");
   if (dcfData) pushRecord("backend_dcf", dcfData, "FastAPI /corporate/dcf response");
-  pushSeries("company_status_radar", healthRadar, "Company Status Diagnosis chart dataset");
-  pushSeries("hurdle_rate_decomposition", regionalMinard, "Hurdle Rate Decomposition chart dataset");
+  pushSeries("hurdle_rate_decomposition", regionalHurdle, "Hurdle Rate Decomposition chart dataset");
   pushSeries("hurdle_bar_components", hurdleBars, "Bottom-up Ke component dataset");
   pushSeries("beta_wacc_curve_beta_components", betaTreemapProxy, "Bottom-up Beta chart dataset");
   pushSeries("wacc_curve", waccCurve, "WACC U-Curve chart dataset");

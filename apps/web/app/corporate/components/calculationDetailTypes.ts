@@ -16,7 +16,6 @@ export type CalculationDetailKey =
   | "bottomUpKe"
   | "backendDcf"
   | "sustainableGrowth"
-  | "companyStatus"
   | "hurdleDecomposition"
   | "betaWaccCurve"
   | "valueDriverMatrix"

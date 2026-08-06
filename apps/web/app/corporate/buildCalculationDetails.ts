@@ -29,10 +29,6 @@ interface DerivedSnapshot {
   bottomUpKe: number;
   spread: number;
   sustainableGrowth: number;
-  agencyRisk: number;
-  lifeCyclePosition: number;
-  leveredBetaRiskScore: number;
-  healthScore: number;
 }
 
 interface ImpliedErpInputsSnapshot {
@@ -55,7 +51,7 @@ interface ValueMatrixPoint {
   fcff: number;
 }
 
-interface RegionalMinardPoint {
+interface RegionalHurdlePoint {
   region: string;
   rf: number;
   erp: number;
@@ -95,8 +91,7 @@ interface BuildCalculationDetailsArgs {
   impliedMarketReturn: number;
   impliedErp: number;
   hasSp500Data: boolean;
-  includeSubjectiveHealth: boolean;
-  regionalMinard: RegionalMinardPoint[];
+  regionalHurdle: RegionalHurdlePoint[];
   betaTreemapProxy: BetaTreemapPoint[];
   waccCurve: WaccCurvePoint[];
   valueMatrix: ValueMatrixPoint[];
@@ -121,8 +116,7 @@ export function buildCalculationDetails({
   impliedMarketReturn,
   impliedErp,
   hasSp500Data,
-  includeSubjectiveHealth,
-  regionalMinard,
+  regionalHurdle,
   betaTreemapProxy,
   waccCurve,
   valueMatrix,
@@ -450,15 +444,13 @@ export function buildCalculationDetails({
       unit: "0-100 score",
       rawInputs: [
         { label: "Product / R&D score", value: numberText(assumptions.innovation), source: "Yahoo annual R&D / revenue intensity proxy, scaled to a 0-100 score and averaged from 2021 onward" },
-        { label: "Radar peer baseline", value: "66.0", source: "UI peer benchmark" },
       ],
       source: "Yahoo annual income statement R&D intensity proxy when available; saved/preset score is fallback",
       timeHorizon: "Annual R&D intensity values from fiscal years 2021+ are scaled and averaged; Yahoo does not directly report an Innovation Index.",
       formula: "Innovation Index = clamp((R&D / revenue x 100) x 10, 0, 100), averaged across annual statement years",
       simulation: [
         { label: "1", value: `Normalize raw innovation signal to ${numberText(assumptions.innovation)}`, source: "0-100 scale" },
-        { label: "2", value: `${numberText(assumptions.innovation)} - 66.0`, source: `Peer gap ${numberText(assumptions.innovation - 66)}` },
-        { label: "3", value: numberText(assumptions.innovation), source: "Final Innovation Index assumption" },
+        { label: "2", value: numberText(assumptions.innovation), source: "Final Innovation Index assumption" },
       ],
     }),
     governance: assumptionDetail({
@@ -468,15 +460,12 @@ export function buildCalculationDetails({
       unit: "0-100 score",
       rawInputs: [
         { label: "Governance score", value: numberText(assumptions.governance), source: "Annual Report / proxy statement review" },
-        { label: "ESG / Agency Penalty", value: numberText(assumptions.esgPenalty), source: "Risk penalty input" },
       ],
       source: "Annual Report, proxy statement, and governance review normalized into SQLite corporate_metrics",
       timeHorizon: "Latest annual report or proxy statement cycle.",
       formula: "Governance Quality = normalized governance score on a 0-100 scale",
       simulation: [
-        { label: "1", value: `Agency risk = 100.0 - ${numberText(assumptions.governance)} + ${numberText(assumptions.esgPenalty)}`, source: numberText(derived.agencyRisk) },
-        { label: "2", value: `Clamp ${numberText(derived.agencyRisk)} to 0.0-100.0`, source: numberText(derived.agencyRisk) },
-        { label: "3", value: numberText(assumptions.governance), source: "Final Governance Quality assumption" },
+        { label: "1", value: numberText(assumptions.governance), source: "Final Governance Quality assumption" },
       ],
     }),
     esgPenalty: assumptionDetail({
@@ -486,14 +475,12 @@ export function buildCalculationDetails({
       unit: "0-100 penalty score",
       rawInputs: [
         { label: "Penalty score", value: numberText(assumptions.esgPenalty), source: "ESG / agency risk review" },
-        { label: "Governance offset", value: numberText(assumptions.governance), source: "Governance quality input" },
       ],
       source: "ESG risk review, governance notes, and sector preset normalized into SQLite corporate_metrics",
       timeHorizon: "Latest annual report, controversy, or governance review cycle.",
-      formula: "Agency Risk = clamp(100 - Governance Quality + ESG / Agency Penalty, 0, 100)",
+      formula: "ESG / Agency Penalty = subjective 0-100 penalty score set on this panel",
       simulation: [
-        { label: "1", value: `100.0 - ${numberText(assumptions.governance)} + ${numberText(assumptions.esgPenalty)}`, source: numberText(derived.agencyRisk) },
-        { label: "2", value: numberText(assumptions.esgPenalty), source: "Final ESG / Agency Penalty assumption" },
+        { label: "1", value: numberText(assumptions.esgPenalty), source: "Final ESG / Agency Penalty assumption" },
       ],
     }),
     spread: {
@@ -610,61 +597,6 @@ export function buildCalculationDetails({
         { label: "3", value: pct(derived.sustainableGrowth), source: "Final Sustainable Growth" },
       ],
     },
-    companyStatus: {
-      title: `${companyName} Company Status Diagnosis`,
-      timeHorizon: `Current realtime assumption set. Subjective Innovation, Governance, and ESG/Agency inputs are ${includeSubjectiveHealth ? "included" : "excluded"} from the health score; peer baselines are static UI benchmarks.`,
-      summary: [
-        { label: "Health Score", value: numberText(derived.healthScore), source: "Radar composite" },
-        { label: "Subjective inputs", value: includeSubjectiveHealth ? "Included" : "Excluded", source: "Company Status Diagnosis toggle" },
-        { label: "Growth Axis", value: numberText(clamp(assumptions.growth * 7, 0, 100)), source: "How: growth rate x 7 clamped to 0-100 for radar display" },
-        { label: "Market Share", value: numberText(assumptions.marketShare), source: "How: normalized competitive-position input on a 0-100 scale" },
-        { label: "Life Cycle", value: numberText(derived.lifeCyclePosition), source: "How: clamp(35 + growth x 2.5 - debt ratio x 0.3, 0, 100)" },
-        { label: "Levered Beta Risk", value: numberText(derived.leveredBetaRiskScore), source: `How: beta risk score from levered beta ${numberText2(derived.leveredBeta)}` },
-        ...(includeSubjectiveHealth
-          ? [
-            { label: "Innovation", value: numberText(assumptions.innovation), source: "How: normalized product and R&D momentum input on a 0-100 scale" },
-            { label: "Governance", value: numberText(assumptions.governance), source: "How: normalized ownership, disclosure, accountability, and alignment score" },
-            { label: "Agency Risk Score", value: numberText(100 - derived.agencyRisk), source: "How: 100 - clamp(100 - governance + ESG penalty, 0, 100)" },
-          ]
-          : []),
-      ],
-      components: [
-        { label: "Growth", value: numberText(clamp(assumptions.growth * 7, 0, 100)), source: `How: radar axis = clamp(${numberText(assumptions.growth)} x 7.0, 0.0, 100.0); composite contribution = ${numberText(assumptions.growth)} x 2.0. Why: growth captures reinvestment runway and terminal value capacity, but the composite dampens it to avoid letting growth dominate quality factors.` },
-        { label: "Market Share", value: numberText(assumptions.marketShare), source: "How: normalized competitive-position and scale input on a 0.0-100.0 scale. Why: larger share can protect pricing power, margins, and forecast durability." },
-        { label: "Life Cycle", value: numberText(derived.lifeCyclePosition), source: `How: clamp(35.0 + growth ${numberText(assumptions.growth)} x 2.5 - debt ratio ${numberText(assumptions.debtRatio)} x 0.3, 0.0, 100.0). Why: life-cycle stage affects reinvestment needs, maturity risk, and terminal assumptions.` },
-        { label: "Levered Beta Risk", value: numberText(derived.leveredBetaRiskScore), source: `How: clamp(100.0 - max(levered beta ${numberText2(derived.leveredBeta)} - 1.0, 0.0) x 35.0, 0.0, 100.0). Why: higher financial leverage raises equity risk versus unlevered business risk.` },
-        ...(includeSubjectiveHealth
-          ? [
-            { label: "Innovation", value: numberText(assumptions.innovation), source: "How: normalized product, technology, and R&D momentum input on a 0.0-100.0 scale. Why: innovation supports moat renewal, future growth, and optionality." },
-            { label: "Governance", value: numberText(assumptions.governance), source: "How: normalized ownership, disclosure, voting alignment, accountability, and management-quality input on a 0.0-100.0 scale. Why: stronger governance improves capital allocation reliability and reduces agency-cost discounts." },
-            { label: "Agency Risk", value: numberText(100 - derived.agencyRisk), source: `How: raw risk = clamp(100.0 - governance ${numberText(assumptions.governance)} + ESG/agency penalty ${numberText(assumptions.esgPenalty)}, 0.0, 100.0) = ${numberText(derived.agencyRisk)}; displayed score = 100.0 - raw risk. Why: lower governance friction and lower agency costs reduce execution and valuation haircut risk.` },
-          ]
-          : []),
-      ],
-      formula: includeSubjectiveHealth
-        ? "Health Score = average(growth x 2, market share, life cycle, levered beta risk, innovation, governance, 100 - agency risk)"
-        : "Health Score = average(growth x 2, market share, life cycle, levered beta risk)",
-      result: numberText(derived.healthScore),
-      sourcing: [
-        { label: "Growth", value: pct(assumptions.growth), source: "Yahoo annual revenue growth rates averaged from 2021 onward when available | Method: radar axis = growth x 7; composite contribution = growth x 2" },
-        { label: "Life Cycle", value: numberText(derived.lifeCyclePosition), source: "Growth and debt ratio inputs | Method: clamp(35 + growth x 2.5 - debt ratio x 0.3, 0, 100)" },
-        { label: "Levered Beta Risk", value: numberText(derived.leveredBetaRiskScore), source: "Levered beta risk penalty included in Company Status Diagnosis" },
-        { label: "Market Share", value: numberText(assumptions.marketShare), source: "Annual Report / sector preset / SQLite corporate_metrics | Method: normalized 0-100 score" },
-        ...(includeSubjectiveHealth
-          ? [
-            { label: "Agency Risk", value: numberText(derived.agencyRisk), source: "Governance and ESG penalty inputs | Method: clamp(100 - governance + ESG penalty, 0, 100), then invert for the displayed score" },
-            { label: "Governance", value: numberText(assumptions.governance), source: "Proxy statement / governance review / SQLite corporate_metrics | Method: normalized 0-100 score" },
-            { label: "Innovation", value: numberText(assumptions.innovation), source: "Yahoo annual R&D / revenue intensity proxy averaged from 2021 onward when available | Method: normalized 0-100 score" },
-          ]
-          : []),
-      ],
-      simulation: [
-        { label: "1", value: `Growth axis = clamp(${numberText(assumptions.growth)} x 7.0, 0.0, 100.0); composite growth = ${numberText(assumptions.growth)} x 2.0`, source: `${numberText(clamp(assumptions.growth * 7, 0, 100))} axis; ${numberText(assumptions.growth * 2)} composite` },
-        { label: "2", value: `Levered beta risk = clamp(100.0 - max(${numberText2(derived.leveredBeta)} - 1.0, 0.0) x 35.0, 0.0, 100.0)`, source: numberText(derived.leveredBetaRiskScore) },
-        { label: "3", value: `Life cycle = clamp(35.0 + ${numberText(assumptions.growth)} x 2.5 - ${numberText(assumptions.debtRatio)} x 0.3, 0.0, 100.0)`, source: numberText(derived.lifeCyclePosition) },
-        { label: "4", value: includeSubjectiveHealth ? "Composite includes subjective innovation, governance, and agency scores" : "Composite excludes subjective innovation, governance, and agency scores", source: numberText(derived.healthScore) },
-      ],
-    },
     hurdleDecomposition: {
       title: `${companyName} Hurdle Rate Decomposition`,
       timeHorizon: "Current market snapshot for risk-free rate and market-implied ERP, shown across US, EU, Korea, and emerging-market hurdle-rate indicators. Korea uses the fixed Korea CRP assumption.",
@@ -676,7 +608,7 @@ export function buildCalculationDetails({
         { label: "CRP", value: pct(koreaCountryRiskPremium), source: "Fixed South Korea country risk premium" },
         { label: "Bottom-up Ke", value: pct(derived.bottomUpKe), source: "Realtime hurdle-rate model" },
       ],
-      components: regionalMinard.map((region) => ({
+      components: regionalHurdle.map((region) => ({
         label: region.region,
         value: `RF ${pct(region.rf)}, implied ERP ${pct2(region.erp)}, spread ${pct(region.defaultSpread)}, multiplier ${numberText(region.riskMultiplier)}, CRP ${pct(region.crp)}, revenue weight ${numberText(region.revenue)}`,
         source: region.region === "US"
@@ -687,7 +619,7 @@ export function buildCalculationDetails({
       })),
       formula: "Bottom-up Ke = risk-free rate + levered beta x implied ERP + selected-region CRP; Implied ERP = market IRR - risk-free rate",
       result: pct(derived.bottomUpKe),
-      sourcing: regionalMinard.map((region) => ({
+      sourcing: regionalHurdle.map((region) => ({
         label: region.region,
         value: `RF ${pct(region.rf)}, implied ERP ${pct2(region.erp)}, CRP ${pct(region.crp)}`,
         source: region.region === "Korea" ? "Fixed Korea CRP assumption" : "Regional hurdle-rate indicator",

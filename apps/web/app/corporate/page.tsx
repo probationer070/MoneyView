@@ -154,7 +154,6 @@ export default function CorporateAnalysisPage() {
   const [latestLoadedMetrics, setLatestLoadedMetrics] = useState<CorporateMetricsApi | null>(null);
   const [roicBasis, setRoicBasis] = useState<RoicBasis>("recent_average");
   const [roicYear, setRoicYear] = useState("2025");
-  const [includeSubjectiveHealth, setIncludeSubjectiveHealth] = useState(false);
   const [comparisonSortKey, setComparisonSortKey] = useState<ComparisonSortKey>("expected_return_spread");
   const [comparisonSortDirection, setComparisonSortDirection] = useState<"desc" | "asc">("desc");
   const [comparisonUniverse, setComparisonUniverse] = useState<ComparisonUniverse>("watchlist_plus_benchmark");
@@ -463,28 +462,6 @@ export default function CorporateAnalysisPage() {
     const bottomUpKe = RISK_FREE_RATE + leveredBeta * impliedErp + KOREA_COUNTRY_RISK_PREMIUM;
     const spread = assumptions.roic - assumptions.wacc;
     const sustainableGrowth = (assumptions.reinvestment / 100) * assumptions.roic;
-    const agencyRisk = clamp(100 - assumptions.governance + assumptions.esgPenalty, 0, 100);
-    const lifeCyclePosition = clamp(35 + assumptions.growth * 2.5 - assumptions.debtRatio * 0.3, 0, 100);
-    const leveredBetaRiskScore = clamp(100 - Math.max(leveredBeta - 1, 0) * 35, 0, 100);
-    const objectiveHealthInputs = [
-      assumptions.growth * 2,
-      assumptions.marketShare,
-      lifeCyclePosition,
-      leveredBetaRiskScore,
-    ];
-    const subjectiveHealthInputs = [
-      assumptions.innovation,
-      assumptions.governance,
-      100 - agencyRisk,
-    ];
-    const healthInputs = includeSubjectiveHealth
-      ? [...objectiveHealthInputs, ...subjectiveHealthInputs]
-      : objectiveHealthInputs;
-    const healthScore = clamp(
-      healthInputs.reduce((sum, value) => sum + value, 0) / healthInputs.length,
-      0,
-      100,
-    );
 
     return {
       debtToEquity,
@@ -492,12 +469,8 @@ export default function CorporateAnalysisPage() {
       bottomUpKe,
       spread,
       sustainableGrowth,
-      agencyRisk,
-      lifeCyclePosition,
-      leveredBetaRiskScore,
-      healthScore,
     };
-  }, [assumptions, impliedErp, includeSubjectiveHealth]);
+  }, [assumptions, impliedErp]);
 
   const comparisonQuery = useQuery<CorporateComparisonApi>({
     queryKey: [
@@ -786,27 +759,13 @@ export default function CorporateAnalysisPage() {
   }, [bulkDcfReportUniverseKey]);
 
   // Chart datasets keep each visualization declarative and reuse the same derived model.
-  const healthRadar = [
-    { subject: "Growth", score: clamp(assumptions.growth * 7, 0, 100), peer: 58 },
-    { subject: "Market Share", score: assumptions.marketShare, peer: 62 },
-    { subject: "Life Cycle", score: derived.lifeCyclePosition, peer: 60 },
-    { subject: "Levered Beta Risk", score: derived.leveredBetaRiskScore, peer: 70 },
-    ...(includeSubjectiveHealth
-      ? [
-        { subject: "Innovation", score: assumptions.innovation, peer: 66 },
-        { subject: "Governance", score: assumptions.governance, peer: 65 },
-        { subject: "Agency Risk", score: 100 - derived.agencyRisk, peer: 62 },
-      ]
-      : []),
-  ];
-
   const hurdleBars = [
     { name: "Risk-free", value: RISK_FREE_RATE, fill: "#9DA5A2" },
     { name: "Beta x Implied ERP", value: derived.leveredBeta * impliedErp, fill: "#60CAAD" },
     { name: "CRP", value: KOREA_COUNTRY_RISK_PREMIUM, fill: "#444444" },
   ];
 
-  const regionalMinard = [
+  const regionalHurdle = [
     { region: "US", rf: RISK_FREE_RATE, erp: impliedErp, defaultSpread: 0.0, riskMultiplier: 0.0, crp: 0.0, revenue: 46 },
     { region: "EU", rf: RISK_FREE_RATE + 0.2, erp: impliedErp + 0.4, defaultSpread: 0.3, riskMultiplier: 1.0, crp: 0.3, revenue: 22 },
     { region: "Korea", rf: RISK_FREE_RATE + 0.4, erp: impliedErp + 1.2, defaultSpread: KOREA_COUNTRY_RISK_PREMIUM, riskMultiplier: 1.0, crp: KOREA_COUNTRY_RISK_PREMIUM, revenue: 12 },
@@ -848,8 +807,7 @@ export default function CorporateAnalysisPage() {
     impliedErp,
     impliedErpInputs,
     dcfData,
-    healthRadar,
-    regionalMinard,
+    regionalHurdle,
     hurdleBars,
     betaTreemapProxy,
     waccCurve,
@@ -904,8 +862,7 @@ export default function CorporateAnalysisPage() {
     impliedMarketReturn,
     impliedErp,
     hasSp500Data: Boolean(sp500Query.data),
-    includeSubjectiveHealth,
-    regionalMinard,
+    regionalHurdle,
     betaTreemapProxy,
     waccCurve,
     valueMatrix,
@@ -919,7 +876,7 @@ export default function CorporateAnalysisPage() {
       <header className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
         <PageHeader
           title="Corporate Analysis"
-          subtitle={`${companyName}: life cycle, hurdle rate, bottom-up beta, DCF, and project risk`}
+          subtitle={`${companyName}: hurdle rate, bottom-up beta, DCF, and value drivers`}
         />
 
         <div className="flex w-full flex-col gap-2 min-[1300px]:items-end">
@@ -1139,12 +1096,8 @@ export default function CorporateAnalysisPage() {
 
           <CorporateDiagnosticsSection
             companyName={companyName}
-            healthScore={derived.healthScore}
-            healthRadar={healthRadar}
-            includeSubjectiveHealth={includeSubjectiveHealth}
-            onIncludeSubjectiveHealthChange={setIncludeSubjectiveHealth}
             hurdleBars={hurdleBars}
-            regionalMinard={regionalMinard}
+            regionalHurdle={regionalHurdle}
             assumptionsDebtRatio={assumptions.debtRatio}
             betaTreemapProxy={betaTreemapProxy}
             waccCurve={waccCurve}

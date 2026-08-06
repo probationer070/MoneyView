@@ -1,7 +1,6 @@
 export const CHART_INITIAL_DIMENSION = { width: 1, height: 1 };
 
 export type DetailKey =
-  | "companyStatus"
   | "hurdleDecomposition"
   | "erp"
   | "crp"
@@ -13,12 +12,6 @@ export type DetailKey =
   | "terminalValueShare"
   | "fcffMagnitude"
   | "backendFairValue";
-
-export interface HealthRadarPoint {
-  subject: string;
-  score: number;
-  peer: number;
-}
 
 export interface HurdleBarPoint {
   name: string;

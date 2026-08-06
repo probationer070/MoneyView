@@ -85,7 +85,6 @@
 
 | Chart | Component | Library | Purpose |
 |---|---|---|---|
-| Company Status | `CompanyStatusGraph.tsx` | Recharts | Lifecycle / governance snapshot |
 | Hurdle Rate Decomposition | `HurdleRateDecompositionGraph.tsx` | Recharts ComposedChart | Cost-of-capital breakdown |
 | Beta + WACC Curve | `BetaWaccCurveGraph.tsx` | Recharts | Leverage sensitivity |
 | Value Driver Matrix | `ValueDriverMatrixGraph.tsx` | Recharts | ROIC vs growth positioning |

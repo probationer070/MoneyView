@@ -136,7 +136,6 @@ Design Notes
 4. Diagnostic Graph Suite
 
 Graphs
-- Company Status Graph
 - Hurdle Rate Decomposition
 - Beta + WACC Curve
 - Value Driver Matrix

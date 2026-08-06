@@ -325,13 +325,23 @@ how close the numbers happen to fall, and does not depend on company size.
       cover assumption response with measured values. Full record in `ERROR-LOG.md` and
       `docs/risk-return-minard.md`; the honesty invariant is pinned by
       `apps/web/tests/e2e/corporate-probability-labels.spec.ts`.
-- [ ] Move any decision-relevant financial scoring out of `apps/web` and into backend or shared
-      finance logic. **Still open** — this is the item the removal did not touch. `agencyRisk`,
-      `lifeCyclePosition` and `leveredBetaRiskScore` remain in the `derived` block of
-      `apps/web/app/corporate/page.tsx`, built from the same kind of magic constants, and feed
-      `healthScore` and the Company Status radar (whose `peer` values are hardcoded per axis
-      too). The two ERROR-LOG entries dated 2026-08-05 and 2026-08-06 are the precedent for
-      what this work has to establish about each: a real derivation, or an honest name.
+- [x] Move any decision-relevant financial scoring out of `apps/web` and into backend or shared
+      finance logic. Closed 2026-08-06 by removal, on the same reasoning as the item above:
+      `agencyRisk`, `lifeCyclePosition` and `leveredBetaRiskScore` had no derivation to move —
+      they were magic-constant formulas over the assumption sliders — and the `healthScore`
+      they fed averaged terms in four different units. The Company Status radar scored them
+      against a `peer` polygon of seven hardcoded constants, identical for every ticker, so its
+      one comparison could not vary with the company on screen.
+
+      Removed `CompanyStatusGraph.tsx`, the `companyStatus` detail modal and both key-type
+      entries, `HealthRadarPoint`, the `includeSubjectiveHealth` toggle, all four `derived`
+      fields, and the `company_status_radar` series from the downloadable raw dataset. Nothing
+      replaced it. Full record in `ERROR-LOG.md` (2026-08-06, "hardcoded peer polygon"); the
+      honesty invariant is pinned by `apps/web/tests/e2e/corporate-composite-score.spec.ts`,
+      which checks the peer baseline is gone from the export as well as the dashboard.
+
+      Also renamed `regionalMinard` to `regionalHurdle`: it survived the Minard removal as the
+      Hurdle Rate Decomposition dataset and was carrying a deleted model's name.
 
 ## Active Track - Performance Instrumentation (sub-project 1 of 4)
 
