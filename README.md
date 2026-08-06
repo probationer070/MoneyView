@@ -9,99 +9,26 @@
   Market monitoring, portfolio attribution, corporate valuation, and Monte Carlo simulation in one dashboard.
 </p>
 
-<p align="center">
-  <a href="http://localhost:3000"><strong>App</strong></a> ·
-  <a href="http://localhost:3000/portfolio"><strong>Portfolio</strong></a> ·
-  <a href="http://localhost:3000/corporate"><strong>Corporate</strong></a> ·
-  <a href="http://localhost:3000/monte-carlo"><strong>Monte Carlo</strong></a> ·
-  <a href="http://127.0.0.1:8000/docs"><strong>API Docs</strong></a>
-</p>
+---
 
-## Overview
+## Contents
 
-MoneyView combines:
-- a FastAPI backend in [`apps/api`](./apps/api)
-- a Next.js frontend in [`apps/web`](./apps/web)
-- local SQLite-backed workflows for analytics, reporting, and experimentation
+[What it is](#what-it-is) · [Requirements](#requirements) · [First-time setup](#first-time-setup) · [Running](#running) · [Screens](#screens) · [Developer dashboards](#developer-dashboards) · [Watchlist](#watchlist) · [Testing](#testing) · [Shared types](#shared-schema-types) · [API](#key-api-endpoints) · [Layout](#repository-layout)
 
-Core product areas:
-- **Market Overview** for macro snapshot tracking
-- **Portfolio** for attribution, holdings, and benchmark comparison
-- **Corporate Analysis** for valuation diagnostics and assumption-driven modeling
-- **Simulation Lab** for Monte Carlo path, risk, valuation, and correlation analysis
+---
 
-## Product Screens
+## What it is
 
-### Market Overview
+A FastAPI backend ([`apps/api`](./apps/api)), a Next.js frontend ([`apps/web`](./apps/web)), and a shared finance engine ([`packages/core_finance`](./packages)), over local SQLite-backed workflows. Everything runs on your machine.
 
-Real-time style cards for indices, commodities, FX, and crypto.
+| Area | What it covers | Deep dive |
+|---|---|---|
+| **Market Overview** | Major indices, commodities, FX, crypto, and trend cards | [`docs/tabs/market-overview-tab.txt`](./docs/tabs/market-overview-tab.txt) |
+| **Portfolio** | Portfolio and benchmark return, active return, beta, attribution effects, holdings detail | [`docs/tabs/portfolio-tab.txt`](./docs/tabs/portfolio-tab.txt) |
+| **Corporate Analysis** | DCF valuation assumptions, hurdle-rate decomposition, WACC × terminal-growth sensitivity, value-driver views | [`docs/tabs/corporate-analysis-tab.txt`](./docs/tabs/corporate-analysis-tab.txt) |
+| **Simulation Lab** | Path simulation, risk analysis, return distribution, corporate valuation, correlation model | [`docs/tabs/monte-carlo-tab.txt`](./docs/tabs/monte-carlo-tab.txt) |
 
-<p align="center">
-  <img src="./data/img/MoneyView-Page4.png" alt="Market Overview" width="100%" />
-</p>
-
-### Portfolio Command Center
-
-Holdings tracking, weighted portfolio testing, snapshot comparison, attribution effects, and drill-down detail in one workspace.
-
-<table>
-  <tr>
-    <td width="33%">
-      <img src="./data/img/MoneyView-Page21.png" alt="Portfolio view 1" width="100%" />
-    </td>
-    <td width="33%">
-      <img src="./data/img/MoneyView-Page22.png" alt="Portfolio view 2" width="100%" />
-    </td>
-    <td width="33%">
-      <img src="./data/img/MoneyView-Page23.png" alt="Portfolio view 3" width="100%" />
-    </td>
-  </tr>
-</table>
-
-### Corporate Analysis
-
-Realtime assumptions, company diagnostics, hurdle-rate decomposition, and valuation visuals.
-
-<p align="center">
-  <img src="./data/img/MoneyView-Page1.png" alt="Corporate Analysis" width="100%" />
-</p>
-
-### Simulation Lab
-
-Monte Carlo workflows for path simulation, risk analysis, valuation uncertainty, and portfolio correlation structure.
-
-<table>
-  <tr>
-    <td width="50%">
-      <img src="./data/img/MoneyView-Page5.png" alt="Simulation Lab view 1" width="100%" />
-    </td>
-    <td width="50%">
-      <img src="./data/img/MoneyView-Page51.png" alt="Simulation Lab view 2" width="100%" />
-    </td>
-  </tr>
-  <tr>
-    <td width="50%">
-      <img src="./data/img/MoneyView-Page52.png" alt="Simulation Lab view 3" width="100%" />
-    </td>
-    <td width="50%">
-      <img src="./data/img/MoneyView-Page53.png" alt="Simulation Lab view 4" width="100%" />
-    </td>
-  </tr>
-  <tr>
-    <td colspan="2">
-      <img src="./data/img/MoneyView-Page54.png" alt="Simulation Lab view 5" width="100%" />
-    </td>
-  </tr>
-</table>
-
-## Feature Map
-
-| Area | What it covers |
-|---|---|
-| Market Overview | Major indices, commodities, FX, crypto, and quick trend cards |
-| Portfolio | Portfolio return, benchmark return, active return, beta, attribution effects, holdings detail |
-| Corporate Analysis | DCF-oriented valuation assumptions, status diagnosis, hurdle-rate decomposition, value-driver views |
-| Simulation Lab | Path simulation, risk analysis, return distribution, corporate valuation, correlation model |
+Start at [`docs/INDEX.md`](./docs/INDEX.md) for a map of every document in the repo.
 
 ## Stack
 
@@ -110,292 +37,219 @@ Monte Carlo workflows for path simulation, risk analysis, valuation uncertainty,
 | Frontend | Next.js, React, TypeScript, Recharts |
 | Backend | FastAPI, Pydantic |
 | Data | SQLite, local cache, Yahoo/yfinance-based ingestion paths |
-| Python Tooling | Conda, `uv`, `pytest` |
-| Frontend Tooling | Node.js, `npm` |
+| Python tooling | Conda, `uv`, `pytest` |
+| Frontend tooling | Node.js, `npm`, Playwright |
 
 ## Requirements
 
-- Conda
-- Python `>=3.12`
-- `uv`
-- Node.js `>=20`
-- `npm`
+Conda · Python `>=3.12` · Node.js `>=20` · `uv` · `npm`
 
-## Quick Start
+## First-time setup
 
-Install the global command once:
-
-```powershell
-powershell.exe -ExecutionPolicy Bypass -File scripts\install_run_command.ps1
-```
-
-Then from `cmd.exe` or PowerShell in any folder, start MoneyView with one command:
-
-```cmd
-run MoneyView
-```
-
-The global `run` command delegates to the repo-root `run.cmd` wrapper, which forwards to the canonical launcher at `scripts\start_local.ps1`.
-
-If you do not want the global command, you can still run from the project root with:
-
-```cmd
-run MoneyView
-```
-
-From PowerShell in the project root:
-
-```powershell
-.\run.cmd MoneyView
-```
-
-The launcher:
-- starts the FastAPI backend
-- starts the Next.js frontend
-- opens two dedicated PowerShell windows: one for the API Server and one for `next-server`
-- auto-installs missing backend/frontend dependencies when needed
-- prefers the active Conda env, but treats `base` as a fallback and uses the `moneyview` Conda env when available
-- writes the backend discovery file
-- writes persistent runtime logs under `data/cache/logs`
-- stops with an explicit backend or frontend startup error if a process does not complete
-- opens the app in the browser
-
-### Resource cost and developer tools
-
-`run MoneyView` uses roughly **1.5–1.7 GB of RAM** (about 85% of that is `next dev`;
-the FastAPI backend is ~156 MB). CPU is bursty during route compilation, then idle.
-If you are using MoneyView rather than developing the frontend, `npm run build && npm run start`
-in `apps/web` is substantially lighter.
-
-Two developer dashboards exist and are **not linked from any navigation**:
-
-| URL | What |
-| --- | --- |
-| `http://localhost:3000/dev/performance` | Request waterfalls, scope breakdown, per-ticker cost, cache effectiveness |
-| `http://localhost:3000/dev/monitor` | Live event tail and latency panels |
-
-Both require server-side instrumentation, which is **off by default** because it costs
-12–19% request latency and up to 128 MB. Turn it on for a run:
-
-```cmd
-run MoneyView -DevMonitor
-```
-
-The startup banner then prints the dashboard URLs. Without the switch it tells you the
-dashboards are disabled and names the flag, rather than leaving you with a blank page.
-
-See [`docs/local-run-resources.md`](docs/local-run-resources.md) for measured figures,
-the measurement method, and operational hazards (notably: a `next dev` that logs
-"Ready" but never binds its port does not exit, and has reached 5 GB).
-
-Direct launcher fallback:
-
-```powershell
-powershell.exe -ExecutionPolicy Bypass -File scripts\start_local.ps1 -OpenBrowser
-```
-
-Useful URLs:
-
-- App: `http://localhost:3000`
-- Portfolio: `http://localhost:3000/portfolio`
-- Corporate Analysis: `http://localhost:3000/corporate`
-- Monte Carlo Lab: `http://localhost:3000/monte-carlo`
-- API health: `http://127.0.0.1:8000/api/v1/health`
-- API docs: `http://127.0.0.1:8000/docs`
-
-Saved runtime logs:
-
-- API Server: `data/cache/logs/api-server.log`
-- next-server: `data/cache/logs/next-server.log`
-
-To stop the app, close the spawned PowerShell windows.
-
-## Watchlist Bootstrap
-
-Portfolio holdings are stored in the local SQLite `watchlist` table and that table is the source of truth.
-
-On first run:
-- if the DB watchlist already has rows, MoneyView uses those rows
-- if the DB watchlist is empty and `apps/api/services/webscrap/stock_targets.json` exists, MoneyView seeds from that file once
-- if the DB watchlist is empty and that JSON file is missing, MoneyView seeds a small built-in default watchlist once
-
-After you add or delete holdings from the Portfolio page, those DB changes become authoritative and automatic bootstrap seeding does not overwrite them.
-
-The current Portfolio page uses saved positive watchlist weights when they exist. If no positive saved weights exist, it falls back to an equal-weight basket. If saved weights total less than `100%`, the remaining balance is treated as implied cash in the attribution flow.
-
-See [`docs/portfolio-tab.md`](./docs/portfolio-tab.md) for the full Portfolio screen breakdown.
-
-See [`docs/corporate-analysis-tab.md`](./docs/corporate-analysis-tab.md) for the full Corporate Analysis screen breakdown.
-
-See [`docs/monte-carlo-tab.md`](./docs/monte-carlo-tab.md) for the full Monte Carlo screen breakdown.
-
-## First-Time Setup
+Do this once, before the first run.
 
 ```powershell
 conda create -n moneyview python=3.13 -y
 conda activate moneyview
 python -m pip install -U uv
 uv pip install -e ".[dev]"
-cd apps\web
-npm install
-cd ..\..
-```
-
-Create the local env file from the template:
-
-```powershell
+cd apps\web; npm install; cd ..\..
 Copy-Item config\.env.example config\.env
 ```
 
-If frontend dependencies are missing, the launcher can install them:
-
-```cmd
-run MoneyView -InstallDeps
-```
-
-From PowerShell:
+Then install the global `run` command, so you can start MoneyView from any folder:
 
 ```powershell
-.\run.cmd MoneyView -InstallDeps
+powershell.exe -ExecutionPolicy Bypass -File scripts\install_run_command.ps1
 ```
 
-Normal Quick Start also attempts that install automatically when dependencies are missing.
-For backend packages, the launcher installs into the selected runtime env. If your active env is `base` and a `moneyview` env exists, the launcher now prefers `moneyview`.
+> If you skip the dependency steps, the launcher installs what is missing on first run —
+> or force it with `run MoneyView -InstallDeps`. Backend packages install into the selected
+> runtime env; if your active env is `base` and a `moneyview` env exists, `moneyview` wins.
 
-## Run Backend
+## Running
+
+```cmd
+run MoneyView
+```
+
+That is the whole thing. It starts the backend and frontend, opens a PowerShell window for
+each, and opens your browser.
+
+**Didn't install the global command?** Run the same thing from the repo root — `.\run.cmd MoneyView`
+in PowerShell, or `run MoneyView` in `cmd.exe`. Both forward to the canonical launcher,
+[`scripts/start_local.ps1`](./scripts/start_local.ps1), which you can also call directly:
+
+```powershell
+powershell.exe -ExecutionPolicy Bypass -File scripts\start_local.ps1 -OpenBrowser
+```
+
+### Where things are
+
+| | |
+|---|---|
+| App | http://localhost:3000 |
+| Portfolio · Corporate · Monte Carlo | `/portfolio` · `/corporate` · `/monte-carlo` |
+| API health | http://127.0.0.1:8000/api/v1/health |
+| API docs | http://127.0.0.1:8000/docs |
+| Logs | `data/cache/logs/api-server.log`, `data/cache/logs/next-server.log` |
+
+**To stop:** close the two spawned PowerShell windows.
+
+### Launcher options
+
+| Flag | Effect |
+|---|---|
+| `-CheckOnly` | Validate prerequisites and ports, start nothing |
+| `-AutoPort` | Scan for free ports when 8000/3000 are taken |
+| `-InstallDeps` | Install missing backend/frontend dependencies first |
+| `-DevMonitor` | Enable server-side performance instrumentation (see below) |
+| `-BuildWeb -ProductionWeb` | Production build instead of `next dev` — much lighter |
+
+### Running the halves separately
 
 ```powershell
 python -m uvicorn apps.api.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-Health check:
-
 ```powershell
-curl http://127.0.0.1:8000/api/v1/health
+cd apps\web; npm run dev
 ```
 
-## Run Frontend
+> If PowerShell blocks `npm`, use `npm.cmd run dev`.
 
-```powershell
-cd apps\web
-npm install
-npm run dev
-```
+### Resource cost
 
-If PowerShell blocks `npm`, use:
+`run MoneyView` uses roughly **1.5–1.7 GB of RAM** — about 85% of that is `next dev`, with the
+FastAPI backend at ~156 MB. CPU is bursty during route compilation, then idle. If you are
+*using* MoneyView rather than developing the frontend, `-BuildWeb -ProductionWeb` is
+substantially lighter.
 
-```powershell
-npm.cmd run dev
-```
+[`docs/local-run-resources.md`](./docs/local-run-resources.md) has the measured figures, the
+measurement method, and the operational hazards — notably that a `next dev` which logs "Ready"
+but never binds its port does not exit, and has reached 5 GB.
 
-## Launcher Options
+## Screens
 
-Check prerequisites without starting processes:
+<details>
+<summary><strong>Market Overview</strong> — cards for indices, commodities, FX, and crypto</summary>
+<p align="center"><img src="./data/img/MoneyView-Page4.png" alt="Market Overview" width="100%" /></p>
+</details>
+
+<details>
+<summary><strong>Portfolio Command Center</strong> — holdings, weighted testing, snapshots, attribution, drill-down</summary>
+<table>
+  <tr>
+    <td width="33%"><img src="./data/img/MoneyView-Page21.png" alt="Portfolio view 1" width="100%" /></td>
+    <td width="33%"><img src="./data/img/MoneyView-Page22.png" alt="Portfolio view 2" width="100%" /></td>
+    <td width="33%"><img src="./data/img/MoneyView-Page23.png" alt="Portfolio view 3" width="100%" /></td>
+  </tr>
+</table>
+</details>
+
+<details>
+<summary><strong>Corporate Analysis</strong> — assumptions, hurdle-rate decomposition, valuation visuals</summary>
+<p align="center"><img src="./data/img/MoneyView-Page1.png" alt="Corporate Analysis" width="100%" /></p>
+</details>
+
+<details>
+<summary><strong>Simulation Lab</strong> — path simulation, risk, valuation uncertainty, correlation structure</summary>
+<table>
+  <tr>
+    <td width="50%"><img src="./data/img/MoneyView-Page5.png" alt="Simulation Lab view 1" width="100%" /></td>
+    <td width="50%"><img src="./data/img/MoneyView-Page51.png" alt="Simulation Lab view 2" width="100%" /></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="./data/img/MoneyView-Page52.png" alt="Simulation Lab view 3" width="100%" /></td>
+    <td width="50%"><img src="./data/img/MoneyView-Page53.png" alt="Simulation Lab view 4" width="100%" /></td>
+  </tr>
+  <tr>
+    <td colspan="2"><img src="./data/img/MoneyView-Page54.png" alt="Simulation Lab view 5" width="100%" /></td>
+  </tr>
+</table>
+</details>
+
+## Developer dashboards
+
+Two dashboards exist and are **not linked from any navigation**:
+
+| URL | What |
+|---|---|
+| `http://localhost:3000/dev/performance` | Request waterfalls, scope breakdown, per-ticker cost, cache effectiveness |
+| `http://localhost:3000/dev/monitor` | Live event tail and latency panels |
+
+Both need server-side instrumentation, which is **off by default** — it costs 12–19% request
+latency and up to 128 MB. Turn it on for a run:
 
 ```cmd
-run MoneyView -CheckOnly
+run MoneyView -DevMonitor
 ```
 
-From PowerShell:
+The startup banner then prints the dashboard URLs. Without the switch it says the dashboards
+are disabled and names the flag, rather than leaving you at a blank page.
 
-```powershell
-.\run.cmd MoneyView -CheckOnly
-```
+## Watchlist
 
-Other useful launcher options:
+Portfolio holdings live in the local SQLite `watchlist` table, and **that table is the source
+of truth**. On first run:
 
-```cmd
-run MoneyView -AutoPort
-run MoneyView -InstallDeps
-run MoneyView -BuildWeb -ProductionWeb
-```
+- rows already in the DB are used as-is
+- if empty and `apps/api/services/webscrap/stock_targets.json` exists, MoneyView seeds from it once
+- if empty and that file is missing, MoneyView seeds a small built-in default once
 
-## Tests and Validation
+Once you add or delete holdings from the Portfolio page, those changes are authoritative —
+bootstrap seeding will not overwrite them.
 
-Run the Python test suite:
+The Portfolio page uses saved positive weights when they exist, and falls back to an
+equal-weight basket when none do. If saved weights total under `100%`, the remainder is
+treated as implied cash in the attribution flow.
 
-```powershell
-pytest -q
-```
+## Testing
 
-Validate the local SQLite schema:
+| Command | What it does |
+|---|---|
+| `pytest -q` | Python test suite |
+| `cd apps\web; npm run test:e2e` | Playwright end-to-end suite (uses ports 3101/8110, not 3000/8000) |
+| `cd apps\web; npx tsc --noEmit` | Frontend typecheck |
+| `python scripts/validate_sqlite_schema.py` | Validate the local SQLite schema (add `--strict` to tighten) |
+| `python scripts/ingest_dry_run.py` | Dry-run the ingestion sources |
+| `python scripts/reconstruct_sqlite_db.py` | Preview a local DB reconstruction (add `--apply` to perform it, with backup) |
+| `python scripts/benchmark_sqlite.py` | Benchmark SQLite workloads |
+| `python scripts/benchmark_finance.py` | Benchmark finance workloads |
 
-```powershell
-python scripts/validate_sqlite_schema.py
-```
+> The Playwright config sets `reuseExistingServer: false`, so two suite runs at once will kill
+> each other's servers. Check 3101 and 8110 are free before starting one.
 
-Strict schema validation:
+## Shared schema types
 
-```powershell
-python scripts/validate_sqlite_schema.py --strict
-```
-
-Dry-run ingestion sources:
-
-```powershell
-python scripts/ingest_dry_run.py
-```
-
-Preview local DB reconstruction:
-
-```powershell
-python scripts/reconstruct_sqlite_db.py
-```
-
-Apply local DB reconstruction with backup:
-
-```powershell
-python scripts/reconstruct_sqlite_db.py --apply
-```
-
-Benchmark SQLite workloads:
-
-```powershell
-python scripts/benchmark_sqlite.py
-```
-
-Benchmark finance workloads:
-
-```powershell
-python scripts/benchmark_finance.py
-```
-
-## Shared Schema Types
-
-Backend Pydantic models are the source of truth for public portfolio/report contracts.
-
-Regenerate shared types after changing public models:
+Backend Pydantic models are the source of truth for the public portfolio/report contracts.
+Regenerate after changing a public model:
 
 ```powershell
 python scripts/export_schema.py
 npx json2ts packages/shared-types/generated/portfolio.schema.json > packages/shared-types/generated/portfolio.ts
 ```
 
-Generated output:
+Output lands in [`packages/shared-types/generated/portfolio.ts`](./packages/shared-types/generated/portfolio.ts).
+Check for drift with `git diff --exit-code packages/shared-types`.
 
-- [`packages/shared-types/generated/portfolio.ts`](./packages/shared-types/generated/portfolio.ts)
+See [`docs/architecture/schema-evolution.md`](./docs/architecture/schema-evolution.md).
 
-Check for generated drift:
+## Key API endpoints
 
-```powershell
-git diff --exit-code packages/shared-types
-```
+Full reference: [`docs/api-usage.md`](./docs/api-usage.md). Interactive docs at `/docs` while running.
 
-Reference:
+| Method | Path |
+|---|---|
+| `POST` | `/api/v1/portfolio/attribution` |
+| `POST` | `/api/v1/report/summary` |
+| `GET` `POST` | `/api/v1/portfolio/watchlist` |
+| `DELETE` | `/api/v1/portfolio/watchlist/{ticker}` |
 
-- [`docs/architecture/schema-evolution.md`](./docs/architecture/schema-evolution.md)
-
-## Key API Endpoints
-
-Reference:
-
-- [`docs/api-usage.md`](./docs/api-usage.md)
-
-### Portfolio Attribution
+<details>
+<summary>Example request bodies</summary>
 
 `POST /api/v1/portfolio/attribution`
-
-Example request:
 
 ```json
 {
@@ -410,17 +264,7 @@ Example request:
 }
 ```
 
-### Report Summary
-
-`POST /api/v1/report/summary`
-
-### Watchlist
-
-`GET /api/v1/portfolio/watchlist`
-
 `POST /api/v1/portfolio/watchlist`
-
-Example request:
 
 ```json
 {
@@ -432,30 +276,27 @@ Example request:
 }
 ```
 
-`DELETE /api/v1/portfolio/watchlist/{ticker}`
+</details>
 
-## Repository Layout
+## Repository layout
 
 ```text
 MoneyView/
 ├─ apps/
-│  ├─ api/
-│  └─ web/
-├─ config/
-├─ data/
-│  ├─ cache/
-│  ├─ img/
-│  ├─ processed/
-│  └─ raw/
-├─ docs/
-├─ guideline/
-├─ packages/
-├─ scripts/
-└─ tests/
+│  ├─ api/          FastAPI backend
+│  └─ web/          Next.js frontend
+├─ packages/        Shared finance engine and generated types
+├─ config/          Local env files
+├─ data/            SQLite cache, logs, images, raw and processed data
+├─ docs/            Architecture, design, and per-tab documentation
+├─ guideline/       SOPs and process specifications
+├─ scripts/         Launcher, benchmarks, schema and ingestion tools
+└─ tests/           Python test suite
 ```
 
 ## Notes
 
-- Screenshots in this README are loaded from [`data/img`](./data/img).
-- The app is designed for local development and experimentation first.
-- If PowerShell shows execution-policy warnings after commands complete, that is usually non-blocking unless the command itself fails.
+- Designed for local development and experimentation first.
+- Screenshots load from [`data/img`](./data/img).
+- PowerShell execution-policy warnings appearing *after* a command completes are usually
+  non-blocking, unless the command itself failed.
