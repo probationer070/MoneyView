@@ -344,3 +344,46 @@ def test_criteria_gate_covers_unattributed_and_partial():
     assert runner.criteria_failed([unattributed]) is True
 
     assert runner.criteria_failed([_result(partial=True)]) is True
+
+
+def test_external_split_section_reports_cpu_wait_and_what_it_could_not_measure():
+    """Item 10. The section must not present a partial split as a whole one: spans whose
+    CPU was not attributable are reported separately, with a coverage line, so a split
+    over 1 of 2 spans cannot be read as a statement about all external time."""
+    import scripts.benchmark_scenarios as runner
+    from apps.api.models.schema_parts.perf_analysis import ExternalCpuWaitSplit
+
+    result = runner.ScenarioResult(
+        name="x", p50_off_ms=1000.0, p50_on_ms=1010.0, p95_on_ms=1020.0,
+        iterations=10, breakdown=None, ticker_table=None, orphans=0, partial=False,
+        truncated=False, reproducibility_delta_pct=1.0,
+        external_split=ExternalCpuWaitSplit(
+            cpu_ms=25.0, wait_ms=75.0, measured_spans=1,
+            unmeasured_spans=1, unmeasured_ms=900.0,
+        ),
+    )
+
+    report = runner.render_report(environment=_ENVIRONMENT, results=[result])
+
+    assert "### External time: CPU vs wait" in report
+    assert "| cpu | 25.0 | 25.0% |" in report
+    assert "| wait | 75.0 | 75.0% |" in report
+    # The 900ms it could not attribute is stated, not silently dropped or counted as wait.
+    assert "| unmeasured | 900.0 | 1 span(s) |" in report
+    assert "covers 1 of 2 external spans" in report
+
+
+def test_external_split_section_is_omitted_when_there_were_no_external_spans():
+    import scripts.benchmark_scenarios as runner
+    from apps.api.models.schema_parts.perf_analysis import ExternalCpuWaitSplit
+
+    result = runner.ScenarioResult(
+        name="x", p50_off_ms=1000.0, p50_on_ms=1010.0, p95_on_ms=1020.0,
+        iterations=10, breakdown=None, ticker_table=None, orphans=0, partial=False,
+        truncated=False, reproducibility_delta_pct=1.0,
+        external_split=ExternalCpuWaitSplit(),
+    )
+
+    report = runner.render_report(environment=_ENVIRONMENT, results=[result])
+
+    assert "### External time: CPU vs wait" not in report

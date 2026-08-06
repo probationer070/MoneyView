@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import threading
@@ -447,6 +448,27 @@ def emit_data_quality_warning_event(
     )
 
 
+def _cpu_ms_since(cpu_started_at: float, duration_ms: float) -> float | None:
+    """Thread CPU consumed since `cpu_started_at`, or None if it cannot be attributed.
+
+    `time.thread_time()` measures the whole thread, so it is only this span's CPU while
+    the span owns the thread outright. Inside a running event loop it does not: any task
+    the loop ran while this span awaited would be charged here. Returning None there is
+    the point -- a plausible-looking CPU number that silently includes a neighbour's work
+    is worse than no number, and this track has twice shipped a metric that read fine for
+    a reason unrelated to what it measured.
+    """
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        # No loop on this thread: a sync call, or a `def` handler on the threadpool.
+        cpu_ms = round((time.thread_time() - cpu_started_at) * 1000, 1)
+        # One thread cannot burn more CPU than the wall clock it ran for; the two clocks
+        # round independently, so clamp rather than emit cpu > duration.
+        return min(cpu_ms, duration_ms)
+    return None
+
+
 def _event_payload(
     base_context: dict[str, Any],
     *,
@@ -496,6 +518,7 @@ def perf_timer(
         )
 
     started_at = time.perf_counter()
+    cpu_started_at = time.thread_time()
     mutable_metadata = event_context["metadata"]
     span_token = _current_span_id.set(span_id)
     error: Exception | None = None
@@ -508,6 +531,7 @@ def perf_timer(
         _current_span_id.reset(span_token)
 
     duration_ms = round((time.perf_counter() - started_at) * 1000, 1)
+    cpu_ms = _cpu_ms_since(cpu_started_at, duration_ms)
 
     if error is not None:
         error_metadata = dict(mutable_metadata)
@@ -523,6 +547,7 @@ def perf_timer(
                     level="error",
                     status="error",
                     duration_ms=duration_ms,
+                    cpu_ms=cpu_ms,
                     **({} if start_event else {"id": span_id}),
                     message=message or str(error),
                 )
@@ -542,6 +567,7 @@ def perf_timer(
                 metadata=terminal_metadata,
                 status=status,
                 duration_ms=duration_ms,
+                cpu_ms=cpu_ms,
                 **({} if start_event else {"id": span_id}),
             )
         )

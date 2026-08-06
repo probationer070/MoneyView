@@ -444,11 +444,35 @@ they look:
 
 ### Nice to have
 
-- [ ] 8. Flamegraph (SVG)
+- [x] 8. Flamegraph (SVG) — **closed 2026-08-06 as won't-do.** It is a different view of a
+      span tree the report already summarises three ways: the critical path (item 12), the
+      ranked leaf spans (item 2), and per-ticker attribution (item 3). For a markdown
+      report read locally, an SVG you have to open separately adds a rendering surface and
+      a second thing to keep correct without adding information. Reopen if the report ever
+      needs to show a shape those three cannot — heavy sibling overlap is the likely one,
+      since the critical path deliberately descends the longest child rather than summing
+      siblings.
 - [x] 9. Compare against the previous baseline — trend beats absolute numbers. Reads a
       `YYYY-MM-DD-baseline.json` sidecar rather than re-parsing the markdown, and warns
       when the environment differs (spec 08.4.1 header parity).
-- [ ] 10. Separate CPU from wait time within `external.*` spans
+- [x] 10. Separate CPU from wait time within `external.*` spans — done 2026-08-06.
+      `perf_timer` records `cpu_ms` from `time.thread_time()` alongside the wall clock;
+      wait is `duration_ms - cpu_ms`. The two answers point at opposite fixes: wait says
+      cut round trips, CPU says the response parsing is the cost, and for a 138-ticker
+      serial fan-out over yfinance that is the whole question.
+
+      The measurement is only sound while a span owns its thread. `thread_time()` counts
+      the thread, so a span wrapping an `await` would be charged for every other task the
+      loop ran during the wait. Those report `cpu_ms=None` — the split excludes them and
+      reports their count and elapsed time beside it, so a split covering 3 of 400 spans
+      cannot be read as a statement about the workload. Folding them in at 0 CPU would
+      have reported all of their time as wait, which is a claim, not a measurement.
+      This track has twice shipped a metric that read green for a reason unrelated to
+      what it measured; that is the trap being avoided here.
+
+      `apps/api/core/dev_monitor.py` (`_cpu_ms_since`), `PerformanceEvent.cpu_ms`,
+      `Span.cpu_ms`, `external_cpu_wait_split()`, and an "External time: CPU vs wait"
+      section in the benchmark report. Nine tests, mutation-verified.
 - [x] 11. Total emitted spans per scenario — covered by item 7's
       `emitted N events / M spans (K per iteration)` line.
 - [x] 12. **Critical path** — done, and promoted out of "nice to have" because the span
