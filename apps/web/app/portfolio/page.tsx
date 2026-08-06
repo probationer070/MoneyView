@@ -2869,6 +2869,17 @@ export default function PortfolioPage() {
             {refreshSummary}
           </p>
         ) : null}
+        {/* A failed bulk fetch leaves newsByTicker empty, and an empty entry is exactly
+            what a ticker with no news looks like -- so without this line every tile reads
+            as "never checked" and the failure is invisible. ERROR-LOG.md (2026-08-02) is
+            the backend half of this same confusion: StockNewsCrawler used to report every
+            provider failure as "no news". Saying it here keeps that fix from being undone
+            one layer up. */}
+        {bulkNewsQuery.isError ? (
+          <p data-testid="news-load-error" className="px-4 pt-3 text-[length:var(--type-helper)] text-[var(--delta-down)]">
+            Could not load news for the visible stocks. The headlines below are missing, not absent — press Refresh to try again.
+          </p>
+        ) : null}
         <StockTileGrid
           stocks={watchlist}
           newsByTicker={bulkNewsQuery.data?.tickers ?? {}}

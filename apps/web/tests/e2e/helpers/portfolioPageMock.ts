@@ -32,6 +32,12 @@ export type PortfolioPageMockOptions = {
   watchlist?: PortfolioStockFixture[];
   /** Holds POST /news/acquire open so a spec can observe the in-flight state. */
   acquireDelayMs?: number;
+  /** Fails GET /news/feed/bulk, so a spec can tell a load failure from "no news". */
+  failBulkNews?: boolean;
+  /** Tickers POST /news/acquire reports it did not recognise. */
+  acquireSkippedUnknown?: string[];
+  /** Returns POST /news/acquire with an empty results array. */
+  acquireReturnsNoResults?: boolean;
 };
 
 // Per-ticker news shape. AAPL has articles, MSFT is checked-but-empty, GOOGL has never
@@ -728,6 +734,9 @@ export async function mockPortfolioPageApi(page: Page, stats?: PortfolioPageMock
     // is enveloped. POST /news/acquire returns NewsAcquireResponse bare. The two differ on
     // the wire and the mock has to differ with them.
     if (pathname === `${API_PREFIX}/news/feed/bulk` && method === "GET") {
+      if (options?.failBulkNews) {
+        return route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ detail: "provider down" }) });
+      }
       const requested = (url.searchParams.get("tickers") ?? "")
         .split(",")
         .map((ticker) => ticker.trim().toUpperCase())
@@ -755,11 +764,13 @@ export async function mockPortfolioPageApi(page: Page, stats?: PortfolioPageMock
       const payload = JSON.parse(route.request().postData() ?? "{}");
       const requested: string[] = (payload.tickers ?? []).map((ticker: string) => String(ticker).toUpperCase());
       const body = {
-        results: requested.map((ticker) => ({
-          ticker,
-          ...(ACQUIRE_OUTCOME_BY_TICKER[ticker] ?? { status: "empty", articles: 0, detail: null }),
-        })),
-        skipped_unknown: [] as string[],
+        results: options?.acquireReturnsNoResults
+          ? []
+          : requested.map((ticker) => ({
+            ticker,
+            ...(ACQUIRE_OUTCOME_BY_TICKER[ticker] ?? { status: "empty", articles: 0, detail: null }),
+          })),
+        skipped_unknown: options?.acquireSkippedUnknown ?? ([] as string[]),
       };
       if (options?.acquireDelayMs) {
         await new Promise((resolve) => setTimeout(resolve, options.acquireDelayMs));

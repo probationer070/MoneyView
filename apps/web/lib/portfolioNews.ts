@@ -51,18 +51,39 @@ export async function acquireNews(tickers: string[]): Promise<NewsAcquireRespons
   return (json.data ?? json) as NewsAcquireResponse;
 }
 
-export function summarizeAcquisition(response: NewsAcquireResponse): string {
-  const acquired = response.results.filter((r) => r.status === "acquired").length;
-  const current = response.results.filter((r) => r.status === "fresh" || r.status === "empty").length;
-  const failed = response.results.filter((r) => r.status === "failed");
+/** "AAPL, MSFT +3" — names the first two and counts the rest. */
+function nameSome(tickers: string[]): string {
+  const named = tickers.slice(0, 2).join(", ");
+  return `${named}${tickers.length > 2 ? ` +${tickers.length - 2}` : ""}`;
+}
 
-  const parts = [`${acquired} refreshed`, `${current} already current`];
-  if (failed.length > 0) {
-    // Name failures rather than counting them anonymously: "3 failed" tells the user
-    // nothing they can act on.
-    const named = failed.slice(0, 2).map((r) => r.ticker).join(", ");
-    const rest = failed.length > 2 ? ` +${failed.length - 2}` : "";
-    parts.push(`${failed.length} failed (${named}${rest})`);
+export function summarizeAcquisition(response: NewsAcquireResponse): string {
+  const skipped = response.skipped_unknown ?? [];
+  const parts: string[] = [];
+
+  if (response.results.length === 0) {
+    // "0 refreshed · 0 already current" is a report about work that never happened, and
+    // it reads as a clean run. Nothing was requested, or nothing came back; say that.
+    parts.push("Nothing to refresh");
+  } else {
+    const acquired = response.results.filter((r) => r.status === "acquired").length;
+    const current = response.results.filter((r) => r.status === "fresh" || r.status === "empty").length;
+    const failed = response.results.filter((r) => r.status === "failed");
+
+    parts.push(`${acquired} refreshed`, `${current} already current`);
+    if (failed.length > 0) {
+      // Name failures rather than counting them anonymously: "3 failed" tells the user
+      // nothing they can act on.
+      parts.push(`${failed.length} failed (${nameSome(failed.map((r) => r.ticker))})`);
+    }
   }
+
+  if (skipped.length > 0) {
+    // The backend reports the tickers it could not resolve. Dropping that line leaves a
+    // typo'd or delisted ticker sitting in the watchlist looking exactly like a stock
+    // that simply has no news, which is the one reading it must not have.
+    parts.push(`${skipped.length} not recognised (${nameSome(skipped)})`);
+  }
+
   return parts.join(" · ");
 }
