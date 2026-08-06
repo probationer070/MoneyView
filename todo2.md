@@ -44,16 +44,17 @@ Two things worth knowing if you revisit it:
 
 ---
 
-## 2. Unpushed — 66 commits, no PR
+## 2. PR #2 open, awaiting review
 
-93 commits ahead of `renewal`, 66 never pushed. The portfolio tile-grid + news-acquisition
-sub-project is complete and reviewed but was never pushed or PR'd; that step is still open.
+Pushed and PR'd 2026-08-06: https://github.com/probationer070/MoneyView/pull/2
+(`feat-statements-acquisition` → `renewal`, 99 commits, 124 files, +17.4k/−2.2k).
+Nothing left to do here but get it reviewed.
 
-```bash
-git log --oneline origin/feat-statements-acquisition..HEAD | wc -l
-git push -u origin feat-statements-acquisition
-gh pr create --base renewal --head feat-statements-acquisition
-```
+**Local `renewal` is 4 commits ahead of `origin/renewal`** and was never pushed —
+`c4bfe5b`, `7c4be80`, `71ce96c` (the statements-acquisition design and plan docs) and `0e4a3c1`
+(statement cache TTL/maxsize, with a test and an ERROR-LOG entry). They are ancestors of this
+branch, so PR #2 carries them in on merge; nothing is lost if you leave them. But anyone
+pulling `renewal` today does not have that fix.
 
 Two things that bit before:
 
@@ -75,32 +76,29 @@ Ledger for that sub-project: `.superpowers/sdd/2026-07-31-portfolio-tile-grid-an
 
 ## 3. Deferred — known, consciously not done
 
-None of these block anything. Each is already written up where it belongs; listed here only so
-they are not rediscovered from scratch.
+Re-verified against the code 2026-08-06. **Four of the six items this section used to list were
+already fixed** — the sdd progress ledgers they were copied from had gone stale, which is the
+failure mode this file exists to avoid. Two remain, neither blocking:
 
-**From `.superpowers/sdd/2026-08-03-dcf-data-completeness/progress.md` (see its "Open, surfaced
-to the user, NOT fixed"):**
+- `packages/shared-types/generated/portfolio.ts` is stale — last regenerated `eb46613`
+  (2026-04-12), so it is missing `metric_schema_version` and the new nullability. Inert: nothing
+  imports it on the paths that changed, and the hand-written types carry the fields. Regenerating
+  needs network.
+- The snapshot-history notice reads "Metric definition changed" where the honest claim at a
+  0-edge is "provenance unknown" (`SnapshotHistoryModal.tsx:67-72`). A second notice variant plus
+  its test was judged more churn than the over-claim costs. Open, deliberately.
 
-- `dcf_value` changed units mid-series — a resolved row stores per-share where the same ticker
-  previously stored enterprise value, and `CorporateComparisonHistoryPoint` carries no
-  `metric_schema_version`, so the history chart draws the discontinuity as a valuation move.
-- `bridge_quality` is persisted and returned but no comparison-table frontend type declares it,
-  so the spec's own mitigation — a flag saying the number is not comparable — is unwired.
-- `packages/shared-types/generated/portfolio.ts` is stale on the new nullability. Inert;
-  regenerating needs network.
+Closed since the ledgers were written, with where to see it:
 
-**From `.superpowers/sdd/2026-08-03-comparison-value-honesty/progress.md`:**
-
-- The notice reads "Metric definition changed" where the honest claim at a 0-edge is "provenance
-  unknown". A second notice variant plus its test was judged more churn than the over-claim
-  costs. Open, deliberately.
-
-**From `guideline/sop/todo.md` (Follow-ups — Portfolio Tile Grid section):**
-
-- `StockTile` still nests `<div>`s inside its `<button>` via `DeltaBadge` and the chart wrapper.
-  Browsers don't auto-correct it, so nothing renders wrong; fixing it means letting those shared
-  components render a `<span>`.
-- `PortfolioAllocationEditor.tsx` clones the `PortfolioStock` type instead of importing it.
+- `metric_schema_version` on the history point — `corporate.py:354` carries it with the
+  enterprise-value/per-share boundary documented in place, `portfolio/page.tsx:195` declares it,
+  `SnapshotHistoryModal.tsx` renders the boundary notice and a version badge, and
+  `snapshot-history-metric-version.spec.ts` pins both directions.
+- `bridge_quality` wired into the frontend — declared in `CorporateComparisonTable.tsx:20`,
+  `graphs/shared.ts:60`, `TargetStockComparisonSection.tsx:33`, `corporateTypes.ts:144`, with
+  `apps/web/lib/bridgeQuality.ts` as the single discriminator.
+- `StockTile` content model — the button is all `<span>`, no flow content (`bc5e06a`, `c7da4e8`).
+- `PortfolioAllocationEditor.tsx` imports `PortfolioStock` instead of cloning it (`83d74b5`).
 
 ---
 
