@@ -365,6 +365,14 @@ emits the real multi-request page-load span; (b) keep it as a grouping label exc
 from self-time accounting; (c) keep it and have `breakdown_by_scope` treat
 same-interval parent/child pairs as one span.
 Files changed: none (record only).
+
+**Fixed in `f1484b9`** ("remove same-interval span duplication, making criterion 2
+measurable") — option (a). The server-side `page_load.<component>` span is gone from
+`middleware.py`; `page_load` survives only as a scope name in the allowed-scopes literal
+(`schema_parts/dev_monitor.py:19`), which is what the frontend's `useDevMonitorPageLoad`
+emits against, and that one measures a real multi-request interval the request span does
+not cover. Verified 2026-08-06: no `page_load` emission remains anywhere in `apps/api`.
+This "Fix:" line was left reading "Not fixed" for that whole period.
 Prevention: Two spans that measure the same interval will always break self-time
 accounting, whatever their nesting. A span map should state, per span, which interval
 it owns exclusively — and spec 04.12's "percentages sum to <= 100%" check should run
@@ -391,6 +399,14 @@ tree *depth*.
 Fix: Not fixed here — out of scope for Task 13, which only surfaced it while
 verifying that the perf suite was green. Belongs to Task 6 (spec §04.10).
 Files changed: none (record only).
+
+**Fixed in `d7ada0b`** ("convert the remaining perf_analysis tree walkers to explicit
+stacks"), as Task 6 predicted. `_to_node`, `_assign_offsets`, `_assign_self_ms` and
+`_depth_map` are all explicit-stack walks now, each carrying a docstring naming this
+failure, and `test_a_chain_far_deeper_than_the_recursion_limit_truncates_instead_of_raising`
+pins a depth-2000 chain — past the reach of every one of them at CPython's 1000-frame
+default. Verified 2026-08-06: `tests/api/test_perf_analysis.py` is 45 passed.
+This "Fix:" line was left reading "Not fixed" for that whole period.
 Prevention: This corrects an earlier claim in this session that the full-suite
 baseline was "1 known failure". Verified by stashing: `python -m pytest tests/api -q`
 reports **6 pre-existing failures** at `196c565` — this one, the known

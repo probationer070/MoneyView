@@ -108,8 +108,9 @@ def _span_from(event: PerformanceEvent, order: int) -> Span:
         # hit/miss) is emitted once, complete, and simply has no duration --
         # treating it as unfinished made baseline criterion 3 unreachable for
         # every scenario that touches the cache. "start" is set at exactly the
-        # three start-event emit sites (dev_monitor.perf_timer, middleware's
-        # api.request_start and page_load.*).
+        # two start-event emit sites (dev_monitor.perf_timer and middleware's
+        # api.request_start). page_load.* was a third until f1484b9 removed it
+        # for measuring the same interval as api.request_*.
         partial=event.duration_ms is None and event.status == "start",
         order=order,
     )
