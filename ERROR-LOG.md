@@ -434,6 +434,46 @@ that replaces non-finite floats with null), rather than relying on each route to
 NaN-free. A route-level test that feeds a NaN through `/market/indices` and asserts
 a 200 with nulls (not a 500) would catch regressions.
 
+**Fixed 2026-08-06, with a correction to the diagnosis above.** Writing the suggested
+regression test found that `/market/indices` no longer reproduces: it declares
+`response_model=List[IndexQuote]`, and FastAPI serializes those through pydantic's own
+JSON writer, which emits `null` for non-finite floats and never reaches Starlette's
+`json.dumps`. Whether that was true on 2026-07-26 or arrived with a later dependency bump
+is not recoverable from the repo -- either way the entry's "the underlying route bug
+remains open" had been false for some unknown period, and re-reading the entry could not
+have revealed that. Only executing the test it asked for did.
+
+The hazard itself was real and still live, one layer over: the protection comes from the
+`response_model=`, not from the route or the data. Of 56 routes, 8 declare no
+`response_model`, and 3 of those return live-derived floats -- `POST /corporate/dcf/{ticker}`,
+`/corporate/metrics/{ticker}/history`, `/corporate/metrics/{ticker}/quarterly-statements`.
+A NaN in any of them still 500'd, confirmed by test before the fix with the same
+`ValueError: Out of range float values are not JSON compliant` traceback.
+
+Fixed by the shared response class this entry's own Prevention section proposed:
+`apps/api/core/responses.py` defines `NonFiniteSafeJSONResponse`, which replaces non-finite
+floats with `null` and is now the app's `default_response_class`. That makes both kinds of
+route agree instead of leaving the outcome to whether a route happens to declare a model.
+`allow_nan=False` is kept in the renderer so anything the walk misses still raises rather
+than emitting a bare `NaN` token.
+
+Null, not 0.0: `guideline/sop/finance-logic.md` prohibits standing a real figure in for an
+absent one, and a NaN delta rendered as 0.0% would read as "unchanged". This is also why
+the web boundary does not reuse the compute boundary's sentinel encoder -- that value has
+to survive a round trip back into a pydantic model, whereas this one is read by a
+TypeScript client that expects a number or null.
+
+Files changed: `apps/api/core/responses.py` (new), `apps/api/main.py`,
+`tests/api/test_nonfinite_json_boundary.py` (new).
+Prevention (revised): the original Prevention was right about the fix and wrong about the
+verification -- it proposed testing `/market/indices`, the one route that was already
+immune, so that test would have passed on day one and proved nothing. When a defect is a
+serialization-boundary property rather than a route's own logic, the test has to target
+what actually decides the outcome. Here that is the presence of a `response_model`, so the
+regression test exercises a route without one. Both cases are pinned, so a future
+dependency bump that changes either path fails a test instead of changing behaviour
+silently.
+
 ## 2026-07-27: Watchlist upsert scheduled a live acquisition on every metadata/weight edit
 
 Date: 2026-07-27
@@ -1297,9 +1337,9 @@ were decoration over a single scalar.
 both the dashboard and the exportable dataset. Each assertion first confirms the surface
 rendered, because an absence check that passes against a blank page proves nothing.
 
-Phase 3 item 3 remains open and covers the rest of this layer: `agencyRisk`,
-`lifeCyclePosition` and `leveredBetaRiskScore` still feed the Company Status radar from
-`apps/web`, built the same way.
+Phase 3 item 3 covers the rest of this layer: `agencyRisk`, `lifeCyclePosition` and
+`leveredBetaRiskScore` still feed the Company Status radar from `apps/web`, built the same
+way. (Closed later the same day by the entry below, which removed all three.)
 
 ## 2026-08-06: The Company Status radar scored slider formulas against a hardcoded peer polygon
 

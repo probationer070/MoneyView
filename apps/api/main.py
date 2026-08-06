@@ -20,6 +20,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from apps.api.core.logger import configure_logging, setup_logger
 from apps.api.core.middleware import StructuralMiddleware
+from apps.api.core.responses import NonFiniteSafeJSONResponse
 from apps.api.core.transport_progress import TransportProgressMiddleware
 from apps.api.routes import (
     corporate_router,
@@ -147,6 +148,7 @@ app = FastAPI(
     description="Financial analytics backend; local-first desktop",
     version="1.0.0",
     lifespan=lifespan,
+    default_response_class=NonFiniteSafeJSONResponse,
 )
 
 app.add_middleware(StructuralMiddleware)
