@@ -14,7 +14,7 @@ export interface RailItem {
 
 interface PortfolioShellProps {
   rail: RailItem[];
-  panels: Record<string, { title: string; body: ReactNode }>;
+  panels: Record<string, { title: string; description?: string; body: ReactNode }>;
   onRailAction?: (id: string) => boolean; // return true if handled as an action, not a panel
   /**
    * Which panel is open. Owned by the parent, because opening one is not always a rail
@@ -61,7 +61,7 @@ export function PortfolioShell({
           {children}
         </div>
         {active ? (
-          <SidePanel open title={active.title} onClose={closePanel}>
+          <SidePanel open title={active.title} description={active.description} onClose={closePanel}>
             {active.body}
           </SidePanel>
         ) : null}

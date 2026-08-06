@@ -2077,17 +2077,21 @@ export default function PortfolioPage() {
   // the rail-triggered side panels. Only the tile grid stays in the scrolling region.
   const snapshotPanelBody = (
     <>
+      {/* Every branch below is gated on hasHoldings, so with an empty watchlist this
+          body rendered nothing at all and the panel opened as a titled slide-over over
+          blank space -- indistinguishable from a panel that failed to load. */}
+      {!hasHoldings && (
+        <p data-testid="panel-empty-state" className="text-sm text-[var(--text-muted)]">
+          No snapshot yet. Add at least one stock to the watchlist, then press Save Current As Snapshot to start a daily record.
+        </p>
+      )}
       {hasHoldings && (
         <section className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4">
           <div className="flex flex-col gap-4 min-[1450px]:flex-row lg:items-start lg:justify-between">
             <div>
-              <h2 className="text-lg font-bold text-[var(--text-primary)]">
-                <InfoTooltip
-                  label="Latest Snapshot Summary"
-                  description="Daily comparison snapshot summary for the selected portfolio-side universe. This keeps the latest persisted stock-comparison record visible on the Portfolio page and points you back to the per-stock table for the meaningful comparison metrics."
-                />
-              </h2>
-              <p className="mt-1 text-sm text-[var(--text-muted)]">
+              {/* No heading here: SidePanel renders the panel title, and its tooltip
+                  carries the description this block used to duplicate. */}
+              <p className="text-sm text-[var(--text-muted)]">
                 Snapshot mode is the default daily record. Live mode lets you inspect the current portfolio-side comparison without replacing the saved daily snapshot.
               </p>
             </div>
@@ -2259,7 +2263,7 @@ export default function PortfolioPage() {
               <span className="font-semibold text-[var(--text-primary)]">Benchmark workflow:</span> Preset is currently {benchmarkPresetLabelForTicker(normalizedBenchmarkTicker)}. Manual ticker input stays available for index symbols or ETFs outside the preset list.
             </div>
             <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-muted)] p-3 text-sm text-[var(--text-muted)]">
-              <span className="font-semibold text-[var(--text-primary)]">Snapshot workflow:</span> Live mode is review-only. Saved history updates only when you press <span className="font-semibold text-[var(--text-primary)]">Save Current As Snapshot</span> or opt in from allocation changes below.
+              <span className="font-semibold text-[var(--text-primary)]">Snapshot workflow:</span> Live mode is review-only. Saved history updates only when you press <span className="font-semibold text-[var(--text-primary)]">Save Current As Snapshot</span> or opt in from the allocation panel.
             </div>
           </div>
           <div className="mt-3 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-panel)] p-4">
@@ -2487,9 +2491,11 @@ export default function PortfolioPage() {
     <>
       <section ref={allocationSectionRef} className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4">
         <div className="flex flex-col gap-2">
-          <h2 className="text-lg font-bold text-[var(--text-primary)]">Portfolio Allocation Workspace</h2>
+          {/* Title and its description live on the panel header; repeating them here
+              showed the same words twice. The copy also described a full-width
+              two-column section -- there is no left or right inside a 480px panel. */}
           <p className="text-sm text-[var(--text-muted)]">
-            Use the stock browser on the left to add names, then adjust allocation percentages inline on the right. Slider moves and double-click manual edits save automatically, and the total investment amount drives the money-based summaries below.
+            Weights save as you change them. Totals update in this panel.
           </p>
         </div>
 
@@ -2607,20 +2613,15 @@ export default function PortfolioPage() {
       {watchlistView.showEmpty && (
         <StatusPanel
           title="No Holdings Yet"
-          message="Add at least one asset to the tracking watchlist, then assign portfolio weights below when you want attribution insights."
+          message="Add at least one asset to the tracking watchlist, then assign portfolio weights in the allocation panel when you want attribution insights."
         />
       )}
       {/* Holdings toolbar: section title, explanatory tooltip, and card/table view toggle. */}
       <section className="flex items-center justify-between gap-4">
         <div>
-          <h2 className="text-lg font-bold text-[var(--text-primary)]">
-            <InfoTooltip
-              label="Watchlist Holdings"
-              description="This section is the tracking watchlist: holdings, current close, day-over-day percentage change, and a recent price sparkline. Good/bad follows local convention: red indicates price gain, blue indicates price loss."
-            />
-          </h2>
+          {/* Heading and tooltip are the panel header's, not this body's. */}
           <p className="text-sm text-[var(--text-muted)]">
-            Tracking list for holdings and price or news drill-down. Weighting, implied cash, snapshots, and attribution stay in the portfolio-testing section below.
+            Tracking list for holdings and price or news drill-down. Weighting, implied cash, snapshots, and attribution each have their own panel on the rail.
           </p>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
@@ -2799,10 +2800,22 @@ export default function PortfolioPage() {
         openPanel={openPanel}
         onOpenPanelChange={setOpenPanel}
         panels={{
-          snapshot: { title: "Latest Snapshot Summary", body: snapshotPanelBody },
+          snapshot: {
+            title: "Latest Snapshot Summary",
+            description: "Daily comparison snapshot summary for the selected portfolio-side universe. This keeps the latest persisted stock-comparison record visible on the Portfolio page and points you back to the per-stock table for the meaningful comparison metrics.",
+            body: snapshotPanelBody,
+          },
           attribution: { title: "Attribution", body: attributionPanelBody },
-          allocation: { title: "Portfolio Allocation Workspace", body: allocationPanelBody },
-          holdings: { title: "Watchlist Holdings", body: holdingsPanelBody },
+          allocation: {
+            title: "Portfolio Allocation Workspace",
+            description: "Add names from the holdings panel, then set each weight here. Slider moves and double-click manual edits save automatically, and the total investment amount drives the money-based summaries in this panel.",
+            body: allocationPanelBody,
+          },
+          holdings: {
+            title: "Watchlist Holdings",
+            description: "This section is the tracking watchlist: holdings, current close, day-over-day percentage change, and a recent price sparkline. Good/bad follows local convention: red indicates price gain, blue indicates price loss.",
+            body: holdingsPanelBody,
+          },
         }}
       >
         <div className="px-4 pt-4">
