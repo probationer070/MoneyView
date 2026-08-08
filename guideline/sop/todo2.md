@@ -66,9 +66,8 @@ Ledger for the tile-grid sub-project (gitignored, local only):
 
 ## 3. Deferred — known, consciously not done
 
-Re-verified against the code 2026-08-06. **Four of the six items this section used to list were
-already fixed** — the sdd progress ledgers they were copied from had gone stale, which is the
-failure mode this file exists to avoid. Two remain, neither blocking:
+Re-verified against the code 2026-08-06, and again on 2026-08-09. **Five of the six items this
+section used to list were already fixed.** One remains, and it is cosmetic:
 
 - `packages/shared-types/generated/portfolio.ts` is still stale — last regenerated `eb46613`
   (2026-04-12). **The dangerous half of this was fixed in `1c4882f`**: it declared
@@ -82,9 +81,6 @@ failure mode this file exists to avoid. Two remain, neither blocking:
   `npx json2ts` half does not, and `json2ts` is installed in neither `node_modules` tree.
   The root cause is that nothing enforces regeneration: no CI, no hook, and the drift check
   the README documents (`git diff --exit-code packages/shared-types`) is never run.
-- The snapshot-history notice reads "Metric definition changed" where the honest claim at a
-  0-edge is "provenance unknown" (`SnapshotHistoryModal.tsx:67-72`). A second notice variant plus
-  its test was judged more churn than the over-claim costs. Open, deliberately.
 
 Closed since the ledgers were written, with where to see it:
 
@@ -98,6 +94,17 @@ Closed since the ledgers were written, with where to see it:
   `apps/web/lib/bridgeQuality.ts` as the single discriminator.
 - `StockTile` content model — the button is all `<span>`, no flow content (`bc5e06a`, `c7da4e8`).
 - `PortfolioAllocationEditor.tsx` imports `PortfolioStock` instead of cloning it (`83d74b5`).
+- The 0-edge notice over-claim — fixed in `7617360`. `SnapshotHistoryModal.tsx` carries both
+  variants: "Metric definition changed…" for a real version change, and "Metric definition
+  before this point was not recorded, so whether values are comparable across it is unknown."
+  when the earlier side is version 0. `snapshot-history-metric-version.spec.ts:133-140` pins
+  each literally and asserts placement, so neither can stand in for the other.
+
+  This one was listed as open until 2026-08-09 because of a bad check, not a stale ledger:
+  `grep -c "Metric definition changed"` returned 1, which was read as "only one variant
+  exists". The count of one string says nothing about whether a differently-worded second
+  variant exists — and it did, eight lines away. Counting a string is not the same as
+  checking a behaviour.
 
 ---
 
