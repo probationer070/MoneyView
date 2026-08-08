@@ -16,6 +16,16 @@ Files changed:
 Prevention:
 ```
 
+**If an entry records a defect as unfixed, and it is fixed later, amend its `Fix:` line.**
+Add the detail in a new paragraph by all means, but the `Fix:` line itself has to change,
+because that line is what anyone asking "what is still broken?" reads. On 2026-08-06 a sweep
+of this file reported three live defects that had all been fixed — one of them months
+earlier. Each carried an accurate resolution paragraph further down, and each still opened
+with "Not fixed". The record was wrong, not the code, and re-reading the entry could not
+reveal that; only checking the code did.
+
+An entry states what was true when it was written. Nothing updates it on its own.
+
 ## 2026-07-26: Full API suite fails intermittently with unrelated 429s
 
 Date: 2026-07-26
@@ -358,7 +368,8 @@ This was previously masked: before the request span became the ambient parent, 4
 421 spans were roots, so `breakdown_by_scope` used its synthetic-root denominator
 (the sum of all root durations) — a number large enough that no overlap was ever
 detected. Fixing the parenting made a pre-existing double-count visible.
-Fix: Not fixed — needs a spec decision on what the server-side `page_load` span is
+Fix: **RESOLVED — see the "Fixed in `f1484b9`" paragraph below.** At the time of writing:
+not fixed — needs a spec decision on what the server-side `page_load` span is
 for. Options: (a) drop it and derive page-load grouping from the `request_group`
 metadata already on the request span, since the frontend's `useDevMonitorPageLoad`
 emits the real multi-request page-load span; (b) keep it as a grouping label excluded
@@ -396,7 +407,8 @@ fan-out) exceeds CPython's default 1000-frame limit well before
 `WATERFALL_SPAN_CAP = 2000` spans is reached, so the truncation path this test
 exercises raises before it can collapse anything. The cap bounds span *count*, not
 tree *depth*.
-Fix: Not fixed here — out of scope for Task 13, which only surfaced it while
+Fix: **RESOLVED — see the "Fixed in `d7ada0b`" paragraph below.** At the time of writing:
+not fixed here — out of scope for Task 13, which only surfaced it while
 verifying that the perf suite was green. Belongs to Task 6 (spec §04.10).
 Files changed: none (record only).
 
@@ -438,7 +450,8 @@ response 500s. This is the same NaN/Inf hazard the compute-boundary serializer
 (spec §A-3, `apps/api/compute/serialization.py`) was built to neutralize, but that
 serializer guards only the compute-tier path -- ordinary web routes like
 `/market/indices` do not pass through it and have no NaN sanitization.
-Fix: Not fixed here -- out of scope for the perf-instrumentation task (Task 13),
+Fix: **RESOLVED — see the "Fixed 2026-08-06" paragraph below.** At the time of writing:
+not fixed here -- out of scope for the perf-instrumentation task (Task 13),
 which only surfaced it. The benchmark runner was made resilient to it via
 `TestClient(app, raise_server_exceptions=False)` so a transient 500 on one surface
 does not abort a whole baseline run. The underlying route bug remains open.
