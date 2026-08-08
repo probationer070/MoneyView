@@ -70,10 +70,18 @@ Re-verified against the code 2026-08-06. **Four of the six items this section us
 already fixed** — the sdd progress ledgers they were copied from had gone stale, which is the
 failure mode this file exists to avoid. Two remain, neither blocking:
 
-- `packages/shared-types/generated/portfolio.ts` is stale — last regenerated `eb46613`
-  (2026-04-12), so it is missing `metric_schema_version` and the new nullability. Inert: nothing
-  imports it on the paths that changed, and the hand-written types carry the fields. Regenerating
-  needs network.
+- `packages/shared-types/generated/portfolio.ts` is still stale — last regenerated `eb46613`
+  (2026-04-12). **The dangerous half of this was fixed in `1c4882f`**: it declared
+  `CorporateComparisonHistoryPoint`, the barrel re-exported it, and it silently shadowed the
+  correct hand-written type. That definition now lives once in `packages/shared-types/portfolio.ts`
+  and is pinned by an explicit re-export, guarded by
+  `apps/web/tests/types/shared-types-contract.ts`.
+
+  What remains is cosmetic: other interfaces in the generated file may also lag the backend
+  models. Regenerating needs network — `scripts/export_schema.py` runs offline but the
+  `npx json2ts` half does not, and `json2ts` is installed in neither `node_modules` tree.
+  The root cause is that nothing enforces regeneration: no CI, no hook, and the drift check
+  the README documents (`git diff --exit-code packages/shared-types`) is never run.
 - The snapshot-history notice reads "Metric definition changed" where the honest claim at a
   0-edge is "provenance unknown" (`SnapshotHistoryModal.tsx:67-72`). A second notice variant plus
   its test was judged more churn than the over-claim costs. Open, deliberately.
