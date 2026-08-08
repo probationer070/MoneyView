@@ -89,7 +89,8 @@ failure mode this file exists to avoid. Two remain, neither blocking:
 Closed since the ledgers were written, with where to see it:
 
 - `metric_schema_version` on the history point — `corporate.py:354` carries it with the
-  enterprise-value/per-share boundary documented in place, `portfolio/page.tsx:195` declares it,
+  enterprise-value/per-share boundary documented in place, `packages/shared-types/portfolio.ts`
+  declares it on the frontend side (moved there from `portfolio/page.tsx` in `1c4882f`),
   `SnapshotHistoryModal.tsx` renders the boundary notice and a version badge, and
   `snapshot-history-metric-version.spec.ts` pins both directions.
 - `bridge_quality` wired into the frontend — declared in `CorporateComparisonTable.tsx:20`,
