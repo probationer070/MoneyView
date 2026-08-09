@@ -47,6 +47,13 @@ from .schema_parts.corporate import (
     RiskAssumptions,
     ValuationAssumptions,
 )
+from .schema_parts.valuation import (
+    SegmentInput,
+    SegmentNarrativeInput,
+    ValuationCaseCreated,
+    ValuationCaseInput,
+    ValuationCaseSummary,
+)
 from .schema_parts.market import DeltaBadge, IndicatorRecord, IndexQuote, MarketDataQuality, MarketIndexDetail, MarketRegimeContext, MarketVolumeSummary, StockOHLCV, StockPriceLookup
 from .schema_parts.news import MonteCarloResult, NewsArticle, TechnicalIndicators
 from .schema_parts.portfolio_reporting import (
@@ -167,4 +174,9 @@ __all__ = [
     "WatchlistResyncResult",
     "WatchlistSyncResult",
     "WatchlistSyncStatus",
+    "SegmentInput",
+    "SegmentNarrativeInput",
+    "ValuationCaseCreated",
+    "ValuationCaseInput",
+    "ValuationCaseSummary",
 ]
