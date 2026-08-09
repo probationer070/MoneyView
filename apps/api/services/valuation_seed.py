@@ -63,12 +63,13 @@ def _narrative(field, claim, confidence, three_p="probable", source="todo3"):
 
 def _segment(name, *, margin_target, margin_claim, s2c_early, s2c_late,
              tam=None, tam_claim=None, share=None, share_claim=None,
-             revenue_target=None, revenue_claim=None, ramp_start_year=1):
+             revenue_target=None, revenue_claim=None, ramp_start_year=1,
+             margin_confidence="confirmed"):
     base_revenue, base_margin = _BASE[name]
     narratives = [
         _narrative("base_revenue", _BASE_CLAIMS[name], "derived", source="todo3 section 6"),
         _narrative("base_margin", _ASSUMED_BASE_MARGIN, "assumed"),
-        _narrative("margin_target", margin_claim, "confirmed", source="todo3 section 3"),
+        _narrative("margin_target", margin_claim, margin_confidence, source="todo3 section 3"),
         _narrative("sales_to_capital_early", _ASSUMED_S2C, "assumed"),
         _narrative("sales_to_capital_late", _ASSUMED_S2C, "assumed"),
     ]
@@ -138,6 +139,7 @@ def _pre_prospectus_payload() -> dict:
                      revenue_claim="xAI against a $3-4T real enterprise AI market, before the Cursor acquisition.",
                      margin_target=0.45,
                      margin_claim="Restated from S2 as 45%. S1's text says 50%; todo3 section 3 footnote 1 documents the conflict and its own derived table uses 45%.",
+                     margin_confidence="derived",
                      s2c_early=0.8, s2c_late=1.2),
             _segment("expansion", revenue_target=50.0, revenue_claim=_EXPANSION_REVENUE,
                      margin_target=0.30, margin_claim=_EXPANSION_MARGIN,

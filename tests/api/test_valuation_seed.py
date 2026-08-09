@@ -66,6 +66,93 @@ def test_uncalibrated_inputs_are_marked_assumed():
     assert by_field["margin_target"]["confidence"] == "confirmed"
 
 
+def test_seeded_narrative_confidence_tags_match_source_exactly():
+    """Every confidence tag, on every narrative, in both cases -- checked against
+    a literal expected mapping written independently of the seed module's own
+    constants. A test that re-derives its expectations from the code under test
+    cannot catch a wrong value; this one is the regression guard for the
+    pre-prospectus `ai` segment's `margin_target`, which was shipped `confirmed`
+    when the source (todo3 section 3 footnote 1: S1 says 50%, S2 restates as
+    45%) makes it `derived`."""
+    ensure_valuation_cases_seeded()
+
+    expected = {
+        (PRE_CASE_NAME, "launch"): {
+            "base_revenue": "derived",
+            "base_margin": "assumed",
+            "tam_target": "confirmed",
+            "market_share_target": "confirmed",
+            "margin_target": "confirmed",
+            "sales_to_capital_early": "assumed",
+            "sales_to_capital_late": "assumed",
+        },
+        (PRE_CASE_NAME, "connectivity"): {
+            "base_revenue": "derived",
+            "base_margin": "assumed",
+            "tam_target": "confirmed",
+            "market_share_target": "confirmed",
+            "margin_target": "confirmed",
+            "sales_to_capital_early": "assumed",
+            "sales_to_capital_late": "assumed",
+        },
+        (PRE_CASE_NAME, "ai"): {
+            "base_revenue": "derived",
+            "base_margin": "assumed",
+            "revenue_target": "confirmed",
+            "margin_target": "derived",
+            "sales_to_capital_early": "assumed",
+            "sales_to_capital_late": "assumed",
+        },
+        (PRE_CASE_NAME, "expansion"): {
+            "base_revenue": "derived",
+            "base_margin": "assumed",
+            "revenue_target": "confirmed",
+            "margin_target": "confirmed",
+            "sales_to_capital_early": "assumed",
+            "sales_to_capital_late": "assumed",
+        },
+        (POST_CASE_NAME, "launch"): {
+            "base_revenue": "derived",
+            "base_margin": "assumed",
+            "tam_target": "confirmed",
+            "market_share_target": "confirmed",
+            "margin_target": "confirmed",
+            "sales_to_capital_early": "assumed",
+            "sales_to_capital_late": "assumed",
+        },
+        (POST_CASE_NAME, "connectivity"): {
+            "base_revenue": "derived",
+            "base_margin": "assumed",
+            "tam_target": "confirmed",
+            "market_share_target": "confirmed",
+            "margin_target": "confirmed",
+            "sales_to_capital_early": "assumed",
+            "sales_to_capital_late": "assumed",
+        },
+        (POST_CASE_NAME, "ai"): {
+            "base_revenue": "derived",
+            "base_margin": "assumed",
+            "revenue_target": "confirmed",
+            "margin_target": "confirmed",
+            "sales_to_capital_early": "assumed",
+            "sales_to_capital_late": "assumed",
+        },
+        (POST_CASE_NAME, "expansion"): {
+            "base_revenue": "derived",
+            "base_margin": "assumed",
+            "revenue_target": "confirmed",
+            "margin_target": "confirmed",
+            "sales_to_capital_early": "assumed",
+            "sales_to_capital_late": "assumed",
+        },
+    }
+
+    for name in (PRE_CASE_NAME, POST_CASE_NAME):
+        for segment in load_case(_case_id(name))["segments"]:
+            actual = {n["input_field"]: n["confidence"] for n in segment["narratives"]}
+            assert actual == expected[(name, segment["name"])], f"{name}/{segment['name']}"
+
+
 def test_seeded_target_year_totals_match_the_confirmed_inputs():
     """The section 6 gates, end to end through HTTP."""
     ensure_valuation_cases_seeded()
