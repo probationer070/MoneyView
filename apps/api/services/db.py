@@ -477,6 +477,64 @@ CREATE TABLE IF NOT EXISTS corporate_quote_facts (
     beta                REAL,
     fetched_at          TEXT NOT NULL
 );
+
+-- ============================================================
+-- Schema: Segment build-up valuation cases (hand-authored)
+--
+-- Independent of the acquisition pipeline: a case is authored, not fetched, so
+-- a private or pre-IPO company with no ticker and no statements is a first-class
+-- subject. See docs/superpowers/specs/2026-08-09-segment-buildup-valuation-design.md
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS valuation_case (
+    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+    case_name          TEXT NOT NULL UNIQUE,
+    ticker             TEXT,                      -- NULL for private / pre-IPO
+    as_of_date         TEXT NOT NULL,
+    base_year          INTEGER NOT NULL,
+    target_year        INTEGER NOT NULL,
+    riskfree_rate      REAL NOT NULL,
+    wacc_initial       REAL NOT NULL,
+    wacc_stable        REAL NOT NULL,
+    wacc_converge_from INTEGER NOT NULL DEFAULT 6,
+    marginal_tax_rate  REAL NOT NULL,
+    nol_balance        REAL NOT NULL DEFAULT 0,
+    roic_stable        REAL NOT NULL,
+    terminal_growth    REAL,                      -- NULL means: use riskfree_rate
+    cash               REAL NOT NULL DEFAULT 0,
+    debt               REAL NOT NULL DEFAULT 0,
+    ipo_proceeds       REAL NOT NULL DEFAULT 0,
+    shares_basic       REAL NOT NULL,
+    shares_new         REAL NOT NULL DEFAULT 0,
+    parent_case_id     INTEGER REFERENCES valuation_case(id)
+);
+
+CREATE TABLE IF NOT EXISTS segment (
+    id                     INTEGER PRIMARY KEY AUTOINCREMENT,
+    case_id                INTEGER NOT NULL REFERENCES valuation_case(id) ON DELETE CASCADE,
+    name                   TEXT NOT NULL,
+    base_revenue           REAL NOT NULL,
+    base_margin            REAL NOT NULL,
+    tam_target             REAL,
+    market_share_target    REAL,
+    revenue_target         REAL,
+    margin_target          REAL NOT NULL,
+    sales_to_capital_early REAL NOT NULL,
+    sales_to_capital_late  REAL NOT NULL,
+    ramp_start_year        INTEGER NOT NULL DEFAULT 1,
+    UNIQUE(case_id, name)
+);
+CREATE INDEX IF NOT EXISTS idx_segment_case ON segment(case_id);
+
+CREATE TABLE IF NOT EXISTS segment_narrative (
+    segment_id      INTEGER NOT NULL REFERENCES segment(id) ON DELETE CASCADE,
+    input_field     TEXT NOT NULL,
+    claim           TEXT NOT NULL,
+    evidence_source TEXT,
+    confidence      TEXT NOT NULL CHECK(confidence IN ('confirmed','derived','assumed')),
+    three_p         TEXT NOT NULL CHECK(three_p IN ('possible','plausible','probable')),
+    PRIMARY KEY (segment_id, input_field)
+);
 """
 
 
