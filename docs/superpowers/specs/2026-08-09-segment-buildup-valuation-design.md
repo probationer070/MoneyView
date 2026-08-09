@@ -245,11 +245,27 @@ Never `(1 + w)^t` — todo3 names this the common implementation bug.
 **Terminal value (F5–F8).**
 
 ```
-g_stable      = riskfree_rate                       # raises if g > rf
+g_stable      = terminal_growth ?? riskfree_rate    # raises if supplied g > rf
 ReinvRate     = g_stable / roic_stable              # F6
 FCFF_{n+1}    = EBIT_n · (1 + g) · (1 − marginal) · (1 − ReinvRate)
 TV_n          = FCFF_{n+1} / (wacc_stable − g_stable)
 ```
+
+`terminal_growth` is an **optional** case input defaulting to `riskfree_rate`.
+Without it, todo3's F5 cap ("enforce `g_stable ≤ riskfree_rate` — raise, don't warn",
+trap #2) is a tautology: a value *defined* as the riskfree rate cannot exceed it, so
+there would be nothing to enforce and trap #2 would have no implementation. Making it
+optional keeps Damodaran's behaviour exactly (both seeds leave it NULL) while giving
+the cap something real to reject. Adds one nullable column, `terminal_growth REAL`.
+
+**Horizon.** `n = target_year − base_year`. todo3 is self-contradictory here: §9.1
+annotates `target_year` as `base_year + 10`, but §9.4 seeds `base_year=2025,
+target_year=2036`, which is 11. Every other reference — §3's "target year 2036 (year
+10)", R5's ramp "by t = 10", P2's `φ(10)=0`, R2's `^(1/10)` — assumes 10. The seeds
+therefore use `base_year=2026, target_year=2036`, with todo3 §4's FY2025 figures as
+the year-0 starting point, which matches valuations dated April and June 2026. The
+§6 gates are unaffected by this choice either way, since the path terminates at
+`target_revenue` and `margin_target` at year `n` for any `n`.
 
 `roic_stable` is a **required case input**. todo3's F6 needs it and §9.1 has no
 column for it — an omission in the source document, not a design choice here.
@@ -445,6 +461,8 @@ commit `1c4882f` fixed on this branch.
    proving the reuse in §3 is an identity and not a coincidence.
 6. **Narrative rule.** A POST omitting one narrative row returns 422 naming the field.
 7. **Seed idempotency.** Running the seed twice leaves one row per case.
+8. **Base revenue reconciliation.** Σ `base_revenue` = `$15.6bn` (±0.05) for both
+   seeds, matching todo3 §6's two independent trailing EV/Sales derivations.
 
 ### Diagnostic — reported, never gated
 
@@ -454,6 +472,26 @@ gap. The test asserts the diagnostic **is produced**; it does not assert agreeme
 Per §1.2, agreement would be evidence of nothing while the `[V]` inputs are
 uncalibrated, and disagreement is information about those guesses rather than a build
 failure. The measured gap is to be recorded in the implementation progress notes.
+
+**Base-year reconciliation diagnostic.** `/run` also reports base-year aggregate
+revenue and EBIT beside todo3's own figures, because two independent inconsistencies
+in the source deserve to be visible in output rather than lost in a comment:
+
+- *Base revenue closes.* §9.4's segment base revenues sum to
+  `4.1 + 11.4 + 0.1 + 0 = $15.6bn`, which §6's pricing multiples corroborate twice
+  and independently: `1250 / 80.13 = 15.60` and `1750 / 112.18 = 15.60`. This is
+  strong enough to gate (§6 gate 8).
+- *Base EBIT does not.* Those same §9.4 base margins imply
+  `4.1(−0.10) + 11.4(0.02) + 0.1(−0.50) = −$0.23bn`, against §4's reported
+  operating loss of **−$2.57bn** and EBITR of **+$4bn**. Nor do §4's own figures
+  close with each other: `−2.57 + 9 = 6.43`, not the stated `4`. Three mutually
+  inconsistent base-year EBIT figures, so none can be a gate.
+
+  `/run` reports the model's own `base_ebit_total`, and the three conflicting
+  source figures are recorded in the seed's `base_margin` narrative claim.
+  They belong there rather than in the engine: they are facts about one company,
+  and hardcoding SpaceX constants into a generic valuation engine is exactly the
+  coupling `segment_narrative` exists to avoid.
 
 ### Error handling
 
@@ -520,3 +558,6 @@ Collected for review, since todo3 is the source of record.
 | §2.2 P3/P4/P6 R&D capitalization | deferred | no data, double-counts (§7.2) |
 | §2.2 P2 back-loaded φ | linear φ | back-loading is `[V]` (§4.2) |
 | §7 "value only what clears Probable" | stored and reported, not gated | trivially satisfiable gate (§5.2) |
+| §9.1 no `terminal_growth` | added, nullable, defaults to `riskfree_rate` | otherwise F5's cap is a tautology (§4.2) |
+| §9.4 `base_year=2025, target_year=2036` (n=11) | `base_year=2026` (n=10) | §9.1, §3, R5, P2, R2 all say 10 (§4.2) |
+| §4 base-year EBIT (three conflicting figures) | reported as a diagnostic | −$0.23bn / −$2.57bn / +$4bn cannot all hold (§6) |
