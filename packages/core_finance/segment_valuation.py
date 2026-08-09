@@ -144,3 +144,57 @@ def revenue_path(spec: SegmentSpec, n: int, g_stable: float) -> list[float]:
         level *= 1.0 + rate
         revenues.append(level)
     return revenues
+
+
+_EARLY_YEARS = 5
+
+
+def margin_path(spec: SegmentSpec, n: int) -> list[float]:
+    """Operating margin for years 1..n -- todo3 P2.
+
+    Converges linearly from `base_margin` in year 1 to `margin_target` in year n:
+    phi(1) = 1, phi(n) = 0. todo3 notes Damodaran typically back-loads this
+    convergence, but tags the shape as unconfirmed. An invented back-loading
+    exponent would be precision the source does not support, so this stays linear
+    until the spreadsheets are available to calibrate it.
+    """
+    if n < 2:
+        return [spec.margin_target]
+    spread = spec.margin_target - spec.base_margin
+    return [
+        spec.margin_target - spread * (n - t) / (n - 1)
+        for t in range(1, n + 1)
+    ]
+
+
+def reinvestment(revenues: list[float], spec: SegmentSpec) -> list[float]:
+    """Capital consumed per year -- todo3 I1.
+
+    `(Rev_t - Rev_t-1) / salesToCapital_t`. This is the only reinvestment
+    mechanism in the template: there is no separate capex, depreciation or
+    working-capital schedule to reconcile against.
+
+    Years before `ramp_start_year` book zero regardless of the revenue series.
+    For a segment ramping from a zero base the delta is already zero, but the
+    guard also covers a segment held back from a non-zero base, where it is not.
+    """
+    amounts: list[float] = []
+    previous = spec.base_revenue
+    for index, revenue in enumerate(revenues):
+        year = index + 1
+        if year < spec.ramp_start_year:
+            amounts.append(0.0)
+            previous = revenue
+            continue
+        ratio = (
+            spec.sales_to_capital_early
+            if year <= _EARLY_YEARS
+            else spec.sales_to_capital_late
+        )
+        if ratio <= 0:
+            raise ValueError(
+                f"{spec.name}: sales_to_capital must be positive, got {ratio}"
+            )
+        amounts.append((revenue - previous) / ratio)
+        previous = revenue
+    return amounts

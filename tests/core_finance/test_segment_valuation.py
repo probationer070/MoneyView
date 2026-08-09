@@ -1,6 +1,11 @@
 import pytest
 
-from packages.core_finance.segment_valuation import SegmentSpec, revenue_path
+from packages.core_finance.segment_valuation import (
+    SegmentSpec,
+    margin_path,
+    reinvestment,
+    revenue_path,
+)
 
 
 def _launch() -> SegmentSpec:
@@ -148,3 +153,63 @@ def test_revenue_path_rejects_negative_base_revenue_on_ramp_branch():
     )
     with pytest.raises(ValueError, match="base_revenue must not be negative"):
         revenue_path(spec, n=10, g_stable=0.0456)
+
+
+def test_margin_starts_at_base_and_ends_at_target():
+    path = margin_path(_launch(), n=10)
+    assert path[0] == pytest.approx(-0.10)
+    assert path[-1] == pytest.approx(0.45)
+
+
+def test_margin_converges_linearly():
+    path = margin_path(_launch(), n=10)
+    steps = [path[i + 1] - path[i] for i in range(len(path) - 1)]
+    assert steps == pytest.approx([steps[0]] * len(steps))
+
+
+def test_reinvestment_is_revenue_delta_over_sales_to_capital():
+    spec = SegmentSpec(
+        name="s",
+        base_revenue=10.0,
+        base_margin=0.0,
+        margin_target=0.2,
+        sales_to_capital_early=2.0,
+        sales_to_capital_late=4.0,
+        revenue_target=20.0,
+    )
+    revenues = [12.0, 14.0, 15.0, 16.0, 17.0, 18.0]
+    result = reinvestment(revenues, spec)
+    # Years 1-5 use the early ratio, year 6 the late one.
+    assert result == pytest.approx([1.0, 1.0, 0.5, 0.5, 0.5, 0.25])
+
+
+def test_ramped_segment_books_no_reinvestment_before_ramp_start():
+    """todo3 trap 6: capital must not be charged against revenue that does not exist."""
+    spec = SegmentSpec(
+        name="expansion",
+        base_revenue=0.0,
+        base_margin=0.0,
+        margin_target=0.30,
+        sales_to_capital_early=1.0,
+        sales_to_capital_late=1.5,
+        revenue_target=50.0,
+        ramp_start_year=7,
+    )
+    revenues = revenue_path(spec, n=10, g_stable=0.0456)
+    result = reinvestment(revenues, spec)
+    assert result[:6] == [0.0] * 6
+    assert all(value > 0 for value in result[6:])
+
+
+def test_reinvestment_rejects_non_positive_sales_to_capital():
+    spec = SegmentSpec(
+        name="s",
+        base_revenue=10.0,
+        base_margin=0.0,
+        margin_target=0.2,
+        sales_to_capital_early=0.0,
+        sales_to_capital_late=1.0,
+        revenue_target=20.0,
+    )
+    with pytest.raises(ValueError, match="sales_to_capital"):
+        reinvestment([12.0], spec)
