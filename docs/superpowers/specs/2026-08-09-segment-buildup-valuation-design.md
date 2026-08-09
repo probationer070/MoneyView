@@ -66,9 +66,8 @@ by construction, and `φ(10) = 0` makes target-year margin equal `margin_target`
 - **Gated:** year-10 revenue and EBIT totals; all path/tax/discounting invariants.
 - **Diagnostic, never gated:** enterprise value and per-share value against
   Damodaran's $1.22T / ~$100. `/run` returns the model's own figures; the
-  comparison against Damodaran's published numbers is measured once and recorded
-  in the project ledger (`.superpowers/sdd/2026-08-09-segment-buildup-valuation/
-  progress.md`), not recomputed on every request.
+  comparison against Damodaran's published numbers was measured once and is
+  recorded in §6 below, not recomputed on every request.
 - Every `[V]` input is persisted with `confidence = 'assumed'` and a claim string, so
   the guessing is visible in the data rather than buried in a comment.
 
@@ -480,9 +479,9 @@ folding the comparison into the endpoint response; that would mean hardcoding
 SpaceX's published numbers into a generic valuation engine — exactly the coupling
 `segment_narrative` exists to avoid (§7.3), so it was dropped.
 
-The comparison itself still happened, once, by hand, and is recorded in the project
-ledger rather than in a test or an endpoint:
-`.superpowers/sdd/2026-08-09-segment-buildup-valuation/progress.md` (Task 4):
+The comparison itself still happened, once, by hand, and is recorded **here** rather
+than in a test or an endpoint. Measured on the two seeded cases at the time the
+engine was completed:
 
 ```
 pre  EV=1,002.1bn  $406.22/share  TV share 93.2%   (he reports ~1,210bn, ~$100)
