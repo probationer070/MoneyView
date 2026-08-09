@@ -320,7 +320,7 @@ def test_terminal_growth_defaults_to_the_riskfree_rate():
 
 def test_roic_at_or_below_wacc_with_positive_growth_raises():
     """todo3 trap 3 -- otherwise terminal growth destroys value."""
-    with pytest.raises(ValueError, match="roic_stable"):
+    with pytest.raises(ValueError, match="must exceed wacc_stable"):
         terminal_value(
             ebit_n=100.0,
             marginal_rate=0.25,
@@ -349,16 +349,10 @@ def test_run_case_exposes_the_terminal_spread():
 
 def test_equity_bridge_matches_the_shared_dcf_helper():
     """The reuse in the design is an identity, not a coincidence."""
-    from packages.core_finance.dcf import calculate_equity_value
-
     case = _case()
     result = run_case(case, [_launch()])
     assert result.equity_value == pytest.approx(
-        calculate_equity_value(
-            enterprise_value=result.enterprise_value,
-            net_debt=case.debt - case.cash,
-            non_operating_assets=case.ipo_proceeds,
-        )
+        result.enterprise_value + 24.7 + 75.0 - 22.9
     )
 
 
@@ -371,3 +365,52 @@ def test_value_per_share_uses_basic_plus_new_shares():
     assert result.value_per_share_basic == pytest.approx(
         result.equity_value / case.shares_basic
     )
+
+
+def test_fcff_equals_ebit_minus_tax_minus_reinvestment():
+    """Pins the FCFF identity itself, not just a magic number -- a rewrite that
+    treats `tax_path`'s return as a rate instead of an amount (or drops the
+    reinvestment term) must fail this."""
+    result = run_case(_case(), [_launch()])
+    expected = [
+        result.ebit[t] - result.tax[t] - result.reinvestment[t]
+        for t in range(len(result.fcff))
+    ]
+    assert result.fcff == pytest.approx(expected)
+
+
+def test_pv_terminal_equals_terminal_value_discounted_by_the_last_factor():
+    """Guards against the `(1+w)^n` mis-implementation `discount_factors`
+    exists to prevent, applied to the terminal value specifically."""
+    result = run_case(_case(), [_launch()])
+    assert result.pv_terminal == pytest.approx(
+        result.terminal_value * result.discount_factor[-1]
+    )
+
+
+def test_enterprise_value_is_pv_explicit_plus_pv_terminal():
+    result = run_case(_case(), [_launch()])
+    assert result.pv_explicit == pytest.approx(
+        sum(f * d for f, d in zip(result.fcff, result.discount_factor))
+    )
+    assert result.enterprise_value == pytest.approx(
+        result.pv_explicit + result.pv_terminal
+    )
+
+
+def test_tax_matches_tax_path_on_the_consolidated_ebit():
+    case = _case()
+    result = run_case(case, [_launch()])
+    assert result.tax == pytest.approx(
+        tax_path(result.ebit, case.marginal_tax_rate, case.nol_balance)
+    )
+
+
+def test_wacc_and_discount_factor_match_their_own_helpers():
+    case = _case()
+    result = run_case(case, [_launch()])
+    expected_wacc = wacc_path(
+        case.wacc_initial, case.wacc_stable, case.horizon, case.wacc_converge_from
+    )
+    assert result.wacc == pytest.approx(expected_wacc)
+    assert result.discount_factor == pytest.approx(discount_factors(expected_wacc))

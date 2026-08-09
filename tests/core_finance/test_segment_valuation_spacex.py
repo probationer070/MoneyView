@@ -9,12 +9,12 @@ are guesses pending the spreadsheets.
 
 Enterprise value is deliberately NOT asserted. See the design spec, section 1.2.
 
-This case data is also present in `apps/api/services/valuation_seed.py`, and the
-duplication is deliberate. These gates test the engine, which lives in
-`packages/core_finance` and must not import from `apps/api` -- the dependency runs
-one way (guideline/sop/file-structure.md:42). Importing the seed here would invert
-it, and dropping these gates in favour of the seed's would leave the engine with no
-acceptance test at its own commit.
+This case data will also live in `apps/api/services/valuation_seed.py` (a later
+task), and the duplication is deliberate. These gates test the engine, which
+lives in `packages/core_finance` and must not import from `apps/api` -- the
+dependency runs one way (guideline/sop/file-structure.md:42). Importing the seed
+here would invert it, and dropping these gates in favour of the seed's would
+leave the engine with no acceptance test at its own commit.
 """
 
 import pytest
