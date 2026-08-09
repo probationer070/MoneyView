@@ -1,5 +1,7 @@
 """The valuation tables exist with the columns the engine and service need."""
 
+import pytest
+
 from apps.api.services.db import get_db
 
 
@@ -58,8 +60,6 @@ def test_case_name_is_unique():
 
 
 def test_segment_narrative_rejects_an_invalid_confidence():
-    import pytest
-
     with get_db() as conn:
         conn.execute(
             "INSERT INTO valuation_case (id, case_name, as_of_date, base_year, target_year,"
@@ -80,8 +80,6 @@ def test_segment_narrative_rejects_an_invalid_confidence():
 
 
 def test_segment_narrative_rejects_an_invalid_three_p():
-    import pytest
-
     with get_db() as conn:
         conn.execute(
             "INSERT INTO valuation_case (id, case_name, as_of_date, base_year, target_year,"

@@ -19,9 +19,15 @@ from packages.core_finance.segment_valuation import (
     run_case,
 )
 
-# Every value-bearing field on a segment. A non-NULL value in any of these needs
-# a segment_narrative row; a narrative for a field left NULL is rejected too,
-# since it is a claim about a number the model never uses.
+# The segment's estimated inputs: base_revenue, base_margin, the three possible
+# endpoint fields (tam_target, market_share_target, revenue_target), margin_target,
+# and the two sales-to-capital ratios. A non-NULL value in any of these needs a
+# segment_narrative row; a narrative for a field left NULL is rejected too, since
+# it is a claim about a number the model never uses.
+#
+# `ramp_start_year` is deliberately not in this tuple: it is a NOT NULL,
+# DEFAULT 1 structural field, not an estimated input, so requiring a claim for
+# it would demand a narrative even from a segment that never touches the default.
 NARRATED_FIELDS: tuple[str, ...] = (
     "base_revenue",
     "base_margin",
@@ -92,31 +98,52 @@ def create_case(payload: dict) -> int:
                 tuple(payload.get(column) for column in _CASE_COLUMNS),
             )
         except sqlite3.IntegrityError as exc:
-            raise ValueError(
-                f"case name '{payload.get('case_name')}' already exists"
-            ) from exc
+            message = str(exc)
+            # Only the case_name uniqueness violation gets the "already exists"
+            # message. Every other IntegrityError on this row (a dangling
+            # parent_case_id, a NULL in a NOT NULL column, ...) has nothing to do
+            # with the name, and mislabeling it sends the author chasing the
+            # wrong fix.
+            if message.startswith("UNIQUE constraint failed") and "case_name" in message:
+                raise ValueError(
+                    f"case name '{payload.get('case_name')}' already exists"
+                ) from exc
+            raise ValueError(f"could not create case: {message}") from exc
         case_id = int(cursor.lastrowid)
 
         for segment in segments:
-            segment_cursor = conn.execute(
-                f"INSERT INTO segment (case_id, {', '.join(_SEGMENT_COLUMNS)}) "
-                f"VALUES (?, {', '.join('?' * len(_SEGMENT_COLUMNS))})",
-                (case_id, *(segment.get(column) for column in _SEGMENT_COLUMNS)),
-            )
+            try:
+                segment_cursor = conn.execute(
+                    f"INSERT INTO segment (case_id, {', '.join(_SEGMENT_COLUMNS)}) "
+                    f"VALUES (?, {', '.join('?' * len(_SEGMENT_COLUMNS))})",
+                    (case_id, *(segment.get(column) for column in _SEGMENT_COLUMNS)),
+                )
+            except sqlite3.IntegrityError as exc:
+                raise ValueError(
+                    f"segment '{segment.get('name')}' could not be created: {exc}"
+                ) from exc
             segment_id = int(segment_cursor.lastrowid)
             for narrative in segment.get("narratives", []):
-                conn.execute(
-                    "INSERT INTO segment_narrative (segment_id, input_field, claim,"
-                    " evidence_source, confidence, three_p) VALUES (?, ?, ?, ?, ?, ?)",
-                    (
-                        segment_id,
-                        narrative["input_field"],
-                        narrative["claim"],
-                        narrative.get("evidence_source"),
-                        narrative["confidence"],
-                        narrative["three_p"],
-                    ),
-                )
+                try:
+                    conn.execute(
+                        "INSERT INTO segment_narrative (segment_id, input_field, claim,"
+                        " evidence_source, confidence, three_p) VALUES (?, ?, ?, ?, ?, ?)",
+                        (
+                            segment_id,
+                            narrative["input_field"],
+                            narrative["claim"],
+                            narrative.get("evidence_source"),
+                            narrative["confidence"],
+                            narrative["three_p"],
+                        ),
+                    )
+                except sqlite3.IntegrityError as exc:
+                    raise ValueError(
+                        f"segment '{segment.get('name')}': could not save narrative for "
+                        f"'{narrative.get('input_field')}' "
+                        f"(confidence={narrative.get('confidence')!r}, "
+                        f"three_p={narrative.get('three_p')!r}): {exc}"
+                    ) from exc
     return case_id
 
 

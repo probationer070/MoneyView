@@ -8,7 +8,7 @@ from apps.api.services.valuation_case import (
     load_case,
     run_stored_case,
 )
-from tests.api.valuation_fixtures import _case_payload, _narrative
+from tests.api.valuation_fixtures import _case_payload, _narrative, _segment_payload
 
 
 def test_create_and_load_round_trips_every_field():
@@ -77,3 +77,62 @@ def test_duplicate_case_name_is_rejected():
     create_case(_case_payload(case_name="taken"))
     with pytest.raises(ValueError, match="taken"):
         create_case(_case_payload(case_name="taken"))
+
+
+def test_duplicate_segment_name_is_rejected_with_the_name_in_the_message():
+    """UNIQUE(case_id, name) on the segment table, translated to a ValueError
+    naming the segment -- not left to escape as a raw sqlite3.IntegrityError."""
+    payload = _case_payload(segments=[_segment_payload(), _segment_payload()])
+    with pytest.raises(ValueError, match="launch"):
+        create_case(payload)
+
+
+def test_partial_segment_write_rolls_back_completely():
+    """The first segment inserts fine; the second violates UNIQUE(case_id, name).
+    Proves rollback across a genuinely partial write -- unlike
+    test_a_rejected_case_leaves_nothing_behind, where validation rejects the
+    case before any insert happens at all."""
+    payload = _case_payload(case_name="partial", segments=[_segment_payload(), _segment_payload()])
+    with pytest.raises(ValueError):
+        create_case(payload)
+    assert [c["case_name"] for c in list_cases()] == []
+
+
+def test_duplicate_narrative_field_on_one_segment_is_rejected():
+    """PRIMARY KEY (segment_id, input_field). _validate_narratives cannot catch
+    this itself -- `claimed` is a set, so the duplicate collapses and validation
+    passes -- so this exercises the database-level guard instead."""
+    payload = _case_payload()
+    payload["segments"][0]["narratives"].append(_narrative("margin_target"))
+    with pytest.raises(ValueError, match="margin_target"):
+        create_case(payload)
+
+
+def test_invalid_confidence_is_rejected_with_the_value_named():
+    """CHECK(confidence IN (...)) on segment_narrative. Not caught by
+    _validate_narratives, which only checks that a claim is present, not that
+    its confidence is one of the allowed literals."""
+    payload = _case_payload()
+    for narrative in payload["segments"][0]["narratives"]:
+        if narrative["input_field"] == "margin_target":
+            narrative["confidence"] = "guessed"
+    with pytest.raises(ValueError, match="guessed"):
+        create_case(payload)
+
+
+def test_dangling_parent_case_id_is_rejected_not_mislabeled_as_duplicate_name():
+    """A foreign-key violation on parent_case_id must not be reported as
+    'case name already exists' -- that message names the wrong problem."""
+    payload = _case_payload(parent_case_id=9999)
+    with pytest.raises(ValueError, match="FOREIGN KEY") as exc_info:
+        create_case(payload)
+    assert "already exists" not in str(exc_info.value)
+
+
+def test_missing_required_case_field_is_rejected_with_the_column_named():
+    """A NOT NULL violation on the case row (shares_basic here) must not be
+    reported as 'case name already exists' either."""
+    payload = _case_payload(shares_basic=None)
+    with pytest.raises(ValueError, match="shares_basic") as exc_info:
+        create_case(payload)
+    assert "already exists" not in str(exc_info.value)
