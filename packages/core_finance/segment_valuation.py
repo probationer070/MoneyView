@@ -121,9 +121,9 @@ def revenue_path(spec: SegmentSpec, n: int, g_stable: float) -> list[float]:
     """Revenue for years 1..n, terminating exactly on the target -- todo3 R3.
 
     Two shapes. A segment with revenue today decays its growth from a solved
-    year-1 rate down to `g_stable`. A segment starting from zero, or one held
-    back by `ramp_start_year`, ramps linearly instead: no growth rate reaches a
-    positive target from a base of zero.
+    year-1 rate down to `g_stable`. A segment starting from zero ramps linearly
+    instead: no growth rate reaches a positive target from a base of zero. A
+    non-zero base combined with `ramp_start_year > 1` is incoherent and raises.
     """
     target = spec.target_revenue()
     if target <= 0:
@@ -180,8 +180,12 @@ def reinvestment(revenues: list[float], spec: SegmentSpec) -> list[float]:
     working-capital schedule to reconcile against.
 
     Years before `ramp_start_year` book zero regardless of the revenue series.
-    For a segment ramping from a zero base the delta is already zero, but the
-    guard also covers a segment held back from a non-zero base, where it is not.
+    For a segment ramping from a zero base the delta is already zero, so the
+    guard is redundant there in practice: `revenue_path` now raises on a
+    non-zero base combined with `ramp_start_year > 1`, so `run_case` can never
+    reach this function with that shape. The guard stays because this function
+    is public and takes an arbitrary revenues list, independent of how it was
+    produced.
     """
     amounts: list[float] = []
     previous = spec.base_revenue

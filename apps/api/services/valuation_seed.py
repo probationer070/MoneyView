@@ -10,8 +10,8 @@ Confidence tags mirror todo3's own: [C] -> confirmed, [D] -> derived,
 [V] -> assumed. Everything tagged `assumed` is a placeholder pending
 SpaceX2026IPO.xlsx and SpaceX2026IPOUpdated.xlsx; see the design spec, 7.3.
 
-Not wired into application startup: fixture data belongs in a database because
-someone asked for it.
+Not wired into application startup: fixture data does not belong in a database
+unless someone asked for it.
 """
 
 from __future__ import annotations
@@ -68,10 +68,10 @@ def _segment(name, *, margin_target, margin_claim, s2c_early, s2c_late,
     base_revenue, base_margin = _BASE[name]
     narratives = [
         _narrative("base_revenue", _BASE_CLAIMS[name], "derived", source="todo3 section 6"),
-        _narrative("base_margin", _ASSUMED_BASE_MARGIN, "assumed"),
+        _narrative("base_margin", _ASSUMED_BASE_MARGIN, "assumed", three_p="plausible"),
         _narrative("margin_target", margin_claim, margin_confidence, source="todo3 section 3"),
-        _narrative("sales_to_capital_early", _ASSUMED_S2C, "assumed"),
-        _narrative("sales_to_capital_late", _ASSUMED_S2C, "assumed"),
+        _narrative("sales_to_capital_early", _ASSUMED_S2C, "assumed", three_p="plausible"),
+        _narrative("sales_to_capital_late", _ASSUMED_S2C, "assumed", three_p="plausible"),
     ]
     if tam is not None:
         narratives.append(_narrative("tam_target", tam_claim, "confirmed", source="todo3 section 7"))

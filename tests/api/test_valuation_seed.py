@@ -153,6 +153,114 @@ def test_seeded_narrative_confidence_tags_match_source_exactly():
             assert actual == expected[(name, segment["name"])], f"{name}/{segment['name']}"
 
 
+def test_seeded_narrative_three_p_tags_match_source_exactly():
+    """Every three_p tag, on every narrative, in both cases -- checked against a
+    literal expected mapping written independently of the seed module's own
+    constants, mirroring the confidence test above.
+
+    The three placeholder inputs -- base_margin, sales_to_capital_early,
+    sales_to_capital_late -- are self-described in their own claim text as
+    uncalibrated ("Placeholder. ... Calibrate against
+    SpaceX2026IPOUpdated.xlsx.") and cannot honestly sit at Probable on a
+    Possible -> Plausible -> Probable scale. Every confirmed or derived input
+    stays at Probable; only those three placeholders are Plausible."""
+    ensure_valuation_cases_seeded()
+
+    expected = {
+        (PRE_CASE_NAME, "launch"): {
+            "base_revenue": "probable",
+            "base_margin": "plausible",
+            "tam_target": "probable",
+            "market_share_target": "probable",
+            "margin_target": "probable",
+            "sales_to_capital_early": "plausible",
+            "sales_to_capital_late": "plausible",
+        },
+        (PRE_CASE_NAME, "connectivity"): {
+            "base_revenue": "probable",
+            "base_margin": "plausible",
+            "tam_target": "probable",
+            "market_share_target": "probable",
+            "margin_target": "probable",
+            "sales_to_capital_early": "plausible",
+            "sales_to_capital_late": "plausible",
+        },
+        (PRE_CASE_NAME, "ai"): {
+            "base_revenue": "probable",
+            "base_margin": "plausible",
+            "revenue_target": "probable",
+            "margin_target": "probable",
+            "sales_to_capital_early": "plausible",
+            "sales_to_capital_late": "plausible",
+        },
+        (PRE_CASE_NAME, "expansion"): {
+            "base_revenue": "probable",
+            "base_margin": "plausible",
+            "revenue_target": "probable",
+            "margin_target": "probable",
+            "sales_to_capital_early": "plausible",
+            "sales_to_capital_late": "plausible",
+        },
+        (POST_CASE_NAME, "launch"): {
+            "base_revenue": "probable",
+            "base_margin": "plausible",
+            "tam_target": "probable",
+            "market_share_target": "probable",
+            "margin_target": "probable",
+            "sales_to_capital_early": "plausible",
+            "sales_to_capital_late": "plausible",
+        },
+        (POST_CASE_NAME, "connectivity"): {
+            "base_revenue": "probable",
+            "base_margin": "plausible",
+            "tam_target": "probable",
+            "market_share_target": "probable",
+            "margin_target": "probable",
+            "sales_to_capital_early": "plausible",
+            "sales_to_capital_late": "plausible",
+        },
+        (POST_CASE_NAME, "ai"): {
+            "base_revenue": "probable",
+            "base_margin": "plausible",
+            "revenue_target": "probable",
+            "margin_target": "probable",
+            "sales_to_capital_early": "plausible",
+            "sales_to_capital_late": "plausible",
+        },
+        (POST_CASE_NAME, "expansion"): {
+            "base_revenue": "probable",
+            "base_margin": "plausible",
+            "revenue_target": "probable",
+            "margin_target": "probable",
+            "sales_to_capital_early": "plausible",
+            "sales_to_capital_late": "plausible",
+        },
+    }
+
+    for name in (PRE_CASE_NAME, POST_CASE_NAME):
+        for segment in load_case(_case_id(name))["segments"]:
+            actual = {n["input_field"]: n["three_p"] for n in segment["narratives"]}
+            assert actual == expected[(name, segment["name"])], f"{name}/{segment['name']}"
+
+
+def test_below_probable_lists_exactly_the_placeholder_inputs_for_post_case():
+    """The whole point of storing three_p: an uncalibrated placeholder input has
+    to actually show up in below_probable, or the honesty mechanism is silently
+    empty. Exactly the three placeholder fields per segment, four segments."""
+    ensure_valuation_cases_seeded()
+    below = _run(POST_CASE_NAME)["below_probable"]
+
+    pairs = {(item["segment"], item["input_field"]) for item in below}
+    expected_pairs = {
+        (segment, field)
+        for segment in ("launch", "connectivity", "ai", "expansion")
+        for field in ("base_margin", "sales_to_capital_early", "sales_to_capital_late")
+    }
+    assert pairs == expected_pairs
+    assert len(below) == 12
+    assert all(item["three_p"] == "plausible" for item in below)
+
+
 def test_seeded_target_year_totals_match_the_confirmed_inputs():
     """The section 6 gates, end to end through HTTP."""
     ensure_valuation_cases_seeded()

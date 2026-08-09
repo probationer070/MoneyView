@@ -347,8 +347,10 @@ def test_run_case_exposes_the_terminal_spread():
     assert result.terminal_spread == pytest.approx(0.0825 - 0.0456)
 
 
-def test_equity_bridge_matches_the_shared_dcf_helper():
-    """The reuse in the design is an identity, not a coincidence."""
+def test_equity_bridge_pins_the_identity_against_literal_arithmetic():
+    """Pins EV + cash + proceeds - debt as literal arithmetic. Does not compare
+    against `calculate_equity_value` itself -- that identity is argued in the
+    design spec, not re-derived here."""
     case = _case()
     result = run_case(case, [_launch()])
     assert result.equity_value == pytest.approx(

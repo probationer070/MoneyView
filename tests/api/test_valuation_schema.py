@@ -41,8 +41,6 @@ def test_case_name_is_unique():
     """UNIQUE(case_name) alone, not UNIQUE(ticker, case_name): ticker is NULL for
     a private company, and SQLite treats NULLs as distinct, so the pair would
     silently fail to constrain exactly the rows it exists to protect."""
-    import pytest
-
     with get_db() as conn:
         conn.execute(
             "INSERT INTO valuation_case (case_name, as_of_date, base_year, target_year,"

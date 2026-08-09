@@ -65,8 +65,10 @@ by construction, and `φ(10) = 0` makes target-year margin equal `margin_target`
 
 - **Gated:** year-10 revenue and EBIT totals; all path/tax/discounting invariants.
 - **Diagnostic, never gated:** enterprise value and per-share value against
-  Damodaran's $1.22T / ~$100. The run reports the gap; the test asserts the
-  diagnostic is produced, not that it agrees.
+  Damodaran's $1.22T / ~$100. `/run` returns the model's own figures; the
+  comparison against Damodaran's published numbers is measured once and recorded
+  in the project ledger (`.superpowers/sdd/2026-08-09-segment-buildup-valuation/
+  progress.md`), not recomputed on every request.
 - Every `[V]` input is persisted with `confidence = 'assumed'` and a claim string, so
   the guessing is visible in the data rather than buried in a comment.
 
@@ -173,7 +175,7 @@ class CaseSpec:
     riskfree_rate: float
     wacc_initial: float
     wacc_stable: float
-    wacc_converge_from: int      # default 6
+    wacc_converge_from: int      # required, no default
     marginal_tax_rate: float
     nol_balance: float
     roic_stable: float
@@ -184,7 +186,7 @@ def revenue_path(spec: SegmentSpec, n: int, g_stable: float) -> list[float]
 def margin_path(spec: SegmentSpec, n: int) -> list[float]
 def reinvestment(revenues: list[float], spec: SegmentSpec) -> list[float]
 def tax_path(ebit: list[float], marginal: float, nol: float) -> list[float]
-def wacc_path(case: CaseSpec, n: int) -> list[float]
+def wacc_path(wacc_initial: float, wacc_stable: float, n: int, converge_from: int) -> list[float]
 def discount_factors(waccs: list[float]) -> list[float]
 def terminal_value(ebit_n, marginal_tax, g_stable, roic_stable, wacc_stable) -> float
 def run_case(case: CaseSpec, segments: list[SegmentSpec]) -> CaseResult
@@ -233,7 +235,8 @@ the shape is one function when S4/S5 become available.
 if EBIT_t < 0:  nol += −EBIT_t ;                       tax_t = 0
 else:           shield = min(nol, EBIT_t) ; nol −= shield
                 tax_t = (EBIT_t − shield) · marginal_tax_rate
-τ_t = tax_t / EBIT_t   (reported; 0 when EBIT_t ≤ 0)
+τ_t = tax_t / EBIT_t   (effective rate implied by tax_t; not itself computed
+                        or returned -- tax_path returns tax_t only)
 ```
 
 **WACC (F3).** `wacc_initial` through year `wacc_converge_from − 1`, then linear to
@@ -392,8 +395,11 @@ instead returns the list of inputs below `probable`, so the caller sees them.
 consolidated EBIT / tax / FCFF / WACC / discount-factor series; `pv_explicit`,
 `pv_terminal`, `terminal_value_share_pct`; the **equity waterfall**
 (`EV → +cash → +proceeds → −debt → equity → per share`, basic and diluted); the
-`wacc_stable − g_stable` **spread** exposed directly (todo3 trap #5); the
-`below_probable` input list; and the **Damodaran diagnostic** (§6).
+`wacc_stable − g_stable` **spread** exposed directly (todo3 trap #5);
+`base_revenue_total` and `base_ebit_total`; and the `below_probable` input list.
+It is the model's own figures throughout — `enterprise_value`,
+`value_per_share_basic`/`_diluted` included. There is no endpoint-computed
+comparison against Damodaran's published $1.22T / ~$100; see §6.
 
 todo3's separate `GET /bridge` is folded into `/run` — the waterfall is a projection
 of the same computation, and a second endpoint recomputing it duplicates the model.
@@ -464,14 +470,29 @@ commit `1c4882f` fixed on this branch.
 8. **Base revenue reconciliation.** Σ `base_revenue` = `$15.6bn` (±0.05) for both
    seeds, matching todo3 §6's two independent trailing EV/Sales derivations.
 
-### Diagnostic — reported, never gated
+### Diagnostic — recorded once, not computed by `/run`
 
-`/run` reports enterprise value and per-share value against Damodaran's stated
-`$1.22T` / `~$100` (and `$1.21T` for the pre case), with the absolute and percentage
-gap. The test asserts the diagnostic **is produced**; it does not assert agreement.
+`/run` does not compute or return a comparison against Damodaran's stated `$1.22T` /
+`~$100` (and `$1.21T` for the pre case). It returns the model's own figures
+(`enterprise_value`, `value_per_share_basic`/`_diluted`, `terminal_value_share_pct`,
+`base_revenue_total`, `base_ebit_total`) and nothing else. §5.3 originally proposed
+folding the comparison into the endpoint response; that would mean hardcoding
+SpaceX's published numbers into a generic valuation engine — exactly the coupling
+`segment_narrative` exists to avoid (§7.3), so it was dropped.
+
+The comparison itself still happened, once, by hand, and is recorded in the project
+ledger rather than in a test or an endpoint:
+`.superpowers/sdd/2026-08-09-segment-buildup-valuation/progress.md` (Task 4):
+
+```
+pre  EV=1,002.1bn  $406.22/share  TV share 93.2%   (he reports ~1,210bn, ~$100)
+post EV=  916.2bn  $ 75.86/share  TV share 102.4%  (he reports ~1,220bn, ~$100)
+```
+
 Per §1.2, agreement would be evidence of nothing while the `[V]` inputs are
 uncalibrated, and disagreement is information about those guesses rather than a build
-failure. The measured gap is to be recorded in the implementation progress notes.
+failure. No test asserts agreement or disagreement; the gates in this section are
+what the suite actually enforces.
 
 **Base-year reconciliation diagnostic.** `/run` also reports base-year aggregate
 revenue and EBIT beside todo3's own figures, because two independent inconsistencies
@@ -554,7 +575,7 @@ Collected for review, since todo3 is the source of record.
 | §9.1 `simulation_input`, `valuation_output` | dropped | 3c; no consumer yet (§5.1) |
 | §9.3 `GET /bridge` | folded into `/run` | same computation (§5.3) |
 | §9.4 shares in millions | billions | repo convention (§4.3) |
-| §9.4 "$1.22T validates `[V]`" | diagnostic, not a gate | too many free parameters (§1.2) |
+| §9.4 "$1.22T validates `[V]`" | comparison recorded once in the project ledger, not computed by `/run` or gated | too many free parameters (§1.2); hardcoding SpaceX numbers into the engine repeats the coupling `segment_narrative` avoids (§6) |
 | §2.2 P3/P4/P6 R&D capitalization | deferred | no data, double-counts (§7.2) |
 | §2.2 P2 back-loaded φ | linear φ | back-loading is `[V]` (§4.2) |
 | §7 "value only what clears Probable" | stored and reported, not gated | trivially satisfiable gate (§5.2) |
