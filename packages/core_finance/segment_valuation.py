@@ -473,6 +473,21 @@ def run_case(case: CaseSpec, segments: list[SegmentSpec]) -> CaseResult:
     target_year_marginal_roic = marginal_roic(segments, case.marginal_tax_rate)
     target_year_nopat = ebit[-1] * (1 - case.marginal_tax_rate)
 
+    # One-sided by design. A terminal return BELOW the marginal return is
+    # competitive erosion and is expected; the engine cannot judge its speed and
+    # does not try. A terminal return ABOVE it is inconsistent with the stated
+    # assumptions: margins have converged to margin_target by the target year and
+    # sales_to_capital_late does not change afterwards, so nothing in the model
+    # produces the improvement in returns such a case asserts.
+    if case.roic_stable > target_year_marginal_roic:
+        raise ValueError(
+            f"roic_stable {case.roic_stable:.4%} exceeds the target-year marginal "
+            f"return on new capital {target_year_marginal_roic:.4%}. Margins have "
+            f"already converged and sales-to-capital does not change after the "
+            f"target year, so the model contains no mechanism by which returns on "
+            f"new capital could improve."
+        )
+
     pv_explicit = sum(fcff[t] * factors[t] for t in range(n))
     tv = terminal_value(
         ebit_n=ebit[-1],

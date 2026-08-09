@@ -488,3 +488,55 @@ def test_run_case_reports_marginal_roic():
     assert result.marginal_roic_target_year == pytest.approx(
         marginal_roic(segments, case.marginal_tax_rate)
     )
+
+
+def test_terminal_roic_above_the_marginal_return_raises():
+    """Spec gate 2. _launch()'s marginal return is 1.5 x 0.45 x 0.75 = 0.50625."""
+    with pytest.raises(ValueError, match="exceeds the target-year marginal"):
+        run_case(_case(roic_stable=0.60), [_launch()])
+
+
+def test_the_guard_message_names_both_values():
+    """A guard that does not say what it compared cannot be acted on."""
+    with pytest.raises(ValueError) as excinfo:
+        run_case(_case(roic_stable=0.60), [_launch()])
+    message = str(excinfo.value)
+    assert "60.0000%" in message
+    assert "50.6250%" in message
+
+
+def test_terminal_roic_below_the_marginal_return_is_accepted():
+    """Spec gate 3. The guard is one-sided: erosion is legitimate.
+
+    0.12 against a 0.50625 marginal return is the exact configuration that
+    motivated this work -- a suspiciously low terminal return. It must still run,
+    because nothing in the model can determine the speed of competitive erosion.
+    The engine reports the discontinuity instead of refusing it.
+    """
+    result = run_case(_case(roic_stable=0.12), [_launch()])
+    assert result.terminal_reinvestment_rate > result.explicit_reinvestment_rate_target_year
+    assert result.enterprise_value > 0
+
+
+def test_terminal_roic_exactly_at_the_marginal_return_is_accepted():
+    """The boundary is inclusive: equality is consistent, not contradictory."""
+    result = run_case(_case(roic_stable=0.50625), [_launch()])
+    assert result.marginal_roic_target_year == pytest.approx(0.50625)
+
+
+def test_terminal_reinvestment_rate_stays_below_one_for_any_admitted_case():
+    """Spec gate 8.
+
+    Not a production guard -- the spec argues one would be dead code, because
+    `roic_stable > wacc_stable` and `wacc_stable > g_stable` together already
+    force `g / roic_stable < 1`. This test checks that argument rather than
+    leaving it asserted. Sweeps roic_stable across the admitted range, from just
+    above wacc_stable up to the marginal return.
+    """
+    # The relationship only binds for positive growth, so pin that first --
+    # otherwise the sweep below could pass vacuously.
+    assert _case().effective_terminal_growth() > 0
+
+    for roic in (0.0826, 0.10, 0.12, 0.25, 0.40, 0.50625):
+        result = run_case(_case(roic_stable=roic), [_launch()])
+        assert 0 < result.terminal_reinvestment_rate < 1, roic
