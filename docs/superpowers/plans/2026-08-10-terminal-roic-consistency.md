@@ -221,7 +221,7 @@ Then add these three arguments to the `CaseResult(...)` constructor call, after
 - [ ] **Step 6: Run the tests to verify they pass**
 
 Run: `python -m pytest tests/core_finance/test_segment_valuation.py -v`
-Expected: PASS, 36 tests (30 existing plus 6 new).
+Expected: PASS, 41 tests (35 existing plus 6 new).
 
 - [ ] **Step 7: Add the marginal-ROIC gate on the two real cases**
 
@@ -268,7 +268,7 @@ def test_pre_prospectus_marginal_roic():
 - [ ] **Step 8: Run the gates**
 
 Run: `python -m pytest tests/core_finance/ -v`
-Expected: PASS, 36 in `test_segment_valuation.py` and 8 in `test_segment_valuation_spacex.py` (6 existing plus 2 new).
+Expected: PASS, 41 in `test_segment_valuation.py` and 8 in `test_segment_valuation_spacex.py` (6 existing plus 2 new).
 
 If a marginal-ROIC gate fails, check the arithmetic in the docstring against the seeded segment values before touching the implementation — the expected numbers are arithmetic on values already in the test file.
 
@@ -390,7 +390,7 @@ In `run_case`, immediately after the two lines Task 1 added
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `python -m pytest tests/core_finance/ -v`
-Expected: PASS, 41 in `test_segment_valuation.py` (36 plus 5 new) and 8 in the SpaceX file.
+Expected: PASS, 46 in `test_segment_valuation.py` (41 plus 5 new) and 8 in the SpaceX file.
 
 The existing `_case()` default `roic_stable=0.12` is well below `_launch()`'s 0.50625 marginal return, and `tests/api/valuation_fixtures.py` uses the same pair, so no existing test should start failing. If one does, report it rather than adjusting the guard.
 
@@ -636,7 +636,7 @@ by reference to arbitrary input. Replace the paragraph beginning "Years before
 - [ ] **Step 7: Run the tests to verify they pass**
 
 Run: `python -m pytest tests/core_finance/ -v`
-Expected: PASS, 56 in `test_segment_valuation.py` (41 from Task 2, minus 1 deleted,
+Expected: PASS, 61 in `test_segment_valuation.py` (46 from Task 2, minus 1 deleted,
 plus 16 new) and 8 in the SpaceX file.
 
 - [ ] **Step 8: Run the full suite**
