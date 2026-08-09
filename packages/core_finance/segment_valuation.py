@@ -16,6 +16,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from packages.core_finance.dcf import (
+    calculate_equity_value,
+    calculate_intrinsic_value_per_share,
+)
+
 # Bisection bounds for the year-1 growth rate. The lower bound stays above -1 so
 # every (1 + g_t) factor is positive and the product stays monotone; the upper
 # bound is far past any credible growth rate and costs nothing to carry.
@@ -267,3 +272,202 @@ def discount_factors(waccs: list[float]) -> list[float]:
         accumulated /= 1.0 + wacc
         factors.append(accumulated)
     return factors
+
+
+@dataclass(frozen=True)
+class CaseSpec:
+    """Firm-level inputs for one valuation case.
+
+    `terminal_growth` is optional and defaults to `riskfree_rate`, which is what
+    Damodaran uses. It exists as a separate field so the cap in todo3 F5 has
+    something to reject: a value *defined* as the riskfree rate could never
+    exceed it, and the rule would be unenforceable.
+    """
+
+    base_year: int
+    target_year: int
+    riskfree_rate: float
+    wacc_initial: float
+    wacc_stable: float
+    wacc_converge_from: int
+    marginal_tax_rate: float
+    nol_balance: float
+    roic_stable: float
+    cash: float
+    debt: float
+    ipo_proceeds: float
+    shares_basic: float
+    shares_new: float
+    terminal_growth: float | None = None
+
+    def __post_init__(self) -> None:
+        if self.target_year <= self.base_year:
+            raise ValueError(
+                f"target_year {self.target_year} must be after base_year {self.base_year}"
+            )
+        if self.terminal_growth is not None and self.terminal_growth > self.riskfree_rate:
+            raise ValueError(
+                f"terminal growth {self.terminal_growth:.4%} exceeds the riskfree "
+                f"rate {self.riskfree_rate:.4%} -- perpetual growth is capped there"
+            )
+        if self.shares_basic <= 0:
+            raise ValueError(f"shares_basic must be positive, got {self.shares_basic}")
+
+    @property
+    def horizon(self) -> int:
+        return self.target_year - self.base_year
+
+    def effective_terminal_growth(self) -> float:
+        if self.terminal_growth is None:
+            return self.riskfree_rate
+        return self.terminal_growth
+
+
+@dataclass(frozen=True)
+class SegmentResult:
+    name: str
+    revenue: list[float]
+    margin: list[float]
+    ebit: list[float]
+    reinvestment: list[float]
+
+
+@dataclass(frozen=True)
+class CaseResult:
+    segments: list[SegmentResult]
+    revenue: list[float]
+    ebit: list[float]
+    tax: list[float]
+    reinvestment: list[float]
+    fcff: list[float]
+    wacc: list[float]
+    discount_factor: list[float]
+    pv_explicit: float
+    terminal_value: float
+    pv_terminal: float
+    enterprise_value: float
+    equity_value: float
+    value_per_share_basic: float
+    value_per_share_diluted: float
+    terminal_spread: float
+    terminal_value_share_pct: float
+    base_revenue_total: float
+    base_ebit_total: float
+
+
+def terminal_value(
+    ebit_n: float,
+    marginal_rate: float,
+    g_stable: float,
+    roic_stable: float,
+    wacc_stable: float,
+) -> float:
+    """Gordon growth terminal value with consistent reinvestment -- todo3 F6-F8.
+
+    Three guards, all raising rather than warning or flooring:
+
+    - the WACC-to-growth spread must be positive, and is not clamped to some
+      epsilon: a large finite number at the point where the model has no value
+      is worse than no number at all (the argument at dcf.py:196)
+    - ROIC in stable growth must beat the cost of capital whenever growth is
+      positive, or the perpetuity is growing while destroying value
+    - ROIC must be positive, or the reinvestment rate is undefined
+    """
+    spread = wacc_stable - g_stable
+    if spread <= 0:
+        raise ValueError(
+            f"terminal spread is not positive: wacc {wacc_stable:.4%} must exceed "
+            f"growth {g_stable:.4%}"
+        )
+    if roic_stable <= 0:
+        raise ValueError(f"roic_stable must be positive, got {roic_stable}")
+    if g_stable > 0 and roic_stable <= wacc_stable:
+        raise ValueError(
+            f"roic_stable {roic_stable:.4%} must exceed wacc_stable "
+            f"{wacc_stable:.4%} when terminal growth is positive, otherwise "
+            f"terminal growth destroys value"
+        )
+    reinvestment_rate = g_stable / roic_stable
+    fcff_next = ebit_n * (1 + g_stable) * (1 - marginal_rate) * (1 - reinvestment_rate)
+    return fcff_next / spread
+
+
+def run_case(case: CaseSpec, segments: list[SegmentSpec]) -> CaseResult:
+    """Value one case end to end: segments in, value per share out."""
+    if not segments:
+        raise ValueError("a valuation case needs at least one segment")
+
+    n = case.horizon
+    g_stable = case.effective_terminal_growth()
+
+    segment_results: list[SegmentResult] = []
+    for spec in segments:
+        revenues = revenue_path(spec, n, g_stable)
+        margins = margin_path(spec, n)
+        segment_results.append(
+            SegmentResult(
+                name=spec.name,
+                revenue=revenues,
+                margin=margins,
+                ebit=[r * m for r, m in zip(revenues, margins)],
+                reinvestment=reinvestment(revenues, spec),
+            )
+        )
+
+    revenue = [sum(s.revenue[t] for s in segment_results) for t in range(n)]
+    ebit = [sum(s.ebit[t] for s in segment_results) for t in range(n)]
+    reinvest = [sum(s.reinvestment[t] for s in segment_results) for t in range(n)]
+
+    tax = tax_path(ebit, case.marginal_tax_rate, case.nol_balance)
+    fcff = [ebit[t] - tax[t] - reinvest[t] for t in range(n)]
+
+    waccs = wacc_path(case.wacc_initial, case.wacc_stable, n, case.wacc_converge_from)
+    factors = discount_factors(waccs)
+
+    pv_explicit = sum(fcff[t] * factors[t] for t in range(n))
+    tv = terminal_value(
+        ebit_n=ebit[-1],
+        marginal_rate=case.marginal_tax_rate,
+        g_stable=g_stable,
+        roic_stable=case.roic_stable,
+        wacc_stable=case.wacc_stable,
+    )
+    pv_terminal = tv * factors[-1]
+    enterprise_value = pv_explicit + pv_terminal
+
+    # todo3 E1/E3: IPO proceeds are held as cash, so they are a firm-value term,
+    # not an enterprise-value one. Expressed through the shared bridge helper --
+    # EV + cash + proceeds - debt is EV - net_debt + non_operating_assets.
+    equity_value = calculate_equity_value(
+        enterprise_value=enterprise_value,
+        net_debt=case.debt - case.cash,
+        non_operating_assets=case.ipo_proceeds,
+    )
+
+    return CaseResult(
+        segments=segment_results,
+        revenue=revenue,
+        ebit=ebit,
+        tax=tax,
+        reinvestment=reinvest,
+        fcff=fcff,
+        wacc=waccs,
+        discount_factor=factors,
+        pv_explicit=pv_explicit,
+        terminal_value=tv,
+        pv_terminal=pv_terminal,
+        enterprise_value=enterprise_value,
+        equity_value=equity_value,
+        value_per_share_basic=calculate_intrinsic_value_per_share(
+            equity_value, case.shares_basic
+        ),
+        value_per_share_diluted=calculate_intrinsic_value_per_share(
+            equity_value, case.shares_basic + case.shares_new
+        ),
+        terminal_spread=case.wacc_stable - g_stable,
+        terminal_value_share_pct=(
+            pv_terminal / enterprise_value * 100 if enterprise_value else 0.0
+        ),
+        base_revenue_total=sum(s.base_revenue for s in segments),
+        base_ebit_total=sum(s.base_revenue * s.base_margin for s in segments),
+    )

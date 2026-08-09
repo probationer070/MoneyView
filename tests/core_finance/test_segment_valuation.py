@@ -1,12 +1,15 @@
 import pytest
 
 from packages.core_finance.segment_valuation import (
+    CaseSpec,
     SegmentSpec,
     discount_factors,
     margin_path,
     reinvestment,
     revenue_path,
+    run_case,
     tax_path,
+    terminal_value,
     wacc_path,
 )
 
@@ -237,7 +240,7 @@ def test_total_tax_equals_marginal_rate_on_income_net_of_shield():
 
 def test_wacc_holds_then_converges_linearly_to_stable():
     path = wacc_path(0.0837, 0.0825, n=10, converge_from=6)
-    assert path[:4] == pytest.approx([0.0837] * 4)
+    assert path[:5] == pytest.approx([0.0837] * 5)
     assert path[-1] == pytest.approx(0.0825)
     tail = path[4:]
     steps = [tail[i + 1] - tail[i] for i in range(len(tail) - 1)]
@@ -269,3 +272,102 @@ def test_cumulative_and_power_forms_diverge_when_wacc_varies():
     factors = discount_factors(waccs)
     naive = 1 / (1 + waccs[0]) ** len(waccs)
     assert abs(factors[-1] - naive) > 1e-6
+
+
+def _case(**overrides) -> CaseSpec:
+    defaults = dict(
+        base_year=2026,
+        target_year=2036,
+        riskfree_rate=0.0456,
+        wacc_initial=0.0837,
+        wacc_stable=0.0825,
+        wacc_converge_from=6,
+        marginal_tax_rate=0.25,
+        nol_balance=5.0,
+        roic_stable=0.12,
+        cash=24.7,
+        debt=22.9,
+        ipo_proceeds=75.0,
+        shares_basic=12.535,
+        shares_new=0.556,
+    )
+    defaults.update(overrides)
+    return CaseSpec(**defaults)
+
+
+def test_terminal_value_discounts_growth_consistent_reinvestment():
+    value = terminal_value(
+        ebit_n=100.0,
+        marginal_rate=0.25,
+        g_stable=0.0456,
+        roic_stable=0.12,
+        wacc_stable=0.0825,
+    )
+    reinvestment_rate = 0.0456 / 0.12
+    fcff = 100.0 * 1.0456 * 0.75 * (1 - reinvestment_rate)
+    assert value == pytest.approx(fcff / (0.0825 - 0.0456))
+
+
+def test_terminal_growth_above_riskfree_rate_raises():
+    """todo3 trap 2 -- the cap is enforced, not warned about."""
+    with pytest.raises(ValueError, match="riskfree"):
+        _case(terminal_growth=0.06)
+
+
+def test_terminal_growth_defaults_to_the_riskfree_rate():
+    assert _case().effective_terminal_growth() == pytest.approx(0.0456)
+
+
+def test_roic_at_or_below_wacc_with_positive_growth_raises():
+    """todo3 trap 3 -- otherwise terminal growth destroys value."""
+    with pytest.raises(ValueError, match="roic_stable"):
+        terminal_value(
+            ebit_n=100.0,
+            marginal_rate=0.25,
+            g_stable=0.0456,
+            roic_stable=0.08,
+            wacc_stable=0.0825,
+        )
+
+
+def test_wacc_at_or_below_terminal_growth_raises():
+    """todo3 trap 5 -- the denominator is not floored to fake a finite answer."""
+    with pytest.raises(ValueError, match="spread"):
+        terminal_value(
+            ebit_n=100.0,
+            marginal_rate=0.25,
+            g_stable=0.09,
+            roic_stable=0.12,
+            wacc_stable=0.0825,
+        )
+
+
+def test_run_case_exposes_the_terminal_spread():
+    result = run_case(_case(), [_launch()])
+    assert result.terminal_spread == pytest.approx(0.0825 - 0.0456)
+
+
+def test_equity_bridge_matches_the_shared_dcf_helper():
+    """The reuse in the design is an identity, not a coincidence."""
+    from packages.core_finance.dcf import calculate_equity_value
+
+    case = _case()
+    result = run_case(case, [_launch()])
+    assert result.equity_value == pytest.approx(
+        calculate_equity_value(
+            enterprise_value=result.enterprise_value,
+            net_debt=case.debt - case.cash,
+            non_operating_assets=case.ipo_proceeds,
+        )
+    )
+
+
+def test_value_per_share_uses_basic_plus_new_shares():
+    case = _case()
+    result = run_case(case, [_launch()])
+    assert result.value_per_share_diluted == pytest.approx(
+        result.equity_value / (case.shares_basic + case.shares_new)
+    )
+    assert result.value_per_share_basic == pytest.approx(
+        result.equity_value / case.shares_basic
+    )
