@@ -57,6 +57,50 @@ def test_case_name_is_unique():
             )
 
 
+def test_segment_narrative_rejects_an_invalid_confidence():
+    import pytest
+
+    with get_db() as conn:
+        conn.execute(
+            "INSERT INTO valuation_case (id, case_name, as_of_date, base_year, target_year,"
+            " riskfree_rate, wacc_initial, wacc_stable, marginal_tax_rate, roic_stable,"
+            " shares_basic) VALUES (1, 'c', '2026-08-09', 2026, 2036, 0.04, 0.08, 0.08,"
+            " 0.25, 0.12, 1.0)"
+        )
+        conn.execute(
+            "INSERT INTO segment (id, case_id, name, base_revenue, base_margin,"
+            " margin_target, sales_to_capital_early, sales_to_capital_late, revenue_target)"
+            " VALUES (1, 1, 'launch', 4.1, -0.1, 0.45, 1.0, 1.5, 70.0)"
+        )
+        with pytest.raises(Exception, match="CHECK"):
+            conn.execute(
+                "INSERT INTO segment_narrative (segment_id, input_field, claim, confidence,"
+                " three_p) VALUES (1, 'margin_target', 'reusability', 'guessed', 'probable')"
+            )
+
+
+def test_segment_narrative_rejects_an_invalid_three_p():
+    import pytest
+
+    with get_db() as conn:
+        conn.execute(
+            "INSERT INTO valuation_case (id, case_name, as_of_date, base_year, target_year,"
+            " riskfree_rate, wacc_initial, wacc_stable, marginal_tax_rate, roic_stable,"
+            " shares_basic) VALUES (1, 'c', '2026-08-09', 2026, 2036, 0.04, 0.08, 0.08,"
+            " 0.25, 0.12, 1.0)"
+        )
+        conn.execute(
+            "INSERT INTO segment (id, case_id, name, base_revenue, base_margin,"
+            " margin_target, sales_to_capital_early, sales_to_capital_late, revenue_target)"
+            " VALUES (1, 1, 'launch', 4.1, -0.1, 0.45, 1.0, 1.5, 70.0)"
+        )
+        with pytest.raises(Exception, match="CHECK"):
+            conn.execute(
+                "INSERT INTO segment_narrative (segment_id, input_field, claim, confidence,"
+                " three_p) VALUES (1, 'margin_target', 'reusability', 'confirmed', 'certain')"
+            )
+
+
 def test_deleting_a_case_cascades_to_segments_and_narratives():
     with get_db() as conn:
         conn.execute(
