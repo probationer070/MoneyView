@@ -5,6 +5,7 @@ from packages.core_finance.segment_valuation import (
     SegmentSpec,
     discount_factors,
     margin_path,
+    marginal_roic,
     reinvestment,
     revenue_path,
     run_case,
@@ -416,3 +417,74 @@ def test_wacc_and_discount_factor_match_their_own_helpers():
     )
     assert result.wacc == pytest.approx(expected_wacc)
     assert result.discount_factor == pytest.approx(discount_factors(expected_wacc))
+
+
+def test_marginal_roic_is_sales_to_capital_times_margin_after_tax():
+    spec = SegmentSpec(
+        name="one",
+        base_revenue=10.0,
+        base_margin=0.0,
+        margin_target=0.40,
+        sales_to_capital_early=1.0,
+        sales_to_capital_late=1.5,
+        revenue_target=100.0,
+    )
+    # 1.5 x 0.40 x (1 - 0.25) = 0.45
+    assert marginal_roic([spec], marginal_tax_rate=0.25) == pytest.approx(0.45)
+
+
+def test_marginal_roic_is_revenue_weighted_not_an_arithmetic_mean():
+    """Spec gate 9.
+
+    Deliberately lopsided: a 90/10 revenue split across segments whose returns
+    differ by 16x. The weighted answer is 0.1875; the arithmetic mean is 0.6375.
+    Nothing subtle separates them, which is the point -- this test pins the
+    weighting property in isolation, so it keeps testing that property even if
+    the seeded segment mix changes.
+    """
+    big = SegmentSpec(
+        name="big", base_revenue=1.0, base_margin=0.0, margin_target=0.10,
+        sales_to_capital_early=1.0, sales_to_capital_late=1.0, revenue_target=90.0,
+    )
+    small = SegmentSpec(
+        name="small", base_revenue=1.0, base_margin=0.0, margin_target=0.80,
+        sales_to_capital_early=1.0, sales_to_capital_late=2.0, revenue_target=10.0,
+    )
+    # big  = 1.0 x 0.10 x 0.75 = 0.075   on 90 of revenue
+    # small= 2.0 x 0.80 x 0.75 = 1.200   on 10 of revenue
+    # weighted      = (0.075*90 + 1.200*10) / 100 = 0.1875   <- correct
+    # arithmetic mean = (0.075 + 1.200) / 2       = 0.6375   <- what a bug returns
+    assert marginal_roic([big, small], marginal_tax_rate=0.25) == pytest.approx(0.1875)
+
+
+def test_marginal_roic_rejects_an_empty_segment_list():
+    with pytest.raises(ValueError, match="at least one segment"):
+        marginal_roic([], marginal_tax_rate=0.25)
+
+
+def test_run_case_reports_the_terminal_reinvestment_rate():
+    """Spec gate 5."""
+    case = _case()
+    result = run_case(case, [_launch()])
+    assert result.terminal_reinvestment_rate == pytest.approx(
+        case.effective_terminal_growth() / case.roic_stable
+    )
+
+
+def test_run_case_reports_the_explicit_reinvestment_rate():
+    """Spec gate 5. The counterpart the terminal rate must be read against."""
+    case = _case()
+    result = run_case(case, [_launch()])
+    nopat = result.ebit[-1] * (1 - case.marginal_tax_rate)
+    assert result.explicit_reinvestment_rate_target_year == pytest.approx(
+        result.reinvestment[-1] / nopat
+    )
+
+
+def test_run_case_reports_marginal_roic():
+    case = _case()
+    segments = [_launch()]
+    result = run_case(case, segments)
+    assert result.marginal_roic_target_year == pytest.approx(
+        marginal_roic(segments, case.marginal_tax_rate)
+    )

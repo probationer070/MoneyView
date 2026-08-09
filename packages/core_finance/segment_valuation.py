@@ -357,6 +357,48 @@ class CaseResult:
     terminal_value_share_pct: float
     base_revenue_total: float
     base_ebit_total: float
+    marginal_roic_target_year: float
+    terminal_reinvestment_rate: float
+    explicit_reinvestment_rate_target_year: float
+
+
+def marginal_roic(segments: list[SegmentSpec], marginal_tax_rate: float) -> float:
+    """Revenue-weighted after-tax return on NEW capital in the target year.
+
+    A dollar of capital buys `sales_to_capital_late` dollars of revenue, which
+    earn `margin_target` before tax:
+
+        roic_i = sales_to_capital_late_i x margin_target_i x (1 - tau)
+
+    weighted by each segment's target-year revenue.
+
+    This is the quantity the terminal reinvestment rate `g / ROIC` actually
+    governs, which is why the consistency guard in `run_case` compares against it.
+    todo3's I3 states ROIC as `EBIT(1-tau) / InvestedCapital`, a *level* return --
+    but that needs an invested-capital base the case does not carry, and it blends
+    in legacy capital that no longer drives growth. Deliberate deviation.
+
+    Weights come from `spec.target_revenue()` rather than a computed path. They
+    are equal by construction -- the revenue path terminates exactly on target --
+    and taking them from the spec keeps this function callable without running a
+    case.
+    """
+    if not segments:
+        raise ValueError("marginal_roic needs at least one segment")
+
+    after_tax = 1.0 - marginal_tax_rate
+    total_revenue = 0.0
+    weighted = 0.0
+    for spec in segments:
+        revenue = spec.target_revenue()
+        total_revenue += revenue
+        weighted += spec.sales_to_capital_late * spec.margin_target * after_tax * revenue
+
+    if total_revenue == 0:
+        raise ValueError(
+            "marginal_roic needs a positive total target revenue to weight by"
+        )
+    return weighted / total_revenue
 
 
 def terminal_value(
@@ -428,6 +470,9 @@ def run_case(case: CaseSpec, segments: list[SegmentSpec]) -> CaseResult:
     waccs = wacc_path(case.wacc_initial, case.wacc_stable, n, case.wacc_converge_from)
     factors = discount_factors(waccs)
 
+    target_year_marginal_roic = marginal_roic(segments, case.marginal_tax_rate)
+    target_year_nopat = ebit[-1] * (1 - case.marginal_tax_rate)
+
     pv_explicit = sum(fcff[t] * factors[t] for t in range(n))
     tv = terminal_value(
         ebit_n=ebit[-1],
@@ -474,4 +519,13 @@ def run_case(case: CaseSpec, segments: list[SegmentSpec]) -> CaseResult:
         ),
         base_revenue_total=sum(s.base_revenue for s in segments),
         base_ebit_total=sum(s.base_revenue * s.base_margin for s in segments),
+        marginal_roic_target_year=target_year_marginal_roic,
+        terminal_reinvestment_rate=g_stable / case.roic_stable,
+        # Zero NOPAT makes the ratio undefined rather than infinite. Reported as
+        # 0.0, matching how `terminal_value_share_pct` above handles a zero
+        # enterprise value. A negative NOPAT is left as a negative rate: a firm
+        # reinvesting while losing money is a real state worth seeing.
+        explicit_reinvestment_rate_target_year=(
+            reinvest[-1] / target_year_nopat if target_year_nopat else 0.0
+        ),
     )

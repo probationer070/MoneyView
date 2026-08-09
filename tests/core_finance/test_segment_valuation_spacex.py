@@ -19,7 +19,12 @@ leave the engine with no acceptance test at its own commit.
 
 import pytest
 
-from packages.core_finance.segment_valuation import CaseSpec, SegmentSpec, run_case
+from packages.core_finance.segment_valuation import (
+    CaseSpec,
+    SegmentSpec,
+    marginal_roic,
+    run_case,
+)
 
 # Base-year (FY2025) revenues. Derived, not stated -- but corroborated twice by
 # todo3 section 6: 1250 / 80.13 = 15.60 and 1750 / 112.18 = 15.60, both of which
@@ -141,3 +146,37 @@ def test_expansion_segment_contributes_nothing_before_2032():
     assert expansion.ebit[:6] == [0.0] * 6
     assert expansion.reinvestment[:6] == [0.0] * 6
     assert expansion.revenue[-1] == pytest.approx(50.0)
+
+
+def test_post_prospectus_marginal_roic():
+    """Spec gate 1. Hand-computed from confirmed margins and the [V] s2c values:
+
+        launch       1.5 x 0.45 x 0.75 = 0.50625  on 70  of target revenue
+        connectivity 1.5 x 0.60 x 0.75 = 0.675    on 120
+        ai           1.0 x 0.25 x 0.75 = 0.1875   on 160
+        expansion    1.5 x 0.30 x 0.75 = 0.3375   on 50
+        weighted = 163.3125 / 400 = 0.40828125
+    """
+    case, segments = post_prospectus()
+    assert marginal_roic(segments, case.marginal_tax_rate) == pytest.approx(
+        0.40828125, abs=1e-9
+    )
+
+
+def test_pre_prospectus_marginal_roic():
+    """Spec gate 1.
+
+        launch       2.0 x 0.40 x 0.75 = 0.60    on 70
+        connectivity 2.0 x 0.60 x 0.75 = 0.90    on 120
+        ai           1.2 x 0.45 x 0.75 = 0.405   on 80
+        expansion    1.5 x 0.30 x 0.75 = 0.3375  on 50
+        weighted = 199.275 / 320 = 0.622734375
+
+    Higher than the post case because the pre-case sales-to-capital values are
+    higher -- todo3 section 3 records that Damodaran LOWERED them after the
+    prospectus. Both sets are [V] guesses.
+    """
+    case, segments = pre_prospectus()
+    assert marginal_roic(segments, case.marginal_tax_rate) == pytest.approx(
+        0.622734375, abs=1e-9
+    )
