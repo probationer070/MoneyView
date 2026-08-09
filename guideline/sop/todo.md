@@ -343,6 +343,21 @@ how close the numbers happen to fall, and does not depend on company size.
       Also renamed `regionalMinard` to `regionalHurdle`: it survived the Minard removal as the
       Hurdle Rate Decomposition dataset and was carrying a deleted model's name.
 
+## Active Track - Segment Build-Up Valuation (todo3 pieces 3a+3b)
+
+Spec: `docs/superpowers/specs/2026-08-09-segment-buildup-valuation-design.md`
+Plan: `docs/superpowers/plans/2026-08-09-segment-buildup-valuation.md`
+Source: `guideline/sop/todo3.md`
+
+- [x] 3a Engine core - `packages/core_finance/segment_valuation.py`
+- [x] 3b Persistence + API - 3 tables, 4 endpoints, both SpaceX cases seeded
+- [ ] 3c Uncertainty + attribution - Monte Carlo, /fork, /diff, /pricing
+- [ ] 3d UI - valuation tab
+
+Known open: every `[V]` input is a placeholder pending SpaceX2026IPO.xlsx and
+SpaceX2026IPOUpdated.xlsx. The enterprise-value gap against Damodaran's $1.21T /
+$1.22T is recorded as a diagnostic, not a gate -- see spec section 1.2.
+
 ## Active Track - Performance Instrumentation (sub-project 1 of 4)
 
 Design spec: `docs/superpowers/specs/2026-07-25-perf-instrumentation/`
