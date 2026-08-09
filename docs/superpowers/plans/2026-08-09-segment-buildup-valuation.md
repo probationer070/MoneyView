@@ -1024,6 +1024,13 @@ base margins, sales-to-capital ratios, tax rate and NOL balance, all of which
 are guesses pending the spreadsheets.
 
 Enterprise value is deliberately NOT asserted. See the design spec, section 1.2.
+
+This case data is also present in `apps/api/services/valuation_seed.py`, and the
+duplication is deliberate. These gates test the engine, which lives in
+`packages/core_finance` and must not import from `apps/api` -- the dependency runs
+one way (guideline/sop/file-structure.md:42). Importing the seed here would invert
+it, and dropping these gates in favour of the seed's would leave the engine with no
+acceptance test at its own commit.
 """
 
 import pytest
@@ -1370,6 +1377,7 @@ git commit -m "feat: valuation_case, segment and segment_narrative tables"
 
 **Files:**
 - Create: `apps/api/services/valuation_case.py`
+- Create: `tests/api/valuation_fixtures.py` (shared payload builders — Task 7 uses them too; not named `test_*` so pytest does not collect it)
 - Test: `tests/api/test_valuation_case_service.py`
 
 **Interfaces:**
@@ -1380,21 +1388,23 @@ git commit -m "feat: valuation_case, segment and segment_narrative tables"
 
 `three_p` is stored but **not** gated. Refusing to run a case whose inputs are below `probable` sounds principled, but the author sets `three_p` themselves, so the gate would only ever reject inputs someone had already labelled weak. `/run` reports them instead.
 
-- [ ] **Step 1: Write the failing tests**
+- [ ] **Step 1: Write the shared payload builders**
 
-Create `tests/api/test_valuation_case_service.py`:
+Two test modules need these (this task's and Task 7's), so they live in their own
+module rather than being imported across test files. The name deliberately does not
+start with `test_`, so pytest imports it without collecting it.
+
+Create `tests/api/valuation_fixtures.py`:
 
 ```python
-import pytest
+"""Payload builders for valuation-case tests.
 
-from apps.api.services.valuation_case import (
-    CaseNotFound,
-    NARRATED_FIELDS,
-    create_case,
-    list_cases,
-    load_case,
-    run_stored_case,
-)
+Shared by test_valuation_case_service.py and test_valuation_routes.py. Kept out
+of a test module so neither imports the other, and out of conftest.py because
+these are called directly, not injected as pytest fixtures.
+"""
+
+from apps.api.services.valuation_case import NARRATED_FIELDS
 
 
 def _narrative(field: str, confidence: str = "assumed", three_p: str = "probable") -> dict:
@@ -1450,6 +1460,24 @@ def _case_payload(**overrides) -> dict:
     }
     payload.update(overrides)
     return payload
+```
+
+- [ ] **Step 2: Write the failing tests**
+
+Create `tests/api/test_valuation_case_service.py`:
+
+```python
+import pytest
+
+from apps.api.services.valuation_case import (
+    CaseNotFound,
+    NARRATED_FIELDS,
+    create_case,
+    list_cases,
+    load_case,
+    run_stored_case,
+)
+from tests.api.valuation_fixtures import _case_payload, _narrative
 
 
 def test_create_and_load_round_trips_every_field():
@@ -1520,12 +1548,12 @@ def test_duplicate_case_name_is_rejected():
         create_case(_case_payload(case_name="taken"))
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [ ] **Step 3: Run the tests to verify they fail**
 
 Run: `python -m pytest tests/api/test_valuation_case_service.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'apps.api.services.valuation_case'`
 
-- [ ] **Step 3: Write the implementation**
+- [ ] **Step 4: Write the implementation**
 
 Create `apps/api/services/valuation_case.py`:
 
@@ -1792,17 +1820,17 @@ def run_stored_case(case_id: int) -> dict:
     }
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [ ] **Step 5: Run the tests to verify they pass**
 
 Run: `python -m pytest tests/api/test_valuation_case_service.py -v`
 Expected: PASS, 8 tests.
 
 If `test_a_rejected_case_leaves_nothing_behind` fails, the narrative validation is running *after* the insert. It must run before `get_db()` is entered — that is why `_validate_narratives` is called in the loop at the top of `create_case`.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add apps/api/services/valuation_case.py tests/api/test_valuation_case_service.py
+git add apps/api/services/valuation_case.py tests/api/valuation_fixtures.py tests/api/test_valuation_case_service.py
 git commit -m "feat: valuation case persistence with the narrative-completeness rule"
 ```
 
@@ -1835,7 +1863,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from apps.api.main import app
-from tests.api.test_valuation_case_service import _case_payload
+from tests.api.valuation_fixtures import _case_payload
 
 client = TestClient(app)
 
@@ -2430,26 +2458,14 @@ Expected: PASS, 8 tests.
 Run: `python -m pytest tests -q`
 Expected: every previously-passing test still passes. Nothing in this plan modifies existing behaviour — `db.py` gains three tables, `main.py` and `routes/__init__.py` gain one router, `schemas.py` gains five imports.
 
-- [ ] **Step 6: Record the final diagnostic**
+The enterprise-value diagnostic was already recorded at the engine level in Task 4
+Step 7. Do **not** re-run it through the seed: that path calls `init_db()` and
+`ensure_valuation_cases_seeded()` against the developer's real
+`data/processed/moneyview.db`, planting fixture rows outside any test's isolation,
+to produce a number Task 4 already produced. `test_seeded_target_year_totals_match_the_confirmed_inputs`
+above already proves the seed data agrees with the engine fixture.
 
-```bash
-python -c "
-from apps.api.services.db import init_db
-from apps.api.services.valuation_seed import ensure_valuation_cases_seeded, PRE_CASE_NAME, POST_CASE_NAME
-from apps.api.services.valuation_case import list_cases, run_stored_case
-init_db(); ensure_valuation_cases_seeded()
-ids = {c['case_name']: c['id'] for c in list_cases()}
-for name, reported in ((PRE_CASE_NAME, 1210), (POST_CASE_NAME, 1220)):
-    r = run_stored_case(ids[name])
-    print(f\"{name}: EV={r['enterprise_value']:,.0f}bn (Damodaran {reported}bn, gap {r['enterprise_value']/reported-1:+.1%}) per-share=\${r['value_per_share_diluted']:,.2f} TV={r['terminal_value_share_pct']:.0f}%\")
-"
-```
-
-**This writes to your real database** — it is the one command in this plan that does. Run it, record the output in the completion note, then delete the two seeded rows if you do not want them (`DELETE FROM valuation_case WHERE case_name LIKE 'spacex_2026%'` cascades to segments and narratives).
-
-A gap is expected. It is the measure of how far the `[V]` guesses sit from Damodaran's actual spreadsheet, and it is the starting point for the calibration work in §7.3 of the spec.
-
-- [ ] **Step 7: Update the trackers**
+- [ ] **Step 6: Update the trackers**
 
 Add to `guideline/sop/todo.md` a new track section:
 
@@ -2472,7 +2488,7 @@ $1.22T is recorded as a diagnostic, not a gate -- see spec section 1.2.
 
 Add the spec and plan to the tables in `docs/INDEX.md` under "Design Specs (`docs/superpowers/specs/`)".
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add apps/api/services/valuation_seed.py tests/api/test_valuation_seed.py guideline/sop/todo.md docs/INDEX.md
@@ -2487,4 +2503,4 @@ git commit -m "feat: seed Damodaran's two SpaceX reference cases"
 
 **Deliberately not covered, matching the spec's Out of Scope:** Monte Carlo, `/fork`, `/diff`, `/pricing`, the UI, and R&D capitalization. Trap #4 (the R&D↔reinvestment cross-check) has no task because it has no implementation to guard — recorded in spec §6 gate 2 so the slot is not lost.
 
-**One residual risk worth naming.** `test_valuation_routes.py` imports `_case_payload` from `test_valuation_case_service.py`, coupling two test modules. The alternative is duplicating a 30-line fixture. If a third consumer appears, move it to a `conftest.py` fixture under `tests/api/`.
+**Two deliberate duplications, both justified in-file so review does not re-litigate them.** The SpaceX case data appears in both `tests/core_finance/test_segment_valuation_spacex.py` and `apps/api/services/valuation_seed.py`, because `packages/core_finance` must not import from `apps/api`. Shared test payload builders live in `tests/api/valuation_fixtures.py` rather than being imported across test modules.
