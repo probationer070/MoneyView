@@ -19,8 +19,16 @@ The model's own assumptions imply a target-year return on new capital of **40.8%
 (revenue-weighted `sales_to_capital_late × margin_target × (1 − τ)`). Setting the
 perpetuity's return to 12% means the reinvestment rate **more than doubles** at the
 year-10 boundary — from 17.5% of NOPAT to 38.0% — while growth *falls* from 7.46%
-to 4.56%. Reinvestment rising as growth falls is backwards, and it is the signature
-of a terminal block that has lost contact with the explicit block.
+to 4.56%.
+
+Reinvestment rising sharply as growth falls is not inherently impossible: a firm
+whose return on incremental capital deteriorates must reinvest a larger share of
+NOPAT to buy each point of growth. It is a warning sign **here** because the model
+supplies no corresponding deterioration in the economics of new capital. The margin
+path has already converged to `margin_target` by year n and `sales_to_capital_late`
+does not change, so nothing in the stated assumptions produces the collapse in
+returns that the terminal block implies. The discontinuity is manufactured entirely
+by the unconstrained `roic_stable` input.
 
 Sensitivity of the post-prospectus case to this one input:
 
@@ -88,21 +96,41 @@ an `IC_0`, and it is a deliberate deviation from I3's literal form.
 
 `run_case` raises `ValueError` when `roic_stable > marginal_roic_target_year`.
 
-A perpetual return above what the explicit period earns on new capital is competitive
-erosion running backwards. The model's margin path has already converged to
-`margin_target` by year n, so no further improvement is even represented — a higher
-terminal return has nothing to come from.
+A perpetual return above what the explicit period earns on new capital is not
+mathematically impossible. It is **inconsistent with the stated margin and
+capital-efficiency path**: the model's margins have already converged to
+`margin_target` by year n and `sales_to_capital_late` does not change afterwards, so
+the assumptions contain no mechanism by which returns on new capital could improve.
+A model asserting a higher terminal return is asserting something it has not modelled.
 
 It lives in `run_case` rather than `terminal_value` because it needs segment data.
 
 **Not added:** a `g_stable / roic_stable > 1` guard. The existing
 `roic_stable > wacc_stable` requirement, combined with the existing
 `wacc_stable > g_stable` spread requirement, already forces the terminal reinvestment
-rate below 1 whenever growth is positive. It would be dead code.
+rate below 1 whenever growth is positive. It would be dead code. §3 gate 8 pins that
+relationship as a test instead, so the reasoning is checked rather than merely asserted.
 
-The guard is deliberately one-sided. A terminal return *below* the marginal return is
-legitimate and expected — it is what competitive erosion means. Only the reverse is
-unambiguously wrong.
+### 2.2.1 What the guard does and does not establish
+
+The guard is deliberately one-sided, and that leaves a real gap worth stating plainly,
+because a reader will otherwise ask: *if 12% is structurally suspicious, why does the
+engine still accept it?*
+
+The engine enforces an **upper consistency bound, not a unique terminal-return
+estimate.** A terminal return below the marginal return is legitimate and expected —
+it is what competitive erosion means — but nothing in the model can determine *how
+fast* that erosion should occur. That is a judgement about competitive dynamics, not
+something derivable from a revenue and margin path.
+
+So `roic_stable = 0.10` still passes the guard and still produces a terminal
+reinvestment rate of 45.6% against an explicit-period 17.5%. The engine cannot reject
+it without pretending to know the speed of erosion. What it can do — and now does — is
+reject the economically impossible direction and **report both reinvestment rates side
+by side** (§2.3) so the discontinuity is visible to whoever chose the input.
+
+The erosion *policy* is therefore a property of a case, not of the engine. §2.5 states
+the policy this repo's seeded cases use.
 
 ### 2.3 Reported diagnostics
 
@@ -137,25 +165,51 @@ is frozen, so construction-time validation cannot be bypassed by mutation.
 `CaseSpec.__post_init__` already exists and validates `terminal_growth`,
 `shares_basic` and the year ordering; these are additions to it.
 
-### 2.5 Seeding rule
+### 2.5 Terminal ROIC policy (a case property, not an engine derivation)
 
-`roic_stable` is seeded by an explicit stated rule rather than a fitted value:
+Three quantities are easy to conflate and must not be. Nothing here *derives* the
+terminal return:
+
+| Quantity | Origin |
+| --- | --- |
+| `marginal_roic_target_year` | **computed from the model** — §2.1, a function of the segment assumptions alone |
+| `roic_stable` | **chosen** by the stated competitive-erosion policy below; a judgement, not a derivation |
+| `terminal_reinvestment_rate` | **derived** from the chosen `roic_stable` as `g_stable / roic_stable` |
+
+The policy this repo's seeded cases adopt:
 
 ```
-roic_stable = (wacc_stable + marginal_roic) / 2
+roic_stable = wacc_stable + (marginal_roic − wacc_stable) / 2
+            = (wacc_stable + marginal_roic) / 2
 ```
 
-"Half the excess return competes away in perpetuity." Chosen on its own logic, not by
-matching a published number.
+Stated precisely: **half of the excess return over the cost of capital survives in
+perpetuity, and half competes away.** The prose form "half the excess return competes
+away" is ambiguous about which half, so the algebra above governs.
+
+This is a modelling policy, not a result. A different case may justify faster or
+slower erosion; the engine's guard (§2.2.1) constrains only the direction, never the
+speed.
 
 | Case | marginal ROIC | seeded `roic_stable` | EV | published |
 | --- | --- | --- | --- | --- |
 | pre-prospectus | 0.623 | **0.351** | 1333.2 | 1210 |
 | post-prospectus | 0.408 | **0.245** | **1210.0** | **1220** |
 
-The post case lands within 0.8% of Damodaran's figure. Because the rule was chosen
-for its own reasons, that agreement is corroboration rather than curve-fitting — the
-evidential value the 2026-08-09 spec wrongly claimed was unobtainable.
+The post case lands within 0.8% of the published figure. State that carefully: the
+agreement is **corroborating evidence that the revised assumptions are directionally
+consistent with the published reference, not independent validation and not a
+calibration target.** It cannot be independent validation, because the reference
+figure was available throughout and influenced the model architecture and several
+other inputs. What changed from the 2026-08-09 spec is narrower and still worth
+having: the gap turns out to carry information, where that spec concluded it carried
+none.
+
+The reference figures themselves — EV 1220, equity 1297, ~$100/share — come from
+`guideline/sop/todo3.md` §3 and §6 and are only as good as that reconstruction. The
+general framework being applied here (linking growth, sales-to-capital, reinvestment
+and return on capital) is standard Damodaran methodology, but that grounding supports
+the *method*, not these particular company figures.
 
 The pre case overshoots by 10%. That difference traces to one identifiable input: the
 pre-case `sales_to_capital_late` values (2.0 for launch and connectivity, against 1.5
@@ -193,12 +247,37 @@ it is the stale-doc failure that repo already has a commit history of fixing.
    weighted by target-year revenue.
 2. `roic_stable > marginal_roic_target_year` raises, with a message naming both values.
 3. A terminal return *below* marginal does **not** raise — the guard is one-sided.
-4. Each of §2.4's four inputs raises at construction, asserting on the message.
+4. Each of §2.4's four inputs raises at construction, asserting on the message —
+   and **both sides of every boundary are pinned**, so the tests document the intended
+   domain rather than only proving that bad values fail:
+
+   | Input | Must raise | Must be accepted |
+   | --- | --- | --- |
+   | `marginal_tax_rate` | `-1e-9`, `1 + 1e-9` | `0.0`, `1.0` |
+   | `ramp_start_year` | `0`, `-1` | `1` |
+   | `sales_to_capital_early` / `_late` | `0.0`, `-1.0` | smallest sensible positive |
+   | `nol_balance` | `-1e-9` | `0.0` |
+
 5. `terminal_reinvestment_rate == g_stable / roic_stable` and
    `explicit_reinvestment_rate_target_year == reinvestment[-1] / (ebit[-1] × (1−τ))`.
 6. Both seeded cases still reproduce their confirmed target-year totals — 400.0/158.5
    post, 320.0/151.0 pre. These are unaffected by `roic_stable` and must not move.
 7. The full suite still passes. Baseline before this work: 585.
+8. **`terminal_reinvestment_rate < 1` for any case the guards admit with `g > 0`.**
+   Not a production guard — §2.2 argues one would be dead code — but a test that
+   documents the relationship that argument depends on, so "it would be dead code"
+   is checked rather than asserted.
+9. **`marginal_roic` is revenue-weighted, not an arithmetic mean.** Assert against a
+   synthetic two-segment case with deliberately unequal target revenues (90 / 10) and
+   sharply different per-segment returns, so a mean-instead-of-weighted-mean
+   implementation fails loudly.
+
+   On the seeded data the two statistics are in fact distinguishable — arithmetic mean
+   0.4265 against weighted 0.4084, a 4.4% difference that gate 1's ±0.001 tolerance
+   would catch. The synthetic test is still worth having for a different reason: it
+   pins the *weighting property* in isolation, so it keeps testing that property if
+   the seed's segment mix ever changes, whereas gate 1 catches a weighting bug only as
+   a side effect of the numbers happening to differ.
 
 **Recorded, not gated:** the post-prospectus EV of 1210.0 against Damodaran's 1220,
 and the pre-prospectus 1333.2 against 1210 with §2.5's explanation. Recorded in this
