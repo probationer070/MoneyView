@@ -97,9 +97,9 @@ def test_marginal_roic_is_revenue_weighted_not_an_arithmetic_mean():
     )
     # big  = 1.0 x 0.10 x 0.75 = 0.075   on 90 of revenue
     # small= 2.0 x 0.80 x 0.75 = 1.200   on 10 of revenue
-    # weighted = (0.075*90 + 1.200*10) / 100 = 0.1875
+    # weighted      = (0.075*90 + 1.200*10) / 100 = 0.1875   <- correct
+    # arithmetic mean = (0.075 + 1.200) / 2       = 0.6375   <- what a bug returns
     assert marginal_roic([big, small], marginal_tax_rate=0.25) == pytest.approx(0.1875)
-    assert marginal_roic([big, small], marginal_tax_rate=0.25) != pytest.approx(0.6375)
 
 
 def test_marginal_roic_rejects_an_empty_segment_list():
@@ -349,11 +349,13 @@ def test_terminal_reinvestment_rate_stays_below_one_for_any_admitted_case():
     leaving it asserted. Sweeps roic_stable across the admitted range, from just
     above wacc_stable up to the marginal return.
     """
-    case = _case()
+    # The relationship only binds for positive growth, so pin that first --
+    # otherwise the sweep below could pass vacuously.
+    assert _case().effective_terminal_growth() > 0
+
     for roic in (0.0826, 0.10, 0.12, 0.25, 0.40, 0.50625):
         result = run_case(_case(roic_stable=roic), [_launch()])
         assert 0 < result.terminal_reinvestment_rate < 1, roic
-    assert case.effective_terminal_growth() > 0
 ```
 
 - [ ] **Step 2: Run the tests to verify they fail**
