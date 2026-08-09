@@ -477,7 +477,7 @@ def reinvestment(revenues: list[float], spec: SegmentSpec) -> list[float]:
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `python -m pytest tests/core_finance/test_segment_valuation.py -v`
-Expected: PASS, 12 tests.
+Expected: PASS, 15 tests (10 from Task 1 including its fix round, plus 5 new).
 
 - [ ] **Step 5: Commit**
 
@@ -649,7 +649,7 @@ def discount_factors(waccs: list[float]) -> list[float]:
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `python -m pytest tests/core_finance/test_segment_valuation.py -v`
-Expected: PASS, 19 tests.
+Expected: PASS, 22 tests (15 existing plus 7 new).
 
 - [ ] **Step 5: Commit**
 
@@ -1007,7 +1007,7 @@ def run_case(case: CaseSpec, segments: list[SegmentSpec]) -> CaseResult:
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `python -m pytest tests/core_finance/test_segment_valuation.py -v`
-Expected: PASS, 27 tests.
+Expected: PASS, 30 tests (22 existing plus 8 new).
 
 - [ ] **Step 5: Write the SpaceX confirmed-input gates**
 
