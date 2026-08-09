@@ -124,11 +124,18 @@ def revenue_path(spec: SegmentSpec, n: int, g_stable: float) -> list[float]:
     if target <= 0:
         raise ValueError(f"{spec.name}: target revenue must be positive, got {target}")
 
-    if spec.ramp_start_year > 1 or spec.base_revenue == 0:
-        return _ramp_revenues(target, n, spec.ramp_start_year)
-
     if spec.base_revenue < 0:
         raise ValueError(f"{spec.name}: base_revenue must not be negative")
+
+    if spec.ramp_start_year > 1 and spec.base_revenue > 0:
+        raise ValueError(
+            f"{spec.name}: ramp_start_year={spec.ramp_start_year} is incoherent "
+            f"with base_revenue={spec.base_revenue}; a segment already earning "
+            f"revenue today cannot also be a delayed-start ramp"
+        )
+
+    if spec.ramp_start_year > 1 or spec.base_revenue == 0:
+        return _ramp_revenues(target, n, spec.ramp_start_year)
 
     g_first = _solve_first_year_growth(target / spec.base_revenue, n, g_stable)
     revenues: list[float] = []

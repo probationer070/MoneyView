@@ -82,7 +82,7 @@ def test_ramped_segment_is_zero_until_ramp_start_then_linear():
     assert path[6:] == pytest.approx([12.5, 25.0, 37.5, 50.0])
 
 
-def test_revenue_path_rejects_unreachable_target():
+def test_revenue_path_rejects_non_positive_target():
     spec = SegmentSpec(
         name="shrinking",
         base_revenue=100.0,
@@ -93,4 +93,58 @@ def test_revenue_path_rejects_unreachable_target():
         revenue_target=-5.0,
     )
     with pytest.raises(ValueError, match="positive"):
+        revenue_path(spec, n=10, g_stable=0.0456)
+
+
+def test_revenue_path_rejects_unreachable_growth_bracket():
+    """A positive target so small relative to base_revenue that even the most
+    negative allowed year-1 growth (-99%) cannot decay revenue down to it
+    within the horizon. This drives the bracket check inside
+    `_solve_first_year_growth` itself, unlike the non-positive-target case
+    above which never reaches that helper.
+    """
+    spec = SegmentSpec(
+        name="collapsing",
+        base_revenue=1_000_000.0,
+        base_margin=0.0,
+        margin_target=0.2,
+        sales_to_capital_early=1.0,
+        sales_to_capital_late=1.0,
+        revenue_target=1.0,
+    )
+    with pytest.raises(ValueError, match="unreachable"):
+        revenue_path(spec, n=10, g_stable=0.0456)
+
+
+def test_revenue_path_rejects_ramp_start_with_existing_revenue():
+    spec = SegmentSpec(
+        name="incoherent",
+        base_revenue=10.0,
+        base_margin=0.0,
+        margin_target=0.2,
+        sales_to_capital_early=1.0,
+        sales_to_capital_late=1.0,
+        revenue_target=50.0,
+        ramp_start_year=3,
+    )
+    with pytest.raises(ValueError) as exc_info:
+        revenue_path(spec, n=10, g_stable=0.0456)
+    message = str(exc_info.value)
+    assert "incoherent" in message
+    assert "ramp_start_year=3" in message
+    assert "base_revenue=10" in message
+
+
+def test_revenue_path_rejects_negative_base_revenue_on_ramp_branch():
+    spec = SegmentSpec(
+        name="negative-ramp",
+        base_revenue=-5.0,
+        base_margin=0.0,
+        margin_target=0.2,
+        sales_to_capital_early=1.0,
+        sales_to_capital_late=1.0,
+        revenue_target=50.0,
+        ramp_start_year=2,
+    )
+    with pytest.raises(ValueError, match="base_revenue must not be negative"):
         revenue_path(spec, n=10, g_stable=0.0456)
