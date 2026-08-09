@@ -2,9 +2,12 @@ import pytest
 
 from packages.core_finance.segment_valuation import (
     SegmentSpec,
+    discount_factors,
     margin_path,
     reinvestment,
     revenue_path,
+    tax_path,
+    wacc_path,
 )
 
 
@@ -213,3 +216,56 @@ def test_reinvestment_rejects_non_positive_sales_to_capital():
     )
     with pytest.raises(ValueError, match="sales_to_capital"):
         reinvestment([12.0], spec)
+
+
+def test_no_tax_while_losses_shield_income():
+    """15 of shield against 10/10/10: year 1 fully sheltered, year 2 half, year 3 none."""
+    taxes = tax_path([10.0, 10.0, 10.0], marginal_rate=0.25, nol_balance=15.0)
+    assert taxes == pytest.approx([0.0, 1.25, 2.5])
+
+
+def test_losses_accumulate_into_the_shield():
+    taxes = tax_path([-5.0, 10.0], marginal_rate=0.25, nol_balance=0.0)
+    assert taxes == pytest.approx([0.0, 1.25])
+
+
+def test_total_tax_equals_marginal_rate_on_income_net_of_shield():
+    ebit = [20.0, 30.0, 50.0]
+    taxes = tax_path(ebit, marginal_rate=0.25, nol_balance=40.0)
+    assert sum(taxes) == pytest.approx(0.25 * (sum(ebit) - 40.0))
+
+
+def test_wacc_holds_then_converges_linearly_to_stable():
+    path = wacc_path(0.0837, 0.0825, n=10, converge_from=6)
+    assert path[:4] == pytest.approx([0.0837] * 4)
+    assert path[-1] == pytest.approx(0.0825)
+    tail = path[4:]
+    steps = [tail[i + 1] - tail[i] for i in range(len(tail) - 1)]
+    assert steps == pytest.approx([steps[0]] * len(steps))
+
+
+def test_wacc_rejects_converge_point_outside_the_horizon():
+    with pytest.raises(ValueError, match="converge_from"):
+        wacc_path(0.0837, 0.0825, n=10, converge_from=11)
+
+
+def test_discount_factors_are_a_cumulative_product():
+    """todo3 trap 1. The `(1+w)^t` form is wrong whenever WACC varies by year.
+
+    Asserted as the recurrence rather than against hardcoded numbers, because
+    the recurrence is the property that distinguishes the two formulas -- a
+    hardcoded expectation would have to be computed by one of them.
+    """
+    waccs = wacc_path(0.0837, 0.0825, n=10, converge_from=6)
+    factors = discount_factors(waccs)
+    assert factors[0] == pytest.approx(1 / (1 + waccs[0]))
+    for t in range(1, len(factors)):
+        assert factors[t] == pytest.approx(factors[t - 1] / (1 + waccs[t]), abs=1e-12)
+
+
+def test_cumulative_and_power_forms_diverge_when_wacc_varies():
+    """Proves the previous test is load-bearing and not vacuous."""
+    waccs = wacc_path(0.0837, 0.0825, n=10, converge_from=6)
+    factors = discount_factors(waccs)
+    naive = 1 / (1 + waccs[0]) ** len(waccs)
+    assert abs(factors[-1] - naive) > 1e-6

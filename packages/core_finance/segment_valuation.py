@@ -198,3 +198,72 @@ def reinvestment(revenues: list[float], spec: SegmentSpec) -> list[float]:
         amounts.append((revenue - previous) / ratio)
         previous = revenue
     return amounts
+
+
+def tax_path(
+    ebit: list[float],
+    marginal_rate: float,
+    nol_balance: float,
+) -> list[float]:
+    """Tax paid per year, net of accumulated losses -- todo3 F2.
+
+    Returns amounts, not rates. A company with a loss carryforward pays nothing
+    until the balance is exhausted, which is not a detail: it moves cash flow
+    into the early years, where discounting hurts it least.
+
+    Losses in the forecast add to the balance rather than generating a refund.
+    """
+    taxes: list[float] = []
+    balance = float(nol_balance)
+    for amount in ebit:
+        if amount <= 0:
+            balance += -amount
+            taxes.append(0.0)
+            continue
+        shield = min(balance, amount)
+        balance -= shield
+        taxes.append((amount - shield) * marginal_rate)
+    return taxes
+
+
+def wacc_path(
+    wacc_initial: float,
+    wacc_stable: float,
+    n: int,
+    converge_from: int,
+) -> list[float]:
+    """Cost of capital per year -- todo3 F3.
+
+    Flat at `wacc_initial` through year `converge_from - 1`, then linear to
+    `wacc_stable` in year n. A young firm's risk profile migrates toward the
+    market as it matures, so a single constant rate over ten years is wrong in
+    a way that compounds.
+    """
+    if not 1 <= converge_from <= n:
+        raise ValueError(
+            f"converge_from must be between 1 and {n}, got {converge_from}"
+        )
+    lead = converge_from - 1
+    span = n - lead
+    spread = wacc_stable - wacc_initial
+    return [
+        wacc_initial if t <= lead else wacc_initial + spread * (t - lead) / span
+        for t in range(1, n + 1)
+    ]
+
+
+def discount_factors(waccs: list[float]) -> list[float]:
+    """Present-value factors for a time-varying discount rate -- todo3 F4.
+
+    A cumulative product: DF_t = DF_t-1 / (1 + w_t). NOT 1 / (1 + w)^t, which is
+    only correct when every rate is identical and is the standard way this model
+    gets silently mis-implemented.
+    """
+    factors: list[float] = []
+    accumulated = 1.0
+    for wacc in waccs:
+        if wacc <= -1:
+            raise ValueError(f"wacc must exceed -100%, got {wacc}")
+        accumulated /= 1.0 + wacc
+        factors.append(accumulated)
+    return factors
