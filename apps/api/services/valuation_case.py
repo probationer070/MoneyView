@@ -283,5 +283,10 @@ def run_stored_case(case_id: int) -> dict:
         "value_per_share_diluted": result.value_per_share_diluted,
         "base_revenue_total": result.base_revenue_total,
         "base_ebit_total": result.base_ebit_total,
+        "marginal_roic_target_year": result.marginal_roic_target_year,
+        "terminal_reinvestment_rate": result.terminal_reinvestment_rate,
+        "explicit_reinvestment_rate_target_year": (
+            result.explicit_reinvestment_rate_target_year
+        ),
         "below_probable": _below_probable(case),
     }

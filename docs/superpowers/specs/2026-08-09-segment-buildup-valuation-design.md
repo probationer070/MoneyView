@@ -56,6 +56,14 @@ interpolation shape are absent from the blog posts. That is more than a dozen fr
 parameters. A model with a dozen free parameters can be tuned to $1.22T while being
 structurally wrong, so agreement would prove nothing.
 
+**Corrected 2026-08-10.** That is right about agreement and wrong about the gap.
+Agreement alone would be weak evidence, but a gap is informative whenever the
+free parameters can be *bounded* -- and they can. Holding `roic_stable` at the
+seeded value and setting every `[V]` input to its most value-favourable extreme
+(zero reinvestment and zero tax for all ten years) reaches EV 1186.6, still short
+of 1220. The gap was never attributable to those inputs; it was one unconstrained
+parameter. See `2026-08-10-terminal-roic-consistency-design.md`.
+
 S4/S5 are `.xlsx` binaries on `pages.stern.nyu.edu`; retrieving them as text does not
 yield cell formulas, so calibration is not available in this cycle.
 
@@ -274,6 +282,13 @@ column for it — an omission in the source document, not a design choice here.
 Deriving it from the model's own year-10 ROIC would make terminal value a function of
 the `[V]` sales-to-capital guesses, which is exactly the coupling to avoid.
 
+**Reversed 2026-08-10.** That reasoning is backwards. todo3's F6
+(`ReinvRate = g / ROIC_stable`) exists precisely to couple the perpetuity to the
+explicit period; implementing F6 while omitting I3 turned the one mechanism whose
+purpose is internal consistency into a free parameter. The engine now computes a
+marginal ROIC and rejects a terminal return above it. See
+`2026-08-10-terminal-roic-consistency-design.md`.
+
 ### 4.3 Units
 
 Billions throughout, **including share counts**. `docs/dcf-valuation.md:225` fixes
@@ -484,9 +499,16 @@ than in a test or an endpoint. Measured on the two seeded cases at the time the
 engine was completed:
 
 ```
-pre  EV=1,002.1bn  $406.22/share  TV share 93.2%   (he reports ~1,210bn, ~$100)
-post EV=  916.2bn  $ 75.86/share  TV share 102.4%  (he reports ~1,220bn, ~$100)
+pre  EV=1,333.2bn  $540.43/share  TV share 94.9%   (he reports ~1,210bn, ~$100)
+post EV=1,210.0bn  $ 98.30/share  TV share 101.8%  (he reports ~1,220bn, ~$100)
 ```
+
+**Updated 2026-08-10.** The prior figures above (EV 1,002.1bn / $406.22 / 93.2% pre;
+EV 916.2bn / $75.86 / 102.4% post) were measured with the seeded `roic_stable = 0.12`,
+an invented value 3.5x below the model's own marginal return on capital. Re-measured
+after the terminal-ROIC consistency remediation set `roic_stable` by the stated
+erosion policy (`(wacc_stable + marginal_roic) / 2`). See
+`2026-08-10-terminal-roic-consistency-design.md`.
 
 Per §1.2, agreement would be evidence of nothing while the `[V]` inputs are
 uncalibrated, and disagreement is information about those guesses rather than a build
@@ -528,6 +550,10 @@ request. Recorded, not changed.
 ---
 
 ## 7. Out of scope
+
+**Done, 2026-08-10.** The terminal-ROIC consistency gap noted throughout this spec
+(§1.2, §4.2, §6) is remediated: the engine now computes a marginal ROIC and rejects
+a terminal return above it. See `2026-08-10-terminal-roic-consistency-design.md`.
 
 ### 7.1 Deferred pieces
 

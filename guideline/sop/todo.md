@@ -358,6 +358,25 @@ Known open: every `[V]` input is a placeholder pending SpaceX2026IPO.xlsx and
 SpaceX2026IPOUpdated.xlsx. The enterprise-value gap against Damodaran's $1.21T /
 $1.22T is recorded as a diagnostic, not a gate -- see spec section 1.2.
 
+- [x] Terminal ROIC consistency remediation (2026-08-10) - an independent
+      adversarial review found `roic_stable` shipped as an unconstrained input set
+      3.5x below the model's own marginal return on capital, accounting for
+      essentially the whole gap against the published valuation. Engine now computes
+      marginal ROIC, rejects a terminal return above it, and reports both
+      reinvestment rates. Four inputs that produced wrong numbers instead of errors
+      now raise at construction.
+      Spec: `docs/superpowers/specs/2026-08-10-terminal-roic-consistency-design.md`
+
+Still open from that review, deliberately out of scope:
+- Case-level inputs carry no narrative rows, so `roic_stable` -- the most valuable
+  number in the model -- cannot carry a claim in the data.
+- Base-year off-by-one: the seed labels its revenues FY2025 while setting
+  `base_year=2026`, making the horizon 10 where the figures imply 11 (~6% EV).
+- Growth-path shape: the decaying curve makes year 1 always the fastest, so the model
+  cannot express the slowed near-term growth todo3 R3 records as `[C]`.
+- API lifecycle: no update or delete endpoint; structural validation fires at `/run`
+  rather than `POST`; horizon is unbounded.
+
 ## Active Track - Performance Instrumentation (sub-project 1 of 4)
 
 Design spec: `docs/superpowers/specs/2026-07-25-perf-instrumentation/`

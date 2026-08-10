@@ -65,3 +65,17 @@ def test_model_invalid_inputs_are_422_not_500():
     response = client.post(f"/api/v1/valuation/cases/{case_id}/run")
     assert response.status_code == 422
     assert "riskfree" in response.json()["detail"]
+
+
+def test_run_exposes_the_terminal_consistency_diagnostics():
+    case_id = client.post(
+        "/api/v1/valuation/cases", json=_case_payload(case_name="diagnostics")
+    ).json()["data"]["id"]
+    data = client.post(f"/api/v1/valuation/cases/{case_id}/run").json()["data"]
+    for key in (
+        "marginal_roic_target_year",
+        "terminal_reinvestment_rate",
+        "explicit_reinvestment_rate_target_year",
+    ):
+        assert key in data, key
+        assert isinstance(data[key], float)

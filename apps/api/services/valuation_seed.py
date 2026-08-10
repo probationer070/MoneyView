@@ -10,6 +10,18 @@ Confidence tags mirror todo3's own: [C] -> confirmed, [D] -> derived,
 [V] -> assumed. Everything tagged `assumed` is a placeholder pending
 SpaceX2026IPO.xlsx and SpaceX2026IPOUpdated.xlsx; see the design spec, 7.3.
 
+`roic_stable` is set by an explicit competitive-erosion policy rather than taken
+from a source: half the excess return over the cost of capital survives in
+perpetuity, half competes away --
+
+    roic_stable = (wacc_stable + marginal_roic) / 2
+
+where marginal_roic is the revenue-weighted `sales_to_capital_late x margin_target
+x (1 - tau)` the engine computes. Pre: (0.0800 + 0.622734) / 2 = 0.3514. Post:
+(0.0825 + 0.408281) / 2 = 0.2454. This is a modelling judgement about the speed of
+competitive erosion, not a derivation -- the engine constrains only the direction.
+The previous value, 0.12, was invented and appears nowhere in todo3.
+
 Not wired into application startup: fixture data does not belong in a database
 unless someone asked for it.
 """
@@ -116,7 +128,7 @@ def _pre_prospectus_payload() -> dict:
         "wacc_converge_from": 6,
         "marginal_tax_rate": 0.25,
         "nol_balance": 5.0,
-        "roic_stable": 0.12,
+        "roic_stable": 0.3514,
         "terminal_growth": None,
         "cash": 0.0,
         "debt": 0.0,
@@ -161,7 +173,7 @@ def _post_prospectus_payload(parent_case_id: int) -> dict:
         "wacc_converge_from": 6,
         "marginal_tax_rate": 0.25,
         "nol_balance": 5.0,
-        "roic_stable": 0.12,
+        "roic_stable": 0.2454,
         "terminal_growth": None,
         "cash": 24.7,
         "debt": 22.9,

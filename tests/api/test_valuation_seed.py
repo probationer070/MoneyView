@@ -282,3 +282,35 @@ def test_post_prospectus_bridge_uses_prospectus_balance_sheet():
     assert bridge["cash"] == pytest.approx(24.7)
     assert bridge["debt"] == pytest.approx(22.9)
     assert bridge["ipo_proceeds"] == pytest.approx(75.0)
+
+
+def test_seeded_terminal_roic_follows_the_stated_erosion_policy():
+    """roic_stable = (wacc_stable + marginal_roic) / 2, rounded to 4dp.
+
+    Expectations are literal, not recomputed from the seed module -- a test that
+    re-derives its expectation from the code under test cannot catch a wrong value.
+    """
+    ensure_valuation_cases_seeded()
+    pre = load_case(_case_id(PRE_CASE_NAME))
+    post = load_case(_case_id(POST_CASE_NAME))
+    assert pre["roic_stable"] == pytest.approx(0.3514)
+    assert post["roic_stable"] == pytest.approx(0.2454)
+
+
+def test_seeded_terminal_roic_sits_below_the_marginal_return():
+    """The policy must satisfy the engine's guard, and by a real margin -- an
+    erosion rule that lands at or above the marginal return is not erosion."""
+    ensure_valuation_cases_seeded()
+    for name, marginal in ((PRE_CASE_NAME, 0.622734375), (POST_CASE_NAME, 0.40828125)):
+        data = _run(name)
+        assert data["marginal_roic_target_year"] == pytest.approx(marginal, abs=1e-9)
+        assert load_case(_case_id(name))["roic_stable"] < marginal
+
+
+def test_run_reports_both_reinvestment_rates_for_the_seeded_cases():
+    """The discontinuity the whole change exists to make visible."""
+    ensure_valuation_cases_seeded()
+    data = _run(POST_CASE_NAME)
+    assert data["terminal_reinvestment_rate"] > 0
+    assert data["explicit_reinvestment_rate_target_year"] > 0
+    assert data["terminal_reinvestment_rate"] < 1
