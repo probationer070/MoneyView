@@ -32,6 +32,12 @@ from packages.core_finance.segment_valuation import (
 BASE_REVENUE = {"launch": 4.1, "connectivity": 11.4, "ai": 0.1, "expansion": 0.0}
 BASE_MARGIN = {"launch": -0.10, "connectivity": 0.02, "ai": -0.50, "expansion": 0.0}
 
+# todo3 section 4's confirmed 2025 segment growth actuals. Same for both cases:
+# FY2025 actuals do not differ between the April and June valuations. `expansion`
+# takes none -- it has no revenue today. Must match
+# `apps/api/services/valuation_seed.py`'s `_CONFIRMED_INITIAL_GROWTH`.
+INITIAL_GROWTH = {"launch": 0.0764, "connectivity": 0.50, "ai": 0.22}
+
 
 def _segment(name, *, margin_target, s2c_early, s2c_late, **endpoint) -> SegmentSpec:
     return SegmentSpec(
@@ -42,6 +48,7 @@ def _segment(name, *, margin_target, s2c_early, s2c_late, **endpoint) -> Segment
         sales_to_capital_early=s2c_early,
         sales_to_capital_late=s2c_late,
         ramp_start_year=7 if name == "expansion" else 1,
+        initial_growth=INITIAL_GROWTH.get(name),
         **endpoint,
     )
 
@@ -194,17 +201,20 @@ def test_pre_prospectus_marginal_roic():
 
 
 def test_seeded_pair_enterprise_values():
-    """Pins the model's own output at roic_stable=0.33 -- nothing did before this
-    test, and the previous fixtures ran the engine's own consistency gates at
-    roic_stable=0.12, the value this work exists to retire.
+    """Pins the model's own output at roic_stable=0.33 with year-1 growth pinned
+    to todo3 section 4's confirmed 2025 actuals (INITIAL_GROWTH above) -- nothing
+    did before this test, and the previous fixtures ran the engine's own
+    consistency gates at roic_stable=0.12, the value this work exists to retire.
 
     These figures are the model's own output, not a target: they are what this
     template, with these inputs, actually produces. The published reference
     figures Damodaran gives are $1,210bn (pre) and $1,220bn (post) -- todo3
-    line 158: "enterprise value barely moved ($1.21T -> $1.22T)". The model
-    produces the OPPOSITE direction: post (1295.9) < pre (1323.7). The source
-    has value rising slightly from pre to post; this model has it falling. This
-    is an open discrepancy against the source, not a reproduction of it.
+    line 158: "enterprise value barely moved ($1.21T -> $1.22T)". The model still
+    produces the OPPOSITE direction: post (1309.85) < pre (1323.37). The source
+    has value rising slightly from pre to post; this model has it falling. Pinning
+    `initial_growth` narrowed the gap (it was post 1295.9 < pre 1323.7 before) but
+    did not flip it. This is an open discrepancy against the source, not a
+    reproduction of it, and closing it was not the aim of this change.
 
     Figures reflect the margin_path year-1 alignment fix (base_margin +
     (margin_target - base_margin) x t / n): previously 1282.1 / 1310.9, when
@@ -213,5 +223,5 @@ def test_seeded_pair_enterprise_values():
     """
     pre = run_case(*pre_prospectus())
     post = run_case(*post_prospectus())
-    assert post.enterprise_value == pytest.approx(1295.9, abs=0.5)
-    assert pre.enterprise_value == pytest.approx(1323.7, abs=0.5)
+    assert post.enterprise_value == pytest.approx(1309.85, abs=0.5)
+    assert pre.enterprise_value == pytest.approx(1323.37, abs=0.5)

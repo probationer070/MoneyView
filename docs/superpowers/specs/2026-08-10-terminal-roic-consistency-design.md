@@ -212,8 +212,8 @@ three segments todo3 §3 records as lowered, and tie for `expansion`, which todo
 
 | Case | marginal ROIC | `roic_stable` | implied capital intensity | EV | published |
 | --- | --- | --- | --- | --- | --- |
-| pre-prospectus | 0.4961 | **0.33** | +50.3% | **1323.7** | 1210 |
-| post-prospectus | 0.3715 | **0.33** | +12.6% | **1295.9** | 1220 |
+| pre-prospectus | 0.4961 | **0.33** | +50.3% | **1323.37** | 1210 |
+| post-prospectus | 0.3715 | **0.33** | +12.6% | **1309.85** | 1220 |
 
 **Both figures moved away from the published references, and that is the honest
 outcome.** The earlier near-agreement on the post case was an artifact of a parameter
@@ -225,8 +225,14 @@ particular company figures.
 
 **The model still produces the pre/post direction opposite to the source.** todo3 §3
 records enterprise value rising slightly, $1.21T → $1.22T. This model has it falling,
-1323.7 → 1295.9. That is an open discrepancy, recorded in
+1323.37 → 1309.85. That is an open discrepancy, recorded in
 `guideline/sop/todo.md`, not a reproduction.
+
+**Updated 2026-08-11.** The figures above reflect `initial_growth` pinning each
+segment's year-1 growth to todo3 §4's confirmed 2025 actuals (launch 7.64%,
+connectivity ~50%, ai ~22%) instead of the decaying curve's structural year-1 peak —
+see `guideline/sop/todo.md`'s Segment Build-Up Valuation track. Both EVs moved (pre
+1323.7 → 1323.37, post 1295.9 → 1309.85); the pre/post direction did not flip.
 
 Values are written as literals in the seed with the reasoning in the claim text, not
 computed at seed time — a seed that recomputes its own inputs cannot be checked
@@ -288,8 +294,8 @@ it is the stale-doc failure that repo already has a commit history of fixing.
    the seed's segment mix ever changes, whereas gate 1 catches a weighting bug only as
    a side effect of the numbers happening to differ.
 
-**Recorded, not gated:** the post-prospectus EV of **1295.9** against Damodaran's 1220,
-and the pre-prospectus **1323.7** against 1210, with §2.5's explanation. Recorded in this
+**Recorded, not gated:** the post-prospectus EV of **1309.85** against Damodaran's 1220,
+and the pre-prospectus **1323.37** against 1210, with §2.5's explanation. Recorded in this
 document, not computed by `/run` — the 2026-08-09 spec §6 establishes why
 company-specific constants do not belong in a generic engine.
 

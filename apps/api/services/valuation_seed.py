@@ -26,6 +26,15 @@ underneath it.
 
 Not wired into application startup: fixture data does not belong in a database
 unless someone asked for it.
+
+`initial_growth` carries todo3 section 4's confirmed 2025 actuals -- launch
++7.64%, connectivity ~+50%, ai ~+22% -- pinning each segment's year-1 growth to
+its observed rate instead of the decaying curve's structural year-1 peak.
+Before this, the engine's consolidated year-1 growth was +55% against a
+confirmed +33% total, contradicting todo3 R3's `[C]`-tagged record that
+Damodaran's June revision SLOWED near-term growth. `expansion` takes no
+`initial_growth`: it is a ramped segment with no revenue today, and
+`SegmentSpec` rejects `initial_growth` on any segment with `base_revenue == 0`.
 """
 
 from __future__ import annotations
@@ -88,6 +97,25 @@ _PRE_S2C_LATE_CLAIM = (
     "prospectus. Calibrate against SpaceX2026IPOUpdated.xlsx."
 )
 
+_CONFIRMED_INITIAL_GROWTH = {
+    "launch": (
+        0.0764,
+        "2025 launch revenue grew 7.64% (todo3 section 4). todo3 R3 records as "
+        "[C] that Damodaran SLOWED near-term launch growth in the June revision; "
+        "pinning year 1 to the observed rate is how that enters the model.",
+    ),
+    "connectivity": (
+        0.50,
+        "2025 Starlink revenue grew about 50% (todo3 section 4) -- the near-term "
+        "engine, on subscribers doubling from 5.0m to 10.3m.",
+    ),
+    "ai": (
+        0.22,
+        "2025 xAI revenue grew about 22% (todo3 section 4), which todo3 notes is "
+        "below the growth its own target-year revenue implies.",
+    ),
+}
+
 
 def _narrative(field, claim, confidence, three_p="probable", source="todo3"):
     return {
@@ -121,6 +149,16 @@ def _segment(name, *, margin_target, margin_claim, s2c_early, s2c_late,
     if revenue_target is not None:
         narratives.append(_narrative("revenue_target", revenue_claim, revenue_confidence, three_p=revenue_three_p, source="todo3 section 7"))
 
+    initial_growth = None
+    if name in _CONFIRMED_INITIAL_GROWTH and base_revenue > 0:
+        initial_growth, growth_claim = _CONFIRMED_INITIAL_GROWTH[name]
+        narratives.append(
+            _narrative(
+                "initial_growth", growth_claim, "confirmed",
+                three_p="probable", source="todo3 section 4",
+            )
+        )
+
     return {
         "name": name,
         "base_revenue": base_revenue,
@@ -132,6 +170,7 @@ def _segment(name, *, margin_target, margin_claim, s2c_early, s2c_late,
         "sales_to_capital_early": s2c_early,
         "sales_to_capital_late": s2c_late,
         "ramp_start_year": ramp_start_year,
+        "initial_growth": initial_growth,
         "narratives": narratives,
     }
 

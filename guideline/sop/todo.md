@@ -414,16 +414,27 @@ Still open from that review, deliberately out of scope:
 
 ### Known divergences from the source
 
-1. **Near-term growth runs the wrong way.** The engine's consolidated year-1
-   growth is **+55%** (both seeded cases) against todo3 section 4's *confirmed*
-   2025 actual of **+33%**. todo3 R3 tags as `[C]` that Damodaran's headline
-   revision was to **slow** near-term growth; this engine's single decaying-
-   growth curve makes year 1 structurally the fastest year and cannot express
-   that. Fixing it needs a second growth curve (an S-curve or logistic on
-   market share). Also note the consolidated growth path is **not monotone
-   decaying** -- year 7's growth rate exceeds year 6's in both cases (pre:
-   34.7% -> 38.5%; post: 41.2% -> 45.2%) when the expansion segment's ramp
-   switches on -- and that no test covers the consolidated path.
+1. **Near-term growth no longer runs the wrong way (closed 2026-08-11).** The
+   engine's consolidated year-1 growth was **+55%** (both seeded cases) against
+   todo3 section 4's *confirmed* 2025 actual of **+33%**, contradicting todo3
+   R3's `[C]`-tagged record that Damodaran's headline revision was to **slow**
+   near-term growth. Fixed by adding an `initial_growth` input (an anchored
+   growth curve that pins year 1 to an observed rate and lands exactly on
+   `target_revenue` at year n) and seeding it with todo3 section 4's confirmed
+   2025 segment actuals -- launch 7.64%, connectivity ~50%, ai ~22%; `expansion`
+   takes none, since it has no revenue today. Plan and design:
+   `.superpowers/sdd/2026-08-11-growth-curve-near-term/`.
+
+   Consolidated year-1 growth is now **+38.7%**: closer to the confirmed +33%,
+   and the residual traces to the base-revenue split, which the seed's own
+   narratives record as an assumption rather than a derivation (see
+   `_BASE_CLAIMS` in `apps/api/services/valuation_seed.py`), not a further
+   modelling gap.
+
+   The consolidated path's non-monotonicity at the expansion ramp is
+   **unchanged**: year 7's growth rate still exceeds year 6's in both cases
+   (pre: 37.3% -> 48.2%; post: 41.0% -> 55.7%) when the expansion segment's
+   ramp switches on, and no test covers the consolidated path.
 
 2. **`base_margin` contradicts its own documented contract.** `SegmentSpec`
    documents it as the R&D-adjusted operating margin, but the seeded values

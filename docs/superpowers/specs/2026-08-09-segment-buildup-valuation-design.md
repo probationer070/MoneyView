@@ -510,6 +510,18 @@ after the terminal-ROIC consistency remediation set `roic_stable` by the stated
 erosion policy (`(wacc_stable + marginal_roic) / 2`). See
 `2026-08-10-terminal-roic-consistency-design.md`.
 
+**Updated 2026-08-11.** Re-measured again after seeding `initial_growth` with todo3
+§4's confirmed 2025 segment growth actuals (launch 7.64%, connectivity ~50%,
+ai ~22%), which pins each segment's year-1 growth to its observed rate instead of
+the decaying curve's structural year-1 peak — see `guideline/sop/todo.md`'s Segment
+Build-Up Valuation track.
+
+```
+pre  EV=1,323.37bn  $536.43/share  TV share 94.74%  (he reports ~1,210bn, ~$100)
+post EV=1,309.85bn  $104.64/share basic, $105.92/share diluted  TV share 99.54%
+     (he reports ~1,220bn, ~$100)
+```
+
 Per §1.2, agreement would be evidence of nothing while the `[V]` inputs are
 uncalibrated, and disagreement is information about those guesses rather than a build
 failure. No test asserts agreement or disagreement; the gates in this section are
