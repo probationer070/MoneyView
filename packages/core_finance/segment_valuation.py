@@ -49,6 +49,25 @@ class SegmentSpec:
     revenue_target: float | None = None
     ramp_start_year: int = 1
 
+    def __post_init__(self) -> None:
+        if self.ramp_start_year < 1:
+            raise ValueError(
+                f"{self.name}: ramp_start_year must be at least 1, got "
+                f"{self.ramp_start_year}. Below 1 it produces a revenue path "
+                f"longer than the horizon, which zip() then truncates -- the "
+                f"target-year revenue silently misses its target."
+            )
+        if self.sales_to_capital_early <= 0:
+            raise ValueError(
+                f"{self.name}: sales_to_capital_early must be positive, got "
+                f"{self.sales_to_capital_early}"
+            )
+        if self.sales_to_capital_late <= 0:
+            raise ValueError(
+                f"{self.name}: sales_to_capital_late must be positive, got "
+                f"{self.sales_to_capital_late}"
+            )
+
     def target_revenue(self) -> float:
         """Revenue in the target year -- todo3 R1.
 
@@ -179,13 +198,15 @@ def reinvestment(revenues: list[float], spec: SegmentSpec) -> list[float]:
     mechanism in the template: there is no separate capex, depreciation or
     working-capital schedule to reconcile against.
 
-    Years before `ramp_start_year` book zero regardless of the revenue series.
-    For a segment ramping from a zero base the delta is already zero, so the
-    guard is redundant there in practice: `revenue_path` now raises on a
-    non-zero base combined with `ramp_start_year > 1`, so `run_case` can never
-    reach this function with that shape. The guard stays because this function
-    is public and takes an arbitrary revenues list, independent of how it was
-    produced.
+    Years before `ramp_start_year` book zero regardless of the revenue series. For
+    a segment ramping from a zero base the delta is already zero, so the guard is
+    redundant in practice -- `revenue_path` rejects a non-zero base combined with
+    `ramp_start_year > 1`, and `SegmentSpec` now rejects `ramp_start_year < 1`. It
+    stays because this function is public and takes an arbitrary revenues list.
+
+    The sales-to-capital ratios are no longer checked here. `SegmentSpec` validates
+    them at construction, which also covers a delayed segment whose early ratio no
+    year ever reaches -- a case this loop could not see.
     """
     amounts: list[float] = []
     previous = spec.base_revenue
@@ -200,10 +221,6 @@ def reinvestment(revenues: list[float], spec: SegmentSpec) -> list[float]:
             if year <= _EARLY_YEARS
             else spec.sales_to_capital_late
         )
-        if ratio <= 0:
-            raise ValueError(
-                f"{spec.name}: sales_to_capital must be positive, got {ratio}"
-            )
         amounts.append((revenue - previous) / ratio)
         previous = revenue
     return amounts
@@ -316,6 +333,19 @@ class CaseSpec:
             )
         if self.shares_basic <= 0:
             raise ValueError(f"shares_basic must be positive, got {self.shares_basic}")
+        if self.nol_balance < 0:
+            raise ValueError(
+                f"nol_balance must not be negative, got {self.nol_balance}. "
+                f"tax_path adds a negative balance to the taxable base, which "
+                f"overstates tax without raising."
+            )
+        if not 0.0 <= self.marginal_tax_rate <= 1.0:
+            raise ValueError(
+                f"marginal_tax_rate must be a decimal fraction between 0 and 1, "
+                f"got {self.marginal_tax_rate}. A percentage such as 25.0 makes "
+                f"(1 - tau) negative and returns a large negative valuation with "
+                f"no error."
+            )
 
     @property
     def horizon(self) -> int:

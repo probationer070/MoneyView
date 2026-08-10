@@ -208,20 +208,6 @@ def test_ramped_segment_books_no_reinvestment_before_ramp_start():
     assert all(value > 0 for value in result[6:])
 
 
-def test_reinvestment_rejects_non_positive_sales_to_capital():
-    spec = SegmentSpec(
-        name="s",
-        base_revenue=10.0,
-        base_margin=0.0,
-        margin_target=0.2,
-        sales_to_capital_early=0.0,
-        sales_to_capital_late=1.0,
-        revenue_target=20.0,
-    )
-    with pytest.raises(ValueError, match="sales_to_capital"):
-        reinvestment([12.0], spec)
-
-
 def test_no_tax_while_losses_shield_income():
     """15 of shield against 10/10/10: year 1 fully sheltered, year 2 half, year 3 none."""
     taxes = tax_path([10.0, 10.0, 10.0], marginal_rate=0.25, nol_balance=15.0)
@@ -540,3 +526,108 @@ def test_terminal_reinvestment_rate_stays_below_one_for_any_admitted_case():
     for roic in (0.0826, 0.10, 0.12, 0.25, 0.40, 0.50625):
         result = run_case(_case(roic_stable=roic), [_launch()])
         assert 0 < result.terminal_reinvestment_rate < 1, roic
+
+
+def _segment(**overrides) -> dict:
+    """Valid SegmentSpec keyword arguments, for boundary tests to perturb."""
+    base = dict(
+        name="s",
+        base_revenue=10.0,
+        base_margin=0.0,
+        margin_target=0.20,
+        sales_to_capital_early=1.0,
+        sales_to_capital_late=1.5,
+        revenue_target=100.0,
+    )
+    base.update(overrides)
+    return base
+
+
+# --- marginal_tax_rate -------------------------------------------------------
+
+def test_marginal_tax_rate_just_below_zero_raises():
+    with pytest.raises(ValueError, match="marginal_tax_rate"):
+        _case(marginal_tax_rate=-1e-9)
+
+
+def test_marginal_tax_rate_just_above_one_raises():
+    with pytest.raises(ValueError, match="marginal_tax_rate"):
+        _case(marginal_tax_rate=1 + 1e-9)
+
+
+def test_marginal_tax_rate_as_a_percentage_raises():
+    """The realistic slip: 25 meaning 25%, which makes (1 - tau) equal -24."""
+    with pytest.raises(ValueError, match="decimal fraction"):
+        _case(marginal_tax_rate=25.0)
+
+
+def test_marginal_tax_rate_of_zero_is_accepted():
+    assert _case(marginal_tax_rate=0.0).marginal_tax_rate == 0.0
+
+
+def test_marginal_tax_rate_of_one_is_accepted():
+    assert _case(marginal_tax_rate=1.0).marginal_tax_rate == 1.0
+
+
+# --- nol_balance -------------------------------------------------------------
+
+def test_negative_nol_balance_raises():
+    """A negative balance is added to the taxable base by tax_path, producing a
+    41.7% effective rate against a 25% marginal rate with no error."""
+    with pytest.raises(ValueError, match="nol_balance"):
+        _case(nol_balance=-1e-9)
+
+
+def test_zero_nol_balance_is_accepted():
+    assert _case(nol_balance=0.0).nol_balance == 0.0
+
+
+# --- ramp_start_year ---------------------------------------------------------
+
+def test_ramp_start_year_of_zero_raises():
+    with pytest.raises(ValueError, match="ramp_start_year"):
+        SegmentSpec(**_segment(ramp_start_year=0))
+
+
+def test_negative_ramp_start_year_raises():
+    with pytest.raises(ValueError, match="ramp_start_year"):
+        SegmentSpec(**_segment(ramp_start_year=-1))
+
+
+def test_ramp_start_year_of_one_is_accepted():
+    assert SegmentSpec(**_segment(ramp_start_year=1)).ramp_start_year == 1
+
+
+# --- sales_to_capital --------------------------------------------------------
+
+def test_zero_sales_to_capital_early_raises():
+    with pytest.raises(ValueError, match="sales_to_capital_early"):
+        SegmentSpec(**_segment(sales_to_capital_early=0.0))
+
+
+def test_negative_sales_to_capital_early_raises():
+    with pytest.raises(ValueError, match="sales_to_capital_early"):
+        SegmentSpec(**_segment(sales_to_capital_early=-1.0))
+
+
+def test_zero_sales_to_capital_late_raises():
+    with pytest.raises(ValueError, match="sales_to_capital_late"):
+        SegmentSpec(**_segment(sales_to_capital_late=0.0))
+
+
+def test_negative_sales_to_capital_late_raises():
+    with pytest.raises(ValueError, match="sales_to_capital_late"):
+        SegmentSpec(**_segment(sales_to_capital_late=-1.0))
+
+
+def test_a_small_positive_sales_to_capital_is_accepted():
+    assert SegmentSpec(**_segment(sales_to_capital_early=1e-6)).sales_to_capital_early == 1e-6
+
+
+def test_an_early_ratio_is_validated_even_when_no_year_reaches_it():
+    """The gap this closes: a delayed segment never exercises its early ratio, so
+    a lazy in-loop check would never fire for it."""
+    with pytest.raises(ValueError, match="sales_to_capital_early"):
+        SegmentSpec(**_segment(
+            base_revenue=0.0, ramp_start_year=7, sales_to_capital_early=-5.0
+        ))
