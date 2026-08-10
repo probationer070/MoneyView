@@ -176,50 +176,59 @@ terminal return:
 | `roic_stable` | **chosen** by the stated competitive-erosion policy below; a judgement, not a derivation |
 | `terminal_reinvestment_rate` | **derived** from the chosen `roic_stable` as `g_stable / roic_stable` |
 
-The policy this repo's seeded cases adopt:
+> **Superseded twice, 2026-08-10.** This section originally specified a *per-case*
+> midpoint policy, `roic_stable = (wacc_stable + marginal_roic) / 2`, giving 0.3514
+> pre and 0.2454 post. A later adversarial review showed that policy made terminal
+> value a function of the least-supported inputs and pushed the pre/post EV ratio
+> *further* from the source's own finding (0.908, against a shared value's 0.978 and
+> the source's 1.008) — degrading the very comparison the seed pair exists to
+> demonstrate. It also showed the attribution below was untested and does not hold.
+> The original text is kept because the reasoning trail is worth more than a document
+> that reads as if it were right the first time. **What actually shipped is stated
+> after it.**
+>
+> *Original, superseded:* the policy was `(wacc_stable + marginal_roic) / 2`, yielding
+> 0.351 pre / 0.245 post and EV 1333.2 / 1210.0. The post case landing within 0.8% of
+> the published 1220 was presented as corroboration, and the pre case's 10% overshoot
+> was attributed to that case's `[V]` sales-to-capital guesses. **That attribution was
+> asserted without testing and is false:** setting the pre-case ratios to the
+> post-case values still leaves a +3.6% overshoot, and closing it fully would require
+> pre-case sales-to-capital *below* post-case, contradicting todo3 §3's `[C]` record
+> that Damodaran *lowered* them. Recorded because asserting an untested claim is the
+> exact failure this document was written to correct, and it recurred inside the
+> correction.
 
-```
-roic_stable = wacc_stable + (marginal_roic − wacc_stable) / 2
-            = (wacc_stable + marginal_roic) / 2
-```
+**What shipped.** A **single shared** `roic_stable = 0.33` across both cases, written
+as a literal in the seed. Chosen to sit below both cases' marginal returns and inside
+the engine's capital-intensity tolerance for both, so the pre/post comparison reflects
+the change in business assumptions rather than a per-case terminal parameter.
 
-Stated precisely: **half of the excess return over the cost of capital survives in
-perpetuity, and half competes away.** The prose form "half the excess return competes
-away" is ambiguous about which half, so the algebra above governs.
+The pre-case `sales_to_capital_late` values were also lowered, from `2.0 / 2.0 / 1.2 /
+1.5` to `1.6 / 1.6 / 1.05 / 1.5`. Independent grounds, not fitting: the old values
+implied a **58% after-tax marginal return in perpetuity**, which is not credible for
+any business. The new values remain strictly above the post-prospectus ratios for the
+three segments todo3 §3 records as lowered, and tie for `expansion`, which todo3 tags
+`[V]` "assumed unchanged".
 
-This is a modelling policy, not a result. A different case may justify faster or
-slower erosion; the engine's guard (§2.2.1) constrains only the direction, never the
-speed.
+| Case | marginal ROIC | `roic_stable` | implied capital intensity | EV | published |
+| --- | --- | --- | --- | --- | --- |
+| pre-prospectus | 0.4961 | **0.33** | +50.3% | **1323.7** | 1210 |
+| post-prospectus | 0.3715 | **0.33** | +12.6% | **1295.9** | 1220 |
 
-| Case | marginal ROIC | seeded `roic_stable` | EV | published |
-| --- | --- | --- | --- | --- |
-| pre-prospectus | 0.623 | **0.351** | 1333.2 | 1210 |
-| post-prospectus | 0.408 | **0.245** | **1210.0** | **1220** |
+**Both figures moved away from the published references, and that is the honest
+outcome.** The earlier near-agreement on the post case was an artifact of a parameter
+fitted per case; it disappears once the parameter is constrained on principle. The
+reference figures — 1210 pre, 1220 post — come from `guideline/sop/todo3.md` §3 and
+are only as good as that reconstruction; the general framework being applied here is
+standard Damodaran methodology, but that grounding supports the *method*, not these
+particular company figures.
 
-The post case lands within 0.8% of the published figure. State that carefully: the
-agreement is **corroborating evidence that the revised assumptions are directionally
-consistent with the published reference, not independent validation and not a
-calibration target.** It cannot be independent validation, because the reference
-figure was available throughout and influenced the model architecture and several
-other inputs. What changed from the 2026-08-09 spec is narrower and still worth
-having: the gap turns out to carry information, where that spec concluded it carried
-none.
+**The model still produces the pre/post direction opposite to the source.** todo3 §3
+records enterprise value rising slightly, $1.21T → $1.22T. This model has it falling,
+1323.7 → 1295.9. That is an open discrepancy, recorded in
+`guideline/sop/todo.md`, not a reproduction.
 
-The reference figures themselves — EV 1220, equity 1297, ~$100/share — come from
-`guideline/sop/todo3.md` §3 and §6 and are only as good as that reconstruction. The
-general framework being applied here (linking growth, sales-to-capital, reinvestment
-and return on capital) is standard Damodaran methodology, but that grounding supports
-the *method*, not these particular company figures.
-
-The pre case overshoots by 10%. That difference traces to one identifiable input: the
-pre-case `sales_to_capital_late` values (2.0 for launch and connectivity, against 1.5
-post) are `[V]` guesses invented to reflect todo3 §3's statement that Damodaran
-*lowered* sales-to-capital after the prospectus. Higher sales-to-capital means less
-capital per dollar of revenue, hence a higher marginal return, hence a higher
-midpoint. **A disagreement that points at a specific guessed input is the diagnostic
-behaviour this feature was supposed to have.**
-
-Values are written as literals in the seed with the derivation in the claim text, not
+Values are written as literals in the seed with the reasoning in the claim text, not
 computed at seed time — a seed that recomputes its own inputs cannot be checked
 against anything.
 
@@ -279,8 +288,8 @@ it is the stale-doc failure that repo already has a commit history of fixing.
    the seed's segment mix ever changes, whereas gate 1 catches a weighting bug only as
    a side effect of the numbers happening to differ.
 
-**Recorded, not gated:** the post-prospectus EV of 1210.0 against Damodaran's 1220,
-and the pre-prospectus 1333.2 against 1210 with §2.5's explanation. Recorded in this
+**Recorded, not gated:** the post-prospectus EV of **1295.9** against Damodaran's 1220,
+and the pre-prospectus **1323.7** against 1210, with §2.5's explanation. Recorded in this
 document, not computed by `/run` — the 2026-08-09 spec §6 establishes why
 company-specific constants do not belong in a generic engine.
 
