@@ -2,7 +2,6 @@ import pytest
 
 from apps.api.services.valuation_case import (
     CaseNotFound,
-    NARRATED_FIELDS,
     create_case,
     list_cases,
     load_case,
@@ -17,10 +16,15 @@ def test_create_and_load_round_trips_every_field():
     assert loaded["case_name"] == "test_case"
     assert loaded["ticker"] is None
     assert loaded["segments"][0]["market_share_target"] == pytest.approx(0.70)
-    # -2, not -1: the default segment payload leaves two NARRATED_FIELDS unset
-    # (revenue_target, since tam_target/market_share_target are used instead;
-    # and initial_growth, which no default segment states).
-    assert len(loaded["segments"][0]["narratives"]) == len(NARRATED_FIELDS) - 2
+    # Field names written out deliberately, not derived from NARRATED_FIELDS: a
+    # count check can't tell "right fields, right count" from "wrong fields,
+    # right count" -- e.g. a typo'd entry in NARRATED_FIELDS would leave the
+    # list length unchanged and this test would keep passing while the real
+    # narrative rule silently misfires for the misspelled field.
+    assert {n["input_field"] for n in loaded["segments"][0]["narratives"]} == {
+        "base_revenue", "base_margin", "tam_target", "market_share_target",
+        "margin_target", "sales_to_capital_early", "sales_to_capital_late",
+    }
 
 
 def test_segment_stating_both_revenue_target_and_tam_share_is_rejected():

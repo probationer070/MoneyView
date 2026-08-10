@@ -2,7 +2,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from apps.api.main import app
-from tests.api.valuation_fixtures import _case_payload
+from tests.api.valuation_fixtures import _case_payload, _narrative
 
 client = TestClient(app)
 
@@ -84,6 +84,26 @@ def test_create_rejects_negative_shares_new():
     payload = _case_payload(case_name="negative_new_shares", shares_new=-5.0)
     response = client.post("/api/v1/valuation/cases", json=payload)
     assert response.status_code == 422
+
+
+def test_create_rejects_initial_growth_at_or_below_negative_one():
+    """Pydantic's Field(gt=-1) on SegmentInput.initial_growth is the bound a real
+    client hits, separate from SegmentSpec's own <= -1 rejection in the engine.
+    The narrative is included so a 422 here proves the numeric constraint fired,
+    not the narrative rule -- without it this would pass for the wrong reason."""
+    payload = _case_payload(case_name="growth_at_floor")
+    payload["segments"][0]["initial_growth"] = -1.0
+    payload["segments"][0]["narratives"].append(_narrative("initial_growth"))
+    response = client.post("/api/v1/valuation/cases", json=payload)
+    assert response.status_code == 422
+    # FastAPI's own request validation, not the narrative rule: detail is a list
+    # of Pydantic error objects, and this one names the field via `loc` and the
+    # bound via `type`, not a plain string -- unlike the narrative rule's 422s.
+    errors = response.json()["detail"]
+    assert any(
+        error["type"] == "greater_than" and "initial_growth" in error["loc"]
+        for error in errors
+    )
 
 
 def test_run_exposes_the_terminal_consistency_diagnostics():
