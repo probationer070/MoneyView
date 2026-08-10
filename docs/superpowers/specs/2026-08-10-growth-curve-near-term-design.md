@@ -94,11 +94,23 @@ Same technique, same argument and same 200-step loop as the existing
 `_solve_first_year_growth`. No new dependency.
 
 That derivative argument holds **only while every factor `(1 + g_t)` stays positive**,
-so the bisection bracket must be chosen to guarantee it rather than assumed. The lower
-bound has to keep the deepest point of the dip above `−1`: with `g_init` and
-`g_stable` both small, the trough sits near `min(g_init, g_stable) + a`, so a lower
-bound of `−0.99 + min(g_init, g_stable)` is safe and the implementation should compute
-it rather than hardcode `−0.99`.
+so the bisection bracket must be chosen to guarantee it rather than assumed.
+
+The linear term never falls below `min(g_init, g_stable)`, and `sin ≤ 1`, so for
+`a < 0` the deepest point satisfies `g_t ≥ min(g_init, g_stable) + a`. Keeping that
+above `−1` requires
+
+```
+a_low = −0.99 − min(g_init, g_stable)
+```
+
+which pins the trough at exactly `−0.99` for any `min`. The implementation must
+compute this rather than hardcode `−0.99`.
+
+*(Corrected during planning. This section first gave `−0.99 + min(g_init, g_stable)`,
+which is safe only for non-negative growth: at `min = −0.5` it yields a trough of
+`−1.99`, a negative growth factor, and a solver whose monotonicity precondition no
+longer holds. `initial_growth ≤ −1` must also be rejected outright.)*
 
 **Negative `a` is allowed and is not an error.** A segment whose observed growth
 already overshoots what the endpoint needs gets a dip rather than a hump. The
