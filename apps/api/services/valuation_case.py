@@ -70,6 +70,22 @@ def _validate_narratives(segment: dict) -> None:
     stated = {f for f in NARRATED_FIELDS if segment.get(f) is not None}
     claimed = {n["input_field"] for n in segment.get("narratives", [])}
 
+    # Minor B: `SegmentSpec.target_revenue()` gives an explicit `revenue_target`
+    # precedence over `tam_target x market_share_target`, so stating both means
+    # one of the two narrated numbers never enters the model. Reject the
+    # combination outright rather than let a narrative silently go unused.
+    if (
+        segment.get("revenue_target") is not None
+        and segment.get("tam_target") is not None
+        and segment.get("market_share_target") is not None
+    ):
+        raise ValueError(
+            f"segment '{name}': states tam_target, market_share_target AND "
+            f"revenue_target. target_revenue() gives revenue_target precedence, "
+            f"which would silently ignore the tam x share pair -- state this "
+            f"segment's revenue endpoint one way or the other."
+        )
+
     for field in sorted(stated - claimed):
         raise ValueError(
             f"segment '{name}': input '{field}' has no narrative claim. Every "

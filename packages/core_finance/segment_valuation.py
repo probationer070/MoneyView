@@ -359,6 +359,16 @@ class CaseSpec:
                 f"(1 - tau) negative and returns a large negative valuation with "
                 f"no error."
             )
+        if self.roic_stable <= 0:
+            raise ValueError(f"roic_stable must be positive, got {self.roic_stable}")
+        if self.cash < 0:
+            raise ValueError(f"cash must not be negative, got {self.cash}")
+        if self.debt < 0:
+            raise ValueError(f"debt must not be negative, got {self.debt}")
+        if self.ipo_proceeds < 0:
+            raise ValueError(f"ipo_proceeds must not be negative, got {self.ipo_proceeds}")
+        if self.shares_new < 0:
+            raise ValueError(f"shares_new must not be negative, got {self.shares_new}")
 
     @property
     def horizon(self) -> int:
@@ -532,7 +542,11 @@ def run_case(case: CaseSpec, segments: list[SegmentSpec]) -> CaseResult:
     # target year and sales_to_capital_late does not change afterwards, so
     # nothing in the model produces the improvement in returns such a case
     # asserts.
-    if case.roic_stable > target_year_marginal_roic:
+    # Tolerant of floating-point representation: a user who types the module's
+    # own consistency formula (sales_to_capital_late x margin_target x (1 - tau))
+    # is not guaranteed to land on a bit-identical float to what marginal_roic
+    # computes here -- the floor guard below already nudges for the same reason.
+    if case.roic_stable > target_year_marginal_roic * (1 + 1e-9):
         raise ValueError(
             f"roic_stable {case.roic_stable:.4%} exceeds the target-year marginal "
             f"return on new capital {target_year_marginal_roic:.4%}. Margins have "
@@ -592,9 +606,20 @@ def run_case(case: CaseSpec, segments: list[SegmentSpec]) -> CaseResult:
         pv_terminal=pv_terminal,
         enterprise_value=enterprise_value,
         equity_value=equity_value,
+        # C1: proceeds and the shares that raised them must move together. Basic
+        # answers "what are existing holders' shares worth before the raise" --
+        # EV + cash - debt, WITHOUT ipo_proceeds -- over shares_basic alone.
+        # Pairing proceeds-in with only-old-shares-out (the historical bug)
+        # overstated this by ipo_proceeds / shares_basic.
         value_per_share_basic=calculate_intrinsic_value_per_share(
-            equity_value, case.shares_basic
+            calculate_equity_value(
+                enterprise_value=enterprise_value,
+                net_debt=case.debt - case.cash,
+            ),
+            case.shares_basic,
         ),
+        # Diluted answers "what is a share worth post-money" -- proceeds AND the
+        # new shares that raised them both in.
         value_per_share_diluted=calculate_intrinsic_value_per_share(
             equity_value, case.shares_basic + case.shares_new
         ),

@@ -286,6 +286,37 @@ def _case(**overrides) -> CaseSpec:
     return CaseSpec(**defaults)
 
 
+def test_case_spec_rejects_negative_cash():
+    with pytest.raises(ValueError, match="cash must not be negative"):
+        _case(cash=-1.0)
+
+
+def test_case_spec_rejects_negative_debt():
+    with pytest.raises(ValueError, match="debt must not be negative"):
+        _case(debt=-1.0)
+
+
+def test_case_spec_rejects_negative_ipo_proceeds():
+    with pytest.raises(ValueError, match="ipo_proceeds must not be negative"):
+        _case(ipo_proceeds=-1.0)
+
+
+def test_case_spec_rejects_negative_shares_new():
+    """I3: shares_new = -5.0 previously produced a diluted value per share
+    ABOVE basic, which is impossible for a real share count."""
+    with pytest.raises(ValueError, match="shares_new must not be negative"):
+        _case(shares_new=-5.0)
+
+
+def test_case_spec_rejects_zero_roic_stable_with_a_value_error():
+    """Minor A: the floor guard divides by roic_stable. Unreachable through the
+    API (Field(gt=0)) but reachable by any direct library consumer, and
+    run_case's contract is that invalid input raises ValueError, not
+    ZeroDivisionError."""
+    with pytest.raises(ValueError, match="roic_stable must be positive"):
+        _case(roic_stable=0.0)
+
+
 def test_terminal_value_discounts_growth_consistent_reinvestment():
     value = terminal_value(
         ebit_n=100.0,
@@ -349,14 +380,29 @@ def test_equity_bridge_pins_the_identity_against_literal_arithmetic():
     )
 
 
-def test_value_per_share_uses_basic_plus_new_shares():
+def test_value_per_share_basic_is_ex_proceeds_diluted_is_post_money():
+    """C1. Proceeds and the shares that raised them must move together.
+
+    `value_per_share_diluted` is the post-money number: ipo_proceeds and
+    shares_new both in. `value_per_share_basic` answers a different question --
+    what existing holders' shares were worth before the raise -- so it must
+    exclude ipo_proceeds too, not just the new shares. The old formula divided
+    an equity value that INCLUDED ipo_proceeds by shares_basic alone, which
+    overstated the per-share value by ipo_proceeds / shares_basic.
+
+    Deliberately does not assert value_per_share_basic < value_per_share_diluted
+    in general -- that ordering depends on whether proceeds per new share
+    exceed pre-money value per share, which is a fact about the inputs, not an
+    identity of the formula. Each side is checked against its own explicit
+    formula instead.
+    """
     case = _case()
     result = run_case(case, [_launch()])
     assert result.value_per_share_diluted == pytest.approx(
         result.equity_value / (case.shares_basic + case.shares_new)
     )
     assert result.value_per_share_basic == pytest.approx(
-        result.equity_value / case.shares_basic
+        (result.equity_value - case.ipo_proceeds) / case.shares_basic
     )
 
 
@@ -533,8 +579,22 @@ def test_terminal_roic_moderately_below_the_marginal_return_is_accepted():
 
 def test_terminal_roic_exactly_at_the_marginal_return_is_accepted():
     """The ceiling boundary is inclusive: equality is consistent, not
-    contradictory."""
-    result = run_case(_case(roic_stable=0.50625), [_launch()])
+    contradictory.
+
+    I4: computed as a product, not typed as a literal. A user who follows the
+    module docstring's own formula -- sales_to_capital_late x margin_target x
+    (1 - tau) -- and enters the result is not guaranteed a bit-identical float
+    to what `marginal_roic` computes internally. For `_launch()` this product
+    is 0.5062500000000001, not the literal 0.50625, and the ceiling must
+    tolerate that representation noise rather than reject the exactly-consistent
+    value.
+    """
+    launch = _launch()
+    case = _case()
+    roic_stable = launch.sales_to_capital_late * launch.margin_target * (
+        1 - case.marginal_tax_rate
+    )
+    result = run_case(_case(roic_stable=roic_stable), [_launch()])
     assert result.marginal_roic_target_year == pytest.approx(0.50625)
 
 

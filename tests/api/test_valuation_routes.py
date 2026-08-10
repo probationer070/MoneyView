@@ -67,6 +67,25 @@ def test_model_invalid_inputs_are_422_not_500():
     assert "riskfree" in response.json()["detail"]
 
 
+def test_create_without_the_equity_bridge_is_a_422():
+    """I3: cash, debt, ipo_proceeds and shares_new have no default -- a POST
+    that omits the bridge must not silently value a debt-free, cash-free firm
+    with no pending raise."""
+    payload = _case_payload(case_name="no_bridge")
+    for field in ("cash", "debt", "ipo_proceeds", "shares_new"):
+        del payload[field]
+    response = client.post("/api/v1/valuation/cases", json=payload)
+    assert response.status_code == 422
+
+
+def test_create_rejects_negative_shares_new():
+    """I3: a negative shares_new previously produced a diluted value per share
+    above basic, which is impossible."""
+    payload = _case_payload(case_name="negative_new_shares", shares_new=-5.0)
+    response = client.post("/api/v1/valuation/cases", json=payload)
+    assert response.status_code == 422
+
+
 def test_run_exposes_the_terminal_consistency_diagnostics():
     case_id = client.post(
         "/api/v1/valuation/cases", json=_case_payload(case_name="diagnostics")

@@ -78,7 +78,7 @@ def test_seeded_narrative_confidence_tags_match_source_exactly():
 
     expected = {
         (PRE_CASE_NAME, "launch"): {
-            "base_revenue": "derived",
+            "base_revenue": "assumed",
             "base_margin": "assumed",
             "tam_target": "confirmed",
             "market_share_target": "confirmed",
@@ -87,7 +87,7 @@ def test_seeded_narrative_confidence_tags_match_source_exactly():
             "sales_to_capital_late": "assumed",
         },
         (PRE_CASE_NAME, "connectivity"): {
-            "base_revenue": "derived",
+            "base_revenue": "assumed",
             "base_margin": "assumed",
             "tam_target": "confirmed",
             "market_share_target": "confirmed",
@@ -96,7 +96,7 @@ def test_seeded_narrative_confidence_tags_match_source_exactly():
             "sales_to_capital_late": "assumed",
         },
         (PRE_CASE_NAME, "ai"): {
-            "base_revenue": "derived",
+            "base_revenue": "assumed",
             "base_margin": "assumed",
             "revenue_target": "confirmed",
             "margin_target": "derived",
@@ -104,15 +104,15 @@ def test_seeded_narrative_confidence_tags_match_source_exactly():
             "sales_to_capital_late": "assumed",
         },
         (PRE_CASE_NAME, "expansion"): {
-            "base_revenue": "derived",
+            "base_revenue": "assumed",
             "base_margin": "assumed",
-            "revenue_target": "confirmed",
-            "margin_target": "confirmed",
+            "revenue_target": "assumed",
+            "margin_target": "assumed",
             "sales_to_capital_early": "assumed",
             "sales_to_capital_late": "assumed",
         },
         (POST_CASE_NAME, "launch"): {
-            "base_revenue": "derived",
+            "base_revenue": "assumed",
             "base_margin": "assumed",
             "tam_target": "confirmed",
             "market_share_target": "confirmed",
@@ -121,7 +121,7 @@ def test_seeded_narrative_confidence_tags_match_source_exactly():
             "sales_to_capital_late": "assumed",
         },
         (POST_CASE_NAME, "connectivity"): {
-            "base_revenue": "derived",
+            "base_revenue": "assumed",
             "base_margin": "assumed",
             "tam_target": "confirmed",
             "market_share_target": "confirmed",
@@ -130,7 +130,7 @@ def test_seeded_narrative_confidence_tags_match_source_exactly():
             "sales_to_capital_late": "assumed",
         },
         (POST_CASE_NAME, "ai"): {
-            "base_revenue": "derived",
+            "base_revenue": "assumed",
             "base_margin": "assumed",
             "revenue_target": "confirmed",
             "margin_target": "confirmed",
@@ -138,10 +138,10 @@ def test_seeded_narrative_confidence_tags_match_source_exactly():
             "sales_to_capital_late": "assumed",
         },
         (POST_CASE_NAME, "expansion"): {
-            "base_revenue": "derived",
+            "base_revenue": "assumed",
             "base_margin": "assumed",
-            "revenue_target": "confirmed",
-            "margin_target": "confirmed",
+            "revenue_target": "assumed",
+            "margin_target": "assumed",
             "sales_to_capital_early": "assumed",
             "sales_to_capital_late": "assumed",
         },
@@ -158,17 +158,22 @@ def test_seeded_narrative_three_p_tags_match_source_exactly():
     literal expected mapping written independently of the seed module's own
     constants, mirroring the confidence test above.
 
-    The three placeholder inputs -- base_margin, sales_to_capital_early,
-    sales_to_capital_late -- are self-described in their own claim text as
-    uncalibrated ("Placeholder. ... Calibrate against
-    SpaceX2026IPOUpdated.xlsx.") and cannot honestly sit at Probable on a
-    Possible -> Plausible -> Probable scale. Every confirmed or derived input
-    stays at Probable; only those three placeholders are Plausible."""
+    base_margin, sales_to_capital_early and sales_to_capital_late are
+    self-described in their own claim text as uncalibrated ("Placeholder. ...
+    Calibrate against SpaceX2026IPOUpdated.xlsx.") and cannot honestly sit at
+    Probable on a Possible -> Plausible -> Probable scale.
+
+    base_revenue is Plausible too (I9): only the segment TOTAL is derived from
+    todo3 section 6's trailing multiples, and the split across segments is an
+    assumption the source does not support -- see the seed module's
+    `_BASE_CLAIMS`. So is expansion's revenue_target and margin_target: todo3
+    section 3 tags both `[V]` ("assumed unchanged") in BOTH cases, not
+    confirmed."""
     ensure_valuation_cases_seeded()
 
     expected = {
         (PRE_CASE_NAME, "launch"): {
-            "base_revenue": "probable",
+            "base_revenue": "plausible",
             "base_margin": "plausible",
             "tam_target": "probable",
             "market_share_target": "probable",
@@ -177,7 +182,7 @@ def test_seeded_narrative_three_p_tags_match_source_exactly():
             "sales_to_capital_late": "plausible",
         },
         (PRE_CASE_NAME, "connectivity"): {
-            "base_revenue": "probable",
+            "base_revenue": "plausible",
             "base_margin": "plausible",
             "tam_target": "probable",
             "market_share_target": "probable",
@@ -186,7 +191,7 @@ def test_seeded_narrative_three_p_tags_match_source_exactly():
             "sales_to_capital_late": "plausible",
         },
         (PRE_CASE_NAME, "ai"): {
-            "base_revenue": "probable",
+            "base_revenue": "plausible",
             "base_margin": "plausible",
             "revenue_target": "probable",
             "margin_target": "probable",
@@ -194,15 +199,15 @@ def test_seeded_narrative_three_p_tags_match_source_exactly():
             "sales_to_capital_late": "plausible",
         },
         (PRE_CASE_NAME, "expansion"): {
-            "base_revenue": "probable",
+            "base_revenue": "plausible",
             "base_margin": "plausible",
-            "revenue_target": "probable",
-            "margin_target": "probable",
+            "revenue_target": "plausible",
+            "margin_target": "plausible",
             "sales_to_capital_early": "plausible",
             "sales_to_capital_late": "plausible",
         },
         (POST_CASE_NAME, "launch"): {
-            "base_revenue": "probable",
+            "base_revenue": "plausible",
             "base_margin": "plausible",
             "tam_target": "probable",
             "market_share_target": "probable",
@@ -211,7 +216,7 @@ def test_seeded_narrative_three_p_tags_match_source_exactly():
             "sales_to_capital_late": "plausible",
         },
         (POST_CASE_NAME, "connectivity"): {
-            "base_revenue": "probable",
+            "base_revenue": "plausible",
             "base_margin": "plausible",
             "tam_target": "probable",
             "market_share_target": "probable",
@@ -220,7 +225,7 @@ def test_seeded_narrative_three_p_tags_match_source_exactly():
             "sales_to_capital_late": "plausible",
         },
         (POST_CASE_NAME, "ai"): {
-            "base_revenue": "probable",
+            "base_revenue": "plausible",
             "base_margin": "plausible",
             "revenue_target": "probable",
             "margin_target": "probable",
@@ -228,10 +233,10 @@ def test_seeded_narrative_three_p_tags_match_source_exactly():
             "sales_to_capital_late": "plausible",
         },
         (POST_CASE_NAME, "expansion"): {
-            "base_revenue": "probable",
+            "base_revenue": "plausible",
             "base_margin": "plausible",
-            "revenue_target": "probable",
-            "margin_target": "probable",
+            "revenue_target": "plausible",
+            "margin_target": "plausible",
             "sales_to_capital_early": "plausible",
             "sales_to_capital_late": "plausible",
         },
@@ -246,7 +251,12 @@ def test_seeded_narrative_three_p_tags_match_source_exactly():
 def test_below_probable_lists_exactly_the_placeholder_inputs_for_post_case():
     """The whole point of storing three_p: an uncalibrated placeholder input has
     to actually show up in below_probable, or the honesty mechanism is silently
-    empty. Exactly the three placeholder fields per segment, four segments."""
+    empty.
+
+    Four placeholder fields per segment (base_revenue, base_margin,
+    sales_to_capital_early, sales_to_capital_late), four segments = 16, plus
+    expansion's revenue_target and margin_target (I9: todo3 tags both `[V]`
+    "assumed unchanged", not confirmed) = 18."""
     ensure_valuation_cases_seeded()
     below = _run(POST_CASE_NAME)["below_probable"]
 
@@ -254,10 +264,16 @@ def test_below_probable_lists_exactly_the_placeholder_inputs_for_post_case():
     expected_pairs = {
         (segment, field)
         for segment in ("launch", "connectivity", "ai", "expansion")
-        for field in ("base_margin", "sales_to_capital_early", "sales_to_capital_late")
+        for field in (
+            "base_revenue", "base_margin",
+            "sales_to_capital_early", "sales_to_capital_late",
+        )
+    } | {
+        ("expansion", "revenue_target"),
+        ("expansion", "margin_target"),
     }
     assert pairs == expected_pairs
-    assert len(below) == 12
+    assert len(below) == 18
     assert all(item["three_p"] == "plausible" for item in below)
 
 

@@ -35,10 +35,12 @@ from apps.api.services.valuation_case import create_case, list_cases
 PRE_CASE_NAME = "spacex_2026_04_pre_prospectus"
 POST_CASE_NAME = "spacex_2026_06_post_prospectus"
 
-# Base-year (FY2025) figures. Revenues are [D]: todo3 section 6 derives 2025
-# revenue twice from trailing multiples -- 1250/80.13 and 1750/112.18 both give
-# 15.60 -- and these four sum to 15.6. Margins are [V] and do not reconcile with
-# either base-year EBIT figure todo3 quotes; see the design spec, section 6.
+# Base-year (FY2025) figures. Only the TOTAL is derived: todo3 section 6
+# derives 2025 revenue twice from trailing multiples -- 1250/80.13 and
+# 1750/112.18, both giving 15.60 -- and these four sum to 15.6. The SPLIT
+# across segments is an assumption the source does not support. Margins are
+# [V] and do not reconcile with either base-year EBIT figure todo3 quotes; see
+# the design spec, section 6.
 _BASE = {
     "launch": (4.1, -0.10),
     "connectivity": (11.4, 0.02),
@@ -47,9 +49,23 @@ _BASE = {
 }
 
 _BASE_CLAIMS = {
-    "launch": "2025 launch revenue, backed out of trailing EV/Sales of 80.13x at $1.25T.",
-    "connectivity": "2025 Starlink revenue; ~+50% growth on 10.3m subscribers at $66/mo ARPU.",
-    "ai": "2025 xAI revenue, pre-Cursor; ~+22% growth, below the implied path.",
+    "launch": (
+        "The segment split is an assumption, not a derivation: only the total "
+        "2025 revenue (~$15.6bn) is derived, from todo3 section 6's two "
+        "trailing-multiple computations (1250/80.13 and 1750/112.18, both "
+        "$15.60bn). The 4.1 / 11.4 / 0.1 / 0.0 split across launch, "
+        "connectivity, ai and expansion is not supported by the source."
+    ),
+    "connectivity": (
+        "Split assumption -- see the 'launch' claim for the derived total. "
+        "Context, not derivation: Starlink reported ~10.3m subscribers at "
+        "~$66/mo ARPU in Q1 2026 (10.3e6 x 66 x 12 = $8.16bn annualized), 40% "
+        "below this segment's $11.4bn and from a different period than FY2025."
+    ),
+    "ai": (
+        "Split assumption -- see the 'launch' claim for the derived total. No "
+        "independent corroboration for the 0.1 figure in the source."
+    ),
     "expansion": "No revenue today. The segment is a real-option proxy, not a business.",
 }
 
@@ -86,12 +102,16 @@ def _narrative(field, claim, confidence, three_p="probable", source="todo3"):
 def _segment(name, *, margin_target, margin_claim, s2c_early, s2c_late,
              tam=None, tam_claim=None, share=None, share_claim=None,
              revenue_target=None, revenue_claim=None, ramp_start_year=1,
-             margin_confidence="confirmed", s2c_late_claim=_ASSUMED_S2C):
+             margin_confidence="confirmed", margin_three_p="probable",
+             revenue_confidence="confirmed", revenue_three_p="probable",
+             s2c_late_claim=_ASSUMED_S2C):
     base_revenue, base_margin = _BASE[name]
     narratives = [
-        _narrative("base_revenue", _BASE_CLAIMS[name], "derived", source="todo3 section 6"),
+        # Retagged assumed/plausible (I9): only the segment TOTAL is derived,
+        # the split across segments is an assumption -- see _BASE_CLAIMS.
+        _narrative("base_revenue", _BASE_CLAIMS[name], "assumed", three_p="plausible", source="todo3 section 6"),
         _narrative("base_margin", _ASSUMED_BASE_MARGIN, "assumed", three_p="plausible"),
-        _narrative("margin_target", margin_claim, margin_confidence, source="todo3 section 3"),
+        _narrative("margin_target", margin_claim, margin_confidence, three_p=margin_three_p, source="todo3 section 3"),
         _narrative("sales_to_capital_early", _ASSUMED_S2C, "assumed", three_p="plausible"),
         _narrative("sales_to_capital_late", s2c_late_claim, "assumed", three_p="plausible"),
     ]
@@ -99,7 +119,7 @@ def _segment(name, *, margin_target, margin_claim, s2c_early, s2c_late,
         narratives.append(_narrative("tam_target", tam_claim, "confirmed", source="todo3 section 7"))
         narratives.append(_narrative("market_share_target", share_claim, "confirmed", source="todo3 section 7"))
     if revenue_target is not None:
-        narratives.append(_narrative("revenue_target", revenue_claim, "confirmed", source="todo3 section 7"))
+        narratives.append(_narrative("revenue_target", revenue_claim, revenue_confidence, three_p=revenue_three_p, source="todo3 section 7"))
 
     return {
         "name": name,
@@ -164,10 +184,14 @@ def _pre_prospectus_payload() -> dict:
                      margin_claim="Restated from S2 as 45%. S1's text says 50%; todo3 section 3 footnote 1 documents the conflict and its own derived table uses 45%.",
                      margin_confidence="derived",
                      s2c_early=0.8, s2c_late=1.05, s2c_late_claim=_PRE_S2C_LATE_CLAIM),
+            # todo3 section 3 tags both revenue_target and margin_target `[V]`
+            # ("assumed unchanged") for expansion in BOTH cases -- not confirmed.
             _segment("expansion", revenue_target=50.0, revenue_claim=_EXPANSION_REVENUE,
                      margin_target=0.30, margin_claim=_EXPANSION_MARGIN,
                      s2c_early=1.0, s2c_late=1.5, ramp_start_year=7,
-                     s2c_late_claim=_PRE_S2C_LATE_CLAIM),
+                     s2c_late_claim=_PRE_S2C_LATE_CLAIM,
+                     revenue_confidence="assumed", revenue_three_p="plausible",
+                     margin_confidence="assumed", margin_three_p="plausible"),
         ],
     }
 
@@ -207,9 +231,13 @@ def _post_prospectus_payload(parent_case_id: int) -> dict:
                      margin_target=0.25,
                      margin_claim="Cut from 45%. The lowest gross margins of the three segments, and deteriorating, under LLM competition.",
                      s2c_early=0.6, s2c_late=1.0),
+            # todo3 section 3 tags both revenue_target and margin_target `[V]`
+            # ("assumed unchanged") for expansion in BOTH cases -- not confirmed.
             _segment("expansion", revenue_target=50.0, revenue_claim=_EXPANSION_REVENUE,
                      margin_target=0.30, margin_claim=_EXPANSION_MARGIN,
-                     s2c_early=1.0, s2c_late=1.5, ramp_start_year=7),
+                     s2c_early=1.0, s2c_late=1.5, ramp_start_year=7,
+                     revenue_confidence="assumed", revenue_three_p="plausible",
+                     margin_confidence="assumed", margin_three_p="plausible"),
         ],
     }
 

@@ -20,6 +20,18 @@ def test_create_and_load_round_trips_every_field():
     assert len(loaded["segments"][0]["narratives"]) == len(NARRATED_FIELDS) - 1
 
 
+def test_segment_stating_both_revenue_target_and_tam_share_is_rejected():
+    """Minor B: `SegmentSpec.target_revenue()` gives revenue_target precedence
+    over tam_target x market_share_target, so stating both means one narrated,
+    stored number never enters the model."""
+    payload = _case_payload(
+        case_name="double_stated",
+        segments=[_segment_payload(revenue_target=70.0)],
+    )
+    with pytest.raises(ValueError, match="launch"):
+        create_case(payload)
+
+
 def test_missing_narrative_rejects_the_whole_case():
     payload = _case_payload()
     payload["segments"][0]["narratives"] = [

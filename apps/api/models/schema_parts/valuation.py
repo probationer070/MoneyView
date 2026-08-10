@@ -47,10 +47,14 @@ class ValuationCaseInput(BaseModel):
     wacc_converge_from: int = Field(default=6, ge=1)
     nol_balance: float = Field(default=0.0, ge=0)
     terminal_growth: float | None = None
-    cash: float = 0.0
-    debt: float = 0.0
-    ipo_proceeds: float = 0.0
-    shares_new: float = 0.0
+    # No defaults: the equity bridge (cash, debt, ipo_proceeds, shares_new) must
+    # be stated, not silently assumed to be a debt-free, cash-free firm with no
+    # pending raise. See `calculate_net_debt`'s docstring in dcf.py for the same
+    # argument -- a missing balance is not a zero balance.
+    cash: float = Field(ge=0)
+    debt: float = Field(ge=0)
+    ipo_proceeds: float = Field(ge=0)
+    shares_new: float = Field(ge=0)
     parent_case_id: int | None = None
 
 

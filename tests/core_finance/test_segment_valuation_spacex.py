@@ -200,9 +200,11 @@ def test_seeded_pair_enterprise_values():
 
     These figures are the model's own output, not a target: they are what this
     template, with these inputs, actually produces. The published reference
-    figures Damodaran gives are $1,220bn (pre) and $1,210bn (post) -- in the
-    opposite order, since the post case's higher WACC and lower marginal ROIC
-    pull enterprise value down relative to the pre case despite higher revenue.
+    figures Damodaran gives are $1,210bn (pre) and $1,220bn (post) -- todo3
+    line 158: "enterprise value barely moved ($1.21T -> $1.22T)". The model
+    produces the OPPOSITE direction: post (1282.1) < pre (1310.9). The source
+    has value rising slightly from pre to post; this model has it falling. This
+    is an open discrepancy against the source, not a reproduction of it.
     """
     pre = run_case(*pre_prospectus())
     post = run_case(*post_prospectus())
