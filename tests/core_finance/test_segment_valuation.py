@@ -1,8 +1,14 @@
+import math
+
 import pytest
 
 from packages.core_finance.segment_valuation import (
     CaseSpec,
     SegmentSpec,
+    _anchored_growth_rates,
+    _decaying_growth_rates,
+    _hump_amplitude_lower_bound,
+    _solve_first_year_growth,
     discount_factors,
     margin_path,
     marginal_roic,
@@ -755,3 +761,144 @@ def test_an_early_ratio_is_validated_even_when_no_year_reaches_it():
         SegmentSpec(**_segment(
             base_revenue=0.0, ramp_start_year=7, sales_to_capital_early=-5.0
         ))
+
+
+def _anchored(**overrides) -> SegmentSpec:
+    """A segment with an observed year-1 growth rate, for curve tests."""
+    base = dict(
+        name="anchored",
+        base_revenue=4.1,
+        base_margin=-0.10,
+        margin_target=0.45,
+        sales_to_capital_early=1.0,
+        sales_to_capital_late=1.5,
+        revenue_target=70.0,
+        initial_growth=0.0764,
+    )
+    base.update(overrides)
+    return SegmentSpec(**base)
+
+
+def test_anchored_path_starts_at_the_observed_growth_rate():
+    """Pinned by construction: sin vanishes at t=1, so `a` cannot move it."""
+    spec = _anchored()
+    path = revenue_path(spec, n=10, g_stable=0.0456)
+    assert path[0] / spec.base_revenue - 1 == pytest.approx(0.0764, abs=1e-12)
+
+
+def test_anchored_path_ends_at_stable_growth():
+    """The reason a logistic was rejected: the explicit period must hand off to
+    the perpetuity at the growth rate the perpetuity assumes."""
+    path = revenue_path(_anchored(), n=10, g_stable=0.0456)
+    assert path[-1] / path[-2] - 1 == pytest.approx(0.0456, abs=1e-12)
+
+
+def test_anchored_path_still_lands_exactly_on_target():
+    path = revenue_path(_anchored(), n=10, g_stable=0.0456)
+    assert path[-1] == pytest.approx(70.0, abs=1e-9)
+
+
+def test_anchored_path_is_slower_in_year_one_than_the_decaying_curve():
+    """The whole point. Same endpoints, same base -- only the shape differs."""
+    anchored = revenue_path(_anchored(), n=10, g_stable=0.0456)
+    decaying = revenue_path(_anchored(initial_growth=None), n=10, g_stable=0.0456)
+    assert anchored[0] < decaying[0]
+    assert decaying[0] / 4.1 - 1 == pytest.approx(0.638, abs=0.002)
+
+
+def test_anchored_path_humps_in_the_middle():
+    """Slow start plus a fixed endpoint forces a fast middle. That is arithmetic,
+    not a modelling choice, and it must not be hidden."""
+    path = revenue_path(_anchored(), n=10, g_stable=0.0456)
+    levels = [4.1, *path]
+    growths = [levels[i + 1] / levels[i] - 1 for i in range(len(path))]
+    assert max(growths) == pytest.approx(0.548, abs=0.005)
+    assert growths.index(max(growths)) not in (0, len(growths) - 1)
+
+
+def test_a_segment_already_growing_fast_enough_solves_to_a_dip():
+    """Connectivity's shape: linear decay from its observed rate already compounds
+    to target, so the hump amplitude solves to about zero rather than erroring."""
+    spec = _anchored(name="connectivity", base_revenue=11.4,
+                     revenue_target=120.0, initial_growth=0.50)
+    path = revenue_path(spec, n=10, g_stable=0.0456)
+    levels = [11.4, *path]
+    growths = [levels[i + 1] / levels[i] - 1 for i in range(len(path))]
+    assert path[-1] == pytest.approx(120.0, abs=1e-9)
+    # Near-linear decay from 50% to 4.56%: consecutive steps are near-equal.
+    # Measured deviation is 1.12e-3 (the solved amplitude is 0.00164, not exactly
+    # zero), so the tolerance is 2e-3 -- tight enough that a real hump fails it.
+    steps = [growths[i + 1] - growths[i] for i in range(len(growths) - 1)]
+    assert steps == pytest.approx([steps[0]] * len(steps), abs=2e-3)
+
+
+def test_a_negative_hump_amplitude_is_solvable_not_an_error():
+    """A segment whose observed growth overshoots its endpoint needs a dip. The
+    bracket must reach below zero, and the trough must stay above -100%."""
+    spec = _anchored(base_revenue=10.0, revenue_target=12.0, initial_growth=0.60)
+    path = revenue_path(spec, n=10, g_stable=0.0456)
+    levels = [10.0, *path]
+    growths = [levels[i + 1] / levels[i] - 1 for i in range(len(path))]
+    assert path[-1] == pytest.approx(12.0, abs=1e-9)
+    assert min(growths) < 0
+    assert min(growths) > -1.0
+
+
+def test_the_hump_bracket_keeps_every_growth_factor_positive():
+    """This is the test that actually catches a hardcoded bracket.
+
+    The solver's monotonicity argument holds only while every (1 + g_t) > 0, so
+    the lower bound must be computed from min(initial_growth, g_stable). Asserting
+    on a solved path does NOT catch a bad bracket: measured with a hardcoded
+    -0.99 and initial_growth=-0.50, four growth factors go negative, yet an even
+    count multiplies to a positive product, so the bracket check still passes and
+    bisection proceeds on a violated precondition -- then converges to the right
+    answer anyway, because the true root sits well inside the valid region.
+
+    So test the bound directly rather than its consequences.
+    """
+    for g_init in (0.50, 0.0, -0.50, -0.90):
+        low = _hump_amplitude_lower_bound(g_init, 0.0456)
+        rates = _anchored_growth_rates(g_init, low, 10, 0.0456)
+        assert all(1 + rate > 0 for rate in rates), g_init
+
+
+def test_a_declining_segment_still_hits_its_target():
+    """End-to-end sanity for a shrinking segment. Note this passes with a broken
+    bracket too -- `test_the_hump_bracket_keeps_every_growth_factor_positive` is
+    what guards the bracket."""
+    spec = _anchored(base_revenue=50.0, revenue_target=30.0, initial_growth=-0.50)
+    path = revenue_path(spec, n=10, g_stable=0.0456)
+    assert path[-1] == pytest.approx(30.0, abs=1e-9)
+    assert all(level > 0 for level in path)
+
+
+def test_initial_growth_at_or_below_minus_one_raises():
+    with pytest.raises(ValueError, match="initial_growth"):
+        _anchored(initial_growth=-1.0)
+
+
+def test_initial_growth_on_a_ramped_segment_raises():
+    """A segment with no revenue today has no year-1 growth rate to pin."""
+    with pytest.raises(ValueError, match="initial_growth"):
+        SegmentSpec(
+            name="expansion", base_revenue=0.0, base_margin=0.0,
+            margin_target=0.30, sales_to_capital_early=1.0,
+            sales_to_capital_late=1.5, revenue_target=50.0,
+            ramp_start_year=7, initial_growth=0.10,
+        )
+
+
+def test_initial_growth_none_reproduces_the_existing_path_exactly():
+    """Backward compatibility, gated. Every stored case and existing test keeps
+    its behaviour. Asserted element-for-element against the decaying curve rather
+    than against hardcoded numbers."""
+    spec = _anchored(initial_growth=None)
+    expected = []
+    level = spec.base_revenue
+    for rate in _decaying_growth_rates(
+        _solve_first_year_growth(70.0 / 4.1, 10, 0.0456), 10, 0.0456
+    ):
+        level *= 1.0 + rate
+        expected.append(level)
+    assert revenue_path(spec, n=10, g_stable=0.0456) == pytest.approx(expected, abs=0.0)

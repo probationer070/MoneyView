@@ -15,6 +15,7 @@ billions, share counts in billions of shares, rates as decimal fractions.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 
 from packages.core_finance.dcf import (
     calculate_equity_value,
@@ -49,6 +50,10 @@ class SegmentSpec:
     `base_margin` is the **R&D-adjusted** operating margin. R&D capitalization is
     not implemented (see the spec, section 7.2), so the base margin is taken to
     already reflect the adjustment rather than having it applied on top.
+
+    `initial_growth` pins year-1 growth to an observed rate; when `None` the
+    growth path decays from a solved year-1 rate instead, making year 1 the
+    fastest year.
     """
 
     name: str
@@ -61,6 +66,7 @@ class SegmentSpec:
     market_share_target: float | None = None
     revenue_target: float | None = None
     ramp_start_year: int = 1
+    initial_growth: float | None = None     # observed year-1 growth; None = decaying curve
 
     def __post_init__(self) -> None:
         if self.ramp_start_year < 1:
@@ -80,6 +86,19 @@ class SegmentSpec:
                 f"{self.name}: sales_to_capital_late must be positive, got "
                 f"{self.sales_to_capital_late}"
             )
+        if self.initial_growth is not None:
+            if self.initial_growth <= -1:
+                raise ValueError(
+                    f"{self.name}: initial_growth must exceed -100%, got "
+                    f"{self.initial_growth}"
+                )
+            if self.base_revenue == 0 or self.ramp_start_year > 1:
+                raise ValueError(
+                    f"{self.name}: initial_growth={self.initial_growth} is "
+                    f"incoherent with a ramped segment (base_revenue="
+                    f"{self.base_revenue}, ramp_start_year={self.ramp_start_year}); "
+                    f"a segment with no revenue today has no year-1 growth to pin"
+                )
 
     def target_revenue(self) -> float:
         """Revenue in the target year -- todo3 R1.
@@ -137,6 +156,94 @@ def _solve_first_year_growth(ratio: float, n: int, g_stable: float) -> float:
     return (low + high) / 2
 
 
+def _hump_shape(t: int, n: int) -> float:
+    """Zero at both ends of the horizon, one at its midpoint.
+
+    This is what pins both endpoints: because it vanishes at t=1 and t=n, the
+    solved amplitude cannot move either of them.
+    """
+    return math.sin(math.pi * (t - 1) / (n - 1))
+
+
+def _anchored_growth_rates(
+    g_init: float, a: float, n: int, g_stable: float
+) -> list[float]:
+    """Growth from a stated year-1 rate to `g_stable`, humped by amplitude `a`.
+
+    A linear ramp between two pinned endpoints plus a hump:
+
+        g_t = g_init + (g_stable - g_init)(t-1)/(n-1) + a * sin(pi (t-1)/(n-1))
+
+    Unlike `_decaying_growth_rates`, year 1 is NOT forced to be the fastest year --
+    which is the point. A source that records near-term growth being *slowed*
+    cannot be represented by a curve whose first year is always its maximum.
+    """
+    if n < 2:
+        return [g_stable]
+    return [
+        g_init + (g_stable - g_init) * (t - 1) / (n - 1) + a * _hump_shape(t, n)
+        for t in range(1, n + 1)
+    ]
+
+
+def _compound_anchored(g_init: float, a: float, n: int, g_stable: float) -> float:
+    product = 1.0
+    for rate in _anchored_growth_rates(g_init, a, n, g_stable):
+        product *= 1.0 + rate
+    return product
+
+
+def _hump_amplitude_lower_bound(g_init: float, g_stable: float) -> float:
+    """Lowest amplitude that keeps every growth factor positive.
+
+    The solver below is monotone in `a` only while every (1 + g_t) > 0. The
+    linear term never drops below min(g_init, g_stable) and sin <= 1, so for
+    a < 0 the trough sits at min(g_init, g_stable) + a. This bound pins that
+    trough at exactly -0.99 for any input.
+
+    Computed, never hardcoded. With a hardcoded -0.99 and a segment declining at
+    50% a year, four growth factors go negative -- and because an even count of
+    negatives multiplies to a positive product, the bracket check still passes
+    and bisection proceeds on a violated precondition without complaint.
+    """
+    return _G1_LOW - min(g_init, g_stable)
+
+
+def _solve_hump_amplitude(
+    ratio: float, g_init: float, n: int, g_stable: float
+) -> float:
+    """Find the hump amplitude whose schedule compounds to `ratio`.
+
+    Monotone in `a` -- d/da of the product is a sum of non-negative sine weights
+    times positive partial products -- so bisection converges, the same technique
+    and step count as `_solve_first_year_growth`.
+
+    That monotonicity holds ONLY while every (1 + g_t) stays positive, so the
+    lower bracket is computed rather than hardcoded. The linear term never drops
+    below min(g_init, g_stable) and sin <= 1, so for a < 0 the trough sits at
+    min(g_init, g_stable) + a; the bound below pins it at exactly -0.99 for any
+    input. A hardcoded -0.99 would put the trough at -1.99 for a segment
+    declining at 50% a year, producing a negative growth factor and a solver
+    whose precondition no longer holds -- silently, since it still returns.
+    """
+    low = _hump_amplitude_lower_bound(g_init, g_stable)
+    high = _G1_HIGH
+    if not _compound_anchored(g_init, low, n, g_stable) <= ratio <= _compound_anchored(
+        g_init, high, n, g_stable
+    ):
+        raise ValueError(
+            f"target revenue ratio {ratio:.6g} is unreachable from a year-1 growth "
+            f"of {g_init:.4%} over {n} years ending at {g_stable:.4%}"
+        )
+    for _ in range(_BISECTION_STEPS):
+        mid = (low + high) / 2
+        if _compound_anchored(g_init, mid, n, g_stable) < ratio:
+            low = mid
+        else:
+            high = mid
+    return (low + high) / 2
+
+
 def _ramp_revenues(target: float, n: int, ramp_start_year: int) -> list[float]:
     """Zero until `ramp_start_year`, then linear to `target` in year n."""
     lead = ramp_start_year - 1
@@ -152,10 +259,13 @@ def _ramp_revenues(target: float, n: int, ramp_start_year: int) -> list[float]:
 def revenue_path(spec: SegmentSpec, n: int, g_stable: float) -> list[float]:
     """Revenue for years 1..n, terminating exactly on the target -- todo3 R3.
 
-    Two shapes. A segment with revenue today decays its growth from a solved
-    year-1 rate down to `g_stable`. A segment starting from zero ramps linearly
-    instead: no growth rate reaches a positive target from a base of zero. A
-    non-zero base combined with `ramp_start_year > 1` is incoherent and raises.
+    Three shapes. A segment with revenue today decays its growth from a solved
+    year-1 rate down to `g_stable` (the default). A segment with `initial_growth`
+    set instead anchors year-1 growth to that observed rate and year-n growth to
+    `g_stable`, humped in between to still land on target. A segment starting
+    from zero ramps linearly instead: no growth rate reaches a positive target
+    from a base of zero. A non-zero base combined with `ramp_start_year > 1` is
+    incoherent and raises.
     """
     target = spec.target_revenue()
     if target <= 0:
@@ -174,10 +284,25 @@ def revenue_path(spec: SegmentSpec, n: int, g_stable: float) -> list[float]:
     if spec.ramp_start_year > 1 or spec.base_revenue == 0:
         return _ramp_revenues(target, n, spec.ramp_start_year)
 
-    g_first = _solve_first_year_growth(target / spec.base_revenue, n, g_stable)
+    if spec.initial_growth is None:
+        rates = _decaying_growth_rates(
+            _solve_first_year_growth(target / spec.base_revenue, n, g_stable),
+            n,
+            g_stable,
+        )
+    else:
+        rates = _anchored_growth_rates(
+            spec.initial_growth,
+            _solve_hump_amplitude(
+                target / spec.base_revenue, spec.initial_growth, n, g_stable
+            ),
+            n,
+            g_stable,
+        )
+
     revenues: list[float] = []
     level = spec.base_revenue
-    for rate in _decaying_growth_rates(g_first, n, g_stable):
+    for rate in rates:
         level *= 1.0 + rate
         revenues.append(level)
     return revenues
