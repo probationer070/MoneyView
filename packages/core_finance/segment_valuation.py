@@ -198,8 +198,11 @@ def _hump_amplitude_lower_bound(g_init: float, g_stable: float) -> float:
 
     The solver below is monotone in `a` only while every (1 + g_t) > 0. The
     linear term never drops below min(g_init, g_stable) and sin <= 1, so for
-    a < 0 the trough sits at min(g_init, g_stable) + a. This bound pins that
-    trough at exactly -0.99 for any input.
+    a < 0 the trough can be no lower than min(g_init, g_stable) + a. This bound
+    is a conservative sufficient condition, not a tight one: it guarantees the
+    trough stays above -0.99 for any input, but the linear term's minimum and
+    the sin = 1 point never actually coincide, so the true trough always sits
+    strictly above -0.99.
 
     Computed, never hardcoded. With a hardcoded -0.99 and a segment declining at
     50% a year, four growth factors go negative -- and because an even count of
@@ -220,11 +223,14 @@ def _solve_hump_amplitude(
 
     That monotonicity holds ONLY while every (1 + g_t) stays positive, so the
     lower bracket is computed rather than hardcoded. The linear term never drops
-    below min(g_init, g_stable) and sin <= 1, so for a < 0 the trough sits at
-    min(g_init, g_stable) + a; the bound below pins it at exactly -0.99 for any
-    input. A hardcoded -0.99 would put the trough at -1.99 for a segment
-    declining at 50% a year, producing a negative growth factor and a solver
-    whose precondition no longer holds -- silently, since it still returns.
+    below min(g_init, g_stable) and sin <= 1, so for a < 0 the trough can be no
+    lower than min(g_init, g_stable) + a; the bound below guarantees it stays
+    above -0.99 for any input. That guarantee is conservative rather than tight
+    -- the linear term's minimum and the sin = 1 point never actually coincide,
+    so the true trough always sits strictly above -0.99. A hardcoded -0.99
+    would put the trough at -1.99 for a segment declining at 50% a year,
+    producing a negative growth factor and a solver whose precondition no
+    longer holds -- silently, since it still returns.
     """
     low = _hump_amplitude_lower_bound(g_init, g_stable)
     high = _G1_HIGH

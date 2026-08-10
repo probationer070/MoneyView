@@ -1,5 +1,3 @@
-import math
-
 import pytest
 
 from packages.core_finance.segment_valuation import (
@@ -883,6 +881,34 @@ def test_initial_growth_on_a_ramped_segment_raises():
     with pytest.raises(ValueError, match="initial_growth"):
         SegmentSpec(
             name="expansion", base_revenue=0.0, base_margin=0.0,
+            margin_target=0.30, sales_to_capital_early=1.0,
+            sales_to_capital_late=1.5, revenue_target=50.0,
+            ramp_start_year=7, initial_growth=0.10,
+        )
+
+
+def test_initial_growth_with_zero_base_revenue_raises():
+    """Isolates the `base_revenue == 0` clause: `ramp_start_year` stays at 1,
+    so only a zero base makes this incoherent. Without this test, a regression
+    that dropped the `ramp_start_year > 1` clause from the validation would
+    still pass every other test in this file."""
+    with pytest.raises(ValueError, match="initial_growth.*incoherent"):
+        SegmentSpec(
+            name="expansion", base_revenue=0.0, base_margin=0.0,
+            margin_target=0.30, sales_to_capital_early=1.0,
+            sales_to_capital_late=1.5, revenue_target=50.0,
+            ramp_start_year=1, initial_growth=0.10,
+        )
+
+
+def test_initial_growth_with_delayed_ramp_start_raises():
+    """Isolates the `ramp_start_year > 1` clause: base_revenue is positive, so
+    only the delayed start makes this incoherent. This fires at construction --
+    `revenue_path`'s own ramp/base_revenue guard would also reject this
+    combination, but only once a path is actually built."""
+    with pytest.raises(ValueError, match="initial_growth.*incoherent"):
+        SegmentSpec(
+            name="expansion", base_revenue=10.0, base_margin=0.0,
             margin_target=0.30, sales_to_capital_early=1.0,
             sales_to_capital_late=1.5, revenue_target=50.0,
             ramp_start_year=7, initial_growth=0.10,
