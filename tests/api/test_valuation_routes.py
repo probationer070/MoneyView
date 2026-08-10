@@ -75,7 +75,8 @@ def test_run_exposes_the_terminal_consistency_diagnostics():
     for key in (
         "marginal_roic_target_year",
         "terminal_reinvestment_rate",
-        "explicit_reinvestment_rate_target_year",
+        "reinvestment_rate_target_year",
+        "explicit_reinvestment_rate_at_stable_growth",
     ):
         assert key in data, key
         assert isinstance(data[key], float)

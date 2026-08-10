@@ -1450,3 +1450,66 @@ That the two failures were only discovered now is the more useful record: `952d4
 committed with `tsc` green and the Playwright suite never run, and the entry above it says so in
 its own Command line ("none -- No suite was red"). A UI-string change is exactly what a
 typecheck cannot see.
+
+## 2026-08-10: Terminal-ROIC remediation did not fix its own motivating defect
+
+Date: 2026-08-10
+Command: none -- found by an independent adversarial code review of the
+2026-08-10 terminal-ROIC-consistency remediation (`guideline/sop/todo.md`
+line 361), before that remediation had shipped any bug fix at all. The full
+suite was green (617 passing) throughout.
+Failure: two silent-wrong-output defects survived the remediation that was
+supposed to fix exactly this class of bug.
+1. `run_case`'s consistency guard (`packages/core_finance/segment_valuation.py`)
+   only rejected `roic_stable > marginal_roic`. The defect that motivated
+   writing the guard in the first place -- `roic_stable=0.12` shipped against a
+   marginal return several times higher -- is a *low* terminal ROIC, which a
+   one-sided ceiling can never catch. Re-running `roic_stable=0.12` after the
+   "fix" still produced a valuation (EV 916.2) with no error.
+2. `marginal_roic` weighted `sales_to_capital_late x margin x (1-tau)` by each
+   segment's revenue. ROIC is `ΔNOPAT / ΔCapital`, a ratio of aggregates;
+   weighting a ratio's combination by anything other than its own denominator
+   is wrong in general, and here it silently overstated the firm's marginal
+   return by +9.9% (post-prospectus case: 0.408281 shipped vs 0.371484
+   correct) and +7.2% (pre-prospectus case). Because the guard in (1) compared
+   `roic_stable` against this inflated number, the ceiling itself was also
+   wrong by the same margin -- a case could ship with a terminal ROIC the
+   *correct* marginal return would have rejected.
+Root cause: (1) the guard was written to catch only the failure mode present
+in the one example the author had in front of them (a suspiciously low
+terminal ROIC being *accepted*), not the general property (terminal ROIC
+consistent with the model's own capital-intensity assumptions in either
+direction). (2) a revenue-weighted average of a per-unit-of-capital return is
+the natural first thing to write and is wrong whenever `sales_to_capital`
+varies across segments -- which it always does, since that variation is the
+entire reason to model segments separately. No test exercised a case where
+`sales_to_capital_late` differed enough across segments for the revenue- vs
+capital-weighted answers to diverge visibly.
+Fix: guard is now two-sided -- `_TERMINAL_CAPITAL_INTENSITY_TOLERANCE = 0.60`
+caps how far `marginal_roic / roic_stable` may exceed 1 before the case is
+asserting an unmodelled change in capital intensity, in either direction.
+`marginal_roic` now computes `Σ(revenue×margin×(1-τ)) /
+Σ(revenue/sales_to_capital_late)` -- capital-weighted, the only weighting
+under which `ReinvRate = g/ROIC` is an identity under the perpetuity-growth
+assumption the terminal formula already makes. The seed
+(`apps/api/services/valuation_seed.py`) moved from a per-case
+`roic_stable = (wacc_stable + marginal_roic) / 2` policy to a single shared
+literal, `roic_stable = 0.33`, and lowered the pre-prospectus case's
+`sales_to_capital_late` (the old values implied a 58% marginal return, not
+credible for any business).
+Files changed: `packages/core_finance/segment_valuation.py`,
+`apps/api/services/valuation_case.py`, `apps/api/services/valuation_seed.py`,
+`apps/api/models/schema_parts/valuation.py`, `apps/api/routes/valuation.py`,
+`tests/core_finance/test_segment_valuation.py`,
+`tests/core_finance/test_segment_valuation_spacex.py`,
+`tests/api/test_valuation_routes.py`, `tests/api/test_valuation_seed.py`,
+`tests/api/valuation_fixtures.py`.
+Prevention: a one-sided guard written against a single failing example should
+be checked against its own mirror case before being called a fix -- "what
+does this guard NOT catch that has the same shape as the bug, just in the
+other direction?" is a five-second question that would have caught (1)
+immediately. For (2), any weighted-average combination of a per-unit ratio
+across groups of different sizes should be checked against the
+weighted-by-denominator form before shipping; the two only agree when every
+group has the same denominator-to-numerator-driver ratio, which is precisely
+the case that makes modelling the groups separately pointless.

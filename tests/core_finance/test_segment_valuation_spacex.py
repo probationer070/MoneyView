@@ -51,20 +51,20 @@ def pre_prospectus() -> tuple[CaseSpec, list[SegmentSpec]]:
         base_year=2026, target_year=2036,
         riskfree_rate=0.0420, wacc_initial=0.0802, wacc_stable=0.0800,
         wacc_converge_from=6, marginal_tax_rate=0.25, nol_balance=5.0,
-        roic_stable=0.12,
+        roic_stable=0.33,
         cash=0.0, debt=0.0, ipo_proceeds=0.0,
         shares_basic=2.467, shares_new=0.0,
     )
     segments = [
         _segment("launch", tam_target=100.0, market_share_target=0.70,
-                 margin_target=0.40, s2c_early=1.5, s2c_late=2.0),
+                 margin_target=0.40, s2c_early=1.5, s2c_late=1.6),
         _segment("connectivity", tam_target=160.0, market_share_target=0.75,
-                 margin_target=0.60, s2c_early=1.5, s2c_late=2.0),
+                 margin_target=0.60, s2c_early=1.5, s2c_late=1.6),
         # 45%, not 50%. todo3 section 3 footnote 1 documents the conflict: S1's
         # text says 50%, S2 restates the same assumption as 45%, and section 3's
         # own derived table uses 45%.
         _segment("ai", revenue_target=80.0, margin_target=0.45,
-                 s2c_early=0.8, s2c_late=1.2),
+                 s2c_early=0.8, s2c_late=1.05),
         _segment("expansion", revenue_target=50.0, margin_target=0.30,
                  s2c_early=1.0, s2c_late=1.5),
     ]
@@ -76,7 +76,7 @@ def post_prospectus() -> tuple[CaseSpec, list[SegmentSpec]]:
         base_year=2026, target_year=2036,
         riskfree_rate=0.0456, wacc_initial=0.0837, wacc_stable=0.0825,
         wacc_converge_from=6, marginal_tax_rate=0.25, nol_balance=5.0,
-        roic_stable=0.12,
+        roic_stable=0.33,
         cash=24.7, debt=22.9, ipo_proceeds=75.0,
         shares_basic=12.535, shares_new=0.556,
     )
@@ -149,34 +149,62 @@ def test_expansion_segment_contributes_nothing_before_2032():
 
 
 def test_post_prospectus_marginal_roic():
-    """Spec gate 1. Hand-computed from confirmed margins and the [V] s2c values:
+    """Spec gate 1. Capital-weighted: sum(NOPAT_i) / sum(capital_i), where
+    NOPAT_i = revenue_i x margin_i x (1 - tau) and capital_i = revenue_i /
+    sales_to_capital_late_i. Hand-computed from confirmed margins and the [V]
+    s2c values:
 
-        launch       1.5 x 0.45 x 0.75 = 0.50625  on 70  of target revenue
-        connectivity 1.5 x 0.60 x 0.75 = 0.675    on 120
-        ai           1.0 x 0.25 x 0.75 = 0.1875   on 160
-        expansion    1.5 x 0.30 x 0.75 = 0.3375   on 50
-        weighted = 163.3125 / 400 = 0.40828125
+        launch       NOPAT = 70  x 0.45 x 0.75 = 23.625   capital = 70/1.5  = 46.666...
+        connectivity NOPAT = 120 x 0.60 x 0.75 = 54.0      capital = 120/1.5 = 80.0
+        ai           NOPAT = 160 x 0.25 x 0.75 = 30.0      capital = 160/1.0 = 160.0
+        expansion    NOPAT = 50  x 0.30 x 0.75 = 11.25     capital = 50/1.5  = 33.333...
+        total NOPAT = 118.875, total capital = 320.0
+        marginal_roic = 118.875 / 320.0 = 0.371484375
     """
     case, segments = post_prospectus()
     assert marginal_roic(segments, case.marginal_tax_rate) == pytest.approx(
-        0.40828125, abs=1e-9
+        0.371484375, abs=1e-9
     )
 
 
 def test_pre_prospectus_marginal_roic():
-    """Spec gate 1.
+    """Spec gate 1. Same capital-weighted formula, at the lowered pre-case
+    sales-to-capital values (1.6 / 1.6 / 1.05 / 1.5):
 
-        launch       2.0 x 0.40 x 0.75 = 0.60    on 70
-        connectivity 2.0 x 0.60 x 0.75 = 0.90    on 120
-        ai           1.2 x 0.45 x 0.75 = 0.405   on 80
-        expansion    1.5 x 0.30 x 0.75 = 0.3375  on 50
-        weighted = 199.275 / 320 = 0.622734375
+        launch       NOPAT = 70  x 0.40 x 0.75 = 21.0     capital = 70/1.6  = 43.75
+        connectivity NOPAT = 120 x 0.60 x 0.75 = 54.0     capital = 120/1.6 = 75.0
+        ai           NOPAT = 80  x 0.45 x 0.75 = 27.0     capital = 80/1.05 = 76.190476...
+        expansion    NOPAT = 50  x 0.30 x 0.75 = 11.25    capital = 50/1.5  = 33.333...
+        total NOPAT = 113.25, total capital = 228.273809523...
+        marginal_roic = 113.25 / 228.273809523... = 0.496114732...
 
-    Higher than the post case because the pre-case sales-to-capital values are
-    higher -- todo3 section 3 records that Damodaran LOWERED them after the
-    prospectus. Both sets are [V] guesses.
+    Still higher than the post case, because the pre-case sales-to-capital
+    values are still higher than the post-case ones -- todo3 section 3 records
+    that Damodaran LOWERED them after the prospectus, and this seed's lowered
+    pre-case values (1.6/1.6/1.05/1.5) remain strictly above the post-case ones
+    (1.5/1.5/1.0/1.5). Both sets are [V] guesses.
     """
     case, segments = pre_prospectus()
-    assert marginal_roic(segments, case.marginal_tax_rate) == pytest.approx(
-        0.622734375, abs=1e-9
+    expected = (70 * 0.40 * 0.75 + 120 * 0.60 * 0.75 + 80 * 0.45 * 0.75 + 50 * 0.30 * 0.75) / (
+        70 / 1.6 + 120 / 1.6 + 80 / 1.05 + 50 / 1.5
     )
+    assert marginal_roic(segments, case.marginal_tax_rate) == pytest.approx(
+        expected, abs=1e-9
+    )
+
+
+def test_seeded_pair_enterprise_values():
+    """Pins the model's own output at roic_stable=0.33 -- nothing did before this
+    test, and the previous fixtures ran the engine's own consistency gates at
+    roic_stable=0.12, the value this work exists to retire.
+
+    These figures are the model's own output, not a target: they are what this
+    template, with these inputs, actually produces. The published reference
+    figures Damodaran gives are $1,220bn (pre) and $1,210bn (post) -- in the
+    opposite order, since the post case's higher WACC and lower marginal ROIC
+    pull enterprise value down relative to the pre case despite higher revenue.
+    """
+    pre = run_case(*pre_prospectus())
+    post = run_case(*post_prospectus())
+    assert post.enterprise_value == pytest.approx(1282.1, abs=0.5)
+    assert pre.enterprise_value == pytest.approx(1310.9, abs=0.5)

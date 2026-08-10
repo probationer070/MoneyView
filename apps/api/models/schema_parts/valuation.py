@@ -45,7 +45,7 @@ class ValuationCaseInput(BaseModel):
     segments: list[SegmentInput] = Field(min_length=1)
     ticker: str | None = None
     wacc_converge_from: int = Field(default=6, ge=1)
-    nol_balance: float = 0.0
+    nol_balance: float = Field(default=0.0, ge=0)
     terminal_growth: float | None = None
     cash: float = 0.0
     debt: float = 0.0

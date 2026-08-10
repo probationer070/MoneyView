@@ -49,7 +49,10 @@ def _case_payload(**overrides) -> dict:
         "wacc_converge_from": 6,
         "marginal_tax_rate": 0.25,
         "nol_balance": 5.0,
-        "roic_stable": 0.12,
+        # The single "launch" segment's marginal return is 1.5 x 0.45 x 0.75 =
+        # 0.50625. 0.35 sits inside the engine's two-sided consistency guard for
+        # it: below the ceiling and above the floor (0.50625 / 1.6 = 0.316406...).
+        "roic_stable": 0.35,
         "terminal_growth": None,
         "cash": 24.7,
         "debt": 22.9,

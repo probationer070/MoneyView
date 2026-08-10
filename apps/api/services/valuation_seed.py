@@ -10,17 +10,19 @@ Confidence tags mirror todo3's own: [C] -> confirmed, [D] -> derived,
 [V] -> assumed. Everything tagged `assumed` is a placeholder pending
 SpaceX2026IPO.xlsx and SpaceX2026IPOUpdated.xlsx; see the design spec, 7.3.
 
-`roic_stable` is set by an explicit competitive-erosion policy rather than taken
-from a source: half the excess return over the cost of capital survives in
-perpetuity, half competes away --
-
-    roic_stable = (wacc_stable + marginal_roic) / 2
-
-where marginal_roic is the revenue-weighted `sales_to_capital_late x margin_target
-x (1 - tau)` the engine computes. Pre: (0.0800 + 0.622734) / 2 = 0.3514. Post:
-(0.0825 + 0.408281) / 2 = 0.2454. This is a modelling judgement about the speed of
-competitive erosion, not a derivation -- the engine constrains only the direction.
-The previous value, 0.12, was invented and appears nowhere in todo3.
+`roic_stable` is a single literal, `0.33`, shared by both cases rather than a
+per-case erosion policy. A per-case value made terminal value a function of the
+least-supported inputs in the model and pushed the pre/post EV ratio further
+from the source's own finding than a shared value did: per-case gave 0.908,
+shared gives 0.978, against the source's 1.008 -- and the whole point of seeding
+this pair is that a 277-page prospectus barely moved enterprise value. 0.33 sits
+below both cases' marginal returns on new capital and within the engine's
+capital-intensity tolerance for both (a terminal ROIC below the marginal one
+implies more capital intensity than the target year, and the engine caps that at
+60%): +12.6% for the post case, +50.3% for the pre case. A single shared
+terminal return means the pre/post comparison reflects the change in business
+assumptions between the two valuations, not a per-case terminal parameter moving
+underneath it.
 
 Not wired into application startup: fixture data does not belong in a database
 unless someone asked for it.
@@ -61,6 +63,14 @@ _ASSUMED_S2C = (
     "lowered after $14bn of 2025 capex -- never the level. Calibrate against "
     "SpaceX2026IPOUpdated.xlsx."
 )
+_PRE_S2C_LATE_CLAIM = (
+    "Placeholder, lowered from an earlier draft. The original values (2.0 / 2.0 "
+    "/ 1.2 / 1.5) implied a 58% after-tax marginal return in perpetuity, which is "
+    "not credible for any business. These stay strictly above the "
+    "post-prospectus values (1.5 / 1.5 / 1.0 / 1.5), preserving todo3 section 3's "
+    "confirmed record that Damodaran lowered sales-to-capital after the "
+    "prospectus. Calibrate against SpaceX2026IPOUpdated.xlsx."
+)
 
 
 def _narrative(field, claim, confidence, three_p="probable", source="todo3"):
@@ -76,14 +86,14 @@ def _narrative(field, claim, confidence, three_p="probable", source="todo3"):
 def _segment(name, *, margin_target, margin_claim, s2c_early, s2c_late,
              tam=None, tam_claim=None, share=None, share_claim=None,
              revenue_target=None, revenue_claim=None, ramp_start_year=1,
-             margin_confidence="confirmed"):
+             margin_confidence="confirmed", s2c_late_claim=_ASSUMED_S2C):
     base_revenue, base_margin = _BASE[name]
     narratives = [
         _narrative("base_revenue", _BASE_CLAIMS[name], "derived", source="todo3 section 6"),
         _narrative("base_margin", _ASSUMED_BASE_MARGIN, "assumed", three_p="plausible"),
         _narrative("margin_target", margin_claim, margin_confidence, source="todo3 section 3"),
         _narrative("sales_to_capital_early", _ASSUMED_S2C, "assumed", three_p="plausible"),
-        _narrative("sales_to_capital_late", _ASSUMED_S2C, "assumed", three_p="plausible"),
+        _narrative("sales_to_capital_late", s2c_late_claim, "assumed", three_p="plausible"),
     ]
     if tam is not None:
         narratives.append(_narrative("tam_target", tam_claim, "confirmed", source="todo3 section 7"))
@@ -128,7 +138,7 @@ def _pre_prospectus_payload() -> dict:
         "wacc_converge_from": 6,
         "marginal_tax_rate": 0.25,
         "nol_balance": 5.0,
-        "roic_stable": 0.3514,
+        "roic_stable": 0.33,
         "terminal_growth": None,
         "cash": 0.0,
         "debt": 0.0,
@@ -140,10 +150,11 @@ def _pre_prospectus_payload() -> dict:
             _segment("launch", tam=100.0, tam_claim=_LAUNCH_TAM, share=0.70,
                      share_claim=_LAUNCH_SHARE, margin_target=0.40,
                      margin_claim="Reusability and existing infrastructure produce a durable cost advantage.",
-                     s2c_early=1.5, s2c_late=2.0),
+                     s2c_early=1.5, s2c_late=1.6, s2c_late_claim=_PRE_S2C_LATE_CLAIM),
             _segment("connectivity", tam=160.0, tam_claim=_CONN_TAM, share=0.75,
                      share_claim=_CONN_SHARE, margin_target=0.60,
-                     margin_claim=_CONN_MARGIN, s2c_early=1.5, s2c_late=2.0),
+                     margin_claim=_CONN_MARGIN, s2c_early=1.5, s2c_late=1.6,
+                     s2c_late_claim=_PRE_S2C_LATE_CLAIM),
             # 45%, not 50%. todo3 section 3 footnote 1: S1's text says 50%, S2
             # restates the same assumption as 45%, and section 3's derived table
             # uses 45%. Recorded as derived so the conflict stays visible.
@@ -152,10 +163,11 @@ def _pre_prospectus_payload() -> dict:
                      margin_target=0.45,
                      margin_claim="Restated from S2 as 45%. S1's text says 50%; todo3 section 3 footnote 1 documents the conflict and its own derived table uses 45%.",
                      margin_confidence="derived",
-                     s2c_early=0.8, s2c_late=1.2),
+                     s2c_early=0.8, s2c_late=1.05, s2c_late_claim=_PRE_S2C_LATE_CLAIM),
             _segment("expansion", revenue_target=50.0, revenue_claim=_EXPANSION_REVENUE,
                      margin_target=0.30, margin_claim=_EXPANSION_MARGIN,
-                     s2c_early=1.0, s2c_late=1.5, ramp_start_year=7),
+                     s2c_early=1.0, s2c_late=1.5, ramp_start_year=7,
+                     s2c_late_claim=_PRE_S2C_LATE_CLAIM),
         ],
     }
 
@@ -173,7 +185,7 @@ def _post_prospectus_payload(parent_case_id: int) -> dict:
         "wacc_converge_from": 6,
         "marginal_tax_rate": 0.25,
         "nol_balance": 5.0,
-        "roic_stable": 0.2454,
+        "roic_stable": 0.33,
         "terminal_growth": None,
         "cash": 24.7,
         "debt": 22.9,

@@ -53,9 +53,17 @@ async def get_valuation_case(case_id: int):
 async def run_valuation_case(case_id: int):
     """Value a stored case.
 
-    A ValueError here is a rejected model, not a server fault: terminal growth
-    above the riskfree rate, a non-positive WACC-to-growth spread, ROIC at or
-    below WACC with positive growth. All are 422.
+    A ValueError here is a rejected model, not a server fault, and is returned as
+    a 422. Raised either at construction time (`CaseSpec`/`SegmentSpec`: terminal
+    growth above the riskfree rate, a non-positive sales-to-capital, a negative
+    NOL balance, a tax rate outside [0, 1], target_year at or before base_year,
+    ramp_start_year below 1, ...) or inside `run_case`/`terminal_value`: a
+    non-positive WACC-to-growth spread, ROIC at or below WACC with positive
+    growth, roic_stable exceeding the target-year marginal return on new capital,
+    or roic_stable sitting so far below it that it implies more than a 60%
+    increase in capital intensity beyond the target year -- the terminal
+    consistency guard is two-sided, rejecting a terminal return that is either
+    too high or too low relative to what the model's own inputs support.
     """
     try:
         return APIResponse(data=run_stored_case(case_id))

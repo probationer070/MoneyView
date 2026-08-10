@@ -284,8 +284,11 @@ def test_post_prospectus_bridge_uses_prospectus_balance_sheet():
     assert bridge["ipo_proceeds"] == pytest.approx(75.0)
 
 
-def test_seeded_terminal_roic_follows_the_stated_erosion_policy():
-    """roic_stable = (wacc_stable + marginal_roic) / 2, rounded to 4dp.
+def test_seeded_terminal_roic_is_the_shared_literal():
+    """roic_stable = 0.33, a single literal shared by both cases rather than a
+    per-case erosion policy -- see the seed module's docstring for why a shared
+    value tracks the "prospectus barely moved EV" finding better than a
+    per-case one did.
 
     Expectations are literal, not recomputed from the seed module -- a test that
     re-derives its expectation from the code under test cannot catch a wrong value.
@@ -293,15 +296,23 @@ def test_seeded_terminal_roic_follows_the_stated_erosion_policy():
     ensure_valuation_cases_seeded()
     pre = load_case(_case_id(PRE_CASE_NAME))
     post = load_case(_case_id(POST_CASE_NAME))
-    assert pre["roic_stable"] == pytest.approx(0.3514)
-    assert post["roic_stable"] == pytest.approx(0.2454)
+    assert pre["roic_stable"] == pytest.approx(0.33)
+    assert post["roic_stable"] == pytest.approx(0.33)
 
 
 def test_seeded_terminal_roic_sits_below_the_marginal_return():
-    """The policy must satisfy the engine's guard, and by a real margin -- an
-    erosion rule that lands at or above the marginal return is not erosion."""
+    """The shared literal must satisfy the engine's two-sided consistency guard
+    for both cases, and by a real margin -- an erosion rule that lands at or
+    above the marginal return is not erosion.
+
+    marginal values are capital-weighted (post: 118.875 NOPAT / 320.0 capital;
+    pre: 113.25 NOPAT / 228.273809... capital at the lowered 1.6/1.6/1.05/1.5
+    sales-to-capital values)."""
     ensure_valuation_cases_seeded()
-    for name, marginal in ((PRE_CASE_NAME, 0.622734375), (POST_CASE_NAME, 0.40828125)):
+    for name, marginal in (
+        (PRE_CASE_NAME, 113.25 / (70 / 1.6 + 120 / 1.6 + 80 / 1.05 + 50 / 1.5)),
+        (POST_CASE_NAME, 0.371484375),
+    ):
         data = _run(name)
         assert data["marginal_roic_target_year"] == pytest.approx(marginal, abs=1e-9)
         assert load_case(_case_id(name))["roic_stable"] < marginal
@@ -312,5 +323,6 @@ def test_run_reports_both_reinvestment_rates_for_the_seeded_cases():
     ensure_valuation_cases_seeded()
     data = _run(POST_CASE_NAME)
     assert data["terminal_reinvestment_rate"] > 0
-    assert data["explicit_reinvestment_rate_target_year"] > 0
+    assert data["reinvestment_rate_target_year"] > 0
+    assert data["explicit_reinvestment_rate_at_stable_growth"] > 0
     assert data["terminal_reinvestment_rate"] < 1

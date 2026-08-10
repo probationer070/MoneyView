@@ -285,8 +285,9 @@ def run_stored_case(case_id: int) -> dict:
         "base_ebit_total": result.base_ebit_total,
         "marginal_roic_target_year": result.marginal_roic_target_year,
         "terminal_reinvestment_rate": result.terminal_reinvestment_rate,
-        "explicit_reinvestment_rate_target_year": (
-            result.explicit_reinvestment_rate_target_year
+        "reinvestment_rate_target_year": result.reinvestment_rate_target_year,
+        "explicit_reinvestment_rate_at_stable_growth": (
+            result.explicit_reinvestment_rate_at_stable_growth
         ),
         "below_probable": _below_probable(case),
     }

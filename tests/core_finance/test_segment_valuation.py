@@ -271,7 +271,11 @@ def _case(**overrides) -> CaseSpec:
         wacc_converge_from=6,
         marginal_tax_rate=0.25,
         nol_balance=5.0,
-        roic_stable=0.12,
+        # _launch()'s marginal return is 0.50625 (1.5 x 0.45 x 0.75). 0.35 sits
+        # inside the two-sided consistency guard's admitted band for it: below
+        # the ceiling (must not exceed 0.50625) and above the floor
+        # (0.50625 / (1 + 0.60) = 0.316406...).
+        roic_stable=0.35,
         cash=24.7,
         debt=22.9,
         ipo_proceeds=75.0,
@@ -419,14 +423,26 @@ def test_marginal_roic_is_sales_to_capital_times_margin_after_tax():
     assert marginal_roic([spec], marginal_tax_rate=0.25) == pytest.approx(0.45)
 
 
-def test_marginal_roic_is_revenue_weighted_not_an_arithmetic_mean():
+def test_marginal_roic_is_capital_weighted_not_revenue_weighted():
     """Spec gate 9.
 
-    Deliberately lopsided: a 90/10 revenue split across segments whose returns
-    differ by 16x. The weighted answer is 0.1875; the arithmetic mean is 0.6375.
-    Nothing subtle separates them, which is the point -- this test pins the
-    weighting property in isolation, so it keeps testing that property even if
-    the seeded segment mix changes.
+    ROIC is dNOPAT / dCapital, a ratio of aggregates, so combining segments must
+    weight by the denominator -- incremental capital -- not by revenue. This
+    fixture is deliberately lopsided: a 90/10 revenue split across segments whose
+    per-dollar-of-revenue returns differ by 16x, so the three candidate answers
+    land far apart and nothing subtle separates them:
+
+        big:   NOPAT = 90 x 0.10 x 0.75 = 6.75    capital = 90 / 1.0 = 90.0
+        small: NOPAT = 10 x 0.80 x 0.75 = 6.00    capital = 10 / 2.0 =  5.0
+
+        capital-weighted (correct) = (6.75 + 6.00) / (90.0 + 5.0)
+                                    = 12.75 / 95 = 0.1342105263...
+        revenue-weighted (shipped bug) = (0.075*90 + 1.200*10) / 100 = 0.1875
+        arithmetic mean                = (0.075 + 1.200) / 2         = 0.6375
+
+    where 0.075 = 1.0 x 0.10 x 0.75 and 1.200 = 2.0 x 0.80 x 0.75 are the two
+    segments' individual `sales_to_capital_late x margin x (1-tax)` returns.
+    All three are far enough apart that this test discriminates all of them.
     """
     big = SegmentSpec(
         name="big", base_revenue=1.0, base_margin=0.0, margin_target=0.10,
@@ -436,11 +452,9 @@ def test_marginal_roic_is_revenue_weighted_not_an_arithmetic_mean():
         name="small", base_revenue=1.0, base_margin=0.0, margin_target=0.80,
         sales_to_capital_early=1.0, sales_to_capital_late=2.0, revenue_target=10.0,
     )
-    # big  = 1.0 x 0.10 x 0.75 = 0.075   on 90 of revenue
-    # small= 2.0 x 0.80 x 0.75 = 1.200   on 10 of revenue
-    # weighted      = (0.075*90 + 1.200*10) / 100 = 0.1875   <- correct
-    # arithmetic mean = (0.075 + 1.200) / 2       = 0.6375   <- what a bug returns
-    assert marginal_roic([big, small], marginal_tax_rate=0.25) == pytest.approx(0.1875)
+    assert marginal_roic([big, small], marginal_tax_rate=0.25) == pytest.approx(
+        12.75 / 95
+    )
 
 
 def test_marginal_roic_rejects_an_empty_segment_list():
@@ -457,13 +471,27 @@ def test_run_case_reports_the_terminal_reinvestment_rate():
     )
 
 
-def test_run_case_reports_the_explicit_reinvestment_rate():
-    """Spec gate 5. The counterpart the terminal rate must be read against."""
+def test_run_case_reports_the_reinvestment_rate_target_year():
+    """Spec gate 5. The target-year rate at target-year growth -- not directly
+    comparable to `terminal_reinvestment_rate`, which is struck at `g_stable`.
+    """
     case = _case()
     result = run_case(case, [_launch()])
     nopat = result.ebit[-1] * (1 - case.marginal_tax_rate)
-    assert result.explicit_reinvestment_rate_target_year == pytest.approx(
+    assert result.reinvestment_rate_target_year == pytest.approx(
         result.reinvestment[-1] / nopat
+    )
+
+
+def test_run_case_reports_the_explicit_reinvestment_rate_at_stable_growth():
+    """I3: the rate the explicit period's own economics (marginal ROIC) would
+    require at the terminal growth rate -- struck at the SAME growth as
+    `terminal_reinvestment_rate`, so the two are directly comparable and differ
+    only through roic_stable vs marginal_roic."""
+    case = _case()
+    result = run_case(case, [_launch()])
+    assert result.explicit_reinvestment_rate_at_stable_growth == pytest.approx(
+        case.effective_terminal_growth() / result.marginal_roic_target_year
     )
 
 
@@ -491,22 +519,53 @@ def test_the_guard_message_names_both_values():
     assert "50.6250%" in message
 
 
-def test_terminal_roic_below_the_marginal_return_is_accepted():
-    """Spec gate 3. The guard is one-sided: erosion is legitimate.
+def test_terminal_roic_moderately_below_the_marginal_return_is_accepted():
+    """Spec gate 3. The guard is two-sided but not a point constraint: erosion
+    within the capital-intensity tolerance is legitimate.
 
-    0.12 against a 0.50625 marginal return is the exact configuration that
-    motivated this work -- a suspiciously low terminal return. It must still run,
-    because nothing in the model can determine the speed of competitive erosion.
-    The engine reports the discontinuity instead of refusing it.
+    0.35 against a 0.50625 marginal return implies a 44.6% capital-intensity
+    increase -- within the 60% tolerance -- so it must still run.
     """
-    result = run_case(_case(roic_stable=0.12), [_launch()])
-    assert result.terminal_reinvestment_rate > result.explicit_reinvestment_rate_target_year
+    result = run_case(_case(roic_stable=0.35), [_launch()])
+    assert result.terminal_reinvestment_rate > result.reinvestment_rate_target_year
     assert result.enterprise_value > 0
 
 
 def test_terminal_roic_exactly_at_the_marginal_return_is_accepted():
-    """The boundary is inclusive: equality is consistent, not contradictory."""
+    """The ceiling boundary is inclusive: equality is consistent, not
+    contradictory."""
     result = run_case(_case(roic_stable=0.50625), [_launch()])
+    assert result.marginal_roic_target_year == pytest.approx(0.50625)
+
+
+def test_terminal_roic_far_below_the_marginal_return_raises():
+    """C1. 0.12 against a 0.50625 marginal return is the historical defect
+    value that motivated this work -- a suspiciously low terminal return that
+    the old one-sided guard let through. It implies a 321.9% capital-intensity
+    increase beyond the target year (0.50625 / 0.12 - 1), far past the 60%
+    tolerance, so the two-sided guard now rejects it.
+    """
+    with pytest.raises(ValueError, match="capital intensity"):
+        run_case(_case(roic_stable=0.12), [_launch()])
+
+
+def test_the_floor_guard_message_names_both_values_and_the_implied_increase():
+    """A guard that does not say what it compared cannot be acted on."""
+    with pytest.raises(ValueError) as excinfo:
+        run_case(_case(roic_stable=0.12), [_launch()])
+    message = str(excinfo.value)
+    assert "12.0000%" in message
+    assert "50.6250%" in message
+    assert "321.9%" in message
+
+
+def test_terminal_roic_just_inside_the_floor_boundary_is_accepted():
+    """The floor boundary is inclusive: exactly 60% above is consistent, not
+    contradictory. Tested a hair inside the boundary rather than exactly on it,
+    since `0.50625 / 1.6` and the engine's own floating-point computation of
+    the marginal return are not guaranteed to be bit-identical inverses."""
+    just_inside_floor = 0.50625 / 1.6 * 1.0000001
+    result = run_case(_case(roic_stable=just_inside_floor), [_launch()])
     assert result.marginal_roic_target_year == pytest.approx(0.50625)
 
 
@@ -516,14 +575,15 @@ def test_terminal_reinvestment_rate_stays_below_one_for_any_admitted_case():
     Not a production guard -- the spec argues one would be dead code, because
     `roic_stable > wacc_stable` and `wacc_stable > g_stable` together already
     force `g / roic_stable < 1`. This test checks that argument rather than
-    leaving it asserted. Sweeps roic_stable across the admitted range, from just
-    above wacc_stable up to the marginal return.
+    leaving it asserted. Sweeps roic_stable across the admitted range: the
+    two-sided consistency guard now bounds it to
+    [marginal_roic / 1.6, marginal_roic] = [0.316406..., 0.50625].
     """
     # The relationship only binds for positive growth, so pin that first --
     # otherwise the sweep below could pass vacuously.
     assert _case().effective_terminal_growth() > 0
 
-    for roic in (0.0826, 0.10, 0.12, 0.25, 0.40, 0.50625):
+    for roic in (0.316406250, 0.35, 0.40, 0.45, 0.50625):
         result = run_case(_case(roic_stable=roic), [_launch()])
         assert 0 < result.terminal_reinvestment_rate < 1, roic
 

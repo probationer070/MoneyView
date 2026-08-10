@@ -28,6 +28,19 @@ _G1_LOW = -0.99
 _G1_HIGH = 1000.0
 _BISECTION_STEPS = 200
 
+# The terminal formula holds margin at margin_target in perpetuity, so
+# ROIC = sales_to_capital_late x margin x (1 - tau) with capital intensity fixed.
+# A terminal ROIC that differs from the target-year marginal return is therefore
+# not "competitive erosion" -- erosion is a margin story -- it is an unmodelled
+# change in capital intensity (sales_to_capital), and that is equally unmodelled
+# whether the terminal return sits above or below the marginal one. This bound
+# caps how far the terminal block's implied capital intensity may drift from the
+# target year's before the case is asserting a structural change the model does
+# not contain. 0.60 rejects the historical defect value (roic_stable=0.12 implied
+# a +210% capital-intensity increase on the post-prospectus case) while admitting
+# both seeded cases (+12.6% post, +50.3% pre at roic_stable=0.33).
+_TERMINAL_CAPITAL_INTENSITY_TOLERANCE = 0.60
+
 
 @dataclass(frozen=True)
 class SegmentSpec:
@@ -389,18 +402,28 @@ class CaseResult:
     base_ebit_total: float
     marginal_roic_target_year: float
     terminal_reinvestment_rate: float
-    explicit_reinvestment_rate_target_year: float
+    reinvestment_rate_target_year: float
+    explicit_reinvestment_rate_at_stable_growth: float
 
 
 def marginal_roic(segments: list[SegmentSpec], marginal_tax_rate: float) -> float:
-    """Revenue-weighted after-tax return on NEW capital in the target year.
+    """Capital-weighted after-tax return on NEW capital in the target year.
 
-    A dollar of capital buys `sales_to_capital_late` dollars of revenue, which
-    earn `margin_target` before tax:
+    ROIC is a ratio of aggregates, dNOPAT / dCapital, so combining segments must
+    weight by the denominator -- incremental capital -- not by revenue:
 
-        roic_i = sales_to_capital_late_i x margin_target_i x (1 - tau)
+        marginal_roic = sum_i( revenue_i x margin_target_i x (1 - tau) )
+                       / sum_i( revenue_i / sales_to_capital_late_i )
 
-    weighted by each segment's target-year revenue.
+    This is the only weighting under which `ReinvRate = g / ROIC` is an identity.
+    In perpetuity every segment grows at `g`, so dRevenue_i = g x revenue_i and
+    dCapital_i = dRevenue_i / sales_to_capital_late_i = g x revenue_i /
+    sales_to_capital_late_i. Summing: dNOPAT = g x sum(revenue_i x margin_i x
+    (1-tau)), dCapital = g x sum(revenue_i / s2c_i), and the `g`s cancel in the
+    ratio -- exactly the expression above. Weighting by revenue instead (the
+    previous implementation) overstates the firm's marginal return whenever
+    sales-to-capital varies across segments, which is exactly the property that
+    justifies modelling segments separately at all.
 
     This is the quantity the terminal reinvestment rate `g / ROIC` actually
     governs, which is why the consistency guard in `run_case` compares against it.
@@ -408,27 +431,28 @@ def marginal_roic(segments: list[SegmentSpec], marginal_tax_rate: float) -> floa
     but that needs an invested-capital base the case does not carry, and it blends
     in legacy capital that no longer drives growth. Deliberate deviation.
 
-    Weights come from `spec.target_revenue()` rather than a computed path. They
-    are equal by construction -- the revenue path terminates exactly on target --
-    and taking them from the spec keeps this function callable without running a
-    case.
+    Revenue comes from `spec.target_revenue()` rather than a computed path. It is
+    equal to the computed path's last value by construction -- the revenue path
+    terminates exactly on target -- and taking it from the spec keeps this
+    function callable without running a case.
     """
     if not segments:
         raise ValueError("marginal_roic needs at least one segment")
 
     after_tax = 1.0 - marginal_tax_rate
-    total_revenue = 0.0
-    weighted = 0.0
+    total_nopat = 0.0
+    total_capital = 0.0
     for spec in segments:
         revenue = spec.target_revenue()
-        total_revenue += revenue
-        weighted += spec.sales_to_capital_late * spec.margin_target * after_tax * revenue
+        total_nopat += revenue * spec.margin_target * after_tax
+        total_capital += revenue / spec.sales_to_capital_late
 
-    if total_revenue == 0:
+    if total_capital <= 0:
         raise ValueError(
-            "marginal_roic needs a positive total target revenue to weight by"
+            "marginal_roic needs a positive total target-year capital "
+            f"(revenue / sales_to_capital_late) to weight by, got {total_capital:.6g}"
         )
-    return weighted / total_revenue
+    return total_nopat / total_capital
 
 
 def terminal_value(
@@ -503,12 +527,11 @@ def run_case(case: CaseSpec, segments: list[SegmentSpec]) -> CaseResult:
     target_year_marginal_roic = marginal_roic(segments, case.marginal_tax_rate)
     target_year_nopat = ebit[-1] * (1 - case.marginal_tax_rate)
 
-    # One-sided by design. A terminal return BELOW the marginal return is
-    # competitive erosion and is expected; the engine cannot judge its speed and
-    # does not try. A terminal return ABOVE it is inconsistent with the stated
-    # assumptions: margins have converged to margin_target by the target year and
-    # sales_to_capital_late does not change afterwards, so nothing in the model
-    # produces the improvement in returns such a case asserts.
+    # Two-sided. A terminal return ABOVE the marginal return is inconsistent with
+    # the stated assumptions: margins have converged to margin_target by the
+    # target year and sales_to_capital_late does not change afterwards, so
+    # nothing in the model produces the improvement in returns such a case
+    # asserts.
     if case.roic_stable > target_year_marginal_roic:
         raise ValueError(
             f"roic_stable {case.roic_stable:.4%} exceeds the target-year marginal "
@@ -516,6 +539,23 @@ def run_case(case: CaseSpec, segments: list[SegmentSpec]) -> CaseResult:
             f"already converged and sales-to-capital does not change after the "
             f"target year, so the model contains no mechanism by which returns on "
             f"new capital could improve."
+        )
+
+    # A terminal return too far BELOW the marginal return is not "competitive
+    # erosion" either. The terminal formula holds margin at margin_target in
+    # perpetuity, so with margin fixed, ROIC = sales_to_capital x margin x
+    # (1 - tau): the only thing a lower terminal ROIC can express is a lower
+    # implied sales-to-capital, i.e. more capital intensity -- an unmodelled
+    # structural change, equally unsupported in either direction. See
+    # `_TERMINAL_CAPITAL_INTENSITY_TOLERANCE` for the bound and its grounding.
+    if target_year_marginal_roic / case.roic_stable > 1 + _TERMINAL_CAPITAL_INTENSITY_TOLERANCE:
+        capital_intensity_increase = target_year_marginal_roic / case.roic_stable - 1
+        raise ValueError(
+            f"roic_stable {case.roic_stable:.4%} is too far below the target-year "
+            f"marginal return on new capital {target_year_marginal_roic:.4%}: it "
+            f"implies a {capital_intensity_increase:.1%} increase in capital "
+            f"intensity (sales-to-capital falling) beyond the target year, and the "
+            f"model contains no mechanism producing that."
         )
 
     pv_explicit = sum(fcff[t] * factors[t] for t in range(n))
@@ -570,7 +610,16 @@ def run_case(case: CaseSpec, segments: list[SegmentSpec]) -> CaseResult:
         # 0.0, matching how `terminal_value_share_pct` above handles a zero
         # enterprise value. A negative NOPAT is left as a negative rate: a firm
         # reinvesting while losing money is a real state worth seeing.
-        explicit_reinvestment_rate_target_year=(
+        reinvestment_rate_target_year=(
             reinvest[-1] / target_year_nopat if target_year_nopat else 0.0
+        ),
+        # The rate the explicit period's own economics (marginal ROIC) would
+        # require at the terminal growth rate -- struck at the SAME growth as
+        # `terminal_reinvestment_rate`, unlike `reinvestment_rate_target_year`
+        # above, which is struck at whatever year-10 aggregate growth happens to
+        # be. The two are therefore directly comparable: they differ only through
+        # roic_stable vs marginal_roic, not through a mismatched growth rate.
+        explicit_reinvestment_rate_at_stable_growth=(
+            g_stable / target_year_marginal_roic
         ),
     )

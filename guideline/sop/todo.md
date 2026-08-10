@@ -367,6 +367,25 @@ $1.22T is recorded as a diagnostic, not a gate -- see spec section 1.2.
       now raise at construction.
       Spec: `docs/superpowers/specs/2026-08-10-terminal-roic-consistency-design.md`
 
+- [x] Terminal ROIC consistency, second pass (2026-08-10) - a follow-up
+      adversarial review found the first pass's remediation did not fix what it
+      targeted: the guard was one-sided (only rejected a terminal ROIC *above*
+      the marginal return, so the motivating defect -- `roic_stable=0.12`
+      against a 0.408 marginal return -- still ran), and `marginal_roic` itself
+      weighted by revenue instead of capital, overstating the firm's marginal
+      return by +9.9% (post) / +7.2% (pre). Fixed: the guard is now two-sided
+      (a terminal ROIC too far below the marginal return implies unmodelled
+      capital intensity, capped at 60%, same as too far above); `marginal_roic`
+      now weights by `revenue/sales_to_capital_late` (capital), which is the
+      only weighting under which `ReinvRate = g/ROIC` is an identity; the two
+      reported reinvestment rates (`terminal_reinvestment_rate` and
+      `reinvestment_rate_target_year`) are now joined by a third,
+      `explicit_reinvestment_rate_at_stable_growth`, struck at the same growth
+      rate so the pair is actually comparable; the seed moved from a per-case
+      erosion policy to one shared `roic_stable=0.33` and lowered pre-case
+      sales-to-capital, bringing the pre/post EV ratio (0.978) closer to the
+      source's 1.008 than the per-case policy's 0.908 was.
+
 Still open from that review, deliberately out of scope:
 - Case-level inputs carry no narrative rows, so `roic_stable` -- the most valuable
   number in the model -- cannot carry a claim in the data.
