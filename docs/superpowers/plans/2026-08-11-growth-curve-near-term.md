@@ -29,7 +29,7 @@
 
 | File | Change |
 | --- | --- |
-| `packages/core_finance/segment_valuation.py` | **Modify.** Add `import math`; add `_hump_shape`, `_anchored_growth_rates`, `_compound_anchored`, `_solve_hump_amplitude`; add `initial_growth` to `SegmentSpec` with validation; branch in `revenue_path`. |
+| `packages/core_finance/segment_valuation.py` | **Modify.** Add `import math`; add `_hump_shape`, `_anchored_growth_rates`, `_compound_anchored`, `_hump_amplitude_lower_bound`, `_solve_hump_amplitude`; add `initial_growth` to `SegmentSpec` with validation; branch in `revenue_path`. |
 | `tests/core_finance/test_segment_valuation.py` | **Modify.** Curve tests, endpoint pinning, backward-compat, the dip case, validation. |
 | `apps/api/services/db.py` | **Modify.** One nullable column on `segment`. |
 | `apps/api/models/schema_parts/valuation.py` | **Modify.** `initial_growth` on `SegmentInput`. |
@@ -50,7 +50,7 @@
 
 **Interfaces:**
 - Consumes: `SegmentSpec` (frozen dataclass, has `__post_init__`), `revenue_path(spec, n, g_stable) -> list[float]`, `_decaying_growth_rates(g_first, n, g_stable)`, `_solve_first_year_growth(ratio, n, g_stable)`, constants `_G1_LOW = -0.99`, `_G1_HIGH = 1000.0`, `_BISECTION_STEPS = 200`.
-- Produces: `SegmentSpec.initial_growth: float | None = None`, and module-private `_hump_shape`, `_anchored_growth_rates`, `_compound_anchored`, `_solve_hump_amplitude`.
+- Produces: `SegmentSpec.initial_growth: float | None = None`, and module-private `_hump_shape`, `_anchored_growth_rates`, `_compound_anchored`, `_hump_amplitude_lower_bound`, `_solve_hump_amplitude`.
 
 **Background — why the obvious implementation is wrong.**
 
@@ -296,7 +296,7 @@ def _solve_hump_amplitude(
     declining at 50% a year, producing a negative growth factor and a solver
     whose precondition no longer holds -- silently, since it still returns.
     """
-    low = _G1_LOW - min(g_init, g_stable)
+    low = _hump_amplitude_lower_bound(g_init, g_stable)
     high = _G1_HIGH
     if not _compound_anchored(g_init, low, n, g_stable) <= ratio <= _compound_anchored(
         g_init, high, n, g_stable
@@ -376,12 +376,12 @@ Update `revenue_path`'s docstring: there are now **three** shapes — a decaying
 - [ ] **Step 6: Run the tests to verify they pass**
 
 Run: `python -m pytest tests/core_finance/ -v`
-Expected: PASS. `test_segment_valuation.py` gains 11 tests; the SpaceX file is unchanged at this point because no seeded segment sets `initial_growth` yet.
+Expected: PASS. `test_segment_valuation.py` gains 12 tests; the SpaceX file is unchanged at this point because no seeded segment sets `initial_growth` yet.
 
 - [ ] **Step 7: Run the full suite**
 
 Run: `python -m pytest tests -q`
-Expected: 641 passing (630 baseline plus 11). **No existing test may change behaviour** — `initial_growth` defaults to `None` everywhere, so every current path is the decaying one. If any pre-existing test fails, stop and report it rather than adjusting it.
+Expected: 642 passing (630 baseline plus 12). **No existing test may change behaviour** — `initial_growth` defaults to `None` everywhere, so every current path is the decaying one. If any pre-existing test fails, stop and report it rather than adjusting it.
 
 - [ ] **Step 8: Commit**
 
@@ -520,7 +520,7 @@ Expected: PASS. Watch for fallout in the seed tests — no seeded segment sets `
 - [ ] **Step 7: Run the full suite**
 
 Run: `python -m pytest tests -q`
-Expected: 645 passing (641 from Task 1 plus 4).
+Expected: 646 passing (642 from Task 1 plus 4).
 
 - [ ] **Step 8: Commit**
 
@@ -686,7 +686,7 @@ In `guideline/sop/todo.md`, **close the divergence entry**: the "near-term growt
 - [ ] **Step 7: Run the full suite**
 
 Run: `python -m pytest tests -q`
-Expected: 649 passing (645 from Task 2 plus 4). No failures.
+Expected: 650 passing (646 from Task 2 plus 4). No failures.
 
 - [ ] **Step 8: Commit**
 
@@ -699,7 +699,7 @@ git commit -m "feat: seed the confirmed 2025 growth actuals as year-1 anchors"
 
 ## Self-Review Notes
 
-**Spec coverage.** §2.1 (why not a logistic) → Task 1 Background, carried into the `_anchored_growth_rates` docstring. §2.2 (the curve, the monotonicity argument, the computed bracket) → Task 1 Steps 3 and 5, gated by `test_a_declining_segment_keeps_every_growth_factor_positive`. §2.3 (behaviour on seeded data) → Task 1's hump and dip tests, plus Task 3 Step 4's measurement. §2.4 (inputs, the `None` default, the ramp exclusion, narration) → Tasks 1 and 2. §2.5 (seeded values, +38.7%) → Task 3. §3 gates 1–8 map to: 1 → `starts_at`/`ends_at`; 2 → `lands_exactly_on_target`; 3 → `initial_growth_none_reproduces`; 4 → `on_a_ramped_segment_raises`; 5 → `negative_hump_amplitude`; 6 → Task 3 Step 4's explicit check; 7 → `initial_growth_requires_a_narrative`; 8 → `year_one_growth_no_longer_contradicts_the_source`.
+**Spec coverage.** §2.1 (why not a logistic) → Task 1 Background, carried into the `_anchored_growth_rates` docstring. §2.2 (the curve, the monotonicity argument, the computed bracket) → Task 1 Steps 3 and 5, gated by `test_the_hump_bracket_keeps_every_growth_factor_positive`, which tests the bound directly because asserting on a solved path does not catch a bad bracket. §2.3 (behaviour on seeded data) → Task 1's hump and dip tests, plus Task 3 Step 4's measurement. §2.4 (inputs, the `None` default, the ramp exclusion, narration) → Tasks 1 and 2. §2.5 (seeded values, +38.7%) → Task 3. §3 gates 1–8 map to: 1 → `starts_at`/`ends_at`; 2 → `lands_exactly_on_target`; 3 → `initial_growth_none_reproduces`; 4 → `on_a_ramped_segment_raises`; 5 → `negative_hump_amplitude` and `the_hump_bracket_keeps_every_growth_factor_positive`; 6 → Task 3 Step 4's explicit check; 7 → `initial_growth_requires_a_narrative`; 8 → `year_one_growth_no_longer_contradicts_the_source`.
 
 **One thing the spec did not call out and this plan adds:** the `_ensure_schema_compatibility` retrofit in Task 2 Step 3. A new nullable column needs both the `CREATE TABLE` text and an `ALTER TABLE` path, because `CREATE TABLE IF NOT EXISTS` does nothing on a database whose `segment` table already exists — which is every developer machine that has run this branch. Without it the column would appear only on fresh databases. Gated by `test_initial_growth_retrofits_onto_a_pre_existing_segment_table`.
 
