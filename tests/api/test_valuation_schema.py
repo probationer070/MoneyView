@@ -97,6 +97,37 @@ def test_segment_narrative_rejects_an_invalid_three_p():
             )
 
 
+def test_segment_table_carries_initial_growth():
+    with get_db() as conn:
+        assert "initial_growth" in _columns(conn, "segment")
+
+
+def test_initial_growth_retrofits_onto_a_pre_existing_segment_table():
+    """New nullable columns need the ALTER path too: CREATE TABLE IF NOT EXISTS
+    silently does nothing when the table already exists, so a developer database
+    created before this change would otherwise never gain the column."""
+    from apps.api.services import db as db_service
+
+    with get_db() as conn:
+        conn.execute("DROP TABLE IF EXISTS segment")
+        conn.execute(
+            "CREATE TABLE segment ("
+            " id INTEGER PRIMARY KEY AUTOINCREMENT,"
+            " case_id INTEGER NOT NULL REFERENCES valuation_case(id) ON DELETE CASCADE,"
+            " name TEXT NOT NULL, base_revenue REAL NOT NULL, base_margin REAL NOT NULL,"
+            " tam_target REAL, market_share_target REAL, revenue_target REAL,"
+            " margin_target REAL NOT NULL, sales_to_capital_early REAL NOT NULL,"
+            " sales_to_capital_late REAL NOT NULL,"
+            " ramp_start_year INTEGER NOT NULL DEFAULT 1, UNIQUE(case_id, name))"
+        )
+        assert "initial_growth" not in _columns(conn, "segment")
+
+    db_service.init_db()
+
+    with get_db() as conn:
+        assert "initial_growth" in _columns(conn, "segment")
+
+
 def test_deleting_a_case_cascades_to_segments_and_narratives():
     with get_db() as conn:
         conn.execute(

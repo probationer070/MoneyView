@@ -28,6 +28,7 @@ class SegmentInput(BaseModel):
     market_share_target: float | None = None
     revenue_target: float | None = None
     ramp_start_year: int = Field(default=1, ge=1)
+    initial_growth: float | None = Field(default=None, gt=-1)
     narratives: list[SegmentNarrativeInput] = Field(default_factory=list)
 
 

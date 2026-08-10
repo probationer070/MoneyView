@@ -522,6 +522,7 @@ CREATE TABLE IF NOT EXISTS segment (
     sales_to_capital_early REAL NOT NULL,
     sales_to_capital_late  REAL NOT NULL,
     ramp_start_year        INTEGER NOT NULL DEFAULT 1,
+    initial_growth         REAL,
     UNIQUE(case_id, name)
 );
 CREATE INDEX IF NOT EXISTS idx_segment_case ON segment(case_id);
@@ -559,6 +560,12 @@ def init_db() -> None:
 
 def _ensure_schema_compatibility(conn: sqlite3.Connection) -> None:
     """Apply additive migrations for older local SQLite files."""
+    segment_columns = {row["name"] for row in conn.execute("PRAGMA table_info(segment)")}
+    if segment_columns and "initial_growth" not in segment_columns:
+        # Nullable, so no default is needed and existing rows keep the decaying
+        # curve. CREATE TABLE IF NOT EXISTS cannot add a column to a table that
+        # already exists, which is every developer database created before this.
+        conn.execute("ALTER TABLE segment ADD COLUMN initial_growth REAL")
     index_columns = {row["name"] for row in conn.execute("PRAGMA table_info(indices)")}
     if "dividends" not in index_columns:
         conn.execute("ALTER TABLE indices ADD COLUMN dividends REAL DEFAULT 0.0")

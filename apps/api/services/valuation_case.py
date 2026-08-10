@@ -37,6 +37,7 @@ NARRATED_FIELDS: tuple[str, ...] = (
     "margin_target",
     "sales_to_capital_early",
     "sales_to_capital_late",
+    "initial_growth",
 )
 
 _CASE_COLUMNS = (
@@ -50,7 +51,7 @@ _CASE_COLUMNS = (
 _SEGMENT_COLUMNS = (
     "name", "base_revenue", "base_margin", "tam_target", "market_share_target",
     "revenue_target", "margin_target", "sales_to_capital_early",
-    "sales_to_capital_late", "ramp_start_year",
+    "sales_to_capital_late", "ramp_start_year", "initial_growth",
 )
 
 
@@ -228,6 +229,7 @@ def _to_specs(case: dict) -> tuple[CaseSpec, list[SegmentSpec]]:
             market_share_target=segment["market_share_target"],
             revenue_target=segment["revenue_target"],
             ramp_start_year=segment["ramp_start_year"],
+            initial_growth=segment["initial_growth"],
         )
         for segment in case["segments"]
     ]

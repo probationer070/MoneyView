@@ -17,7 +17,10 @@ def test_create_and_load_round_trips_every_field():
     assert loaded["case_name"] == "test_case"
     assert loaded["ticker"] is None
     assert loaded["segments"][0]["market_share_target"] == pytest.approx(0.70)
-    assert len(loaded["segments"][0]["narratives"]) == len(NARRATED_FIELDS) - 1
+    # -2, not -1: the default segment payload leaves two NARRATED_FIELDS unset
+    # (revenue_target, since tam_target/market_share_target are used instead;
+    # and initial_growth, which no default segment states).
+    assert len(loaded["segments"][0]["narratives"]) == len(NARRATED_FIELDS) - 2
 
 
 def test_segment_stating_both_revenue_target_and_tam_share_is_rejected():
@@ -148,3 +151,25 @@ def test_missing_required_case_field_is_rejected_with_the_column_named():
     with pytest.raises(ValueError, match="shares_basic") as exc_info:
         create_case(payload)
     assert "already exists" not in str(exc_info.value)
+
+
+def test_initial_growth_requires_a_narrative():
+    """It is a stated numeric input, so the narrative rule covers it."""
+    payload = _case_payload(case_name="growth_unnarrated")
+    payload["segments"][0]["initial_growth"] = 0.0764
+    with pytest.raises(ValueError, match="initial_growth"):
+        create_case(payload)
+
+
+def test_initial_growth_round_trips_and_reaches_the_engine():
+    payload = _case_payload(case_name="growth_narrated")
+    payload["segments"][0]["initial_growth"] = 0.0764
+    payload["segments"][0]["narratives"].append(_narrative("initial_growth"))
+    case_id = create_case(payload)
+
+    loaded = load_case(case_id)
+    assert loaded["segments"][0]["initial_growth"] == pytest.approx(0.0764)
+
+    result = run_stored_case(case_id)
+    launch = result["segments"][0]
+    assert launch["revenue"][0] / 4.1 - 1 == pytest.approx(0.0764, abs=1e-12)
