@@ -189,17 +189,28 @@ _EARLY_YEARS = 5
 def margin_path(spec: SegmentSpec, n: int) -> list[float]:
     """Operating margin for years 1..n -- todo3 P2.
 
-    Converges linearly from `base_margin` in year 1 to `margin_target` in year n:
-    phi(1) = 1, phi(n) = 0. todo3 notes Damodaran typically back-loads this
-    convergence, but tags the shape as unconfirmed. An invented back-loading
-    exponent would be precision the source does not support, so this stays linear
-    until the spreadsheets are available to calibrate it.
+    Converges linearly from `base_margin` to `margin_target`, reaching the target
+    exactly in year n: margin_t = base_margin + (margin_target - base_margin) x
+    t / n. Year 1 therefore receives one step of convergence rather than none.
+
+    todo3 P2's literal formula is phi(1) = 1, phi(n) = 0 -- i.e. margin_1 ==
+    base_margin exactly, with year 1 sitting on the pre-convergence value and
+    everything moving over the remaining n-1 steps. This function deliberately
+    deviates from that: `revenue_path` applies a full year of growth in year 1
+    (todo3 R3), so a year-1 margin still sitting at `base_margin` prices that
+    grown revenue at the wrong-year margin -- e.g. the seeded launch segment
+    would book its year-1 loss on revenue that has already grown ~64% while its
+    margin has not moved at all. Giving year 1 one step of margin convergence
+    keeps margin and revenue offset by the same number of steps. todo3 notes
+    Damodaran typically back-loads the convergence shape itself (independent of
+    this off-by-one question) but tags that shape as unconfirmed; this stays
+    linear until the spreadsheets are available to calibrate it.
     """
     if n < 2:
         return [spec.margin_target]
     spread = spec.margin_target - spec.base_margin
     return [
-        spec.margin_target - spread * (n - t) / (n - 1)
+        spec.base_margin + spread * t / n
         for t in range(1, n + 1)
     ]
 

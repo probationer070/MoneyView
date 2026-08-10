@@ -396,6 +396,56 @@ Still open from that review, deliberately out of scope:
 - API lifecycle: no update or delete endpoint; structural validation fires at `/run`
   rather than `POST`; horizon is unbounded.
 
+- [x] Margin-path year-1 alignment fix (2026-08-10) - `margin_path` returned
+      `margin_1 == base_margin` exactly, todo3 P2's literal phi(1)=1, so
+      improvement happened over `n-1` steps starting in year 2. But
+      `revenue_path` applies a full year of growth in year 1 (todo3 R3, the
+      seeded launch segment goes 4.1 -> 6.714), so a year-0 `base_margin` was
+      being priced onto year-1 revenue. The seeded launch segment's year-1 loss
+      widened 63% purely from the offset, ~64% of the seeded post case's
+      negative explicit-period PV. Fixed: `margin_t = base_margin +
+      (margin_target - base_margin) x t / n`, giving year 1 one step of margin
+      convergence to match revenue's one step of growth; `t = n` is unchanged
+      (`margin_target` exactly), so target-year totals (400.0/158.5 post,
+      320.0/151.0 pre) are unaffected. Seeded launch year-1 margin: -10.00% ->
+      -4.50%. Post case `pv_explicit`: -21.70 -> -7.91. Post EV: 1282.06 ->
+      1295.86. Pre EV: 1310.9 -> 1323.66. This is a deliberate deviation from
+      todo3 P2's literal shape -- see "Known divergences from the source" below.
+
+### Known divergences from the source
+
+1. **Near-term growth runs the wrong way.** The engine's consolidated year-1
+   growth is **+55%** (both seeded cases) against todo3 section 4's *confirmed*
+   2025 actual of **+33%**. todo3 R3 tags as `[C]` that Damodaran's headline
+   revision was to **slow** near-term growth; this engine's single decaying-
+   growth curve makes year 1 structurally the fastest year and cannot express
+   that. Fixing it needs a second growth curve (an S-curve or logistic on
+   market share). Also note the consolidated growth path is **not monotone
+   decaying** -- year 7's growth rate exceeds year 6's in both cases (pre:
+   34.7% -> 38.5%; post: 41.2% -> 45.2%) when the expansion segment's ramp
+   switches on -- and that no test covers the consolidated path.
+
+2. **`base_margin` contradicts its own documented contract.** `SegmentSpec`
+   documents it as the R&D-adjusted operating margin, but the seeded values
+   give a base EBIT of -0.232, close to todo3 section 4's *reported* operating
+   loss of -2.57 rather than its R&D-adjusted EBITR of +4.0. So the margin path
+   ramps from a reported basis to targets todo3 justifies specifically by the
+   R&D adjustment.
+
+3. **Case-level inputs carry no narrative rows.** `roic_stable` determines a
+   terminal value that is ~100% of the seeded case's enterprise value, and
+   across the guard's admitted band the enterprise value moves about 9.3% --
+   yet it states no reason, because the narrative rule covers segment fields
+   only. Closing this needs a schema change (a `case_narrative` table, or a
+   nullable `segment_id` on `segment_narrative`). This is the structural form
+   of the defect the terminal-ROIC remediation fixed.
+
+No test asserts any explicit-period value against an independently computed
+expectation: the confirmed-input gates in `test_segment_valuation_spacex.py`
+are pure sums of the input literals and would pass against any revenue path,
+margin path, tax schedule or discounting scheme provided year 10 lands on
+target.
+
 ## Active Track - Performance Instrumentation (sub-project 1 of 4)
 
 Design spec: `docs/superpowers/specs/2026-07-25-perf-instrumentation/`

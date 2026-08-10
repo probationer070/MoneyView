@@ -162,9 +162,13 @@ def test_revenue_path_rejects_negative_base_revenue_on_ramp_branch():
         revenue_path(spec, n=10, g_stable=0.0456)
 
 
-def test_margin_starts_at_base_and_ends_at_target():
+def test_margin_takes_one_step_in_year_one_and_ends_at_target():
+    # margin_t = base_margin + (margin_target - base_margin) * t / n, so year 1
+    # (t=1, n=10) is one step of convergence past base_margin, not base_margin
+    # itself -- this keeps margin offset from base by the same one step that
+    # revenue_path's year-1 growth is offset from base_revenue.
     path = margin_path(_launch(), n=10)
-    assert path[0] == pytest.approx(-0.10)
+    assert path[0] == pytest.approx(-0.10 + (0.45 - -0.10) * 1 / 10)
     assert path[-1] == pytest.approx(0.45)
 
 

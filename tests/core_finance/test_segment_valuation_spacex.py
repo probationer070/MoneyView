@@ -202,11 +202,16 @@ def test_seeded_pair_enterprise_values():
     template, with these inputs, actually produces. The published reference
     figures Damodaran gives are $1,210bn (pre) and $1,220bn (post) -- todo3
     line 158: "enterprise value barely moved ($1.21T -> $1.22T)". The model
-    produces the OPPOSITE direction: post (1282.1) < pre (1310.9). The source
+    produces the OPPOSITE direction: post (1295.9) < pre (1323.7). The source
     has value rising slightly from pre to post; this model has it falling. This
     is an open discrepancy against the source, not a reproduction of it.
+
+    Figures reflect the margin_path year-1 alignment fix (base_margin +
+    (margin_target - base_margin) x t / n): previously 1282.1 / 1310.9, when
+    margin_path left year 1 at base_margin unconverged while revenue_path had
+    already applied a full year of growth.
     """
     pre = run_case(*pre_prospectus())
     post = run_case(*post_prospectus())
-    assert post.enterprise_value == pytest.approx(1282.1, abs=0.5)
-    assert pre.enterprise_value == pytest.approx(1310.9, abs=0.5)
+    assert post.enterprise_value == pytest.approx(1295.9, abs=0.5)
+    assert pre.enterprise_value == pytest.approx(1323.7, abs=0.5)
