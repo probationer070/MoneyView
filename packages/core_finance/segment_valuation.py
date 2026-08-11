@@ -29,18 +29,33 @@ _G1_LOW = -0.99
 _G1_HIGH = 1000.0
 _BISECTION_STEPS = 200
 
-# The terminal formula holds margin at margin_target in perpetuity, so
-# ROIC = sales_to_capital_late x margin x (1 - tau) with capital intensity fixed.
-# A terminal ROIC that differs from the target-year marginal return is therefore
-# not "competitive erosion" -- erosion is a margin story -- it is an unmodelled
-# change in capital intensity (sales_to_capital), and that is equally unmodelled
-# whether the terminal return sits above or below the marginal one. This bound
-# caps how far the terminal block's implied capital intensity may drift from the
-# target year's before the case is asserting a structural change the model does
-# not contain. 0.60 rejects the historical defect value (roic_stable=0.12 implied
-# a +210% capital-intensity increase on the post-prospectus case) while admitting
-# both seeded cases (+12.6% post, +50.3% pre at roic_stable=0.33).
-_TERMINAL_CAPITAL_INTENSITY_TOLERANCE = 0.60
+# A terminal ROIC below the target-year marginal return implies the terminal
+# block reinvests more per dollar of new revenue than the target year does --
+# `terminal_value` charges reinvestment g / roic_stable, so a lower terminal
+# return mechanically raises it. `CaseResult.terminal_capital_intensity_change`
+# reports the size of that implied change.
+#
+# It is REPORTED, not enforced. This was a hard bound (tolerance 0.60) until
+# 2026-08-11, on the reasoning that a drift this large asserts a structural
+# change the model does not contain. Reading Damodaran's own spreadsheets
+# disproved the premise: his terminal return on capital is 0.15 against a
+# target-year marginal return of 1.017 (post) and 0.901 (pre) -- implied
+# increases of +578% and +501%, an order of magnitude past the bound. His
+# template's DEFAULT is lower still (terminal ROIC = cost of capital, 0.0825),
+# with 0.15 entered as a deliberate override upward. Fading excess returns to
+# a mature level is the framework's central terminal assumption, not an
+# inconsistency, and `terminal_value`'s reinvestment term is the mechanism that
+# carries it. A bound that rejects the source it reproduces is a false-positive
+# generator, so the number is surfaced and the judgement left to the reader.
+#
+# The opposite direction still raises: a terminal return ABOVE the target-year
+# marginal one has no mechanism, since margins have converged and
+# sales_to_capital does not change after the target year.
+#
+# What made the historical defect (roic_stable=0.12, chosen arbitrarily) a
+# defect was its lack of provenance, not its level -- 0.12 is far closer to the
+# source's confirmed 0.15 than the 0.33 that replaced it. Provenance is a
+# narrative problem; see `guideline/sop/todo.md`, "Known divergences", item 3.
 
 
 @dataclass(frozen=True)
@@ -553,6 +568,10 @@ class CaseResult:
     base_revenue_total: float
     base_ebit_total: float
     marginal_roic_target_year: float
+    # marginal_roic_target_year / roic_stable - 1. Positive means the terminal
+    # block implies more capital per dollar of new revenue than the target year.
+    # A diagnostic, not a gate; see the note above the constants.
+    terminal_capital_intensity_change: float
     terminal_reinvestment_rate: float
     reinvestment_rate_target_year: float
     explicit_reinvestment_rate_at_stable_growth: float
@@ -697,22 +716,12 @@ def run_case(case: CaseSpec, segments: list[SegmentSpec]) -> CaseResult:
             f"new capital could improve."
         )
 
-    # A terminal return too far BELOW the marginal return is not "competitive
-    # erosion" either. The terminal formula holds margin at margin_target in
-    # perpetuity, so with margin fixed, ROIC = sales_to_capital x margin x
-    # (1 - tau): the only thing a lower terminal ROIC can express is a lower
-    # implied sales-to-capital, i.e. more capital intensity -- an unmodelled
-    # structural change, equally unsupported in either direction. See
-    # `_TERMINAL_CAPITAL_INTENSITY_TOLERANCE` for the bound and its grounding.
-    if target_year_marginal_roic / case.roic_stable > 1 + _TERMINAL_CAPITAL_INTENSITY_TOLERANCE:
-        capital_intensity_increase = target_year_marginal_roic / case.roic_stable - 1
-        raise ValueError(
-            f"roic_stable {case.roic_stable:.4%} is too far below the target-year "
-            f"marginal return on new capital {target_year_marginal_roic:.4%}: it "
-            f"implies a {capital_intensity_increase:.1%} increase in capital "
-            f"intensity (sales-to-capital falling) beyond the target year, and the "
-            f"model contains no mechanism producing that."
-        )
+    # Reported, not enforced -- see the note on the constants above for why the
+    # bound that used to live here was removed. Zero means the terminal block
+    # reinvests at exactly the target year's rate per dollar of new revenue.
+    terminal_capital_intensity_change = (
+        target_year_marginal_roic / case.roic_stable - 1
+    )
 
     pv_explicit = sum(fcff[t] * factors[t] for t in range(n))
     tv = terminal_value(
@@ -772,6 +781,7 @@ def run_case(case: CaseSpec, segments: list[SegmentSpec]) -> CaseResult:
         base_revenue_total=sum(s.base_revenue for s in segments),
         base_ebit_total=sum(s.base_revenue * s.base_margin for s in segments),
         marginal_roic_target_year=target_year_marginal_roic,
+        terminal_capital_intensity_change=terminal_capital_intensity_change,
         terminal_reinvestment_rate=g_stable / case.roic_stable,
         # Zero NOPAT makes the ratio undefined rather than infinite. Reported as
         # 0.0, matching how `terminal_value_share_pct` above handles a zero

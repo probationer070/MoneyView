@@ -59,11 +59,11 @@ async def run_valuation_case(case_id: int):
     NOL balance, a tax rate outside [0, 1], target_year at or before base_year,
     ramp_start_year below 1, ...) or inside `run_case`/`terminal_value`: a
     non-positive WACC-to-growth spread, ROIC at or below WACC with positive
-    growth, roic_stable exceeding the target-year marginal return on new capital,
-    or roic_stable sitting so far below it that it implies more than a 60%
-    increase in capital intensity beyond the target year -- the terminal
-    consistency guard is two-sided, rejecting a terminal return that is either
-    too high or too low relative to what the model's own inputs support.
+    growth, or roic_stable exceeding the target-year marginal return on new
+    capital -- returns cannot improve after the target year, since margins have
+    converged and sales-to-capital no longer changes. A terminal return BELOW
+    the marginal one is not rejected at any distance; the implied change in
+    capital intensity is reported as `terminal_capital_intensity_change`.
     """
     try:
         return APIResponse(data=run_stored_case(case_id))

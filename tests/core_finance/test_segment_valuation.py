@@ -574,11 +574,8 @@ def test_the_guard_message_names_both_values():
 
 
 def test_terminal_roic_moderately_below_the_marginal_return_is_accepted():
-    """Spec gate 3. The guard is two-sided but not a point constraint: erosion
-    within the capital-intensity tolerance is legitimate.
-
-    0.35 against a 0.50625 marginal return implies a 44.6% capital-intensity
-    increase -- within the 60% tolerance -- so it must still run.
+    """Spec gate 3. Erosion below the target-year marginal return is legitimate:
+    0.35 against a 0.50625 marginal return must run.
     """
     result = run_case(_case(roic_stable=0.35), [_launch()])
     assert result.terminal_reinvestment_rate > result.reinvestment_rate_target_year
@@ -606,35 +603,46 @@ def test_terminal_roic_exactly_at_the_marginal_return_is_accepted():
     assert result.marginal_roic_target_year == pytest.approx(0.50625)
 
 
-def test_terminal_roic_far_below_the_marginal_return_raises():
-    """C1. 0.12 against a 0.50625 marginal return is the historical defect
-    value that motivated this work -- a suspiciously low terminal return that
-    the old one-sided guard let through. It implies a 321.9% capital-intensity
-    increase beyond the target year (0.50625 / 0.12 - 1), far past the 60%
-    tolerance, so the two-sided guard now rejects it.
+def test_terminal_roic_far_below_the_marginal_return_is_reported_not_rejected():
+    """There is no floor. 0.12 against a 0.50625 marginal return implies a
+    321.9% capital-intensity increase, and the case still runs.
+
+    This was a hard rejection until 2026-08-11. Damodaran's own spreadsheets
+    (`guideline/sop/todo3-spreadsheet-values.md`) carry a terminal return of
+    0.15 against target-year marginal returns of 1.017 and 0.901 -- +578% and
+    +501% -- so a floor at any level near 60% rejects the source this engine
+    reproduces. Fading returns to a mature level is the framework's terminal
+    assumption, and `terminal_value`'s g / roic_stable reinvestment term is the
+    mechanism that carries it.
     """
-    with pytest.raises(ValueError, match="capital intensity"):
-        run_case(_case(roic_stable=0.12), [_launch()])
+    result = run_case(_case(roic_stable=0.12), [_launch()])
+    assert result.enterprise_value > 0
+    assert result.terminal_capital_intensity_change == pytest.approx(
+        0.50625 / 0.12 - 1
+    )
 
 
-def test_the_floor_guard_message_names_both_values_and_the_implied_increase():
-    """A guard that does not say what it compared cannot be acted on."""
-    with pytest.raises(ValueError) as excinfo:
-        run_case(_case(roic_stable=0.12), [_launch()])
-    message = str(excinfo.value)
-    assert "12.0000%" in message
-    assert "50.6250%" in message
-    assert "321.9%" in message
+def test_terminal_capital_intensity_change_is_zero_at_the_marginal_return():
+    """The diagnostic's zero point: a terminal return equal to the target-year
+    marginal one implies no change in capital per dollar of new revenue."""
+    launch = _launch()
+    case = _case()
+    consistent = launch.sales_to_capital_late * launch.margin_target * (
+        1 - case.marginal_tax_rate
+    )
+    result = run_case(_case(roic_stable=consistent), [launch])
+    assert result.terminal_capital_intensity_change == pytest.approx(0.0, abs=1e-9)
 
 
-def test_terminal_roic_just_inside_the_floor_boundary_is_accepted():
-    """The floor boundary is inclusive: exactly 60% above is consistent, not
-    contradictory. Tested a hair inside the boundary rather than exactly on it,
-    since `0.50625 / 1.6` and the engine's own floating-point computation of
-    the marginal return are not guaranteed to be bit-identical inverses."""
-    just_inside_floor = 0.50625 / 1.6 * 1.0000001
-    result = run_case(_case(roic_stable=just_inside_floor), [_launch()])
-    assert result.marginal_roic_target_year == pytest.approx(0.50625)
+def test_terminal_capital_intensity_change_grows_as_the_terminal_return_falls():
+    """Monotone in the right direction: a lower terminal return means more
+    implied capital per dollar of new revenue, never less."""
+    changes = [
+        run_case(_case(roic_stable=r), [_launch()]).terminal_capital_intensity_change
+        for r in (0.45, 0.35, 0.25, 0.15)
+    ]
+    assert changes == sorted(changes)
+    assert all(c > 0 for c in changes)
 
 
 def test_terminal_reinvestment_rate_stays_below_one_for_any_admitted_case():
