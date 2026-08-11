@@ -207,3 +207,64 @@ def resolve_benchmark(
         ranked=tuple(row.name for row in ranked_rows),
         rejected=tuple(rejected),
     )
+
+
+Direction = Literal["lower_is_conservative", "higher_is_conservative"]
+
+# Which way "conservative" points, per assumption. It flips with whether the
+# input is a benefit or a cost: a company assumed to pay less tax, or raise
+# cheaper capital, than the best of its sector is being flattered exactly as
+# much as one assumed to earn a higher margin.
+#
+# `unlevered_beta`, `debt_to_capital` and `reinvestment_rate` are absent
+# deliberately. The segment engine takes WACC directly rather than rebuilding it
+# from beta and leverage, so fading the first two would move nothing; and
+# reinvestment is an engine OUTPUT (`ΔRevenue / sales_to_capital`), not an input,
+# so benchmarking it would assert a result the model is supposed to derive.
+# Fading fields the engine does not consume is precisely what caused this plan to
+# be retargeted away from `corporate_dcf`.
+FADE_DIRECTIONS: dict[str, Direction] = {
+    "revenue_growth": "lower_is_conservative",
+    "operating_margin": "lower_is_conservative",
+    "after_tax_roc": "lower_is_conservative",
+    # A HIGHER sales/capital means LESS capital per dollar of new revenue, so it
+    # is a benefit and fades DOWN. Backwards, capital-hungry companies look
+    # cheaper -- the opposite of conservative.
+    "sales_to_capital": "lower_is_conservative",
+    "effective_tax_rate": "higher_is_conservative",
+    "cost_of_capital": "higher_is_conservative",
+}
+
+
+def fade(
+    company: float,
+    benchmark: float,
+    direction: Direction,
+    *,
+    year: int,
+    horizon: int,
+) -> float:
+    """Move `company` toward `benchmark`, but only in the conservative direction.
+
+    Linear from the company's own value to the benchmark, reaching it exactly in
+    year `horizon`. Year 1 is one step in rather than the unfaded value, which
+    matches `margin_path`'s convention in `segment_valuation.py`.
+
+    Where the company is already on the conservative side of the benchmark the
+    value HOLDS. Nothing ever fades toward optimism: a laggard is not assumed to
+    catch the best in its sector.
+    """
+    if not 1 <= year <= horizon:
+        raise ValueError(
+            f"year must be between 1 and the horizon {horizon}, got {year}"
+        )
+    if direction == "lower_is_conservative":
+        if company <= benchmark:
+            return company
+    elif direction == "higher_is_conservative":
+        if company >= benchmark:
+            return company
+    else:
+        raise ValueError(f"unknown fade direction {direction!r}")
+
+    return company + (benchmark - company) * year / horizon

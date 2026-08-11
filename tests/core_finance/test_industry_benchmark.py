@@ -186,3 +186,85 @@ def test_thin_industries_are_excluded_from_ranking_entirely():
 def test_top_n_defaults_to_five():
     result = resolve_benchmark("Technology", TECHNOLOGY_ROWS)
     assert len(result.columns["operating_margin"].industries) == 5
+
+
+from packages.core_finance.industry_benchmark import FADE_DIRECTIONS, fade
+
+
+def test_a_benefit_above_the_benchmark_fades_down_to_it():
+    """22% margin against a 15% benchmark reaches 15% in the terminal year."""
+    assert fade(0.22, 0.15, "lower_is_conservative", year=5, horizon=5) == pytest.approx(0.15)
+    assert fade(0.22, 0.15, "lower_is_conservative", year=1, horizon=5) == pytest.approx(0.206)
+
+
+def test_a_benefit_below_the_benchmark_holds_and_never_fades_up():
+    """A 9% company is not assumed to catch the best in its sector. The
+    asymmetry IS the conservatism; a symmetric fade would be mean reversion,
+    which is a different and less cautious claim."""
+    for year in range(1, 6):
+        assert fade(0.09, 0.15, "lower_is_conservative", year=year, horizon=5) == 0.09
+
+
+def test_a_cost_below_the_benchmark_fades_up_to_it():
+    """A company assumed to raise cheaper capital than the best of its sector is
+    being flattered exactly as much as one assumed to earn a higher margin."""
+    assert fade(0.07, 0.095, "higher_is_conservative", year=5, horizon=5) == pytest.approx(0.095)
+    assert fade(0.07, 0.095, "higher_is_conservative", year=1, horizon=5) == pytest.approx(0.075)
+
+
+def test_a_cost_above_the_benchmark_holds():
+    for year in range(1, 6):
+        assert fade(0.12, 0.095, "higher_is_conservative", year=year, horizon=5) == 0.12
+
+
+def test_a_company_exactly_at_the_benchmark_does_not_move():
+    for direction in ("lower_is_conservative", "higher_is_conservative"):
+        assert fade(0.15, 0.15, direction, year=3, horizon=5) == pytest.approx(0.15)
+
+
+def test_year_one_is_one_step_in_not_the_unfaded_value():
+    """Matches the convention `margin_path` already uses in segment_valuation:
+    year 1 receives one step of convergence rather than none."""
+    value = fade(0.20, 0.10, "lower_is_conservative", year=1, horizon=5)
+    assert value == pytest.approx(0.18)
+    assert value != 0.20
+
+
+def test_the_fade_is_monotone_across_the_horizon():
+    path = [fade(0.22, 0.15, "lower_is_conservative", year=y, horizon=5) for y in range(1, 6)]
+    assert path == sorted(path, reverse=True)
+
+
+def test_year_zero_or_beyond_the_horizon_raises():
+    with pytest.raises(ValueError, match="between 1 and"):
+        fade(0.2, 0.1, "lower_is_conservative", year=0, horizon=5)
+    with pytest.raises(ValueError, match="between 1 and"):
+        fade(0.2, 0.1, "lower_is_conservative", year=6, horizon=5)
+
+
+def test_every_faded_assumption_declares_a_direction():
+    """A column with no declared direction would silently never fade.
+
+    unlevered_beta, debt_to_capital and reinvestment_rate are ABSENT on purpose:
+    the segment engine takes WACC directly rather than rebuilding it from beta
+    and leverage, and reinvestment is an engine OUTPUT (ΔRevenue /
+    sales_to_capital), not an input. Fading a field the engine does not consume
+    is what caused this plan to be retargeted.
+    """
+    assert FADE_DIRECTIONS == {
+        "revenue_growth": "lower_is_conservative",
+        "operating_margin": "lower_is_conservative",
+        "after_tax_roc": "lower_is_conservative",
+        "sales_to_capital": "lower_is_conservative",
+        "effective_tax_rate": "higher_is_conservative",
+        "cost_of_capital": "higher_is_conservative",
+    }
+
+
+def test_sales_to_capital_is_a_benefit_and_fades_down():
+    """A HIGHER sales/capital means LESS capital per dollar of new revenue. Get
+    this backwards and capital-hungry companies look cheaper -- the opposite of
+    conservative. This is the direction most likely to be implemented wrong."""
+    assert FADE_DIRECTIONS["sales_to_capital"] == "lower_is_conservative"
+    assert fade(3.0, 2.0, "lower_is_conservative", year=10, horizon=10) == pytest.approx(2.0)
+    assert fade(1.2, 2.0, "lower_is_conservative", year=10, horizon=10) == pytest.approx(1.2)
