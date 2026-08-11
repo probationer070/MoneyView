@@ -1069,6 +1069,25 @@ Deferred, not oversights:
   a large unrelated Pydantic-version reformatting (`allOf` wrappers and redundant `const`
   keys disappear under Pydantic 2.13), so it belongs in its own commit.
 
+## Active Track - Industry-Relative Conservative Valuation
+
+Plan: `.superpowers/sdd/2026-08-11-industry-relative-conservative-valuation/`
+
+- [x] Task 1 (2026-08-11) - Industry row model and per-column screening.
+      `packages/core_finance/industry_benchmark.py`: `BenchmarkColumn`,
+      `BENCHMARK_COLUMNS` (9 columns, each with an explicit `Unit` and a
+      plausibility band tighter than the engine's own validation),
+      `IndustryRow`, `MIN_FIRMS = 10`, `screen_value`/`screen_row`. Screening
+      is column-level (a bad cell does not reject its row's other columns)
+      and row-level (firm count only) as two separate functions. Fixture of
+      10 real Damodaran technology-sector rows in
+      `tests/fixtures/industry_rows_technology.py`, transcribed verbatim
+      (unrounded) since later tasks assert averages over them to 1e-12.
+      7 tests in `tests/core_finance/test_industry_benchmark.py`; full suite
+      695 passed. `tests/fixtures/__init__.py` added since the directory did
+      not exist yet, matching the existing `tests/<pkg>/__init__.py` pattern.
+      No storage or case-generator wiring yet -- pure module only.
+
 ## Archived Track - MoneyView Dev Monitor
 
 Completed basis retained from the previous active plan:
