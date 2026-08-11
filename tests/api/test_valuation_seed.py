@@ -60,7 +60,7 @@ def test_every_seeded_input_carries_a_narrative():
                     "base_revenue", "base_margin", "tam_target",
                     "market_share_target", "revenue_target", "margin_target",
                     "sales_to_capital_early", "sales_to_capital_late",
-                    "initial_growth",
+                    "initial_growth", "waypoint_gap_fraction",
                 )
                 if segment[f] is not None
             }
@@ -240,39 +240,86 @@ def test_early_sales_to_capital_still_carries_the_confirmed_lowering():
         assert pre[name]["sales_to_capital_early"] > post[name]["sales_to_capital_early"], name
 
 
-def test_enterprise_value_tracks_the_spreadsheets():
-    """The first test here to assert an explicit-period-sensitive number against
-    an independently sourced expectation, rather than a sum of input literals.
+def test_post_prospectus_reproduces_the_spreadsheet_exactly():
+    """Not "within a tolerance" -- to the cent, through HTTP.
 
-    The post case lands within 0.5% of the source and the pre case within 2.5%.
-    The asymmetry is the point: terminal value is ~87% of post-prospectus value
-    and depends only on the target year, which now matches exactly, so the
-    remaining error is almost entirely in the explicit period -- where this
-    engine's decaying growth curve still differs from the source's gap-closing
-    interpolation. The pre workbook is also the hand-edited one, with a
-    different waypoint rule per segment.
+    Every input is transcribed, the gap-closing revenue curve reproduces the
+    source's own path, and the effective-tax ramp reproduces its tax row. What
+    is left is arithmetic both sides do identically.
+    """
+    ensure_valuation_cases_seeded()
+    data = _run(POST_CASE_NAME)
+    assert data["enterprise_value"] == pytest.approx(SOURCE_EV_POST, abs=1e-3)
+    assert data["equity_value"] == pytest.approx(1301.299006, abs=1e-3)
+    assert data["value_per_share_diluted"] == pytest.approx(97.827655, abs=1e-4)
 
-    These bounds are a regression guard, not a target. Tightening them is the
-    job of the revenue-shape work; if it lands, they should be tightened.
+
+def test_pre_prospectus_tracks_the_spreadsheet_once_its_error_is_corrected():
+    """S4 cannot be reproduced, and should not be: it contains a formula error.
+
+    `Valuation output!D15:L15` computes launch's reinvestment as the change in
+    TOTAL revenue (row 7) over launch's sales-to-capital ratio, instead of the
+    change in launch's own revenue (row 3). Only year 1 is right. Over the ten
+    years that overstates launch reinvestment 119682.5 against a correct
+    24712.5 -- nearly 5x -- which suppresses FCFF and pushes S4's enterprise
+    value down to the published 1216.06. S5 has the same row reading row 3
+    throughout; the error was fixed between the two workbooks.
+
+    This engine computes it correctly, so it reproduces the CORRECTED April
+    valuation, ~1270.8. The residual against that is the within-block
+    interpolation: S4 uses a constant 0.2 fraction in its first block and a
+    straight line in its second, where S5 (and this engine) use 0.2/0.3/0.4/0.5
+    in both. Reproducing S4 exactly would need per-segment, per-block shape
+    configuration for a workbook that has no single rule.
+    """
+    ensure_valuation_cases_seeded()
+    assert _run(PRE_CASE_NAME)["enterprise_value"] == pytest.approx(1270.8, rel=0.01)
+
+
+def test_the_pre_post_direction_agrees_with_the_corrected_source():
+    """The long-running divergence, closed -- in the engine's favour.
+
+    As published, the source has enterprise value RISING 1216.06 -> 1224.45
+    (+0.69%), and todo3's headline reads that as a 277-page prospectus barely
+    moving value. Corrected for S4's reinvestment error, the April valuation is
+    ~1270.8 and value FALLS about 3.6%. This engine has always shown a fall.
+
+    So the direction this model was repeatedly "wrong" about was right, and the
+    source's rise is an artifact of a formula error in the April spreadsheet.
     """
     ensure_valuation_cases_seeded()
     pre_ev = _run(PRE_CASE_NAME)["enterprise_value"]
     post_ev = _run(POST_CASE_NAME)["enterprise_value"]
-    assert pre_ev == pytest.approx(SOURCE_EV_PRE, rel=0.025)
-    assert post_ev == pytest.approx(SOURCE_EV_POST, rel=0.005)
-
-
-def test_the_pre_post_enterprise_value_direction_is_still_inverted():
-    """Recorded, not asserted as correct. The source has enterprise value RISING
-    1216.06 -> 1224.45 (+0.69%); this engine still has it falling, because the
-    pre case carries the larger explicit-period error (+2.0% vs -0.4%).
-
-    Every confirmed input now matches the spreadsheets, so the residual is the
-    revenue path shape and nothing else. This test exists to fail loudly when
-    the shape work lands -- at which point it should be inverted, not deleted.
-    """
-    ensure_valuation_cases_seeded()
-    pre_ev = _run(PRE_CASE_NAME)["enterprise_value"]
-    post_ev = _run(POST_CASE_NAME)["enterprise_value"]
-    assert SOURCE_EV_POST > SOURCE_EV_PRE
     assert post_ev < pre_ev
+    assert post_ev / pre_ev - 1 == pytest.approx(-0.036, abs=0.01)
+
+
+def test_the_seeded_waypoints_are_the_ones_each_workbook_uses():
+    """S5 applies 1/3 to all four segments. S4 does not: launch and
+    connectivity sit at 0.5 and AI at 1/3, transcribed per segment rather than
+    smoothed to one value."""
+    ensure_valuation_cases_seeded()
+    pre = {s["name"]: s["waypoint_gap_fraction"]
+           for s in load_case(_case_id(PRE_CASE_NAME))["segments"]}
+    post = {s["name"]: s["waypoint_gap_fraction"]
+            for s in load_case(_case_id(POST_CASE_NAME))["segments"]}
+    assert pre == pytest.approx(
+        {"launch": 0.5, "connectivity": 0.5, "ai": 1 / 3, "expansion": None}
+    )
+    assert post == pytest.approx(
+        {"launch": 1 / 3, "connectivity": 1 / 3, "ai": 1 / 3, "expansion": None}
+    )
+
+
+def test_the_effective_tax_rate_is_seeded_and_ramps():
+    """`Input sheet!B23` is 0.10 in both workbooks, and B63 is "No", so the rate
+    converges to the 0.25 marginal by year 10 rather than holding. Worth 19.4 of
+    enterprise value on the post case -- the single largest remaining error
+    before it was added."""
+    ensure_valuation_cases_seeded()
+    for name in (PRE_CASE_NAME, POST_CASE_NAME):
+        assert load_case(_case_id(name))["effective_tax_rate"] == pytest.approx(0.10)
+    data = _run(POST_CASE_NAME)
+    rates = [tax / ebit for tax, ebit in zip(data["tax"], data["ebit"])]
+    assert rates[:5] == pytest.approx([0.10] * 5)
+    assert rates[5:] == pytest.approx([0.13, 0.16, 0.19, 0.22, 0.25])

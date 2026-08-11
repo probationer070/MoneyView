@@ -82,6 +82,9 @@ class SegmentSpec:
     revenue_target: float | None = None
     ramp_start_year: int = 1
     initial_growth: float | None = None     # observed year-1 growth; None = decaying curve
+    # Fraction of the base-to-target revenue gap closed by the midpoint year.
+    # Setting it selects the gap-closing curve; see `_gap_closing_revenues`.
+    waypoint_gap_fraction: float | None = None
 
     def __post_init__(self) -> None:
         if self.ramp_start_year < 1:
@@ -113,6 +116,31 @@ class SegmentSpec:
                     f"incoherent with a ramped segment (base_revenue="
                     f"{self.base_revenue}, ramp_start_year={self.ramp_start_year}); "
                     f"a segment with no revenue today has no year-1 growth to pin"
+                )
+        if self.waypoint_gap_fraction is not None:
+            if not 0.0 < self.waypoint_gap_fraction < 1.0:
+                raise ValueError(
+                    f"{self.name}: waypoint_gap_fraction must lie strictly "
+                    f"between 0 and 1, got {self.waypoint_gap_fraction}. At 0 "
+                    f"the midpoint year closes none of the gap and the second "
+                    f"half carries all of it; at 1 the midpoint year is already "
+                    f"at target and the second half is flat."
+                )
+            if self.initial_growth is not None:
+                raise ValueError(
+                    f"{self.name}: waypoint_gap_fraction and initial_growth are "
+                    f"different revenue curves and cannot both be set. The "
+                    f"gap-closing curve fixes year-1 revenue from the waypoint, "
+                    f"so there is no free amplitude left to hit an observed "
+                    f"year-1 growth rate as well."
+                )
+            if self.base_revenue == 0 or self.ramp_start_year > 1:
+                raise ValueError(
+                    f"{self.name}: waypoint_gap_fraction="
+                    f"{self.waypoint_gap_fraction} is incoherent with a ramped "
+                    f"segment (base_revenue={self.base_revenue}, "
+                    f"ramp_start_year={self.ramp_start_year}); closing a "
+                    f"fraction of a gap that starts at zero is just a ramp"
                 )
 
     def target_revenue(self) -> float:
@@ -277,16 +305,76 @@ def _ramp_revenues(target: float, n: int, ramp_start_year: int) -> list[float]:
     return [0.0] * lead + [target * step / steps for step in range(1, steps + 1)]
 
 
+# Years 1..5 use sales_to_capital_early, 6..n the late ratio.
+_EARLY_YEARS = 5
+
+# Fraction of the gap remaining to the block's endpoint that each year closes.
+# Four entries, not five: the block's final year is set to the endpoint itself.
+# These are literal constants typed into Damodaran's spreadsheet
+# (`Valuation output` row 3, cells C3:F3 and H3:K3), not evaluations of a
+# formula -- there is nothing here to generalise to a block of another length,
+# which is why `_gap_closing_revenues` requires the horizon it was written for.
+_BLOCK_GAP_FRACTIONS = (0.2, 0.3, 0.4, 0.5)
+
+
+def _gap_closing_revenues(
+    base: float, target: float, n: int, waypoint_fraction: float
+) -> list[float]:
+    """Two equal blocks, each closing a fixed share of the remaining gap.
+
+    The scheme Damodaran's SpaceX spreadsheets use, transcribed in
+    `guideline/sop/todo3-spreadsheet-values.md`. A waypoint sits
+    `waypoint_fraction` of the way from base to target at the midpoint year;
+    within each half, years 1-4 close 20%, 30%, 40% and 50% of whatever gap
+    remains to that half's endpoint, and year 5 lands on the endpoint exactly.
+
+    Growth RATES are an output here, not an input -- the source's own sheet
+    labels its growth row "Imputed Revenue growth rate". With the source's 1/3
+    waypoint, one third of total growth lands in the first half and two thirds
+    in the second, so the imputed rate JUMPS at the midpoint (16.5% to 50.5% on
+    the post-prospectus case) rather than decaying. The other curves in this
+    module cannot produce that: they are monotone or single-humped by
+    construction.
+    """
+    if n != 2 * _EARLY_YEARS:
+        raise ValueError(
+            f"the gap-closing curve is defined for a {2 * _EARLY_YEARS}-year "
+            f"horizon in two {_EARLY_YEARS}-year blocks, not {n}. Its "
+            f"within-block fractions {_BLOCK_GAP_FRACTIONS} are literal "
+            f"constants from the source spreadsheet with no formula behind "
+            f"them, so there is nothing to stretch or interpolate to a "
+            f"different length. Use the decaying or anchored curve instead."
+        )
+
+    revenues: list[float] = []
+    level = base
+    waypoint = base + (target - base) * waypoint_fraction
+    for endpoint in (waypoint, target):
+        for fraction in _BLOCK_GAP_FRACTIONS:
+            level += (endpoint - level) * fraction
+            revenues.append(level)
+        level = endpoint
+        revenues.append(level)
+    return revenues
+
+
 def revenue_path(spec: SegmentSpec, n: int, g_stable: float) -> list[float]:
     """Revenue for years 1..n, terminating exactly on the target -- todo3 R3.
 
-    Three shapes. A segment with revenue today decays its growth from a solved
-    year-1 rate down to `g_stable` (the default). A segment with `initial_growth`
-    set instead anchors year-1 growth to that observed rate and year-n growth to
-    `g_stable`, humped in between to still land on target. A segment starting
-    from zero ramps linearly instead: no growth rate reaches a positive target
-    from a base of zero. A non-zero base combined with `ramp_start_year > 1` is
-    incoherent and raises.
+    Four shapes, in dispatch order:
+
+    - a segment starting from zero ramps linearly: no growth rate reaches a
+      positive target from a base of zero. A non-zero base combined with
+      `ramp_start_year > 1` is incoherent and raises.
+    - `waypoint_gap_fraction` set: the gap-closing curve, which is what
+      Damodaran's spreadsheets actually do. See `_gap_closing_revenues`.
+    - `initial_growth` set: anchors year-1 growth to that observed rate and
+      year-n growth to `g_stable`, humped in between to still land on target.
+    - otherwise: growth decays from a solved year-1 rate to `g_stable`, making
+      year 1 the fastest year.
+
+    The first three are shape descriptions; only the last two are growth-rate
+    curves. All four land exactly on `target_revenue()` in year n.
     """
     target = spec.target_revenue()
     if target <= 0:
@@ -304,6 +392,11 @@ def revenue_path(spec: SegmentSpec, n: int, g_stable: float) -> list[float]:
 
     if spec.ramp_start_year > 1 or spec.base_revenue == 0:
         return _ramp_revenues(target, n, spec.ramp_start_year)
+
+    if spec.waypoint_gap_fraction is not None:
+        return _gap_closing_revenues(
+            spec.base_revenue, target, n, spec.waypoint_gap_fraction
+        )
 
     if spec.initial_growth is None:
         rates = _decaying_growth_rates(
@@ -328,8 +421,6 @@ def revenue_path(spec: SegmentSpec, n: int, g_stable: float) -> list[float]:
         revenues.append(level)
     return revenues
 
-
-_EARLY_YEARS = 5
 
 
 def margin_path(spec: SegmentSpec, n: int) -> list[float]:
@@ -396,10 +487,41 @@ def reinvestment(revenues: list[float], spec: SegmentSpec) -> list[float]:
     return amounts
 
 
+def tax_rate_path(
+    effective_rate: float,
+    marginal_rate: float,
+    n: int,
+    converge_from: int,
+) -> list[float]:
+    """Tax RATE per year, converging from effective to marginal.
+
+    Same shape as `wacc_path`, and for the same reason: a young company's
+    reported effective rate reflects credits, losses and structure that a mature
+    one does not keep. Flat at `effective_rate` through year `converge_from - 1`,
+    then linear to `marginal_rate` in year n.
+
+    Damodaran's template applies exactly this, hardwired to a 5/5 split
+    (`Valuation output` row 13: `=G13+($M$13-$G$13)/5` from year 6 on), and it is
+    not a rounding detail -- on the post-prospectus SpaceX case it is worth 19.4
+    of enterprise value, since it lifts every explicit-period cash flow.
+    """
+    if not 1 <= converge_from <= n:
+        raise ValueError(
+            f"converge_from must be between 1 and {n}, got {converge_from}"
+        )
+    lead = converge_from - 1
+    span = n - lead
+    spread = marginal_rate - effective_rate
+    return [effective_rate] * lead + [
+        effective_rate + spread * step / span for step in range(1, span + 1)
+    ]
+
+
 def tax_path(
     ebit: list[float],
     marginal_rate: float,
     nol_balance: float,
+    rate_schedule: list[float] | None = None,
 ) -> list[float]:
     """Tax paid per year, net of accumulated losses -- todo3 F2.
 
@@ -408,17 +530,26 @@ def tax_path(
     into the early years, where discounting hurts it least.
 
     Losses in the forecast add to the balance rather than generating a refund.
+
+    `rate_schedule`, when given, supplies the rate for each year and
+    `marginal_rate` is ignored -- see `tax_rate_path`. Without it every year is
+    taxed at `marginal_rate`.
     """
+    rates = rate_schedule if rate_schedule is not None else [marginal_rate] * len(ebit)
+    if len(rates) != len(ebit):
+        raise ValueError(
+            f"rate_schedule has {len(rates)} entries for {len(ebit)} years of EBIT"
+        )
     taxes: list[float] = []
     balance = float(nol_balance)
-    for amount in ebit:
+    for amount, rate in zip(ebit, rates):
         if amount <= 0:
             balance += -amount
             taxes.append(0.0)
             continue
         shield = min(balance, amount)
         balance -= shield
-        taxes.append((amount - shield) * marginal_rate)
+        taxes.append((amount - shield) * rate)
     return taxes
 
 
@@ -490,6 +621,10 @@ class CaseSpec:
     shares_basic: float
     shares_new: float
     terminal_growth: float | None = None
+    # Today's reported rate. When set, the tax rate converges from it to
+    # `marginal_tax_rate` on the same schedule as the WACC; when None every year
+    # is taxed at the marginal rate. See `tax_rate_path`.
+    effective_tax_rate: float | None = None
 
     def __post_init__(self) -> None:
         if self.target_year <= self.base_year:
@@ -515,6 +650,13 @@ class CaseSpec:
                 f"got {self.marginal_tax_rate}. A percentage such as 25.0 makes "
                 f"(1 - tau) negative and returns a large negative valuation with "
                 f"no error."
+            )
+        if self.effective_tax_rate is not None and not 0.0 <= self.effective_tax_rate <= 1.0:
+            raise ValueError(
+                f"effective_tax_rate must be a decimal fraction between 0 and 1, "
+                f"got {self.effective_tax_rate}. Same trap as marginal_tax_rate: "
+                f"a percentage such as 10.0 passes silently and taxes away ten "
+                f"times the operating income."
             )
         if self.roic_stable <= 0:
             raise ValueError(f"roic_stable must be positive, got {self.roic_stable}")
@@ -689,7 +831,15 @@ def run_case(case: CaseSpec, segments: list[SegmentSpec]) -> CaseResult:
     ebit = [sum(s.ebit[t] for s in segment_results) for t in range(n)]
     reinvest = [sum(s.reinvestment[t] for s in segment_results) for t in range(n)]
 
-    tax = tax_path(ebit, case.marginal_tax_rate, case.nol_balance)
+    rate_schedule = None
+    if case.effective_tax_rate is not None:
+        rate_schedule = tax_rate_path(
+            case.effective_tax_rate,
+            case.marginal_tax_rate,
+            n,
+            case.wacc_converge_from,
+        )
+    tax = tax_path(ebit, case.marginal_tax_rate, case.nol_balance, rate_schedule)
     fcff = [ebit[t] - tax[t] - reinvest[t] for t in range(n)]
 
     waccs = wacc_path(case.wacc_initial, case.wacc_stable, n, case.wacc_converge_from)

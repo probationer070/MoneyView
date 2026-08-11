@@ -29,6 +29,7 @@ class SegmentInput(BaseModel):
     revenue_target: float | None = None
     ramp_start_year: int = Field(default=1, ge=1)
     initial_growth: float | None = Field(default=None, gt=-1)
+    waypoint_gap_fraction: float | None = Field(default=None, gt=0, lt=1)
     narratives: list[SegmentNarrativeInput] = Field(default_factory=list)
 
 
@@ -48,6 +49,7 @@ class ValuationCaseInput(BaseModel):
     wacc_converge_from: int = Field(default=6, ge=1)
     nol_balance: float = Field(default=0.0, ge=0)
     terminal_growth: float | None = None
+    effective_tax_rate: float | None = Field(default=None, ge=0, le=1)
     # No defaults: the equity bridge (cash, debt, ipo_proceeds, shares_new) must
     # be stated, not silently assumed to be a debt-free, cash-free firm with no
     # pending raise. See `calculate_net_debt`'s docstring in dcf.py for the same

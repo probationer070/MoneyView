@@ -623,6 +623,51 @@ Still open from that review, deliberately out of scope:
    This closes the open calibration question. It also supersedes the premise of
    the linked design spec, whose scope decision was made without these values.
 
+   **Fully resolved 2026-08-11: the source's direction is an artifact of a
+   formula error, and this model's direction was right all along.**
+
+   S4's `Valuation output!D15:L15` computes launch's reinvestment as the change
+   in TOTAL revenue (row 7) divided by launch's sales-to-capital ratio, instead
+   of the change in launch's own revenue (row 3). Only year 1 is correct. S5's
+   row 15 reads row 3 in every column, so it was fixed between the workbooks.
+   Verified both ways: the buggy formula reproduces S4's stored values in all
+   ten columns; the correct one reproduces only year 1. Over ten years it gives
+   launch reinvestment of 119,682.5 against a correct 24,712.5 -- nearly 5x --
+   and discounting the excess accounts for 54.7 of enterprise value, the entire
+   remaining gap.
+
+   | | Enterprise value | Direction |
+   | --- | --- | --- |
+   | Source as published | 1216.06 -> 1224.45 | **+0.69%** |
+   | Source with S4 corrected | ~1270.8 -> 1224.45 | **-3.6%** |
+   | This engine | 1280.16 -> 1224.45 | **-4.4%** |
+
+   So todo3 line 158's headline -- *"This is why the enterprise value barely
+   moved"* -- rests on the error. The near-cancellation is real at target-year
+   EBIT (155.0 -> 160.0, +3.2%) and not real at enterprise value.
+
+   Three separate rounds of work treated this model's falling direction as its
+   own defect, including two published claims about why it could not be fixed.
+   The direction was never the defect. What made it look like one was comparing
+   against a figure without being able to see how it was computed.
+
+5. **The post-prospectus case reproduces its spreadsheet exactly (closed
+   2026-08-11).** PV explicit 161.8819499, PV terminal 1062.5660566, enterprise
+   value 1224.4480065, value per share 97.8276552, and the revenue path matches
+   `Valuation output` rows 3-5 cell for cell. Two engine changes were needed
+   beyond the input transcription: `waypoint_gap_fraction` (the two-block
+   gap-closing revenue curve the source actually uses) and `effective_tax_rate`
+   (10% held through year 5, then linear to the 25% marginal rate -- worth 19.4
+   of enterprise value on its own).
+
+   The pre-prospectus case reproduces the CORRECTED April valuation to within
+   1% and cannot reproduce the published one, by design. Its residual is the
+   within-block interpolation: S4 uses a constant 0.2 fraction in its first
+   block and a straight line in its second, where S5 and this engine use
+   0.2/0.3/0.4/0.5 in both. Reproducing S4 exactly would need per-segment,
+   per-block shape configuration for a workbook that has no single rule --
+   deliberately not built.
+
 **Closed 2026-08-11.** This section used to record that no test asserted an
 explicit-period value against an independently computed expectation -- the
 confirmed-input gates were pure sums of the input literals and would pass

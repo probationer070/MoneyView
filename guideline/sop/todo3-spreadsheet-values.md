@@ -168,6 +168,45 @@ from 0 to target across years 6–10, anchored on the absolute year-5 cell.
 | Terminal value | `FCFF_terminal / (WACC_terminal − g)`, discounted at the year-10 cumulative factor |
 | Share count | `base shares + IPO proceeds / value per share` — **circular**, solved by Excel iteration |
 
+---
+
+## 3a. S4 contains a formula error
+
+`SpaceX2026IPO.xlsx`, `Valuation output` row 15 — launch's reinvestment:
+
+| Cell | Formula | Reads |
+| --- | --- | --- |
+| `C15` (year 1) | `=(C3-B3)/C49` | row 3, launch revenue — **correct** |
+| `D15`–`L15` (years 2–10) | `=(D7-C7)/D49` … | **row 7, TOTAL revenue** |
+
+Every year after the first divides the change in *consolidated* revenue by
+*launch's* sales-to-capital ratio. S5's row 15 reads row 3 in all ten columns,
+so the error was fixed between the two workbooks.
+
+Verified two ways: the buggy formula reproduces S4's stored values exactly in
+all ten columns, and the correct one reproduces only year 1.
+
+| | Launch reinvestment, 10-year total |
+| --- | ---: |
+| S4 as computed | 119,682.5 |
+| Correct | 24,712.5 |
+
+Nearly 5× overstated. That suppresses FCFF across the explicit period and holds
+S4's enterprise value down. Discounting the excess at S4's flat 8% cost of
+capital accounts for 54.7 of enterprise value — which is the entire gap between
+this engine's corrected pre-case figure and the published one.
+
+**Consequence for the headline finding.** As published, enterprise value rises
+1,216,061 → 1,224,448 (+0.69%), and `todo3.md` line 158 builds its central
+lesson on that: *"This is why the enterprise value barely moved."* Correct the
+error and the April valuation is ≈1,270,800, so enterprise value **falls about
+3.6%** across the prospectus. The near-cancellation is real at the target-year
+EBIT level (155.0 → 160.0, +3.2%); it is not real at the enterprise-value level.
+
+This also closes the pre/post direction question in the engine's favour. This
+model showed a fall throughout, and three rounds of work treated that as its own
+defect. It was not.
+
 ### S4 is not internally consistent
 
 S4 predates the uniform treatment. Its year-5 waypoint is at 50% of the gap for
@@ -180,28 +219,33 @@ row, not by applying a rule.
 
 ## 4. Divergences from the MoneyView engine as built
 
-| # | Item | Source | `valuation_seed.py` | Impact |
-| --- | --- | --- | --- | --- |
-| 1 | Terminal ROIC | 0.15 | 0.33 | Dominates terminal value; largest single error |
-| 2 | Revenue shape | Two-block gap-closing, 1/3 waypoint | Decaying / anchored / hump curve | Whole path |
-| 3 | Post target revenue | 420,000 | 400,000 | −4.8% on year-10 revenue |
-| 4 | Post year-10 EBIT | 160,000 | 158,500 | — |
-| 5 | Pre year-10 EBIT | 155,000 | 151,000 | — |
-| 6 | Pre xAI target margin | 0.50 | 0.45 | Followed a footnote guess now disproved |
-| 7 | Sales-to-capital slope | Reverses S4→S5 (see §2) | Invented magnitudes, wrong direction | Caused the pre/post EV sign error |
-| 8 | Base margins | 0.08 / 0.10 / −0.05 / 0.00 | Single assumed value | Path-wide |
-| 9 | R&D capitalization | Yes, in both | Deferred by decision | Base EBIT sign flips: −2,589 → +4,020.2 |
-| 10 | Terminal growth | = riskfree, not overridden | — | — |
-| 11 | Share count | Circular on value per share | Fixed at 12.535 + 0.556 | Post value/share |
+All of the below were corrected on 2026-08-11 unless marked open.
 
-**Item 7 closes the question left open in `todo3.md`'s "Known divergences"
-item 1.** The engine produced EV falling pre→post; the source has it rising by
-+0.69%. The cause was neither an incompatibility in the source (my first claim,
-false) nor a calibration magnitude to be tuned (my second framing, also wrong).
-The source reverses the *direction* of the sales-to-capital slope between the two
-valuations, and lowers the early ratios while raising the late ones. No amount of
-tuning a single "lowering magnitude" reaches that, because it is a different
-shape, not a different size.
+| # | Item | Source | Was | Status |
+| --- | --- | --- | --- | --- |
+| 1 | Terminal ROIC | 0.15 | 0.33 | Fixed |
+| 2 | Revenue shape | Two-block gap-closing | Decaying / anchored curve | Fixed — `waypoint_gap_fraction` |
+| 3 | Effective tax rate | 0.10, ramping to marginal | marginal every year | Fixed — `effective_tax_rate` |
+| 4 | Post target revenue | 420,000 | 400,000 | Fixed |
+| 5 | Post / pre year-10 EBIT | 160,000 / 155,000 | 158,500 / 151,000 | Fixed |
+| 6 | Pre xAI target margin | 0.50 | 0.45 | Fixed — footnote 1 disproved |
+| 7 | Sales-to-capital | Slope reverses S4→S5 | Invented magnitudes | Fixed |
+| 8 | Base revenues and margins | Per-segment rows | Apportioned / single value | Fixed |
+| 9 | Expansion ramp start | Year 6 | Year 7 | Fixed |
+| 10 | Share count | Circular on value per share | 12.535 + 0.556 | Fixed — solved count transcribed |
+| 11 | R&D capitalization | Yes, in both | Not implemented | **Open** |
+| 12 | Case-level narratives | n/a | Absent | **Open** — needs a schema change |
+
+**Result.** The post-prospectus case now reproduces `SpaceX2026IPOUpdated.xlsx`
+exactly — PV of the explicit period 161.8819499, PV of terminal value
+1062.5660566, enterprise value 1224.4480065, value per share 97.8276552, and the
+revenue path matches cell for cell. The pre-prospectus case reproduces the
+*corrected* April valuation to within 1%; it cannot reproduce the published one,
+because the published one contains the error in §3a.
+
+Items 11 and 12 do not affect either figure: R&D capitalization changes only the
+base year, which is not discounted, and case-level narratives are a provenance
+mechanism rather than an input.
 
 ## 5. What is still not in the spreadsheets
 

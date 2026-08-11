@@ -107,6 +107,25 @@ _BASE_MARGIN_CLAIM = (
 )
 
 
+_WAYPOINT_CLAIM = (
+    "Revenue interpolates by closing a fixed share of the remaining gap to a "
+    "waypoint, not by a growth rate: `Valuation output` row 3 reads "
+    "`=B3+($G$3-B3)*0.2`, then 0.3, 0.4, 0.5, with year 5 set to the waypoint "
+    "and the same four fractions repeating toward the target. The source's own "
+    "growth row is labelled \"Imputed Revenue growth rate\" -- rates are an "
+    "output. This fraction is where the year-5 waypoint sits between base and "
+    "target."
+)
+
+_WAYPOINT_CLAIM_S4 = _WAYPOINT_CLAIM + (
+    " S4 is not internally consistent about it: launch and connectivity sit at "
+    "0.5 while AI sits at 1/3, and launch's first block is a straight line "
+    "rather than gap-closing at all. S5 applies one rule to all four segments. "
+    "The waypoint is transcribed per segment; the within-block fractions are "
+    "S5's, which is why the pre case does not reproduce exactly."
+)
+
+
 def _narrative(field, claim, confidence, three_p="probable", source="S5 spreadsheet"):
     return {
         "input_field": field,
@@ -121,7 +140,8 @@ def _segment(name, base, *, margin_target, margin_claim, s2c_early, s2c_late,
              s2c_claim, tam=None, tam_claim=None, share=None, share_claim=None,
              share_confidence="confirmed", share_three_p="probable",
              revenue_target=None, revenue_claim=None, revenue_three_p="probable",
-             margin_three_p="probable", ramp_start_year=1):
+             margin_three_p="probable", ramp_start_year=1,
+             waypoint_gap_fraction=None, waypoint_claim=None):
     # `confidence` and `three_p` are orthogonal. Confidence answers "is this the
     # number the source used" -- `confirmed` throughout, because every value is a
     # spreadsheet cell. three_p answers "how strong is the claim the number
@@ -146,6 +166,9 @@ def _segment(name, base, *, margin_target, margin_claim, s2c_early, s2c_late,
     if revenue_target is not None:
         narratives.append(_narrative("revenue_target", revenue_claim, "confirmed",
                                      three_p=revenue_three_p, source=src))
+    if waypoint_gap_fraction is not None:
+        narratives.append(_narrative("waypoint_gap_fraction", waypoint_claim,
+                                     "confirmed", source=src))
 
     return {
         "name": name,
@@ -159,6 +182,7 @@ def _segment(name, base, *, margin_target, margin_claim, s2c_early, s2c_late,
         "sales_to_capital_late": s2c_late,
         "ramp_start_year": ramp_start_year,
         "initial_growth": None,
+        "waypoint_gap_fraction": waypoint_gap_fraction,
         "narratives": narratives,
     }
 
@@ -206,10 +230,14 @@ def _pre_prospectus_payload() -> dict:
         "base_year": 2026,
         "target_year": 2036,
         "riskfree_rate": 0.0420,
-        "wacc_initial": 0.080246,
+        "wacc_initial": 0.08024591576065232,
         "wacc_stable": 0.0800,
         "wacc_converge_from": 6,
         "marginal_tax_rate": 0.25,
+        # Input sheet!B23. Held flat through year 5, then linear to the
+        # marginal rate by year 10 (Valuation output row 13). B63 is "No", so
+        # the template does converge rather than hold the effective rate.
+        "effective_tax_rate": 0.10,
         "nol_balance": 0.0,
         "roic_stable": 0.15,
         "terminal_growth": None,
@@ -233,6 +261,7 @@ def _pre_prospectus_payload() -> dict:
                     "Input sheet!B30. Reusability and existing infrastructure "
                     "produce a durable cost advantage."
                 ),
+                waypoint_gap_fraction=0.5, waypoint_claim=_WAYPOINT_CLAIM_S4,
                 s2c_early=4.0, s2c_late=2.0,
                 s2c_claim=(
                     "Input sheet!B36/C36: 4 for years 1-5, 2 for years 6-10. "
@@ -245,6 +274,7 @@ def _pre_prospectus_payload() -> dict:
                 "connectivity", _BASE_PRE, tam=160.0, tam_claim=_CONN_TAM,
                 share=0.75, share_claim=_CONN_SHARE,
                 margin_target=0.60, margin_claim=_CONN_MARGIN,
+                waypoint_gap_fraction=0.5, waypoint_claim=_WAYPOINT_CLAIM_S4,
                 s2c_early=10.0, s2c_late=5.0,
                 s2c_claim=(
                     "Input sheet!B37/C37: 10 for years 1-5, 5 for years 6-10. "
@@ -265,6 +295,7 @@ def _pre_prospectus_payload() -> dict:
                     "a text error, pending the spreadsheet. The spreadsheet says "
                     "50%: the blog was right and the footnote's guess was wrong."
                 ),
+                waypoint_gap_fraction=1 / 3, waypoint_claim=_WAYPOINT_CLAIM_S4,
                 s2c_early=2.5, s2c_late=1.5,
                 s2c_claim=(
                     "Input sheet!B38/C38: 2.5 for years 1-5, 1.5 for years 6-10. "
@@ -298,10 +329,14 @@ def _post_prospectus_payload(parent_case_id: int) -> dict:
         "base_year": 2026,
         "target_year": 2036,
         "riskfree_rate": 0.0456,
-        "wacc_initial": 0.083745,
+        "wacc_initial": 0.0837450225998141,
         "wacc_stable": 0.0825,
         "wacc_converge_from": 6,
         "marginal_tax_rate": 0.25,
+        # Input sheet!B23. Held flat through year 5, then linear to the
+        # marginal rate by year 10 (Valuation output row 13). B63 is "No", so
+        # the template does converge rather than hold the effective rate.
+        "effective_tax_rate": 0.10,
         "nol_balance": 0.0,
         "roic_stable": 0.15,
         "terminal_growth": None,
@@ -309,11 +344,14 @@ def _post_prospectus_payload(parent_case_id: int) -> dict:
         "debt": 22.896,
         "ipo_proceeds": 75.0,
         "shares_basic": 12.5353,
-        # 766.65m new shares = 75000 / 97.83, the source's own iterated solution
+        # `Valuation output!B43` minus `Input sheet!B21`: 13301.95438 -
+        # 12535.3. The source solves this circularly, dividing proceeds by the
+        # value per share it is simultaneously computing; this engine does not
+        # iterate, so the solved count is transcribed
         # (Valuation output!B43 divides proceeds by the value per share it is
         # simultaneously computing). This engine does not iterate, so the
         # source's answer is transcribed rather than reproduced.
-        "shares_new": 0.76665,
+        "shares_new": 0.76665438,
         "parent_case_id": parent_case_id,
         "segments": [
             _segment(
@@ -334,6 +372,7 @@ def _post_prospectus_payload(parent_case_id: int) -> dict:
                     "Input sheet!B30, raised from 40%. Gross margin is ~67% and "
                     "the reported operating loss was entirely R&D-driven."
                 ),
+                waypoint_gap_fraction=1 / 3, waypoint_claim=_WAYPOINT_CLAIM,
                 s2c_early=3.0, s2c_late=4.0,
                 s2c_claim=(
                     "Input sheet!B36/C36: 3 for years 1-5, 4 for years 6-10. "
@@ -347,6 +386,7 @@ def _post_prospectus_payload(parent_case_id: int) -> dict:
                 "connectivity", _BASE_POST, tam=160.0, tam_claim=_CONN_TAM,
                 share=0.75, share_claim=_CONN_SHARE,
                 margin_target=0.60, margin_claim=_CONN_MARGIN,
+                waypoint_gap_fraction=1 / 3, waypoint_claim=_WAYPOINT_CLAIM,
                 s2c_early=3.0, s2c_late=5.0,
                 s2c_claim=(
                     "Input sheet!B37/C37: 3 for years 1-5, 5 for years 6-10. The "
@@ -368,6 +408,7 @@ def _post_prospectus_payload(parent_case_id: int) -> dict:
                     "the three segments, and deteriorating, under LLM "
                     "competition."
                 ),
+                waypoint_gap_fraction=1 / 3, waypoint_claim=_WAYPOINT_CLAIM,
                 s2c_early=1.5, s2c_late=2.5,
                 s2c_claim=(
                     "Input sheet!B38/C38: 1.5 for years 1-5, 2.5 for years 6-10 "

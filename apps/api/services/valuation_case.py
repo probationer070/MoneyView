@@ -38,12 +38,14 @@ NARRATED_FIELDS: tuple[str, ...] = (
     "sales_to_capital_early",
     "sales_to_capital_late",
     "initial_growth",
+    "waypoint_gap_fraction",
 )
 
 _CASE_COLUMNS = (
     "case_name", "ticker", "as_of_date", "base_year", "target_year",
     "riskfree_rate", "wacc_initial", "wacc_stable", "wacc_converge_from",
     "marginal_tax_rate", "nol_balance", "roic_stable", "terminal_growth",
+    "effective_tax_rate",
     "cash", "debt", "ipo_proceeds", "shares_basic", "shares_new",
     "parent_case_id",
 )
@@ -52,6 +54,7 @@ _SEGMENT_COLUMNS = (
     "name", "base_revenue", "base_margin", "tam_target", "market_share_target",
     "revenue_target", "margin_target", "sales_to_capital_early",
     "sales_to_capital_late", "ramp_start_year", "initial_growth",
+    "waypoint_gap_fraction",
 )
 
 
@@ -211,6 +214,7 @@ def _to_specs(case: dict) -> tuple[CaseSpec, list[SegmentSpec]]:
         nol_balance=case["nol_balance"],
         roic_stable=case["roic_stable"],
         terminal_growth=case["terminal_growth"],
+        effective_tax_rate=case["effective_tax_rate"],
         cash=case["cash"],
         debt=case["debt"],
         ipo_proceeds=case["ipo_proceeds"],
@@ -230,6 +234,7 @@ def _to_specs(case: dict) -> tuple[CaseSpec, list[SegmentSpec]]:
             revenue_target=segment["revenue_target"],
             ramp_start_year=segment["ramp_start_year"],
             initial_growth=segment["initial_growth"],
+            waypoint_gap_fraction=segment["waypoint_gap_fraction"],
         )
         for segment in case["segments"]
     ]

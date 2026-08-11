@@ -501,6 +501,7 @@ CREATE TABLE IF NOT EXISTS valuation_case (
     nol_balance        REAL NOT NULL DEFAULT 0,
     roic_stable        REAL NOT NULL,
     terminal_growth    REAL,                      -- NULL means: use riskfree_rate
+    effective_tax_rate REAL,                      -- NULL means: marginal rate every year
     cash               REAL NOT NULL DEFAULT 0,
     debt               REAL NOT NULL DEFAULT 0,
     ipo_proceeds       REAL NOT NULL DEFAULT 0,
@@ -523,6 +524,7 @@ CREATE TABLE IF NOT EXISTS segment (
     sales_to_capital_late  REAL NOT NULL,
     ramp_start_year        INTEGER NOT NULL DEFAULT 1,
     initial_growth         REAL,
+    waypoint_gap_fraction  REAL,
     UNIQUE(case_id, name)
 );
 CREATE INDEX IF NOT EXISTS idx_segment_case ON segment(case_id);
@@ -566,6 +568,14 @@ def _ensure_schema_compatibility(conn: sqlite3.Connection) -> None:
         # curve. CREATE TABLE IF NOT EXISTS cannot add a column to a table that
         # already exists, which is every developer database created before this.
         conn.execute("ALTER TABLE segment ADD COLUMN initial_growth REAL")
+    if segment_columns and "waypoint_gap_fraction" not in segment_columns:
+        # Nullable for the same reason: existing rows keep whichever curve
+        # their other fields already select.
+        conn.execute("ALTER TABLE segment ADD COLUMN waypoint_gap_fraction REAL")
+    case_columns = {row["name"] for row in conn.execute("PRAGMA table_info(valuation_case)")}
+    if case_columns and "effective_tax_rate" not in case_columns:
+        # Nullable: existing rows keep taxing every year at the marginal rate.
+        conn.execute("ALTER TABLE valuation_case ADD COLUMN effective_tax_rate REAL")
     index_columns = {row["name"] for row in conn.execute("PRAGMA table_info(indices)")}
     if "dividends" not in index_columns:
         conn.execute("ALTER TABLE indices ADD COLUMN dividends REAL DEFAULT 0.0")

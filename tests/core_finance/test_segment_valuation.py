@@ -14,6 +14,7 @@ from packages.core_finance.segment_valuation import (
     revenue_path,
     run_case,
     tax_path,
+    tax_rate_path,
     terminal_value,
     wacc_path,
 )
@@ -936,3 +937,131 @@ def test_initial_growth_none_reproduces_the_existing_path_exactly():
         level *= 1.0 + rate
         expected.append(level)
     assert revenue_path(spec, n=10, g_stable=0.0456) == pytest.approx(expected, abs=0.0)
+
+
+# --- gap-closing revenue curve -------------------------------------------
+
+
+def _gap(**kw):
+    defaults = dict(
+        name="g", base_revenue=10.0, base_margin=0.0, margin_target=0.4,
+        sales_to_capital_early=2.0, sales_to_capital_late=2.0,
+        revenue_target=100.0, waypoint_gap_fraction=1 / 3,
+    )
+    return SegmentSpec(**{**defaults, **kw})
+
+
+def test_gap_closing_lands_on_the_waypoint_at_the_midpoint_year():
+    """Year 5 is the waypoint exactly, not approximately: the block's last year
+    is assigned the endpoint rather than closing a fifth fraction of the gap."""
+    path = revenue_path(_gap(), 10, 0.04)
+    assert path[4] == pytest.approx(10.0 + (100.0 - 10.0) / 3)
+
+
+def test_gap_closing_lands_exactly_on_target():
+    assert revenue_path(_gap(), 10, 0.04)[-1] == pytest.approx(100.0)
+
+
+def test_gap_closing_uses_the_source_fractions_within_each_block():
+    """0.2, 0.3, 0.4, 0.5 of the gap remaining to that block's endpoint."""
+    path = revenue_path(_gap(), 10, 0.04)
+    waypoint = 10.0 + (100.0 - 10.0) / 3
+    level = 10.0
+    for year, fraction in enumerate((0.2, 0.3, 0.4, 0.5)):
+        level += (waypoint - level) * fraction
+        assert path[year] == pytest.approx(level), year
+    level = waypoint
+    for offset, fraction in enumerate((0.2, 0.3, 0.4, 0.5)):
+        level += (100.0 - level) * fraction
+        assert path[5 + offset] == pytest.approx(level), offset
+
+
+def test_gap_closing_growth_rate_jumps_at_the_midpoint():
+    """The property no other curve here can produce. With a 1/3 waypoint one
+    third of total growth lands in the first half and two thirds in the second,
+    so year 6 grows faster than year 5 -- the source's own sheet shows 16.5% to
+    50.5%. The decaying and anchored curves are monotone or single-humped."""
+    path = revenue_path(_gap(), 10, 0.04)
+    rates = [path[0] / 10.0 - 1] + [
+        path[t] / path[t - 1] - 1 for t in range(1, 10)
+    ]
+    assert rates[5] > rates[4]
+
+
+def test_a_larger_waypoint_fraction_front_loads_revenue():
+    early = revenue_path(_gap(waypoint_gap_fraction=0.6), 10, 0.04)
+    late = revenue_path(_gap(waypoint_gap_fraction=0.2), 10, 0.04)
+    assert all(a > b for a, b in zip(early[:9], late[:9]))
+    assert early[-1] == pytest.approx(late[-1])
+
+
+def test_gap_closing_rejects_a_horizon_it_was_not_written_for():
+    """Its fractions are literal spreadsheet constants, not a formula, so there
+    is nothing to stretch to a 12-year horizon."""
+    with pytest.raises(ValueError, match="two 5-year blocks"):
+        revenue_path(_gap(), 12, 0.04)
+
+
+@pytest.mark.parametrize("fraction", [0.0, 1.0, -0.1, 1.5])
+def test_waypoint_fraction_outside_the_open_unit_interval_raises(fraction):
+    with pytest.raises(ValueError, match="strictly between 0 and 1"):
+        _gap(waypoint_gap_fraction=fraction)
+
+
+def test_waypoint_fraction_and_initial_growth_together_raise():
+    """Two different curves. The gap-closing one fixes year-1 revenue from the
+    waypoint, leaving no amplitude free to hit an observed year-1 rate."""
+    with pytest.raises(ValueError, match="cannot both be set"):
+        _gap(initial_growth=0.1)
+
+
+def test_waypoint_fraction_on_a_ramped_segment_raises():
+    with pytest.raises(ValueError, match="incoherent with a ramped segment"):
+        _gap(base_revenue=0.0)
+
+
+# --- effective-to-marginal tax convergence -------------------------------
+
+
+def test_tax_rate_path_holds_the_effective_rate_then_converges():
+    rates = tax_rate_path(0.10, 0.25, 10, 6)
+    assert rates[:5] == pytest.approx([0.10] * 5)
+    assert rates[5:] == pytest.approx([0.13, 0.16, 0.19, 0.22, 0.25])
+
+
+def test_tax_rate_path_with_equal_rates_is_flat():
+    assert tax_rate_path(0.25, 0.25, 10, 6) == pytest.approx([0.25] * 10)
+
+
+def test_tax_rate_path_converging_from_year_one_is_a_straight_line():
+    rates = tax_rate_path(0.0, 0.5, 5, 1)
+    assert rates == pytest.approx([0.1, 0.2, 0.3, 0.4, 0.5])
+
+
+def test_tax_path_applies_the_schedule_year_by_year():
+    ebit = [100.0] * 10
+    taxes = tax_path(ebit, 0.25, 0.0, tax_rate_path(0.10, 0.25, 10, 6))
+    assert taxes[0] == pytest.approx(10.0)
+    assert taxes[-1] == pytest.approx(25.0)
+
+
+def test_tax_path_without_a_schedule_uses_the_marginal_rate_throughout():
+    assert tax_path([100.0] * 3, 0.25, 0.0) == pytest.approx([25.0] * 3)
+
+
+def test_tax_path_schedule_of_the_wrong_length_raises():
+    with pytest.raises(ValueError, match="entries for"):
+        tax_path([100.0] * 10, 0.25, 0.0, [0.25] * 9)
+
+
+def test_the_nol_shield_still_applies_under_a_rate_schedule():
+    """The schedule sets the rate; the carryforward still decides how much
+    income that rate touches."""
+    taxes = tax_path([100.0] * 10, 0.25, 60.0, tax_rate_path(0.10, 0.25, 10, 6))
+    assert taxes[0] == pytest.approx(4.0)
+    assert taxes[-1] == pytest.approx(25.0)
+
+
+def test_effective_tax_rate_as_a_percentage_raises():
+    with pytest.raises(ValueError, match="decimal fraction between 0 and 1"):
+        _case(effective_tax_rate=10.0)
