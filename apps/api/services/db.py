@@ -475,6 +475,8 @@ CREATE TABLE IF NOT EXISTS corporate_quote_facts (
     shares_outstanding  REAL,
     currency            TEXT DEFAULT '',
     beta                REAL,
+    sector              TEXT DEFAULT '',
+    industry            TEXT DEFAULT '',
     fetched_at          TEXT NOT NULL
 );
 
@@ -771,6 +773,10 @@ def _ensure_schema_compatibility(conn: sqlite3.Connection) -> None:
     quote_facts_columns = {row["name"] for row in conn.execute("PRAGMA table_info(corporate_quote_facts)")}
     if "beta" not in quote_facts_columns:
         conn.execute("ALTER TABLE corporate_quote_facts ADD COLUMN beta REAL")
+    if "sector" not in quote_facts_columns:
+        conn.execute("ALTER TABLE corporate_quote_facts ADD COLUMN sector TEXT DEFAULT ''")
+    if "industry" not in quote_facts_columns:
+        conn.execute("ALTER TABLE corporate_quote_facts ADD COLUMN industry TEXT DEFAULT ''")
     v3_row = conn.execute("SELECT 1 FROM corporate_comparison_snapshots_v3 LIMIT 1").fetchone()
     if v3_row is None:
         conn.execute(

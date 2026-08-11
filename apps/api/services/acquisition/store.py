@@ -54,10 +54,10 @@ def save_quote_facts(ticker: str, facts: QuoteFacts) -> None:
     with get_db() as conn:
         conn.execute(
             """INSERT OR REPLACE INTO corporate_quote_facts
-                   (ticker, market_cap, shares_outstanding, currency, beta, fetched_at)
-               VALUES (?, ?, ?, ?, ?, ?)""",
+                   (ticker, market_cap, shares_outstanding, currency, beta, sector, industry, fetched_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
             (ticker, facts.market_cap, facts.shares_outstanding, facts.currency, facts.beta,
-             datetime.now(timezone.utc).isoformat()),
+             facts.sector, facts.industry, datetime.now(timezone.utc).isoformat()),
         )
 
 
