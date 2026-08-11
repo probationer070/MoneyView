@@ -459,10 +459,12 @@ Still open from that review, deliberately out of scope:
    **326.6%** for AI, against 2025 actuals of 7.6% / 49.8% / 22.2%. todo3 R3's
    `[C]` claim that the June revision SLOWED near-term growth is nonetheless
    confirmed as a pre-to-post comparison -- launch's year-1 growth falls from
-   160.7% (S4) to 58.6% (S5) -- but the mechanism is the cut to launch's 2036
-   revenue target, from 70 to 40, not an anchor. Reading "slowed near-term
-   growth" as an instruction to pin year 1 was this model's inference, and it
-   was wrong.
+   160.7% (S4) to 58.6% (S5) -- but the mechanism is not an anchor, and not the
+   target cut alone either. Decomposed: holding the 70,000 target and swapping
+   S4's interpolation for S5's gives 107.2% (-53.5pp); cutting the target to
+   40,000 takes it the rest of the way (-48.6pp). The two contribute about
+   equally. Reading "slowed near-term growth" as an instruction to pin year 1
+   was this model's inference, and it was wrong.
 
    `initial_growth` is now `None` on every seeded segment; removing it also
    improved the post case's fit against the source, from -0.65% to -0.41%. The
@@ -633,8 +635,10 @@ Still open from that review, deliberately out of scope:
    Verified both ways: the buggy formula reproduces S4's stored values in all
    ten columns; the correct one reproduces only year 1. Over ten years it gives
    launch reinvestment of 119,682.5 against a correct 24,712.5 -- nearly 5x --
-   and discounting the excess accounts for 54.7 of enterprise value, the entire
-   remaining gap.
+   and discounting the excess accounts for 54.74 of enterprise value -- most of
+   the gap, not all of it. This engine's pre-case figure is 1280.16 against the
+   published 1216.06, a gap of 64.10; the error explains 85.4% of that, and the
+   remaining 9.36 is the within-block interpolation difference.
 
    | | Enterprise value | Direction |
    | --- | --- | --- |
@@ -676,10 +680,17 @@ provided year 10 landed on target. That was only fixable once there was an
 independent expectation to assert against, which the spreadsheets supplied.
 
 `test_segment_valuation_spacex.py` and `tests/api/test_valuation_seed.py` now
-both assert enterprise value against `Valuation output!B32` (1216.06 pre,
-1224.45 post) with recorded tolerances of 2.5% and 0.5%, and the post case's
-value per share against `B44` (97.83) at 1%. These are regression guards, not
-targets; the revenue-shape work should tighten them.
+both assert enterprise value against the workbooks. The POST case is exact
+(`B31`, `B30`, `B32`, `B44` at abs=1e-6). The PRE case is asserted against the
+CORRECTED April figure, ~1270.8 at rel=0.01, and explicitly NOT against the
+published 1216.06 -- see divergence item 4.
+
+That 1% band is loose enough to hide a structural error on its own, so the pre
+case additionally pins what does not depend on the revenue shape: its terminal
+value and PV of terminal value match `B29`/`B30` exactly, and its year-1 and
+year-5 revenue match S4's own cells for all three earning segments. What remains
+unguarded on the pre side is the margin path within the explicit period, which
+the post case's exact assertions cover through the same shared code.
 
 The sum-of-literals gates are kept alongside, since they isolate a different
 failure: a target-year total that drifts tells you which input moved, where an

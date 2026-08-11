@@ -280,10 +280,10 @@ def _case(**overrides) -> CaseSpec:
         wacc_converge_from=6,
         marginal_tax_rate=0.25,
         nol_balance=5.0,
-        # _launch()'s marginal return is 0.50625 (1.5 x 0.45 x 0.75). 0.35 sits
-        # inside the two-sided consistency guard's admitted band for it: below
-        # the ceiling (must not exceed 0.50625) and above the floor
-        # (0.50625 / (1 + 0.60) = 0.316406...).
+        # _launch()'s marginal return is 0.50625 (1.5 x 0.45 x 0.75). 0.35 is
+        # below the ceiling, which is the only bound relating roic_stable to the
+        # marginal return; the capital-intensity floor that used to sit at
+        # 0.316406... was removed on 2026-08-11 and is now only reported.
         roic_stable=0.35,
         cash=24.7,
         debt=22.9,
@@ -649,18 +649,22 @@ def test_terminal_capital_intensity_change_grows_as_the_terminal_return_falls():
 def test_terminal_reinvestment_rate_stays_below_one_for_any_admitted_case():
     """Spec gate 8.
 
-    Not a production guard -- the spec argues one would be dead code, because
-    `roic_stable > wacc_stable` and `wacc_stable > g_stable` together already
-    force `g / roic_stable < 1`. This test checks that argument rather than
-    leaving it asserted. Sweeps roic_stable across the admitted range: the
-    two-sided consistency guard now bounds it to
-    [marginal_roic / 1.6, marginal_roic] = [0.316406..., 0.50625].
+    Not a production guard for POSITIVE growth -- `roic_stable > wacc_stable`
+    and `wacc_stable > g_stable` together already force `g / roic_stable < 1`,
+    and this test checks that argument rather than leaving it asserted.
+
+    The sweep must cover the range the engine actually admits, which changed on
+    2026-08-11: the capital-intensity floor at `marginal_roic / 1.6` was
+    removed, so the admitted range is now `(wacc_stable, marginal_roic]` =
+    `(0.0825, 0.50625]`. The lower half of that is newly opened and is exactly
+    where the seeded SpaceX cases live (roic_stable 0.15). Sweeping only from
+    0.316406 would leave the region this change created untested.
     """
     # The relationship only binds for positive growth, so pin that first --
     # otherwise the sweep below could pass vacuously.
     assert _case().effective_terminal_growth() > 0
 
-    for roic in (0.316406250, 0.35, 0.40, 0.45, 0.50625):
+    for roic in (0.08250001, 0.12, 0.15, 0.316406250, 0.35, 0.40, 0.45, 0.50625):
         result = run_case(_case(roic_stable=roic), [_launch()])
         assert 0 < result.terminal_reinvestment_rate < 1, roic
 
@@ -1065,3 +1069,82 @@ def test_the_nol_shield_still_applies_under_a_rate_schedule():
 def test_effective_tax_rate_as_a_percentage_raises():
     with pytest.raises(ValueError, match="decimal fraction between 0 and 1"):
         _case(effective_tax_rate=10.0)
+
+
+# --- terminal value stays finite when growth is negative -----------------
+
+
+def _declining(roic, g):
+    """A terminally shrinking single-segment case."""
+    return run_case(
+        CaseSpec(
+            base_year=2026, target_year=2036, riskfree_rate=0.04,
+            wacc_initial=0.09, wacc_stable=0.08, wacc_converge_from=6,
+            marginal_tax_rate=0.25, nol_balance=0.0, roic_stable=roic,
+            cash=0.0, debt=0.0, ipo_proceeds=0.0, shares_basic=1.0,
+            shares_new=0.0, terminal_growth=g,
+        ),
+        [SegmentSpec(
+            name="s", base_revenue=10.0, base_margin=0.05, margin_target=0.20,
+            sales_to_capital_early=2.0, sales_to_capital_late=2.0,
+            revenue_target=60.0,
+        )],
+    )
+
+
+def test_a_terminal_roic_below_the_magnitude_of_negative_growth_raises():
+    """The hole the capital-intensity guard's removal opened.
+
+    `terminal_value` charges reinvestment `g / roic_stable`. Its ROIC-above-WACC
+    rule is gated on `g_stable > 0`, so with negative growth nothing bounded
+    roic_stable from below, and `1 - g/roic` grows without limit as roic falls:
+    terminal value ROSE as the terminal return got worse. At roic_stable=1e-8
+    this case was valued at 76,599,748 against 49.62 at a coherent 0.30.
+    """
+    with pytest.raises(ValueError, match="magnitude of terminal growth"):
+        _declining(0.01, -0.02)
+
+
+def test_terminal_value_stays_bounded_across_admitted_declining_cases():
+    """Value RISES as the terminal return falls here, and that is correct, not
+    the defect.
+
+    A shrinking business releases capital, and the lower its return on capital
+    the more capital each dollar of lost revenue frees up -- so `1 - g/roic`
+    with g < 0 is above 1 and grows as roic falls. That is real cash. The defect
+    was that it grew without limit; the bound caps the release at one year's
+    NOPAT, which is what keeps the whole range finite. Asserting a falling
+    sequence here would be asserting a false property.
+    """
+    values = [_declining(r, -0.02).enterprise_value for r in (0.30, 0.15, 0.05, 0.021)]
+    assert values == sorted(values)
+    assert all(0 < v < 100 for v in values)
+    rates = [_declining(r, -0.02).terminal_reinvestment_rate for r in (0.30, 0.021)]
+    assert all(-1 < rate < 0 for rate in rates)
+
+
+def test_the_negative_growth_bound_is_exclusive_at_equality():
+    """roic_stable == |g| gives a reinvestment rate of exactly -1, which is the
+    edge of the interval, not a point inside it."""
+    with pytest.raises(ValueError, match="magnitude of terminal growth"):
+        _declining(0.02, -0.02)
+    assert _declining(0.0200001, -0.02).enterprise_value > 0
+
+
+def test_a_negative_riskfree_rate_reaches_the_same_bound():
+    """`terminal_growth` defaults to `riskfree_rate`, and nothing constrains the
+    riskfree rate's sign -- so the default path reaches the negative-growth
+    branch too."""
+    with pytest.raises(ValueError, match="magnitude of terminal growth"):
+        run_case(
+            _case(riskfree_rate=-0.02, terminal_growth=None, roic_stable=0.001),
+            [_launch()],
+        )
+
+
+def test_zero_terminal_growth_needs_no_reinvestment_and_is_admitted():
+    """The boundary between the two regimes: at g = 0 the reinvestment rate is
+    0 for any positive roic_stable, so the bound is satisfied by roic > 0."""
+    result = _declining(0.001, 0.0)
+    assert result.terminal_reinvestment_rate == pytest.approx(0.0)
+    assert result.enterprise_value > 0

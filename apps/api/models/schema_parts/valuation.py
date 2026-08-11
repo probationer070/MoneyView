@@ -46,9 +46,17 @@ class ValuationCaseInput(BaseModel):
     shares_basic: float = Field(gt=0)
     segments: list[SegmentInput] = Field(min_length=1)
     ticker: str | None = None
+    # Also controls the tax ramp: `effective_tax_rate`, when set, converges
+    # to `marginal_tax_rate` on this same schedule. One knob, because the
+    # source hardwires both to year 6 -- but moving it moves the tax
+    # schedule too, which is worth 12.6 of enterprise value on the seeded
+    # post-prospectus case across the range 3..8.
     wacc_converge_from: int = Field(default=6, ge=1)
     nol_balance: float = Field(default=0.0, ge=0)
     terminal_growth: float | None = None
+    # Today's reported rate. None taxes every year at the marginal rate.
+    # Converges on the `wacc_converge_from` schedule above; at
+    # wacc_converge_from=1 it therefore applies to no year at all.
     effective_tax_rate: float | None = Field(default=None, ge=0, le=1)
     # No defaults: the equity bridge (cash, debt, ipo_proceeds, shares_new) must
     # be stated, not silently assumed to be a debt-free, cash-free firm with no

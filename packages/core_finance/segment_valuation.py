@@ -439,9 +439,12 @@ def margin_path(spec: SegmentSpec, n: int) -> list[float]:
     would book its year-1 loss on revenue that has already grown while its
     margin has not moved at all. Giving year 1 one step of margin convergence
     keeps margin and revenue offset by the same number of steps. todo3 notes
-    Damodaran typically back-loads the convergence shape itself (independent of
-    this off-by-one question) but tags that shape as unconfirmed; this stays
-    linear until the spreadsheets are available to calibrate it.
+    todo3 notes Damodaran typically back-loads the convergence shape itself
+    (independent of this off-by-one question) and tags that shape as
+    unconfirmed. The spreadsheets settled it: `Valuation output` rows 8-11 are
+    `=target-((target-base)/Y)*(Y-t)`, a straight line, and this function
+    reproduces them exactly. The off-by-one above remains this module's own
+    deviation -- the source's year 1 does sit one step in, so the two agree.
     """
     if n < 2:
         return [spec.margin_target]
@@ -782,9 +785,12 @@ def terminal_value(
     - the WACC-to-growth spread must be positive, and is not clamped to some
       epsilon: a large finite number at the point where the model has no value
       is worse than no number at all (the argument at dcf.py:196)
+    - ROIC must be positive, or the reinvestment rate is undefined
+    - ROIC must exceed the MAGNITUDE of terminal growth, so the reinvestment
+      rate stays inside (-1, 1). This is the bound that keeps terminal value
+      finite when growth is negative
     - ROIC in stable growth must beat the cost of capital whenever growth is
       positive, or the perpetuity is growing while destroying value
-    - ROIC must be positive, or the reinvestment rate is undefined
     """
     spread = wacc_stable - g_stable
     if spread <= 0:
@@ -794,6 +800,24 @@ def terminal_value(
         )
     if roic_stable <= 0:
         raise ValueError(f"roic_stable must be positive, got {roic_stable}")
+    # The reinvestment rate is g / roic_stable, and it must stay inside (-1, 1):
+    # above +1 the perpetuity reinvests more than it earns, below -1 it releases
+    # more capital than it earns, every year forever. For positive growth the
+    # ROIC-above-WACC rule below already implies this, since wacc > g. For
+    # NEGATIVE growth nothing else does -- the rule below is gated on g > 0, and
+    # 1 - g/roic grows without bound as roic falls, so terminal value RISES as
+    # the terminal return gets worse. Before 2026-08-11 the capital-intensity
+    # tolerance in `run_case` happened to cover that branch; removing it left
+    # this open, and a declining case at roic_stable=1e-8 valued at 76,599,748
+    # against 49.62 at a coherent 0.30.
+    if roic_stable <= abs(g_stable):
+        raise ValueError(
+            f"roic_stable {roic_stable:.4%} must exceed the magnitude of "
+            f"terminal growth {g_stable:.4%}: otherwise the terminal "
+            f"reinvestment rate g / roic_stable leaves (-1, 1) and the "
+            f"perpetuity reinvests, or releases, more capital than it earns "
+            f"every year forever."
+        )
     if g_stable > 0 and roic_stable <= wacc_stable:
         raise ValueError(
             f"roic_stable {roic_stable:.4%} must exceed wacc_stable "

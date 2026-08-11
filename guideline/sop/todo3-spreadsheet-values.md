@@ -30,9 +30,11 @@ and `Valuation output` tabs. **These are not reconstructions.**
 | Number of shares | 2,416.67 | 13,301.95 |
 | Value per share | 503.20 | 97.83 |
 
-**EV rises pre → post by +0.69%** (+8,386.85). Value per share falls 81% for one
-reason only: the share count rises 5.5×, because S4 was written before the
-prospectus disclosed the real count and before the IPO proceeds were known.
+**EV rises pre → post by +0.69%** (+8,386.85). Value per share falls 81%, mostly
+because the share count rises 5.5× — S4 was written before the prospectus
+disclosed the real count and before the IPO proceeds were known. Not only:
+equity value also rises 7.01% on cash and proceeds less debt, so the share count
+alone would give 91.42 and the equity-value effect adds back 6.41.
 
 ## 2. Confirmed inputs
 
@@ -125,7 +127,8 @@ inert template text, not an input.
 ## 3. The interpolation shape
 
 This is the `[V]` gap `todo3.md` line 443 called highest-value. S5 applies one
-uniform rule to all four segments.
+uniform rule to its three earning segments; the zero-base "Other" segment is
+separate and is described at the end of this section.
 
 ### Revenue
 
@@ -145,9 +148,9 @@ A **two-block gap-closing** scheme, not a growth-rate curve. Growth rates are an
 
 3. Terminal revenue: `R₁₁ = R₁₀ · (1 + g)`.
 
-Consequence: exactly one third of total base→target revenue growth lands in
-years 1–5 and two thirds in years 6–10, so the imputed growth rate **jumps
-upward at year 6** (S5 total: 16.5% in year 5, 50.5% in year 6). The curve is not
+Consequence, for those three segments: exactly one third of total base→target
+revenue growth lands in years 1–5 and two thirds in years 6–10, so the imputed
+growth rate **jumps upward at year 6** (S5 total: 16.5% in year 5, 50.5% in year 6). The curve is not
 monotonically decaying.
 
 The zero-base segment ("Other") is separate: zero through year 5, then linear
@@ -184,7 +187,18 @@ Every year after the first divides the change in *consolidated* revenue by
 so the error was fixed between the two workbooks.
 
 Verified two ways: the buggy formula reproduces S4's stored values exactly in
-all ten columns, and the correct one reproduces only year 1.
+all ten columns, and the correct one reproduces only year 1. It is not
+intentional under any reading — `row 19 = SUM(15:18)`, so a "row 15 is
+firm-wide" design would count total revenue growth once through row 15 and again
+through rows 16–18.
+
+S4 carries a **second**, value-inert defect in the same area: `C53:L53`
+accumulates row 15 alone where S5's accumulates row 19, so S4's displayed
+year-10 invested capital is 148,257.7 against 227,378.8 on the total, and its
+displayed year-10 ROIC is 78.41% against 51.13%. Rows 53–54 are display-only
+here (`Input sheet!B55="Yes"` pins terminal ROIC to 0.15, `B33=0` makes the
+failure-proceeds row inert), which is exactly why correcting row 15 alone gives
+a clean answer.
 
 | | Launch reinvestment, 10-year total |
 | --- | ---: |
@@ -192,9 +206,15 @@ all ten columns, and the correct one reproduces only year 1.
 | Correct | 24,712.5 |
 
 Nearly 5× overstated. That suppresses FCFF across the explicit period and holds
-S4's enterprise value down. Discounting the excess at S4's flat 8% cost of
-capital accounts for 54.7 of enterprise value — which is the entire gap between
-this engine's corrected pre-case figure and the published one.
+S4's enterprise value down. Discounting the excess at S4's own cost-of-capital
+factors (8.0246% for years 1–5, easing to 8.0% by year 10 — not flat) accounts
+for **54.74** of enterprise value.
+
+That is most of the gap, not all of it. This engine's pre-case figure is 1280.16
+against the published 1216.06, a gap of **64.10**; the error explains 54.74 of
+it, or 85.4%. The remaining **9.36** is the within-block interpolation
+difference described below, and is why the engine sits 0.74% above the corrected
+figure rather than on it.
 
 **Consequence for the headline finding.** As published, enterprise value rises
 1,216,061 → 1,224,448 (+0.69%), and `todo3.md` line 158 builds its central
@@ -207,15 +227,27 @@ This also closes the pre/post direction question in the engine's favour. This
 model showed a fall throughout, and three rounds of work treated that as its own
 defect. It was not.
 
-### S4 is not internally consistent
+### S4 has no single interpolation rule
 
-S4 predates the uniform treatment. Its year-5 waypoint is at 50% of the gap for
-Launch and Starlink but 1/3 for xAI, and Launch's within-block path is a straight
-line (equal increments) rather than gap-closing. These look hand-edited. **Treat
-S5 as the authoritative shape**; reproduce S4 only by transcribing its output
-row, not by applying a rule.
+S4 predates the uniform treatment, and **no S4 segment uses S5's
+`[0.2, 0.3, 0.4, 0.5]` fractions in either block**:
 
----
+| Segment | Year-over-year increments | Rule |
+| --- | --- | --- |
+| Launch | `6590` ×10 | a straight line across all ten years |
+| Starlink | `10860, 8688, 6950.4, 5560.3, 22241.3`, then `10860` ×5 | constant 1/5 of the remaining gap, then linear |
+| xAI | same pattern | constant 1/5 of the remaining gap, then linear |
+
+Launch has no waypoint cell at all — `G3` is `=F3+($L$3-F3)*(1/6)`, the last
+step of the line — so its "0.5 waypoint" is emergent rather than an input.
+Starlink's and xAI's waypoints (0.5 and 1/3) are real, but their within-block
+rule still differs from S5's.
+
+**Treat S5 as the authoritative shape.** Reproducing S4 exactly would need
+per-segment, per-block shape configuration for a workbook that has no single
+rule. The engine instead applies S5's fractions with each S4 segment's waypoint,
+which reproduces S4's year-1 and year-5 levels exactly and differs in between —
+the 9.36 of unexplained enterprise value noted in §3a.
 
 ## 4. Divergences from the MoneyView engine as built
 

@@ -16,8 +16,11 @@ Both cases are seeded because the pair is the point: enterprise value barely
 moved across a 277-page prospectus, 1216.06 -> 1224.45, +0.69%.
 
 Confidence tags: `confirmed` means the value is a cell in one of the two
-workbooks. `derived` means it is computed from such cells. `assumed` is now rare
-here -- the spreadsheets closed most of what todo3 tagged [V].
+workbooks. `derived` means it is computed from such cells, or read off their
+behaviour rather than typed into them. The TAM and market-share pairs are
+`derived` for that reason -- the workbooks carry only the resulting revenue, and
+todo3 supplies the TAM the split is measured against. So are the pre-case
+waypoints, which S4 never states as an input (see `_WAYPOINT_CLAIM_S4`).
 
 `roic_stable` is 0.15 in both workbooks (`Input sheet!B56`, an override on the
 template's default of "terminal return = cost of capital"). It sits far below
@@ -34,16 +37,24 @@ observed rate, and the spreadsheets show the source does no such thing: S5's
 year-1 growth is 58.6% for launch, 63.6% for connectivity and 326.6% for AI,
 against 2025 actuals of 7.6%, 49.8% and 22.2%. todo3 R3's `[C]` claim that the
 June revision SLOWED near-term growth is confirmed -- launch's year-1 growth
-falls 160.7% -> 58.6% between the workbooks -- but the mechanism is the cut to
-launch's 2036 revenue target, not an anchor on the observed rate. The anchored
+falls 160.7% -> 58.6% between the workbooks -- but the mechanism is not an
+anchor on the observed rate. It is two changes of roughly equal size: holding
+the 70,000 target and swapping S4's shape for S5's gives 107.2% (-53.5pp), and
+cutting the target to 40,000 takes it the rest of the way (-48.6pp). The anchored
 curve stays in the engine as a generic option; it is not what Damodaran did.
 
-The revenue path shape is still wrong, and is the largest remaining divergence.
-The source interpolates by closing a fixed fraction of the remaining gap to a
-waypoint one third of the way from base to target at year 5; this engine decays
-a solved growth rate. Because terminal value is ~87% of enterprise value and
-depends only on the target year, the post-prospectus case still lands within
-0.4% of the source, but the explicit period does not match year by year.
+The post-prospectus case reproduces S5 exactly -- enterprise value
+1224.4480065, and the revenue path matches `Valuation output` rows 3-5 cell for
+cell -- via `waypoint_gap_fraction` (the gap-closing curve) and
+`effective_tax_rate` (10% held through year 5, then linear to the marginal
+rate).
+
+The pre-prospectus case does NOT reproduce S4 as published, and should not: S4
+contains a formula error (`Valuation output!D15:L15` divides the change in TOTAL
+revenue by launch's sales-to-capital ratio). This engine computes that
+correctly, so it reproduces the CORRECTED April valuation. It lands 0.74% above
+that; the residual is the within-block interpolation, since S4 uses a constant
+1/5 fraction and straight lines where S5 uses 0.2/0.3/0.4/0.5.
 
 Not wired into application startup: fixture data does not belong in a database
 unless someone asked for it.
@@ -117,12 +128,18 @@ _WAYPOINT_CLAIM = (
     "target."
 )
 
-_WAYPOINT_CLAIM_S4 = _WAYPOINT_CLAIM + (
-    " S4 is not internally consistent about it: launch and connectivity sit at "
-    "0.5 while AI sits at 1/3, and launch's first block is a straight line "
-    "rather than gap-closing at all. S5 applies one rule to all four segments. "
-    "The waypoint is transcribed per segment; the within-block fractions are "
-    "S5's, which is why the pre case does not reproduce exactly."
+_WAYPOINT_CLAIM_S4 = (
+    "DERIVED, not transcribed. S5 states its waypoint as an input -- "
+    "`Valuation output!G3` is `=B3+($L$3-B3)*(1/3)`. S4 states no waypoint at "
+    "all: its launch row is `=F3+($L$3-F3)*(1/6)`, the last step of a straight "
+    "line running 6590 a year across all ten years, so the 0.5 here is an "
+    "emergent property of that line rather than a number Damodaran typed. Nor "
+    "does any S4 segment use S5's 0.2/0.3/0.4/0.5 fractions: launch is linear "
+    "throughout, and connectivity and AI close a constant 1/5 of the remaining "
+    "gap in their first block and then run linearly through the second. These "
+    "waypoints reproduce each S4 segment's year-5 level and its year-1 level "
+    "exactly; the years between differ, which is the whole of the pre case's "
+    "residual against the corrected April valuation."
 )
 
 
@@ -138,10 +155,11 @@ def _narrative(field, claim, confidence, three_p="probable", source="S5 spreadsh
 
 def _segment(name, base, *, margin_target, margin_claim, s2c_early, s2c_late,
              s2c_claim, tam=None, tam_claim=None, share=None, share_claim=None,
-             share_confidence="confirmed", share_three_p="probable",
+             share_confidence="derived", share_three_p="probable",
              revenue_target=None, revenue_claim=None, revenue_three_p="probable",
              margin_three_p="probable", ramp_start_year=1,
-             waypoint_gap_fraction=None, waypoint_claim=None):
+             waypoint_gap_fraction=None, waypoint_claim=None,
+             waypoint_confidence="confirmed"):
     # `confidence` and `three_p` are orthogonal. Confidence answers "is this the
     # number the source used" -- `confirmed` throughout, because every value is a
     # spreadsheet cell. three_p answers "how strong is the claim the number
@@ -160,7 +178,10 @@ def _segment(name, base, *, margin_target, margin_claim, s2c_early, s2c_late,
         _narrative("sales_to_capital_late", s2c_claim, "confirmed", source=src),
     ]
     if tam is not None:
-        narratives.append(_narrative("tam_target", tam_claim, "confirmed", source="todo3 section 7"))
+        # DERIVED, not confirmed: neither workbook carries a TAM or a share.
+        # They carry a single typed revenue target, and this pair is one way
+        # of decomposing it against the TAM todo3 quotes from the blog posts.
+        narratives.append(_narrative("tam_target", tam_claim, "derived", source="todo3 section 7"))
         narratives.append(_narrative("market_share_target", share_claim,
                                      share_confidence, three_p=share_three_p, source=src))
     if revenue_target is not None:
@@ -168,7 +189,7 @@ def _segment(name, base, *, margin_target, margin_claim, s2c_early, s2c_late,
                                      three_p=revenue_three_p, source=src))
     if waypoint_gap_fraction is not None:
         narratives.append(_narrative("waypoint_gap_fraction", waypoint_claim,
-                                     "confirmed", source=src))
+                                     waypoint_confidence, source=src))
 
     return {
         "name": name,
@@ -196,8 +217,13 @@ _LAUNCH_TAM = (
     "spreadsheets carry only the resulting revenue, never the TAM itself."
 )
 _CONN_TAM = (
-    "Satellite internet goes from 1% to 10% of a $1.5T internet market. As "
-    "with launch, the spreadsheets carry only the resulting revenue."
+    "Satellite internet goes from 1% to 10% of a $1.5T internet market. As with "
+    "launch, the spreadsheets carry only the resulting revenue (120.0 in both "
+    "workbooks), never the TAM. Note the stated arithmetic gives $150bn, not "
+    "the $160bn used here -- the mismatch is inherited from todo3 line 122 and "
+    "is why this pair is tagged `derived`. At $150bn the implied share would be "
+    "80% rather than 75%; the revenue endpoint is unaffected either way, since "
+    "it is the transcribed quantity and the split is the inference."
 )
 _CONN_SHARE = (
     "75%: Starlink's satellite lead plus captive launch capacity is "
@@ -262,6 +288,7 @@ def _pre_prospectus_payload() -> dict:
                     "produce a durable cost advantage."
                 ),
                 waypoint_gap_fraction=0.5, waypoint_claim=_WAYPOINT_CLAIM_S4,
+                waypoint_confidence="derived",
                 s2c_early=4.0, s2c_late=2.0,
                 s2c_claim=(
                     "Input sheet!B36/C36: 4 for years 1-5, 2 for years 6-10. "
@@ -275,6 +302,7 @@ def _pre_prospectus_payload() -> dict:
                 share=0.75, share_claim=_CONN_SHARE,
                 margin_target=0.60, margin_claim=_CONN_MARGIN,
                 waypoint_gap_fraction=0.5, waypoint_claim=_WAYPOINT_CLAIM_S4,
+                waypoint_confidence="derived",
                 s2c_early=10.0, s2c_late=5.0,
                 s2c_claim=(
                     "Input sheet!B37/C37: 10 for years 1-5, 5 for years 6-10. "
@@ -296,6 +324,7 @@ def _pre_prospectus_payload() -> dict:
                     "50%: the blog was right and the footnote's guess was wrong."
                 ),
                 waypoint_gap_fraction=1 / 3, waypoint_claim=_WAYPOINT_CLAIM_S4,
+                waypoint_confidence="derived",
                 s2c_early=2.5, s2c_late=1.5,
                 s2c_claim=(
                     "Input sheet!B38/C38: 2.5 for years 1-5, 1.5 for years 6-10. "
@@ -356,7 +385,7 @@ def _post_prospectus_payload(parent_case_id: int) -> dict:
         "segments": [
             _segment(
                 "launch", _BASE_POST, tam=100.0, tam_claim=_LAUNCH_TAM,
-                share=0.40, share_confidence="derived", share_three_p="plausible",
+                share=0.40, share_three_p="plausible",
                 share_claim=(
                     "40%, DERIVED: Input sheet!B26 cuts launch's 2036 revenue "
                     "from 70.0 to 40.0, and 40.0 against the blog's confirmed "

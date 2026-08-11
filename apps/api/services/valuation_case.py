@@ -102,6 +102,35 @@ def _validate_narratives(segment: dict) -> None:
         )
 
 
+def _validate_runnable(payload: dict, segment: dict) -> None:
+    """Reject at write time what `run_case` would reject at read time.
+
+    Without this a POST returns 201 and every subsequent /run returns 422, so
+    the case is permanently stored and permanently unrunnable. These two
+    combinations are cross-field, which is why Pydantic does not catch them.
+    """
+    name = segment.get("name", "?")
+    if (
+        segment.get("waypoint_gap_fraction") is not None
+        and segment.get("initial_growth") is not None
+    ):
+        raise ValueError(
+            f"segment '{name}': states both waypoint_gap_fraction and "
+            f"initial_growth. They select different revenue curves -- the "
+            f"gap-closing curve fixes year-1 revenue from the waypoint, so "
+            f"there is no amplitude left to hit an observed year-1 rate."
+        )
+    if segment.get("waypoint_gap_fraction") is not None:
+        horizon = payload["target_year"] - payload["base_year"]
+        if horizon != 10:
+            raise ValueError(
+                f"segment '{name}': waypoint_gap_fraction needs a 10-year "
+                f"horizon in two 5-year blocks, but this case spans {horizon} "
+                f"years. Its within-block fractions are literal constants from "
+                f"the source spreadsheet with no formula behind them."
+            )
+
+
 def create_case(payload: dict) -> int:
     """Persist a case, its segments and their narratives in one transaction."""
     segments = payload.get("segments") or []
@@ -109,6 +138,7 @@ def create_case(payload: dict) -> int:
         raise ValueError("a valuation case needs at least one segment")
     for segment in segments:
         _validate_narratives(segment)
+        _validate_runnable(payload, segment)
 
     with get_db() as conn:
         try:

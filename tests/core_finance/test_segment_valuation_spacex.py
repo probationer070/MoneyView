@@ -168,14 +168,33 @@ def test_base_revenue_matches_the_spreadsheets():
 
 
 def test_offsetting_changes_barely_move_target_year_ebit():
-    """todo3 section 3's central finding survives the spreadsheet, with
-    different numbers: target-year revenue rises 31% but EBIT only 3.2%,
-    because AI's revenue doubling and the launch margin uplift are almost
-    exactly cancelled by AI's margin collapse and launch's revenue cut."""
-    pre = run_case(*pre_prospectus())
-    post = run_case(*post_prospectus())
-    assert post.revenue[-1] / pre.revenue[-1] == pytest.approx(420 / 320, abs=1e-9)
-    assert abs(post.ebit[-1] / pre.ebit[-1] - 1) < 0.05
+    """todo3 section 3's central finding survives the spreadsheet, but not its
+    explanation. Target-year revenue rises 31% and EBIT only 3.2%. The
+    segment-level decomposition:
+
+        launch        28.0 -> 18.0    -10.0   revenue cut 70->40 beats the
+                                              margin uplift 0.40->0.45
+        connectivity  72.0 -> 72.0      0.0
+        ai            40.0 -> 40.0      0.0   the doubling 80->160 is cancelled
+                                              by its OWN margin halving 0.50->0.25
+        expansion     15.0 -> 30.0    +15.0   <- what actually holds the total up
+        TOTAL        155.0 -> 160.0   +3.2%
+
+    So AI self-cancels, launch FALLS 36%, and the offset comes from expansion
+    doubling -- the segment todo3 records as "assumed unchanged". Asserted per
+    segment, because the totals alone are already pinned by the two target-year
+    tests above and would restate them rather than check this.
+    """
+    pre = {s.name: s for s in run_case(*pre_prospectus()).segments}
+    post = {s.name: s for s in run_case(*post_prospectus()).segments}
+    deltas = {
+        name: post[name].ebit[-1] - pre[name].ebit[-1]
+        for name in ("launch", "connectivity", "ai", "expansion")
+    }
+    assert deltas == pytest.approx(
+        {"launch": -10.0, "connectivity": 0.0, "ai": 0.0, "expansion": 15.0}
+    )
+    assert sum(deltas.values()) == pytest.approx(5.0)
 
 
 def test_expansion_segment_contributes_nothing_before_2032():
@@ -303,6 +322,30 @@ def test_pre_prospectus_tracks_the_spreadsheet_once_its_error_is_corrected():
     assert result.enterprise_value == pytest.approx(1270.8, rel=0.01)
     assert result.enterprise_value > SOURCE_EV_PRE
 
+    # The 1% band above is loose enough to hide a structural error, so pin what
+    # CAN be pinned. The terminal block depends only on year-10 EBIT, the WACC
+    # path, terminal ROIC and terminal growth -- never on the revenue shape --
+    # and S4's error is confined to the explicit period. So these two match the
+    # workbook exactly (`Valuation output` B29 and B30) and stay matched under
+    # any waypoint, which makes them a real check on everything except shape.
+    assert result.terminal_value == pytest.approx(2295.142105, abs=1e-5)
+    assert result.pv_terminal == pytest.approx(1061.4019320, abs=1e-6)
+
+
+def test_pre_prospectus_revenue_matches_S4_at_the_years_it_can_match():
+    """The seeded waypoints reproduce S4's year-1 and year-5 revenue exactly for
+    all three earning segments, even though the years between differ. Asserting
+    those six cells catches a shape mutation that the 1% enterprise-value band
+    lets through."""
+    by_name = {s.name: s for s in run_case(*pre_prospectus()).segments}
+    for name, year_one, year_five in (
+        ("launch", 10.690, 37.050),
+        ("connectivity", 22.260, 65.700),
+        ("ai", 5.4266667, 26.7333333),
+    ):
+        assert by_name[name].revenue[0] == pytest.approx(year_one, abs=1e-6), name
+        assert by_name[name].revenue[4] == pytest.approx(year_five, abs=1e-6), name
+
 
 def test_the_pre_post_direction_agrees_with_the_corrected_source():
     """As published the source has enterprise value rising 1216.06 -> 1224.45.
@@ -312,6 +355,11 @@ def test_the_pre_post_direction_agrees_with_the_corrected_source():
     pre = run_case(*pre_prospectus())
     post = run_case(*post_prospectus())
     assert post.enterprise_value < pre.enterprise_value
+    # Two different ratios, previously conflated. -3.6% is the CORRECTED
+    # SOURCE's, from figures the engine does not produce; the engine's own is
+    # -4.4%. Both are checked, and the source's is arithmetic on two
+    # transcribed cells rather than on anything the engine computed.
+    assert SOURCE_EV_POST / 1270.798264 - 1 == pytest.approx(-0.03647, abs=1e-5)
     assert post.enterprise_value / pre.enterprise_value - 1 == pytest.approx(
-        -0.036, abs=0.01
+        -0.0435, abs=0.002
     )

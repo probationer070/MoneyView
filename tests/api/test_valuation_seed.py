@@ -10,7 +10,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from apps.api.main import app
-from apps.api.services.valuation_case import list_cases, load_case
+from apps.api.services.valuation_case import create_case, list_cases, load_case
 from apps.api.services.valuation_seed import (
     POST_CASE_NAME,
     PRE_CASE_NAME,
@@ -67,10 +67,21 @@ def test_every_seeded_input_carries_a_narrative():
             assert {n["input_field"] for n in segment["narratives"]} == stated
 
 
-def test_every_seeded_input_is_confirmed_except_the_one_derivation():
-    """Reading the spreadsheets turned every seeded input into a transcription.
-    The single exception is the post-prospectus launch share: the workbook gives
-    a 40.0 revenue target, and 40% is that divided by the blog's $100bn TAM."""
+def test_only_inputs_the_workbooks_do_not_state_are_tagged_derived():
+    """`confirmed` is defined as "this value is a cell in one of the workbooks".
+    Three kinds of input are not, and must not claim to be:
+
+    - `tam_target`: neither workbook carries a TAM. They carry a single typed
+      revenue target; the TAM comes from todo3 quoting the blog posts.
+    - `market_share_target`: the quotient of that revenue target and that TAM.
+    - the PRE case's `waypoint_gap_fraction`: S5 states its waypoint as an input
+      (`Valuation output!G3` is `=B3+($L$3-B3)*(1/3)`), but S4 states none --
+      its launch row is `=F3+($L$3-F3)*(1/6)`, the last step of a straight line,
+      so 0.5 is an emergent property rather than a number Damodaran typed.
+
+    Written as a literal set: a test that recomputes this from the seed module
+    cannot catch a wrong tag.
+    """
     ensure_valuation_cases_seeded()
     derived = set()
     for name in (PRE_CASE_NAME, POST_CASE_NAME):
@@ -79,37 +90,64 @@ def test_every_seeded_input_is_confirmed_except_the_one_derivation():
                 assert narrative["confidence"] in ("confirmed", "derived")
                 if narrative["confidence"] == "derived":
                     derived.add((name, segment["name"], narrative["input_field"]))
-    assert derived == {(POST_CASE_NAME, "launch", "market_share_target")}
+
+    assert derived == {
+        (case, seg, field)
+        for case in (PRE_CASE_NAME, POST_CASE_NAME)
+        for seg in ("launch", "connectivity")
+        for field in ("tam_target", "market_share_target")
+    } | {
+        (PRE_CASE_NAME, seg, "waypoint_gap_fraction")
+        for seg in ("launch", "connectivity", "ai")
+    }
+
+
+def test_the_post_case_waypoint_is_confirmed_because_it_is_a_cell():
+    """The other side of the test above: without it, `derived` could spread to
+    every tag in the seed and still pass."""
+    ensure_valuation_cases_seeded()
+    checked = 0
+    for segment in load_case(_case_id(POST_CASE_NAME))["segments"]:
+        claims = {n["input_field"]: n for n in segment["narratives"]}
+        if segment["waypoint_gap_fraction"] is not None:
+            assert claims["waypoint_gap_fraction"]["confidence"] == "confirmed"
+            checked += 1
+    assert checked == 3
 
 
 def test_claims_the_source_only_assumed_stay_below_probable():
-    """`confidence` and `three_p` are orthogonal, and this is what makes that
-    worth storing separately. Every value below is confirmed -- it is the number
-    Damodaran used -- yet the claim each one makes is weak:
+    """`confidence` and `three_p` are orthogonal, and this is what makes them
+    worth storing separately. Every value below is the number Damodaran used,
+    yet the claim each one makes is weak:
 
-    - `base_margin` (all eight segments): typed constants that do not reconcile
+    - `base_margin`, all eight segments: typed constants that do not reconcile
       with the source's own base-year EBIT.
-    - expansion's `revenue_target` and `margin_target`: a placeholder for
-      optionality, assumed outright, and DOUBLED between the workbooks (50 ->
-      100) while todo3 records it as "assumed unchanged".
-    - post-prospectus launch `market_share_target`: this model's own
-      decomposition, contradicting todo3's "unchanged at 70%".
+    - expansion's `revenue_target` and `margin_target`, both cases: a
+      placeholder for optionality, assumed outright, and DOUBLED between the
+      workbooks (50 -> 100) while todo3 records it as "assumed unchanged".
+    - post-prospectus launch `market_share_target`: 40% contradicts todo3's
+      "unchanged at 70%", so its claim is weak as well as derived.
+
+    BOTH cases are checked. Until 2026-08-11 this ran only the post case, and
+    the pre case's four segments could carry any three_p at all -- flipping the
+    pre expansion's revenue_target to "probable" passed.
     """
     ensure_valuation_cases_seeded()
-    below = _run(POST_CASE_NAME)["below_probable"]
 
-    pairs = {(item["segment"], item["input_field"]) for item in below}
-    assert pairs == {
-        ("launch", "base_margin"),
-        ("connectivity", "base_margin"),
-        ("ai", "base_margin"),
-        ("expansion", "base_margin"),
-        ("expansion", "revenue_target"),
-        ("expansion", "margin_target"),
-        ("launch", "market_share_target"),
-    }
-    assert len(below) == 7
-    assert all(item["three_p"] == "plausible" for item in below)
+    common = {
+        (seg, "base_margin")
+        for seg in ("launch", "connectivity", "ai", "expansion")
+    } | {("expansion", "revenue_target"), ("expansion", "margin_target")}
+
+    for name, expected in (
+        (PRE_CASE_NAME, common),
+        (POST_CASE_NAME, common | {("launch", "market_share_target")}),
+    ):
+        below = _run(name)["below_probable"]
+        pairs = {(item["segment"], item["input_field"]) for item in below}
+        assert pairs == expected, name
+        assert len(below) == len(expected), name
+        assert all(item["three_p"] == "plausible" for item in below), name
 
 
 def test_seeded_target_year_totals_match_the_spreadsheets():
@@ -206,10 +244,16 @@ def test_the_sales_to_capital_slope_reverses_between_the_cases():
     direction question, and no blog post mentions it.
 
     April has the late ratio at or BELOW the early one -- capital intensity
-    rising with scale. June has it at or ABOVE. So the June revision lowered the
-    early ratios (which todo3 I2 records) and raised the late ones (which it
-    does not). Every earlier attempt to reach the source's rising EV by tuning a
-    single "lowering magnitude" was working on the wrong parameter.
+    rising with scale. June has it at or ABOVE.
+
+    Stated precisely, because the summary version overreaches: of the three
+    earning segments the early ratio fell in all three (which todo3 I2 records)
+    and the late ratio rose in launch and AI but is UNCHANGED at 5 for
+    connectivity. Expansion moves the other way entirely, 3 -> 5 in both blocks.
+    So "lowered the early, raised the late" is the shape of the change, not a
+    statement true of every cell. Every earlier attempt to reach the source's
+    rising EV by tuning a single "lowering magnitude" was working on the wrong
+    parameter regardless.
     """
     ensure_valuation_cases_seeded()
     pre = {s["name"]: s for s in load_case(_case_id(PRE_CASE_NAME))["segments"]}
@@ -273,7 +317,12 @@ def test_pre_prospectus_tracks_the_spreadsheet_once_its_error_is_corrected():
     configuration for a workbook that has no single rule.
     """
     ensure_valuation_cases_seeded()
-    assert _run(PRE_CASE_NAME)["enterprise_value"] == pytest.approx(1270.8, rel=0.01)
+    pre_ev = _run(PRE_CASE_NAME)["enterprise_value"]
+    assert pre_ev == pytest.approx(1270.8, rel=0.01)
+    # And explicitly NOT the published figure: this engine is above it by about
+    # the discounted value of the overstated reinvestment.
+    assert pre_ev > SOURCE_EV_PRE
+    assert pre_ev - SOURCE_EV_PRE == pytest.approx(64.1, abs=1.0)
 
 
 def test_the_pre_post_direction_agrees_with_the_corrected_source():
@@ -323,3 +372,51 @@ def test_the_effective_tax_rate_is_seeded_and_ramps():
     rates = [tax / ebit for tax, ebit in zip(data["tax"], data["ebit"])]
     assert rates[:5] == pytest.approx([0.10] * 5)
     assert rates[5:] == pytest.approx([0.13, 0.16, 0.19, 0.22, 0.25])
+
+
+def test_a_case_that_could_never_run_is_rejected_at_write_time():
+    """Both combinations below make `run_case` raise, so without a write-time
+    check a POST returns 201 and every subsequent /run returns 422 -- the case
+    is permanently stored and permanently unrunnable."""
+    base = {
+        "case_name": "unrunnable", "ticker": None, "as_of_date": "2026-01-01",
+        "base_year": 2026, "target_year": 2036, "riskfree_rate": 0.04,
+        "wacc_initial": 0.09, "wacc_stable": 0.08, "wacc_converge_from": 6,
+        "marginal_tax_rate": 0.25, "nol_balance": 0.0, "roic_stable": 0.15,
+        "terminal_growth": None, "effective_tax_rate": None, "cash": 0.0,
+        "debt": 0.0, "ipo_proceeds": 0.0, "shares_basic": 1.0, "shares_new": 0.0,
+        "parent_case_id": None,
+    }
+    segment = {
+        "name": "core", "base_revenue": 10.0, "base_margin": 0.0,
+        "tam_target": None, "market_share_target": None, "revenue_target": 100.0,
+        "margin_target": 0.2, "sales_to_capital_early": 1.0,
+        "sales_to_capital_late": 1.5, "ramp_start_year": 1,
+        "initial_growth": None, "waypoint_gap_fraction": None,
+        "narratives": [
+            {"input_field": f, "claim": "c", "evidence_source": None,
+             "confidence": "assumed", "three_p": "possible"}
+            for f in ("base_revenue", "base_margin", "revenue_target",
+                      "margin_target", "sales_to_capital_early",
+                      "sales_to_capital_late")
+        ],
+    }
+
+    both = {**segment, "initial_growth": 0.5, "waypoint_gap_fraction": 0.5}
+    both["narratives"] = both["narratives"] + [
+        {"input_field": f, "claim": "c", "evidence_source": None,
+         "confidence": "assumed", "three_p": "possible"}
+        for f in ("initial_growth", "waypoint_gap_fraction")
+    ]
+    with pytest.raises(ValueError, match="different revenue curves"):
+        create_case({**base, "segments": [both]})
+
+    short = {**segment, "waypoint_gap_fraction": 0.5}
+    short["narratives"] = short["narratives"] + [
+        {"input_field": "waypoint_gap_fraction", "claim": "c",
+         "evidence_source": None, "confidence": "assumed", "three_p": "possible"}
+    ]
+    with pytest.raises(ValueError, match="10-year horizon"):
+        create_case({**base, "target_year": 2038, "segments": [short]})
+
+    assert not [c for c in list_cases() if c["case_name"] == "unrunnable"]
