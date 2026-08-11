@@ -1101,6 +1101,19 @@ Plan: `.superpowers/sdd/2026-08-11-industry-relative-conservative-valuation/`
       not a cost -- inverting it would make capital-hungry companies look
       cheaper. 10 new tests in `tests/core_finance/test_industry_benchmark.py`
       (26 total in that file); full suite 714 passed.
+- [x] Task 4 (2026-08-11) - The sector and industry maps.
+      `apps/api/services/industry_maps.py`: `EXCLUDED_ROWS` (the sheet's two
+      total rows, named because firm-count screening rejects low counts and
+      these screen high), `SECTOR_TO_INDUSTRIES` (94 industries across 11
+      GICS-shaped sectors, covering every row in the 2026 vintage), and
+      `YAHOO_TO_DAMODARAN` (142 Yahoo labels, keyed lowercase), plus
+      `sector_for_industry` and `damodaran_industry_for_yahoo`. Industry
+      names are verbatim from the source sheet including its misspellings
+      ("Heathcare Information and Technology", "Rubber& Tires") -- a
+      corrected name resolves to no sector and silently disables the feature
+      for that industry. Every arguable classification carries a comment on
+      its own line. 7 tests in `tests/api/test_industry_maps.py`; full suite
+      721 passed. Completeness against the stored vintage is Task 5's gate.
 
 ## Archived Track - MoneyView Dev Monitor
 
