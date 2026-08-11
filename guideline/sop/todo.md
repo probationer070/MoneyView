@@ -1114,6 +1114,44 @@ Plan: `.superpowers/sdd/2026-08-11-industry-relative-conservative-valuation/`
       for that industry. Every arguable classification carries a comment on
       its own line. 7 tests in `tests/api/test_industry_maps.py`; full suite
       721 passed. Completeness against the stored vintage is Task 5's gate.
+- [x] Task 7 (2026-08-12) - The conservative case generator.
+      `apps/api/services/conservative_case.py`: `CompanyBaseline` and
+      `build_conservative_case`, producing a `create_case` payload with one
+      segment (a listed company has no published segment split). The fade is
+      applied to ENDPOINTS at `year == horizon`, not per year: the segment
+      engine's own `margin_path`, `wacc_path` and `tax_rate_path` already
+      interpolate, so fading per year would apply convergence twice. The
+      company's own endpoint absent a benchmark is its current value held flat.
+      Nothing is clamped to fit the engine's guards -- see "Known divergences"
+      below. 17 tests in `tests/api/test_conservative_case.py`; full suite
+      749 passed.
+
+      Two deviations from the task brief, both tested. (1) The brief asserted
+      `effective_tax_rate == 0.22` against a marginal rate of 0.25. The column
+      is `higher_is_conservative` and the company's own endpoint IS the
+      marginal rate, so a sector averaging below it holds at 0.25; 0.22 would
+      fade toward optimism, which `fade` refuses by design. Split into two
+      tests (fades up to a 0.30 sector, holds at 0.25 against a 0.22 one).
+      (2) Added coverage for the roic_stable collision below and for the
+      payload round-tripping through `create_case` + `run_stored_case`.
+
+      OPEN, for whoever wires the generator to real vintage data: `run_case`
+      caps `roic_stable` at the target-year marginal return on new capital,
+      `margin_target x (1 - marginal_tax_rate) x sales_to_capital_late`. All
+      three of those fade to the sector while `after_tax_roc` fades
+      independently, so they can cross -- and the crossing is systematic, not
+      exotic. A sector whose columns are mutually consistent has
+      `after_tax_roc ~ operating_margin x (1 - effective_tax_rate) x
+      sales_to_capital`, struck at the sector's EFFECTIVE rate, while the
+      ceiling is struck at the company's MARGINAL rate. Where the marginal rate
+      is the higher of the two (0.25 vs 0.22 on the plan's own fixture) the
+      ceiling sits BELOW the sector's own ROC: 0.225 against 0.234. The
+      fixture escapes only because its `after_tax_roc` is 0.20, below the 0.234
+      its other columns imply. Real Damodaran columns are measured
+      independently rather than derived from one another, so the gap is not
+      guaranteed either way, but the bias is one-directional. The generator
+      states the faded number and lets the engine refuse; a later task turns
+      that refusal into a user-facing reason.
 
 ## Archived Track - MoneyView Dev Monitor
 
