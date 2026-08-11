@@ -25,12 +25,53 @@ recorded before the design rather than inside it.
 | Benchmark set | Top 3–5 **industries** within the company's sector | The company's own single industry row; top 3–5 peer *companies* |
 | Ranking | After-tax ROC, descending | Operating margin; firm count; a weighted composite |
 | Conservative rule | Asymmetric fade toward the benchmark | Hard worse-of ceiling held flat; fixed haircut |
-| Target engine | `corporate_dcf`, the live comparison-tab path | The segment build-up engine; both |
+| Target engine | **The segment build-up engine** (revised, see below) | `corporate_dcf`; both |
 
 **Why "top" is the conservative direction.** Benchmarking against the strongest
 comparable industries sets a ceiling, not a target: the company must still look
 undervalued when measured against the best of its sector, rather than against a
 mediocre average that flatters it.
+
+### Revised 2026-08-11: the target engine changed before implementation
+
+The original choice was `corporate_dcf`, on the reasoning that it is the live
+path valuing every watchlist ticker. That reasoning checked *that* it runs
+everywhere, not *what it consumes*. It consumes almost nothing.
+
+`corporate_dcf.py:159` computes `enterprise_value = pv_fcff + pv_terminal`, and
+the projection is `base_fcff * (1 + growth) ** year` discounted at `wacc`. Five
+inputs reach that arithmetic: `fcff`, `revenue_growth_rate`, `wacc`,
+`terminal_growth_rate`, `esg_penalty`. The rest are echoed into the response
+payload and hashed into `report_id`, and never enter the math:
+
+| Assumption | Where it actually goes |
+| --- | --- |
+| `operating_margin` | `:135` → payload + `report_id`. Not in the computation. |
+| `tax_rate` | `:311` → payload echo only |
+| `unlevered_beta` | `:309` → payload echo only |
+| `debt_ratio` | `:310` → payload echo only |
+| `reinvestment` | zero references |
+
+So four of the six columns this design fades would have computed, displayed and
+changed nothing, while appearing to work — the false precision
+`guideline/sop/finance-logic.md` prohibits in its opening principle, built in by
+design.
+
+**The segment build-up engine consumes all of them as real drivers.** It is a
+revenue → margin → NOPAT → reinvestment → FCFF model, so operating margin,
+sales-to-capital, the tax ramp and the terminal return each move enterprise
+value. It is the multivariate engine the request asked for; `corporate_dcf` is
+structurally a three-parameter model and no amount of benchmarking changes that.
+
+The obstacle cited when it was first rejected — that it values hand-authored
+cases rather than the watchlist — is a wiring problem, not a modelling one, and
+this design now solves it (see "The conservative case generator").
+
+A second finding, now moot but worth recording: `metrics.roic` IS a genuine
+return on invested capital (`nopat / average_invested_capital`,
+`corporate_statement_metrics.py:389`), so feeding it into `operating_margin` at
+`corporate_metrics_service.py:456` is a real mislabelling. It is inert, which is
+presumably why it survived.
 
 **Why peer *companies* were rejected.** MoneyView's universe is the user's own
 watchlist, roughly 40 self-selected tickers. Most industries would contain zero
@@ -65,21 +106,20 @@ annually. The columns this design consumes:
 | --- | --- |
 | Industry Name | key |
 | Number of firms | screening |
-| Annual Average Revenue growth – Last 5 years | `revenue_growth_rate` |
-| Pre-tax Operating Margin (Unadjusted) | `operating_margin` |
-| After-tax ROC | ranking |
-| Average effective tax rate | `tax_rate` |
-| Unlevered Beta | `unlevered_beta` |
-| Cost of capital | `wacc` |
-| Market Debt/Capital | `debt_ratio` (reported) |
-| Reinvestment Rate | `reinvestment` |
-| Sales/Capital | stored and reported; no `ValuationAssumptions` field consumes it |
+| Annual Average Revenue growth – Last 5 years | `SegmentSpec.revenue_target` |
+| Pre-tax Operating Margin (Unadjusted) | `SegmentSpec.margin_target` |
+| After-tax ROC | ranking, and `CaseSpec.roic_stable` |
+| Average effective tax rate | `CaseSpec.effective_tax_rate` |
+| Cost of capital | `CaseSpec.wacc_initial`, `wacc_stable` |
+| Sales/Capital | `SegmentSpec.sales_to_capital_early` / `_late` |
+| Unlevered Beta | stored, fades nothing — the engine takes WACC directly |
+| Market Debt/Capital | stored, fades nothing — same reason |
+| Reinvestment Rate | stored, fades nothing — it is an engine OUTPUT, not an input |
 
-Sales/Capital has no counterpart in `ValuationAssumptions`, so it feeds no
-assumption in this spec. It is listed because it appears in the worked example
-and its average is asserted in the tests — the resolver averages every numeric
-column uniformly, and testing a column with no consumer is the cheapest way to
-check that the averaging is not quietly special-cased per field.
+The resolver averages every numeric column uniformly, including the three that
+fade nothing. Keeping them costs nothing and testing a column with no consumer
+is the cheapest way to check that the averaging is not quietly special-cased per
+field.
 
 The remaining 16 columns are stored but unused here; `Trailing PE`, `EV/Sales`,
 `Price/Book` and `Std deviation in stock prices` are the ones sub-project 3 will
@@ -158,44 +198,51 @@ Bounds that reject nothing in the current vintage are still specified. They
 exist because the dataset is re-acquired annually and a future vintage is not
 required to resemble this one.
 
-### Units: the two sides do not agree, and must be converted explicitly
+### Units
 
-This is the highest-risk detail in the design, because getting it wrong produces
-a silent 100× error in a plausible-looking number.
+The first draft of this design targeted `corporate_dcf`, where units were the
+highest-risk detail: `ValuationAssumptions` is mixed — `revenue_growth_rate`,
+`operating_margin`, `tax_rate` and `wacc` are fractions, while `reinvestment`
+and `debt_ratio` are declared `ge=0.0, le=100.0` and never divided
+(`corporate_dcf.py:310` passes `debt_ratio` straight through). A fraction
+leaking into `reinvestment` passes every declared bound and silently means 0.4%
+instead of 41%.
 
-**Damodaran's dataset is in fractions.** Reinvestment Rate 0.409, Market
-Debt/Capital 0.220, After-tax ROC 0.146.
+**Retargeting to the segment engine removes most of that risk.**
+`segment_valuation.py` uses fractions for every rate and billions for every
+money amount, with no mixed convention anywhere. Damodaran's dataset is also
+entirely fractions. So the two sides agree, and no rate conversion happens at
+all.
 
-**MoneyView's `CorporateMetrics` are in percent.** `AAPL` is stored as
-`{"growth": 6, "roic": 18, "wacc": 10, "debt_ratio": 18}`
-(`corporate_metrics_service.py:38`).
+Two boundaries survive and still need explicit handling:
 
-**`ValuationAssumptions` is mixed.** `revenue_growth_rate`, `operating_margin`,
-`tax_rate` and `wacc` are fractions — `metric_percent_for_valuation` divides by
-100 on the way in. But `reinvestment` and `debt_ratio` are declared
-`ge=0.0, le=100.0` and are *not* divided; `corporate_dcf.py:310` passes
-`debt_ratio` straight through. They remain percentages.
+1. **Statements → billions.** `base_revenue` comes from raw statement currency
+   and must be scaled. `equity_bridge._scaled` is the existing helper and the
+   convention to follow; `equity_bridge` already emits net debt and share counts
+   in billions, so the generator's money terms are consistent if they all come
+   through it.
+2. **`CorporateMetrics` → the engine.** Anything read from `CorporateMetrics`
+   (the marginal tax rate, for instance) is in PERCENT — `AAPL` is stored as
+   `{"growth": 6, "roic": 18, "wacc": 10}` (`corporate_metrics_service.py:38`) —
+   and must be divided by 100 before it reaches `CaseSpec`.
 
-So the claim that screening bounds can simply mirror the `ValuationAssumptions`
-ranges is **false** for exactly those two fields, where the model's range is
-0–100 and the benchmark's natural range is 0–1.
+The design therefore still requires:
 
-The design therefore requires:
+- Every benchmark column carries a declared unit in the stored schema, not by
+  convention.
+- Conversion happens once, per field, at the boundary — never by a blanket
+  multiply.
+- A test asserts that a generated case's rate fields all land in plausible
+  bands, not merely inside the engine's validation ranges. `CaseSpec` accepts
+  `marginal_tax_rate` anywhere in [0, 1], so a percent leaking through as 25.0
+  is rejected — but `effective_tax_rate=0.25` and `0.0025` are both accepted,
+  and only one is right.
 
-- Every benchmark column carries a declared unit (`fraction` or `percent`) in
-  the stored schema, not by convention.
-- Conversion happens once, at the boundary into `ValuationAssumptions`, per
-  field — never by a blanket `* 100`.
-- A test asserts, for every industry in the stored vintage, that each converted
-  assumption satisfies its own `ValuationAssumptions` bound. A fraction leaking
-  into `reinvestment` would pass silently (0.409 is within 0–100 and means 0.4%
-  instead of 41%), so this test must additionally assert the converted value is
-  in the plausible band for its unit, not merely inside the field's declared
-  range.
-
-The last point matters: the field bounds are too loose to catch this class of
-error on their own, which is why the bound table above specifies plausible
-ranges separately from the model's validation ranges.
+The engine's own validation is a genuine safety net here in a way
+`ValuationAssumptions` was not: `CaseSpec.__post_init__` rejects a
+`marginal_tax_rate` outside [0, 1] with an explicit message about percentages,
+and `terminal_value` rejects a `roic_stable` below the magnitude of terminal
+growth. Several classes of units error fail loudly rather than silently.
 
 ### Worked example
 
@@ -216,173 +263,292 @@ reproduce these averages exactly from the stored vintage.
 
 ## The conservative fade
 
+### What the segment engine actually consumes
+
+Every field below moves enterprise value. That is the whole reason the target
+changed.
+
+| Benchmark column | Engine field | How it moves value |
+| --- | --- | --- |
+| Pre-tax Operating Margin | `SegmentSpec.margin_target` | Sets the margin path's endpoint; EBIT in every year |
+| Sales/Capital | `SegmentSpec.sales_to_capital_early` / `_late` | Reinvestment is `ΔRevenue / sales_to_capital` |
+| After-tax ROC | `CaseSpec.roic_stable` | Terminal reinvestment is `g / roic_stable` |
+| Average effective tax rate | `CaseSpec.effective_tax_rate` | The tax ramp across years 1–10 |
+| Cost of capital | `CaseSpec.wacc_initial`, `wacc_stable` | Discounting, every year |
+| Annual Avg Revenue growth | `SegmentSpec.revenue_target` | The target-year revenue the whole path lands on |
+
+**`roic_stable` is the largest single lever.** This session established that
+terminal value is roughly 87% of enterprise value on a reproduced Damodaran
+case, and `roic_stable` drives it. Benchmarking it against the sector's
+after-tax ROC also closes `guideline/sop/todo.md`'s "Known divergences" item 3:
+`roic_stable` currently determines most of a valuation while stating no reason.
+A benchmark gives it one, with a source.
+
+Three columns are stored but fade nothing, and their absence is deliberate:
+
+- **Unlevered Beta** and **Market Debt/Capital** — the engine takes WACC
+  directly rather than rebuilding it from beta and leverage, so fading these
+  would move nothing. Storing them without fading is honest; fading them would
+  repeat the mistake that caused this revision.
+- **Reinvestment Rate** — an *output* of the segment engine
+  (`ΔRevenue / sales_to_capital`), not an input. Benchmarking it would assert a
+  result the model is supposed to derive.
+
 ### Direction is per-assumption, not global
 
 "Conservative" flips sign depending on whether an input is a benefit or a cost.
-A company assumed to pay less tax, or raise cheaper capital, than the best of
-its sector is being flattered exactly as much as one assumed to earn a higher
-margin.
 
-| Assumption | Benchmark column | If company is *better* | If *worse* |
+| Engine field | Benchmark column | If company is *better* | If *worse* |
 | --- | --- | --- | --- |
-| `revenue_growth_rate` | Annual Avg Revenue growth | fade **down** to benchmark | hold |
-| `operating_margin` | Pre-tax Operating Margin | fade **down** | hold |
-| `tax_rate` | Average effective tax rate | fade **up** | hold |
-| `wacc` | Cost of capital | fade **up** | hold |
-| `unlevered_beta` | Unlevered Beta | fade **up** | hold |
-| `reinvestment` | Reinvestment Rate | fade **up** | hold |
-| `debt_ratio` | Market Debt/Capital | reported only | reported only |
+| `margin_target` | Pre-tax Operating Margin | fade **down** to benchmark | hold |
+| `revenue_target` | via Annual Avg Revenue growth | fade **down** | hold |
+| `roic_stable` | After-tax ROC | fade **down** | hold |
+| `sales_to_capital_early` / `_late` | Sales/Capital | fade **down** | hold |
+| `effective_tax_rate` | Average effective tax rate | fade **up** | hold |
+| `wacc_initial`, `wacc_stable` | Cost of capital | fade **up** | hold |
+
+`sales_to_capital` needs care: a *higher* ratio means less capital consumed per
+dollar of new revenue, so it is a benefit and fades **down** toward the
+benchmark. Getting its direction backwards would make capital-hungry companies
+look cheaper, which is the opposite of conservative.
 
 **Nothing ever fades toward optimism.** A company below its sector benchmark
 holds its own value rather than being assumed to catch the best in the sector.
-The asymmetry is the conservatism; a symmetric fade would be a mean-reversion
-model, which is a different and less cautious claim.
+The asymmetry is the conservatism; a symmetric fade would be mean reversion,
+which is a different and less cautious claim.
 
-`terminal_growth_rate` is not benchmarked. Perpetual growth is a macro
-constraint, not an industry characteristic, and the existing cap at the riskfree
-rate is already the conservative treatment.
-
-`debt_ratio` is reported but not faded. Capital structure is a financing choice
-rather than an operating assumption, and forcing a company toward its sector's
-leverage would change the WACC that is already being faded directly — the same
-quantity adjusted twice by two routes.
+`terminal_growth` is not benchmarked — it defaults to `riskfree_rate`, which the
+engine already caps, and perpetual growth is a macro constraint rather than an
+industry characteristic.
 
 ### Fade shape and horizon
 
-`corporate_dcf` is a five-year model. The fade runs linearly from the company's
-current value in year 1 to the benchmark in the terminal year, and the terminal
-value carries the fully-faded assumption.
+The horizon is **ten years**, matching the engine's own target-year convention
+and Damodaran's convergence. This removes the caveat the first draft carried:
+against `corporate_dcf`'s five-year model the fade was faster than Damodaran's;
+against this engine it is the same length.
 
-Terminal value dominates: the SpaceX reproduction completed this session put it
-at **~87% of enterprise value**. So the terminal assumption is where nearly all
-of the conservatism actually lands, and a fade that stopped short of the terminal
-year would mostly be decoration.
+Each benchmarked field is faded **once, to its terminal value**, because the
+engine already applies its own convergence path over the horizon: `margin_path`
+ramps `base_margin` to `margin_target`, `wacc_path` ramps `wacc_initial` to
+`wacc_stable`, and `tax_rate_path` ramps `effective_tax_rate` to the marginal
+rate. Fading the *endpoints* and letting the engine's own paths carry them is
+correct. Fading year by year on top of that would apply convergence twice, which
+would be a real modelling error rather than merely a conservative one.
 
-Five years is a faster convergence than Damodaran's ten. This is a deliberate
-consequence of targeting the existing engine and is recorded as such rather than
-defended: it makes the result more conservative for a company currently above
-its benchmark, and identical for one below it.
+## The conservative case generator
+
+This is the wiring that was missing when the segment engine was first rejected.
+
+`build_conservative_case(ticker, benchmark, vintage) -> dict` produces a
+`create_case` payload: one `CaseSpec` and a single `SegmentSpec` named for the
+company. A listed company has no published segment split, so one segment is the
+whole business — the engine requires at least one and imposes no upper bound.
+
+| Field | Source |
+| --- | --- |
+| `base_revenue`, `base_margin` | Stored statements: `revenue_by_year`, `operating_income_by_year` |
+| `margin_target`, `revenue_target`, `sales_to_capital_*`, `roic_stable`, `effective_tax_rate`, `wacc_*` | Benchmark, faded |
+| `cash`, `debt`, `shares_basic` | `equity_bridge.py`, which already emits net debt and diluted shares in billions with quality metadata |
+| `riskfree_rate` | Existing market data |
+| `marginal_tax_rate` | Existing metrics |
+| `base_year`, `target_year` | Current year, +10 |
+
+Amounts are in **billions**; `equity_bridge._scaled` is the existing convention
+to follow. Rates are fractions throughout, in both the engine and the dataset —
+so the units hazard that dominated the first draft largely evaporates. It
+survives only at the statement boundary, where raw currency becomes billions,
+and that boundary already has a helper.
+
+`equity_bridge` emits `net_debt` as a single figure while `CaseSpec` takes
+`cash` and `debt` separately. The generator sets `debt = max(net_debt, 0)` and
+`cash = max(-net_debt, 0)`, which reproduces the same equity bridge — the engine
+computes `EV - debt + cash + ipo_proceeds`, so only the difference matters.
+`ipo_proceeds` and `shares_new` are zero for a listed company.
+
+### The narrative rule becomes the point, not an obstacle
+
+`valuation_case.create_case` rejects any segment input lacking a narrative
+claim. Every benchmark-derived number has an exact one:
+
+> claim: "Top 3 industries by after-tax ROC in Technology (Computers/Peripherals,
+> Software (System & Application), Semiconductor Equip), vintage 2026-01-01,
+> average Pre-tax Operating Margin 0.2721, faded from the company's 0.31."
+> confidence: `derived` · evidence_source: `damodaran_industry_2026-01-01`
+
+That is stronger provenance than the hand-authored SpaceX cases carry, and it is
+machine-generated rather than asserted. `three_p` follows the column: `probable`
+where the benchmark rests on the full basket, `plausible` where screening
+reduced it below the requested size.
+
+`base_revenue` and `base_margin` come from statements rather than the benchmark,
+so their claims name the statement years used and are tagged `derived` /
+`probable`.
 
 ## Integration
 
-### Parallel scenario, not an override
+### A separate case, not an override
 
-The DCF runs twice per ticker: once on stored assumptions, once on
-benchmark-faded ones. Both values are returned, with the per-assumption deltas
-between them.
+Nothing existing changes. `corporate_dcf` keeps producing exactly what it
+produces today; the conservative valuation is an additional stored case,
+runnable through the existing `POST /api/v1/valuation/cases/{id}/run`.
 
-The alternative — applying the fade inside `valuation_params_from_metrics` — was
-rejected. It changes the meaning of every stored snapshot silently and destroys
-the ability to see which assumption moved a valuation. This session ended with
-three independent reviews finding overclaims that were only catchable because
-the superseded numbers stayed visible; the same argument applies here.
+This is a stronger form of the parallel-scenario promise than the first draft
+had: the two valuations now come from *different engines*, so there is no shared
+code path along which one could perturb the other. The regression guard is
+correspondingly simpler — no existing test should change at all.
+
+Case naming is `conservative_<TICKER>_<vintage>`, so re-running against a new
+benchmark vintage creates a new case rather than silently mutating the old one,
+and the two remain comparable. `create_case` already rejects duplicate names,
+which makes regeneration explicit rather than accidental.
 
 ### Shape
 
 ```
 packages/core_finance/industry_benchmark.py     pure: screening, ranking, averaging, fade
-apps/api/services/industry_benchmark.py         storage, vintage handling, map loading
-apps/api/services/industry_maps/                the two checked-in map artifacts
+apps/api/services/industry_benchmark_store.py   storage, vintage handling, resolution
+apps/api/services/industry_maps.py              the two checked-in map artifacts
+apps/api/services/conservative_case.py          the case generator
 ```
 
 `packages/core_finance` must not import from `apps/api`
-(`guideline/sop/file-structure.md:42`). The fade and the resolver are pure
-functions over plain data, so the dependency runs one way: the service layer
-loads a vintage and hands it to the pure layer.
-
-`conservative_valuation_params(metrics, benchmark, *, year, horizon)` sits beside
-the existing `valuation_params_from_metrics` rather than replacing it, and
-returns the same `ValuationAssumptions` type so the DCF needs no change to
-consume it.
+(`guideline/sop/file-structure.md:42`). The screening, ranking and fade are pure
+functions over plain data; the generator is a service because it reads
+statements, the equity bridge and the benchmark store.
 
 ## Error handling
 
 The governing rule: **a missing or unreliable benchmark produces no conservative
-valuation, never a silently degraded one.**
+case, never a silently degraded one.**
 
 | Condition | Behaviour |
 | --- | --- |
-| Ticker has no Yahoo industry | No conservative scenario. Reason reported. |
-| Yahoo industry not in the map | No conservative scenario. Reason names the unmapped value, so the map can be extended. |
-| Industry maps to a sector with fewer than 3 industries surviving screening | No conservative scenario. Reason lists what was screened and why. |
-| A single column loses too many candidates | That column falls back to the company's own value, unfaded, and is marked as such. The other columns still fade. |
-| No benchmark vintage stored | No conservative scenario. Reason distinguishes "never acquired" from "acquired but stale". |
+| Ticker has no Yahoo industry | No case generated. Reason reported. |
+| Yahoo industry not in the map | No case. Reason names the unmapped value, so the map can be extended. |
+| Sector has fewer than 3 industries surviving screening | No case. Reason lists what was screened and why. |
+| A column the generator needs loses too many candidates | No case. Unlike the first draft, a missing column cannot fall back to the company's own value: `roic_stable` and `margin_target` have no unfaded counterpart to fall back to. |
+| No statements stored for the ticker | No case. `base_revenue` and `base_margin` have no source. |
+| No benchmark vintage stored | No case. Reason distinguishes "never acquired" from "acquired but stale". |
+| A case with the same name already exists | No new case; the existing one is returned. Regeneration is explicit, not accidental. |
 
 Falling back to an all-industry average was considered and rejected: it would
-produce a number that looks like a sector benchmark but is not one, which is the
+produce a number that looks like a sector benchmark and is not one, which is the
 failure mode this design exists to prevent.
+
+Note the change from the first draft's per-column fallback. Against
+`corporate_dcf` a missing column could leave the company's own assumption in
+place, because every field had one. The segment engine's `margin_target`,
+`roic_stable` and `sales_to_capital` are forward-looking inputs with no
+"current" counterpart, so a missing benchmark column means the case cannot be
+built at all.
 
 ## Testing
 
 Network is prohibited in tests, and tests must not open
-`data/processed/moneyview.db`. Both constraints are already established in this
-repo.
+`data/processed/moneyview.db`. `tests/conftest.py` enforces both with autouse
+session fixtures, and gives every test its own SQLite file via `_isolated_db`.
 
 **Pure layer** (`packages/core_finance/industry_benchmark.py`)
 
-- The worked example above reproduces exactly — top-3 average ROC 0.3416,
+- The worked example reproduces exactly — top-3 average after-tax ROC 0.3416,
   operating margin 0.2721, sales/capital 2.336, reinvestment 0.409.
 - `Software (Internet)`'s 1414% reinvestment rate is screened out, and the
-  resulting basket's reinvestment average is computed without it.
-- `Information Services`'s negative reinvestment is screened, while its *other*
+  basket's reinvestment average is computed without it.
+- `Information Services`'s negative reinvestment is screened while its other
   columns still qualify — per-column independence.
 - Each fade direction, both branches: a company above and below the benchmark,
-  for a benefit assumption and for a cost assumption. Four cases minimum.
+  for a benefit field and a cost field.
+- `sales_to_capital` fades DOWN when the company's ratio is higher. This is the
+  direction most likely to be implemented backwards, and getting it wrong makes
+  capital-hungry companies look cheaper.
 - A company exactly at the benchmark does not move.
-- Fade reaches the benchmark exactly in the terminal year, and year 1 is one
-  step in — matching the convention `margin_path` already uses in
-  `segment_valuation.py`.
-- Every faded assumption satisfies the corresponding `ValuationAssumptions`
-  bound, for every industry in the stored vintage. This is the test that catches
-  a screening bound drifting out of step with the model's own validation.
+- Screening is exercised by a synthetic sector where a poisoned row ranks FIRST
+  by ROC. In the real Technology rows the two defective industries rank last, so
+  a test built only on real data would never fire the screen and would pass
+  vacuously.
 
 **Service layer**
 
 - Vintage selection returns the newest vintage at or before a given date.
-- Every error-handling row above produces no scenario and a distinct reason
-  string.
+- Every error-handling row above produces no case and a distinct reason string.
 - Round-trip: a stored vintage loads back with identical values.
 
-**Integration**
+**The case generator**
 
-- A ticker with a mapped industry returns both valuations and the deltas.
-- A ticker without one returns the existing valuation unchanged, plus a reason.
-- The stored-assumption valuation is byte-identical to what the same ticker
-  produced before this change. This is the regression guard for the
-  parallel-scenario promise.
+- A generated case passes `create_case` — which means every segment input
+  carries a narrative, since `create_case` rejects any that does not. This is
+  the test that proves the narrative rule is satisfied rather than worked
+  around.
+- Every generated narrative is tagged `derived`, never `confirmed`: the
+  benchmark is a real average, but applying it to this company is inference.
+- A generated case runs through `run_case` without raising, and produces a
+  positive enterprise value.
+- The money terms are in billions: a company with $400bn revenue yields
+  `base_revenue == 400.0`, not `4.0e11`. A units error here is a 10⁹ error.
+- `debt` and `cash` reconstruct the equity bridge: for a net-debt-positive
+  company `debt > 0 and cash == 0`, and the reverse for a net-cash company.
+- The case is reproducible: generating twice from the same vintage and the same
+  statements yields identical inputs.
+
+**Regression**
+
+- The full existing suite passes unchanged. Because the conservative valuation
+  runs on a different engine and stores a separate case, no existing test should
+  need modification — if one does, the parallel-scenario promise has been broken
+  and the change needs justifying rather than accommodating.
 
 ## Risks and limits
 
-**The two maps encode my classification judgement.** Neither Yahoo's taxonomy nor
-a sector grouping over Damodaran's 95 industries is a fact; both are opinions
-checked into the repo. Every resolved benchmark therefore carries its
-provenance, and the maps are reviewable artifacts rather than embedded
-constants. A wrong mapping produces a confidently wrong benchmark, and nothing
-in the design detects that — only review does.
+**The two maps encode my classification judgement.** Neither Yahoo's taxonomy
+nor a sector grouping over Damodaran's 95 industries is a fact; both are
+opinions checked into the repo. Every resolved benchmark carries its provenance,
+and the maps are reviewable artifacts rather than embedded constants. A wrong
+mapping produces a confidently wrong benchmark, and nothing in the design
+detects that — only review does.
 
-**Benchmarking against the top of a sector is a choice, not a neutral baseline.**
-It is conservative for identifying undervaluation and *anti*-conservative for
-identifying overvaluation: a company that looks expensive against the best
-industries in its sector may be reasonably priced against its actual peers. The
-verdict layer in sub-project 3 must state which direction it is testing.
+**One segment is a real simplification.** A conglomerate valued as a single
+business against a single sector benchmark is being described crudely. The
+engine supports multiple segments and the SpaceX cases use four; a listed
+company simply has no published split to use. Where a company spans sectors,
+the benchmark is the one its Yahoo industry names, and the provenance says so.
+
+**Benchmarking against the top of a sector is a choice, not a neutral
+baseline.** It is conservative for identifying undervaluation and
+*anti*-conservative for identifying overvaluation: a company that looks
+expensive against the best industries in its sector may be reasonably priced
+against its actual peers. The verdict layer in sub-project 3 must state which
+direction it is testing.
 
 **US-only.** The dataset acquired here is `Industry Average Beta (US)`.
 Damodaran publishes global and regional equivalents in the same shape. Non-US
-holdings will resolve to US industry benchmarks unless and until the regional
-datasets are added, and the provenance must say so rather than let a US
-benchmark pass for a local one.
+holdings resolve to US industry benchmarks until those are added, and the
+provenance must say so rather than let a US benchmark pass for a local one.
 
-**Annual vintage means the benchmark is stale for most of the year.** This is a
-property of the source, not a defect to engineer around. The vintage date is
-stored and reported so the staleness is visible.
+**Annual vintage means the benchmark is stale for most of the year.** A property
+of the source, not a defect to engineer around. The vintage date is stored and
+reported so the staleness is visible.
 
-## Noted, not addressed
+**The generated case competes with hand-authored ones.** The SpaceX cases were
+authored deliberately, with argued narratives. Machine-generated cases will
+outnumber them quickly. Case naming (`conservative_<TICKER>_<vintage>`) keeps
+them distinguishable, but the case list will need a filter before it is usable
+with a full watchlist.
+
+## Resolved during design
 
 `valuation_params_from_metrics` feeds `metrics.roic` into `operating_margin`
-(`apps/api/services/corporate_metrics_service.py:456`). Return on invested
-capital and operating margin are different quantities. This may be deliberate,
-but it means the assumption this design fades against
-`Pre-tax Operating Margin` may not currently hold an operating margin. It is
-pre-existing and unrelated to this work; it is recorded here because it will
-affect how the fade's output should be read, and it should be resolved before or
-alongside implementation.
+(`corporate_metrics_service.py:456`). Investigating this is what produced the
+target-engine reversal above. Two findings:
+
+1. `metrics.roic` is a genuine return on invested capital
+   (`nopat / average_invested_capital`, `corporate_statement_metrics.py:389`),
+   so the mapping is a real mislabelling.
+2. It does not matter, because `operating_margin` never enters
+   `corporate_dcf`'s arithmetic — it reaches the response payload and the
+   `report_id` hash and stops there.
+
+This design no longer touches `valuation_params_from_metrics`, so the
+mislabelling is out of scope. It is recorded here because it is a live defect in
+displayed output, and because the investigation that found it is the reason this
+spec was revised.
