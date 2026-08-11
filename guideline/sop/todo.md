@@ -436,6 +436,22 @@ Still open from that review, deliberately out of scope:
    (pre: 37.3% -> 48.2%; post: 41.0% -> 55.7%) when the expansion segment's
    ramp switches on, and no test covers the consolidated path.
 
+   **Amended 2026-08-11 (adversarial fix wave): the record above was one-sided.**
+   Pinning both the observed year-1 rate and the target-year revenue with a
+   single free growth-curve amplitude means a slower start is paid for in the
+   middle years, not spread evenly. On the post-prospectus case, year 5 growth
+   rises from 37% to 55% for launch and from 136% to 202% for ai (years 4
+   through 10 are higher than before this change for both segments);
+   connectivity is unaffected, since its solved amplitude was already ~0.0016.
+   "Slowed near-term growth" is true of year 1 only. Also amended: the three
+   `initial_growth` narratives were retagged from `confirmed`/`probable` to
+   `derived`/`probable` (launch, connectivity) and `derived`/`plausible` (ai) --
+   the 2025 actuals are confirmed, but using each one as the year-1 anchor is
+   this model's own inference about an interpolation todo3 R3 tags `[V]`, and
+   todo3 records a near-term slowdown `[C]` for launch and connectivity only,
+   not for ai. See `apps/api/services/valuation_seed.py`'s module docstring and
+   `_CONFIRMED_INITIAL_GROWTH`.
+
 2. **`base_margin` contradicts its own documented contract.** `SegmentSpec`
    documents it as the R&D-adjusted operating margin, but the seeded values
    give a base EBIT of -0.232, close to todo3 section 4's *reported* operating

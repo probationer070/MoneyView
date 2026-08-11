@@ -86,7 +86,7 @@ def test_seeded_narrative_confidence_tags_match_source_exactly():
             "margin_target": "confirmed",
             "sales_to_capital_early": "assumed",
             "sales_to_capital_late": "assumed",
-            "initial_growth": "confirmed",
+            "initial_growth": "derived",
         },
         (PRE_CASE_NAME, "connectivity"): {
             "base_revenue": "assumed",
@@ -96,7 +96,7 @@ def test_seeded_narrative_confidence_tags_match_source_exactly():
             "margin_target": "confirmed",
             "sales_to_capital_early": "assumed",
             "sales_to_capital_late": "assumed",
-            "initial_growth": "confirmed",
+            "initial_growth": "derived",
         },
         (PRE_CASE_NAME, "ai"): {
             "base_revenue": "assumed",
@@ -105,7 +105,7 @@ def test_seeded_narrative_confidence_tags_match_source_exactly():
             "margin_target": "derived",
             "sales_to_capital_early": "assumed",
             "sales_to_capital_late": "assumed",
-            "initial_growth": "confirmed",
+            "initial_growth": "derived",
         },
         (PRE_CASE_NAME, "expansion"): {
             "base_revenue": "assumed",
@@ -123,7 +123,7 @@ def test_seeded_narrative_confidence_tags_match_source_exactly():
             "margin_target": "confirmed",
             "sales_to_capital_early": "assumed",
             "sales_to_capital_late": "assumed",
-            "initial_growth": "confirmed",
+            "initial_growth": "derived",
         },
         (POST_CASE_NAME, "connectivity"): {
             "base_revenue": "assumed",
@@ -133,7 +133,7 @@ def test_seeded_narrative_confidence_tags_match_source_exactly():
             "margin_target": "confirmed",
             "sales_to_capital_early": "assumed",
             "sales_to_capital_late": "assumed",
-            "initial_growth": "confirmed",
+            "initial_growth": "derived",
         },
         (POST_CASE_NAME, "ai"): {
             "base_revenue": "assumed",
@@ -142,7 +142,7 @@ def test_seeded_narrative_confidence_tags_match_source_exactly():
             "margin_target": "confirmed",
             "sales_to_capital_early": "assumed",
             "sales_to_capital_late": "assumed",
-            "initial_growth": "confirmed",
+            "initial_growth": "derived",
         },
         (POST_CASE_NAME, "expansion"): {
             "base_revenue": "assumed",
@@ -206,7 +206,7 @@ def test_seeded_narrative_three_p_tags_match_source_exactly():
             "margin_target": "probable",
             "sales_to_capital_early": "plausible",
             "sales_to_capital_late": "plausible",
-            "initial_growth": "probable",
+            "initial_growth": "plausible",
         },
         (PRE_CASE_NAME, "expansion"): {
             "base_revenue": "plausible",
@@ -243,7 +243,7 @@ def test_seeded_narrative_three_p_tags_match_source_exactly():
             "margin_target": "probable",
             "sales_to_capital_early": "plausible",
             "sales_to_capital_late": "plausible",
-            "initial_growth": "probable",
+            "initial_growth": "plausible",
         },
         (POST_CASE_NAME, "expansion"): {
             "base_revenue": "plausible",
@@ -269,7 +269,11 @@ def test_below_probable_lists_exactly_the_placeholder_inputs_for_post_case():
     Four placeholder fields per segment (base_revenue, base_margin,
     sales_to_capital_early, sales_to_capital_late), four segments = 16, plus
     expansion's revenue_target and margin_target (I9: todo3 tags both `[V]`
-    "assumed unchanged", not confirmed) = 18."""
+    "assumed unchanged", not confirmed) = 18, plus ai's initial_growth
+    (todo3 records no `[C]` near-term slowdown for ai specifically, only that
+    2025 growth ran below the implied path, so its anchor sits at plausible
+    rather than probable -- see the seed module's `_CONFIRMED_INITIAL_GROWTH`)
+    = 19."""
     ensure_valuation_cases_seeded()
     below = _run(POST_CASE_NAME)["below_probable"]
 
@@ -284,9 +288,10 @@ def test_below_probable_lists_exactly_the_placeholder_inputs_for_post_case():
     } | {
         ("expansion", "revenue_target"),
         ("expansion", "margin_target"),
+        ("ai", "initial_growth"),
     }
     assert pairs == expected_pairs
-    assert len(below) == 18
+    assert len(below) == 19
     assert all(item["three_p"] == "plausible" for item in below)
 
 
@@ -369,18 +374,24 @@ def test_seeded_initial_growth_matches_the_confirmed_actuals():
         assert actual == pytest.approx(expected)
 
 
-def test_seeded_initial_growth_is_tagged_confirmed():
-    """These are among the few genuinely confirmed segment inputs in the seed --
-    unlike the base-revenue split, which is an assumption."""
+def test_seeded_initial_growth_is_tagged_derived():
+    """The 2025 actuals themselves are confirmed, but pinning year 1 to one of
+    them is this model's own inference about an interpolation todo3 R3 tags
+    `[V]` -- so the narrative is `derived`, not `confirmed`. Launch and
+    connectivity keep `probable` (todo3 R3 records a `[C]` near-term slowdown
+    for both); ai drops to `plausible`, since todo3 records no such slowdown
+    for ai specifically, only that its 2025 growth ran below the implied
+    path."""
     ensure_valuation_cases_seeded()
+    expected_three_p = {"launch": "probable", "connectivity": "probable", "ai": "plausible"}
     for name in (PRE_CASE_NAME, POST_CASE_NAME):
         for segment in load_case(_case_id(name))["segments"]:
             claims = {n["input_field"]: n for n in segment["narratives"]}
             if segment["initial_growth"] is None:
                 assert "initial_growth" not in claims
                 continue
-            assert claims["initial_growth"]["confidence"] == "confirmed"
-            assert claims["initial_growth"]["three_p"] == "probable"
+            assert claims["initial_growth"]["confidence"] == "derived"
+            assert claims["initial_growth"]["three_p"] == expected_three_p[segment["name"]]
 
 
 def test_seeded_year_one_growth_no_longer_contradicts_the_source():

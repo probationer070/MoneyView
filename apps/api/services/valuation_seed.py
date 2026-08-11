@@ -35,6 +35,21 @@ confirmed +33% total, contradicting todo3 R3's `[C]`-tagged record that
 Damodaran's June revision SLOWED near-term growth. `expansion` takes no
 `initial_growth`: it is a ramped segment with no revenue today, and
 `SegmentSpec` rejects `initial_growth` on any segment with `base_revenue == 0`.
+The 2025 actuals themselves are confirmed; using each one as the model's
+year-1 anchor is this model's own inference about an interpolation todo3 R3
+tags `[V]`, and the narratives below are tagged `derived` accordingly, not
+`confirmed`.
+
+Pinning both the observed year-1 rate and the target-year revenue with a
+single free growth-curve amplitude means a slower start has to be paid for
+somewhere else in the path: the middle years absorb it. On the post-prospectus
+case, launch's year-5 growth rises from 37% (pre-anchor curve) to 55%
+(anchored curve) and AI's from 136% to 202% -- years 4 through 10 are higher
+than before for both segments. Connectivity is unaffected: its solved
+amplitude was already ~0.0016, close enough to zero that the unanchored
+linear-decay path already matched the observed rate. "Slowed near-term
+growth" describes year 1 only; the mid-horizon accelerated to make room for
+it.
 """
 
 from __future__ import annotations
@@ -100,19 +115,36 @@ _PRE_S2C_LATE_CLAIM = (
 _CONFIRMED_INITIAL_GROWTH = {
     "launch": (
         0.0764,
-        "2025 launch revenue grew 7.64% (todo3 section 4). todo3 R3 records as "
-        "[C] that Damodaran SLOWED near-term launch growth in the June revision; "
-        "pinning year 1 to the observed rate is how that enters the model.",
+        "2025 launch revenue grew 7.64% (todo3 section 4) -- confirmed. Pinning "
+        "the model's year-1 growth to that observed rate is this model's own "
+        "inference, not todo3's: R3 tags the shape change (a near-term "
+        "slowdown) [C] but the exact interpolation [V]. Here that inference has "
+        "real support -- todo3 R3 records as [C] that Damodaran SLOWED "
+        "near-term launch growth specifically in the June revision.",
+        "probable",
     ),
     "connectivity": (
         0.50,
-        "2025 Starlink revenue grew about 50% (todo3 section 4) -- the near-term "
-        "engine, on subscribers doubling from 5.0m to 10.3m.",
+        "2025 Starlink revenue grew about 50% (todo3 section 4) -- confirmed, "
+        "the near-term engine on subscribers doubling from 5.0m to 10.3m. "
+        "Pinning the model's year-1 growth to that observed rate is this "
+        "model's own inference, not todo3's: R3 tags the shape change [C] but "
+        "the exact interpolation [V]. As with launch, todo3 R3 records as [C] "
+        "that Damodaran SLOWED near-term connectivity growth in the June "
+        "revision.",
+        "probable",
     ),
     "ai": (
         0.22,
-        "2025 xAI revenue grew about 22% (todo3 section 4), which todo3 notes is "
-        "below the growth its own target-year revenue implies.",
+        "2025 xAI revenue grew about 22% (todo3 section 4) -- confirmed, and "
+        "todo3 notes it as below the growth its own target-year revenue "
+        "implies. Pinning the model's year-1 growth to that observed rate is "
+        "this model's own inference, not todo3's: R3 tags the shape change [C] "
+        "but the exact interpolation [V]. Unlike launch and connectivity, "
+        "todo3 records no [C] near-term slowdown for AI specifically -- only "
+        "that 2025 growth ran below the implied path -- so this segment's "
+        "anchor has weaker support than the other two.",
+        "plausible",
     ),
 }
 
@@ -151,11 +183,11 @@ def _segment(name, *, margin_target, margin_claim, s2c_early, s2c_late,
 
     initial_growth = None
     if name in _CONFIRMED_INITIAL_GROWTH and base_revenue > 0:
-        initial_growth, growth_claim = _CONFIRMED_INITIAL_GROWTH[name]
+        initial_growth, growth_claim, growth_three_p = _CONFIRMED_INITIAL_GROWTH[name]
         narratives.append(
             _narrative(
-                "initial_growth", growth_claim, "confirmed",
-                three_p="probable", source="todo3 section 4",
+                "initial_growth", growth_claim, "derived",
+                three_p=growth_three_p, source="todo3 section 4",
             )
         )
 

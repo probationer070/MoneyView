@@ -330,7 +330,7 @@ def margin_path(spec: SegmentSpec, n: int) -> list[float]:
     deviates from that: `revenue_path` applies a full year of growth in year 1
     (todo3 R3), so a year-1 margin still sitting at `base_margin` prices that
     grown revenue at the wrong-year margin -- e.g. the seeded launch segment
-    would book its year-1 loss on revenue that has already grown ~64% while its
+    would book its year-1 loss on revenue that has already grown while its
     margin has not moved at all. Giving year 1 one step of margin convergence
     keeps margin and revenue offset by the same number of steps. todo3 notes
     Damodaran typically back-loads the convergence shape itself (independent of
