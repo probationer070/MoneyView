@@ -302,6 +302,7 @@ def run_stored_case(case_id: int) -> dict:
         "base_revenue_total": result.base_revenue_total,
         "base_ebit_total": result.base_ebit_total,
         "marginal_roic_target_year": result.marginal_roic_target_year,
+        "terminal_capital_intensity_change": result.terminal_capital_intensity_change,
         "terminal_reinvestment_rate": result.terminal_reinvestment_rate,
         "reinvestment_rate_target_year": result.reinvestment_rate_target_year,
         "explicit_reinvestment_rate_at_stable_growth": (

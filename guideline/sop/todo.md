@@ -453,6 +453,24 @@ Still open from that review, deliberately out of scope:
    not for ai. See `apps/api/services/valuation_seed.py`'s module docstring and
    `_CONFIRMED_INITIAL_GROWTH`.
 
+   **Superseded 2026-08-11 by the spreadsheets: the anchor was removed from the
+   seed.** The source does not pin year-1 growth to an observed rate. S5's
+   year-1 growth is **58.6%** for launch, **63.6%** for connectivity and
+   **326.6%** for AI, against 2025 actuals of 7.6% / 49.8% / 22.2%. todo3 R3's
+   `[C]` claim that the June revision SLOWED near-term growth is nonetheless
+   confirmed as a pre-to-post comparison -- launch's year-1 growth falls from
+   160.7% (S4) to 58.6% (S5) -- but the mechanism is the cut to launch's 2036
+   revenue target, from 70 to 40, not an anchor. Reading "slowed near-term
+   growth" as an instruction to pin year 1 was this model's inference, and it
+   was wrong.
+
+   `initial_growth` is now `None` on every seeded segment; removing it also
+   improved the post case's fit against the source, from -0.65% to -0.41%. The
+   anchored curve stays in the engine as a generic option, with its tests
+   intact -- it is a legitimate MoneyView feature, just not a reproduction of
+   Damodaran. The "+38.7% consolidated year-1 growth" figure recorded above no
+   longer describes the seed.
+
 2. **`base_margin` contradicts its own documented contract.** `SegmentSpec`
    documents it as the R&D-adjusted operating margin, but the seeded values
    give a base EBIT of -0.232, close to todo3 section 4's *reported* operating
@@ -460,13 +478,30 @@ Still open from that review, deliberately out of scope:
    ramps from a reported basis to targets todo3 justifies specifically by the
    R&D adjustment.
 
+   **Amended 2026-08-11: the contradiction is the source's, and is now carried
+   deliberately.** The workbooks' base margins (`Valuation output!B8:B11`, 8% /
+   10% / -5% / 0%, identical in both) are typed constants that do not reconcile
+   with their own base-year EBIT row either: row 12 gives -0.317 pre and +4.020
+   post, the R&D-adjusted reported figures, against 1.463 and 1.306 implied by
+   the margins. Seeded at the source's values, tagged `confirmed` for
+   provenance and `plausible` on the 3P scale for exactly this reason. The base
+   year is not discounted, so it does not enter enterprise value. What remains
+   open is R&D capitalization itself (`Input sheet!B15` is "Yes" in both
+   workbooks; not implemented here).
+
 3. **Case-level inputs carry no narrative rows.** `roic_stable` determines a
-   terminal value that is ~100% of the seeded case's enterprise value, and
-   across the guard's admitted band the enterprise value moves about 9.3% --
-   yet it states no reason, because the narrative rule covers segment fields
-   only. Closing this needs a schema change (a `case_narrative` table, or a
-   nullable `segment_id` on `segment_narrative`). This is the structural form
-   of the defect the terminal-ROIC remediation fixed.
+   terminal value that is ~87% of the source's own enterprise value, yet it
+   states no reason, because the narrative rule covers segment fields only.
+   Closing this needs a schema change (a `case_narrative` table, or a nullable
+   `segment_id` on `segment_narrative`).
+
+   **Now the most valuable open item (2026-08-11).** Every *segment* input is a
+   spreadsheet transcription, so the narrative layer is fully populated and
+   honest there -- and the contrast makes the case-level gap the last place a
+   value drives the model while stating nothing. It also absorbed the
+   terminal-ROIC guard's job: the numeric bound that stood in for provenance
+   was removed on 2026-08-11 for rejecting the source's own 0.15, which leaves
+   provenance with nothing enforcing it at the case level.
 
 4. **The pre/post enterprise-value direction runs opposite to the source, and
    cannot be corrected within the source's own confirmed constraints.** todo3
@@ -588,11 +623,22 @@ Still open from that review, deliberately out of scope:
    This closes the open calibration question. It also supersedes the premise of
    the linked design spec, whose scope decision was made without these values.
 
-No test asserts any explicit-period value against an independently computed
-expectation: the confirmed-input gates in `test_segment_valuation_spacex.py`
-are pure sums of the input literals and would pass against any revenue path,
-margin path, tax schedule or discounting scheme provided year 10 lands on
-target.
+**Closed 2026-08-11.** This section used to record that no test asserted an
+explicit-period value against an independently computed expectation -- the
+confirmed-input gates were pure sums of the input literals and would pass
+against any revenue path, margin path, tax schedule or discounting scheme
+provided year 10 landed on target. That was only fixable once there was an
+independent expectation to assert against, which the spreadsheets supplied.
+
+`test_segment_valuation_spacex.py` and `tests/api/test_valuation_seed.py` now
+both assert enterprise value against `Valuation output!B32` (1216.06 pre,
+1224.45 post) with recorded tolerances of 2.5% and 0.5%, and the post case's
+value per share against `B44` (97.83) at 1%. These are regression guards, not
+targets; the revenue-shape work should tighten them.
+
+The sum-of-literals gates are kept alongside, since they isolate a different
+failure: a target-year total that drifts tells you which input moved, where an
+enterprise-value bound only tells you something did.
 
 ## Active Track - Performance Instrumentation (sub-project 1 of 4)
 

@@ -1,3 +1,11 @@
+"""The seeded SpaceX cases, checked against Damodaran's spreadsheets.
+
+Expectations here are literal, transcribed from
+`guideline/sop/todo3-spreadsheet-values.md`, never re-derived from the seed
+module's own constants -- a test that reads its expectation out of the code
+under test cannot catch a wrong value.
+"""
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -10,6 +18,10 @@ from apps.api.services.valuation_seed import (
 )
 
 client = TestClient(app)
+
+# Value of operating assets, `Valuation output!B32` in each workbook.
+SOURCE_EV_PRE = 1216.061156
+SOURCE_EV_POST = 1224.448006
 
 
 def _case_id(name: str) -> int:
@@ -55,301 +67,113 @@ def test_every_seeded_input_carries_a_narrative():
             assert {n["input_field"] for n in segment["narratives"]} == stated
 
 
-def test_uncalibrated_inputs_are_marked_assumed():
-    """todo3 tags sales-to-capital and base margins as unconfirmed. That has to
-    be visible in the data, not just in a comment."""
+def test_every_seeded_input_is_confirmed_except_the_one_derivation():
+    """Reading the spreadsheets turned every seeded input into a transcription.
+    The single exception is the post-prospectus launch share: the workbook gives
+    a 40.0 revenue target, and 40% is that divided by the blog's $100bn TAM."""
     ensure_valuation_cases_seeded()
-    post = load_case(_case_id(POST_CASE_NAME))
-    launch = next(s for s in post["segments"] if s["name"] == "launch")
-    by_field = {n["input_field"]: n for n in launch["narratives"]}
-    assert by_field["sales_to_capital_early"]["confidence"] == "assumed"
-    assert by_field["base_margin"]["confidence"] == "assumed"
-    assert by_field["margin_target"]["confidence"] == "confirmed"
-
-
-def test_seeded_narrative_confidence_tags_match_source_exactly():
-    """Every confidence tag, on every narrative, in both cases -- checked against
-    a literal expected mapping written independently of the seed module's own
-    constants. A test that re-derives its expectations from the code under test
-    cannot catch a wrong value; this one is the regression guard for the
-    pre-prospectus `ai` segment's `margin_target`, which was shipped `confirmed`
-    when the source (todo3 section 3 footnote 1: S1 says 50%, S2 restates as
-    45%) makes it `derived`."""
-    ensure_valuation_cases_seeded()
-
-    expected = {
-        (PRE_CASE_NAME, "launch"): {
-            "base_revenue": "assumed",
-            "base_margin": "assumed",
-            "tam_target": "confirmed",
-            "market_share_target": "confirmed",
-            "margin_target": "confirmed",
-            "sales_to_capital_early": "assumed",
-            "sales_to_capital_late": "assumed",
-            "initial_growth": "derived",
-        },
-        (PRE_CASE_NAME, "connectivity"): {
-            "base_revenue": "assumed",
-            "base_margin": "assumed",
-            "tam_target": "confirmed",
-            "market_share_target": "confirmed",
-            "margin_target": "confirmed",
-            "sales_to_capital_early": "assumed",
-            "sales_to_capital_late": "assumed",
-            "initial_growth": "derived",
-        },
-        (PRE_CASE_NAME, "ai"): {
-            "base_revenue": "assumed",
-            "base_margin": "assumed",
-            "revenue_target": "confirmed",
-            "margin_target": "derived",
-            "sales_to_capital_early": "assumed",
-            "sales_to_capital_late": "assumed",
-            "initial_growth": "derived",
-        },
-        (PRE_CASE_NAME, "expansion"): {
-            "base_revenue": "assumed",
-            "base_margin": "assumed",
-            "revenue_target": "assumed",
-            "margin_target": "assumed",
-            "sales_to_capital_early": "assumed",
-            "sales_to_capital_late": "assumed",
-        },
-        (POST_CASE_NAME, "launch"): {
-            "base_revenue": "assumed",
-            "base_margin": "assumed",
-            "tam_target": "confirmed",
-            "market_share_target": "confirmed",
-            "margin_target": "confirmed",
-            "sales_to_capital_early": "assumed",
-            "sales_to_capital_late": "assumed",
-            "initial_growth": "derived",
-        },
-        (POST_CASE_NAME, "connectivity"): {
-            "base_revenue": "assumed",
-            "base_margin": "assumed",
-            "tam_target": "confirmed",
-            "market_share_target": "confirmed",
-            "margin_target": "confirmed",
-            "sales_to_capital_early": "assumed",
-            "sales_to_capital_late": "assumed",
-            "initial_growth": "derived",
-        },
-        (POST_CASE_NAME, "ai"): {
-            "base_revenue": "assumed",
-            "base_margin": "assumed",
-            "revenue_target": "confirmed",
-            "margin_target": "confirmed",
-            "sales_to_capital_early": "assumed",
-            "sales_to_capital_late": "assumed",
-            "initial_growth": "derived",
-        },
-        (POST_CASE_NAME, "expansion"): {
-            "base_revenue": "assumed",
-            "base_margin": "assumed",
-            "revenue_target": "assumed",
-            "margin_target": "assumed",
-            "sales_to_capital_early": "assumed",
-            "sales_to_capital_late": "assumed",
-        },
-    }
-
+    derived = set()
     for name in (PRE_CASE_NAME, POST_CASE_NAME):
         for segment in load_case(_case_id(name))["segments"]:
-            actual = {n["input_field"]: n["confidence"] for n in segment["narratives"]}
-            assert actual == expected[(name, segment["name"])], f"{name}/{segment['name']}"
+            for narrative in segment["narratives"]:
+                assert narrative["confidence"] in ("confirmed", "derived")
+                if narrative["confidence"] == "derived":
+                    derived.add((name, segment["name"], narrative["input_field"]))
+    assert derived == {(POST_CASE_NAME, "launch", "market_share_target")}
 
 
-def test_seeded_narrative_three_p_tags_match_source_exactly():
-    """Every three_p tag, on every narrative, in both cases -- checked against a
-    literal expected mapping written independently of the seed module's own
-    constants, mirroring the confidence test above.
+def test_claims_the_source_only_assumed_stay_below_probable():
+    """`confidence` and `three_p` are orthogonal, and this is what makes that
+    worth storing separately. Every value below is confirmed -- it is the number
+    Damodaran used -- yet the claim each one makes is weak:
 
-    base_margin, sales_to_capital_early and sales_to_capital_late are
-    self-described in their own claim text as uncalibrated ("Placeholder. ...
-    Calibrate against SpaceX2026IPOUpdated.xlsx.") and cannot honestly sit at
-    Probable on a Possible -> Plausible -> Probable scale.
-
-    base_revenue is Plausible too (I9): only the segment TOTAL is derived from
-    todo3 section 6's trailing multiples, and the split across segments is an
-    assumption the source does not support -- see the seed module's
-    `_BASE_CLAIMS`. So is expansion's revenue_target and margin_target: todo3
-    section 3 tags both `[V]` ("assumed unchanged") in BOTH cases, not
-    confirmed."""
-    ensure_valuation_cases_seeded()
-
-    expected = {
-        (PRE_CASE_NAME, "launch"): {
-            "base_revenue": "plausible",
-            "base_margin": "plausible",
-            "tam_target": "probable",
-            "market_share_target": "probable",
-            "margin_target": "probable",
-            "sales_to_capital_early": "plausible",
-            "sales_to_capital_late": "plausible",
-            "initial_growth": "probable",
-        },
-        (PRE_CASE_NAME, "connectivity"): {
-            "base_revenue": "plausible",
-            "base_margin": "plausible",
-            "tam_target": "probable",
-            "market_share_target": "probable",
-            "margin_target": "probable",
-            "sales_to_capital_early": "plausible",
-            "sales_to_capital_late": "plausible",
-            "initial_growth": "probable",
-        },
-        (PRE_CASE_NAME, "ai"): {
-            "base_revenue": "plausible",
-            "base_margin": "plausible",
-            "revenue_target": "probable",
-            "margin_target": "probable",
-            "sales_to_capital_early": "plausible",
-            "sales_to_capital_late": "plausible",
-            "initial_growth": "plausible",
-        },
-        (PRE_CASE_NAME, "expansion"): {
-            "base_revenue": "plausible",
-            "base_margin": "plausible",
-            "revenue_target": "plausible",
-            "margin_target": "plausible",
-            "sales_to_capital_early": "plausible",
-            "sales_to_capital_late": "plausible",
-        },
-        (POST_CASE_NAME, "launch"): {
-            "base_revenue": "plausible",
-            "base_margin": "plausible",
-            "tam_target": "probable",
-            "market_share_target": "probable",
-            "margin_target": "probable",
-            "sales_to_capital_early": "plausible",
-            "sales_to_capital_late": "plausible",
-            "initial_growth": "probable",
-        },
-        (POST_CASE_NAME, "connectivity"): {
-            "base_revenue": "plausible",
-            "base_margin": "plausible",
-            "tam_target": "probable",
-            "market_share_target": "probable",
-            "margin_target": "probable",
-            "sales_to_capital_early": "plausible",
-            "sales_to_capital_late": "plausible",
-            "initial_growth": "probable",
-        },
-        (POST_CASE_NAME, "ai"): {
-            "base_revenue": "plausible",
-            "base_margin": "plausible",
-            "revenue_target": "probable",
-            "margin_target": "probable",
-            "sales_to_capital_early": "plausible",
-            "sales_to_capital_late": "plausible",
-            "initial_growth": "plausible",
-        },
-        (POST_CASE_NAME, "expansion"): {
-            "base_revenue": "plausible",
-            "base_margin": "plausible",
-            "revenue_target": "plausible",
-            "margin_target": "plausible",
-            "sales_to_capital_early": "plausible",
-            "sales_to_capital_late": "plausible",
-        },
-    }
-
-    for name in (PRE_CASE_NAME, POST_CASE_NAME):
-        for segment in load_case(_case_id(name))["segments"]:
-            actual = {n["input_field"]: n["three_p"] for n in segment["narratives"]}
-            assert actual == expected[(name, segment["name"])], f"{name}/{segment['name']}"
-
-
-def test_below_probable_lists_exactly_the_placeholder_inputs_for_post_case():
-    """The whole point of storing three_p: an uncalibrated placeholder input has
-    to actually show up in below_probable, or the honesty mechanism is silently
-    empty.
-
-    Four placeholder fields per segment (base_revenue, base_margin,
-    sales_to_capital_early, sales_to_capital_late), four segments = 16, plus
-    expansion's revenue_target and margin_target (I9: todo3 tags both `[V]`
-    "assumed unchanged", not confirmed) = 18, plus ai's initial_growth
-    (todo3 records no `[C]` near-term slowdown for ai specifically, only that
-    2025 growth ran below the implied path, so its anchor sits at plausible
-    rather than probable -- see the seed module's `_CONFIRMED_INITIAL_GROWTH`)
-    = 19."""
+    - `base_margin` (all eight segments): typed constants that do not reconcile
+      with the source's own base-year EBIT.
+    - expansion's `revenue_target` and `margin_target`: a placeholder for
+      optionality, assumed outright, and DOUBLED between the workbooks (50 ->
+      100) while todo3 records it as "assumed unchanged".
+    - post-prospectus launch `market_share_target`: this model's own
+      decomposition, contradicting todo3's "unchanged at 70%".
+    """
     ensure_valuation_cases_seeded()
     below = _run(POST_CASE_NAME)["below_probable"]
 
     pairs = {(item["segment"], item["input_field"]) for item in below}
-    expected_pairs = {
-        (segment, field)
-        for segment in ("launch", "connectivity", "ai", "expansion")
-        for field in (
-            "base_revenue", "base_margin",
-            "sales_to_capital_early", "sales_to_capital_late",
-        )
-    } | {
+    assert pairs == {
+        ("launch", "base_margin"),
+        ("connectivity", "base_margin"),
+        ("ai", "base_margin"),
+        ("expansion", "base_margin"),
         ("expansion", "revenue_target"),
         ("expansion", "margin_target"),
-        ("ai", "initial_growth"),
+        ("launch", "market_share_target"),
     }
-    assert pairs == expected_pairs
-    assert len(below) == 19
+    assert len(below) == 7
     assert all(item["three_p"] == "plausible" for item in below)
 
 
-def test_seeded_target_year_totals_match_the_confirmed_inputs():
-    """The section 6 gates, end to end through HTTP."""
+def test_seeded_target_year_totals_match_the_spreadsheets():
+    """`Input sheet!B26:B29` and `B30:B33`, summed. Note both post-prospectus
+    totals moved when the spreadsheets were read: revenue 400 -> 420 (todo3
+    records launch's target as unchanged at 70; the workbook cuts it to 40, and
+    doubles expansion from 50 to 100) and EBIT 158.5 -> 160."""
     ensure_valuation_cases_seeded()
     pre, post = _run(PRE_CASE_NAME), _run(POST_CASE_NAME)
     assert pre["revenue"][-1] == pytest.approx(320.0, abs=1e-6)
-    assert pre["ebit"][-1] == pytest.approx(151.0, abs=1e-6)
-    assert post["revenue"][-1] == pytest.approx(400.0, abs=1e-6)
-    assert post["ebit"][-1] == pytest.approx(158.5, abs=1e-6)
+    assert pre["ebit"][-1] == pytest.approx(155.0, abs=1e-6)
+    assert post["revenue"][-1] == pytest.approx(420.0, abs=1e-6)
+    assert post["ebit"][-1] == pytest.approx(160.0, abs=1e-6)
 
 
-def test_seeded_base_revenue_reconciles_with_trailing_multiples():
+def test_seeded_base_revenue_matches_the_spreadsheets():
+    """`Input sheet!B8:B10`. The pre-case total also reconciles with todo3
+    section 6's two independent trailing-multiple derivations, both $15.60bn."""
     ensure_valuation_cases_seeded()
-    assert _run(POST_CASE_NAME)["base_revenue_total"] == pytest.approx(15.6, abs=0.05)
+    assert _run(PRE_CASE_NAME)["base_revenue_total"] == pytest.approx(15.600, abs=1e-9)
+    assert _run(POST_CASE_NAME)["base_revenue_total"] == pytest.approx(18.674, abs=1e-9)
 
 
 def test_post_prospectus_bridge_uses_prospectus_balance_sheet():
+    """`Input sheet!B17`, `B14` and `B18`, to the dollar rather than rounded."""
     ensure_valuation_cases_seeded()
     bridge = _run(POST_CASE_NAME)["equity_bridge"]
-    assert bridge["cash"] == pytest.approx(24.7)
-    assert bridge["debt"] == pytest.approx(22.9)
+    assert bridge["cash"] == pytest.approx(24.747)
+    assert bridge["debt"] == pytest.approx(22.896)
     assert bridge["ipo_proceeds"] == pytest.approx(75.0)
 
 
-def test_seeded_terminal_roic_is_the_shared_literal():
-    """roic_stable = 0.33, a single literal shared by both cases rather than a
-    per-case erosion policy -- see the seed module's docstring for why a shared
-    value tracks the "prospectus barely moved EV" finding better than a
-    per-case one did.
+def test_seeded_terminal_roic_is_the_spreadsheet_value():
+    """`Input sheet!B56` is 0.15 in both workbooks -- an override on the
+    template's default of "terminal return = cost of capital". It was 0.33 here
+    until the spreadsheets were read, which was the largest single divergence in
+    the build: terminal value is ~87% of enterprise value."""
+    ensure_valuation_cases_seeded()
+    assert load_case(_case_id(PRE_CASE_NAME))["roic_stable"] == pytest.approx(0.15)
+    assert load_case(_case_id(POST_CASE_NAME))["roic_stable"] == pytest.approx(0.15)
 
-    Expectations are literal, not recomputed from the seed module -- a test that
-    re-derives its expectation from the code under test cannot catch a wrong value.
+
+def test_seeded_terminal_roic_sits_far_below_the_marginal_return():
+    """And is reported rather than rejected. Capital-weighted marginal returns,
+    computed here from the transcribed inputs alone:
+
+        post  160.0 x 0.75 / (40/4 + 120/5 + 160/2.5 + 100/5) = 120/118
+        pre   155.0 x 0.75 / (70/2 + 120/5 +  80/1.5 + 50/3)  = 116.25/129
+
+    Against roic_stable 0.15 those imply +578% and +501% capital intensity. A
+    guard rejecting that stood here until 2026-08-11 and rejected both cases;
+    see `packages/core_finance/segment_valuation.py`.
     """
     ensure_valuation_cases_seeded()
-    pre = load_case(_case_id(PRE_CASE_NAME))
-    post = load_case(_case_id(POST_CASE_NAME))
-    assert pre["roic_stable"] == pytest.approx(0.33)
-    assert post["roic_stable"] == pytest.approx(0.33)
-
-
-def test_seeded_terminal_roic_sits_below_the_marginal_return():
-    """The shared literal must satisfy the engine's two-sided consistency guard
-    for both cases, and by a real margin -- an erosion rule that lands at or
-    above the marginal return is not erosion.
-
-    marginal values are capital-weighted (post: 118.875 NOPAT / 320.0 capital;
-    pre: 113.25 NOPAT / 236.190476... capital at the pre-case 1.5/1.5/1.05/1.5
-    sales-to-capital values)."""
-    ensure_valuation_cases_seeded()
     for name, marginal in (
-        (PRE_CASE_NAME, 113.25 / (70 / 1.5 + 120 / 1.5 + 80 / 1.05 + 50 / 1.5)),
-        (POST_CASE_NAME, 0.371484375),
+        (PRE_CASE_NAME, 116.25 / 129.0),
+        (POST_CASE_NAME, 120.0 / 118.0),
     ):
         data = _run(name)
-        assert data["marginal_roic_target_year"] == pytest.approx(marginal, abs=1e-9)
-        assert load_case(_case_id(name))["roic_stable"] < marginal
+        assert data["marginal_roic_target_year"] == pytest.approx(marginal, abs=1e-12)
+        assert data["terminal_capital_intensity_change"] == pytest.approx(
+            marginal / 0.15 - 1, abs=1e-12
+        )
+        assert data["enterprise_value"] > 0
 
 
 def test_run_reports_both_reinvestment_rates_for_the_seeded_cases():
@@ -362,74 +186,53 @@ def test_run_reports_both_reinvestment_rates_for_the_seeded_cases():
     assert data["terminal_reinvestment_rate"] < 1
 
 
-def test_seeded_initial_growth_matches_the_confirmed_actuals():
-    """todo3 section 4's confirmed 2025 segment growth. Expectations are literal,
-    not read back from the seed module."""
+def test_no_segment_anchors_its_year_one_growth():
+    """`initial_growth` is unset everywhere, because the source does not anchor.
+    S5's year-1 growth is 58.6% (launch), 63.6% (connectivity) and 326.6% (AI)
+    against 2025 actuals of 7.6%, 49.8% and 22.2%. The anchor was this model's
+    inference from todo3 R3's `[C]` "slowed near-term growth"; the workbooks
+    show that slowdown is real but comes from cutting launch's 2036 target, not
+    from pinning year 1."""
     ensure_valuation_cases_seeded()
-    expected = {"launch": 0.0764, "connectivity": 0.50, "ai": 0.22, "expansion": None}
-    for name in (PRE_CASE_NAME, POST_CASE_NAME):
-        actual = {
-            s["name"]: s["initial_growth"] for s in load_case(_case_id(name))["segments"]
-        }
-        assert actual == pytest.approx(expected)
-
-
-def test_seeded_initial_growth_is_tagged_derived():
-    """The 2025 actuals themselves are confirmed, but pinning year 1 to one of
-    them is this model's own inference about an interpolation todo3 R3 tags
-    `[V]` -- so the narrative is `derived`, not `confirmed`. Launch and
-    connectivity keep `probable` (todo3 R3 records a `[C]` near-term slowdown
-    for both); ai drops to `plausible`, since todo3 records no such slowdown
-    for ai specifically, only that its 2025 growth ran below the implied
-    path."""
-    ensure_valuation_cases_seeded()
-    expected_three_p = {"launch": "probable", "connectivity": "probable", "ai": "plausible"}
     for name in (PRE_CASE_NAME, POST_CASE_NAME):
         for segment in load_case(_case_id(name))["segments"]:
-            claims = {n["input_field"]: n for n in segment["narratives"]}
-            if segment["initial_growth"] is None:
-                assert "initial_growth" not in claims
-                continue
-            assert claims["initial_growth"]["confidence"] == "derived"
-            assert claims["initial_growth"]["three_p"] == expected_three_p[segment["name"]]
+            assert segment["initial_growth"] is None, f"{name}/{segment['name']}"
+            fields = {n["input_field"] for n in segment["narratives"]}
+            assert "initial_growth" not in fields
 
 
-def test_seeded_year_one_growth_no_longer_contradicts_the_source():
-    """Was +55% against a confirmed +33% total. Now +38.7%: closer, and the
-    residual traces to the base-revenue split, which the seed's own narratives
-    record as an assumption rather than a derivation."""
-    ensure_valuation_cases_seeded()
-    data = _run(POST_CASE_NAME)
-    base_total = data["base_revenue_total"]
-    assert data["revenue"][0] / base_total - 1 == pytest.approx(0.387, abs=0.001)
+def test_the_sales_to_capital_slope_reverses_between_the_cases():
+    """`Input sheet!B36:C39`. This is what closed the pre/post enterprise-value
+    direction question, and no blog post mentions it.
 
-
-def test_seeded_launch_starts_at_its_observed_rate():
-    ensure_valuation_cases_seeded()
-    launch = next(s for s in _run(POST_CASE_NAME)["segments"] if s["name"] == "launch")
-    assert launch["revenue"][0] / 4.1 - 1 == pytest.approx(0.0764, abs=1e-12)
-
-
-def test_late_sales_to_capital_is_unchanged_where_todo3_restricts_the_lowering():
-    """todo3.md:82 (formula I2, tagged [C]) says he lowered sales-to-capital
-    "for yrs 1-5 (launch + connectivity)". Section 3 repeats the year restriction
-    in both segments' rows. So the LATE ratio for those two is not something the
-    source says moved, and the seed must not move it.
-
-    This matters more than its size: marginal_roic reads sales_to_capital_late
-    only, so an invented value here anchors the entire terminal block.
+    April has the late ratio at or BELOW the early one -- capital intensity
+    rising with scale. June has it at or ABOVE. So the June revision lowered the
+    early ratios (which todo3 I2 records) and raised the late ones (which it
+    does not). Every earlier attempt to reach the source's rising EV by tuning a
+    single "lowering magnitude" was working on the wrong parameter.
     """
     ensure_valuation_cases_seeded()
     pre = {s["name"]: s for s in load_case(_case_id(PRE_CASE_NAME))["segments"]}
     post = {s["name"]: s for s in load_case(_case_id(POST_CASE_NAME))["segments"]}
-    for name in ("launch", "connectivity"):
-        assert pre[name]["sales_to_capital_late"] == post[name]["sales_to_capital_late"], name
-        assert pre[name]["sales_to_capital_late"] == pytest.approx(1.5), name
+
+    expected_pre = {"launch": (4.0, 2.0), "connectivity": (10.0, 5.0),
+                    "ai": (2.5, 1.5), "expansion": (3.0, 3.0)}
+    expected_post = {"launch": (3.0, 4.0), "connectivity": (3.0, 5.0),
+                     "ai": (1.5, 2.5), "expansion": (5.0, 5.0)}
+
+    for name, (early, late) in expected_pre.items():
+        assert pre[name]["sales_to_capital_early"] == pytest.approx(early), name
+        assert pre[name]["sales_to_capital_late"] == pytest.approx(late), name
+        assert pre[name]["sales_to_capital_late"] <= pre[name]["sales_to_capital_early"], name
+    for name, (early, late) in expected_post.items():
+        assert post[name]["sales_to_capital_early"] == pytest.approx(early), name
+        assert post[name]["sales_to_capital_late"] == pytest.approx(late), name
+        assert post[name]["sales_to_capital_late"] >= post[name]["sales_to_capital_early"], name
 
 
 def test_early_sales_to_capital_still_carries_the_confirmed_lowering():
-    """The correction above must not overshoot. todo3 confirms the years-1-5
-    lowering; removing it too would be a different error in the other direction."""
+    """todo3 I2's `[C]` claim survives contact with the spreadsheet: the
+    years-1-5 ratios did fall for all three revenue-earning segments."""
     ensure_valuation_cases_seeded()
     pre = {s["name"]: s for s in load_case(_case_id(PRE_CASE_NAME))["segments"]}
     post = {s["name"]: s for s in load_case(_case_id(POST_CASE_NAME))["segments"]}
@@ -437,11 +240,39 @@ def test_early_sales_to_capital_still_carries_the_confirmed_lowering():
         assert pre[name]["sales_to_capital_early"] > post[name]["sales_to_capital_early"], name
 
 
-def test_ai_late_sales_to_capital_is_still_lowered():
-    """todo3.md:129 places no year restriction on AI -- "already low, lower
-    still" -- so lowering AI's late ratio IS supported and must survive."""
+def test_enterprise_value_tracks_the_spreadsheets():
+    """The first test here to assert an explicit-period-sensitive number against
+    an independently sourced expectation, rather than a sum of input literals.
+
+    The post case lands within 0.5% of the source and the pre case within 2.5%.
+    The asymmetry is the point: terminal value is ~87% of post-prospectus value
+    and depends only on the target year, which now matches exactly, so the
+    remaining error is almost entirely in the explicit period -- where this
+    engine's decaying growth curve still differs from the source's gap-closing
+    interpolation. The pre workbook is also the hand-edited one, with a
+    different waypoint rule per segment.
+
+    These bounds are a regression guard, not a target. Tightening them is the
+    job of the revenue-shape work; if it lands, they should be tightened.
+    """
     ensure_valuation_cases_seeded()
-    pre = {s["name"]: s for s in load_case(_case_id(PRE_CASE_NAME))["segments"]}
-    post = {s["name"]: s for s in load_case(_case_id(POST_CASE_NAME))["segments"]}
-    assert pre["ai"]["sales_to_capital_late"] == pytest.approx(1.05)
-    assert post["ai"]["sales_to_capital_late"] == pytest.approx(1.0)
+    pre_ev = _run(PRE_CASE_NAME)["enterprise_value"]
+    post_ev = _run(POST_CASE_NAME)["enterprise_value"]
+    assert pre_ev == pytest.approx(SOURCE_EV_PRE, rel=0.025)
+    assert post_ev == pytest.approx(SOURCE_EV_POST, rel=0.005)
+
+
+def test_the_pre_post_enterprise_value_direction_is_still_inverted():
+    """Recorded, not asserted as correct. The source has enterprise value RISING
+    1216.06 -> 1224.45 (+0.69%); this engine still has it falling, because the
+    pre case carries the larger explicit-period error (+2.0% vs -0.4%).
+
+    Every confirmed input now matches the spreadsheets, so the residual is the
+    revenue path shape and nothing else. This test exists to fail loudly when
+    the shape work lands -- at which point it should be inverted, not deleted.
+    """
+    ensure_valuation_cases_seeded()
+    pre_ev = _run(PRE_CASE_NAME)["enterprise_value"]
+    post_ev = _run(POST_CASE_NAME)["enterprise_value"]
+    assert SOURCE_EV_POST > SOURCE_EV_PRE
+    assert post_ev < pre_ev
