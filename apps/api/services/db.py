@@ -538,6 +538,22 @@ CREATE TABLE IF NOT EXISTS segment_narrative (
     three_p         TEXT NOT NULL CHECK(three_p IN ('possible','plausible','probable')),
     PRIMARY KEY (segment_id, input_field)
 );
+
+CREATE TABLE IF NOT EXISTS industry_benchmark (
+    vintage            TEXT NOT NULL,   -- publication date, NOT the fetch date
+    industry_name      TEXT NOT NULL,
+    firms              INTEGER NOT NULL,
+    revenue_growth     REAL,
+    operating_margin   REAL,
+    after_tax_roc      REAL,
+    effective_tax_rate REAL,
+    unlevered_beta     REAL,
+    debt_to_capital    REAL,
+    cost_of_capital    REAL,
+    sales_to_capital   REAL,
+    reinvestment_rate  REAL,
+    PRIMARY KEY (vintage, industry_name)
+);
 """
 
 
@@ -808,6 +824,26 @@ def _ensure_schema_compatibility(conn: sqlite3.Connection) -> None:
         """INSERT OR IGNORE INTO portfolio_preferences
            (singleton_id, total_investment_amount, transaction_fee_rate, updated_at)
            VALUES (1, 10000.0, 0.002, '')"""
+    )
+    # Additive: CREATE TABLE IF NOT EXISTS above covers new databases, this
+    # covers developer databases created before the table existed. Nothing to
+    # backfill -- an absent vintage simply yields no conservative scenario.
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS industry_benchmark (
+            vintage            TEXT NOT NULL,
+            industry_name      TEXT NOT NULL,
+            firms              INTEGER NOT NULL,
+            revenue_growth     REAL,
+            operating_margin   REAL,
+            after_tax_roc      REAL,
+            effective_tax_rate REAL,
+            unlevered_beta     REAL,
+            debt_to_capital    REAL,
+            cost_of_capital    REAL,
+            sales_to_capital   REAL,
+            reinvestment_rate  REAL,
+            PRIMARY KEY (vintage, industry_name)
+        )"""
     )
 
 

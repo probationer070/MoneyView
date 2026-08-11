@@ -55,3 +55,42 @@ def test_yahoo_lookup_is_case_and_space_insensitive():
     assert damodaran_industry_for_yahoo("semiconductors") == "Semiconductor"
     assert damodaran_industry_for_yahoo("  Semiconductors  ") == "Semiconductor"
     assert damodaran_industry_for_yahoo("Nonexistent Industry") is None
+
+
+def _all_dataset_rows():
+    """Every industry row in the 2026 vintage, names and firm counts only.
+
+    Read from the checked-in fixture rather than `TECHNOLOGY_ROWS` (ten
+    industries) so the completeness gate below covers the whole dataset, not
+    a tenth of it.
+    """
+    from pathlib import Path
+
+    from packages.core_finance.industry_benchmark import IndustryRow
+
+    fixture_path = Path(__file__).resolve().parent.parent / "fixtures" / "damodaran_industries.txt"
+    rows = []
+    for line in fixture_path.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        name, _, firms = line.partition("|")
+        rows.append(IndustryRow(name=name.strip(), firms=int(firms.strip()), values={}))
+    return rows
+
+
+def test_every_industry_in_a_stored_vintage_is_classified():
+    """The gate on the sector map. Every industry in the dataset must be either
+    mapped to a sector or named in EXCLUDED_ROWS -- an unclassified industry
+    silently disables the feature for every ticker in it."""
+    from apps.api.services.industry_benchmark_store import load_vintage, store_vintage
+
+    all_rows = _all_dataset_rows()
+    assert len(all_rows) == 96
+
+    store_vintage("2026-01-01", all_rows)
+    unclassified = [
+        row.name for row in load_vintage("2026-01-01")
+        if sector_for_industry(row.name) is None and row.name not in EXCLUDED_ROWS
+    ]
+    assert unclassified == [], f"unclassified industries: {unclassified}"
