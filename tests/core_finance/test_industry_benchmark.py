@@ -2,8 +2,10 @@ import pytest
 
 from packages.core_finance.industry_benchmark import (
     BENCHMARK_COLUMNS,
+    BenchmarkUnavailable,
     IndustryRow,
     column_by_key,
+    resolve_benchmark,
     screen_row,
     screen_value,
 )
@@ -77,3 +79,110 @@ def test_a_capital_intensive_reinvestment_rate_below_two_is_kept():
         assert screen_value(column, plausible) is None, plausible
     for artifact in (2.115, 3.242, 14.1421393679):
         assert screen_value(column, artifact) is not None, artifact
+
+
+# Exact top-3 averages over Computers/Peripherals, Software (System &
+# Application) and Semiconductor Equip -- the three highest after-tax ROC rows
+# in TECHNOLOGY_ROWS. Computed from the fixture's unrounded values.
+TOP3 = {
+    "after_tax_roc": (0.4476035274 + 0.2931842949 + 0.2840446307) / 3,
+    "operating_margin": (0.224848747 + 0.3298251374 + 0.2617117458) / 3,
+    "sales_to_capital": (3.6197887498 + 1.5381715802 + 1.8511086723) / 3,
+    "reinvestment_rate": (0.2136889975 + 0.7377874473 + 0.2745310217) / 3,
+    "cost_of_capital": (0.0970707313 + 0.0934404807 + 0.0989358133) / 3,
+}
+
+
+def test_ranking_is_by_after_tax_roc_descending():
+    result = resolve_benchmark("Technology", TECHNOLOGY_ROWS, top_n=3)
+    assert result.ranked[:3] == (
+        "Computers/Peripherals",
+        "Software (System & Application)",
+        "Semiconductor Equip",
+    )
+
+
+def test_top_three_averages_reproduce_the_spec_worked_example():
+    """The spec's worked example is a fixture, not an illustration."""
+    result = resolve_benchmark("Technology", TECHNOLOGY_ROWS, top_n=3)
+    for key, expected in TOP3.items():
+        assert result.columns[key].value == pytest.approx(expected, abs=1e-12), key
+    assert result.columns["after_tax_roc"].value == pytest.approx(0.3416, abs=5e-5)
+    assert result.columns["operating_margin"].value == pytest.approx(0.2721, abs=5e-5)
+    assert result.columns["sales_to_capital"].value == pytest.approx(2.336, abs=5e-4)
+    assert result.columns["reinvestment_rate"].value == pytest.approx(0.409, abs=5e-4)
+
+
+def test_each_column_records_which_industries_it_averaged():
+    result = resolve_benchmark("Technology", TECHNOLOGY_ROWS, top_n=3)
+    assert result.columns["operating_margin"].industries == (
+        "Computers/Peripherals",
+        "Software (System & Application)",
+        "Semiconductor Equip",
+    )
+
+
+def test_a_poisoned_cell_drops_only_its_own_column():
+    """Construct a sector where the HIGHEST-ROC industry carries a 1414%
+    reinvestment rate. It must still contribute every other column, and the
+    reinvestment average must be taken without it.
+
+    Screening only bites when a poisoned row ranks into the basket, which the
+    real Technology rows do not -- Software (Internet) ranks last by ROC. So
+    this is built rather than borrowed.
+    """
+    poisoned = IndustryRow("Poisoned Leader", 50, {
+        **{c.key: 0.2 for c in BENCHMARK_COLUMNS},
+        "after_tax_roc": 0.9,
+        "reinvestment_rate": 14.1421393679,
+    })
+    rows = [poisoned] + [r for r in TECHNOLOGY_ROWS if r.name in (
+        "Computers/Peripherals", "Software (System & Application)", "Semiconductor Equip",
+    )]
+    # top_n=4 (not 3): the basket must hold all four rows, or reinvestment_rate
+    # would have only 2 non-poisoned survivors -- one short of the default
+    # minimum of 3 -- and the column would be dropped rather than averaged.
+    result = resolve_benchmark("Technology", rows, top_n=4)
+
+    assert result.ranked[0] == "Poisoned Leader"
+    assert "Poisoned Leader" in result.columns["operating_margin"].industries
+    assert "Poisoned Leader" not in result.columns["reinvestment_rate"].industries
+    assert any("reinvestment_rate" in r and "Poisoned Leader" in r for r in result.rejected)
+
+
+def test_a_column_that_loses_too_many_candidates_is_absent_not_wrong():
+    """Three of four candidates carry unusable reinvestment rates, leaving one.
+    Below `minimum`, the column is omitted rather than averaged over a single
+    industry and presented as a sector benchmark."""
+    rows = [
+        IndustryRow(f"Bad {i}", 50, {**{c.key: 0.2 for c in BENCHMARK_COLUMNS},
+                                     "after_tax_roc": 0.9 - i * 0.01,
+                                     "reinvestment_rate": -0.5})
+        for i in range(3)
+    ] + [IndustryRow("Good", 50, {**{c.key: 0.2 for c in BENCHMARK_COLUMNS},
+                                  "after_tax_roc": 0.5, "reinvestment_rate": 0.4})]
+    result = resolve_benchmark("Technology", rows, top_n=4, minimum=3)
+
+    assert "reinvestment_rate" not in result.columns
+    assert "operating_margin" in result.columns
+
+
+def test_a_sector_with_too_few_usable_industries_raises():
+    rows = [r for r in TECHNOLOGY_ROWS if r.name == "Semiconductor"]
+    with pytest.raises(BenchmarkUnavailable, match="only 1"):
+        resolve_benchmark("Technology", rows, minimum=3)
+
+
+def test_thin_industries_are_excluded_from_ranking_entirely():
+    """Information Services has 15 firms and passes MIN_FIRMS; a 9-firm row
+    must not appear in `ranked` at all, even with the sector's best ROC."""
+    rows = [IndustryRow("Thin Star", 9, {**{c.key: 0.2 for c in BENCHMARK_COLUMNS},
+                                         "after_tax_roc": 0.99})] + TECHNOLOGY_ROWS
+    result = resolve_benchmark("Technology", rows, top_n=3)
+    assert "Thin Star" not in result.ranked
+    assert any("Thin Star" in r and "9 firms" in r for r in result.rejected)
+
+
+def test_top_n_defaults_to_five():
+    result = resolve_benchmark("Technology", TECHNOLOGY_ROWS)
+    assert len(result.columns["operating_margin"].industries) == 5

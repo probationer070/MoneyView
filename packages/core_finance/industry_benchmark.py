@@ -110,3 +110,100 @@ def screen_value(column: BenchmarkColumn, value: float | None) -> str | None:
             f"artifact rather than an economic fact"
         )
     return None
+
+
+class BenchmarkUnavailable(Exception):
+    """No benchmark can be resolved, and no degraded substitute will be offered.
+
+    Falling back to an all-industry average would produce a number that looks
+    like a sector benchmark and is not one -- the failure mode this module
+    exists to prevent.
+    """
+
+
+@dataclass(frozen=True)
+class ColumnAverage:
+    value: float
+    industries: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SectorBenchmark:
+    """One averaged value per usable column, plus how it was reached.
+
+    A benchmark that arrives as a bare number is untraceable when it later looks
+    wrong, so `ranked` and `rejected` travel with the values.
+    """
+
+    sector: str
+    columns: dict[str, ColumnAverage]
+    ranked: tuple[str, ...]
+    rejected: tuple[str, ...]
+
+
+def resolve_benchmark(
+    sector: str,
+    rows: list[IndustryRow],
+    *,
+    top_n: int = 5,
+    minimum: int = 3,
+) -> SectorBenchmark:
+    """Average the top `top_n` industries by after-tax ROC, per column.
+
+    Columns are averaged INDEPENDENTLY, so one unusable cell drops one column
+    rather than the whole benchmark, and different columns may rest on different
+    numbers of industries. A column with fewer than `minimum` surviving
+    industries is omitted entirely rather than averaged over too few.
+    """
+    if minimum < 1:
+        raise ValueError(f"minimum must be at least 1, got {minimum}")
+    if top_n < minimum:
+        raise ValueError(
+            f"top_n {top_n} is below minimum {minimum}: the basket could never "
+            f"reach the size its own columns require"
+        )
+
+    rejected: list[str] = []
+    usable: list[IndustryRow] = []
+    for row in rows:
+        reason = screen_row(row)
+        if reason is not None:
+            rejected.append(reason)
+            continue
+        roc = row.values.get("after_tax_roc")
+        if screen_value(column_by_key("after_tax_roc"), roc) is not None:
+            rejected.append(f"{row.name}: unusable after-tax ROC, cannot be ranked")
+            continue
+        usable.append(row)
+
+    ranked_rows = sorted(usable, key=lambda r: r.values["after_tax_roc"], reverse=True)
+    basket = ranked_rows[:top_n]
+    if len(basket) < minimum:
+        raise BenchmarkUnavailable(
+            f"sector {sector!r} has only {len(basket)} usable industries, below "
+            f"the minimum of {minimum}. Rejected: {'; '.join(rejected) or 'none'}"
+        )
+
+    columns: dict[str, ColumnAverage] = {}
+    for column in BENCHMARK_COLUMNS:
+        contributors: list[tuple[str, float]] = []
+        for row in basket:
+            value = row.values.get(column.key)
+            reason = screen_value(column, value)
+            if reason is not None:
+                rejected.append(f"{row.name}: {reason}")
+                continue
+            contributors.append((row.name, float(value)))
+        if len(contributors) < minimum:
+            continue
+        columns[column.key] = ColumnAverage(
+            value=sum(v for _, v in contributors) / len(contributors),
+            industries=tuple(name for name, _ in contributors),
+        )
+
+    return SectorBenchmark(
+        sector=sector,
+        columns=columns,
+        ranked=tuple(row.name for row in ranked_rows),
+        rejected=tuple(rejected),
+    )
