@@ -423,7 +423,8 @@ Still open from that review, deliberately out of scope:
    `target_revenue` at year n) and seeding it with todo3 section 4's confirmed
    2025 segment actuals -- launch 7.64%, connectivity ~50%, ai ~22%; `expansion`
    takes none, since it has no revenue today. Plan and design:
-   `.superpowers/sdd/2026-08-11-growth-curve-near-term/`.
+   `docs/superpowers/specs/2026-08-10-growth-curve-near-term-design.md` and
+   `docs/superpowers/plans/2026-08-11-growth-curve-near-term.md`.
 
    Consolidated year-1 growth is now **+38.7%**: closer to the confirmed +33%,
    and the residual traces to the base-revenue split, which the seed's own
@@ -466,6 +467,41 @@ Still open from that review, deliberately out of scope:
    only. Closing this needs a schema change (a `case_narrative` table, or a
    nullable `segment_id` on `segment_narrative`). This is the structural form
    of the defect the terminal-ROIC remediation fixed.
+
+4. **The pre/post enterprise-value direction runs opposite to the source, and
+   cannot be corrected within the source's own confirmed constraints.** todo3
+   section 3 records enterprise value rising slightly, $1.21T -> $1.22T. The
+   model has it falling: pre 1320.79, post 1309.85.
+
+   Investigated 2026-08-11 rather than assumed. An input-by-input attribution
+   from pre to post shows the individual effects summing to +154 against an
+   actual move of -13.5, so interactions dominate: doubling AI's revenue target
+   while halving its margin leaves target-year AI EBIT nearly unchanged
+   (36 -> 40) but roughly doubles the capital needed to reach it from a 0.1
+   base, and that does not cancel.
+
+   The sign turns on one input. Sweeping the pre-case sales-to-capital ratios
+   as a multiple of the post values: 1.00 (no lowering at all) gives +8.07,
+   1.05 gives +0.83, the seeded values give -13.5, 1.10 gives -5.74. The sign
+   flips at roughly a 6% lowering -- and todo3 I2 confirms `[C]` that he DID
+   lower them, so any consistent value produces a falling EV. Reproducing the
+   source's +10 would require he raised them.
+
+   So the source's confirmed input and its reported outcome are mutually
+   inconsistent under this template. Note also that the source's own move is
+   +0.8%, smaller than the uncertainty on any single `[V]` input -- the
+   sales-to-capital sweep alone spans 22 points of enterprise value. No
+   reconstruction at this fidelity can meaningfully reproduce the sign of a
+   move that small, so this is recorded rather than fitted.
+
+   Two hypotheses were tested and rejected: raising AI's base revenue (holding
+   the corroborated 15.6 total) makes the gap *worse*, -13.5 -> -26.8 at a base
+   of 3.0, because base revenue moved into the low-return segment comes out of
+   the high-return ones; and a per-case terminal-ROIC policy was already known
+   worse for this metric, giving a pre/post ratio of 0.908 against a shared
+   value's 0.978.
+
+   Design: `docs/superpowers/specs/2026-08-11-sales-to-capital-late-scope-design.md`.
 
 No test asserts any explicit-period value against an independently computed
 expectation: the confirmed-input gates in `test_segment_valuation_spacex.py`

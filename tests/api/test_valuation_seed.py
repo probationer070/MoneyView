@@ -340,11 +340,11 @@ def test_seeded_terminal_roic_sits_below_the_marginal_return():
     above the marginal return is not erosion.
 
     marginal values are capital-weighted (post: 118.875 NOPAT / 320.0 capital;
-    pre: 113.25 NOPAT / 228.273809... capital at the lowered 1.6/1.6/1.05/1.5
+    pre: 113.25 NOPAT / 236.190476... capital at the pre-case 1.5/1.5/1.05/1.5
     sales-to-capital values)."""
     ensure_valuation_cases_seeded()
     for name, marginal in (
-        (PRE_CASE_NAME, 113.25 / (70 / 1.6 + 120 / 1.6 + 80 / 1.05 + 50 / 1.5)),
+        (PRE_CASE_NAME, 113.25 / (70 / 1.5 + 120 / 1.5 + 80 / 1.05 + 50 / 1.5)),
         (POST_CASE_NAME, 0.371484375),
     ):
         data = _run(name)
@@ -408,3 +408,40 @@ def test_seeded_launch_starts_at_its_observed_rate():
     ensure_valuation_cases_seeded()
     launch = next(s for s in _run(POST_CASE_NAME)["segments"] if s["name"] == "launch")
     assert launch["revenue"][0] / 4.1 - 1 == pytest.approx(0.0764, abs=1e-12)
+
+
+def test_late_sales_to_capital_is_unchanged_where_todo3_restricts_the_lowering():
+    """todo3.md:82 (formula I2, tagged [C]) says he lowered sales-to-capital
+    "for yrs 1-5 (launch + connectivity)". Section 3 repeats the year restriction
+    in both segments' rows. So the LATE ratio for those two is not something the
+    source says moved, and the seed must not move it.
+
+    This matters more than its size: marginal_roic reads sales_to_capital_late
+    only, so an invented value here anchors the entire terminal block.
+    """
+    ensure_valuation_cases_seeded()
+    pre = {s["name"]: s for s in load_case(_case_id(PRE_CASE_NAME))["segments"]}
+    post = {s["name"]: s for s in load_case(_case_id(POST_CASE_NAME))["segments"]}
+    for name in ("launch", "connectivity"):
+        assert pre[name]["sales_to_capital_late"] == post[name]["sales_to_capital_late"], name
+        assert pre[name]["sales_to_capital_late"] == pytest.approx(1.5), name
+
+
+def test_early_sales_to_capital_still_carries_the_confirmed_lowering():
+    """The correction above must not overshoot. todo3 confirms the years-1-5
+    lowering; removing it too would be a different error in the other direction."""
+    ensure_valuation_cases_seeded()
+    pre = {s["name"]: s for s in load_case(_case_id(PRE_CASE_NAME))["segments"]}
+    post = {s["name"]: s for s in load_case(_case_id(POST_CASE_NAME))["segments"]}
+    for name in ("launch", "connectivity", "ai"):
+        assert pre[name]["sales_to_capital_early"] > post[name]["sales_to_capital_early"], name
+
+
+def test_ai_late_sales_to_capital_is_still_lowered():
+    """todo3.md:129 places no year restriction on AI -- "already low, lower
+    still" -- so lowering AI's late ratio IS supported and must survive."""
+    ensure_valuation_cases_seeded()
+    pre = {s["name"]: s for s in load_case(_case_id(PRE_CASE_NAME))["segments"]}
+    post = {s["name"]: s for s in load_case(_case_id(POST_CASE_NAME))["segments"]}
+    assert pre["ai"]["sales_to_capital_late"] == pytest.approx(1.05)
+    assert post["ai"]["sales_to_capital_late"] == pytest.approx(1.0)

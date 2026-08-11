@@ -64,9 +64,9 @@ def pre_prospectus() -> tuple[CaseSpec, list[SegmentSpec]]:
     )
     segments = [
         _segment("launch", tam_target=100.0, market_share_target=0.70,
-                 margin_target=0.40, s2c_early=1.5, s2c_late=1.6),
+                 margin_target=0.40, s2c_early=1.5, s2c_late=1.5),
         _segment("connectivity", tam_target=160.0, market_share_target=0.75,
-                 margin_target=0.60, s2c_early=1.5, s2c_late=1.6),
+                 margin_target=0.60, s2c_early=1.5, s2c_late=1.5),
         # 45%, not 50%. todo3 section 3 footnote 1 documents the conflict: S1's
         # text says 50%, S2 restates the same assumption as 45%, and section 3's
         # own derived table uses 45%.
@@ -175,25 +175,26 @@ def test_post_prospectus_marginal_roic():
 
 
 def test_pre_prospectus_marginal_roic():
-    """Spec gate 1. Same capital-weighted formula, at the lowered pre-case
-    sales-to-capital values (1.6 / 1.6 / 1.05 / 1.5):
+    """Spec gate 1. Same capital-weighted formula, at the pre-case
+    sales-to-capital values (1.5 / 1.5 / 1.05 / 1.5):
 
-        launch       NOPAT = 70  x 0.40 x 0.75 = 21.0     capital = 70/1.6  = 43.75
-        connectivity NOPAT = 120 x 0.60 x 0.75 = 54.0     capital = 120/1.6 = 75.0
+        launch       NOPAT = 70  x 0.40 x 0.75 = 21.0     capital = 70/1.5  = 46.666...
+        connectivity NOPAT = 120 x 0.60 x 0.75 = 54.0     capital = 120/1.5 = 80.0
         ai           NOPAT = 80  x 0.45 x 0.75 = 27.0     capital = 80/1.05 = 76.190476...
         expansion    NOPAT = 50  x 0.30 x 0.75 = 11.25    capital = 50/1.5  = 33.333...
-        total NOPAT = 113.25, total capital = 228.273809523...
-        marginal_roic = 113.25 / 228.273809523... = 0.496114732...
+        total NOPAT = 113.25, total capital = 236.190476...
+        marginal_roic = 113.25 / 236.190476... = 0.479486...
 
-    Still higher than the post case, because the pre-case sales-to-capital
-    values are still higher than the post-case ones -- todo3 section 3 records
-    that Damodaran LOWERED them after the prospectus, and this seed's lowered
-    pre-case values (1.6/1.6/1.05/1.5) remain strictly above the post-case ones
-    (1.5/1.5/1.0/1.5). Both sets are [V] guesses.
+    Still higher than the post case, because AI's pre-case sales-to-capital
+    value is still higher than the post-case one -- todo3 section 3 records
+    that Damodaran LOWERED it after the prospectus. Launch and connectivity are
+    equal between the two cases: todo3 I2 restricts their confirmed lowering to
+    years 1-5, so the late-years ratio carries no support for moving. Both sets
+    are [V] guesses.
     """
     case, segments = pre_prospectus()
     expected = (70 * 0.40 * 0.75 + 120 * 0.60 * 0.75 + 80 * 0.45 * 0.75 + 50 * 0.30 * 0.75) / (
-        70 / 1.6 + 120 / 1.6 + 80 / 1.05 + 50 / 1.5
+        70 / 1.5 + 120 / 1.5 + 80 / 1.05 + 50 / 1.5
     )
     assert marginal_roic(segments, case.marginal_tax_rate) == pytest.approx(
         expected, abs=1e-9
@@ -210,11 +211,14 @@ def test_seeded_pair_enterprise_values():
     template, with these inputs, actually produces. The published reference
     figures Damodaran gives are $1,210bn (pre) and $1,220bn (post) -- todo3
     line 158: "enterprise value barely moved ($1.21T -> $1.22T)". The model still
-    produces the OPPOSITE direction: post (1309.85) < pre (1323.37). The source
+    produces the OPPOSITE direction: post (1309.85) < pre (1320.79). The source
     has value rising slightly from pre to post; this model has it falling. Pinning
     `initial_growth` narrowed the gap (it was post 1295.9 < pre 1323.7 before) but
     did not flip it. This is an open discrepancy against the source, not a
-    reproduction of it, and closing it was not the aim of this change.
+    reproduction of it, and closing it was not the aim of this change. Removing
+    the pre-case's unsupported late-years sales-to-capital lowering for launch
+    and connectivity (todo3 I2 restricts that lowering to years 1-5) narrowed the
+    gap further, from -13.5 to -10.9, without flipping the sign.
 
     Figures reflect the margin_path year-1 alignment fix (base_margin +
     (margin_target - base_margin) x t / n): previously 1282.1 / 1310.9, when
@@ -224,4 +228,4 @@ def test_seeded_pair_enterprise_values():
     pre = run_case(*pre_prospectus())
     post = run_case(*post_prospectus())
     assert post.enterprise_value == pytest.approx(1309.85, abs=0.5)
-    assert pre.enterprise_value == pytest.approx(1323.37, abs=0.5)
+    assert pre.enterprise_value == pytest.approx(1320.79, abs=0.5)

@@ -103,13 +103,26 @@ _ASSUMED_S2C = (
     "lowered after $14bn of 2025 capex -- never the level. Calibrate against "
     "SpaceX2026IPOUpdated.xlsx."
 )
-_PRE_S2C_LATE_CLAIM = (
-    "Placeholder, lowered from an earlier draft. The original values (2.0 / 2.0 "
-    "/ 1.2 / 1.5) implied a 58% after-tax marginal return in perpetuity, which is "
-    "not credible for any business. These stay strictly above the "
-    "post-prospectus values (1.5 / 1.5 / 1.0 / 1.5), preserving todo3 section 3's "
-    "confirmed record that Damodaran lowered sales-to-capital after the "
-    "prospectus. Calibrate against SpaceX2026IPOUpdated.xlsx."
+_PRE_S2C_LATE_UNCHANGED = (
+    "Unchanged from the post-prospectus case. todo3 I2 (line 82, tagged [C]) "
+    "restricts the confirmed lowering to years 1-5 for launch and connectivity, "
+    "and section 3 repeats the year restriction in both rows -- so the source "
+    "says nothing about this segment's late-years ratio moving. The level "
+    "itself remains a guess: what the source settles is whether it changed, "
+    "not what it is. Calibrate against SpaceX2026IPOUpdated.xlsx."
+)
+
+_PRE_S2C_LATE_AI = (
+    "Lowered to 1.0 post-prospectus. Unlike launch and connectivity, todo3 "
+    "section 3 (line 129) places no year restriction on AI -- \"already low, "
+    "lower still\" -- so lowering the late-years ratio is supported here. The "
+    "level is still a guess. Calibrate against SpaceX2026IPOUpdated.xlsx."
+)
+
+_PRE_S2C_LATE_EXPANSION = (
+    "Unchanged from the post-prospectus case, per todo3 section 3, which tags "
+    "the expansion segment's inputs [V] \"assumed unchanged\". The level is a "
+    "guess for a segment that is itself a placeholder for optionality."
 )
 
 _CONFIRMED_INITIAL_GROWTH = {
@@ -241,11 +254,11 @@ def _pre_prospectus_payload() -> dict:
             _segment("launch", tam=100.0, tam_claim=_LAUNCH_TAM, share=0.70,
                      share_claim=_LAUNCH_SHARE, margin_target=0.40,
                      margin_claim="Reusability and existing infrastructure produce a durable cost advantage.",
-                     s2c_early=1.5, s2c_late=1.6, s2c_late_claim=_PRE_S2C_LATE_CLAIM),
+                     s2c_early=1.5, s2c_late=1.5, s2c_late_claim=_PRE_S2C_LATE_UNCHANGED),
             _segment("connectivity", tam=160.0, tam_claim=_CONN_TAM, share=0.75,
                      share_claim=_CONN_SHARE, margin_target=0.60,
-                     margin_claim=_CONN_MARGIN, s2c_early=1.5, s2c_late=1.6,
-                     s2c_late_claim=_PRE_S2C_LATE_CLAIM),
+                     margin_claim=_CONN_MARGIN, s2c_early=1.5, s2c_late=1.5,
+                     s2c_late_claim=_PRE_S2C_LATE_UNCHANGED),
             # 45%, not 50%. todo3 section 3 footnote 1: S1's text says 50%, S2
             # restates the same assumption as 45%, and section 3's derived table
             # uses 45%. Recorded as derived so the conflict stays visible.
@@ -254,13 +267,13 @@ def _pre_prospectus_payload() -> dict:
                      margin_target=0.45,
                      margin_claim="Restated from S2 as 45%. S1's text says 50%; todo3 section 3 footnote 1 documents the conflict and its own derived table uses 45%.",
                      margin_confidence="derived",
-                     s2c_early=0.8, s2c_late=1.05, s2c_late_claim=_PRE_S2C_LATE_CLAIM),
+                     s2c_early=0.8, s2c_late=1.05, s2c_late_claim=_PRE_S2C_LATE_AI),
             # todo3 section 3 tags both revenue_target and margin_target `[V]`
             # ("assumed unchanged") for expansion in BOTH cases -- not confirmed.
             _segment("expansion", revenue_target=50.0, revenue_claim=_EXPANSION_REVENUE,
                      margin_target=0.30, margin_claim=_EXPANSION_MARGIN,
                      s2c_early=1.0, s2c_late=1.5, ramp_start_year=7,
-                     s2c_late_claim=_PRE_S2C_LATE_CLAIM,
+                     s2c_late_claim=_PRE_S2C_LATE_EXPANSION,
                      revenue_confidence="assumed", revenue_three_p="plausible",
                      margin_confidence="assumed", margin_three_p="plausible"),
         ],
