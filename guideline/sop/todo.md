@@ -560,6 +560,34 @@ Still open from that review, deliberately out of scope:
    §1.2, which keeps that argument while dropping the "cannot be corrected"
    claim it used to support.
 
+   **Resolved 2026-08-11 by reading the spreadsheets.** Both S4
+   (`SpaceX2026IPO.xlsx`) and S5 (`SpaceX2026IPOUpdated.xlsx`) were retrieved
+   and read; every value is transcribed in
+   [`todo3-spreadsheet-values.md`](todo3-spreadsheet-values.md). The source's
+   enterprise value is **1,216,061 -> 1,224,448, a rise of +0.69%**, confirming
+   the direction todo3 section 3 records.
+
+   The cause is neither of the two framings above. The source's sales-to-capital
+   ratios (years 1-5 / years 6-10) are:
+
+   | Segment | S4 pre | S5 post |
+   | --- | --- | --- |
+   | Launch | 4 / 2 | 3 / 4 |
+   | Starlink | 10 / 5 | 3 / 5 |
+   | xAI | 2.5 / 1.5 | 1.5 / 2.5 |
+   | Other | 3 / 3 | 5 / 5 |
+
+   The *slope* reverses between the two valuations: S4 has the late ratio at or
+   below the early one (capital intensity rising with scale), S5 has it at or
+   above (capital intensity falling). Early ratios were lowered AND late ratios
+   raised. That is a change of shape, not of magnitude, so no single-magnitude
+   sweep of the kind above could ever have reached the source's sign. Both the
+   original conclusion and its correction were reasoning about the wrong
+   parameter.
+
+   This closes the open calibration question. It also supersedes the premise of
+   the linked design spec, whose scope decision was made without these values.
+
 No test asserts any explicit-period value against an independently computed
 expectation: the confirmed-input gates in `test_segment_valuation_spacex.py`
 are pure sums of the input literals and would pass against any revenue path,
