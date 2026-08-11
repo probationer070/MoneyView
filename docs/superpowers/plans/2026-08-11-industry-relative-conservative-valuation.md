@@ -439,7 +439,12 @@ def test_a_poisoned_cell_drops_only_its_own_column():
     rows = [poisoned] + [r for r in TECHNOLOGY_ROWS if r.name in (
         "Computers/Peripherals", "Software (System & Application)", "Semiconductor Equip",
     )]
-    result = resolve_benchmark("Technology", rows, top_n=3)
+    # top_n=4, not 3: with the poisoned row ranking first, a 3-basket leaves only
+    # 2 valid reinvestment contributors -- below the default minimum=3 -- so the
+    # column is dropped entirely and the assertion below raises KeyError instead
+    # of testing exclusion. 4 admits all three real rows alongside the poisoned
+    # leader, which is what this test's docstring actually describes.
+    result = resolve_benchmark("Technology", rows, top_n=4)
 
     assert result.ranked[0] == "Poisoned Leader"
     assert "Poisoned Leader" in result.columns["operating_margin"].industries
