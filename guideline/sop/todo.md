@@ -1087,6 +1087,20 @@ Plan: `.superpowers/sdd/2026-08-11-industry-relative-conservative-valuation/`
       695 passed. `tests/fixtures/__init__.py` added since the directory did
       not exist yet, matching the existing `tests/<pkg>/__init__.py` pattern.
       No storage or case-generator wiring yet -- pure module only.
+- [x] Task 3 (2026-08-11) - The asymmetric fade.
+      `packages/core_finance/industry_benchmark.py`: `Direction` literal,
+      `FADE_DIRECTIONS` (6 of the 9 benchmark columns declare a direction;
+      `unlevered_beta`, `debt_to_capital`, `reinvestment_rate` deliberately
+      absent -- the segment engine takes WACC directly and treats
+      reinvestment as an output, not an input), `fade(company, benchmark,
+      direction, *, year, horizon)`. Linear convergence toward the benchmark,
+      reaching it exactly at `horizon`, year 1 already one step in; holds
+      (never fades toward optimism) when the company is already on the
+      conservative side. `sales_to_capital` fades `lower_is_conservative`
+      since a higher ratio is a benefit (less capital per revenue dollar),
+      not a cost -- inverting it would make capital-hungry companies look
+      cheaper. 10 new tests in `tests/core_finance/test_industry_benchmark.py`
+      (26 total in that file); full suite 714 passed.
 
 ## Archived Track - MoneyView Dev Monitor
 
