@@ -290,9 +290,12 @@ BENCHMARK_COLUMNS: tuple[BenchmarkColumn, ...] = (
     BenchmarkColumn("debt_to_capital", "Market Debt/Capital", "fraction", 0.0, 1.0),
     BenchmarkColumn("cost_of_capital", "Cost of capital", "fraction", 0.0, 0.5),
     BenchmarkColumn("sales_to_capital", "Sales/Capital", "ratio", 0.0, 20.0),
-    # 0 to 1.5 rejects the 11 negative rates and the three above 200% in the
-    # 2026 vintage. p90 is 1.311, so the upper bound keeps the ordinary tail.
-    BenchmarkColumn("reinvestment_rate", "Reinvestment Rate", "fraction", 0.0, 1.5),
+    # 0 to 2.0 rejects the 11 negative rates and the three artifacts above it:
+    # Steel 2.115, Insurance (General) 3.242, Software (Internet) 14.142. p90 is
+    # 1.311, and 2.0 sits in the observed gap between 1.888 and 2.115 -- so
+    # capital-intensive industries reinvesting up to ~190% of NOPAT are KEPT.
+    # An earlier bound of 1.5 wrongly screened out five of those.
+    BenchmarkColumn("reinvestment_rate", "Reinvestment Rate", "fraction", 0.0, 2.0),
 )
 
 _COLUMNS_BY_KEY = {column.key: column for column in BENCHMARK_COLUMNS}

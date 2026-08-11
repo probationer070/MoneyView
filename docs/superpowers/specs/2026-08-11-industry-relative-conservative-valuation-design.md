@@ -180,7 +180,7 @@ silently. Measured across the 96 rows:
 | Column | Observed range | p10 → p90 | Bound | Rejects |
 | --- | --- | --- | --- | --- |
 | Number of firms | 1 → 5994 | 10 → 176 | `>= 10` | the thinnest decile |
-| Reinvestment Rate | −0.986 → 14.142 | −0.156 → 1.311 | `0.0 → 1.5` | 11 negative, 3 above 200% |
+| Reinvestment Rate | −0.986 → 14.142 | −0.156 → 1.311 | `0.0 → 2.0` | 11 negative, 3 above the bound |
 | Pre-tax Operating Margin | −0.045 → 0.435 | 0.027 → 0.262 | `-0.5 → 1.0` | none today; guards a future vintage |
 | After-tax ROC | −0.083 → 0.631 | 0.041 → 0.284 | `-1.0 → 1.0` | none today |
 | Average effective tax rate | — | — | `0.0 → 1.0` | out-of-range cells |
