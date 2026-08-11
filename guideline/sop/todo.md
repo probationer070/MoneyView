@@ -503,6 +503,63 @@ Still open from that review, deliberately out of scope:
 
    Design: `docs/superpowers/specs/2026-08-11-sales-to-capital-late-scope-design.md`.
 
+   **Corrected 2026-08-11 (adversarial correction): the sweep above was
+   methodologically broken, and the "cannot be corrected" / "mutually
+   inconsistent" conclusion drawn from it is false.** The title and the sweep
+   paragraph above are kept verbatim as the record of what was published; this
+   note supersedes their conclusion.
+
+   The sweep varied the pre-case sales-to-capital ratios as a multiple of the
+   *post* values for BOTH the early and late years. Scaling the early ratios
+   that way destroys the confirmed years-1-5 lowering: at multiple 1.00 the
+   pre-case early ratios equal the post-case ones, i.e. no lowering at all.
+   The sweep therefore measured a world todo3 explicitly contradicts, so its
+   numbers (+8.07 at 1.00, sign flip at ~6%) describe that world, not the
+   source's.
+
+   Redone correctly -- holding the late ratios as divergence item 4's linked
+   design fixed them, and varying only the magnitude of the early-years
+   lowering (what I2's `[C]` actually constrains the *direction* of, leaving
+   the magnitude `[V]`):
+
+   | pre early ratios | early lowering | post - pre |
+   | --- | --- | --- |
+   | 1.00 / 1.00 / 0.60 | none | **+6.11** |
+   | 1.05 / 1.05 / 0.63 | ~5% | **+3.63** |
+   | 1.10 / 1.10 / 0.66 | ~10% | **+1.37** |
+   | 1.20 / 1.20 / 0.72 | ~17% | -2.57 |
+   | 1.35 / 1.35 / 0.81 | ~26% | -7.40 |
+   | 1.50 / 1.50 / 0.90 | ~33% | -11.26 |
+
+   The sign flips at roughly a **12%** lowering (pre ~= 1.13x post), not 6%. A
+   10% lowering is unambiguously "lowered", fully consistent with todo3 I2's
+   confirmed direction, and produces the source's sign.
+
+   The currently seeded pre-case early ratios are 1.5 / 1.5 / 0.8 against post
+   1.0 / 1.0 / 0.6 -- a 33% lowering for launch and connectivity and 25% for
+   ai, giving the actual measured gap of **-10.94**. (The 1.50 sweep row above
+   is not exactly the seeded case: it scales ai to 0.90 rather than the seeded
+   0.80, hence -11.26 rather than -10.94.) Those magnitudes are inventions,
+   tagged `assumed` in the seed's own narratives, which say the source gives
+   the direction, never the level.
+
+   **So the honest conclusion is the opposite of the one the title above
+   states: the sign is determined by the magnitude of the lowering, which the
+   source does not supply.** The chosen magnitude produces a falling EV; a
+   smaller magnitude, equally consistent with the confirmed direction,
+   produces the source's rising one. This is an **open calibration question**,
+   not a settled incompatibility between the source's input and its outcome.
+   Resolving it needs the spreadsheet (`SpaceX2026IPOUpdated.xlsx`), which
+   would give the actual levels.
+
+   The input-by-input attribution above and the two rejected hypotheses are
+   unaffected by this correction and stand as recorded. The +0.8%-scale
+   argument (the source's own move is smaller than the uncertainty on any
+   single `[V]` input) also stands as a separate reason not to chase the sign
+   by tuning -- see `docs/superpowers/specs/2026-08-11-sales-to-capital-late-scope-design.md`
+   §1.2, which keeps that argument while dropping the "cannot be corrected"
+   claim it used to support.
+
 No test asserts any explicit-period value against an independently computed
 expectation: the confirmed-input gates in `test_segment_valuation_spacex.py`
 are pure sums of the input literals and would pass against any revenue path,

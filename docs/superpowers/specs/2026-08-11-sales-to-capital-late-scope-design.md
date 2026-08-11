@@ -15,7 +15,7 @@ post-prospectus case (1323.37 → 1309.85). `guideline/sop/todo3.md` §3 records
 **rising** slightly ($1.21T → $1.22T). The investigation asked whether an input was
 wrong in a way that explained the sign.
 
-### 1.1 The direction cannot be fixed without contradicting the source
+### 1.1 The direction cannot be fixed without contradicting the source (corrected 2026-08-11 — see below; this section's conclusion is false)
 
 An input-by-input attribution from the pre case to the post case, each change applied
 alone:
@@ -58,7 +58,63 @@ So todo3's confirmed input and todo3's reported outcome are **mutually inconsist
 under this template**. That is a finding about the reconstruction, not a defect to
 repair.
 
-### 1.2 Why chasing the sign would be meaningless anyway
+### Correction (2026-08-11): the sweep above was broken, and the conclusion reverses
+
+This section's table and its "mutually inconsistent" conclusion are **wrong** and are
+kept above only as the record of what was published. The sweep varied the pre-case
+sales-to-capital ratios as a multiple of the *post* values for **both** the early and
+late years. Scaling the early ratios that way destroys the confirmed years-1–5
+lowering: at multiple 1.00 the pre-case early ratios *equal* the post-case ones, i.e.
+no lowering at all. The sweep therefore measured a world todo3 explicitly
+contradicts — its numbers (+8.07 at 1.00, sign flip at ~6%) describe that world, not
+the source's.
+
+Redone correctly — holding the late ratios as §2.1's correction fixed them, and
+varying only the *magnitude* of the early-years lowering, which is what I2's `[C]`
+actually constrains the direction of, while leaving the magnitude `[V]`:
+
+| pre early ratios | early lowering | post − pre |
+| --- | --- | --- |
+| 1.00 / 1.00 / 0.60 | none | **+6.11** |
+| 1.05 / 1.05 / 0.63 | ~5% | **+3.63** |
+| 1.10 / 1.10 / 0.66 | ~10% | **+1.37** |
+| 1.20 / 1.20 / 0.72 | ~17% | −2.57 |
+| 1.35 / 1.35 / 0.81 | ~26% | −7.40 |
+| 1.50 / 1.50 / 0.90 | ~33% | −11.26 |
+
+The sign flips at roughly a **12% lowering** (pre ≈ 1.13× post), not 6%. A 10%
+lowering is unambiguously "lowered", fully consistent with I2's confirmed direction,
+and produces the source's sign.
+
+The currently seeded pre-case early ratios are `1.5 / 1.5 / 0.8` against post
+`1.0 / 1.0 / 0.6` — a 33% lowering for launch and connectivity and 25% for ai, giving
+the actual measured gap of **−10.94**. (The 1.50 sweep row above is not exactly the
+seeded case: it scales ai to 0.90 rather than the seeded 0.80, hence −11.26 rather
+than −10.94.) Those magnitudes are inventions, tagged `assumed` in the seed's own
+narratives, which say the source gives the direction, never the level.
+
+**The honest conclusion is the opposite of §1.1's title: the sign is determined by
+the magnitude of the lowering, which the source does not supply.** The chosen
+magnitude produces a falling EV; a smaller magnitude, equally consistent with the
+confirmed direction, produces the source's rising one. This is an **open calibration
+question**, not a settled incompatibility between the source's input and its
+outcome. Resolving it needs the spreadsheet (`SpaceX2026IPOUpdated.xlsx`), which
+would give the actual levels.
+
+The input-by-input attribution in §1.1 and the two rejected hypotheses in §1.2 are
+unaffected by this correction and stand as recorded.
+
+### 1.2 Why chasing the sign by tuning an unconstrained input would still be meaningless
+
+This section's scale argument survives the correction above and is kept as originally
+written; what it no longer supports is §1.1's stronger "cannot be corrected" claim.
+The correction found that the sign is set by the *magnitude* of a `[V]` input the
+source leaves open — sales-to-capital's early-years lowering — not that it is fixed
+against the source. The argument below is a separate reason not to *chase* that sign
+by tuning: even with the direction now known to be open, arbitrarily selecting a
+magnitude of an unconstrained input specifically to land on the source's sign would be
+fitting, not reconstruction. Resolving the open question legitimately needs the
+spreadsheet (`SpaceX2026IPOUpdated.xlsx`), not a search for a magnitude that works.
 
 The source's own move is **+0.8%** (1210 → 1220). The sales-to-capital sweep above
 spans 22 points of enterprise value on its own, and every `[V]` input carries
@@ -185,9 +241,15 @@ is an invented assumption removed and an incompatibility stated precisely.
 
 ## 4. Out of scope
 
-**The pre/post direction itself.** §1.1 establishes it cannot be corrected within the
-source's confirmed constraints, and §1.2 that doing so would be meaningless at this
-fidelity. It stays recorded.
+**The pre/post direction itself.** ~~§1.1 establishes it cannot be corrected within
+the source's confirmed constraints, and §1.2 that doing so would be meaningless at
+this fidelity.~~ Corrected 2026-08-11: §1.1's original conclusion was based on a
+broken sweep (see the correction inserted after §1.1) and is false. The direction is
+an **open calibration question** — it turns on the magnitude of a `[V]` sales-to-
+capital lowering the source does not supply, not on a settled incompatibility. §1.2's
+scale argument still stands as a reason not to *chase* the sign by tuning. Resolving
+the direction for real needs the spreadsheet (`SpaceX2026IPOUpdated.xlsx`) and stays
+out of scope for this change, which corrects the late-scope invention only.
 
 **Everything else already deferred**, unchanged: `base_margin`'s R&D-basis
 contradiction; case-level narratives, so `roic_stable` still states no reason; the

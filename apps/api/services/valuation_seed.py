@@ -120,9 +120,13 @@ _PRE_S2C_LATE_AI = (
 )
 
 _PRE_S2C_LATE_EXPANSION = (
-    "Unchanged from the post-prospectus case, per todo3 section 3, which tags "
-    "the expansion segment's inputs [V] \"assumed unchanged\". The level is a "
-    "guess for a segment that is itself a placeholder for optionality."
+    "Unchanged from the post-prospectus case. todo3 section 3's expansion block "
+    "has exactly two rows -- target revenue 2036 and target op. margin (lines "
+    "130-131), both tagged [V] \"assumed unchanged\" -- and no sales-to-capital "
+    "row at all. The source is silent on this segment's sales-to-capital, so "
+    "the ratio is carried unchanged between the cases by assumption, not on "
+    "the source's authority. The level is a guess for a segment that is "
+    "itself a placeholder for optionality."
 )
 
 _CONFIRMED_INITIAL_GROWTH = {
