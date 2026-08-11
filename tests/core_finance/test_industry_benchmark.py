@@ -64,3 +64,16 @@ def test_every_column_declares_a_unit_and_a_plausible_band():
     for column in BENCHMARK_COLUMNS:
         assert column.unit in ("fraction", "count", "ratio")
         assert column.low < column.high
+
+
+def test_a_capital_intensive_reinvestment_rate_below_two_is_kept():
+    """Utilities and broadcasters reinvesting 150-190% of NOPAT are ordinary,
+    not data artifacts. An earlier bound of 1.5 screened out five such
+    industries -- Retail (Distributors) 1.522, Chemical (Basic) 1.587, Utility
+    (Water) 1.622, Utility (General) 1.723, Broadcasting 1.888 -- while the real
+    artifacts sit above a gap at 2.115, 3.242 and 14.142."""
+    column = column_by_key("reinvestment_rate")
+    for plausible in (1.522, 1.587, 1.622, 1.723, 1.888):
+        assert screen_value(column, plausible) is None, plausible
+    for artifact in (2.115, 3.242, 14.1421393679):
+        assert screen_value(column, artifact) is not None, artifact
