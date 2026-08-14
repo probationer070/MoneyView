@@ -17,8 +17,19 @@ from __future__ import annotations
 import openpyxl
 
 from apps.api.services.db import get_db
-from apps.api.services.industry_maps import EXCLUDED_ROWS
-from packages.core_finance.industry_benchmark import BENCHMARK_COLUMNS, IndustryRow
+from apps.api.services.industry_maps import (
+    EXCLUDED_ROWS,
+    SECTOR_TO_INDUSTRIES,
+    damodaran_industry_for_yahoo,
+    sector_for_industry,
+)
+from packages.core_finance.industry_benchmark import (
+    BENCHMARK_COLUMNS,
+    BenchmarkUnavailable,
+    IndustryRow,
+    SectorBenchmark,
+    resolve_benchmark,
+)
 
 _VALUE_COLUMNS = tuple(column.key for column in BENCHMARK_COLUMNS)
 
@@ -115,3 +126,51 @@ def latest_vintage(on_or_before: str | None = None) -> str | None:
                 (on_or_before,),
             ).fetchone()
     return row["vintage"] if row and row["vintage"] else None
+
+
+def _stored_industry(ticker: str) -> str:
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT industry FROM corporate_quote_facts WHERE ticker = ?",
+            (ticker.upper(),),
+        ).fetchone()
+    return (row["industry"] or "") if row else ""
+
+
+def resolve_for_ticker(
+    ticker: str, *, as_of: str | None = None
+) -> tuple[SectorBenchmark | None, str | None]:
+    """Resolve a sector benchmark for one ticker.
+
+    Returns `(benchmark, None)` or `(None, reason)`. Exactly one is non-None: a
+    missing or unreliable benchmark yields NO case rather than a silently
+    degraded one. Falling back to an all-industry average would produce a number
+    that looks like a sector benchmark and is not one.
+    """
+    vintage = latest_vintage(on_or_before=as_of)
+    if vintage is None:
+        return None, "no_vintage: no industry benchmark data has been loaded"
+
+    industry = _stored_industry(ticker)
+    if not industry:
+        return None, f"no_industry: {ticker} has no industry from the quote source"
+
+    mapped = damodaran_industry_for_yahoo(industry)
+    if mapped is None:
+        return None, (
+            f"unmapped_industry: {ticker}'s industry {industry!r} is not in "
+            f"YAHOO_TO_DAMODARAN; add it to apps/api/services/industry_maps.py"
+        )
+
+    sector = sector_for_industry(mapped)
+    if sector is None:
+        return None, (
+            f"unmapped_industry: {mapped!r} is in no sector in SECTOR_TO_INDUSTRIES"
+        )
+
+    names = set(SECTOR_TO_INDUSTRIES[sector])
+    rows = [row for row in load_vintage(vintage) if row.name in names]
+    try:
+        return resolve_benchmark(sector, rows), None
+    except BenchmarkUnavailable as exc:
+        return None, f"sector_too_thin: {exc}"

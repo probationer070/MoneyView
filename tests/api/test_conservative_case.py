@@ -270,3 +270,59 @@ def test_a_sector_earning_below_its_cost_of_capital_is_refused_not_adjusted():
     assert case["wacc_stable"] == pytest.approx(0.095)
     with pytest.raises(ValueError, match="must exceed wacc_stable"):
         _run(case)
+
+
+from apps.api.services.industry_benchmark_store import resolve_for_ticker, store_vintage
+from tests.fixtures.industry_rows_technology import TECHNOLOGY_ROWS
+
+
+def _seed_quote_facts(ticker, industry):
+    from apps.api.services.db import get_db
+    with get_db() as conn:
+        conn.execute(
+            "INSERT OR REPLACE INTO corporate_quote_facts "
+            "(ticker, market_cap, shares_outstanding, currency, beta, sector, industry, fetched_at) "
+            "VALUES (?, 1.0, 1.0, 'USD', 1.0, 'Technology', ?, '2026-01-01')",
+            (ticker.upper(), industry),
+        )
+
+
+def test_a_mapped_ticker_resolves_a_benchmark_with_provenance():
+    store_vintage("2026-01-01", TECHNOLOGY_ROWS)
+    _seed_quote_facts("NVDA", "Semiconductors")
+    benchmark, reason = resolve_for_ticker("NVDA")
+    assert reason is None
+    assert benchmark.sector == "Technology"
+    assert benchmark.ranked[0] == "Computers/Peripherals"
+
+
+def test_no_vintage_gives_a_reason_not_a_benchmark():
+    _seed_quote_facts("NVDA", "Semiconductors")
+    benchmark, reason = resolve_for_ticker("NVDA")
+    assert benchmark is None
+    assert "no_vintage" in reason
+
+
+def test_a_ticker_with_no_industry_gives_a_reason():
+    store_vintage("2026-01-01", TECHNOLOGY_ROWS)
+    _seed_quote_facts("XYZ", "")
+    benchmark, reason = resolve_for_ticker("XYZ")
+    assert benchmark is None
+    assert "no_industry" in reason
+
+
+def test_an_unmapped_industry_names_the_value_so_the_map_can_be_extended():
+    store_vintage("2026-01-01", TECHNOLOGY_ROWS)
+    _seed_quote_facts("XYZ", "Llama Farming")
+    benchmark, reason = resolve_for_ticker("XYZ")
+    assert benchmark is None
+    assert "unmapped_industry" in reason
+    assert "Llama Farming" in reason
+
+
+def test_a_sector_too_thin_to_benchmark_gives_a_reason():
+    store_vintage("2026-01-01", [TECHNOLOGY_ROWS[0]])
+    _seed_quote_facts("NVDA", "Semiconductors")
+    benchmark, reason = resolve_for_ticker("NVDA")
+    assert benchmark is None
+    assert "sector_too_thin" in reason
