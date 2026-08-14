@@ -168,23 +168,49 @@ def test_the_payload_is_storable_and_runnable_through_the_case_store():
     assert run_stored_case(case_id)["enterprise_value"] > 0
 
 
-def test_a_sector_roc_above_the_faded_marginal_return_is_refused_not_clamped():
-    """The generator states the faded number and lets the engine refuse it.
+def test_a_sector_roc_above_the_implied_marginal_return_is_capped_at_it():
+    """The worse of two independent estimates of the same return, not a clamp.
 
-    The collision is systematic, not exotic. `run_case` caps `roic_stable` at
-    the target-year marginal return, which for one segment is
-    `margin_target x (1 - marginal_tax_rate) x sales_to_capital_late` -- all
-    three of them faded to the sector. A sector whose own columns are mutually
-    consistent has `after_tax_roc ~ operating_margin x (1 - effective_tax_rate)
-    x sales_to_capital`, struck at the sector's EFFECTIVE rate (0.22), while the
-    ceiling is struck at the company's MARGINAL rate (0.25). The higher rate in
-    the ceiling puts it BELOW the sector's own ROC: 0.15 x 0.75 x 2.0 = 0.225
-    against 0.15 x 0.78 x 2.0 = 0.234.
+    Damodaran's "After-tax ROC" is a BOOK return on EXISTING capital;
+    `margin x (1 - tau) x sales_to_capital` is the return on NEW capital implied
+    by the same table's margin and capital intensity. Where the first exceeds
+    the second the book capital base is understated relative to what the
+    industry's own margin and turnover generate on new investment, and carrying
+    the higher figure as a TERMINAL return would assert the terminal block earns
+    more on new capital than the model itself supports.
 
-    Clamping `roic_stable` down to 0.225 would silently move a valuation input
-    to whatever the guard permits. Refusing is the honest outcome.
+    Real Financials, 2026 vintage: a faded ROC of 0.2200 against an implied
+    marginal return of 0.1932. Here: 0.234 against 0.15 x 0.75 x 2.0 = 0.225.
+    Without this, five of the eleven real sectors produce nothing.
     """
     case = _build(benchmark=_benchmark(after_tax_roc=0.234))
-    assert case["roic_stable"] == pytest.approx(0.234)
-    with pytest.raises(ValueError, match="exceeds the target-year marginal"):
+    assert case["roic_stable"] == pytest.approx(0.15 * 0.75 * 2.0)
+    assert _run(case).enterprise_value > 0
+
+
+def test_a_sector_earning_below_its_cost_of_capital_is_refused_not_adjusted():
+    """The cap does NOT rescue this, and must not.
+
+    Real Estate, 2026 vintage: a capped terminal return of 0.0531 against a
+    faded cost of capital of 0.0607. `terminal_value` rejects a positive-growth
+    perpetuity whose return sits at or below its cost of capital, and it is
+    right to -- such a perpetuity destroys value as it grows. The difference
+    from the Financials case above is that nothing here is an accounting
+    mismatch between two measures of one quantity; the sector's top industries
+    genuinely earn less than their capital costs, and refusing says so. Moving
+    the number until the guard passes would replace an economic statement about
+    the sector with false precision.
+
+    Reproduced here at this fixture's own levels rather than Real Estate's: the
+    implied marginal return is 0.06 x 0.75 x 2.0 = 0.09, so the cap does not
+    bind and `roic_stable` is the sector's own 0.05 -- below the 0.095 cost of
+    capital. Same mechanism, different absolute level.
+    """
+    case = _build(
+        baseline={"base_margin": 0.06, "current_roic": 0.05},
+        benchmark=_benchmark(operating_margin=0.06, after_tax_roc=0.053),
+    )
+    assert case["roic_stable"] == pytest.approx(0.05)
+    assert case["wacc_stable"] == pytest.approx(0.095)
+    with pytest.raises(ValueError, match="must exceed wacc_stable"):
         _run(case)

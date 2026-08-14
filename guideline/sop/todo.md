@@ -1135,23 +1135,39 @@ Plan: `.superpowers/sdd/2026-08-11-industry-relative-conservative-valuation/`
       (2) Added coverage for the roic_stable collision below and for the
       payload round-tripping through `create_case` + `run_stored_case`.
 
-      OPEN, for whoever wires the generator to real vintage data: `run_case`
-      caps `roic_stable` at the target-year marginal return on new capital,
-      `margin_target x (1 - marginal_tax_rate) x sales_to_capital_late`. All
-      three of those fade to the sector while `after_tax_roc` fades
-      independently, so they can cross -- and the crossing is systematic, not
-      exotic. A sector whose columns are mutually consistent has
-      `after_tax_roc ~ operating_margin x (1 - effective_tax_rate) x
-      sales_to_capital`, struck at the sector's EFFECTIVE rate, while the
-      ceiling is struck at the company's MARGINAL rate. Where the marginal rate
-      is the higher of the two (0.25 vs 0.22 on the plan's own fixture) the
-      ceiling sits BELOW the sector's own ROC: 0.225 against 0.234. The
-      fixture escapes only because its `after_tax_roc` is 0.20, below the 0.234
-      its other columns imply. Real Damodaran columns are measured
-      independently rather than derived from one another, so the gap is not
-      guaranteed either way, but the bias is one-directional. The generator
-      states the faded number and lets the engine refuse; a later task turns
-      that refusal into a user-facing reason.
+      RESOLVED during review (2026-08-12). `roic_stable` is now the worse of
+      two independent estimates of the same return rather than the faded
+      `after_tax_roc` alone:
+
+          roic_stable = min(faded after_tax_roc,
+                            margin_target x (1 - marginal_tax_rate)
+                            x sales_to_capital_late)
+
+      Damodaran's "After-tax ROC" is a BOOK return on EXISTING capital
+      (NOPAT / invested capital); the second term is the return on NEW capital
+      implied by the same table's margin and capital intensity. Where the first
+      exceeds the second the industry's book capital base is understated
+      relative to what its margin and turnover generate on new investment, and
+      carrying the higher figure as a TERMINAL return asserts the terminal
+      block earns more on new capital than the model's own margin and capital
+      intensity support -- which is exactly what `run_case`'s marginal-return
+      guard rejects. Taking the lower is the same worse-of rule the fade
+      already applies everywhere else, so it is conservative and consistent,
+      not a number moved until a guard passes.
+
+      Measured against all 11 real sectors of the 2026 vintage, the uncapped
+      version refused five: Consumer Discretionary (roic 0.2238 vs ceiling
+      0.2024), Financials (0.2200 vs 0.1932), Industrials (0.2561 vs 0.2449),
+      Utilities (0.0595 vs 0.0512) and Real Estate. The cap fixes the first
+      four; 10 of 11 sectors now produce a case.
+
+      Real Estate still refuses, correctly: its capped return 0.0531 sits below
+      its faded cost of capital 0.0607, so `terminal_value` rejects the
+      positive-growth perpetuity. That refusal is an economic statement about
+      the sector -- its top industries genuinely earn below their cost of
+      capital -- not a technical failure, and the cap deliberately does not
+      address it, nor the `roic_stable <= abs(terminal_growth)` guard. A later
+      task turns those refusals into a user-facing reason.
 
 ## Archived Track - MoneyView Dev Monitor
 

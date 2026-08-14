@@ -9,15 +9,33 @@ THE FADE IS APPLIED TO ENDPOINTS, NOT PER YEAR. The engine already interpolates
 wacc_initial to wacc_stable, `tax_rate_path` ramps effective_tax_rate to the
 marginal rate. Fading year by year on top of that would apply convergence twice.
 
-NOTHING HERE IS CLAMPED TO FIT THE ENGINE'S GUARDS. `run_case` caps
-`roic_stable` at the target-year marginal return on new capital, which for one
-segment is `margin_target x (1 - marginal_tax_rate) x sales_to_capital_late` --
-and all three of those are faded to the sector independently of `after_tax_roc`,
-so the two can cross. When they do, the generated case is REFUSED by the engine
-rather than trimmed to whatever the guard permits: silently moving a valuation
-input to the largest value that passes validation is exactly the false precision
-this feature exists to avoid. See
-`test_a_sector_roc_above_the_faded_marginal_return_is_refused_not_clamped`.
+THE TERMINAL RETURN IS THE WORSE OF TWO INDEPENDENT ESTIMATES, NOT A CLAMP.
+`roic_stable` is `min(faded after_tax_roc, margin_target x (1 -
+marginal_tax_rate) x sales_to_capital_late)`. Both sides estimate the same
+quantity from the same table:
+
+- Damodaran's "After-tax ROC" is a BOOK return on EXISTING capital, NOPAT over
+  invested capital.
+- `margin x (1 - tau) x sales_to_capital` is the return on NEW capital implied
+  by that same table's margin and capital intensity.
+
+Where the first exceeds the second, the industry's book capital base is
+understated relative to what its current margin and capital intensity generate
+on new investment. Carrying the higher figure as a TERMINAL return would assert
+that the terminal block earns more on new capital than the model's own margin
+and capital intensity support -- which is what `run_case`'s marginal-return
+guard exists to reject, and it is right to. Taking the lower is the same
+worse-of rule the fade already applies to every other field, so it is
+conservative and consistent rather than a number moved to whatever makes a
+guard pass. Without it, five of the eleven real 2026 sectors produce nothing.
+
+NOTHING ELSE IS ADJUSTED TO FIT A GUARD. `terminal_value` separately rejects
+`roic_stable <= wacc_stable` (positive growth destroying value) and
+`roic_stable <= abs(terminal_growth)`. Those cases are REFUSED, not trimmed:
+a sector whose top industries genuinely earn below their cost of capital has no
+positive-growth perpetuity available to it, and saying so is an economic
+statement about the sector. Moving the number until it passes would replace
+that statement with false precision. See the two tests named for these.
 
 Amounts are in billions and rates are fractions, matching both the engine and
 Damodaran's dataset.
@@ -104,7 +122,7 @@ def build_conservative_case(
 
     margin_target, margin_meta = faded("operating_margin", baseline.base_margin,
                                        "lower_is_conservative")
-    roic_stable, _ = faded("after_tax_roc", baseline.current_roic, "lower_is_conservative")
+    faded_roc, _ = faded("after_tax_roc", baseline.current_roic, "lower_is_conservative")
     s2c, s2c_meta = faded("sales_to_capital", baseline.current_sales_to_capital,
                           "lower_is_conservative")
     growth, growth_meta = faded("revenue_growth", baseline.current_growth,
@@ -115,6 +133,14 @@ def build_conservative_case(
     tax_rate, _ = faded("effective_tax_rate", marginal_tax_rate, "higher_is_conservative")
     wacc, _ = faded("cost_of_capital", riskfree_rate + _DEFAULT_EQUITY_RISK_PREMIUM,
                     "higher_is_conservative")
+
+    # The worse of the two estimates of the same return -- see the module
+    # docstring. `marginal_roic` computes this same product from the segment's
+    # target revenue rather than directly, so the two can differ in the last
+    # bits; `run_case` compares with a 1e-9 relative tolerance for exactly that
+    # reason, and there is no cause to shade the value to buy headroom.
+    implied_marginal_roc = margin_target * (1.0 - marginal_tax_rate) * s2c
+    roic_stable = min(faded_roc, implied_marginal_roc)
 
     revenue_target = baseline.base_revenue * (1.0 + growth) ** HORIZON_YEARS
 
