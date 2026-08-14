@@ -1194,6 +1194,20 @@ Plan: `.superpowers/sdd/2026-08-11-industry-relative-conservative-valuation/`
       `three_p="plausible"`, since a held value has no sector corroboration.
       The `(meta or {}).get("claim", "")` call sites are gone, so an empty claim
       is no longer constructible rather than merely no longer produced.
+- [x] Task 8 (2026-08-15) - Resolve a benchmark per ticker, and refuse rather
+      than degrade. `apps/api/services/industry_benchmark_store.py`:
+      `resolve_for_ticker(ticker, *, as_of=None) -> tuple[SectorBenchmark |
+      None, str | None]`, exactly one non-None. Chains `latest_vintage` ->
+      stored `industry` on `corporate_quote_facts` -> `damodaran_industry_for_yahoo`
+      -> `sector_for_industry` -> `resolve_benchmark`, refusing at the first
+      missing link with one of five prefixed reasons (`no_vintage`,
+      `no_industry`, `unmapped_industry` x2, `sector_too_thin`); the unmapped
+      reasons name the offending value so the map can be extended without
+      guesswork. No all-industry fallback anywhere in the chain. The `sector`/
+      `industry` columns, their guarded `ALTER TABLE`s, and the extended
+      `save_quote_facts` INSERT were already in place from Task 6 -- verified,
+      not redone. 5 new tests in `tests/api/test_conservative_case.py` (25
+      total in that file); full suite 757 passed.
 
 ## Archived Track - MoneyView Dev Monitor
 
