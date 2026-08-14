@@ -178,6 +178,43 @@ def test_generating_twice_from_the_same_inputs_is_reproducible():
            {k: v for k, v in second.items() if k != "segments"}
 
 
+def test_a_dropped_benchmark_column_still_states_why_the_value_was_not_faded():
+    """An empty claim would be worse than a refusal: it stores a number that
+    LOOKS justified and is not.
+
+    `resolve_benchmark` omits any column with too few surviving industries, so a
+    benchmark can arrive missing one. The affected fields then hold the
+    company's own value, which is the right number -- but a blank claim clears
+    both gates that are supposed to catch an unjustified input:
+    `_validate_narratives` only checks the field is named, and `claim` is
+    `TEXT NOT NULL`, which an empty string satisfies. The case stores, reads
+    back as fully narrated, and silently asserts nothing.
+    """
+    benchmark = _benchmark()
+    del benchmark.columns["operating_margin"]
+    del benchmark.columns["sales_to_capital"]
+
+    case = _build(benchmark=benchmark)
+    segment = case["segments"][0]
+    claims = {n["input_field"]: n for n in segment["narratives"]}
+
+    for field, column in (("margin_target", "operating_margin"),
+                          ("sales_to_capital_early", "sales_to_capital"),
+                          ("sales_to_capital_late", "sales_to_capital")):
+        assert claims[field]["claim"].strip(), field
+        assert column in claims[field]["claim"], field
+        # A held company value has no sector corroboration, so it is a weaker
+        # claim than a benchmarked one.
+        assert claims[field]["three_p"] == "plausible", field
+
+    # The values are the company's own, held flat -- unfaded, not defaulted.
+    assert segment["margin_target"] == pytest.approx(0.30)
+    assert segment["sales_to_capital_early"] == pytest.approx(3.0)
+    assert segment["sales_to_capital_late"] == pytest.approx(3.0)
+
+    assert create_case(case) > 0
+
+
 def test_the_payload_is_storable_and_runnable_through_the_case_store():
     """The generator's whole output contract is "a `create_case` payload", and
     only `create_case` can say whether it is one -- it enforces the narrative

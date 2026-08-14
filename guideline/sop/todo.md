@@ -1182,6 +1182,19 @@ Plan: `.superpowers/sdd/2026-08-11-industry-relative-conservative-valuation/`
       own comment. For this field the benchmark is a FLOOR, not a ceiling: a
       company borrowing more expensively than its sector keeps its own number.
 
+      Also resolved during review (2026-08-15): a benchmark missing a column
+      produced EMPTY narrative claims that stored cleanly. `resolve_benchmark`
+      omits any column with too few surviving industries; the affected fields
+      correctly held the company's own value, but the claim was `''`, which
+      clears both gates -- `_validate_narratives` only checks the field is
+      NAMED, and `claim` is `TEXT NOT NULL`, which an empty string satisfies.
+      Three numbers could enter the model stating no reason, the exact failure
+      the narrative rule exists to prevent. `faded` now always returns a claim
+      (`_missing_claim` names the column, the vintage and the held value) tagged
+      `three_p="plausible"`, since a held value has no sector corroboration.
+      The `(meta or {}).get("claim", "")` call sites are gone, so an empty claim
+      is no longer constructible rather than merely no longer produced.
+
 ## Archived Track - MoneyView Dev Monitor
 
 Completed basis retained from the previous active plan:

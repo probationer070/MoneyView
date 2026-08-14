@@ -75,8 +75,18 @@ class CompanyBaseline:
     # A FRACTION, like every other rate here. `CorporateMetrics.wacc` is stored
     # in PERCENT -- AAPL is 10.0, MSFT 9.0 -- so whoever populates this baseline
     # divides by 100. That conversion is the single likeliest place for a 100x
-    # error in this module: 10.0 is a legal float that the engine accepts, and a
-    # discount rate of 1000% returns a near-zero valuation with no error raised.
+    # error in this module.
+    #
+    # It is usually caught, but not by anything in this file: passing 10.0
+    # discounts at 1000%, and `terminal_value` then refuses with "roic_stable
+    # 20.0000% must exceed wacc_stable 1000.0000% when terminal growth is
+    # positive" -- the capped `roic_stable` cannot outrun a percent-scale WACC.
+    # That guard is gated on `g_stable > 0`, and terminal growth defaults to
+    # `riskfree_rate`, so with a riskfree rate of ZERO OR BELOW nothing fires:
+    # measured on this module's own fixture, `riskfree_rate=0.0` with a WACC of
+    # 10.0 returns an enterprise value of 1.69 against the correct 274.80, with
+    # no error raised. A negative or zero riskfree rate is the narrow band in
+    # which this error is silent.
     current_wacc: float
     cash: float
     debt: float
@@ -92,6 +102,24 @@ def _claim(benchmark: SectorBenchmark, column: str, vintage: str,
         f"{benchmark.sector} ({', '.join(average.industries)}), vintage {vintage}, "
         f"average {column} {average.value:.4f}. The company's own value is "
         f"{company_value:.4f}; the conservative endpoint is {chosen:.4f}."
+    )
+
+
+def _missing_claim(column: str, vintage: str, company_value: float) -> str:
+    """Why a field was NOT benchmarked, for the case where the column dropped out.
+
+    `resolve_benchmark` omits any column with too few surviving industries, so a
+    benchmark can arrive missing one. The field then holds the company's own
+    value -- which is the right number -- but "the right number with no stated
+    reason" is exactly what the narrative rule exists to prevent, and an empty
+    claim clears both `_validate_narratives` (which only checks the field is
+    named) and the `claim TEXT NOT NULL` column (empty strings are not NULL).
+    A number that stores looking justified and is not is worse than a refusal.
+    """
+    return (
+        f"No usable sector average for {column} in the {vintage} vintage: too "
+        f"few industries survived screening. The company's own "
+        f"{company_value:.4f} is held flat, unfaded."
     )
 
 
@@ -122,10 +150,22 @@ def build_conservative_case(
         (len(a.industries) for a in benchmark.columns.values()), default=0
     )
 
-    def faded(column: str, company_value: float, direction: str) -> tuple[float, dict | None]:
+    def faded(column: str, company_value: float, direction: str) -> tuple[float, dict]:
+        """The faded value and the claim that justifies it -- never an empty one.
+
+        A dropped column returns the company's own value with the claim that
+        says so, rather than `None` for the caller to paper over: every path out
+        of here carries provenance, so no narrative can be assembled empty.
+        """
         average = benchmark.columns.get(column)
         if average is None:
-            return company_value, None
+            return company_value, {
+                "claim": _missing_claim(column, vintage, company_value),
+                # Weaker than any benchmarked claim: a held company value has no
+                # sector corroboration at all, and `full_basket` below never
+                # sees this path.
+                "three_p": "plausible",
+            }
         chosen = fade(company_value, average.value, direction,
                       year=HORIZON_YEARS, horizon=HORIZON_YEARS)
         three_p = "probable" if len(average.industries) == full_basket else "plausible"
@@ -164,14 +204,14 @@ def build_conservative_case(
                    f"from stored statements.", vintage, "probable"),
         _narrative("revenue_target",
                    f"{baseline.base_revenue:.4f} compounded at {growth:.4f} for "
-                   f"{HORIZON_YEARS} years. " + (growth_meta or {}).get("claim", ""),
-                   vintage, (growth_meta or {}).get("three_p", "plausible")),
-        _narrative("margin_target", (margin_meta or {}).get("claim", ""), vintage,
-                   (margin_meta or {}).get("three_p", "plausible")),
-        _narrative("sales_to_capital_early", (s2c_meta or {}).get("claim", ""), vintage,
-                   (s2c_meta or {}).get("three_p", "plausible")),
-        _narrative("sales_to_capital_late", (s2c_meta or {}).get("claim", ""), vintage,
-                   (s2c_meta or {}).get("three_p", "plausible")),
+                   f"{HORIZON_YEARS} years. " + growth_meta["claim"],
+                   vintage, growth_meta["three_p"]),
+        _narrative("margin_target", margin_meta["claim"], vintage,
+                   margin_meta["three_p"]),
+        _narrative("sales_to_capital_early", s2c_meta["claim"], vintage,
+                   s2c_meta["three_p"]),
+        _narrative("sales_to_capital_late", s2c_meta["claim"], vintage,
+                   s2c_meta["three_p"]),
     ]
 
     return {
