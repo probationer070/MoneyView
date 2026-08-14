@@ -277,6 +277,42 @@ changed.
 | Cost of capital | `CaseSpec.wacc_initial`, `wacc_stable` | Discounting, every year |
 | Annual Avg Revenue growth | `SegmentSpec.revenue_target` | The target-year revenue the whole path lands on |
 
+### The terminal return needs two estimates reconciled, not one adopted
+
+`roic_stable` cannot simply take Damodaran's After-tax ROC. Measured across all
+11 sectors in the 2026 vintage, five would be rejected by the engine's own
+guards: Consumer Discretionary, Financials, Industrials and Utilities exceed
+`margin_target × (1 − τ) × sales_to_capital_late`, and Real Estate falls below
+its benchmarked cost of capital.
+
+The reason is that the two columns measure different things:
+
+- **After-tax ROC** is a book return on *existing* capital — NOPAT over invested
+  capital.
+- **`margin × (1 − τ) × sales/capital`** is the return on *new* capital implied
+  by the same table's margin and capital intensity.
+
+When the first exceeds the second, the industry's book capital base is
+understated relative to what its current economics generate on new investment.
+Adopting the higher figure as a TERMINAL return asserts that the terminal block
+earns more on new capital than the model's own margin and capital intensity
+support, which is exactly what `run_case`'s ceiling exists to reject.
+
+So `roic_stable` is the **lower of the two**:
+
+    roic_stable = min(faded After-tax ROC, margin_target × (1 − τ) × sales_to_capital_late)
+
+This is the same worse-of rule the fade applies everywhere else, here reconciling
+two independent estimates of one quantity rather than a company against a sector.
+It is conservative by construction and consistent by construction, and it takes
+10 of the 11 sectors from rejected to valued.
+
+**Real Estate still refuses, and should.** Its top industries by ROC earn 5.31%
+against a 6.07% cost of capital. A perpetuity growing at the riskfree rate while
+earning below its cost of capital destroys value without bound, and the engine
+rejects it. That is an economic finding about the sector, not a defect to
+engineer around.
+
 **`roic_stable` is the largest single lever.** This session established that
 terminal value is roughly 87% of enterprise value on a reproduced Damodaran
 case, and `roic_stable` drives it. Benchmarking it against the sector's
