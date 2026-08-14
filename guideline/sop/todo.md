@@ -1169,6 +1169,19 @@ Plan: `.superpowers/sdd/2026-08-11-industry-relative-conservative-valuation/`
       address it, nor the `roic_stable <= abs(terminal_growth)` guard. A later
       task turns those refusals into a user-facing reason.
 
+      Also resolved during review (2026-08-12): `CompanyBaseline.current_wacc`
+      replaced a placeholder `riskfree_rate + 0.045` as the company-side
+      endpoint of the cost-of-capital fade. `cost_of_capital` fades
+      `higher_is_conservative`, so the invented constant WON in 10 of the 11
+      real sectors -- only Technology's average (0.0959) sits above it -- which
+      meant the benchmark's cost-of-capital column was effectively ignored and
+      Energy was refused on an artifact rather than on economics. The field is a
+      FRACTION; `CorporateMetrics.wacc` is stored in PERCENT (AAPL 10.0, MSFT
+      9.0), so whoever populates the baseline divides by 100. That conversion is
+      the likeliest 100x error in this module and is called out in the field's
+      own comment. For this field the benchmark is a FLOOR, not a ceiling: a
+      company borrowing more expensively than its sector keeps its own number.
+
 ## Archived Track - MoneyView Dev Monitor
 
 Completed basis retained from the previous active plan:

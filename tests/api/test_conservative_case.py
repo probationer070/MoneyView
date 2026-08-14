@@ -25,6 +25,7 @@ def _benchmark(**overrides):
 def _baseline(**overrides):
     base = dict(base_revenue=100.0, base_margin=0.30, current_roic=0.35,
                 current_sales_to_capital=3.0, current_growth=0.20,
+                current_wacc=0.085,
                 cash=20.0, debt=5.0, shares=1.0, source_years=(2024, 2025))
     base.update(overrides)
     return CompanyBaseline(**base)
@@ -100,6 +101,24 @@ def test_a_sector_tax_rate_below_the_marginal_rate_holds_at_the_marginal_rate():
 def test_the_cost_of_capital_fades_up_toward_the_sector():
     case = _build()
     assert case["wacc_stable"] == pytest.approx(0.095)
+
+
+def test_a_company_costlier_than_its_sector_keeps_its_own_cost_of_capital():
+    """The sector average is a FLOOR on the cost of capital, not a ceiling.
+
+    `cost_of_capital` fades `higher_is_conservative`, so a company already
+    raising capital more expensively than its sector keeps its own number rather
+    than being handed the sector's cheaper one. This is the usual case, not the
+    exotic one: across the real 2026 vintage only Technology's average (0.0959)
+    sits above a typical large-cap's own cost of capital, so for the other ten
+    sectors the company's measured WACC is what discounts the case. That is
+    exactly why this field takes a measured input -- an invented company-side
+    placeholder would override the benchmark almost everywhere instead of being
+    overridden by it.
+    """
+    case = _build(baseline={"current_wacc": 0.11})
+    assert case["wacc_stable"] == pytest.approx(0.11)
+    assert case["wacc_initial"] == pytest.approx(0.11)
 
 
 def test_revenue_target_compounds_the_faded_growth_over_ten_years():

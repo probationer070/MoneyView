@@ -29,6 +29,19 @@ worse-of rule the fade already applies to every other field, so it is
 conservative and consistent rather than a number moved to whatever makes a
 guard pass. Without it, five of the eleven real 2026 sectors produce nothing.
 
+THE COST OF CAPITAL IS THE ONE FIELD WHERE THE COMPANY'S OWN VALUE ROUTINELY
+WINS, so the benchmark acts as a FLOOR on it rather than a ceiling. It fades
+`higher_is_conservative`, and across the real 2026 vintage only Technology's
+sector average (0.0959) sits above a typical large-cap's own cost of capital;
+every other sector's is lower and therefore holds. That is the correct
+behaviour -- a company borrowing more expensively than its sector is not handed
+its sector's cheaper capital -- but it means this field must carry the company's
+MEASURED cost of capital. An invented company-side placeholder silently
+overrides the benchmark in almost every sector instead of being overridden by
+it, which is how a constant of `riskfree_rate + 0.045` came to set the discount
+rate for 10 of 11 sectors and refuse Energy on an artifact rather than on
+economics.
+
 NOTHING ELSE IS ADJUSTED TO FIT A GUARD. `terminal_value` separately rejects
 `roic_stable <= wacc_stable` (positive growth destroying value) and
 `roic_stable <= abs(terminal_growth)`. Those cases are REFUSED, not trimmed:
@@ -49,13 +62,6 @@ from packages.core_finance.industry_benchmark import SectorBenchmark, fade
 
 HORIZON_YEARS = 10
 
-# Equity risk premium added to the riskfree rate for the company's own cost of
-# capital, absent a measured one. It is only the company-side endpoint of a fade
-# that can move in one direction: where the sector's cost of capital is higher,
-# the sector's wins, so this matters only when the sector is cheaper than the
-# company -- in which case the company's own number is the conservative one.
-_DEFAULT_EQUITY_RISK_PREMIUM = 0.045
-
 
 @dataclass(frozen=True)
 class CompanyBaseline:
@@ -66,6 +72,12 @@ class CompanyBaseline:
     current_roic: float
     current_sales_to_capital: float
     current_growth: float
+    # A FRACTION, like every other rate here. `CorporateMetrics.wacc` is stored
+    # in PERCENT -- AAPL is 10.0, MSFT 9.0 -- so whoever populates this baseline
+    # divides by 100. That conversion is the single likeliest place for a 100x
+    # error in this module: 10.0 is a legal float that the engine accepts, and a
+    # discount rate of 1000% returns a near-zero valuation with no error raised.
+    current_wacc: float
     cash: float
     debt: float
     shares: float
@@ -131,8 +143,7 @@ def build_conservative_case(
     # not demonstrated. A sector averaging below that can only lift the early
     # years' cash flow, so `fade` holds; only a sector above it moves this.
     tax_rate, _ = faded("effective_tax_rate", marginal_tax_rate, "higher_is_conservative")
-    wacc, _ = faded("cost_of_capital", riskfree_rate + _DEFAULT_EQUITY_RISK_PREMIUM,
-                    "higher_is_conservative")
+    wacc, _ = faded("cost_of_capital", baseline.current_wacc, "higher_is_conservative")
 
     # The worse of the two estimates of the same return -- see the module
     # docstring. `marginal_roic` computes this same product from the segment's
