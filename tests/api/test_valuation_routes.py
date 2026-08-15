@@ -59,10 +59,12 @@ def test_run_of_an_unknown_case_is_404():
 
 
 def test_model_invalid_inputs_are_422_not_500():
-    """A terminal growth above the riskfree rate is a rejected model, not a crash."""
+    """A terminal growth above the riskfree rate is a rejected model, not a
+    crash. Rejected at creation now, not at run: the write-time engine gate
+    (task 1) catches this before the row is ever stored, so there is no
+    case_id to run against any more."""
     payload = _case_payload(case_name="uncapped", terminal_growth=0.09)
-    case_id = client.post("/api/v1/valuation/cases", json=payload).json()["data"]["id"]
-    response = client.post(f"/api/v1/valuation/cases/{case_id}/run")
+    response = client.post("/api/v1/valuation/cases", json=payload)
     assert response.status_code == 422
     assert "riskfree" in response.json()["detail"]
 

@@ -131,6 +131,44 @@ def _validate_runnable(payload: dict, segment: dict) -> None:
             )
 
 
+def _specs_from_payload(payload: dict) -> tuple[CaseSpec, list[SegmentSpec]]:
+    """Build engine specs from a create payload, as `load_case` would.
+
+    Normalizing through the column lists reproduces exactly what a stored row
+    yields on read -- `None` for anything unstated -- so the write-time trial
+    and the later run cannot disagree about their inputs. `_to_specs` indexes
+    with `case["key"]` and would raise `KeyError` on an omitted optional field,
+    where `create_case` tolerates the omission via `.get()`.
+    """
+    normalized = {column: payload.get(column) for column in _CASE_COLUMNS}
+    normalized["segments"] = [
+        {column: segment.get(column) for column in _SEGMENT_COLUMNS}
+        for segment in payload["segments"]
+    ]
+    return _to_specs(normalized)
+
+
+def _validate_by_engine(payload: dict) -> None:
+    """Reject at write time what `run_case` rejects at read time.
+
+    Not a re-statement of the engine's guards -- the engine itself. Any
+    `ValueError` guard reached by `run_case` through this execution path is
+    enforced at creation time without duplicating the guard in this layer.
+
+    Only `ValueError` is translated. A `KeyError`, `TypeError` or anything else
+    is a defect in this module or the engine, not an economic refusal, and must
+    keep its own type and traceback. Do NOT widen this to `except Exception`:
+    that would relabel programming and infrastructure faults as ordinary
+    validation failures and bury them behind a 422.
+
+    The engine's result is discarded. This is a gate, not a computation.
+    """
+    try:
+        run_case(*_specs_from_payload(payload))
+    except ValueError as exc:
+        raise ValueError(f"case is not valuable: {exc}") from exc
+
+
 def create_case(payload: dict) -> int:
     """Persist a case, its segments and their narratives in one transaction."""
     segments = payload.get("segments") or []
@@ -139,6 +177,7 @@ def create_case(payload: dict) -> int:
     for segment in segments:
         _validate_narratives(segment)
         _validate_runnable(payload, segment)
+    _validate_by_engine(payload)
 
     with get_db() as conn:
         try:

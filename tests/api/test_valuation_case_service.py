@@ -2,6 +2,8 @@ import pytest
 
 from apps.api.services.valuation_case import (
     CaseNotFound,
+    _specs_from_payload,
+    _to_specs,
     create_case,
     list_cases,
     load_case,
@@ -177,3 +179,81 @@ def test_initial_growth_round_trips_and_reaches_the_engine():
     result = run_stored_case(case_id)
     launch = result["segments"][0]
     assert launch["revenue"][0] / 4.1 - 1 == pytest.approx(0.0764, abs=1e-12)
+
+
+def test_a_case_whose_roic_cannot_carry_its_terminal_growth_is_rejected():
+    """The defect this gate exists for. roic_stable 3% under a 4.56% terminal
+    growth stored cleanly and then failed on every single run, forever, while
+    the caller was told the case was created."""
+    payload = _case_payload(case_name="dead_on_arrival", roic_stable=0.03)
+    with pytest.raises(ValueError) as excinfo:
+        create_case(payload)
+    assert "case is not valuable" in str(excinfo.value)
+    assert "must exceed the magnitude of terminal growth" in str(excinfo.value)
+
+
+def test_a_case_growing_while_destroying_value_is_rejected():
+    """A SECOND, different engine guard: positive terminal growth with a
+    terminal return below the cost of capital.
+
+    This test is why the gate can claim to delegate. A single-guard test would
+    still pass if the implementation had quietly copied that one check into
+    this module; two different guards reached through one `run_case` call is
+    the cheapest evidence that the engine itself does the rejecting.
+    """
+    payload = _case_payload(case_name="value_destroying", roic_stable=0.06)
+    with pytest.raises(ValueError) as excinfo:
+        create_case(payload)
+    assert "case is not valuable" in str(excinfo.value)
+    assert "must exceed wacc_stable" in str(excinfo.value)
+
+
+def test_an_unvaluable_case_leaves_nothing_behind():
+    """The gate runs before the transaction opens, so a refusal writes no row.
+
+    Without this the gate could reject correctly and still leave a half-written
+    case behind, which is the failure mode `test_a_rejected_case_leaves_nothing_behind`
+    guards for the narrative rule.
+    """
+    payload = _case_payload(case_name="doomed_by_engine", roic_stable=0.03)
+    with pytest.raises(ValueError):
+        create_case(payload)
+    assert [c["case_name"] for c in list_cases()] == []
+
+
+def test_a_valuable_case_still_stores_and_runs():
+    """The gate must not reject good input."""
+    case_id = create_case(_case_payload())
+    assert run_stored_case(case_id)["enterprise_value"] > 0
+
+
+def test_a_declining_case_is_not_judged_by_the_positive_growth_rule():
+    """roic_stable 6% sits below wacc_stable 8.25%, which the engine rejects
+    ONLY when terminal growth is positive. At -1% growth that rule does not
+    apply, and the case must store.
+
+    This is the counterpart to the value-destroying test: together they show the
+    gate rejects where the engine rejects and *only* there, rather than imposing
+    a broader rule of its own at the service layer.
+    """
+    case_id = create_case(_case_payload(
+        case_name="declining", roic_stable=0.06, terminal_growth=-0.01,
+    ))
+    assert run_stored_case(case_id)["enterprise_value"] > 0
+
+
+def test_write_time_specs_equal_read_time_specs():
+    """The invariant the whole gate rests on: the trial validates the same
+    representation the later run will see.
+
+    It holds today by construction -- `create_case` inserts `payload.get(column)`
+    with no defaults or coercion, and `load_case` returns `dict(row)`
+    untransformed -- but that is an argument, not a proof. A future default, a
+    generated column, a serialization step or a SQLite type-affinity change
+    would break it silently, and the gate would start validating something the
+    run path never sees. `CaseSpec` and `SegmentSpec` are both
+    `@dataclass(frozen=True)`, so `==` compares field by field.
+    """
+    payload = _case_payload(case_name="equivalence")
+    case_id = create_case(payload)
+    assert _specs_from_payload(payload) == _to_specs(load_case(case_id))
