@@ -1087,6 +1087,22 @@ Plan: `.superpowers/sdd/2026-08-11-industry-relative-conservative-valuation/`
       695 passed. `tests/fixtures/__init__.py` added since the directory did
       not exist yet, matching the existing `tests/<pkg>/__init__.py` pattern.
       No storage or case-generator wiring yet -- pure module only.
+- [x] Task 2 (2026-08-11) - Ranking, averaging, and provenance.
+      `packages/core_finance/industry_benchmark.py`: `ColumnAverage`,
+      `SectorBenchmark`, `BenchmarkUnavailable`, `resolve_benchmark(sector,
+      rows, *, top_n=5, minimum=3)`. Ranks by after-tax ROC, takes the top
+      `top_n`, then averages each column INDEPENDENTLY over its own surviving
+      contributors -- one poisoned cell drops only its own column, not the
+      whole basket -- and a column with fewer than `minimum` survivors is
+      omitted rather than averaged over too few. `ranked`/`rejected` travel
+      with the result so a benchmark that later looks wrong is traceable. One
+      test in the task brief (`test_a_poisoned_cell_drops_only_its_own_column`)
+      asserted `top_n=3` over a 4-row fixture, which cannot satisfy its own
+      assertions -- the basket would hold only 2 non-poisoned
+      `reinvestment_rate` contributors, one short of the default minimum of 3;
+      corrected to `top_n=4` to match the test's documented intent. 9 new
+      tests in `tests/core_finance/test_industry_benchmark.py` (16 total in
+      that file); full suite 704 passed.
 - [x] Task 3 (2026-08-11) - The asymmetric fade.
       `packages/core_finance/industry_benchmark.py`: `Direction` literal,
       `FADE_DIRECTIONS` (6 of the 9 benchmark columns declare a direction;
@@ -1114,6 +1130,32 @@ Plan: `.superpowers/sdd/2026-08-11-industry-relative-conservative-valuation/`
       for that industry. Every arguable classification carries a comment on
       its own line. 7 tests in `tests/api/test_industry_maps.py`; full suite
       721 passed. Completeness against the stored vintage is Task 5's gate.
+- [x] Task 5 (2026-08-11) - Vintage storage and workbook parsing.
+      `apps/api/services/industry_benchmark_store.py`: `parse_workbook`
+      (locates columns by HEADER TEXT, not position, since Damodaran
+      republishes annually and column order is not a contract),
+      `store_vintage`/`load_vintage` (keyed by the dataset's PUBLICATION date,
+      not the fetch date -- an annual dataset re-fetched daily must not
+      manufacture variation that did not occur), `latest_vintage`. Strengthens
+      the Task 4 sector-map completeness gate
+      (`test_every_industry_in_a_stored_vintage_is_classified`) to check all
+      96 industries in the real 2026 vintage via a checked-in fixture
+      (`tests/fixtures/damodaran_industries.txt`) instead of the 10 covered by
+      `TECHNOLOGY_ROWS`. Loading is manual (`store_vintage(vintage,
+      parse_workbook(path))`); wiring it into the acquisition scheduler is
+      deliberately not done, since an annual dataset does not need one. 8 new
+      tests across `tests/api/test_industry_benchmark_store.py` (new file, 7
+      tests) and `tests/api/test_industry_maps.py` (+1); full suite 729
+      passed.
+- [x] Task 6 (2026-08-12) - Persist Yahoo sector and industry end to end.
+      `QuoteFacts` already fetched `sector`/`industry` into memory and
+      discarded them. Adds the columns to `corporate_quote_facts` (additive
+      `ALTER TABLE`, following the existing `beta` column's pattern) and
+      writes them in `save_quote_facts`; without this the benchmark feature's
+      whole chain from ticker to sector has nothing to read. 3 new tests
+      across `tests/api/acquisition/test_store.py` (+1) and
+      `tests/api/test_quote_facts_industry.py` (new file, covering fetch,
+      missing-value default, and the DB round trip); full suite 732 passed.
 - [x] Task 7 (2026-08-12) - The conservative case generator.
       `apps/api/services/conservative_case.py`: `CompanyBaseline` and
       `build_conservative_case`, producing a `create_case` payload with one
@@ -1159,15 +1201,31 @@ Plan: `.superpowers/sdd/2026-08-11-industry-relative-conservative-valuation/`
       version refused five: Consumer Discretionary (roic 0.2238 vs ceiling
       0.2024), Financials (0.2200 vs 0.1932), Industrials (0.2561 vs 0.2449),
       Utilities (0.0595 vs 0.0512) and Real Estate. The cap fixes the first
-      four; 10 of 11 sectors now produce a case.
+      four.
 
-      Real Estate still refuses, correctly: its capped return 0.0531 sits below
-      its faded cost of capital 0.0607, so `terminal_value` rejects the
-      positive-growth perpetuity. That refusal is an economic statement about
-      the sector -- its top industries genuinely earn below their cost of
-      capital -- not a technical failure, and the cap deliberately does not
-      address it, nor the `roic_stable <= abs(terminal_growth)` guard. A later
-      task turns those refusals into a user-facing reason.
+      CORRECTED (2026-08-15): the "10 of 11" figure above was retracted. It
+      used the BENCHMARK cost of capital as `wacc_stable`, but the generator
+      fades `higher_is_conservative`, so `wacc_stable = max(company, benchmark)`
+      -- the company's own WACC governs whenever it exceeds the sector's. The
+      corrected sweep, run against the real 2026 vintage at four company-WACC
+      levels:
+
+          company WACC 0.060 and 0.075 -> 9 of 11 valued; Real Estate and
+          Utilities refuse
+          company WACC 0.085 and 0.100 -> 8 of 11 valued; Energy, Real Estate
+          and Utilities refuse
+
+      Real Estate and Utilities refuse STRUCTURALLY -- their implied return on
+      new capital sits below any plausible cost of capital, at every WACC
+      tested. Energy's refusal is sensitive to the company's own WACC rather
+      than structural. Real Estate still refuses, correctly: its capped return
+      0.0531 sits below its faded cost of capital 0.0607, so `terminal_value`
+      rejects the positive-growth perpetuity. That refusal is an economic
+      statement about the sector -- its top industries genuinely earn below
+      their cost of capital -- not a technical failure, and the cap
+      deliberately does not address it, nor the `roic_stable <=
+      abs(terminal_growth)` guard. A later task turns those refusals into a
+      user-facing reason.
 
       Also resolved during review (2026-08-12): `CompanyBaseline.current_wacc`
       replaced a placeholder `riskfree_rate + 0.045` as the company-side
