@@ -21,6 +21,14 @@ logger = setup_logger(__name__)
 
 YAHOO_STATEMENT_START_YEAR = 2021
 YAHOO_STATEMENT_END_YEAR = 2025
+
+# Yahoo's label aliases for the three lines every consumer in this module reads.
+# Named once so a new reader -- `statement_baseline` below -- cannot drift from
+# what `yahoo_statement_metrics` matches on.
+REVENUE_LABELS = ("Total Revenue", "Operating Revenue")
+OPERATING_INCOME_LABELS = ("Operating Income", "EBIT")
+EQUITY_LABELS = ("Stockholders Equity", "Total Equity Gross Minority Interest")
+
 DEFAULT_RISK_FREE_RATE = 0.042
 DEFAULT_EQUITY_RISK_PREMIUM = 0.055
 KOREA_COUNTRY_RISK_PREMIUM = 0.8
@@ -667,12 +675,12 @@ def yahoo_statement_metrics(
     quarterly_balance = bundle["quarterly_balance"]
     info = bundle["info"]
     revenue_by_year = _prefer_annual_map(
-        _statement_map_from_year(income, ("Total Revenue", "Operating Revenue"), YAHOO_STATEMENT_START_YEAR - 1),
-        _quarterly_flow_map(quarterly_income, ("Total Revenue", "Operating Revenue"), start_year=YAHOO_STATEMENT_START_YEAR - 1),
+        _statement_map_from_year(income, REVENUE_LABELS, YAHOO_STATEMENT_START_YEAR - 1),
+        _quarterly_flow_map(quarterly_income, REVENUE_LABELS, start_year=YAHOO_STATEMENT_START_YEAR - 1),
     )
     operating_income_by_year = _prefer_annual_map(
-        _statement_map(income, ("Operating Income", "EBIT")),
-        _quarterly_flow_map(quarterly_income, ("Operating Income", "EBIT")),
+        _statement_map(income, OPERATING_INCOME_LABELS),
+        _quarterly_flow_map(quarterly_income, OPERATING_INCOME_LABELS),
     )
     pretax_income_by_year = _prefer_annual_map(
         _statement_map(income, ("Pretax Income", "Income Before Tax")),
@@ -691,8 +699,8 @@ def yahoo_statement_metrics(
     }
     debt_by_year = _gross_debt_map(balance, quarterly_balance)
     equity_by_year = _prefer_annual_map(
-        _statement_map(balance, ("Stockholders Equity", "Total Equity Gross Minority Interest")),
-        _quarterly_balance_map(quarterly_balance, ("Stockholders Equity", "Total Equity Gross Minority Interest")),
+        _statement_map(balance, EQUITY_LABELS),
+        _quarterly_balance_map(quarterly_balance, EQUITY_LABELS),
     )
     capex_by_year = {
         year: abs(value)
@@ -1305,8 +1313,8 @@ def metric_audit_for_ticker(
             metadata={"metric": "growth"},
         ):
             revenue_by_year = _prefer_annual_map(
-                _statement_map_from_year(income, ("Total Revenue", "Operating Revenue"), YAHOO_STATEMENT_START_YEAR - 1),
-                _quarterly_flow_map(quarterly_income, ("Total Revenue", "Operating Revenue"), start_year=YAHOO_STATEMENT_START_YEAR - 1),
+                _statement_map_from_year(income, REVENUE_LABELS, YAHOO_STATEMENT_START_YEAR - 1),
+                _quarterly_flow_map(quarterly_income, REVENUE_LABELS, start_year=YAHOO_STATEMENT_START_YEAR - 1),
             )
             current_revenue_by_year = _current_statement_years(revenue_by_year)
             growth_payload = _stable_growth_payload(current_revenue_by_year)
@@ -1320,8 +1328,8 @@ def metric_audit_for_ticker(
             metadata={"metric": "roic", "roic_basis": roic_basis, "roic_year": roic_year},
         ):
             operating_income_by_year = _prefer_annual_map(
-                _statement_map(income, ("Operating Income", "EBIT")),
-                _quarterly_flow_map(quarterly_income, ("Operating Income", "EBIT")),
+                _statement_map(income, OPERATING_INCOME_LABELS),
+                _quarterly_flow_map(quarterly_income, OPERATING_INCOME_LABELS),
             )
             pretax_income_by_year = _prefer_annual_map(
                 _statement_map(income, ("Pretax Income", "Income Before Tax")),
@@ -1340,8 +1348,8 @@ def metric_audit_for_ticker(
             }
             debt_by_year = _gross_debt_map(balance, quarterly_balance)
             equity_by_year = _prefer_annual_map(
-                _statement_map(balance, ("Stockholders Equity", "Total Equity Gross Minority Interest")),
-                _quarterly_balance_map(quarterly_balance, ("Stockholders Equity", "Total Equity Gross Minority Interest")),
+                _statement_map(balance, EQUITY_LABELS),
+                _quarterly_balance_map(quarterly_balance, EQUITY_LABELS),
             )
             roic_payload = _build_roic_records(
                 operating_income_by_year=operating_income_by_year,
@@ -1560,12 +1568,12 @@ def yahoo_metric_history(ticker: str, bundle_loader=get_yahoo_statement_bundle) 
     quarterly_balance = bundle["quarterly_balance"]
 
     revenue_by_year = _prefer_annual_map(
-        _statement_map_from_year(income, ("Total Revenue", "Operating Revenue"), YAHOO_STATEMENT_START_YEAR - 1),
-        _quarterly_flow_map(quarterly_income, ("Total Revenue", "Operating Revenue"), start_year=YAHOO_STATEMENT_START_YEAR - 1),
+        _statement_map_from_year(income, REVENUE_LABELS, YAHOO_STATEMENT_START_YEAR - 1),
+        _quarterly_flow_map(quarterly_income, REVENUE_LABELS, start_year=YAHOO_STATEMENT_START_YEAR - 1),
     )
     operating_income_by_year = _prefer_annual_map(
-        _statement_map(income, ("Operating Income", "EBIT")),
-        _quarterly_flow_map(quarterly_income, ("Operating Income", "EBIT")),
+        _statement_map(income, OPERATING_INCOME_LABELS),
+        _quarterly_flow_map(quarterly_income, OPERATING_INCOME_LABELS),
     )
     pretax_income_by_year = _prefer_annual_map(
         _statement_map(income, ("Pretax Income", "Income Before Tax")),
@@ -1577,8 +1585,8 @@ def yahoo_metric_history(ticker: str, bundle_loader=get_yahoo_statement_bundle) 
     )
     debt_by_year = _gross_debt_map(balance, quarterly_balance)
     equity_by_year = _prefer_annual_map(
-        _statement_map(balance, ("Stockholders Equity", "Total Equity Gross Minority Interest")),
-        _quarterly_balance_map(quarterly_balance, ("Stockholders Equity", "Total Equity Gross Minority Interest")),
+        _statement_map(balance, EQUITY_LABELS),
+        _quarterly_balance_map(quarterly_balance, EQUITY_LABELS),
     )
     current_revenue_by_year = {
         year: value
@@ -1619,4 +1627,55 @@ def yahoo_metric_history(ticker: str, bundle_loader=get_yahoo_statement_bundle) 
         "roic_recent_average": _roic_value(roic_points, "recent_average", None),
         "roic_all_year_average": _roic_value(roic_points, "all_year_average", None),
         "annual_roic": _annual_metric_rows(roic_points),
+    }
+
+
+def statement_baseline(
+    ticker: str, *, bundle_loader=get_yahoo_statement_bundle
+) -> Optional[dict[str, dict[int, float]]]:
+    """The three series a conservative case needs, in RAW STATEMENT CURRENCY.
+
+    Deliberately unscaled: `company_baseline.build_company_baseline` owns the
+    single currency-to-billions conversion in the feature, and converting here
+    as well would be a 10^9 error that no downstream guard catches -- both
+    figures would still be plausible floats.
+
+    Invested capital is equity plus interest-bearing debt, the same definition
+    and the same guards ROIC already uses (`_calculate_invested_capital` drops a
+    year whose equity is missing or whose capital is non-positive or too small
+    to be a stable denominator), so a case and a ROIC never disagree about what
+    the company's capital base is. Like every other reader here it acquires
+    nothing: an unacquired ticker yields None rather than a fetch.
+    """
+    bundle = bundle_loader(ticker.upper(), "conservative_case")
+    if bundle is None:
+        return None
+    income = bundle.get("income")
+    balance = bundle.get("balance")
+    quarterly_income = bundle.get("quarterly_income")
+    quarterly_balance = bundle.get("quarterly_balance")
+
+    revenue_by_year = _prefer_annual_map(
+        _statement_map_from_year(income, REVENUE_LABELS, YAHOO_STATEMENT_START_YEAR - 1),
+        _quarterly_flow_map(quarterly_income, REVENUE_LABELS, start_year=YAHOO_STATEMENT_START_YEAR - 1),
+    )
+    operating_income_by_year = _prefer_annual_map(
+        _statement_map(income, OPERATING_INCOME_LABELS),
+        _quarterly_flow_map(quarterly_income, OPERATING_INCOME_LABELS),
+    )
+    debt_by_year = _gross_debt_map(balance, quarterly_balance)
+    equity_by_year = _prefer_annual_map(
+        _statement_map(balance, EQUITY_LABELS),
+        _quarterly_balance_map(quarterly_balance, EQUITY_LABELS),
+    )
+    invested_capital_by_year: dict[int, float] = {}
+    for year in sorted(equity_by_year):
+        result = _calculate_invested_capital(equity_by_year.get(year), debt_by_year.get(year))
+        if result["invested_capital"] is not None:
+            invested_capital_by_year[year] = float(result["invested_capital"])
+
+    return {
+        "revenue_by_year": revenue_by_year,
+        "operating_income_by_year": operating_income_by_year,
+        "invested_capital_by_year": invested_capital_by_year,
     }

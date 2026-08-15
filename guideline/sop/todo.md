@@ -1269,6 +1269,33 @@ Plan: `.superpowers/sdd/2026-08-11-industry-relative-conservative-valuation/`
       `save_quote_facts` INSERT were already in place from Task 6 -- verified,
       not redone. 5 new tests in `tests/api/test_conservative_case.py` (25
       total in that file); full suite 757 passed.
+- [x] Task 9 (2026-08-15) - The statements -> baseline adapter, and the entry
+      point. Closes the seam the whole-branch review found: nothing built a
+      `CompanyBaseline`, so `build_conservative_case` and `resolve_for_ticker`
+      had zero production callers. New `apps/api/services/company_baseline.py`
+      owns the feature's ONLY units boundary -- statement currency -> billions
+      for revenue and the bridge terms, `CorporateMetrics` percent -> fraction
+      for roic/wacc/growth -- while `base_margin` and
+      `current_sales_to_capital` stay unscaled because both are ratios of two
+      raw-currency figures. `generate_conservative_case` chains
+      `resolve_for_ticker` -> `build_company_baseline` ->
+      `build_conservative_case` -> `create_case`, injecting every dependency so
+      it runs with no network; a `create_case` `ValueError` (duplicate
+      `case_name`, or an engine guard the generated inputs trip) becomes a
+      `not_storable` reason rather than an exception. New
+      `statement_baseline(ticker, *, bundle_loader=...)` in
+      `corporate_statement_metrics.py` returns the three RAW-currency series,
+      reusing `_prefer_annual_map`/`_statement_map`/`_calculate_invested_capital`
+      -- so a case and a ROIC cannot disagree about the capital base. The three
+      Yahoo label tuples it shares with `yahoo_statement_metrics` were extracted
+      to module-level `REVENUE_LABELS`/`OPERATING_INCOME_LABELS`/`EQUITY_LABELS`
+      (they were already inline in three places) rather than copied a fourth
+      time. Departure from the brief: its reference `build_company_baseline`
+      intersected the three year-sets before checking each series, so an absent
+      operating-income series reported `no_revenue`; each series is now checked
+      on its own and an empty intersection has its own `no_shared_year` reason.
+      23 new tests in `tests/api/test_company_baseline.py`; full suite 781
+      passed.
 
 ## Archived Track - MoneyView Dev Monitor
 
