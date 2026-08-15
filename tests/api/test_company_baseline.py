@@ -320,3 +320,90 @@ def test_generating_the_same_case_twice_refuses_rather_than_raising():
     second_id, second_reason = _generate()
     assert second_id is None
     assert "not_storable" in second_reason
+
+
+# --- the ticker -> case wrapper -------------------------------------------
+
+
+def _bundle_for(revenue, operating_income, equity, debt, cash, shares):
+    """A synthetic Yahoo-shaped bundle. Injected, so no network is reachable."""
+    import pandas as pd
+
+    years = sorted(revenue)
+    idx = [pd.Timestamp(f"{y}-12-31") for y in years]
+
+    def frame(rows):
+        return pd.DataFrame(rows, index=idx).T
+
+    return {
+        "income": frame({"Total Revenue": [revenue[y] for y in years],
+                         "Operating Income": [operating_income[y] for y in years]}),
+        "balance": frame({"Stockholders Equity": [equity[y] for y in years],
+                          "Total Debt": [debt[y] for y in years],
+                          "Cash And Cash Equivalents": [cash[y] for y in years],
+                          "Diluted Average Shares": [shares[y] for y in years]}),
+        "cashflow": frame({"Free Cash Flow": [1.0 for _ in years]}),
+        "quarterly_income": frame({"Total Revenue": [revenue[y] for y in years]}),
+        "quarterly_balance": frame({"Stockholders Equity": [equity[y] for y in years]}),
+        "quarterly_cashflow": frame({"Free Cash Flow": [1.0 for _ in years]}),
+        "info": {"marketCap": 200_000_000_000.0, "sharesOutstanding": 1_000_000_000.0},
+    }
+
+
+def test_the_ticker_wrapper_reaches_no_network_and_refuses_without_a_benchmark():
+    """Refusal propagates unchanged from the layer that raised it.
+
+    This test does NOT prove the statement and bridge loaders are wired: it
+    refuses at `resolve_for_ticker`, before either is reached. The test below,
+    which produces a runnable case, is the one that proves the wiring. Kept
+    separate because a refusal path that swallowed its reason would still pass
+    that one."""
+    from apps.api.services.company_baseline import generate_conservative_case_for_ticker
+
+    bundle = _bundle_for(
+        revenue={2024: 90e9, 2025: 100e9},
+        operating_income={2024: 27e9, 2025: 30e9},
+        equity={2024: 25e9, 2025: 28e9},
+        debt={2024: 6e9, 2025: 6e9},
+        cash={2024: 1e9, 2025: 1e9},
+        shares={2024: 1e9, 2025: 1e9},
+    )
+    case_id, reason = generate_conservative_case_for_ticker(
+        "NOBENCH", bundle_loader=lambda ticker, endpoint: bundle,
+    )
+    # No vintage stored and no quote facts, so it must refuse -- but it must
+    # have got far enough to ASK, which proves the loaders were wired.
+    assert case_id is None
+    assert reason is not None
+
+
+def test_the_ticker_wrapper_produces_a_stored_runnable_case():
+    """End to end from a bare ticker: benchmark + statements + bridge -> case."""
+    from apps.api.services.company_baseline import generate_conservative_case_for_ticker
+    from apps.api.services.db import get_db
+    from apps.api.services.industry_benchmark_store import store_vintage
+    from apps.api.services.valuation_case import run_stored_case
+    from tests.fixtures.industry_rows_technology import TECHNOLOGY_ROWS
+
+    store_vintage("2026-01-01", TECHNOLOGY_ROWS)
+    with get_db() as conn:
+        conn.execute(
+            "INSERT OR REPLACE INTO corporate_quote_facts "
+            "(ticker, market_cap, shares_outstanding, currency, beta, sector, industry, fetched_at) "
+            "VALUES ('WRAP', 1.0, 1.0, 'USD', 1.0, 'Technology', 'Semiconductors', '2026-01-01')"
+        )
+
+    bundle = _bundle_for(
+        revenue={2024: 90e9, 2025: 100e9},
+        operating_income={2024: 27e9, 2025: 30e9},
+        equity={2024: 25e9, 2025: 28e9},
+        debt={2024: 6e9, 2025: 6e9},
+        cash={2024: 1e9, 2025: 1e9},
+        shares={2024: 1e9, 2025: 1e9},
+    )
+    case_id, reason = generate_conservative_case_for_ticker(
+        "WRAP", base_year=2026, bundle_loader=lambda ticker, endpoint: bundle,
+    )
+    assert reason is None, reason
+    assert case_id > 0
+    assert run_stored_case(case_id)["enterprise_value"] > 0

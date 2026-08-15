@@ -21,11 +21,26 @@ zero produces a confident valuation from data that does not exist.
 
 from __future__ import annotations
 
+from datetime import date
+
 from apps.api.services.conservative_case import CompanyBaseline, build_conservative_case
+from apps.api.services.corporate_metrics_service import metrics_for_ticker
+from apps.api.services.corporate_statement_metrics import (
+    DEFAULT_RISK_FREE_RATE,
+    get_yahoo_statement_bundle,
+    statement_baseline,
+)
+from apps.api.services.equity_bridge import load_equity_bridge
 from apps.api.services.industry_benchmark_store import resolve_for_ticker
 from apps.api.services.valuation_case import create_case
 
 _BILLION = 1_000_000_000.0
+
+# `Input sheet!B24` in both of Damodaran's SpaceX workbooks, and what the two
+# seeded reference cases use. A jurisdiction constant, not a company one -- the
+# industry benchmark supplies the EFFECTIVE rate, which the engine ramps toward
+# this.
+DEFAULT_MARGINAL_TAX_RATE = 0.25
 
 
 def build_company_baseline(
@@ -144,3 +159,43 @@ def generate_conservative_case(
         # Covers both a duplicate case_name and any engine guard the generated
         # inputs trip. Both are legitimate refusals, not faults.
         return None, f"not_storable: {exc}"
+
+
+def generate_conservative_case_for_ticker(
+    ticker: str,
+    *,
+    as_of: str | None = None,
+    base_year: int | None = None,
+    riskfree_rate: float = DEFAULT_RISK_FREE_RATE,
+    marginal_tax_rate: float = DEFAULT_MARGINAL_TAX_RATE,
+    bundle_loader=get_yahoo_statement_bundle,
+) -> tuple[int | None, str | None]:
+    """One call from a bare ticker to a stored conservative case.
+
+    The seam between `generate_conservative_case`, which takes its four inputs
+    injected so it can be tested without I/O, and a caller that only has a
+    ticker. Assembles those four and delegates; every refusal reason comes back
+    unchanged from the layer that raised it.
+
+    `bundle_loader` threads through all three loaders, so a single injection
+    makes the whole path offline-testable. `tests/conftest.py` fails any test
+    that opens a non-loopback socket, which is what catches a missed one.
+
+    `base_year` defaults to the current calendar year. It sets the case's
+    10-year horizon and appears in `as_of_date`, so pin it explicitly wherever
+    reproducibility across a year boundary matters.
+    """
+    metrics = metrics_for_ticker(ticker, bundle_loader=bundle_loader)
+    bridge = load_equity_bridge(ticker, bundle_loader=bundle_loader)
+
+    return generate_conservative_case(
+        ticker,
+        as_of=as_of,
+        base_year=base_year if base_year is not None else date.today().year,
+        riskfree_rate=riskfree_rate,
+        marginal_tax_rate=marginal_tax_rate,
+        metrics=metrics,
+        statement_source=statement_baseline(ticker, bundle_loader=bundle_loader),
+        net_debt=bridge.net_debt.value,
+        shares=bridge.diluted_shares_outstanding.value,
+    )
