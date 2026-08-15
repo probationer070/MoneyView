@@ -257,3 +257,19 @@ def test_write_time_specs_equal_read_time_specs():
     payload = _case_payload(case_name="equivalence")
     case_id = create_case(payload)
     assert _specs_from_payload(payload) == _to_specs(load_case(case_id))
+
+
+def test_a_segment_missing_a_required_field_is_rejected():
+    """The presence check covers `SegmentSpec`'s no-default fields too, not
+    only `CaseSpec`'s. A missing `sales_to_capital_late` used to reach
+    SQLite's NOT NULL constraint and come back as a clean ValueError naming
+    the column; it must still do so now that the trial spec build happens
+    before that constraint is ever checked, rather than crash with a
+    TypeError from SegmentSpec's own null-unsafe __post_init__.
+    """
+    payload = _case_payload(
+        case_name="segment_missing_field",
+        segments=[_segment_payload(sales_to_capital_late=None)],
+    )
+    with pytest.raises(ValueError, match="sales_to_capital_late"):
+        create_case(payload)

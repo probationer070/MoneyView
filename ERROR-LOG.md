@@ -1554,47 +1554,58 @@ fixture. Ten rows cannot reveal where a natural gap in 92 rows actually
 falls; a bound placed to look reasonable on a small sample can still cut
 through the middle of a real cluster in the full one.
 
-## 2026-08-15: A missing required case field now crashes with TypeError instead of a clean ValueError
+## 2026-08-15: A missing required case field crashed with TypeError instead of a clean ValueError
 
 Date: 2026-08-15
 Command: `python -m pytest -q` (full suite, run as Step 8 of the write-time
 runnability gate, `.superpowers/sdd/2026-08-15-write-time-runnability-gate/task-1-brief.md`)
 Failure: `tests/api/test_valuation_case_service.py::test_missing_required_case_field_is_rejected_with_the_column_named`
-fails with an unhandled `TypeError: '<=' not supported between instances of
+failed with an unhandled `TypeError: '<=' not supported between instances of
 'NoneType' and 'int'` instead of the `ValueError` naming `shares_basic` that
-the test (and, before today, the real behavior) expects.
+the test (and, before Task 1's gate, the real behavior) expects.
 Root cause: Task 1 added `_validate_by_engine`, which runs `run_case` against
-a trial `CaseSpec`/`SegmentSpec` built from the raw payload *before* the
-`INSERT` that used to be the first place a missing `NOT NULL` column (e.g.
-`shares_basic`) was caught, as a clean `sqlite3.IntegrityError` translated to
-`ValueError`. `CaseSpec.__post_init__` (`packages/core_finance/segment_valuation.py:642`)
+a trial `CaseSpec`/`SegmentSpec` built straight from the raw, unvalidated
+payload -- *before* the `INSERT` that used to be the first place a missing
+`NOT NULL` column (e.g. `shares_basic`) was caught, as a clean
+`sqlite3.IntegrityError` translated to `ValueError`. Nothing before Task 1
+ever built a `CaseSpec`/`SegmentSpec` from unvalidated input, so this path
+was never reachable. `CaseSpec.__post_init__` (`packages/core_finance/segment_valuation.py:642`)
 assumes required numeric fields are never `None` and does `self.shares_basic
-<= 0` with no null check, so a payload missing a required field now reaches
-that comparison first and raises `TypeError` instead. `_validate_by_engine`
-only translates `ValueError` by design (translating `TypeError` would relabel
-a programming/infrastructure fault as an ordinary 422), so the `TypeError`
-propagates out of `create_case` uncaught. The FastAPI route
-(`apps/api/routes/valuation.py:32-35`) also only catches `ValueError`, and
-`apps/api/main.py` has no generic exception handler, so any caller of
-`create_case` that skips Pydantic validation and omits a required numeric
-field now gets a raw 500 where it previously got a 422. The public API route
-is not affected in practice -- `ValuationCaseInput.shares_basic` is
-`Field(gt=0)`, non-nullable, so Pydantic rejects a missing value before
-`create_case` is ever called -- but any other direct caller of `create_case`
-(seed scripts, other services, or this unit test) is exposed.
-Fix: Not fixed. Task 1's brief explicitly scopes this out: `_validate_by_engine`
-must not widen its `except` to `TypeError`/`Exception` (that would bury real
-defects behind a 422), and `packages/core_finance/segment_valuation.py` is
-off-limits for this task (the engine's guards are correct; only the moment
-they fire changed). Making `CaseSpec`/`SegmentSpec` null-safe, or adding a
-presence check ahead of the engine call in `apps/api/services/valuation_case.py`,
-is left for a follow-up task. The test that caught this
-(`test_missing_required_case_field_is_rejected_with_the_column_named`) is left
-failing, not skipped or weakened, so this stays visible.
-Files changed: none (this entry only).
+<= 0` with no null check -- pre-existing, and out of scope to change here --
+so a payload missing a required field reached that comparison first and
+raised `TypeError` instead. `_validate_by_engine` only translates `ValueError`
+by design (translating `TypeError` would relabel a programming/infrastructure
+fault as an ordinary 422), so the `TypeError` propagated out of `create_case`
+uncaught. The FastAPI route (`apps/api/routes/valuation.py:32-35`) also only
+catches `ValueError`, and `apps/api/main.py` has no generic exception
+handler, so any caller of `create_case` that skips Pydantic validation and
+omits a required numeric field would have gotten a raw 500 where it
+previously got a 422. The public API route was not affected in practice --
+`ValuationCaseInput.shares_basic` is `Field(gt=0)`, non-nullable, so Pydantic
+rejects a missing value before `create_case` is ever called -- but any other
+direct caller of `create_case` (seed scripts, other services, or this unit
+test) was exposed.
+Fix: Added `_validate_required_fields` in `apps/api/services/valuation_case.py`,
+called at the start of `_validate_by_engine`, before the trial spec is built.
+It derives the required-field lists straight from the dataclasses
+(`dataclasses.fields(CaseSpec)` / `dataclasses.fields(SegmentSpec)`, any field
+with no default) rather than hand-maintaining them, and raises `ValueError`
+naming every missing case-level or segment-level field found `None` in the
+payload. This restores the original clean-422 behavior at the new, earlier
+point without touching `segment_valuation.py` and without widening
+`_validate_by_engine`'s `except ValueError` clause. Added
+`test_a_segment_missing_a_required_field_is_rejected` to cover the
+segment-level half of the check (`SegmentSpec` fields), alongside the
+existing `test_missing_required_case_field_is_rejected_with_the_column_named`,
+which now passes unmodified.
+Files changed: `apps/api/services/valuation_case.py`,
+`tests/api/test_valuation_case_service.py`.
 Prevention: any future reordering that runs engine code earlier than a
 database constraint that used to be the first line of defense should be
 checked against every required-but-nullable-in-Python field, not just the
 economic guards the reordering was aimed at -- `CaseSpec`/`SegmentSpec`'s
 `__post_init__` guards assume presence, not just validity, and were written
-assuming the database had already screened for `None`.
+assuming the database had already screened for `None`. Deriving the required
+list from the dataclass, rather than hand-copying field names, keeps this
+check from silently drifting out of sync if either spec gains a new
+no-default field later.
