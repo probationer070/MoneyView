@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Run every watchlist DCF a second time on assumptions faded toward the average of the top 3–5 industries in the company's sector, and return both valuations side by side.
+**Goal:** Generate, for any watchlist ticker, a segment-build-up valuation case whose every forward assumption is faded toward the average of the top 3–5 industries in its sector, with each number carrying the industries behind it.
 
-**Architecture:** A pure layer in `packages/core_finance/industry_benchmark.py` does screening, ranking, averaging and fading over plain dataclasses. A service layer in `apps/api/services/` owns storage, vintage selection and two hand-authored mapping tables. The existing DCF is not modified — a sibling of `valuation_params_from_metrics` produces a second `ValuationAssumptions`, and `corporate_dcf` runs the same computation twice.
+**Architecture:** A pure layer in `packages/core_finance/industry_benchmark.py` does screening, ranking, averaging and fading over plain dataclasses. A service layer owns storage, vintage selection, two hand-authored mapping tables, and a generator that turns a ticker plus a benchmark into a `create_case` payload for the existing segment build-up engine. Nothing existing is modified: the conservative valuation is a separate stored case run by a different engine.
 
 **Tech Stack:** Python 3.11, FastAPI, Pydantic v2, SQLite (no migration framework), pytest, openpyxl.
 
@@ -16,10 +16,10 @@
 - Tests must not open `data/processed/moneyview.db`.
 - `packages/core_finance` must not import from `apps/api` (`guideline/sop/file-structure.md:42`). The dependency runs one way.
 - Schema changes go in `_CREATE_SCHEMA_SQL` plus an additive `ALTER TABLE` in `_ensure_schema_compatibility` in `apps/api/services/db.py`. There is no migration framework.
-- **Units.** Damodaran's dataset is in fractions (reinvestment 0.409). `CorporateMetrics` is in percent (`{"roic": 18}`). `ValuationAssumptions` is mixed: `revenue_growth_rate`, `operating_margin`, `tax_rate`, `wacc` are fractions; `reinvestment` and `debt_ratio` are percent, bounded `ge=0.0, le=100.0`, and are NOT divided by 100 anywhere. Convert once, per field, at the boundary. Never apply a blanket `* 100`.
+- **Units.** `segment_valuation.py` uses FRACTIONS for every rate and BILLIONS for every money amount. Damodaran's dataset is also entirely fractions, so no rate conversion is needed between them. Two boundaries still need care: raw statement currency must be scaled to billions (`equity_bridge._scaled` is the existing helper), and anything read from `CorporateMetrics` is in PERCENT (`{"roic": 18}`) and must be divided by 100.
 - Consult `guideline/sop/finance-logic.md` before and after any change to a formula.
-- The stored-assumption valuation must remain byte-identical to what it produces today. This is the regression guard on the parallel-scenario promise.
-- Do not modify `packages/core_finance/dcf.py` or `packages/core_finance/segment_valuation.py`.
+- No existing test should need modification. The conservative valuation runs on a different engine and stores a separate case, so there is no shared path along which it could perturb `corporate_dcf`. If an existing test changes, the separation has been broken.
+- Do not modify `packages/core_finance/dcf.py`, `packages/core_finance/segment_valuation.py`, `apps/api/services/corporate_dcf.py`, or `apps/api/services/corporate_metrics_service.py`.
 
 ## File Structure
 
@@ -28,14 +28,14 @@
 | `packages/core_finance/industry_benchmark.py` | Pure. `IndustryRow`, `BENCHMARK_COLUMNS`, screening, ranking, averaging, `SectorBenchmark`, the fade. |
 | `apps/api/services/industry_maps.py` | The two hand-authored maps and the excluded-rows list. Judgement artifacts with comments. |
 | `apps/api/services/industry_benchmark_store.py` | SQLite storage, vintage selection, workbook parsing. |
-| `apps/api/services/corporate_metrics_service.py` | Add `conservative_valuation_params`. Existing functions untouched. |
-| `apps/api/services/corporate_dcf.py` | Add the parallel scenario to the DCF outputs. |
+| `apps/api/services/conservative_case.py` | Turn a ticker + benchmark into a `create_case` payload. |
+| `apps/api/services/acquisition/store.py` | Persist Yahoo's sector and industry. |
 | `apps/api/services/acquisition/sources/quote_facts.py` | Keep Yahoo's `sector` and `industry`. |
 | `apps/api/services/db.py` | `industry_benchmark` table + additive migration. |
 | `tests/core_finance/test_industry_benchmark.py` | Pure-layer tests. |
 | `tests/api/test_industry_maps.py` | Map completeness. |
 | `tests/api/test_industry_benchmark_store.py` | Storage, vintage, parsing. |
-| `tests/api/test_conservative_valuation.py` | Conversion, units, integration. |
+| `tests/api/test_conservative_case.py` | Case generation, units, per-ticker resolution. |
 | `tests/fixtures/industry_rows_technology.py` | Ten real industry rows, exact values. |
 
 ---
@@ -241,8 +241,10 @@ Everything here is pure: no I/O, no database, no network. `packages/core_finance
 must not import from `apps/api` (guideline/sop/file-structure.md:42).
 
 UNITS. Every value in this module is in the dataset's own units -- fractions,
-not percents. Conversion to `ValuationAssumptions`, which is mixed, happens at
-the service boundary and nowhere else. See the design spec, "Units".
+not percents -- which is also what `segment_valuation.py` uses for every rate,
+so no conversion happens between them. The only conversions live at the service
+boundary: raw statement currency to billions, and `CorporateMetrics` percent to
+fraction. See the design spec, "Units".
 """
 
 from __future__ import annotations
@@ -264,9 +266,9 @@ class BenchmarkColumn:
     """One column of the dataset, with the band outside which it is unusable.
 
     `low`/`high` are PLAUSIBILITY bounds, deliberately tighter than the
-    corresponding `ValuationAssumptions` field validation. The field bounds are
-    too loose to catch a units error -- 0.409 passes `ge=0.0, le=100.0` and
-    silently means 0.4% instead of 41%.
+    engine's own validation. `CaseSpec` accepts any `effective_tax_rate` in
+    [0, 1], so 0.22 and 0.0022 are both legal and only one is right -- the
+    engine cannot catch a magnitude error that stays inside its range.
     """
 
     key: str
@@ -288,9 +290,12 @@ BENCHMARK_COLUMNS: tuple[BenchmarkColumn, ...] = (
     BenchmarkColumn("debt_to_capital", "Market Debt/Capital", "fraction", 0.0, 1.0),
     BenchmarkColumn("cost_of_capital", "Cost of capital", "fraction", 0.0, 0.5),
     BenchmarkColumn("sales_to_capital", "Sales/Capital", "ratio", 0.0, 20.0),
-    # 0 to 1.5 rejects the 11 negative rates and the three above 200% in the
-    # 2026 vintage. p90 is 1.311, so the upper bound keeps the ordinary tail.
-    BenchmarkColumn("reinvestment_rate", "Reinvestment Rate", "fraction", 0.0, 1.5),
+    # 0 to 2.0 rejects the 11 negative rates and the three artifacts above it:
+    # Steel 2.115, Insurance (General) 3.242, Software (Internet) 14.142. p90 is
+    # 1.311, and 2.0 sits in the observed gap between 1.888 and 2.115 -- so
+    # capital-intensive industries reinvesting up to ~190% of NOPAT are KEPT.
+    # An earlier bound of 1.5 wrongly screened out five of those.
+    BenchmarkColumn("reinvestment_rate", "Reinvestment Rate", "fraction", 0.0, 2.0),
 )
 
 _COLUMNS_BY_KEY = {column.key: column for column in BENCHMARK_COLUMNS}
@@ -434,7 +439,12 @@ def test_a_poisoned_cell_drops_only_its_own_column():
     rows = [poisoned] + [r for r in TECHNOLOGY_ROWS if r.name in (
         "Computers/Peripherals", "Software (System & Application)", "Semiconductor Equip",
     )]
-    result = resolve_benchmark("Technology", rows, top_n=3)
+    # top_n=4, not 3: with the poisoned row ranking first, a 3-basket leaves only
+    # 2 valid reinvestment contributors -- below the default minimum=3 -- so the
+    # column is dropped entirely and the assertion below raises KeyError instead
+    # of testing exclusion. 4 admits all three real rows alongside the poisoned
+    # leader, which is what this test's docstring actually describes.
+    result = resolve_benchmark("Technology", rows, top_n=4)
 
     assert result.ranked[0] == "Poisoned Leader"
     assert "Poisoned Leader" in result.columns["operating_margin"].industries
@@ -674,15 +684,31 @@ def test_year_zero_or_beyond_the_horizon_raises():
 
 
 def test_every_faded_assumption_declares_a_direction():
-    """A column with no declared direction would silently never fade."""
+    """A column with no declared direction would silently never fade.
+
+    unlevered_beta, debt_to_capital and reinvestment_rate are ABSENT on purpose:
+    the segment engine takes WACC directly rather than rebuilding it from beta
+    and leverage, and reinvestment is an engine OUTPUT (ΔRevenue /
+    sales_to_capital), not an input. Fading a field the engine does not consume
+    is what caused this plan to be retargeted.
+    """
     assert FADE_DIRECTIONS == {
         "revenue_growth": "lower_is_conservative",
         "operating_margin": "lower_is_conservative",
+        "after_tax_roc": "lower_is_conservative",
+        "sales_to_capital": "lower_is_conservative",
         "effective_tax_rate": "higher_is_conservative",
         "cost_of_capital": "higher_is_conservative",
-        "unlevered_beta": "higher_is_conservative",
-        "reinvestment_rate": "higher_is_conservative",
     }
+
+
+def test_sales_to_capital_is_a_benefit_and_fades_down():
+    """A HIGHER sales/capital means LESS capital per dollar of new revenue. Get
+    this backwards and capital-hungry companies look cheaper -- the opposite of
+    conservative. This is the direction most likely to be implemented wrong."""
+    assert FADE_DIRECTIONS["sales_to_capital"] == "lower_is_conservative"
+    assert fade(3.0, 2.0, "lower_is_conservative", year=10, horizon=10) == pytest.approx(2.0)
+    assert fade(1.2, 2.0, "lower_is_conservative", year=10, horizon=10) == pytest.approx(1.2)
 ```
 
 - [ ] **Step 2: Run to verify they fail**
@@ -702,18 +728,23 @@ Direction = Literal["lower_is_conservative", "higher_is_conservative"]
 # cheaper capital, than the best of its sector is being flattered exactly as
 # much as one assumed to earn a higher margin.
 #
-# `debt_to_capital` and `sales_to_capital` are absent deliberately. Capital
-# structure is a financing choice, not an operating assumption, and forcing a
-# company toward its sector's leverage would move the cost of capital that is
-# already being faded directly -- the same quantity adjusted twice by two
-# routes. `sales_to_capital` has no `ValuationAssumptions` counterpart.
+# `unlevered_beta`, `debt_to_capital` and `reinvestment_rate` are absent
+# deliberately. The segment engine takes WACC directly rather than rebuilding it
+# from beta and leverage, so fading the first two would move nothing; and
+# reinvestment is an engine OUTPUT (`ΔRevenue / sales_to_capital`), not an input,
+# so benchmarking it would assert a result the model is supposed to derive.
+# Fading fields the engine does not consume is precisely what caused this plan to
+# be retargeted away from `corporate_dcf`.
 FADE_DIRECTIONS: dict[str, Direction] = {
     "revenue_growth": "lower_is_conservative",
     "operating_margin": "lower_is_conservative",
+    "after_tax_roc": "lower_is_conservative",
+    # A HIGHER sales/capital means LESS capital per dollar of new revenue, so it
+    # is a benefit and fades DOWN. Backwards, capital-hungry companies look
+    # cheaper -- the opposite of conservative.
+    "sales_to_capital": "lower_is_conservative",
     "effective_tax_rate": "higher_is_conservative",
     "cost_of_capital": "higher_is_conservative",
-    "unlevered_beta": "higher_is_conservative",
-    "reinvestment_rate": "higher_is_conservative",
 }
 
 
@@ -1343,41 +1374,56 @@ git commit -m "feat: keep Yahoo sector and industry on QuoteFacts"
 
 ---
 
-### Task 7: Conservative assumptions, with the units conversion
+### Task 7: The conservative case generator
 
 **Files:**
-- Modify: `apps/api/services/corporate_metrics_service.py`
-- Test: `tests/api/test_conservative_valuation.py` (create)
+- Create: `apps/api/services/conservative_case.py`
+- Test: `tests/api/test_conservative_case.py` (create)
 
 **Interfaces:**
 - Consumes: `SectorBenchmark`, `FADE_DIRECTIONS`, `fade` (Tasks 2–3).
 - Produces:
-  - `BenchmarkUnavailableReason(NamedTuple)` with `code: str`, `detail: str`
-  - `conservative_valuation_params(metrics: CorporateMetrics, benchmark: SectorBenchmark, *, year: int = 5, horizon: int = 5) -> ValuationAssumptions`
+  - `CompanyBaseline(base_revenue: float, base_margin: float, current_roic: float, current_sales_to_capital: float, current_growth: float, cash: float, debt: float, shares: float, source_years: tuple[int, ...])`
+  - `build_conservative_case(ticker: str, baseline: CompanyBaseline, benchmark: SectorBenchmark, *, vintage: str, riskfree_rate: float, marginal_tax_rate: float, base_year: int) -> dict`
 
-**This is the task where the units hazard lives.** Read the Global Constraints
-block again before writing code.
+**Read this before writing code — the fade is applied to ENDPOINTS, not per year.**
 
-`CorporateMetrics` is a Pydantic `BaseModel` (`apps/api/models/schema_parts/corporate.py:194`)
-with these defaults, all in PERCENT: `growth=6.0`, `roic=18.0`, `wacc=10.0`,
-`debt_ratio=18.0`, `unlevered_beta=1.05`, `reinvestment=34.0`. Fields are
-mutable, so the tests below assign to them directly. `unlevered_beta` is a ratio
-in both places and needs no conversion — it is in the mapping table only so that
-every faded field's unit is stated rather than assumed.
+The segment engine already interpolates: `margin_path` ramps `base_margin` to
+`margin_target`, `wacc_path` ramps `wacc_initial` to `wacc_stable`,
+`tax_rate_path` ramps `effective_tax_rate` to the marginal rate. So the
+generator fades each *endpoint* once, with `year=horizon`, and the engine
+carries the gradual convergence. Fading year by year on top of the engine's own
+paths would apply convergence twice.
+
+With `year=horizon`, `fade` degenerates to worse-of — and that is correct HERE
+even though a flat worse-of was rejected during design. The difference: the
+company's *current* value still enters the model as `base_margin`, so the path
+runs from where the company actually is today to the faded endpoint. It is a
+fade; the engine performs it.
+
+Per field, the company's "own" endpoint absent any benchmark is its CURRENT
+value held flat — assuming no improvement it has not demonstrated:
+
+| Engine field | Company's own endpoint | Benchmark column | Direction |
+| --- | --- | --- | --- |
+| `margin_target` | `baseline.base_margin` | `operating_margin` | lower |
+| `roic_stable` | `baseline.current_roic` | `after_tax_roc` | lower |
+| `sales_to_capital_early`/`_late` | `baseline.current_sales_to_capital` | `sales_to_capital` | lower |
+| `effective_tax_rate` | `marginal_tax_rate` | `effective_tax_rate` | higher |
+| `wacc_initial`/`wacc_stable` | company WACC | `cost_of_capital` | higher |
+| revenue growth (→ `revenue_target`) | `baseline.current_growth` | `revenue_growth` | lower |
+
+`revenue_target` is then `base_revenue * (1 + faded_growth) ** 10`.
 
 - [ ] **Step 1: Write the failing tests**
 
 ```python
-# tests/api/test_conservative_valuation.py
+# tests/api/test_conservative_case.py
 import pytest
 
-from apps.api.models.schema_parts.corporate import ValuationAssumptions
-from apps.api.services.corporate_metrics_service import (
-    conservative_valuation_params,
-    valuation_params_from_metrics,
-    default_metrics,
-)
+from apps.api.services.conservative_case import CompanyBaseline, build_conservative_case
 from packages.core_finance.industry_benchmark import ColumnAverage, SectorBenchmark
+from packages.core_finance.segment_valuation import CaseSpec, SegmentSpec, run_case
 
 
 def _benchmark(**overrides):
@@ -1389,289 +1435,459 @@ def _benchmark(**overrides):
     base.update(overrides)
     return SectorBenchmark(
         sector="Technology",
-        columns={k: ColumnAverage(v, ("A", "B", "C")) for k, v in base.items()},
-        ranked=("A", "B", "C"), rejected=(),
+        columns={k: ColumnAverage(v, ("Computers/Peripherals", "Semiconductor", "Semiconductor Equip"))
+                 for k, v in base.items()},
+        ranked=("Computers/Peripherals", "Semiconductor", "Semiconductor Equip"),
+        rejected=(),
     )
 
 
-def test_a_margin_above_the_benchmark_fades_down():
-    metrics = default_metrics("TEST")
-    metrics.roic = 22.0          # percent, per CorporateMetrics convention
-    params = conservative_valuation_params(metrics, _benchmark(operating_margin=0.15))
-    assert params.operating_margin == pytest.approx(0.15)
+def _baseline(**overrides):
+    base = dict(base_revenue=100.0, base_margin=0.30, current_roic=0.35,
+                current_sales_to_capital=3.0, current_growth=0.20,
+                cash=20.0, debt=5.0, shares=1.0, source_years=(2024, 2025))
+    base.update(overrides)
+    return CompanyBaseline(**base)
 
 
-def test_a_cost_below_the_benchmark_fades_up():
-    metrics = default_metrics("TEST")
-    metrics.wacc = 7.0           # percent
-    params = conservative_valuation_params(metrics, _benchmark(cost_of_capital=0.095))
-    assert params.wacc == pytest.approx(0.095)
-
-
-def test_nothing_fades_toward_optimism():
-    metrics = default_metrics("TEST")
-    metrics.roic = 9.0
-    metrics.wacc = 12.0
-    params = conservative_valuation_params(
-        metrics, _benchmark(operating_margin=0.15, cost_of_capital=0.095)
+def _build(**kw):
+    return build_conservative_case(
+        "TEST", _baseline(**kw.pop("baseline", {})), kw.pop("benchmark", _benchmark()),
+        vintage="2026-01-01", riskfree_rate=0.04, marginal_tax_rate=0.25, base_year=2026,
     )
-    assert params.operating_margin == pytest.approx(0.09)
-    assert params.wacc == pytest.approx(0.12)
 
 
-def test_reinvestment_stays_in_percent_units():
-    """THE UNITS TRAP. The benchmark is a fraction (0.40). ValuationAssumptions
-    declares `reinvestment` as ge=0.0, le=100.0 and nothing divides it by 100.
-    A fraction leaking through passes every declared bound and means 0.4%
-    instead of 40%."""
-    metrics = default_metrics("TEST")
-    metrics.reinvestment = 20.0
-    params = conservative_valuation_params(metrics, _benchmark(reinvestment_rate=0.40))
-    assert params.reinvestment == pytest.approx(40.0)
-    assert params.reinvestment > 1.0
+def test_a_margin_above_the_benchmark_becomes_the_benchmark():
+    """30% company against a 15% sector: the TARGET is 15%. The engine then
+    ramps from the company's actual 30% base_margin down to it."""
+    case = _build()
+    segment = case["segments"][0]
+    assert segment["margin_target"] == pytest.approx(0.15)
+    assert segment["base_margin"] == pytest.approx(0.30)
 
 
-def test_growth_and_margin_stay_in_fraction_units():
-    """The other side of the trap: these ARE divided by 100 on the existing
-    path, so the benchmark's fraction goes through unconverted."""
-    metrics = default_metrics("TEST")
-    metrics.growth = 30.0
-    params = conservative_valuation_params(metrics, _benchmark(revenue_growth=0.08))
-    assert params.revenue_growth_rate == pytest.approx(0.08)
-    assert params.revenue_growth_rate < 1.0
+def test_a_margin_below_the_benchmark_holds_and_is_not_assumed_to_improve():
+    case = _build(baseline={"base_margin": 0.09})
+    assert case["segments"][0]["margin_target"] == pytest.approx(0.09)
 
 
-def test_a_missing_benchmark_column_leaves_the_company_value_unfaded():
-    benchmark = _benchmark()
-    del benchmark.columns["operating_margin"]
-    metrics = default_metrics("TEST")
-    metrics.roic = 22.0
-    params = conservative_valuation_params(metrics, benchmark)
-    assert params.operating_margin == pytest.approx(0.22)
+def test_terminal_roic_takes_the_worse_of_company_and_sector():
+    case = _build()
+    assert case["roic_stable"] == pytest.approx(0.20)
 
 
-def test_debt_ratio_is_not_faded():
-    """Capital structure is a financing choice. Fading it would move the cost of
-    capital that is already being faded directly -- the same quantity adjusted
-    twice by two routes."""
-    metrics = default_metrics("TEST")
-    metrics.debt_ratio = 10.0
-    params = conservative_valuation_params(metrics, _benchmark(debt_to_capital=0.25))
-    assert params.debt_ratio == pytest.approx(10.0)
+def test_sales_to_capital_fades_down_because_a_higher_ratio_is_a_benefit():
+    """A HIGHER sales/capital means LESS capital per dollar of new revenue, so
+    it is a benefit and fades down. Backwards, this makes capital-hungry
+    companies look cheaper."""
+    segment = _build()["segments"][0]
+    assert segment["sales_to_capital_early"] == pytest.approx(2.0)
+    assert segment["sales_to_capital_late"] == pytest.approx(2.0)
 
 
-def test_terminal_growth_is_not_benchmarked():
-    """Perpetual growth is a macro constraint, not an industry characteristic.
-    The existing cap is already the conservative treatment."""
-    metrics = default_metrics("TEST")
-    params = conservative_valuation_params(metrics, _benchmark())
-    baseline = valuation_params_from_metrics(metrics)
-    assert params.terminal_growth_rate <= params.wacc
+def test_a_company_below_the_sector_sales_to_capital_holds():
+    segment = _build(baseline={"current_sales_to_capital": 1.2})["segments"][0]
+    assert segment["sales_to_capital_early"] == pytest.approx(1.2)
 
 
-def test_every_industry_produces_assumptions_the_model_accepts():
-    """The test that catches a screening bound drifting out of step with the
-    model's own validation, and a units error at the same time."""
-    from packages.core_finance.industry_benchmark import resolve_benchmark
-    from tests.fixtures.industry_rows_technology import TECHNOLOGY_ROWS
+def test_the_tax_rate_fades_up_toward_the_sector():
+    case = _build(benchmark=_benchmark(effective_tax_rate=0.22))
+    assert case["effective_tax_rate"] == pytest.approx(0.22)
 
-    benchmark = resolve_benchmark("Technology", TECHNOLOGY_ROWS)
-    metrics = default_metrics("TEST")
-    params = conservative_valuation_params(metrics, benchmark)
 
-    ValuationAssumptions(**params.model_dump())          # bounds hold
-    assert 0.0 <= params.reinvestment <= 100.0
-    assert params.reinvestment > 1.0 or metrics.reinvestment <= 1.0
-    assert -1.0 <= params.operating_margin <= 1.0
+def test_the_cost_of_capital_fades_up_toward_the_sector():
+    case = _build()
+    assert case["wacc_stable"] == pytest.approx(0.095)
+
+
+def test_revenue_target_compounds_the_faded_growth_over_ten_years():
+    """Company grows 20%, sector 8%. The conservative target uses 8%."""
+    case = _build()
+    assert case["segments"][0]["revenue_target"] == pytest.approx(100.0 * 1.08 ** 10)
+    assert case["target_year"] - case["base_year"] == 10
+
+
+def test_the_equity_bridge_is_reconstructed_from_net_debt():
+    case = _build(baseline={"cash": 0.0, "debt": 30.0})
+    assert case["debt"] == pytest.approx(30.0)
+    assert case["cash"] == pytest.approx(0.0)
+    assert case["ipo_proceeds"] == 0.0
+    assert case["shares_new"] == 0.0
+
+
+def test_every_segment_input_carries_a_derived_narrative():
+    """create_case rejects any narrated input without a claim, so this is what
+    makes the generated case storable at all. Nothing is `confirmed`: the
+    benchmark is a real average, but applying it to THIS company is inference."""
+    segment = _build()["segments"][0]
+    claims = {n["input_field"]: n for n in segment["narratives"]}
+    for field in ("base_revenue", "base_margin", "revenue_target", "margin_target",
+                  "sales_to_capital_early", "sales_to_capital_late"):
+        assert field in claims, field
+        assert claims[field]["confidence"] == "derived"
+        assert claims[field]["evidence_source"] == "damodaran_industry_2026-01-01"
+
+
+def test_narratives_name_the_industries_behind_the_number():
+    """Provenance is the point. A benchmark that arrives as a bare number is
+    untraceable when it later looks wrong."""
+    segment = _build()["segments"][0]
+    claim = next(n for n in segment["narratives"] if n["input_field"] == "margin_target")["claim"]
+    assert "Computers/Peripherals" in claim
+    assert "Technology" in claim
+    assert "2026-01-01" in claim
+
+
+def test_the_generated_case_runs_and_produces_a_positive_value():
+    case = _build()
+    spec = CaseSpec(**{k: v for k, v in case.items()
+                       if k in CaseSpec.__dataclass_fields__})
+    segments = [SegmentSpec(**{k: v for k, v in s.items()
+                               if k in SegmentSpec.__dataclass_fields__})
+                for s in case["segments"]]
+    result = run_case(spec, segments)
+    assert result.enterprise_value > 0
+    assert result.revenue[-1] == pytest.approx(100.0 * 1.08 ** 10)
+
+
+def test_money_terms_are_in_billions_not_raw_currency():
+    """A units error here is a 10^9 error. base_revenue for a $100bn company is
+    100.0."""
+    assert _build()["segments"][0]["base_revenue"] == pytest.approx(100.0)
+
+
+def test_generating_twice_from_the_same_inputs_is_reproducible():
+    first, second = _build(), _build()
+    assert first["segments"][0] == second["segments"][0]
+    assert {k: v for k, v in first.items() if k != "segments"} == \
+           {k: v for k, v in second.items() if k != "segments"}
 ```
 
 - [ ] **Step 2: Run to verify they fail**
 
-Run: `python -m pytest tests/api/test_conservative_valuation.py -q`
-Expected: FAIL — `ImportError: cannot import name 'conservative_valuation_params'`
+Run: `python -m pytest tests/api/test_conservative_case.py -q`
+Expected: FAIL — `ModuleNotFoundError: No module named 'apps.api.services.conservative_case'`
 
-- [ ] **Step 3: Implement it**
-
-Append to `apps/api/services/corporate_metrics_service.py`:
+- [ ] **Step 3: Implement the generator**
 
 ```python
-# Which ValuationAssumptions field each benchmark column feeds, and the unit
-# that field expects. The dataset is entirely fractions; ValuationAssumptions is
-# MIXED. Getting this table wrong produces a silent 100x error in a
-# plausible-looking number, so the conversion is declared per field and never
-# applied in bulk.
-_BENCHMARK_TO_ASSUMPTION = {
-    # benchmark column      assumption field        metrics attr   target unit
-    "revenue_growth":      ("revenue_growth_rate",  "growth",      "fraction"),
-    "operating_margin":    ("operating_margin",     "roic",        "fraction"),
-    "effective_tax_rate":  ("tax_rate",             None,          "fraction"),
-    "cost_of_capital":     ("wacc",                 "wacc",        "fraction"),
-    "unlevered_beta":      ("unlevered_beta",       "unlevered_beta", "ratio"),
-    "reinvestment_rate":   ("reinvestment",         "reinvestment", "percent"),
-}
+# apps/api/services/conservative_case.py
+"""Build a conservative valuation case for one ticker from an industry benchmark.
+
+The wiring that lets the segment build-up engine value a listed company. One
+segment, named for the company: a listed company has no published segment split,
+so one segment is the whole business.
+
+THE FADE IS APPLIED TO ENDPOINTS, NOT PER YEAR. The engine already interpolates
+-- `margin_path` ramps base_margin to margin_target, `wacc_path` ramps
+wacc_initial to wacc_stable, `tax_rate_path` ramps effective_tax_rate to the
+marginal rate. Fading year by year on top of that would apply convergence twice.
+
+Amounts are in billions and rates are fractions, matching both the engine and
+Damodaran's dataset.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from packages.core_finance.industry_benchmark import SectorBenchmark, fade
+
+HORIZON_YEARS = 10
 
 
-def conservative_valuation_params(
-    metrics: CorporateMetrics,
+@dataclass(frozen=True)
+class CompanyBaseline:
+    """What the company is today, from its own statements. Billions, fractions."""
+
+    base_revenue: float
+    base_margin: float
+    current_roic: float
+    current_sales_to_capital: float
+    current_growth: float
+    cash: float
+    debt: float
+    shares: float
+    source_years: tuple[int, ...]
+
+
+def _claim(benchmark: SectorBenchmark, column: str, vintage: str,
+           company_value: float, chosen: float) -> str:
+    average = benchmark.columns[column]
+    return (
+        f"Top {len(average.industries)} industries by after-tax ROC in "
+        f"{benchmark.sector} ({', '.join(average.industries)}), vintage {vintage}, "
+        f"average {column} {average.value:.4f}. The company's own value is "
+        f"{company_value:.4f}; the conservative endpoint is {chosen:.4f}."
+    )
+
+
+def _narrative(field: str, claim: str, vintage: str, three_p: str) -> dict:
+    return {
+        "input_field": field,
+        "claim": claim,
+        "evidence_source": f"damodaran_industry_{vintage}",
+        # Never `confirmed`: the benchmark is a real average, but applying it to
+        # THIS company is this model's inference.
+        "confidence": "derived",
+        "three_p": three_p,
+    }
+
+
+def build_conservative_case(
+    ticker: str,
+    baseline: CompanyBaseline,
     benchmark: SectorBenchmark,
     *,
-    year: int = 5,
-    horizon: int = 5,
-) -> ValuationAssumptions:
-    """`valuation_params_from_metrics`, with each input faded toward the sector.
+    vintage: str,
+    riskfree_rate: float,
+    marginal_tax_rate: float,
+    base_year: int,
+) -> dict:
+    """A `create_case` payload valuing `ticker` against its sector benchmark."""
+    full_basket = max(
+        (len(a.industries) for a in benchmark.columns.values()), default=0
+    )
 
-    Sits BESIDE the existing function rather than replacing it: the DCF runs
-    twice and both values are returned, so a change in valuation can always be
-    traced to the assumption that moved.
+    def faded(column: str, company_value: float, direction: str) -> tuple[float, dict | None]:
+        average = benchmark.columns.get(column)
+        if average is None:
+            return company_value, None
+        chosen = fade(company_value, average.value, direction,
+                      year=HORIZON_YEARS, horizon=HORIZON_YEARS)
+        three_p = "probable" if len(average.industries) == full_basket else "plausible"
+        return chosen, {"claim": _claim(benchmark, column, vintage, company_value, chosen),
+                        "three_p": three_p}
 
-    `year=horizon` by default, which is the fully-faded terminal assumption --
-    terminal value dominates enterprise value, so that is where the conservatism
-    actually lands.
-    """
-    params = valuation_params_from_metrics(metrics)
-    updates: dict[str, float] = {}
+    margin_target, margin_meta = faded("operating_margin", baseline.base_margin,
+                                       "lower_is_conservative")
+    roic_stable, _ = faded("after_tax_roc", baseline.current_roic, "lower_is_conservative")
+    s2c, s2c_meta = faded("sales_to_capital", baseline.current_sales_to_capital,
+                          "lower_is_conservative")
+    growth, growth_meta = faded("revenue_growth", baseline.current_growth,
+                                "lower_is_conservative")
+    tax_rate, _ = faded("effective_tax_rate", marginal_tax_rate, "higher_is_conservative")
+    wacc, _ = faded("cost_of_capital", riskfree_rate + 0.045, "higher_is_conservative")
 
-    for column_key, (field_name, metrics_attr, unit) in _BENCHMARK_TO_ASSUMPTION.items():
-        direction = FADE_DIRECTIONS.get(column_key)
-        average = benchmark.columns.get(column_key)
-        current = getattr(params, field_name, None)
-        if direction is None or average is None or current is None:
-            continue
+    revenue_target = baseline.base_revenue * (1.0 + growth) ** HORIZON_YEARS
 
-        # Bring the benchmark (always a fraction) into the field's own unit.
-        if unit == "percent":
-            benchmark_value = average.value * 100.0
-        else:
-            benchmark_value = average.value
+    narratives = [
+        _narrative("base_revenue",
+                   f"FY{baseline.source_years[-1]} revenue from stored statements, "
+                   f"years {baseline.source_years}.", vintage, "probable"),
+        _narrative("base_margin",
+                   f"FY{baseline.source_years[-1]} operating income over revenue, "
+                   f"from stored statements.", vintage, "probable"),
+        _narrative("revenue_target",
+                   f"{baseline.base_revenue:.4f} compounded at {growth:.4f} for "
+                   f"{HORIZON_YEARS} years. " + (growth_meta or {}).get("claim", ""),
+                   vintage, (growth_meta or {}).get("three_p", "plausible")),
+        _narrative("margin_target", (margin_meta or {}).get("claim", ""), vintage,
+                   (margin_meta or {}).get("three_p", "plausible")),
+        _narrative("sales_to_capital_early", (s2c_meta or {}).get("claim", ""), vintage,
+                   (s2c_meta or {}).get("three_p", "plausible")),
+        _narrative("sales_to_capital_late", (s2c_meta or {}).get("claim", ""), vintage,
+                   (s2c_meta or {}).get("three_p", "plausible")),
+    ]
 
-        updates[field_name] = fade(
-            float(current), benchmark_value, direction, year=year, horizon=horizon
-        )
-
-    if "wacc" in updates:
-        # Preserve the existing invariant: terminal growth must stay below WACC.
-        updates["terminal_growth_rate"] = min(
-            params.terminal_growth_rate, updates["wacc"] - 0.005
-        )
-
-    return params.model_copy(update=updates)
-```
-
-Add the imports at the top of the module:
-
-```python
-from packages.core_finance.industry_benchmark import (
-    FADE_DIRECTIONS,
-    SectorBenchmark,
-    fade,
-)
+    return {
+        "case_name": f"conservative_{ticker.upper()}_{vintage}",
+        "ticker": ticker.upper(),
+        "as_of_date": f"{base_year}-01-01",
+        "base_year": base_year,
+        "target_year": base_year + HORIZON_YEARS,
+        "riskfree_rate": riskfree_rate,
+        "wacc_initial": wacc,
+        "wacc_stable": wacc,
+        "wacc_converge_from": 6,
+        "marginal_tax_rate": marginal_tax_rate,
+        "effective_tax_rate": tax_rate,
+        "nol_balance": 0.0,
+        "roic_stable": roic_stable,
+        "terminal_growth": None,
+        # `equity_bridge` yields a single net-debt figure; the engine takes cash
+        # and debt separately and only their difference matters.
+        "cash": baseline.cash,
+        "debt": baseline.debt,
+        "ipo_proceeds": 0.0,
+        "shares_basic": baseline.shares,
+        "shares_new": 0.0,
+        "parent_case_id": None,
+        "segments": [{
+            "name": ticker.lower(),
+            "base_revenue": baseline.base_revenue,
+            "base_margin": baseline.base_margin,
+            "tam_target": None,
+            "market_share_target": None,
+            "revenue_target": revenue_target,
+            "margin_target": margin_target,
+            "sales_to_capital_early": s2c,
+            "sales_to_capital_late": s2c,
+            "ramp_start_year": 1,
+            "initial_growth": None,
+            "waypoint_gap_fraction": None,
+            "narratives": narratives,
+        }],
+    }
 ```
 
 - [ ] **Step 4: Run to verify they pass**
 
-Run: `python -m pytest tests/api/test_conservative_valuation.py -q`
-Expected: PASS, 9 tests.
+Run: `python -m pytest tests/api/test_conservative_case.py -q`
+Expected: PASS, 14 tests.
 
-- [ ] **Step 5: Run the full suite**
-
-Run: `python -m pytest tests/ -q`
-Expected: PASS, nothing existing broken.
-
-- [ ] **Step 6: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
-git add apps/api/services/corporate_metrics_service.py tests/api/test_conservative_valuation.py
-git commit -m "feat: conservative valuation assumptions faded toward the sector benchmark"
+git add apps/api/services/conservative_case.py tests/api/test_conservative_case.py
+git commit -m "feat: build a conservative segment case from an industry benchmark"
 ```
 
 ---
 
-### Task 8: The parallel scenario, and a reason whenever there isn't one
+### Task 8: Resolve a benchmark per ticker, and refuse rather than degrade
 
 **Files:**
-- Modify: `apps/api/services/corporate_dcf.py`
-- Test: `tests/api/test_conservative_valuation.py`
+- Modify: `apps/api/services/industry_benchmark_store.py`
+- Modify: `apps/api/services/db.py` (sector/industry on `corporate_quote_facts`)
+- Modify: `apps/api/services/acquisition/store.py` (persist them)
+- Test: `tests/api/test_conservative_case.py`
 
 **Interfaces:**
 - Consumes: everything above.
-- Produces: `resolve_for_ticker(ticker: str, *, as_of: str | None = None) -> tuple[SectorBenchmark | None, str | None]` in `apps/api/services/industry_benchmark_store.py`, returning `(benchmark, reason)` where exactly one is non-None.
+- Produces: `resolve_for_ticker(ticker: str, *, as_of: str | None = None) -> tuple[SectorBenchmark | None, str | None]` — exactly one of the two is non-None.
 
-- [ ] **Step 1: Write the failing tests**
+**Resolved for you:** `corporate_quote_facts` exists at `db.py:472` with
+`(ticker, market_cap, shares_outstanding, currency, beta, fetched_at)`.
+`save_quote_facts` is at `acquisition/store.py:52`. The `beta` column was added
+by additive `ALTER TABLE` at `db.py:755-757` — copy that pattern for `sector` and
+`industry`, and extend the INSERT in `save_quote_facts` to write them.
 
-Append to `tests/api/test_conservative_valuation.py`:
+- [ ] **Step 1: Add the two columns**
+
+In `apps/api/services/db.py`, add to the `corporate_quote_facts` CREATE TABLE:
+
+```sql
+    sector             TEXT DEFAULT '',
+    industry           TEXT DEFAULT '',
+```
+
+and in `_ensure_schema_compatibility`, beside the existing `beta` migration:
 
 ```python
-from apps.api.services.industry_benchmark_store import resolve_for_ticker
+    if "sector" not in quote_facts_columns:
+        conn.execute("ALTER TABLE corporate_quote_facts ADD COLUMN sector TEXT DEFAULT ''")
+    if "industry" not in quote_facts_columns:
+        conn.execute("ALTER TABLE corporate_quote_facts ADD COLUMN industry TEXT DEFAULT ''")
+```
+
+In `apps/api/services/acquisition/store.py`, extend `save_quote_facts`:
+
+```python
+            """INSERT OR REPLACE INTO corporate_quote_facts
+                   (ticker, market_cap, shares_outstanding, currency, beta,
+                    sector, industry, fetched_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (ticker, facts.market_cap, facts.shares_outstanding, facts.currency,
+             facts.beta, facts.sector, facts.industry,
+             datetime.now(timezone.utc).isoformat()),
+```
+
+- [ ] **Step 2: Write the failing tests**
+
+Append to `tests/api/test_conservative_case.py`:
+
+```python
+from apps.api.services.industry_benchmark_store import resolve_for_ticker, store_vintage
+from tests.fixtures.industry_rows_technology import TECHNOLOGY_ROWS
 
 
-@pytest.mark.parametrize("setup,expected_code", [
-    ("no_vintage", "no_vintage"),
-    ("no_industry", "no_industry"),
-    ("unmapped_industry", "unmapped_industry"),
-    ("sector_too_thin", "sector_too_thin"),
-])
-def test_every_failure_path_gives_a_distinct_reason(setup, expected_code):
-    """A missing benchmark produces NO conservative valuation, never a silently
-    degraded one -- and always says which of the four reasons applied."""
-    benchmark, reason = _arrange(setup)
-    assert benchmark is None
-    assert reason is not None
-    assert expected_code in reason
+def _seed_quote_facts(ticker, industry):
+    from apps.api.services.db import get_db
+    with get_db() as conn:
+        conn.execute(
+            "INSERT OR REPLACE INTO corporate_quote_facts "
+            "(ticker, market_cap, shares_outstanding, currency, beta, sector, industry, fetched_at) "
+            "VALUES (?, 1.0, 1.0, 'USD', 1.0, 'Technology', ?, '2026-01-01')",
+            (ticker.upper(), industry),
+        )
 
 
 def test_a_mapped_ticker_resolves_a_benchmark_with_provenance():
-    from apps.api.services.industry_benchmark_store import store_vintage
-    from tests.fixtures.industry_rows_technology import TECHNOLOGY_ROWS
-
     store_vintage("2026-01-01", TECHNOLOGY_ROWS)
-    benchmark, reason = _arrange("happy_path")
+    _seed_quote_facts("NVDA", "Semiconductors")
+    benchmark, reason = resolve_for_ticker("NVDA")
     assert reason is None
     assert benchmark.sector == "Technology"
     assert benchmark.ranked[0] == "Computers/Peripherals"
 
 
-def test_the_stored_assumption_valuation_is_unchanged():
-    """The regression guard on the parallel-scenario promise: adding the second
-    scenario must not move the first by a single digit."""
-    from apps.api.services.corporate_dcf import build_dcf_summary
+def test_no_vintage_gives_a_reason_not_a_benchmark():
+    _seed_quote_facts("NVDA", "Semiconductors")
+    benchmark, reason = resolve_for_ticker("NVDA")
+    assert benchmark is None
+    assert "no_vintage" in reason
 
-    before = build_dcf_summary("AAPL")
-    after = build_dcf_summary("AAPL")
-    assert before.estimated_value == after.estimated_value
-    assert before.enterprise_value == after.enterprise_value
+
+def test_a_ticker_with_no_industry_gives_a_reason():
+    store_vintage("2026-01-01", TECHNOLOGY_ROWS)
+    _seed_quote_facts("XYZ", "")
+    benchmark, reason = resolve_for_ticker("XYZ")
+    assert benchmark is None
+    assert "no_industry" in reason
+
+
+def test_an_unmapped_industry_names_the_value_so_the_map_can_be_extended():
+    store_vintage("2026-01-01", TECHNOLOGY_ROWS)
+    _seed_quote_facts("XYZ", "Llama Farming")
+    benchmark, reason = resolve_for_ticker("XYZ")
+    assert benchmark is None
+    assert "unmapped_industry" in reason
+    assert "Llama Farming" in reason
+
+
+def test_a_sector_too_thin_to_benchmark_gives_a_reason():
+    store_vintage("2026-01-01", [TECHNOLOGY_ROWS[0]])
+    _seed_quote_facts("NVDA", "Semiconductors")
+    benchmark, reason = resolve_for_ticker("NVDA")
+    assert benchmark is None
+    assert "sector_too_thin" in reason
 ```
 
-**Implementer note:** `_arrange` is a helper you write in this test module. It
-should set up each condition and call `resolve_for_ticker`. Write it explicitly
-per case rather than with shared branching — four small arrangements read better
-than one parameterised one, and the parametrize above exists to keep the four
-reason codes visible in one place.
+- [ ] **Step 3: Run to verify they fail**
 
-- [ ] **Step 2: Run to verify they fail**
-
-Run: `python -m pytest tests/api/test_conservative_valuation.py -q`
+Run: `python -m pytest tests/api/test_conservative_case.py -q`
 Expected: FAIL — `ImportError: cannot import name 'resolve_for_ticker'`
 
-- [ ] **Step 3: Implement resolution with reasons**
+- [ ] **Step 4: Implement resolution**
 
 Append to `apps/api/services/industry_benchmark_store.py`:
 
 ```python
+def _stored_industry(ticker: str) -> str:
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT industry FROM corporate_quote_facts WHERE ticker = ?",
+            (ticker.upper(),),
+        ).fetchone()
+    return (row["industry"] or "") if row else ""
+
+
 def resolve_for_ticker(
     ticker: str, *, as_of: str | None = None
 ) -> tuple[SectorBenchmark | None, str | None]:
     """Resolve a sector benchmark for one ticker.
 
     Returns `(benchmark, None)` or `(None, reason)`. Exactly one is non-None: a
-    missing or unreliable benchmark yields NO conservative valuation rather than
-    a silently degraded one. Falling back to an all-industry average would
-    produce a number that looks like a sector benchmark and is not one.
+    missing or unreliable benchmark yields NO case rather than a silently
+    degraded one. Falling back to an all-industry average would produce a number
+    that looks like a sector benchmark and is not one.
     """
     vintage = latest_vintage(on_or_before=as_of)
     if vintage is None:
-        return None, f"no_vintage: no industry benchmark data has been loaded"
+        return None, "no_vintage: no industry benchmark data has been loaded"
 
-    industry = _stored_yahoo_industry(ticker)
+    industry = _stored_industry(ticker)
     if not industry:
         return None, f"no_industry: {ticker} has no industry from the quote source"
 
@@ -1685,8 +1901,7 @@ def resolve_for_ticker(
     sector = sector_for_industry(mapped)
     if sector is None:
         return None, (
-            f"unmapped_industry: {mapped!r} is not in any sector in "
-            f"SECTOR_TO_INDUSTRIES"
+            f"unmapped_industry: {mapped!r} is in no sector in SECTOR_TO_INDUSTRIES"
         )
 
     names = set(SECTOR_TO_INDUSTRIES[sector])
@@ -1697,7 +1912,7 @@ def resolve_for_ticker(
         return None, f"sector_too_thin: {exc}"
 ```
 
-Add the imports this needs:
+with these imports:
 
 ```python
 from apps.api.services.industry_maps import (
@@ -1712,39 +1927,418 @@ from packages.core_finance.industry_benchmark import (
 )
 ```
 
-`_stored_yahoo_industry(ticker)` reads the industry persisted by Task 6. Write it
-against whatever store `QuoteFacts` already writes to; if the acquisition layer
-does not yet persist it, add the column alongside the existing quote-fact columns
-following the same additive-migration pattern used in Task 5.
-
-- [ ] **Step 4: Add the parallel scenario to the DCF output**
-
-In `apps/api/services/corporate_dcf.py`, inside `_build_dcf_outputs`, after the
-existing valuation is computed, add the second pass. Do not alter the first.
-
-```python
-    benchmark, benchmark_reason = resolve_for_ticker(ticker)
-    conservative = None
-    if benchmark is not None:
-        conservative_params = conservative_valuation_params(metrics, benchmark)
-        conservative = _value_with(conservative_params)
-```
-
-Return both, plus `benchmark_reason`, plus the per-assumption deltas between
-`params` and `conservative_params`. Follow the shape the existing `DCFSummary`
-already uses for its fields; add the new fields as `| None` so a ticker without a
-benchmark serialises unchanged.
-
 - [ ] **Step 5: Run the full suite**
 
 Run: `python -m pytest tests/ -q`
-Expected: PASS.
+Expected: PASS. No existing test should change — the conservative valuation runs
+on a different engine and stores a separate case, so there is no shared path
+along which it could perturb `corporate_dcf`.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add apps/api/services/industry_benchmark_store.py apps/api/services/corporate_dcf.py tests/api/test_conservative_valuation.py
-git commit -m "feat: return the conservative scenario beside the stored-assumption DCF"
+git add apps/api/services/industry_benchmark_store.py apps/api/services/db.py apps/api/services/acquisition/store.py tests/api/test_conservative_case.py
+git commit -m "feat: resolve a sector benchmark per ticker, or refuse with a reason"
+```
+
+---
+
+### Task 9: The statements → baseline adapter, and the entry point
+
+**Files:**
+- Create: `apps/api/services/company_baseline.py`
+- Modify: `apps/api/services/corporate_statement_metrics.py` (add one public function)
+- Test: `tests/api/test_company_baseline.py`
+
+**Why this task exists.** The final whole-branch review found the feature had no
+caller: `build_conservative_case` and `resolve_for_ticker` had zero production
+callers, and nothing constructed a `CompanyBaseline`. Eight per-task reviews all
+passed because each task did its own job and no task owned the seam. This closes
+it.
+
+**Interfaces:**
+- Consumes:
+  - `resolve_for_ticker(ticker, *, as_of=None) -> tuple[SectorBenchmark | None, str | None, str | None]` returning `(benchmark, vintage, reason)` — `apps/api/services/industry_benchmark_store.py`
+  - `build_conservative_case(ticker, baseline, benchmark, *, vintage, riskfree_rate, marginal_tax_rate, base_year) -> dict` and `CompanyBaseline` — `apps/api/services/conservative_case.py`
+  - `create_case(payload) -> int` — `apps/api/services/valuation_case.py`
+  - `load_equity_bridge(ticker, *, bundle_loader=...) -> EquityBridge` with fields `net_debt`, `non_operating_assets`, `diluted_shares_outstanding`, each a `BridgeInputMeta` carrying `.value` (billions, or None) and `.quality` — `apps/api/services/equity_bridge.py`
+  - `metrics_for_ticker(...)` / `CorporateMetrics` — fields `roic`, `wacc`, `growth` are PERCENT
+- Produces:
+  - `statement_baseline(ticker, *, bundle_loader=get_yahoo_statement_bundle) -> dict | None` in `corporate_statement_metrics.py`, returning `{"revenue_by_year": dict[int, float], "operating_income_by_year": dict[int, float], "invested_capital_by_year": dict[int, float]}` in RAW statement currency
+  - `build_company_baseline(ticker, *, metrics, bundle_loader=...) -> tuple[CompanyBaseline | None, str | None]`
+  - `generate_conservative_case(ticker, *, as_of=None, ...) -> tuple[int | None, str | None]` — the entry point, returning `(case_id, None)` or `(None, reason)`
+
+**THE UNITS BOUNDARY LIVES HERE.** This is the one place in the feature where a
+scale error is possible, and the whole branch has been built so that it can only
+happen in this file:
+
+- Statement figures are RAW CURRENCY. `CompanyBaseline.base_revenue` and the
+  cash/debt terms are BILLIONS. `equity_bridge._scaled` is the existing helper
+  and `load_equity_bridge` already returns billions — use it rather than
+  dividing by 1e9 by hand, so there is one convention, not two.
+- `CorporateMetrics.roic`, `.wacc` and `.growth` are PERCENT. `AAPL` is stored
+  as `{"growth": 6, "roic": 18, "wacc": 10}`. `CompanyBaseline` wants FRACTIONS.
+  Divide by 100 exactly once, here.
+- `base_margin` and `current_sales_to_capital` are ratios of two raw-currency
+  figures, so they are already dimensionless — do NOT scale them.
+
+**No network in tests.** `get_yahoo_statement_bundle` fetches from Yahoo. Every
+function here takes a `bundle_loader` injection, matching
+`yahoo_statement_metrics(..., bundle_loader=...)` and
+`load_equity_bridge(..., bundle_loader=...)`. Tests inject a fake.
+
+**Refuse, never default.** Every missing input produces a reason, not a
+substituted zero or an industry average. A baseline built on a defaulted figure
+would produce a confident valuation from data that does not exist.
+
+- [ ] **Step 1: Write the failing tests**
+
+```python
+# tests/api/test_company_baseline.py
+import pytest
+
+from apps.api.services.company_baseline import (
+    build_company_baseline,
+    generate_conservative_case,
+)
+from apps.api.models.schema_parts.corporate import CorporateMetrics
+
+
+def _metrics(**overrides):
+    base = dict(ticker="TEST", growth=20.0, roic=35.0, wacc=8.5)
+    base.update(overrides)
+    return CorporateMetrics(**base)
+
+
+def _baseline_source(**overrides):
+    """Raw-currency statement figures, as they come off a bundle."""
+    base = {
+        "revenue_by_year": {2024: 90_000_000_000.0, 2025: 100_000_000_000.0},
+        "operating_income_by_year": {2024: 27_000_000_000.0, 2025: 30_000_000_000.0},
+        "invested_capital_by_year": {2024: 30_000_000_000.0, 2025: 33_333_333_333.0},
+    }
+    base.update(overrides)
+    return base
+
+
+def test_revenue_is_converted_to_billions():
+    """A 100bn-revenue company yields 100.0, not 1e11. This is the single
+    boundary in the whole feature where a 10^9 error is possible."""
+    baseline, reason = build_company_baseline(
+        "TEST", metrics=_metrics(), statement_source=_baseline_source(),
+        net_debt=5.0, shares=1.0,
+    )
+    assert reason is None
+    assert baseline.base_revenue == pytest.approx(100.0)
+
+
+def test_percent_metrics_are_converted_to_fractions():
+    """CorporateMetrics stores roic/wacc/growth as percent. A 35.0 leaking
+    through as a fraction would be a 3500% return on capital."""
+    baseline, _ = build_company_baseline(
+        "TEST", metrics=_metrics(roic=35.0, wacc=8.5, growth=20.0),
+        statement_source=_baseline_source(), net_debt=5.0, shares=1.0,
+    )
+    assert baseline.current_roic == pytest.approx(0.35)
+    assert baseline.current_wacc == pytest.approx(0.085)
+    assert baseline.current_growth == pytest.approx(0.20)
+
+
+def test_base_margin_is_dimensionless_and_not_scaled():
+    """operating_income / revenue is a ratio of two raw-currency figures, so it
+    must NOT be divided by 1e9 alongside them."""
+    baseline, _ = build_company_baseline(
+        "TEST", metrics=_metrics(), statement_source=_baseline_source(),
+        net_debt=5.0, shares=1.0,
+    )
+    assert baseline.base_margin == pytest.approx(0.30)
+
+
+def test_sales_to_capital_is_revenue_over_invested_capital():
+    baseline, _ = build_company_baseline(
+        "TEST", metrics=_metrics(), statement_source=_baseline_source(),
+        net_debt=5.0, shares=1.0,
+    )
+    assert baseline.current_sales_to_capital == pytest.approx(3.0, rel=1e-4)
+
+
+def test_positive_net_debt_becomes_debt_and_zero_cash():
+    baseline, _ = build_company_baseline(
+        "TEST", metrics=_metrics(), statement_source=_baseline_source(),
+        net_debt=5.0, shares=1.0,
+    )
+    assert baseline.debt == pytest.approx(5.0)
+    assert baseline.cash == pytest.approx(0.0)
+
+
+def test_negative_net_debt_becomes_cash_and_zero_debt():
+    """A net-cash company. EV - debt + cash must reconstruct the same bridge."""
+    baseline, _ = build_company_baseline(
+        "TEST", metrics=_metrics(), statement_source=_baseline_source(),
+        net_debt=-12.0, shares=1.0,
+    )
+    assert baseline.cash == pytest.approx(12.0)
+    assert baseline.debt == pytest.approx(0.0)
+
+
+def test_source_years_names_the_years_actually_used():
+    baseline, _ = build_company_baseline(
+        "TEST", metrics=_metrics(), statement_source=_baseline_source(),
+        net_debt=5.0, shares=1.0,
+    )
+    assert baseline.source_years == (2024, 2025)
+
+
+@pytest.mark.parametrize("missing,expected", [
+    ("revenue_by_year", "no_revenue"),
+    ("operating_income_by_year", "no_operating_income"),
+    ("invested_capital_by_year", "no_invested_capital"),
+])
+def test_a_missing_statement_series_refuses_with_a_reason(missing, expected):
+    """Never a defaulted zero. A baseline built on a substituted figure produces
+    a confident valuation from data that does not exist."""
+    source = _baseline_source()
+    source[missing] = {}
+    baseline, reason = build_company_baseline(
+        "TEST", metrics=_metrics(), statement_source=source,
+        net_debt=5.0, shares=1.0,
+    )
+    assert baseline is None
+    assert expected in reason
+
+
+def test_a_missing_share_count_refuses():
+    baseline, reason = build_company_baseline(
+        "TEST", metrics=_metrics(), statement_source=_baseline_source(),
+        net_debt=5.0, shares=None,
+    )
+    assert baseline is None
+    assert "no_shares" in reason
+
+
+def test_a_missing_net_debt_refuses():
+    """Unlike a zero balance, a missing one is unknown. The argument in
+    `calculate_net_debt`'s docstring applies: a missing balance is not a zero
+    balance."""
+    baseline, reason = build_company_baseline(
+        "TEST", metrics=_metrics(), statement_source=_baseline_source(),
+        net_debt=None, shares=1.0,
+    )
+    assert baseline is None
+    assert "no_net_debt" in reason
+
+
+def test_zero_revenue_refuses_rather_than_dividing_by_zero():
+    source = _baseline_source(revenue_by_year={2025: 0.0})
+    baseline, reason = build_company_baseline(
+        "TEST", metrics=_metrics(), statement_source=source,
+        net_debt=5.0, shares=1.0,
+    )
+    assert baseline is None
+    assert "no_revenue" in reason
+```
+
+- [ ] **Step 2: Run to verify they fail**
+
+Run: `python -m pytest tests/api/test_company_baseline.py -q`
+Expected: FAIL — `ModuleNotFoundError: No module named 'apps.api.services.company_baseline'`
+
+- [ ] **Step 3: Implement `build_company_baseline`**
+
+`statement_source` is a plain dict so the unit conversion is testable without a
+bundle. The bundle-reading wrapper comes in Step 5.
+
+```python
+# apps/api/services/company_baseline.py
+"""Build a CompanyBaseline for one ticker, and generate its conservative case.
+
+The adapter the final whole-branch review found missing: without it,
+`build_conservative_case` had no caller and the feature had no entry point.
+
+THIS FILE OWNS THE UNITS BOUNDARY. Everywhere else in the feature, rates are
+fractions and money is billions, matching both the segment engine and
+Damodaran's dataset. Two conversions happen here and nowhere else:
+
+    statement currency -> billions   (revenue, and the equity-bridge terms)
+    CorporateMetrics percent -> fraction   (roic, wacc, growth)
+
+`base_margin` and `current_sales_to_capital` are ratios of two raw-currency
+figures and are therefore already dimensionless. Scaling them would be a
+1e9 error that no downstream guard would catch, because both would still be
+plausible floats.
+
+Every missing input refuses with a reason. A baseline built on a substituted
+zero produces a confident valuation from data that does not exist.
+"""
+
+from __future__ import annotations
+
+from apps.api.services.conservative_case import CompanyBaseline
+
+_BILLION = 1_000_000_000.0
+
+
+def build_company_baseline(
+    ticker: str,
+    *,
+    metrics,
+    statement_source: dict,
+    net_debt: float | None,
+    shares: float | None,
+) -> tuple[CompanyBaseline | None, str | None]:
+    """Assemble a baseline, or refuse with a reason. Exactly one is non-None."""
+    revenue = statement_source.get("revenue_by_year") or {}
+    operating_income = statement_source.get("operating_income_by_year") or {}
+    invested_capital = statement_source.get("invested_capital_by_year") or {}
+
+    years = sorted(set(revenue) & set(operating_income) & set(invested_capital))
+    if not revenue or not years or not revenue.get(years[-1] if years else None):
+        return None, f"no_revenue: {ticker} has no usable revenue in its stored statements"
+    if not operating_income:
+        return None, f"no_operating_income: {ticker} has no operating income in its stored statements"
+    if not invested_capital:
+        return None, f"no_invested_capital: {ticker} has no invested capital in its stored statements"
+
+    latest = years[-1]
+    latest_revenue = float(revenue[latest])
+    if latest_revenue <= 0:
+        return None, f"no_revenue: {ticker}'s latest revenue is {latest_revenue}, which cannot anchor a growth path"
+    latest_capital = float(invested_capital[latest])
+    if latest_capital <= 0:
+        return None, f"no_invested_capital: {ticker}'s invested capital is {latest_capital}"
+
+    if shares is None or shares <= 0:
+        return None, f"no_shares: {ticker} has no diluted share count in its statements"
+    if net_debt is None:
+        # A missing balance is not a zero balance -- the argument in
+        # `calculate_net_debt`'s docstring in dcf.py.
+        return None, f"no_net_debt: {ticker}'s net debt is unknown, not zero"
+
+    return CompanyBaseline(
+        base_revenue=latest_revenue / _BILLION,
+        # Dimensionless: a ratio of two raw-currency figures. NOT scaled.
+        base_margin=float(operating_income[latest]) / latest_revenue,
+        current_roic=float(metrics.roic) / 100.0,
+        current_sales_to_capital=latest_revenue / latest_capital,
+        current_growth=float(metrics.growth) / 100.0,
+        current_wacc=float(metrics.wacc) / 100.0,
+        cash=max(-float(net_debt), 0.0),
+        debt=max(float(net_debt), 0.0),
+        shares=float(shares),
+        source_years=tuple(years),
+    ), None
+```
+
+- [ ] **Step 4: Run to verify they pass**
+
+Run: `python -m pytest tests/api/test_company_baseline.py -q`
+Expected: PASS, 14 tests.
+
+- [ ] **Step 5: Add `statement_baseline` and the entry point**
+
+Add to `apps/api/services/corporate_statement_metrics.py` a public
+`statement_baseline(ticker, *, bundle_loader=get_yahoo_statement_bundle)` that
+returns the three raw-currency maps, reusing the module's existing private
+helpers (`_prefer_annual_map`, `_statement_map`, `_calculate_invested_capital`
+and the label constants already defined there) rather than reimplementing label
+matching. Return `None` when the bundle is `None`.
+
+Then in `company_baseline.py`:
+
+```python
+def generate_conservative_case(
+    ticker: str,
+    *,
+    as_of: str | None = None,
+    base_year: int,
+    riskfree_rate: float,
+    marginal_tax_rate: float,
+    metrics,
+    statement_source: dict | None,
+    net_debt: float | None,
+    shares: float | None,
+) -> tuple[int | None, str | None]:
+    """Resolve, build, and store a conservative case. Exactly one is non-None.
+
+    Dependencies are injected rather than fetched so this is testable without a
+    network. The caller wires `statement_baseline` and `load_equity_bridge`.
+    """
+    benchmark, vintage, reason = resolve_for_ticker(ticker, as_of=as_of)
+    if benchmark is None:
+        return None, reason
+    if statement_source is None:
+        return None, f"no_statements: {ticker} has no stored statement bundle"
+
+    baseline, reason = build_company_baseline(
+        ticker, metrics=metrics, statement_source=statement_source,
+        net_debt=net_debt, shares=shares,
+    )
+    if baseline is None:
+        return None, reason
+
+    payload = build_conservative_case(
+        ticker, baseline, benchmark, vintage=vintage,
+        riskfree_rate=riskfree_rate, marginal_tax_rate=marginal_tax_rate,
+        base_year=base_year,
+    )
+    try:
+        return create_case(payload), None
+    except ValueError as exc:
+        # Covers both a duplicate case_name and any engine guard the generated
+        # inputs trip. Both are legitimate refusals, not faults.
+        return None, f"not_storable: {exc}"
+```
+
+- [ ] **Step 6: Test the entry point end to end**
+
+```python
+def test_generate_produces_a_stored_runnable_case():
+    """The end-to-end gate this whole task exists to provide: benchmark ->
+    baseline -> case -> stored -> runnable."""
+    from apps.api.services.industry_benchmark_store import store_vintage
+    from apps.api.services.valuation_case import run_stored_case
+    from tests.fixtures.industry_rows_technology import TECHNOLOGY_ROWS
+    from apps.api.services.db import get_db
+
+    store_vintage("2026-01-01", TECHNOLOGY_ROWS)
+    with get_db() as conn:
+        conn.execute(
+            "INSERT OR REPLACE INTO corporate_quote_facts "
+            "(ticker, market_cap, shares_outstanding, currency, beta, sector, industry, fetched_at) "
+            "VALUES ('TEST', 1.0, 1.0, 'USD', 1.0, 'Technology', 'Semiconductors', '2026-01-01')"
+        )
+
+    case_id, reason = generate_conservative_case(
+        "TEST", base_year=2026, riskfree_rate=0.0456, marginal_tax_rate=0.25,
+        metrics=_metrics(), statement_source=_baseline_source(),
+        net_debt=5.0, shares=1.0,
+    )
+    assert reason is None
+    assert case_id > 0
+    result = run_stored_case(case_id)
+    assert result["enterprise_value"] > 0
+
+
+def test_generate_refuses_when_no_benchmark_resolves():
+    case_id, reason = generate_conservative_case(
+        "UNKNOWN", base_year=2026, riskfree_rate=0.0456, marginal_tax_rate=0.25,
+        metrics=_metrics(), statement_source=_baseline_source(),
+        net_debt=5.0, shares=1.0,
+    )
+    assert case_id is None
+    assert reason is not None
+```
+
+- [ ] **Step 7: Run the full suite**
+
+Run: `python -m pytest tests/ -q`
+Expected: PASS. Baseline is 758.
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add apps/api/services/company_baseline.py apps/api/services/corporate_statement_metrics.py tests/api/test_company_baseline.py
+git commit -m "feat: statements to baseline adapter and the conservative case entry point"
 ```
 
 ---
@@ -1752,29 +2346,49 @@ git commit -m "feat: return the conservative scenario beside the stored-assumpti
 ## Self-review notes
 
 **Spec coverage.** Data foundation → Tasks 1, 4, 5, 6. Resolver → Tasks 1–2.
-Fade → Task 3. Integration → Tasks 7–8. Error handling → Task 8's four reason
-codes plus Task 7's missing-column test. Testing → each task's own tests.
+Fade → Task 3. Case generator → Task 7. Per-ticker resolution and error
+handling → Task 8. Statements → baseline adapter and the entry point → Task 9.
+
+**Task 9 was added after the final whole-branch review, and its absence is the
+plan's own defect.** The first eight tasks each did their job and all eight
+per-task reviews passed, but no task owned the seam between them: nothing built
+a `CompanyBaseline`, so `build_conservative_case` had no caller and the feature
+had no entry point. This self-review originally claimed full spec coverage,
+which was wrong — the spec says the generator reads statements and the equity
+bridge, and no task did. A per-task review structurally cannot catch that.
+
+**Revised 2026-08-11, before any implementer was dispatched.** The original plan
+targeted `corporate_dcf`. It computes enterprise value from `base_fcff`,
+`revenue_growth_rate`, `wacc`, `terminal_growth_rate` and `esg_penalty` only;
+`operating_margin`, `tax_rate`, `unlevered_beta` and `debt_ratio` reach the
+response payload and the `report_id` hash and stop there, and `reinvestment` is
+never referenced. Four of six faded columns would have been inert. Tasks 1–6 were
+unaffected and are unchanged; Tasks 7–8 were rewritten against the segment
+build-up engine, which consumes all of them as real drivers.
 
 **Two spec items deliberately not implemented, and why:**
 
-1. **Acquisition scheduling.** The spec says the annual cadence fits the existing
-   acquisition layer's freshness rules. Task 5 provides manual
-   `parse_workbook` + `store_vintage` instead. An annual dataset does not need a
-   scheduler, and building one would be machinery ahead of need. If the
-   acquisition layer should own it, that is a follow-up task, not a gap here.
+1. **Acquisition scheduling.** The spec notes the annual cadence fits the
+   acquisition layer's freshness rules. Task 5 provides manual `parse_workbook`
+   + `store_vintage` instead. An annual dataset does not need a scheduler, and
+   building one would be machinery ahead of need.
 2. **The full 95-industry sector map.** Task 4 ships Technology worked out and
    the completeness test that fails until the rest is authored. The
-   classification is judgement that must be made by whoever implements it; the
-   test defines done rather than a placeholder deferring the work.
+   classification is judgement the implementer must make; the test defines done
+   rather than a placeholder deferring the work.
 
 **Known ambiguity resolved by choice:** the spec's worked example uses a top-3
 average while `resolve_benchmark` defaults to `top_n=5`. Both are tested. Three
 is the spec's illustration; five is the default because the request said "3 to
 5" and a wider basket is less sensitive to a single industry.
 
-**Carried forward from the spec, unresolved:**
-`valuation_params_from_metrics` feeds `metrics.roic` into `operating_margin`
-(`corporate_metrics_service.py:456`), and Task 7 fades that field against
-`Pre-tax Operating Margin`. If the existing mapping is wrong, the fade is
-comparing a return on capital against a margin. Resolve it before Task 7 or
-accept that the benchmark comparison is between two different quantities.
+**Watch during execution.** The generated case must satisfy the engine's own
+guards, which the generator does not currently check: `run_case` rejects
+`roic_stable` above the target-year marginal return, and `terminal_value`
+rejects `roic_stable` below the magnitude of terminal growth or below
+`wacc_stable` when growth is positive. A conservative `roic_stable` faded down
+toward a low sector ROC can trip the last of these. Task 7's
+`test_the_generated_case_runs_and_produces_a_positive_value` catches it for the
+fixture; if it fires for real tickers, the honest response is another
+error-handling row — refuse the case with a reason — not a clamp that quietly
+moves the number.

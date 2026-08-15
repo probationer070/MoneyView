@@ -75,6 +75,22 @@ def test_beta_round_trips_into_the_bundle_info():
     assert load_statement_bundle("BETA")["info"]["beta"] == 1.21
 
 
+def test_sector_and_industry_round_trip_through_save_quote_facts():
+    """save_quote_facts writes sector/industry; without this the columns are fetched but
+    never persisted, leaving the benchmark feature half-built."""
+    save_quote_facts("SECT", QuoteFacts("SECT", 4_000.0, 100.0, "USD", sector="Technology",
+                                         industry="Semiconductors"))
+
+    from apps.api.services.db import get_db as db_get_db
+    with db_get_db() as conn:
+        row = conn.execute(
+            "SELECT sector, industry FROM corporate_quote_facts WHERE ticker = 'SECT'"
+        ).fetchone()
+
+    assert row["sector"] == "Technology"
+    assert row["industry"] == "Semiconductors"
+
+
 def test_an_unknown_ticker_returns_none():
     assert load_statement_bundle("NOPE") is None
 

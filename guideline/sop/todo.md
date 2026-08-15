@@ -1069,6 +1069,234 @@ Deferred, not oversights:
   a large unrelated Pydantic-version reformatting (`allOf` wrappers and redundant `const`
   keys disappear under Pydantic 2.13), so it belongs in its own commit.
 
+## Active Track - Industry-Relative Conservative Valuation
+
+Plan: `.superpowers/sdd/2026-08-11-industry-relative-conservative-valuation/`
+
+- [x] Task 1 (2026-08-11) - Industry row model and per-column screening.
+      `packages/core_finance/industry_benchmark.py`: `BenchmarkColumn`,
+      `BENCHMARK_COLUMNS` (9 columns, each with an explicit `Unit` and a
+      plausibility band tighter than the engine's own validation),
+      `IndustryRow`, `MIN_FIRMS = 10`, `screen_value`/`screen_row`. Screening
+      is column-level (a bad cell does not reject its row's other columns)
+      and row-level (firm count only) as two separate functions. Fixture of
+      10 real Damodaran technology-sector rows in
+      `tests/fixtures/industry_rows_technology.py`, transcribed verbatim
+      (unrounded) since later tasks assert averages over them to 1e-12.
+      7 tests in `tests/core_finance/test_industry_benchmark.py`; full suite
+      695 passed. `tests/fixtures/__init__.py` added since the directory did
+      not exist yet, matching the existing `tests/<pkg>/__init__.py` pattern.
+      No storage or case-generator wiring yet -- pure module only.
+- [x] Task 2 (2026-08-11) - Ranking, averaging, and provenance.
+      `packages/core_finance/industry_benchmark.py`: `ColumnAverage`,
+      `SectorBenchmark`, `BenchmarkUnavailable`, `resolve_benchmark(sector,
+      rows, *, top_n=5, minimum=3)`. Ranks by after-tax ROC, takes the top
+      `top_n`, then averages each column INDEPENDENTLY over its own surviving
+      contributors -- one poisoned cell drops only its own column, not the
+      whole basket -- and a column with fewer than `minimum` survivors is
+      omitted rather than averaged over too few. `ranked`/`rejected` travel
+      with the result so a benchmark that later looks wrong is traceable. One
+      test in the task brief (`test_a_poisoned_cell_drops_only_its_own_column`)
+      asserted `top_n=3` over a 4-row fixture, which cannot satisfy its own
+      assertions -- the basket would hold only 2 non-poisoned
+      `reinvestment_rate` contributors, one short of the default minimum of 3;
+      corrected to `top_n=4` to match the test's documented intent. 9 new
+      tests in `tests/core_finance/test_industry_benchmark.py` (16 total in
+      that file); full suite 704 passed.
+- [x] Task 3 (2026-08-11) - The asymmetric fade.
+      `packages/core_finance/industry_benchmark.py`: `Direction` literal,
+      `FADE_DIRECTIONS` (6 of the 9 benchmark columns declare a direction;
+      `unlevered_beta`, `debt_to_capital`, `reinvestment_rate` deliberately
+      absent -- the segment engine takes WACC directly and treats
+      reinvestment as an output, not an input), `fade(company, benchmark,
+      direction, *, year, horizon)`. Linear convergence toward the benchmark,
+      reaching it exactly at `horizon`, year 1 already one step in; holds
+      (never fades toward optimism) when the company is already on the
+      conservative side. `sales_to_capital` fades `lower_is_conservative`
+      since a higher ratio is a benefit (less capital per revenue dollar),
+      not a cost -- inverting it would make capital-hungry companies look
+      cheaper. 10 new tests in `tests/core_finance/test_industry_benchmark.py`
+      (26 total in that file); full suite 714 passed.
+- [x] Task 4 (2026-08-11) - The sector and industry maps.
+      `apps/api/services/industry_maps.py`: `EXCLUDED_ROWS` (the sheet's two
+      total rows, named because firm-count screening rejects low counts and
+      these screen high), `SECTOR_TO_INDUSTRIES` (94 industries across 11
+      GICS-shaped sectors, covering every row in the 2026 vintage), and
+      `YAHOO_TO_DAMODARAN` (142 Yahoo labels, keyed lowercase), plus
+      `sector_for_industry` and `damodaran_industry_for_yahoo`. Industry
+      names are verbatim from the source sheet including its misspellings
+      ("Heathcare Information and Technology", "Rubber& Tires") -- a
+      corrected name resolves to no sector and silently disables the feature
+      for that industry. Every arguable classification carries a comment on
+      its own line. 7 tests in `tests/api/test_industry_maps.py`; full suite
+      721 passed. Completeness against the stored vintage is Task 5's gate.
+- [x] Task 5 (2026-08-11) - Vintage storage and workbook parsing.
+      `apps/api/services/industry_benchmark_store.py`: `parse_workbook`
+      (locates columns by HEADER TEXT, not position, since Damodaran
+      republishes annually and column order is not a contract),
+      `store_vintage`/`load_vintage` (keyed by the dataset's PUBLICATION date,
+      not the fetch date -- an annual dataset re-fetched daily must not
+      manufacture variation that did not occur), `latest_vintage`. Strengthens
+      the Task 4 sector-map completeness gate
+      (`test_every_industry_in_a_stored_vintage_is_classified`) to check all
+      96 industries in the real 2026 vintage via a checked-in fixture
+      (`tests/fixtures/damodaran_industries.txt`) instead of the 10 covered by
+      `TECHNOLOGY_ROWS`. Loading is manual (`store_vintage(vintage,
+      parse_workbook(path))`); wiring it into the acquisition scheduler is
+      deliberately not done, since an annual dataset does not need one. 8 new
+      tests across `tests/api/test_industry_benchmark_store.py` (new file, 7
+      tests) and `tests/api/test_industry_maps.py` (+1); full suite 729
+      passed.
+- [x] Task 6 (2026-08-12) - Persist Yahoo sector and industry end to end.
+      `QuoteFacts` already fetched `sector`/`industry` into memory and
+      discarded them. Adds the columns to `corporate_quote_facts` (additive
+      `ALTER TABLE`, following the existing `beta` column's pattern) and
+      writes them in `save_quote_facts`; without this the benchmark feature's
+      whole chain from ticker to sector has nothing to read. 3 new tests
+      across `tests/api/acquisition/test_store.py` (+1) and
+      `tests/api/test_quote_facts_industry.py` (new file, covering fetch,
+      missing-value default, and the DB round trip); full suite 732 passed.
+- [x] Task 7 (2026-08-12) - The conservative case generator.
+      `apps/api/services/conservative_case.py`: `CompanyBaseline` and
+      `build_conservative_case`, producing a `create_case` payload with one
+      segment (a listed company has no published segment split). The fade is
+      applied to ENDPOINTS at `year == horizon`, not per year: the segment
+      engine's own `margin_path`, `wacc_path` and `tax_rate_path` already
+      interpolate, so fading per year would apply convergence twice. The
+      company's own endpoint absent a benchmark is its current value held flat.
+      Nothing is clamped to fit the engine's guards -- see "Known divergences"
+      below. 17 tests in `tests/api/test_conservative_case.py`; full suite
+      749 passed.
+
+      Two deviations from the task brief, both tested. (1) The brief asserted
+      `effective_tax_rate == 0.22` against a marginal rate of 0.25. The column
+      is `higher_is_conservative` and the company's own endpoint IS the
+      marginal rate, so a sector averaging below it holds at 0.25; 0.22 would
+      fade toward optimism, which `fade` refuses by design. Split into two
+      tests (fades up to a 0.30 sector, holds at 0.25 against a 0.22 one).
+      (2) Added coverage for the roic_stable collision below and for the
+      payload round-tripping through `create_case` + `run_stored_case`.
+
+      RESOLVED during review (2026-08-12). `roic_stable` is now the worse of
+      two independent estimates of the same return rather than the faded
+      `after_tax_roc` alone:
+
+          roic_stable = min(faded after_tax_roc,
+                            margin_target x (1 - marginal_tax_rate)
+                            x sales_to_capital_late)
+
+      Damodaran's "After-tax ROC" is a BOOK return on EXISTING capital
+      (NOPAT / invested capital); the second term is the return on NEW capital
+      implied by the same table's margin and capital intensity. Where the first
+      exceeds the second the industry's book capital base is understated
+      relative to what its margin and turnover generate on new investment, and
+      carrying the higher figure as a TERMINAL return asserts the terminal
+      block earns more on new capital than the model's own margin and capital
+      intensity support -- which is exactly what `run_case`'s marginal-return
+      guard rejects. Taking the lower is the same worse-of rule the fade
+      already applies everywhere else, so it is conservative and consistent,
+      not a number moved until a guard passes.
+
+      Measured against all 11 real sectors of the 2026 vintage, the uncapped
+      version refused five: Consumer Discretionary (roic 0.2238 vs ceiling
+      0.2024), Financials (0.2200 vs 0.1932), Industrials (0.2561 vs 0.2449),
+      Utilities (0.0595 vs 0.0512) and Real Estate. The cap raises the
+      ceiling above the reported ROC for the first four, but see the
+      correction below: it does NOT make all four valuable, because the
+      binding constraint for Utilities turns out to be the cost of capital,
+      not the ceiling.
+
+      CORRECTED (2026-08-15): the "10 of 11" figure above was retracted. It
+      used the BENCHMARK cost of capital as `wacc_stable`, but the generator
+      fades `higher_is_conservative`, so `wacc_stable = max(company, benchmark)`
+      -- the company's own WACC governs whenever it exceeds the sector's. The
+      corrected sweep, run against the real 2026 vintage at four company-WACC
+      levels:
+
+          company WACC 0.060 and 0.075 -> 9 of 11 valued; Real Estate and
+          Utilities refuse
+          company WACC 0.085 and 0.100 -> 8 of 11 valued; Energy, Real Estate
+          and Utilities refuse
+
+      Real Estate and Utilities refuse STRUCTURALLY -- their implied return on
+      new capital sits below any plausible cost of capital, at every WACC
+      tested. Energy's refusal is sensitive to the company's own WACC rather
+      than structural. Real Estate still refuses, correctly: its capped return
+      0.0531 sits below its faded cost of capital 0.0607, so `terminal_value`
+      rejects the positive-growth perpetuity. That refusal is an economic
+      statement about the sector -- its top industries genuinely earn below
+      their cost of capital -- not a technical failure, and the cap
+      deliberately does not address it, nor the `roic_stable <=
+      abs(terminal_growth)` guard. A later task turns those refusals into a
+      user-facing reason.
+
+      Also resolved during review (2026-08-12): `CompanyBaseline.current_wacc`
+      replaced a placeholder `riskfree_rate + 0.045` as the company-side
+      endpoint of the cost-of-capital fade. `cost_of_capital` fades
+      `higher_is_conservative`, so the invented constant WON in 10 of the 11
+      real sectors -- only Technology's average (0.0959) sits above it -- which
+      meant the benchmark's cost-of-capital column was effectively ignored and
+      Energy was refused on an artifact rather than on economics. The field is a
+      FRACTION; `CorporateMetrics.wacc` is stored in PERCENT (AAPL 10.0, MSFT
+      9.0), so whoever populates the baseline divides by 100. That conversion is
+      the likeliest 100x error in this module and is called out in the field's
+      own comment. For this field the benchmark is a FLOOR, not a ceiling: a
+      company borrowing more expensively than its sector keeps its own number.
+
+      Also resolved during review (2026-08-15): a benchmark missing a column
+      produced EMPTY narrative claims that stored cleanly. `resolve_benchmark`
+      omits any column with too few surviving industries; the affected fields
+      correctly held the company's own value, but the claim was `''`, which
+      clears both gates -- `_validate_narratives` only checks the field is
+      NAMED, and `claim` is `TEXT NOT NULL`, which an empty string satisfies.
+      Three numbers could enter the model stating no reason, the exact failure
+      the narrative rule exists to prevent. `faded` now always returns a claim
+      (`_missing_claim` names the column, the vintage and the held value) tagged
+      `three_p="plausible"`, since a held value has no sector corroboration.
+      The `(meta or {}).get("claim", "")` call sites are gone, so an empty claim
+      is no longer constructible rather than merely no longer produced.
+- [x] Task 8 (2026-08-15) - Resolve a benchmark per ticker, and refuse rather
+      than degrade. `apps/api/services/industry_benchmark_store.py`:
+      `resolve_for_ticker(ticker, *, as_of=None) -> tuple[SectorBenchmark |
+      None, str | None]`, exactly one non-None. Chains `latest_vintage` ->
+      stored `industry` on `corporate_quote_facts` -> `damodaran_industry_for_yahoo`
+      -> `sector_for_industry` -> `resolve_benchmark`, refusing at the first
+      missing link with one of five prefixed reasons (`no_vintage`,
+      `no_industry`, `unmapped_industry` x2, `sector_too_thin`); the unmapped
+      reasons name the offending value so the map can be extended without
+      guesswork. No all-industry fallback anywhere in the chain. The `sector`/
+      `industry` columns, their guarded `ALTER TABLE`s, and the extended
+      `save_quote_facts` INSERT were already in place from Task 6 -- verified,
+      not redone. 5 new tests in `tests/api/test_conservative_case.py` (25
+      total in that file); full suite 757 passed.
+- [x] Task 9 (2026-08-15) - The statements -> baseline adapter, and the entry
+      point. Closes the seam the whole-branch review found: nothing built a
+      `CompanyBaseline`, so `build_conservative_case` and `resolve_for_ticker`
+      had zero production callers. New `apps/api/services/company_baseline.py`
+      owns the feature's ONLY units boundary -- statement currency -> billions
+      for revenue and the bridge terms, `CorporateMetrics` percent -> fraction
+      for roic/wacc/growth -- while `base_margin` and
+      `current_sales_to_capital` stay unscaled because both are ratios of two
+      raw-currency figures. `generate_conservative_case` chains
+      `resolve_for_ticker` -> `build_company_baseline` ->
+      `build_conservative_case` -> `create_case`, injecting every dependency so
+      it runs with no network; a `create_case` `ValueError` (duplicate
+      `case_name`, or an engine guard the generated inputs trip) becomes a
+      `not_storable` reason rather than an exception. New
+      `statement_baseline(ticker, *, bundle_loader=...)` in
+      `corporate_statement_metrics.py` returns the three RAW-currency series,
+      reusing `_prefer_annual_map`/`_statement_map`/`_calculate_invested_capital`
+      -- so a case and a ROIC cannot disagree about the capital base. The three
+      Yahoo label tuples it shares with `yahoo_statement_metrics` were extracted
+      to module-level `REVENUE_LABELS`/`OPERATING_INCOME_LABELS`/`EQUITY_LABELS`
+      (they were already inline in three places) rather than copied a fourth
+      time. Departure from the brief: its reference `build_company_baseline`
+      intersected the three year-sets before checking each series, so an absent
+      operating-income series reported `no_revenue`; each series is now checked
+      on its own and an empty intersection has its own `no_shared_year` reason.
+      23 new tests in `tests/api/test_company_baseline.py`; full suite 781
+      passed.
+
 ## Archived Track - MoneyView Dev Monitor
 
 Completed basis retained from the previous active plan:
