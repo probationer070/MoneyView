@@ -343,6 +343,359 @@ how close the numbers happen to fall, and does not depend on company size.
       Also renamed `regionalMinard` to `regionalHurdle`: it survived the Minard removal as the
       Hurdle Rate Decomposition dataset and was carrying a deleted model's name.
 
+## Active Track - Segment Build-Up Valuation (todo3 pieces 3a+3b)
+
+Spec: `docs/superpowers/specs/2026-08-09-segment-buildup-valuation-design.md`
+Plan: `docs/superpowers/plans/2026-08-09-segment-buildup-valuation.md`
+Source: `guideline/sop/todo3.md`
+
+- [x] 3a Engine core - `packages/core_finance/segment_valuation.py`
+- [x] 3b Persistence + API - 3 tables, 4 endpoints, both SpaceX cases seeded
+- [ ] 3c Uncertainty + attribution - Monte Carlo, /fork, /diff, /pricing
+- [ ] 3d UI - valuation tab
+
+Known open: every `[V]` input is a placeholder pending SpaceX2026IPO.xlsx and
+SpaceX2026IPOUpdated.xlsx. The enterprise-value gap against Damodaran's $1.21T /
+$1.22T is recorded as a diagnostic, not a gate -- see spec section 1.2.
+
+- [x] Terminal ROIC consistency remediation (2026-08-10) - an independent
+      adversarial review found `roic_stable` shipped as an unconstrained input set
+      3.5x below the model's own marginal return on capital, accounting for
+      essentially the whole gap against the published valuation. Engine now computes
+      marginal ROIC, rejects a terminal return above it, and reports both
+      reinvestment rates. Four inputs that produced wrong numbers instead of errors
+      now raise at construction.
+      Spec: `docs/superpowers/specs/2026-08-10-terminal-roic-consistency-design.md`
+
+- [x] Terminal ROIC consistency, second pass (2026-08-10) - a follow-up
+      adversarial review found the first pass's remediation did not fix what it
+      targeted: the guard was one-sided (only rejected a terminal ROIC *above*
+      the marginal return, so the motivating defect -- `roic_stable=0.12`
+      against a 0.408 marginal return -- still ran), and `marginal_roic` itself
+      weighted by revenue instead of capital, overstating the firm's marginal
+      return by +9.9% (post) / +7.2% (pre). Fixed: the guard is now two-sided
+      (a terminal ROIC too far below the marginal return implies unmodelled
+      capital intensity, capped at 60%, same as too far above); `marginal_roic`
+      now weights by `revenue/sales_to_capital_late` (capital), which is the
+      only weighting under which `ReinvRate = g/ROIC` is an identity; the two
+      reported reinvestment rates (`terminal_reinvestment_rate` and
+      `reinvestment_rate_target_year`) are now joined by a third,
+      `explicit_reinvestment_rate_at_stable_growth`, struck at the same growth
+      rate so the pair is actually comparable; the seed moved from a per-case
+      erosion policy to one shared `roic_stable=0.33` and lowered pre-case
+      sales-to-capital, bringing the pre/post EV ratio (0.978) closer to the
+      source's 1.008 than the per-case policy's 0.908 was.
+
+Still open from that review, deliberately out of scope:
+- Case-level inputs carry no narrative rows, so `roic_stable` -- the most valuable
+  number in the model -- cannot carry a claim in the data.
+- Base-year off-by-one: the seed labels its revenues FY2025 while setting
+  `base_year=2026`, making the horizon 10 where the figures imply 11 (~6% EV).
+- Growth-path shape: the decaying curve makes year 1 always the fastest, so the model
+  cannot express the slowed near-term growth todo3 R3 records as `[C]`.
+- API lifecycle: no update or delete endpoint; structural validation fires at `/run`
+  rather than `POST`; horizon is unbounded.
+
+- [x] Margin-path year-1 alignment fix (2026-08-10) - `margin_path` returned
+      `margin_1 == base_margin` exactly, todo3 P2's literal phi(1)=1, so
+      improvement happened over `n-1` steps starting in year 2. But
+      `revenue_path` applies a full year of growth in year 1 (todo3 R3, the
+      seeded launch segment goes 4.1 -> 6.714), so a year-0 `base_margin` was
+      being priced onto year-1 revenue. The seeded launch segment's year-1 loss
+      widened 63% purely from the offset, ~64% of the seeded post case's
+      negative explicit-period PV. Fixed: `margin_t = base_margin +
+      (margin_target - base_margin) x t / n`, giving year 1 one step of margin
+      convergence to match revenue's one step of growth; `t = n` is unchanged
+      (`margin_target` exactly), so target-year totals (400.0/158.5 post,
+      320.0/151.0 pre) are unaffected. Seeded launch year-1 margin: -10.00% ->
+      -4.50%. Post case `pv_explicit`: -21.70 -> -7.91. Post EV: 1282.06 ->
+      1295.86. Pre EV: 1310.9 -> 1323.66. This is a deliberate deviation from
+      todo3 P2's literal shape -- see "Known divergences from the source" below.
+
+### Known divergences from the source
+
+1. **Near-term growth no longer runs the wrong way (closed 2026-08-11).** The
+   engine's consolidated year-1 growth was **+55%** (both seeded cases) against
+   todo3 section 4's *confirmed* 2025 actual of **+33%**, contradicting todo3
+   R3's `[C]`-tagged record that Damodaran's headline revision was to **slow**
+   near-term growth. Fixed by adding an `initial_growth` input (an anchored
+   growth curve that pins year 1 to an observed rate and lands exactly on
+   `target_revenue` at year n) and seeding it with todo3 section 4's confirmed
+   2025 segment actuals -- launch 7.64%, connectivity ~50%, ai ~22%; `expansion`
+   takes none, since it has no revenue today. Plan and design:
+   `docs/superpowers/specs/2026-08-10-growth-curve-near-term-design.md` and
+   `docs/superpowers/plans/2026-08-11-growth-curve-near-term.md`.
+
+   Consolidated year-1 growth is now **+38.7%**: closer to the confirmed +33%,
+   and the residual traces to the base-revenue split, which the seed's own
+   narratives record as an assumption rather than a derivation (see
+   `_BASE_CLAIMS` in `apps/api/services/valuation_seed.py`), not a further
+   modelling gap.
+
+   The consolidated path's non-monotonicity at the expansion ramp is
+   **unchanged**: year 7's growth rate still exceeds year 6's in both cases
+   (pre: 37.3% -> 48.2%; post: 41.0% -> 55.7%) when the expansion segment's
+   ramp switches on, and no test covers the consolidated path.
+
+   **Amended 2026-08-11 (adversarial fix wave): the record above was one-sided.**
+   Pinning both the observed year-1 rate and the target-year revenue with a
+   single free growth-curve amplitude means a slower start is paid for in the
+   middle years, not spread evenly. On the post-prospectus case, year 5 growth
+   rises from 37% to 55% for launch and from 136% to 202% for ai (years 4
+   through 10 are higher than before this change for both segments);
+   connectivity is unaffected, since its solved amplitude was already ~0.0016.
+   "Slowed near-term growth" is true of year 1 only. Also amended: the three
+   `initial_growth` narratives were retagged from `confirmed`/`probable` to
+   `derived`/`probable` (launch, connectivity) and `derived`/`plausible` (ai) --
+   the 2025 actuals are confirmed, but using each one as the year-1 anchor is
+   this model's own inference about an interpolation todo3 R3 tags `[V]`, and
+   todo3 records a near-term slowdown `[C]` for launch and connectivity only,
+   not for ai. See `apps/api/services/valuation_seed.py`'s module docstring and
+   `_CONFIRMED_INITIAL_GROWTH`.
+
+   **Superseded 2026-08-11 by the spreadsheets: the anchor was removed from the
+   seed.** The source does not pin year-1 growth to an observed rate. S5's
+   year-1 growth is **58.6%** for launch, **63.6%** for connectivity and
+   **326.6%** for AI, against 2025 actuals of 7.6% / 49.8% / 22.2%. todo3 R3's
+   `[C]` claim that the June revision SLOWED near-term growth is nonetheless
+   confirmed as a pre-to-post comparison -- launch's year-1 growth falls from
+   160.7% (S4) to 58.6% (S5) -- but the mechanism is not an anchor, and not the
+   target cut alone either. Decomposed: holding the 70,000 target and swapping
+   S4's interpolation for S5's gives 107.2% (-53.5pp); cutting the target to
+   40,000 takes it the rest of the way (-48.6pp). The two contribute about
+   equally. Reading "slowed near-term growth" as an instruction to pin year 1
+   was this model's inference, and it was wrong.
+
+   `initial_growth` is now `None` on every seeded segment; removing it also
+   improved the post case's fit against the source, from -0.65% to -0.41%. The
+   anchored curve stays in the engine as a generic option, with its tests
+   intact -- it is a legitimate MoneyView feature, just not a reproduction of
+   Damodaran. The "+38.7% consolidated year-1 growth" figure recorded above no
+   longer describes the seed.
+
+2. **`base_margin` contradicts its own documented contract.** `SegmentSpec`
+   documents it as the R&D-adjusted operating margin, but the seeded values
+   give a base EBIT of -0.232, close to todo3 section 4's *reported* operating
+   loss of -2.57 rather than its R&D-adjusted EBITR of +4.0. So the margin path
+   ramps from a reported basis to targets todo3 justifies specifically by the
+   R&D adjustment.
+
+   **Amended 2026-08-11: the contradiction is the source's, and is now carried
+   deliberately.** The workbooks' base margins (`Valuation output!B8:B11`, 8% /
+   10% / -5% / 0%, identical in both) are typed constants that do not reconcile
+   with their own base-year EBIT row either: row 12 gives -0.317 pre and +4.020
+   post, the R&D-adjusted reported figures, against 1.463 and 1.306 implied by
+   the margins. Seeded at the source's values, tagged `confirmed` for
+   provenance and `plausible` on the 3P scale for exactly this reason. The base
+   year is not discounted, so it does not enter enterprise value. What remains
+   open is R&D capitalization itself (`Input sheet!B15` is "Yes" in both
+   workbooks; not implemented here).
+
+3. **Case-level inputs carry no narrative rows.** `roic_stable` determines a
+   terminal value that is ~87% of the source's own enterprise value, yet it
+   states no reason, because the narrative rule covers segment fields only.
+   Closing this needs a schema change (a `case_narrative` table, or a nullable
+   `segment_id` on `segment_narrative`).
+
+   **Now the most valuable open item (2026-08-11).** Every *segment* input is a
+   spreadsheet transcription, so the narrative layer is fully populated and
+   honest there -- and the contrast makes the case-level gap the last place a
+   value drives the model while stating nothing. It also absorbed the
+   terminal-ROIC guard's job: the numeric bound that stood in for provenance
+   was removed on 2026-08-11 for rejecting the source's own 0.15, which leaves
+   provenance with nothing enforcing it at the case level.
+
+4. **The pre/post enterprise-value direction runs opposite to the source, and
+   cannot be corrected within the source's own confirmed constraints.** todo3
+   section 3 records enterprise value rising slightly, $1.21T -> $1.22T. The
+   model has it falling: pre 1320.79, post 1309.85.
+
+   Investigated 2026-08-11 rather than assumed. An input-by-input attribution
+   from pre to post shows the individual effects summing to +154 against an
+   actual move of -13.5, so interactions dominate: doubling AI's revenue target
+   while halving its margin leaves target-year AI EBIT nearly unchanged
+   (36 -> 40) but roughly doubles the capital needed to reach it from a 0.1
+   base, and that does not cancel.
+
+   The sign turns on one input. Sweeping the pre-case sales-to-capital ratios
+   as a multiple of the post values: 1.00 (no lowering at all) gives +8.07,
+   1.05 gives +0.83, the seeded values give -13.5, 1.10 gives -5.74. The sign
+   flips at roughly a 6% lowering -- and todo3 I2 confirms `[C]` that he DID
+   lower them, so any consistent value produces a falling EV. Reproducing the
+   source's +10 would require he raised them.
+
+   So the source's confirmed input and its reported outcome are mutually
+   inconsistent under this template. Note also that the source's own move is
+   +0.8%, smaller than the uncertainty on any single `[V]` input -- the
+   sales-to-capital sweep alone spans 22 points of enterprise value. No
+   reconstruction at this fidelity can meaningfully reproduce the sign of a
+   move that small, so this is recorded rather than fitted.
+
+   Two hypotheses were tested and rejected: raising AI's base revenue (holding
+   the corroborated 15.6 total) makes the gap *worse*, -13.5 -> -26.8 at a base
+   of 3.0, because base revenue moved into the low-return segment comes out of
+   the high-return ones; and a per-case terminal-ROIC policy was already known
+   worse for this metric, giving a pre/post ratio of 0.908 against a shared
+   value's 0.978.
+
+   Design: `docs/superpowers/specs/2026-08-11-sales-to-capital-late-scope-design.md`.
+
+   **Corrected 2026-08-11 (adversarial correction): the sweep above was
+   methodologically broken, and the "cannot be corrected" / "mutually
+   inconsistent" conclusion drawn from it is false.** The title and the sweep
+   paragraph above are kept verbatim as the record of what was published; this
+   note supersedes their conclusion.
+
+   The sweep varied the pre-case sales-to-capital ratios as a multiple of the
+   *post* values for BOTH the early and late years. Scaling the early ratios
+   that way destroys the confirmed years-1-5 lowering: at multiple 1.00 the
+   pre-case early ratios equal the post-case ones, i.e. no lowering at all.
+   The sweep therefore measured a world todo3 explicitly contradicts, so its
+   numbers (+8.07 at 1.00, sign flip at ~6%) describe that world, not the
+   source's.
+
+   Redone correctly -- holding the late ratios as divergence item 4's linked
+   design fixed them, and varying only the magnitude of the early-years
+   lowering (what I2's `[C]` actually constrains the *direction* of, leaving
+   the magnitude `[V]`):
+
+   | pre early ratios | early lowering | post - pre |
+   | --- | --- | --- |
+   | 1.00 / 1.00 / 0.60 | none | **+6.11** |
+   | 1.05 / 1.05 / 0.63 | ~5% | **+3.63** |
+   | 1.10 / 1.10 / 0.66 | ~10% | **+1.37** |
+   | 1.20 / 1.20 / 0.72 | ~17% | -2.57 |
+   | 1.35 / 1.35 / 0.81 | ~26% | -7.40 |
+   | 1.50 / 1.50 / 0.90 | ~33% | -11.26 |
+
+   The sign flips at roughly a **12%** lowering (pre ~= 1.13x post), not 6%. A
+   10% lowering is unambiguously "lowered", fully consistent with todo3 I2's
+   confirmed direction, and produces the source's sign.
+
+   The currently seeded pre-case early ratios are 1.5 / 1.5 / 0.8 against post
+   1.0 / 1.0 / 0.6 -- a 33% lowering for launch and connectivity and 25% for
+   ai, giving the actual measured gap of **-10.94**. (The 1.50 sweep row above
+   is not exactly the seeded case: it scales ai to 0.90 rather than the seeded
+   0.80, hence -11.26 rather than -10.94.) Those magnitudes are inventions,
+   tagged `assumed` in the seed's own narratives, which say the source gives
+   the direction, never the level.
+
+   **So the honest conclusion is the opposite of the one the title above
+   states: the sign is determined by the magnitude of the lowering, which the
+   source does not supply.** The chosen magnitude produces a falling EV; a
+   smaller magnitude, equally consistent with the confirmed direction,
+   produces the source's rising one. This is an **open calibration question**,
+   not a settled incompatibility between the source's input and its outcome.
+   Resolving it needs the spreadsheet (`SpaceX2026IPOUpdated.xlsx`), which
+   would give the actual levels.
+
+   The input-by-input attribution above and the two rejected hypotheses are
+   unaffected by this correction and stand as recorded. The +0.8%-scale
+   argument (the source's own move is smaller than the uncertainty on any
+   single `[V]` input) also stands as a separate reason not to chase the sign
+   by tuning -- see `docs/superpowers/specs/2026-08-11-sales-to-capital-late-scope-design.md`
+   §1.2, which keeps that argument while dropping the "cannot be corrected"
+   claim it used to support.
+
+   **Resolved 2026-08-11 by reading the spreadsheets.** Both S4
+   (`SpaceX2026IPO.xlsx`) and S5 (`SpaceX2026IPOUpdated.xlsx`) were retrieved
+   and read; every value is transcribed in
+   [`todo3-spreadsheet-values.md`](todo3-spreadsheet-values.md). The source's
+   enterprise value is **1,216,061 -> 1,224,448, a rise of +0.69%**, confirming
+   the direction todo3 section 3 records.
+
+   The cause is neither of the two framings above. The source's sales-to-capital
+   ratios (years 1-5 / years 6-10) are:
+
+   | Segment | S4 pre | S5 post |
+   | --- | --- | --- |
+   | Launch | 4 / 2 | 3 / 4 |
+   | Starlink | 10 / 5 | 3 / 5 |
+   | xAI | 2.5 / 1.5 | 1.5 / 2.5 |
+   | Other | 3 / 3 | 5 / 5 |
+
+   The *slope* reverses between the two valuations: S4 has the late ratio at or
+   below the early one (capital intensity rising with scale), S5 has it at or
+   above (capital intensity falling). Early ratios were lowered AND late ratios
+   raised. That is a change of shape, not of magnitude, so no single-magnitude
+   sweep of the kind above could ever have reached the source's sign. Both the
+   original conclusion and its correction were reasoning about the wrong
+   parameter.
+
+   This closes the open calibration question. It also supersedes the premise of
+   the linked design spec, whose scope decision was made without these values.
+
+   **Fully resolved 2026-08-11: the source's direction is an artifact of a
+   formula error, and this model's direction was right all along.**
+
+   S4's `Valuation output!D15:L15` computes launch's reinvestment as the change
+   in TOTAL revenue (row 7) divided by launch's sales-to-capital ratio, instead
+   of the change in launch's own revenue (row 3). Only year 1 is correct. S5's
+   row 15 reads row 3 in every column, so it was fixed between the workbooks.
+   Verified both ways: the buggy formula reproduces S4's stored values in all
+   ten columns; the correct one reproduces only year 1. Over ten years it gives
+   launch reinvestment of 119,682.5 against a correct 24,712.5 -- nearly 5x --
+   and discounting the excess accounts for 54.74 of enterprise value -- most of
+   the gap, not all of it. This engine's pre-case figure is 1280.16 against the
+   published 1216.06, a gap of 64.10; the error explains 85.4% of that, and the
+   remaining 9.36 is the within-block interpolation difference.
+
+   | | Enterprise value | Direction |
+   | --- | --- | --- |
+   | Source as published | 1216.06 -> 1224.45 | **+0.69%** |
+   | Source with S4 corrected | ~1270.8 -> 1224.45 | **-3.6%** |
+   | This engine | 1280.16 -> 1224.45 | **-4.4%** |
+
+   So todo3 line 158's headline -- *"This is why the enterprise value barely
+   moved"* -- rests on the error. The near-cancellation is real at target-year
+   EBIT (155.0 -> 160.0, +3.2%) and not real at enterprise value.
+
+   Three separate rounds of work treated this model's falling direction as its
+   own defect, including two published claims about why it could not be fixed.
+   The direction was never the defect. What made it look like one was comparing
+   against a figure without being able to see how it was computed.
+
+5. **The post-prospectus case reproduces its spreadsheet exactly (closed
+   2026-08-11).** PV explicit 161.8819499, PV terminal 1062.5660566, enterprise
+   value 1224.4480065, value per share 97.8276552, and the revenue path matches
+   `Valuation output` rows 3-5 cell for cell. Two engine changes were needed
+   beyond the input transcription: `waypoint_gap_fraction` (the two-block
+   gap-closing revenue curve the source actually uses) and `effective_tax_rate`
+   (10% held through year 5, then linear to the 25% marginal rate -- worth 19.4
+   of enterprise value on its own).
+
+   The pre-prospectus case reproduces the CORRECTED April valuation to within
+   1% and cannot reproduce the published one, by design. Its residual is the
+   within-block interpolation: S4 uses a constant 0.2 fraction in its first
+   block and a straight line in its second, where S5 and this engine use
+   0.2/0.3/0.4/0.5 in both. Reproducing S4 exactly would need per-segment,
+   per-block shape configuration for a workbook that has no single rule --
+   deliberately not built.
+
+**Closed 2026-08-11.** This section used to record that no test asserted an
+explicit-period value against an independently computed expectation -- the
+confirmed-input gates were pure sums of the input literals and would pass
+against any revenue path, margin path, tax schedule or discounting scheme
+provided year 10 landed on target. That was only fixable once there was an
+independent expectation to assert against, which the spreadsheets supplied.
+
+`test_segment_valuation_spacex.py` and `tests/api/test_valuation_seed.py` now
+both assert enterprise value against the workbooks. The POST case is exact
+(`B31`, `B30`, `B32`, `B44` at abs=1e-6). The PRE case is asserted against the
+CORRECTED April figure, ~1270.8 at rel=0.01, and explicitly NOT against the
+published 1216.06 -- see divergence item 4.
+
+That 1% band is loose enough to hide a structural error on its own, so the pre
+case additionally pins what does not depend on the revenue shape: its terminal
+value and PV of terminal value match `B29`/`B30` exactly, and its year-1 and
+year-5 revenue match S4's own cells for all three earning segments. What remains
+unguarded on the pre side is the margin path within the explicit period, which
+the post case's exact assertions cover through the same shared code.
+
+The sum-of-literals gates are kept alongside, since they isolate a different
+failure: a target-year total that drifts tells you which input moved, where an
+enterprise-value bound only tells you something did.
+
 ## Active Track - Performance Instrumentation (sub-project 1 of 4)
 
 Design spec: `docs/superpowers/specs/2026-07-25-perf-instrumentation/`

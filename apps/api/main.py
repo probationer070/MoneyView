@@ -33,6 +33,7 @@ from apps.api.routes import (
     portfolio_router,
     report_router,
     stock_router,
+    valuation_router,
 )
 from apps.api.services.db import get_db, init_db
 from apps.api.services.market_data import MarketDataService
@@ -186,6 +187,7 @@ app.include_router(dev_monitor_router, prefix="/api/v1/dev", tags=["Dev Monitor"
 app.include_router(report_router, prefix="/api/v1/report", tags=["Report"])
 app.include_router(monte_carlo_router, prefix="/api/v1/monte-carlo", tags=["Monte Carlo"])
 app.include_router(stock_router, prefix="/api/v1/stock", tags=["Stock"])
+app.include_router(valuation_router, prefix="/api/v1/valuation", tags=["Valuation"])
 
 
 @app.get("/api/v1/health", tags=["Health"])

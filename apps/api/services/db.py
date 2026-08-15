@@ -477,6 +477,67 @@ CREATE TABLE IF NOT EXISTS corporate_quote_facts (
     beta                REAL,
     fetched_at          TEXT NOT NULL
 );
+
+-- ============================================================
+-- Schema: Segment build-up valuation cases (hand-authored)
+--
+-- Independent of the acquisition pipeline: a case is authored, not fetched, so
+-- a private or pre-IPO company with no ticker and no statements is a first-class
+-- subject. See docs/superpowers/specs/2026-08-09-segment-buildup-valuation-design.md
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS valuation_case (
+    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+    case_name          TEXT NOT NULL UNIQUE,
+    ticker             TEXT,                      -- NULL for private / pre-IPO
+    as_of_date         TEXT NOT NULL,
+    base_year          INTEGER NOT NULL,
+    target_year        INTEGER NOT NULL,
+    riskfree_rate      REAL NOT NULL,
+    wacc_initial       REAL NOT NULL,
+    wacc_stable        REAL NOT NULL,
+    wacc_converge_from INTEGER NOT NULL DEFAULT 6,
+    marginal_tax_rate  REAL NOT NULL,
+    nol_balance        REAL NOT NULL DEFAULT 0,
+    roic_stable        REAL NOT NULL,
+    terminal_growth    REAL,                      -- NULL means: use riskfree_rate
+    effective_tax_rate REAL,                      -- NULL means: marginal rate every year
+    cash               REAL NOT NULL DEFAULT 0,
+    debt               REAL NOT NULL DEFAULT 0,
+    ipo_proceeds       REAL NOT NULL DEFAULT 0,
+    shares_basic       REAL NOT NULL,
+    shares_new         REAL NOT NULL DEFAULT 0,
+    parent_case_id     INTEGER REFERENCES valuation_case(id)
+);
+
+CREATE TABLE IF NOT EXISTS segment (
+    id                     INTEGER PRIMARY KEY AUTOINCREMENT,
+    case_id                INTEGER NOT NULL REFERENCES valuation_case(id) ON DELETE CASCADE,
+    name                   TEXT NOT NULL,
+    base_revenue           REAL NOT NULL,
+    base_margin            REAL NOT NULL,
+    tam_target             REAL,
+    market_share_target    REAL,
+    revenue_target         REAL,
+    margin_target          REAL NOT NULL,
+    sales_to_capital_early REAL NOT NULL,
+    sales_to_capital_late  REAL NOT NULL,
+    ramp_start_year        INTEGER NOT NULL DEFAULT 1,
+    initial_growth         REAL,
+    waypoint_gap_fraction  REAL,
+    UNIQUE(case_id, name)
+);
+CREATE INDEX IF NOT EXISTS idx_segment_case ON segment(case_id);
+
+CREATE TABLE IF NOT EXISTS segment_narrative (
+    segment_id      INTEGER NOT NULL REFERENCES segment(id) ON DELETE CASCADE,
+    input_field     TEXT NOT NULL,
+    claim           TEXT NOT NULL,
+    evidence_source TEXT,
+    confidence      TEXT NOT NULL CHECK(confidence IN ('confirmed','derived','assumed')),
+    three_p         TEXT NOT NULL CHECK(three_p IN ('possible','plausible','probable')),
+    PRIMARY KEY (segment_id, input_field)
+);
 """
 
 
@@ -501,6 +562,20 @@ def init_db() -> None:
 
 def _ensure_schema_compatibility(conn: sqlite3.Connection) -> None:
     """Apply additive migrations for older local SQLite files."""
+    segment_columns = {row["name"] for row in conn.execute("PRAGMA table_info(segment)")}
+    if segment_columns and "initial_growth" not in segment_columns:
+        # Nullable, so no default is needed and existing rows keep the decaying
+        # curve. CREATE TABLE IF NOT EXISTS cannot add a column to a table that
+        # already exists, which is every developer database created before this.
+        conn.execute("ALTER TABLE segment ADD COLUMN initial_growth REAL")
+    if segment_columns and "waypoint_gap_fraction" not in segment_columns:
+        # Nullable for the same reason: existing rows keep whichever curve
+        # their other fields already select.
+        conn.execute("ALTER TABLE segment ADD COLUMN waypoint_gap_fraction REAL")
+    case_columns = {row["name"] for row in conn.execute("PRAGMA table_info(valuation_case)")}
+    if case_columns and "effective_tax_rate" not in case_columns:
+        # Nullable: existing rows keep taxing every year at the marginal rate.
+        conn.execute("ALTER TABLE valuation_case ADD COLUMN effective_tax_rate REAL")
     index_columns = {row["name"] for row in conn.execute("PRAGMA table_info(indices)")}
     if "dividends" not in index_columns:
         conn.execute("ALTER TABLE indices ADD COLUMN dividends REAL DEFAULT 0.0")

@@ -36,6 +36,10 @@ import { PortfolioCommandCenter } from "./components/PortfolioCommandCenter";
 import { PortfolioShell } from "./components/PortfolioShell";
 import { selectVisibleStocks, StockTileGrid, type GridFilter } from "./components/StockTileGrid";
 import { acquireNews, fetchBulkNews, summarizeAcquisition } from "@/lib/portfolioNews";
+import type {
+  CorporateComparisonHistoryPoint,
+  CorporateComparisonHistoryResponse,
+} from "../../../../packages/shared-types";
 import {
   buildPortfolioTickerMetrics,
   metricDisplayTitle,
@@ -176,32 +180,13 @@ export interface CorporateComparisonResponse {
   rows: CorporateComparisonRow[];
 }
 
-export interface CorporateComparisonHistoryPoint {
-  as_of_date: string;
-  generated_at: string;
-  snapshot_version: string;
-  snapshot_source: string;
-  comparison_universe: string;
-  benchmark_ticker: string;
-  stock_count: number;
-  // Nullable: both averages cover only the rows whose equity bridge resolved, so a
-  // snapshot with no such rows has no average at all. Render an unavailable state,
-  // never a zero.
-  average_expected_return_spread: number | null;
-  average_roic_minus_wacc: number;
-  average_dcf_value: number | null;
-  // Which definition average_dcf_value carries: enterprise value below 2, intrinsic value
-  // per share from 2 on. 0 means the snapshot predates the stored column.
-  metric_schema_version: number;
-  market_expected_return: number;
-}
-
-export interface CorporateComparisonHistoryResponse {
-  comparison_universe: string;
-  benchmark_ticker: string;
-  custom_tickers: string[];
-  points: CorporateComparisonHistoryPoint[];
-}
+// Defined once in packages/shared-types/portfolio.ts and re-exported here so the existing
+// `from "../page"` importers keep working. Two copies of a contract type drift; this one
+// already had, against the generated interface of the same name.
+export type {
+  CorporateComparisonHistoryPoint,
+  CorporateComparisonHistoryResponse,
+};
 
 interface CorporateComparisonStockHistoryPoint {
   as_of_date: string;
