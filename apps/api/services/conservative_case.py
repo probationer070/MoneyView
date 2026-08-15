@@ -58,9 +58,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from packages.core_finance.industry_benchmark import SectorBenchmark, fade
+from packages.core_finance.industry_benchmark import FADE_DIRECTIONS, SectorBenchmark, fade
 
 HORIZON_YEARS = 10
+
+# `wacc_stable` always equals `wacc_initial` here (both take the same faded
+# WACC), so `wacc_converge_from` never moves the WACC path -- it is flat by
+# construction, and this constant only ever governs the tax-rate ramp. Even
+# there it is inert whenever `effective_tax_rate` (== `max(marginal, sector)`)
+# holds at the marginal rate, which is the common case: it only bites when a
+# sector's average effective tax rate exceeds the company's marginal rate.
+_TAX_RAMP_START = 6
 
 
 @dataclass(frozen=True)
@@ -123,11 +131,15 @@ def _missing_claim(column: str, vintage: str, company_value: float) -> str:
     )
 
 
-def _narrative(field: str, claim: str, vintage: str, three_p: str) -> dict:
+def _narrative(field: str, claim: str, vintage: str, three_p: str,
+                *, source: str | None = None) -> dict:
     return {
         "input_field": field,
         "claim": claim,
-        "evidence_source": f"damodaran_industry_{vintage}",
+        # Benchmark-derived fields default to the vintage they were faded
+        # against; `base_revenue`/`base_margin` pass an explicit
+        # `"stored_statements"` since they never touch the benchmark.
+        "evidence_source": source or f"damodaran_industry_{vintage}",
         # Never `confirmed`: the benchmark is a real average, but applying it to
         # THIS company is this model's inference.
         "confidence": "derived",
@@ -173,17 +185,20 @@ def build_conservative_case(
                         "three_p": three_p}
 
     margin_target, margin_meta = faded("operating_margin", baseline.base_margin,
-                                       "lower_is_conservative")
-    faded_roc, _ = faded("after_tax_roc", baseline.current_roic, "lower_is_conservative")
+                                       FADE_DIRECTIONS["operating_margin"])
+    faded_roc, _ = faded("after_tax_roc", baseline.current_roic,
+                         FADE_DIRECTIONS["after_tax_roc"])
     s2c, s2c_meta = faded("sales_to_capital", baseline.current_sales_to_capital,
-                          "lower_is_conservative")
+                          FADE_DIRECTIONS["sales_to_capital"])
     growth, growth_meta = faded("revenue_growth", baseline.current_growth,
-                                "lower_is_conservative")
+                                FADE_DIRECTIONS["revenue_growth"])
     # The company's own endpoint is the MARGINAL rate -- no tax benefit it has
     # not demonstrated. A sector averaging below that can only lift the early
     # years' cash flow, so `fade` holds; only a sector above it moves this.
-    tax_rate, _ = faded("effective_tax_rate", marginal_tax_rate, "higher_is_conservative")
-    wacc, _ = faded("cost_of_capital", baseline.current_wacc, "higher_is_conservative")
+    tax_rate, _ = faded("effective_tax_rate", marginal_tax_rate,
+                       FADE_DIRECTIONS["effective_tax_rate"])
+    wacc, _ = faded("cost_of_capital", baseline.current_wacc,
+                    FADE_DIRECTIONS["cost_of_capital"])
 
     # The worse of the two estimates of the same return -- see the module
     # docstring. `marginal_roic` computes this same product from the segment's
@@ -198,10 +213,12 @@ def build_conservative_case(
     narratives = [
         _narrative("base_revenue",
                    f"FY{baseline.source_years[-1]} revenue from stored statements, "
-                   f"years {baseline.source_years}.", vintage, "probable"),
+                   f"years {baseline.source_years}.", vintage, "probable",
+                   source="stored_statements"),
         _narrative("base_margin",
                    f"FY{baseline.source_years[-1]} operating income over revenue, "
-                   f"from stored statements.", vintage, "probable"),
+                   f"from stored statements.", vintage, "probable",
+                   source="stored_statements"),
         _narrative("revenue_target",
                    f"{baseline.base_revenue:.4f} compounded at {growth:.4f} for "
                    f"{HORIZON_YEARS} years. " + growth_meta["claim"],
@@ -223,7 +240,7 @@ def build_conservative_case(
         "riskfree_rate": riskfree_rate,
         "wacc_initial": wacc,
         "wacc_stable": wacc,
-        "wacc_converge_from": 6,
+        "wacc_converge_from": _TAX_RAMP_START,
         "marginal_tax_rate": marginal_tax_rate,
         "effective_tax_rate": tax_rate,
         "nol_balance": 0.0,

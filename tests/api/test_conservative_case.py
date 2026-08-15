@@ -146,7 +146,14 @@ def test_every_segment_input_carries_a_derived_narrative():
                   "sales_to_capital_early", "sales_to_capital_late"):
         assert field in claims, field
         assert claims[field]["confidence"] == "derived"
-        assert claims[field]["evidence_source"] == "damodaran_industry_2026-01-01"
+    # `base_revenue`/`base_margin` never touch the benchmark -- they come from
+    # the company's own stored statements -- so they must not be attributed to
+    # the Damodaran vintage like the four benchmark-derived fields are.
+    for field in ("base_revenue", "base_margin"):
+        assert claims[field]["evidence_source"] == "stored_statements", field
+    for field in ("revenue_target", "margin_target",
+                  "sales_to_capital_early", "sales_to_capital_late"):
+        assert claims[field]["evidence_source"] == "damodaran_industry_2026-01-01", field
 
 
 def test_narratives_name_the_industries_behind_the_number():
@@ -290,32 +297,47 @@ def _seed_quote_facts(ticker, industry):
 def test_a_mapped_ticker_resolves_a_benchmark_with_provenance():
     store_vintage("2026-01-01", TECHNOLOGY_ROWS)
     _seed_quote_facts("NVDA", "Semiconductors")
-    benchmark, reason = resolve_for_ticker("NVDA")
+    benchmark, vintage, reason = resolve_for_ticker("NVDA")
     assert reason is None
     assert benchmark.sector == "Technology"
     assert benchmark.ranked[0] == "Computers/Peripherals"
 
 
+def test_the_returned_vintage_matches_the_one_the_benchmark_was_resolved_from():
+    """`build_conservative_case` stamps this vintage into `case_name` and every
+    `evidence_source`; it must be the vintage the benchmark actually came from,
+    not one recomputed by a second `latest_vintage()` call that could race a
+    concurrent store."""
+    store_vintage("2026-01-01", TECHNOLOGY_ROWS)
+    _seed_quote_facts("NVDA", "Semiconductors")
+    _, vintage, reason = resolve_for_ticker("NVDA")
+    assert reason is None
+    assert vintage == "2026-01-01"
+
+
 def test_no_vintage_gives_a_reason_not_a_benchmark():
     _seed_quote_facts("NVDA", "Semiconductors")
-    benchmark, reason = resolve_for_ticker("NVDA")
+    benchmark, vintage, reason = resolve_for_ticker("NVDA")
     assert benchmark is None
+    assert vintage is None
     assert "no_vintage" in reason
 
 
 def test_a_ticker_with_no_industry_gives_a_reason():
     store_vintage("2026-01-01", TECHNOLOGY_ROWS)
     _seed_quote_facts("XYZ", "")
-    benchmark, reason = resolve_for_ticker("XYZ")
+    benchmark, vintage, reason = resolve_for_ticker("XYZ")
     assert benchmark is None
+    assert vintage is None
     assert "no_industry" in reason
 
 
 def test_an_unmapped_industry_names_the_value_so_the_map_can_be_extended():
     store_vintage("2026-01-01", TECHNOLOGY_ROWS)
     _seed_quote_facts("XYZ", "Llama Farming")
-    benchmark, reason = resolve_for_ticker("XYZ")
+    benchmark, vintage, reason = resolve_for_ticker("XYZ")
     assert benchmark is None
+    assert vintage is None
     assert "unmapped_industry" in reason
     assert "Llama Farming" in reason
 
@@ -323,6 +345,7 @@ def test_an_unmapped_industry_names_the_value_so_the_map_can_be_extended():
 def test_a_sector_too_thin_to_benchmark_gives_a_reason():
     store_vintage("2026-01-01", [TECHNOLOGY_ROWS[0]])
     _seed_quote_facts("NVDA", "Semiconductors")
-    benchmark, reason = resolve_for_ticker("NVDA")
+    benchmark, vintage, reason = resolve_for_ticker("NVDA")
     assert benchmark is None
+    assert vintage is None
     assert "sector_too_thin" in reason

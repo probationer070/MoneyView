@@ -139,38 +139,42 @@ def _stored_industry(ticker: str) -> str:
 
 def resolve_for_ticker(
     ticker: str, *, as_of: str | None = None
-) -> tuple[SectorBenchmark | None, str | None]:
+) -> tuple[SectorBenchmark | None, str | None, str | None]:
     """Resolve a sector benchmark for one ticker.
 
-    Returns `(benchmark, None)` or `(None, reason)`. Exactly one is non-None: a
-    missing or unreliable benchmark yields NO case rather than a silently
-    degraded one. Falling back to an all-industry average would produce a number
-    that looks like a sector benchmark and is not one.
+    Returns `(benchmark, vintage, None)` or `(None, None, reason)`. Exactly one
+    of benchmark/reason is non-None: a missing or unreliable benchmark yields NO
+    case rather than a silently degraded one. Falling back to an all-industry
+    average would produce a number that looks like a sector benchmark and is not
+    one. The vintage travels with a successful resolution so callers -- notably
+    `build_conservative_case`, which stamps the vintage into `case_name` and
+    every `evidence_source` -- never have to call `latest_vintage()` a second
+    time and risk it returning a different vintage than the one actually used.
     """
     vintage = latest_vintage(on_or_before=as_of)
     if vintage is None:
-        return None, "no_vintage: no industry benchmark data has been loaded"
+        return None, None, "no_vintage: no industry benchmark data has been loaded"
 
     industry = _stored_industry(ticker)
     if not industry:
-        return None, f"no_industry: {ticker} has no industry from the quote source"
+        return None, None, f"no_industry: {ticker} has no industry from the quote source"
 
     mapped = damodaran_industry_for_yahoo(industry)
     if mapped is None:
-        return None, (
+        return None, None, (
             f"unmapped_industry: {ticker}'s industry {industry!r} is not in "
             f"YAHOO_TO_DAMODARAN; add it to apps/api/services/industry_maps.py"
         )
 
     sector = sector_for_industry(mapped)
     if sector is None:
-        return None, (
+        return None, None, (
             f"unmapped_industry: {mapped!r} is in no sector in SECTOR_TO_INDUSTRIES"
         )
 
     names = set(SECTOR_TO_INDUSTRIES[sector])
     rows = [row for row in load_vintage(vintage) if row.name in names]
     try:
-        return resolve_benchmark(sector, rows), None
+        return resolve_benchmark(sector, rows), vintage, None
     except BenchmarkUnavailable as exc:
-        return None, f"sector_too_thin: {exc}"
+        return None, None, f"sector_too_thin: {exc}"

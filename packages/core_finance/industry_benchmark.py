@@ -250,6 +250,13 @@ def fade(
     year `horizon`. Year 1 is one step in rather than the unfaded value, which
     matches `margin_path`'s convention in `segment_valuation.py`.
 
+    The year-by-year interpolation this implies is unused in production: the
+    sole production caller, `apps/api/services/conservative_case.py`, always
+    passes `year == horizon`, deliberately degenerating this to a min/max
+    endpoint choice -- the segment engine already interpolates internally
+    (`margin_path`, `wacc_path`, `tax_rate_path`), so fading per year here
+    would apply convergence twice.
+
     Where the company is already on the conservative side of the benchmark the
     value HOLDS. Nothing ever fades toward optimism: a laggard is not assumed to
     catch the best in its sector.
