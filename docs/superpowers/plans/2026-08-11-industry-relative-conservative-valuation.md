@@ -1943,11 +1943,419 @@ git commit -m "feat: resolve a sector benchmark per ticker, or refuse with a rea
 
 ---
 
+### Task 9: The statements → baseline adapter, and the entry point
+
+**Files:**
+- Create: `apps/api/services/company_baseline.py`
+- Modify: `apps/api/services/corporate_statement_metrics.py` (add one public function)
+- Test: `tests/api/test_company_baseline.py`
+
+**Why this task exists.** The final whole-branch review found the feature had no
+caller: `build_conservative_case` and `resolve_for_ticker` had zero production
+callers, and nothing constructed a `CompanyBaseline`. Eight per-task reviews all
+passed because each task did its own job and no task owned the seam. This closes
+it.
+
+**Interfaces:**
+- Consumes:
+  - `resolve_for_ticker(ticker, *, as_of=None) -> tuple[SectorBenchmark | None, str | None, str | None]` returning `(benchmark, vintage, reason)` — `apps/api/services/industry_benchmark_store.py`
+  - `build_conservative_case(ticker, baseline, benchmark, *, vintage, riskfree_rate, marginal_tax_rate, base_year) -> dict` and `CompanyBaseline` — `apps/api/services/conservative_case.py`
+  - `create_case(payload) -> int` — `apps/api/services/valuation_case.py`
+  - `load_equity_bridge(ticker, *, bundle_loader=...) -> EquityBridge` with fields `net_debt`, `non_operating_assets`, `diluted_shares_outstanding`, each a `BridgeInputMeta` carrying `.value` (billions, or None) and `.quality` — `apps/api/services/equity_bridge.py`
+  - `metrics_for_ticker(...)` / `CorporateMetrics` — fields `roic`, `wacc`, `growth` are PERCENT
+- Produces:
+  - `statement_baseline(ticker, *, bundle_loader=get_yahoo_statement_bundle) -> dict | None` in `corporate_statement_metrics.py`, returning `{"revenue_by_year": dict[int, float], "operating_income_by_year": dict[int, float], "invested_capital_by_year": dict[int, float]}` in RAW statement currency
+  - `build_company_baseline(ticker, *, metrics, bundle_loader=...) -> tuple[CompanyBaseline | None, str | None]`
+  - `generate_conservative_case(ticker, *, as_of=None, ...) -> tuple[int | None, str | None]` — the entry point, returning `(case_id, None)` or `(None, reason)`
+
+**THE UNITS BOUNDARY LIVES HERE.** This is the one place in the feature where a
+scale error is possible, and the whole branch has been built so that it can only
+happen in this file:
+
+- Statement figures are RAW CURRENCY. `CompanyBaseline.base_revenue` and the
+  cash/debt terms are BILLIONS. `equity_bridge._scaled` is the existing helper
+  and `load_equity_bridge` already returns billions — use it rather than
+  dividing by 1e9 by hand, so there is one convention, not two.
+- `CorporateMetrics.roic`, `.wacc` and `.growth` are PERCENT. `AAPL` is stored
+  as `{"growth": 6, "roic": 18, "wacc": 10}`. `CompanyBaseline` wants FRACTIONS.
+  Divide by 100 exactly once, here.
+- `base_margin` and `current_sales_to_capital` are ratios of two raw-currency
+  figures, so they are already dimensionless — do NOT scale them.
+
+**No network in tests.** `get_yahoo_statement_bundle` fetches from Yahoo. Every
+function here takes a `bundle_loader` injection, matching
+`yahoo_statement_metrics(..., bundle_loader=...)` and
+`load_equity_bridge(..., bundle_loader=...)`. Tests inject a fake.
+
+**Refuse, never default.** Every missing input produces a reason, not a
+substituted zero or an industry average. A baseline built on a defaulted figure
+would produce a confident valuation from data that does not exist.
+
+- [ ] **Step 1: Write the failing tests**
+
+```python
+# tests/api/test_company_baseline.py
+import pytest
+
+from apps.api.services.company_baseline import (
+    build_company_baseline,
+    generate_conservative_case,
+)
+from apps.api.models.schema_parts.corporate import CorporateMetrics
+
+
+def _metrics(**overrides):
+    base = dict(ticker="TEST", growth=20.0, roic=35.0, wacc=8.5)
+    base.update(overrides)
+    return CorporateMetrics(**base)
+
+
+def _baseline_source(**overrides):
+    """Raw-currency statement figures, as they come off a bundle."""
+    base = {
+        "revenue_by_year": {2024: 90_000_000_000.0, 2025: 100_000_000_000.0},
+        "operating_income_by_year": {2024: 27_000_000_000.0, 2025: 30_000_000_000.0},
+        "invested_capital_by_year": {2024: 30_000_000_000.0, 2025: 33_333_333_333.0},
+    }
+    base.update(overrides)
+    return base
+
+
+def test_revenue_is_converted_to_billions():
+    """A 100bn-revenue company yields 100.0, not 1e11. This is the single
+    boundary in the whole feature where a 10^9 error is possible."""
+    baseline, reason = build_company_baseline(
+        "TEST", metrics=_metrics(), statement_source=_baseline_source(),
+        net_debt=5.0, shares=1.0,
+    )
+    assert reason is None
+    assert baseline.base_revenue == pytest.approx(100.0)
+
+
+def test_percent_metrics_are_converted_to_fractions():
+    """CorporateMetrics stores roic/wacc/growth as percent. A 35.0 leaking
+    through as a fraction would be a 3500% return on capital."""
+    baseline, _ = build_company_baseline(
+        "TEST", metrics=_metrics(roic=35.0, wacc=8.5, growth=20.0),
+        statement_source=_baseline_source(), net_debt=5.0, shares=1.0,
+    )
+    assert baseline.current_roic == pytest.approx(0.35)
+    assert baseline.current_wacc == pytest.approx(0.085)
+    assert baseline.current_growth == pytest.approx(0.20)
+
+
+def test_base_margin_is_dimensionless_and_not_scaled():
+    """operating_income / revenue is a ratio of two raw-currency figures, so it
+    must NOT be divided by 1e9 alongside them."""
+    baseline, _ = build_company_baseline(
+        "TEST", metrics=_metrics(), statement_source=_baseline_source(),
+        net_debt=5.0, shares=1.0,
+    )
+    assert baseline.base_margin == pytest.approx(0.30)
+
+
+def test_sales_to_capital_is_revenue_over_invested_capital():
+    baseline, _ = build_company_baseline(
+        "TEST", metrics=_metrics(), statement_source=_baseline_source(),
+        net_debt=5.0, shares=1.0,
+    )
+    assert baseline.current_sales_to_capital == pytest.approx(3.0, rel=1e-4)
+
+
+def test_positive_net_debt_becomes_debt_and_zero_cash():
+    baseline, _ = build_company_baseline(
+        "TEST", metrics=_metrics(), statement_source=_baseline_source(),
+        net_debt=5.0, shares=1.0,
+    )
+    assert baseline.debt == pytest.approx(5.0)
+    assert baseline.cash == pytest.approx(0.0)
+
+
+def test_negative_net_debt_becomes_cash_and_zero_debt():
+    """A net-cash company. EV - debt + cash must reconstruct the same bridge."""
+    baseline, _ = build_company_baseline(
+        "TEST", metrics=_metrics(), statement_source=_baseline_source(),
+        net_debt=-12.0, shares=1.0,
+    )
+    assert baseline.cash == pytest.approx(12.0)
+    assert baseline.debt == pytest.approx(0.0)
+
+
+def test_source_years_names_the_years_actually_used():
+    baseline, _ = build_company_baseline(
+        "TEST", metrics=_metrics(), statement_source=_baseline_source(),
+        net_debt=5.0, shares=1.0,
+    )
+    assert baseline.source_years == (2024, 2025)
+
+
+@pytest.mark.parametrize("missing,expected", [
+    ("revenue_by_year", "no_revenue"),
+    ("operating_income_by_year", "no_operating_income"),
+    ("invested_capital_by_year", "no_invested_capital"),
+])
+def test_a_missing_statement_series_refuses_with_a_reason(missing, expected):
+    """Never a defaulted zero. A baseline built on a substituted figure produces
+    a confident valuation from data that does not exist."""
+    source = _baseline_source()
+    source[missing] = {}
+    baseline, reason = build_company_baseline(
+        "TEST", metrics=_metrics(), statement_source=source,
+        net_debt=5.0, shares=1.0,
+    )
+    assert baseline is None
+    assert expected in reason
+
+
+def test_a_missing_share_count_refuses():
+    baseline, reason = build_company_baseline(
+        "TEST", metrics=_metrics(), statement_source=_baseline_source(),
+        net_debt=5.0, shares=None,
+    )
+    assert baseline is None
+    assert "no_shares" in reason
+
+
+def test_a_missing_net_debt_refuses():
+    """Unlike a zero balance, a missing one is unknown. The argument in
+    `calculate_net_debt`'s docstring applies: a missing balance is not a zero
+    balance."""
+    baseline, reason = build_company_baseline(
+        "TEST", metrics=_metrics(), statement_source=_baseline_source(),
+        net_debt=None, shares=1.0,
+    )
+    assert baseline is None
+    assert "no_net_debt" in reason
+
+
+def test_zero_revenue_refuses_rather_than_dividing_by_zero():
+    source = _baseline_source(revenue_by_year={2025: 0.0})
+    baseline, reason = build_company_baseline(
+        "TEST", metrics=_metrics(), statement_source=source,
+        net_debt=5.0, shares=1.0,
+    )
+    assert baseline is None
+    assert "no_revenue" in reason
+```
+
+- [ ] **Step 2: Run to verify they fail**
+
+Run: `python -m pytest tests/api/test_company_baseline.py -q`
+Expected: FAIL — `ModuleNotFoundError: No module named 'apps.api.services.company_baseline'`
+
+- [ ] **Step 3: Implement `build_company_baseline`**
+
+`statement_source` is a plain dict so the unit conversion is testable without a
+bundle. The bundle-reading wrapper comes in Step 5.
+
+```python
+# apps/api/services/company_baseline.py
+"""Build a CompanyBaseline for one ticker, and generate its conservative case.
+
+The adapter the final whole-branch review found missing: without it,
+`build_conservative_case` had no caller and the feature had no entry point.
+
+THIS FILE OWNS THE UNITS BOUNDARY. Everywhere else in the feature, rates are
+fractions and money is billions, matching both the segment engine and
+Damodaran's dataset. Two conversions happen here and nowhere else:
+
+    statement currency -> billions   (revenue, and the equity-bridge terms)
+    CorporateMetrics percent -> fraction   (roic, wacc, growth)
+
+`base_margin` and `current_sales_to_capital` are ratios of two raw-currency
+figures and are therefore already dimensionless. Scaling them would be a
+1e9 error that no downstream guard would catch, because both would still be
+plausible floats.
+
+Every missing input refuses with a reason. A baseline built on a substituted
+zero produces a confident valuation from data that does not exist.
+"""
+
+from __future__ import annotations
+
+from apps.api.services.conservative_case import CompanyBaseline
+
+_BILLION = 1_000_000_000.0
+
+
+def build_company_baseline(
+    ticker: str,
+    *,
+    metrics,
+    statement_source: dict,
+    net_debt: float | None,
+    shares: float | None,
+) -> tuple[CompanyBaseline | None, str | None]:
+    """Assemble a baseline, or refuse with a reason. Exactly one is non-None."""
+    revenue = statement_source.get("revenue_by_year") or {}
+    operating_income = statement_source.get("operating_income_by_year") or {}
+    invested_capital = statement_source.get("invested_capital_by_year") or {}
+
+    years = sorted(set(revenue) & set(operating_income) & set(invested_capital))
+    if not revenue or not years or not revenue.get(years[-1] if years else None):
+        return None, f"no_revenue: {ticker} has no usable revenue in its stored statements"
+    if not operating_income:
+        return None, f"no_operating_income: {ticker} has no operating income in its stored statements"
+    if not invested_capital:
+        return None, f"no_invested_capital: {ticker} has no invested capital in its stored statements"
+
+    latest = years[-1]
+    latest_revenue = float(revenue[latest])
+    if latest_revenue <= 0:
+        return None, f"no_revenue: {ticker}'s latest revenue is {latest_revenue}, which cannot anchor a growth path"
+    latest_capital = float(invested_capital[latest])
+    if latest_capital <= 0:
+        return None, f"no_invested_capital: {ticker}'s invested capital is {latest_capital}"
+
+    if shares is None or shares <= 0:
+        return None, f"no_shares: {ticker} has no diluted share count in its statements"
+    if net_debt is None:
+        # A missing balance is not a zero balance -- the argument in
+        # `calculate_net_debt`'s docstring in dcf.py.
+        return None, f"no_net_debt: {ticker}'s net debt is unknown, not zero"
+
+    return CompanyBaseline(
+        base_revenue=latest_revenue / _BILLION,
+        # Dimensionless: a ratio of two raw-currency figures. NOT scaled.
+        base_margin=float(operating_income[latest]) / latest_revenue,
+        current_roic=float(metrics.roic) / 100.0,
+        current_sales_to_capital=latest_revenue / latest_capital,
+        current_growth=float(metrics.growth) / 100.0,
+        current_wacc=float(metrics.wacc) / 100.0,
+        cash=max(-float(net_debt), 0.0),
+        debt=max(float(net_debt), 0.0),
+        shares=float(shares),
+        source_years=tuple(years),
+    ), None
+```
+
+- [ ] **Step 4: Run to verify they pass**
+
+Run: `python -m pytest tests/api/test_company_baseline.py -q`
+Expected: PASS, 14 tests.
+
+- [ ] **Step 5: Add `statement_baseline` and the entry point**
+
+Add to `apps/api/services/corporate_statement_metrics.py` a public
+`statement_baseline(ticker, *, bundle_loader=get_yahoo_statement_bundle)` that
+returns the three raw-currency maps, reusing the module's existing private
+helpers (`_prefer_annual_map`, `_statement_map`, `_calculate_invested_capital`
+and the label constants already defined there) rather than reimplementing label
+matching. Return `None` when the bundle is `None`.
+
+Then in `company_baseline.py`:
+
+```python
+def generate_conservative_case(
+    ticker: str,
+    *,
+    as_of: str | None = None,
+    base_year: int,
+    riskfree_rate: float,
+    marginal_tax_rate: float,
+    metrics,
+    statement_source: dict | None,
+    net_debt: float | None,
+    shares: float | None,
+) -> tuple[int | None, str | None]:
+    """Resolve, build, and store a conservative case. Exactly one is non-None.
+
+    Dependencies are injected rather than fetched so this is testable without a
+    network. The caller wires `statement_baseline` and `load_equity_bridge`.
+    """
+    benchmark, vintage, reason = resolve_for_ticker(ticker, as_of=as_of)
+    if benchmark is None:
+        return None, reason
+    if statement_source is None:
+        return None, f"no_statements: {ticker} has no stored statement bundle"
+
+    baseline, reason = build_company_baseline(
+        ticker, metrics=metrics, statement_source=statement_source,
+        net_debt=net_debt, shares=shares,
+    )
+    if baseline is None:
+        return None, reason
+
+    payload = build_conservative_case(
+        ticker, baseline, benchmark, vintage=vintage,
+        riskfree_rate=riskfree_rate, marginal_tax_rate=marginal_tax_rate,
+        base_year=base_year,
+    )
+    try:
+        return create_case(payload), None
+    except ValueError as exc:
+        # Covers both a duplicate case_name and any engine guard the generated
+        # inputs trip. Both are legitimate refusals, not faults.
+        return None, f"not_storable: {exc}"
+```
+
+- [ ] **Step 6: Test the entry point end to end**
+
+```python
+def test_generate_produces_a_stored_runnable_case():
+    """The end-to-end gate this whole task exists to provide: benchmark ->
+    baseline -> case -> stored -> runnable."""
+    from apps.api.services.industry_benchmark_store import store_vintage
+    from apps.api.services.valuation_case import run_stored_case
+    from tests.fixtures.industry_rows_technology import TECHNOLOGY_ROWS
+    from apps.api.services.db import get_db
+
+    store_vintage("2026-01-01", TECHNOLOGY_ROWS)
+    with get_db() as conn:
+        conn.execute(
+            "INSERT OR REPLACE INTO corporate_quote_facts "
+            "(ticker, market_cap, shares_outstanding, currency, beta, sector, industry, fetched_at) "
+            "VALUES ('TEST', 1.0, 1.0, 'USD', 1.0, 'Technology', 'Semiconductors', '2026-01-01')"
+        )
+
+    case_id, reason = generate_conservative_case(
+        "TEST", base_year=2026, riskfree_rate=0.0456, marginal_tax_rate=0.25,
+        metrics=_metrics(), statement_source=_baseline_source(),
+        net_debt=5.0, shares=1.0,
+    )
+    assert reason is None
+    assert case_id > 0
+    result = run_stored_case(case_id)
+    assert result["enterprise_value"] > 0
+
+
+def test_generate_refuses_when_no_benchmark_resolves():
+    case_id, reason = generate_conservative_case(
+        "UNKNOWN", base_year=2026, riskfree_rate=0.0456, marginal_tax_rate=0.25,
+        metrics=_metrics(), statement_source=_baseline_source(),
+        net_debt=5.0, shares=1.0,
+    )
+    assert case_id is None
+    assert reason is not None
+```
+
+- [ ] **Step 7: Run the full suite**
+
+Run: `python -m pytest tests/ -q`
+Expected: PASS. Baseline is 758.
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add apps/api/services/company_baseline.py apps/api/services/corporate_statement_metrics.py tests/api/test_company_baseline.py
+git commit -m "feat: statements to baseline adapter and the conservative case entry point"
+```
+
+---
+
 ## Self-review notes
 
 **Spec coverage.** Data foundation → Tasks 1, 4, 5, 6. Resolver → Tasks 1–2.
 Fade → Task 3. Case generator → Task 7. Per-ticker resolution and error
-handling → Task 8.
+handling → Task 8. Statements → baseline adapter and the entry point → Task 9.
+
+**Task 9 was added after the final whole-branch review, and its absence is the
+plan's own defect.** The first eight tasks each did their job and all eight
+per-task reviews passed, but no task owned the seam between them: nothing built
+a `CompanyBaseline`, so `build_conservative_case` had no caller and the feature
+had no entry point. This self-review originally claimed full spec coverage,
+which was wrong — the spec says the generator reads statements and the equity
+bridge, and no task did. A per-task review structurally cannot catch that.
 
 **Revised 2026-08-11, before any implementer was dispatched.** The original plan
 targeted `corporate_dcf`. It computes enterprise value from `base_fcff`,
