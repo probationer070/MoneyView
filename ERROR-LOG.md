@@ -1513,3 +1513,43 @@ across groups of different sizes should be checked against the
 weighted-by-denominator form before shipping; the two only agree when every
 group has the same denominator-to-numerator-driver ratio, which is precisely
 the case that makes modelling the groups separately pointless.
+
+## 2026-08-11: reinvestment_rate plausibility bound screened out legitimate industries
+
+Date: 2026-08-11
+Command: none -- caught by a reviewer verifying against the full 92-industry
+dataset, which neither the implementer nor the first reviewer had access to
+when Task 1 of the industry-relative conservative valuation feature shipped.
+Failure: `BENCHMARK_COLUMNS`'s `reinvestment_rate` column
+(`packages/core_finance/industry_benchmark.py`) declared a plausibility band
+of `[0.0, 1.5]`. `screen_value` silently rejected any industry reinvesting
+more than 150% of NOPAT as a "data artifact", with no error raised and no
+test covering the boundary. Measured across all 92 industries with a numeric
+reinvestment rate, 8 sit above 1.5, not the 3 the column's own comment
+claimed -- and 5 of the 8 (Retail (Distributors) 1.522, Chemical (Basic)
+1.587, Utility (Water) 1.622, Utility (General) 1.723, Broadcasting 1.888)
+are ordinary capital-intensive reinvestment, not artifacts. Only 3 (Steel
+2.115, Insurance (General) 3.242, Software (Internet) 14.142) are genuine
+artifacts, sitting above a natural gap in the data at 1.888 to 2.115.
+Root cause: the bound and its justifying comment were both transcribed
+verbatim from the task brief, which asserted "the three above 200%" without
+having measured the full dataset -- the number was wrong (8, not 3) and the
+threshold was drawn well inside real data (1.5, when the actual gap is at
+2.0), so the bound silently discarded good rows for entire capital-intensive
+sectors (utilities, broadcasting) rather than catching a smaller and
+different set of artifacts than described.
+Fix: bound widened to `[0.0, 2.0]`, which sits inside the observed gap
+between 1.888 and 2.115. Comment corrected to state 11 negative, 3 genuine
+artifacts above the bound (naming them), and p90 = 1.311. A test,
+`test_a_capital_intensive_reinvestment_rate_below_two_is_kept`, pins both
+sides of the gap so the bound cannot drift back toward 1.5 or past 2.115
+without a visible test failure.
+Files changed: `packages/core_finance/industry_benchmark.py`,
+`tests/core_finance/test_industry_benchmark.py`.
+Prevention: a plausibility bound whose justification cites specific counts
+("the three above 200%") is a claim about a dataset, not an opinion -- it
+needs to be checked against the actual full dataset before being encoded as
+a screening rule, not asserted from a brief or sampled from a 10-row
+fixture. Ten rows cannot reveal where a natural gap in 92 rows actually
+falls; a bound placed to look reasonable on a small sample can still cut
+through the middle of a real cluster in the full one.

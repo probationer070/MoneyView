@@ -23,6 +23,8 @@ class QuoteFacts:
     # WACC's levered beta reads this; without it the cost of equity silently falls back to
     # a beta re-derived from the fallback metrics' unlevered beta.
     beta: float | None = None
+    sector: str = ""
+    industry: str = ""
 
 
 def _default_ticker_factory(symbol: str):
@@ -63,4 +65,6 @@ def fetch_quote_facts(
         shares_outstanding=shares_outstanding,
         currency=str(info.get("currency") or ""),
         beta=_optional_float(info.get("beta")),
+        sector=str(info.get("sector") or ""),
+        industry=str(info.get("industry") or ""),
     )
