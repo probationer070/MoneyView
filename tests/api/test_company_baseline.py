@@ -378,7 +378,8 @@ def test_the_ticker_wrapper_reaches_no_network_and_refuses_without_a_benchmark()
 
 
 def test_the_ticker_wrapper_produces_a_stored_runnable_case():
-    """End to end from a bare ticker: benchmark + statements + bridge -> case."""
+    """End to end from a bare ticker: benchmark + statements + bridge -> case,
+    and every loader provably threaded."""
     from apps.api.services.company_baseline import generate_conservative_case_for_ticker
     from apps.api.services.db import get_db
     from apps.api.services.industry_benchmark_store import store_vintage
@@ -401,9 +402,32 @@ def test_the_ticker_wrapper_produces_a_stored_runnable_case():
         cash={2024: 1e9, 2025: 1e9},
         shares={2024: 1e9, 2025: 1e9},
     )
+    class _Recorder:
+        """Records which endpoints were asked for, so the assertion below can
+        prove each loader received the injection."""
+
+        def __init__(self, payload):
+            self.payload = payload
+            self.endpoints = []
+
+        def __call__(self, ticker, endpoint):
+            self.endpoints.append(endpoint)
+            return self.payload
+
+    loader = _Recorder(bundle)
     case_id, reason = generate_conservative_case_for_ticker(
-        "WRAP", base_year=2026, bundle_loader=lambda ticker, endpoint: bundle,
+        "WRAP", base_year=2026, bundle_loader=loader,
     )
     assert reason is None, reason
     assert case_id > 0
     assert run_stored_case(case_id)["enterprise_value"] > 0
+
+    # The wiring assertion, and it has to be explicit. A produced case does NOT
+    # prove all three loaders were threaded: `metrics_for_ticker` never refuses
+    # -- on a miss it falls back through `load_fallback_metrics` to a generic
+    # `default_metrics` (growth 6%, roic 18%, wacc 10%) -- so dropping its
+    # `bundle_loader` still yields a stored, runnable, positive-value case,
+    # silently computed against defaults instead of this bundle. Verified by
+    # deliberately breaking that one wire. The other two hard-refuse, so only
+    # this one is invisible.
+    assert set(loader.endpoints) == {"metrics", "equity_bridge", "conservative_case"}

@@ -178,12 +178,25 @@ def generate_conservative_case_for_ticker(
     unchanged from the layer that raised it.
 
     `bundle_loader` threads through all three loaders, so a single injection
-    makes the whole path offline-testable. `tests/conftest.py` fails any test
-    that opens a non-loopback socket, which is what catches a missed one.
+    makes the whole path offline-testable. Note what does NOT catch a missed
+    injection: the default `get_yahoo_statement_bundle` reads the local store
+    and never opens a socket, so `tests/conftest.py`'s network guard cannot see
+    one. Worse, `metrics_for_ticker` does not refuse on a miss -- it falls back
+    through `load_fallback_metrics` to a generic `default_metrics` -- so a
+    dropped wire there still produces a stored, runnable case, silently
+    computed against defaults. The endpoint assertion in
+    `test_the_ticker_wrapper_produces_a_stored_runnable_case` is what catches
+    it. `load_equity_bridge` and `statement_baseline` both hard-refuse, so only
+    the metrics wire is invisible.
 
     `base_year` defaults to the current calendar year. It sets the case's
     10-year horizon and appears in `as_of_date`, so pin it explicitly wherever
-    reproducibility across a year boundary matters.
+    reproducibility across a year boundary matters. Note that `case_name` is
+    `conservative_<TICKER>_<vintage>` and is NOT keyed by `base_year`, so
+    calling this either side of a year boundary for the same ticker and vintage
+    does not produce two cases -- the second refuses with
+    `not_storable: ... already exists`. That is a safe failure, but it is a
+    refusal rather than the differing case the horizon change would imply.
     """
     metrics = metrics_for_ticker(ticker, bundle_loader=bundle_loader)
     bridge = load_equity_bridge(ticker, bundle_loader=bundle_loader)
