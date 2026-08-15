@@ -1200,8 +1200,11 @@ Plan: `.superpowers/sdd/2026-08-11-industry-relative-conservative-valuation/`
       Measured against all 11 real sectors of the 2026 vintage, the uncapped
       version refused five: Consumer Discretionary (roic 0.2238 vs ceiling
       0.2024), Financials (0.2200 vs 0.1932), Industrials (0.2561 vs 0.2449),
-      Utilities (0.0595 vs 0.0512) and Real Estate. The cap fixes the first
-      four.
+      Utilities (0.0595 vs 0.0512) and Real Estate. The cap raises the
+      ceiling above the reported ROC for the first four, but see the
+      correction below: it does NOT make all four valuable, because the
+      binding constraint for Utilities turns out to be the cost of capital,
+      not the ceiling.
 
       CORRECTED (2026-08-15): the "10 of 11" figure above was retracted. It
       used the BENCHMARK cost of capital as `wacc_stable`, but the generator
