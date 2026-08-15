@@ -242,7 +242,8 @@ New tests in `tests/api/test_valuation_case_service.py`:
    central assumption into something that fails loudly when it stops being
    true.
 
-And in `tests/api/test_conservative_case.py`:
+And in `tests/api/test_company_baseline.py`, where the generator's own tests
+live alongside the `_metrics`/`_baseline_source`/`_generate` helpers:
 
 7. **The generator reports the refusal.** The same scenario through
    `generate_conservative_case` returns `(None, reason)` where the reason
