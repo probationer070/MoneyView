@@ -1321,12 +1321,12 @@ Plan: `.superpowers/sdd/2026-08-11-industry-relative-conservative-valuation/`
       regression the fix for it introduced.
 
       This section previously described an unvaluable case as a
-      "refusal" in several entries above (Task 7, Task 9). That was true
-      only once a case reached `run_case` -- before this gate, a rejected
-      case had already been written, so calling it a refusal understated
-      what actually happened: a store followed by a permanently broken
-      row. `generate_conservative_case`'s refusal is now real at the
-      point it is reported: the row is never written.
+      "refusal" (Task 7, above). That was true only once a case reached
+      `run_case` -- before this gate, a rejected case had already been
+      written, so calling it a refusal understated what actually
+      happened: a store followed by a permanently broken row.
+      `generate_conservative_case`'s refusal is now real at the point it
+      is reported: the row is never written.
 
       Fixture triage (Task 1 Step 8, run against the full suite): exactly
       one test needed changing, and no fixture was found invalid for
