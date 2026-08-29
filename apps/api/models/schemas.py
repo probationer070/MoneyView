@@ -50,6 +50,7 @@ from .schema_parts.corporate import (
 from .schema_parts.valuation import (
     SegmentInput,
     SegmentNarrativeInput,
+    ConservativeCaseResult,
     ValuationCaseCreated,
     ValuationCaseInput,
     ValuationCaseSummary,
@@ -176,6 +177,7 @@ __all__ = [
     "WatchlistSyncStatus",
     "SegmentInput",
     "SegmentNarrativeInput",
+    "ConservativeCaseResult",
     "ValuationCaseCreated",
     "ValuationCaseInput",
     "ValuationCaseSummary",

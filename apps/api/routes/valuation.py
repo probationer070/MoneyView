@@ -8,10 +8,17 @@ from fastapi import APIRouter, Body, HTTPException
 
 from apps.api.models.schemas import (
     APIResponse,
+    ConservativeCaseResult,
     ValuationCaseCreated,
     ValuationCaseInput,
     ValuationCaseSummary,
 )
+from apps.api.services.company_baseline import (
+    find_conservative_case_id,
+    generate_conservative_case_for_ticker,
+)
+from apps.api.services.conservative_case import conservative_case_name
+from apps.api.services.industry_benchmark_store import latest_vintage
 from apps.api.services.valuation_case import (
     CaseNotFound,
     create_case,
@@ -71,3 +78,53 @@ async def run_valuation_case(case_id: int):
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/conservative/{ticker}", response_model=APIResponse[ConservativeCaseResult])
+async def create_conservative_case(ticker: str):
+    """Value `ticker` against the top industries of its sector, conservatively.
+
+    Idempotent: the case is named `conservative_<TICKER>_<vintage>`, so a repeat
+    request returns the existing case with `created=false` rather than the
+    duplicate-name refusal `create_case` would otherwise raise. A client
+    retrying after a timeout is therefore safe.
+
+    Refusal is a first-class outcome here, not a degradation -- a benchmark that
+    cannot be resolved never falls back to a substituted default, and the reason
+    keeps its machine-readable prefix (`unmapped_industry`, `no_statements`,
+    `not_storable`, ...) so a caller can branch on it without parsing prose.
+
+    `no_vintage` is the one refusal that is not about the ticker: it means no
+    benchmark dataset has been loaded into this server at all. It answers 409
+    rather than 422, because blaming the caller's input for missing server state
+    sends them to debug a ticker that was never the problem.
+    """
+    case_id, reason = generate_conservative_case_for_ticker(ticker)
+    if case_id is not None:
+        return APIResponse(
+            data=ConservativeCaseResult(
+                id=case_id,
+                case_name=conservative_case_name(ticker, latest_vintage()),
+                created=True,
+            )
+        )
+
+    if reason.startswith("no_vintage"):
+        raise HTTPException(status_code=409, detail=reason)
+
+    # Only a DUPLICATE-NAME refusal means "already done". Checking for an
+    # existing case on any refusal would let a stale case mask a new, genuine
+    # one -- a ticker whose industry mapping later broke would keep answering
+    # 200 with the old id instead of reporting `unmapped_industry`.
+    is_duplicate = reason.startswith("not_storable:") and "already exists" in reason
+    existing = find_conservative_case_id(ticker) if is_duplicate else None
+    if existing is not None:
+        return APIResponse(
+            data=ConservativeCaseResult(
+                id=existing,
+                case_name=conservative_case_name(ticker, latest_vintage()),
+                created=False,
+            )
+        )
+
+    raise HTTPException(status_code=422, detail=reason)

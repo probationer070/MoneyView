@@ -1367,6 +1367,37 @@ Plan: `.superpowers/sdd/2026-08-11-industry-relative-conservative-valuation/`
         or diagnostic to find them. Exposure is per-developer since
         `data/processed/` is gitignored.
 
+- [x] HTTP route (2026-08-29) - `POST /api/v1/valuation/conservative/{ticker}`.
+      Closes the "complete as a service call, unreachable over HTTP" gap the
+      feature shipped with: `apps/api/routes/**` was out of scope by the
+      original plan's own constraints, so nothing could trigger the generator
+      from the app. `apps/api/routes/valuation.py` gains one endpoint;
+      `ConservativeCaseResult` (`id`, `case_name`, `created`) is the response.
+
+      Two decisions worth knowing. (1) The endpoint is IDEMPOTENT: a repeat
+      request returns the existing case with `created=false` instead of the
+      duplicate-name refusal, so a client retrying after a timeout is safe.
+      Only a duplicate-name refusal takes that path -- checking for an existing
+      case on ANY refusal would let a stale case mask a new one, so a ticker
+      whose industry mapping later broke would keep answering 200 with the old
+      id rather than reporting `unmapped_industry`. (2) `no_vintage` answers
+      409, every other refusal 422. `no_vintage` means no benchmark dataset is
+      loaded into this server at all -- it is not about the ticker, and a 422
+      would send the caller to debug an input that was never the problem.
+      Reasons keep their machine-readable prefix so a client can branch on them
+      without parsing prose.
+
+      `conservative_case_name(ticker, vintage)` extracted in
+      `conservative_case.py` (was inline at the payload build) so the generator
+      and the idempotency lookup cannot disagree about a case's name;
+      `find_conservative_case_id` added to `company_baseline.py`, resolving the
+      vintage the same way the generator does.
+
+      Note for future route tests: the route cannot inject a `bundle_loader`,
+      so tests seed `corporate_statements` directly -- where the default loader
+      reads -- rather than passing a bundle in as the service-level tests do.
+      4 tests in `tests/api/test_valuation_routes.py`; full suite 798 passed.
+
 ## Archived Track - MoneyView Dev Monitor
 
 Completed basis retained from the previous active plan:

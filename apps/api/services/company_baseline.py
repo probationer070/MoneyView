@@ -23,7 +23,11 @@ from __future__ import annotations
 
 from datetime import date
 
-from apps.api.services.conservative_case import CompanyBaseline, build_conservative_case
+from apps.api.services.conservative_case import (
+    CompanyBaseline,
+    build_conservative_case,
+    conservative_case_name,
+)
 from apps.api.services.corporate_metrics_service import metrics_for_ticker
 from apps.api.services.corporate_statement_metrics import (
     DEFAULT_RISK_FREE_RATE,
@@ -31,8 +35,8 @@ from apps.api.services.corporate_statement_metrics import (
     statement_baseline,
 )
 from apps.api.services.equity_bridge import load_equity_bridge
-from apps.api.services.industry_benchmark_store import resolve_for_ticker
-from apps.api.services.valuation_case import create_case
+from apps.api.services.industry_benchmark_store import latest_vintage, resolve_for_ticker
+from apps.api.services.valuation_case import create_case, list_cases
 
 _BILLION = 1_000_000_000.0
 
@@ -211,4 +215,21 @@ def generate_conservative_case_for_ticker(
         statement_source=statement_baseline(ticker, bundle_loader=bundle_loader),
         net_debt=bridge.net_debt.value,
         shares=bridge.diluted_shares_outstanding.value,
+    )
+
+
+def find_conservative_case_id(ticker: str, *, as_of: str | None = None) -> int | None:
+    """The id of `ticker`'s already-stored conservative case, or None.
+
+    Exists so a repeat request can return the existing case instead of the
+    duplicate-name refusal `create_case` would raise. It resolves the vintage
+    the same way the generator does, so the two always agree about which case
+    is "the" conservative case for a ticker.
+    """
+    vintage = latest_vintage(as_of)
+    if vintage is None:
+        return None
+    wanted = conservative_case_name(ticker, vintage)
+    return next(
+        (case["id"] for case in list_cases() if case["case_name"] == wanted), None
     )
