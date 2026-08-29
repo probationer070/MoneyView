@@ -17,8 +17,6 @@ from apps.api.services.company_baseline import (
     find_conservative_case_id,
     generate_conservative_case_for_ticker,
 )
-from apps.api.services.conservative_case import conservative_case_name
-from apps.api.services.industry_benchmark_store import latest_vintage
 from apps.api.services.valuation_case import (
     CaseNotFound,
     create_case,
@@ -80,8 +78,24 @@ async def run_valuation_case(case_id: int):
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
+def _conservative_result(case_id: int, *, created: bool) -> ConservativeCaseResult:
+    """Report the case's name as STORED, never as re-derived.
+
+    `generate_conservative_case_for_ticker` resolves a vintage internally and
+    returns only `(case_id, reason)`, so the name is not handed back. Rebuilding
+    it here with a second `latest_vintage()` call is the exact anti-pattern
+    `resolve_for_ticker`'s docstring warns against: a vintage stored between the
+    two calls makes the reported name disagree with the stored row, and a
+    `latest_vintage()` of None yields a plausible-looking `conservative_X_None`
+    that no guard would catch. The stored row is the only authority.
+    """
+    return ConservativeCaseResult(
+        id=case_id, case_name=load_case(case_id)["case_name"], created=created
+    )
+
+
 @router.post("/conservative/{ticker}", response_model=APIResponse[ConservativeCaseResult])
-async def create_conservative_case(ticker: str):
+def create_conservative_case(ticker: str):
     """Value `ticker` against the top industries of its sector, conservatively.
 
     Idempotent: the case is named `conservative_<TICKER>_<vintage>`, so a repeat
@@ -101,13 +115,7 @@ async def create_conservative_case(ticker: str):
     """
     case_id, reason = generate_conservative_case_for_ticker(ticker)
     if case_id is not None:
-        return APIResponse(
-            data=ConservativeCaseResult(
-                id=case_id,
-                case_name=conservative_case_name(ticker, latest_vintage()),
-                created=True,
-            )
-        )
+        return APIResponse(data=_conservative_result(case_id, created=True))
 
     if reason.startswith("no_vintage"):
         raise HTTPException(status_code=409, detail=reason)
@@ -119,12 +127,6 @@ async def create_conservative_case(ticker: str):
     is_duplicate = reason.startswith("not_storable:") and "already exists" in reason
     existing = find_conservative_case_id(ticker) if is_duplicate else None
     if existing is not None:
-        return APIResponse(
-            data=ConservativeCaseResult(
-                id=existing,
-                case_name=conservative_case_name(ticker, latest_vintage()),
-                created=False,
-            )
-        )
+        return APIResponse(data=_conservative_result(existing, created=False))
 
     raise HTTPException(status_code=422, detail=reason)

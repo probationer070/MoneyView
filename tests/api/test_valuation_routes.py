@@ -242,3 +242,21 @@ def test_conservative_case_route_refusal_is_422_naming_the_reason():
     response = client.post("/api/v1/valuation/conservative/WEIRD")
     assert response.status_code == 422
     assert "unmapped_industry" in response.json()["detail"]
+
+
+def test_conservative_case_route_reports_the_stored_name():
+    """The reported `case_name` must be the one on the stored row, not a name
+    the route rebuilt for itself.
+
+    `generate_conservative_case_for_ticker` resolves a vintage internally and
+    returns only `(case_id, reason)`. Rebuilding the name from a second
+    `latest_vintage()` call is what `resolve_for_ticker`'s docstring warns
+    against: it can disagree with the stored row, and a `None` vintage yields a
+    plausible-looking `conservative_<TICKER>_None` that no guard would catch.
+    """
+    from apps.api.services.valuation_case import load_case
+
+    _seed_conservative_inputs(ticker="NAMED")
+    body = client.post("/api/v1/valuation/conservative/NAMED").json()["data"]
+    assert body["case_name"] == load_case(body["id"])["case_name"]
+    assert "None" not in body["case_name"]
