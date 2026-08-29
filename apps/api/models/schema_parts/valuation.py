@@ -73,6 +73,19 @@ class ValuationCaseCreated(BaseModel):
     id: int
 
 
+class ConservativeCaseResult(BaseModel):
+    """The outcome of a conservative-case request.
+
+    `created` distinguishes a case built by this call from one that already
+    existed, which a bare id cannot: the endpoint is idempotent, so a repeat
+    request succeeds without changing anything.
+    """
+
+    id: int
+    case_name: str
+    created: bool
+
+
 class ValuationCaseSummary(BaseModel):
     id: int
     case_name: str

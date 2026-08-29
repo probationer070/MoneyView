@@ -161,3 +161,102 @@ def test_run_exposes_the_terminal_consistency_diagnostics():
     ):
         assert key in data, key
         assert isinstance(data[key], float)
+
+
+BILLION = 1_000_000_000.0
+
+_STATEMENT_ROWS = (
+    ("income", "Total Revenue", {2024: 90 * BILLION, 2025: 100 * BILLION}),
+    ("income", "Operating Income", {2024: 27 * BILLION, 2025: 30 * BILLION}),
+    ("balance", "Stockholders Equity", {2024: 25 * BILLION, 2025: 28 * BILLION}),
+    ("balance", "Total Debt", {2024: 5 * BILLION, 2025: 5 * BILLION}),
+    ("balance", "Cash And Cash Equivalents", {2024: 1 * BILLION, 2025: 1 * BILLION}),
+    ("balance", "Diluted Average Shares", {2024: 1 * BILLION, 2025: 1 * BILLION}),
+)
+
+
+def _seed_conservative_inputs(ticker="ROUTE", industry="Semiconductors"):
+    """Everything the conservative generator reads, in the isolated test DB.
+
+    The route cannot inject a `bundle_loader`, so the statement bundle has to be
+    seeded where the default loader reads it -- `corporate_statements` -- rather
+    than passed in as the service-level tests do.
+    """
+    from apps.api.services.db import get_db
+    from apps.api.services.industry_benchmark_store import store_vintage
+    from tests.fixtures.industry_rows_technology import TECHNOLOGY_ROWS
+
+    store_vintage("2026-01-01", TECHNOLOGY_ROWS)
+    with get_db() as conn:
+        conn.execute(
+            "INSERT OR REPLACE INTO corporate_quote_facts "
+            "(ticker, market_cap, shares_outstanding, currency, beta, sector, industry, fetched_at) "
+            "VALUES (?, 2.0e11, 1.0e9, 'USD', 1.0, 'Technology', ?, '2026-01-01')",
+            (ticker, industry),
+        )
+        conn.executemany(
+            "INSERT OR REPLACE INTO corporate_statements "
+            "(ticker, statement_type, frequency, period_end, line_item, value, fetched_at) "
+            "VALUES (?, ?, 'annual', ?, ?, ?, '2026-01-01T00:00:00')",
+            [
+                (ticker, statement_type, f"{year}-12-31", line_item, value)
+                for statement_type, line_item, by_year in _STATEMENT_ROWS
+                for year, value in by_year.items()
+            ],
+        )
+
+
+def test_conservative_case_route_creates_a_case():
+    _seed_conservative_inputs()
+    response = client.post("/api/v1/valuation/conservative/ROUTE")
+    assert response.status_code == 200
+    body = response.json()["data"]
+    assert body["id"] > 0
+    assert body["created"] is True
+
+
+def test_conservative_case_route_is_idempotent():
+    """A repeat call returns the existing case rather than a duplicate-name
+    error, so a client retrying after a timeout is safe."""
+    _seed_conservative_inputs()
+    first = client.post("/api/v1/valuation/conservative/ROUTE").json()["data"]
+    second = client.post("/api/v1/valuation/conservative/ROUTE")
+    assert second.status_code == 200
+    body = second.json()["data"]
+    assert body["id"] == first["id"]
+    assert body["created"] is False
+
+
+def test_conservative_case_route_without_a_vintage_is_409():
+    """No benchmark dataset loaded is a server-state problem, not a bad ticker:
+    a 422 would blame the caller's input for something it did not cause."""
+    response = client.post("/api/v1/valuation/conservative/NOVINTAGE")
+    assert response.status_code == 409
+    assert "no_vintage" in response.json()["detail"]
+
+
+def test_conservative_case_route_refusal_is_422_naming_the_reason():
+    """An unmapped industry is about this ticker, so it is a 422 -- and the
+    reason keeps its machine-readable prefix."""
+    _seed_conservative_inputs(ticker="WEIRD", industry="Nonexistent Industry")
+    response = client.post("/api/v1/valuation/conservative/WEIRD")
+    assert response.status_code == 422
+    assert "unmapped_industry" in response.json()["detail"]
+
+
+def test_conservative_case_route_reports_the_stored_name():
+    """The reported `case_name` must be the one on the stored row, not a name
+    the route rebuilt for itself.
+
+    `generate_conservative_case_for_ticker` resolves a vintage internally and
+    returns only `(case_id, reason)`. Rebuilding the name from a second
+    `latest_vintage()` call is what `resolve_for_ticker`'s docstring warns
+    against: it can disagree with the stored row, and a `None` vintage yields a
+    plausible-looking `conservative_<TICKER>_None` that no guard would catch.
+    """
+    from apps.api.services.valuation_case import load_case
+
+    _seed_conservative_inputs(ticker="NAMED")
+    body = client.post("/api/v1/valuation/conservative/NAMED").json()["data"]
+    assert body["case_name"] == load_case(body["id"])["case_name"]
+    assert "None" not in body["case_name"]

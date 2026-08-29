@@ -147,6 +147,16 @@ def _narrative(field: str, claim: str, vintage: str, three_p: str,
     }
 
 
+def conservative_case_name(ticker: str, vintage: str) -> str:
+    """The stored name of a ticker's conservative case for one benchmark vintage.
+
+    One source of truth: `build_conservative_case` names the case with it and
+    the lookup that makes the HTTP route idempotent finds it with the same
+    call, so a caller never has to reconstruct the scheme itself.
+    """
+    return f"conservative_{ticker.upper()}_{vintage}"
+
+
 def build_conservative_case(
     ticker: str,
     baseline: CompanyBaseline,
@@ -232,7 +242,7 @@ def build_conservative_case(
     ]
 
     return {
-        "case_name": f"conservative_{ticker.upper()}_{vintage}",
+        "case_name": conservative_case_name(ticker, vintage),
         "ticker": ticker.upper(),
         "as_of_date": f"{base_year}-01-01",
         "base_year": base_year,
