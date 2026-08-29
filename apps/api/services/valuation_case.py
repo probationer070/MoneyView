@@ -10,6 +10,7 @@ carries the narrative claim that justifies it. See `_validate_narratives`.
 
 from __future__ import annotations
 
+import dataclasses
 import sqlite3
 
 from apps.api.services.db import get_db
@@ -131,6 +132,113 @@ def _validate_runnable(payload: dict, segment: dict) -> None:
             )
 
 
+def _specs_from_payload(payload: dict) -> tuple[CaseSpec, list[SegmentSpec]]:
+    """Build engine specs from a create payload, as `load_case` would.
+
+    Normalizing through the column lists reproduces exactly what a stored row
+    yields on read -- `None` for anything unstated -- so the write-time trial
+    and the later run cannot disagree about their inputs. `_to_specs` indexes
+    with `case["key"]` and would raise `KeyError` on an omitted optional field,
+    where `create_case` tolerates the omission via `.get()`.
+    """
+    normalized = {column: payload.get(column) for column in _CASE_COLUMNS}
+    normalized["segments"] = [
+        {column: segment.get(column) for column in _SEGMENT_COLUMNS}
+        for segment in payload["segments"]
+    ]
+    return _to_specs(normalized)
+
+
+def _required_field_names(spec_cls: type) -> tuple[str, ...]:
+    """Field names on an engine dataclass that `__post_init__` uses unconditionally.
+
+    A field qualifies here when it has no default at all, or when its default
+    is a concrete value rather than `None`. `CaseSpec` and `SegmentSpec` both
+    assume such a field is present -- their `__post_init__` guards compare it
+    directly with no `None` check. That is true of a no-default field like
+    `shares_basic` (`self.shares_basic <= 0`), and it is equally true of a
+    field with a non-`None` default: `SegmentSpec.ramp_start_year` defaults to
+    `1` but is still compared unconditionally (`self.ramp_start_year < 1`), so
+    passing `None` reaches that comparison and raises `TypeError`, not
+    `ValueError`. A `None` default, by contrast, is the dataclass's own signal
+    that the engine treats the field's absence as a distinct, valid case (see
+    e.g. `CaseSpec.terminal_growth`, `SegmentSpec.tam_target`), so those fields
+    are deliberately left out.
+
+    This is a heuristic over dataclass metadata, not an inspection of
+    `__post_init__` itself, and it has one known blind spot: a future field
+    that defaults to `None` but that some `__post_init__` or downstream engine
+    path nonetheless dereferences without a null check -- the same shape of
+    defect this predicate was extended to close for `ramp_start_year`,
+    recurring on a field this predicate is built to treat as optional. Closing
+    that class of gap for good would mean inspecting `__post_init__` itself,
+    not deriving from dataclass field metadata.
+    """
+    return tuple(
+        field.name
+        for field in dataclasses.fields(spec_cls)
+        if (field.default is dataclasses.MISSING or field.default is not None)
+        and field.default_factory is dataclasses.MISSING  # type: ignore[misc]
+    )
+
+
+_REQUIRED_CASE_FIELDS = _required_field_names(CaseSpec)
+_REQUIRED_SEGMENT_FIELDS = _required_field_names(SegmentSpec)
+
+
+def _validate_required_fields(payload: dict) -> None:
+    """Reject a missing required field before it reaches `CaseSpec`/`SegmentSpec`.
+
+    Nothing previously built a `CaseSpec`/`SegmentSpec` from an unvalidated
+    payload -- a missing required field (e.g. `shares_basic=None`) used to
+    reach SQLite's `NOT NULL` constraint first, at INSERT time, and come back
+    as a clean `ValueError` naming the column. `_validate_by_engine` now
+    builds a trial spec earlier than that, so without this check the same
+    missing field would instead hit a null-unsafe `__post_init__` comparison
+    and raise `TypeError` -- a regression from a clean 422 to an unhandled
+    500 for any caller that reaches `create_case` without Pydantic's own
+    field validation ahead of it. This check restores the original, clean
+    rejection at the new, earlier point.
+    """
+    missing_case = [f for f in _REQUIRED_CASE_FIELDS if payload.get(f) is None]
+    if missing_case:
+        raise ValueError(f"case is missing required field(s): {', '.join(missing_case)}")
+    for segment in payload["segments"]:
+        missing_segment = [f for f in _REQUIRED_SEGMENT_FIELDS if segment.get(f) is None]
+        if missing_segment:
+            name = segment.get("name") or "?"
+            raise ValueError(
+                f"segment '{name}' is missing required field(s): "
+                f"{', '.join(missing_segment)}"
+            )
+
+
+def _validate_by_engine(payload: dict) -> None:
+    """Reject at write time what `run_case` rejects at read time.
+
+    First checks that every no-default `CaseSpec`/`SegmentSpec` field is
+    present (`_validate_required_fields`) -- a missing one is a structural
+    defect, not an economic refusal, and the engine's own dataclasses raise
+    `TypeError`, not `ValueError`, for it. Only after that does it run the
+    real engine itself against specs built from the payload. Any `ValueError`
+    guard reached by `run_case` through this execution path is enforced at
+    creation time without duplicating the guard in this layer.
+
+    Only `ValueError` is translated. A `KeyError`, `TypeError` or anything else
+    is a defect in this module or the engine, not an economic refusal, and must
+    keep its own type and traceback. Do NOT widen this to `except Exception`:
+    that would relabel programming and infrastructure faults as ordinary
+    validation failures and bury them behind a 422.
+
+    The engine's result is discarded. This is a gate, not a computation.
+    """
+    _validate_required_fields(payload)
+    try:
+        run_case(*_specs_from_payload(payload))
+    except ValueError as exc:
+        raise ValueError(f"case is not valuable: {exc}") from exc
+
+
 def create_case(payload: dict) -> int:
     """Persist a case, its segments and their narratives in one transaction."""
     segments = payload.get("segments") or []
@@ -139,6 +247,7 @@ def create_case(payload: dict) -> int:
     for segment in segments:
         _validate_narratives(segment)
         _validate_runnable(payload, segment)
+    _validate_by_engine(payload)
 
     with get_db() as conn:
         try:

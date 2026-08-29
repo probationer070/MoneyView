@@ -1553,3 +1553,107 @@ a screening rule, not asserted from a brief or sampled from a 10-row
 fixture. Ten rows cannot reveal where a natural gap in 92 rows actually
 falls; a bound placed to look reasonable on a small sample can still cut
 through the middle of a real cluster in the full one.
+
+## 2026-08-15: create_case stored valuation cases the engine could never run
+
+Date: 2026-08-15
+Command: `generate_conservative_case("TEST", ...)` on a thin-margin,
+capital-heavy company -- 3% operating margin, sales-to-capital 0.6,
+`CorporateMetrics(growth=2.0, roic=4.0, wacc=9.0)` -- found by a scratch
+probe and later formalized as
+`test_generate_refuses_a_case_the_engine_cannot_value`.
+Failure: the call returned `case_id 1, reason None` -- a success -- and the
+stored row was permanently unrunnable. `run_stored_case(1)` then raised
+`ValueError: roic_stable 1.3554% must exceed the magnitude of terminal
+growth 4.5600%`, and would raise it identically on every future call,
+since nothing about a stored case ever changes. `POST /valuation/cases`
+carried the identical defect through the public API: 201 Created,
+followed by a permanent 422 on every later `run`. Any caller of
+`create_case` could write a case the engine would never value, be told it
+succeeded, and have no way to discover the problem short of running it.
+Found by a scratch probe, `tests/api/test_zz_probe2.py`, which was never
+committed and was deleted once its assertion was formalized as
+`test_generate_refuses_a_case_the_engine_cannot_value`.
+Root cause: `_validate_runnable` documented itself as rejecting "at write
+time what `run_case` would reject at read time", but only checked two
+structural combinations (`waypoint_gap_fraction` vs `initial_growth`, and
+the 10-year horizon). The economic guards -- including the `roic_stable`
+vs terminal-growth check that fired here -- live in the engine's
+`terminal_value` and fire only when a case is run. **The docstring
+claimed coverage the function did not have, and that overclaim is why the
+gap survived review**: a reader checking whether write time mirrored read
+time had only the docstring's claim to check against, not the two `if`
+statements actually beneath it.
+Fix: `_validate_by_engine` builds a trial `CaseSpec`/`SegmentSpec` from
+the payload and runs the real engine -- `run_case`'s own code path --
+before the transaction opens, translating any `ValueError` it raises into
+`case is not valuable: <engine message>`. The guard is not restated in a
+second location; the same code that enforces it at run time now enforces
+it at write time.
+Files changed: `apps/api/services/valuation_case.py`,
+`tests/api/test_valuation_case_service.py`,
+`tests/api/test_company_baseline.py`.
+Prevention: a validator that claims to mirror another layer must execute
+that layer, not restate a fragment of it and document the fragment as the
+whole. Where restating is unavoidable, the docstring's claim must be
+narrowed to what is actually checked, not to what the function is meant
+to check. The entry directly below this one is a distinct, later defect:
+the fix for this one (`ef1a1d3`) reordered validation so engine code now
+runs ahead of a database constraint that used to be the first thing to
+catch a missing required field, and that reordering is what regressed.
+
+## 2026-08-15: A missing required case field crashed with TypeError instead of a clean ValueError
+
+Date: 2026-08-15
+Command: `python -m pytest -q` (full suite, run as Step 8 of the write-time
+runnability gate, `.superpowers/sdd/2026-08-15-write-time-runnability-gate/task-1-brief.md`)
+Failure: `tests/api/test_valuation_case_service.py::test_missing_required_case_field_is_rejected_with_the_column_named`
+failed with an unhandled `TypeError: '<=' not supported between instances of
+'NoneType' and 'int'` instead of the `ValueError` naming `shares_basic` that
+the test (and, before Task 1's gate, the real behavior) expects.
+Root cause: Task 1 added `_validate_by_engine`, which runs `run_case` against
+a trial `CaseSpec`/`SegmentSpec` built straight from the raw, unvalidated
+payload -- *before* the `INSERT` that used to be the first place a missing
+`NOT NULL` column (e.g. `shares_basic`) was caught, as a clean
+`sqlite3.IntegrityError` translated to `ValueError`. Nothing before Task 1
+ever built a `CaseSpec`/`SegmentSpec` from unvalidated input, so this path
+was never reachable. `CaseSpec.__post_init__` (`packages/core_finance/segment_valuation.py:642`)
+assumes required numeric fields are never `None` and does `self.shares_basic
+<= 0` with no null check -- pre-existing, and out of scope to change here --
+so a payload missing a required field reached that comparison first and
+raised `TypeError` instead. `_validate_by_engine` only translates `ValueError`
+by design (translating `TypeError` would relabel a programming/infrastructure
+fault as an ordinary 422), so the `TypeError` propagated out of `create_case`
+uncaught. The FastAPI route (`apps/api/routes/valuation.py:32-35`) also only
+catches `ValueError`, and `apps/api/main.py` has no generic exception
+handler, so any caller of `create_case` that skips Pydantic validation and
+omits a required numeric field would have gotten a raw 500 where it
+previously got a 422. The public API route was not affected in practice --
+`ValuationCaseInput.shares_basic` is `Field(gt=0)`, non-nullable, so Pydantic
+rejects a missing value before `create_case` is ever called -- but any other
+direct caller of `create_case` (seed scripts, other services, or this unit
+test) was exposed.
+Fix: Added `_validate_required_fields` in `apps/api/services/valuation_case.py`,
+called at the start of `_validate_by_engine`, before the trial spec is built.
+It derives the required-field lists straight from the dataclasses
+(`dataclasses.fields(CaseSpec)` / `dataclasses.fields(SegmentSpec)`, any field
+with no default) rather than hand-maintaining them, and raises `ValueError`
+naming every missing case-level or segment-level field found `None` in the
+payload. This restores the original clean-422 behavior at the new, earlier
+point without touching `segment_valuation.py` and without widening
+`_validate_by_engine`'s `except ValueError` clause. Added
+`test_a_segment_missing_a_required_field_is_rejected` to cover the
+segment-level half of the check (`SegmentSpec` fields), alongside the
+existing `test_missing_required_case_field_is_rejected_with_the_column_named`,
+which now passes unmodified.
+Files changed: `apps/api/services/valuation_case.py`,
+`tests/api/test_valuation_case_service.py`.
+Prevention: any future reordering that runs engine code earlier than a
+database constraint that used to be the first line of defense should be
+checked against every required-but-nullable-in-Python field, not just the
+economic guards the reordering was aimed at -- `CaseSpec`/`SegmentSpec`'s
+`__post_init__` guards assume presence, not just validity, and were written
+assuming the database had already screened for `None`. Deriving the required
+list from the dataclass, rather than hand-copying field names, keeps this
+check from silently drifting out of sync if either spec gains a new
+no-default field later.
