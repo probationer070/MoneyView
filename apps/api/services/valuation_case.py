@@ -150,19 +150,34 @@ def _specs_from_payload(payload: dict) -> tuple[CaseSpec, list[SegmentSpec]]:
 
 
 def _required_field_names(spec_cls: type) -> tuple[str, ...]:
-    """Field names on an engine dataclass that have no default.
+    """Field names on an engine dataclass that `__post_init__` uses unconditionally.
 
-    `CaseSpec` and `SegmentSpec` both assume every no-default field is
-    present -- their `__post_init__` guards compare fields like
-    `shares_basic` directly (`self.shares_basic <= 0`) with no `None` check,
-    so a missing value raises `TypeError`, not `ValueError`. Deriving the
-    list from the dataclass itself, rather than hand-maintaining one, means a
-    future required field on either spec is covered automatically.
+    A field qualifies here when it has no default at all, or when its default
+    is a concrete value rather than `None`. `CaseSpec` and `SegmentSpec` both
+    assume such a field is present -- their `__post_init__` guards compare it
+    directly with no `None` check. That is true of a no-default field like
+    `shares_basic` (`self.shares_basic <= 0`), and it is equally true of a
+    field with a non-`None` default: `SegmentSpec.ramp_start_year` defaults to
+    `1` but is still compared unconditionally (`self.ramp_start_year < 1`), so
+    passing `None` reaches that comparison and raises `TypeError`, not
+    `ValueError`. A `None` default, by contrast, is the dataclass's own signal
+    that the engine treats the field's absence as a distinct, valid case (see
+    e.g. `CaseSpec.terminal_growth`, `SegmentSpec.tam_target`), so those fields
+    are deliberately left out.
+
+    This is a heuristic over dataclass metadata, not an inspection of
+    `__post_init__` itself, and it has one known blind spot: a future field
+    that defaults to `None` but that some `__post_init__` or downstream engine
+    path nonetheless dereferences without a null check -- the same shape of
+    defect this predicate was extended to close for `ramp_start_year`,
+    recurring on a field this predicate is built to treat as optional. Closing
+    that class of gap for good would mean inspecting `__post_init__` itself,
+    not deriving from dataclass field metadata.
     """
     return tuple(
         field.name
         for field in dataclasses.fields(spec_cls)
-        if field.default is dataclasses.MISSING
+        if (field.default is dataclasses.MISSING or field.default is not None)
         and field.default_factory is dataclasses.MISSING  # type: ignore[misc]
     )
 

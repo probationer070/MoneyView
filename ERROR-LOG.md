@@ -1571,6 +1571,9 @@ carried the identical defect through the public API: 201 Created,
 followed by a permanent 422 on every later `run`. Any caller of
 `create_case` could write a case the engine would never value, be told it
 succeeded, and have no way to discover the problem short of running it.
+Found by a scratch probe, `tests/api/test_zz_probe2.py`, which was never
+committed and was deleted once its assertion was formalized as
+`test_generate_refuses_a_case_the_engine_cannot_value`.
 Root cause: `_validate_runnable` documented itself as rejecting "at write
 time what `run_case` would reject at read time", but only checked two
 structural combinations (`waypoint_gap_fraction` vs `initial_growth`, and
@@ -1589,9 +1592,7 @@ second location; the same code that enforces it at run time now enforces
 it at write time.
 Files changed: `apps/api/services/valuation_case.py`,
 `tests/api/test_valuation_case_service.py`,
-`tests/api/test_company_baseline.py`, `tests/api/test_zz_probe2.py`
-(scratch probe that found the defect, deleted once its assertion was
-formalized as `test_generate_refuses_a_case_the_engine_cannot_value`).
+`tests/api/test_company_baseline.py`.
 Prevention: a validator that claims to mirror another layer must execute
 that layer, not restate a fragment of it and document the fragment as the
 whole. Where restating is unavoidable, the docstring's claim must be

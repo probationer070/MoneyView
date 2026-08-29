@@ -1348,6 +1348,25 @@ Plan: `.superpowers/sdd/2026-08-11-industry-relative-conservative-valuation/`
       modifying `packages/core_finance/segment_valuation.py`. Deferred
       until a second need for validation-without-computation appears.
 
+      Further deferred, from the final review of this branch:
+      - `_validate_runnable` is now redundant -- both its checks are
+        enforced by the engine at write time through `_validate_by_engine`
+        (the waypoint/`initial_growth` conflict by
+        `SegmentSpec.__post_init__`, the 10-year-horizon rule by
+        `_gap_closing_revenues`). Because `create_case` runs it first, the
+        service-layer message wins and the engine's is never seen; if
+        either engine message is edited the copy diverges with no test
+        failure. It can be deleted, out of this branch's scope.
+      - Engine null-safety belongs in the engine -- `CaseSpec.__post_init__`
+        and `SegmentSpec.__post_init__` dereference required fields without
+        null checks, and the service-layer presence check
+        (`_validate_required_fields`) is a mirror that must be kept in
+        sync, the same duplication the spec argues against.
+      - Legacy stored-but-unrunnable rows -- the gate governs writes only,
+        rows written before it are unaffected, and there is no migration
+        or diagnostic to find them. Exposure is per-developer since
+        `data/processed/` is gitignored.
+
 ## Archived Track - MoneyView Dev Monitor
 
 Completed basis retained from the previous active plan:

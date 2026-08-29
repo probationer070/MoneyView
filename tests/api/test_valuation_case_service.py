@@ -259,6 +259,40 @@ def test_write_time_specs_equal_read_time_specs():
     assert _specs_from_payload(payload) == _to_specs(load_case(case_id))
 
 
+def test_write_time_specs_equal_read_time_specs_for_a_fully_populated_payload():
+    """The equivalence test above only pins `_case_payload()`'s default shape,
+    where every optional field is `None` or absent -- a payload that actually
+    populates its optional fields exercises a different set of columns
+    entirely and must round-trip identically, or the invariant only holds for
+    the sparse case.
+
+    Sets `terminal_growth`, `effective_tax_rate` and `parent_case_id` on the
+    case, and `initial_growth` plus `revenue_target` on the segment (dropping
+    `tam_target`/`market_share_target`, which conflict with `revenue_target`
+    per Minor B in `_validate_narratives`). `revenue_target=70.0` matches the
+    default fixture's `tam_target x market_share_target` (100.0 x 0.70), and
+    `initial_growth=0.0764` is the value already proven to reach the engine in
+    `test_initial_growth_round_trips_and_reaches_the_engine`. `terminal_growth`
+    is capped below `riskfree_rate` (4.56%) by `CaseSpec.__post_init__`, so
+    0.02 (2%) is used instead of reusing 0.0764 for both.
+    """
+    parent_id = create_case(_case_payload(case_name="populated_equivalence_parent"))
+    payload = _case_payload(
+        case_name="populated_equivalence",
+        terminal_growth=0.02,
+        effective_tax_rate=0.21,
+        parent_case_id=parent_id,
+        segments=[_segment_payload(
+            tam_target=None,
+            market_share_target=None,
+            revenue_target=70.0,
+            initial_growth=0.0764,
+        )],
+    )
+    case_id = create_case(payload)
+    assert _specs_from_payload(payload) == _to_specs(load_case(case_id))
+
+
 def test_a_segment_missing_a_required_field_is_rejected():
     """The presence check covers `SegmentSpec`'s no-default fields too, not
     only `CaseSpec`'s. A missing `sales_to_capital_late` used to reach
@@ -272,4 +306,23 @@ def test_a_segment_missing_a_required_field_is_rejected():
         segments=[_segment_payload(sales_to_capital_late=None)],
     )
     with pytest.raises(ValueError, match="sales_to_capital_late"):
+        create_case(payload)
+
+
+def test_a_segment_with_ramp_start_year_none_is_rejected_with_a_valueerror():
+    """`ramp_start_year` has a non-None default (1), so the old "no default"
+    predicate skipped it entirely: `SegmentSpec.__post_init__` still compares
+    it unconditionally (`self.ramp_start_year < 1`), so a `None` value used to
+    reach that comparison and raise `TypeError` -- a 500, where every other
+    missing required field gets a clean, field-named `ValueError` here. The
+    corrected predicate (no default, OR a non-`None` default) now catches it
+    before the trial spec is built. `pytest.raises(ValueError)` itself proves
+    this is not the old `TypeError`: that exception type would not be caught
+    and the test would error out instead of passing.
+    """
+    payload = _case_payload(
+        case_name="segment_null_ramp_start_year",
+        segments=[_segment_payload(ramp_start_year=None)],
+    )
+    with pytest.raises(ValueError, match="ramp_start_year"):
         create_case(payload)

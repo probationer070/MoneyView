@@ -2,6 +2,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from apps.api.main import app
+from apps.api.services.db import get_db
 from tests.api.valuation_fixtures import _case_payload, _narrative
 
 client = TestClient(app)
@@ -106,6 +107,45 @@ def test_create_rejects_initial_growth_at_or_below_negative_one():
         error["type"] == "greater_than" and "initial_growth" in error["loc"]
         for error in errors
     )
+
+
+def test_run_of_a_legacy_unvaluable_row_is_a_422():
+    """The write-time gate governs writes only; it cannot retroactively fix a
+    row written before it existed, and there is no migration that sweeps for
+    one. This stands in for such a row: since no supported path can create an
+    unvaluable case any more, this inserts one directly via `get_db()`,
+    bypassing `create_case` (and its narrative/engine gates) entirely -- which
+    is exactly what a legacy row is. Regression coverage for
+    `apps/api/routes/valuation.py`'s `except ValueError -> 422` branch on
+    `/run`, which the write-time gate otherwise drives to zero hits across the
+    whole suite.
+    """
+    with get_db() as conn:
+        cursor = conn.execute(
+            "INSERT INTO valuation_case (case_name, as_of_date, base_year,"
+            " target_year, riskfree_rate, wacc_initial, wacc_stable,"
+            " marginal_tax_rate, roic_stable, shares_basic) VALUES"
+            " (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                "legacy_unvaluable", "2026-08-09", 2026, 2036,
+                0.0456, 0.0837, 0.0825, 0.25,
+                0.03,  # roic_stable, terminal_growth left NULL -> defaults to
+                       # riskfree_rate 0.0456; 0.03 fails to exceed its magnitude.
+                12.535,
+            ),
+        )
+        case_id = int(cursor.lastrowid)
+        conn.execute(
+            "INSERT INTO segment (case_id, name, base_revenue, base_margin,"
+            " tam_target, market_share_target, margin_target,"
+            " sales_to_capital_early, sales_to_capital_late) VALUES"
+            " (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (case_id, "launch", 4.1, -0.10, 100.0, 0.70, 0.45, 1.0, 1.5),
+        )
+
+    response = client.post(f"/api/v1/valuation/cases/{case_id}/run")
+    assert response.status_code == 422
+    assert "terminal growth" in response.json()["detail"]
 
 
 def test_run_exposes_the_terminal_consistency_diagnostics():
