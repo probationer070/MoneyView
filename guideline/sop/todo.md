@@ -1296,6 +1296,57 @@ Plan: `.superpowers/sdd/2026-08-11-industry-relative-conservative-valuation/`
       on its own and an empty intersection has its own `no_shared_year` reason.
       23 new tests in `tests/api/test_company_baseline.py`; full suite 781
       passed.
+- [x] Task 10 (2026-08-15/2026-08-29) - The write-time runnability gate.
+      Plan: `.superpowers/sdd/2026-08-15-write-time-runnability-gate/`.
+      `create_case` could store a case the engine would never run:
+      `_validate_runnable` documented itself as rejecting "at write time
+      what `run_case` would reject at read time" but only checked two
+      structural combinations, never the economic guards in
+      `terminal_value`. A thin-margin, capital-heavy company reproduced it
+      through both `create_case` callers -- Task 9's
+      `generate_conservative_case` and the public `POST
+      /valuation/cases` route -- returning a success and a permanent 422
+      on every later run. `_validate_by_engine` now runs the real engine
+      against a trial `CaseSpec`/`SegmentSpec` before the transaction
+      opens and translates `ValueError` into a creation-time refusal, so
+      the guard is enforced once, by the same code, at both times. A fix
+      round closed a regression the gate introduced: building the trial
+      spec from an unvalidated payload reached `CaseSpec.__post_init__`'s
+      null-unsafe comparisons before a missing required field could be
+      named, turning a clean 422 into an unhandled 500;
+      `_validate_required_fields` (deriving its field lists from
+      `dataclasses.fields()`) now runs first. Both defects have their own
+      `ERROR-LOG.md` entries, dated the same day and kept distinct on
+      purpose -- the original stored-but-unrunnable case, and the
+      regression the fix for it introduced.
+
+      This section previously described an unvaluable case as a
+      "refusal" in several entries above (Task 7, Task 9). That was true
+      only once a case reached `run_case` -- before this gate, a rejected
+      case had already been written, so calling it a refusal understated
+      what actually happened: a store followed by a permanently broken
+      row. `generate_conservative_case`'s refusal is now real at the
+      point it is reported: the row is never written.
+
+      Fixture triage (Task 1 Step 8, run against the full suite): exactly
+      one test needed changing, and no fixture was found invalid for
+      economic reasons. `test_model_invalid_inputs_are_422_not_500`
+      (`tests/api/test_valuation_routes.py`) created a case with
+      `terminal_growth=0.09` against a lower riskfree rate -- a case that
+      was never valuable -- and asserted the **run** endpoint returned
+      422. Under the write-time gate such a case can no longer be
+      stored, so the assertion moved to the **create** endpoint: same
+      guard, same `"riskfree"` substring, now asserted where it actually
+      fires. An independent reviewer traced this end to end and ruled it
+      a legitimate relocation, not a weakening.
+
+      Deferred refactor: extracting the engine's input guards into a
+      `_validate_valuation_inputs(spec, segments)` called by both
+      `create_case` and `run_case` would remove the duplicated DCF
+      computation `_validate_by_engine` currently pays for, but requires
+      the guards to be separable from the computation and would mean
+      modifying `packages/core_finance/segment_valuation.py`. Deferred
+      until a second need for validation-without-computation appears.
 
 ## Archived Track - MoneyView Dev Monitor
 

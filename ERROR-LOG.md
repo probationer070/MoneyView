@@ -1554,6 +1554,53 @@ fixture. Ten rows cannot reveal where a natural gap in 92 rows actually
 falls; a bound placed to look reasonable on a small sample can still cut
 through the middle of a real cluster in the full one.
 
+## 2026-08-15: create_case stored valuation cases the engine could never run
+
+Date: 2026-08-15
+Command: `generate_conservative_case("TEST", ...)` on a thin-margin,
+capital-heavy company -- 3% operating margin, sales-to-capital 0.6,
+`CorporateMetrics(growth=2.0, roic=4.0, wacc=9.0)` -- found by a scratch
+probe and later formalized as
+`test_generate_refuses_a_case_the_engine_cannot_value`.
+Failure: the call returned `case_id 1, reason None` -- a success -- and the
+stored row was permanently unrunnable. `run_stored_case(1)` then raised
+`ValueError: roic_stable 1.3554% must exceed the magnitude of terminal
+growth 4.5600%`, and would raise it identically on every future call,
+since nothing about a stored case ever changes. `POST /valuation/cases`
+carried the identical defect through the public API: 201 Created,
+followed by a permanent 422 on every later `run`. Any caller of
+`create_case` could write a case the engine would never value, be told it
+succeeded, and have no way to discover the problem short of running it.
+Root cause: `_validate_runnable` documented itself as rejecting "at write
+time what `run_case` would reject at read time", but only checked two
+structural combinations (`waypoint_gap_fraction` vs `initial_growth`, and
+the 10-year horizon). The economic guards -- including the `roic_stable`
+vs terminal-growth check that fired here -- live in the engine's
+`terminal_value` and fire only when a case is run. **The docstring
+claimed coverage the function did not have, and that overclaim is why the
+gap survived review**: a reader checking whether write time mirrored read
+time had only the docstring's claim to check against, not the two `if`
+statements actually beneath it.
+Fix: `_validate_by_engine` builds a trial `CaseSpec`/`SegmentSpec` from
+the payload and runs the real engine -- `run_case`'s own code path --
+before the transaction opens, translating any `ValueError` it raises into
+`case is not valuable: <engine message>`. The guard is not restated in a
+second location; the same code that enforces it at run time now enforces
+it at write time.
+Files changed: `apps/api/services/valuation_case.py`,
+`tests/api/test_valuation_case_service.py`,
+`tests/api/test_company_baseline.py`, `tests/api/test_zz_probe2.py`
+(scratch probe that found the defect, deleted once its assertion was
+formalized as `test_generate_refuses_a_case_the_engine_cannot_value`).
+Prevention: a validator that claims to mirror another layer must execute
+that layer, not restate a fragment of it and document the fragment as the
+whole. Where restating is unavoidable, the docstring's claim must be
+narrowed to what is actually checked, not to what the function is meant
+to check. The entry directly below this one is a distinct, later defect:
+the fix for this one (`ef1a1d3`) reordered validation so engine code now
+runs ahead of a database constraint that used to be the first thing to
+catch a missing required field, and that reordering is what regressed.
+
 ## 2026-08-15: A missing required case field crashed with TypeError instead of a clean ValueError
 
 Date: 2026-08-15
