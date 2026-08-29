@@ -25,7 +25,7 @@ _mkt   = MarketDataService()
 # ---------------------------------------------------------------------------
 
 @router.get("/{ticker}/ohlcv", response_model=List[StockOHLCV])
-async def get_ohlcv(
+def get_ohlcv(
     ticker: str,
     period: str = Query(default="5y"),
 ):
@@ -33,7 +33,7 @@ async def get_ohlcv(
 
 
 @router.get("/{ticker}/technicals", response_model=TechnicalIndicators)
-async def get_technicals(ticker: str, period: str = Query(default="5y")):
+def get_technicals(ticker: str, period: str = Query(default="5y")):
     """Compute RSI-14, MACD, Bollinger Bands, and MAs using the market-data service."""
     normalized_ticker = ticker.upper()
     bars = _mkt.get_stock_ohlcv(normalized_ticker, period=period)
@@ -57,7 +57,7 @@ def _risk_label(p5: float, current: float, p95: float) -> str:
 
 
 @router.get("/{ticker}/monte-carlo", response_model=MonteCarloResult)
-async def get_monte_carlo(
+def get_monte_carlo(
     ticker:       str,
     paths:        int = Query(default=1000, ge=100, le=10000),
     horizon_days: int = Query(default=252, ge=30, le=756),

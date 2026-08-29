@@ -9,7 +9,7 @@ router = APIRouter()
 
 
 @router.get("/logs/api-tail", response_model=APIResponse[LogTailResponse])
-async def get_api_log_tail(lines: int = Query(default=100, ge=1, le=500)):
+def get_api_log_tail(lines: int = Query(default=100, ge=1, le=500)):
     """Return a recent plain-text tail of the persistent API server log."""
     tail_lines = read_log_tail(max_lines=lines)
     return APIResponse(

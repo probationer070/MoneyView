@@ -132,19 +132,19 @@ def _valuation_params_from_metrics(metrics: CorporateMetrics) -> ValuationAssump
 
 
 @router.get("/companies", response_model=list[CorporateCompany])
-async def get_corporate_companies():
+def get_corporate_companies():
     """Return company-name-first corporate analysis universe."""
     return corporate_metrics_service.list_companies(_WATCHLIST_JSON)
 
 
 @router.post("/companies", response_model=CorporateCompany)
-async def add_corporate_company(company: CorporateCompany = Body(...)):
+def add_corporate_company(company: CorporateCompany = Body(...)):
     """Persist a manually added company for on-demand corporate analysis."""
     return corporate_metrics_service.add_company(company)
 
 
 @router.get("/comparison", response_model=APIResponse[CorporateComparisonResponse])
-async def get_corporate_comparison(
+def get_corporate_comparison(
     mode: Literal["snapshot", "live"] = Query(default=DEFAULT_SNAPSHOT_MODE),
     comparison_universe: Literal["portfolio_plus_benchmark", "watchlist_plus_benchmark", "custom"] = Query(
         default=DEFAULT_COMPARISON_UNIVERSE
@@ -172,7 +172,7 @@ async def get_corporate_comparison(
 
 
 @router.post("/comparison/snapshot", response_model=APIResponse[CorporateComparisonResponse])
-async def refresh_corporate_comparison_snapshot(
+def refresh_corporate_comparison_snapshot(
     comparison_universe: Literal["portfolio_plus_benchmark", "watchlist_plus_benchmark", "custom"] = Query(
         default=DEFAULT_COMPARISON_UNIVERSE
     ),
@@ -214,7 +214,7 @@ async def refresh_corporate_comparison_snapshot(
 
 
 @router.get("/comparison/history", response_model=APIResponse[CorporateComparisonHistoryResponse])
-async def get_corporate_comparison_history(
+def get_corporate_comparison_history(
     comparison_universe: Literal["portfolio_plus_benchmark", "watchlist_plus_benchmark", "custom"] = Query(
         default=DEFAULT_COMPARISON_UNIVERSE
     ),
@@ -237,7 +237,7 @@ async def get_corporate_comparison_history(
 
 
 @router.get("/comparison/snapshot-version", response_model=APIResponse[CorporateComparisonResponse])
-async def get_corporate_comparison_snapshot_version(snapshot_version: str = Query(..., min_length=1)):
+def get_corporate_comparison_snapshot_version(snapshot_version: str = Query(..., min_length=1)):
     """Return one persisted comparison snapshot version by id."""
     normalized_snapshot_version = snapshot_version.strip().replace(" ", "+")
     response = load_corporate_comparison_snapshot_version(snapshot_version=normalized_snapshot_version)
@@ -250,7 +250,7 @@ async def get_corporate_comparison_snapshot_version(snapshot_version: str = Quer
 
 
 @router.delete("/comparison/snapshot-version", response_model=APIResponse[CorporateComparisonSnapshotDeleteResult])
-async def delete_corporate_comparison_snapshot(snapshot_version: str = Query(..., min_length=1)):
+def delete_corporate_comparison_snapshot(snapshot_version: str = Query(..., min_length=1)):
     """Delete one persisted comparison snapshot version by id."""
     normalized_snapshot_version = snapshot_version.strip().replace(" ", "+")
     deleted_rows = delete_corporate_comparison_snapshot_version(snapshot_version=normalized_snapshot_version)
@@ -266,7 +266,7 @@ async def delete_corporate_comparison_snapshot(snapshot_version: str = Query(...
 
 
 @router.get("/comparison/stock-history", response_model=APIResponse[CorporateComparisonStockHistoryResponse])
-async def get_corporate_comparison_stock_history(
+def get_corporate_comparison_stock_history(
     ticker: str = Query(..., min_length=1),
     comparison_universe: Literal["portfolio_plus_benchmark", "watchlist_plus_benchmark", "custom"] = Query(
         default=DEFAULT_COMPARISON_UNIVERSE
@@ -291,7 +291,7 @@ async def get_corporate_comparison_stock_history(
 
 
 @router.post("/dcf/{ticker}")
-async def dynamic_dcf_model(ticker: str, params: ValuationAssumptions):
+def dynamic_dcf_model(ticker: str, params: ValuationAssumptions):
     """
     Lightweight non-streaming DCF summary response kept for compatibility paths.
     """
@@ -312,7 +312,7 @@ async def dynamic_dcf_model(ticker: str, params: ValuationAssumptions):
 
 
 @router.post("/dcf/{ticker}/report", response_model=APIResponse[DCFFullReport])
-async def get_dcf_full_report(ticker: str, params: ValuationAssumptions):
+def get_dcf_full_report(ticker: str, params: ValuationAssumptions):
     """Return the full DCF report only on explicit request."""
     report = build_dcf_full_report(
         ticker=ticker,
@@ -331,7 +331,7 @@ async def get_dcf_full_report(ticker: str, params: ValuationAssumptions):
 
 
 @router.post("/dcf/reports/bulk", response_model=APIResponse[list[DCFFullReport]])
-async def get_bulk_dcf_reports(request: CorporateDcfBatchRequest):
+def get_bulk_dcf_reports(request: CorporateDcfBatchRequest):
     """Calculate full DCF reports for a list of comparison tickers."""
     reports = build_bulk_dcf_reports(
         request.tickers,
@@ -420,7 +420,7 @@ async def stream_dcf_summary(request: Request, ticker: str, params: ValuationAss
 
 
 @router.get("/metrics/{ticker}", response_model=CorporateMetrics)
-async def get_corporate_metrics(
+def get_corporate_metrics(
     ticker: str,
     growth_basis: Literal["cagr", "recent_average", "annual"] = Query(default="cagr"),
     roic_basis: Literal["recent_average", "all_year_average", "annual"] = Query(default="recent_average"),
@@ -446,7 +446,7 @@ async def get_corporate_metrics(
 
 
 @router.get("/metrics/{ticker}/audit", response_model=CorporateMetricAudit)
-async def get_corporate_metric_audit(
+def get_corporate_metric_audit(
     ticker: str,
     roic_basis: Literal["recent_average", "all_year_average", "annual"] = Query(default="recent_average"),
     roic_year: Optional[int] = Query(default=None, ge=YAHOO_STATEMENT_START_YEAR),
@@ -470,26 +470,26 @@ async def get_corporate_metric_audit(
 
 
 @router.get("/metrics/{ticker}/history")
-async def get_corporate_metric_history(ticker: str):
+def get_corporate_metric_history(ticker: str):
     ticker = ticker.upper()
     logger.info("corporate.metrics_history_request ticker=%s", ticker)
     return corporate_metrics_service.metric_history(ticker, bundle_loader=_get_yahoo_statement_bundle)
 
 
 @router.get("/metrics/{ticker}/quarterly-statements")
-async def get_corporate_quarterly_statements(ticker: str):
+def get_corporate_quarterly_statements(ticker: str):
     ticker = ticker.upper()
     logger.info("corporate.quarterly_statements_request ticker=%s", ticker)
     return corporate_metrics_service.quarterly_statement_payload(ticker, bundle_loader=_get_yahoo_statement_bundle)
 
 
 @router.put("/metrics/{ticker}", response_model=CorporateMetrics)
-async def save_corporate_metrics(ticker: str, metrics: CorporateMetrics):
+def save_corporate_metrics(ticker: str, metrics: CorporateMetrics):
     return corporate_metrics_service.save_metrics(ticker, metrics)
 
 
 @router.get("/diagnostic/{ticker}/radar")
-async def get_corporate_radar(ticker: str):
+def get_corporate_radar(ticker: str):
     """
     Native Recharts Radar mappings resolving overlapping qualitative bounds.
     Requires: [{subject: string, score: number, peer: number, max: number}]
@@ -506,7 +506,7 @@ async def get_corporate_radar(ticker: str):
 
 
 @router.get("/diagnostic/{ticker}/tornado")
-async def get_monte_carlo_tornado(ticker: str):
+def get_monte_carlo_tornado(ticker: str):
     """
     Native Recharts Bar mapping for Monte Carlo sensitivity.
     Requires: [{name: string, target: number}]

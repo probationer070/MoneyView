@@ -24,7 +24,7 @@ router = APIRouter()
 
 
 @router.post("/cases", response_model=APIResponse[ValuationCaseCreated])
-async def create_valuation_case(payload: ValuationCaseInput = Body(...)):
+def create_valuation_case(payload: ValuationCaseInput = Body(...)):
     """Create a case with its segments and narratives.
 
     Rejects with 422 if any stated numeric input lacks a narrative claim.
@@ -37,12 +37,12 @@ async def create_valuation_case(payload: ValuationCaseInput = Body(...)):
 
 
 @router.get("/cases", response_model=APIResponse[list[ValuationCaseSummary]])
-async def list_valuation_cases():
+def list_valuation_cases():
     return APIResponse(data=[ValuationCaseSummary(**case) for case in list_cases()])
 
 
 @router.get("/cases/{case_id}", response_model=APIResponse[dict])
-async def get_valuation_case(case_id: int):
+def get_valuation_case(case_id: int):
     try:
         return APIResponse(data=load_case(case_id))
     except CaseNotFound as exc:
@@ -50,7 +50,7 @@ async def get_valuation_case(case_id: int):
 
 
 @router.post("/cases/{case_id}/run", response_model=APIResponse[dict])
-async def run_valuation_case(case_id: int):
+def run_valuation_case(case_id: int):
     """Value a stored case.
 
     A ValueError here is a rejected model, not a server fault, and is returned as

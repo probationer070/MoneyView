@@ -28,7 +28,7 @@ MAX_ACQUIRE_TICKERS = 100
 
 
 @router.get("/feed", response_model=List[NewsArticle])
-async def get_news_feed(
+def get_news_feed(
     ticker:  Optional[str] = Query(default=None),
     q:       Optional[str] = Query(default=None, description="keyword search"),
     limit:   int           = Query(default=20, ge=1, le=100),
@@ -39,7 +39,7 @@ async def get_news_feed(
 
 
 @router.get("/feed/bulk", response_model=APIResponse[BulkNewsResponse])
-async def get_news_feed_bulk(
+def get_news_feed_bulk(
     tickers: str = Query(..., description="comma-separated tickers"),
     per_ticker: int = Query(default=3, ge=1, le=20),
 ):
@@ -54,7 +54,7 @@ async def get_news_feed_bulk(
 
 
 @router.post("/crawl", response_model=List[NewsArticle])
-async def crawl_news(
+def crawl_news(
     query:  str           = Query(...),
     ticker: Optional[str] = Query(default=None),
     limit:  int           = Query(default=10),
@@ -64,7 +64,7 @@ async def crawl_news(
 
 
 @router.post("/crawl/stock", response_model=List[NewsArticle])
-async def crawl_stock_news(
+def crawl_stock_news(
     ticker: str = Query(...),
     company_name: str = Query(default=""),
     limit: int = Query(default=10, ge=1, le=50),
