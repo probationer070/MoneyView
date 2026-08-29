@@ -431,3 +431,31 @@ def test_the_ticker_wrapper_produces_a_stored_runnable_case():
     # deliberately breaking that one wire. The other two hard-refuse, so only
     # this one is invisible.
     assert set(loader.endpoints) == {"metrics", "equity_bridge", "conservative_case"}
+
+
+def test_generate_refuses_a_case_the_engine_cannot_value():
+    """A thin-margin, capital-heavy company: 3% operating margin against a
+    capital base 1.66x revenue.
+
+    Before the write-time gate this returned `(case_id, None)` -- a success --
+    for a case that raised on every run. The refusal must name both the layer
+    (`not_storable`) and the engine's own guard, so a reader can tell it apart
+    from a duplicate case name, which carries the same prefix.
+    """
+    from apps.api.services.industry_benchmark_store import store_vintage
+    from tests.fixtures.industry_rows_technology import TECHNOLOGY_ROWS
+
+    store_vintage("2026-01-01", TECHNOLOGY_ROWS)
+    _seed_quote_facts()
+
+    case_id, reason = _generate(
+        metrics=_metrics(growth=2.0, roic=4.0, wacc=9.0),
+        statement_source=_baseline_source(
+            revenue_by_year={2025: 100_000_000_000.0},
+            operating_income_by_year={2025: 3_000_000_000.0},
+            invested_capital_by_year={2025: 166_000_000_000.0},
+        ),
+    )
+    assert case_id is None
+    assert reason.startswith("not_storable: case is not valuable: ")
+    assert "must exceed the magnitude of terminal growth" in reason
