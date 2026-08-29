@@ -59,35 +59,35 @@ async def stream_dev_log_events(request: Request, once: bool = Query(default=Fal
 
 
 @router.get("/performance/recent", response_model=APIResponse[PerformanceEventListResponse])
-async def get_recent_performance_events(limit: int = Query(default=500, ge=1, le=500)):
+def get_recent_performance_events(limit: int = Query(default=500, ge=1, le=500)):
     _require_dev_monitor()
     events = get_dev_monitor_sink().recent(limit=limit)
     return APIResponse(data=PerformanceEventListResponse(events=events, limit=limit), meta=_response_meta())
 
 
 @router.get("/performance/slow", response_model=APIResponse[PerformanceEventListResponse])
-async def get_slow_performance_events(limit: int = Query(default=100, ge=1, le=500)):
+def get_slow_performance_events(limit: int = Query(default=100, ge=1, le=500)):
     _require_dev_monitor()
     events = get_dev_monitor_sink().slow(limit=limit)
     return APIResponse(data=PerformanceEventListResponse(events=events, limit=limit), meta=_response_meta())
 
 
 @router.get("/performance/errors", response_model=APIResponse[PerformanceEventListResponse])
-async def get_error_performance_events(limit: int = Query(default=100, ge=1, le=500)):
+def get_error_performance_events(limit: int = Query(default=100, ge=1, le=500)):
     _require_dev_monitor()
     events = get_dev_monitor_sink().errors(limit=limit)
     return APIResponse(data=PerformanceEventListResponse(events=events, limit=limit), meta=_response_meta())
 
 
 @router.get("/performance/summary", response_model=APIResponse[PerformanceSummary])
-async def get_performance_summary():
+def get_performance_summary():
     _require_dev_monitor()
     summary = get_dev_monitor_sink().summary()
     return APIResponse(data=summary, meta=_response_meta())
 
 
 @router.post("/performance/client-event", response_model=APIResponse[PerformanceEvent])
-async def post_client_performance_event(payload: ClientPerformanceEventRequest):
+def post_client_performance_event(payload: ClientPerformanceEventRequest):
     _require_dev_monitor()
     # Dev routes are uninstrumented so the dashboard does not record its own fetches
     # (spec 06.9), but this endpoint exists precisely to persist the browser's spans.
@@ -146,7 +146,7 @@ def _buffer_events() -> list[PerformanceEvent]:
 
 
 @router.get("/performance/requests", response_model=APIResponse[RequestIndex])
-async def get_performance_requests(limit: int = Query(default=50, ge=1, le=200)):
+def get_performance_requests(limit: int = Query(default=50, ge=1, le=200)):
     _require_dev_monitor()
     events = _buffer_events()
     data = list_requests(events, limit=limit, buffer_limit=get_dev_monitor_event_limit())
@@ -154,7 +154,7 @@ async def get_performance_requests(limit: int = Query(default=50, ge=1, le=200))
 
 
 @router.get("/performance/waterfall/{request_id}", response_model=APIResponse[RequestWaterfall])
-async def get_performance_waterfall(request_id: str):
+def get_performance_waterfall(request_id: str):
     _require_dev_monitor()
     scoped = _filter_events(_buffer_events(), request_id=request_id)
     if not scoped:
@@ -163,7 +163,7 @@ async def get_performance_waterfall(request_id: str):
 
 
 @router.get("/performance/by-ticker", response_model=APIResponse[TickerCostTable])
-async def get_performance_by_ticker(
+def get_performance_by_ticker(
     request_id: str | None = Query(default=None),
     route: str | None = Query(default=None),
     window: int = Query(default=300, ge=1, le=3600),
@@ -174,14 +174,14 @@ async def get_performance_by_ticker(
 
 
 @router.get("/performance/breakdown", response_model=APIResponse[ScopeBreakdown])
-async def get_performance_breakdown(request_id: str | None = Query(default=None)):
+def get_performance_breakdown(request_id: str | None = Query(default=None)):
     _require_dev_monitor()
     scoped = _filter_events(_buffer_events(), request_id=request_id)
     return APIResponse(data=breakdown_by_scope(scoped), meta=_response_meta())
 
 
 @router.get("/performance/cache", response_model=APIResponse[CacheReport])
-async def get_performance_cache(window: int = Query(default=300, ge=1, le=3600)):
+def get_performance_cache(window: int = Query(default=300, ge=1, le=3600)):
     _require_dev_monitor()
     scoped = _filter_events(_buffer_events(), window=window)
     return APIResponse(data=cache_effectiveness(scoped), meta=_response_meta())

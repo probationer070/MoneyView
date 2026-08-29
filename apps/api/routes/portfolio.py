@@ -46,7 +46,7 @@ _portfolio_analytics = PortfolioAnalyticsService(_mkt)
 
 
 @router.get("/watchlist", response_model=List[PortfolioStock])
-async def get_watchlist():
+def get_watchlist():
     """
     Return all watchlist stocks with latest close, delta badge, and sparkline.
     Seed once from JSON or built-in defaults when local state is empty.
@@ -90,7 +90,7 @@ async def get_watchlist():
 
 
 @router.get("/preferences", response_model=APIResponse[PortfolioPreferences])
-async def get_portfolio_preferences():
+def get_portfolio_preferences():
     """Return persisted portfolio workspace preferences."""
     with get_db() as conn:
         row = conn.execute(
@@ -108,7 +108,7 @@ async def get_portfolio_preferences():
 
 
 @router.put("/preferences", response_model=APIResponse[PortfolioPreferences])
-async def save_portfolio_preferences(preferences: PortfolioPreferences = Body(...)):
+def save_portfolio_preferences(preferences: PortfolioPreferences = Body(...)):
     """Persist portfolio workspace preferences used by allocation tools."""
     payload = preferences.model_copy(update={"transaction_fee_rate": 0.002})
     with get_db() as conn:
@@ -134,7 +134,7 @@ async def save_portfolio_preferences(preferences: PortfolioPreferences = Body(..
 
 
 @router.get("/stock/{ticker}", response_model=dict)
-async def get_stock_detail(ticker: str, period: str = "5y"):
+def get_stock_detail(ticker: str, period: str = "5y"):
     """Return prices and recent news for a single stock."""
     normalized_ticker = ticker.upper().strip()
     bars = _mkt.get_stock_ohlcv(normalized_ticker, period=period)
@@ -147,7 +147,7 @@ async def get_stock_detail(ticker: str, period: str = "5y"):
 
 
 @router.post("/watchlist", response_model=WatchlistItem)
-async def upsert_watchlist_item(item: WatchlistItem = Body(...)):
+def upsert_watchlist_item(item: WatchlistItem = Body(...)):
     """Add or update a watchlist entry."""
     normalized = WatchlistItem(
         ticker=item.ticker.upper().strip(),
@@ -190,7 +190,7 @@ async def upsert_watchlist_item(item: WatchlistItem = Body(...)):
 
 
 @router.post("/watchlist/resync", response_model=APIResponse[WatchlistResyncResult])
-async def resync_watchlist():
+def resync_watchlist():
     """Explicitly replace the watchlist table with the current stock_targets.json contents."""
     try:
         result = resync_watchlist_from_json(_WATCHLIST_JSON)
@@ -200,7 +200,7 @@ async def resync_watchlist():
 
 
 @router.post("/watchlist/sync", response_model=APIResponse[WatchlistSyncResult])
-async def sync_watchlist():
+def sync_watchlist():
     """Safely export the current DB-backed watchlist into stock_targets.json."""
     try:
         result = sync_watchlist_to_json(_WATCHLIST_JSON)
@@ -210,13 +210,13 @@ async def sync_watchlist():
 
 
 @router.get("/watchlist/sync-status", response_model=APIResponse[WatchlistSyncStatus])
-async def get_watchlist_sync_metadata():
+def get_watchlist_sync_metadata():
     """Return the last explicit watchlist sync/import metadata."""
     return APIResponse(data=WatchlistSyncStatus(**get_watchlist_sync_status(_WATCHLIST_JSON)))
 
 
 @router.delete("/watchlist/{ticker}")
-async def delete_watchlist_item(ticker: str):
+def delete_watchlist_item(ticker: str):
     """Delete a watchlist entry by ticker."""
     normalized_ticker = ticker.upper().strip()
     with get_db() as conn:

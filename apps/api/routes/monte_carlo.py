@@ -261,7 +261,7 @@ def _correlation_model(rng: np.random.Generator, sample_count: int) -> dict[str,
 
 
 @router.post("/analyze", response_model=MonteCarloResponse)
-async def analyze_monte_carlo(request: MonteCarloRequest):
+def analyze_monte_carlo(request: MonteCarloRequest):
     with perf_timer(scope="calculation", operation="calculation.monte_carlo_backend", ticker=request.ticker.upper(), component="monte_carlo", metadata={"path_count": request.path_count, "steps_per_year": request.steps_per_year, "seed": request.seed}):
         rng = np.random.default_rng(request.seed)
         steps = max(1, int(request.horizon_years * request.steps_per_year))

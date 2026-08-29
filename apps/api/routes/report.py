@@ -18,7 +18,7 @@ _report_service = PortfolioAnalyticsService()
 
 
 @router.post("/summary", response_model=APIResponse[ReportPayload])
-async def get_report_summary(payload: ReportSummaryRequest = Body(...)):
+def get_report_summary(payload: ReportSummaryRequest = Body(...)):
     """
     Build a canonical report payload used by HTML/PDF/Markdown/CSV/JSON exports.
     """
@@ -30,7 +30,7 @@ async def get_report_summary(payload: ReportSummaryRequest = Body(...)):
 
 
 @router.post("/export", response_model=APIResponse[ReportExportResponse])
-async def export_report(payload: ReportExportRequest = Body(...)):
+def export_report(payload: ReportExportRequest = Body(...)):
     """
     Backend static export renderer.
     """

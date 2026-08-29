@@ -9,7 +9,7 @@ _mkt = MarketDataService()
 
 
 @router.get("/{ticker}/price", response_model=APIResponse[StockPriceLookup])
-async def get_stock_price(ticker: str):
+def get_stock_price(ticker: str):
     lookup = _mkt.get_stock_price_lookup(ticker)
     payload = APIResponse(data=lookup)
     if lookup.status == "fetching":

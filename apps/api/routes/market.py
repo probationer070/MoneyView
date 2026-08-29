@@ -16,7 +16,7 @@ _svc   = MarketDataService()
 
 
 @router.get("/indices", response_model=List[IndexQuote])
-async def get_all_indices():
+def get_all_indices():
     """
     Return summary cards for all 9 market indices.
     Each card includes: name, ticker, last_close, delta badge, 30-day sparkline.
@@ -25,7 +25,7 @@ async def get_all_indices():
 
 
 @router.get("/index/{ticker}", response_model=List[StockOHLCV])
-async def get_index_history(
+def get_index_history(
     ticker: str,
     period: str = Query(default="5y", description="1w | 1mo | 3mo | 6mo | 1y | 2y | 5y"),
 ):
@@ -34,7 +34,7 @@ async def get_index_history(
 
 
 @router.get("/index/{ticker}/detail", response_model=MarketIndexDetail)
-async def get_index_detail(
+def get_index_detail(
     ticker: str,
     period: str = Query(default="5y", description="1w | 1mo | 3mo | 6mo | 1y | 2y | 5y"),
 ):
