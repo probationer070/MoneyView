@@ -40,6 +40,16 @@ def test_load_price_bars_limit_keeps_the_most_recent():
     assert [b["date"] for b in bars] == ["2025-01-04", "2025-01-05"]
 
 
+def test_load_price_bars_passes_through_a_null_close():
+    with get_db() as conn:
+        conn.execute(
+            "INSERT OR REPLACE INTO stocks (ticker, date, open, high, low, close, volume) "
+            "VALUES ('NULLC', '2025-01-01', 1.0, 1.0, 1.0, NULL, 100)"
+        )
+    bars = load_price_bars("NULLC")
+    assert bars[0]["close"] is None
+
+
 def test_peers_are_same_industry_tickers_excluding_self():
     for t in ("TGT", "P1", "P2", "P3"):
         _seed_facts(t)
@@ -64,3 +74,14 @@ def test_a_ticker_with_no_stored_industry_refuses():
     peers, reason = resolve_peers("GHOST")
     assert peers == []
     assert reason == "no_industry: GHOST"
+
+
+def test_a_ticker_with_empty_string_industry_refuses():
+    """`industry` is back-filled to '' by an ALTER TABLE migration (db.py),
+    so a pre-migration ticker has a row present with industry == '', not
+    absent. That must refuse exactly like the no-row case, not fall through
+    to WHERE industry = '' and match every other pre-migration ticker."""
+    _seed_facts("BLANK", industry="")
+    peers, reason = resolve_peers("BLANK")
+    assert peers == []
+    assert reason == "no_industry: BLANK"

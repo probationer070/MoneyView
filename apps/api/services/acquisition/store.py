@@ -170,6 +170,11 @@ def load_price_bars(ticker: str, limit: int | None = None) -> list[dict]:
 
     `limit` keeps the most RECENT n bars, since every signal here looks
     backwards from today.
+
+    `close` and `volume` pass through exactly as stored, including NULL:
+    `stocks.close`/`stocks.volume` are nullable columns, and filtering NULL
+    rows here would silently shorten the series and change what "the last
+    n bars" means. The caller must handle `None`.
     """
     ticker = ticker.upper()
     with get_db() as conn:
