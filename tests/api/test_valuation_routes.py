@@ -260,3 +260,93 @@ def test_conservative_case_route_reports_the_stored_name():
     body = client.post("/api/v1/valuation/conservative/NAMED").json()["data"]
     assert body["case_name"] == load_case(body["id"])["case_name"]
     assert "None" not in body["case_name"]
+
+
+def _seed_verdict_inputs(ticker="VERD", industry="Semiconductors"):
+    from apps.api.services.db import get_db
+
+    with get_db() as conn:
+        conn.execute(
+            "INSERT OR REPLACE INTO corporate_quote_facts "
+            "(ticker, market_cap, shares_outstanding, currency, beta, sector, industry, fetched_at) "
+            "VALUES (?, 1.0, 1.0, 'USD', 1.0, 'Technology', ?, '2026-01-01')",
+            (ticker, industry),
+        )
+        conn.executemany(
+            "INSERT OR REPLACE INTO stocks (ticker, date, open, high, low, close, volume) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            [(ticker, f"2025-01-0{i}", 100.0 + i, 100.0 + i, 100.0 + i, 100.0 + i, i * 100)
+             for i in range(1, 6)],
+        )
+
+
+def test_verdict_route_returns_a_panel():
+    _seed_verdict_inputs()
+    response = client.get("/api/v1/valuation/verdict/VERD")
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["ticker"] == "VERD"
+    assert "anti-conservative" in data["direction"]
+    assert "drawdown" in data["rows"]
+
+
+def test_verdict_route_is_404_when_nothing_is_stored():
+    assert client.get("/api/v1/valuation/verdict/NOTHING").status_code == 404
+
+
+def test_verdict_route_returns_200_with_refused_rows():
+    """A partially refused panel is a successful response -- that is the whole
+    point of refusing per signal rather than globally."""
+    _seed_verdict_inputs(ticker="LONELY")
+    data = client.get("/api/v1/valuation/verdict/LONELY").json()["data"]
+    # No vintage is loaded in this fixture, so the honest cause is the missing
+    # server-wide dataset, not a missing case for this ticker. Before the I6 fix
+    # this row said `no_case: LONELY`, sending a reader to debug a ticker that
+    # was never the problem -- so asserting `no_case` here passed for the wrong
+    # reason. What this test is really about is that refused rows travel inside
+    # a 200, which the two assertions here still pin.
+    assert data["rows"]["dcf_gap"]["reason"].startswith("no_vintage")
+    # This fixture seeds 5 bars, which cannot fill the 252-bar drawdown window,
+    # so the row refuses on its own history. `resolve_peers` still runs
+    # unconditionally ahead of this block and resolves the peer SET -- only
+    # peer BARS are never loaded, since the row refuses before reaching the
+    # code that would load them. A refusal about the subject's own bars must
+    # not be attributed to the peers (finding I3).
+    assert data["rows"]["drawdown"]["reason"].startswith("insufficient_history")
+
+
+def test_verdict_route_computes_a_drawdown_through_the_real_loader():
+    """Every other verdict-route test either injects `bars_loader` or seeds
+    only 5 bars, which refuses before the peer-loading loop inside
+    `build_verdict` ever runs -- so that loop, against the real
+    `load_price_bars`, has no coverage anywhere. Seed enough history for the
+    subject and three peers to drive a computed drawdown end to end."""
+    import datetime as _dt
+
+    from apps.api.services.db import get_db
+
+    def _seed(ticker, industry="Semiconductors"):
+        with get_db() as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO corporate_quote_facts "
+                "(ticker, market_cap, shares_outstanding, currency, beta, sector, industry, fetched_at) "
+                "VALUES (?, 1.0, 1.0, 'USD', 1.0, 'Technology', ?, '2026-01-01')",
+                (ticker, industry),
+            )
+            conn.executemany(
+                "INSERT OR REPLACE INTO stocks (ticker, date, open, high, low, close, volume) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                [
+                    (ticker, str(_dt.date(2024, 1, 1) + _dt.timedelta(days=i)),
+                     100.0, 100.0, 100.0, 100.0, 100)
+                    for i in range(260)
+                ],
+            )
+
+    for t in ("REALDD", "REALDDP1", "REALDDP2", "REALDDP3"):
+        _seed(t)
+
+    data = client.get("/api/v1/valuation/verdict/REALDD").json()["data"]
+    drawdown = data["rows"]["drawdown"]
+    assert drawdown["reason"] is None
+    assert drawdown["value"] is not None

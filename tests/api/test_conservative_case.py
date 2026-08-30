@@ -222,6 +222,44 @@ def test_a_dropped_benchmark_column_still_states_why_the_value_was_not_faded():
     assert create_case(case) > 0
 
 
+def test_full_basket_counts_required_columns_but_not_optional_ones():
+    """Task 3 review, round 2: `full_basket` must scope by
+    `BenchmarkColumn.required`, not by `FADE_DIRECTIONS`. Scoping by
+    `FADE_DIRECTIONS` (round 1's fix) also excluded three PRE-EXISTING required
+    columns that fade nothing -- unlevered_beta, debt_to_capital,
+    reinvestment_rate -- which were always counted before Task 3 existed.
+    Dropping them can only LOWER full_basket, loosening a "probable" ->
+    "plausible" downgrade that used to fire. Required-scoping counts exactly
+    the nine original columns regardless of whether this case fades them, so
+    pre-existing confidence labels are unchanged in every case.
+
+    Two assertions pin the boundary from both sides:
+    - trailing_pe (OPTIONAL, added by Task 3) resting on a bigger basket must
+      NOT raise full_basket -- a well-populated price column cannot inflate
+      the confidence bar for fades that never used it.
+    - reinvestment_rate (REQUIRED, pre-existing, fades nothing) resting on a
+      bigger basket MUST still raise full_basket, exactly as it did before
+      Task 3 -- this is the case FADE_DIRECTIONS-scoping silently broke.
+    """
+    optional_wider = _benchmark()
+    optional_wider.columns["trailing_pe"] = ColumnAverage(
+        18.0, ("Computers/Peripherals", "Semiconductor", "Semiconductor Equip",
+               "Extra Industry 1", "Extra Industry 2"),
+    )
+    optional_case = _build(benchmark=optional_wider)
+    optional_claims = {n["input_field"]: n for n in optional_case["segments"][0]["narratives"]}
+    assert optional_claims["margin_target"]["three_p"] == "probable"
+
+    required_wider = _benchmark()
+    required_wider.columns["reinvestment_rate"] = ColumnAverage(
+        0.30, ("Computers/Peripherals", "Semiconductor", "Semiconductor Equip",
+               "Extra Industry 1", "Extra Industry 2"),
+    )
+    required_case = _build(benchmark=required_wider)
+    required_claims = {n["input_field"]: n for n in required_case["segments"][0]["narratives"]}
+    assert required_claims["margin_target"]["three_p"] == "plausible"
+
+
 def test_the_payload_is_storable_and_runnable_through_the_case_store():
     """The generator's whole output contract is "a `create_case` payload", and
     only `create_case` can say whether it is one -- it enforces the narrative

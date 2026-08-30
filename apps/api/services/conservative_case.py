@@ -58,7 +58,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from packages.core_finance.industry_benchmark import FADE_DIRECTIONS, SectorBenchmark, fade
+from packages.core_finance.industry_benchmark import (
+    FADE_DIRECTIONS,
+    SectorBenchmark,
+    column_by_key,
+    fade,
+)
 
 HORIZON_YEARS = 10
 
@@ -168,8 +173,21 @@ def build_conservative_case(
     base_year: int,
 ) -> dict:
     """A `create_case` payload valuing `ticker` against its sector benchmark."""
+    # full_basket counts only columns that predate Task 3's optional additions
+    # (BenchmarkColumn.required is True) -- the nine original columns, whether or
+    # not this case fades all of them. Task 3 added trailing_pe/price_to_book/
+    # ev_sales/stdev_price to `benchmark.columns`; a well-populated one of those
+    # must not be able to raise `full_basket` and downgrade an unrelated fade's
+    # `three_p` from "probable" to "plausible" for a column no vintage carried
+    # before this task. Scoping by FADE_DIRECTIONS instead would also have
+    # dropped unlevered_beta/debt_to_capital/reinvestment_rate -- pre-existing,
+    # required columns that fade nothing but were always counted -- which could
+    # only ever LOWER full_basket and loosen a confidence label that fired
+    # before this task existed.
     full_basket = max(
-        (len(a.industries) for a in benchmark.columns.values()), default=0
+        (len(a.industries) for key, a in benchmark.columns.items()
+         if column_by_key(key).required),
+        default=0,
     )
 
     def faded(column: str, company_value: float, direction: str) -> tuple[float, dict]:

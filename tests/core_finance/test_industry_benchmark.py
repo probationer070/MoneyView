@@ -268,3 +268,26 @@ def test_sales_to_capital_is_a_benefit_and_fades_down():
     assert FADE_DIRECTIONS["sales_to_capital"] == "lower_is_conservative"
     assert fade(3.0, 2.0, "lower_is_conservative", year=10, horizon=10) == pytest.approx(2.0)
     assert fade(1.2, 2.0, "lower_is_conservative", year=10, horizon=10) == pytest.approx(1.2)
+
+
+def test_the_four_price_columns_are_optional():
+    """parse_workbook builds its required-header list from BENCHMARK_COLUMNS,
+    so a column added as required would reject every workbook published before
+    it existed -- trading a missing signal for a broken loader."""
+    from packages.core_finance.industry_benchmark import BENCHMARK_COLUMNS
+
+    by_key = {c.key: c for c in BENCHMARK_COLUMNS}
+    for key in ("trailing_pe", "price_to_book", "ev_sales", "stdev_price"):
+        assert key in by_key, f"{key} missing from BENCHMARK_COLUMNS"
+        assert by_key[key].required is False
+
+
+def test_every_pre_existing_column_stays_required():
+    from packages.core_finance.industry_benchmark import BENCHMARK_COLUMNS
+
+    for key in (
+        "revenue_growth", "operating_margin", "after_tax_roc", "effective_tax_rate",
+        "unlevered_beta", "debt_to_capital", "cost_of_capital", "sales_to_capital",
+        "reinvestment_rate",
+    ):
+        assert next(c for c in BENCHMARK_COLUMNS if c.key == key).required is True

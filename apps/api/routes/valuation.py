@@ -12,7 +12,9 @@ from apps.api.models.schemas import (
     ValuationCaseCreated,
     ValuationCaseInput,
     ValuationCaseSummary,
+    VerdictPanel,
 )
+from apps.api.services.acquisition.store import load_price_bars
 from apps.api.services.company_baseline import (
     find_conservative_case_id,
     generate_conservative_case_for_ticker,
@@ -24,6 +26,7 @@ from apps.api.services.valuation_case import (
     load_case,
     run_stored_case,
 )
+from apps.api.services.valuation_verdict import build_verdict
 
 router = APIRouter()
 
@@ -130,3 +133,18 @@ def create_conservative_case(ticker: str):
         return APIResponse(data=_conservative_result(existing, created=False))
 
     raise HTTPException(status_code=422, detail=reason)
+
+
+@router.get("/verdict/{ticker}", response_model=APIResponse[VerdictPanel])
+def get_valuation_verdict(ticker: str):
+    """Evidence about whether a computed gap between price and value is worth acting on.
+
+    Individual rows refuse independently and travel inside this 200 response: a
+    panel with three computed rows and one refused row is a successful result.
+    A 404 means the ticker has NO stored bars, so there is no panel to build.
+
+    Issues no buy/sell label and no score. See `valuation_verdict.build_verdict`.
+    """
+    if not load_price_bars(ticker):
+        raise HTTPException(status_code=404, detail=f"no stored price bars for {ticker.upper()}")
+    return APIResponse(data=VerdictPanel(**build_verdict(ticker)))
