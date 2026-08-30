@@ -1,3 +1,5 @@
+import datetime as _dt
+
 import pytest
 
 from apps.api.services.db import get_db
@@ -23,7 +25,29 @@ def _bars(ticker, rows):
         )
 
 
-_SERIES = [("2025-01-0%d" % i, float(100 + i * 10), 100 * i) for i in range(1, 6)]
+# 260 bars, so the 252-bar drawdown window is filled. The shape is deliberate
+# and every expected value below derives from it rather than from a magic
+# number: closes climb 100 -> 200 over the first 200 bars, then fall to 150,
+# so the peak sits inside the window and the drawdown is exactly -25%.
+def _date(i: int) -> str:
+    return str(_dt.date(2024, 1, 1) + _dt.timedelta(days=i))
+
+
+_PEAK_INDEX = 199
+_SERIES_BARS = 260
+
+
+def _series_close(i: int) -> float:
+    if i <= _PEAK_INDEX:
+        return 100.0 + i * (100.0 / _PEAK_INDEX)
+    return 200.0 - (i - _PEAK_INDEX) * (50.0 / (_SERIES_BARS - 1 - _PEAK_INDEX))
+
+
+_SERIES = [
+    ((_date(i)), _series_close(i), 100)
+    for i in range(_SERIES_BARS)
+]
+_SERIES_DRAWDOWN = (_series_close(_SERIES_BARS - 1) - 200.0) / 200.0
 
 
 def test_the_panel_always_states_the_direction_being_tested():
@@ -41,9 +65,11 @@ def test_drawdown_and_volume_compute_from_stored_bars():
     for t in ("TGT", "P1", "P2", "P3"):
         _facts(t)
         _bars(t, _SERIES)
-    _bars("TGT", [("2025-01-06", 120.0, 900)])
+    _bars("TGT", [(_date(_SERIES_BARS), 120.0, 900)])
     panel = build_verdict("TGT")
-    assert panel["rows"]["drawdown"]["value"] == pytest.approx((120.0 - 150.0) / 150.0)
+    # Measured from the series' 200.0 peak to the appended close, not from the
+    # series' own last bar -- the peak is what a drawdown is relative to.
+    assert panel["rows"]["drawdown"]["value"] == pytest.approx((120.0 - 200.0) / 200.0)
     assert panel["rows"]["drawdown"]["reason"] is None
     assert panel["rows"]["volume"]["value"] is not None
 
@@ -60,11 +86,18 @@ def test_a_thin_peer_set_refuses_only_the_peer_rows():
 
 
 def test_a_ticker_with_no_case_refuses_only_the_dcf_row():
+    """A vintage IS loaded here, so `no_case` is the real cause. Without one the
+    row refuses `no_vintage` instead -- a different fact about the server, not
+    about this ticker -- and this test would pass for the wrong reason."""
+    from apps.api.services.industry_benchmark_store import store_vintage
+    from tests.fixtures.industry_rows_technology import TECHNOLOGY_ROWS
+
+    store_vintage("2026-01-01", TECHNOLOGY_ROWS)
     for t in ("TGT", "P1", "P2", "P3"):
         _facts(t)
         _bars(t, _SERIES)
     panel = build_verdict("TGT")
-    assert panel["rows"]["dcf_gap"]["reason"] == "no_case: TGT"
+    assert panel["rows"]["dcf_gap"]["reason"] == "no_case: TGT has no stored conservative case"
     assert panel["rows"]["drawdown"]["value"] is not None
 
 

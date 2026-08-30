@@ -299,5 +299,15 @@ def test_verdict_route_returns_200_with_refused_rows():
     point of refusing per signal rather than globally."""
     _seed_verdict_inputs(ticker="LONELY")
     data = client.get("/api/v1/valuation/verdict/LONELY").json()["data"]
-    assert data["rows"]["dcf_gap"]["reason"].startswith("no_case")
-    assert data["rows"]["drawdown"]["reason"].startswith("peer_set_too_thin")
+    # No vintage is loaded in this fixture, so the honest cause is the missing
+    # server-wide dataset, not a missing case for this ticker. Before the I6 fix
+    # this row said `no_case: LONELY`, sending a reader to debug a ticker that
+    # was never the problem -- so asserting `no_case` here passed for the wrong
+    # reason. What this test is really about is that refused rows travel inside
+    # a 200, which the two assertions here still pin.
+    assert data["rows"]["dcf_gap"]["reason"].startswith("no_vintage")
+    # This fixture seeds 5 bars, which cannot fill the 252-bar drawdown window,
+    # so the row refuses on its own history before the peer set is ever
+    # consulted. That ordering is deliberate: a refusal about the subject's own
+    # bars must not be attributed to the peers (finding I3).
+    assert data["rows"]["drawdown"]["reason"].startswith("insufficient_history")

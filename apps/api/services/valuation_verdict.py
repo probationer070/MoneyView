@@ -16,18 +16,28 @@ from apps.api.services.acquisition.store import load_price_bars
 from apps.api.services.company_baseline import find_conservative_case_id
 from apps.api.services.industry_benchmark_store import resolve_for_ticker
 from apps.api.services.peer_set import resolve_peers
-from apps.api.services.valuation_case import run_stored_case
+from apps.api.services.valuation_case import CaseNotFound, run_stored_case
 from packages.core_finance.price_signals import (
     drawdown_from_peak,
     volume_ratio,
 )
 
 DIRECTION = (
-    "Testing UNDERVALUATION against the top of the sector. This basis is "
-    "anti-conservative for overvaluation: a company that looks expensive "
+    "Testing UNDERVALUATION. Each row states the basis it was compared "
+    "against, and those bases differ: only a row benchmarked against the top "
+    "of the sector carries that framing. Where a row IS benchmarked that way, "
+    "the basis is conservative for identifying undervaluation and "
+    "anti-conservative for the opposite -- a company that looks expensive "
     "against the best industries in its sector may be reasonably priced "
     "against its actual peers."
 )
+
+# The drawdown lookback, in usable bars. A peak is only meaningful relative to
+# the window it was taken over, so subject and peers must use the SAME one: a
+# subject measured over 300 bars beside peers measured over 5 produces a real
+# number, a real label, and a meaningless comparison. Peers with less history
+# are dropped rather than silently compared on a different basis.
+_DRAWDOWN_BARS = 252
 
 _RECENT_DAYS = 90
 _BASELINE_DAYS = 252
@@ -124,32 +134,46 @@ def build_verdict(ticker: str, *, bars_loader=load_price_bars) -> dict:
     )
 
     # --- drawdown ------------------------------------------------------------
-    computed = drawdown_from_peak(closes)
-    if computed is None:
+    # I1/I2/I3/I4: one fixed window for subject and peers; a refusal about the
+    # subject's OWN bars names the subject's bars, never the peer set; and a
+    # non-positive peak is reported as such rather than blamed on history.
+    window = closes[-_DRAWDOWN_BARS:]
+    own_source = f"own bars: {len(window)} of {len(bars)} bars usable"
+    if len(window) < _DRAWDOWN_BARS:
         rows["drawdown"] = _row(
-            source=peer_source, reason=f"insufficient_history: {len(closes)} of {len(bars)} bars usable"
+            source=own_source,
+            reason=(
+                f"insufficient_history: {len(window)} of {_DRAWDOWN_BARS} "
+                f"bars needed for the drawdown window"
+            ),
+        )
+    elif max(window) <= 0:
+        # `drawdown_from_peak` refuses an empty series and a non-positive peak
+        # alike; only the caller knows which happened, and "insufficient
+        # history" is false when every bar is present.
+        rows["drawdown"] = _row(
+            source=own_source, reason=f"non_positive_peak: {max(window)}"
         )
     elif peer_reason is not None:
-        rows["drawdown"] = _row(source=peer_source, reason=peer_reason)
+        rows["drawdown"] = _row(source=own_source, reason=peer_reason)
     else:
-        pct, peak, index = computed
-        peer_pcts = [
-            p[0]
-            for p in (
-                drawdown_from_peak(_closes_from_bars(bars_loader(peer)))
-                for peer in peers
-            )
-            if p is not None
-        ]
-        if peer_pcts:
-            comparison = f"peer mean {sum(peer_pcts) / len(peer_pcts):.1%}"
-            drawdown_source = f"peers: {len(peer_pcts)} stored"
-        else:
-            comparison = None
-            drawdown_source = f"peers: {len(peers)} resolved, 0 with bars"
+        pct, peak, index = drawdown_from_peak(window)
+        peer_pcts = []
+        for peer in peers:
+            peer_window = _closes_from_bars(bars_loader(peer))[-_DRAWDOWN_BARS:]
+            if len(peer_window) < _DRAWDOWN_BARS or max(peer_window) <= 0:
+                continue
+            peer_pcts.append(drawdown_from_peak(peer_window)[0])
+        # Both counts, always: "3 stored" meant "3 resolved" on one path and
+        # "3 contributed" on another, which are different facts.
+        drawdown_source = (
+            f"peers: {len(peer_pcts)} of {len(peers)} over {_DRAWDOWN_BARS} bars"
+        )
+        comparison = (
+            f"peer mean {sum(peer_pcts) / len(peer_pcts):.1%}" if peer_pcts else None
+        )
         # The stale-price note qualifies the subject's OWN price, not the
-        # sector comparison -- `comparison` is reserved for the peer figure,
-        # so the note belongs in `source` even when there is no comparison.
+        # sector comparison -- `comparison` is reserved for the peer figure.
         if stale_price_note is not None:
             drawdown_source = f"{drawdown_source}; {stale_price_note}"
         rows["drawdown"] = _row(pct, comparison, source=drawdown_source)
@@ -209,14 +233,30 @@ def build_verdict(ticker: str, *, bars_loader=load_price_bars) -> dict:
         rows["trailing_pe"] = _row(
             None,
             f"sector avg {benchmark.columns['trailing_pe'].value:.1f}",
-            source=f"Damodaran {vintage}",
-            reason="no_eps",
+            source=f"Damodaran {vintage} top-5-by-ROC sector basket",
+            reason=(
+                "eps_not_wired: the sector PE resolved, but this panel does not "
+                "read EPS -- confirming Yahoo's EPS line-item labels needs a "
+                "stored bundle no fixture carries, and guessing them would be "
+                "worse than refusing"
+            ),
         )
 
     # --- DCF gap -------------------------------------------------------------
     case_id = find_conservative_case_id(ticker)
     if case_id is None:
-        rows["dcf_gap"] = _row(source="conservative case", reason=f"no_case: {ticker}")
+        # `find_conservative_case_id` returns None both when no vintage is
+        # loaded at all and when this ticker simply has no stored case. Blaming
+        # the ticker for the former sends the reader to debug an input that was
+        # never the problem -- and its sibling row already names the real cause.
+        no_vintage = bench_reason is not None and bench_reason.startswith("no_vintage")
+        rows["dcf_gap"] = _row(
+            source="conservative case",
+            reason=(
+                bench_reason if no_vintage
+                else f"no_case: {ticker} has no stored conservative case"
+            ),
+        )
     elif not closes:
         rows["dcf_gap"] = _row(
             source="conservative case", reason=f"insufficient_history: {len(closes)} of {len(bars)} bars usable"
@@ -229,7 +269,7 @@ def build_verdict(ticker: str, *, bars_loader=load_price_bars) -> dict:
         else:
             try:
                 intrinsic = run_stored_case(case_id)["value_per_share_diluted"]
-            except ValueError as exc:
+            except (ValueError, CaseNotFound) as exc:
                 rows["dcf_gap"] = _row(source=case_source, reason=f"invalid_case #{case_id}: {exc}")
             else:
                 rows["dcf_gap"] = _row(
