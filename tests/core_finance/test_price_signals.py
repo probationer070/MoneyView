@@ -68,6 +68,15 @@ def test_a_non_positive_eps_yields_no_pe_for_that_period():
     assert trailing_pe_series(closes, eps) == []
 
 
+def test_a_year_absent_from_the_eps_map_yields_no_pe_for_that_close():
+    """This is the realistic case, not an exotic edge: price history outruns
+    statement history, so a partial EPS map -- missing years, not just
+    loss-making ones -- is the normal shape of a real statement bundle."""
+    closes = [("2023-12-31", 90.0), ("2024-12-31", 100.0), ("2025-12-31", 120.0)]
+    eps = {"2024": 5.0}
+    assert trailing_pe_series(closes, eps) == [("2024-12-31", 20.0)]
+
+
 def test_pe_change_is_the_fractional_move_across_the_series():
     series = [("2024-12-31", 34.0), ("2025-12-31", 22.1)]
     assert pe_change(series) == pytest.approx(-0.35)
