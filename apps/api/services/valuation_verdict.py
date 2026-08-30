@@ -60,15 +60,35 @@ def _dated_closes_from_bars(bars: list[dict]) -> list[tuple[str, float]]:
     return [(b["date"], float(b["close"])) for b in bars if b["close"] is not None]
 
 
-def _volumes_from_bars(bars: list[dict]) -> list[int]:
-    """Volumes with NULL entries dropped, mirroring `_closes_from_bars`.
+def _dated_volumes_from_bars(bars: list[dict]) -> list[tuple[str, int]]:
+    """Volumes paired with the bar date they came from, NULL entries dropped.
 
-    An unknown volume is not zero traded volume: substituting 0 for NULL would
-    drag a mean down and distort `volume_ratio`. Only `None` is dropped -- a
-    genuinely stored `0` is a real reading and must be kept, so this checks
-    `is not None` rather than truthiness.
+    Mirrors `_dated_closes_from_bars`. An unknown volume is not zero traded
+    volume: substituting 0 for NULL would drag a mean down and distort
+    `volume_ratio`. Only `None` is dropped -- a genuinely stored `0` is a real
+    reading and must be kept, so this checks `is not None` rather than
+    truthiness. The date is kept alongside each volume so a caller reporting
+    the window can say what calendar span it actually spans, since dropping
+    NULLs makes "the last n bars" a count of positions, not days.
     """
-    return [int(b["volume"]) for b in bars if b["volume"] is not None]
+    return [(b["date"], int(b["volume"])) for b in bars if b["volume"] is not None]
+
+
+def _volume_source(dated_volumes: list[tuple[str, int]], total_bars: int, recent: int, baseline: int) -> str:
+    """Describe the window `volume_ratio` actually used.
+
+    The window is a count of BARS, not days: NULL-filtering makes the kept
+    volumes non-contiguous, so "the last n bars" no longer spans n calendar
+    days. When NULLs were in fact dropped (the filtered series is shorter
+    than the raw bar count), the baseline's real date span is stated too, so
+    a reader can see how much calendar time it actually covers.
+    """
+    label = f"own bars: {recent}/{baseline} bars"
+    if len(dated_volumes) < total_bars:
+        window = dated_volumes[-baseline:] if baseline > 0 else []
+        if window:
+            label = f"{label} (baseline spans {window[0][0]} to {window[-1][0]})"
+    return label
 
 
 def build_verdict(ticker: str, *, bars_loader=load_price_bars) -> dict:
@@ -88,7 +108,8 @@ def build_verdict(ticker: str, *, bars_loader=load_price_bars) -> dict:
 
     dated_closes = _dated_closes_from_bars(bars)
     closes = [close for _, close in dated_closes]
-    volumes = _volumes_from_bars(bars)
+    dated_volumes = _dated_volumes_from_bars(bars)
+    volumes = [volume for _, volume in dated_volumes]
 
     # The newest bar may carry a NULL close (dropped above), in which case the
     # latest usable close is an OLDER bar's price. Refusing outright would be
@@ -105,7 +126,9 @@ def build_verdict(ticker: str, *, bars_loader=load_price_bars) -> dict:
     # --- drawdown ------------------------------------------------------------
     computed = drawdown_from_peak(closes)
     if computed is None:
-        rows["drawdown"] = _row(source=peer_source, reason=f"insufficient_history: {len(closes)} bars")
+        rows["drawdown"] = _row(
+            source=peer_source, reason=f"insufficient_history: {len(closes)} of {len(bars)} bars usable"
+        )
     elif peer_reason is not None:
         rows["drawdown"] = _row(source=peer_source, reason=peer_reason)
     else:
@@ -124,26 +147,37 @@ def build_verdict(ticker: str, *, bars_loader=load_price_bars) -> dict:
         else:
             comparison = None
             drawdown_source = f"peers: {len(peers)} resolved, 0 with bars"
+        # The stale-price note qualifies the subject's OWN price, not the
+        # sector comparison -- `comparison` is reserved for the peer figure,
+        # so the note belongs in `source` even when there is no comparison.
         if stale_price_note is not None:
-            comparison = f"{comparison}; {stale_price_note}" if comparison else stale_price_note
+            drawdown_source = f"{drawdown_source}; {stale_price_note}"
         rows["drawdown"] = _row(pct, comparison, source=drawdown_source)
 
     # --- volume ----------------------------------------------------------
     # Computed purely from the subject's own bars, so it never refuses on a
     # peer-set failure and never wears `peer_source`.
-    ratio = volume_ratio(volumes, _RECENT_DAYS, _BASELINE_DAYS)
-    if ratio is not None:
-        volume_source = f"own bars: {_RECENT_DAYS}d/{_BASELINE_DAYS}d"
+    if not volumes:
+        # No usable volume at all -- distinct from "not enough history": the
+        # bars are there, only the volume column is empty. A degenerate
+        # 0-length window (e.g. "1/0 bars") is not a real source, so none is
+        # emitted; the count of bars that lack volume stands in its place.
+        no_volume = f"0 of {len(bars)} bars have volume"
+        rows["volume"] = _row(source=f"own bars: {no_volume}", reason=f"no_volume: {no_volume}")
     else:
-        fallback_recent = max(1, len(volumes) // 2)
-        fallback_baseline = len(volumes)
-        ratio = volume_ratio(volumes, fallback_recent, fallback_baseline)
-        volume_source = f"own bars: {fallback_recent}d/{fallback_baseline}d"
+        ratio = volume_ratio(volumes, _RECENT_DAYS, _BASELINE_DAYS)
+        if ratio is not None:
+            volume_source = _volume_source(dated_volumes, len(bars), _RECENT_DAYS, _BASELINE_DAYS)
+        else:
+            fallback_recent = max(1, len(volumes) // 2)
+            fallback_baseline = len(volumes)
+            ratio = volume_ratio(volumes, fallback_recent, fallback_baseline)
+            volume_source = _volume_source(dated_volumes, len(bars), fallback_recent, fallback_baseline)
 
-    if ratio is None:
-        rows["volume"] = _row(source=volume_source, reason=f"insufficient_history: {len(bars)} bars")
-    else:
-        rows["volume"] = _row(ratio, None, source=volume_source)
+        if ratio is None:
+            rows["volume"] = _row(source=volume_source, reason=f"insufficient_history: {len(bars)} bars")
+        else:
+            rows["volume"] = _row(ratio, None, source=volume_source)
 
     # --- trailing PE ---------------------------------------------------------
     benchmark, vintage, bench_reason = resolve_for_ticker(ticker)
@@ -166,7 +200,9 @@ def build_verdict(ticker: str, *, bars_loader=load_price_bars) -> dict:
     if case_id is None:
         rows["dcf_gap"] = _row(source="conservative case", reason=f"no_case: {ticker}")
     elif not closes:
-        rows["dcf_gap"] = _row(source="conservative case", reason="insufficient_history: 0 bars")
+        rows["dcf_gap"] = _row(
+            source="conservative case", reason=f"insufficient_history: {len(closes)} of {len(bars)} bars usable"
+        )
     else:
         price_date, price = dated_closes[-1]
         case_source = f"conservative case #{case_id}"

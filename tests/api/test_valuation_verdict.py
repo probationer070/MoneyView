@@ -217,7 +217,7 @@ def test_a_falsy_recent_ratio_is_not_discarded_by_the_fallback():
     panel = build_verdict("TGT", bars_loader=lambda t, limit=None: bars)
     volume = panel["rows"]["volume"]
     assert volume["value"] == pytest.approx(0.0)
-    assert volume["source"] == "own bars: 90d/252d"
+    assert volume["source"] == "own bars: 90/252 bars"
 
 
 def test_a_null_volume_is_dropped_rather_than_counted_as_zero():
@@ -239,7 +239,9 @@ def test_a_null_volume_is_dropped_rather_than_counted_as_zero():
     # Correct behaviour: NULLs dropped, only [100, 100] remain, so the
     # fallback window is 1d/2d and the ratio is 1.0 -- no distortion at all.
     assert volume["value"] == pytest.approx(1.0)
-    assert volume["source"] == "own bars: 1d/2d"
+    assert volume["source"] == (
+        "own bars: 1/2 bars (baseline spans 2025-01-03 to 2025-01-04)"
+    )
 
 
 def test_a_genuine_zero_volume_is_kept_not_dropped():
@@ -258,7 +260,7 @@ def test_a_genuine_zero_volume_is_kept_not_dropped():
     volume = panel["rows"]["volume"]
     # All 4 bars have a real (non-NULL) volume, so the window stays 2d/4d and
     # the real 0.0 recent mean must survive into the ratio.
-    assert volume["source"] == "own bars: 2d/4d"
+    assert volume["source"] == "own bars: 2/4 bars"
     assert volume["value"] == pytest.approx(0.0)
 
 
@@ -297,8 +299,12 @@ def test_a_stale_price_carries_its_date_into_the_dcf_gap_and_drawdown_rows(monke
 
     drawdown = panel["rows"]["drawdown"]
     assert drawdown["value"] is not None
-    assert stale_date in drawdown["comparison"]
-    assert newest_date in drawdown["comparison"]
+    # The note lives in `source`, not `comparison`: it qualifies the subject's own
+    # price, and `comparison` is the sector-comparison slot, which a sibling test
+    # pins as None when no comparison was possible.
+    assert stale_date in drawdown["source"]
+    assert newest_date in drawdown["source"]
+    assert "price as of" not in (drawdown["comparison"] or "")
 
 
 def test_a_thin_peer_set_that_resolves_with_no_bars_keeps_the_value(monkeypatch):
@@ -321,3 +327,50 @@ def test_a_thin_peer_set_that_resolves_with_no_bars_keeps_the_value(monkeypatch)
     assert drawdown["reason"] is None
     assert "0" in drawdown["source"]
     assert drawdown["source"] != "peers: 0 stored"
+
+
+def test_the_volume_source_counts_bars_not_days(monkeypatch):
+    """ND-1: the window is a position count in the NULL-filtered series, so
+    labelling it `252d` is false whenever any volume was dropped.
+
+    `load_price_bars` warns that filtering NULL rows "would silently shorten
+    the series and change what 'the last n bars' means"; this module does that
+    filtering, so it must re-establish the meaning. A contiguous series cannot
+    catch this -- every other volume here is NULL, so 4 positions span 7 days.
+    """
+    _facts("TGT")
+    bars = [
+        {"date": f"2025-01-{i:02d}", "close": 10.0, "volume": (None if i % 2 == 0 else 100)}
+        for i in range(1, 8)
+    ]
+    panel = build_verdict("TGT", bars_loader=lambda t, limit=None: bars)
+    source = panel["rows"]["volume"]["source"]
+    assert "d/" not in source, f"source claims days over a filtered series: {source}"
+    assert "bars" in source
+    # Non-contiguous, so the span must be stated rather than implied.
+    assert "baseline spans" in source
+
+
+def test_no_usable_volume_names_volume_as_the_cause_not_history():
+    """ND-3: with bars present but every volume NULL, `insufficient_history`
+    named the wrong cause -- history is plentiful, volume is what is absent --
+    and the source read `1d/0d`, a zero-length window indistinguishable from
+    the genuinely-empty panel."""
+    _facts("TGT")
+    bars = [{"date": f"2025-02-{i:02d}", "close": 10.0, "volume": None} for i in range(1, 20)]
+    volume = build_verdict("TGT", bars_loader=lambda t, limit=None: bars)["rows"]["volume"]
+    assert volume["value"] is None
+    assert volume["reason"].startswith("no_volume:")
+    assert "19" in volume["reason"], "the reason must name how many bars were present"
+    assert "0d" not in volume["source"]
+
+
+def test_a_refusal_counts_the_input_not_the_filtered_remainder():
+    """ND-4: five bars whose closes are all NULL reported `0 bars`, identical
+    to a genuinely empty panel. The count must describe what arrived."""
+    _facts("TGT")
+    bars = [{"date": f"2025-03-{i:02d}", "close": None, "volume": 5} for i in range(1, 6)]
+    panel = build_verdict("TGT", bars_loader=lambda t, limit=None: bars)
+    reason = panel["rows"]["drawdown"]["reason"]
+    assert "5" in reason, f"reason must name the 5 bars that arrived: {reason}"
+    assert reason != "insufficient_history: 0 bars"
