@@ -37,6 +37,17 @@ def _row(value=None, comparison=None, *, source, reason=None) -> dict:
     return {"value": value, "comparison": comparison, "source": source, "reason": reason}
 
 
+def _closes_from_bars(bars: list[dict]) -> list[float]:
+    """Closes with NULL entries dropped.
+
+    `load_price_bars` documents that `close`/`volume` pass through exactly as
+    stored, including NULL, and that the caller must handle it. A NULL close
+    cannot enter `float()` or a price-derived signal, so it is dropped here
+    rather than left to blow up the row (or the whole panel) that touches it.
+    """
+    return [float(b["close"]) for b in bars if b["close"] is not None]
+
+
 def build_verdict(ticker: str, *, bars_loader=load_price_bars) -> dict:
     """Assemble the evidence panel for one ticker.
 
@@ -52,13 +63,13 @@ def build_verdict(ticker: str, *, bars_loader=load_price_bars) -> dict:
     peers, peer_reason = resolve_peers(ticker)
     peer_source = f"peers: {len(peers)} stored" if peer_reason is None else "peers"
 
-    closes = [float(b["close"]) for b in bars]
+    closes = _closes_from_bars(bars)
     volumes = [int(b["volume"] or 0) for b in bars]
 
     # --- drawdown ------------------------------------------------------------
     computed = drawdown_from_peak(closes)
     if computed is None:
-        rows["drawdown"] = _row(source=peer_source, reason=f"insufficient_history: {len(bars)} bars")
+        rows["drawdown"] = _row(source=peer_source, reason=f"insufficient_history: {len(closes)} bars")
     elif peer_reason is not None:
         rows["drawdown"] = _row(source=peer_source, reason=peer_reason)
     else:
@@ -66,28 +77,35 @@ def build_verdict(ticker: str, *, bars_loader=load_price_bars) -> dict:
         peer_pcts = [
             p[0]
             for p in (
-                drawdown_from_peak([float(b["close"]) for b in bars_loader(peer)])
+                drawdown_from_peak(_closes_from_bars(bars_loader(peer)))
                 for peer in peers
             )
             if p is not None
         ]
-        comparison = (
-            f"peer mean {sum(peer_pcts) / len(peer_pcts):.1%}" if peer_pcts else None
-        )
-        rows["drawdown"] = _row(
-            pct, comparison, source=f"peers: {len(peer_pcts)} stored",
-        )
+        if peer_pcts:
+            comparison = f"peer mean {sum(peer_pcts) / len(peer_pcts):.1%}"
+            drawdown_source = f"peers: {len(peer_pcts)} stored"
+        else:
+            comparison = None
+            drawdown_source = f"peers: {len(peers)} resolved, 0 with bars"
+        rows["drawdown"] = _row(pct, comparison, source=drawdown_source)
 
-    # --- volume --------------------------------------------------------------
-    ratio = volume_ratio(volumes, _RECENT_DAYS, _BASELINE_DAYS) or volume_ratio(
-        volumes, max(1, len(volumes) // 2), len(volumes)
-    )
-    if ratio is None:
-        rows["volume"] = _row(source=peer_source, reason=f"insufficient_history: {len(bars)} bars")
-    elif peer_reason is not None:
-        rows["volume"] = _row(source=peer_source, reason=peer_reason)
+    # --- volume ----------------------------------------------------------
+    # Computed purely from the subject's own bars, so it never refuses on a
+    # peer-set failure and never wears `peer_source`.
+    ratio = volume_ratio(volumes, _RECENT_DAYS, _BASELINE_DAYS)
+    if ratio is not None:
+        volume_source = f"own bars: {_RECENT_DAYS}d/{_BASELINE_DAYS}d"
     else:
-        rows["volume"] = _row(ratio, None, source=peer_source)
+        fallback_recent = max(1, len(volumes) // 2)
+        fallback_baseline = len(volumes)
+        ratio = volume_ratio(volumes, fallback_recent, fallback_baseline)
+        volume_source = f"own bars: {fallback_recent}d/{fallback_baseline}d"
+
+    if ratio is None:
+        rows["volume"] = _row(source=volume_source, reason=f"insufficient_history: {len(bars)} bars")
+    else:
+        rows["volume"] = _row(ratio, None, source=volume_source)
 
     # --- trailing PE ---------------------------------------------------------
     benchmark, vintage, bench_reason = resolve_for_ticker(ticker)
@@ -112,12 +130,20 @@ def build_verdict(ticker: str, *, bars_loader=load_price_bars) -> dict:
     elif not closes:
         rows["dcf_gap"] = _row(source="conservative case", reason="insufficient_history: 0 bars")
     else:
-        intrinsic = run_stored_case(case_id)["value_per_share_diluted"]
         price = closes[-1]
-        rows["dcf_gap"] = _row(
-            (intrinsic - price) / price,
-            f"intrinsic {intrinsic:.2f} vs price {price:.2f}",
-            source=f"conservative case #{case_id}",
-        )
+        case_source = f"conservative case #{case_id}"
+        if price <= 0:
+            rows["dcf_gap"] = _row(source=case_source, reason=f"non_positive_price: {price}")
+        else:
+            try:
+                intrinsic = run_stored_case(case_id)["value_per_share_diluted"]
+            except ValueError as exc:
+                rows["dcf_gap"] = _row(source=case_source, reason=f"invalid_case #{case_id}: {exc}")
+            else:
+                rows["dcf_gap"] = _row(
+                    (intrinsic - price) / price,
+                    f"intrinsic {intrinsic:.2f} vs price {price:.2f}",
+                    source=case_source,
+                )
 
     return {"ticker": ticker, "direction": DIRECTION, "rows": rows}
