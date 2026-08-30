@@ -54,6 +54,8 @@ from .schema_parts.valuation import (
     ValuationCaseCreated,
     ValuationCaseInput,
     ValuationCaseSummary,
+    VerdictPanel,
+    VerdictRow,
 )
 from .schema_parts.market import DeltaBadge, IndicatorRecord, IndexQuote, MarketDataQuality, MarketIndexDetail, MarketRegimeContext, MarketVolumeSummary, StockOHLCV, StockPriceLookup
 from .schema_parts.news import MonteCarloResult, NewsArticle, TechnicalIndicators
@@ -181,4 +183,6 @@ __all__ = [
     "ValuationCaseCreated",
     "ValuationCaseInput",
     "ValuationCaseSummary",
+    "VerdictPanel",
+    "VerdictRow",
 ]

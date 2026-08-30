@@ -86,6 +86,21 @@ class ConservativeCaseResult(BaseModel):
     created: bool
 
 
+class VerdictRow(BaseModel):
+    """One signal. `value` and `reason` are mutually exclusive."""
+
+    value: float | None = None
+    comparison: str | None = None
+    source: str
+    reason: str | None = None
+
+
+class VerdictPanel(BaseModel):
+    ticker: str
+    direction: str
+    rows: dict[str, VerdictRow]
+
+
 class ValuationCaseSummary(BaseModel):
     id: int
     case_name: str

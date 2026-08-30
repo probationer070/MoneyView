@@ -1398,6 +1398,58 @@ Plan: `.superpowers/sdd/2026-08-11-industry-relative-conservative-valuation/`
       reads -- rather than passing a bundle in as the service-level tests do.
       4 tests in `tests/api/test_valuation_routes.py`; full suite 798 passed.
 
+## Active Track - Over/Undervaluation Verdict (sub-project 3)
+
+Plan: `.superpowers/sdd/2026-08-29-overvaluation-verdict/`
+
+- [x] Tasks 1-4 (2026-08-29/30) - pure drawdown/volume/trailing-PE signal
+      arithmetic (`packages/core_finance/price_signals.py`), a local-store-only
+      `load_price_bars`, `apps/api/services/peer_set.py` for same-industry
+      peers, four optional benchmark columns, and
+      `apps/api/services/valuation_verdict.py`'s `build_verdict(ticker, *,
+      bars_loader=load_price_bars) -> dict` / `DIRECTION`. Full suite 842
+      passed.
+- [x] Task 5 (2026-08-30) - the route. `GET /api/v1/valuation/verdict/{ticker}`
+      in `apps/api/routes/valuation.py`, `VerdictRow`/`VerdictPanel` in
+      `apps/api/models/schema_parts/valuation.py`. The feature is now reachable
+      over HTTP, not just as a service call. Declared `def`, matching every
+      other handler in the app since the threadpool change. 3 new tests in
+      `tests/api/test_valuation_routes.py`; full suite 845 passed.
+
+      **Status semantics, deliberately asymmetric.** Refusal is per-signal and
+      travels inside a 200 body -- a panel with three computed rows and one
+      refused row is a successful result, since the whole point of Task 4's
+      per-signal refusal was to avoid collapsing it back into one global
+      failure. Only a 404 means something different: the ticker has NO stored
+      bars at all, so there is no panel to build in the first place.
+
+      **The 2026-08-11 industry-relative spec's nine benchmark columns did not
+      include trailing PE, and Task 3 of this plan added four more (`trailing_pe`,
+      `price_to_book`, `ev_sales`, `stdev_price`) as OPTIONAL columns** --
+      `BenchmarkColumn.required` is `False` for these four and `True` for the
+      original nine, which is also what `conservative_case.py`'s `full_basket`
+      scoping (commit `bfe97e9`) now keys off of. Until a workbook carrying
+      real values for these four columns is loaded, `resolve_for_ticker` finds
+      no surviving contributors for `trailing_pe` and the PE row refuses with
+      `no_sector_pe`.
+
+      **The `trailing_pe` row additionally refuses with `no_eps`, by
+      deliberate ruling, even once a sector average is available.** Computing
+      a trailing-PE series needs EPS extracted from `corporate_statements`,
+      and confirming Yahoo's EPS line-item labels needs a real stored bundle
+      that no fixture in this repo currently carries. Task 4's implementer was
+      told not to invent label names, and did not; guessing was judged worse
+      than refusing honestly. Closing this is a follow-up once a real bundle
+      can be inspected -- the arithmetic in `price_signals.py` is already
+      tested in isolation and ready when the labels are known.
+
+      **The peer set is a watchlist, not a sector census.** `peer_set.py`'s
+      own docstring says so: six semiconductor tickers someone follows are not
+      the semiconductor sector. Every peer-based row in the panel (`drawdown`)
+      reports its peer count in `source` (e.g. `"peers: 4 stored"`) precisely
+      so a caller can see how thin the comparison is rather than trusting it
+      as authoritative.
+
 ## Archived Track - MoneyView Dev Monitor
 
 Completed basis retained from the previous active plan:

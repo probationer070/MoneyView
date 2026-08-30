@@ -260,3 +260,44 @@ def test_conservative_case_route_reports_the_stored_name():
     body = client.post("/api/v1/valuation/conservative/NAMED").json()["data"]
     assert body["case_name"] == load_case(body["id"])["case_name"]
     assert "None" not in body["case_name"]
+
+
+def _seed_verdict_inputs(ticker="VERD", industry="Semiconductors"):
+    from apps.api.services.db import get_db
+
+    with get_db() as conn:
+        conn.execute(
+            "INSERT OR REPLACE INTO corporate_quote_facts "
+            "(ticker, market_cap, shares_outstanding, currency, beta, sector, industry, fetched_at) "
+            "VALUES (?, 1.0, 1.0, 'USD', 1.0, 'Technology', ?, '2026-01-01')",
+            (ticker, industry),
+        )
+        conn.executemany(
+            "INSERT OR REPLACE INTO stocks (ticker, date, open, high, low, close, volume) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            [(ticker, f"2025-01-0{i}", 100.0 + i, 100.0 + i, 100.0 + i, 100.0 + i, i * 100)
+             for i in range(1, 6)],
+        )
+
+
+def test_verdict_route_returns_a_panel():
+    _seed_verdict_inputs()
+    response = client.get("/api/v1/valuation/verdict/VERD")
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["ticker"] == "VERD"
+    assert "anti-conservative" in data["direction"]
+    assert "drawdown" in data["rows"]
+
+
+def test_verdict_route_is_404_when_nothing_is_stored():
+    assert client.get("/api/v1/valuation/verdict/NOTHING").status_code == 404
+
+
+def test_verdict_route_returns_200_with_refused_rows():
+    """A partially refused panel is a successful response -- that is the whole
+    point of refusing per signal rather than globally."""
+    _seed_verdict_inputs(ticker="LONELY")
+    data = client.get("/api/v1/valuation/verdict/LONELY").json()["data"]
+    assert data["rows"]["dcf_gap"]["reason"].startswith("no_case")
+    assert data["rows"]["drawdown"]["reason"].startswith("peer_set_too_thin")
