@@ -1699,3 +1699,55 @@ reader assumes -- filtering changes length, and a positional assumption that hel
 silently point at the wrong element after it. This is the same defect class `69d3808` already fixed for
 this module (a number wearing an attribution it has not earned); it was not exhaustively swept for at
 the time.
+
+## 2026-08-30: The evidence panel's own fix round left one refusal misnamed and introduced two more
+
+Date: 2026-08-30
+Command: Manual review of `apps/api/services/valuation_verdict.py` at HEAD `96dfbe9`, followed by
+`python -m pytest tests/api/test_valuation_verdict.py -v` and `python -m pytest -q`.
+Failure: The round that fixed the two defects above (this file's prior 2026-08-30 entry) left one
+instance of the same class standing and introduced two more, all in the volume/drawdown refusal rows.
+
+1. `volume`'s `ratio is None` branch at `:177-178` emitted `reason=f"insufficient_history: {len(bars)}
+   bars"`. Given `fallback_baseline = len(volumes)`, `volume_ratio`'s length guard
+   (`len(volumes) < max(recent, baseline)`) can never trip on that call -- the only way it still
+   returns `None` is `baseline_mean <= 0`, i.e. every stored volume in the window is genuinely zero.
+   Reproduced with 5 bars, every volume a real `0`: `{'source': 'own bars: 2/5 bars', 'reason':
+   'insufficient_history: 5 bars'}` -- the source shows a window that fit inside the data, the reason
+   blames the amount of data. Reachable in production: an all-zero volume column is normal for
+   illiquid/OTC tickers and for providers that write `0` for unknown.
+2. The same line's count was also inconsistent with its siblings: `:130`/`:204` report
+   `{usable} of {total} bars usable` (the NULL-filtered count over the raw count); `:178` reported the
+   raw bar count alone, so two rows on the same panel used different denominators under an identical
+   reason prefix.
+3. The empty-panel case (`bars == []`) was folded into the same `no_volume` branch as "bars arrived,
+   none carried volume," producing `{'source': 'own bars: 0 of 0 bars have volume', 'reason':
+   'no_volume: 0 of 0 bars have volume'}` -- asserting the bars have no volume when no bars arrived at
+   all, with `source` reduced to the reason string plus a prefix (zero real provenance). Before the
+   prior round this case correctly said `insufficient_history: 0 bars`; the prior round's `no_volume`
+   fix regressed it while fixing its neighbour (bars present, no usable volume).
+
+Root cause: (1)/(2) -- the fallback call's `fallback_baseline` was never checked against what
+`volume_ratio`'s own length guard could still reject; the `insufficient_history` reason and its raw
+`len(bars)` count were inherited from an earlier version of the branch without re-deriving what could
+actually still reach it after the fallback logic was added. (3) -- collapsing "no bars" and "bars with
+no volume" into one `if not volumes:` branch treated both as the same absence, when the reader needs
+to know which one is true (a data-collection gap vs. a genuinely volume-less instrument).
+Fix: (1) new reason code `zero_volume: baseline mean 0 over {fallback_baseline} bars`, replacing the
+`insufficient_history` reuse at that line -- nothing else reaches that branch, so no other case is
+affected. (2) resolved as a side effect of (1): the only remaining `insufficient_history` usages
+(`:130`, `:204`, and the empty-panel case below) already share the `{usable} of {total} bars usable`
+shape. (3) split `if not volumes:` on `if not bars:`; the empty case now gets
+`source="own bars: none stored"`, `reason="insufficient_history: 0 of 0 bars usable"`, and the
+non-empty "no usable volume" case is unchanged.
+Files changed: `apps/api/services/valuation_verdict.py`, `tests/api/test_valuation_verdict.py` (two new
+tests -- zero-baseline volume names its real cause, empty panel names "no bars stored" -- plus a new
+`comparison` assertion on the existing stale-price test closing the untested half of that contract, two
+stale comments corrected, and two weak assertions pinned to exact strings).
+Prevention: when a refusal branch's reachability changes because an upstream call gained a fallback
+(or any other new path into it), re-derive from the callee's own guard conditions what can actually
+still land there -- do not assume an old reason string is still describing the live path. And when a
+`not X` guard covers two distinguishable absences (e.g. "no rows" vs. "rows with no usable value in
+this column"), branch on the more specific condition explicitly rather than letting one message stand
+in for both -- a reader cannot tell "nothing arrived" from "something arrived but was empty" unless the
+row says which.

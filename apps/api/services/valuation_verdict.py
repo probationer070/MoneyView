@@ -158,12 +158,22 @@ def build_verdict(ticker: str, *, bars_loader=load_price_bars) -> dict:
     # Computed purely from the subject's own bars, so it never refuses on a
     # peer-set failure and never wears `peer_source`.
     if not volumes:
-        # No usable volume at all -- distinct from "not enough history": the
-        # bars are there, only the volume column is empty. A degenerate
-        # 0-length window (e.g. "1/0 bars") is not a real source, so none is
-        # emitted; the count of bars that lack volume stands in its place.
-        no_volume = f"0 of {len(bars)} bars have volume"
-        rows["volume"] = _row(source=f"own bars: {no_volume}", reason=f"no_volume: {no_volume}")
+        if not bars:
+            # No bars arrived at all -- distinct from "bars arrived, but none
+            # carry volume" (below). `no_volume` would blame an absent volume
+            # column for the absence of the bars themselves, and `own bars`
+            # would claim provenance for data that was never fetched.
+            rows["volume"] = _row(
+                source="own bars: none stored",
+                reason="insufficient_history: 0 of 0 bars usable",
+            )
+        else:
+            # No usable volume at all -- distinct from "not enough history": the
+            # bars are there, only the volume column is empty. A degenerate
+            # 0-length window (e.g. "1/0 bars") is not a real source, so none is
+            # emitted; the count of bars that lack volume stands in its place.
+            no_volume = f"0 of {len(bars)} bars have volume"
+            rows["volume"] = _row(source=f"own bars: {no_volume}", reason=f"no_volume: {no_volume}")
     else:
         ratio = volume_ratio(volumes, _RECENT_DAYS, _BASELINE_DAYS)
         if ratio is not None:
@@ -175,7 +185,15 @@ def build_verdict(ticker: str, *, bars_loader=load_price_bars) -> dict:
             volume_source = _volume_source(dated_volumes, len(bars), fallback_recent, fallback_baseline)
 
         if ratio is None:
-            rows["volume"] = _row(source=volume_source, reason=f"insufficient_history: {len(bars)} bars")
+            # `fallback_baseline` always equals `len(volumes)`, so the length
+            # guard in `volume_ratio` can never trip on this call -- the only
+            # way it still returns None is `baseline_mean <= 0`, i.e. every
+            # stored volume over that window is zero. `insufficient_history`
+            # would blame a shortage of data that is not actually short.
+            rows["volume"] = _row(
+                source=volume_source,
+                reason=f"zero_volume: baseline mean 0 over {fallback_baseline} bars",
+            )
         else:
             rows["volume"] = _row(ratio, None, source=volume_source)
 

@@ -1449,6 +1449,24 @@ Plan: `.superpowers/sdd/2026-08-29-overvaluation-verdict/`
       reports its peer count in `source` (e.g. `"peers: 4 stored"`) precisely
       so a caller can see how thin the comparison is rather than trusting it
       as authoritative.
+- [x] Task 4 addendum (2026-08-30) - whole-branch review found the prior
+      round left one refusal-naming defect standing and introduced two more,
+      plus one untested contract half. `volume`'s zero-baseline case (every
+      stored volume genuinely `0`) now gets its own `zero_volume` reason
+      instead of reusing `insufficient_history`, which could never actually
+      be the cause on that line -- `volume_ratio`'s length guard cannot trip
+      on the fallback call, since `fallback_baseline == len(volumes)` always.
+      The empty panel (`bars == []`) now names `insufficient_history: 0 of 0
+      bars usable` with `source="own bars: none stored"`, distinct from the
+      genuine "bars arrived, none carried volume" `no_volume` case it had
+      been folded into. The stale-price test now asserts `drawdown`'s
+      `comparison` still starts with `"peer mean"`, closing the half of that
+      contract nothing in the suite checked (a change that emptied
+      `comparison` whenever the price is stale would have passed all 20 prior
+      tests). See `ERROR-LOG.md`'s second 2026-08-30 entry for the full
+      root-cause writeup and `.superpowers/sdd/2026-08-29-overvaluation-verdict/task-4-report.md`'s
+      final addendum for the revert-check evidence. 2 new tests; full suite
+      850 passed.
 
 ## Archived Track - MoneyView Dev Monitor
 
