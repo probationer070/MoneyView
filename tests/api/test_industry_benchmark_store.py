@@ -71,3 +71,24 @@ def test_latest_vintage_returns_the_newest_at_or_before_a_date():
 
 def test_latest_vintage_is_none_when_nothing_was_ever_stored():
     assert latest_vintage() is None
+
+
+def test_a_workbook_without_the_optional_columns_still_parses(tmp_path):
+    """The four price columns were added after several vintages were published."""
+    import openpyxl
+
+    from apps.api.services.industry_benchmark_store import parse_workbook
+    from packages.core_finance.industry_benchmark import BENCHMARK_COLUMNS
+
+    book = openpyxl.Workbook()
+    sheet = book.active
+    sheet.title = "Industry Averages"
+    required = [c for c in BENCHMARK_COLUMNS if c.required]
+    sheet.append(["Industry Name", "Number of firms"] + [c.source_header for c in required])
+    sheet.append(["Semiconductor", 50] + [0.1] * len(required))
+    path = tmp_path / "old_vintage.xlsx"
+    book.save(path)
+
+    rows = parse_workbook(path, sheet="Industry Averages")
+    assert len(rows) == 1
+    assert rows[0].values.get("trailing_pe") is None

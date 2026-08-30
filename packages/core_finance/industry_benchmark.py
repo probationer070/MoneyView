@@ -43,6 +43,11 @@ class BenchmarkColumn:
     unit: Unit
     low: float
     high: float
+    # False for columns added after vintages were already published. `parse_workbook`
+    # builds its required-header list from this flag, so an optional column absent
+    # from an older workbook leaves that row's value None instead of rejecting the
+    # whole file.
+    required: bool = True
 
 
 BENCHMARK_COLUMNS: tuple[BenchmarkColumn, ...] = (
@@ -65,6 +70,12 @@ BENCHMARK_COLUMNS: tuple[BenchmarkColumn, ...] = (
     # 1.587, Utility (Water) 1.622, Utility (General) 1.723, Broadcasting
     # 1.888) are kept rather than screened as if they were errors.
     BenchmarkColumn("reinvestment_rate", "Reinvestment Rate", "fraction", 0.0, 2.0),
+    BenchmarkColumn("trailing_pe", "Trailing PE", "ratio", 0.0, 200.0, required=False),
+    BenchmarkColumn("price_to_book", "Price/Book", "ratio", 0.0, 50.0, required=False),
+    BenchmarkColumn("ev_sales", "EV/Sales", "ratio", 0.0, 50.0, required=False),
+    BenchmarkColumn(
+        "stdev_price", "Std deviation in stock prices", "fraction", 0.0, 3.0, required=False
+    ),
 )
 
 _COLUMNS_BY_KEY = {column.key: column for column in BENCHMARK_COLUMNS}

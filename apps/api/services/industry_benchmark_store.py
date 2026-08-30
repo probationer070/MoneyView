@@ -46,7 +46,9 @@ def parse_workbook(
     header_row = [cell.value for cell in worksheet[1]]
     index = {str(name).strip(): position for position, name in enumerate(header_row) if name}
 
-    required = ["Industry Name", "Number of firms"] + [c.source_header for c in BENCHMARK_COLUMNS]
+    required = ["Industry Name", "Number of firms"] + [
+        c.source_header for c in BENCHMARK_COLUMNS if c.required
+    ]
     missing = [name for name in required if name not in index]
     if missing:
         raise ValueError(
@@ -68,7 +70,8 @@ def parse_workbook(
             values={
                 column.key: (
                     float(raw[index[column.source_header]])
-                    if isinstance(raw[index[column.source_header]], (int, float))
+                    if column.source_header in index
+                    and isinstance(raw[index[column.source_header]], (int, float))
                     else None
                 )
                 for column in BENCHMARK_COLUMNS

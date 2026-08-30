@@ -554,6 +554,10 @@ CREATE TABLE IF NOT EXISTS industry_benchmark (
     cost_of_capital    REAL,
     sales_to_capital   REAL,
     reinvestment_rate  REAL,
+    trailing_pe        REAL,
+    price_to_book      REAL,
+    ev_sales           REAL,
+    stdev_price        REAL,
     PRIMARY KEY (vintage, industry_name)
 );
 """
@@ -848,9 +852,20 @@ def _ensure_schema_compatibility(conn: sqlite3.Connection) -> None:
             cost_of_capital    REAL,
             sales_to_capital   REAL,
             reinvestment_rate  REAL,
+            trailing_pe        REAL,
+            price_to_book      REAL,
+            ev_sales           REAL,
+            stdev_price        REAL,
             PRIMARY KEY (vintage, industry_name)
         )"""
     )
+    benchmark_columns = {
+        row["name"]
+        for row in conn.execute("PRAGMA table_info(industry_benchmark)").fetchall()
+    }
+    for column in ("trailing_pe", "price_to_book", "ev_sales", "stdev_price"):
+        if column not in benchmark_columns:
+            conn.execute(f"ALTER TABLE industry_benchmark ADD COLUMN {column} REAL")
 
 
 def get_db_path() -> Path:
