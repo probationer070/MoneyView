@@ -113,24 +113,30 @@ def _own_window_source(
     not shared.
     """
     source = f"own window: last {len(window)} of {len(closes)} bars"
-    # "usable" is reserved for NULL-filtering on the sibling rows, so the
-    # dropped bars are named rather than folded into that word: without this,
-    # `252 of 252 bars` reads as "nothing discarded" for a ticker with 400
-    # stored bars of which 148 carry no close.
+    # The span belongs to the WINDOW, so it is attached to the window clause and
+    # labelled. Emitting a bare "(spans A to B)" after the stored-bars clause
+    # attached it to the wrong noun and produced impossible sentences -- "550 of
+    # 800 stored bars have a close (spans 2024-10-25 to 2026-03-09)", 550 bars
+    # across 500 days. `_volume_source` labels its span for the same reason.
+    #
+    # It is stated whenever ANY close was dropped, because only then can the
+    # window's bar count differ from the days it covers. A contiguous window
+    # spans exactly as many days as it holds bars, so the dates would be noise.
     if len(dated_closes) < len(bars_total):
-        source = f"{source}, {len(dated_closes)} of {len(bars_total)} stored bars have a close"
-        # Only a NULL-sparse window needs its span stated: a contiguous one
-        # spans exactly as many days as it holds bars, so the dates would be
-        # noise. This is the rule `_volume_source` already follows.
-        if len(dated_closes) >= len(window):
-            span = dated_closes[-len(window):]
-            source = f"{source} (spans {span[0][0]} to {span[-1][0]})"
+        span = dated_closes[-len(window):]
+        source = f"{source} (window spans {span[0][0]} to {span[-1][0]})"
+        source = (
+            f"{source}, {len(dated_closes)} of {len(bars_total)} stored bars have a close"
+        )
     if len(closes) > len(window):
         # `drawdown_from_peak` refuses a non-positive peak as well as an empty
         # series, and this helper is called from the `non_positive_peak` branch
         # itself -- so the full-history figure may not exist. Unpacking it
         # unconditionally raised out of `build_verdict`, breaking the
         # per-signal invariant on the one branch that most needed the source.
+        #
+        # Note the figure is the full history of USABLE closes, which the
+        # stored-bars clause above makes visible when they differ.
         full = drawdown_from_peak(closes)
         if full is not None and max(closes) > max(window):
             source = f"{source} (full-history drawdown {full[0]:.1%}, peak outside window)"

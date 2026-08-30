@@ -594,3 +594,61 @@ def test_a_null_sparse_window_names_its_dropped_bars_and_real_span():
     assert "spans" in source
     # "usable" stays reserved for NULL-filtering on the sibling rows.
     assert "usable" not in source
+
+
+def test_no_source_string_ever_claims_more_bars_than_its_span_can_hold():
+    """A PROPERTY over the assembled sentence, not a case.
+
+    `_own_window_source` concatenates four independently-gated clauses, and
+    every one of the nine defects in this module's history was an interaction
+    between clauses that were each individually true. Nothing asserted anything
+    about the assembled string, so a span attached to the wrong noun shipped:
+    `550 of 800 stored bars have a close (spans ... )` over 500 calendar days,
+    which 550 daily bars cannot cover.
+
+    This checks the invariant that catches that whole sub-class: any bar count
+    the sentence names must fit inside any span it states.
+    """
+    import datetime as dt
+    import re
+
+    _facts("TGT")
+    for peer in ("P1", "P2", "P3"):
+        _facts(peer)
+
+    def bars_for(n, null_from=None, step=2):
+        return [
+            {
+                "date": _date(i),
+                "close": (None if null_from is not None and i >= null_from and i % step else 100.0),
+                "volume": 10,
+            }
+            for i in range(n)
+        ]
+
+    shapes = [
+        (900, 300, 2), (800, 300, 2), (600, 0, 2), (600, 400, 3),
+        (400, 100, 2), (300, None, 2), (260, 250, 2), (700, 1, 4),
+    ]
+    for total, null_from, step in shapes:
+        subject = bars_for(total, null_from, step)
+        panel = build_verdict(
+            "TGT",
+            bars_loader=lambda t, limit=None, s=subject: s if t == "TGT" else bars_for(300),
+        )
+        source = panel["rows"]["drawdown"]["source"]
+        span = re.search(r"spans (\d{4}-\d{2}-\d{2}) to (\d{4}-\d{2}-\d{2})", source)
+        if span is None:
+            continue
+        days = (dt.date.fromisoformat(span.group(2)) - dt.date.fromisoformat(span.group(1))).days + 1
+        # The count a reader attaches a span to is the one immediately before
+        # it. That is precisely what went wrong: the span described the window
+        # but sat after the stored-bars clause, so the sentence read as 550
+        # bars across 500 days.
+        preceding = re.findall(r"(\d+) of \d+ (?:stored )?bars", source[: span.start()])
+        assert preceding, f"a span with no count before it: {source!r}"
+        count = int(preceding[-1])
+        assert count <= days, (
+            f"the count immediately before the span claims {count} bars inside "
+            f"a {days}-day span: {source!r}"
+        )
