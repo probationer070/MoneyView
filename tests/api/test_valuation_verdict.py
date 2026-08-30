@@ -220,6 +220,87 @@ def test_a_falsy_recent_ratio_is_not_discarded_by_the_fallback():
     assert volume["source"] == "own bars: 90d/252d"
 
 
+def test_a_null_volume_is_dropped_rather_than_counted_as_zero():
+    """Finding A: `int(b["volume"] or 0)` turned an unknown volume into "zero
+    traded", dragging the baseline mean down and inflating the ratio. The two
+    NULLs here must be dropped -- like `_closes_from_bars` already drops NULL
+    closes -- not substituted with 0."""
+    _facts("TGT")
+    bars = [
+        {"date": "2025-01-01", "close": 10.0, "volume": None},
+        {"date": "2025-01-02", "close": 10.0, "volume": None},
+        {"date": "2025-01-03", "close": 10.0, "volume": 100},
+        {"date": "2025-01-04", "close": 10.0, "volume": 100},
+    ]
+    panel = build_verdict("TGT", bars_loader=lambda t, limit=None: bars)
+    volume = panel["rows"]["volume"]
+    # Buggy behaviour: NULLs -> 0, baseline mean (0+0+100+100)/4 = 50, recent
+    # mean (100+100)/2 = 100, ratio 100/50 = 2.0, source "own bars: 2d/4d".
+    # Correct behaviour: NULLs dropped, only [100, 100] remain, so the
+    # fallback window is 1d/2d and the ratio is 1.0 -- no distortion at all.
+    assert volume["value"] == pytest.approx(1.0)
+    assert volume["source"] == "own bars: 1d/2d"
+
+
+def test_a_genuine_zero_volume_is_kept_not_dropped():
+    """The other half of Finding A: only `None` is a missing reading. A
+    genuinely stored `0` is real data and must still be counted, so the fix
+    must check `is not None` rather than falsiness (which `or 0` also gets
+    wrong for a real `0`)."""
+    _facts("TGT")
+    bars = [
+        {"date": "2025-01-01", "close": 10.0, "volume": 100},
+        {"date": "2025-01-02", "close": 10.0, "volume": 100},
+        {"date": "2025-01-03", "close": 10.0, "volume": 0},
+        {"date": "2025-01-04", "close": 10.0, "volume": 0},
+    ]
+    panel = build_verdict("TGT", bars_loader=lambda t, limit=None: bars)
+    volume = panel["rows"]["volume"]
+    # All 4 bars have a real (non-NULL) volume, so the window stays 2d/4d and
+    # the real 0.0 recent mean must survive into the ratio.
+    assert volume["source"] == "own bars: 2d/4d"
+    assert volume["value"] == pytest.approx(0.0)
+
+
+def test_a_stale_price_carries_its_date_into_the_dcf_gap_and_drawdown_rows(monkeypatch):
+    """Finding B: dropping the newest bar's NULL close makes `closes[-1]` an
+    OLDER bar's price. Refusing outright would be too aggressive -- it is
+    genuinely the last known price -- so its date must be visible in both
+    rows that report it, not silently presented as "the" price."""
+    for t in ("TGT", "P1", "P2", "P3"):
+        _facts(t)
+    monkeypatch.setattr(
+        "apps.api.services.valuation_verdict.find_conservative_case_id",
+        lambda ticker: 999,
+    )
+    monkeypatch.setattr(
+        "apps.api.services.valuation_verdict.run_stored_case",
+        lambda case_id: {"value_per_share_diluted": 200.0},
+    )
+    tgt_bars = [{"date": d, "close": c, "volume": v} for d, c, v in _SERIES]
+    tgt_bars[-1] = {**tgt_bars[-1], "close": None}
+    stale_date = tgt_bars[-2]["date"]
+    newest_date = tgt_bars[-1]["date"]
+    assert stale_date != newest_date
+
+    def loader(ticker, limit=None):
+        if ticker == "TGT":
+            return tgt_bars
+        return [{"date": d, "close": c, "volume": v} for d, c, v in _SERIES]
+
+    panel = build_verdict("TGT", bars_loader=loader)
+
+    dcf = panel["rows"]["dcf_gap"]
+    assert dcf["value"] is not None
+    assert stale_date in dcf["comparison"]
+    assert newest_date not in dcf["comparison"]  # the row must not claim the newest date
+
+    drawdown = panel["rows"]["drawdown"]
+    assert drawdown["value"] is not None
+    assert stale_date in drawdown["comparison"]
+    assert newest_date in drawdown["comparison"]
+
+
 def test_a_thin_peer_set_that_resolves_with_no_bars_keeps_the_value(monkeypatch):
     """Finding 4: when peers resolve but none has bars, the row must keep the
     subject's own drawdown value while its source says no comparison was

@@ -1657,3 +1657,45 @@ assuming the database had already screened for `None`. Deriving the required
 list from the dataclass, rather than hand-copying field names, keeps this
 check from silently drifting out of sync if either spec gains a new
 no-default field later.
+
+## 2026-08-30: The evidence panel counted an unknown volume as zero and could publish a stale price unmarked
+
+Date: 2026-08-30
+Command: Manual review of commit `69d3808` (`apps/api/services/valuation_verdict.py`), followed by
+`python -m pytest tests/api/test_valuation_verdict.py -v` and `python -m pytest -q`.
+Failure: Two silent-honesty defects in the over/undervaluation evidence panel, whose stated job is
+naming the provenance of every number it shows.
+
+1. `volumes = [int(b["volume"] or 0) for b in bars]` substituted `0` for a NULL volume. Reproduced with
+   two NULL volumes in a four-bar series: `{'value': 2.0, 'source': 'own bars: 2d/4d'}` -- the NULLs,
+   coerced to `0`, dragged the baseline mean down and inflated the ratio, in a fallback window that gave
+   no hint anything was substituted.
+2. `price = closes[-1]` assumed the last entry of `closes` (NULL closes already dropped by
+   `_closes_from_bars`) was the newest bar's price. When the newest bar's close is NULL, `closes[-1]` is
+   an OLDER bar's close, and `dcf_gap` published it as "price" with no marker. Reproduced with the
+   newest bar's close set to `None`: drawdown read `0.0` measured against `150.0`, an older bar's price,
+   with nothing in the row saying so.
+
+Root cause: both trace to `load_price_bars` (`apps/api/services/acquisition/store.py:174-177`), which
+documents that `close`/`volume` pass through exactly as stored, including NULL, and that the caller must
+handle it. `_closes_from_bars` handled NULL close correctly (drop it) but `volumes` used `or 0`
+(truthiness, not a `None` check) instead of the same drop. And dropping NULL closes shortens `closes`
+relative to `bars`, so `closes[-1]` silently stopped meaning "the newest bar's close" the moment any
+recent close was NULL -- nothing re-established what index the last surviving close actually came from.
+Fix: Added `_volumes_from_bars`, mirroring `_closes_from_bars`: drops `None` volumes via `is not None`,
+keeping a genuinely stored `0` (which `or 0` would also keep, but only by chance -- `is not None` keeps
+it by construction). Added `_dated_closes_from_bars`, returning `(date, close)` pairs with NULLs
+dropped, so the latest surviving close can be reported alongside the date it actually came from rather
+than assumed to be the newest bar's. Kept using the latest non-NULL close for both `drawdown` and
+`dcf_gap` (refusing outright would be too aggressive -- it genuinely is the last known price) but now
+carry that date into `dcf_gap`'s `comparison` string unconditionally, and into `drawdown`'s `comparison`
+whenever the close actually used is not the newest bar's.
+Files changed: `apps/api/services/valuation_verdict.py`, `tests/api/test_valuation_verdict.py` (three
+new tests: NULL volume dropped not zeroed, a genuine `0` volume kept, and a stale price's date visible
+in both `dcf_gap` and `drawdown`).
+Prevention: whenever a per-row value is read by a fixed index (`closes[-1]`) after an earlier filtering
+step has already dropped entries from that same sequence, check whether the index still means what the
+reader assumes -- filtering changes length, and a positional assumption that held before the filter can
+silently point at the wrong element after it. This is the same defect class `69d3808` already fixed for
+this module (a number wearing an attribution it has not earned); it was not exhaustively swept for at
+the time.

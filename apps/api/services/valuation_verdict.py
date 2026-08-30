@@ -48,6 +48,29 @@ def _closes_from_bars(bars: list[dict]) -> list[float]:
     return [float(b["close"]) for b in bars if b["close"] is not None]
 
 
+def _dated_closes_from_bars(bars: list[dict]) -> list[tuple[str, float]]:
+    """Closes paired with the bar date they came from, NULL entries dropped.
+
+    Dropping NULL closes shortens the list relative to `bars`, so a plain
+    `closes[-1]` no longer reliably means "the newest bar's close" -- if the
+    newest bar's close is NULL, it means an OLDER bar's close instead, silently.
+    Carrying the date alongside each close lets a caller that reports "price"
+    say which date it actually priced against.
+    """
+    return [(b["date"], float(b["close"])) for b in bars if b["close"] is not None]
+
+
+def _volumes_from_bars(bars: list[dict]) -> list[int]:
+    """Volumes with NULL entries dropped, mirroring `_closes_from_bars`.
+
+    An unknown volume is not zero traded volume: substituting 0 for NULL would
+    drag a mean down and distort `volume_ratio`. Only `None` is dropped -- a
+    genuinely stored `0` is a real reading and must be kept, so this checks
+    `is not None` rather than truthiness.
+    """
+    return [int(b["volume"]) for b in bars if b["volume"] is not None]
+
+
 def build_verdict(ticker: str, *, bars_loader=load_price_bars) -> dict:
     """Assemble the evidence panel for one ticker.
 
@@ -63,8 +86,21 @@ def build_verdict(ticker: str, *, bars_loader=load_price_bars) -> dict:
     peers, peer_reason = resolve_peers(ticker)
     peer_source = f"peers: {len(peers)} stored" if peer_reason is None else "peers"
 
-    closes = _closes_from_bars(bars)
-    volumes = [int(b["volume"] or 0) for b in bars]
+    dated_closes = _dated_closes_from_bars(bars)
+    closes = [close for _, close in dated_closes]
+    volumes = _volumes_from_bars(bars)
+
+    # The newest bar may carry a NULL close (dropped above), in which case the
+    # latest usable close is an OLDER bar's price. Refusing outright would be
+    # too aggressive -- it is genuinely the last known price -- so instead its
+    # date is surfaced wherever that price is reported, per finding B.
+    latest_bar_date = bars[-1]["date"] if bars else None
+    latest_close_date = dated_closes[-1][0] if dated_closes else None
+    stale_price_note = (
+        f"price as of {latest_close_date}, latest bar {latest_bar_date}"
+        if latest_close_date is not None and latest_close_date != latest_bar_date
+        else None
+    )
 
     # --- drawdown ------------------------------------------------------------
     computed = drawdown_from_peak(closes)
@@ -88,6 +124,8 @@ def build_verdict(ticker: str, *, bars_loader=load_price_bars) -> dict:
         else:
             comparison = None
             drawdown_source = f"peers: {len(peers)} resolved, 0 with bars"
+        if stale_price_note is not None:
+            comparison = f"{comparison}; {stale_price_note}" if comparison else stale_price_note
         rows["drawdown"] = _row(pct, comparison, source=drawdown_source)
 
     # --- volume ----------------------------------------------------------
@@ -130,7 +168,7 @@ def build_verdict(ticker: str, *, bars_loader=load_price_bars) -> dict:
     elif not closes:
         rows["dcf_gap"] = _row(source="conservative case", reason="insufficient_history: 0 bars")
     else:
-        price = closes[-1]
+        price_date, price = dated_closes[-1]
         case_source = f"conservative case #{case_id}"
         if price <= 0:
             rows["dcf_gap"] = _row(source=case_source, reason=f"non_positive_price: {price}")
@@ -142,7 +180,7 @@ def build_verdict(ticker: str, *, bars_loader=load_price_bars) -> dict:
             else:
                 rows["dcf_gap"] = _row(
                     (intrinsic - price) / price,
-                    f"intrinsic {intrinsic:.2f} vs price {price:.2f}",
+                    f"intrinsic {intrinsic:.2f} vs price {price:.2f} as of {price_date}",
                     source=case_source,
                 )
 
