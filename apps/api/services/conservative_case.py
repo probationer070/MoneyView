@@ -168,8 +168,16 @@ def build_conservative_case(
     base_year: int,
 ) -> dict:
     """A `create_case` payload valuing `ticker` against its sector benchmark."""
+    # Only the columns this case actually fades (FADE_DIRECTIONS' keys -- every
+    # `faded(...)` call below names one) count toward the basket size. Task 3
+    # added trailing_pe/price_to_book/ev_sales/stdev_price to `benchmark.columns`;
+    # none of them feed a fade, so a well-populated price column must not be able
+    # to raise `full_basket` and downgrade an unrelated fade's `three_p` from
+    # "probable" to "plausible" for a column this case never consumes.
     full_basket = max(
-        (len(a.industries) for a in benchmark.columns.values()), default=0
+        (len(a.industries) for key, a in benchmark.columns.items()
+         if key in FADE_DIRECTIONS),
+        default=0,
     )
 
     def faded(column: str, company_value: float, direction: str) -> tuple[float, dict]:

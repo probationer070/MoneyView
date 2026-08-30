@@ -222,6 +222,27 @@ def test_a_dropped_benchmark_column_still_states_why_the_value_was_not_faded():
     assert create_case(case) > 0
 
 
+def test_full_basket_ignores_columns_the_case_does_not_consume():
+    """Task 3 review finding: `benchmark.columns` now carries trailing_pe,
+    price_to_book, ev_sales and stdev_price alongside the columns this case
+    actually fades, and none of the four feed a fade. If `full_basket` counted
+    them, a well-populated price column would raise `full_basket` above the
+    fade columns' own basket size and silently downgrade every fade's
+    `three_p` from "probable" to "plausible" -- a confidence label depending
+    on a column the case never consumes. Here trailing_pe rests on five
+    industries while every fade-consumed column rests on the usual three."""
+    benchmark = _benchmark()
+    benchmark.columns["trailing_pe"] = ColumnAverage(
+        18.0, ("Computers/Peripherals", "Semiconductor", "Semiconductor Equip",
+               "Extra Industry 1", "Extra Industry 2"),
+    )
+
+    case = _build(benchmark=benchmark)
+    claims = {n["input_field"]: n for n in case["segments"][0]["narratives"]}
+    assert claims["margin_target"]["three_p"] == "probable"
+    assert claims["sales_to_capital_early"]["three_p"] == "probable"
+
+
 def test_the_payload_is_storable_and_runnable_through_the_case_store():
     """The generator's whole output contract is "a `create_case` payload", and
     only `create_case` can say whether it is one -- it enforces the narrative
