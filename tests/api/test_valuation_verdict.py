@@ -98,7 +98,10 @@ def test_a_ticker_with_no_case_refuses_only_the_dcf_row():
         _bars(t, _SERIES)
     panel = build_verdict("TGT")
     assert panel["rows"]["dcf_gap"]["reason"] == "no_case: TGT has no stored conservative case"
-    assert panel["rows"]["drawdown"]["value"] is not None
+    # The plain -25% shape `_SERIES` was built to produce (ND-F): the peer set
+    # is drawn from the same series, so the window's own peak is the global
+    # peak and this pins the exact value rather than merely "not None".
+    assert panel["rows"]["drawdown"]["value"] == pytest.approx(_SERIES_DRAWDOWN)
 
 
 def test_the_pe_row_refuses_when_the_vintage_has_no_trailing_pe():
@@ -367,6 +370,91 @@ def test_a_thin_peer_set_that_resolves_with_no_bars_keeps_the_value(monkeypatch)
     assert drawdown["source"] != "peers: 0 stored"
 
 
+def test_a_deep_drawdown_outside_the_window_is_still_disclosed():
+    """ND-A: the 252-bar window keeps the subject comparable to its peers, but
+    it also silently truncates the subject's OWN published number. A stock
+    down 90% whose peak sits outside the window would otherwise publish `0.0`
+    -- "at its peak, in line with peers" -- with the discarded history
+    invisible. `source` must name the subject's own window and, since the
+    true peak sits outside it here, the full-history drawdown too."""
+    for t in ("TGT", "P1", "P2", "P3"):
+        _facts(t)
+
+    def subject_bars():
+        # Peak of 1000.0 at bar 10 of 600, flat at 100.0 for every bar after
+        # -- a -90% full-history drawdown that the 252-bar window (the last
+        # 252 of the 600, all flat) cannot see: within the window alone the
+        # series never moves, so a naive read is "at its peak".
+        closes = [100.0] * 10 + [1000.0] + [100.0] * 589
+        return [{"date": _date(i), "close": c, "volume": 100} for i, c in enumerate(closes)]
+
+    def peer_bars():
+        # Flat throughout, so each peer's own 252-bar drawdown is exactly
+        # 0.0% and the peer mean is unambiguous.
+        return [{"date": _date(i), "close": 100.0, "volume": 100} for i in range(260)]
+
+    def loader(ticker, limit=None):
+        return subject_bars() if ticker == "TGT" else peer_bars()
+
+    panel = build_verdict("TGT", bars_loader=loader)
+    drawdown = panel["rows"]["drawdown"]
+    assert drawdown["reason"] is None
+    assert drawdown["value"] == pytest.approx(0.0)
+    assert drawdown["comparison"] == "peer mean 0.0%"
+    assert "own window: last 252 of 600 bars" in drawdown["source"]
+    assert "full-history drawdown -90.0%" in drawdown["source"]
+    assert "peak outside window" in drawdown["source"]
+    assert "peers: 3 of 3 over 252 bars" in drawdown["source"]
+
+
+def test_the_drawdown_source_names_a_window_not_usable_bars_when_full():
+    """ND-B: `own bars: N of M bars usable` reported bars as unusable that
+    were merely outside the 252-bar window (348 raw bars, 0 NULL closes ->
+    `252 of 300 bars usable`, falsely implying 48 were bad). "usable" is
+    reserved for NULL-filtering everywhere else in this panel (dcf_gap,
+    volume); a full window must describe itself as a window instead."""
+    for t in ("TGT", "P1", "P2", "P3"):
+        _facts(t)
+    _bars("TGT", _SERIES)  # 260 bars, no NULLs -- the window truncates 8 of them
+    panel = build_verdict("TGT")
+    source = panel["rows"]["drawdown"]["source"]
+    assert "usable" not in source
+    assert "own window: last 252 of 260 bars" in source
+
+
+def test_the_pe_row_names_the_real_contributor_count():
+    """ND-C: `resolve_benchmark` averages each column independently and keeps
+    any column with >= 3 surviving contributors, so a `trailing_pe` average
+    resting on 3 of the top-5-by-ROC basket is normal. Naming only the basket
+    size ("top-5-by-ROC sector basket") claims all 5 fed the average when the
+    real count -- held in `.industries` -- may be fewer."""
+    import dataclasses
+
+    from apps.api.services.industry_benchmark_store import store_vintage
+    from tests.fixtures.industry_rows_technology import TECHNOLOGY_ROWS
+
+    # Ranked by after_tax_roc, the top 5 are: Computers/Peripherals, Software
+    # (System & Application), Semiconductor Equip, Semiconductor, Computer
+    # Services. Only 3 of them get a trailing_pe here.
+    pe_by_name = {
+        "Computers/Peripherals": 20.0,
+        "Semiconductor Equip": 25.0,
+        "Computer Services": 30.0,
+    }
+    rows = [
+        dataclasses.replace(row, values={**row.values, "trailing_pe": pe_by_name.get(row.name)})
+        for row in TECHNOLOGY_ROWS
+    ]
+    store_vintage("2026-01-01", rows)
+    _facts("TGT")
+    _bars("TGT", _SERIES)
+
+    panel = build_verdict("TGT")
+    pe = panel["rows"]["trailing_pe"]
+    assert pe["comparison"] == "sector avg 25.0"
+    assert "3 of 5 industries" in pe["source"]
+
+
 def test_the_volume_source_counts_bars_not_days(monkeypatch):
     """ND-1: the window is a position count in the NULL-filtered series, so
     labelling it `252d` is false whenever any volume was dropped.
@@ -400,15 +488,24 @@ def test_no_usable_volume_names_volume_as_the_cause_not_history():
     assert volume["source"] == "own bars: 0 of 19 bars have volume"
 
 
-def test_a_refusal_counts_the_input_not_the_filtered_remainder():
-    """ND-4: five bars whose closes are all NULL reported `0 bars`, identical
-    to a genuinely empty panel. The count must describe what arrived."""
+def test_a_refusal_names_what_arrived_not_just_the_filtered_remainder():
+    """ND-D: `insufficient_history: 0 of 252 bars needed for the drawdown
+    window` was IDENTICAL whether zero bars were stored or five arrived and
+    every close was NULL -- the only "5" in that string was the one inside
+    "252", so a substring check on "5" passed by coincidence. The reason must
+    actually distinguish "nothing arrived" from "something arrived, all
+    unusable"."""
     _facts("TGT")
-    bars = [{"date": f"2025-03-{i:02d}", "close": None, "volume": 5} for i in range(1, 6)]
-    panel = build_verdict("TGT", bars_loader=lambda t, limit=None: bars)
-    reason = panel["rows"]["drawdown"]["reason"]
-    assert "5" in reason, f"reason must name the 5 bars that arrived: {reason}"
-    assert reason != "insufficient_history: 0 bars"
+    empty_reason = build_verdict(
+        "TGT", bars_loader=lambda t, limit=None: []
+    )["rows"]["drawdown"]["reason"]
+    null_bars = [{"date": f"2025-03-{i:02d}", "close": None, "volume": 5} for i in range(1, 6)]
+    null_reason = build_verdict(
+        "TGT", bars_loader=lambda t, limit=None: null_bars
+    )["rows"]["drawdown"]["reason"]
+    assert empty_reason != null_reason
+    assert "0 bars stored" in empty_reason
+    assert "5 bars stored" in null_reason
 
 
 def test_a_zero_baseline_names_the_baseline_not_history_as_the_cause():

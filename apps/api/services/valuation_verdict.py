@@ -84,6 +84,25 @@ def _dated_volumes_from_bars(bars: list[dict]) -> list[tuple[str, int]]:
     return [(b["date"], int(b["volume"])) for b in bars if b["volume"] is not None]
 
 
+def _own_window_source(closes: list[float], window: list[float]) -> str:
+    """Describe the window the subject's own drawdown was actually computed over.
+
+    `window` is capped at `_DRAWDOWN_BARS` bars even when more history exists,
+    so a value computed on it is silently NOT the subject's full-history
+    drawdown -- without this, a stock down 90% over its full history could
+    publish a computed `0.0` with nothing disclosing that most of its history
+    was discarded. When the window is truncated AND the true peak sits outside
+    it, the full-history figure is named too; otherwise it would be noise, since
+    a peak inside the window makes the two figures identical.
+    """
+    source = f"own window: last {len(window)} of {len(closes)} bars"
+    if len(closes) > len(window):
+        full_pct, _, full_peak_index = drawdown_from_peak(closes)
+        if full_peak_index < len(closes) - len(window):
+            source = f"{source} (full-history drawdown {full_pct:.1%}, peak outside window)"
+    return source
+
+
 def _volume_source(dated_volumes: list[tuple[str, int]], total_bars: int, recent: int, baseline: int) -> str:
     """Describe the window `volume_ratio` actually used.
 
@@ -114,7 +133,6 @@ def build_verdict(ticker: str, *, bars_loader=load_price_bars) -> dict:
     rows: dict[str, dict] = {}
 
     peers, peer_reason = resolve_peers(ticker)
-    peer_source = f"peers: {len(peers)} stored" if peer_reason is None else "peers"
 
     dated_closes = _dated_closes_from_bars(bars)
     closes = [close for _, close in dated_closes]
@@ -138,13 +156,17 @@ def build_verdict(ticker: str, *, bars_loader=load_price_bars) -> dict:
     # subject's OWN bars names the subject's bars, never the peer set; and a
     # non-positive peak is reported as such rather than blamed on history.
     window = closes[-_DRAWDOWN_BARS:]
-    own_source = f"own bars: {len(window)} of {len(bars)} bars usable"
     if len(window) < _DRAWDOWN_BARS:
+        # "usable" is reserved for NULL-filtering everywhere else in this
+        # panel (dcf_gap, volume), so it means the same thing here: closes
+        # that survived the filter, out of bars that actually arrived. The
+        # reason names both that count AND how many bars arrived, so "0
+        # bars stored" and "5 bars, all filtered out" no longer read alike.
         rows["drawdown"] = _row(
-            source=own_source,
+            source=f"own bars: {len(closes)} of {len(bars)} bars usable",
             reason=(
-                f"insufficient_history: {len(window)} of {_DRAWDOWN_BARS} "
-                f"bars needed for the drawdown window"
+                f"insufficient_history: {len(closes)} of {_DRAWDOWN_BARS} bars "
+                f"needed for the drawdown window ({len(bars)} bars stored)"
             ),
         )
     elif max(window) <= 0:
@@ -152,10 +174,10 @@ def build_verdict(ticker: str, *, bars_loader=load_price_bars) -> dict:
         # alike; only the caller knows which happened, and "insufficient
         # history" is false when every bar is present.
         rows["drawdown"] = _row(
-            source=own_source, reason=f"non_positive_peak: {max(window)}"
+            source=_own_window_source(closes, window), reason=f"non_positive_peak: {max(window)}"
         )
     elif peer_reason is not None:
-        rows["drawdown"] = _row(source=own_source, reason=peer_reason)
+        rows["drawdown"] = _row(source=_own_window_source(closes, window), reason=peer_reason)
     else:
         pct, peak, index = drawdown_from_peak(window)
         peer_pcts = []
@@ -165,8 +187,12 @@ def build_verdict(ticker: str, *, bars_loader=load_price_bars) -> dict:
                 continue
             peer_pcts.append(drawdown_from_peak(peer_window)[0])
         # Both counts, always: "3 stored" meant "3 resolved" on one path and
-        # "3 contributed" on another, which are different facts.
+        # "3 contributed" on another, which are different facts. The subject's
+        # own window comes first: `value` stays on the 252-bar basis to stay
+        # comparable to the peer mean, but the basis it rests on must be named
+        # too, not just the peers it is being compared against (ND-A).
         drawdown_source = (
+            f"{_own_window_source(closes, window)}; "
             f"peers: {len(peer_pcts)} of {len(peers)} over {_DRAWDOWN_BARS} bars"
         )
         comparison = (
@@ -180,7 +206,7 @@ def build_verdict(ticker: str, *, bars_loader=load_price_bars) -> dict:
 
     # --- volume ----------------------------------------------------------
     # Computed purely from the subject's own bars, so it never refuses on a
-    # peer-set failure and never wears `peer_source`.
+    # peer-set failure and never wears the peer set's source label.
     if not volumes:
         if not bars:
             # No bars arrived at all -- distinct from "bars arrived, but none
@@ -230,10 +256,20 @@ def build_verdict(ticker: str, *, bars_loader=load_price_bars) -> dict:
             source="Damodaran", reason=f"no_sector_pe: {vintage} has no trailing_pe"
         )
     else:
+        # `resolve_benchmark` averages each column independently and keeps any
+        # column with >= 3 surviving contributors -- a `trailing_pe` average
+        # resting on 3 or 4 of the top-5-by-ROC basket is normal, not an edge
+        # case. `.industries` holds the real contributor count; naming the
+        # basket size alone would claim all 5 fed this average when fewer may
+        # have.
+        pe_industries = benchmark.columns["trailing_pe"].industries
         rows["trailing_pe"] = _row(
             None,
             f"sector avg {benchmark.columns['trailing_pe'].value:.1f}",
-            source=f"Damodaran {vintage} top-5-by-ROC sector basket",
+            source=(
+                f"Damodaran {vintage} top-5-by-ROC sector basket "
+                f"({len(pe_industries)} of 5 industries)"
+            ),
             reason=(
                 "eps_not_wired: the sector PE resolved, but this panel does not "
                 "read EPS -- confirming Yahoo's EPS line-item labels needs a "
