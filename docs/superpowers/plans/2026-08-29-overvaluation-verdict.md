@@ -414,7 +414,7 @@ Expected: 6 passed.
 - [ ] **Step 6: Run the full suite**
 
 Run: `python -m pytest -q`
-Expected: 816 passed.
+Expected: 817 passed.
 
 - [ ] **Step 7: Commit**
 
@@ -571,7 +571,7 @@ Expected: all pass, including the pre-existing ones.
 - [ ] **Step 8: Run the full suite**
 
 Run: `python -m pytest -q`
-Expected: 819 passed.
+Expected: 820 passed.
 
 - [ ] **Step 9: Commit**
 
@@ -858,7 +858,7 @@ Expected: 7 passed.
 - [ ] **Step 5: Run the full suite**
 
 Run: `python -m pytest -q`
-Expected: 826 passed.
+Expected: 827 passed.
 
 - [ ] **Step 6: Commit**
 
@@ -989,7 +989,7 @@ Expected: 3 passed.
 - [ ] **Step 6: Run the full suite**
 
 Run: `python -m pytest -q`
-Expected: 829 passed.
+Expected: 830 passed.
 
 - [ ] **Step 7: Update the change record**
 
