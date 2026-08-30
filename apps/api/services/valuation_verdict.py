@@ -97,9 +97,16 @@ def _own_window_source(closes: list[float], window: list[float]) -> str:
     """
     source = f"own window: last {len(window)} of {len(closes)} bars"
     if len(closes) > len(window):
-        full_pct, _, full_peak_index = drawdown_from_peak(closes)
-        if full_peak_index < len(closes) - len(window):
-            source = f"{source} (full-history drawdown {full_pct:.1%}, peak outside window)"
+        # `drawdown_from_peak` refuses a non-positive peak as well as an empty
+        # series, and this helper is called from the `non_positive_peak` branch
+        # itself -- so the full-history figure may not exist. Unpacking it
+        # unconditionally raised out of `build_verdict`, breaking the
+        # per-signal invariant on the one branch that most needed the source.
+        full = drawdown_from_peak(closes)
+        if full is not None:
+            full_pct, _, full_peak_index = full
+            if full_peak_index < len(closes) - len(window):
+                source = f"{source} (full-history drawdown {full_pct:.1%}, peak outside window)"
     return source
 
 

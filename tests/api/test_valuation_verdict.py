@@ -537,3 +537,26 @@ def test_an_empty_panel_names_no_bars_stored_not_no_volume():
     assert volume["value"] is None
     assert volume["reason"] == "insufficient_history: 0 of 0 bars usable"
     assert volume["source"] == "own bars: none stored"
+
+
+def test_a_non_positive_peak_over_a_full_window_does_not_raise():
+    """The per-signal invariant on the branch that most needed its source.
+
+    `_own_window_source` names the full-history drawdown when the window
+    truncates, but `drawdown_from_peak` refuses a non-positive peak as well as
+    an empty series -- so on THIS branch the full-history figure does not
+    exist. Unpacking it unconditionally raised straight out of `build_verdict`,
+    destroying every row and the direction statement, and no test covered it
+    because it needs more than 252 bars AND a non-positive peak.
+    """
+    _facts("TGT")
+    bars = [(_date(i), -5.0, 10) for i in range(300)]
+    panel = build_verdict("TGT", bars_loader=lambda t, limit=None: [
+        {"date": d, "close": c, "volume": v} for d, c, v in bars
+    ])
+    drawdown = panel["rows"]["drawdown"]
+    assert drawdown["reason"] == "non_positive_peak: -5.0"
+    assert drawdown["source"] == "own window: last 252 of 300 bars"
+    # The whole panel survived, which is the point.
+    assert set(panel["rows"]) == {"drawdown", "volume", "trailing_pe", "dcf_gap"}
+    assert panel["direction"]
