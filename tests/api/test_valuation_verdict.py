@@ -560,3 +560,37 @@ def test_a_non_positive_peak_over_a_full_window_does_not_raise():
     # The whole panel survived, which is the point.
     assert set(panel["rows"]) == {"drawdown", "volume", "trailing_pe", "dcf_gap"}
     assert panel["direction"]
+
+
+def test_a_tied_early_peak_is_not_reported_as_discarded():
+    """ND-8: the disclosure was gated on the peak's FIRST index, and
+    `drawdown_from_peak` reports the earliest bar attaining the max. So any
+    series whose high is merely TIED early -- a perfectly flat one above all --
+    claimed its peak had been discarded when an identical peak sat inside the
+    window and the two figures were byte-identical. The gate is the fact
+    (`max(closes) > max(window)`), not a proxy for it.
+    """
+    for t in ("TGT", "P1", "P2", "P3"):
+        _facts(t)
+        _bars(t, [(_date(i), 100.0, 10) for i in range(260)])
+    source = build_verdict("TGT")["rows"]["drawdown"]["source"]
+    assert "peak outside window" not in source
+    assert "own window: last 252 of 260 bars" in source
+
+
+def test_a_null_sparse_window_names_its_dropped_bars_and_real_span():
+    """ND-9/ND-10: 252 kept closes out of 600 stored bars read as
+    `252 of 252 bars` -- "nothing discarded" -- and claimed a `252 bars` basis
+    shared with peers while actually spanning twice their calendar time. The
+    volume row already states its span for exactly this reason.
+    """
+    for t in ("TGT", "P1", "P2", "P3"):
+        _facts(t)
+    _bars("TGT", [(_date(i), (None if i % 2 else 100.0), 10) for i in range(600)])
+    for t in ("P1", "P2", "P3"):
+        _bars(t, [(_date(i), 100.0, 10) for i in range(300)])
+    source = build_verdict("TGT")["rows"]["drawdown"]["source"]
+    assert "300 of 600 stored bars have a close" in source
+    assert "spans" in source
+    # "usable" stays reserved for NULL-filtering on the sibling rows.
+    assert "usable" not in source

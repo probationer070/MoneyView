@@ -84,18 +84,47 @@ def _dated_volumes_from_bars(bars: list[dict]) -> list[tuple[str, int]]:
     return [(b["date"], int(b["volume"])) for b in bars if b["volume"] is not None]
 
 
-def _own_window_source(closes: list[float], window: list[float]) -> str:
+def _own_window_source(
+    closes: list[float],
+    window: list[float],
+    dated_closes: list[tuple[str, float]],
+    bars_total: list,
+) -> str:
     """Describe the window the subject's own drawdown was actually computed over.
 
-    `window` is capped at `_DRAWDOWN_BARS` bars even when more history exists,
-    so a value computed on it is silently NOT the subject's full-history
-    drawdown -- without this, a stock down 90% over its full history could
-    publish a computed `0.0` with nothing disclosing that most of its history
-    was discarded. When the window is truncated AND the true peak sits outside
-    it, the full-history figure is named too; otherwise it would be noise, since
-    a peak inside the window makes the two figures identical.
+    Three things have to be said here, and each was learned the hard way.
+
+    The window is capped at `_DRAWDOWN_BARS` even when more history exists, so
+    a value computed on it is silently NOT the full-history drawdown -- a stock
+    down 90% could otherwise publish `0.0` with nothing disclosing that most of
+    its history was discarded.
+
+    That disclosure is gated on whether the peak was ACTUALLY lost, not on
+    where its first occurrence sits. `drawdown_from_peak` reports the earliest
+    bar attaining the max, so an index test fires whenever an all-time high is
+    merely TIED early -- including on a perfectly flat series, where every bar
+    is the peak and the two figures are identical. Comparing the maxima is the
+    fact; comparing indices was a proxy for it that misreports ties.
+
+    And the count of bars is not the span of time they cover: NULL closes are
+    dropped, so 252 kept bars can span far more than 252 days. The volume row
+    already states its real span for the same reason; a drawdown compared
+    against peers "over 252 bars" must too, or the shared basis it claims is
+    not shared.
     """
     source = f"own window: last {len(window)} of {len(closes)} bars"
+    # "usable" is reserved for NULL-filtering on the sibling rows, so the
+    # dropped bars are named rather than folded into that word: without this,
+    # `252 of 252 bars` reads as "nothing discarded" for a ticker with 400
+    # stored bars of which 148 carry no close.
+    if len(dated_closes) < len(bars_total):
+        source = f"{source}, {len(dated_closes)} of {len(bars_total)} stored bars have a close"
+        # Only a NULL-sparse window needs its span stated: a contiguous one
+        # spans exactly as many days as it holds bars, so the dates would be
+        # noise. This is the rule `_volume_source` already follows.
+        if len(dated_closes) >= len(window):
+            span = dated_closes[-len(window):]
+            source = f"{source} (spans {span[0][0]} to {span[-1][0]})"
     if len(closes) > len(window):
         # `drawdown_from_peak` refuses a non-positive peak as well as an empty
         # series, and this helper is called from the `non_positive_peak` branch
@@ -103,10 +132,8 @@ def _own_window_source(closes: list[float], window: list[float]) -> str:
         # unconditionally raised out of `build_verdict`, breaking the
         # per-signal invariant on the one branch that most needed the source.
         full = drawdown_from_peak(closes)
-        if full is not None:
-            full_pct, _, full_peak_index = full
-            if full_peak_index < len(closes) - len(window):
-                source = f"{source} (full-history drawdown {full_pct:.1%}, peak outside window)"
+        if full is not None and max(closes) > max(window):
+            source = f"{source} (full-history drawdown {full[0]:.1%}, peak outside window)"
     return source
 
 
@@ -181,10 +208,10 @@ def build_verdict(ticker: str, *, bars_loader=load_price_bars) -> dict:
         # alike; only the caller knows which happened, and "insufficient
         # history" is false when every bar is present.
         rows["drawdown"] = _row(
-            source=_own_window_source(closes, window), reason=f"non_positive_peak: {max(window)}"
+            source=_own_window_source(closes, window, dated_closes, bars), reason=f"non_positive_peak: {max(window)}"
         )
     elif peer_reason is not None:
-        rows["drawdown"] = _row(source=_own_window_source(closes, window), reason=peer_reason)
+        rows["drawdown"] = _row(source=_own_window_source(closes, window, dated_closes, bars), reason=peer_reason)
     else:
         pct, peak, index = drawdown_from_peak(window)
         peer_pcts = []
@@ -199,7 +226,7 @@ def build_verdict(ticker: str, *, bars_loader=load_price_bars) -> dict:
         # comparable to the peer mean, but the basis it rests on must be named
         # too, not just the peers it is being compared against (ND-A).
         drawdown_source = (
-            f"{_own_window_source(closes, window)}; "
+            f"{_own_window_source(closes, window, dated_closes, bars)}; "
             f"peers: {len(peer_pcts)} of {len(peers)} over {_DRAWDOWN_BARS} bars"
         )
         comparison = (
