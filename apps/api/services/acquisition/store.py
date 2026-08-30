@@ -158,3 +158,24 @@ def load_statement_bundle(ticker: str) -> dict[str, object] | None:
     # no ORDER BY, so rows[0] was arbitrary and the reported age could be any of them.
     bundle["fetched_at"] = max(datetime.fromisoformat(row["fetched_at"]) for row in rows)
     return bundle
+
+
+def load_price_bars(ticker: str, limit: int | None = None) -> list[dict]:
+    """Price bars from the local store ONLY, oldest first.
+
+    Deliberately not `market_data.get_stock_ohlcv`, which refreshes live when
+    the local copy is stale and therefore reaches the network. Signal
+    computation reads what the acquisition layer stored and nothing else, the
+    same rule `load_statement_bundle` follows.
+
+    `limit` keeps the most RECENT n bars, since every signal here looks
+    backwards from today.
+    """
+    ticker = ticker.upper()
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT date, close, volume FROM stocks WHERE ticker = ? ORDER BY date DESC"
+            + (" LIMIT ?" if limit is not None else ""),
+            (ticker, limit) if limit is not None else (ticker,),
+        ).fetchall()
+    return [dict(row) for row in reversed(rows)]
