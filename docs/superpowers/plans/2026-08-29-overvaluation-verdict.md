@@ -94,9 +94,20 @@ def test_volume_ratio_is_recent_mean_over_baseline_mean():
 
 
 def test_volume_ratio_refuses_a_zero_baseline():
-    """A zero baseline would divide to infinity. A plausible-looking number is
-    worse than no number -- the argument dcf.py:196 makes for the terminal spread."""
-    assert volume_ratio([0, 0, 5, 5], recent=2, baseline=4) is None
+    """A zero baseline MEAN would divide to infinity. A plausible-looking number
+    is worse than no number -- the argument dcf.py:196 makes for the terminal
+    spread."""
+    assert volume_ratio([0, 0, 0, 0], recent=2, baseline=4) is None
+
+
+def test_volume_ratio_tolerates_individual_zero_volume_days():
+    """Only the baseline MEAN has to be positive. A halted or zero-volume day
+    inside the window must not refuse the whole signal: over a 252-day baseline
+    that would make the ratio almost never computable on real data.
+
+    recent 2 -> mean 5.0; baseline 4 -> mean 2.5; ratio 2.0
+    """
+    assert volume_ratio([0, 0, 5, 5], recent=2, baseline=4) == pytest.approx(2.0)
 
 
 def test_volume_ratio_refuses_when_the_window_exceeds_the_data():
@@ -211,12 +222,12 @@ def pe_change(series: Sequence[tuple[str, float]]) -> float | None:
 - [ ] **Step 4: Run to verify they pass**
 
 Run: `python -m pytest tests/core_finance/test_price_signals.py -v`
-Expected: 10 passed.
+Expected: 11 passed.
 
 - [ ] **Step 5: Run the full suite**
 
 Run: `python -m pytest -q`
-Expected: 809 passed (799 baseline + 10).
+Expected: 810 passed (799 baseline + 11).
 
 - [ ] **Step 6: Commit**
 
@@ -403,7 +414,7 @@ Expected: 6 passed.
 - [ ] **Step 6: Run the full suite**
 
 Run: `python -m pytest -q`
-Expected: 815 passed.
+Expected: 816 passed.
 
 - [ ] **Step 7: Commit**
 
@@ -560,7 +571,7 @@ Expected: all pass, including the pre-existing ones.
 - [ ] **Step 8: Run the full suite**
 
 Run: `python -m pytest -q`
-Expected: 818 passed.
+Expected: 819 passed.
 
 - [ ] **Step 9: Commit**
 
@@ -847,7 +858,7 @@ Expected: 7 passed.
 - [ ] **Step 5: Run the full suite**
 
 Run: `python -m pytest -q`
-Expected: 825 passed.
+Expected: 826 passed.
 
 - [ ] **Step 6: Commit**
 
@@ -978,7 +989,7 @@ Expected: 3 passed.
 - [ ] **Step 6: Run the full suite**
 
 Run: `python -m pytest -q`
-Expected: 828 passed.
+Expected: 829 passed.
 
 - [ ] **Step 7: Update the change record**
 
