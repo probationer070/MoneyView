@@ -12,6 +12,8 @@ a successful result, not an error.
 
 from __future__ import annotations
 
+import math
+
 from apps.api.services.acquisition.store import load_price_bars
 from apps.api.services.company_baseline import find_conservative_case_id
 from apps.api.services.industry_benchmark_store import resolve_for_ticker
@@ -38,6 +40,14 @@ DIRECTION = (
 # number, a real label, and a meaningless comparison. Peers with less history
 # are dropped rather than silently compared on a different basis.
 _DRAWDOWN_BARS = 252
+
+# A peer must cover at least this much of the subject's window to be averaged
+# with it. Requiring equality would drop peers for harmless calendar
+# mismatches -- a market holiday, a late listing, a halt -- while a small
+# absolute floor would admit a peer trading on a tenth of the period. The
+# fraction is of the SUBJECT's window count, not of `_DRAWDOWN_BARS`, so the
+# rule still holds if that window is ever shortened.
+_PEER_COVERAGE = 0.80
 
 _RECENT_DAYS = 90
 _BASELINE_DAYS = 252
@@ -220,12 +230,27 @@ def build_verdict(ticker: str, *, bars_loader=load_price_bars) -> dict:
         rows["drawdown"] = _row(source=_own_window_source(closes, window, dated_closes, bars), reason=peer_reason)
     else:
         pct, peak, index = drawdown_from_peak(window)
+        # Peers are sampled inside the SUBJECT's window dates, not over their own
+        # last `_DRAWDOWN_BARS` positions. Those positions are NULL-filtered, so
+        # a sparse peer's 252 of them can span years where the subject's span one
+        # -- and a peak the subject's period structurally cannot contain was
+        # entering the mean and being published as a sector comparison. A
+        # drawdown comparison only means something over the same calendar
+        # period, so that period is the basis and the invariant is explicit:
+        # every close contributing to the mean satisfies start <= date <= end.
+        window_span = dated_closes[-len(window):]
+        start, end = window_span[0][0], window_span[-1][0]
+        minimum_peer_closes = math.ceil(len(window) * _PEER_COVERAGE)
         peer_pcts = []
         for peer in peers:
-            peer_window = _closes_from_bars(bars_loader(peer))[-_DRAWDOWN_BARS:]
-            if len(peer_window) < _DRAWDOWN_BARS or max(peer_window) <= 0:
+            in_range = [
+                close
+                for date, close in _dated_closes_from_bars(bars_loader(peer))
+                if start <= date <= end
+            ]
+            if len(in_range) < minimum_peer_closes or max(in_range) <= 0:
                 continue
-            peer_pcts.append(drawdown_from_peak(peer_window)[0])
+            peer_pcts.append(drawdown_from_peak(in_range)[0])
         # Both counts, always: "3 stored" meant "3 resolved" on one path and
         # "3 contributed" on another, which are different facts. The subject's
         # own window comes first: `value` stays on the 252-bar basis to stay
@@ -233,7 +258,7 @@ def build_verdict(ticker: str, *, bars_loader=load_price_bars) -> dict:
         # too, not just the peers it is being compared against (ND-A).
         drawdown_source = (
             f"{_own_window_source(closes, window, dated_closes, bars)}; "
-            f"peers: {len(peer_pcts)} of {len(peers)} over {_DRAWDOWN_BARS} bars"
+            f"peers: {len(peer_pcts)} of {len(peers)} within {start}..{end}"
         )
         comparison = (
             f"peer mean {sum(peer_pcts) / len(peer_pcts):.1%}" if peer_pcts else None

@@ -389,9 +389,12 @@ def test_a_deep_drawdown_outside_the_window_is_still_disclosed():
         return [{"date": _date(i), "close": c, "volume": 100} for i, c in enumerate(closes)]
 
     def peer_bars():
-        # Flat throughout, so each peer's own 252-bar drawdown is exactly
-        # 0.0% and the peer mean is unambiguous.
-        return [{"date": _date(i), "close": 100.0, "volume": 100} for i in range(260)]
+        # Flat throughout, so each peer's drawdown is exactly 0.0% and the mean
+        # is unambiguous. It must span the SUBJECT's 600 days: at 260 bars the
+        # peers ended before the subject's window even opened, so under the
+        # date-range rule they contribute nothing -- this fixture was itself an
+        # instance of the defect that rule exists to prevent.
+        return [{"date": _date(i), "close": 100.0, "volume": 100} for i in range(600)]
 
     def loader(ticker, limit=None):
         return subject_bars() if ticker == "TGT" else peer_bars()
@@ -404,7 +407,7 @@ def test_a_deep_drawdown_outside_the_window_is_still_disclosed():
     assert "own window: last 252 of 600 bars" in drawdown["source"]
     assert "full-history drawdown -90.0%" in drawdown["source"]
     assert "peak outside window" in drawdown["source"]
-    assert "peers: 3 of 3 over 252 bars" in drawdown["source"]
+    assert "peers: 3 of 3 within" in drawdown["source"]
 
 
 def test_the_drawdown_source_names_a_window_not_usable_bars_when_full():
@@ -652,3 +655,66 @@ def test_no_source_string_ever_claims_more_bars_than_its_span_can_hold():
             f"the count immediately before the span claims {count} bars inside "
             f"a {days}-day span: {source!r}"
         )
+
+
+def _range_bars(n, start_day=0, close=100.0, step=1):
+    return [(_date(start_day + i * step), close, 10) for i in range(n)]
+
+
+def test_a_peer_spike_outside_the_subject_window_cannot_enter_the_mean():
+    """ND-12, the original defect: peer windows were the peer's own last 252
+    NULL-filtered POSITIONS, which for a sparse peer span far more calendar
+    time than the subject's. A peak the subject's period structurally cannot
+    contain was entering the peer mean and being published as a sector
+    comparison. Peers are now sampled inside the subject's date range.
+    """
+    for t in ("TGT", "P1", "P2", "P3"):
+        _facts(t)
+    _bars("TGT", _range_bars(300, start_day=400))
+    # Each peer: a 200.0 spike well BEFORE the subject's window, flat inside it.
+    for peer in ("P1", "P2", "P3"):
+        _bars(peer, [(_date(i), (200.0 if i == 0 else 100.0), 10) for i in range(700)])
+    panel = build_verdict("TGT")["rows"]["drawdown"]
+    assert panel["comparison"] == "peer mean 0.0%", panel
+    assert "within" in panel["source"]
+
+
+def test_a_peer_too_thin_inside_the_subject_window_is_dropped_and_counted():
+    """A peer trading on only a fraction of the subject's period cannot be
+    averaged with it. Dropping it must be visible, or a shrinking comparison
+    looks like a shrinking sector."""
+    for t in ("TGT", "P1", "P2", "P3"):
+        _facts(t)
+    _bars("TGT", _range_bars(300, start_day=400))
+    _bars("P1", _range_bars(300, start_day=400))
+    _bars("P2", _range_bars(300, start_day=400))
+    _bars("P3", _range_bars(30, start_day=400))  # far below 80% coverage
+    source = build_verdict("TGT")["rows"]["drawdown"]["source"]
+    assert "peers: 2 of 3 within" in source
+
+
+def test_an_ordinary_calendar_gap_does_not_drop_a_peer():
+    """The threshold is 80% of the subject's window, not equality: a peer that
+    missed a few weeks to a halt or a late listing is still comparable, and a
+    stricter rule would drop peers for harmless calendar mismatches."""
+    for t in ("TGT", "P1", "P2", "P3"):
+        _facts(t)
+    _bars("TGT", _range_bars(300, start_day=400))
+    for peer in ("P1", "P2"):
+        _bars(peer, _range_bars(300, start_day=400))
+    _bars("P3", _range_bars(270, start_day=400))  # ~90% coverage
+    assert "peers: 3 of 3 within" in build_verdict("TGT")["rows"]["drawdown"]["source"]
+
+
+def test_every_close_in_the_peer_mean_lies_inside_the_subject_window():
+    """The invariant, as a property: start <= date <= end for every close that
+    contributes. Checked by construction -- a peer whose bars lie ENTIRELY
+    outside the subject's range must contribute nothing at all."""
+    for t in ("TGT", "P1", "P2", "P3"):
+        _facts(t)
+    _bars("TGT", _range_bars(300, start_day=400))
+    for peer in ("P1", "P2", "P3"):
+        _bars(peer, _range_bars(300, start_day=0, close=50.0))  # ends before TGT starts
+    panel = build_verdict("TGT")["rows"]["drawdown"]
+    assert panel["comparison"] is None
+    assert "peers: 0 of 3 within" in panel["source"]
