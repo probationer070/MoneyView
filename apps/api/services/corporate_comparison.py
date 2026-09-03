@@ -52,6 +52,13 @@ METRIC_SCHEMA_VERSION = 2
 class CompanyUniverseData:
     registry: dict[str, dict[str, object]]
     watchlist_rows: list[dict[str, object]]
+    # Display names for index/commodity tickers, e.g. "^GSPC" -> "S&P 500".
+    # Kept SEPARATE from `registry` rather than merged into it: a merged entry
+    # would also reach `_registry_row_for_ticker`, whose `group_name` falls back
+    # to "custom" only when the ticker is absent -- so merging would silently
+    # relabel a custom-universe "^GSPC" row as "default". Benchmarks are the only
+    # consumer, so only the benchmark row reads this.
+    index_names: dict[str, str]
 
 
 def build_corporate_comparison_response(
@@ -303,6 +310,7 @@ def _build_live_rows(
         custom_tickers=custom_tickers,
         company_registry=company_data.registry,
         watchlist_payload=company_data.watchlist_rows,
+        index_names=company_data.index_names,
     )
 
     rows: list[CorporateComparisonRow] = []
@@ -857,6 +865,9 @@ def load_company_universe_data(default_companies: dict[str, dict[str, str]]) -> 
                FROM watchlist
                ORDER BY group_name, ticker"""
         ).fetchall()
+        index_name_rows = conn.execute(
+            "SELECT DISTINCT ticker, name FROM indices WHERE name <> ''"
+        ).fetchall()
         company_rows = conn.execute(
             """SELECT ticker, name, sector
                FROM corporate_companies
@@ -897,7 +908,13 @@ def load_company_universe_data(default_companies: dict[str, dict[str, str]]) -> 
             "weight": float(existing.get("weight", 0.0)),
         }
 
-    return CompanyUniverseData(registry=registry, watchlist_rows=watchlist_payload)
+    return CompanyUniverseData(
+        registry=registry,
+        watchlist_rows=watchlist_payload,
+        index_names={
+            str(row["ticker"]).upper(): str(row["name"]) for row in index_name_rows
+        },
+    )
 
 
 def _resolve_comparison_universe_rows(
@@ -907,6 +924,7 @@ def _resolve_comparison_universe_rows(
     custom_tickers: list[str],
     company_registry: dict[str, dict[str, object]],
     watchlist_payload: list[dict[str, object]],
+    index_names: dict[str, str] | None = None,
 ) -> list[dict[str, object]]:
     normalized_benchmark = _normalize_benchmark_ticker(benchmark_ticker)
 
@@ -916,7 +934,9 @@ def _resolve_comparison_universe_rows(
             for ticker in _normalize_custom_tickers(custom_tickers)
         ]
         if normalized_benchmark:
-            rows.append(_benchmark_row_for_ticker(normalized_benchmark, company_registry))
+            rows.append(
+                _benchmark_row_for_ticker(normalized_benchmark, company_registry, index_names)
+            )
         return _dedupe_rows(rows)
 
     if comparison_universe == "portfolio_plus_benchmark":
@@ -926,7 +946,10 @@ def _resolve_comparison_universe_rows(
         rows = watchlist_payload
 
     if normalized_benchmark:
-        rows = [*rows, _benchmark_row_for_ticker(normalized_benchmark, company_registry)]
+        rows = [
+            *rows,
+            _benchmark_row_for_ticker(normalized_benchmark, company_registry, index_names),
+        ]
     return _dedupe_rows(rows)
 
 
@@ -953,11 +976,27 @@ def _registry_row_for_ticker(
     }
 
 
-def _benchmark_row_for_ticker(ticker: str, company_registry: dict[str, dict[str, object]]) -> dict[str, object]:
+def _benchmark_row_for_ticker(
+    ticker: str,
+    company_registry: dict[str, dict[str, object]],
+    index_names: dict[str, str] | None = None,
+) -> dict[str, object]:
+    """A benchmark row, named for a reader rather than for a data provider.
+
+    `company_registry` is built from `corporate_companies` and the watchlist,
+    and an index ticker appears in neither -- so the name fell back to the raw
+    symbol and every snapshot stored `name = "^GSPC"`. The `indices` table
+    already carries "S&P 500", "Dow Jones", "Nasdaq", "KOSPI 200" and the
+    commodity/FX names beside those tickers, so the name is looked up there
+    rather than hardcoded here: a symbol this installation has never stored
+    keeps showing its raw ticker, which is honest, instead of being given a
+    label from a table of guesses.
+    """
     metadata = company_registry.get(ticker, {})
+    name = str(metadata.get("name") or "") or (index_names or {}).get(ticker, "") or ticker
     return {
         "ticker": ticker,
-        "name": metadata.get("name", ticker),
+        "name": name,
         "sector": metadata.get("sector", "Benchmark") or "Benchmark",
         "group_name": BENCHMARK_GROUP_NAME,
         "weight": 0.0,
