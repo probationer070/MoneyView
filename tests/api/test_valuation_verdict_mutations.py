@@ -163,6 +163,24 @@ MUTATIONS: dict[str, tuple[str, str]] = {
         'f"price as of {latest_close_date}, latest bar {latest_bar_date}"',
         'f"price as of {latest_bar_date}, latest bar {latest_bar_date}"',
     ),
+    # Track A2: reading Basic EPS instead of Diluted. More shares outstanding
+    # means a LOWER diluted EPS than basic, hence a HIGHER price/EPS -- the
+    # conservative direction for a panel testing undervaluation (DIRECTION,
+    # above). Basic is anti-conservative, which is exactly why `_EPS_LABELS`
+    # carries only "Diluted EPS" with no fallback.
+    "eps-label-reads-basic-not-diluted": (
+        '_EPS_LABELS = ("Diluted EPS",)',
+        '_EPS_LABELS = ("Basic EPS",)',
+    ),
+    # Track A2: the trailing-PE row's `source` drops its own `own PE:` clause
+    # on the computed branch, leaving only the Damodaran half of the sentence.
+    # ND-A, the defect class the drawdown row's `own window: ...; peers: ...`
+    # shape exists to prevent: a row naming only what it was compared against
+    # leaves its own number unattributed.
+    "pe-row-drops-its-own-clause": (
+        'f"own PE: {eps_label} {eps:.2f} for FY{period_end}, "',
+        'f"{eps_label} {eps:.2f} for FY{period_end}, "',
+    ),
 }
 
 # The four property tests these mutations are checked against. The fourth is
@@ -238,6 +256,16 @@ _MATRIX = [
         "stale-price-names-the-wrong-date",
         "test_the_stale_price_clause_names_the_dates_it_actually_priced_against",
         "but the newest usable close is",
+    ),
+    (
+        "eps-label-reads-basic-not-diluted",
+        "test_diluted_eps_is_preferred_over_basic_even_though_both_are_present",
+        "used an EPS other than the diluted 7.46",
+    ),
+    (
+        "pe-row-drops-its-own-clause",
+        "test_the_pe_row_computes_from_diluted_eps_and_names_both_bases",
+        "own PE: Diluted EPS 7.46",
     ),
 ]
 

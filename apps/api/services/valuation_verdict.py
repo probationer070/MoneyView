@@ -14,7 +14,9 @@ from __future__ import annotations
 
 import math
 
-from apps.api.services.acquisition.store import load_price_bars
+import pandas as pd
+
+from apps.api.services.acquisition.store import load_price_bars, load_statement_bundle
 from apps.api.services.company_baseline import find_conservative_case_id
 from apps.api.services.industry_benchmark_store import resolve_for_ticker
 from apps.api.services.peer_set import resolve_peers
@@ -51,6 +53,17 @@ _PEER_COVERAGE = 0.80
 
 _RECENT_DAYS = 90
 _BASELINE_DAYS = 252
+
+# Confirmed against a real AAPL bundle fetched from Yahoo on 2026-09-03 (see
+# tests/fixtures/aapl_income_annual.py): the annual income statement carries
+# both `Diluted EPS` and `Basic EPS`. Diluted is the deliberate choice, not
+# the default one -- more shares outstanding means a LOWER diluted EPS than
+# basic, which means a HIGHER price/EPS. That is the conservative direction
+# for a panel testing UNDERVALUATION (DIRECTION, above): it makes the stock
+# look more expensive, never less. Reading Basic EPS instead would be
+# anti-conservative -- the same bias `packages/core_finance/dcf.py` and this
+# module's own DIRECTION statement argue against elsewhere.
+_EPS_LABELS = ("Diluted EPS",)
 
 
 def _row(value=None, comparison=None, *, source, reason=None) -> dict:
@@ -170,13 +183,65 @@ def _volume_source(dated_volumes: list[tuple[str, int]], total_bars: int, recent
     return label
 
 
-def build_verdict(ticker: str, *, bars_loader=load_price_bars) -> dict:
+def _latest_positive_eps(bundle: dict) -> tuple[str, float] | None:
+    """The newest annual period whose EPS is present and strictly positive.
+
+    Only `_EPS_LABELS` (diluted) is read -- there is no fallback to Basic EPS,
+    because falling back would silently trade the conservative figure for the
+    anti-conservative one on exactly the tickers where diluted is missing but
+    basic is not, which is worse than refusing.
+
+    A period is skipped, not fatal, when its EPS is absent: `load_statement_bundle`
+    pads a column that stopped reporting with NaN (`_frame`, acquisition/store.py),
+    and Yahoo's own AAPL bundle does exactly this for 2021-09-30 -- every income
+    line is NaN, not merely EPS. A period is also skipped when EPS is <= 0: a
+    loss-making year has no meaningful earnings multiple, the same argument
+    `packages/core_finance/price_signals.py::trailing_pe_series` makes for
+    omitting it there rather than publishing a negative PE that would sort as
+    "cheap" in any ascending comparison.
+
+    Returns `(period_end_iso, eps)` for the newest period that survives both
+    filters, or `None` if none does.
+    """
+    frame = bundle.get("income") if bundle is not None else None
+    if frame is None or not isinstance(frame, pd.DataFrame) or frame.empty:
+        return None
+    for label in _EPS_LABELS:
+        if label not in frame.index:
+            continue
+        row = frame.loc[label]
+        for period in sorted(row.index, reverse=True):
+            value = row[period]
+            if value is None or pd.isna(value):
+                continue
+            value = float(value)
+            if value <= 0:
+                continue
+            return str(period.date()), value
+    return None
+
+
+def _annual_periods_examined(bundle: dict) -> list[str]:
+    """Every annual period the income statement carries, newest first.
+
+    Used only to name what `_latest_positive_eps` looked at when it found
+    nothing usable -- a refusal that names zero periods (nothing stored) reads
+    differently from one that examined five and found every one NaN or
+    loss-making, and a reader should not have to guess which happened.
+    """
+    frame = bundle.get("income") if bundle is not None else None
+    if frame is None or not isinstance(frame, pd.DataFrame) or frame.empty:
+        return []
+    return [str(period.date()) for period in sorted(frame.columns, reverse=True)]
+
+
+def build_verdict(ticker: str, *, bars_loader=load_price_bars, statements_loader=load_statement_bundle) -> dict:
     """Assemble the evidence panel for one ticker.
 
-    `bars_loader` is injected so the whole path is testable without the
-    network. Note what a missed injection would NOT hit: the default reads the
-    local store and never opens a socket, so `tests/conftest.py`'s network
-    guard cannot see one.
+    `bars_loader` and `statements_loader` are both injected so the whole path
+    is testable without the network. Note what a missed injection would NOT
+    hit: the defaults read the local store and never open a socket, so
+    `tests/conftest.py`'s network guard cannot see one.
     """
     ticker = ticker.upper()
     bars = bars_loader(ticker)
@@ -328,20 +393,64 @@ def build_verdict(ticker: str, *, bars_loader=load_price_bars) -> dict:
         # basket size alone would claim all 5 fed this average when fewer may
         # have.
         pe_industries = benchmark.columns["trailing_pe"].industries
-        rows["trailing_pe"] = _row(
-            None,
-            f"sector avg {benchmark.columns['trailing_pe'].value:.1f}",
-            source=(
-                f"Damodaran {vintage} top-5-by-ROC sector basket "
-                f"({len(pe_industries)} of 5 industries)"
-            ),
-            reason=(
-                "eps_not_wired: the sector PE resolved, but this panel does not "
-                "read EPS -- confirming Yahoo's EPS line-item labels needs a "
-                "stored bundle no fixture carries, and guessing them would be "
-                "worse than refusing"
-            ),
+        # The sector figure is real information even when the subject's own PE
+        # cannot be computed -- a refused row still has something to publish,
+        # so `comparison` is set once here and every branch below keeps it.
+        comparison = f"sector avg {benchmark.columns['trailing_pe'].value:.1f}"
+        damodaran_clause = (
+            f"Damodaran {vintage} top-5-by-ROC sector basket "
+            f"({len(pe_industries)} of 5 industries)"
         )
+        eps_label = _EPS_LABELS[0]
+        statement_bundle = statements_loader(ticker)
+        eps_result = _latest_positive_eps(statement_bundle) if statement_bundle is not None else None
+
+        # `source` must name BOTH bases, subject-first (ND-A -- see
+        # `_own_window_source`'s docstring for the drawdown row this mirrors): a
+        # row naming only what it was compared against leaves its own number
+        # unattributed. A refused row still owes the reader what was missing,
+        # rather than dropping the `own PE:` clause silently.
+        if statement_bundle is None:
+            rows["trailing_pe"] = _row(
+                None,
+                comparison,
+                source=f"own PE: no statements stored for {ticker}; {damodaran_clause}",
+                reason=f"no_statements: {ticker} has no stored statements",
+            )
+        elif eps_result is None:
+            periods = _annual_periods_examined(statement_bundle)
+            periods_note = ", ".join(periods) if periods else "none"
+            rows["trailing_pe"] = _row(
+                None,
+                comparison,
+                source=(
+                    f"own PE: no positive annual {eps_label} found "
+                    f"(periods examined: {periods_note}); {damodaran_clause}"
+                ),
+                reason=(
+                    f"no_positive_eps: no annual {eps_label} above zero found "
+                    f"in {ticker}'s statements (periods examined: {periods_note})"
+                ),
+            )
+        elif not closes:
+            rows["trailing_pe"] = _row(
+                None,
+                comparison,
+                source=f"own PE: no usable close; {damodaran_clause}",
+                reason=f"insufficient_history: {len(closes)} of {len(bars)} bars usable",
+            )
+        else:
+            period_end, eps = eps_result
+            price_date, price = dated_closes[-1]
+            rows["trailing_pe"] = _row(
+                price / eps,
+                comparison,
+                source=(
+                    f"own PE: {eps_label} {eps:.2f} for FY{period_end}, "
+                    f"price {price:.2f} as of {price_date}; {damodaran_clause}"
+                ),
+                reason=None,
+            )
 
     # --- DCF gap -------------------------------------------------------------
     case_id = find_conservative_case_id(ticker)

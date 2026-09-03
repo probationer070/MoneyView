@@ -1,6 +1,7 @@
 import datetime as _dt
 import re
 
+import pandas as pd
 import pytest
 
 from apps.api.services.db import get_db
@@ -461,6 +462,194 @@ def test_the_pe_row_names_the_real_contributor_count():
     pe = panel["rows"]["trailing_pe"]
     assert pe["comparison"] == "sector avg 25.0"
     assert "3 of 5 industries" in pe["source"]
+
+
+def _statement_bundle(income=None):
+    """A statement bundle shaped like `acquisition.store.load_statement_bundle`.
+
+    Mirrors `tests/api/test_equity_bridge.py::_bundle`: only `income` varies
+    across these tests, and the trailing-PE row reads nothing else out of a
+    bundle, but the shape must match what the real loader returns (a dict with
+    all six statement keys, `info`, `fetched_at`) so a test cannot pass against
+    a shape the production loader never produces.
+    """
+    empty = pd.DataFrame()
+    return {
+        "ticker": "TEST",
+        "income": income if income is not None else empty,
+        "balance": empty,
+        "cashflow": empty,
+        "quarterly_income": empty,
+        "quarterly_balance": empty,
+        "quarterly_cashflow": empty,
+        "info": {},
+        "fetched_at": None,
+    }
+
+
+def _aapl_statements_loader(ticker=None):
+    from tests.fixtures.aapl_income_annual import AAPL_INCOME_ANNUAL
+
+    return _statement_bundle(AAPL_INCOME_ANNUAL)
+
+
+# The subject's last close and its date, over the shared `_SERIES` fixture --
+# what `dated_closes[-1]` resolves to for every test below that stores `_SERIES`
+# for TGT, so the PE row's expected price is derived rather than hardcoded.
+_SERIES_PRICE = _series_close(_SERIES_BARS - 1)
+_SERIES_PRICE_DATE = _date(_SERIES_BARS - 1)
+
+
+def test_the_pe_row_computes_from_diluted_eps_and_names_both_bases():
+    """The row this whole track exists to close: with a real AAPL-shaped bundle
+    and a resolved sector PE, the row must compute rather than refuse, and its
+    `source` must name both the subject's own PE (ND-A: a row naming only what
+    it was compared against leaves its own number unattributed) and the
+    Damodaran clause the sibling test already pins verbatim."""
+    _store_a_pe_vintage()
+    _facts("TGT")
+    _bars("TGT", _SERIES)
+
+    panel = build_verdict("TGT", statements_loader=_aapl_statements_loader)
+    pe = panel["rows"]["trailing_pe"]
+
+    assert pe["value"] == pytest.approx(_SERIES_PRICE / 7.46)
+    assert pe["reason"] is None
+    assert pe["comparison"] == "sector avg 25.0"
+    assert pe["source"] == (
+        f"own PE: Diluted EPS 7.46 for FY2025-09-30, price {_SERIES_PRICE:.2f} "
+        f"as of {_SERIES_PRICE_DATE}; Damodaran 2026-01-01 top-5-by-ROC sector "
+        f"basket (3 of 5 industries)"
+    )
+
+
+def test_diluted_eps_is_preferred_over_basic_even_though_both_are_present():
+    """`_EPS_LABELS = ("Diluted EPS",)` is deliberate: more shares outstanding
+    means a LOWER diluted EPS than basic, which means a HIGHER price/EPS -- the
+    conservative direction for a panel testing undervaluation. The AAPL fixture
+    carries both (7.46 diluted, 7.49 basic for FY2025); asserting on the NUMBER
+    rather than the label is the point -- a bug that read Basic EPS would still
+    produce a plausible-looking PE, just the wrong one."""
+    _store_a_pe_vintage()
+    _facts("TGT")
+    _bars("TGT", _SERIES)
+
+    panel = build_verdict("TGT", statements_loader=_aapl_statements_loader)
+    value = panel["rows"]["trailing_pe"]["value"]
+
+    # The assertion carries its own diagnosis, not just two floats. A bare
+    # `assert a == b` fails with `assert 20.026... == 20.107...`, which names
+    # nothing -- and the mutation harness matches on this message, so an
+    # unnamed cause would let it certify a guarantee it had stopped checking.
+    assert value == pytest.approx(_SERIES_PRICE / 7.46), (
+        f"the PE row used an EPS other than the diluted 7.46: it published "
+        f"{value}, and basic EPS (7.49) would give {_SERIES_PRICE / 7.49}"
+    )
+    assert value != pytest.approx(_SERIES_PRICE / 7.49), (
+        f"the PE row published exactly the basic-EPS answer ({value}), so it "
+        f"read Basic EPS where Diluted EPS is required"
+    )
+
+
+def test_the_newest_period_with_a_positive_eps_wins_skipping_a_nan_newest_period():
+    """Yahoo's own AAPL bundle reports 2021-09-30 as all-NaN (confirmed
+    2026-09-03, see `tests/fixtures/aapl_income_annual.py`); a caller reading
+    "the newest period with an EPS" must skip it rather than crash on it. Here
+    the NEWEST period itself (2026-09-30) is NaN, so the row must fall through
+    to 2025-09-30 instead of refusing or raising."""
+    _store_a_pe_vintage()
+    _facts("TGT")
+    _bars("TGT", _SERIES)
+
+    frame = pd.DataFrame(
+        {"2026-09-30": [None], "2025-09-30": [7.46]}, index=["Diluted EPS"]
+    )
+    frame.columns = pd.to_datetime(frame.columns)
+
+    panel = build_verdict(
+        "TGT", statements_loader=lambda t: _statement_bundle(frame)
+    )
+    pe = panel["rows"]["trailing_pe"]
+    assert pe["reason"] is None
+    assert pe["value"] == pytest.approx(_SERIES_PRICE / 7.46)
+    assert "FY2025-09-30" in pe["source"]
+
+
+def test_a_loss_making_eps_is_refused_not_published_as_a_negative_pe():
+    """The same argument `price_signals.trailing_pe_series` makes for omitting a
+    loss-making year rather than emitting a negative PE that would sort as
+    "cheap" in any ascending comparison."""
+    _store_a_pe_vintage()
+    _facts("TGT")
+    _bars("TGT", _SERIES)
+
+    frame = pd.DataFrame({"2025-09-30": [-1.50]}, index=["Diluted EPS"])
+    frame.columns = pd.to_datetime(frame.columns)
+
+    panel = build_verdict(
+        "TGT", statements_loader=lambda t: _statement_bundle(frame)
+    )
+    pe = panel["rows"]["trailing_pe"]
+    assert pe["value"] is None
+    assert pe["reason"].startswith("no_positive_eps")
+    assert "2025-09-30" in pe["reason"]
+    assert pe["comparison"] == "sector avg 25.0"
+    assert "own PE:" in pe["source"]
+
+
+def test_no_stored_statements_refuses_naming_that_and_keeps_the_sector_comparison():
+    """A ticker with no acquired statements must refuse by name, not silently --
+    and the sector average is real information regardless, so `comparison` must
+    survive the refusal exactly like every other refused row in this panel."""
+    _store_a_pe_vintage()
+    _facts("TGT")
+    _bars("TGT", _SERIES)
+
+    panel = build_verdict("TGT", statements_loader=lambda t: None)
+    pe = panel["rows"]["trailing_pe"]
+    assert pe["value"] is None
+    assert pe["reason"] == "no_statements: TGT has no stored statements"
+    assert pe["comparison"] == "sector avg 25.0"
+    assert "own PE:" in pe["source"]
+    assert "no statements stored for TGT" in pe["source"]
+
+
+def test_the_pe_row_still_refuses_no_sector_pe_when_the_vintage_has_no_trailing_pe():
+    """Unchanged from before A2: this refusal is gated on the SECTOR side
+    (`benchmark.columns.get("trailing_pe") is None`) and never reaches the EPS
+    read at all, so wiring EPS must not touch it. Re-asserts
+    `test_the_pe_row_refuses_when_the_vintage_has_no_trailing_pe`'s behaviour
+    with a statements_loader that would raise if it were ever called, proving
+    the EPS path is genuinely never reached on this branch."""
+    from apps.api.services.industry_benchmark_store import store_vintage
+    from tests.fixtures.industry_rows_technology import TECHNOLOGY_ROWS
+
+    store_vintage("2026-01-01", TECHNOLOGY_ROWS)
+    _facts("TGT")
+    _bars("TGT", _SERIES)
+
+    def unexpected_loader(ticker):
+        raise AssertionError("statements_loader must not be called when no_sector_pe refuses first")
+
+    panel = build_verdict("TGT", statements_loader=unexpected_loader)
+    assert panel["rows"]["trailing_pe"]["reason"].startswith("no_sector_pe")
+
+
+def test_the_pe_row_still_refuses_when_no_benchmark_vintage_is_loaded():
+    """Unchanged from before A2: `benchmark is None` (no vintage loaded at all)
+    is the OTHER pre-existing refusal ground, gated even earlier than
+    `no_sector_pe`, and must also never reach the EPS read."""
+    _facts("TGT")
+    _bars("TGT", _SERIES)
+
+    def unexpected_loader(ticker):
+        raise AssertionError("statements_loader must not be called when benchmark is None")
+
+    panel = build_verdict("TGT", statements_loader=unexpected_loader)
+    pe = panel["rows"]["trailing_pe"]
+    assert pe["reason"] == "no_vintage: no industry benchmark data has been loaded"
+    assert pe["value"] is None
+    assert pe["source"] == "Damodaran"
 
 
 def test_the_volume_source_counts_bars_not_days(monkeypatch):
