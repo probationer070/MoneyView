@@ -15,6 +15,16 @@ EXPECTED_SNAPSHOT_TABLES = {
 
 def _seed(conn):
     conn.execute(
+        "INSERT INTO corporate_comparison_snapshots "
+        "(snapshot_date, snapshot_taken_at, ticker) "
+        "VALUES ('2026-04-23', '2026-04-23T00:00:00+00:00', 'MSFT')"
+    )
+    conn.execute(
+        "INSERT INTO corporate_comparison_snapshots_v2 "
+        "(snapshot_date, universe_key, snapshot_taken_at, ticker) "
+        "VALUES ('2026-04-23', 'u', '2026-04-23T00:00:00+00:00', 'MSFT')"
+    )
+    conn.execute(
         "INSERT INTO corporate_comparison_snapshots_v3 "
         "(snapshot_version, snapshot_date, universe_key, snapshot_taken_at, ticker) "
         "VALUES ('v1', '2026-04-23', 'u', '2026-04-23T00:00:00+00:00', 'MSFT')"
@@ -29,6 +39,8 @@ def test_reset_clears_every_snapshot_table_not_only_v3():
         _seed(conn)
         deleted = reset_snapshots(conn)
         assert set(deleted) == EXPECTED_SNAPSHOT_TABLES, deleted
+        assert deleted["corporate_comparison_snapshots"] == 1
+        assert deleted["corporate_comparison_snapshots_v2"] == 1
         assert deleted["corporate_comparison_snapshots_v3"] == 1
         for table in EXPECTED_SNAPSHOT_TABLES:
             assert conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0] == 0

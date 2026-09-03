@@ -28,7 +28,6 @@ def reset_snapshots(conn: sqlite3.Connection) -> dict[str, int]:
 
 if __name__ == "__main__":  # pragma: no cover - operator entry point
     import shutil
-    from pathlib import Path
 
     from apps.api.services.db import get_db, get_db_path
 
