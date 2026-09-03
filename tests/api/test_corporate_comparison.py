@@ -1375,6 +1375,68 @@ def test_a_repeated_snapshot_with_unchanged_assumptions_replaces_the_stored_rows
     assert len(replaced_rows) == len(first_rows), "replace must not accumulate duplicate rows"
 
 
+def test_a_shrinking_universe_deletes_the_departed_tickers_row_but_keeps_the_rest():
+    """Task 7's orphan delete (`DELETE ... WHERE snapshot_version = ? AND ticker NOT
+    IN (...)`) is new SQL with a dynamically built placeholder list, and nothing
+    exercised the shrink path -- every other test in this file uses a fixed ticker
+    set on both saves, so `live_tickers` never shrinks.
+
+    A watchlist ticker losing its positive weight is how a universe actually
+    shrinks for `portfolio_plus_benchmark` mode: the universe_key stays
+    "portfolio_plus_benchmark|^GSPC|" either way (custom_tickers is empty, so it
+    plays no part), so the version is REUSED per Task 7's dedupe rule -- but the
+    second save's `response.rows` now omits BBB. This confirms the delete removes
+    exactly BBB's row under that version and nothing else: AAA's and the
+    benchmark's rows must survive, and the version identity must not move.
+    """
+    with db_service.get_db() as conn:
+        conn.execute(
+            "INSERT INTO watchlist (ticker, name, sector, group_name, weight) VALUES (?, ?, ?, ?, ?)",
+            ("AAA", "Triple A Corp", "Technology", "core", 0.5),
+        )
+        conn.execute(
+            "INSERT INTO watchlist (ticker, name, sector, group_name, weight) VALUES (?, ?, ?, ?, ?)",
+            ("BBB", "Double B Corp", "Technology", "core", 0.5),
+        )
+
+    def _save():
+        return save_corporate_comparison_snapshot(
+            snapshot_source="manual",
+            comparison_universe="portfolio_plus_benchmark",
+            benchmark_ticker="^GSPC",
+            custom_tickers=[],
+            metrics_loader=_stub_metrics_loader,
+            price_loader=lambda _ticker: 100.0,
+            default_companies={},
+            risk_free_rate=0.042,
+            equity_risk_premium=0.055,
+        )
+
+    def _tickers_for(version: str) -> set[str]:
+        with db_service.get_db() as conn:
+            return {
+                row["ticker"]
+                for row in conn.execute(
+                    "SELECT ticker FROM corporate_comparison_snapshots_v3 WHERE snapshot_version = ?",
+                    (version,),
+                ).fetchall()
+            }
+
+    first = _save()
+    first_version = first.snapshot.snapshot_version
+    assert _tickers_for(first_version) == {"^GSPC", "AAA", "BBB"}
+
+    with db_service.get_db() as conn:
+        conn.execute("UPDATE watchlist SET weight = 0 WHERE ticker = ?", ("BBB",))
+
+    second = _save()
+    assert second.snapshot.snapshot_version == first_version, "unchanged assumptions must reuse the version"
+
+    remaining = _tickers_for(first_version)
+    assert "BBB" not in remaining, "the departed ticker's row must be deleted"
+    assert remaining == {"^GSPC", "AAA"}, "surviving tickers must not be swept up by the delete"
+
+
 def test_the_button_acquires_nothing_when_every_dataset_is_fresh(tmp_path, monkeypatch):
     """Idempotence, stated in the spec: re-running acquisition within the freshness boundary
     performs no network work and does not modify local state."""
@@ -1579,3 +1641,23 @@ def test_the_version_carries_no_timestamp():
         risk_free_rate=0.042, equity_risk_premium=0.055,
     )
     assert "T" not in version.replace("2026-04-23", ""), version
+
+
+def test_the_version_records_assumptions_in_their_stored_percentage_form():
+    """The columns store `round(rate * 100, 2)`; the key must use the same form.
+    A raw decimal would put `0.042000000000000003` into an identity string, so
+    two runs that agree could then disagree. Equality between two identical
+    calls cannot catch that -- only the form can.
+
+    Also pins the schema component: `test_a_changed_assumption_creates_a_new_version`
+    varies rate, date and universe but never the schema, so dropping
+    `schema=...` from the format string is caught by nothing else in this file.
+    """
+    version = _snapshot_version_id(
+        universe_key="u", snapshot_date="2026-04-23",
+        risk_free_rate=0.042, equity_risk_premium=0.055,
+    )
+    assert "rf=4.2" in version, version
+    assert "erp=5.5" in version, version
+    assert "0.042" not in version, version
+    assert f"schema={METRIC_SCHEMA_VERSION}" in version, version
