@@ -49,7 +49,19 @@ Copied verbatim from the spec and from `.claude/CLAUDE.md`:
 ```python
 # tests/scripts/test_reset_snapshots.py
 from apps.api.services.db import get_db
-from scripts.reset_snapshots import SNAPSHOT_TABLES, reset_snapshots
+from scripts.reset_snapshots import reset_snapshots
+
+# The three tables named as LITERALS, deliberately NOT `set(SNAPSHOT_TABLES)`.
+# Comparing the function's output against the same constant the function
+# iterates is tautological: shrink the constant and both sides shrink together,
+# so the assertion can never fail for the defect this test is named after. The
+# first draft of this plan made exactly that mistake and the Task 1 mutation
+# check caught it.
+EXPECTED_SNAPSHOT_TABLES = {
+    "corporate_comparison_snapshots",
+    "corporate_comparison_snapshots_v2",
+    "corporate_comparison_snapshots_v3",
+}
 
 
 def _seed(conn):
@@ -67,9 +79,9 @@ def test_reset_clears_every_snapshot_table_not_only_v3():
     with get_db() as conn:
         _seed(conn)
         deleted = reset_snapshots(conn)
-        assert set(deleted) == set(SNAPSHOT_TABLES), deleted
+        assert set(deleted) == EXPECTED_SNAPSHOT_TABLES, deleted
         assert deleted["corporate_comparison_snapshots_v3"] == 1
-        for table in SNAPSHOT_TABLES:
+        for table in EXPECTED_SNAPSHOT_TABLES:
             assert conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0] == 0
 
 
@@ -146,8 +158,10 @@ Expected: PASS (2 tests)
 
 - [ ] **Step 5: Mutation-verify**
 
-Edit `SNAPSHOT_TABLES` to contain only `"corporate_comparison_snapshots_v3"`.
-Run the tests. Expected: `test_reset_clears_every_snapshot_table_not_only_v3` FAILS on the `set(deleted) == set(SNAPSHOT_TABLES)` assertion. Restore the tuple and re-run; both pass.
+Edit `SNAPSHOT_TABLES` in `scripts/reset_snapshots.py` to contain only `"corporate_comparison_snapshots_v3"`.
+Run the tests. Expected: `test_reset_clears_every_snapshot_table_not_only_v3` FAILS, because `deleted` now has one key and `EXPECTED_SNAPSHOT_TABLES` still names three. Restore the tuple and re-run; both pass.
+
+> This step earns its keep: the first draft asserted against `set(SNAPSHOT_TABLES)`, which made the check tautological, and running the mutation is what exposed it.
 
 - [ ] **Step 6: Commit**
 
