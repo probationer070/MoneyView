@@ -178,3 +178,28 @@ def record_decision(
             ),
         )
         return int(cursor.lastrowid)
+
+
+from apps.api.services.acquisition.store import load_price_bars
+
+
+def list_decisions(*, bars_loader=load_price_bars) -> list[dict]:
+    """Every decision, newest first, each with a freshly computed outcome.
+
+    `bars_loader` is injected so the whole path is testable without the store.
+    The outcome is NOT persisted -- see `outcome_for`.
+    """
+    with get_db() as conn:
+        rows = [
+            dict(row)
+            for row in conn.execute(
+                "SELECT * FROM investment_decision ORDER BY decided_at DESC, id DESC"
+            )
+        ]
+    for row in rows:
+        row["outcome"] = outcome_for(
+            decided_at=str(row["decided_at"]),
+            price_at_decision=row["price_at_decision"],
+            bars=bars_loader(str(row["ticker"])),
+        )
+    return rows
