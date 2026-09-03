@@ -80,6 +80,7 @@ sub-project and feeding an implementation plan.
 | `2026-07-27-data-acquisition-design.md` | Data acquisition registry, per-class freshness boundaries, incremental backfill, and provider recommendations (sub-project 2 of 4) |
 | `2026-08-09-segment-buildup-valuation-design.md` | Segment build-up valuation engine, persistence, and API for hand-authored (private/pre-IPO) cases |
 | `2026-09-03-snapshot-overhaul-design.md` | Durable decision records with outcomes, snapshot dedupe on write, and the reset that precedes them |
+| `plans/2026-09-03-snapshot-overhaul-backend.md` | Task-by-task backend plan implementing the snapshot-overhaul spec |
 
 ## Process SOPs (`guideline/sop/`)
 
