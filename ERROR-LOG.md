@@ -26,6 +26,46 @@ reveal that; only checking the code did.
 
 An entry states what was true when it was written. Nothing updates it on its own.
 
+## 2026-09-03: Corporate comparison snapshots accumulate a new version on every refresh click
+
+Date: 2026-09-03
+Command: manual inspection of `corporate_comparison_snapshots_v3` on the live database.
+Failure: the live table held 8 versions of `snapshot_date = 2026-04-23`, seven of them
+created within about three minutes of each other. `MSFT` and `IAUM` are byte-identical
+across all 8; only the benchmark `^GSPC` moves, by pennies (`dcf_value` 6313.41 ->
+6313.14 -> 6313.34 -> 6312.65 -> 6312.59). Nothing raised -- every write succeeded and
+was individually correct -- so the only symptom was version bloat silently piling up on
+every click of the same refresh button.
+Root cause: `_snapshot_version_id` built the identity from `snapshot_taken_at`
+(a wall-clock timestamp captured at the top of the request), concatenated with the
+universe key. Two calls a minute apart differ only in that timestamp, so every refresh
+minted a new primary-key value even when the day, universe, and CAPM assumptions were
+identical -- there was no notion of "the same snapshot" to replace.
+Fix: `_snapshot_version_id` now keys on INPUTS instead -- `snapshot_date`, `universe_key`,
+the assumptions (in their STORED, rounded-percentage form, not the raw decimal argument,
+so two equal runs cannot disagree over float noise), and `METRIC_SCHEMA_VERSION` -- with
+no timestamp component. A rule comparing OUTPUT figures was considered and rejected: it
+would have caught only 3 of the 8 live versions, defeated by the penny-level tick on
+`^GSPC` that nobody was actually looking at. The write changed from `INSERT` to
+`INSERT OR REPLACE` (the primary key is `(snapshot_version, ticker)`, so a second click
+with unchanged assumptions now replaces the row in place instead of raising
+`sqlite3.IntegrityError`), and a delete was added for any ticker that has left the
+universe under a reused version, so a shrinking universe leaves no orphaned rows.
+`snapshot_taken_at` is still recorded in its own column -- only the version *identifier*
+dropped it.
+Files changed: `apps/api/services/corporate_comparison.py`,
+`tests/api/test_corporate_comparison.py`.
+Prevention: when a dedupe/identity key is derived from data that includes both
+"what changed" and "when it was observed," keying on the latter silently defeats the
+former -- prefer keying on the narrowest set of inputs that actually make two writes
+the same thing, verified by a test that repeats a write with unchanged inputs and
+asserts the identity did not move (verified here by re-adding the timestamp component
+and confirming `test_repeating_a_snapshot_with_unchanged_assumptions_does_not_add_a_version`
+fails -- though on this Windows sandbox that specific test's own back-to-back calls can
+land within one clock tick and coincidentally agree; two sibling tests in the same file,
+one using assumptions an hour apart and one asserting the identity's format directly,
+independently confirmed the mutation is caught).
+
 ## 2026-07-26: Full API suite fails intermittently with unrelated 429s
 
 Date: 2026-07-26

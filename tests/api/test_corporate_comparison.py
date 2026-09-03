@@ -21,6 +21,7 @@ from apps.api.services.corporate_comparison import (
     _benchmark_row_for_ticker,
     _comparison_universe_key,
     _dcf_snapshot,
+    _snapshot_version_id,
     acquire_comparison_datasets,
     build_corporate_comparison_response,
     load_company_universe_data,
@@ -949,7 +950,7 @@ def test_corporate_comparison_snapshot_uses_kst_business_date_and_365_day_retent
     assert "2026-04-12" in remaining_dates
 
 
-def test_manual_refresh_keeps_multiple_intraday_versions_for_same_kst_day(tmp_path, monkeypatch):
+def test_manual_refresh_reuses_the_same_version_for_unchanged_assumptions_on_the_same_kst_day(tmp_path, monkeypatch):
     db_path = tmp_path / "moneyview.db"
     monkeypatch.setattr(db_service, "_DB_PATH", db_path)
     db_service.init_db()
@@ -996,7 +997,11 @@ def test_manual_refresh_keeps_multiple_intraday_versions_for_same_kst_day(tmp_pa
     )
 
     assert first.snapshot.as_of_date == second.snapshot.as_of_date == "2026-04-11"
-    assert first.snapshot.snapshot_version != second.snapshot.snapshot_version
+    # Task 7: the version is now keyed on inputs (day, universe, assumptions), not on
+    # snapshot_taken_at, so a second refresh with unchanged assumptions on the same day
+    # reuses the first version instead of appending one -- this is the dedupe rule that
+    # replaced the seven-versions-in-three-minutes behavior described in ERROR-LOG.md.
+    assert first.snapshot.snapshot_version == second.snapshot.snapshot_version
 
     with db_service.get_db() as conn:
         version_count = conn.execute(
@@ -1005,7 +1010,7 @@ def test_manual_refresh_keeps_multiple_intraday_versions_for_same_kst_day(tmp_pa
                WHERE snapshot_date = ? AND universe_key = ?""",
             ("2026-04-11", "portfolio_plus_benchmark|^GSPC|"),
         ).fetchone()
-    assert int(version_count["version_count"]) == 2
+    assert int(version_count["version_count"]) == 1
 
 
 @pytest.mark.virgin_db
@@ -1323,14 +1328,15 @@ def test_a_snapshot_records_the_metric_schema_version():
     assert "|" in row["snapshot_version"]
 
 
-def test_snapshots_are_immutable_a_second_save_adds_rather_than_updates():
-    """A newer snapshot is a new observation, never an update to the old one.
+def test_a_repeated_snapshot_with_unchanged_assumptions_replaces_the_stored_rows_in_place():
+    """Task 7: the version is keyed on inputs (day, universe, assumptions), not on
+    snapshot_taken_at. So a second save with the same inputs but a different price
+    reuses the first version's identity and must REPLACE its rows in place -- not
+    raise a uniqueness error and not silently keep the stale first-save rows.
 
-    Counting rows would only prove multiplicity. This saves twice at different prices,
-    then re-reads the FIRST snapshot's stored rows and asserts they are byte-identical
-    to what was written -- the earlier observation survives as evidence. The assertion
-    that the second snapshot's values actually differ keeps the first assertion honest:
-    without it, both snapshots could be identical and the test would pass vacuously.
+    This saves twice at different prices under otherwise-unchanged assumptions, then
+    re-reads the (single, reused) version's stored rows and asserts they reflect the
+    SECOND save, not the first -- the earlier observation does not survive.
     """
 
     def _save(price: float):
@@ -1362,10 +1368,11 @@ def test_snapshots_are_immutable_a_second_save_adds_rather_than_updates():
     assert first_rows != []
 
     second_version = _save(20.0).snapshot.snapshot_version
-    assert second_version != first_version
+    assert second_version == first_version, "unchanged assumptions must reuse the version"
 
-    assert _rows_for(first_version) == first_rows
-    assert _rows_for(second_version) != first_rows
+    replaced_rows = _rows_for(first_version)
+    assert replaced_rows != first_rows, "the second save must overwrite the stored rows in place"
+    assert len(replaced_rows) == len(first_rows), "replace must not accumulate duplicate rows"
 
 
 def test_the_button_acquires_nothing_when_every_dataset_is_fresh(tmp_path, monkeypatch):
@@ -1529,3 +1536,46 @@ def test_a_benchmark_this_installation_has_never_stored_keeps_its_raw_symbol():
     row = _benchmark_row_for_ticker("^KS11", data.registry, data.index_names)
 
     assert row["name"] == "^KS11", row
+
+
+def test_repeating_a_snapshot_with_unchanged_assumptions_does_not_add_a_version():
+    """The live table holds 8 versions of 2026-04-23, seven from clicking
+    refresh. Crucially MSFT and IAUM are byte-identical across all of them and
+    only the benchmark ^GSPC ticks, so a rule comparing OUTPUT figures would
+    have caught 3 of 8. This keys on inputs instead."""
+    first = _snapshot_version_id(
+        universe_key="portfolio_plus_benchmark|^GSPC|",
+        snapshot_date="2026-04-23",
+        risk_free_rate=0.042,
+        equity_risk_premium=0.055,
+    )
+    again = _snapshot_version_id(
+        universe_key="portfolio_plus_benchmark|^GSPC|",
+        snapshot_date="2026-04-23",
+        risk_free_rate=0.042,
+        equity_risk_premium=0.055,
+    )
+    assert first == again, "a repeated click must reuse the version, not append one"
+
+
+def test_a_changed_assumption_creates_a_new_version():
+    base = dict(
+        universe_key="portfolio_plus_benchmark|^GSPC|",
+        snapshot_date="2026-04-23",
+        risk_free_rate=0.042,
+        equity_risk_premium=0.055,
+    )
+    assert _snapshot_version_id(**base) != _snapshot_version_id(**{**base, "risk_free_rate": 0.045})
+    assert _snapshot_version_id(**base) != _snapshot_version_id(**{**base, "snapshot_date": "2026-04-24"})
+    assert _snapshot_version_id(**base) != _snapshot_version_id(
+        **{**base, "universe_key": "custom|^KS11|NVDA"}
+    )
+
+
+def test_the_version_carries_no_timestamp():
+    """A timestamp component is what made every click a new version."""
+    version = _snapshot_version_id(
+        universe_key="u", snapshot_date="2026-04-23",
+        risk_free_rate=0.042, equity_risk_premium=0.055,
+    )
+    assert "T" not in version.replace("2026-04-23", ""), version
