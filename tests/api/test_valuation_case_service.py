@@ -294,12 +294,14 @@ def test_write_time_specs_equal_read_time_specs_for_a_fully_populated_payload():
 
 
 def test_a_segment_missing_a_required_field_is_rejected():
-    """The presence check covers `SegmentSpec`'s no-default fields too, not
-    only `CaseSpec`'s. A missing `sales_to_capital_late` used to reach
-    SQLite's NOT NULL constraint and come back as a clean ValueError naming
-    the column; it must still do so now that the trial spec build happens
-    before that constraint is ever checked, rather than crash with a
-    TypeError from SegmentSpec's own null-unsafe __post_init__.
+    """The presence check now lives in the engine, not this service: the
+    explicit null guard at the top of `SegmentSpec.__post_init__`
+    (`packages/core_finance/segment_valuation.py`) catches a missing
+    `sales_to_capital_late` before the old null-unsafe comparison
+    (`self.sales_to_capital_late <= 0`) can turn it into a `TypeError`. This
+    test pins that `create_case` still surfaces a clean, field-named
+    `ValueError` for it -- the same outward behaviour as when the check lived
+    in this module's own `_validate_required_fields`, which D2 deleted.
     """
     payload = _case_payload(
         case_name="segment_missing_field",
@@ -310,13 +312,13 @@ def test_a_segment_missing_a_required_field_is_rejected():
 
 
 def test_a_segment_with_ramp_start_year_none_is_rejected_with_a_valueerror():
-    """`ramp_start_year` has a non-None default (1), so the old "no default"
-    predicate skipped it entirely: `SegmentSpec.__post_init__` still compares
-    it unconditionally (`self.ramp_start_year < 1`), so a `None` value used to
-    reach that comparison and raise `TypeError` -- a 500, where every other
-    missing required field gets a clean, field-named `ValueError` here. The
-    corrected predicate (no default, OR a non-`None` default) now catches it
-    before the trial spec is built. `pytest.raises(ValueError)` itself proves
+    """`ramp_start_year` has a non-None default (1), which is exactly why the
+    engine's explicit null guard lists it alongside the no-default fields:
+    `SegmentSpec.__post_init__` still compares it unconditionally
+    (`self.ramp_start_year < 1`) after the guard, so a `None` value that
+    reached that comparison would raise `TypeError` -- a 500, where every
+    other missing required field gets a clean, field-named `ValueError` here.
+    The guard catches it first. `pytest.raises(ValueError)` itself proves
     this is not the old `TypeError`: that exception type would not be caught
     and the test would error out instead of passing.
     """
