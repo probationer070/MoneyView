@@ -17,9 +17,11 @@ Legend: `[ ]` not started, `[x]` complete
 
 ---
 
-## Where things stand (2026-08-30)
+## Where things stand (2026-09-03)
 
-`renewal` @ `e28be2a`, **862 tests passing**, no skips or xfails.
+`renewal` @ `7bfeb84`, **882 tests passing**, no skips or xfails.
+(The 862 measured at `e28be2a` on 2026-08-30, plus Track B's 4 property tests
+and its 16-case mutation harness. Track B is the only change since.)
 
 Shipped and merged: the segment build-up engine; the write-time runnability
 gate; the industry-benchmark chain (data, mapping, conservative-case generator)
@@ -59,10 +61,10 @@ Each is separately closable, and the row stays refused until both are.
 
 ---
 
-## Track B - Close the defect class on the verdict panel
+## Track B - Close the defect class on the verdict panel  [COMPLETE 2026-09-03]
 
-**Do this before adding a fifth signal to the panel.** This is the recommended
-next piece of work.
+Kept here rather than archived to `todo4.md` because Track A and Track C have not
+started and this record is what a fifth signal must be added against.
 
 `apps/api/services/valuation_verdict.py` needed **ten** review rounds, and every
 defect belonged to one class: a number or refusal wearing an attribution it has
@@ -73,25 +75,54 @@ gated clauses (window count, dropped bars, span, full-history), and **the
 concatenation is unowned** -- each clause is individually true, and until the
 last commit nothing asserted anything about the assembled sentence.
 
-- [ ] **B1. Property test: clause-to-noun attachment.** One exists already
-      (`test_no_source_string_ever_claims_more_bars_than_its_span_can_hold`) --
-      the count immediately preceding a span must fit inside that span. Extend
-      the idea so every parenthetical must attach to the clause it describes.
-      A shipped defect read `550 of 800 stored bars have a close (spans ...)`
-      across 500 days; 550 daily bars cannot span 500 days.
+- [x] **B1. Property test: clause-to-noun attachment.** Done --
+      `test_every_parenthetical_attaches_to_the_clause_it_describes`. It binds a
+      span to its clause by NAME rather than by position (the older
+      `test_no_source_string_ever_claims_more_bars_than_its_span_can_hold` binds
+      positionally, which is how a reader parses the sentence but not how it is
+      built), covers every row of the panel rather than the drawdown row alone,
+      and every parenthetical rather than spans alone. Shown to catch
+      `bare-span-wrong-noun`, `span-too-short-for-its-count` and
+      `bar-count-labelled-in-days`.
 
-- [ ] **B2. Property test: subject-vs-peer basis symmetry.** Whatever basis the
-      subject's `source` names, the peer clause must name the same one. Every
-      cross-basis defect found so far -- a `252d` label on a 502-day window,
-      peers measured over their own positions rather than the subject's dates --
-      would have failed such a test.
+- [x] **B2. Property test: subject-vs-peer basis symmetry.** Done, as a PAIR --
+      and the pair is the finding. The string half
+      (`test_the_peer_clause_names_the_same_basis_as_the_subject_clause`) was
+      written first and reported as verified because it passed. It is not
+      sufficient: the label and the peer sampling are produced by separate code
+      paths, so reintroducing ND-12 moves the published figure from
+      `peer mean 0.0%` to `peer mean -90.0%` while `source` stays byte-identical
+      and the test still passes. The computed half
+      (`test_the_peer_mean_is_computed_over_the_period_its_clause_names`) closes
+      it: a peer spike outside the subject's window, on either side, across seven
+      subject shapes, must not move the mean. Full write-up in `ERROR-LOG.md`
+      2026-09-03. Note the panel itself was never exposed -- the pre-existing
+      `test_every_close_in_the_peer_mean_lies_inside_the_subject_window` catches
+      ND-12 from one hand-built case; what B2 adds is generality.
 
-- [ ] **B3. Consider restructuring the helper** so each clause declares its own
-      subject rather than being concatenated positionally. Judgement call; the
-      property tests may be enough on their own.
+- [x] **B3. Restructuring the helper -- decided AGAINST, with evidence.** The
+      peer clause's stated period and the peer sampling already read the same two
+      locals (`start`, `end`, `valuation_verdict.py:241-261`), so they cannot
+      disagree by construction -- which is the property the restructure was meant
+      to create. One real duplication remains: `:136` recomputes
+      `dated_closes[-len(window):]` independently of `:241`, so the window clause
+      and the peer clause could drift if someone edited one. That is exactly what
+      the `peer-clause-names-a-different-period` mutation exploits, and the B2
+      string test catches it. The invariant a refactor would enforce structurally
+      is therefore already pinned by a test, and rewriting a module that took ten
+      review rounds to stabilise costs more risk than it removes (CLAUDE.md 3).
+      Revisit only if a fifth signal needs a clause the positional concatenation
+      cannot express.
 
-**Estimate: about half a day. It is the difference between the next signal
-costing one review round or nine.**
+**Done 2026-09-03.** The defect class is closed by a checked-in gate, not by a
+one-time check: `tests/api/test_valuation_verdict_mutations.py` rebuilds
+`valuation_verdict.py` in memory with each of six known defects reintroduced and
+asserts the property test that should catch it does fail. Mutation is in-memory
+only, so an interrupted run cannot leave a broken module in the tree. An
+anchor-integrity test fails loudly if `valuation_verdict.py` is rewritten,
+instructing the next author to re-verify the property tests by hand rather than
+loosen the anchor. Procedure and rationale: `guideline/sop/test-verification.md`
+and CLAUDE.md section 8. Suite: 882 passing, no skips or xfails.
 
 ---
 

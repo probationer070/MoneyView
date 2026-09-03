@@ -1751,3 +1751,54 @@ still land there -- do not assume an old reason string is still describing the l
 this column"), branch on the more specific condition explicitly rather than letting one message stand
 in for both -- a reader cannot tell "nothing arrived" from "something arrived but was empty" unless the
 row says which.
+
+## 2026-09-03: A new property test asserted on the label, not the number it described
+
+Date: 2026-09-03
+Command: `python -m pytest tests/api/test_valuation_verdict.py -q` under six hand-applied
+mutations of `apps/api/services/valuation_verdict.py`, then
+`python -m pytest tests/api/test_valuation_verdict_mutations.py -q`.
+Failure: Track B added `test_the_peer_clause_names_the_same_basis_as_the_subject_clause` to
+guarantee "whatever basis the subject's `source` names, the peer clause must name the same one",
+and it was reported as verified on the strength of a passing run. It asserts only on the `source`
+STRING. Reintroducing the ND-12 defect -- sampling peers over their own trailing 252 positions
+instead of the subject's date range -- moves the published figure from `peer mean 0.0%` to
+`peer mean -90.0%` while leaving `source` byte-identical, still reading
+`peers: 3 of 3 within 2024-04-06..2025-08-21`. The test passes. The todo entry that specified it
+claimed that defect "would have failed such a test"; as implemented, it would not.
+
+**No product exposure.** The pre-existing case test
+`test_every_close_in_the_peer_mean_lies_inside_the_subject_window` does catch that mutation
+(verified by running the HEAD version of the test file against it). This was a defect in a new
+test's coverage claim, not a hole in the panel's behaviour. It is recorded because the coverage
+claim was believed and stated, and because the reasoning error is the reusable part.
+Root cause: the test was written to the WORDING of the Track B specification, which describes a
+relation between two strings ("the peer clause must name the same one"), rather than to the
+guarantee that wording exists to protect -- that the computed mean actually uses the period its
+label names. A label and the computation it describes are produced by separate code paths
+(`valuation_verdict.py:241-261`), so an assertion on one says nothing about the other. This is the
+same defect class the module's ten review rounds were about -- an attribution not earned --
+reproduced inside the test written to prevent it. Compounded by the reporting error: the test was
+called verified after being observed passing, which is not evidence about a test.
+Fix: added `test_the_peer_mean_is_computed_over_the_period_its_clause_names`, which asserts a
+computed consequence by control vs. treatment -- a peer spike planted outside the subject's window
+(on both sides, across seven subject shapes) must not move the published peer mean. The string test
+is kept as the labelling layer, with a docstring noting the pair is deliberate. Added
+`tests/api/test_valuation_verdict_mutations.py`, a checked-in harness that rebuilds
+`valuation_verdict.py` in memory with each of six known defects reintroduced and asserts the
+property test that should catch it does fail -- so this evidence is re-derived on every run instead
+of resting on someone having checked once. Mutation is in-memory only; the source file is never
+written to, so an interrupted run cannot leave a broken module in the tree.
+Files changed: `tests/api/test_valuation_verdict.py`, `tests/api/test_valuation_verdict_mutations.py`
+(new), `guideline/sop/test-verification.md` (new), `.claude/CLAUDE.md` (new section 8),
+`docs/INDEX.md`. `apps/api/services/valuation_verdict.py` was NOT changed -- the panel's behaviour
+was already correct.
+Prevention: never report a test as verified because it passed; name the broken implementation it was
+shown to reject, or call it unverified (`.claude/CLAUDE.md` section 8,
+`guideline/sop/test-verification.md`). Specifically, when a test asserts on a label, a source, or any
+other attribution, check whether the label and the thing it describes are produced by separate code
+paths -- if they are, the string assertion cannot detect them diverging, and a second test must
+assert a computed consequence: construct an input the named basis cannot reach and assert the
+published figure does not move. Note also that a `-k` filter narrow enough to run only the new tests
+will hide the fact that an older test already covers the case, which is how the severity here was
+initially overstated; confirm against the full module before concluding a defect is undefended.
