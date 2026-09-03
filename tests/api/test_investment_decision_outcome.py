@@ -56,3 +56,20 @@ def test_a_null_close_is_skipped_rather_than_ending_the_series():
     )
     assert outcome["price_now"] == 120.0
     assert outcome["price_date"] == "2026-02-01"
+
+
+def test_a_genuine_zero_move_is_reported_as_zero_not_as_a_refusal():
+    """The other half of the refusal rule. A decision whose price has not moved
+    is a real reading of 0.0, and must be distinguishable from "no bar after the
+    decision", which refuses. Collapsing the two would make a flat result and a
+    missing result look identical -- the exact confusion the reason field exists
+    to prevent."""
+    outcome = outcome_for(
+        decided_at="2026-01-10T00:00:00+00:00",
+        price_at_decision=100.0,
+        bars=_bars([("2026-02-01", 100.0)]),
+    )
+    assert outcome["price_move"] == 0.0
+    assert outcome["price_move"] is not None
+    assert outcome["reason"] is None
+    assert outcome["price_date"] == "2026-02-01"
