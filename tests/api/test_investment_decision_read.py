@@ -31,8 +31,20 @@ def test_the_gap_at_decision_is_returned_beside_the_move_but_never_combined():
     row = list_decisions(bars_loader=_bars)[0]
     assert row["dcf_implied_return"] == 50.0
     assert row["outcome"]["price_move"] == pytest.approx(0.20)
-    forbidden = {"accuracy", "error", "residual", "predicted_vs_realized", "score"}
-    assert not (forbidden & set(row)), row.keys()
+    # An ALLOWLIST, not a blocklist of suspicious names. The rule this protects --
+    # never combine the horizonless gap with the horizoned move (spec §6) -- must
+    # not depend on guessing what someone would name the combination. Any new
+    # top-level key fails here, which is the point: adding a field to this
+    # response should be a conscious decision someone records in this test, not
+    # something that slips through because it was not on a list of five words.
+    EXPECTED_KEYS = {
+        "id", "ticker", "decided_at", "action", "memo",
+        "price_at_decision", "dcf_value", "dcf_implied_return", "roic", "wacc",
+        "risk_free_rate", "equity_risk_premium", "metric_schema_version",
+        "figures_source", "figures_unavailable_reason",
+        "outcome",
+    }
+    assert set(row) == EXPECTED_KEYS, sorted(set(row) ^ EXPECTED_KEYS)
 
 
 def test_decisions_come_back_newest_first():
