@@ -59,6 +59,12 @@ from .schema_parts.valuation import (
 )
 from .schema_parts.market import DeltaBadge, IndicatorRecord, IndexQuote, MarketDataQuality, MarketIndexDetail, MarketRegimeContext, MarketVolumeSummary, StockOHLCV, StockPriceLookup
 from .schema_parts.news import MonteCarloResult, NewsArticle, TechnicalIndicators
+from .schema_parts.decision import (
+    DecisionCreated,
+    DecisionInput,
+    DecisionOutcome,
+    DecisionRow,
+)
 from .schema_parts.portfolio_reporting import (
     RECONCILIATION_TOLERANCE,
     WEIGHT_SUM_TOLERANCE,
@@ -145,6 +151,10 @@ __all__ = [
     "MonteCarloResult",
     "NewsArticle",
     "TechnicalIndicators",
+    "DecisionCreated",
+    "DecisionInput",
+    "DecisionOutcome",
+    "DecisionRow",
     "RECONCILIATION_TOLERANCE",
     "WEIGHT_SUM_TOLERANCE",
     "AttributionDataContract",
