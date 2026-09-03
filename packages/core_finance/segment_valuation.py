@@ -87,6 +87,33 @@ class SegmentSpec:
     waypoint_gap_fraction: float | None = None
 
     def __post_init__(self) -> None:
+        # Explicit null guard, checked before anything below dereferences these
+        # fields. Without it, a caller building a spec with e.g.
+        # sales_to_capital_late=None reaches `self.sales_to_capital_late <= 0`
+        # (or the equivalent in `revenue_path`/`margin_path`/`reinvestment`,
+        # all of which use these fields unconditionally too) and gets a raw
+        # TypeError -- a 500 in apps.api, not the clean ValueError every other
+        # invalid input here produces. It sits next to the comparisons it
+        # protects, not in apps.api.services.valuation_case (see D2 in
+        # guideline/sop/todo.md), so it cannot drift out of sync with which
+        # fields the engine actually dereferences -- which is exactly what the
+        # service-layer mirror it replaces was at risk of doing. `name` can
+        # itself be the missing field; a placeholder stands in for it in the
+        # message below rather than reporting it twice.
+        missing = [
+            field
+            for field in (
+                "name", "base_revenue", "base_margin", "margin_target",
+                "sales_to_capital_early", "sales_to_capital_late",
+                "ramp_start_year",
+            )
+            if getattr(self, field) is None
+        ]
+        if missing:
+            label = self.name if self.name is not None else "<unnamed segment>"
+            raise ValueError(
+                f"{label}: missing required field(s): {', '.join(missing)}"
+            )
         if self.ramp_start_year < 1:
             raise ValueError(
                 f"{self.name}: ramp_start_year must be at least 1, got "
@@ -630,6 +657,25 @@ class CaseSpec:
     effective_tax_rate: float | None = None
 
     def __post_init__(self) -> None:
+        # Same guard as `SegmentSpec`, and the same reason: every comparison
+        # below dereferences these fields with no None check, so a missing one
+        # used to reach the comparison and raise TypeError -- a 500 in
+        # apps.api -- instead of the clean ValueError every other invalid
+        # input here produces. See the longer comment on `SegmentSpec` for why
+        # the guard lives in the engine rather than in
+        # apps.api.services.valuation_case.
+        missing = [
+            field
+            for field in (
+                "base_year", "target_year", "riskfree_rate", "wacc_initial",
+                "wacc_stable", "wacc_converge_from", "marginal_tax_rate",
+                "nol_balance", "roic_stable", "cash", "debt", "ipo_proceeds",
+                "shares_basic", "shares_new",
+            )
+            if getattr(self, field) is None
+        ]
+        if missing:
+            raise ValueError(f"case is missing required field(s): {', '.join(missing)}")
         if self.target_year <= self.base_year:
             raise ValueError(
                 f"target_year {self.target_year} must be after base_year {self.base_year}"

@@ -1,3 +1,5 @@
+import dataclasses
+
 import pytest
 
 from packages.core_finance.segment_valuation import (
@@ -1148,3 +1150,78 @@ def test_zero_terminal_growth_needs_no_reinvestment_and_is_admitted():
     result = _declining(0.001, 0.0)
     assert result.terminal_reinvestment_rate == pytest.approx(0.0)
     assert result.enterprise_value > 0
+
+
+# --- D2: every dereferenced-unconditionally field raises ValueError when None ----
+#
+# `apps.api.services.valuation_case` used to carry its own copy of "which
+# fields does the engine dereference without a None check", introspected from
+# dataclass metadata, so it could stay in sync with the engine only by someone
+# remembering to update both places. D2 (guideline/sop/todo.md) deleted that
+# copy and put an explicit null guard directly in `CaseSpec.__post_init__` and
+# `SegmentSpec.__post_init__`, next to the comparisons it protects.
+#
+# The introspection itself is still useful -- not as production logic this
+# time, but as the thing that catches a FUTURE required field whose guard
+# someone forgot to add: sweep every field the predicate says is required,
+# and prove each one raises ValueError, by name, when set to None alone.
+
+
+def _required_fields(spec_cls: type) -> tuple[str, ...]:
+    """Fields with no default, or a default that is not None -- the same
+    predicate `_required_field_names` used before D2 deleted it. A `None`
+    default is the dataclass's own signal that the field's absence is a
+    distinct, valid case (e.g. `CaseSpec.terminal_growth`), so those are
+    excluded on purpose, not by oversight.
+    """
+    return tuple(
+        field.name
+        for field in dataclasses.fields(spec_cls)
+        if (field.default is dataclasses.MISSING or field.default is not None)
+        and field.default_factory is dataclasses.MISSING  # type: ignore[misc]
+    )
+
+
+_CASE_REQUIRED_FIELDS = _required_fields(CaseSpec)
+_SEGMENT_REQUIRED_FIELDS = _required_fields(SegmentSpec)
+
+
+def test_the_required_case_field_sweep_is_non_empty():
+    """A predicate that silently matched nothing would make every test below
+    vacuously pass without ever calling `CaseSpec`."""
+    assert _CASE_REQUIRED_FIELDS
+
+
+def test_the_required_segment_field_sweep_is_non_empty():
+    assert _SEGMENT_REQUIRED_FIELDS
+
+
+@pytest.mark.parametrize("field", _CASE_REQUIRED_FIELDS)
+def test_a_missing_required_case_field_raises_valueerror_naming_it(field):
+    """Set ONLY `field` to None on an otherwise-valid case and check the
+    engine's null guard catches it -- not `revenue_path`, `margin_path` or
+    some other function three calls downstream, which would mean the guard
+    missed this field and the None reached an unguarded comparison instead.
+
+    `pytest.raises(ValueError)` is itself the type assertion: were the guard
+    for `field` missing, the None would fall through to the first
+    unconditional comparison that touches it and raise `TypeError`, which
+    `pytest.raises(ValueError)` does NOT catch -- the test would error out
+    (not fail cleanly), and that error is exactly what would flag a forgotten
+    guard.
+    """
+    with pytest.raises(ValueError) as exc_info:
+        _case(**{field: None})
+    assert field in str(exc_info.value)
+
+
+@pytest.mark.parametrize("field", _SEGMENT_REQUIRED_FIELDS)
+def test_a_missing_required_segment_field_raises_valueerror_naming_it(field):
+    """Same property, for `SegmentSpec`. `name` is itself one of the swept
+    fields: `_segment(name=None)` sets it to None like any other field, and
+    the guard's placeholder (`<unnamed segment>`) means that does not raise a
+    second, unrelated error while reporting the first.
+    """
+    with pytest.raises(ValueError) as exc_info:
+        SegmentSpec(**_segment(**{field: None}))
+    assert field in str(exc_info.value)

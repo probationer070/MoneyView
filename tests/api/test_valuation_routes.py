@@ -1,3 +1,5 @@
+import datetime as _dt
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -278,6 +280,90 @@ def _seed_verdict_inputs(ticker="VERD", industry="Semiconductors"):
             [(ticker, f"2025-01-0{i}", 100.0 + i, 100.0 + i, 100.0 + i, 100.0 + i, i * 100)
              for i in range(1, 6)],
         )
+
+
+# D4: `_seed_verdict_inputs` stores 5 bars, so every route test above exercises a
+# drawdown row that REFUSES. That pins the 200-with-refusals semantic, which is
+# the panel's whole design -- but it leaves the other half unpinned: no route
+# test has ever carried a COMPUTED row through the real `load_price_bars` and out
+# through `VerdictPanel`'s serialisation. A refused row serialises `value: None`;
+# a computed one serialises floats and a peer-comparison string, and nothing
+# asserted that path survives the round trip.
+_DRAWDOWN_BARS_NEEDED = 252
+_COMPUTED_BARS = 260
+_PEAK_INDEX = 199
+
+
+def _computed_close(i: int) -> float:
+    """100 -> 200 over the first 200 bars, then down to 150.
+
+    The peak sits at index 199, inside the trailing 252-bar window (which opens
+    at index 8), so the drawdown is exactly (150 - 200) / 200 = -25%. Every
+    expected value below derives from this shape rather than from a magic number.
+    """
+    if i <= _PEAK_INDEX:
+        return 100.0 + i * (100.0 / _PEAK_INDEX)
+    return 200.0 - (i - _PEAK_INDEX) * (50.0 / (_COMPUTED_BARS - 1 - _PEAK_INDEX))
+
+
+def _seed_computed_verdict_inputs(ticker="COMPD", industry="Semiconductors"):
+    """Enough history for a real drawdown, plus three flat same-industry peers."""
+    from apps.api.services.db import get_db
+
+    def rows(symbol, close_of):
+        return [
+            (symbol, str(_dt.date(2024, 1, 1) + _dt.timedelta(days=i)),
+             close_of(i), close_of(i), close_of(i), close_of(i), 1000)
+            for i in range(_COMPUTED_BARS)
+        ]
+
+    with get_db() as conn:
+        for symbol in (ticker, "PEERA", "PEERB", "PEERC"):
+            conn.execute(
+                "INSERT OR REPLACE INTO corporate_quote_facts "
+                "(ticker, market_cap, shares_outstanding, currency, beta, sector, industry, fetched_at) "
+                "VALUES (?, 1.0, 1.0, 'USD', 1.0, 'Technology', ?, '2026-01-01')",
+                (symbol, industry),
+            )
+        conn.executemany(
+            "INSERT OR REPLACE INTO stocks (ticker, date, open, high, low, close, volume) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            rows(ticker, _computed_close),
+        )
+        for peer in ("PEERA", "PEERB", "PEERC"):
+            conn.executemany(
+                "INSERT OR REPLACE INTO stocks (ticker, date, open, high, low, close, volume) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                rows(peer, lambda _i: 100.0),
+            )
+
+
+def test_verdict_route_serves_a_computed_drawdown_not_only_refusals():
+    """D4: the computed half of the route contract.
+
+    Everything else in this file seeds 5 bars, so the drawdown row always
+    refuses and `value` is always `None` on the wire. A refusal and a computed
+    figure take different paths through `VerdictPanel`, and only the refusal one
+    was covered. This drives a real -25% drawdown and a real peer mean through
+    the actual `load_price_bars` and the response model.
+    """
+    _seed_computed_verdict_inputs()
+    response = client.get("/api/v1/valuation/verdict/COMPD")
+    assert response.status_code == 200
+
+    row = response.json()["data"]["rows"]["drawdown"]
+    assert row["reason"] is None, row
+    # Exactly -25% by construction, and it must survive JSON as a number rather
+    # than arriving stringified or rounded away.
+    assert isinstance(row["value"], float)
+    assert row["value"] == pytest.approx(-0.25), (
+        f"the route served {row['value']!r} where the seeded series falls from a "
+        f"peak of 200.0 to a last close of 150.0, i.e. -25%"
+    )
+    # Flat peers, so the mean drawdown is 0.0% -- and the fact that a comparison
+    # string arrives at all is the half a refused row can never exercise.
+    assert row["comparison"] == "peer mean 0.0%", row
+    assert "peers: 3 of 3 within" in row["source"], row
 
 
 def test_verdict_route_returns_a_panel():
