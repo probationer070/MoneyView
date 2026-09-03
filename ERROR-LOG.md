@@ -1802,3 +1802,90 @@ assert a computed consequence: construct an input the named basis cannot reach a
 published figure does not move. Note also that a `-k` filter narrow enough to run only the new tests
 will hide the fact that an older test already covers the case, which is how the severity here was
 initially overstated; confirm against the full module before concluding a defect is undefended.
+
+## 2026-09-03: Test fixture data was written into the real database, impersonating a real ticker AND a Damodaran vintage
+
+Date: 2026-09-03
+Command: an ad-hoc `python` script during Track A2 that imported helpers from
+`tests/api/test_valuation_verdict.py` and called them directly, outside pytest.
+Failure: silent, and nothing raised. 260 synthetic price bars and one
+`corporate_quote_facts` row for **TGT** were written into
+`data/processed/moneyview.db`. The bars were byte-for-byte the module's `_SERIES`
+fixture -- first date 2024-01-01, close climbing 100 -> 200 then falling to 150,
+every volume exactly 100 -- and the facts row carried the fixture's giveaway
+`fetched_at='2026-01-01'` with `industry='Semiconductors'`. TGT is a REAL ticker
+(Target Corp), so the fabricated series did not read as obviously synthetic: it
+sat in the production store impersonating a real company, and any signal computed
+for TGT would have been derived from invented prices while reporting ordinary
+provenance. Discovered only by accident, when a row count taken for an unrelated
+purpose (acquiring AAPL quote facts) showed `stocks` at 68,271 against the 68,011
+measured earlier in the same session, and `corporate_quote_facts` at 1 where it
+had been 0.
+
+The blast radius was WIDER than that first count revealed, and the second half was
+worse. `industry_benchmark` also held 10 fabricated rows -- the whole
+`tests/fixtures/industry_rows_technology.py` basket under vintage `2026-01-01`,
+with `_store_a_pe_vintage()`'s three round trailing PEs of 20.0 / 25.0 / 30.0.
+Because a vintage was now present, the trailing-PE row STOPPED REFUSING and began
+publishing: `build_verdict("AAPL")` returned a PE of 44.70 against `sector avg
+25.0`, sourced as `Damodaran 2026-01-01 top-5-by-ROC sector basket (3 of 5
+industries)`. Every part of that sentence was true of the stored data and false of
+the world. Track A1 -- "load a Damodaran vintage" -- appeared satisfied when no
+vintage had ever been obtained. This was caught only because the figures were
+inspected against expectations (A1 was known to be outstanding, so a computing PE
+row was impossible) rather than by any check in the code.
+Root cause: every database guard in `tests/conftest.py` is a pytest FIXTURE.
+`_isolated_db` monkeypatches `db_service._DB_PATH` to a tmp file; `_forbid_the_real_database`
+patches `sqlite3.connect` to refuse the real path. Both are inert the moment a test
+module is imported and its helpers are called from a plain script -- the fixtures
+never run, `_DB_PATH` keeps its production default, and `_facts`/`_bars` write
+wherever it points. The protection lived with the RUNNER rather than with the code
+that performs the write, so it evaporated the moment the code was invoked any other
+way. `_forbid_the_real_database`'s own docstring anticipates the general shape of
+this ("a test that builds its own connection string bypasses it entirely") without
+covering the case where the guard itself is simply not active.
+Fix: deleted the contaminated rows -- 260 from `stocks`, 1 from
+`corporate_quote_facts`, and 10 from `industry_benchmark` (the whole `2026-01-01`
+vintage, confirmed identical to `TECHNOLOGY_ROWS` by name set and `after_tax_roc`
+to 1e-12 before deleting). Verified `stocks` back to its original 68,011, only
+AAPL remaining in `corporate_quote_facts`, `industry_benchmark` back to empty, and
+AAPL's 1,701 statement rows and 1,310 bars intact. `build_verdict("AAPL")` now
+correctly refuses trailing_pe with `no_vintage` again. Installed the refusal at IMPORT TIME in `tests/__init__.py`: it
+wraps `sqlite3.connect` and raises on any attempt to open the real database,
+armed by the same act that makes the helpers reachable rather than by the runner.
+Importing any `tests.*` module executes that file, so all 20 test modules
+containing INSERT are covered without each having to remember. It is not
+bypassable -- no test has a legitimate reason to write to the developer's real
+database, so an opt-out would only ever be reached for the wrong reason. Under
+pytest nothing changes: `_isolated_db` already redirects `_DB_PATH`, so the
+guarded path is never requested.
+
+A first attempt put a plain `refuse_the_real_database()` function in
+`conftest.py` and called it from `_facts`/`_bars`. That was discarded before
+committing, for two reasons. It covered ONE module out of twenty. And it was
+strictly weaker: it inspects `db_service._DB_PATH`, so it is blind to a test that
+builds its own connection string -- the exact bypass `_forbid_the_real_database`'s
+docstring already warns about. The connect-level guard catches both, verified
+against a module doing each.
+
+Verified by reproducing the incident exactly -- importing `_facts` and `_bars`
+outside pytest and calling them now raises instead of writing -- and by confirming
+the guard stays silent for tmp files and `:memory:`. Note the first verification
+run was misleading: the explicit helper ran first and masked the new guard, so the
+guard had to be re-tested through a module that did not call it.
+Files changed: `tests/__init__.py`.
+Prevention: a guard implemented as a pytest fixture protects the test RUN, not the
+code, and evaporates the moment the code is invoked any other way. Arm safety at
+import, not at fixture setup, so it cannot be skipped by the caller choosing a
+different entry point -- and prefer the CHOKEPOINT the operation must pass through
+(`sqlite3.connect`) over the configuration it usually reads (`_DB_PATH`), because
+only the former catches the caller who bypasses that configuration. Second
+lesson: synthetic fixtures that borrow REAL ticker
+symbols (TGT, and this module's P1/P2/P3 do not) are undetectable once loose in a
+production store -- a fixture ticker should be one that cannot be mistaken for a
+listed company. Third, and most important: contamination that makes a refusing row
+START COMPUTING is far more dangerous than contamination that breaks something. A
+broken row gets investigated; a row that begins publishing a plausible number with
+an authoritative-looking source reads as PROGRESS, and here it briefly looked like
+Track A1 had been completed. When a long-refusing signal suddenly resolves, verify
+the input arrived the way you think it did before believing the output.
