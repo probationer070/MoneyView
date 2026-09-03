@@ -18,6 +18,7 @@ from apps.api.services.acquisition.state import record_success
 from apps.api.services.acquisition.store import save_quote_facts, save_statements
 from apps.api.services.corporate_comparison import (
     METRIC_SCHEMA_VERSION,
+    _benchmark_row_for_ticker,
     _comparison_universe_key,
     _dcf_snapshot,
     acquire_comparison_datasets,
@@ -1482,3 +1483,49 @@ def test_a_live_comparison_computes_with_no_network_at_all(tmp_path, monkeypatch
     # The stored close, not a live quote.
     aapl = next(row for row in payload["rows"] if row["ticker"] == "AAPL")
     assert aapl["current_price"] == 123.45
+
+
+def _seed_index_names() -> None:
+    """The `indices` table as it really is: a display name beside each ticker."""
+    with db_service.get_db() as conn:
+        conn.executemany(
+            """INSERT INTO indices (name, ticker, date, close)
+               VALUES (?, ?, ?, ?)""",
+            [
+                ("S&P 500", "^GSPC", "2026-04-23", 7126.6),
+                ("KOSPI 200", "^KS200", "2026-04-23", 350.1),
+            ],
+        )
+
+
+def test_a_benchmark_row_is_named_for_a_reader_not_by_its_raw_symbol():
+    """Every stored snapshot has `name = "^GSPC"`, because the benchmark's name
+    is looked up in a registry built from `corporate_companies` and the
+    watchlist -- and an index ticker is in neither, so it fell back to the raw
+    symbol. The `indices` table already carries "S&P 500" beside that ticker.
+
+    Asserting on the NAME rather than on "not the ticker" is deliberate: a bug
+    that substituted any other label would still satisfy the weaker check.
+    """
+    _seed_index_names()
+    data = load_company_universe_data({})
+
+    row = _benchmark_row_for_ticker("^GSPC", data.registry, data.index_names)
+
+    assert row["name"] == "S&P 500", row
+    assert row["ticker"] == "^GSPC", row
+    assert row["group_name"] == "benchmark", row
+
+
+def test_a_benchmark_this_installation_has_never_stored_keeps_its_raw_symbol():
+    """The name comes from data, not from a table of guesses. `^KS11` is not in
+    `indices` (this installation stores `^KS200`), so it must keep showing the
+    symbol rather than being given a plausible-looking label -- the same refusal
+    discipline the verdict panel uses for a figure it cannot source.
+    """
+    _seed_index_names()
+    data = load_company_universe_data({})
+
+    row = _benchmark_row_for_ticker("^KS11", data.registry, data.index_names)
+
+    assert row["name"] == "^KS11", row
