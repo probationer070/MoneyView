@@ -19,7 +19,8 @@ Legend: `[ ]` not started, `[x]` complete
 
 ## Where things stand (2026-09-03)
 
-`renewal` @ `7bfeb84` + Track B/A2, **891 tests passing**, no skips or xfails.
+`renewal` @ `a50f255` (PR #13 merged) + Track D, **915 tests passing**, no
+skips or xfails.
 (The 862 measured at `e28be2a` on 2026-08-30, plus Track B's 4 property tests
 and its 16-case mutation harness, plus Track A2's 7 tests and 2 mutations.)
 
@@ -197,7 +198,7 @@ and CLAUDE.md section 8. Suite: 882 passing, no skips or xfails.
 
 ---
 
-## Track D - Cleanups, each small and independent  [D1, D5, D6 done 2026-09-03]
+## Track D - Cleanups  [ALL CLOSED 2026-09-03]
 
 - [x] **D1. Deleted `_validate_runnable`** (`apps/api/services/valuation_case.py`).
       Done 2026-09-03. The redundancy was verified before deleting, not assumed:
@@ -209,21 +210,56 @@ and CLAUDE.md section 8. Suite: 882 passing, no skips or xfails.
       Both tests still pass with the function gone, which is the proof. 29 lines
       removed; `_validate_by_engine` reaches both through `run_case`.
 
-- [ ] **D2. Move engine null-safety into the engine.**
-      `CaseSpec.__post_init__` and `SegmentSpec.__post_init__` dereference
-      required fields without null checks, and `valuation_case.py`'s
-      `_validate_required_fields` is a service-layer mirror that must be kept in
-      sync -- the same duplication the industry-benchmark spec argues against.
+- [x] **D2. Moved engine null-safety into the engine.** Done 2026-09-03.
+      `CaseSpec.__post_init__` and `SegmentSpec.__post_init__`
+      (`segment_valuation.py`) now guard every field they dereference
+      unconditionally with an explicit `None` check at the very top,
+      naming the field(s) in a `ValueError` -- not derived from dataclass
+      introspection, which was the service-layer mirror's blind spot
+      (`_validate_required_fields` and `_required_field_names`, both
+      deleted from `valuation_case.py`, 82 lines removed). The two tests at
+      `test_valuation_case_service.py:296-329` still pass unchanged, proving
+      the outward behaviour held. New property tests in
+      `tests/core_finance/test_segment_valuation.py` keep the introspection
+      as a TEST: they sweep every field the old predicate would have called
+      required and assert each raises `ValueError` naming itself when set to
+      `None` alone (14 `CaseSpec` fields, 7 `SegmentSpec` fields, plus two
+      non-empty-sweep guards -- 23 new tests, 892 -> 915 passing). Mutation-
+      verified: removing `shares_basic` from the engine's guard list made
+      `test_a_missing_required_case_field_raises_valueerror_naming_it[shares_basic]`
+      fail with `TypeError: '<=' not supported between instances of
+      'NoneType' and 'int'` at `self.shares_basic <= 0`, uncaught by
+      `pytest.raises(ValueError)` -- exactly the regression the guard
+      exists to prevent. Restored; `git diff --stat` on the engine file
+      showed only the intended change.
 
-- [ ] **D3. Audit local databases for stored-but-unrunnable cases.** The
-      write-time gate governs writes only; rows written before it are unaffected
-      and still fail at run. No migration and no diagnostic exists.
-      Per-developer, since `data/processed/` is gitignored.
+- [x] **D3. Audited -- nothing to migrate on this machine.** Run 2026-09-03
+      against `data/processed/moneyview.db`: **0 rows in `valuation_case`, 0 in
+      `segment`**, so no case predates the write-time gate here and there is
+      nothing unrunnable to find. The three `moneyview-e2e*.db` files have no
+      `valuation_case` table at all.
 
-- [ ] **D4. Restore route coverage of a computed drawdown.**
-      `_seed_verdict_inputs` seeds 5 bars, so every route test's drawdown row
-      refuses. The 200-with-refusals semantic is pinned; a computed row through
-      the real `load_price_bars` is not.
+      No diagnostic script was written, deliberately. With zero cases it could
+      not be exercised against real data, which makes it exactly the speculative
+      machinery CLAUDE.md section 2 rules out -- and the audit itself is a dozen
+      lines of read-only SQL. Write one when a machine turns up that actually
+      has cases. **This item is per-developer: closing it here says nothing
+      about anyone else's database.**
+
+- [x] **D4. Route coverage of a computed drawdown restored.** Done
+      2026-09-03. `test_verdict_route_serves_a_computed_drawdown_not_only_refusals`
+      seeds 260 bars falling from a peak of 200.0 to a last close of 150.0, plus
+      three flat same-industry peers, and drives a real -25% drawdown and a real
+      peer mean through the actual `load_price_bars` and `VerdictPanel`. A
+      refused row serialises `value: None`; a computed one serialises floats and
+      a comparison string, and only the refusal path had ever been exercised.
+
+      Mutation-verified, and the mutation is the point: with the route feeding
+      `build_verdict` only the last 5 bars -- so every drawdown refuses -- the
+      new test fails while `test_verdict_route_returns_a_panel` and
+      `test_verdict_route_returns_200_with_refused_rows` both keep passing.
+      They cannot see that regression, because a refusal is what they already
+      assert. That is the hole this test closes.
 
 - [x] **D5. `test_verdict_route_is_404_when_nothing_is_stored` now names its
       own 404.** Done 2026-09-03. Confirmed the defect first: FastAPI answers an
