@@ -86,6 +86,7 @@ documentation file in the repo — architecture, design, tabs, SOPs, and more.
 | Finance formula or engine module change | `guideline/sop/finance-logic.md` |
 | File moves, new modules, ownership changes | `guideline/sop/file-structure.md` |
 | Build/test/lint failure | `guideline/sop/build-error-resolver.md` |
+| New or changed test, especially one asserting a label/source/attribution | `guideline/sop/test-verification.md` |
 | Secrets, local data, generated reports, financial integrity | `guideline/sop/security-reviewer.md` |
 | Reducing complexity without changing behavior | `guideline/sop/refactor-cleaner.md` |
 | Pre-commit / final quality gate | `guideline/sop/code-reviewer.md` |
@@ -112,3 +113,31 @@ defines when and how to write the entry.
 
 **This is working if:** the same class of bug never appears twice without a
 prior `ERROR-LOG.md` entry that should have prevented it.
+
+## 8. Test Verification
+
+**A passing test is not evidence that the test works.**
+
+A test can pass because the code is correct, or because the test never reaches
+what it claims to check. A green run does not distinguish those. Before
+reporting a test as verified, break the source so the defect it targets is
+present, and confirm the test FAILS for the intended reason. Then restore the
+source. `guideline/sop/test-verification.md` defines the procedure and when it
+may be skipped.
+
+Two rules follow from it and are not negotiable:
+
+- **Never say a test is verified on the strength of a passing run.** Name the
+  mutation it was shown to catch, or call it unverified. "All tests pass"
+  answers a different question than "this test works".
+- **The gate does not depend on who wrote the code.** Whether a contributor or
+  any given model at any given version produced it, competence is not
+  observable from inside this repo and can change without notice -- a model
+  that has misread the task reports success in the same tone as one that has
+  not. So the check is executed, not trusted: a test that fails the mutation
+  matrix is bad no matter who wrote it, and one that passes is good no matter
+  who wrote it.
+
+**This is working if:** no test in this repo is trusted on the basis of having
+been observed passing, and every attribution-asserting test can name the broken
+implementation it was shown to reject.

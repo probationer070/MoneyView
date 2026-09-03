@@ -291,7 +291,20 @@ def test_verdict_route_returns_a_panel():
 
 
 def test_verdict_route_is_404_when_nothing_is_stored():
-    assert client.get("/api/v1/valuation/verdict/NOTHING").status_code == 404
+    """D5: the status code alone cannot carry this assertion.
+
+    FastAPI answers an UNREGISTERED path with exactly the same 404, so a test
+    asserting only the code passes whether the route exists or not -- it would
+    have gone on passing if the router were dropped entirely. The two are told
+    apart by the body: ours names the ticker, FastAPI's says "Not Found".
+    """
+    response = client.get("/api/v1/valuation/verdict/NOTHING")
+    assert response.status_code == 404
+    detail = response.json()["detail"]
+    assert detail == "no stored price bars for NOTHING", (
+        f"the 404 did not come from the verdict route's own guard: {detail!r}. "
+        f"FastAPI returns 'Not Found' for a path that is not registered at all."
+    )
 
 
 def test_verdict_route_returns_200_with_refused_rows():

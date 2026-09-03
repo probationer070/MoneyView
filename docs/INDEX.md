@@ -98,6 +98,7 @@ change type.
 | `security-reviewer.md` | Secrets, local data, generated reports, financial integrity |
 | `refactor-cleaner.md` | Reduce complexity without changing behavior |
 | `build-error-resolver.md` | Reproduce, diagnose, fix, and document build/test failures |
+| `test-verification.md` | Prove a test fails on a broken implementation before trusting it |
 | `harness-optimizer.md` | Keep agent sessions focused and token-efficient |
 | `suggestion.md` | DCF valuation critique and remediation source |
 | `todo.md` | Active development-track tracking |

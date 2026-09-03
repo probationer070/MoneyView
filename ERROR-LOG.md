@@ -1751,3 +1751,141 @@ still land there -- do not assume an old reason string is still describing the l
 this column"), branch on the more specific condition explicitly rather than letting one message stand
 in for both -- a reader cannot tell "nothing arrived" from "something arrived but was empty" unless the
 row says which.
+
+## 2026-09-03: A new property test asserted on the label, not the number it described
+
+Date: 2026-09-03
+Command: `python -m pytest tests/api/test_valuation_verdict.py -q` under six hand-applied
+mutations of `apps/api/services/valuation_verdict.py`, then
+`python -m pytest tests/api/test_valuation_verdict_mutations.py -q`.
+Failure: Track B added `test_the_peer_clause_names_the_same_basis_as_the_subject_clause` to
+guarantee "whatever basis the subject's `source` names, the peer clause must name the same one",
+and it was reported as verified on the strength of a passing run. It asserts only on the `source`
+STRING. Reintroducing the ND-12 defect -- sampling peers over their own trailing 252 positions
+instead of the subject's date range -- moves the published figure from `peer mean 0.0%` to
+`peer mean -90.0%` while leaving `source` byte-identical, still reading
+`peers: 3 of 3 within 2024-04-06..2025-08-21`. The test passes. The todo entry that specified it
+claimed that defect "would have failed such a test"; as implemented, it would not.
+
+**No product exposure.** The pre-existing case test
+`test_every_close_in_the_peer_mean_lies_inside_the_subject_window` does catch that mutation
+(verified by running the HEAD version of the test file against it). This was a defect in a new
+test's coverage claim, not a hole in the panel's behaviour. It is recorded because the coverage
+claim was believed and stated, and because the reasoning error is the reusable part.
+Root cause: the test was written to the WORDING of the Track B specification, which describes a
+relation between two strings ("the peer clause must name the same one"), rather than to the
+guarantee that wording exists to protect -- that the computed mean actually uses the period its
+label names. A label and the computation it describes are produced by separate code paths
+(`valuation_verdict.py:241-261`), so an assertion on one says nothing about the other. This is the
+same defect class the module's ten review rounds were about -- an attribution not earned --
+reproduced inside the test written to prevent it. Compounded by the reporting error: the test was
+called verified after being observed passing, which is not evidence about a test.
+Fix: added `test_the_peer_mean_is_computed_over_the_period_its_clause_names`, which asserts a
+computed consequence by control vs. treatment -- a peer spike planted outside the subject's window
+(on both sides, across seven subject shapes) must not move the published peer mean. The string test
+is kept as the labelling layer, with a docstring noting the pair is deliberate. Added
+`tests/api/test_valuation_verdict_mutations.py`, a checked-in harness that rebuilds
+`valuation_verdict.py` in memory with each of six known defects reintroduced and asserts the
+property test that should catch it does fail -- so this evidence is re-derived on every run instead
+of resting on someone having checked once. Mutation is in-memory only; the source file is never
+written to, so an interrupted run cannot leave a broken module in the tree.
+Files changed: `tests/api/test_valuation_verdict.py`, `tests/api/test_valuation_verdict_mutations.py`
+(new), `guideline/sop/test-verification.md` (new), `.claude/CLAUDE.md` (new section 8),
+`docs/INDEX.md`. `apps/api/services/valuation_verdict.py` was NOT changed -- the panel's behaviour
+was already correct.
+Prevention: never report a test as verified because it passed; name the broken implementation it was
+shown to reject, or call it unverified (`.claude/CLAUDE.md` section 8,
+`guideline/sop/test-verification.md`). Specifically, when a test asserts on a label, a source, or any
+other attribution, check whether the label and the thing it describes are produced by separate code
+paths -- if they are, the string assertion cannot detect them diverging, and a second test must
+assert a computed consequence: construct an input the named basis cannot reach and assert the
+published figure does not move. Note also that a `-k` filter narrow enough to run only the new tests
+will hide the fact that an older test already covers the case, which is how the severity here was
+initially overstated; confirm against the full module before concluding a defect is undefended.
+
+## 2026-09-03: Test fixture data was written into the real database, impersonating a real ticker AND a Damodaran vintage
+
+Date: 2026-09-03
+Command: an ad-hoc `python` script during Track A2 that imported helpers from
+`tests/api/test_valuation_verdict.py` and called them directly, outside pytest.
+Failure: silent, and nothing raised. 260 synthetic price bars and one
+`corporate_quote_facts` row for **TGT** were written into
+`data/processed/moneyview.db`. The bars were byte-for-byte the module's `_SERIES`
+fixture -- first date 2024-01-01, close climbing 100 -> 200 then falling to 150,
+every volume exactly 100 -- and the facts row carried the fixture's giveaway
+`fetched_at='2026-01-01'` with `industry='Semiconductors'`. TGT is a REAL ticker
+(Target Corp), so the fabricated series did not read as obviously synthetic: it
+sat in the production store impersonating a real company, and any signal computed
+for TGT would have been derived from invented prices while reporting ordinary
+provenance. Discovered only by accident, when a row count taken for an unrelated
+purpose (acquiring AAPL quote facts) showed `stocks` at 68,271 against the 68,011
+measured earlier in the same session, and `corporate_quote_facts` at 1 where it
+had been 0.
+
+The blast radius was WIDER than that first count revealed, and the second half was
+worse. `industry_benchmark` also held 10 fabricated rows -- the whole
+`tests/fixtures/industry_rows_technology.py` basket under vintage `2026-01-01`,
+with `_store_a_pe_vintage()`'s three round trailing PEs of 20.0 / 25.0 / 30.0.
+Because a vintage was now present, the trailing-PE row STOPPED REFUSING and began
+publishing: `build_verdict("AAPL")` returned a PE of 44.70 against `sector avg
+25.0`, sourced as `Damodaran 2026-01-01 top-5-by-ROC sector basket (3 of 5
+industries)`. Every part of that sentence was true of the stored data and false of
+the world. Track A1 -- "load a Damodaran vintage" -- appeared satisfied when no
+vintage had ever been obtained. This was caught only because the figures were
+inspected against expectations (A1 was known to be outstanding, so a computing PE
+row was impossible) rather than by any check in the code.
+Root cause: every database guard in `tests/conftest.py` is a pytest FIXTURE.
+`_isolated_db` monkeypatches `db_service._DB_PATH` to a tmp file; `_forbid_the_real_database`
+patches `sqlite3.connect` to refuse the real path. Both are inert the moment a test
+module is imported and its helpers are called from a plain script -- the fixtures
+never run, `_DB_PATH` keeps its production default, and `_facts`/`_bars` write
+wherever it points. The protection lived with the RUNNER rather than with the code
+that performs the write, so it evaporated the moment the code was invoked any other
+way. `_forbid_the_real_database`'s own docstring anticipates the general shape of
+this ("a test that builds its own connection string bypasses it entirely") without
+covering the case where the guard itself is simply not active.
+Fix: deleted the contaminated rows -- 260 from `stocks`, 1 from
+`corporate_quote_facts`, and 10 from `industry_benchmark` (the whole `2026-01-01`
+vintage, confirmed identical to `TECHNOLOGY_ROWS` by name set and `after_tax_roc`
+to 1e-12 before deleting). Verified `stocks` back to its original 68,011, only
+AAPL remaining in `corporate_quote_facts`, `industry_benchmark` back to empty, and
+AAPL's 1,701 statement rows and 1,310 bars intact. `build_verdict("AAPL")` now
+correctly refuses trailing_pe with `no_vintage` again. Installed the refusal at IMPORT TIME in `tests/__init__.py`: it
+wraps `sqlite3.connect` and raises on any attempt to open the real database,
+armed by the same act that makes the helpers reachable rather than by the runner.
+Importing any `tests.*` module executes that file, so all 20 test modules
+containing INSERT are covered without each having to remember. It is not
+bypassable -- no test has a legitimate reason to write to the developer's real
+database, so an opt-out would only ever be reached for the wrong reason. Under
+pytest nothing changes: `_isolated_db` already redirects `_DB_PATH`, so the
+guarded path is never requested.
+
+A first attempt put a plain `refuse_the_real_database()` function in
+`conftest.py` and called it from `_facts`/`_bars`. That was discarded before
+committing, for two reasons. It covered ONE module out of twenty. And it was
+strictly weaker: it inspects `db_service._DB_PATH`, so it is blind to a test that
+builds its own connection string -- the exact bypass `_forbid_the_real_database`'s
+docstring already warns about. The connect-level guard catches both, verified
+against a module doing each.
+
+Verified by reproducing the incident exactly -- importing `_facts` and `_bars`
+outside pytest and calling them now raises instead of writing -- and by confirming
+the guard stays silent for tmp files and `:memory:`. Note the first verification
+run was misleading: the explicit helper ran first and masked the new guard, so the
+guard had to be re-tested through a module that did not call it.
+Files changed: `tests/__init__.py`.
+Prevention: a guard implemented as a pytest fixture protects the test RUN, not the
+code, and evaporates the moment the code is invoked any other way. Arm safety at
+import, not at fixture setup, so it cannot be skipped by the caller choosing a
+different entry point -- and prefer the CHOKEPOINT the operation must pass through
+(`sqlite3.connect`) over the configuration it usually reads (`_DB_PATH`), because
+only the former catches the caller who bypasses that configuration. Second
+lesson: synthetic fixtures that borrow REAL ticker
+symbols (TGT, and this module's P1/P2/P3 do not) are undetectable once loose in a
+production store -- a fixture ticker should be one that cannot be mistaken for a
+listed company. Third, and most important: contamination that makes a refusing row
+START COMPUTING is far more dangerous than contamination that breaks something. A
+broken row gets investigated; a row that begins publishing a plausible number with
+an authoritative-looking source reads as PROGRESS, and here it briefly looked like
+Track A1 had been completed. When a long-refusing signal suddenly resolves, verify
+the input arrived the way you think it did before believing the output.

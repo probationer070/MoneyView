@@ -1,9 +1,15 @@
 import datetime as _dt
+import re
 
+import pandas as pd
 import pytest
 
 from apps.api.services.db import get_db
-from apps.api.services.valuation_verdict import DIRECTION, build_verdict
+from apps.api.services.valuation_verdict import (
+    DIRECTION,
+    _DRAWDOWN_BARS,
+    build_verdict,
+)
 
 
 def _facts(ticker, industry="Semiconductors"):
@@ -458,6 +464,194 @@ def test_the_pe_row_names_the_real_contributor_count():
     assert "3 of 5 industries" in pe["source"]
 
 
+def _statement_bundle(income=None):
+    """A statement bundle shaped like `acquisition.store.load_statement_bundle`.
+
+    Mirrors `tests/api/test_equity_bridge.py::_bundle`: only `income` varies
+    across these tests, and the trailing-PE row reads nothing else out of a
+    bundle, but the shape must match what the real loader returns (a dict with
+    all six statement keys, `info`, `fetched_at`) so a test cannot pass against
+    a shape the production loader never produces.
+    """
+    empty = pd.DataFrame()
+    return {
+        "ticker": "TEST",
+        "income": income if income is not None else empty,
+        "balance": empty,
+        "cashflow": empty,
+        "quarterly_income": empty,
+        "quarterly_balance": empty,
+        "quarterly_cashflow": empty,
+        "info": {},
+        "fetched_at": None,
+    }
+
+
+def _aapl_statements_loader(ticker=None):
+    from tests.fixtures.aapl_income_annual import AAPL_INCOME_ANNUAL
+
+    return _statement_bundle(AAPL_INCOME_ANNUAL)
+
+
+# The subject's last close and its date, over the shared `_SERIES` fixture --
+# what `dated_closes[-1]` resolves to for every test below that stores `_SERIES`
+# for TGT, so the PE row's expected price is derived rather than hardcoded.
+_SERIES_PRICE = _series_close(_SERIES_BARS - 1)
+_SERIES_PRICE_DATE = _date(_SERIES_BARS - 1)
+
+
+def test_the_pe_row_computes_from_diluted_eps_and_names_both_bases():
+    """The row this whole track exists to close: with a real AAPL-shaped bundle
+    and a resolved sector PE, the row must compute rather than refuse, and its
+    `source` must name both the subject's own PE (ND-A: a row naming only what
+    it was compared against leaves its own number unattributed) and the
+    Damodaran clause the sibling test already pins verbatim."""
+    _store_a_pe_vintage()
+    _facts("TGT")
+    _bars("TGT", _SERIES)
+
+    panel = build_verdict("TGT", statements_loader=_aapl_statements_loader)
+    pe = panel["rows"]["trailing_pe"]
+
+    assert pe["value"] == pytest.approx(_SERIES_PRICE / 7.46)
+    assert pe["reason"] is None
+    assert pe["comparison"] == "sector avg 25.0"
+    assert pe["source"] == (
+        f"own PE: Diluted EPS 7.46 for FY2025-09-30, price {_SERIES_PRICE:.2f} "
+        f"as of {_SERIES_PRICE_DATE}; Damodaran 2026-01-01 top-5-by-ROC sector "
+        f"basket (3 of 5 industries)"
+    )
+
+
+def test_diluted_eps_is_preferred_over_basic_even_though_both_are_present():
+    """`_EPS_LABELS = ("Diluted EPS",)` is deliberate: more shares outstanding
+    means a LOWER diluted EPS than basic, which means a HIGHER price/EPS -- the
+    conservative direction for a panel testing undervaluation. The AAPL fixture
+    carries both (7.46 diluted, 7.49 basic for FY2025); asserting on the NUMBER
+    rather than the label is the point -- a bug that read Basic EPS would still
+    produce a plausible-looking PE, just the wrong one."""
+    _store_a_pe_vintage()
+    _facts("TGT")
+    _bars("TGT", _SERIES)
+
+    panel = build_verdict("TGT", statements_loader=_aapl_statements_loader)
+    value = panel["rows"]["trailing_pe"]["value"]
+
+    # The assertion carries its own diagnosis, not just two floats. A bare
+    # `assert a == b` fails with `assert 20.026... == 20.107...`, which names
+    # nothing -- and the mutation harness matches on this message, so an
+    # unnamed cause would let it certify a guarantee it had stopped checking.
+    assert value == pytest.approx(_SERIES_PRICE / 7.46), (
+        f"the PE row used an EPS other than the diluted 7.46: it published "
+        f"{value}, and basic EPS (7.49) would give {_SERIES_PRICE / 7.49}"
+    )
+    assert value != pytest.approx(_SERIES_PRICE / 7.49), (
+        f"the PE row published exactly the basic-EPS answer ({value}), so it "
+        f"read Basic EPS where Diluted EPS is required"
+    )
+
+
+def test_the_newest_period_with_a_positive_eps_wins_skipping_a_nan_newest_period():
+    """Yahoo's own AAPL bundle reports 2021-09-30 as all-NaN (confirmed
+    2026-09-03, see `tests/fixtures/aapl_income_annual.py`); a caller reading
+    "the newest period with an EPS" must skip it rather than crash on it. Here
+    the NEWEST period itself (2026-09-30) is NaN, so the row must fall through
+    to 2025-09-30 instead of refusing or raising."""
+    _store_a_pe_vintage()
+    _facts("TGT")
+    _bars("TGT", _SERIES)
+
+    frame = pd.DataFrame(
+        {"2026-09-30": [None], "2025-09-30": [7.46]}, index=["Diluted EPS"]
+    )
+    frame.columns = pd.to_datetime(frame.columns)
+
+    panel = build_verdict(
+        "TGT", statements_loader=lambda t: _statement_bundle(frame)
+    )
+    pe = panel["rows"]["trailing_pe"]
+    assert pe["reason"] is None
+    assert pe["value"] == pytest.approx(_SERIES_PRICE / 7.46)
+    assert "FY2025-09-30" in pe["source"]
+
+
+def test_a_loss_making_eps_is_refused_not_published_as_a_negative_pe():
+    """The same argument `price_signals.trailing_pe_series` makes for omitting a
+    loss-making year rather than emitting a negative PE that would sort as
+    "cheap" in any ascending comparison."""
+    _store_a_pe_vintage()
+    _facts("TGT")
+    _bars("TGT", _SERIES)
+
+    frame = pd.DataFrame({"2025-09-30": [-1.50]}, index=["Diluted EPS"])
+    frame.columns = pd.to_datetime(frame.columns)
+
+    panel = build_verdict(
+        "TGT", statements_loader=lambda t: _statement_bundle(frame)
+    )
+    pe = panel["rows"]["trailing_pe"]
+    assert pe["value"] is None
+    assert pe["reason"].startswith("no_positive_eps")
+    assert "2025-09-30" in pe["reason"]
+    assert pe["comparison"] == "sector avg 25.0"
+    assert "own PE:" in pe["source"]
+
+
+def test_no_stored_statements_refuses_naming_that_and_keeps_the_sector_comparison():
+    """A ticker with no acquired statements must refuse by name, not silently --
+    and the sector average is real information regardless, so `comparison` must
+    survive the refusal exactly like every other refused row in this panel."""
+    _store_a_pe_vintage()
+    _facts("TGT")
+    _bars("TGT", _SERIES)
+
+    panel = build_verdict("TGT", statements_loader=lambda t: None)
+    pe = panel["rows"]["trailing_pe"]
+    assert pe["value"] is None
+    assert pe["reason"] == "no_statements: TGT has no stored statements"
+    assert pe["comparison"] == "sector avg 25.0"
+    assert "own PE:" in pe["source"]
+    assert "no statements stored for TGT" in pe["source"]
+
+
+def test_the_pe_row_still_refuses_no_sector_pe_when_the_vintage_has_no_trailing_pe():
+    """Unchanged from before A2: this refusal is gated on the SECTOR side
+    (`benchmark.columns.get("trailing_pe") is None`) and never reaches the EPS
+    read at all, so wiring EPS must not touch it. Re-asserts
+    `test_the_pe_row_refuses_when_the_vintage_has_no_trailing_pe`'s behaviour
+    with a statements_loader that would raise if it were ever called, proving
+    the EPS path is genuinely never reached on this branch."""
+    from apps.api.services.industry_benchmark_store import store_vintage
+    from tests.fixtures.industry_rows_technology import TECHNOLOGY_ROWS
+
+    store_vintage("2026-01-01", TECHNOLOGY_ROWS)
+    _facts("TGT")
+    _bars("TGT", _SERIES)
+
+    def unexpected_loader(ticker):
+        raise AssertionError("statements_loader must not be called when no_sector_pe refuses first")
+
+    panel = build_verdict("TGT", statements_loader=unexpected_loader)
+    assert panel["rows"]["trailing_pe"]["reason"].startswith("no_sector_pe")
+
+
+def test_the_pe_row_still_refuses_when_no_benchmark_vintage_is_loaded():
+    """Unchanged from before A2: `benchmark is None` (no vintage loaded at all)
+    is the OTHER pre-existing refusal ground, gated even earlier than
+    `no_sector_pe`, and must also never reach the EPS read."""
+    _facts("TGT")
+    _bars("TGT", _SERIES)
+
+    def unexpected_loader(ticker):
+        raise AssertionError("statements_loader must not be called when benchmark is None")
+
+    panel = build_verdict("TGT", statements_loader=unexpected_loader)
+    pe = panel["rows"]["trailing_pe"]
+    assert pe["reason"] == "no_vintage: no industry benchmark data has been loaded"
+    assert pe["value"] is None
+    assert pe["source"] == "Damodaran"
+
+
 def test_the_volume_source_counts_bars_not_days(monkeypatch):
     """ND-1: the window is a position count in the NULL-filtered series, so
     labelling it `252d` is false whenever any volume was dropped.
@@ -718,3 +912,458 @@ def test_every_close_in_the_peer_mean_lies_inside_the_subject_window():
     panel = build_verdict("TGT")["rows"]["drawdown"]
     assert panel["comparison"] is None
     assert "peers: 0 of 3 within" in panel["source"]
+
+
+# --- Track B: properties over the ASSEMBLED sentence -------------------------
+#
+# `_own_window_source` concatenates four independently-gated clauses, and every
+# defect this module has shipped belonged to one class: a clause wearing an
+# attribution it had not earned. Each clause was individually true; nothing
+# owned the sentence they formed together. The two properties below own it, so
+# a fifth signal cannot reintroduce the class silently.
+
+_DATE = r"\d{4}-\d{2}-\d{2}"
+
+# A parenthetical stating dates must NAME the noun those dates belong to. The
+# regex for each noun is anchored at the END of the text preceding the
+# parenthetical, so matching proves two things at once: the named clause exists,
+# and the parenthetical sits directly after it rather than after a sibling. The
+# capture is the bar count that clause claims, which must fit inside the span.
+_SPAN_SUBJECTS = {
+    "window": re.compile(r"last (\d+) of \d+ bars$"),
+    "baseline": re.compile(r"\d+/(\d+) bars$"),
+}
+
+_SPAN = re.compile(rf"(\w+) spans ({_DATE}) to ({_DATE})")
+
+
+def _assert_parentheticals_attach(source: str) -> None:
+    """Every parenthetical in `source` describes the clause it follows."""
+    for match in re.finditer(r"\(([^()]*)\)", source):
+        inside = match.group(1)
+        before = source[: match.start()].rstrip()
+        assert before, f"a parenthetical opens the sentence, describing nothing: {source!r}"
+        if not re.search(_DATE, inside):
+            continue  # a count or a figure, not a span; nothing to attach dates to
+        span = _SPAN.fullmatch(inside)
+        assert span, (
+            f"a parenthetical states dates without naming the clause they belong "
+            f"to: ({inside}) in {source!r}"
+        )
+        subject, start, end = span.groups()
+        clause = _SPAN_SUBJECTS.get(subject)
+        assert clause is not None, (
+            f"({inside}) names a subject no clause in this panel defines: {source!r}"
+        )
+        named = clause.search(before)
+        assert named is not None, (
+            f"({inside}) does not follow the {subject} clause it describes; it "
+            f"follows {before[-45:]!r}: {source!r}"
+        )
+        days = (_dt.date.fromisoformat(end) - _dt.date.fromisoformat(start)).days + 1
+        count = int(named.group(1))
+        assert count <= days, (
+            f"the {subject} clause claims {count} bars inside a {days}-day span: {source!r}"
+        )
+
+
+def _subject_window_dates(subject):
+    """The dates the subject's drawdown window actually spans, plus its count.
+
+    Derived from `_DRAWDOWN_BARS`, never from the literal 252. The module's own
+    `_PEER_COVERAGE` comment anticipates that window being shortened, and a
+    test that hardcodes today's value would then blame the code for a change in
+    a constant -- or, worse, keep passing while its fixture no longer reaches
+    what it claims to test.
+    """
+    dated = [b["date"] for b in subject if b["close"] is not None]
+    window = dated[-_DRAWDOWN_BARS:]
+    return window[0], window[-1], len(window)
+
+
+def _shaped_bars(n, *, null_close=None, null_volume=None, peak_at=None, start_day=0, step=1):
+    """Bars with NULLs punched in on a stride, so kept bars are non-contiguous.
+
+    Only a sparse series can separate a bar COUNT from a calendar SPAN, which
+    is the distinction every defect in this class blurred.
+    """
+    # A peak planted on a position the NULL stride blanks is silently erased,
+    # leaving a fixture that is entirely flat while still being named e.g.
+    # "sparse, peak outside the window" -- it would assert nothing about a peak
+    # and pass. `_shaped_bars(900, null_close=3, peak_at=10)` is exactly that:
+    # 10 % 3 is truthy, so the peak becomes None. Refuse the combination rather
+    # than emit the misleading shape.
+    assert peak_at is None or null_close is None or peak_at % null_close == 0, (
+        f"peak_at={peak_at} falls on a position blanked by null_close="
+        f"{null_close} ({peak_at} % {null_close} != 0), so the peak would be "
+        f"silently dropped and this fixture would be flat despite its name"
+    )
+    bars = []
+    for i in range(n):
+        close = 1000.0 if peak_at == i else 100.0
+        if null_close is not None and i % null_close:
+            close = None
+        volume = 10
+        if null_volume is not None and i % null_volume:
+            volume = None
+        bars.append({"date": _date(start_day + i * step), "close": close, "volume": volume})
+    return bars
+
+
+# Each shape exists to light up a different combination of clauses: a span or
+# no span, a full-history parenthetical or none, a computed row or a refusal.
+# The interaction cases (sparse AND truncated AND peaked) are the ones that
+# produced defects; the plain ones are here so a fix cannot pass by suppressing
+# a clause outright.
+# The peer fixture used by the computed-consequence property below. Both
+# values are derived from `_DRAWDOWN_BARS` at the point of use rather than
+# written as literals -- see that test for why a hardcoded spike day made it
+# pass while asserting nothing.
+_PEER_SPAN_BARS = 1200
+_AFTER_SPIKE_DAY = _PEER_SPAN_BARS - _DRAWDOWN_BARS // 2
+_BEFORE_SPIKE_DAY = 0
+
+_SENTENCE_SHAPES = [
+    ("contiguous, window truncates history", _shaped_bars(300)),
+    ("contiguous, window exactly filled", _shaped_bars(252)),
+    ("sparse closes", _shaped_bars(600, null_close=2)),
+    ("sparse volumes", _shaped_bars(400, null_volume=2)),
+    ("sparse closes and volumes", _shaped_bars(700, null_close=3, null_volume=2)),
+    ("peak outside the window", _shaped_bars(600, peak_at=10)),
+    ("sparse, peak outside the window", _shaped_bars(800, null_close=2, peak_at=10)),
+    ("sparse, peak inside the window", _shaped_bars(600, null_close=2, peak_at=580)),
+    ("dated on a stride, so bars and days differ", _shaped_bars(300, step=3)),
+    ("too little history", _shaped_bars(100)),
+    ("no bars at all", []),
+    ("no usable close", [{"date": _date(i), "close": None, "volume": 10} for i in range(300)]),
+    ("no usable volume", [{"date": _date(i), "close": 100.0, "volume": None} for i in range(300)]),
+]
+
+
+def _store_a_pe_vintage():
+    """A vintage whose `trailing_pe` resolves, so the PE row emits its own
+    parenthetical -- `(N of 5 industries)` -- and enters the sweep too."""
+    import dataclasses
+
+    from apps.api.services.industry_benchmark_store import store_vintage
+    from tests.fixtures.industry_rows_technology import TECHNOLOGY_ROWS
+
+    pe_by_name = {
+        "Computers/Peripherals": 20.0,
+        "Semiconductor Equip": 25.0,
+        "Computer Services": 30.0,
+    }
+    store_vintage(
+        "2026-01-01",
+        [
+            dataclasses.replace(row, values={**row.values, "trailing_pe": pe_by_name.get(row.name)})
+            for row in TECHNOLOGY_ROWS
+        ],
+    )
+
+
+def test_every_parenthetical_attaches_to_the_clause_it_describes():
+    """B1: the generalisation of
+    `test_no_source_string_ever_claims_more_bars_than_its_span_can_hold`.
+
+    That test binds a span to a count POSITIONALLY -- the last count before it
+    -- which is how a reader parses the sentence but not how the sentence is
+    built. This one binds by NAME: a `(window spans ...)` is checked against the
+    window clause's own count, and is required to sit directly after that
+    clause. It also covers every row of the panel rather than the drawdown row
+    alone, and every parenthetical rather than spans alone.
+
+    The shipped defect it forbids: `550 of 800 stored bars have a close (spans
+    2024-10-25 to 2026-03-09)` -- an unlabelled span, attached by position to a
+    clause it did not describe, asserting 550 daily bars across 500 days.
+    """
+    _store_a_pe_vintage()
+    for t in ("TGT", "P1", "P2", "P3"):
+        _facts(t)
+    # Dense peers spanning every shape's calendar, so peer clauses appear and
+    # the drawdown row is not refused before the sentence is even assembled.
+    peers = _shaped_bars(1200)
+
+    for name, subject in _SENTENCE_SHAPES:
+        panel = build_verdict(
+            "TGT",
+            bars_loader=lambda t, limit=None, s=subject: s if t == "TGT" else peers,
+        )
+        for row_name, row in panel["rows"].items():
+            source = row["source"]
+            assert source, f"{name}: the {row_name} row named no source"
+            try:
+                _assert_parentheticals_attach(source)
+            except AssertionError as exc:
+                raise AssertionError(f"{name} / {row_name} row: {exc}") from None
+
+
+def test_the_stale_price_clause_names_the_dates_it_actually_priced_against():
+    """B1, unparenthesised half: a date-bearing clause that B1 structurally
+    cannot see.
+
+    `build_verdict` appends `price as of A, latest bar B` when the newest bar's
+    close is NULL, so the latest USABLE price is an older bar's. It is a clause
+    of the same assembled sentence Track B set out to own, but it carries its
+    dates without parentheses -- so
+    `test_every_parenthetical_attaches_to_the_clause_it_describes` skips it
+    entirely, and the peer/window matcher in its sibling does not match it
+    either. It could drift to the wrong date, or attach after the peer clause it
+    does not describe, with every other property test green. Found in review of
+    the Track B work itself, which had claimed the sentence was owned.
+
+    The dates are derived from the fixture bars, never from the source string.
+    """
+    for t in ("TGT", "P1", "P2", "P3"):
+        _facts(t)
+    peers = _shaped_bars(_PEER_SPAN_BARS)
+
+    checked = 0
+    for name, subject in _SENTENCE_SHAPES:
+        panel = build_verdict(
+            "TGT",
+            bars_loader=lambda t, limit=None, s=subject: s if t == "TGT" else peers,
+        )
+        usable = [b["date"] for b in subject if b["close"] is not None]
+        stale = subject and usable and subject[-1]["date"] != usable[-1]
+
+        for row_name, row in panel["rows"].items():
+            source = row["source"]
+            match = re.search(
+                rf"price as of ({_DATE}), latest bar ({_DATE})", source
+            )
+            if match is None:
+                assert not stale or row_name != "drawdown" or row["reason"] is not None, (
+                    f"{name}: the newest bar's close is NULL, so the drawdown "
+                    f"row priced against an older bar, but it says nothing "
+                    f"about that: {source!r}"
+                )
+                continue
+            priced_on, latest_bar = match.groups()
+            assert priced_on == usable[-1], (
+                f"{name} / {row_name} row: claims it priced as of {priced_on}, "
+                f"but the newest usable close is {usable[-1]}: {source!r}"
+            )
+            assert latest_bar == subject[-1]["date"], (
+                f"{name} / {row_name} row: names {latest_bar} as the latest bar, "
+                f"but the latest stored bar is {subject[-1]['date']}: {source!r}"
+            )
+            # The clause qualifies the subject's own price, so it must not sit
+            # between the window clause and the peer clause it would then read
+            # as describing.
+            if "peers:" in source:
+                assert source.index("price as of") > source.index("peers:"), (
+                    f"{name} / {row_name} row: the stale-price clause sits "
+                    f"before the peer clause, reading as a qualifier on it: "
+                    f"{source!r}"
+                )
+            checked += 1
+
+    assert checked, (
+        "no shape in _SENTENCE_SHAPES produced a stale-price clause, so this "
+        "property asserted nothing -- add a shape whose newest bar has a NULL "
+        "close"
+    )
+
+
+def test_the_peer_mean_is_computed_over_the_period_its_clause_names():
+    """B2, computed half: the half its sibling below can only check by label.
+
+    That sibling reads only the SOURCE STRING, so it cannot see a peer mean
+    computed over the wrong period but still labelled with the right one.
+    Proven by mutation: swapping the peer-sampling loop to read each peer's
+    own trailing 252 positions instead of the subject's date range moves the
+    published peer mean from `peer mean 0.0%` to `peer mean -90.0%` while
+    leaving `source` -- including its `peers: 3 of 3 within ...` clause --
+    byte-identical. The sibling passes under that mutation; this test fails
+    it.
+
+    This is NOT the only defence against that mutation:
+    `test_every_close_in_the_peer_mean_lies_inside_the_subject_window`
+    catches it too, from one hand-built case where the peers lie entirely
+    before the subject. What this adds is generality -- seven subject shapes,
+    both sides of the window, sparse and contiguous -- so the guarantee does
+    not rest on one fixture happening to be shaped the right way.
+
+    Checked by control vs. treatment, not by reading a label: a peer close
+    the named period structurally cannot reach must not be able to move the
+    published mean.
+    """
+    for t in ("TGT", "P1", "P2", "P3"):
+        _facts(t)
+
+    # Peers span days 0..`_PEER_SPAN_BARS`-1, dense (no NULLs), so their own
+    # trailing `_DRAWDOWN_BARS` positions -- the exact place the buggy rule
+    # reads from -- are the last `_DRAWDOWN_BARS` days of that range.
+    #
+    # The spike day is DERIVED, not the literal 1000 it started as. With a
+    # 100-bar window that literal falls outside the peers' trailing window
+    # too, so neither the correct nor the buggy rule reaches it, control
+    # equals treatment, and this test passes while asserting nothing.
+    # Verified: at `_DRAWDOWN_BARS = 100` the hardcoded version went green
+    # and silent. Landing the spike mid-way into the peers' trailing window
+    # keeps it reachable by the buggy rule for any window size the subjects
+    # below leave room for.
+    flat_peers = _shaped_bars(_PEER_SPAN_BARS)
+
+    def peers_with_spike(day):
+        return _shaped_bars(_PEER_SPAN_BARS, peak_at=day)
+
+    def comparison_for(subject, peers):
+        panel = build_verdict(
+            "TGT",
+            bars_loader=lambda t, limit=None, s=subject, p=peers: s if t == "TGT" else p,
+        )
+        return panel["rows"]["drawdown"]["comparison"]
+
+    subjects = [
+        ("contiguous", _shaped_bars(300)),
+        ("window exactly filled", _shaped_bars(252)),
+        ("sparse closes", _shaped_bars(600, null_close=2)),
+        ("sparse closes, long history", _shaped_bars(900, null_close=3)),
+        ("dated on a stride", _shaped_bars(300, step=3)),
+        ("peak outside the window", _shaped_bars(600, peak_at=10)),
+        ("sparse, peak outside the window", _shaped_bars(800, null_close=2, peak_at=10)),
+    ]
+
+    # If this fails, the fixture no longer reaches where the buggy rule reads
+    # and the whole test would pass vacuously. Asserted once, outside the loop,
+    # because it is a property of the peer fixture alone.
+    assert _AFTER_SPIKE_DAY >= _PEER_SPAN_BARS - _DRAWDOWN_BARS, (
+        f"the planted spike (day {_AFTER_SPIKE_DAY}) has fallen outside the "
+        f"peers' own trailing {_DRAWDOWN_BARS} positions "
+        f"({_PEER_SPAN_BARS - _DRAWDOWN_BARS}..{_PEER_SPAN_BARS - 1}), so the "
+        f"defect this test exists to catch can no longer move the mean and "
+        f"the test would pass while asserting nothing. Widen _PEER_SPAN_BARS."
+    )
+
+    for name, subject in subjects:
+        control = comparison_for(subject, flat_peers)
+        assert control is not None, (
+            f"{name}: the control comparison refused -- nothing real to "
+            f"compare the treatment against"
+        )
+
+        start, end, _held = _subject_window_dates(subject)
+
+        # AFTER: the spike sits after this subject's window ends and inside
+        # the peers' own trailing window -- the exact place the buggy rule
+        # reaches and the correct rule cannot. The precondition is asserted
+        # rather than assumed, so a changed window size fails here, naming
+        # the reason, instead of quietly making the comparison vacuous.
+        assert _date(_AFTER_SPIKE_DAY) > end, (
+            f"{name}: the planted spike (day {_AFTER_SPIKE_DAY}) is no longer "
+            f"after this subject's window, which ends {end} -- the correct "
+            f"rule would legitimately include it, so this is not a valid probe"
+        )
+        after = comparison_for(subject, peers_with_spike(_AFTER_SPIKE_DAY))
+        assert after == control, (
+            f"{name}: a peer spike after the subject's window moved the "
+            f"published peer mean from {control!r} to {after!r}"
+        )
+
+        # BEFORE: the same property on the other side of the window. It does
+        # not apply to a subject whose window covers its ENTIRE history --
+        # there the window opens on the subject's first close, so day 0 is
+        # the window's own first day rather than before it, and a day-0 peer
+        # spike legitimately belongs in that comparison. Derived from the
+        # dates rather than naming a fixture by label, so adding a shape (or
+        # changing the window size) cannot leave a stale exemption behind.
+        first_close_date = next(b["date"] for b in subject if b["close"] is not None)
+        if start == first_close_date:
+            continue
+        assert _date(_BEFORE_SPIKE_DAY) < start, (
+            f"{name}: the planted spike (day {_BEFORE_SPIKE_DAY}) is not "
+            f"before this subject's window, which opens {start}"
+        )
+        before = comparison_for(subject, peers_with_spike(_BEFORE_SPIKE_DAY))
+        assert before == control, (
+            f"{name}: a peer spike before the subject's window moved the "
+            f"published peer mean from {control!r} to {before!r}"
+        )
+
+
+def test_the_peer_clause_names_the_same_basis_as_the_subject_clause():
+    """B2: subject and peers must name ONE basis, not two that happen to agree.
+
+    A drawdown is a fall from a peak taken over a period, so a subject measured
+    over one period beside peers measured over another produces a real number,
+    a real label and a meaningless comparison. The expected period is derived
+    here from the fixture bars, not from the code under test.
+
+    Both cross-basis defects found so far fail this: peers sampled over their
+    OWN last 252 positions named no shared period at all (there was no `within`
+    clause to match the subject's window against), and a `252d` label sat on a
+    window spanning 502 days -- a count of bars wearing the unit of days.
+
+    This checks the STRING only. The sibling test above it,
+    `test_the_peer_mean_is_computed_over_the_period_its_clause_names`, checks
+    the computed CONSEQUENCE -- that the published number actually rests on
+    the period this clause names. The pair is deliberate; neither subsumes
+    the other.
+    """
+    for t in ("TGT", "P1", "P2", "P3"):
+        _facts(t)
+
+    # The peer shapes vary independently of the subject's: dense, sparse, and
+    # one whose own most recent window sits outside the subject's period.
+    # Whatever they are, the basis the sentence names is the subject's.
+    peer_shapes = {
+        "P1": _shaped_bars(1200),
+        "P2": _shaped_bars(1200, null_close=2),
+        "P3": _shaped_bars(400, start_day=800),
+    }
+    subjects = [
+        ("contiguous", _shaped_bars(300)),
+        ("window exactly filled", _shaped_bars(252)),
+        ("sparse closes", _shaped_bars(600, null_close=2)),
+        ("sparse closes, long history", _shaped_bars(900, null_close=3)),
+        ("dated on a stride", _shaped_bars(300, step=3)),
+        ("peak outside the window", _shaped_bars(600, peak_at=10)),
+        ("sparse, peak outside the window", _shaped_bars(800, null_close=2, peak_at=10)),
+    ]
+
+    for name, subject in subjects:
+        panel = build_verdict(
+            "TGT",
+            bars_loader=lambda t, limit=None, s=subject: s if t == "TGT" else peer_shapes[t],
+        )
+        row = panel["rows"]["drawdown"]
+        source = row["source"]
+        assert row["reason"] is None, f"{name}: {source}"
+
+        start, end, held = _subject_window_dates(subject)
+        peer_clause = re.search(rf"peers: \d+ of \d+ within ({_DATE})\.\.({_DATE})", source)
+        assert peer_clause, (
+            f"{name}: the peer clause names no period, so nothing ties it to the "
+            f"subject's window: {source!r}"
+        )
+        assert peer_clause.groups() == (start, end), (
+            f"{name}: peers were compared over {peer_clause.groups()} while the "
+            f"subject's window is {(start, end)}: {source!r}"
+        )
+
+        # The subject must name its own basis too -- `value` rests on the window,
+        # not on the peer set, and a row that names only what it was compared
+        # against leaves its own number unattributed (ND-A).
+        subject_clause = re.search(r"own window: last (\d+) of \d+ bars", source)
+        assert subject_clause, f"{name}: the subject named no window: {source!r}"
+        assert int(subject_clause.group(1)) == held, f"{name}: {source!r}"
+
+        # When the window states its span, it must be the SAME period the peers
+        # were drawn from; two clauses naming one basis cannot disagree.
+        stated = re.search(rf"window spans ({_DATE}) to ({_DATE})", source)
+        if stated:
+            assert stated.groups() == (start, end), (
+                f"{name}: the window clause and the peer clause name different "
+                f"periods: {source!r}"
+            )
+
+        # No clause anywhere in the panel may label a bar count with a day unit.
+        # `252d` on a 502-day window was exactly that: a basis named in days and
+        # measured in NULL-filtered positions.
+        for row_name, other in panel["rows"].items():
+            assert not re.search(r"\b\d+d\b", other["source"]), (
+                f"{name} / {row_name} row: a count wears a day unit it did not "
+                f"measure: {other['source']!r}"
+            )

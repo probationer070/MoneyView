@@ -17,9 +17,17 @@ Legend: `[ ]` not started, `[x]` complete
 
 ---
 
-## Where things stand (2026-08-30)
+## Where things stand (2026-09-03)
 
-`renewal` @ `e28be2a`, **862 tests passing**, no skips or xfails.
+`renewal` @ `7bfeb84` + Track B/A2, **891 tests passing**, no skips or xfails.
+(The 862 measured at `e28be2a` on 2026-08-30, plus Track B's 4 property tests
+and its 16-case mutation harness, plus Track A2's 7 tests and 2 mutations.)
+
+**Local-data caveat for anyone running the panel by hand:** `corporate_quote_facts`
+is still EMPTY, so `resolve_peers` and `resolve_for_ticker` both fail for every
+ticker -- `build_verdict("AAPL")` today refuses drawdown and trailing_pe with
+`no_industry: AAPL`, and only the volume row computes. Acquiring quote facts is a
+separate network call; nothing in A2 depends on it.
 
 Shipped and merged: the segment build-up engine; the write-time runnability
 gate; the industry-benchmark chain (data, mapping, conservative-case generator)
@@ -38,31 +46,83 @@ follow-ups below.
 The verdict panel's `trailing_pe` row refuses on **two independent grounds**.
 Each is separately closable, and the row stays refused until both are.
 
-- [ ] **A1. Load a Damodaran vintage carrying the price columns.**
-      `trailing_pe`, `price_to_book`, `ev_sales` and `stdev_price` already exist
-      in `industry_benchmark` and in `BENCHMARK_COLUMNS` as `required=False`,
-      and `parse_workbook` reads them by header text. No code change needed:
-      obtain the workbook and run `store_vintage(vintage, parse_workbook(path))`.
-      Until then the row refuses `no_sector_pe: <vintage> has no trailing_pe`.
-      Note the source workbook is NOT in the repo -- only test fixtures are.
+- [ ] **A1. Load a Damodaran vintage carrying the price columns.** STILL OPEN --
+      blocked only on obtaining the file, which is not in the repo and cannot be
+      produced from anything here. No code change needed:
 
-- [ ] **A2. Confirm Yahoo's EPS line-item labels, then wire the arithmetic.**
-      `trailing_pe_series` and `pe_change`
-      (`packages/core_finance/price_signals.py`) are written and fully tested but
-      have **no caller**, deliberately: the label names cannot be confirmed
-      without inspecting a real stored bundle, and guessing them was ruled worse
-      than refusing honestly. The row emits `eps_not_wired` today.
-      Method: read `corporate_statements` for a ticker whose statements were
-      actually acquired, find the income-statement rows carrying EPS (or derive
-      it from net income / diluted shares), fixture them, then wire the PE row
-      in `apps/api/services/valuation_verdict.py`.
+          from apps.api.services.db import init_db
+          from apps.api.services.industry_benchmark_store import (
+              parse_workbook, store_vintage,
+          )
+          init_db()   # see below -- older local DBs have no industry_benchmark table
+          store_vintage("2026-01-01", parse_workbook(r"path\to\workbook.xlsx"))
+
+      The vintage key is the PUBLICATION date, not the fetch date. `parse_workbook`
+      reads sheet `"Industry Average Beta (US)"` and locates columns by HEADER
+      TEXT, so column order does not matter. It requires `Industry Name`,
+      `Number of firms`, and the nine `required=True` headers in
+      `BENCHMARK_COLUMNS`. **`Trailing PE` is `required=False`**, so a workbook
+      lacking it parses successfully and silently leaves the column `None` --
+      which reproduces exactly the `no_sector_pe` refusal this task exists to
+      close. Check the workbook actually carries `Trailing PE` before loading.
+      `tests/fixtures/damodaran_industries.txt` pins the 2026 vintage's 99
+      industry names verbatim (including the upstream "Heathcare" misspelling)
+      if you need to confirm a candidate file is the right dataset.
+
+      Verified 2026-09-03: `data/processed/moneyview.db` predates this feature
+      and had no `industry_benchmark` table at all; `init_db()` has since created
+      it (additively -- it is `CREATE TABLE IF NOT EXISTS` plus
+      `ALTER TABLE ADD COLUMN`, no DROP or DELETE anywhere).
+
+- [x] **A2. Yahoo's EPS labels confirmed, and the arithmetic wired.**
+      Done 2026-09-03. A real AAPL bundle was fetched and persisted
+      (`corporate_statements`, 1701 rows), which settled the labels by
+      inspection rather than by guessing. Yahoo's annual income statement
+      reports **`Diluted EPS`** directly -- 7.46 / 6.08 / 6.13 / 6.11 for
+      FY2025-2022, with FY2021 all-NaN -- alongside `Basic EPS`, `Net Income`,
+      `Net Income Common Stockholders` and `Diluted Average Shares`. The real
+      rows are fixtured in `tests/fixtures/aapl_income_annual.py`; the LABELS
+      are the point of that fixture, not the values.
+
+      `_EPS_LABELS = ("Diluted EPS",)` with no fallback to basic. Diluted is
+      deliberate and conservative: more shares means lower EPS means a HIGHER
+      PE, so the stock looks more expensive -- the safe direction for a panel
+      testing UNDERvaluation. Falling back to basic would trade the conservative
+      figure for the anti-conservative one on exactly the tickers where diluted
+      is missing, which is worse than refusing.
+
+      The row now publishes `price / eps` from the newest annual period with a
+      strictly positive EPS, skipping NaN periods and loss-making years (a
+      negative PE sorts as "cheap" in any ascending comparison). `source` names
+      BOTH bases subject-first, mirroring the drawdown row's ND-A fix:
+      `own PE: Diluted EPS 7.46 for FY2025-09-30, price 333.43 as of 2026-07-30;
+      Damodaran <vintage> top-5-by-ROC sector basket (3 of 5 industries)`.
+      `comparison` keeps the sector average even on a refused row -- the sector
+      figure is real information regardless of whether the subject's PE resolved.
+      New refusals: `no_statements`, `no_positive_eps` (naming the periods it
+      examined). Covered by two mutations in
+      `tests/api/test_valuation_verdict_mutations.py`.
+
+      **`trailing_pe_series` and `pe_change` are still uncalled, now for a
+      different reason.** They key EPS by the close's calendar YEAR, so for a
+      September fiscal year a March close is priced against earnings not
+      reported until October -- lookahead bias. Closing A2 needs only the
+      current PE, so they were left alone rather than wired with a caveat. They
+      are not forgotten; a PE-CHANGE signal is a separate decision, and under
+      this panel's rules it would owe its own basis disclosure.
+
+      Note the todo's original fallback suggestion -- "derive it from net income
+      / diluted shares" -- would ALSO have required a guess: before this task no
+      net-income label existed anywhere in the repo. Only `Diluted Average
+      Shares` was mapped (`equity_bridge.py`). Reading `Diluted EPS` directly
+      avoids the derivation entirely.
 
 ---
 
-## Track B - Close the defect class on the verdict panel
+## Track B - Close the defect class on the verdict panel  [COMPLETE 2026-09-03]
 
-**Do this before adding a fifth signal to the panel.** This is the recommended
-next piece of work.
+Kept here rather than archived to `todo4.md` because Track A and Track C have not
+started and this record is what a fifth signal must be added against.
 
 `apps/api/services/valuation_verdict.py` needed **ten** review rounds, and every
 defect belonged to one class: a number or refusal wearing an attribution it has
@@ -73,25 +133,54 @@ gated clauses (window count, dropped bars, span, full-history), and **the
 concatenation is unowned** -- each clause is individually true, and until the
 last commit nothing asserted anything about the assembled sentence.
 
-- [ ] **B1. Property test: clause-to-noun attachment.** One exists already
-      (`test_no_source_string_ever_claims_more_bars_than_its_span_can_hold`) --
-      the count immediately preceding a span must fit inside that span. Extend
-      the idea so every parenthetical must attach to the clause it describes.
-      A shipped defect read `550 of 800 stored bars have a close (spans ...)`
-      across 500 days; 550 daily bars cannot span 500 days.
+- [x] **B1. Property test: clause-to-noun attachment.** Done --
+      `test_every_parenthetical_attaches_to_the_clause_it_describes`. It binds a
+      span to its clause by NAME rather than by position (the older
+      `test_no_source_string_ever_claims_more_bars_than_its_span_can_hold` binds
+      positionally, which is how a reader parses the sentence but not how it is
+      built), covers every row of the panel rather than the drawdown row alone,
+      and every parenthetical rather than spans alone. Shown to catch
+      `bare-span-wrong-noun`, `span-too-short-for-its-count` and
+      `bar-count-labelled-in-days`.
 
-- [ ] **B2. Property test: subject-vs-peer basis symmetry.** Whatever basis the
-      subject's `source` names, the peer clause must name the same one. Every
-      cross-basis defect found so far -- a `252d` label on a 502-day window,
-      peers measured over their own positions rather than the subject's dates --
-      would have failed such a test.
+- [x] **B2. Property test: subject-vs-peer basis symmetry.** Done, as a PAIR --
+      and the pair is the finding. The string half
+      (`test_the_peer_clause_names_the_same_basis_as_the_subject_clause`) was
+      written first and reported as verified because it passed. It is not
+      sufficient: the label and the peer sampling are produced by separate code
+      paths, so reintroducing ND-12 moves the published figure from
+      `peer mean 0.0%` to `peer mean -90.0%` while `source` stays byte-identical
+      and the test still passes. The computed half
+      (`test_the_peer_mean_is_computed_over_the_period_its_clause_names`) closes
+      it: a peer spike outside the subject's window, on either side, across seven
+      subject shapes, must not move the mean. Full write-up in `ERROR-LOG.md`
+      2026-09-03. Note the panel itself was never exposed -- the pre-existing
+      `test_every_close_in_the_peer_mean_lies_inside_the_subject_window` catches
+      ND-12 from one hand-built case; what B2 adds is generality.
 
-- [ ] **B3. Consider restructuring the helper** so each clause declares its own
-      subject rather than being concatenated positionally. Judgement call; the
-      property tests may be enough on their own.
+- [x] **B3. Restructuring the helper -- decided AGAINST, with evidence.** The
+      peer clause's stated period and the peer sampling already read the same two
+      locals (`start`, `end`, `valuation_verdict.py:241-261`), so they cannot
+      disagree by construction -- which is the property the restructure was meant
+      to create. One real duplication remains: `:136` recomputes
+      `dated_closes[-len(window):]` independently of `:241`, so the window clause
+      and the peer clause could drift if someone edited one. That is exactly what
+      the `peer-clause-names-a-different-period` mutation exploits, and the B2
+      string test catches it. The invariant a refactor would enforce structurally
+      is therefore already pinned by a test, and rewriting a module that took ten
+      review rounds to stabilise costs more risk than it removes (CLAUDE.md 3).
+      Revisit only if a fifth signal needs a clause the positional concatenation
+      cannot express.
 
-**Estimate: about half a day. It is the difference between the next signal
-costing one review round or nine.**
+**Done 2026-09-03.** The defect class is closed by a checked-in gate, not by a
+one-time check: `tests/api/test_valuation_verdict_mutations.py` rebuilds
+`valuation_verdict.py` in memory with each of six known defects reintroduced and
+asserts the property test that should catch it does fail. Mutation is in-memory
+only, so an interrupted run cannot leave a broken module in the tree. An
+anchor-integrity test fails loudly if `valuation_verdict.py` is rewritten,
+instructing the next author to re-verify the property tests by hand rather than
+loosen the anchor. Procedure and rationale: `guideline/sop/test-verification.md`
+and CLAUDE.md section 8. Suite: 882 passing, no skips or xfails.
 
 ---
 
@@ -108,13 +197,17 @@ costing one review round or nine.**
 
 ---
 
-## Track D - Cleanups, each small and independent
+## Track D - Cleanups, each small and independent  [D1, D5, D6 done 2026-09-03]
 
-- [ ] **D1. Delete `_validate_runnable`** (`apps/api/services/valuation_case.py`).
-      Provably redundant: both its checks are now enforced by the engine at
-      write time through `_validate_by_engine`. Because it runs FIRST its
-      messages shadow the engine's, so editing an engine message leaves a stale
-      copy diverging with no test failure.
+- [x] **D1. Deleted `_validate_runnable`** (`apps/api/services/valuation_case.py`).
+      Done 2026-09-03. The redundancy was verified before deleting, not assumed:
+      the both-curves-set rule is enforced by `SegmentSpec.__post_init__`
+      (`segment_valuation.py:130`, message carries "different revenue curves")
+      and the 10-year-horizon rule by `_gap_closing_revenues` (`:338`, message
+      carries "10-year horizon" since `_EARLY_YEARS = 5`) -- the exact phrases
+      `test_valuation_seed.py`'s two `pytest.raises(match=...)` assertions pin.
+      Both tests still pass with the function gone, which is the proof. 29 lines
+      removed; `_validate_by_engine` reaches both through `run_case`.
 
 - [ ] **D2. Move engine null-safety into the engine.**
       `CaseSpec.__post_init__` and `SegmentSpec.__post_init__` dereference
@@ -132,12 +225,18 @@ costing one review round or nine.**
       refuses. The 200-with-refusals semantic is pinned; a computed row through
       the real `load_price_bars` is not.
 
-- [ ] **D5. `test_verdict_route_is_404_when_nothing_is_stored` passes when the
-      route does not exist.** It asserts no `detail`, so it cannot distinguish
-      "no stored bars" from "route unregistered". One added assertion fixes it.
+- [x] **D5. `test_verdict_route_is_404_when_nothing_is_stored` now names its
+      own 404.** Done 2026-09-03. Confirmed the defect first: FastAPI answers an
+      unregistered path with exactly `404 {"detail": "Not Found"}`, so the
+      status-only assertion passed against an EMPTY app -- it would have gone on
+      passing if the router were dropped entirely. The test now asserts
+      `detail == "no stored price bars for NOTHING"`, which an unregistered route
+      cannot produce.
 
-- [ ] **D6. The route loads bars twice** -- once to test emptiness, once inside
-      `build_verdict`. `limit=1` on the guard is enough.
+- [x] **D6. The route no longer loads every bar to test emptiness.**
+      Done 2026-09-03. `load_price_bars(ticker, limit=1)` on the guard; the full
+      history is loaded once, inside `build_verdict`. For AAPL that guard was
+      pulling 1,310 rows to answer a yes/no question.
 
 ---
 
