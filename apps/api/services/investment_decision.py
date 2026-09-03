@@ -52,3 +52,101 @@ def outcome_for(
         "price_move": (price_now - price_at_decision) / price_at_decision,
         "reason": None,
     }
+
+
+from datetime import datetime, timezone
+
+from apps.api.services.db import get_db
+
+ACTIONS = ("buy", "sell", "watch", "pass")
+
+# Defaults matching the assumptions the comparison table ships with.
+DEFAULT_RISK_FREE_RATE = 4.2
+DEFAULT_EQUITY_RISK_PREMIUM = 5.5
+
+
+def _default_figures_loader(ticker: str) -> dict:
+    """Capture the model's view of `ticker` right now, from the same function
+    that produces the comparison table's figures."""
+    from apps.api.services import corporate_metrics_service
+    from apps.api.services.corporate_comparison import _dcf_snapshot
+
+    metrics = corporate_metrics_service.metrics_for_ticker(ticker)
+    dcf = _dcf_snapshot(
+        ticker=ticker,
+        metrics=metrics,
+        price_loader=corporate_metrics_service.latest_market_price,
+        risk_free_rate=DEFAULT_RISK_FREE_RATE,
+        equity_risk_premium=DEFAULT_EQUITY_RISK_PREMIUM,
+    )
+    return {
+        "price_at_decision": float(dcf["current_price"]),
+        "dcf_value": float(dcf["estimated_value"]),
+        "dcf_implied_return": float(dcf["dcf_implied_return"]),
+        "roic": round(float(metrics.roic), 2),
+        "wacc": round(float(metrics.wacc), 2),
+        "source": "corporate_comparison._dcf_snapshot",
+    }
+
+
+def record_decision(
+    *,
+    ticker: str,
+    action: str,
+    memo: str,
+    risk_free_rate: float = DEFAULT_RISK_FREE_RATE,
+    equity_risk_premium: float = DEFAULT_EQUITY_RISK_PREMIUM,
+    figures_loader=None,
+) -> int:
+    """Persist one decision, capturing the model's figures HERE rather than
+    accepting them from the caller.
+
+    A figure supplied by a browser could be stale, rounded for display, or read
+    from a page opened an hour earlier, and would be stored as what the user
+    believed with no way to tell the difference later. Capturing server-side
+    makes the record self-certifying; `figures_source` names where it came from.
+    """
+    from apps.api.services.corporate_comparison import METRIC_SCHEMA_VERSION
+
+    ticker = ticker.upper().strip()
+    if action not in ACTIONS:
+        raise ValueError(f"action must be one of {', '.join(ACTIONS)}, got {action!r}")
+    if not memo.strip():
+        raise ValueError("memo is required: a decision without a stated reason is a snapshot")
+
+    loader = figures_loader or _default_figures_loader
+    figures: dict | None = None
+    unavailable: str | None = None
+    try:
+        figures = loader(ticker)
+    except (ValueError, KeyError, TypeError) as exc:
+        # The model could not value this ticker. Record the decision anyway with
+        # the reason in place of the numbers -- refusing outright would drop the
+        # memo, which is the part that cannot be reconstructed later.
+        unavailable = str(exc)
+
+    with get_db() as conn:
+        cursor = conn.execute(
+            """INSERT INTO investment_decision
+               (ticker, decided_at, action, memo, price_at_decision, dcf_value,
+                dcf_implied_return, roic, wacc, risk_free_rate, equity_risk_premium,
+                metric_schema_version, figures_source, figures_unavailable_reason)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                ticker,
+                datetime.now(timezone.utc).isoformat(),
+                action,
+                memo.strip(),
+                (figures or {}).get("price_at_decision"),
+                (figures or {}).get("dcf_value"),
+                (figures or {}).get("dcf_implied_return"),
+                (figures or {}).get("roic"),
+                (figures or {}).get("wacc"),
+                risk_free_rate if figures else None,
+                equity_risk_premium if figures else None,
+                METRIC_SCHEMA_VERSION if figures else None,
+                (figures or {}).get("source", "unavailable"),
+                unavailable,
+            ),
+        )
+        return int(cursor.lastrowid)
