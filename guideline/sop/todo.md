@@ -197,13 +197,17 @@ and CLAUDE.md section 8. Suite: 882 passing, no skips or xfails.
 
 ---
 
-## Track D - Cleanups, each small and independent
+## Track D - Cleanups, each small and independent  [D1, D5, D6 done 2026-09-03]
 
-- [ ] **D1. Delete `_validate_runnable`** (`apps/api/services/valuation_case.py`).
-      Provably redundant: both its checks are now enforced by the engine at
-      write time through `_validate_by_engine`. Because it runs FIRST its
-      messages shadow the engine's, so editing an engine message leaves a stale
-      copy diverging with no test failure.
+- [x] **D1. Deleted `_validate_runnable`** (`apps/api/services/valuation_case.py`).
+      Done 2026-09-03. The redundancy was verified before deleting, not assumed:
+      the both-curves-set rule is enforced by `SegmentSpec.__post_init__`
+      (`segment_valuation.py:130`, message carries "different revenue curves")
+      and the 10-year-horizon rule by `_gap_closing_revenues` (`:338`, message
+      carries "10-year horizon" since `_EARLY_YEARS = 5`) -- the exact phrases
+      `test_valuation_seed.py`'s two `pytest.raises(match=...)` assertions pin.
+      Both tests still pass with the function gone, which is the proof. 29 lines
+      removed; `_validate_by_engine` reaches both through `run_case`.
 
 - [ ] **D2. Move engine null-safety into the engine.**
       `CaseSpec.__post_init__` and `SegmentSpec.__post_init__` dereference
@@ -221,12 +225,18 @@ and CLAUDE.md section 8. Suite: 882 passing, no skips or xfails.
       refuses. The 200-with-refusals semantic is pinned; a computed row through
       the real `load_price_bars` is not.
 
-- [ ] **D5. `test_verdict_route_is_404_when_nothing_is_stored` passes when the
-      route does not exist.** It asserts no `detail`, so it cannot distinguish
-      "no stored bars" from "route unregistered". One added assertion fixes it.
+- [x] **D5. `test_verdict_route_is_404_when_nothing_is_stored` now names its
+      own 404.** Done 2026-09-03. Confirmed the defect first: FastAPI answers an
+      unregistered path with exactly `404 {"detail": "Not Found"}`, so the
+      status-only assertion passed against an EMPTY app -- it would have gone on
+      passing if the router were dropped entirely. The test now asserts
+      `detail == "no stored price bars for NOTHING"`, which an unregistered route
+      cannot produce.
 
-- [ ] **D6. The route loads bars twice** -- once to test emptiness, once inside
-      `build_verdict`. `limit=1` on the guard is enough.
+- [x] **D6. The route no longer loads every bar to test emptiness.**
+      Done 2026-09-03. `load_price_bars(ticker, limit=1)` on the guard; the full
+      history is loaded once, inside `build_verdict`. For AAPL that guard was
+      pulling 1,310 rows to answer a yes/no question.
 
 ---
 
