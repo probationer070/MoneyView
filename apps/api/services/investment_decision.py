@@ -60,12 +60,18 @@ from apps.api.services.db import get_db
 
 ACTIONS = ("buy", "sell", "watch", "pass")
 
-# Defaults matching the assumptions the comparison table ships with.
-DEFAULT_RISK_FREE_RATE = 4.2
-DEFAULT_EQUITY_RISK_PREMIUM = 5.5
+# Defaults matching the assumptions the comparison table ships with. DECIMAL
+# scale (0.042 == 4.2%), matching the codebase-wide contract documented in
+# packages/core_finance/expected_return.py and used by corporate_statement_metrics.py.
+# `investment_decision` stores these rates as-is (decimal); this differs from
+# `corporate_comparison_snapshots_v3`, which stores `round(rate * 100, 2)`.
+DEFAULT_RISK_FREE_RATE = 0.042
+DEFAULT_EQUITY_RISK_PREMIUM = 0.055
 
 
-def _default_figures_loader(ticker: str) -> dict:
+def _default_figures_loader(
+    ticker: str, *, risk_free_rate: float, equity_risk_premium: float
+) -> dict:
     """Capture the model's view of `ticker` right now, from the same function
     that produces the comparison table's figures."""
     from apps.api.services import corporate_metrics_service
@@ -76,8 +82,8 @@ def _default_figures_loader(ticker: str) -> dict:
         ticker=ticker,
         metrics=metrics,
         price_loader=corporate_metrics_service.latest_market_price,
-        risk_free_rate=DEFAULT_RISK_FREE_RATE,
-        equity_risk_premium=DEFAULT_EQUITY_RISK_PREMIUM,
+        risk_free_rate=risk_free_rate,
+        equity_risk_premium=equity_risk_premium,
     )
     return {
         "price_at_decision": float(dcf["current_price"]),
@@ -114,7 +120,13 @@ def record_decision(
     if not memo.strip():
         raise ValueError("memo is required: a decision without a stated reason is a snapshot")
 
-    loader = figures_loader or _default_figures_loader
+    if figures_loader is not None:
+        loader = figures_loader
+    else:
+        loader = lambda t: _default_figures_loader(
+            t, risk_free_rate=risk_free_rate, equity_risk_premium=equity_risk_premium
+        )
+
     figures: dict | None = None
     unavailable: str | None = None
     try:
@@ -124,6 +136,22 @@ def record_decision(
         # the reason in place of the numbers -- refusing outright would drop the
         # memo, which is the part that cannot be reconstructed later.
         unavailable = str(exc)
+    else:
+        # `latest_market_price` returns 0.0 rather than raising when nothing is
+        # stored, so an absent price arrives as a number, not an exception -- for
+        # the default loader and potentially for an injected one too. Checked
+        # here, not only inside `_default_figures_loader`, so the guarantee holds
+        # for either. A non-positive price is the clear, checkable signal that the
+        # model could not value the ticker; `outcome_for` already treats
+        # `price_at_decision <= 0` as "no price recorded". Without this check the
+        # row would store fallback-derived figures as though they were captured,
+        # with `figures_unavailable_reason` left NULL. Spec section 3.3.
+        price = figures.get("price_at_decision")
+        if price is None or price <= 0:
+            unavailable = (
+                f"no stored price for {ticker}: the model cannot value it at this time"
+            )
+            figures = None
 
     with get_db() as conn:
         cursor = conn.execute(
