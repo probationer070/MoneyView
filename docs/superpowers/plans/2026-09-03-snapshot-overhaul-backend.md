@@ -10,6 +10,10 @@
 
 **Spec:** `docs/superpowers/specs/2026-09-03-snapshot-overhaul-design.md`
 
+**Line numbers below were measured against `renewal` 3bdd3d0** (PRs #13, #14, #15
+merged). If they no longer match, trust the named symbol over the number and
+re-derive -- a stale line reference is exactly the drift this repo keeps finding.
+
 ## Scope of THIS plan
 
 Backend only: §3, §4, §5 and §7 of the spec. The frontend (`/decisions` page and the §6 scatter chart) gets its own plan, written **after** this one ships, so it can be built against a real API response rather than an imagined one. Everything here is testable and useful without any UI — the API is exercisable directly.
@@ -915,7 +919,7 @@ git commit -m "feat: add the /api/v1/decisions router"
 ### Task 7: Snapshot dedupe on write
 
 **Files:**
-- Modify: `apps/api/services/corporate_comparison.py` — `_snapshot_version_id` at :1000, and its call site at :173
+- Modify: `apps/api/services/corporate_comparison.py` — `_snapshot_version_id` at :1039, and its call site at :180
 - Test: `tests/api/test_corporate_comparison.py` (append)
 
 **Interfaces:**
@@ -978,7 +982,7 @@ Expected: FAIL — `TypeError: _snapshot_version_id() got an unexpected keyword 
 
 - [ ] **Step 3: Write minimal implementation**
 
-Replace `_snapshot_version_id` (`corporate_comparison.py:1000`):
+Replace `_snapshot_version_id` (`corporate_comparison.py:1039`):
 
 ```python
 def _snapshot_version_id(
@@ -1004,7 +1008,7 @@ def _snapshot_version_id(
     parameter on two routes and an identity key across five frontend files.
     """
     # The assumptions arrive as DECIMALS (0.042) and are stored as rounded
-    # percentages (`round(risk_free_rate * 100, 2)` at :193). The key uses the
+    # percentages (`round(risk_free_rate * 100, 2)` at :203). The key uses the
     # stored form: a raw float would put 0.042000000000000003 in an identity
     # string, and two runs that agree could then disagree.
     return (
@@ -1014,7 +1018,7 @@ def _snapshot_version_id(
     )
 ```
 
-At the call site (`:173`), pass the new arguments — `snapshot_date` is already computed on the line below it, so move that computation above the call:
+At the call site (`:180`), pass the new arguments — `snapshot_date` is already computed on the line below it, so move that computation above the call:
 
 ```python
     snapshot_date = _snapshot_business_date()
@@ -1026,7 +1030,7 @@ At the call site (`:173`), pass the new arguments — `snapshot_date` is already
     )
 ```
 
-**The write is a plain `INSERT` today** (`:178`). With a deterministic version and
+**The write is a plain `INSERT` today** (`:185`). With a deterministic version and
 the primary key `(snapshot_version, ticker)`, a second click would raise
 `sqlite3.IntegrityError: UNIQUE constraint failed`. Change that one word:
 
@@ -1049,7 +1053,7 @@ the loop iterates `response.rows` -- so build one:
 ```
 
 **Keep the `snapshot_taken_at` variable.** It is still written to its own column
-(`:190`); only the version *identifier* drops it.
+(`:197`); only the version *identifier* drops it.
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -1111,4 +1115,4 @@ git commit -m "docs: record the snapshot overhaul backend in the todo"
 
 **Type consistency:** `outcome_for` returns `decided_on`/`price_now`/`price_date`/`price_move`/`reason` in Task 3, consumed under those names in Task 5 and modelled as `DecisionOutcome` with the same five fields in Task 6. `record_decision` returns `int`, used as `decision_id` in Task 6. `figures_loader` returns the six keys `_default_figures_loader` produces, matching the test doubles in Tasks 4 and 5. `_snapshot_version_id`'s new keyword-only signature is used identically in Task 7's test and call site.
 
-**Three assumptions checked against the source rather than left to the implementer:** the snapshot write is a plain `INSERT`, not `INSERT OR REPLACE` (`:178`) — so a deterministic version would raise `IntegrityError` on the second click unless that word changes; there is no `tickers` variable in scope at the delete site, since the loop iterates `response.rows`; and the assumption columns are stored as rounded percentages (`:193`), so the version key uses that form rather than the raw decimal. Task 7 reflects all three.
+**Three assumptions checked against the source rather than left to the implementer:** the snapshot write is a plain `INSERT`, not `INSERT OR REPLACE` (`:185`) — so a deterministic version would raise `IntegrityError` on the second click unless that word changes; there is no `tickers` variable in scope at the delete site, since the loop iterates `response.rows`; and the assumption columns are stored as rounded percentages (`:203`), so the version key uses that form rather than the raw decimal. Task 7 reflects all three.
