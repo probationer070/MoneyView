@@ -218,9 +218,38 @@ def metrics_for_ticker(
     *,
     bundle_loader: StatementBundleLoader = get_yahoo_statement_bundle,
 ) -> CorporateMetrics:
+    metrics, _ = metrics_for_ticker_with_provenance(
+        ticker,
+        growth_basis,
+        roic_basis,
+        growth_year,
+        roic_year,
+        bundle_loader=bundle_loader,
+    )
+    return metrics
+
+
+def metrics_for_ticker_with_provenance(
+    ticker: str,
+    growth_basis: str = "cagr",
+    roic_basis: str = "recent_average",
+    growth_year: Optional[int] = None,
+    roic_year: Optional[int] = None,
+    *,
+    bundle_loader: StatementBundleLoader = get_yahoo_statement_bundle,
+) -> tuple[CorporateMetrics, bool]:
+    """Like `metrics_for_ticker`, but also reports whether the figures are real.
+
+    True when either the statement-derived computation succeeded, or the
+    stored `corporate_metrics` fallback row is a genuine (non-generic-default)
+    entry. False means every figure downstream -- including roic and wacc --
+    is fabricated from `sum(ord(char) for char in f"{ticker}:{sector}")`, not
+    a modelling judgement. A caller that persists these figures permanently
+    (e.g. `investment_decision`) must check this before storing them as captured.
+    """
     ticker = ticker.upper()
-    fallback, _ = load_fallback_metrics(ticker)
-    return yahoo_statement_metrics(
+    fallback, fallback_is_real = load_fallback_metrics(ticker)
+    computed = yahoo_statement_metrics(
         ticker,
         fallback,
         growth_basis=growth_basis,
@@ -228,14 +257,20 @@ def metrics_for_ticker(
         growth_year=growth_year,
         roic_year=roic_year,
         bundle_loader=bundle_loader,
-    ) or fallback.model_copy(
-        update={
-            "crp": KOREA_COUNTRY_RISK_PREMIUM,
-            "growth_avg_legacy": fallback.growth,
-            "growth_cagr_v2": fallback.growth,
-            "roic_legacy": fallback.roic,
-            "roic_stable_v2": fallback.roic,
-        }
+    )
+    if computed is not None:
+        return computed, True
+    return (
+        fallback.model_copy(
+            update={
+                "crp": KOREA_COUNTRY_RISK_PREMIUM,
+                "growth_avg_legacy": fallback.growth,
+                "growth_cagr_v2": fallback.growth,
+                "roic_legacy": fallback.roic,
+                "roic_stable_v2": fallback.roic,
+            }
+        ),
+        fallback_is_real,
     )
 
 

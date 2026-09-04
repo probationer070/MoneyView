@@ -512,6 +512,34 @@ CREATE TABLE IF NOT EXISTS valuation_case (
     parent_case_id     INTEGER REFERENCES valuation_case(id)
 );
 
+CREATE TABLE IF NOT EXISTS investment_decision (
+    id                         INTEGER PRIMARY KEY AUTOINCREMENT,
+    ticker                     TEXT NOT NULL,
+    decided_at                 TEXT NOT NULL,   -- ISO-8601 UTC
+    action                     TEXT NOT NULL,   -- buy | sell | watch | pass
+    -- NOT NULL on purpose: a decision without a stated reason is a snapshot,
+    -- and snapshots already exist. See the 2026-09-03 snapshot-overhaul spec.
+    memo                       TEXT NOT NULL,
+    -- Figures COPIED at record time, never a reference to a snapshot row:
+    -- snapshots expire at SNAPSHOT_RETENTION_DAYS = 365 and metric definitions
+    -- change, so a reference would be reinterpreted later. A copy is a fixed
+    -- record of what was actually believed.
+    price_at_decision          REAL,
+    dcf_value                  REAL,
+    dcf_implied_return         REAL,
+    roic                       REAL,
+    wacc                       REAL,
+    risk_free_rate             REAL,
+    equity_risk_premium        REAL,
+    metric_schema_version      INTEGER,
+    figures_source             TEXT NOT NULL,
+    -- Populated INSTEAD of the figures when the model cannot value the ticker.
+    -- Exactly one side is ever set. A refusal is content, not an error -- the
+    -- same rule valuation_verdict.py follows per signal.
+    figures_unavailable_reason TEXT
+);
+-- No retention policy, deliberately. Snapshots expire; decisions do not.
+
 CREATE TABLE IF NOT EXISTS segment (
     id                     INTEGER PRIMARY KEY AUTOINCREMENT,
     case_id                INTEGER NOT NULL REFERENCES valuation_case(id) ON DELETE CASCADE,

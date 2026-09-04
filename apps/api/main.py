@@ -24,6 +24,7 @@ from apps.api.core.responses import NonFiniteSafeJSONResponse
 from apps.api.core.transport_progress import TransportProgressMiddleware
 from apps.api.routes import (
     corporate_router,
+    decisions_router,
     dev_monitor_router,
     diagnostic_router,
     detail_router,
@@ -188,6 +189,7 @@ app.include_router(report_router, prefix="/api/v1/report", tags=["Report"])
 app.include_router(monte_carlo_router, prefix="/api/v1/monte-carlo", tags=["Monte Carlo"])
 app.include_router(stock_router, prefix="/api/v1/stock", tags=["Stock"])
 app.include_router(valuation_router, prefix="/api/v1/valuation", tags=["Valuation"])
+app.include_router(decisions_router, prefix="/api/v1/decisions", tags=["Decisions"])
 
 
 @app.get("/api/v1/health", tags=["Health"])

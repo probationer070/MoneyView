@@ -177,12 +177,17 @@ def save_corporate_comparison_snapshot(
         benchmark_ticker=normalized_benchmark,
         custom_tickers=normalized_custom_tickers,
     )
-    snapshot_version = _snapshot_version_id(universe_key=universe_key, snapshot_taken_at=snapshot_taken_at)
+    snapshot_version = _snapshot_version_id(
+        universe_key=universe_key,
+        snapshot_date=snapshot_date,
+        risk_free_rate=risk_free_rate,
+        equity_risk_premium=equity_risk_premium,
+    )
 
     with get_db() as conn:
         for row in response.rows:
             conn.execute(
-                """INSERT INTO corporate_comparison_snapshots_v3 (
+                """INSERT OR REPLACE INTO corporate_comparison_snapshots_v3 (
                        snapshot_version, snapshot_date, universe_key, comparison_universe, benchmark_ticker,
                        custom_tickers, snapshot_taken_at, snapshot_source, risk_free_rate,
                        equity_risk_premium, stock_expected_return_method, ticker, name, sector,
@@ -224,6 +229,13 @@ def save_corporate_comparison_snapshot(
                     row.bridge_quality,
                 ),
             )
+        live_tickers = [row.ticker for row in response.rows]
+        conn.execute(
+            "DELETE FROM corporate_comparison_snapshots_v3 "
+            "WHERE snapshot_version = ? AND ticker NOT IN "
+            f"({','.join('?' * len(live_tickers))})",
+            (snapshot_version, *live_tickers),
+        )
         conn.execute(
             "DELETE FROM corporate_comparison_snapshots_v3 WHERE snapshot_date < ?",
             ((_now_kst() - timedelta(days=SNAPSHOT_RETENTION_DAYS)).date().isoformat(),),
@@ -1036,12 +1048,37 @@ def _comparison_universe_key(
     return f"{comparison_universe}|{benchmark_ticker}|{','.join(custom_tickers)}"
 
 
-def _snapshot_version_id(*, universe_key: str, snapshot_taken_at: str) -> str:
-    # The business-date component is gone: snapshots are manual, so there is no day for an
-    # identifier to belong to. Renaming this field to snapshot_id is deferred -- the name is
-    # a query parameter on two routes and an identity key across five frontend files, and
-    # moving it is an API break with no behavioural gain.
-    return f"{snapshot_taken_at}|{universe_key}"
+def _snapshot_version_id(
+    *,
+    universe_key: str,
+    snapshot_date: str,
+    risk_free_rate: float,
+    equity_risk_premium: float,
+) -> str:
+    """A DETERMINISTIC snapshot identity, so a repeated write replaces in place.
+
+    The previous identity embedded `snapshot_taken_at`, which made every click a
+    new version: the live table holds 8 versions of 2026-04-23, seven of them
+    from refreshing within about three minutes.
+
+    Dedupe keys on INPUTS -- day, universe, assumptions, metric schema -- not on
+    the output figures. Across those 8 versions MSFT and IAUM are byte-identical
+    and only the benchmark ^GSPC moves, by pennies, so an output comparison would
+    have suppressed 3 of 8 and let a tick on a ticker nobody was looking at
+    defeat it.
+
+    Renaming this field to `snapshot_id` is still deferred: it is a query
+    parameter on two routes and an identity key across five frontend files.
+    """
+    # The assumptions arrive as DECIMALS (0.042) and are stored as rounded
+    # percentages (`round(risk_free_rate * 100, 2)` at :203). The key uses the
+    # stored form: a raw float would put 0.042000000000000003 in an identity
+    # string, and two runs that agree could then disagree.
+    return (
+        f"{snapshot_date}|{universe_key}"
+        f"|rf={round(risk_free_rate * 100, 2)}|erp={round(equity_risk_premium * 100, 2)}"
+        f"|schema={METRIC_SCHEMA_VERSION}"
+    )
 
 
 def acquire_comparison_datasets(

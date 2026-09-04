@@ -19,7 +19,7 @@ Legend: `[ ]` not started, `[x]` complete
 
 ## Where things stand (2026-09-03)
 
-`renewal` @ `a50f255` (PR #13 merged) + Track D, **915 tests passing**, no
+`renewal` @ `3bdd3d0` (PRs #13-15 merged) + Track E, **942 tests passing**, no
 skips or xfails.
 (The 862 measured at `e28be2a` on 2026-08-30, plus Track B's 4 property tests
 and its 16-case mutation harness, plus Track A2's 7 tests and 2 mutations.)
@@ -273,6 +273,125 @@ and CLAUDE.md section 8. Suite: 882 passing, no skips or xfails.
       Done 2026-09-03. `load_price_bars(ticker, limit=1)` on the guard; the full
       history is loaded once, inside `build_verdict`. For AAPL that guard was
       pulling 1,310 rows to answer a yes/no question.
+
+---
+
+## Track E - Snapshot overhaul (backend)  [SHIPPED 2026-09-03]
+
+Spec: `docs/superpowers/specs/2026-09-03-snapshot-overhaul-design.md`
+Plan: `docs/superpowers/plans/2026-09-03-snapshot-overhaul-backend.md`
+
+The complaint was that snapshots carry no memo and no visualization, so their
+utility is worse than a commercial service. The fix is not a prettier history:
+snapshots stay as expiring telemetry, and a new **decision** record takes over
+the job they were failing at.
+
+- [x] **E1. `investment_decision` — the durable record.** One row per ticker per
+      decision: memo (NOT NULL -- a decision without a stated reason is a
+      snapshot), action, and the model's figures COPIED at record time. No
+      retention policy, deliberately: `SNAPSHOT_RETENTION_DAYS = 365` prunes
+      snapshots, and the code already said so before this work started.
+
+- [x] **E2. The server captures the figures, never the client.**
+      `POST /api/v1/decisions` accepts `{ticker, action, memo}` and nothing else;
+      the request model uses `extra="forbid"`, so a client that smuggles a price
+      gets a 422 rather than having it silently dropped. A browser-posted figure
+      could be stale or rounded for display and would be stored as what the user
+      believed, undetectably.
+
+- [x] **E3. A decision is recordable when the model cannot value the ticker.**
+      `figures_unavailable_reason` is stored INSTEAD of the figures. Review
+      caught that the first implementation's refusal path was dead against real
+      data -- `latest_market_price` returns `0.0` rather than raising, and
+      `metrics_for_ticker` falls back to generic defaults, so an unvaluable
+      ticker would have been recorded with fallback figures wearing a captured
+      attribution. A non-positive price is now detected explicitly.
+
+- [x] **E4. Outcomes are computed on read, never stored.** A persisted outcome is
+      correct only until the next bar arrives and then silently wrong. Both dates
+      travel with the number, because the figure it sits beside -- gap to fair
+      value -- has no time horizon and the move does.
+
+- [x] **E5. No accuracy metric, ever.** `dcf_implied_return` is
+      `(intrinsic / price) - 1`: total upside, NO horizon. Combining it with a
+      realized return would be the same basis mismatch `ERROR-LOG.md` already
+      records twice. Guarded by an allowlist over the response's top-level keys,
+      so a combined figure fails whatever it is named -- a blocklist of five
+      suspicious words let `gap_vs_move` through.
+
+- [x] **E6. Snapshot dedupe on write.** `_snapshot_version_id` is deterministic --
+      day, universe, assumptions (in their stored percentage form), schema -- so a
+      repeated refresh replaces in place instead of appending. An output-comparison
+      rule was rejected: across the 8 live versions of 2026-04-23, `MSFT` and
+      `IAUM` are byte-identical and only `^GSPC` ticks by pennies, so it would have
+      caught 3 of 8. See `ERROR-LOG.md` 2026-09-03.
+
+- [x] **E10. Final whole-branch review fix wave.** A number-and-attribution
+      divergence bug reached the default path: `_default_figures_loader` reached
+      `_dcf_snapshot` and `metrics_for_ticker` for the figures but dropped both
+      quality discriminators they already compute (`bridge_quality`, and
+      `metrics_for_ticker`'s discarded `is_real` flag), so a ticker with no
+      statements, no `corporate_metrics` row, and no equity bridge got a decision
+      row with a fabricated `dcf_value` (enterprise value, not per-share),
+      `dcf_implied_return=0.0`, and hash-derived `roic`/`wacc`, all under a
+      captured `figures_source` with `figures_unavailable_reason` NULL -- the
+      third occurrence of the discriminator-dropped-on-reuse defect class (see
+      `ERROR-LOG.md` 2026-09-03). Fixed by adding
+      `metrics_for_ticker_with_provenance` and gating `record_decision` on both
+      discriminators, mirroring the existing non-positive-price guard.
+      Also: `DecisionRow`/`DecisionOutcome` now expose the gap and the move on
+      the SAME scale (`dcf_implied_return_pct`, `outcome.price_move_pct` --
+      previously 100x apart, DB columns unchanged); `metric_schema_version`,
+      `risk_free_rate` and `equity_risk_premium` are now on the wire (previously
+      stored and unreturned); the allowlist test guarding "never combine the gap
+      and the move" (E5) is now also asserted at the route/wire layer, not just
+      the service dict; a blank `ticker` (`"  "`) is now a 422, mirroring the
+      memo validator; and E's own "known limits" bullet about the bars loader
+      below is resolved. The defect, its root cause and the mutations that pin
+      it are recorded in `ERROR-LOG.md` under 2026-09-03; the working notes
+      lived in a gitignored `.superpowers/sdd/` workspace and are not a
+      durable reference.
+
+      **Review of the fix wave found its verification weaker than reported.** The
+      new guard is two conditions in an `elif` chain, and the reproduction case
+      trips both, so each could be deleted alone with all 949 tests still green;
+      hardcoding either discriminator inside `_default_figures_loader` was also
+      uncaught, and `metrics_for_ticker_with_provenance` -- the function the fix
+      rests on -- had no direct test. Four tests added to isolate each condition
+      and to assert the loader's output directly rather than through the guard
+      chain; all six mutations are now caught by a named test. The lesson is in
+      `ERROR-LOG.md`'s amendment: mutate chained conditions ONE AT A TIME, or the
+      strongest evidence a suite can give certifies less than it sounds like.
+
+### Not done, deliberately
+
+- [ ] **E7. Run the reset.** `python scripts/reset_snapshots.py` clears all three
+      snapshot tables (139 + 0 + 880 rows) after backing the database up. The
+      script is written and tested; it has NOT been run. Snapshot rows are
+      point-in-time records that cannot be regenerated, so the irreversible step
+      is left to a human hand even though it was authorised.
+
+- [ ] **E8. `GET /api/v1/decisions/{id}`.** Spec §4 names it; no task implemented
+      it. Nothing consumes it -- the list endpoint already returns every decision
+      with its outcome -- so it waits for the frontend plan to supply a real
+      caller rather than being built on speculation.
+
+- [ ] **E9. The frontend.** The `/decisions` page and the spec's §6 scatter chart
+      (gap-at-decision against price-move-since, two labelled series, no trend
+      line and no R²). Its plan is written after this ships, against a real API
+      response rather than an imagined one.
+
+### Known limits of this iteration
+
+- **`list_decisions` calls the bars loader once per decision**, with no de-dup
+  across repeated tickers. Acceptable for a personal decision log; it would not
+  be for a paginated endpoint.
+- **The empty-memo route test passes if only the Pydantic validator is removed**,
+  because `record_decision` guards independently. That redundancy is deliberate
+  defence in depth, but the route test alone does not pin the request model.
+- **Deferred from the spec:** readable snapshot identity, charts over snapshot
+  history, and the pre-existing annual-vs-horizonless conflation in
+  `expected_return_spread`, which predates this work and touches `/corporate`.
 
 ---
 

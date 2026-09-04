@@ -9,8 +9,10 @@ from .report import router as report_router
 from .monte_carlo import router as monte_carlo_router
 from .stock import router as stock_router
 from .valuation import router as valuation_router
+from .decisions import router as decisions_router
 
 __all__ = [
     "market_router", "portfolio_router",
     "detail_router", "news_router", "corporate_router", "diagnostic_router", "dev_monitor_router", "report_router", "monte_carlo_router", "stock_router", "valuation_router",
+    "decisions_router",
 ]
