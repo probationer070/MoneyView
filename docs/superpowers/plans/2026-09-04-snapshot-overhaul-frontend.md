@@ -435,8 +435,11 @@ Append inside the existing `describe` in `apps/web/tests/e2e/decisions.spec.ts`:
 
     // The move carries a stated period, both dates named (spec 4.1).
     await expect(msft.getByText(/price move/i)).toBeVisible();
-    await expect(msft.getByText(/2026-09-04/)).toBeVisible();
-    await expect(msft.getByText(/2099-01-01/)).toBeVisible();
+    // The exact period, as ONE string. Asserting each date separately would
+    // match the card's own decided-on header too, which is a Playwright
+    // strict-mode violation -- and this way the two dates are pinned as a
+    // travelling pair, which is what spec 4.1 actually requires.
+    await expect(msft.getByText("2026-09-04 → 2099-01-01")).toBeVisible();
     await expect(msft.getByText("+20.0%")).toBeVisible();
 
     await expect(msft.getByText("cheap on FCF")).toBeVisible();
@@ -476,9 +479,9 @@ Create `apps/web/app/decisions/components/DecisionList.tsx`:
 import { fmtPct } from "@/lib/chartConfig";
 import type { DecisionRow } from "../decisionTypes";
 
-function signedPct(value: number) {
-  return `${value >= 0 ? "+" : ""}${fmtPct(value, 1)}`;
-}
+// NOTE: `fmtPct` already prepends "+" for non-negative values
+// (lib/chartConfig.ts) -- do NOT add a sign wrapper around it, or every
+// positive figure renders as "++50.0%".
 
 /**
  * The two figures are deliberately rendered as a PAIR with separate basis
@@ -497,7 +500,7 @@ function FigurePair({ decision }: { decision: DecisionRow }) {
         <p className="text-lg font-bold text-[var(--text-primary)]">
           {decision.dcf_implied_return_pct === null
             ? "—"
-            : signedPct(decision.dcf_implied_return_pct)}
+            : fmtPct(decision.dcf_implied_return_pct, 1)}
         </p>
         <p className="text-xs text-[var(--text-muted)]">no horizon</p>
         {decision.figures_unavailable_reason && (
@@ -510,7 +513,7 @@ function FigurePair({ decision }: { decision: DecisionRow }) {
       <div className="rounded-[var(--radius-sm)] border border-[var(--border-default)] p-3">
         <p className="text-xs font-medium text-[var(--text-secondary)]">Price move</p>
         <p className="text-lg font-bold text-[var(--text-primary)]">
-          {outcome.price_move_pct === null ? "—" : signedPct(outcome.price_move_pct)}
+          {outcome.price_move_pct === null ? "—" : fmtPct(outcome.price_move_pct, 1)}
         </p>
         <p className="text-xs text-[var(--text-muted)]">
           {outcome.price_date
@@ -575,7 +578,7 @@ Expected: PASS, clean lint.
 
 Break the source and confirm the test fails for the intended reason (`.claude/CLAUDE.md` §8):
 
-In `DecisionList.tsx`, change `{outcome.price_move_pct === null ? "—" : signedPct(outcome.price_move_pct)}` to `{signedPct(outcome.price_move_pct ?? 0)}` — the exact defect spec §4.1 forbids, a refusal rendered as `+0.0%`.
+In `DecisionList.tsx`, change `{outcome.price_move_pct === null ? "—" : fmtPct(outcome.price_move_pct, 1)}` to `{fmtPct(outcome.price_move_pct ?? 0, 1)}` — the exact defect spec §4.1 forbids, a refusal rendered as `+0.0%`.
 
 ```bash
 npm.cmd run test:e2e -- decisions.spec.ts -g "refusal renders its sentence"
