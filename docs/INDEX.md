@@ -81,6 +81,7 @@ sub-project and feeding an implementation plan.
 | `2026-08-09-segment-buildup-valuation-design.md` | Segment build-up valuation engine, persistence, and API for hand-authored (private/pre-IPO) cases |
 | `2026-09-03-snapshot-overhaul-design.md` | Durable decision records with outcomes, snapshot dedupe on write, and the reset that precedes them |
 | `plans/2026-09-03-snapshot-overhaul-backend.md` | Task-by-task backend plan implementing the snapshot-overhaul spec |
+| `plans/2026-09-04-snapshot-overhaul-frontend.md` | Task-by-task plan for the `/decisions` page: the record form, the log, and the gap-vs-move scatter |
 
 ## Process SOPs (`guideline/sop/`)
 
