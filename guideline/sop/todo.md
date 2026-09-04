@@ -232,16 +232,63 @@ and CLAUDE.md section 8. Suite: 882 passing, no skips or xfails.
 
 ---
 
-## Track C - Frontend
+## Track C - Frontend  [C1 SHIPPED 2026-09-04; C2 OPEN]
 
-- [ ] **C1. 3d - the valuation tab.** Nothing from sub-projects 1-3 has a UI;
-      all of it is HTTP-only. The verdict panel is designed to be shown as rows
-      with a `source` beside each -- a refused row is content, not an error
-      state, and the UI must render it as such.
+- [x] **C1. The valuation tab -- shipped 2026-09-04.** `/valuation` surfaces
+      `GET /api/v1/valuation/verdict/{ticker}`, which had shipped with no UI at
+      all. Five files under `app/valuation/`: the route, `verdictTypes.ts`,
+      `verdictFormat.ts`, `components/TickerPicker.tsx` and
+      `components/VerdictPanel.tsx`. Spec:
+      `docs/superpowers/specs/2026-09-04-valuation-tab-design.md`.
+      Plan: `docs/superpowers/plans/2026-09-04-valuation-tab.md`.
 
-- [ ] **C2. 3c - uncertainty and attribution.** Monte Carlo, `/fork`, `/diff`,
-      `/pricing`. Specced in
+      **The four rows are in four different units, so there is no shared
+      formatter.** `drawdown` is a fraction of the peak (`-9.4%`), `volume` is a
+      RATIO of two means (`×1.20`), `trailing_pe` is a multiple (`24.3`), and
+      `dcf_gap` is a horizonless fraction (`+18.2%`). One formatter across all
+      four renders volume's `1.1951` as `+119.5%` -- a proportion the number
+      does not state. Each row owns its formatter.
+
+      A refused row renders its `reason` as ordinary content, never a zero and
+      never an error colour; `source` is always visible in full on every row,
+      refusals included, because a refused `trailing_pe` still names
+      "Damodaran" as where the figure would have come from; and `comparison` is
+      rendered verbatim, since it is the backend's own attribution wording.
+      The page invents no verdict: `direction` is a fixed constant identical for
+      every ticker, the backend deliberately computes no rollup, and four
+      signals in four units cannot be combined without inventing a basis none
+      of them share.
+
+      **10 e2e tests, and seven mutations each shown to fail against a named
+      test** -- every one executed and observed, not asserted:
+
+      | Mutation | Caught by |
+      | --- | --- |
+      | `volume` through the percent formatter | each row is formatted in its own unit |
+      | a refusal rendered as a value | a refused row renders its reason as content |
+      | `source` hidden on refused rows | every row shows its full source |
+      | a rollup verdict badge added | the page invents no verdict of its own |
+      | `comparison` reformatted with `.toUpperCase()` | the comparison string is rendered verbatim |
+      | the `trailing_pe` arm switched to percent (`+2430.0%`) | all four rows format in their own unit |
+      | the `dcf_gap` arm switched to a ratio (`×0.18`) | all four rows format in their own unit |
+
+      The last two exist because review found those two formatter arms had ZERO
+      coverage: the default fixture refuses `trailing_pe` and `dcf_gap`, so half
+      the design's central claim was unguarded. A second all-computed fixture
+      closed it -- and those are exactly the rows that start computing when A1
+      lands.
+
+      **Expected today: two computed rows and two refusals for every ticker.**
+      `trailing_pe` and `dcf_gap` both refuse `no_vintage`, which is Track A1,
+      blocked on a Damodaran workbook not on this machine. That is not a defect
+      in this page; refusal is the majority state in the real data, and the page
+      was designed for it and stays correct when A1 lands.
+
+- [ ] **C2. 3c - uncertainty and attribution.** STILL OPEN -- C1 does not close
+      Track C. Monte Carlo, `/fork`, `/diff`, `/pricing`. Specced in
       `docs/superpowers/specs/2026-08-09-segment-buildup-valuation-design.md`.
+      A separate subsystem from C1: no shared endpoint, no shared component, and
+      it layers on the segment build-up engine rather than the evidence panel.
 
 ---
 
