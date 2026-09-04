@@ -2048,3 +2048,86 @@ offer ("I broke it and the test failed") certifies less than it appears to, and 
 so in exactly the confident register that stops further checking. That failure mode
 is this repo's own subject matter: a verification wearing an attribution it has not
 earned.
+
+## 2026-09-04: 880 snapshot rows were deleted from the real database, unnoticed for a day
+
+Date: 2026-09-04 (loss occurred 2026-09-03)
+Command: discovered while running `python scripts/reset_snapshots.py`. The script
+was expected to clear 139 + 0 + 880 rows, the figures Spec section 7 measured on
+2026-09-03. It reported 139 + 0 + **0**: the live `_v3` table was already empty.
+Failure: `corporate_comparison_snapshots_v3` lost all 880 rows across 20 snapshot
+versions. Point-in-time snapshot rows cannot be regenerated -- their inputs have
+moved -- so this is unrecoverable except from a backup. No error was raised, no
+log recorded it, and nothing noticed for a day. The plan, the spec and
+`guideline/sop/todo.md` all went on quoting 880 as a live figure after it was
+false.
+
+Root cause: **bounded by evidence, not fully named.** What is established:
+
+- The 2026-09-03 14:04:33 backup (`moneyview.db.pre-tgt-cleanup-backup`) holds all
+  880 rows across 20 versions; the database's next and last write before
+  2026-09-04 was at 17:26:25, and by then `_v3` was empty. The loss happened
+  inside that 3h22m window.
+- `corporate_comparison_snapshots` (v1) kept all 139 of its rows. Whatever ran
+  targeted `_v3` specifically.
+- **Retention is excluded.** `SNAPSHOT_RETENTION_DAYS = 365` gives a cutoff of
+  2025-09-03; the oldest of the 880 rows is dated 2026-04-12. Zero rows were
+  eligible. Verified by running the predicate against the backup.
+- **The orphan delete is excluded.** `corporate_comparison.py` deletes only
+  `WHERE snapshot_version = ? AND ticker NOT IN (...)` -- one version, and only
+  tickers absent from the live response. It cannot remove 20 versions.
+- **`scripts/reset_snapshots.py`'s operator entry point is excluded.** It copies
+  the database to `moneyview.db.pre-snapshot-reset` before deleting; that file's
+  NTFS creation time is 2026-09-04 16:16:20. It had never existed before, so
+  `__main__` had never run.
+- **pytest is excluded.** `tests/conftest.py`'s autouse `_isolated_db` repoints
+  `db._DB_PATH` at `tmp_path`, and `tests/__init__.py` refuses the real database at
+  connect time (in place since 14:54:35 that day, before the window closed).
+  `tests/scripts/__init__.py` exists, so the guard is reachable for the reset
+  test specifically.
+
+What remains consistent with every observation: an ad-hoc call to
+`reset_snapshots(conn)` against a real `get_db()` connection -- outside pytest and
+outside `__main__` -- during Task 1 of the snapshot-overhaul backend plan, whose
+report documents mutating that module to exactly
+`SNAPSHOT_TABLES = ("corporate_comparison_snapshots_v3",)` and later restoring it.
+That mutation's blast radius is precisely the observed damage: v3 emptied, v1
+untouched. `reset_snapshots(conn)` takes any connection and writes no backup.
+**The exact command is not established** -- no shell history from that session
+survives -- and this entry does not claim it as fact.
+
+Fix: none to the data. Recovered nothing, because nothing needed recovering by the
+time it was found: the snapshots were being cleared deliberately anyway (Track E7),
+and `moneyview.db.pre-tgt-cleanup-backup` still holds the 880 rows if they are ever
+wanted. The reset was completed on 2026-09-04 and `investment_decision` was created
+by `init_db()` in the same pass.
+
+Files changed: none. This entry is the deliverable.
+
+Prevention: two distinct lessons.
+
+1. **The real-database guard protects pytest and nothing else.** It is installed by
+   `tests/__init__.py`, so it exists only for code that imports the test package.
+   A REPL, an ad-hoc `python -c`, or any script importing `apps.api.services.db`
+   directly reaches `data/processed/moneyview.db` with no guard, no confirmation
+   and no backup. `reset_snapshots(conn)` in particular is a delete-everything
+   function that accepts any connection and is safe only by convention -- the
+   backup lives in `__main__`, which is exactly the path a careless caller skips.
+   Moving the backup (or a refuse-unless-explicitly-confirmed check) into the
+   function itself would close this.
+
+2. **Mutating a destructive function leaves a loaded gun in the working tree.**
+   This repo's own discipline (CLAUDE.md section 8) requires breaking the source to
+   prove a test catches it. When the source under mutation *deletes data*, the
+   mutated state is not merely a failing test -- for as long as it is applied, every
+   invocation of that code path does different damage than the author expects. The
+   mutation here narrowed a three-table delete to a one-table delete, and the one
+   table it kept is the live one. Mutate destructive code paths against a copy of
+   the database, or make the function inert without an explicit opt-in, so that the
+   window between "mutate" and "restore" cannot cost anything.
+
+The generalisable point: a figure measured once and then quoted repeatedly becomes
+an assertion about the present. Spec section 7, the backend plan and the todo all
+carried "880 rows" for a day after it was zero, and each restatement made it look
+better attested. Re-measure before an irreversible step, not because the number was
+wrong when taken, but because nothing tells you when it stops being true.
