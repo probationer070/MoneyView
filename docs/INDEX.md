@@ -84,6 +84,7 @@ sub-project and feeding an implementation plan.
 | `plans/2026-09-04-snapshot-overhaul-frontend.md` | Task-by-task plan for the `/decisions` page: the record form, the log, and the gap-vs-move scatter |
 | `2026-09-04-valuation-tab-design.md` | Track C1: the `/valuation` tab surfacing the four-row evidence panel, with per-row units and refusal-as-content |
 | `plans/2026-09-04-valuation-tab.md` | Task-by-task plan for the `/valuation` tab: per-unit formatters, refusal-as-content, and no invented verdict |
+| `2026-09-04-fork-and-diff-design.md` | Track C2 (first half): `/fork` a stored case and `/diff` it against its parent, attributing the difference per input by Shapley |
 
 ## Process SOPs (`guideline/sop/`)
 

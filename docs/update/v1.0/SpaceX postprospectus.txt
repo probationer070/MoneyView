@@ -289,3 +289,8 @@ Use this as the module's golden fixture: the same input set must reproduce $96�
 - [SpaceX stock falls back to below IPO price — Seeking Alpha](https://seekingalpha.com/news/4635626-spacex-stock-falls-back-to-below-ipo-price)
 - [SpaceX Stock Just Closed Above Its IPO Price — Motley Fool](https://www.fool.com/investing/2026/08/13/spacex-stock-just-closed-above-its-ipo-price-heres/)
 - [Anthropic will pay xAI $1.25B per month for compute — TechCrunch](https://techcrunch.com/2026/05/20/anthropic-will-pay-xai-1-25-billion-per-month-for-compute/)
+
+
+# reference link
+
+https://aswathdamodaran.blogspot.com/2026/06/a-weeks-ago-i-assessed-value-of-spacex.html
