@@ -33,7 +33,8 @@ snapshot-reset hardening's 5, and E8's 8.)
 | `corporate_statements` | 259,261 | 135 tickers (was 1) |
 | `corporate_quote_facts` | -- | 136 tickers (was 1) |
 | `corporate_companies` | 0 | **empty by design** -- one manual writer, and every reader falls back to the watchlist, which carries a name and sector for all 139 |
-| `industry_benchmark` | 0 | **the one real gap.** See A1 |
+| `industry_benchmark` | 94 | Damodaran vintage `2026-01-01`, loaded 2026-09-04 (A1) |
+| `valuation_case` | 30 | conservative cases; 109 tickers refused by the runnability gate |
 
 Before this, 88 watchlist tickers held exactly 76 bars each (all starting
 2026-03-09) against 51 with 252+ -- a perfectly bimodal split, the signature of a
@@ -56,71 +57,63 @@ follow-ups below.
 
 ---
 
-## Track A - Finish the PE signal
+## Track A - Finish the PE signal  [CLOSED 2026-09-04]
 
 The verdict panel's `trailing_pe` row refuses on **two independent grounds**.
 Each is separately closable, and the row stays refused until both are.
 
-- [ ] **A1. Load a Damodaran vintage carrying the price columns.** STILL OPEN --
-      and after 2026-09-04 it is the **only** thing standing between the panel and
-      two of its four signals. Everything else A1 was waiting on is now in place.
+- [x] **A1. Damodaran vintage loaded 2026-09-04 -- Track A is closed.** The file
+      arrived as `docs/update/v1.0/SpaceX2026IPO.xlsx`: Damodaran's own valuation
+      template (workbook creator `Aswath Damodaran`), which embeds his industry
+      lookup sheets. `store_vintage("2026-01-01", parse_workbook(...))` stored
+      **94 industries**.
 
-      **Measured 2026-09-04, `build_verdict` across all 139 watchlist tickers:**
+      **Four preconditions were verified BEFORE anything was written**, because a
+      wrong workbook parses cleanly and seeds plausible-but-wrong sector PEs:
 
-      | Signal | Computed | Refused | Why |
+      | Check | Result |
+      | --- | --- |
+      | sheet `"Industry Average Beta (US)"` | present (1 of 16 sheets) |
+      | the 11 required columns | all present |
+      | `Trailing PE` actually populated | 91 of 94, range 6.1-506.5 |
+      | names vs `tests/fixtures/damodaran_industries.txt` | **96/96 exact**, firm counts identical, "Heathcare" misspelling included |
+
+      That last row is the proof it is the right dataset. 96 sheet rows became 94
+      industries: `Total Market` and `Total Market (without financials)` are
+      market aggregates, correctly dropped by `EXCLUDED_ROWS`.
+
+      The vintage key is the PUBLICATION date. `2026-01-01` was used: the fixture
+      calls this the 2026 vintage and Damodaran publishes industry averages each
+      January. The workbook's Input sheet carries `2026-04-01`, but that is the
+      SpaceX model's valuation date, not the dataset's.
+
+      **Measured effect, `build_verdict` across all 139 watchlist tickers:**
+
+      | Signal | Before A1 | After A1 | After conservative cases |
       | --- | --- | --- | --- |
-      | `volume` | 139 | 0 | -- |
-      | `drawdown` | 84 | 55 | `peer_set_too_thin`=51, `no_industry`=4 |
-      | `trailing_pe` | 0 | 139 | `no_vintage`=139 |
-      | `dcf_gap` | 0 | 139 | `no_vintage`=139 |
+      | `volume` | 139 | 139 | **139** |
+      | `trailing_pe` | 0 (`no_vintage`x139) | **108** | 108 |
+      | `drawdown` | 84 | 84 | **84** |
+      | `dcf_gap` | 0 (`no_vintage`x139) | 0 (`no_case`x139) | **30** |
 
-      `insufficient_history` was 88 refusals before the bar backfill and is now
-      **zero**. The 51 `peer_set_too_thin` are a real modelling limit, not a data
-      gap: those tickers resolve an industry but lack peers with overlapping
-      history, and the panel correctly declines rather than comparing against one
-      or two. `no_vintage` on 139 is A1 and nothing else.
+      AAPL now publishes `trailing_pe = 44.0`, sourced
+      `own PE: Diluted EPS 7.46 for FY2025-09-30, price 328.21 as of 2026-09-03;
+      Damodaran 2026-01-01 top-5-by-ROC sector basket (5 of 5 industries)`.
+      Note that a FABRICATED `industry_benchmark` row once made this same cell
+      publish 44.70 (see `ERROR-LOG.md`). Nearly the same number, entirely
+      different standing: 328.21 / 7.46 = 44.00, checked.
 
-      **Do not substitute a lookalike workbook.** Checked 2026-09-04: Damodaran's
-      standard public downloads are the wrong shape. `betas.xls`, `wacc.xls` and
-      `pedata.xls` all use a sheet named `"Industry Averages"`, not
-      `"Industry Average Beta (US)"`, and between them carry only `Industry Name`,
-      `Number of firms` and `Trailing PE` -- **all nine required columns are
-      missing**. `indname.xls` is the company-to-industry mapping, not averages.
-      No source URL is recorded anywhere in the repo, and no `.xlsx` exists on
-      this machine (repo, `docs/update/`, and the whole user profile all checked).
-      A wrong workbook PARSES CLEANLY and seeds plausible-but-wrong sector PEs --
-      the same failure as the fabricated `industry_benchmark` rows that briefly
-      made this row publish a fake PE 44.70. Refusing is correct until the real
-      file appears.
+      **Conservative cases generated the same day** so `dcf_gap` could compute:
+      30 of 139 stored. The other 109 are principled refusals of the model, not
+      missing data -- 53 where `roic_stable` does not exceed terminal growth (the
+      terminal reinvestment rate would exceed 100% and destroy value), 37 with a
+      negative `roic_stable`, 12 `no_revenue`, 4 `no_industry`, 2
+      `no_operating_income`, 1 `no_net_debt`. The write-time runnability gate
+      refuses to store a case whose DCF cannot mean anything.
 
-      The file did exist once: `tests/fixtures/damodaran_industries.txt` pins its
-      99 industry names verbatim, upstream "Heathcare" misspelling included.
-
-      No code change needed once the file is in hand:
-
-          from apps.api.services.db import init_db
-          from apps.api.services.industry_benchmark_store import (
-              parse_workbook, store_vintage,
-          )
-          init_db()   # see below -- older local DBs have no industry_benchmark table
-          store_vintage("2026-01-01", parse_workbook(r"path\to\workbook.xlsx"))
-
-      The vintage key is the PUBLICATION date, not the fetch date. `parse_workbook`
-      reads sheet `"Industry Average Beta (US)"` and locates columns by HEADER
-      TEXT, so column order does not matter. It requires `Industry Name`,
-      `Number of firms`, and the nine `required=True` headers in
-      `BENCHMARK_COLUMNS`. **`Trailing PE` is `required=False`**, so a workbook
-      lacking it parses successfully and silently leaves the column `None` --
-      which reproduces exactly the `no_sector_pe` refusal this task exists to
-      close. Check the workbook actually carries `Trailing PE` before loading.
-      `tests/fixtures/damodaran_industries.txt` pins the 2026 vintage's 99
-      industry names verbatim (including the upstream "Heathcare" misspelling)
-      if you need to confirm a candidate file is the right dataset.
-
-      Verified 2026-09-03: `data/processed/moneyview.db` predates this feature
-      and had no `industry_benchmark` table at all; `init_db()` has since created
-      it (additively -- it is `CREATE TABLE IF NOT EXISTS` plus
-      `ALTER TABLE ADD COLUMN`, no DROP or DELETE anywhere).
+      Remaining `trailing_pe` refusals are equally honest: 27 `no_positive_eps`
+      (a negative PE sorts as "cheap" in any ascending comparison, so refusing
+      beats publishing) and 4 `no_industry`.
 
 - [x] **A2. Yahoo's EPS labels confirmed, and the arithmetic wired.**
       Done 2026-09-03. A real AAPL bundle was fetched and persisted
