@@ -13,6 +13,15 @@
 # testing
 /coverage
 
+# Playwright writes .last-run.json plus a directory of traces and screenshots
+# per failing test into test-results/ on EVERY run. `.last-run.json` was tracked
+# (committed in 5fdd826), so every `npm run test:e2e` dirtied the working tree
+# and the file was one `git add -A` away from being committed with unrelated
+# work. It is machine-local state -- Playwright reads it for `--last-failed`.
+# Only test-results/ is listed: this config uses `reporter: "list"`, so
+# playwright-report/ and blob-report/ are never produced here.
+/test-results/
+
 # next.js
 /.next/
 /out/
