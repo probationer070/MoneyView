@@ -1193,11 +1193,20 @@ Expected: FAIL on `/1 of 3 decisions plotted/`. **Restore.**
 **(c)** Drop the first half of the plottability invariant: change
 `if (movePct === null || priceDate === null)` to `if (priceDate === null)`.
 
+This one is caught by the TYPE CHECKER, not by Playwright — and that is the
+point. `outcome_for` always sets `price_date` and the move together, so no API
+response can distinguish the two clauses at runtime and no e2e test can either.
+What the clause actually guards is the type: without it, `movePct` stays
+`number | null` and cannot satisfy `DecisionPoint.movePct: number`.
+
 ```bash
-npm.cmd run test:e2e -- decisions.spec.ts -g "each half of the invariant"
+cd apps/web && npx.cmd tsc --noEmit -p tsconfig.json
 ```
-Expected: FAIL — `decision-point-GAPONLY` renders, because a decision with no
-move is no longer excluded. **Restore.**
+Expected: FAIL with
+`app/decisions/decisionChartData.ts(61,7): error TS2322: Type 'number | null' is not assignable to type 'number'`.
+**Restore.** Note the Playwright suite stays GREEN under this mutation — the
+harness runs Next in dev mode and never typechecks, which is why `tsc` is a
+required verification step in Task 5 and not an optional nicety.
 
 **(d)** Drop the other half: change `if (gapPct === null)` to `if (false)`.
 
@@ -1215,10 +1224,13 @@ came to look pinned while each was independently deletable — see `ERROR-LOG.md
 
 - [ ] **Step 8: Verify the absence test can fail**
 
-Add a trend line to the chart:
+Add a trend line to the chart. Keep the segment INSIDE the data domain —
+Recharts 3.8.1 defaults `ifOverflow="discard"`, so an out-of-domain segment
+(e.g. -100 to 100 against this fixture's much narrower range) is silently
+dropped before it reaches the DOM and the mutation proves nothing:
 
 ```tsx
-<ReferenceLine segment={[{ x: -100, y: -100 }, { x: 100, y: 100 }]} label="Trend" />
+<ReferenceLine segment={[{ x: 0, y: 0 }, { x: 50, y: 20 }]} label="Trend" />
 ```
 
 ```bash
@@ -1258,11 +1270,30 @@ cd /c/Learn/Economy/MoneyView && python -m pytest -q
 
 Expected: `954 passed`. Nothing in this plan touches Python; a failure means something unrelated moved.
 
-- [ ] **Step 3: Lint the whole changed surface**
+- [ ] **Step 3: Lint AND typecheck the whole changed surface**
 
 ```bash
 cd apps/web && npm.cmd run lint -- app/decisions components/ui/Sidebar.tsx tests/e2e/decisions.spec.ts tests/e2e/helpers/decisionsPageMock.ts
+npx.cmd tsc --noEmit -p tsconfig.json
 ```
+
+Expected: both clean. **The typecheck is not optional.** `npm run lint` is
+eslint with `eslint-config-next`, which does not typecheck, and the Playwright
+harness runs Next in dev mode, which does not fail on type errors — so before
+this step the repo had no gate that could see a type regression at all. Task 4's
+mutation 7(c) is caught by `tsc` and by nothing else.
+
+- [ ] **Step 3b: Declare `openpyxl`**
+
+`apps/api/services/industry_benchmark_store.py:17` imports `openpyxl` at module
+scope, and it appears in no manifest — `pyproject.toml`'s `dependencies` list
+does not contain it. A clean checkout therefore cannot boot the API, which the
+Playwright harness starts, so this blocks every e2e run and not just this
+feature. Add `"openpyxl"` to `dependencies` in `pyproject.toml`, and write an
+`ERROR-LOG.md` entry per CLAUDE.md §7 (Date, Command, Failure, Root cause, Fix,
+Files changed, Prevention) recording that an undeclared module-scope import
+passes on a developer machine that happens to have the package and fails
+everywhere else.
 
 - [ ] **Step 4: Close E9 in the todo**
 
@@ -1271,7 +1302,7 @@ In `guideline/sop/todo.md`, change the `- [ ] **E9. The frontend.**` bullet to `
 - [ ] **Step 5: Commit**
 
 ```bash
-git add guideline/sop/todo.md
+git add guideline/sop/todo.md pyproject.toml ERROR-LOG.md
 git commit -m "docs: close Track E9, the decision log page"
 ```
 
