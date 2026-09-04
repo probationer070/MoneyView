@@ -233,4 +233,17 @@ test.describe("the decision log page", () => {
       await expect(page.getByText(forbidden)).toHaveCount(0);
     }
   });
+
+  test("a failed load shows an error and never a plotted count", async ({ page }) => {
+    await mockDecisionsApi(page, { getStatus: 500 });
+    await gotoDecisions(page);
+
+    // Positive control: the error branch actually rendered, so the absences
+    // below are absences from a page that reached its error state.
+    await expect(page.getByRole("main").getByRole("alert")).toBeVisible();
+
+    // A count -- of any kind -- claims an answer the request never returned.
+    await expect(page.getByText(/decisions plotted/i)).toHaveCount(0);
+    await expect(page.getByTestId("decision-outcome-scatter")).toHaveCount(0);
+  });
 });

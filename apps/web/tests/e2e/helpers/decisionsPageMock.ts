@@ -46,6 +46,8 @@ export interface DecisionsMockOptions {
   rows?: DecisionRow[];
   /** Make POST fail with this status, to exercise the server-rejection path. */
   postStatus?: number;
+  /** Make GET fail with this status, to exercise the failed-load path. */
+  getStatus?: number;
 }
 
 export async function mockDecisionsApi(
@@ -59,6 +61,7 @@ export async function mockDecisionsApi(
   // whether or not the query was ever invalidated.
   const rows: DecisionRow[] = [...(options.rows ?? DECISION_FIXTURE)];
   const postStatus = options.postStatus ?? 200;
+  const getStatus = options.getStatus ?? 200;
 
   await page.route(`**${API_PREFIX}/decisions`, async (route) => {
     if (route.request().method() === "POST") {
@@ -87,6 +90,10 @@ export async function mockDecisionsApi(
                    price_move_pct: null, reason: "no bar with a close after 2026-09-05" },
       });
       return json(route, { status: "ok", data: { id }, meta: {} });
+    }
+
+    if (getStatus !== 200) {
+      return json(route, { detail: "internal server error" }, getStatus);
     }
     return json(route, { status: "ok", data: rows, meta: {} });
   });

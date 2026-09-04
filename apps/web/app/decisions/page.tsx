@@ -30,7 +30,9 @@ export default function DecisionsPage() {
         subtitle="What was believed about a ticker, when, and why. Figures are captured by the server at record time and never edited."
       />
       <RecordDecisionForm />
-      <DecisionOutcomeScatter decisions={decisions} />
+      {!decisionsQuery.isLoading && !decisionsQuery.isError && (
+        <DecisionOutcomeScatter decisions={decisions} />
+      )}
       {/* The state contract in Global Constraints, in order. Loading and error
           render NOTHING that implies a count: "0 decisions" or "none recorded
           yet" on a failed request states an answer the request never returned. */}
