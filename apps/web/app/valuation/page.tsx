@@ -6,6 +6,7 @@ import { fetchApi } from "@/lib/api";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { useDevMonitorPageLoad } from "@/hooks/useDevMonitorPageLoad";
 import { TickerPicker } from "./components/TickerPicker";
+import { VerdictPanelView } from "./components/VerdictPanel";
 import type { VerdictPanel, WatchlistItem } from "./verdictTypes";
 
 export default function ValuationPage() {
@@ -54,6 +55,10 @@ export default function ValuationPage() {
         <p role="alert" className="text-[var(--chart-negative)]">
           Could not load the panel for {ticker}.
         </p>
+      )}
+
+      {ticker !== null && !verdictQuery.isLoading && !verdictQuery.isError && verdictQuery.data && (
+        <VerdictPanelView panel={verdictQuery.data} />
       )}
     </div>
   );
