@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { fetchApi } from "@/lib/api";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { useDevMonitorPageLoad } from "@/hooks/useDevMonitorPageLoad";
+import { DecisionList } from "./components/DecisionList";
 import type { DecisionRow } from "./decisionTypes";
 
 export default function DecisionsPage() {
@@ -37,6 +38,9 @@ export default function DecisionsPage() {
       )}
       {!decisionsQuery.isLoading && !decisionsQuery.isError && decisions.length === 0 && (
         <p className="text-[var(--text-secondary)]">No decisions recorded yet.</p>
+      )}
+      {!decisionsQuery.isLoading && !decisionsQuery.isError && (
+        <DecisionList decisions={decisions} />
       )}
     </div>
   );
