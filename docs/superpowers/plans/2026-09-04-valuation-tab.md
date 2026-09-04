@@ -200,16 +200,6 @@ test.describe("the valuation tab", () => {
     await expect(page.getByText(/choose a ticker/i)).toBeVisible();
   });
 
-  test("the panel renders without waiting for the watchlist", async ({ page }) => {
-    // The watchlist takes 2-3.5s in production because it fetches a live quote
-    // per ticker. Suggestions are a convenience; the panel is the product.
-    await mockValuationApi(page, { stallWatchlist: true });
-    await gotoValuation(page);
-    await page.getByLabel(/ticker/i).fill("AEP");
-    await page.getByLabel(/ticker/i).press("Enter");
-    await expect(page.getByTestId("verdict-panel")).toBeVisible({ timeout: 15_000 });
-  });
-
   test("a failed verdict request shows an error and no rows", async ({ page }) => {
     await mockValuationApi(page, { verdictStatus: 500 });
     await gotoValuation(page);
@@ -426,21 +416,25 @@ git commit -m "feat: add the /valuation route, its types and a non-blocking tick
 
 ---
 
-### Task 2: One formatter per row, because the units differ
+### Task 2: The formatters and the panel — four rows, both states, source always
 
 **Files:**
 - Create: `apps/web/app/valuation/verdictFormat.ts`
+- Create: `apps/web/app/valuation/components/VerdictPanel.tsx`
+- Modify: `apps/web/app/valuation/page.tsx`
 - Test: `apps/web/tests/e2e/valuation.spec.ts`
 
 **Interfaces:**
-- Consumes: `SignalName` from Task 1.
-- Produces: `formatSignalValue(signal, value): string`, `SIGNAL_LABELS`, `SIGNAL_UNIT_NOTE`.
+- Consumes: `VerdictPanel`, `SIGNAL_ORDER`, `SignalName`, `WatchlistItem` (Task 1).
+- Produces: `formatSignalValue`, `SIGNAL_LABELS`, `SIGNAL_UNIT_NOTE`; `<VerdictPanelView panel={VerdictPanel} />`.
 
-This is the task the spec exists for. The four rows share a JSON shape and nothing else.
+> **Merged from the plan's original Tasks 2 and 3.** The formatter module has no
+> consumer and no passing test until the panel renders it, so splitting them put
+> a knowingly-red suite behind a commit. They ship together.
 
 - [ ] **Step 1: Write the failing tests**
 
-Append inside the existing `describe` in `apps/web/tests/e2e/valuation.spec.ts`:
+Append to `apps/web/tests/e2e/valuation.spec.ts`:
 
 ```ts
   test("each row is formatted in its own unit", async ({ page }) => {
@@ -460,109 +454,17 @@ Append inside the existing `describe` in `apps/web/tests/e2e/valuation.spec.ts`:
     await expect(page.getByTestId("verdict-row-volume")).not.toContainText("119.5%");
     await expect(page.getByTestId("verdict-row-volume")).not.toContainText("19.5%");
   });
-```
 
-- [ ] **Step 2: Run it and watch it fail**
+test("the panel renders without waiting for the watchlist", async ({ page }) => {
+    // The watchlist takes 2-3.5s in production because it fetches a live quote
+    // per ticker. Suggestions are a convenience; the panel is the product.
+    await mockValuationApi(page, { stallWatchlist: true });
+    await gotoValuation(page);
+    await page.getByLabel(/ticker/i).fill("AEP");
+    await page.getByLabel(/ticker/i).press("Enter");
+    await expect(page.getByTestId("verdict-panel")).toBeVisible({ timeout: 15_000 });
+  });
 
-```bash
-cd apps/web && npm.cmd run test:e2e -- valuation.spec.ts
-```
-
-Expected: FAIL — `verdict-row-drawdown` does not exist yet.
-
-- [ ] **Step 3: Write the formatter module**
-
-Create `apps/web/app/valuation/verdictFormat.ts`:
-
-```ts
-import type { SignalName } from "./verdictTypes";
-
-/**
- * One formatter per signal. There is deliberately NO shared formatValue().
- *
- * The four rows arrive as bare JSON numbers in four different units:
- *
- *   drawdown    -0.0939  fractional decline from the running peak  -> -9.4%
- *   volume       1.1951  recent mean volume / baseline mean volume -> x1.20
- *   trailing_pe 24.3     price / EPS, a multiple                   -> 24.3
- *   dcf_gap      0.182   (intrinsic - price) / price, NO horizon   -> +18.2%
- *
- * A single formatter across all four renders volume's 1.1951 as "119.5%",
- * which states a proportion the number is not. The panel's whole purpose is
- * that a figure travels with its basis; formatting it in the wrong unit
- * breaks that at the last step.
- */
-
-export const SIGNAL_LABELS: Record<SignalName, string> = {
-  drawdown: "Drawdown from peak",
-  volume: "Volume vs baseline",
-  trailing_pe: "Trailing PE",
-  dcf_gap: "Gap to fair value",
-};
-
-/** The basis line under each figure. `dcf_gap` names its lack of a horizon. */
-export const SIGNAL_UNIT_NOTE: Record<SignalName, string> = {
-  drawdown: "percent of the 252-bar peak",
-  volume: "multiple of the baseline mean",
-  trailing_pe: "price ÷ earnings, a multiple",
-  dcf_gap: "total gap, no time horizon",
-};
-
-function percent(value: number, decimals = 1): string {
-  return `${value >= 0 ? "+" : ""}${(value * 100).toFixed(decimals)}%`;
-}
-
-export function formatSignalValue(signal: SignalName, value: number): string {
-  switch (signal) {
-    case "drawdown":
-      // A decline is already negative; percent() supplies the sign.
-      return percent(value);
-    case "dcf_gap":
-      return percent(value);
-    case "volume":
-      // A ratio. "x1.20" cannot be misread as a proportion.
-      return `×${value.toFixed(2)}`;
-    case "trailing_pe":
-      return value.toFixed(1);
-  }
-}
-```
-
-- [ ] **Step 4: Run the test — it still fails**
-
-The formatter exists but nothing renders it yet. That is expected; Task 3 wires it. Confirm the failure is now "row not found" rather than a compile error:
-
-```bash
-cd apps/web && npm.cmd run typecheck
-```
-
-Expected: clean.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add apps/web/app/valuation/verdictFormat.ts
-git commit -m "feat: give each verdict row its own formatter, since the units differ"
-```
-
----
-
-### Task 3: The panel — four rows, both states, source always
-
-**Files:**
-- Create: `apps/web/app/valuation/components/VerdictPanel.tsx`
-- Modify: `apps/web/app/valuation/page.tsx`
-- Test: `apps/web/tests/e2e/valuation.spec.ts`
-
-**Interfaces:**
-- Consumes: `VerdictPanel`, `SIGNAL_ORDER`, `SignalName` (Task 1); `formatSignalValue`, `SIGNAL_LABELS`, `SIGNAL_UNIT_NOTE` (Task 2).
-- Produces: `<VerdictPanelView panel={VerdictPanel} />`.
-
-- [ ] **Step 1: Write the failing tests**
-
-Append to `apps/web/tests/e2e/valuation.spec.ts`:
-
-```ts
   test("a refused row renders its reason as content, not as a value", async ({ page }) => {
     await mockValuationApi(page);
     await gotoValuation(page);
@@ -633,7 +535,65 @@ cd apps/web && npm.cmd run test:e2e -- valuation.spec.ts
 
 Expected: FAIL — no `verdict-panel`.
 
-- [ ] **Step 3: Write the panel**
+- [ ] **Step 3: Write the formatter module**
+
+Create `apps/web/app/valuation/verdictFormat.ts`:
+
+```ts
+import type { SignalName } from "./verdictTypes";
+
+/**
+ * One formatter per signal. There is deliberately NO shared formatValue().
+ *
+ * The four rows arrive as bare JSON numbers in four different units:
+ *
+ *   drawdown    -0.0939  fractional decline from the running peak  -> -9.4%
+ *   volume       1.1951  recent mean volume / baseline mean volume -> x1.20
+ *   trailing_pe 24.3     price / EPS, a multiple                   -> 24.3
+ *   dcf_gap      0.182   (intrinsic - price) / price, NO horizon   -> +18.2%
+ *
+ * A single formatter across all four renders volume's 1.1951 as "119.5%",
+ * which states a proportion the number is not. The panel's whole purpose is
+ * that a figure travels with its basis; formatting it in the wrong unit
+ * breaks that at the last step.
+ */
+
+export const SIGNAL_LABELS: Record<SignalName, string> = {
+  drawdown: "Drawdown from peak",
+  volume: "Volume vs baseline",
+  trailing_pe: "Trailing PE",
+  dcf_gap: "Gap to fair value",
+};
+
+/** The basis line under each figure. `dcf_gap` names its lack of a horizon. */
+export const SIGNAL_UNIT_NOTE: Record<SignalName, string> = {
+  drawdown: "percent of the 252-bar peak",
+  volume: "multiple of the baseline mean",
+  trailing_pe: "price ÷ earnings, a multiple",
+  dcf_gap: "total gap, no time horizon",
+};
+
+function percent(value: number, decimals = 1): string {
+  return `${value >= 0 ? "+" : ""}${(value * 100).toFixed(decimals)}%`;
+}
+
+export function formatSignalValue(signal: SignalName, value: number): string {
+  switch (signal) {
+    case "drawdown":
+      // A decline is already negative; percent() supplies the sign.
+      return percent(value);
+    case "dcf_gap":
+      return percent(value);
+    case "volume":
+      // A ratio. "x1.20" cannot be misread as a proportion.
+      return `×${value.toFixed(2)}`;
+    case "trailing_pe":
+      return value.toFixed(1);
+  }
+}
+```
+
+- [ ] **Step 4: Write the panel**
 
 Create `apps/web/app/valuation/components/VerdictPanel.tsx`:
 
@@ -713,7 +673,7 @@ function SignalRow({ name, row }: { name: SignalName; row: VerdictPanel["rows"][
 }
 ```
 
-- [ ] **Step 4: Render it from the page**
+- [ ] **Step 5: Render it from the page**
 
 In `apps/web/app/valuation/page.tsx`, import `VerdictPanelView` and add, after the three state branches:
 
@@ -723,7 +683,7 @@ In `apps/web/app/valuation/page.tsx`, import `VerdictPanelView` and add, after t
       )}
 ```
 
-- [ ] **Step 5: Run the tests, lint and typecheck**
+- [ ] **Step 6: Run the tests, lint and typecheck**
 
 ```bash
 cd apps/web && npm.cmd run test:e2e -- valuation.spec.ts
@@ -733,7 +693,7 @@ npm.cmd run typecheck
 
 Expected: PASS, clean.
 
-- [ ] **Step 6: Verify the units test is load-bearing**
+- [ ] **Step 7: Verify the units test is load-bearing**
 
 In `verdictFormat.ts`, change the `volume` case to `return percent(value);` — the shared-formatter mistake this whole design exists to prevent.
 
@@ -743,7 +703,7 @@ npm.cmd run test:e2e -- valuation.spec.ts
 
 Expected: FAIL on `"×1.20"` (received `+119.5%`). **Restore** and re-run green.
 
-- [ ] **Step 7: Verify the refusal test is load-bearing**
+- [ ] **Step 8: Verify the refusal test is load-bearing**
 
 In `VerdictPanel.tsx`, change `const refused = row.value === null;` to `const refused = false;` and the value line to `formatSignalValue(name, row.value ?? 0)`.
 
@@ -753,7 +713,7 @@ npm.cmd run test:e2e -- valuation.spec.ts
 
 Expected: FAIL — the refused `trailing_pe` row renders `0.0`. **Restore.**
 
-- [ ] **Step 8: Verify the source test is load-bearing**
+- [ ] **Step 9: Verify the source test is load-bearing**
 
 In `VerdictPanel.tsx`, wrap the `source` paragraph so it renders only when `!refused`.
 
@@ -763,7 +723,7 @@ npm.cmd run test:e2e -- valuation.spec.ts
 
 Expected: FAIL — `trailing_pe` no longer contains "Damodaran". **Restore.**
 
-- [ ] **Step 9: Verify the no-verdict test is load-bearing**
+- [ ] **Step 10: Verify the no-verdict test is load-bearing**
 
 Add a rollup badge to `VerdictPanelView`, above the rows:
 
@@ -777,7 +737,7 @@ npm.cmd run test:e2e -- valuation.spec.ts
 
 Expected: FAIL on `/\bundervalued\b/i` and `/\bverdict:/i`. **Restore** and re-run green.
 
-- [ ] **Step 10: Commit**
+- [ ] **Step 11: Commit**
 
 ```bash
 git add apps/web/app/valuation apps/web/tests/e2e/valuation.spec.ts
@@ -786,7 +746,7 @@ git commit -m "feat: render the evidence panel with every row on its own basis"
 
 ---
 
-### Task 4: Whole-suite verification and docs
+### Task 3: Whole-suite verification and docs
 
 **Files:**
 - Modify: `guideline/sop/todo.md` (Track C, item C1)
@@ -836,12 +796,12 @@ git commit -m "docs: close Track C1, the valuation tab"
 | --- | --- |
 | §2 scope: one route, one ticker, nav entry | Task 1 |
 | §3 contract: `value`/`reason` exclusive, `source` on refusals, `comparison` verbatim | Tasks 1, 3 |
-| §4 four different units, no shared formatter | Task 2, mutation-verified in Task 3 Step 6 |
-| §5 `direction` is framing; no badge/score/colour/sort | Task 3, mutation-verified Step 9 |
-| §6 row anatomy; `source` always visible | Task 3, mutation-verified Steps 7–8 |
-| §7 ticker selection, suggestions never block | Task 1 (`stallWatchlist` test) |
+| §4 four different units, no shared formatter | Task 2, mutation-verified in Task 2 |
+| §5 `direction` is framing; no badge/score/colour/sort | Task 2, mutation-verified |
+| §6 row anatomy; `source` always visible | Task 2, mutation-verified |
+| §7 ticker selection, suggestions never block | Task 1 (component) + Task 2 (`stallWatchlist` test) |
 | §8 UI state contract | Task 1 |
-| §9 testing, positive controls, mutations | Tasks 1–3 |
+| §9 testing, positive controls, mutations | Tasks 1–2 |
 | §10 out of scope | not implemented, deliberately |
 
 **Deliberately not built**
@@ -850,6 +810,6 @@ git commit -m "docs: close Track C1, the valuation tab"
 - **A `dcf_gap` computed-row test.** It refuses for every ticker today (`no_vintage`), so the fixture would assert on a state the real API cannot currently produce. Its formatter is covered by the same `percent()` path as `drawdown`. When A1 lands, add the case then.
 - **Ranking, sorting, filtering tickers.** All require the rollup §5 forbids.
 
-**Type consistency:** `VerdictRow`, `VerdictPanel`, `SIGNAL_ORDER`, `SignalName`, `WatchlistItem` (Task 1) are used unchanged in Tasks 2–3. `formatSignalValue`, `SIGNAL_LABELS`, `SIGNAL_UNIT_NOTE` (Task 2) are used only in Task 3. Row keys `value`/`comparison`/`source`/`reason` match the captured response verbatim.
+**Type consistency:** `VerdictRow`, `VerdictPanel`, `SIGNAL_ORDER`, `SignalName`, `WatchlistItem` (Task 1) are used unchanged in Tasks 2–3. `formatSignalValue`, `SIGNAL_LABELS`, `SIGNAL_UNIT_NOTE` are created and consumed within Task 2. Row keys `value`/`comparison`/`source`/`reason` match the captured response verbatim.
 
 **Query keys:** `["watchlist-tickers"]` and `["verdict", ticker]`. The verdict query is `enabled: ticker !== null`, so no request fires before a ticker is chosen.
