@@ -2126,6 +2126,20 @@ Prevention: two distinct lessons.
    the database, or make the function inert without an explicit opt-in, so that the
    window between "mutate" and "restore" cannot cost anything.
 
+Hardened 2026-09-04, after this entry was first written. `reset_snapshots(conn)`
+now refuses a connection attached to `data/processed/moneyview.db` unless the
+caller passes `allow_real_database=True`, and backs the database up itself when
+they do -- so the safety no longer depends on which entry point a caller happened
+to use. The backup runs through SQLite's backup API on its own read-only
+connection (a file copy can miss committed pages still in the WAL sidecar, and
+backing up through a connection holding an open write transaction deadlocks), and
+its filename carries a microsecond timestamp so no run can clobber an earlier
+copy. Five mutations verify it, each caught by a named test: guard removed;
+opt-in ignored; backup skipped; fixed backup name; and `_REAL_DB` repointed at a
+harmless path -- that last one because every other test monkeypatches the
+constant, so without it the guard could be aimed anywhere and the suite would
+stay green.
+
 The generalisable point: a figure measured once and then quoted repeatedly becomes
 an assertion about the present. Spec section 7, the backend plan and the todo all
 carried "880 rows" for a day after it was zero, and each restatement made it look
