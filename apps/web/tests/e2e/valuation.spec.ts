@@ -39,6 +39,10 @@ test.describe("the valuation tab", () => {
     await page.getByLabel(/ticker/i).press("Enter");
     await expect(page.getByTestId("verdict-panel")).toBeVisible();
 
+    // The panel names the ticker it describes -- without this, switching the
+    // input without pressing Enter leaves stale numbers with no attribution.
+    await expect(page.getByTestId("verdict-ticker")).toHaveText("AEP");
+
     // drawdown is a FRACTION of the peak -> a percent.
     await expect(page.getByTestId("verdict-row-drawdown")).toContainText("-9.4%");
 
@@ -90,6 +94,9 @@ test("all four rows are formatted in their own unit when all four compute", asyn
     // A refusal rendered as a number is indistinguishable from a real figure.
     await expect(pe).not.toContainText("0.0");
     await expect(pe).not.toContainText("×");
+    // Spec §6: the value is ABSENT on a refused row. A dash in the value slot
+    // is a placeholder wearing a figure's styling -- it reads as data.
+    await expect(pe).not.toContainText("—");
   });
 
   test("every row shows its full source, refused rows included", async ({ page }) => {

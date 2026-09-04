@@ -15,6 +15,11 @@ import { SIGNAL_ORDER, type SignalName, type VerdictPanel, type VerdictRow } fro
 export function VerdictPanelView({ panel }: { panel: VerdictPanel }) {
   return (
     <section data-testid="verdict-panel" className="flex flex-col gap-4">
+      {/* Names the subject. Plain: a ticker, not a verdict -- no badge, no colour. */}
+      <h2 data-testid="verdict-ticker" className="text-sm font-bold text-[var(--text-primary)]">
+        {panel.ticker}
+      </h2>
+
       {/* Framing, rendered as prose. Not a headline verdict. */}
       <p
         data-testid="verdict-direction"

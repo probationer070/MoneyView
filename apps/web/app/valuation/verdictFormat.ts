@@ -25,7 +25,7 @@ export const SIGNAL_LABELS: Record<SignalName, string> = {
 
 /** The basis line under each figure. `dcf_gap` names its lack of a horizon. */
 export const SIGNAL_UNIT_NOTE: Record<SignalName, string> = {
-  drawdown: "percent of the 252-bar peak",
+  drawdown: "percent below the 252-bar peak",
   volume: "multiple of the baseline mean",
   trailing_pe: "price ÷ earnings, a multiple",
   dcf_gap: "total gap, no time horizon",
