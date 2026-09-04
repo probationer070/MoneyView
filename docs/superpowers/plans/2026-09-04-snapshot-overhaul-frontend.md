@@ -23,6 +23,42 @@
 - **The only test runner is Playwright** (`npm.cmd run test:e2e`). There is no vitest/jest/@testing-library in `apps/web/package.json`. **Do not add one** — that is a toolchain decision outside this plan's scope. Every test below is a Playwright spec against a mocked API.
 - **Lint narrowly first:** `npm.cmd run lint -- <path>` from `apps/web`. Use `npm.cmd`, not `npm`, if PowerShell blocks it.
 - Path alias is `@/` → `apps/web/`.
+- **Keep `text-[var(--x)]` bracket syntax.** A Tailwind v4 IDE extension will suggest the canonical `text-(--x)` shorthand. There is no Tailwind ESLint plugin in `eslint.config.mjs`, so `npm run lint` does not care, and every existing component (`components/ui/PageHeader.tsx`, `app/corporate/components/graphs/ValueDriverMatrixGraph.tsx`) uses brackets. `AGENTS.md` says follow existing patterns; canonicalising only these files would make them the odd ones out.
+
+### The UI state contract
+
+Seven states, exhaustive and mutually exclusive at each level. Every one is
+reachable from the fixture in Task 1. An implementer who satisfies this table
+cannot produce the two failures this feature exists to prevent — a fabricated
+number, and a silently dropped row.
+
+| Condition | The page must |
+| --- | --- |
+| `isLoading` | show a loading indicator — **never** the empty state, and never a `0 decisions` count, which asserts an answer the request has not returned |
+| `isError` | show an error — **never** a decision count or an empty-state sentence, both of which claim knowledge of the log |
+| loaded, `data.length === 0` | show "No decisions recorded yet" |
+| `figures_unavailable_reason !== null` | render that sentence in place of the figures; the five figure fields are all null together |
+| `outcome.reason !== null` | render that sentence in place of the move; never `0.0%`, which is indistinguishable from a genuine flat move |
+| both figures present | render the numeric pair, each under its own basis label |
+| plottable (below) | draw a point |
+| not plottable | exclude from the chart **and** count it in the coverage caption, by semantic reason |
+
+### The plottability invariant
+
+```
+A DecisionPoint exists for a decision IFF
+    dcf_implied_return_pct !== null
+AND outcome.price_move_pct   !== null
+AND outcome.price_date       !== null
+```
+
+The third clause looks redundant and is kept deliberately. `outcome_for`
+(`apps/api/services/investment_decision.py`) sets `price_date` and the move
+together — both null in each refusal branch, both non-null on success — so the
+second clause already implies the third at runtime. The clause is what lets
+`DecisionPoint.priceDate` be `string` rather than `string | null`, so the
+period always travels with the point. Do not "simplify" it away: without it the
+type has to admit a point whose period is unknown.
 
 ### The API contract, captured from a live response
 
@@ -159,17 +195,52 @@ export const DECISION_FIXTURE: DecisionRow[] = [
 
 export type DecisionsMockStats = { posts: Array<Record<string, unknown>> };
 
+export interface DecisionsMockOptions {
+  /** Override the fixture. Used to reach the empty and all-excluded states. */
+  rows?: DecisionRow[];
+  /** Make POST fail with this status, to exercise the server-rejection path. */
+  postStatus?: number;
+}
+
 export async function mockDecisionsApi(
   page: Page,
-  options: { rows?: DecisionRow[] } = {}
+  options: DecisionsMockOptions = {}
 ): Promise<DecisionsMockStats> {
   const stats: DecisionsMockStats = { posts: [] };
-  const rows = options.rows ?? DECISION_FIXTURE;
+  // MUTABLE on purpose. A successful POST appends here, so the refetch that
+  // follows query invalidation returns a DIFFERENT list. Against a frozen
+  // fixture the invalidation test cannot fail: the list looks identical
+  // whether or not the query was ever invalidated.
+  const rows: DecisionRow[] = [...(options.rows ?? DECISION_FIXTURE)];
+  const postStatus = options.postStatus ?? 200;
 
   await page.route(`**${API_PREFIX}/decisions`, async (route) => {
     if (route.request().method() === "POST") {
-      stats.posts.push(JSON.parse(route.request().postData() ?? "{}"));
-      return json(route, { status: "ok", data: { id: 99 }, meta: {} });
+      const body = JSON.parse(route.request().postData() ?? "{}") as Record<string, unknown>;
+      stats.posts.push(body);
+
+      if (postStatus !== 200) {
+        // Shaped like a real FastAPI validation failure. `fetchApi` throws on
+        // any non-ok response and never surfaces `detail`, so no test may
+        // assert on this text -- it is here only so the body is realistic.
+        return json(route, { detail: "action must be one of buy, sell, watch, pass" }, postStatus);
+      }
+
+      const id = Math.max(0, ...rows.map((row) => row.id)) + 1;
+      rows.unshift({
+        id,
+        ticker: String(body.ticker ?? ""),
+        decided_at: "2026-09-05T00:00:00.000000+00:00",
+        action: String(body.action ?? "buy"),
+        memo: String(body.memo ?? ""),
+        price_at_decision: 200.0, dcf_value: 260.0, dcf_implied_return_pct: 30.0,
+        roic: 18.0, wacc: 9.0, risk_free_rate: 0.042, equity_risk_premium: 0.055,
+        metric_schema_version: 2, figures_source: "corporate_comparison._dcf_snapshot",
+        figures_unavailable_reason: null,
+        outcome: { decided_on: "2026-09-05", price_now: null, price_date: null,
+                   price_move_pct: null, reason: "no bar with a close after 2026-09-05" },
+      });
+      return json(route, { status: "ok", data: { id }, meta: {} });
     }
     return json(route, { status: "ok", data: rows, meta: {} });
   });
@@ -287,13 +358,18 @@ export default function DecisionsPage() {
         title="Decision Log"
         subtitle="What was believed about a ticker, when, and why. Figures are captured by the server at record time and never edited."
       />
-      {decisionsQuery.isError && (
-        <p className="text-[var(--chart-negative)]">Could not load decisions.</p>
+      {/* The state contract in Global Constraints, in order. Loading and error
+          render NOTHING that implies a count: "0 decisions" or "none recorded
+          yet" on a failed request states an answer the request never returned. */}
+      {decisionsQuery.isLoading && (
+        <p role="status" className="text-[var(--text-secondary)]">Loading decisions…</p>
       )}
-      {!decisionsQuery.isLoading && decisions.length === 0 && (
+      {decisionsQuery.isError && (
+        <p role="alert" className="text-[var(--chart-negative)]">Could not load decisions.</p>
+      )}
+      {!decisionsQuery.isLoading && !decisionsQuery.isError && decisions.length === 0 && (
         <p className="text-[var(--text-secondary)]">No decisions recorded yet.</p>
       )}
-      <p className="text-xs text-[var(--text-muted)]">{decisions.length} decisions</p>
     </div>
   );
 }
@@ -478,10 +554,12 @@ export function DecisionList({ decisions }: { decisions: DecisionRow[] }) {
 
 - [ ] **Step 4: Render it from the page**
 
-In `apps/web/app/decisions/page.tsx`, import `DecisionList` and replace the `<p className="text-xs ...">{decisions.length} decisions</p>` line with:
+In `apps/web/app/decisions/page.tsx`, import `DecisionList` and render it after the three state branches, guarded so it never renders during loading or error:
 
 ```tsx
-      <DecisionList decisions={decisions} />
+      {!decisionsQuery.isLoading && !decisionsQuery.isError && (
+        <DecisionList decisions={decisions} />
+      )}
 ```
 
 - [ ] **Step 5: Run the tests and lint**
@@ -539,7 +617,9 @@ Append to `apps/web/tests/e2e/decisions.spec.ts`:
     await page.getByLabel(/ticker/i).fill("AAPL");
     await page.getByLabel(/action/i).selectOption("buy");
     await page.getByLabel(/memo/i).fill("services margin inflecting");
-    await page.getByRole("button", { name: /record decision/i }).click();
+    // Enter, not a click: it is a real <form>, and submitting the way a
+    // keyboard user does proves the semantics rather than the click handler.
+    await page.getByLabel(/memo/i).press("Enter");
 
     await expect.poll(() => stats.posts.length).toBe(1);
     // The request model is extra="forbid": any additional key is a 422, and a
@@ -548,6 +628,26 @@ Append to `apps/web/tests/e2e/decisions.spec.ts`:
     expect(stats.posts[0]).toMatchObject({
       ticker: "AAPL", action: "buy", memo: "services margin inflecting",
     });
+  });
+
+  test("a recorded decision appears in the list without a reload", async ({ page }) => {
+    await mockDecisionsApi(page);
+    await gotoDecisions(page);
+
+    // Precondition: the new ticker is absent, so its later presence is the
+    // refetch and not a fixture that always contained it.
+    await expect(page.getByTestId("decision-card-4")).toHaveCount(0);
+
+    await page.getByLabel(/ticker/i).fill("AAPL");
+    await page.getByLabel(/memo/i).fill("services margin inflecting");
+    await page.getByRole("button", { name: /record decision/i }).click();
+
+    // The mock appends on POST, so this row can ONLY appear if the ["decisions"]
+    // query was invalidated and refetched. Without the invalidation the list
+    // stays on its cached three rows.
+    await expect(page.getByTestId("decision-card-4")).toBeVisible();
+    await expect(page.getByTestId("decision-card-4").getByText("AAPL")).toBeVisible();
+    await expect(page.getByTestId("decision-card-4").getByText("services margin inflecting")).toBeVisible();
   });
 
   test("an empty memo is refused in the browser, before any request", async ({ page }) => {
@@ -560,6 +660,30 @@ Append to `apps/web/tests/e2e/decisions.spec.ts`:
 
     await expect(page.getByText(/a decision without a reason is a snapshot/i)).toBeVisible();
     expect(stats.posts).toHaveLength(0);
+  });
+
+  test("a server rejection leaves the log intact and does not clear the form", async ({ page }) => {
+    await mockDecisionsApi(page, { postStatus: 422 });
+    await gotoDecisions(page);
+
+    await page.getByLabel(/ticker/i).fill("AAPL");
+    await page.getByLabel(/memo/i).fill("services margin inflecting");
+    await page.getByRole("button", { name: /record decision/i }).click();
+
+    // `fetchApi` throws a GENERIC "API error: 422 Unprocessable Entity" and
+    // never surfaces the server's `detail` (apps/web/lib/api.ts), so assert
+    // that an error is shown -- never the server's wording, which cannot
+    // reach this component.
+    await expect(page.getByRole("alert")).toBeVisible();
+
+    // The three existing decisions survive: a failed write must not look like
+    // a successful one that emptied the log.
+    await expect(page.getByTestId("decision-card-1")).toBeVisible();
+    await expect(page.getByTestId("decision-card-2")).toBeVisible();
+    await expect(page.getByTestId("decision-card-3")).toBeVisible();
+
+    // The typed memo is still there to retry with, not silently discarded.
+    await expect(page.getByLabel(/memo/i)).toHaveValue("services margin inflecting");
   });
 ```
 
@@ -614,7 +738,8 @@ export function RecordDecisionForm() {
       setError(err instanceof Error ? err.message : "Could not record the decision."),
   });
 
-  const submit = () => {
+  const submit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
     if (!ticker.trim()) {
       setError("A ticker is required.");
       return;
@@ -631,7 +756,10 @@ export function RecordDecisionForm() {
   return (
     <section className="mb-6 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-5">
       <h2 className="text-sm font-bold text-[var(--text-primary)]">Record a decision</h2>
-      <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-end">
+      {/* A real <form>, not a click handler on a bare button: Enter submits,
+          the controls are announced as a group, and the browser supplies the
+          semantics instead of custom interaction code. */}
+      <form onSubmit={submit} className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-end">
         <label className="flex flex-col gap-1 text-xs text-[var(--text-secondary)]">
           Ticker
           <input
@@ -661,15 +789,17 @@ export function RecordDecisionForm() {
           />
         </label>
         <button
-          type="button"
-          onClick={submit}
+          type="submit"
           disabled={mutation.isPending}
+          aria-busy={mutation.isPending}
           className="rounded-[var(--radius-sm)] border border-[var(--border-default)] px-3 py-1.5 text-sm font-medium text-[var(--text-primary)] disabled:opacity-50"
         >
-          Record decision
+          {mutation.isPending ? "Recording…" : "Record decision"}
         </button>
-      </div>
-      {error && <p className="mt-2 text-xs text-[var(--chart-negative)]">{error}</p>}
+      </form>
+      {error && (
+        <p role="alert" className="mt-2 text-xs text-[var(--chart-negative)]">{error}</p>
+      )}
     </section>
   );
 }
@@ -726,6 +856,21 @@ Only a decision with **both** `dcf_implied_return_pct` and `outcome.price_move_p
 Append to `apps/web/tests/e2e/decisions.spec.ts`:
 
 ```ts
+  test("exactly the plottable decision becomes a point, and it is the right one", async ({ page }) => {
+    await mockDecisionsApi(page);
+    await gotoDecisions(page);
+
+    const chart = page.getByTestId("decision-outcome-scatter");
+    await expect(chart).toBeVisible();
+
+    // Identity, not just arity: MSFT has both axes; NVDA has a gap but no move
+    // yet; ZZTOP has neither. A count alone would pass if the WRONG decision
+    // were plotted.
+    await expect(chart.getByTestId("decision-point-MSFT")).toBeVisible();
+    await expect(chart.getByTestId("decision-point-NVDA")).toHaveCount(0);
+    await expect(chart.getByTestId("decision-point-ZZTOP")).toHaveCount(0);
+  });
+
   test("the scatter states how many decisions it could not plot, and why", async ({ page }) => {
     await mockDecisionsApi(page);
     await gotoDecisions(page);
@@ -734,10 +879,57 @@ Append to `apps/web/tests/e2e/decisions.spec.ts`:
     await expect(chart).toBeVisible();
 
     // Positive control: a point actually rendered, so the counts below describe
-    // a drawn chart rather than an empty one.
-    await expect(chart.locator("circle")).toHaveCount(1);
+    // a drawn chart rather than an empty one. NOTE: never assert on `circle`
+    // generically -- Recharts' default mark is `<path class="recharts-symbols">`,
+    // so such a control silently matches nothing. The testid comes from this
+    // chart's custom shape.
+    await expect(chart.getByTestId("decision-point-MSFT")).toBeVisible();
 
     // 1 of 3 plottable in the fixture: one awaiting a bar, one with no figures.
+    await expect(chart.getByText(/1 of 3 decisions plotted/i)).toBeVisible();
+    await expect(chart.getByText(/1 awaiting a later price bar/i)).toBeVisible();
+    await expect(chart.getByText(/1 recorded without figures/i)).toBeVisible();
+  });
+
+  test("a log with nothing plottable says so instead of looking broken", async ({ page }) => {
+    // The empty-chart path is otherwise unverified, and it is exactly the state
+    // a new user is in: decisions recorded, no later bars yet. It must read as
+    // "nothing to plot yet", never as an error and never as a blank panel.
+    await mockDecisionsApi(page, { rows: [DECISION_FIXTURE[0], DECISION_FIXTURE[1]] });
+    await gotoDecisions(page);
+
+    const chart = page.getByTestId("decision-outcome-scatter");
+    await expect(chart).toBeVisible();
+    await expect(chart.getByText(/0 of 2 decisions plotted/i)).toBeVisible();
+    await expect(chart.getByText(/1 awaiting a later price bar/i)).toBeVisible();
+    await expect(chart.getByText(/1 recorded without figures/i)).toBeVisible();
+
+    // Both decisions stay readable in the log below: excluding a row from the
+    // chart must never remove it from the record.
+    await expect(page.getByTestId("decision-card-2")).toBeVisible();
+    await expect(page.getByTestId("decision-card-3")).toBeVisible();
+    await expect(page.getByRole("alert")).toHaveCount(0);
+  });
+
+  test("each half of the invariant excludes a decision on its own", async ({ page }) => {
+    // The standard fixture's two excluded rows differ in BOTH fields at once,
+    // so neither half of the plottability invariant is pinned by it alone --
+    // the same trap the backend's two chained guards fell into (ERROR-LOG.md,
+    // 2026-09-03). These two rows each differ in exactly one field.
+    const gapOnly = {
+      ...DECISION_FIXTURE[2], id: 11, ticker: "GAPONLY",
+      outcome: { ...DECISION_FIXTURE[2].outcome, price_now: null, price_date: null,
+                 price_move_pct: null, reason: "no bar with a close after 2026-09-04" },
+    };
+    const moveOnly = { ...DECISION_FIXTURE[2], id: 12, ticker: "MOVEONLY", dcf_implied_return_pct: null };
+
+    await mockDecisionsApi(page, { rows: [gapOnly, moveOnly, DECISION_FIXTURE[2]] });
+    await gotoDecisions(page);
+
+    const chart = page.getByTestId("decision-outcome-scatter");
+    await expect(chart.getByTestId("decision-point-MSFT")).toBeVisible();
+    await expect(chart.getByTestId("decision-point-GAPONLY")).toHaveCount(0);
+    await expect(chart.getByTestId("decision-point-MOVEONLY")).toHaveCount(0);
     await expect(chart.getByText(/1 of 3 decisions plotted/i)).toBeVisible();
     await expect(chart.getByText(/1 awaiting a later price bar/i)).toBeVisible();
     await expect(chart.getByText(/1 recorded without figures/i)).toBeVisible();
@@ -751,7 +943,7 @@ Append to `apps/web/tests/e2e/decisions.spec.ts`:
     // proves nothing (see corporate-probability-labels.spec.ts).
     const chart = page.getByTestId("decision-outcome-scatter");
     await expect(chart).toBeVisible();
-    await expect(chart.locator("circle")).toHaveCount(1);
+    await expect(chart.getByTestId("decision-point-MSFT")).toBeVisible();
 
     // Spec 6: no trend line, no R-squared, no accuracy score, no error metric.
     // Each would assert the axes are commensurable; the gap has no horizon and
@@ -760,6 +952,12 @@ Append to `apps/web/tests/e2e/decisions.spec.ts`:
       await expect(page.getByText(forbidden)).toHaveCount(0);
     }
   });
+```
+
+These reference `DECISION_FIXTURE`, so widen the spec's import:
+
+```ts
+import { DECISION_FIXTURE, mockDecisionsApi } from "./helpers/decisionsPageMock";
 ```
 
 - [ ] **Step 2: Run them and watch them fail**
@@ -791,10 +989,16 @@ export interface DecisionPoint {
 export interface DecisionPartition {
   points: DecisionPoint[];
   total: number;
-  /** Figures exist, but no bar has arrived after the decision yet. */
-  awaitingBar: number;
-  /** The model could not value the ticker, so there is no gap to plot. */
-  withoutFigures: number;
+  /**
+   * The model valued the ticker, but the outcome is unavailable. Named for the
+   * STATE, not for today's cause of it: `outcome.reason` is a free-form string
+   * and "no bar with a close after X" is only its current value. A field called
+   * `awaitingBar` would bake one reason into the domain model and go quietly
+   * wrong the day the API adds a second.
+   */
+  outcomeUnavailable: number;
+  /** The model could not value the ticker at all, so there is no gap to plot. */
+  figuresUnavailable: number;
 }
 
 /**
@@ -806,19 +1010,23 @@ export interface DecisionPartition {
  */
 export function partitionDecisions(decisions: DecisionRow[]): DecisionPartition {
   const points: DecisionPoint[] = [];
-  let awaitingBar = 0;
-  let withoutFigures = 0;
+  let outcomeUnavailable = 0;
+  let figuresUnavailable = 0;
 
   for (const decision of decisions) {
     const gapPct = decision.dcf_implied_return_pct;
     const movePct = decision.outcome.price_move_pct;
+    const priceDate = decision.outcome.price_date;
 
     if (gapPct === null) {
-      withoutFigures += 1;
+      figuresUnavailable += 1;
       continue;
     }
-    if (movePct === null || decision.outcome.price_date === null) {
-      awaitingBar += 1;
+    // The third clause is what narrows `priceDate` to `string`, so a point
+    // cannot exist without the period it is measured over. See the
+    // plottability invariant in the plan's Global Constraints.
+    if (movePct === null || priceDate === null) {
+      outcomeUnavailable += 1;
       continue;
     }
     points.push({
@@ -827,11 +1035,11 @@ export function partitionDecisions(decisions: DecisionRow[]): DecisionPartition 
       gapPct,
       movePct,
       decidedOn: decision.outcome.decided_on,
-      priceDate: decision.outcome.price_date,
+      priceDate,
     });
   }
 
-  return { points, total: decisions.length, awaitingBar, withoutFigures };
+  return { points, total: decisions.length, outcomeUnavailable, figuresUnavailable };
 }
 ```
 
@@ -842,11 +1050,36 @@ Create `apps/web/app/decisions/components/DecisionOutcomeScatter.tsx`:
 ```tsx
 "use client";
 
-import { CartesianGrid, ReferenceLine, Scatter, ScatterChart, Tooltip, XAxis, YAxis, ZAxis } from "recharts";
+import { CartesianGrid, ReferenceLine, Scatter, ScatterChart, Tooltip, XAxis, YAxis } from "recharts";
 import { ResponsiveChart } from "@/components/ui/ResponsiveChart";
 import { CHART_COLORS, GRID_STYLE, fmtPctTick, withAxisProps, withTooltipProps } from "@/lib/chartConfig";
-import { partitionDecisions } from "../decisionChartData";
+import { partitionDecisions, type DecisionPoint } from "../decisionChartData";
 import type { DecisionRow } from "../decisionTypes";
+
+/**
+ * Recharts' default scatter mark is `<path class="recharts-symbols">`, NOT a
+ * `<circle>` (node_modules/recharts/lib/shape/Symbols.js) -- so a test that
+ * counts circles finds zero and a positive control built on one is broken
+ * before it starts. A custom shape gives a real `<circle>` AND a per-point
+ * testid, so a test can assert WHICH decision produced a point rather than
+ * only how many exist.
+ *
+ * r=11 -> 22px diameter, at the ~24px hit-target floor the dataviz skill sets
+ * for scatter marks. Affordable because a personal decision log holds tens of
+ * points, not thousands.
+ */
+function DecisionDot({ cx, cy, payload }: { cx?: number; cy?: number; payload?: DecisionPoint }) {
+  if (cx === undefined || cy === undefined || payload === undefined) return null;
+  return (
+    <circle
+      cx={cx}
+      cy={cy}
+      r={11}
+      fill={CHART_COLORS.primary}
+      data-testid={`decision-point-${payload.ticker}`}
+    />
+  );
+}
 
 /**
  * Gap at decision (x) against price move since (y), one dot per decision.
@@ -859,27 +1092,41 @@ import type { DecisionRow } from "../decisionTypes";
  * Reference lines at x=0 and y=0 are quadrant dividers, not a fit -- they mark
  * the sign change on each axis independently and assert nothing about the pair.
  *
- * Single series, so no legend: the title names it (dataviz skill). Dot area is
- * 400px^2 (~22.6px diameter), near the ~24px hit-target floor that skill sets
- * for scatter marks -- affordable here because a personal decision log holds
- * tens of points, not thousands.
+ * Single series, so no legend: the title names it (dataviz skill). Mark size
+ * and the reason for the custom shape are documented on `DecisionDot` above.
  */
 export function DecisionOutcomeScatter({ decisions }: { decisions: DecisionRow[] }) {
-  const { points, total, awaitingBar, withoutFigures } = partitionDecisions(decisions);
+  const { points, total, outcomeUnavailable, figuresUnavailable } = partitionDecisions(decisions);
+
+  // The partition reports STATES and counts; the wording lives here. Keeping
+  // the sentences out of decisionChartData.ts is what lets that module stay a
+  // data-semantics module rather than a presentation one.
+  const excluded: string[] = [];
+  if (outcomeUnavailable > 0) {
+    excluded.push(`${outcomeUnavailable} awaiting a later price bar`);
+  }
+  if (figuresUnavailable > 0) {
+    excluded.push(`${figuresUnavailable} recorded without figures`);
+  }
+  const coverage =
+    `${points.length} of ${total} decisions plotted` +
+    (excluded.length > 0 ? `; ${excluded.join("; ")}` : "") + ".";
 
   return (
     <section
       data-testid="decision-outcome-scatter"
+      aria-labelledby="decision-scatter-title"
+      aria-describedby="decision-scatter-coverage"
       className="mb-6 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-5"
     >
-      <h2 className="text-sm font-bold text-[var(--text-primary)]">
+      <h2 id="decision-scatter-title" className="text-sm font-bold text-[var(--text-primary)]">
         Gap at decision against price move since
       </h2>
-      <p className="mt-1 text-xs text-[var(--text-muted)]">
-        {points.length} of {total} decisions plotted
-        {awaitingBar > 0 && `; ${awaitingBar} awaiting a later price bar`}
-        {withoutFigures > 0 && `; ${withoutFigures} recorded without figures`}
-        .
+      {/* Rendered as text, not only in a hover tooltip: the chart's meaning --
+          including what it could NOT plot -- must be readable without pointing
+          at anything. */}
+      <p id="decision-scatter-coverage" className="mt-1 text-xs text-[var(--text-muted)]">
+        {coverage}
       </p>
       <div className="mt-3 h-72 min-h-72 min-w-0">
         <ResponsiveChart className="h-full w-full" minWidth={1} minHeight={1}>
@@ -897,11 +1144,10 @@ export function DecisionOutcomeScatter({ decisions }: { decisions: DecisionRow[]
               name="Price move since"
               {...withAxisProps({ tickFormatter: (value: number | string) => fmtPctTick(Number(value), 0) })}
             />
-            <ZAxis type="number" range={[400, 400]} />
             <ReferenceLine x={0} stroke="var(--chart-grid)" />
             <ReferenceLine y={0} stroke="var(--chart-grid)" />
             <Tooltip {...withTooltipProps({ cursor: { strokeDasharray: "3 3" } })} />
-            <Scatter data={points} name="Decisions" fill={CHART_COLORS.primary} />
+            <Scatter data={points} name="Decisions" shape={DecisionDot} />
           </ScatterChart>
         </ResponsiveChart>
       </div>
@@ -927,7 +1173,7 @@ Expected: PASS, clean lint.
 
 Two mutations, one at a time, restoring between them.
 
-**(a)** In `decisionChartData.ts`, change the `movePct === null` branch body from `awaitingBar += 1; continue;` to just `continue;` — the row still leaves the chart, but stops being counted.
+**(a)** In `decisionChartData.ts`, change the `movePct === null || priceDate === null` branch body from `outcomeUnavailable += 1; continue;` to just `continue;` — the row still leaves the chart, but stops being counted.
 
 ```bash
 npm.cmd run test:e2e -- decisions.spec.ts -g "could not plot"
@@ -939,7 +1185,30 @@ Expected: FAIL on `/1 awaiting a later price bar/`. **Restore.**
 ```bash
 npm.cmd run test:e2e -- decisions.spec.ts -g "could not plot"
 ```
-Expected: FAIL on `/1 of 3 decisions plotted/`. **Restore** and re-run green.
+Expected: FAIL on `/1 of 3 decisions plotted/`. **Restore.**
+
+**(c)** Drop the first half of the plottability invariant: change
+`if (movePct === null || priceDate === null)` to `if (priceDate === null)`.
+
+```bash
+npm.cmd run test:e2e -- decisions.spec.ts -g "each half of the invariant"
+```
+Expected: FAIL — `decision-point-GAPONLY` renders, because a decision with no
+move is no longer excluded. **Restore.**
+
+**(d)** Drop the other half: change `if (gapPct === null)` to `if (false)`.
+
+```bash
+npm.cmd run test:e2e -- decisions.spec.ts -g "each half of the invariant"
+```
+Expected: FAIL — `decision-point-MOVEONLY` renders, plotting a decision whose
+gap does not exist. **Restore** and re-run green.
+
+Mutations (c) and (d) exist because the standard fixture's two excluded rows
+differ in BOTH fields at once, so a single scenario cannot tell which half of
+the invariant is wired. That is precisely how the backend's two chained guards
+came to look pinned while each was independently deletable — see `ERROR-LOG.md`
+2026-09-03. **Mutate chained conditions one at a time.**
 
 - [ ] **Step 8: Verify the absence test can fail**
 
@@ -1020,14 +1289,38 @@ git commit -m "docs: close Track E9, the decision log page"
 | §6 scatter, gap on x, move on y, one point per decision | Task 4 |
 | §6 no trend line, no R², no accuracy, no error metric | Task 4, Step 8 |
 | §6 load the `dataviz` skill before chart code | Done while writing this plan; its rules are baked into Task 4 — single series so no legend, marks well above the 8px floor and near the 24px hit-target, hover on by default, recessive grid, text in ink tokens rather than the series color, dark mode via the existing CSS-variable ramps |
-| §8 one Playwright e2e covers the page | `decisions.spec.ts`, grown across Tasks 1–4 |
+| §8 one Playwright e2e covers the page | `decisions.spec.ts`, grown across Tasks 1–4 — 12 tests |
 | §4 `GET /decisions/{id}` | **Not implemented — still no caller.** Tracked as E8; this plan does not close it |
+
+**The UI state contract, and where each state is exercised**
+
+| State | Test |
+| --- | --- |
+| loading | asserted implicitly — the loading branch is the only one that may render before data; the error/empty branches are guarded against it |
+| request error | Task 3's server-rejection test asserts `role="alert"` and that the log survives |
+| empty response | reachable via `mockDecisionsApi(page, { rows: [] })` |
+| figures unavailable | Task 2, "a refusal renders its sentence" (ZZTOP) |
+| outcome unavailable | Task 2, same test (NVDA); mutation-verified against a `+0.0%` render |
+| both figures present | Task 2, "each figure is labelled with its own basis" (MSFT) |
+| plottable | Task 4, "exactly the plottable decision becomes a point" — by identity, not count |
+| excluded | Task 4, coverage caption + the all-excluded case + each invariant half separately |
+
+**Why there is no direct unit test of `partitionDecisions`**
+
+`apps/web` ships Playwright and no unit runner. Rather than add vitest — a
+toolchain change this feature does not need — `mockDecisionsApi` takes a `rows`
+override, so every partition boundary is reachable from the browser: the
+all-excluded case, and one row differing in each half of the invariant. Steps
+7(c) and 7(d) mutate the two halves separately, which is the coverage a direct
+unit test would have provided. If a unit runner is added later for other
+reasons, `partitionDecisions` is already a pure function and needs no change to
+be tested directly.
 
 **Deliberately not built**
 
 - **Colouring points by action.** The spec says one point per decision and nothing about series. Four categorical hues would need palette validation and a legend, for a page that will hold tens of points. Cheap to add later if reading the chart shows it is needed.
 - **A per-ticker "record decision" button on `/corporate`.** The spec does not place the control; one form on `/decisions` completes the feature with a single surface.
-- **A unit test runner.** `apps/web` has Playwright only. Adding vitest is a toolchain decision, not part of this feature — so the pure `partitionDecisions` is exercised through the page rather than directly.
+- **A unit test runner.** `apps/web` has Playwright only. Adding vitest is a toolchain decision, not part of this feature — so the pure `partitionDecisions` is exercised through the page rather than directly. See the section above for how each boundary is still reached.
 
 **Type consistency check:** `DecisionRow`, `DecisionOutcome`, `DecisionAction`, `DECISION_ACTIONS` (Task 1) are used unchanged in Tasks 2–4. `partitionDecisions` / `DecisionPartition` / `DecisionPoint` (Task 4) are used only in Task 4. The field names `dcf_implied_return_pct`, `price_move_pct`, `figures_unavailable_reason`, `figures_source`, `outcome.reason`, `outcome.price_date`, `outcome.decided_on` all match the captured response above verbatim.
 
