@@ -82,6 +82,7 @@ sub-project and feeding an implementation plan.
 | `2026-09-03-snapshot-overhaul-design.md` | Durable decision records with outcomes, snapshot dedupe on write, and the reset that precedes them |
 | `plans/2026-09-03-snapshot-overhaul-backend.md` | Task-by-task backend plan implementing the snapshot-overhaul spec |
 | `plans/2026-09-04-snapshot-overhaul-frontend.md` | Task-by-task plan for the `/decisions` page: the record form, the log, and the gap-vs-move scatter |
+| `2026-09-04-valuation-tab-design.md` | Track C1: the `/valuation` tab surfacing the four-row evidence panel, with per-row units and refusal-as-content |
 
 ## Process SOPs (`guideline/sop/`)
 
