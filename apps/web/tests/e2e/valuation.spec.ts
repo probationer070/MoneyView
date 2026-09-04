@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { mockValuationApi } from "./helpers/valuationPageMock";
+import { mockValuationApi, ALL_COMPUTED_FIXTURE } from "./helpers/valuationPageMock";
 
 async function gotoValuation(page: Page) {
   await page.goto("/valuation", { waitUntil: "domcontentloaded" });
@@ -50,7 +50,25 @@ test.describe("the valuation tab", () => {
     await expect(page.getByTestId("verdict-row-volume")).not.toContainText("19.5%");
   });
 
-test("the panel renders without waiting for the watchlist", async ({ page }) => {
+test("all four rows are formatted in their own unit when all four compute", async ({ page }) => {
+    // VERDICT_FIXTURE refuses trailing_pe and dcf_gap, so this is the only test
+    // that exercises those two formatter arms.
+    await mockValuationApi(page, { panel: ALL_COMPUTED_FIXTURE });
+    await gotoValuation(page);
+    await page.getByLabel(/ticker/i).fill("AEP");
+    await page.getByLabel(/ticker/i).press("Enter");
+    await expect(page.getByTestId("verdict-panel")).toBeVisible();
+
+    // trailing_pe is a bare multiple -> no "%", no "×".
+    await expect(page.getByTestId("verdict-row-trailing_pe")).toContainText("24.3");
+    await expect(page.getByTestId("verdict-row-trailing_pe")).not.toContainText("%");
+    await expect(page.getByTestId("verdict-row-trailing_pe")).not.toContainText("×");
+
+    // dcf_gap is a fraction of price -> a signed percent.
+    await expect(page.getByTestId("verdict-row-dcf_gap")).toContainText("+18.2%");
+  });
+
+  test("the panel renders without waiting for the watchlist", async ({ page }) => {
     // The watchlist takes 2-3.5s in production because it fetches a live quote
     // per ticker. Suggestions are a convenience; the panel is the product.
     await mockValuationApi(page, { stallWatchlist: true });

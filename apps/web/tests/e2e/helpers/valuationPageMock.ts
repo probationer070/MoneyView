@@ -38,6 +38,41 @@ export const VERDICT_FIXTURE: VerdictPanel = {
   },
 };
 
+/** All four rows computed. VERDICT_FIXTURE refuses two of them, which leaves the
+ *  trailing_pe and dcf_gap formatter arms unexercised — and those two are exactly
+ *  the rows that will start computing when Track A1's Damodaran vintage lands. */
+export const ALL_COMPUTED_FIXTURE: VerdictPanel = {
+  ticker: "AEP",
+  direction:
+    "Testing UNDERVALUATION. Each row states the basis it was compared against, and those bases differ.",
+  rows: {
+    drawdown: {
+      value: -0.09395437797260045,
+      comparison: "peer mean -12.9%",
+      source: "own window: last 252 of 2513 bars; peers: 8 of 8 within 2025-09-04..2026-09-03",
+      reason: null,
+    },
+    volume: {
+      value: 1.1951446405779511,
+      comparison: null,
+      source: "own bars: 90/252 bars",
+      reason: null,
+    },
+    trailing_pe: {
+      value: 24.3,
+      comparison: "sector 18.7",
+      source: "own PE: …",
+      reason: null,
+    },
+    dcf_gap: {
+      value: 0.182,
+      comparison: "intrinsic 118.20 vs price 100.00",
+      source: "conservative case #3",
+      reason: null,
+    },
+  },
+};
+
 export const WATCHLIST_FIXTURE = [
   { ticker: "AEP", name: "American Electric Power", sector: "Utilities" },
   { ticker: "AAPL", name: "Apple", sector: "Technology" },

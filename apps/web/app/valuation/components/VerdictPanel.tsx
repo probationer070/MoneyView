@@ -1,7 +1,7 @@
 "use client";
 
 import { SIGNAL_LABELS, SIGNAL_UNIT_NOTE, formatSignalValue } from "../verdictFormat";
-import { SIGNAL_ORDER, type SignalName, type VerdictPanel } from "../verdictTypes";
+import { SIGNAL_ORDER, type SignalName, type VerdictPanel, type VerdictRow } from "../verdictTypes";
 
 /**
  * The evidence panel. Computed and refused rows go through the SAME path:
@@ -32,7 +32,7 @@ export function VerdictPanelView({ panel }: { panel: VerdictPanel }) {
   );
 }
 
-function SignalRow({ name, row }: { name: SignalName; row: VerdictPanel["rows"][string] }) {
+function SignalRow({ name, row }: { name: SignalName; row: VerdictRow }) {
   const refused = row.value === null;
   return (
     <article
@@ -41,9 +41,9 @@ function SignalRow({ name, row }: { name: SignalName; row: VerdictPanel["rows"][
     >
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h3 className="text-sm font-bold text-[var(--text-primary)]">{SIGNAL_LABELS[name]}</h3>
-        {!refused && (
+        {row.value !== null && (
           <p className="text-lg font-bold text-[var(--text-primary)]">
-            {formatSignalValue(name, row.value as number)}
+            {formatSignalValue(name, row.value)}
           </p>
         )}
       </div>
