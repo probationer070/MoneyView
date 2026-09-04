@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { mockDecisionsApi } from "./helpers/decisionsPageMock";
+import { DECISION_FIXTURE, mockDecisionsApi } from "./helpers/decisionsPageMock";
 
 async function gotoDecisions(page: Page) {
   await page.goto("/decisions", { waitUntil: "domcontentloaded" });
@@ -132,5 +132,105 @@ test.describe("the decision log page", () => {
 
     // The typed memo is still there to retry with, not silently discarded.
     await expect(page.getByLabel(/memo/i)).toHaveValue("services margin inflecting");
+  });
+
+  test("exactly the plottable decision becomes a point, and it is the right one", async ({ page }) => {
+    await mockDecisionsApi(page);
+    await gotoDecisions(page);
+
+    const chart = page.getByTestId("decision-outcome-scatter");
+    await expect(chart).toBeVisible();
+
+    // Identity, not just arity: MSFT has both axes; NVDA has a gap but no move
+    // yet; ZZTOP has neither. A count alone would pass if the WRONG decision
+    // were plotted.
+    await expect(chart.getByTestId("decision-point-MSFT")).toBeVisible();
+    await expect(chart.getByTestId("decision-point-NVDA")).toHaveCount(0);
+    await expect(chart.getByTestId("decision-point-ZZTOP")).toHaveCount(0);
+  });
+
+  test("the scatter states how many decisions it could not plot, and why", async ({ page }) => {
+    await mockDecisionsApi(page);
+    await gotoDecisions(page);
+
+    const chart = page.getByTestId("decision-outcome-scatter");
+    await expect(chart).toBeVisible();
+
+    // Positive control: a point actually rendered, so the counts below describe
+    // a drawn chart rather than an empty one. NOTE: never assert on `circle`
+    // generically -- Recharts' default mark is `<path class="recharts-symbols">`,
+    // so such a control silently matches nothing. The testid comes from this
+    // chart's custom shape.
+    await expect(chart.getByTestId("decision-point-MSFT")).toBeVisible();
+
+    // 1 of 3 plottable in the fixture: one awaiting a bar, one with no figures.
+    await expect(chart.getByText(/1 of 3 decisions plotted/i)).toBeVisible();
+    await expect(chart.getByText(/1 awaiting a later price bar/i)).toBeVisible();
+    await expect(chart.getByText(/1 recorded without figures/i)).toBeVisible();
+  });
+
+  test("a log with nothing plottable says so instead of looking broken", async ({ page }) => {
+    // The empty-chart path is otherwise unverified, and it is exactly the state
+    // a new user is in: decisions recorded, no later bars yet. It must read as
+    // "nothing to plot yet", never as an error and never as a blank panel.
+    await mockDecisionsApi(page, { rows: [DECISION_FIXTURE[0], DECISION_FIXTURE[1]] });
+    await gotoDecisions(page);
+
+    const chart = page.getByTestId("decision-outcome-scatter");
+    await expect(chart).toBeVisible();
+    await expect(chart.getByText(/0 of 2 decisions plotted/i)).toBeVisible();
+    await expect(chart.getByText(/1 awaiting a later price bar/i)).toBeVisible();
+    await expect(chart.getByText(/1 recorded without figures/i)).toBeVisible();
+
+    // Both decisions stay readable in the log below: excluding a row from the
+    // chart must never remove it from the record.
+    await expect(page.getByTestId("decision-card-2")).toBeVisible();
+    await expect(page.getByTestId("decision-card-3")).toBeVisible();
+    // Scoped to <main>: Next's App Router mounts its own role="alert" live
+    // region as a body sibling, through an open shadow root that Playwright
+    // pierces, so an unscoped query here can never reach 0.
+    await expect(page.getByRole("main").getByRole("alert")).toHaveCount(0);
+  });
+
+  test("each half of the invariant excludes a decision on its own", async ({ page }) => {
+    // The standard fixture's two excluded rows differ in BOTH fields at once,
+    // so neither half of the plottability invariant is pinned by it alone --
+    // the same trap the backend's two chained guards fell into (ERROR-LOG.md,
+    // 2026-09-03). These two rows each differ in exactly one field.
+    const gapOnly = {
+      ...DECISION_FIXTURE[2], id: 11, ticker: "GAPONLY",
+      outcome: { ...DECISION_FIXTURE[2].outcome, price_now: null, price_date: null,
+                 price_move_pct: null, reason: "no bar with a close after 2026-09-04" },
+    };
+    const moveOnly = { ...DECISION_FIXTURE[2], id: 12, ticker: "MOVEONLY", dcf_implied_return_pct: null };
+
+    await mockDecisionsApi(page, { rows: [gapOnly, moveOnly, DECISION_FIXTURE[2]] });
+    await gotoDecisions(page);
+
+    const chart = page.getByTestId("decision-outcome-scatter");
+    await expect(chart.getByTestId("decision-point-MSFT")).toBeVisible();
+    await expect(chart.getByTestId("decision-point-GAPONLY")).toHaveCount(0);
+    await expect(chart.getByTestId("decision-point-MOVEONLY")).toHaveCount(0);
+    await expect(chart.getByText(/1 of 3 decisions plotted/i)).toBeVisible();
+    await expect(chart.getByText(/1 awaiting a later price bar/i)).toBeVisible();
+    await expect(chart.getByText(/1 recorded without figures/i)).toBeVisible();
+  });
+
+  test("the chart asserts no relationship between the two axes", async ({ page }) => {
+    await mockDecisionsApi(page);
+    await gotoDecisions(page);
+
+    // Positive control first: an absence assertion against an unrendered chart
+    // proves nothing (see corporate-probability-labels.spec.ts).
+    const chart = page.getByTestId("decision-outcome-scatter");
+    await expect(chart).toBeVisible();
+    await expect(chart.getByTestId("decision-point-MSFT")).toBeVisible();
+
+    // Spec 6: no trend line, no R-squared, no accuracy score, no error metric.
+    // Each would assert the axes are commensurable; the gap has no horizon and
+    // the move does.
+    for (const forbidden of [/trend/i, /R²|R2\b/i, /accuracy/i, /regression/i, /correlation/i, /hit rate/i]) {
+      await expect(page.getByText(forbidden)).toHaveCount(0);
+    }
   });
 });
