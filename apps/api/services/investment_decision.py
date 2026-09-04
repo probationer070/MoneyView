@@ -227,6 +227,30 @@ from apps.api.services.acquisition.store import load_price_bars
 _OUTCOME_BARS_LIMIT = 30
 
 
+def get_decision(decision_id: int, *, bars_loader=load_price_bars) -> dict | None:
+    """One decision with a freshly computed outcome, or None if there is no such id.
+
+    Returns None rather than a row of nulls: a hollow dict would reach the route
+    as a 200 describing a decision nobody made. The outcome is computed here for
+    the same reason it is in `list_decisions` -- a stored one is correct only
+    until the next bar arrives, and then silently wrong.
+    """
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT * FROM investment_decision WHERE id = ?", (decision_id,)
+        ).fetchone()
+    if row is None:
+        return None
+
+    decision = dict(row)
+    decision["outcome"] = outcome_for(
+        decided_at=str(decision["decided_at"]),
+        price_at_decision=decision["price_at_decision"],
+        bars=bars_loader(str(decision["ticker"]), limit=_OUTCOME_BARS_LIMIT),
+    )
+    return decision
+
+
 def list_decisions(*, bars_loader=load_price_bars) -> list[dict]:
     """Every decision, newest first, each with a freshly computed outcome.
 

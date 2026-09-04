@@ -1,6 +1,6 @@
 import pytest
 
-from apps.api.services.investment_decision import list_decisions, record_decision
+from apps.api.services.investment_decision import get_decision, list_decisions, record_decision
 
 
 def _figures(ticker):
@@ -73,4 +73,60 @@ def test_bars_are_loaded_once_per_ticker_with_a_small_limit_not_the_full_history
     assert len(calls) == 1, calls
     ticker, limit = calls[0]
     assert ticker == "MSFT", calls
+    assert limit is not None and limit < 100, calls
+
+
+def test_one_decision_is_readable_by_id_with_its_outcome():
+    """Spec S4 names this endpoint beside the list. It must return the same shape
+    the list returns for that row -- an outcome computed on read, not a bare
+    stored record."""
+    decision_id = record_decision(ticker="MSFT", action="buy", memo="m", figures_loader=_figures)
+    row = get_decision(decision_id, bars_loader=_bars)
+    assert row is not None
+    assert row["id"] == decision_id
+    assert row["ticker"] == "MSFT"
+    assert row["outcome"]["price_move"] == pytest.approx(0.20)
+    assert row["outcome"]["price_date"] == "2026-12-31"
+
+
+def test_an_unknown_id_is_absent_rather_than_an_empty_decision():
+    """None, not a hollow row. A dict with null fields would reach the route as a
+    200 describing a decision that was never made."""
+    assert get_decision(9999, bars_loader=_bars) is None
+
+
+def test_the_outcome_for_one_decision_is_computed_on_read_not_stored():
+    """The same guarantee the list gives (spec S4.1): a persisted outcome is
+    correct only until the next bar arrives and then silently wrong. Reading the
+    SAME decision against a later bar must yield a different move, with no write
+    in between."""
+    decision_id = record_decision(ticker="MSFT", action="buy", memo="m", figures_loader=_figures)
+
+    first = get_decision(decision_id, bars_loader=lambda t, limit=None: [
+        {"date": "2026-12-31", "close": 120.0},
+    ])
+    later = get_decision(decision_id, bars_loader=lambda t, limit=None: [
+        {"date": "2026-12-31", "close": 120.0},
+        {"date": "2027-01-15", "close": 90.0},
+    ])
+    assert first["outcome"]["price_move"] == pytest.approx(0.20)
+    assert later["outcome"]["price_move"] == pytest.approx(-0.10)
+    assert later["outcome"]["price_date"] == "2027-01-15"
+
+
+def test_reading_one_decision_loads_bars_with_a_bounded_limit():
+    """`outcome_for` needs only the newest bar after the decision, so pulling a
+    ticker's whole stored history for a single read is the anti-pattern Track D6
+    already fixed elsewhere."""
+    calls = []
+
+    def _counting(ticker, limit=None):
+        calls.append((ticker, limit))
+        return [{"date": "2026-12-31", "close": 120.0}]
+
+    decision_id = record_decision(ticker="MSFT", action="buy", memo="m", figures_loader=_figures)
+    get_decision(decision_id, bars_loader=_counting)
+    assert len(calls) == 1, calls
+    ticker, limit = calls[0]
+    assert ticker == "MSFT"
     assert limit is not None and limit < 100, calls

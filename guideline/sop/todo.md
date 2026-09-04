@@ -365,16 +365,43 @@ the job they were failing at.
 
 ### Not done, deliberately
 
-- [ ] **E7. Run the reset.** `python scripts/reset_snapshots.py` clears all three
-      snapshot tables (139 + 0 + 880 rows) after backing the database up. The
-      script is written and tested; it has NOT been run. Snapshot rows are
-      point-in-time records that cannot be regenerated, so the irreversible step
-      is left to a human hand even though it was authorised.
+- [x] **E7. Reset run 2026-09-04.** `python scripts/reset_snapshots.py` cleared
+      all three snapshot tables after backing the database up.
 
-- [ ] **E8. `GET /api/v1/decisions/{id}`.** Spec §4 names it; no task implemented
-      it. Nothing consumes it -- the list endpoint already returns every decision
-      with its outcome -- so it waits for the frontend plan to supply a real
-      caller rather than being built on speculation.
+      **It deleted 139 + 0 + 0 rows, not the 139 + 0 + 880 this entry used to
+      claim.** `_v3` had already been emptied a day earlier -- 880 rows across 20
+      versions, unrecoverable, unnoticed. The investigation and the resulting
+      hardening are in `ERROR-LOG.md` under 2026-09-04: the loss is bounded by
+      backups to a 3h22m window on 2026-09-03, four candidate causes are excluded
+      by measurement, and the exact command is explicitly NOT established.
+      `reset_snapshots` now refuses the real database without an explicit opt-in
+      and backs it up itself, verified by five mutations.
+
+      The stale figure is the lesson: it was measured once, then restated in the
+      spec, the plan, a PR description and here, and every restatement made it
+      look better attested while it was already false. Re-measure before an
+      irreversible step.
+
+- [x] **E8. `GET /api/v1/decisions/{id}` — built 2026-09-04, on request.**
+      `get_decision(id, bars_loader=...)` returns one row with its outcome
+      computed on read, exactly as `list_decisions` does, or `None`; the route
+      turns `None` into a 404 rather than a 200 carrying nulls, because a hollow
+      row would describe a decision nobody made. Bars are loaded once, bounded by
+      `_OUTCOME_BARS_LIMIT`.
+
+      **Still has no caller.** It was deferred precisely for that reason and was
+      built anyway when asked; the frontend reads the list endpoint and does not
+      need this one. That is a deliberate exception to CLAUDE.md section 2, not
+      an oversight, and it is recorded here so nobody later infers a consumer
+      that does not exist.
+
+      Three mutations, each caught by a named test: a missing id returning a
+      hollow 200 instead of a 404; the outcome stored rather than computed on
+      read; and bars loaded unbounded. A fourth probe -- reordering the route
+      declarations -- was DROPPED after testing showed it cannot fail:
+      `/decisions` and `/decisions/{id}` are distinct paths and neither shadows
+      the other, so an earlier docstring claiming the order mattered was wrong
+      and was corrected.
 
 - [x] **E9. The frontend.** `app/decisions/page.tsx` — the route — reads the
       list endpoint through `decisionTypes.ts` (the `DecisionRow`/
@@ -408,7 +435,8 @@ the job they were failing at.
       `eslint-config-next`, which does not typecheck, and the Playwright
       harness runs Next in dev mode, which does not fail the run on a type
       error either.
-      **E9 does not close E7 or E8 — both remain open below.**
+      **E9 did not close E7 or E8.** E7 was run on 2026-09-04 (see the
+      entry above and `ERROR-LOG.md`); E8 was built the same day, on request.
 
 ### Known limits of this iteration
 
