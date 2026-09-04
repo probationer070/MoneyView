@@ -1,0 +1,291 @@
+# MoneyView — Damodaran Valuation Module: SpaceX Post-Prospectus Implementation Spec
+
+**Source:** auto-transcript of Damodaran's post-prospectus SpaceX session, corresponding to *"Revisiting the SpaceX Valuation: A Post-Prospectus Update!"* (Musings on Markets / Substack, June 2026). Third in the series after the April 2026 pre-prospectus valuation.
+
+**Status:** spec only. No code written. Figures below are transcript-derived unless marked `[VERIFIED]` (checked against external sources, Sept 2026) or `[UNSPECIFIED]` (he stated direction but no number — do not fabricate a value; require user input).
+
+**Transcription hazard:** the source is a machine transcript with visible corruption. Numbers that read ambiguously are flagged `[T?]` throughout and must be confirmed against the written post before entering the input store. Known corrections applied: "Cursard" → Cursor, "Enthropic" → Anthropic, "Sam Alman" → Altman, "Ramco" → Aramco, "Ebida" → EBITDA, "disclosure diarrhea" → his own joke on "disclosure dilemma".
+
+---
+
+## Part A — Numeric inputs
+
+### A.1 Financing / capital structure (the "numbers section")
+
+| Input | Pre-prospectus (April) | Post-prospectus (June) | Value impact |
+|---|---|---|---|
+| Book equity | $20B (guess) | $41.3B | None — book equity is not a DCF input |
+| Total debt | unknown, assumed nonzero | $22.9B | Enters WACC weights only |
+| Cash | zeroed out | ~$25B | — |
+| **Net debt** | n/a | **≈ −$2.1B (net cash)** | Rounding error against $1.2T |
+| Share count | ~2.5B (est. mkt cap ÷ private mark) | 12.5B post-split, pre-IPO | Denominator only |
+| Share count (his forecast) | — | ">13B" incl. IPO + restricted stock | `[VERIFIED]` 13.57B actual as of Sep 2026 — he was right |
+| IPO gross proceeds | unknown | ~$74.4B / $75B, **retained in firm** | +$75B to equity value, offset by new shares |
+| Class A | — | 6.9B shares @ 1 vote | Governance module |
+| Class B | — | 5.6B shares @ 10 votes, ~all Musk | ~85% voting control |
+
+**The lesson to encode:** three of the four "missing" balance-sheet items he was guessing at moved a long way and changed the valuation by essentially nothing. Book equity is irrelevant to intrinsic value; gross debt is irrelevant once netted against cash. A module that gates a valuation on "we don't have the balance sheet yet" is gating on the wrong data.
+
+### A.2 Operating results, FY2025
+
+| Segment | Revenue growth 2025 | Gross margin 2024 | Gross margin 2025 | Direction |
+|---|---|---|---|---|
+| Space (launch) | ~8% | 59.4% | ~67% | Improving |
+| Connectivity (Starlink) | ~50% (49%) | 37% | 48% | Improving, largest slice |
+| AI (xAI) | ~22% | lowest of three `[UNSPECIFIED]` | declined | **Deteriorating** |
+| **Total** | **~33%** | | | Aggregate operating loss $2.6B vs his $2.0B estimate |
+
+Supplementary unit-economics disclosures:
+
+- Launch cost per payload declining (Falcon 9 → Starship); cost advantage over competitors already large and widening.
+- Starlink ARPU: ~$100/mo (2024) → $66/mo (Q1 2026) `[T?]`, a ~⅓ decline, against a **doubling** of subscribers and +49% revenue. He reads falling ARPU as *confirmatory* for a mass-market endgame, not as deterioration.
+- Colossus (xAI compute) leased to Anthropic: **$1.25B/month** `[VERIFIED]` — Colossus 1, ~220K GPUs, ~300MW, capped near 11% of xAI's park, term running to 2029. Near-term revenue; long-term strategic tension because xAI is simultaneously targeting the enterprise market Anthropic serves.
+- xAI margin deterioration attributed to two persistent forces: (1) most competitively exposed of the three segments, cutthroat pricing; (2) rising unit cost of delivering AI services (agentic workloads), which he expects will **not** scale down as vendors claim.
+
+### A.3 Total addressable market: issuer claim vs analyst estimate
+
+| Segment | Prospectus TAM | Damodaran TAM | Haircut | Basis for the haircut |
+|---|---|---|---|---|
+| Space | $370B | **$100B** (unchanged) | 27% | Rejects the issuer figure outright |
+| Connectivity | $1.6T | **$160B** addressable | 10% | $1.6T is *all* broadband; satellite is a niche subset at ~10% penetration |
+| AI | $26T (of which $22.7T enterprise) | **$3–4T** | ~13% | Accepts a huge market, rejects the magnitude |
+| **Total** | **$28T** | ~$3.5T | | $28T ≈ 20% of *all global corporate revenue* (~$140T, 2025) |
+
+Historical overreach comparanda he cites (use as validator calibration): Uber 2019 claimed $5.2T (built by summing all transportation spend including car purchases); Airbnb 2020 claimed $3.5T (~6× the entire global hotel industry's revenue).
+
+### A.4 Story inputs — pre vs post
+
+| Segment | Input | Pre | Post | Driver of change |
+|---|---|---|---|---|
+| Space | TAM | $100B | $100B | unchanged |
+| | Market share | 70% | 70% | unchanged |
+| | Target revenue | $70B | $70B | unchanged |
+| | Target operating margin | 40% | **45%** | Gross margin 59.4→67%, falling launch cost |
+| | Reinvestment (yrs 1–5) | low | **higher** | Observed capex; modest increase |
+| Connectivity | TAM | $1.6T total / 10% satellite | same | unchanged |
+| | Target revenue | $120B | $120B | unchanged |
+| | Target operating margin | 60% | 60% | unchanged (already well above current) |
+| | Reinvestment (yrs 1–5) | low | **higher** | Observed capex; 10k satellites already orbital |
+| AI | Strategy | consumer subscription niche | **enterprise services** | Prospectus TAM framing + Cursor acquisition |
+| | Target revenue | $80B | **$160B** (2×) | Bigger market |
+| | Target operating margin | 45% | **25%** | *Largest single change in the valuation* |
+| | Sales-to-capital | — | **lowered** `[UNSPECIFIED]` | More capital intensive, reinvestment front-loaded |
+| Expansion options | Target revenue | $50B | $50B | unchanged |
+| | Margin | "pretty good" `[UNSPECIFIED]` | unchanged | Mars tourism, fiber-competitive satellite, AI adjacencies |
+| Firmwide | Risk-free rate | 4.2% | **4.56%** | +36bp on the 10-yr T-bond |
+| | WACC yrs 1–10 | ~8.0% | **8.37%** | Rate move |
+| | WACC terminal | ~8.0% | **8.25%** | Rate move |
+| | Near-term external funding need | — | ~$13.5B/yr `[T?]` | To sustain capex |
+
+**The pivot is the whole story.** Doubling the AI target revenue and halving its margin are one decision, not two: going head-on at enterprise services buys a larger market and pays for it in competitive margin compression and heavier capital intensity. The module must not let a user raise a TAM without being prompted on the margin and sales-to-capital consequences — a bigger market taken by a more contested route is not a free upgrade. **Implement as a coupled-input constraint, not three independent sliders.**
+
+---
+
+## Part B — Reconciliation audit
+
+Before this input set is trusted as a fixture, it must reproduce his stated output. It does:
+
+**Weighted target margin, core three segments**
+
+| | Pre | Post |
+|---|---|---|
+| Space | $70B × 40% = $28.0B | $70B × 45% = $31.5B |
+| Connectivity | $120B × 60% = $72.0B | $120B × 60% = $72.0B |
+| AI | $80B × 45% = $36.0B | $160B × 25% = $40.0B |
+| **Target revenue** | **$270B** | **$350B** (+29.6%) |
+| **Target EBIT** | **$136.0B** | **$143.5B** (+5.5%) |
+| **Weighted margin** | **50.4%** | **41.0%** (−940bp) |
+
+This is internally coherent with his stated result: +29.6% revenue and +5.5% EBIT, offset by ~37bp of added WACC and materially front-loaded reinvestment, nets to operating-asset value $1.21T → **$1.22T** — the near-zero change he reports, arrived at by cancellation rather than by nothing happening.
+
+**Per-share bridge**
+
+```
+Operating assets            $1,220B
++ Net cash (25.0 − 22.9)    +   2.1B
++ IPO proceeds retained     +  75.0B
+─────────────────────────────────────
+Equity value                $1,297B
+÷ Shares (12.5B + 0.556B)    13.06B
+─────────────────────────────────────
+Value per share              $99.3   ≈ his "$100"
+```
+
+Re-run on actual IPO mechanics `[VERIFIED]` (555.6M shares at $135, over-allotment lifting gross proceeds to ~$86B, 13.57B shares outstanding): equity $1,308B ÷ 13.57B = **$96.4/share**. So his intrinsic value sits in a **$96–100** band, against a $135 offer.
+
+**Circularity warning — read this alongside Part C.3.** Converting $75B of proceeds into a share count requires an offer price, so a *pricing* input legitimately enters the per-share calculation. This is not the market-price anchoring bug the DCF audit found. The distinction the code must enforce: an offer price may size the denominator (a mechanical share-count conversion) but may never touch the numerator (cash flows, growth, margins, WACC, terminal value). Keep them in separate functions with separate signatures so the boundary is visible.
+
+---
+
+## Part C — Conceptual modules
+
+### C.1 TAM plausibility check
+
+Purpose: prevent issuer-claimed TAM from entering a valuation as a default. His framing — this is the one number Silicon Valley has learned to game, because a large TAM stops investors asking questions.
+
+```python
+@dataclass(frozen=True)
+class TamClaim:
+    segment: str
+    issuer_tam: float                 # as disclosed, USD
+    issuer_source: str                # e.g. "S-1 p.112"
+    category_current_revenue: float | None   # actual revenue of the named category today
+    analyst_tam: float | None         # REQUIRED before valuation proceeds
+    penetration_rationale: str | None # why the served subset < category
+
+GLOBAL_CORPORATE_REVENUE = 140_000e9   # 2025, his stated benchmark; refresh annually
+```
+
+Flags, in ascending severity:
+
+| Rule | Threshold | Severity |
+|---|---|---|
+| `issuer_tam / GLOBAL_CORPORATE_REVENUE` | > 1% | `warn` |
+| same | > 5% | `severe` (SpaceX AI: 18.6%; total claim: 20%) |
+| `issuer_tam / category_current_revenue` | > 3× | `warn` — category inflation (Airbnb: ~6×) |
+| `issuer_tam` equals a whole category while the firm serves a technically distinct subset | boolean | `severe` — demand a penetration haircut (satellite ≠ all broadband) |
+| `analyst_tam is None` | — | **block**: refuse to value |
+
+The last rule is the point of the module. Issuer TAM is stored, displayed and diffed, but is never a usable input — the same posture as `no_sector_pe` refusing to publish rather than guessing.
+
+Empirical prior for the override, *derived from his three haircuts (27%, 10%, 13%) — not his stated rule*: issuer TAM × 0.10–0.30 is a defensible starting band for a consumer/enterprise technology claim. Surface it as a suggestion with the derivation shown, never as a default that auto-populates.
+
+Also worth encoding as a display rule: report claimed TAM as a percentage of global corporate revenue next to the raw figure. "$28 trillion" does not read as absurd; "20% of all revenue earned by every company on earth" does.
+
+### C.2 Life-cycle input weighting
+
+Purpose: make the engine's screens conditional on life-cycle stage. This is his central methodological claim in this session — the informational value of a financial statement shifts across the corporate life cycle, and applying mature-company diagnostics to a young company is "not just myopic, it's often misleading."
+
+| Stage | Questions that matter | Informative inputs | Inputs that are noise |
+|---|---|---|---|
+| Idea / start-up | Is the product buildable? Is there a market? | Founder, exit plan, capital access | Everything accounting |
+| Young growth | What are the unit economics? | **Gross margin and its trajectory**, cost dynamics, ownership structure | Earnings, ROE/ROIC, revenue level |
+| High growth | Can growth be sustained, and at what cost? | **Revenue growth, reinvestment intensity, sales-to-capital** | Accounting returns, current margins |
+| Mature growth / mature stable | Is the moat real? | **Operating margin, ROIC vs WACC, excess return spread** | — |
+| Decline | Is liquidation worth more? | Divestiture value, distribution capacity | Growth inputs |
+
+Concrete engine consequences:
+
+1. **Gate the ROIC vs WACC value-creation test on stage.** MoneyView's existing ROIC−WACC spread is a mature-company diagnostic. For `young_growth` and `high_growth`, suppress it or mark it `not_meaningful` — a company still searching for a moat has no meaningful excess return, and negative or near-zero book capital produces garbage denominators. All three SpaceX segments classify as young/high growth; the firmwide accounting return in 2025 would have been meaningless.
+2. **Substitute the early-stage diagnostic pair:** gross-margin level *and* trajectory, plus capital intensity (sales-to-capital or capex/revenue). These are exactly the two things he actually extracted from a 277-page prospectus. Everything else in the numbers section moved his value by a rounding error.
+3. **Never suppress a valuation for negative earnings or negative FCF at early stages** — flag as expected, not as a defect.
+4. **Bear-case classifier** (small, cheap, high value). Reject as life-cycle-inappropriate: "loses money", "negative cash flow", "revenue too small relative to valuation". Accept as substantive: TAM overestimation, competitive margin compression, reinvestment/capital-allocation risk, governance. His words: the money-losing argument is "both lazy and unconvincing," because of course a young company loses money.
+5. **Prospectus-bloat corollary.** 277 pages plus a ~100-page addendum, against sub-100-page prospectuses for Apple and Microsoft in the 1980s. Page count has grown; information content has not. A parser should target a narrow extraction set — segment revenue, segment gross margin, capex, R&D, share classes and votes, use of proceeds, ARPU and subscriber counts — and ignore the rest rather than attempting general comprehension.
+
+### C.3 Price vs. value separation
+
+Purpose: structurally enforce the separation the DCF audit found violated (estimated value anchored to current market price via a hardcoded scalar).
+
+**Hard invariant:** no market price, transaction price, private-round mark, offer price, or comparable multiple may appear anywhere in the intrinsic-value chain — cash flows, growth, margins, reinvestment, WACC, terminal value.
+
+Permitted uses of price, exhaustively:
+
+| Use | Where | Note |
+|---|---|---|
+| Sizing shares issued from known proceeds | Per-share denominator only | Part B circularity warning |
+| Price/value gap | Output diagnostic | Never an input |
+| Regression beta | WACC | Prefer bottom-up/Hamada — already implemented — for pre-IPO and newly-listed names |
+| Pricing-comp cross-check | Separate reported panel | Labelled *pricing*, not valuation |
+
+**Regression test that would have caught the audit bug:**
+
+```python
+def test_intrinsic_value_is_price_invariant():
+    base = build_inputs(TICKER)
+    v1 = dcf(base)
+    v2 = dcf(replace(base, market_price=base.market_price * 3.0))
+    assert v1.value_per_share == pytest.approx(v2.value_per_share)
+    # and the strong form:
+    assert "market_price" not in dcf_input_dependency_graph(dcf)
+```
+
+**Pricing model, kept separate.** His account of how banks actually set the number, which is a *pricing* algorithm and should be labelled as one: anchor on the most recent private/VC mark ($1.2–1.25T two months prior) → apply a public-company premium (cash inflow, reduced failure risk) → deliberately underprice to honour the price guarantee. He predicted $1.5–2T from that chain alone, months in advance; actual was $1.77T. Worth implementing as `ipo_price_estimate()` precisely because it demonstrates that the banks' number is derivable without any valuation.
+
+**Action layer — separate from the value layer.** A price/value gap is not a trade signal. His position: overvalued means don't buy, but does *not* mean short, because mood and momentum dominate over horizons long enough to ruin you. Encode an explicit abstain band and record his stated precedents as the reason it exists:
+
+- Facebook 2012: $38 offer, his value $28–29, no purchase; $18 three months later — value reached, so patience was the correct action, not shorting.
+- Uber 2019: overpriced at IPO on his numbers; $14 a year later under COVID.
+- His own SpaceX stance: sit out the IPO, do not short, revisit on price change. Explicitly not a permanent judgment.
+
+### C.4 Governance / key-man risk
+
+Purpose: represent controller-concentration risk as a valuation input rather than commentary.
+
+```python
+@dataclass(frozen=True)
+class ControlStructure:
+    classes: list[ShareClass]     # (shares, votes_per_share)
+    controller_economic_pct: float   # SpaceX/Musk: ~42%  [VERIFIED]
+    controller_voting_pct: float      # SpaceX/Musk: ~82–85%
+    @property
+    def wedge(self) -> float:         # 2.0x for SpaceX
+        return self.controller_voting_pct / self.controller_economic_pct
+```
+
+**Implement as a scenario branch on capital allocation, not as a discount-rate premium.** Default to the scenario; expose the discount-rate route behind a flag with the trade-off documented. Rationale: a WACC add-on is a blunt instrument that penalises the good outcomes symmetrically, whereas the risk he actually describes is specific and one-directional — a controller who cannot be overruled invests real capital against an overestimated TAM and an overestimated competitive position.
+
+Overreach branch mechanics for SpaceX AI:
+
+- Reinvestment is sized to the **controller's** TAM ($26T) and implied revenue ambition.
+- Margins and achieved market share stay at the **analyst's** estimates ($3–4T TAM, 25% margin).
+- The gap is capital deployed at a return below cost of capital.
+- Value destruction ≈ PV of excess reinvestment × (1 − ROIC_new / WACC).
+- Trigger conditions to expose in the UI: capex growth persistently outrunning segment revenue growth; R&D growth outrunning revenue growth; a segment with deteriorating gross margin absorbing a rising share of total reinvestment. All three were observable in SpaceX's FY2025 disclosures — capex doubled, R&D more than doubled, both concentrated in the segment whose gross margin fell.
+
+He is explicit that this is his dominant residual risk, and that the dual-class structure removes the ordinary check on it: "this is not a corporate democracy."
+
+---
+
+## Part D — Out-of-sample validation fixture
+
+The IPO has since happened, which makes this an unusually good regression test: a documented intrinsic value, a documented pricing, and three months of realised outcome. `[VERIFIED]` against sources listed at the end.
+
+| Event | Date | Price | Implied value |
+|---|---|---|---|
+| Damodaran pre-prospectus valuation | Apr 2026 | — | $1.21T operating assets |
+| Prospectus filed | — | — | 277pp + ~100pp addendum |
+| Damodaran post-prospectus valuation | Jun 2026 | **$96–100/sh** | $1.25–1.30T equity |
+| IPO priced | Jun 11–12, 2026 | **$135** | ~$1.77T |
+| First trading day (open = close) | Jun 12, 2026 | **$161** (+19%) | ~$2.1T |
+| Post-IPO peak | week of Jun 15 | **$225.64** | ~$3.1T |
+| Trough (below IPO price) | late Jul 2026 | **$104.83** (−54% from peak) | ~$1.42T |
+| Recovered above offer | Aug 13, 2026 | > $135 | — |
+| Share-unlock pressure | Aug 2026 | — | +319M shares to market |
+| Latest | Sep 3, 2026 | **$149.74** | $2.03T, 13.57B shares |
+
+Scoring what this validates:
+
+- **Value estimate: sound.** Actual shares outstanding 13.57B against his ">13B" forecast. TTM revenue $23.0B (+121.9%), net income −$8.89B, EPS −$2.27 — a money-losing, cash-burning growth company, exactly as characterised.
+- **"$135 is too rich": correct directionally.** The stock traded below the offer price within seven weeks.
+- **"Don't short": correct, and the more valuable lesson.** It went to $225.64 first — a 67% adverse move against a short taken at the offer. This is the abstain band in C.3 earning its place. A module that converted a −26% value gap into a short signal would have been right about value and destroyed.
+- **Price never reached value.** Trough $104.83 vs value $96–100. Current price/value ≈ **1.55×**. Sell-side median 12-month target ~$222 (range $190–800) sits at roughly 2.2× his intrinsic value — a usable illustration of the pricing/valuation gap for the UI.
+
+Use this as the module's golden fixture: the same input set must reproduce $96–100/share, must classify all three segments as young/high growth, must refuse the $28T TAM, must flag the 2.0× voting wedge, and must return `abstain` rather than `short` at a $135 price.
+
+---
+
+## Part E — Flagged items requiring source confirmation
+
+| Item | Issue |
+|---|---|
+| xAI 2024 gross margin | `[UNSPECIFIED]` — stated as lowest of the three and declining, no figure given |
+| Sales-to-capital ratios, all segments | `[UNSPECIFIED]` — only direction stated. Required numerically before the fixture runs |
+| Expansion-option margins | `[UNSPECIFIED]` — "pretty good profitability" |
+| Starlink ARPU $66 | `[T?]` — transcript garbles the period ("2020 the first quarter of 2026") |
+| $13.5B funding need | `[T?]` — transcript ambiguous on whether annual or cumulative |
+| Connectivity target revenue $120B vs $160B addressable | Implies ~75% share, which he never states explicitly. Confirm |
+| Expansion-option valuation method | Not described in this session — carried over from April post. Needs the earlier source |
+| Terminal-year assumptions | Not stated; the 8.25% terminal WACC implies a terminal growth cap at the risk-free rate (4.56%) per his standard constraint — confirm rather than assume |
+
+---
+
+## Sources
+
+- [Revisiting the SpaceX Valuation: A Post-Prospectus Update! — Musings on Markets](https://aswathdamodaran.blogspot.com/2026/06/a-weeks-ago-i-assessed-value-of-spacex.html)
+- [To a Trillion(s) Dollars and beyond: A SpaceX IPO Odyssey! (April, pre-prospectus)](https://aswathdamodaran.blogspot.com/2026/04/to-trillion-dollars-and-beyond-spacex.html)
+- [SpaceX targets $135 IPO price at valuation of $1.77 trillion — CNBC](https://www.cnbc.com/2026/06/03/spacex-ipo-stock-price-roadshow-musk.html)
+- [Initial public offering of SpaceX — Wikipedia](https://en.wikipedia.org/wiki/Initial_public_offering_of_SpaceX)
+- [SPCX overview — StockAnalysis](https://stockanalysis.com/stocks/spcx/)
+- [SpaceX stock falls back to below IPO price — Seeking Alpha](https://seekingalpha.com/news/4635626-spacex-stock-falls-back-to-below-ipo-price)
+- [SpaceX Stock Just Closed Above Its IPO Price — Motley Fool](https://www.fool.com/investing/2026/08/13/spacex-stock-just-closed-above-its-ipo-price-heres/)
+- [Anthropic will pay xAI $1.25B per month for compute — TechCrunch](https://techcrunch.com/2026/05/20/anthropic-will-pay-xai-1-25-billion-per-month-for-compute/)

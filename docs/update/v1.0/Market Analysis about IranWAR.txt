@@ -1,0 +1,197 @@
+# MoneyView — Valuation Module Spec: Sovereign-CDS Country Risk & Q1-2026 ERP Vintage
+
+**Status:** draft for implementation
+**Scope:** two additions to the Damodaran valuation module
+**Source of the seed data:** Damodaran, *March 2026 market update* (his off-cycle "start of April" ERP recomputation)
+**Author note:** numbers taken from a spoken transcript are marked `[transcript]`; anything I could not source from it is marked `[NEEDS: <his dataset>]` and must be pulled from his published April-2026 country-ERP spreadsheet before it goes in the DB. Do not fabricate the gaps.
+
+---
+
+## Why these two, and why now
+
+Damodaran's March session is, in effect, a runnable demonstration of the machinery this module encodes: the implied ERP, the *mature-market-premium + country-risk-premium* build-up, and — the reason this spec exists — his explicit statement that his country risk premiums "become shaky" because they depend on sovereign ratings, and that the fix is to read country risk from the **sovereign CDS market** instead. MoneyView's CRP path currently keys off ratings, so it inherits exactly the failure mode he's describing (agencies froze Ukraine's rating and withdrew Russia's in 2022; there is no reason to expect faster action in the current episode).
+
+Two work items follow:
+
+1. **Feature A — CDS-based Country Risk Premium**, as an override/backstop for the ratings path.
+2. **Feature B — the April-2026 ERP vintage**, ingested as its own off-cycle `store_vintage` record with a reproducibility check on the implied-return decomposition.
+
+Neither touches `build_verdict`'s sector-PE path — that work continues independently.
+
+---
+
+## Feature A — CDS-based Country Risk Premium
+
+### A.1 Problem statement
+
+`resolve_crp(iso3, vintage)` today derives a country's risk premium from its sovereign rating → default-spread lookup. When a rating is **stale, frozen, or withdrawn**, the ratings path silently returns a number built on a rating that no longer reflects reality. There is no signal to the caller that the input is stale. For countries in an active conflict this is precisely when the number matters most and is least trustworthy.
+
+### A.2 Damodaran's method (the thing to implement)
+
+Country risk premium from CDS, netted against the base (US) sovereign:
+
+```
+netted_default_spread(country) = cds_spread(country) − cds_spread(US)        # same vintage
+crp(country)                   = netted_default_spread(country) × λ_vol
+total_erp(country)             = mature_market_premium + crp(country)
+```
+
+- **`λ_vol`** is the relative-equity-volatility multiplier (σ_equity / σ_sovereign-bond). Damodaran has trended toward **λ_vol = 1.0** in recent vintages (CRP = netted default spread directly). Make it a per-vintage parameter, default `1.0`, and record the value actually used. `[NEEDS: his April-2026 λ, if he departs from 1.0]`
+- The **US CDS spread is mandatory** for this path — it is the netting base. The transcript notes US CDS "surged" and global CDS rose 12%, but gives **no absolute US figure**. Until that value is in the vintage, the CDS path **cannot produce a number** and must raise, not guess. This is the single hard blocker for Feature A. `[NEEDS: US sovereign CDS spread, 2026-03-31]`
+
+### A.3 Data model (SQLite)
+
+Store raw spreads and the resolved CRP separately, so ingestion and derivation stay auditable.
+
+```sql
+CREATE TABLE sovereign_cds (
+    vintage_date  TEXT NOT NULL,     -- ISO date = publication date (the store_vintage key)
+    iso3          TEXT NOT NULL,     -- 'ARE', 'BHR', ...
+    country       TEXT NOT NULL,
+    cds_spread    REAL NOT NULL,     -- decimal fraction, NOT percent: 0.0091 for 0.91%
+    as_of_date    TEXT NOT NULL,     -- market date the spread reflects (e.g. 2026-03-31)
+    source        TEXT NOT NULL,     -- provenance string
+    PRIMARY KEY (vintage_date, iso3)
+);
+
+CREATE TABLE country_risk_premium (
+    vintage_date          TEXT NOT NULL,
+    iso3                  TEXT NOT NULL,
+    crp                   REAL,               -- NULL when unresolvable (e.g. US CDS missing)
+    method                TEXT NOT NULL,      -- 'rating' | 'cds' | 'cds_override'
+    rating                TEXT,               -- nullable
+    rating_status         TEXT NOT NULL,      -- 'active' | 'frozen' | 'withdrawn'
+    netted_default_spread REAL,
+    lambda_vol            REAL,
+    unresolved_reason     TEXT,               -- e.g. 'missing_us_cds'
+    PRIMARY KEY (vintage_date, iso3)
+);
+```
+
+**Unit discipline:** store everything as decimal fractions, never percent. `0.0091`, not `0.91`. Add a parse-time assert that any ingested spread is `< 1.0` to catch percent-vs-fraction mistakes at the door.
+
+### A.4 Resolution precedence
+
+```
+resolve_crp(iso3, vintage, prefer_cds=False):
+    rating_status = lookup_rating_status(iso3, vintage)
+
+    use_cds = prefer_cds
+              or rating_status in ('frozen', 'withdrawn')
+              or rating_is_stale(iso3, vintage)      # rating as_of older than STALE_DAYS
+
+    if not use_cds:
+        return crp_from_rating(iso3, vintage), method='rating'
+
+    us = cds_spread('USA', vintage)
+    if us is None:
+        return None, method='cds', unresolved_reason='missing_us_cds'   # A.2 blocker — do not guess
+
+    country = cds_spread(iso3, vintage)
+    if country is None:
+        return None, method='cds', unresolved_reason='missing_country_cds'
+
+    netted = country - us
+    lam    = lambda_vol(vintage)                 # default 1.0
+    method = 'cds_override' if prefer_cds or rating_status == 'active' else 'cds'
+    return netted * lam, method=method
+```
+
+- `STALE_DAYS`: default 400 (his ratings cadence is roughly annual; anything older than a year-plus is suspect). Configurable.
+- `rating_status` is a new field on the ratings ingest — capture `frozen`/`withdrawn` explicitly rather than inferring from a missing rating. The 2022 Russia (withdrawn) / Ukraine (frozen) split is the reference case.
+- Returning `crp=None` with an `unresolved_reason` is a first-class outcome, not an exception to swallow. `build_verdict` and the ERP panel should surface "country risk unresolved: missing US CDS base" the same way they surface `no_sector_pe` — a named refusal, not a zero.
+
+### A.5 Seed data (from the transcript)
+
+Ingestible absolute endpoints exist for **only two countries**. Everything else in the session was directional ("big jumps", "roughly flat") and must come from his dataset.
+
+| Country | ISO3 | 2026-01-01 CDS | 2026-03-31 CDS | In-transcript? |
+|---|---|---|---|---|
+| Abu Dhabi (UAE) | ARE | 0.0060 | 0.0091 | `[transcript]` full |
+| Bahrain | BHR | 0.0247 | 0.0352 | `[transcript]` full |
+| Kuwait | KWT | — | — (+18.4% MoM) | `[transcript]` **Δ only — absolute NEEDS dataset** |
+| UAE / Iraq / Oman | — | — | — ("big jumps") | `[NEEDS: dataset]` |
+| Saudi Arabia | SAU | ~flat | ~flat | `[NEEDS: dataset]` |
+| Israel | ISR | ~flat | ~flat | `[NEEDS: dataset]` |
+| Turkey | TUR | — | — (jumped) | `[NEEDS: dataset]` |
+| **United States** | **USA** | — | — ("surged") | **`[NEEDS: dataset]` — blocks all CDS-CRP** |
+
+Global sovereign CDS index rose ~12% over the quarter `[transcript]` — useful as a sanity band on ingested moves, not as a per-country input.
+
+Only Abu Dhabi and Bahrain can be loaded now, and even they resolve to `crp=None` until the US base is present. That is correct behavior — the row stores, the CRP stays unresolved with `missing_us_cds`.
+
+### A.6 Tests
+
+- `test_percent_guard`: ingesting `0.91` (percent form) for a spread raises at parse time.
+- `test_netting`: with US=0.X and ARE=0.0091, `netted = 0.0091 − US`, `crp = netted × λ`.
+- `test_missing_us_cds_blocks`: ARE present, US absent → `resolve_crp` returns `None` + `missing_us_cds`, does **not** raise, does **not** return `0`.
+- `test_frozen_rating_routes_to_cds`: `rating_status='frozen'` forces the CDS path even when a rating string exists.
+- `test_stale_rating_routes_to_cds`: rating `as_of` older than `STALE_DAYS` forces the CDS path.
+- `test_withdrawn_rating`: Russia-2022-style withdrawn rating → CDS path, and if no CDS either → `None` + reason, never a silent fallback to the last known rating.
+
+---
+
+## Feature B — April-2026 ERP vintage
+
+### B.1 The record
+
+This is a **third, off-cycle vintage** distinct from the regular Jan-1 and mid-year drops. Key it to its publication date.
+
+```python
+store_vintage(
+    kind="equity_risk_premium",
+    vintage_date="2026-04-01",          # publication date, per the existing key convention
+    payload={
+        "mature_market_premium": 0.0477,          # [transcript]
+        "prior_mmp":            0.0423,           # [transcript] 2026-01-01 value, for the delta panel
+        "prior_mmp_vintage":    "2026-01-01",
+        "lambda_vol":           None,             # [NEEDS: dataset]  see A.2
+        "note": "Off-cycle recomputation after March-2026 conflict; "
+                "country CRPs shaky on frozen sovereign ratings — prefer CDS path (Feature A).",
+    },
+)
+```
+
+### B.2 The implied-return decomposition — mind the two windows
+
+The transcript carries **two different measurements over two different date ranges**. Do not conflate them.
+
+- **Mature market premium:** `4.23% → 4.77%` spans **2026-01-01 → 2026-04-01** (Δ = +0.54pp).
+- **Implied S&P 500 expected return:** `8.34% → 9.07%` spans **2026-02-27 → 2026-03-31** (Δ = +0.73pp), and Damodaran attributes it **"roughly half" to the T-bond rate rising and "roughly half" to the ERP widening**.
+
+These are not the same ERP delta. The 0.54pp is the Jan→Apr mature-premium move; the ~0.365pp ERP contribution is the Feb-27→Mar-31 slice of the implied-return walk. Store both, labeled by window; never subtract one from the other.
+
+Back-solving the implied-return window (return = riskfree + ERP):
+- 2026-02-27: rf ≈ 8.34% − ERP₀
+- 2026-03-31: rf ≈ 9.07% − ERP₁, with (ERP₁ − ERP₀) ≈ 0.365pp and (rf₁ − rf₀) ≈ 0.365pp
+
+The absolute riskfree levels are **not stated** in the transcript — do not hardcode 4.11%/4.30%; those are illustrative back-outs. `[NEEDS: T-bond rate, 2026-02-27 and 2026-03-31]`
+
+### B.3 Reproducibility test
+
+```
+test_implied_return_decomposition:
+    given implied_return(2026-02-27) = 0.0834
+          implied_return(2026-03-31) = 0.0907
+          d_return = 0.0073
+    assert 0.40 <= (d_rf   / d_return) <= 0.60      # "roughly half" from rate
+    assert 0.40 <= (d_erp  / d_return) <= 0.60      # "roughly half" from ERP
+    assert abs(d_rf + d_erp - d_return) < 1e-6      # they must sum to the total move
+```
+
+This is the guardrail against the module reintroducing the DCF anchoring defect: a healthy implied-ERP engine must be able to *decompose* a return move into rate vs. premium. An engine that anchors value to price with a scalar cannot produce this decomposition at all — so this test doubles as a regression fence for that fix.
+
+---
+
+## Non-goals (explicitly out of scope for this spec)
+
+- Oil term structure, yield-curve steepening, regional equity performance — excellent macro context, no engine binding here.
+- Damodaran's qualitative "three questions / concerned-not-panicked" war framework — deliberately un-quantified priors; encoding his scenario weights would import exactly the prior-driven judgment he warns against. If anything, the *panic-vs-readjustment indicator set* (ERP move small, only CCC spreads widen, gold down, Bitcoin up) belongs to the macro regime gauge, not the valuation module — track separately.
+
+## Definition of done
+
+- [ ] `sovereign_cds` + `country_risk_premium` tables migrated.
+- [ ] `resolve_crp` precedence + `rating_status` field landed with A.6 tests green.
+- [ ] Abu Dhabi & Bahrain rows ingested; both resolve to `None`/`missing_us_cds` until the US base lands (correct).
+- [ ] `2026-04-01` ERP vintage stored with B.3 decomposition test green.
+- [ ] All `[NEEDS: …]` items backfilled from Damodaran's published April-2026 country-ERP dataset, or left explicitly unresolved with a reason — never zero-filled.

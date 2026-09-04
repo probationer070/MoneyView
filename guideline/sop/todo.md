@@ -24,12 +24,21 @@ Legend: `[ ]` not started, `[x]` complete
 (942 at the close of the backend track, plus the frontend's 13 e2e tests, the
 snapshot-reset hardening's 5, and E8's 8.)
 
-**Local-data caveat for anyone running the panel by hand:** `corporate_quote_facts`
-holds **1 row** (AAPL, acquired 2026-09-03), not zero as this note previously
-claimed. `resolve_peers` and `resolve_for_ticker` therefore work for AAPL and
-still fail for every other ticker, which refuses drawdown and trailing_pe with
-`no_industry: <TICKER>` and leaves only the volume row computing. Acquiring quote
-facts is a separate network call per ticker.
+**Local-data state, measured 2026-09-04** after a full re-acquisition across the
+139-ticker watchlist. Counts, not recollections:
+
+| Table | Rows | Coverage |
+| --- | --- | --- |
+| `stocks` | 259,654 | 142 tickers; **every watchlist ticker now has 252+ bars** |
+| `corporate_statements` | 259,261 | 135 tickers (was 1) |
+| `corporate_quote_facts` | -- | 136 tickers (was 1) |
+| `corporate_companies` | 0 | **empty by design** -- one manual writer, and every reader falls back to the watchlist, which carries a name and sector for all 139 |
+| `industry_benchmark` | 0 | **the one real gap.** See A1 |
+
+Before this, 88 watchlist tickers held exactly 76 bars each (all starting
+2026-03-09) against 51 with 252+ -- a perfectly bimodal split, the signature of a
+missed initial backfill rather than drift. `plan_range` took the
+`covered_to is None` branch and pulled the full 10-year window for each.
 
 The snapshot tables are **empty** as of 2026-09-04 (Track E7's reset), and
 `investment_decision` exists but holds **0 rows** -- the decision log starts from
@@ -53,8 +62,41 @@ The verdict panel's `trailing_pe` row refuses on **two independent grounds**.
 Each is separately closable, and the row stays refused until both are.
 
 - [ ] **A1. Load a Damodaran vintage carrying the price columns.** STILL OPEN --
-      blocked only on obtaining the file, which is not in the repo and cannot be
-      produced from anything here. No code change needed:
+      and after 2026-09-04 it is the **only** thing standing between the panel and
+      two of its four signals. Everything else A1 was waiting on is now in place.
+
+      **Measured 2026-09-04, `build_verdict` across all 139 watchlist tickers:**
+
+      | Signal | Computed | Refused | Why |
+      | --- | --- | --- | --- |
+      | `volume` | 139 | 0 | -- |
+      | `drawdown` | 84 | 55 | `peer_set_too_thin`=51, `no_industry`=4 |
+      | `trailing_pe` | 0 | 139 | `no_vintage`=139 |
+      | `dcf_gap` | 0 | 139 | `no_vintage`=139 |
+
+      `insufficient_history` was 88 refusals before the bar backfill and is now
+      **zero**. The 51 `peer_set_too_thin` are a real modelling limit, not a data
+      gap: those tickers resolve an industry but lack peers with overlapping
+      history, and the panel correctly declines rather than comparing against one
+      or two. `no_vintage` on 139 is A1 and nothing else.
+
+      **Do not substitute a lookalike workbook.** Checked 2026-09-04: Damodaran's
+      standard public downloads are the wrong shape. `betas.xls`, `wacc.xls` and
+      `pedata.xls` all use a sheet named `"Industry Averages"`, not
+      `"Industry Average Beta (US)"`, and between them carry only `Industry Name`,
+      `Number of firms` and `Trailing PE` -- **all nine required columns are
+      missing**. `indname.xls` is the company-to-industry mapping, not averages.
+      No source URL is recorded anywhere in the repo, and no `.xlsx` exists on
+      this machine (repo, `docs/update/`, and the whole user profile all checked).
+      A wrong workbook PARSES CLEANLY and seeds plausible-but-wrong sector PEs --
+      the same failure as the fabricated `industry_benchmark` rows that briefly
+      made this row publish a fake PE 44.70. Refusing is correct until the real
+      file appears.
+
+      The file did exist once: `tests/fixtures/damodaran_industries.txt` pins its
+      99 industry names verbatim, upstream "Heathcare" misspelling included.
+
+      No code change needed once the file is in hand:
 
           from apps.api.services.db import init_db
           from apps.api.services.industry_benchmark_store import (
