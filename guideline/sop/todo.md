@@ -17,18 +17,23 @@ Legend: `[ ]` not started, `[x]` complete
 
 ---
 
-## Where things stand (2026-09-03)
+## Where things stand (2026-09-04)
 
-`renewal` @ `3bdd3d0` (PRs #13-15 merged) + Track E, **942 tests passing**, no
-skips or xfails.
-(The 862 measured at `e28be2a` on 2026-08-30, plus Track B's 4 property tests
-and its 16-case mutation harness, plus Track A2's 7 tests and 2 mutations.)
+`renewal` @ `606ec88` (PRs #13-15, #17-20 merged), **967 tests passing** plus
+**112 Playwright** specs, no skips or xfails.
+(942 at the close of the backend track, plus the frontend's 13 e2e tests, the
+snapshot-reset hardening's 5, and E8's 8.)
 
 **Local-data caveat for anyone running the panel by hand:** `corporate_quote_facts`
-is still EMPTY, so `resolve_peers` and `resolve_for_ticker` both fail for every
-ticker -- `build_verdict("AAPL")` today refuses drawdown and trailing_pe with
-`no_industry: AAPL`, and only the volume row computes. Acquiring quote facts is a
-separate network call; nothing in A2 depends on it.
+holds **1 row** (AAPL, acquired 2026-09-03), not zero as this note previously
+claimed. `resolve_peers` and `resolve_for_ticker` therefore work for AAPL and
+still fail for every other ticker, which refuses drawdown and trailing_pe with
+`no_industry: <TICKER>` and leaves only the volume row computing. Acquiring quote
+facts is a separate network call per ticker.
+
+The snapshot tables are **empty** as of 2026-09-04 (Track E7's reset), and
+`investment_decision` exists but holds **0 rows** -- the decision log starts from
+nothing. Both counts are measured, not carried forward.
 
 Shipped and merged: the segment build-up engine; the write-time runnability
 gate; the industry-benchmark chain (data, mapping, conservative-case generator)
@@ -276,10 +281,14 @@ and CLAUDE.md section 8. Suite: 882 passing, no skips or xfails.
 
 ---
 
-## Track E - Snapshot overhaul (backend)  [SHIPPED 2026-09-03]
+## Track E - Snapshot overhaul  [CLOSED 2026-09-04]
+
+Every item shipped: the backend record (E1-E6, E10), the reset (E7), the by-id
+endpoint (E8) and the frontend (E9). PRs #17, #18, #19, #20.
 
 Spec: `docs/superpowers/specs/2026-09-03-snapshot-overhaul-design.md`
-Plan: `docs/superpowers/plans/2026-09-03-snapshot-overhaul-backend.md`
+Plans: `docs/superpowers/plans/2026-09-03-snapshot-overhaul-backend.md`,
+`docs/superpowers/plans/2026-09-04-snapshot-overhaul-frontend.md`
 
 The complaint was that snapshots carry no memo and no visualization, so their
 utility is worse than a commercial service. The fix is not a prettier history:
@@ -363,7 +372,11 @@ the job they were failing at.
       `ERROR-LOG.md`'s amendment: mutate chained conditions ONE AT A TIME, or the
       strongest evidence a suite can give certifies less than it sounds like.
 
-### Not done, deliberately
+### Deferred at the time, since done
+
+All three were left out of the original backend pass on purpose -- E7 because it
+is irreversible, E8 and E9 because nothing consumed them. Each was later done on
+request, and each entry says what changed.
 
 - [x] **E7. Reset run 2026-09-04.** `python scripts/reset_snapshots.py` cleared
       all three snapshot tables after backing the database up.
@@ -440,9 +453,11 @@ the job they were failing at.
 
 ### Known limits of this iteration
 
-- **`list_decisions` calls the bars loader once per decision**, with no de-dup
-  across repeated tickers. Acceptable for a personal decision log; it would not
-  be for a paginated endpoint.
+(The bars-loader limit once recorded here -- one load per decision row with no
+de-dup -- was fixed in the final review's fix wave: `list_decisions` now caches
+per ticker and bounds the query with `_OUTCOME_BARS_LIMIT`. Removed rather than
+left standing, since a known limit nobody re-checks becomes a false claim.)
+
 - **The empty-memo route test passes if only the Pydantic validator is removed**,
   because `record_decision` guards independently. That redundancy is deliberate
   defence in depth, but the route test alone does not pin the request model.
