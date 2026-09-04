@@ -347,8 +347,10 @@ the job they were failing at.
       and the move" (E5) is now also asserted at the route/wire layer, not just
       the service dict; a blank `ticker` (`"  "`) is now a 422, mirroring the
       memo validator; and E's own "known limits" bullet about the bars loader
-      below is resolved. Full report:
-      `.superpowers/sdd/2026-09-03-snapshot-overhaul-backend/final-fix-report.md`.
+      below is resolved. The defect, its root cause and the mutations that pin
+      it are recorded in `ERROR-LOG.md` under 2026-09-03; the working notes
+      lived in a gitignored `.superpowers/sdd/` workspace and are not a
+      durable reference.
 
       **Review of the fix wave found its verification weaker than reported.** The
       new guard is two conditions in an `elif` chain, and the reproduction case
