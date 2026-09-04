@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, PieChart, Newspaper, Activity, Building2, Orbit } from "lucide-react";
+import { LayoutDashboard, PieChart, Newspaper, Activity, Building2, Orbit, NotebookPen } from "lucide-react";
 import clsx from "clsx";
 
 const navItems = [
@@ -11,6 +11,7 @@ const navItems = [
   { href: "/news", label: "News Feed", icon: Newspaper },
   { href: "/corporate", label: "Corporate Analysis", icon: Building2 },
   { href: "/monte-carlo", label: "Monte Carlo", icon: Orbit },
+  { href: "/decisions", label: "Decision Log", icon: NotebookPen },
 ];
 
 export function Sidebar({

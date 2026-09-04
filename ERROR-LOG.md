@@ -26,6 +26,34 @@ reveal that; only checking the code did.
 
 An entry states what was true when it was written. Nothing updates it on its own.
 
+## 2026-09-04: `openpyxl` missing from `pyproject.toml` blocks the API from booting on a clean checkout
+
+Date: 2026-09-04
+Command: `cd apps/web && npm.cmd run test:e2e` (the Playwright harness boots the API server
+as a fixture before any spec runs).
+Failure: `ModuleNotFoundError: No module named 'openpyxl'` raised while the API process
+starts, which fails the harness's boot step and blocks the entire e2e suite -- not just
+the one feature under test.
+Root cause: `apps/api/services/industry_benchmark_store.py:17` does `import openpyxl` at
+module scope, but `openpyxl` was never added to `dependencies` in `pyproject.toml`. On
+the machine where this module was written, `openpyxl` happened to already be installed
+(a transitive dependency of something else, or a leftover from manual testing), so the
+import silently succeeded there and the gap was invisible. Any other clean checkout --
+CI, a new contributor's machine, or a fresh venv -- installs only the declared
+dependencies and fails at import time as soon as anything imports
+`industry_benchmark_store`, including indirectly through the API app's route
+registration.
+Fix: added `"openpyxl"` to `dependencies` in `pyproject.toml`.
+Files changed: `pyproject.toml`.
+Prevention: a module-scope import of an undeclared package passes silently on whichever
+one machine happens to already have it installed and fails everywhere else -- and
+nothing in the test suite catches this class of bug, because the suite itself only ever
+runs on that same machine. There is no test for "does a clean `pip install .` produce a
+bootable app"; the only way this surfaces is someone actually trying a fresh checkout, as
+this task's e2e harness boot did. When adding a new module-scope third-party import,
+cross-check it against `pyproject.toml`'s `dependencies` list in the same change, since a
+passing local test run cannot catch the omission.
+
 ## 2026-09-03: Corporate comparison snapshots accumulate a new version on every refresh click
 
 Date: 2026-09-03

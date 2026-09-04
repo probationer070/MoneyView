@@ -376,10 +376,39 @@ the job they were failing at.
       with its outcome -- so it waits for the frontend plan to supply a real
       caller rather than being built on speculation.
 
-- [ ] **E9. The frontend.** The `/decisions` page and the spec's §6 scatter chart
-      (gap-at-decision against price-move-since, two labelled series, no trend
-      line and no R²). Its plan is written after this ships, against a real API
-      response rather than an imagined one.
+- [x] **E9. The frontend.** `app/decisions/page.tsx` — the route — reads the
+      list endpoint through `decisionTypes.ts` (the `DecisionRow`/
+      `DecisionOutcome`/`DecisionAction` wire types) and `decisionChartData.ts`
+      (the pure `partitionDecisions`, which splits decisions into plottable
+      points and an excluded count under the "never combine gap and move
+      unless both invariant halves hold" rule). Three components carry the
+      page: `DecisionList` (the log, each figure labelled with its own basis,
+      a refusal rendered as its stated reason), `RecordDecisionForm` (posts
+      exactly `{ticker, action, memo}`, client-validated before any request),
+      and `DecisionOutcomeScatter` (the spec §6 gap-vs-move scatter, one point
+      per plottable decision, no trend line, no R², no accuracy metric).
+      13 Playwright tests in `tests/e2e/decisions.spec.ts` cover it, backed by
+      `tests/e2e/helpers/decisionsPageMock.ts`. Each test that guards a spec
+      rule was verified against a specific broken implementation:
+        - a refusal rendered as `+0.0%` instead of its reason sentence;
+        - a smuggled `price_at_decision` key added to the POST body;
+        - a dropped `outcomeUnavailable` count in the coverage caption;
+        - a bare plotted-count caption with no denominator;
+        - a dropped `gapPct === null` clause in the plottable invariant;
+        - a dropped `movePct === null` clause in the same invariant — caught
+          by `tsc`, not by Playwright; this is the one gap in the e2e suite's
+          own coverage, closed only because Task 5 made typecheck a real,
+          runnable gate (see below);
+        - an in-domain trend line drawn across the points;
+        - an ungated scatter reporting "0 of 0 decisions plotted" while the
+          load was still failing.
+      Task 5 also added `npm run typecheck` (`apps/web/package.json`) as a
+      standalone script, because before it nothing in the repo exposed a
+      command that could see a type regression: `npm run lint` is
+      `eslint-config-next`, which does not typecheck, and the Playwright
+      harness runs Next in dev mode, which does not fail the run on a type
+      error either.
+      **E9 does not close E7 or E8 — both remain open below.**
 
 ### Known limits of this iteration
 
