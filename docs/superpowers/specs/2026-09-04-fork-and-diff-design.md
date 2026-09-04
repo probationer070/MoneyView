@@ -175,7 +175,68 @@ refused.** A fork that changes nothing produces a case identical to its parent,
 and a diff of it would be an all-zero waterfall presented as if it meant
 something.
 
-### 4.2 Fork invariants
+### 4.2 A changed narrated field needs a new claim
+
+**10 of the 11 segment scalars are `NARRATED_FIELDS`** — every one carries a
+stored claim justifying its value. At design time the 30 stored cases held 180
+such claims, e.g. for `revenue_target`:
+
+> "416.1610 compounded at 0.0181 for 10 years. Top 5 industries…"
+
+`_validate_narratives` enforces both directions: every stated field has a claim,
+and every claim names a stated field. Its own docstring says why the second
+matters — *"a claim survives the removal of the input it justified and quietly
+misdescribes the case."*
+
+**Inheriting the parent's narrative through a fork would defeat exactly that.**
+Override `revenue_target` and copy the claim, and validation PASSES — the field
+is still stated and still claimed — while the stored claim now describes how a
+different number was derived. Nothing in the schema or the validator would catch
+it. A claim wearing an attribution it no longer earns is the defect class
+`ERROR-LOG.md` records three times.
+
+So:
+
+```
+A fork that changes a NARRATED field MUST supply a new claim for it.
+Narratives are never inherited for changed fields.
+Unchanged narrated fields keep the parent's narrative untouched.
+```
+
+The request carries them alongside the value:
+
+```json
+{
+  "case_name": "aapl_higher_margin",
+  "overrides": {
+    "case": { "wacc_stable": 0.081 },
+    "segments": {
+      "Core": {
+        "margin_target": {
+          "value": 0.31,
+          "claim": "Services mix reaches 30% of revenue by 2030; margin follows the 2024-25 trend rather than the 5-year mean.",
+          "evidence_source": "own estimate",
+          "confidence": "assumed"
+        }
+      }
+    }
+  }
+}
+```
+
+A narrated field given as a bare scalar instead of this object is a **422
+`narrative_required:`** naming the field. An unnarrated field (`ramp_start_year`,
+and every `case.*` column) takes a bare scalar; supplying a claim for one is a
+422 `unexpected_narrative:`, because a claim that names no narrated input is the
+other half of what `_validate_narratives` rejects.
+
+This is the same rule the codebase already applies twice: a number does not enter
+the model without a stated reason (`_validate_narratives`), and a decision
+without a stated reason is a snapshot (`investment_decision.memo` is NOT NULL).
+The cost is one sentence per changed assumption, which is the point rather than
+the price.
+
+### 4.3 Fork invariants
 
 Locked down, because a diff's meaning depends on them:
 
@@ -186,11 +247,13 @@ Locked down, because a diff's meaning depends on them:
 - Every scalar not explicitly overridden is copied from the parent unchanged.
 - Segments cannot be added, removed or renamed.
 - Only scalar fields on existing case and segment records may change.
+- A changed NARRATED field carries a new claim; narratives are never inherited
+  for changed fields (§4.2).
 - Segment names match exactly: case-sensitive, unique within a case, no
   normalisation and no fuzzy matching.
 ```
 
-### 4.3 The runnability gate applies unchanged
+### 4.4 The runnability gate applies unchanged
 
 A fork goes through `create_case`, and therefore through `_validate_by_engine`,
 which runs the engine and raises `case is not valuable: <engine's own message>`
@@ -208,7 +271,7 @@ The refusal is a **422 carrying the engine's message verbatim**. It is not
 reworded here: the engine owns that wording, and a second copy of it in this
 layer is what D1 removed for shadowing the original.
 
-### 4.4 The error contract — prefixes, not a new envelope
+### 4.5 The error contract — prefixes, not a new envelope
 
 Callers must be able to branch on a refusal without parsing prose. This repo
 already solves that, and this design adopts the existing solution rather than
@@ -232,6 +295,8 @@ handle both depending on which endpoint it hit. So:
 | unknown case | 404 | `no_case:` |
 | unknown field in `overrides.case` or a segment | 422 | `unknown_field:` |
 | unknown segment name | 422 | `unknown_segment:` |
+| a narrated field changed without a claim | 422 | `narrative_required:` |
+| a claim supplied for an unnarrated field | 422 | `unexpected_narrative:` |
 | zero effective changes (§4.1) | 422 | `no_effective_change:` |
 | engine refuses the forked case | 422 | `case is not valuable:` — **the engine's own wording, verbatim** |
 | `/diff` on a case with no parent | 422 | `no_parent:` |
