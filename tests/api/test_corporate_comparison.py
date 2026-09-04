@@ -1600,27 +1600,16 @@ def test_a_benchmark_this_installation_has_never_stored_keeps_its_raw_symbol():
     assert row["name"] == "^KS11", row
 
 
-def test_repeating_a_snapshot_with_unchanged_assumptions_does_not_add_a_version():
-    """The live table holds 8 versions of 2026-04-23, seven from clicking
-    refresh. Crucially MSFT and IAUM are byte-identical across all of them and
-    only the benchmark ^GSPC ticks, so a rule comparing OUTPUT figures would
-    have caught 3 of 8. This keys on inputs instead."""
-    first = _snapshot_version_id(
-        universe_key="portfolio_plus_benchmark|^GSPC|",
-        snapshot_date="2026-04-23",
-        risk_free_rate=0.042,
-        equity_risk_premium=0.055,
-    )
-    again = _snapshot_version_id(
-        universe_key="portfolio_plus_benchmark|^GSPC|",
-        snapshot_date="2026-04-23",
-        risk_free_rate=0.042,
-        equity_risk_premium=0.055,
-    )
-    assert first == again, "a repeated click must reuse the version, not append one"
-
-
 def test_a_changed_assumption_creates_a_new_version():
+    """Every deterministic implementation of `_snapshot_version_id` -- including
+    one that ignores its arguments and returns a constant -- passes an
+    `f(x) == f(x)` self-comparison. This asserts the real property: each
+    assumption that spec S5 says must fork a new version actually does, by
+    varying every one of them independently, `equity_risk_premium` included.
+    All 26 call sites in this file that build a version use `erp=0.055`,
+    which previously meant that hardcoding `|erp=5.5|` into the format string
+    passed the entire suite silently -- ERP would have dropped out of the
+    dedupe key with nothing here to notice."""
     base = dict(
         universe_key="portfolio_plus_benchmark|^GSPC|",
         snapshot_date="2026-04-23",
@@ -1631,6 +1620,9 @@ def test_a_changed_assumption_creates_a_new_version():
     assert _snapshot_version_id(**base) != _snapshot_version_id(**{**base, "snapshot_date": "2026-04-24"})
     assert _snapshot_version_id(**base) != _snapshot_version_id(
         **{**base, "universe_key": "custom|^KS11|NVDA"}
+    )
+    assert _snapshot_version_id(**base) != _snapshot_version_id(
+        **{**base, "equity_risk_premium": 0.065}
     )
 
 

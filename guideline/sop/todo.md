@@ -326,6 +326,41 @@ the job they were failing at.
       `IAUM` are byte-identical and only `^GSPC` ticks by pennies, so it would have
       caught 3 of 8. See `ERROR-LOG.md` 2026-09-03.
 
+- [x] **E10. Final whole-branch review fix wave.** A number-and-attribution
+      divergence bug reached the default path: `_default_figures_loader` reached
+      `_dcf_snapshot` and `metrics_for_ticker` for the figures but dropped both
+      quality discriminators they already compute (`bridge_quality`, and
+      `metrics_for_ticker`'s discarded `is_real` flag), so a ticker with no
+      statements, no `corporate_metrics` row, and no equity bridge got a decision
+      row with a fabricated `dcf_value` (enterprise value, not per-share),
+      `dcf_implied_return=0.0`, and hash-derived `roic`/`wacc`, all under a
+      captured `figures_source` with `figures_unavailable_reason` NULL -- the
+      third occurrence of the discriminator-dropped-on-reuse defect class (see
+      `ERROR-LOG.md` 2026-09-03). Fixed by adding
+      `metrics_for_ticker_with_provenance` and gating `record_decision` on both
+      discriminators, mirroring the existing non-positive-price guard.
+      Also: `DecisionRow`/`DecisionOutcome` now expose the gap and the move on
+      the SAME scale (`dcf_implied_return_pct`, `outcome.price_move_pct` --
+      previously 100x apart, DB columns unchanged); `metric_schema_version`,
+      `risk_free_rate` and `equity_risk_premium` are now on the wire (previously
+      stored and unreturned); the allowlist test guarding "never combine the gap
+      and the move" (E5) is now also asserted at the route/wire layer, not just
+      the service dict; a blank `ticker` (`"  "`) is now a 422, mirroring the
+      memo validator; and E's own "known limits" bullet about the bars loader
+      below is resolved. Full report:
+      `.superpowers/sdd/2026-09-03-snapshot-overhaul-backend/final-fix-report.md`.
+
+      **Review of the fix wave found its verification weaker than reported.** The
+      new guard is two conditions in an `elif` chain, and the reproduction case
+      trips both, so each could be deleted alone with all 949 tests still green;
+      hardcoding either discriminator inside `_default_figures_loader` was also
+      uncaught, and `metrics_for_ticker_with_provenance` -- the function the fix
+      rests on -- had no direct test. Four tests added to isolate each condition
+      and to assert the loader's output directly rather than through the guard
+      chain; all six mutations are now caught by a named test. The lesson is in
+      `ERROR-LOG.md`'s amendment: mutate chained conditions ONE AT A TIME, or the
+      strongest evidence a suite can give certifies less than it sounds like.
+
 ### Not done, deliberately
 
 - [ ] **E7. Run the reset.** `python scripts/reset_snapshots.py` clears all three

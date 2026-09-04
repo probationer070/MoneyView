@@ -51,3 +51,26 @@ def test_decisions_come_back_newest_first():
     record_decision(ticker="AAA", action="buy", memo="first", figures_loader=_figures)
     record_decision(ticker="BBB", action="buy", memo="second", figures_loader=_figures)
     assert [r["ticker"] for r in list_decisions(bars_loader=_bars)] == ["BBB", "AAA"]
+
+
+def test_bars_are_loaded_once_per_ticker_with_a_small_limit_not_the_full_history():
+    """Finding 7 (MINOR): outcome_for only needs the newest non-null bar after
+    the decision, so pulling a ticker's whole history once per DECISION ROW is
+    the same anti-pattern Track D6 already fixed for the verdict route's guard
+    (guideline/sop/todo.md). Two decisions on the same ticker must call
+    bars_loader once, not twice, and with a limit -- not None (unbounded)."""
+    calls = []
+
+    def _counting_bars(ticker, limit=None):
+        calls.append((ticker, limit))
+        return [{"date": "2026-12-31", "close": 120.0}]
+
+    record_decision(ticker="MSFT", action="buy", memo="first", figures_loader=_figures)
+    record_decision(ticker="MSFT", action="watch", memo="second", figures_loader=_figures)
+
+    list_decisions(bars_loader=_counting_bars)
+
+    assert len(calls) == 1, calls
+    ticker, limit = calls[0]
+    assert ticker == "MSFT", calls
+    assert limit is not None and limit < 100, calls

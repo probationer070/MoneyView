@@ -1929,3 +1929,94 @@ broken row gets investigated; a row that begins publishing a plausible number wi
 an authoritative-looking source reads as PROGRESS, and here it briefly looked like
 Track A1 had been completed. When a long-refusing signal suddenly resolves, verify
 the input arrived the way you think it did before believing the output.
+
+## 2026-09-03: A decision could store fabricated figures under a captured attribution
+
+Date: 2026-09-03
+Command: `record_decision(ticker="ZZTOP", action="buy", memo="cheap on FCF")` through
+the real default loader, against a fresh database holding one price bar for ZZTOP and
+nothing else -- no statements, no `corporate_metrics` row, no equity bridge.
+Failure: the row came back with `dcf_value=5135.11` (an ENTERPRISE VALUE, not a
+per-share figure), `dcf_implied_return=0.0` (fabricated: `f(price, price) - 1`),
+`roic=23.0` and `wacc=11.25` (both derived from `sum(ord(char) for char in
+f"{ticker}:{sector}")`, a hash of the ticker's letters), all stamped
+`figures_source='corporate_comparison._dcf_snapshot'` with
+`figures_unavailable_reason` left NULL -- i.e. presented as captured model output.
+`investment_decision`'s entire reason for existing is that a number and its
+attribution cannot diverge; this was the DEFAULT path, not an edge case reached only
+through misuse.
+Root cause: `_default_figures_loader` (`apps/api/services/investment_decision.py`)
+called `_dcf_snapshot` and `corporate_metrics_service.metrics_for_ticker`, but
+discarded the two discriminators each already computes for exactly this situation.
+`_dcf_snapshot` (`corporate_comparison.py`) returns `estimated_value =
+enterprise_value` when the equity bridge does not resolve, and feeds `current_price`
+in as `intrinsic_value`, so `dcf_implied_return` is 0.0 by construction -- both
+survive in the comparison table only because `bridge_quality` travels beside the row
+and every consumer is required to check it (see the 2026-08-05 entry below, which
+this defect re-breaks in a new consumer). `_default_figures_loader` never read
+`bridge_quality` and `investment_decision` has no column for it.
+Separately, `corporate_metrics_service.load_fallback_metrics` already returns
+`(metrics, is_real)`, and `metrics_for_ticker` (the function `_default_figures_loader`
+called) discarded `is_real` at its own `fallback, _ = load_fallback_metrics(ticker)`.
+Fix: added `metrics_for_ticker_with_provenance`, which returns `(metrics, is_real)`
+without changing `metrics_for_ticker`'s existing behavior (it now delegates to the new
+function and discards the flag itself, at the one call site that is allowed to).
+`_default_figures_loader` now calls the provenance-carrying function and also reads
+`_dcf_snapshot`'s `bridge_quality`, returning both alongside the figures.
+`record_decision` gates on them the same way it already gated on a non-positive
+price (`investment_decision.py`, the pre-existing guard this mirrors): if
+`bridge_quality == "missing"` or `metrics_are_real is False`, the decision is stored
+as unavailable, with a reason string naming which discriminator fired, instead of
+with fabricated figures. Verified by reproducing the incident as a permanent test
+(`test_a_ticker_with_no_statements_no_metrics_row_and_no_bridge_is_refused_not_fabricated`
+in `tests/api/test_investment_decision_record.py`), then removing the new guard and
+re-running it: it failed by reproducing the exact fabricated row from the incident
+(`dcf_value=5135.11`, `dcf_implied_return=0.0`), confirming the guard is load-bearing
+before restoring it.
+Files changed: `apps/api/services/corporate_metrics_service.py`,
+`apps/api/services/investment_decision.py`,
+`tests/api/test_investment_decision_record.py`.
+Prevention: this is the THIRD time this exact defect class has appeared -- 2026-08-03
+(Net Debt silently misread), 2026-08-05 (enterprise value presented as a per-share
+figure), and here. All three share one shape: a function computes a quality/realness
+discriminator beside a headline figure, and a new caller reaches for the figure
+without also reaching for its discriminator, because nothing forces the two to travel
+together. Grep test for any future consumer of `_dcf_snapshot` or
+`corporate_metrics_service`: if it reads `estimated_value`/`dcf_value`,
+`dcf_implied_return`, `roic`, or `wacc` without also reading `bridge_quality` (or,
+for the metrics path, checking realness), that is this defect recurring a fourth
+time. A permanent record is the least forgiving place for this to recur, because
+unlike a snapshot it never expires and is never silently superseded by the next
+refresh -- a fabricated row, once written, is what "what the user believed" says
+forever.
+
+Amendment, same day, found while verifying the fix rather than the code: the guard
+above is TWO guards in an `elif` chain (`bridge_quality == "missing"` and
+`metrics_are_real is False`), and the ZZTOP reproduction trips BOTH at once. So the
+mutation recorded above -- "removing the new guard" -- removed them together, and
+each one alone could be deleted with the whole suite still green. The report read as
+though the fix were pinned; it pinned only the pair. Two further mutations showed the
+same for the wiring: hardcoding `bridge_quality="ok"` or `metrics_are_real=True`
+inside `_default_figures_loader` also left 949 tests passing, because whichever
+discriminator was still wired went on refusing ZZTOP. And
+`metrics_for_ticker_with_provenance`, the function the whole fix rests on, had no
+direct test at all -- its flag could be inverted unnoticed.
+
+Closed with four tests in `tests/api/test_investment_decision_record.py`:
+`test_a_missing_equity_bridge_is_refused_even_when_the_metrics_are_real` and
+`test_hashed_metrics_are_refused_even_when_the_bridge_resolves` (injected loaders
+setting exactly one discriminator, so each guard has a case only it can catch),
+`test_the_default_loader_reports_both_discriminators_from_their_real_sources`
+(asserted on the loader's returned dict, not through the guard chain, so each key is
+pinned to its own source), and
+`test_metrics_provenance_separates_a_stored_row_from_a_hashed_fallback`. All six
+mutations above are now caught, each by a named test.
+
+The generalisable lesson is about the mutation itself, not this fix: when a guard is
+a chain of conditions, a single scenario that trips several of them proves only that
+AT LEAST ONE is wired. Mutate the conditions ONE AT A TIME, and require a scenario
+that isolates each -- otherwise the strongest-sounding evidence a test suite can
+offer ("I broke it and the test failed") certifies less than it appears to, and does
+so in exactly the confident register that stops further checking. That failure mode
+is this repo's own subject matter: a verification wearing an attribution it has not
+earned.

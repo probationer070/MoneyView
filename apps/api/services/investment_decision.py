@@ -73,11 +73,21 @@ def _default_figures_loader(
     ticker: str, *, risk_free_rate: float, equity_risk_premium: float
 ) -> dict:
     """Capture the model's view of `ticker` right now, from the same function
-    that produces the comparison table's figures."""
+    that produces the comparison table's figures.
+
+    Carries two discriminators the caller (`record_decision`) checks before
+    trusting these figures: `bridge_quality` (from `_dcf_snapshot` -- "missing"
+    means the equity bridge did not resolve, so `dcf_value` is an enterprise
+    value, not per-share, and `dcf_implied_return` is `f(price, price) = 0`)
+    and `metrics_are_real` (from the fallback-metrics path -- False means
+    roic/wacc are fabricated from a hash of the ticker, not a real metric).
+    """
     from apps.api.services import corporate_metrics_service
     from apps.api.services.corporate_comparison import _dcf_snapshot
 
-    metrics = corporate_metrics_service.metrics_for_ticker(ticker)
+    metrics, metrics_are_real = corporate_metrics_service.metrics_for_ticker_with_provenance(
+        ticker
+    )
     dcf = _dcf_snapshot(
         ticker=ticker,
         metrics=metrics,
@@ -92,6 +102,8 @@ def _default_figures_loader(
         "roic": round(float(metrics.roic), 2),
         "wacc": round(float(metrics.wacc), 2),
         "source": "corporate_comparison._dcf_snapshot",
+        "bridge_quality": dcf["bridge_quality"],
+        "metrics_are_real": metrics_are_real,
     }
 
 
@@ -135,7 +147,10 @@ def record_decision(
         # The model could not value this ticker. Record the decision anyway with
         # the reason in place of the numbers -- refusing outright would drop the
         # memo, which is the part that cannot be reconstructed later.
-        unavailable = str(exc)
+        # Prefixed: a KeyError/TypeError here is more likely a bug than a
+        # modelling refusal, and its raw text (a stack-level message) must
+        # never be stored looking like a deliberate judgement about the ticker.
+        unavailable = f"figures unavailable: {exc}"
     else:
         # `latest_market_price` returns 0.0 rather than raising when nothing is
         # stored, so an absent price arrives as a number, not an exception -- for
@@ -150,6 +165,27 @@ def record_decision(
         if price is None or price <= 0:
             unavailable = (
                 f"no stored price for {ticker}: the model cannot value it at this time"
+            )
+            figures = None
+        # The two discriminators `_default_figures_loader` carries alongside
+        # the figures (absent from an injected test loader's dict, in which
+        # case `.get` defaults to "trust it" -- see `_figures_ok` in
+        # tests/api/test_investment_decision_record.py). Checked here rather
+        # than by raising inside the loader, mirroring the price guard above,
+        # so the guarantee holds for the default loader specifically without
+        # requiring every injected loader to know about it.
+        elif figures.get("bridge_quality") == "missing":
+            unavailable = (
+                f"equity bridge for {ticker} is missing (bridge_quality): dcf_value "
+                "would be an enterprise value, not per-share, and dcf_implied_return "
+                "would be fabricated (price compared against itself)"
+            )
+            figures = None
+        elif figures.get("metrics_are_real") is False:
+            unavailable = (
+                f"roic/wacc for {ticker} are not real (metrics_are_real=False): "
+                "no statement data and no stored corporate_metrics row, so the "
+                "figures would be fabricated from a hash of the ticker"
             )
             figures = None
 
@@ -183,11 +219,21 @@ def record_decision(
 from apps.api.services.acquisition.store import load_price_bars
 
 
+# `outcome_for` only ever needs the newest non-null-close bar after the
+# decision date -- history predating the decision is never read. 30 trading
+# days comfortably covers a handful of consecutive NULL closes near the tail
+# without pulling a ticker's full history (Track D6 fixed this exact
+# anti-pattern -- see guideline/sop/todo.md -- for the verdict route's guard).
+_OUTCOME_BARS_LIMIT = 30
+
+
 def list_decisions(*, bars_loader=load_price_bars) -> list[dict]:
     """Every decision, newest first, each with a freshly computed outcome.
 
     `bars_loader` is injected so the whole path is testable without the store.
-    The outcome is NOT persisted -- see `outcome_for`.
+    The outcome is NOT persisted -- see `outcome_for`. Bars are loaded once per
+    ticker (not once per decision row) and with a small limit, since multiple
+    decisions commonly share a ticker.
     """
     with get_db() as conn:
         rows = [
@@ -196,10 +242,14 @@ def list_decisions(*, bars_loader=load_price_bars) -> list[dict]:
                 "SELECT * FROM investment_decision ORDER BY decided_at DESC, id DESC"
             )
         ]
+    bars_by_ticker: dict[str, list[dict]] = {}
     for row in rows:
+        ticker = str(row["ticker"])
+        if ticker not in bars_by_ticker:
+            bars_by_ticker[ticker] = bars_loader(ticker, limit=_OUTCOME_BARS_LIMIT)
         row["outcome"] = outcome_for(
             decided_at=str(row["decided_at"]),
             price_at_decision=row["price_at_decision"],
-            bars=bars_loader(str(row["ticker"])),
+            bars=bars_by_ticker[ticker],
         )
     return rows
