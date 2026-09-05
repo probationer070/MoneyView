@@ -303,12 +303,21 @@ def test_as_of_date_is_not_a_settable_field(parent_id):
 
 
 def test_parent_case_id_is_not_a_settable_field(parent_id):
-    """Spec Section 4.3 declares `parent_case_id` immutable. Relaxing
-    `_UNSETTABLE_CASE_FIELDS` to `{"case_name"}` would let a fork repoint its
-    own parent, and `/diff` would then attribute against a case it never came
-    from."""
+    """Spec Section 4.3 declares `parent_case_id` immutable, and the id below is
+    a REAL other case rather than a dangling 999 on purpose. With a dangling id,
+    removing the guard fails on a FOREIGN KEY constraint -- which would prove
+    only that SQLite enforces referential integrity, not that the guard does
+    anything. With a real one, removing the guard lets the fork SUCCEED and
+    quietly repoint its own parent, and `/diff` would then attribute against a
+    case it never came from."""
+    from apps.api.services.valuation_case import create_case
+
+    other = _parent_payload()
+    other["case_name"] = "another_root_case"
+    other_id = create_case(other)
+
     with pytest.raises(ForkRefused, match="unknown_field"):
-        fork_case(parent_id, "child_case", {"case": {"parent_case_id": 999}})
+        fork_case(parent_id, "child_case", {"case": {"parent_case_id": other_id}})
 
 
 def test_an_unknown_segment_is_refused(parent_id):

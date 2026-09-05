@@ -239,8 +239,10 @@ def test_a_child_that_is_not_a_fork_is_refused_at_the_route(parent_id):
 
 def test_the_cap_refuses_at_the_route_rather_than_downgrading(monkeypatch):
     """Over the cap the route must return the refusal, not a cheaper attribution
-    of the same shape. Measured 2026-09-05: the seeded SpaceX pair changes 26
-    inputs and is refused for exactly this reason."""
+    of the same shape. This test monkeypatches the cap rather than using the
+    seeded pair; the seeded pair's own refusal is pinned by
+    `test_the_seeded_pair_is_refused_by_the_cap_not_a_500`, which measures the
+    count instead of quoting one."""
     from apps.api.services import case_diff
 
     monkeypatch.setattr(case_diff, "SHAPLEY_INPUT_CAP", 1)
