@@ -25,14 +25,21 @@ def test_a_decreasing_relation_is_minus_one():
 
 def test_ties_take_the_average_rank():
     """A sampled INTEGER field produces many ties. Ranking ties by position
-    instead of averaging invents an ordering the data does not have, and the
-    coefficient then depends on input order."""
-    x = np.array([1.0, 1.0, 2.0, 2.0, 3.0])
-    y = np.array([5.0, 5.0, 7.0, 7.0, 9.0])
-    assert spearman(x, y) == pytest.approx(1.0)
-    shuffled = np.array([1.0, 2.0, 1.0, 3.0, 2.0])
-    shuffled_y = np.array([5.0, 7.0, 5.0, 9.0, 7.0])
-    assert spearman(shuffled, shuffled_y) == pytest.approx(1.0)
+    instead of averaging invents an ordering the data does not have.
+
+    Only x carries the tie here, and that is the point: a fixture where BOTH
+    sides tie in the same places is satisfied by positional ranking too, because
+    it hands both sides the same spurious ordering and the coefficient is 1.0
+    either way. Measured: 0.948683 with average ranks, exactly 1.0 with
+    positional ranks."""
+    x = np.array([1.0, 1.0, 2.0, 3.0])
+    y = np.array([10.0, 20.0, 30.0, 40.0])
+    assert spearman(x, y) == pytest.approx(0.948683, abs=1e-6)
+
+    # Hand-check: x average ranks are 1.5, 1.5, 3, 4 against y ranks 1, 2, 3, 4.
+    # Centred: (-1, -1, 0.5, 1.5) and (-1.5, -0.5, 0.5, 1.5).
+    # numerator 4.5; denominator sqrt(4.5 * 5.0) = 4.743416; 4.5 / 4.743416.
+    assert spearman(x, y) == pytest.approx(4.5 / (4.5 * 5.0) ** 0.5, abs=1e-9)
 
 
 def test_a_constant_input_is_none_not_zero():
@@ -46,7 +53,13 @@ def test_a_constant_input_is_none_not_zero():
 def test_it_matches_a_hand_computed_case():
     """Hand-computed so the test does not merely agree with the implementation.
     x ranks 1,2,3,4,5; y ranks 2,1,4,3,5. d = -1,1,-1,1,0; sum d^2 = 4.
-    rho = 1 - 6*4 / (5*(25-1)) = 1 - 24/120 = 0.8."""
+    rho = 1 - 6*4 / (5*(25-1)) = 1 - 24/120 = 0.8.
+
+    This pins the coefficient's arithmetic, not the Spearman-vs-Pearson choice:
+    these y values are a permutation of a linearly spaced set, so Pearson on
+    the raw values also comes out to 0.8 here.
+    test_a_monotonic_nonlinear_relation_is_exactly_one is the only test that
+    separates Spearman from Pearson."""
     x = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
     y = np.array([20.0, 10.0, 40.0, 30.0, 50.0])
     assert spearman(x, y) == pytest.approx(0.8)
