@@ -87,6 +87,7 @@ sub-project and feeding an implementation plan.
 | `2026-09-04-fork-and-diff-design.md` | Track C2 (first half): `/fork` a stored case and `/diff` it against its parent, attributing the difference per input by Shapley |
 | `plans/2026-09-04-fork-and-diff.md` | Task-by-task plan for `/fork` and `/diff`: the pure Shapley module, the fork's narrative rule, and the cap that refuses rather than degrades |
 | `2026-09-05-simulate-design.md` | Track C2 (second half): Monte Carlo over caller-stated input distributions -- percentiles conditional on the engine accepting the inputs, a 10% suppression threshold, and association rather than contribution |
+| `plans/2026-09-05-simulate.md` | Task-by-task plan for `/simulate`: numpy-only sampling and Spearman, engine-refusal codes with a tested completeness table, and suppression above a 10% refused fraction |
 
 ## Process SOPs (`guideline/sop/`)
 
