@@ -276,6 +276,15 @@ def test_effective_changes_compares_against_the_named_segments_value():
     }}})
     assert unchanged == {}
 
+
+def test_effective_changes_reports_the_named_segments_value_as_the_baseline():
+    """Split from the test above deliberately: sharing one test hid this
+    assertion behind that one, so a mis-keyed lookup was only ever observed
+    through the discard, never through the baseline it corrupts. The baseline is
+    what /diff subtracts against, so it needs its own failure."""
+    from apps.api.services.valuation_case import create_case
+    parent = load_case(create_case(_two_segment_payload()))
+
     moved = effective_changes(parent, {"segments": {"Adjacent": {
         "margin_target": {"value": 0.24, "claim": "c", "three_p": "possible"},
     }}})
