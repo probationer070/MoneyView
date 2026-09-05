@@ -236,6 +236,15 @@ def test_two_fields_on_one_segment_are_two_players(parent_id):
 
 
 def test_a_segment_override_touches_only_the_named_segment():
+    """An end-to-end guard, not an isolating one: it does NOT prove `fork_case`
+    keys overrides by segment name on its own. The crosstalk mutation alone (the
+    segment loop reading every segment's overrides) leaves this test green,
+    because the `changes` skip added for the discard rule re-derives correct
+    scoping from `effective_changes` and filters the crosstalk out before it is
+    applied -- confirmed by mutation testing. The test that isolates keying is
+    `test_effective_changes_compares_against_the_named_segments_value`, since
+    `by_name[segment_name]` in `effective_changes` is where keying is actually
+    enforced."""
     from apps.api.services.valuation_case import create_case
     parent_id = create_case(_two_segment_payload())
 
@@ -250,3 +259,26 @@ def test_a_segment_override_touches_only_the_named_segment():
     assert by_name["Core"]["margin_target"] == pytest.approx(0.28)
     core_claims = {n["input_field"]: n["claim"] for n in by_name["Core"]["narratives"]}
     assert core_claims["margin_target"] == "parent claim for margin_target"
+
+
+def test_effective_changes_compares_against_the_named_segments_value():
+    """Keying is enforced here, not in `fork_case`: `by_name[segment_name]` picks
+    which stored value an override is measured against. Compared against the
+    wrong segment, an assumption nobody moved is counted as a change and the
+    diff's baseline is a number from a different segment."""
+    from apps.api.services.valuation_case import create_case
+    parent = load_case(create_case(_two_segment_payload()))
+    assert parent["segments"][0]["margin_target"] == pytest.approx(0.28)   # Core
+    assert parent["segments"][1]["margin_target"] == pytest.approx(0.18)   # Adjacent
+
+    unchanged = effective_changes(parent, {"segments": {"Adjacent": {
+        "margin_target": {"value": 0.18, "claim": "c", "three_p": "possible"},
+    }}})
+    assert unchanged == {}
+
+    moved = effective_changes(parent, {"segments": {"Adjacent": {
+        "margin_target": {"value": 0.24, "claim": "c", "three_p": "possible"},
+    }}})
+    assert set(moved) == {"segment.Adjacent.margin_target"}
+    assert moved["segment.Adjacent.margin_target"] == (
+        pytest.approx(0.18), pytest.approx(0.24))
