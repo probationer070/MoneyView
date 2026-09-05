@@ -102,6 +102,19 @@ def test_an_unknown_top_level_key_is_a_422_not_silently_dropped(parent_id):
     assert response.status_code == 422
 
 
+def test_an_unknown_key_inside_overrides_is_a_422(parent_id):
+    """Targets `ForkOverrides`'s own `extra=\"forbid\"` specifically -- the two
+    tests above put the unknown key at the TOP level of the request body, which
+    `ForkRequest`'s `extra=\"forbid\"` catches on its own and would stay green
+    even if `ForkOverrides` silently ignored an unknown key one level down."""
+    response = client.post(
+        f"/api/v1/valuation/cases/{parent_id}/fork",
+        json={"case_name": "extra2",
+              "overrides": {"case": {"wacc_stable": 0.081}, "bogus_in_overrides": 1}},
+    )
+    assert response.status_code == 422
+
+
 def test_a_blank_case_name_is_a_422(parent_id):
     response = client.post(
         f"/api/v1/valuation/cases/{parent_id}/fork",
