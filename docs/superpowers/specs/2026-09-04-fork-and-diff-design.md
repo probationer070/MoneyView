@@ -216,7 +216,8 @@ The request carries them alongside the value:
           "value": 0.31,
           "claim": "Services mix reaches 30% of revenue by 2030; margin follows the 2024-25 trend rather than the 5-year mean.",
           "evidence_source": "own estimate",
-          "confidence": "assumed"
+          "confidence": "assumed",
+          "three_p": "plausible"
         }
       }
     }
@@ -224,8 +225,14 @@ The request carries them alongside the value:
 }
 ```
 
-A narrated field given as a bare scalar instead of this object is a **422
-`narrative_required:`** naming the field. An unnarrated field (`ramp_start_year`,
+`three_p` is required and must be one of `possible | plausible | probable` --
+`segment_narrative.three_p` is `NOT NULL` with a `CHECK` on exactly those three
+values. It is **not** defaulted: it is an epistemic claim about the assumption,
+and an API that picks one on the caller's behalf asserts a confidence nobody
+stated. That is the same reason the claim itself is required.
+
+A narrated field given as a bare scalar instead of this object, or missing
+`claim` or `three_p`, is a **422 `narrative_required:`** naming the field. An unnarrated field (`ramp_start_year`,
 and every `case.*` column) takes a bare scalar; supplying a claim for one is a
 422 `unexpected_narrative:`, because a claim that names no narrated input is the
 other half of what `_validate_narratives` rejects.
