@@ -309,9 +309,17 @@ handle both depending on which endpoint it hit. So:
 | `/diff` on a case with no parent | 422 | `no_parent:` |
 | `/diff` on a child whose stored value the reconstruction does not reproduce | 422 | `not_a_fork:` |
 | more changed inputs than the cap | 422 | `too_many_changed_inputs:` |
+| duplicate case name | 409 | `duplicate_case_name:` |
+| a leaf that is not a number | 422 | `not_a_number:` |
+| an intermediate coalition the engine refuses | 422 | `unrunnable_coalition:` |
 
 Every prefix ends with `: ` followed by a human-readable explanation naming the
 offending field, segment, or count.
+
+Schema-level rejections (a malformed request body FastAPI itself rejects before
+either route runs) carry a LIST-shaped `detail`, not a prefixed string, so a
+client must check the status before assuming a prefix. This is repo-wide and
+pre-existing.
 
 ---
 

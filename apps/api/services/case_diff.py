@@ -87,14 +87,26 @@ def diff_case(case_id: int) -> dict:
             f"cap is {SHAPLEY_INPUT_CAP}"
         )
 
+    def _metric(inputs: dict) -> float:
+        try:
+            return run_case_payload(parent, inputs)[METRIC]
+        except ValueError as exc:
+            # Shapley evaluates every one of the 2^k coalitions, including
+            # combinations neither stored case holds. When the engine refuses
+            # one, the attribution cannot be computed -- and computing it from
+            # the coalitions that DID run would silently drop a term and break
+            # conservation. Refuse, naming the engine's own words.
+            raise DiffRefused(
+                f"unrunnable_coalition: attributing this difference requires "
+                f"valuing a combination the engine refuses -- {exc}"
+            ) from exc
+
     base = {key: frm for key, (frm, _) in changes.items()}
     changed_values = {key: to for key, (_, to) in changes.items()}
-    contributions = shapley_contributions(
-        base, changed_values, lambda inputs: run_case_payload(parent, inputs)[METRIC]
-    )
+    contributions = shapley_contributions(base, changed_values, _metric)
 
-    parent_value = run_case_payload(parent, base)[METRIC]
-    case_value = run_case_payload(parent, changed_values)[METRIC]
+    parent_value = _metric(base)
+    case_value = _metric(changed_values)
 
     stored_value = run_stored_case(case_id)[METRIC]
     if not math.isclose(case_value, stored_value, rel_tol=1e-7, abs_tol=1e-9):

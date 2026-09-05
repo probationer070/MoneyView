@@ -158,6 +158,34 @@ def test_an_unchanged_field_keeps_the_parents_claim_even_if_a_new_one_is_sent(pa
     assert claims["margin_target"] == "parent claim for margin_target"
 
 
+def test_a_non_numeric_bare_scalar_is_refused(parent_id):
+    """`wacc_stable` is unnarrated, so its override arrives as a bare value.
+    The model can't catch this -- a leaf is legitimately `Any` -- so the check
+    lives in `_unwrap`. Without it this reaches the engine and raises
+    `TypeError: str - float`."""
+    with pytest.raises(ForkRefused, match="not_a_number"):
+        fork_case(parent_id, "child_case", {"case": {"wacc_stable": "abc"}})
+
+
+def test_a_non_numeric_object_value_is_refused(parent_id):
+    """`margin_target` is narrated, so its override arrives as an object; the
+    same check applies to `raw["value"]`."""
+    with pytest.raises(ForkRefused, match="not_a_number"):
+        fork_case(parent_id, "child_case", {
+            "segments": {"Core": {"margin_target": {
+                "value": "abc", "claim": "c", "three_p": "possible",
+            }}},
+        })
+
+
+def test_a_bool_value_is_refused_not_silently_coerced(parent_id):
+    """`isinstance(True, int)` is True in Python, so without excluding `bool`
+    first, `True` would silently become `1.0` -- a stored assumption nobody
+    typed."""
+    with pytest.raises(ForkRefused, match="not_a_number"):
+        fork_case(parent_id, "child_case", {"case": {"wacc_stable": True}})
+
+
 def test_a_narrated_change_without_three_p_is_refused(parent_id):
     """three_p is NOT NULL with a CHECK on three values. Defaulting it would have
     the API state an epistemic confidence the caller never gave."""

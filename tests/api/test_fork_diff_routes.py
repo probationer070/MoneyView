@@ -29,7 +29,39 @@ def test_forking_an_unknown_case_is_a_404():
         json={"case_name": "child_case", "overrides": {"case": {"wacc_stable": 0.081}}},
     )
     assert response.status_code == 404
+    assert response.json()["detail"].startswith("no_case:")
     assert "no valuation case" in response.json()["detail"]
+
+
+def test_a_string_overrides_envelope_is_a_422(parent_id):
+    """`overrides` typed as a scalar rather than an object. Before the envelope
+    was typed this reached `.get("case")` on a str and 500'd with
+    AttributeError. FastAPI's own schema error is a LIST-shaped `detail`, not a
+    prefixed string, so only the status is asserted."""
+    response = client.post(
+        f"/api/v1/valuation/cases/{parent_id}/fork",
+        json={"case_name": "c1", "overrides": "nope"},
+    )
+    assert response.status_code == 422
+
+
+def test_a_string_case_overrides_is_a_422(parent_id):
+    """`overrides.case` typed as a scalar rather than an object. Before the
+    envelope was typed this reached `.items()` on a str and 500'd with
+    AttributeError."""
+    response = client.post(
+        f"/api/v1/valuation/cases/{parent_id}/fork",
+        json={"case_name": "c2", "overrides": {"case": "nope"}},
+    )
+    assert response.status_code == 422
+
+
+def test_a_blank_case_name_is_a_422(parent_id):
+    response = client.post(
+        f"/api/v1/valuation/cases/{parent_id}/fork",
+        json={"case_name": "   ", "overrides": {"case": {"wacc_stable": 0.081}}},
+    )
+    assert response.status_code == 422
 
 
 def test_a_refused_fork_carries_its_machine_readable_prefix(parent_id):
@@ -97,6 +129,7 @@ def test_the_diff_response_carries_no_residual_row(parent_id):
 
     body = client.get(f"/api/v1/valuation/cases/{created}/diff").json()["data"]
     inputs = {c["input"] for c in body["contributions"]}
+    assert inputs == {"case.wacc_stable"}
     assert not {"other", "residual", "interaction", "unexplained"} & inputs
 
 
@@ -104,6 +137,21 @@ def test_diffing_a_root_case_is_a_422(parent_id):
     response = client.get(f"/api/v1/valuation/cases/{parent_id}/diff")
     assert response.status_code == 422
     assert response.json()["detail"].startswith("no_parent:")
+
+
+def test_an_unrunnable_coalition_is_a_422_at_the_route(parent_id):
+    """Parent (roic 0.12 > wacc 0.074) and child (roic 0.20 > wacc 0.15) are each
+    runnable; the mixed coalition the diff must evaluate is not. Reproduced from
+    a real 500 before this fix."""
+    created = client.post(
+        f"/api/v1/valuation/cases/{parent_id}/fork",
+        json={"case_name": "child_case",
+              "overrides": {"case": {"wacc_stable": 0.15, "roic_stable": 0.20}}},
+    ).json()["data"]["id"]
+
+    response = client.get(f"/api/v1/valuation/cases/{created}/diff")
+    assert response.status_code == 422
+    assert response.json()["detail"].startswith("unrunnable_coalition:")
 
 
 def test_a_child_that_is_not_a_fork_is_refused_at_the_route(parent_id):

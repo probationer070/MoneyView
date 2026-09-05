@@ -62,6 +62,11 @@ class CaseNotFound(Exception):
     """No valuation case with the requested id."""
 
 
+class DuplicateCaseName(ValueError):
+    """A name collision, not a rejected model. Callers separate the two by
+    type rather than by matching wording this module is free to change."""
+
+
 def _validate_narratives(segment: dict) -> None:
     """Every stated input has a claim, and every claim names a stated input.
 
@@ -175,7 +180,7 @@ def create_case(payload: dict) -> int:
             # with the name, and mislabeling it sends the author chasing the
             # wrong fix.
             if message.startswith("UNIQUE constraint failed") and "case_name" in message:
-                raise ValueError(
+                raise DuplicateCaseName(
                     f"case name '{payload.get('case_name')}' already exists"
                 ) from exc
             raise ValueError(f"could not create case: {message}") from exc

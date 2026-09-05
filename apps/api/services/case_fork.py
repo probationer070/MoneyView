@@ -31,6 +31,23 @@ class ForkRefused(Exception):
 _THREE_P = frozenset({"possible", "plausible", "probable"})
 
 
+def _as_number(field: str, value: object) -> float:
+    """Reject a non-numeric leaf without forcing its type.
+
+    Some settable fields (`ramp_start_year`) are engine-side integers used in
+    arithmetic (`[0.0] * lead`) that rejects a float multiplier -- coercing
+    every leaf to `float` here would turn a legitimate `ramp_start_year: 2`
+    into `2.0` and 500 downstream. Validating without converting keeps an
+    int an int and a float a float; only `bool` and non-numeric values are
+    refused.
+    """
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ForkRefused(
+            f"not_a_number: {field} must be a number, got {type(value).__name__}"
+        )
+    return value
+
+
 def _unwrap(field: str, raw: object) -> tuple[float, str | None, str, str, str]:
     """Return (value, claim, evidence_source, confidence, three_p) for one override.
 
@@ -61,7 +78,7 @@ def _unwrap(field: str, raw: object) -> tuple[float, str | None, str, str, str]:
                 f"{sorted(_THREE_P)}, got {three_p!r}"
             )
         return (
-            raw["value"],
+            _as_number(field, raw["value"]),
             claim,
             str(raw.get("evidence_source") or "fork"),
             str(raw.get("confidence") or "assumed"),
@@ -72,7 +89,7 @@ def _unwrap(field: str, raw: object) -> tuple[float, str | None, str, str, str]:
             f"narrative_required: {field} is a narrated field, so an override of it "
             "must be an object carrying a claim, not a bare value"
         )
-    return raw, None, "", "", ""
+    return _as_number(field, raw), None, "", "", ""
 
 
 def effective_changes(parent: dict, overrides: dict) -> dict[str, tuple[float, float]]:

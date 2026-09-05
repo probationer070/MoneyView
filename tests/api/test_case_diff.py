@@ -47,6 +47,21 @@ def test_a_case_with_no_parent_cannot_be_diffed(parent_id):
         diff_case(parent_id)
 
 
+def test_an_unrunnable_intermediate_coalition_is_refused(parent_id):
+    """Parent (roic 0.12 > wacc 0.074) and child (roic 0.20 > wacc 0.15) are each
+    runnable and stored. The MIXED coalition -- wacc moved to 0.15, roic left at
+    0.12 -- is not: 0.12 does not exceed 0.15, so terminal growth would destroy
+    value. `shapley_contributions` evaluates all four coalitions of these two
+    changed inputs, including this one nobody stored. Dropping it and computing
+    the attribution from the three that ran would silently drop a term and
+    break conservation, so this must refuse the whole diff instead of a 500."""
+    child_id = fork_case(parent_id, "child_case", {
+        "case": {"wacc_stable": 0.15, "roic_stable": 0.20},
+    })
+    with pytest.raises(DiffRefused, match="unrunnable_coalition"):
+        diff_case(child_id)
+
+
 def test_contributions_conserve_the_difference_against_the_real_engine(parent_id):
     """Proves the module is wired into MoneyView's actual valuation engine, not
     merely correct in isolation."""

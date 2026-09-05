@@ -2145,3 +2145,34 @@ an assertion about the present. Spec section 7, the backend plan and the todo al
 carried "880 rows" for a day after it was zero, and each restatement made it look
 better attested. Re-measure before an irreversible step, not because the number was
 wrong when taken, but because nothing tells you when it stops being true.
+
+## 2026-09-05: `GET /cases/{id}/diff` returns 500 when a MIXED coalition is unrunnable
+
+Date: 2026-09-05
+Command: `POST /cases/1/fork {"case_name":"c4","overrides":{"case":{"wacc_stable":0.15,"roic_stable":0.20}}}`
+(200), then `GET /cases/2/diff` (500).
+Failure: `ValueError: roic_stable 12.0000% must exceed wacc_stable 15.0000% when
+terminal growth is positive, otherwise terminal growth destroys value`, uncaught,
+turned into a 500 by FastAPI's default handler. The parent (`roic 0.12 > wacc
+0.074`) and the child (`0.20 > 0.15`) are each stored and each runnable; only one
+of the four coalitions `shapley_contributions` evaluates for two changed inputs
+-- wacc moved without roic -- fails the engine's own runnability check.
+Root cause: `diff_case` in `apps/api/services/case_diff.py` called
+`run_case_payload` directly, both inside the Shapley metric closure and at the
+two direct calls for `parent_value`/`case_value`, with no handling for the
+engine's `ValueError`. Shapley evaluates every one of the 2^k coalitions,
+including combinations neither stored case holds; when the engine refuses one
+of them, the attribution cannot be computed, and computing it from only the
+coalitions that DID run would silently drop a term and break conservation --
+the exact defect this module exists to prevent.
+Fix: added a `_metric` closure in `case_diff.py` that wraps every
+`run_case_payload` call (the Shapley metric and both direct calls) and
+re-raises the engine's `ValueError` as `DiffRefused("unrunnable_coalition: ...")`,
+naming the engine's own words. The route already maps `DiffRefused` to a 422.
+Files changed: `apps/api/services/case_diff.py`.
+Prevention: `tests/api/test_case_diff.py::test_an_unrunnable_intermediate_coalition_is_refused`
+reproduces the exact fork above and asserts `DiffRefused` with the
+`unrunnable_coalition` prefix; `tests/api/test_fork_diff_routes.py::test_an_unrunnable_coalition_is_a_422_at_the_route`
+asserts the 422 and prefix at the route. Mutation-verified: removing the
+try/except lets the bare `ValueError` escape, and the service test then fails
+on `ValueError` rather than `DiffRefused`.

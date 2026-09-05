@@ -9,6 +9,7 @@ from fastapi import APIRouter, Body, HTTPException
 from apps.api.models.schemas import (
     APIResponse,
     ConservativeCaseResult,
+    ForkRequest,
     ValuationCaseCreated,
     ValuationCaseInput,
     ValuationCaseSummary,
@@ -23,6 +24,7 @@ from apps.api.services.company_baseline import (
 )
 from apps.api.services.valuation_case import (
     CaseNotFound,
+    DuplicateCaseName,
     create_case,
     list_cases,
     load_case,
@@ -100,7 +102,7 @@ def _conservative_result(case_id: int, *, created: bool) -> ConservativeCaseResu
 
 
 @router.post("/cases/{case_id}/fork", response_model=APIResponse[ValuationCaseCreated])
-def fork_valuation_case(case_id: int, payload: dict = Body(...)):
+def fork_valuation_case(case_id: int, payload: ForkRequest = Body(...)):
     """Copy a case with changed assumptions, recording the parent.
 
     Refusals keep a machine-readable prefix (`unknown_field`, `unknown_segment`,
@@ -109,30 +111,25 @@ def fork_valuation_case(case_id: int, payload: dict = Body(...)):
     conservative-case route documents. An engine refusal passes through in the
     engine's own words: it owns that wording.
 
-    The ValueErrors `create_case` raises are separated by MESSAGE, not by type.
-    All four are bare ValueErrors, so `except ValueError -> 422` would report a
-    duplicate case name as an unrunnable model -- naming the wrong problem, the
-    very confusion `test_valuation_case_service.py:146` already guards against
-    one layer down. A name collision is a conflict the caller fixes by choosing
-    another name, so it gets 409 and a prefix of its own; the engine's wording
-    is preserved after that prefix rather than replaced by it.
+    `DuplicateCaseName` is a distinct type from the engine's runnability
+    refusal, both bare `ValueError`s from `create_case`: a name collision is a
+    conflict the caller fixes by choosing another name, well-formed input that
+    conflicts with server state -- 409's definition -- so it is caught first and
+    gets a prefix of its own; the engine's wording is preserved after that
+    prefix rather than replaced by it.
     """
-    case_name = str(payload.get("case_name") or "").strip()
-    if not case_name:
-        raise HTTPException(status_code=422, detail="missing_case_name: a fork needs a name")
     try:
-        new_id = fork_case(case_id, case_name, payload.get("overrides") or {})
+        new_id = fork_case(case_id, payload.case_name, payload.overrides.model_dump())
     except CaseNotFound as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        raise HTTPException(status_code=404, detail=f"no_case: {exc}") from exc
     except ForkRefused as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except DuplicateCaseName as exc:
+        raise HTTPException(
+            status_code=409, detail=f"duplicate_case_name: {exc}"
+        ) from exc
     except ValueError as exc:
-        message = str(exc)
-        if "already exists" in message:
-            raise HTTPException(
-                status_code=409, detail=f"duplicate_case_name: {message}"
-            ) from exc
-        raise HTTPException(status_code=422, detail=message) from exc
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     return APIResponse(data=ValuationCaseCreated(id=new_id))
 
 
@@ -150,7 +147,7 @@ def diff_valuation_case(case_id: int):
     try:
         return APIResponse(data=diff_case(case_id))
     except CaseNotFound as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        raise HTTPException(status_code=404, detail=f"no_case: {exc}") from exc
     except DiffRefused as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
