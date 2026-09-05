@@ -365,3 +365,29 @@ def run_stored_case(case_id: int) -> dict:
         ),
         "below_probable": _below_probable(case),
     }
+
+
+def run_case_payload(base_case: dict, overrides: dict[str, float]) -> dict:
+    """Run the engine over `base_case` with canonical-key `overrides` applied.
+
+    Nothing is persisted: this is the evaluation function Shapley calls 2^k
+    times, and writing a row per coalition would be both slow and a lie about
+    what a stored case means.
+    """
+    case = {field: base_case[field] for field in _CASE_COLUMNS}
+    segments = [
+        {field: segment[field] for field in _SEGMENT_COLUMNS}
+        for segment in base_case["segments"]
+    ]
+    by_name = {segment["name"]: segment for segment in segments}
+    for key, value in overrides.items():
+        if key.startswith("case."):
+            case[key.split(".", 1)[1]] = value
+        else:
+            _, segment_name, column = key.split(".", 2)
+            by_name[segment_name][column] = value
+
+    case["segments"] = segments
+    spec, specs = _specs_from_payload(case)
+    result = run_case(spec, specs)
+    return {"value_per_share_diluted": result.value_per_share_diluted}
