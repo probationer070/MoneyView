@@ -15,6 +15,8 @@ from apps.api.models.schemas import (
     VerdictPanel,
 )
 from apps.api.services.acquisition.store import load_price_bars
+from apps.api.services.case_diff import DiffRefused, diff_case
+from apps.api.services.case_fork import ForkRefused, fork_case
 from apps.api.services.company_baseline import (
     find_conservative_case_id,
     generate_conservative_case_for_ticker,
@@ -95,6 +97,62 @@ def _conservative_result(case_id: int, *, created: bool) -> ConservativeCaseResu
     return ConservativeCaseResult(
         id=case_id, case_name=load_case(case_id)["case_name"], created=created
     )
+
+
+@router.post("/cases/{case_id}/fork", response_model=APIResponse[ValuationCaseCreated])
+def fork_valuation_case(case_id: int, payload: dict = Body(...)):
+    """Copy a case with changed assumptions, recording the parent.
+
+    Refusals keep a machine-readable prefix (`unknown_field`, `unknown_segment`,
+    `narrative_required`, `unexpected_narrative`, `no_effective_change`) so a
+    caller can branch without parsing prose -- the same convention the
+    conservative-case route documents. An engine refusal passes through in the
+    engine's own words: it owns that wording.
+
+    The ValueErrors `create_case` raises are separated by MESSAGE, not by type.
+    All four are bare ValueErrors, so `except ValueError -> 422` would report a
+    duplicate case name as an unrunnable model -- naming the wrong problem, the
+    very confusion `test_valuation_case_service.py:146` already guards against
+    one layer down. A name collision is a conflict the caller fixes by choosing
+    another name, so it gets 409 and a prefix of its own; the engine's wording
+    is preserved after that prefix rather than replaced by it.
+    """
+    case_name = str(payload.get("case_name") or "").strip()
+    if not case_name:
+        raise HTTPException(status_code=422, detail="missing_case_name: a fork needs a name")
+    try:
+        new_id = fork_case(case_id, case_name, payload.get("overrides") or {})
+    except CaseNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ForkRefused as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except ValueError as exc:
+        message = str(exc)
+        if "already exists" in message:
+            raise HTTPException(
+                status_code=409, detail=f"duplicate_case_name: {message}"
+            ) from exc
+        raise HTTPException(status_code=422, detail=message) from exc
+    return APIResponse(data=ValuationCaseCreated(id=new_id))
+
+
+@router.get("/cases/{case_id}/diff", response_model=APIResponse[dict])
+def diff_valuation_case(case_id: int):
+    """Attribute this case's value difference from its parent, per changed input.
+
+    Shapley: exact and independent of the order the changes are enumerated.
+    Above the cap it refuses rather than falling back to a cheaper, order-
+    dependent method -- two responses of identical shape computed differently
+    cannot be compared. Measured 2026-09-05: the seeded SpaceX pair changes 26
+    inputs and is refused, which is the contract working, not a gap to paper
+    over.
+    """
+    try:
+        return APIResponse(data=diff_case(case_id))
+    except CaseNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except DiffRefused as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.post("/conservative/{ticker}", response_model=APIResponse[ConservativeCaseResult])
