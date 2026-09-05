@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class SegmentNarrativeInput(BaseModel):
@@ -71,6 +71,31 @@ class ValuationCaseInput(BaseModel):
 
 class ValuationCaseCreated(BaseModel):
     id: int
+
+
+class ForkOverrides(BaseModel):
+    """The envelope is known; the leaves are not. A leaf is a bare scalar for
+    an unnarrated field or a {value, claim, three_p} object for a narrated
+    one, so it stays `Any` and `case_fork` validates it."""
+    model_config = ConfigDict(extra="forbid")
+
+    case: dict[str, Any] = {}
+    segments: dict[str, dict[str, Any]] = {}
+
+
+class ForkRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    case_name: str
+    overrides: ForkOverrides = ForkOverrides()
+
+    @field_validator("case_name")
+    @classmethod
+    def _named(cls, value: str) -> str:
+        name = value.strip()
+        if not name:
+            raise ValueError("a fork needs a name")
+        return name
 
 
 class ConservativeCaseResult(BaseModel):

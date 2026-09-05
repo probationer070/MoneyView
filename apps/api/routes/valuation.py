@@ -9,18 +9,22 @@ from fastapi import APIRouter, Body, HTTPException
 from apps.api.models.schemas import (
     APIResponse,
     ConservativeCaseResult,
+    ForkRequest,
     ValuationCaseCreated,
     ValuationCaseInput,
     ValuationCaseSummary,
     VerdictPanel,
 )
 from apps.api.services.acquisition.store import load_price_bars
+from apps.api.services.case_diff import DiffRefused, diff_case
+from apps.api.services.case_fork import ForkRefused, fork_case
 from apps.api.services.company_baseline import (
     find_conservative_case_id,
     generate_conservative_case_for_ticker,
 )
 from apps.api.services.valuation_case import (
     CaseNotFound,
+    DuplicateCaseName,
     create_case,
     list_cases,
     load_case,
@@ -95,6 +99,64 @@ def _conservative_result(case_id: int, *, created: bool) -> ConservativeCaseResu
     return ConservativeCaseResult(
         id=case_id, case_name=load_case(case_id)["case_name"], created=created
     )
+
+
+@router.post("/cases/{case_id}/fork", response_model=APIResponse[ValuationCaseCreated])
+def fork_valuation_case(case_id: int, payload: ForkRequest = Body(...)):
+    """Copy a case with changed assumptions, recording the parent.
+
+    Refusals keep a machine-readable prefix (`unknown_field`, `unknown_segment`,
+    `narrative_required`, `unexpected_narrative`, `not_a_number`,
+    `no_effective_change`) so a caller can branch without parsing prose -- the
+    same convention the conservative-case route documents. An engine refusal
+    passes through in the engine's own words: it owns that wording.
+
+    `DuplicateCaseName` is now its own type, distinct from the engine's
+    runnability refusal, which stays a bare `ValueError` from `create_case`: a
+    name collision is a conflict the caller fixes by choosing another name,
+    well-formed input that conflicts with server state -- 409's definition --
+    so it is caught first and gets a prefix of its own; the engine's wording is
+    preserved after that prefix rather than replaced by it.
+    """
+    try:
+        new_id = fork_case(case_id, payload.case_name, payload.overrides.model_dump())
+    except CaseNotFound as exc:
+        raise HTTPException(status_code=404, detail=f"no_case: {exc}") from exc
+    except ForkRefused as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except DuplicateCaseName as exc:
+        raise HTTPException(
+            status_code=409, detail=f"duplicate_case_name: {exc}"
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return APIResponse(data=ValuationCaseCreated(id=new_id))
+
+
+@router.get("/cases/{case_id}/diff", response_model=APIResponse[dict])
+def diff_valuation_case(case_id: int):
+    """Attribute this case's value difference from its parent, per changed input.
+
+    Shapley: exact and independent of the order the changes are enumerated.
+    Above the cap it refuses rather than falling back to a cheaper, order-
+    dependent method -- two responses of identical shape computed differently
+    cannot be compared. Measured 2026-09-05: the seeded SpaceX pair changes 25
+    inputs (`ticker` and `as_of_date` are excluded as case identity, not
+    attributable inputs) and is refused with `too_many_changed_inputs`, which
+    is the contract working, not a gap to paper over.
+    """
+    try:
+        return APIResponse(data=diff_case(case_id))
+    except CaseNotFound as exc:
+        raise HTTPException(status_code=404, detail=f"no_case: {exc}") from exc
+    except DiffRefused as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except ForkRefused as exc:
+        # Defence in depth: `diff_case` rebuilds the child's overrides and
+        # replays them through `effective_changes`, so a field that should
+        # have been excluded from that reconstruction would otherwise escape
+        # as a 500 instead of a refusal.
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.post("/conservative/{ticker}", response_model=APIResponse[ConservativeCaseResult])

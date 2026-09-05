@@ -62,6 +62,11 @@ class CaseNotFound(Exception):
     """No valuation case with the requested id."""
 
 
+class DuplicateCaseName(ValueError):
+    """A name collision, not a rejected model. Callers separate the two by
+    type rather than by matching wording this module is free to change."""
+
+
 def _validate_narratives(segment: dict) -> None:
     """Every stated input has a claim, and every claim names a stated input.
 
@@ -175,7 +180,7 @@ def create_case(payload: dict) -> int:
             # with the name, and mislabeling it sends the author chasing the
             # wrong fix.
             if message.startswith("UNIQUE constraint failed") and "case_name" in message:
-                raise ValueError(
+                raise DuplicateCaseName(
                     f"case name '{payload.get('case_name')}' already exists"
                 ) from exc
             raise ValueError(f"could not create case: {message}") from exc
@@ -365,3 +370,34 @@ def run_stored_case(case_id: int) -> dict:
         ),
         "below_probable": _below_probable(case),
     }
+
+
+def run_case_payload(base_case: dict, overrides: dict[str, float]) -> dict:
+    """Run the engine over `base_case` with canonical-key `overrides` applied.
+
+    Nothing is persisted: this is the evaluation function Shapley calls 2^k
+    times, and writing a row per coalition would be both slow and a lie about
+    what a stored case means.
+    """
+    case = {field: base_case[field] for field in _CASE_COLUMNS}
+    segments = [
+        {field: segment[field] for field in _SEGMENT_COLUMNS}
+        for segment in base_case["segments"]
+    ]
+    by_name = {segment["name"]: segment for segment in segments}
+    for key, value in overrides.items():
+        if key.startswith("case."):
+            case[key.split(".", 1)[1]] = value
+        else:
+            # rsplit, not split: a SEGMENT NAME may contain dots and a column
+            # name never can. conservative_case names a segment ticker.lower(),
+            # and this repo ships .KS tickers, so `segment.005930.ks.margin_target`
+            # is a real key -- a left split reads the name as "005930" and then
+            # KeyErrors, which is a 500 rather than a refusal.
+            segment_name, column = key[len("segment."):].rsplit(".", 1)
+            by_name[segment_name][column] = value
+
+    case["segments"] = segments
+    spec, specs = _specs_from_payload(case)
+    result = run_case(spec, specs)
+    return {"value_per_share_diluted": result.value_per_share_diluted}

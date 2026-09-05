@@ -685,6 +685,15 @@ class CaseSpec:
                 f"terminal growth {self.terminal_growth:.4%} exceeds the riskfree "
                 f"rate {self.riskfree_rate:.4%} -- perpetual growth is capped there"
             )
+        if self.wacc_initial <= 0:
+            # The guard lives here, not in ValuationCaseInput, because the
+            # pydantic bound only covers POST /cases. `discount_factors`
+            # rejects only wacc <= -1, so a negative wacc_initial reached
+            # the runnability gate, passed it, and persisted a case worth
+            # 99x its true value per share.
+            raise ValueError(
+                f"wacc_initial must be positive, got {self.wacc_initial}"
+            )
         if self.shares_basic <= 0:
             raise ValueError(f"shares_basic must be positive, got {self.shares_basic}")
         if self.nol_balance < 0:
