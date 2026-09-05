@@ -2,9 +2,14 @@ import math
 
 import pytest
 
-from apps.api.services.case_diff import SHAPLEY_INPUT_CAP, DiffRefused, diff_case
+from apps.api.services.case_diff import METRIC, SHAPLEY_INPUT_CAP, DiffRefused, diff_case
 from apps.api.services.case_fork import fork_case
-from apps.api.services.valuation_case import create_case, run_stored_case
+from apps.api.services.valuation_case import (
+    create_case,
+    load_case,
+    run_case_payload,
+    run_stored_case,
+)
 from tests.api.test_case_fork import _parent_payload
 
 
@@ -93,3 +98,41 @@ def test_too_many_changed_inputs_is_refused_not_downgraded(monkeypatch):
 
 def test_the_cap_is_a_named_constant():
     assert SHAPLEY_INPUT_CAP == 12
+
+
+def test_two_inputs_get_the_shapley_split_not_a_sequential_walk(parent_id):
+    """Conservation does NOT distinguish Shapley from a sequential walk: a
+    one-at-a-time walk telescopes, so its contributions sum to the same total.
+    Measured 2026-09-05 -- a WORKING sequential attribution passes every other
+    test in this file. What separates them is the interaction term: Shapley
+    halves it, a sequential walk gives all of it to whichever input went second.
+    """
+    parent = load_case(parent_id)
+    child_id = fork_case(parent_id, "child_case", {
+        "case": {"wacc_stable": 0.081, "terminal_growth": 0.025},
+    })
+    a, b = "case.wacc_stable", "case.terminal_growth"
+    base = {a: 0.074, b: 0.030}
+
+    def value(**moved) -> float:
+        return run_case_payload(parent, {**base, **moved})[METRIC]
+
+    v0 = value()
+    va = value(**{a: 0.081})
+    vb = value(**{b: 0.025})
+    vab = value(**{a: 0.081, b: 0.025})
+
+    # Positive control. On a fixture with no interaction the two methods
+    # COINCIDE and every assertion below would hold for either, proving
+    # nothing. Measured 0.66/share here, 10.5% of the total move.
+    interaction = vab - va - vb + v0
+    assert abs(interaction) > 0.1
+
+    shapley_a = 0.5 * (va - v0) + 0.5 * (vab - vb)
+    shapley_b = 0.5 * (vb - v0) + 0.5 * (vab - va)
+    got = {c["input"]: c["contribution"] for c in diff_case(child_id)["contributions"]}
+    assert got[a] == pytest.approx(shapley_a, rel=1e-9)
+    assert got[b] == pytest.approx(shapley_b, rel=1e-9)
+    # Named explicitly so the distinction is the test's subject, not a side
+    # effect: the sequential walk's answer for `a` is (va - v0).
+    assert got[a] != pytest.approx(va - v0, rel=1e-6)
