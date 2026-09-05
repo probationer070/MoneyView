@@ -140,15 +140,22 @@ def diff_valuation_case(case_id: int):
     Shapley: exact and independent of the order the changes are enumerated.
     Above the cap it refuses rather than falling back to a cheaper, order-
     dependent method -- two responses of identical shape computed differently
-    cannot be compared. Measured 2026-09-05: the seeded SpaceX pair changes 26
-    inputs and is refused, which is the contract working, not a gap to paper
-    over.
+    cannot be compared. Measured 2026-09-05: the seeded SpaceX pair changes 25
+    inputs (`ticker` and `as_of_date` are excluded as case identity, not
+    attributable inputs) and is refused with `too_many_changed_inputs`, which
+    is the contract working, not a gap to paper over.
     """
     try:
         return APIResponse(data=diff_case(case_id))
     except CaseNotFound as exc:
         raise HTTPException(status_code=404, detail=f"no_case: {exc}") from exc
     except DiffRefused as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except ForkRefused as exc:
+        # Defence in depth: `diff_case` rebuilds the child's overrides and
+        # replays them through `effective_changes`, so a field that should
+        # have been excluded from that reconstruction would otherwise escape
+        # as a 500 instead of a refusal.
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 

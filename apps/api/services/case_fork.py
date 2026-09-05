@@ -19,7 +19,17 @@ from apps.api.services.valuation_case import (
 # Set by the caller, never copied: a fork's name is new and its parent is the
 # case it came from.
 _UNSETTABLE_CASE_FIELDS = frozenset({"case_name", "parent_case_id"})
-_SETTABLE_CASE_FIELDS = frozenset(_CASE_COLUMNS) - _UNSETTABLE_CASE_FIELDS
+
+# TEXT columns (db.py). They identify the case rather than value it: a fork
+# is the same company, and neither is an attributable input, so neither is
+# settable and neither is a Shapley player. Excluded HERE, once, because
+# defining "a changed input" by subtraction in two modules is what let a
+# string reach _as_number and 500 the endpoint.
+_NON_NUMERIC_CASE_FIELDS = frozenset({"ticker", "as_of_date"})
+
+_SETTABLE_CASE_FIELDS = (
+    frozenset(_CASE_COLUMNS) - _UNSETTABLE_CASE_FIELDS - _NON_NUMERIC_CASE_FIELDS
+)
 _SETTABLE_SEGMENT_FIELDS = frozenset(_SEGMENT_COLUMNS) - {"name"}
 
 
@@ -29,6 +39,15 @@ class ForkRefused(Exception):
 
 
 _THREE_P = frozenset({"possible", "plausible", "probable"})
+
+# db.py's segment_narrative table: CHECK(confidence IN
+# ('confirmed','derived','assumed')), the same shape of constraint as
+# three_p's. Unlike three_p, confidence IS defaulted (see _unwrap) -- the spec
+# permits defaulting it, since it is not itself an epistemic claim about the
+# assumption -- but a SUPPLIED value must still be one of these three, or it
+# reaches sqlite as a raw CHECK constraint failure instead of a refusal the
+# caller can branch on.
+_CONFIDENCE = frozenset({"confirmed", "derived", "assumed"})
 
 # INTEGER columns (db.py:496,497,501,555). A float here reaches the engine
 # as a sequence multiplier or a range bound and raises TypeError three
@@ -98,11 +117,20 @@ def _unwrap(field: str, raw: object) -> tuple[float, str | None, str, str, str]:
                 f"narrative_required: {field} needs a three_p of "
                 f"{sorted(_THREE_P)}, got {three_p!r}"
             )
+        confidence = str(raw.get("confidence") or "assumed")
+        if confidence not in _CONFIDENCE:
+            # Defaulting is fine (see _CONFIDENCE); a SUPPLIED value that is
+            # not one of the three is refused here, before sqlite's CHECK ever
+            # sees it -- the same treatment three_p already gets.
+            raise ForkRefused(
+                f"narrative_required: {field} needs a confidence of "
+                f"{sorted(_CONFIDENCE)}, got {confidence!r}"
+            )
         return (
             _as_number(field, raw["value"]),
             claim,
             str(raw.get("evidence_source") or "fork"),
-            str(raw.get("confidence") or "assumed"),
+            confidence,
             three_p,
         )
     if narrated:

@@ -8,10 +8,12 @@ from apps.api.services.valuation_case import (
     _CASE_COLUMNS,
     _SEGMENT_COLUMNS,
     create_case,
+    list_cases,
     load_case,
     run_case_payload,
     run_stored_case,
 )
+from apps.api.services.valuation_seed import ensure_valuation_cases_seeded
 from tests.api.test_case_fork import _parent_payload, _two_segment_payload
 
 
@@ -248,3 +250,38 @@ def test_an_unnarrated_segment_field_diffs_without_a_spurious_claim():
     assert [c["input"] for c in result["contributions"]] == ["segment.Core.ramp_start_year"]
     assert result["contributions"][0]["from"] == pytest.approx(1)
     assert result["contributions"][0]["to"] == pytest.approx(2)
+
+
+def test_the_seeded_pair_is_refused_by_the_cap_not_a_500():
+    """The only parent/child pair the product actually ships. Before excluding
+    `ticker`/`as_of_date` from the reconstructed override set, this 500'd with
+    `ForkRefused: not_a_number: as_of_date must be a number, got str` -- the
+    cap refusal was never reached at all."""
+    ensure_valuation_cases_seeded()
+    cases = {case["case_name"]: case["id"] for case in list_cases()}
+    child_id = cases["spacex_2026_06_post_prospectus"]
+
+    with pytest.raises(DiffRefused, match="too_many_changed_inputs") as exc_info:
+        diff_case(child_id)
+    # Measured 2026-09-05, after the fix: the seeded post-prospectus case
+    # changes 25 inputs against its pre-prospectus parent.
+    assert "25 inputs changed" in str(exc_info.value)
+
+
+def test_a_directly_created_child_differing_in_as_of_date_diffs_on_the_numeric_field_only():
+    """`as_of_date` is case identity, not an attributable input -- excluded from
+    the reconstructed override set alongside `ticker`. A child that differs
+    from its parent in `as_of_date` AND one numeric field must diff
+    successfully, attributing only the numeric change."""
+    parent_id = create_case(_parent_payload())
+    parent = load_case(parent_id)
+
+    payload = _direct_child_payload(
+        parent, case_name="date_shifted_child",
+        as_of_date="2027-01-01", wacc_stable=0.081,
+    )
+    child_id = create_case(payload)
+
+    result = diff_case(child_id)
+    assert [c["input"] for c in result["contributions"]] == ["case.wacc_stable"]
+    assert result["changed_input_count"] == 1

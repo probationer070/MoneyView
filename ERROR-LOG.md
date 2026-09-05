@@ -2176,3 +2176,92 @@ reproduces the exact fork above and asserts `DiffRefused` with the
 asserts the 422 and prefix at the route. Mutation-verified: removing the
 try/except lets the bare `ValueError` escape, and the service test then fails
 on `ValueError` rather than `DiffRefused`.
+
+## 2026-09-05: `GET /cases/{id}/diff` reported a 56%-wrong value with no refusal, for a child whose segment set differed from its parent's
+
+Date: 2026-09-05
+Command: a child created directly (not through `fork_case`) -- `POST /valuation/cases`
+with `parent_case_id` set, or `valuation_seed.py`'s seeding path -- whose segment set
+differs from its parent's, then `GET /cases/{id}/diff`.
+Failure: `/diff` reported `69.819691` for `value_per_share_diluted` where the case's own
+stored value was `44.718570` -- a 56% error wearing an exact Shapley attribution, with
+no refusal raised at all. `diff_case` rebuilds a child's overrides by diffing its stored
+columns against the parent's, then replays those diffs against the parent to recompute
+a "child" value; nothing checked that this reconstruction actually reproduces the
+child's own stored row.
+Root cause: a directly created child can differ from its parent in STRUCTURE, not just
+value -- a dropped or added segment -- so reapplying the reconstructed column diffs to
+the parent lands on a value for a case that does not exist. `diff_case` never compared
+its reconstruction against `run_stored_case(case_id)`.
+Fix: `diff_case` now calls `run_stored_case(case_id)` and raises
+`DiffRefused("not_a_fork: ...")` when the reconstructed `case_value` does not match it
+within `math.isclose(rel_tol=1e-7, abs_tol=1e-9)`, before the response is built.
+Files changed: `apps/api/services/case_diff.py` (commit `093854d`).
+Prevention: `tests/api/test_case_diff.py::test_a_directly_created_child_that_drops_a_segment_is_refused`
+and `tests/api/test_fork_diff_routes.py::test_a_child_that_is_not_a_fork_is_refused_at_the_route`
+reproduce a dropped segment directly and assert the `not_a_fork` refusal at both the
+service and the route. CLAUDE.md §7 names exactly this shape -- "wrong output, wrong
+data, no error raised" -- as the archetype that must be recorded; this is this branch's
+clearest instance of it.
+
+## 2026-09-05: `POST /cases/{id}/fork` 500s on a malformed envelope, and on a whole-number float into an INTEGER column
+
+Date: 2026-09-05
+Command: `POST /cases/{id}/fork {"case_name": "c1", "overrides": "nope"}` (well-formed
+JSON, wrong shape); and `POST /cases/{id}/fork {"case_name": "c2", "overrides":
+{"case": {"wacc_converge_from": 6.0}}}` (a whole-number float into an INTEGER column).
+Failure: the first raised `AttributeError: 'str' object has no attribute 'get'` inside
+`effective_changes` (`overrides.get("case")` called on a str), a 500. The second stored
+`6.0` into `wacc_converge_from`, and the engine's own arithmetic downstream (`[0.0] *
+lead` with a float `lead`) raised `TypeError: can't multiply sequence by non-int of type
+'float'`, also a 500.
+Root cause: shared between both -- free-form JSON leaves (`overrides`, and any leaf
+inside it) reached deeper layers unvalidated. Neither the request schema nor
+`_as_number` distinguished a malformed envelope from a well-typed one, nor a
+whole-number float (JSON's `6.0`, meaning the integer `6`) from a genuinely fractional
+one on a column the engine treats as an integer.
+Fix: `ForkOverrides`/`ForkRequest` in `apps/api/models/schemas.py` now type `overrides`,
+`overrides.case` and `overrides.segments.*` as objects with `extra="forbid"`, refusing a
+scalar with FastAPI's own 422 before it reaches the service. `_as_number` in
+`case_fork.py` gained an `_INTEGER_FIELDS` branch: a float is accepted only when
+`value.is_integer()` and converted to `int`; a fractional float is refused with
+`not_a_number:`.
+Files changed: `apps/api/models/schemas.py`, `apps/api/services/case_fork.py` (commits
+`8fb7fbc`, `f60ace3`).
+Prevention: `tests/api/test_fork_diff_routes.py::test_a_string_overrides_envelope_is_a_422`
+(and its `case`/`segments`-scoped siblings) cover the envelope shape;
+`tests/api/test_case_fork.py::test_a_whole_number_float_on_an_integer_field_forks_and_stores_an_int`
+and `test_a_fractional_float_on_an_integer_field_is_refused` cover the INTEGER-column
+float. One entry covers both: they share a root cause, free-form leaves reaching the
+engine unvalidated.
+
+## 2026-09-05: `GET /cases/{id}/diff` 500s on the only parent/child pair the product ships
+
+Date: 2026-09-05
+Command: `ensure_valuation_cases_seeded()` (case 1 `spacex_2026_04_pre_prospectus`, no
+parent; case 2 `spacex_2026_06_post_prospectus`, child of 1), then `GET /cases/2/diff`.
+Failure: 500. `ForkRefused: not_a_number: as_of_date must be a number, got str`, uncaught
+-- the diff route handled only `CaseNotFound` and `DiffRefused` -- on the only
+parent/child pair the product actually ships.
+Root cause: `diff_case` rebuilds the child's overrides from every `_CASE_COLUMNS` entry
+except `case_name`/`parent_case_id`. That set still included the TEXT columns `ticker`
+and `as_of_date` (db.py), which reach `effective_changes` -> `_unwrap` -> `_as_number`
+and raise `ForkRefused`, a type the diff route's `except` clauses did not name. "A
+changed input" was defined by subtraction (columns minus two names) in both
+`case_fork.py` and `case_diff.py`, and by type in neither -- each module assumed the
+other had excluded the strings.
+Fix: defined `_NON_NUMERIC_CASE_FIELDS = frozenset({"ticker", "as_of_date"})` once, in
+`case_fork.py`, and subtracted it from `_SETTABLE_CASE_FIELDS`; `case_diff.py` imports
+and skips the same set when rebuilding overrides rather than restating it. The diff
+route also gained `except ForkRefused` -> 422, as defence in depth. Measured after the
+fix: the seeded pair changes 25 inputs and is refused with `too_many_changed_inputs`,
+not a 500.
+Files changed: `apps/api/services/case_fork.py`, `apps/api/services/case_diff.py`,
+`apps/api/routes/valuation.py`.
+Prevention: `tests/api/test_case_diff.py::test_the_seeded_pair_is_refused_by_the_cap_not_a_500`
+reproduces the exact seed and asserts `DiffRefused` with `too_many_changed_inputs`, not a
+500; a route-level sibling in `test_fork_diff_routes.py` asserts 422 with the same
+prefix. Related to, but distinct from, the `unrunnable_coalition` entry above: both are
+"diff 500s on a case nobody tested against the real seed", but that one is an
+engine-level refusal reached only inside a Shapley coalition, and this one is a
+validation-layer crash reached on the very first call.

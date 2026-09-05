@@ -2,7 +2,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from apps.api.main import app
-from apps.api.services.valuation_case import create_case, load_case
+from apps.api.services.valuation_case import create_case, list_cases, load_case
+from apps.api.services.valuation_seed import ensure_valuation_cases_seeded
 from tests.api.test_case_diff import _direct_child_payload
 from tests.api.test_case_fork import _parent_payload, _two_segment_payload
 
@@ -68,7 +69,7 @@ def test_a_string_segment_overrides_is_a_422(parent_id):
     assert response.status_code == 422
 
 
-def test_a_whole_number_float_on_an_integer_field_is_a_422_not_a_500(parent_id):
+def test_a_fractional_float_on_an_integer_field_is_a_422_not_a_500(parent_id):
     """`wacc_converge_from` is an INTEGER column; `6.5` must be refused at the
     schema/service boundary with a 422, never reach the engine as a 500."""
     response = client.post(
@@ -251,5 +252,18 @@ def test_the_cap_refuses_at_the_route_rather_than_downgrading(monkeypatch):
     ).json()["data"]["id"]
 
     response = client.get(f"/api/v1/valuation/cases/{created}/diff")
+    assert response.status_code == 422
+    assert response.json()["detail"].startswith("too_many_changed_inputs:")
+
+
+def test_the_seeded_pair_is_a_422_not_a_500_at_the_route():
+    """The only parent/child pair the product ships, at the route: must be a
+    422 carrying `too_many_changed_inputs:`, never the 500 a stray TEXT column
+    used to produce."""
+    ensure_valuation_cases_seeded()
+    cases = {case["case_name"]: case["id"] for case in list_cases()}
+    child_id = cases["spacex_2026_06_post_prospectus"]
+
+    response = client.get(f"/api/v1/valuation/cases/{child_id}/diff")
     assert response.status_code == 422
     assert response.json()["detail"].startswith("too_many_changed_inputs:")

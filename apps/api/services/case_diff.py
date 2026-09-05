@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import math
 
-from apps.api.services.case_fork import effective_changes
+from apps.api.services.case_fork import _NON_NUMERIC_CASE_FIELDS, effective_changes
 from apps.api.services.valuation_case import (
     _CASE_COLUMNS,
     _SEGMENT_COLUMNS,
@@ -59,7 +59,9 @@ def diff_case(case_id: int) -> dict:
         "case": {
             field: case[field]
             for field in _CASE_COLUMNS
-            if field not in ("case_name", "parent_case_id") and case[field] != parent[field]
+            if field not in ("case_name", "parent_case_id")
+            and field not in _NON_NUMERIC_CASE_FIELDS
+            and case[field] != parent[field]
         },
         "segments": {},
     }

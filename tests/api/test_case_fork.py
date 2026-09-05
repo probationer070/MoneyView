@@ -120,6 +120,19 @@ def test_a_changed_narrated_field_needs_a_new_claim(parent_id):
                   {"segments": {"Core": {"margin_target": 0.31}}})
 
 
+def test_a_blank_claim_is_refused_as_narrative_required(parent_id):
+    """The object-vs-scalar shape rule above is a different guarantee from the
+    claim REQUIREMENT itself: a request that already takes the object form can
+    still carry a claim of only whitespace. Deleting the `if not claim:` block
+    leaves this narrated override storing an empty claim on a changed field."""
+    with pytest.raises(ForkRefused, match="narrative_required"):
+        fork_case(parent_id, "child_case", {
+            "segments": {"Core": {"margin_target": {
+                "value": 0.31, "claim": "   ", "three_p": "possible",
+            }}},
+        })
+
+
 def test_a_narrated_change_with_a_claim_replaces_the_parents(parent_id):
     child_id = fork_case(parent_id, "child_case", {
         "segments": {"Core": {"margin_target": {
@@ -236,6 +249,33 @@ def test_an_invalid_three_p_is_refused_before_sqlite_sees_it(parent_id):
         })
 
 
+def test_a_narrated_override_with_no_value_is_refused(parent_id):
+    """Without the `"value" not in raw` guard, `raw["value"]` is a `KeyError`
+    three layers down -- a 500, where spec Section 4.5 mandates a
+    `narrative_required:` 422."""
+    with pytest.raises(ForkRefused, match="narrative_required"):
+        fork_case(parent_id, "child_case", {
+            "segments": {"Core": {"margin_target": {
+                "claim": "x", "three_p": "possible",
+            }}},
+        })
+
+
+def test_an_invalid_confidence_is_refused_before_sqlite_sees_it(parent_id):
+    """The column has an identical CHECK(confidence IN
+    ('confirmed','derived','assumed')) to three_p's -- but unlike three_p,
+    confidence IS defaulted when omitted. A SUPPLIED value outside the three
+    names must still be refused by name here, not surface as sqlite's raw
+    CHECK constraint message."""
+    with pytest.raises(ForkRefused, match="narrative_required"):
+        fork_case(parent_id, "child_case", {
+            "segments": {"Core": {"margin_target": {
+                "value": 0.31, "claim": "services mix reaches 30% by 2030",
+                "three_p": "possible", "confidence": "certain",
+            }}},
+        })
+
+
 def test_a_claim_on_an_unnarrated_field_is_refused(parent_id):
     with pytest.raises(ForkRefused, match="unexpected_narrative"):
         fork_case(parent_id, "child_case", {
@@ -246,6 +286,29 @@ def test_a_claim_on_an_unnarrated_field_is_refused(parent_id):
 def test_an_unknown_field_is_refused(parent_id):
     with pytest.raises(ForkRefused, match="unknown_field"):
         fork_case(parent_id, "child_case", {"case": {"not_a_column": 1.0}})
+
+
+def test_ticker_is_not_a_settable_field(parent_id):
+    """`ticker` is a TEXT column (db.py) that identifies the case rather than
+    values it -- a fork is the same company, so it is not an attributable
+    input. Reaching `_as_number` with a string used to 500 the whole request;
+    it must be refused with the ordinary `unknown_field:` prefix instead."""
+    with pytest.raises(ForkRefused, match="unknown_field"):
+        fork_case(parent_id, "child_case", {"case": {"ticker": "OTHER"}})
+
+
+def test_as_of_date_is_not_a_settable_field(parent_id):
+    with pytest.raises(ForkRefused, match="unknown_field"):
+        fork_case(parent_id, "child_case", {"case": {"as_of_date": "2027-01-01"}})
+
+
+def test_parent_case_id_is_not_a_settable_field(parent_id):
+    """Spec Section 4.3 declares `parent_case_id` immutable. Relaxing
+    `_UNSETTABLE_CASE_FIELDS` to `{"case_name"}` would let a fork repoint its
+    own parent, and `/diff` would then attribute against a case it never came
+    from."""
+    with pytest.raises(ForkRefused, match="unknown_field"):
+        fork_case(parent_id, "child_case", {"case": {"parent_case_id": 999}})
 
 
 def test_an_unknown_segment_is_refused(parent_id):

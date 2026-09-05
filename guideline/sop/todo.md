@@ -317,17 +317,23 @@ and CLAUDE.md section 8. Suite: 882 passing, no skips or xfails.
       the methods is the interaction term: for `wacc_stable` 0.074->0.081 and
       `terminal_growth` 0.030->0.025 the interaction is 0.661/share (10.5% of
       the move), Shapley gives `wacc_stable` -4.9138 and a sequential walk
-      -4.5833 -- exactly half the interaction, as the axioms require. Without
-      that test the module would have shipped sequential numbers labelled
-      `method: "shapley"`.
+      -4.5833 -- exactly half the interaction, as the axioms require. (Both
+      figures are legitimate sequential answers, not a contradiction: -4.5833
+      applies `wacc_stable` SECOND, after `terminal_growth`; the test's own
+      `va - v0` pins the other order -- `wacc_stable` applied FIRST -- at
+      -5.2443.) Without that test the module would have shipped sequential
+      numbers labelled `method: "shapley"`.
 
       `SHAPLEY_INPUT_CAP = 12` (2^12 = 4096 engine runs). Above it `/diff`
       **refuses**; it never falls back to a cheaper method, because two
       responses of identical shape computed differently cannot be compared.
       Measured consequence, recorded so nobody rediscovers it at the UI: the
-      seeded SpaceX pair changes **26** inputs and is refused. The 2026-08-09
-      design's claim that the seed is "the fixture 3c's `/diff` will need" is
-      therefore false as shipped; a demo needs a fork of <= 12 changes.
+      seeded SpaceX pair changes **25** inputs (`ticker` and `as_of_date` are
+      excluded as case identity, not attributable inputs) and is refused with
+      `too_many_changed_inputs`, not a 500 -- see the 2026-09-05 final-fix
+      round and `ERROR-LOG.md`. The 2026-08-09 design's claim that the seed is
+      "the fixture 3c's `/diff` will need" is therefore false as shipped; a
+      demo needs a fork of <= 12 changes.
 
       A fork that changes a narrated field must supply a new claim AND a
       `three_p`, neither inherited nor defaulted -- the parent's claim describes
