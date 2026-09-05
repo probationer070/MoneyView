@@ -389,7 +389,12 @@ def run_case_payload(base_case: dict, overrides: dict[str, float]) -> dict:
         if key.startswith("case."):
             case[key.split(".", 1)[1]] = value
         else:
-            _, segment_name, column = key.split(".", 2)
+            # rsplit, not split: a SEGMENT NAME may contain dots and a column
+            # name never can. conservative_case names a segment ticker.lower(),
+            # and this repo ships .KS tickers, so `segment.005930.ks.margin_target`
+            # is a real key -- a left split reads the name as "005930" and then
+            # KeyErrors, which is a 500 rather than a refusal.
+            segment_name, column = key[len("segment."):].rsplit(".", 1)
             by_name[segment_name][column] = value
 
     case["segments"] = segments

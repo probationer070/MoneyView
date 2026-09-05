@@ -431,3 +431,13 @@ def test_a_supplied_empty_confidence_is_refused_not_defaulted(parent_id):
                 "confidence": "",
             }}},
         })
+
+
+def test_a_non_positive_wacc_initial_is_refused_by_the_engine(parent_id):
+    """`ValuationCaseInput` bounds wacc_initial > 0, but that only guards
+    POST /cases -- a fork's leaves are deliberately free-form. `discount_factors`
+    rejects only wacc <= -1, so a negative wacc_initial passed the runnability
+    gate and persisted a case worth 99x its true value per share, which then fed
+    /run, the verdict panel's dcf_gap row and /diff as a validated case."""
+    with pytest.raises(ValueError, match="wacc_initial must be positive"):
+        fork_case(parent_id, "child_case", {"case": {"wacc_initial": -0.5}})

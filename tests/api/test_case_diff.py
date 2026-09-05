@@ -301,3 +301,25 @@ def test_a_null_on_either_side_is_refused_as_unattributable():
 
     with pytest.raises(DiffRefused, match="not_attributable"):
         diff_case(child_id)
+
+
+def test_a_segment_name_containing_a_dot_diffs_rather_than_500ing():
+    """The canonical key is `segment.<name>.<column>` and a segment NAME may
+    contain dots -- `conservative_case` names a segment `ticker.lower()`, and
+    this repo ships `.KS` tickers, so `005930.ks` is a real segment name. A
+    left-hand split reads that name as `005930` and raises KeyError, which is
+    neither a ValueError the metric closure catches nor a refusal the route
+    maps: it is a 500."""
+    payload = _parent_payload()
+    payload["segments"][0]["name"] = "005930.ks"
+    parent_id = create_case(payload)
+    child_id = fork_case(parent_id, "dotted_child", {
+        "segments": {"005930.ks": {"margin_target": {
+            "value": 0.31, "claim": "c", "three_p": "possible"}}},
+    })
+
+    result = diff_case(child_id)
+    assert [c["input"] for c in result["contributions"]] == [
+        "segment.005930.ks.margin_target"
+    ]
+    assert result["contributions"][0]["to"] == pytest.approx(0.31)

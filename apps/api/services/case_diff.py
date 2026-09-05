@@ -41,7 +41,8 @@ def _canonical_sort_key(key: str) -> tuple:
     if key.startswith("case."):
         column = key.split(".", 1)[1]
         return (0, _CASE_COLUMNS.index(column), "", 0)
-    _, segment_name, column = key.split(".", 2)
+    # rsplit: a segment name may contain dots, a column name may not.
+    segment_name, column = key[len("segment."):].rsplit(".", 1)
     return (1, 0, segment_name, _SEGMENT_COLUMNS.index(column))
 
 
