@@ -1,3 +1,5 @@
+import copy
+
 import pytest
 
 from apps.api.services.case_fork import ForkRefused, effective_changes, fork_case
@@ -52,6 +54,19 @@ def _parent_payload() -> dict:
     }
 
 
+def _two_segment_payload() -> dict:
+    """The one-segment fixture cannot observe a bug that applies a segment
+    override to EVERY segment."""
+    payload = _parent_payload()
+    payload["case_name"] = "two_segment_parent"
+    second = copy.deepcopy(payload["segments"][0])
+    second["name"] = "Adjacent"
+    second["base_revenue"] = 400.0
+    second["margin_target"] = 0.18
+    payload["segments"].append(second)
+    return payload
+
+
 @pytest.fixture()
 def parent_id() -> int:
     from apps.api.services.valuation_case import create_case
@@ -100,7 +115,7 @@ def test_a_changed_narrated_field_needs_a_new_claim(parent_id):
     """Inheriting the parent's claim would leave a stored sentence describing how
     a DIFFERENT number was derived, and `_validate_narratives` would not notice:
     the field is still stated and still claimed."""
-    with pytest.raises(ForkRefused, match="narrative_required"):
+    with pytest.raises(ForkRefused, match="must be an object carrying a claim"):
         fork_case(parent_id, "child_case",
                   {"segments": {"Core": {"margin_target": 0.31}}})
 
@@ -124,6 +139,25 @@ def test_a_narrated_change_with_a_claim_replaces_the_parents(parent_id):
     assert claims["base_revenue"] == "parent claim for base_revenue"
 
 
+def test_an_unchanged_field_keeps_the_parents_claim_even_if_a_new_one_is_sent(parent_id):
+    """A value the caller did not move is not a change, so its narrative is not
+    rewritten either. Storing the new claim would put a fresh sentence on a field
+    /diff reports as unchanged."""
+    child_id = fork_case(parent_id, "child_case", {
+        "case": {"wacc_stable": 0.081},
+        "segments": {"Core": {"margin_target": {
+            "value": 0.28,  # identical to the parent
+            "claim": "restated wording for an assumption nobody moved",
+            "three_p": "probable",
+        }}},
+    })
+
+    segment = load_case(child_id)["segments"][0]
+    assert segment["margin_target"] == pytest.approx(0.28)
+    claims = {n["input_field"]: n["claim"] for n in segment["narratives"]}
+    assert claims["margin_target"] == "parent claim for margin_target"
+
+
 def test_a_narrated_change_without_three_p_is_refused(parent_id):
     """three_p is NOT NULL with a CHECK on three values. Defaulting it would have
     the API state an epistemic confidence the caller never gave."""
@@ -131,6 +165,19 @@ def test_a_narrated_change_without_three_p_is_refused(parent_id):
         fork_case(parent_id, "child_case", {
             "segments": {"Core": {"margin_target": {
                 "value": 0.31, "claim": "services mix reaches 30% by 2030",
+            }}},
+        })
+
+
+def test_an_invalid_three_p_is_refused_before_sqlite_sees_it(parent_id):
+    """The column has CHECK(three_p IN ('possible','plausible','probable')). A
+    value outside it must be refused by name, not surface as an IntegrityError
+    from three layers down."""
+    with pytest.raises(ForkRefused, match="three_p"):
+        fork_case(parent_id, "child_case", {
+            "segments": {"Core": {"margin_target": {
+                "value": 0.31, "claim": "services mix reaches 30% by 2030",
+                "three_p": "certain",
             }}},
         })
 
@@ -186,3 +233,20 @@ def test_two_fields_on_one_segment_are_two_players(parent_id):
         "segment.Core.margin_target",
         "segment.Core.sales_to_capital_late",
     }
+
+
+def test_a_segment_override_touches_only_the_named_segment():
+    from apps.api.services.valuation_case import create_case
+    parent_id = create_case(_two_segment_payload())
+
+    child_id = fork_case(parent_id, "child_case", {
+        "segments": {"Adjacent": {"margin_target": {
+            "value": 0.24, "claim": "adjacent mix improves", "three_p": "possible",
+        }}},
+    })
+
+    by_name = {s["name"]: s for s in load_case(child_id)["segments"]}
+    assert by_name["Adjacent"]["margin_target"] == pytest.approx(0.24)
+    assert by_name["Core"]["margin_target"] == pytest.approx(0.28)
+    core_claims = {n["input_field"]: n["claim"] for n in by_name["Core"]["narratives"]}
+    assert core_claims["margin_target"] == "parent claim for margin_target"

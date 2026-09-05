@@ -69,8 +69,8 @@ def _unwrap(field: str, raw: object) -> tuple[float, str | None, str, str, str]:
         )
     if narrated:
         raise ForkRefused(
-            f"narrative_required: {field} is a narrated field, so changing it needs "
-            "a claim -- the parent's claim describes a different number"
+            f"narrative_required: {field} is a narrated field, so an override of it "
+            "must be an object carrying a claim, not a bare value"
         )
     return raw, None, "", "", ""
 
@@ -132,6 +132,11 @@ def fork_case(case_id: int, case_name: str, overrides: dict) -> int:
     payload["case_name"] = case_name
     payload["parent_case_id"] = case_id
     for field, raw in (overrides.get("case") or {}).items():
+        if f"case.{field}" not in changes:
+            # Dropping it stores nothing false: the parent's claim (or, for an
+            # unnarrated field, the parent's stored value) already describes
+            # this exact value, so there is nothing here to apply.
+            continue
         payload[field], _, _, _, _ = _unwrap(field, raw)
 
     payload["segments"] = []
@@ -139,6 +144,12 @@ def fork_case(case_id: int, case_name: str, overrides: dict) -> int:
         copy = {field: segment[field] for field in _SEGMENT_COLUMNS}
         narratives = {n["input_field"]: dict(n) for n in segment["narratives"]}
         for field, raw in (overrides.get("segments") or {}).get(segment["name"], {}).items():
+            if f"segment.{segment['name']}.{field}" not in changes:
+                # Dropping it stores nothing false: the parent's claim already
+                # describes this exact value, so rewriting the narrative here
+                # would attach a fresh sentence to a field /diff reports as
+                # unchanged.
+                continue
             value, claim, source, confidence, three_p = _unwrap(field, raw)
             copy[field] = value
             if claim is not None:
