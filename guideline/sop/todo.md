@@ -225,7 +225,7 @@ and CLAUDE.md section 8. Suite: 882 passing, no skips or xfails.
 
 ---
 
-## Track C - Frontend  [C1 SHIPPED 2026-09-04; C2 OPEN]
+## Track C - Frontend  [C1 SHIPPED 2026-09-04; C2 HALF-SHIPPED 2026-09-05 -- /fork and /diff done, Monte Carlo and /pricing open]
 
 - [x] **C1. The valuation tab -- shipped 2026-09-04.** `/valuation` surfaces
       `GET /api/v1/valuation/verdict/{ticker}`, which had shipped with no UI at
@@ -277,11 +277,98 @@ and CLAUDE.md section 8. Suite: 882 passing, no skips or xfails.
       in this page; refusal is the majority state in the real data, and the page
       was designed for it and stays correct when A1 lands.
 
-- [ ] **C2. 3c - uncertainty and attribution.** STILL OPEN -- C1 does not close
-      Track C. Monte Carlo, `/fork`, `/diff`, `/pricing`. Specced in
-      `docs/superpowers/specs/2026-08-09-segment-buildup-valuation-design.md`.
+- [ ] **C2. 3c - uncertainty and attribution.** STILL OPEN, but half of it
+      shipped 2026-09-05: **`/fork` and `/diff` are done; Monte Carlo
+      (`/simulate`) and `/pricing` are not.** Spec:
+      `docs/superpowers/specs/2026-09-04-fork-and-diff-design.md`.
+      Plan: `docs/superpowers/plans/2026-09-04-fork-and-diff.md`.
       A separate subsystem from C1: no shared endpoint, no shared component, and
       it layers on the segment build-up engine rather than the evidence panel.
+
+      `POST /api/v1/valuation/cases/{id}/fork` copies a stored case with changed
+      assumptions; `GET /api/v1/valuation/cases/{id}/diff` attributes the
+      resulting difference in `value_per_share_diluted` to each changed input.
+      Four modules: `packages/core_finance/shapley.py`,
+      `apps/api/services/case_fork.py`, `apps/api/services/case_diff.py`, and
+      two routes in `apps/api/routes/valuation.py`. 62 new tests, suite
+      967 -> 1029.
+
+      **Attribution is Shapley because it is exact and order-independent.** The
+      engine is nonlinear: change `wacc_stable` and `terminal_growth` together
+      and there is no single true answer to "how much did WACC contribute",
+      because the two interact through the terminal value. A sequential walk
+      gives the whole interaction to whichever input it applied second; a
+      one-at-a-time attribution leaves a residual that has to go somewhere, and
+      an "other" bucket is where an unexplained gap goes to look explained.
+      Shapley averages over all orderings with weight `s!(n-s-1)!/n!`, so the
+      contributions sum exactly to the difference and no residual row exists.
+
+      **The single most useful sentence for the next reader: a LINEAR fixture
+      cannot catch a sequential swap.** Every attribution method agrees on a
+      linear function, so a hand-computed linear test is a cannot-fail assertion
+      for the exact property the design exists to guarantee. Measured, not
+      argued: replacing `shapley_contributions` with a working sequential walk
+      left the linear test passing and only the nonlinear `a*b` fixture failed.
+
+      The same trap bit one layer up. **Conservation cannot catch a sequential
+      fallback either** -- a one-at-a-time walk telescopes, so its contributions
+      sum to the identical total by construction. A working sequential
+      attribution passed all seven of `/diff`'s original tests. What separates
+      the methods is the interaction term: for `wacc_stable` 0.074->0.081 and
+      `terminal_growth` 0.030->0.025 the interaction is 0.661/share (10.5% of
+      the move), Shapley gives `wacc_stable` -4.9138 and a sequential walk
+      -4.5833 -- exactly half the interaction, as the axioms require. Without
+      that test the module would have shipped sequential numbers labelled
+      `method: "shapley"`.
+
+      `SHAPLEY_INPUT_CAP = 12` (2^12 = 4096 engine runs). Above it `/diff`
+      **refuses**; it never falls back to a cheaper method, because two
+      responses of identical shape computed differently cannot be compared.
+      Measured consequence, recorded so nobody rediscovers it at the UI: the
+      seeded SpaceX pair changes **26** inputs and is refused. The 2026-08-09
+      design's claim that the seed is "the fixture 3c's `/diff` will need" is
+      therefore false as shipped; a demo needs a fork of <= 12 changes.
+
+      A fork that changes a narrated field must supply a new claim AND a
+      `three_p`, neither inherited nor defaulted -- the parent's claim describes
+      the number the override just superseded, and defaulting `three_p` would
+      have the API state an epistemic confidence nobody gave. An override equal
+      to the parent's stored value is discarded entirely, not merely uncounted:
+      applying it would rewrite the narrative of a field `/diff` reports as
+      unchanged.
+
+      **11 mutations, each executed and each shown to fail a named test** -- and
+      three of them were written because a mutation proved less than its row
+      claimed:
+
+      | Mutation | Caught by |
+      | --- | --- |
+      | `shapley_contributions` -> a working sequential walk | `test_contributions_are_invariant_to_key_order` (nonlinear fixture only; the linear one stays green) |
+      | same, one layer up in `diff_case` | `test_two_inputs_get_the_shapley_split_not_a_sequential_walk` |
+      | `by_name[segment_name]` -> `segments[0]` | `test_effective_changes_compares_against_the_named_segments_value` and `..._reports_the_named_segments_value_as_the_baseline` |
+      | drop the `math.isclose` reconstruction guard | `test_a_directly_created_child_that_drops_a_segment_is_refused` |
+      | `sorted(changes, key=_canonical_sort_key)` -> `sorted(changes)` | `test_contributions_come_back_in_canonical_order` |
+      | wrap every override, narrated or not | `test_an_unnarrated_segment_field_diffs_without_a_spurious_claim` |
+      | remove the unrunnable-coalition `try/except` | the service and route `unrunnable_coalition` tests |
+      | drop `isinstance(value, bool)` | `test_a_bool_value_would_be_silently_runnable_without_the_guard` (DID NOT RAISE) |
+      | delete the `_INTEGER_FIELDS` branch | `test_a_whole_number_float_on_an_integer_field_forks_and_stores_an_int` |
+      | `DiffRefused` detail -> a constant | all three prefix-carrying diff refusals |
+      | delete the 409 branch (map by type only) | `test_a_duplicate_case_name_is_a_conflict_not_an_unrunnable_case` |
+
+      **Two 500s and a 56%-wrong number were found by review, not by the
+      tests.** `/diff` reported `69.82` for a case whose stored value was
+      `44.72` when the child's segment set differed from the parent's -- fixed
+      by refusing when the reconstruction does not reproduce the child
+      (`not_a_fork:`). `/diff` returned 500 when an intermediate coalition was
+      unrunnable though parent and child both ran (`unrunnable_coalition:`, see
+      `ERROR-LOG.md`). `/fork` returned 500 on a well-formed body of the wrong
+      shape, and on a float into an INTEGER column. Six tests in this work
+      passed for the wrong reason and were found by mutation; the count is in
+      the record because it is the argument for running the gate at all.
+
+      Still open in C2: Monte Carlo (`/simulate`), `/pricing`, and any UI --
+      `/fork` and `/diff` are HTTP-only, exactly as `/valuation/verdict` was
+      before C1.
 
 ---
 
