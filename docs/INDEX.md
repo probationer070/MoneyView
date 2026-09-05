@@ -86,6 +86,7 @@ sub-project and feeding an implementation plan.
 | `plans/2026-09-04-valuation-tab.md` | Task-by-task plan for the `/valuation` tab: per-unit formatters, refusal-as-content, and no invented verdict |
 | `2026-09-04-fork-and-diff-design.md` | Track C2 (first half): `/fork` a stored case and `/diff` it against its parent, attributing the difference per input by Shapley |
 | `plans/2026-09-04-fork-and-diff.md` | Task-by-task plan for `/fork` and `/diff`: the pure Shapley module, the fork's narrative rule, and the cap that refuses rather than degrades |
+| `2026-09-05-simulate-design.md` | Track C2 (second half): Monte Carlo over caller-stated input distributions -- percentiles conditional on the engine accepting the inputs, a 10% suppression threshold, and association rather than contribution |
 
 ## Process SOPs (`guideline/sop/`)
 
