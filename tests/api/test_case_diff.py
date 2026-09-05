@@ -5,17 +5,38 @@ import pytest
 from apps.api.services.case_diff import METRIC, SHAPLEY_INPUT_CAP, DiffRefused, diff_case
 from apps.api.services.case_fork import fork_case
 from apps.api.services.valuation_case import (
+    _CASE_COLUMNS,
+    _SEGMENT_COLUMNS,
     create_case,
     load_case,
     run_case_payload,
     run_stored_case,
 )
-from tests.api.test_case_fork import _parent_payload
+from tests.api.test_case_fork import _parent_payload, _two_segment_payload
 
 
 @pytest.fixture()
 def parent_id() -> int:
     return create_case(_parent_payload())
+
+
+def _direct_child_payload(parent: dict, **case_overrides) -> dict:
+    """Build a `create_case` payload for a child that copies `parent`'s stored
+    columns without going through `fork_case` -- the same door `POST
+    /valuation/cases` and `valuation_seed.py` use to set `parent_case_id`
+    directly, bypassing the reconstruction guarantees `fork_case` provides."""
+    payload = {
+        field: parent[field] for field in _CASE_COLUMNS
+        if field not in ("case_name", "parent_case_id")
+    }
+    payload["parent_case_id"] = parent["id"]
+    payload.update(case_overrides)
+    payload["segments"] = [
+        {**{field: segment[field] for field in _SEGMENT_COLUMNS},
+         "narratives": segment["narratives"]}
+        for segment in parent["segments"]
+    ]
+    return payload
 
 
 def test_a_case_with_no_parent_cannot_be_diffed(parent_id):
@@ -67,18 +88,36 @@ def test_only_changed_inputs_appear(parent_id):
     assert result["contributions"][0]["to"] == pytest.approx(0.081)
 
 
-def test_contributions_come_back_in_canonical_order(parent_id):
+def test_contributions_come_back_in_canonical_order():
     """Mathematical order-independence and a stable response list are different
-    guarantees; this is the second one."""
+    guarantees; this is the second one. Asserts the exact list -- a plain
+    `sorted(changes)` (alphabetical) happens to agree with canonical order on
+    segment name, but disagrees on case-column order: 'terminal_growth' sorts
+    alphabetically before 'wacc_stable', while canonical order is column
+    position (`_CASE_COLUMNS.index`), where wacc_stable (7) precedes
+    terminal_growth (12). A two-segment fixture is needed so the
+    segment-name-then-column rule is exercised, not just case-before-segment."""
+    parent_id = create_case(_two_segment_payload())
     child_id = fork_case(parent_id, "child_case", {
         "case": {"wacc_stable": 0.081, "terminal_growth": 0.025},
-        "segments": {"Core": {"margin_target": {
-            "value": 0.31, "claim": "c", "three_p": "possible"}}},
+        "segments": {
+            "Adjacent": {"sales_to_capital_late": {
+                "value": 3.5, "claim": "c", "three_p": "possible"}},
+            "Core": {"margin_target": {
+                "value": 0.31, "claim": "c", "three_p": "possible"}},
+        },
     })
+    assert _CASE_COLUMNS.index("wacc_stable") < _CASE_COLUMNS.index("terminal_growth")
+
     first = [c["input"] for c in diff_case(child_id)["contributions"]]
     second = [c["input"] for c in diff_case(child_id)["contributions"]]
     assert first == second
-    assert first[-1].startswith("segment."), "case.* keys sort before segment.*"
+    assert first == [
+        "case.wacc_stable",
+        "case.terminal_growth",
+        "segment.Adjacent.sales_to_capital_late",
+        "segment.Core.margin_target",
+    ]
 
 
 def test_too_many_changed_inputs_is_refused_not_downgraded(monkeypatch):
@@ -112,7 +151,7 @@ def test_two_inputs_get_the_shapley_split_not_a_sequential_walk(parent_id):
         "case": {"wacc_stable": 0.081, "terminal_growth": 0.025},
     })
     a, b = "case.wacc_stable", "case.terminal_growth"
-    base = {a: 0.074, b: 0.030}
+    base = {a: parent["wacc_stable"], b: parent["terminal_growth"]}
 
     def value(**moved) -> float:
         return run_case_payload(parent, {**base, **moved})[METRIC]
@@ -136,3 +175,61 @@ def test_two_inputs_get_the_shapley_split_not_a_sequential_walk(parent_id):
     # Named explicitly so the distinction is the test's subject, not a side
     # effect: the sequential walk's answer for `a` is (va - v0).
     assert got[a] != pytest.approx(va - v0, rel=1e-6)
+
+
+def test_a_directly_created_child_that_drops_a_segment_is_refused():
+    """`diff_case` rebuilds a child's overrides by diffing stored columns
+    against the parent's -- it does not, on its own, check that reapplying
+    those diffs to the parent reproduces the child. A child created directly
+    (not through `fork_case`) can differ in SHAPE, not just value: `POST
+    /valuation/cases` accepts `parent_case_id`, and `valuation_seed.py` already
+    creates children that way. Dropping a segment here means the reconstructed
+    change set, replayed against the two-segment parent, lands on a value the
+    one-segment child never had -- an exact-looking number about a case that
+    does not exist."""
+    parent_id = create_case(_two_segment_payload())
+    parent = load_case(parent_id)
+
+    payload = _direct_child_payload(parent, case_name="not_a_real_fork", wacc_stable=0.081)
+    payload["segments"] = payload["segments"][:1]  # drop "Adjacent"
+    child_id = create_case(payload)
+
+    with pytest.raises(DiffRefused, match="not_a_fork"):
+        diff_case(child_id)
+
+
+def test_a_directly_created_child_identical_to_its_parent_has_no_effective_change():
+    """`no_effective_change` is unreachable through `fork_case` (it refuses
+    before persisting), but reachable through the same direct-child door as
+    the shape mismatch above: nothing stops a directly created child from
+    storing the same values as its parent."""
+    parent_id = create_case(_two_segment_payload())
+    parent = load_case(parent_id)
+
+    payload = _direct_child_payload(parent, case_name="identical_child")
+    child_id = create_case(payload)
+
+    with pytest.raises(DiffRefused, match="no_effective_change"):
+        diff_case(child_id)
+
+
+def test_an_unnarrated_segment_field_diffs_without_a_spurious_claim():
+    """`ramp_start_year` is the only unnarrated settable segment field.
+    Dropping the `if field in NARRATED_FIELDS` conditional in
+    `_as_bare_scalars` would wrap it through the narrated-field object branch
+    too, tripping `unexpected_narrative` and crashing a fork that legitimately
+    changed it. Needs `base_revenue=0.0`: `segment_valuation.py` rejects
+    `ramp_start_year > 1` when `base_revenue > 0`."""
+    payload = _parent_payload()
+    payload["case_name"] = "zero_base_parent"
+    payload["segments"][0]["base_revenue"] = 0.0
+    parent_id = create_case(payload)
+
+    child_id = fork_case(parent_id, "child_case", {
+        "segments": {"Core": {"ramp_start_year": 2}},
+    })
+
+    result = diff_case(child_id)
+    assert [c["input"] for c in result["contributions"]] == ["segment.Core.ramp_start_year"]
+    assert result["contributions"][0]["from"] == pytest.approx(1)
+    assert result["contributions"][0]["to"] == pytest.approx(2)

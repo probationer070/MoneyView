@@ -6,6 +6,8 @@ The metric is `value_per_share_diluted` -- the same number
 """
 from __future__ import annotations
 
+import math
+
 from apps.api.services.case_fork import effective_changes
 from apps.api.services.valuation_case import (
     _CASE_COLUMNS,
@@ -13,6 +15,7 @@ from apps.api.services.valuation_case import (
     NARRATED_FIELDS,
     load_case,
     run_case_payload,
+    run_stored_case,
 )
 from packages.core_finance.shapley import shapley_contributions
 
@@ -30,7 +33,7 @@ class DiffRefused(Exception):
 
 
 def _canonical_sort_key(key: str) -> tuple:
-    """case.* before segment.*, then column order, then segment name."""
+    """case.* before segment.*, then segment name, then column order."""
     if key.startswith("case."):
         column = key.split(".", 1)[1]
         return (0, _CASE_COLUMNS.index(column), "", 0)
@@ -92,6 +95,20 @@ def diff_case(case_id: int) -> dict:
 
     parent_value = run_case_payload(parent, base)[METRIC]
     case_value = run_case_payload(parent, changed_values)[METRIC]
+
+    stored_value = run_stored_case(case_id)[METRIC]
+    if not math.isclose(case_value, stored_value, rel_tol=1e-7, abs_tol=1e-9):
+        # The reconstruction is only an attribution if it lands on the case it
+        # claims to explain. When it does not, the two cases do not share a
+        # structure -- a dropped or added segment, most likely -- and every
+        # contribution below would be an exact-looking number about a case that
+        # does not exist.
+        raise DiffRefused(
+            f"not_a_fork: case {case_id}'s stored value {stored_value} is not "
+            f"reproduced by applying its differences to case {parent_id} "
+            f"({case_value}); the two cases do not share a structure"
+        )
+
     return {
         "case_id": case_id,
         "parent_case_id": parent_id,

@@ -307,6 +307,7 @@ handle both depending on which endpoint it hit. So:
 | zero effective changes (§4.1) | 422 | `no_effective_change:` |
 | engine refuses the forked case | 422 | `case is not valuable:` — **the engine's own wording, verbatim** |
 | `/diff` on a case with no parent | 422 | `no_parent:` |
+| `/diff` on a child whose stored value the reconstruction does not reproduce | 422 | `not_a_fork:` |
 | more changed inputs than the cap | 422 | `too_many_changed_inputs:` |
 
 Every prefix ends with `: ` followed by a human-readable explanation naming the
