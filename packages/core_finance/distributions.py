@@ -11,6 +11,7 @@ neither the field nor the parameter, and the caller cannot act on it.
 """
 from __future__ import annotations
 
+import math
 from typing import Mapping
 
 import numpy as np
@@ -31,7 +32,16 @@ def _number(shape: str, name: str, value: object) -> float:
         raise ValueError(
             f"{shape} parameter {name} must be a number, got {type(value).__name__}"
         )
-    return float(value)
+    number = float(value)
+    # Finiteness is checked HERE rather than left to the comparisons below,
+    # because every ordinary comparison against NaN is False: `sd <= 0` and
+    # `low >= high` both pass it silently, and the draw then returns an array
+    # of NaN with no exception at all.
+    if not math.isfinite(number):
+        raise ValueError(
+            f"{shape} parameter {name} must be finite, got {number}"
+        )
+    return number
 
 
 def validate(shape: str, params: Mapping[str, object]) -> None:

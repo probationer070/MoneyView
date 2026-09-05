@@ -58,6 +58,12 @@ def test_the_same_seed_gives_the_same_draw():
     ("triangular", {"low": 0.1, "mode": 0.05, "high": 0.5}, "mode must lie between"),
     ("normal", {"mean": "abc", "sd": 0.1}, "must be a number"),
     ("normal", {"mean": True, "sd": 0.1}, "must be a number"),
+    ("normal", {"mean": 0.1, "sd": float("nan")}, "must be finite"),
+    ("normal", {"mean": float("nan"), "sd": 0.1}, "must be finite"),
+    ("normal", {"mean": 0.1, "sd": float("inf")}, "must be finite"),
+    ("uniform", {"low": float("nan"), "high": 1.0}, "must be finite"),
+    ("uniform", {"low": 0.0, "high": float("inf")}, "must be finite"),
+    ("triangular", {"low": 0.0, "mode": float("nan"), "high": 1.0}, "must be finite"),
 ])
 def test_invalid_parameters_are_refused_by_name(shape, params, message):
     """Refused HERE, where the caller can still be told which parameter is
@@ -72,3 +78,12 @@ def test_a_valid_distribution_validates_silently():
     validate("triangular", {"low": 0.07, "mode": 0.074, "high": 0.085})
     validate("normal", {"mean": 0.28, "sd": 0.03})
     validate("uniform", {"low": 1.0, "high": 2.0})
+
+
+def test_a_nan_parameter_never_reaches_the_draw():
+    """Without the finiteness check this returned an array of NaN and raised
+    nothing -- a silent wrong answer, which is worse than any error. The point
+    is not that validate refuses it; it is that no draw ever happens."""
+    rng = np.random.default_rng(42)
+    with pytest.raises(ValueError, match="must be finite"):
+        sample("normal", {"mean": 0.1, "sd": float("nan")}, 100, rng)
