@@ -1,3 +1,5 @@
+import warnings
+
 import numpy as np
 import pytest
 
@@ -63,3 +65,39 @@ def test_it_matches_a_hand_computed_case():
     x = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
     y = np.array([20.0, 10.0, 40.0, 30.0, 50.0])
     assert spearman(x, y) == pytest.approx(0.8)
+
+
+def test_nan_in_x_raises():
+    """A NaN is not silently ranked. np.argsort sorts it to the end and
+    np.unique treats it as its own value, so without this guard a NaN would be
+    assigned the largest rank and folded into the coefficient -- measured,
+    one NaN in a 4-element array returned 0.4 rather than raising."""
+    x = np.array([1.0, np.nan, 3.0, 4.0])
+    y = np.array([1.0, 2.0, 3.0, 4.0])
+    with pytest.raises(ValueError, match="must be finite"):
+        spearman(x, y)
+
+
+def test_nan_in_y_raises():
+    x = np.array([1.0, 2.0, 3.0, 4.0])
+    y = np.array([1.0, np.nan, 3.0, 4.0])
+    with pytest.raises(ValueError, match="must be finite"):
+        spearman(x, y)
+
+
+def test_infinity_raises():
+    x = np.array([1.0, np.inf, 3.0, 4.0])
+    y = np.array([1.0, 2.0, 3.0, 4.0])
+    with pytest.raises(ValueError, match="must be finite"):
+        spearman(x, y)
+
+
+def test_empty_input_is_none_with_no_warning():
+    """Zero valid samples is a real outcome /simulate can reach when every
+    draw is refused. None is the right answer, but the empty-slice arithmetic
+    on the way there must not emit a numpy RuntimeWarning -- a run configured
+    with -W error would fail on it otherwise."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        result = spearman(np.array([]), np.array([]))
+    assert result is None

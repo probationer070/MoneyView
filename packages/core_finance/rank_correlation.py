@@ -41,6 +41,15 @@ def spearman(x: np.ndarray, y: np.ndarray) -> float | None:
     """
     if x.shape != y.shape:
         raise ValueError(f"x and y must have the same shape, got {x.shape} and {y.shape}")
+    if not (np.isfinite(x).all() and np.isfinite(y).all()):
+        # np.argsort sorts NaN to the end and np.unique treats it as its own
+        # value, so a NaN is silently assigned the largest rank and folded into
+        # the coefficient: measured, one NaN in a 4-element array returns 0.4
+        # rather than raising. A plausible-looking wrong number is worse than an
+        # error, and /simulate will pass engine output here.
+        raise ValueError("x and y must be finite; filter NaN before correlating")
+    if x.size == 0:
+        return None
 
     rx = _average_ranks(x)
     ry = _average_ranks(y)
