@@ -186,6 +186,32 @@ def test_a_bool_value_is_refused_not_silently_coerced(parent_id):
         fork_case(parent_id, "child_case", {"case": {"wacc_stable": True}})
 
 
+def test_a_bool_value_would_be_silently_runnable_without_the_guard(parent_id):
+    """`wacc_stable: True` is caught, but only because 1.0 happens to break the
+    engine's runnability gate -- that proves the gate fired, not that the bool
+    guard did. `nol_balance` isolates the guard itself: the parent's value is
+    0.0, so `nol_balance: True` becoming 1.0 is perfectly runnable and nothing
+    downstream would object. Without `isinstance(value, bool)`, this fork would
+    SUCCEED and store `1.0` -- the silent coercion the docstring warns about."""
+    with pytest.raises(ForkRefused, match="not_a_number"):
+        fork_case(parent_id, "child_case", {"case": {"nol_balance": True}})
+
+
+def test_a_whole_number_float_on_an_integer_field_forks_and_stores_an_int(parent_id):
+    """JSON does not distinguish `6` from `6.0` -- a client that sends the
+    latter means the former. `wacc_converge_from` is an INTEGER column
+    (db.py:501); a float reaching it 500s downstream, so `6.0` must be
+    accepted and stored as `6`."""
+    child_id = fork_case(parent_id, "child_case", {"case": {"wacc_converge_from": 6.0}})
+    assert load_case(child_id)["wacc_converge_from"] == 6
+
+
+def test_a_fractional_float_on_an_integer_field_is_refused(parent_id):
+    """`6.5` is a number but not a year -- refused rather than truncated."""
+    with pytest.raises(ForkRefused, match="not_a_number"):
+        fork_case(parent_id, "child_case", {"case": {"wacc_converge_from": 6.5}})
+
+
 def test_a_narrated_change_without_three_p_is_refused(parent_id):
     """three_p is NOT NULL with a CHECK on three values. Defaulting it would have
     the API state an epistemic confidence the caller never gave."""

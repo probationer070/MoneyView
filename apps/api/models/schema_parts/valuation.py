@@ -84,6 +84,8 @@ class ForkOverrides(BaseModel):
 
 
 class ForkRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     case_name: str
     overrides: ForkOverrides = ForkOverrides()
 

@@ -30,6 +30,13 @@ class ForkRefused(Exception):
 
 _THREE_P = frozenset({"possible", "plausible", "probable"})
 
+# INTEGER columns (db.py:496,497,501,555). A float here reaches the engine
+# as a sequence multiplier or a range bound and raises TypeError three
+# layers down, so the shape is checked where the caller can still be told.
+_INTEGER_FIELDS = frozenset({
+    "base_year", "target_year", "wacc_converge_from", "ramp_start_year",
+})
+
 
 def _as_number(field: str, value: object) -> float:
     """Reject a non-numeric leaf without forcing its type.
@@ -40,10 +47,24 @@ def _as_number(field: str, value: object) -> float:
     into `2.0` and 500 downstream. Validating without converting keeps an
     int an int and a float a float; only `bool` and non-numeric values are
     refused.
+
+    For a field in `_INTEGER_FIELDS` a float is accepted only when it carries
+    no fraction -- JSON does not distinguish `6` from `6.0`, and a client that
+    sends the latter means the former -- and is converted to `int` so it
+    reaches the engine as the whole number it is. `6.5` is a number but not a
+    year, so it is refused rather than silently truncated.
     """
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ForkRefused(
             f"not_a_number: {field} must be a number, got {type(value).__name__}"
+        )
+    if field in _INTEGER_FIELDS:
+        if isinstance(value, int):
+            return value
+        if isinstance(value, float) and value.is_integer():
+            return int(value)
+        raise ForkRefused(
+            f"not_a_number: {field} is a whole-number field, got {value!r}"
         )
     return value
 

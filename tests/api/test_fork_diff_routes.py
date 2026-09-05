@@ -56,6 +56,52 @@ def test_a_string_case_overrides_is_a_422(parent_id):
     assert response.status_code == 422
 
 
+def test_a_string_segment_overrides_is_a_422(parent_id):
+    """`overrides.segments.Core` typed as a scalar rather than an object. The
+    route 422s this today via `ForkOverrides.segments: dict[str, dict[str,
+    Any]]`; nothing pinned it before. Without that inner typing this reaches
+    `.items()` on a str in `effective_changes` and 500s with AttributeError."""
+    response = client.post(
+        f"/api/v1/valuation/cases/{parent_id}/fork",
+        json={"case_name": "c3", "overrides": {"segments": {"Core": "nope"}}},
+    )
+    assert response.status_code == 422
+
+
+def test_a_whole_number_float_on_an_integer_field_is_a_422_not_a_500(parent_id):
+    """`wacc_converge_from` is an INTEGER column; `6.5` must be refused at the
+    schema/service boundary with a 422, never reach the engine as a 500."""
+    response = client.post(
+        f"/api/v1/valuation/cases/{parent_id}/fork",
+        json={"case_name": "child_case", "overrides": {"case": {"wacc_converge_from": 6.5}}},
+    )
+    assert response.status_code == 422
+    assert response.json()["detail"].startswith("not_a_number:")
+
+
+def test_a_typoed_overrides_key_is_a_422_not_a_silent_no_op(parent_id):
+    """`overides` (missing an `r`) is not a field `ForkRequest` knows. Without
+    `extra=\"forbid\"` this is silently dropped and the caller is told their
+    fork changes nothing -- the exact mislabeling `no_effective_change` exists
+    to prevent."""
+    response = client.post(
+        f"/api/v1/valuation/cases/{parent_id}/fork",
+        json={"case_name": "typo", "overides": {"case": {"wacc_stable": 0.081}}},
+    )
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert "no_effective_change" not in str(detail)
+
+
+def test_an_unknown_top_level_key_is_a_422_not_silently_dropped(parent_id):
+    response = client.post(
+        f"/api/v1/valuation/cases/{parent_id}/fork",
+        json={"case_name": "extra",
+              "overrides": {"case": {"wacc_stable": 0.081}}, "bogus": 1},
+    )
+    assert response.status_code == 422
+
+
 def test_a_blank_case_name_is_a_422(parent_id):
     response = client.post(
         f"/api/v1/valuation/cases/{parent_id}/fork",
@@ -131,6 +177,15 @@ def test_the_diff_response_carries_no_residual_row(parent_id):
     inputs = {c["input"] for c in body["contributions"]}
     assert inputs == {"case.wacc_stable"}
     assert not {"other", "residual", "interaction", "unexplained"} & inputs
+
+
+def test_diffing_an_unknown_case_is_a_404_with_its_prefix(parent_id):
+    """Mirrors `test_forking_an_unknown_case_is_a_404`: only the fork route's
+    404 was pinned to its `no_case:` prefix before this test existed."""
+    response = client.get("/api/v1/valuation/cases/999999/diff")
+    assert response.status_code == 404
+    assert response.json()["detail"].startswith("no_case:")
+    assert "no valuation case" in response.json()["detail"]
 
 
 def test_diffing_a_root_case_is_a_422(parent_id):

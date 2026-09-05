@@ -106,17 +106,17 @@ def fork_valuation_case(case_id: int, payload: ForkRequest = Body(...)):
     """Copy a case with changed assumptions, recording the parent.
 
     Refusals keep a machine-readable prefix (`unknown_field`, `unknown_segment`,
-    `narrative_required`, `unexpected_narrative`, `no_effective_change`) so a
-    caller can branch without parsing prose -- the same convention the
-    conservative-case route documents. An engine refusal passes through in the
-    engine's own words: it owns that wording.
+    `narrative_required`, `unexpected_narrative`, `not_a_number`,
+    `no_effective_change`) so a caller can branch without parsing prose -- the
+    same convention the conservative-case route documents. An engine refusal
+    passes through in the engine's own words: it owns that wording.
 
-    `DuplicateCaseName` is a distinct type from the engine's runnability
-    refusal, both bare `ValueError`s from `create_case`: a name collision is a
-    conflict the caller fixes by choosing another name, well-formed input that
-    conflicts with server state -- 409's definition -- so it is caught first and
-    gets a prefix of its own; the engine's wording is preserved after that
-    prefix rather than replaced by it.
+    `DuplicateCaseName` is now its own type, distinct from the engine's
+    runnability refusal, which stays a bare `ValueError` from `create_case`: a
+    name collision is a conflict the caller fixes by choosing another name,
+    well-formed input that conflicts with server state -- 409's definition --
+    so it is caught first and gets a prefix of its own; the engine's wording is
+    preserved after that prefix rather than replaced by it.
     """
     try:
         new_id = fork_case(case_id, payload.case_name, payload.overrides.model_dump())
