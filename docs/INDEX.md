@@ -85,6 +85,7 @@ sub-project and feeding an implementation plan.
 | `2026-09-04-valuation-tab-design.md` | Track C1: the `/valuation` tab surfacing the four-row evidence panel, with per-row units and refusal-as-content |
 | `plans/2026-09-04-valuation-tab.md` | Task-by-task plan for the `/valuation` tab: per-unit formatters, refusal-as-content, and no invented verdict |
 | `2026-09-04-fork-and-diff-design.md` | Track C2 (first half): `/fork` a stored case and `/diff` it against its parent, attributing the difference per input by Shapley |
+| `plans/2026-09-04-fork-and-diff.md` | Task-by-task plan for `/fork` and `/diff`: the pure Shapley module, the fork's narrative rule, and the cap that refuses rather than degrades |
 
 ## Process SOPs (`guideline/sop/`)
 
