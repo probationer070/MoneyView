@@ -143,10 +143,24 @@ Loads `case_id`, applies the overrides, persists a new case with
 does not have is a 422 naming the unknown segment — silently ignoring it would
 let a typo look like an applied change that did nothing.
 
-**Only scalar fields may be overridden**, on the case and on existing segments.
-The allowed keys are exactly the columns of `valuation_case` (excluding `id`,
-`case_name`, `parent_case_id`) and of `segment` (excluding `id`, `case_id`,
-`name`). Anything else is a 422 naming the field.
+**Only NUMERIC scalar fields may be overridden**, on the case and on existing
+segments. The allowed keys are the columns of `valuation_case` (excluding `id`,
+`case_name`, `parent_case_id`, and the TEXT columns `ticker` and `as_of_date`)
+and of `segment` (excluding `id`, `case_id`, `name`). Anything else is a 422
+naming the field.
+
+`ticker` and `as_of_date` are excluded because they identify the case rather
+than value it: a fork is the same company, and neither is an attributable input.
+Amended 2026-09-05 -- the original wording said "exactly the columns", and
+`/diff` rebuilt a child's overrides from that same subtraction, so both TEXT
+columns reached the numeric validator and the endpoint answered 500 on the
+seeded pair. The set is now defined once, by type, in
+`case_fork._NON_NUMERIC_CASE_FIELDS`, and `case_diff` imports it.
+
+A column that is NULL on either side is a **422 `not_attributable:`**. Several
+numeric columns are nullable; a child holding NULL where its parent holds a
+number has changed, but Shapley needs a value at both ends of every coalition,
+so there is no interval to attribute across.
 
 ### 4.1 Effective changes, and the order things are decided in
 
@@ -231,6 +245,17 @@ values. It is **not** defaulted: it is an epistemic claim about the assumption,
 and an API that picks one on the caller's behalf asserts a confidence nobody
 stated. That is the same reason the claim itself is required.
 
+`confidence` MAY be defaulted, and is -- to `assumed`. It is not itself an
+epistemic claim about the assumption the way `three_p` is, so choosing it for an
+absent key asserts nothing the caller did not. But a SUPPLIED value is validated
+against `segment_narrative.confidence`'s own `CHECK(confidence IN
+('confirmed','derived','assumed'))` and refused with **422
+`narrative_required:`** if it is not one of the three -- including a supplied
+empty string or null, which is a value the caller typed rather than an absent
+key. Without that check an invalid value reached sqlite and came back as a raw
+`CHECK constraint failed`, which is exactly what the prefixes exist to prevent.
+(Added 2026-09-05.)
+
 A narrated field given as a bare scalar instead of this object, or missing
 `claim` or `three_p`, is a **422 `narrative_required:`** naming the field. An unnarrated field (`ramp_start_year`,
 and every `case.*` column) takes a bare scalar; supplying a claim for one is a
@@ -309,6 +334,7 @@ handle both depending on which endpoint it hit. So:
 | `/diff` on a case with no parent | 422 | `no_parent:` |
 | `/diff` on a child whose stored value the reconstruction does not reproduce | 422 | `not_a_fork:` |
 | more changed inputs than the cap | 422 | `too_many_changed_inputs:` |
+| a changed column NULL on either side | 422 | `not_attributable:` |
 | duplicate case name | 409 | `duplicate_case_name:` |
 | a leaf that is not a number | 422 | `not_a_number:` |
 | an intermediate coalition the engine refuses | 422 | `unrunnable_coalition:` |

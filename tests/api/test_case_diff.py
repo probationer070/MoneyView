@@ -285,3 +285,19 @@ def test_a_directly_created_child_differing_in_as_of_date_diffs_on_the_numeric_f
     result = diff_case(child_id)
     assert [c["input"] for c in result["contributions"]] == ["case.wacc_stable"]
     assert result["changed_input_count"] == 1
+
+
+def test_a_null_on_either_side_is_refused_as_unattributable():
+    """Several numeric columns are nullable. A child holding NULL where its
+    parent holds a number HAS changed, but Shapley needs a value at both ends of
+    every coalition, so there is no interval to attribute across. Before this
+    guard the pair surfaced as `not_a_number: ... got NoneType` -- blaming the
+    caller's input for a property of the two STORED cases."""
+    parent_id = create_case(_parent_payload())
+    parent = load_case(parent_id)
+    payload = _direct_child_payload(parent, case_name="null_child", wacc_stable=0.081)
+    payload["effective_tax_rate"] = None
+    child_id = create_case(payload)
+
+    with pytest.raises(DiffRefused, match="not_attributable"):
+        diff_case(child_id)

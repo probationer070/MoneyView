@@ -117,7 +117,10 @@ def _unwrap(field: str, raw: object) -> tuple[float, str | None, str, str, str]:
                 f"narrative_required: {field} needs a three_p of "
                 f"{sorted(_THREE_P)}, got {three_p!r}"
             )
-        confidence = str(raw.get("confidence") or "assumed")
+        # `in raw` rather than `or`: an ABSENT confidence defaults, but a
+        # supplied empty string, null or 0 is a value the caller typed and is
+        # refused rather than quietly replaced with "assumed".
+        confidence = "assumed" if "confidence" not in raw else str(raw["confidence"])
         if confidence not in _CONFIDENCE:
             # Defaulting is fine (see _CONFIDENCE); a SUPPLIED value that is
             # not one of the three is refused here, before sqlite's CHECK ever

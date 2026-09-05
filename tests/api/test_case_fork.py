@@ -417,3 +417,17 @@ def test_effective_changes_reports_the_named_segments_value_as_the_baseline():
     assert set(moved) == {"segment.Adjacent.margin_target"}
     assert moved["segment.Adjacent.margin_target"] == (
         pytest.approx(0.18), pytest.approx(0.24))
+
+
+def test_a_supplied_empty_confidence_is_refused_not_defaulted(parent_id):
+    """An ABSENT confidence defaults to "assumed"; a supplied empty string is a
+    value the caller typed. Coercing it to the default would store a confidence
+    level nobody chose, which is the same objection that keeps three_p
+    undefaulted."""
+    with pytest.raises(ForkRefused, match="confidence"):
+        fork_case(parent_id, "child_case", {
+            "segments": {"Core": {"margin_target": {
+                "value": 0.31, "claim": "c", "three_p": "possible",
+                "confidence": "",
+            }}},
+        })

@@ -8,7 +8,11 @@ from __future__ import annotations
 
 import math
 
-from apps.api.services.case_fork import _NON_NUMERIC_CASE_FIELDS, effective_changes
+from apps.api.services.case_fork import (
+    _NON_NUMERIC_CASE_FIELDS,
+    _SETTABLE_CASE_FIELDS,
+    effective_changes,
+)
 from apps.api.services.valuation_case import (
     _CASE_COLUMNS,
     _SEGMENT_COLUMNS,
@@ -59,7 +63,7 @@ def diff_case(case_id: int) -> dict:
         "case": {
             field: case[field]
             for field in _CASE_COLUMNS
-            if field not in ("case_name", "parent_case_id")
+            if field in _SETTABLE_CASE_FIELDS
             and field not in _NON_NUMERIC_CASE_FIELDS
             and case[field] != parent[field]
         },
@@ -77,6 +81,8 @@ def diff_case(case_id: int) -> dict:
         }
         if changed:
             overrides["segments"][segment["name"]] = changed
+
+    _refuse_unattributable(overrides, parent, case_id)
 
     changes = effective_changes(parent, _as_bare_scalars(overrides))
     if not changes:
@@ -142,6 +148,34 @@ def diff_case(case_id: int) -> dict:
             for key in sorted(changes, key=_canonical_sort_key)
         ],
     }
+
+
+def _refuse_unattributable(overrides: dict, parent: dict, case_id: int) -> None:
+    """Refuse a column that holds NULL on either side, naming the real problem.
+
+    Several numeric columns are nullable (`terminal_growth`,
+    `effective_tax_rate`, `tam_target`, ...). A child that holds NULL where its
+    parent holds a number HAS changed, but there is no interval to attribute
+    across: Shapley needs a value at both ends of every coalition. Left to
+    `_as_number` this surfaced as `not_a_number: ... got NoneType`, which names
+    the caller's input as the fault when the fault is the stored pair.
+    """
+    parent_segments = {s["name"]: s for s in parent["segments"]}
+    for field, value in overrides["case"].items():
+        if value is None or parent[field] is None:
+            raise DiffRefused(
+                f"not_attributable: case {case_id} and its parent differ in "
+                f"case.{field}, but one of them holds no value, so there is no "
+                "interval to attribute across"
+            )
+    for name, fields in overrides["segments"].items():
+        for field, value in fields.items():
+            if value is None or parent_segments[name][field] is None:
+                raise DiffRefused(
+                    f"not_attributable: case {case_id} and its parent differ in "
+                    f"segment.{name}.{field}, but one of them holds no value, so "
+                    "there is no interval to attribute across"
+                )
 
 
 def _as_bare_scalars(overrides: dict) -> dict:
