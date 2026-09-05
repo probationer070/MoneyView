@@ -338,8 +338,11 @@ def _parent_payload() -> dict:
                 "sales_to_capital_late": 3.0,
                 "ramp_start_year": 1,
                 "narratives": [
+                    # three_p is NOT NULL with CHECK(three_p IN
+                    # ('possible','plausible','probable')) -- see db.py:568.
                     {"input_field": f, "claim": f"parent claim for {f}",
-                     "evidence_source": "test", "confidence": "assumed", "three_p": None}
+                     "evidence_source": "test", "confidence": "assumed",
+                     "three_p": "probable"}
                     for f in ("base_revenue", "base_margin", "revenue_target",
                               "margin_target", "sales_to_capital_early",
                               "sales_to_capital_late")
@@ -409,6 +412,7 @@ def test_a_narrated_change_with_a_claim_replaces_the_parents(parent_id):
             "claim": "services mix reaches 30% by 2030",
             "evidence_source": "own estimate",
             "confidence": "assumed",
+            "three_p": "plausible",
         }}},
     })
 
@@ -418,6 +422,17 @@ def test_a_narrated_change_with_a_claim_replaces_the_parents(parent_id):
     assert claims["margin_target"] == "services mix reaches 30% by 2030"
     # Untouched narrated fields keep the parent's wording.
     assert claims["base_revenue"] == "parent claim for base_revenue"
+
+
+def test_a_narrated_change_without_three_p_is_refused(parent_id):
+    """three_p is NOT NULL with a CHECK on three values. Defaulting it would have
+    the API state an epistemic confidence the caller never gave."""
+    with pytest.raises(ForkRefused, match="three_p"):
+        fork_case(parent_id, "child_case", {
+            "segments": {"Core": {"margin_target": {
+                "value": 0.31, "claim": "services mix reaches 30% by 2030",
+            }}},
+        })
 
 
 def test_a_claim_on_an_unnarrated_field_is_refused(parent_id):
@@ -451,7 +466,8 @@ def test_effective_changes_reports_canonical_keys(parent_id):
     parent = load_case(parent_id)
     changes = effective_changes(parent, {
         "case": {"wacc_stable": 0.081},
-        "segments": {"Core": {"margin_target": {"value": 0.31, "claim": "c"}}},
+        "segments": {"Core": {"margin_target": {
+            "value": 0.31, "claim": "c", "three_p": "possible"}}},
     })
     assert set(changes) == {"case.wacc_stable", "segment.Core.margin_target"}
     assert changes["case.wacc_stable"] == (pytest.approx(0.074), pytest.approx(0.081))
@@ -462,8 +478,8 @@ def test_two_fields_on_one_segment_are_two_players(parent_id):
     parent = load_case(parent_id)
     changes = effective_changes(parent, {
         "segments": {"Core": {
-            "margin_target": {"value": 0.31, "claim": "c1"},
-            "sales_to_capital_late": {"value": 3.5, "claim": "c2"},
+            "margin_target": {"value": 0.31, "claim": "c1", "three_p": "possible"},
+            "sales_to_capital_late": {"value": 3.5, "claim": "c2", "three_p": "possible"},
         }},
     })
     assert set(changes) == {
@@ -515,8 +531,11 @@ class ForkRefused(Exception):
     prefix so a route can map it to a status without parsing prose."""
 
 
-def _unwrap(field: str, raw: object) -> tuple[float, str | None, str, str]:
-    """Return (value, claim, evidence_source, confidence) for one override.
+_THREE_P = frozenset({"possible", "plausible", "probable"})
+
+
+def _unwrap(field: str, raw: object) -> tuple[float, str | None, str, str, str]:
+    """Return (value, claim, evidence_source, confidence, three_p) for one override.
 
     A narrated field arrives as an object carrying its claim; an unnarrated one
     arrives as a bare scalar. Mixing them up is refused rather than guessed at.
@@ -536,18 +555,27 @@ def _unwrap(field: str, raw: object) -> tuple[float, str | None, str, str]:
                 f"narrative_required: {field} is a narrated field, so changing it "
                 "needs a claim -- the parent's claim describes a different number"
             )
+        three_p = str(raw.get("three_p") or "")
+        if three_p not in _THREE_P:
+            # NOT defaulted: three_p is an epistemic claim about the assumption,
+            # and picking one for the caller asserts a confidence nobody stated.
+            raise ForkRefused(
+                f"narrative_required: {field} needs a three_p of "
+                f"{sorted(_THREE_P)}, got {three_p!r}"
+            )
         return (
             raw["value"],
             claim,
             str(raw.get("evidence_source") or "fork"),
             str(raw.get("confidence") or "assumed"),
+            three_p,
         )
     if narrated:
         raise ForkRefused(
             f"narrative_required: {field} is a narrated field, so changing it needs "
             "a claim -- the parent's claim describes a different number"
         )
-    return raw, None, "", ""
+    return raw, None, "", "", ""
 
 
 def effective_changes(parent: dict, overrides: dict) -> dict[str, tuple[float, float]]:
@@ -563,7 +591,7 @@ def effective_changes(parent: dict, overrides: dict) -> dict[str, tuple[float, f
     for field, raw in (overrides.get("case") or {}).items():
         if field not in _SETTABLE_CASE_FIELDS:
             raise ForkRefused(f"unknown_field: case.{field} is not a settable case column")
-        value, _, _, _ = _unwrap(field, raw)
+        value, _, _, _, _ = _unwrap(field, raw)
         if value != parent[field]:
             changes[f"case.{field}"] = (parent[field], value)
 
@@ -581,7 +609,7 @@ def effective_changes(parent: dict, overrides: dict) -> dict[str, tuple[float, f
                     f"unknown_field: segment.{segment_name}.{field} is not a settable "
                     "segment column"
                 )
-            value, _, _, _ = _unwrap(field, raw)
+            value, _, _, _, _ = _unwrap(field, raw)
             if value != segment[field]:
                 changes[f"segment.{segment_name}.{field}"] = (segment[field], value)
 
@@ -607,14 +635,14 @@ def fork_case(case_id: int, case_name: str, overrides: dict) -> int:
     payload["case_name"] = case_name
     payload["parent_case_id"] = case_id
     for field, raw in (overrides.get("case") or {}).items():
-        payload[field], _, _, _ = _unwrap(field, raw)
+        payload[field], _, _, _, _ = _unwrap(field, raw)
 
     payload["segments"] = []
     for segment in parent["segments"]:
         copy = {field: segment[field] for field in _SEGMENT_COLUMNS}
         narratives = {n["input_field"]: dict(n) for n in segment["narratives"]}
         for field, raw in (overrides.get("segments") or {}).get(segment["name"], {}).items():
-            value, claim, source, confidence = _unwrap(field, raw)
+            value, claim, source, confidence, three_p = _unwrap(field, raw)
             copy[field] = value
             if claim is not None:
                 # Replace, never inherit: the parent's claim describes the value
@@ -624,7 +652,7 @@ def fork_case(case_id: int, case_name: str, overrides: dict) -> int:
                     "claim": claim,
                     "evidence_source": source,
                     "confidence": confidence,
-                    "three_p": None,
+                    "three_p": three_p,
                 }
         copy["narratives"] = [narratives[k] for k in sorted(narratives)]
         payload["segments"].append(copy)
@@ -638,7 +666,7 @@ def fork_case(case_id: int, case_name: str, overrides: dict) -> int:
 python -m pytest -q tests/api/test_case_fork.py
 ```
 
-Expected: PASS, 12 tests.
+Expected: PASS, 13 tests.
 
 - [ ] **Step 5: Verify the preservation test is load-bearing**
 
@@ -765,7 +793,8 @@ def test_contributions_come_back_in_canonical_order(parent_id):
     guarantees; this is the second one."""
     child_id = fork_case(parent_id, "child_case", {
         "case": {"wacc_stable": 0.081, "terminal_growth": 0.025},
-        "segments": {"Core": {"margin_target": {"value": 0.31, "claim": "c"}}},
+        "segments": {"Core": {"margin_target": {
+            "value": 0.31, "claim": "c", "three_p": "possible"}}},
     })
     first = [c["input"] for c in diff_case(child_id)["contributions"]]
     second = [c["input"] for c in diff_case(child_id)["contributions"]]
@@ -817,6 +846,7 @@ from apps.api.services.case_fork import effective_changes
 from apps.api.services.valuation_case import (
     _CASE_COLUMNS,
     _SEGMENT_COLUMNS,
+    NARRATED_FIELDS,
     load_case,
     run_case_payload,
 )
@@ -927,7 +957,12 @@ def _as_bare_scalars(overrides: dict) -> dict:
     wrapped = {"case": dict(overrides["case"]), "segments": {}}
     for name, fields in overrides["segments"].items():
         wrapped["segments"][name] = {
-            field: {"value": value, "claim": "stored"} for field, value in fields.items()
+            # Only NARRATED fields take the object form. Wrapping an unnarrated
+            # one (ramp_start_year) would trip `unexpected_narrative` and crash
+            # the diff on a fork that legitimately changed it.
+            field: ({"value": value, "claim": "stored", "three_p": "probable"}
+                    if field in NARRATED_FIELDS else value)
+            for field, value in fields.items()
         }
     return wrapped
 ```
@@ -1233,7 +1268,7 @@ git commit -m "feat: expose /fork and /diff, refusals keeping their prefixes"
 python -m pytest -q
 ```
 
-Expected: **999 passed** (967 before this work, plus 6 + 12 + 7 + 7 = 32 new). If the count differs, report the actual number rather than the expected one — a mismatch means a test was not collected or an existing one broke.
+Expected: **1000 passed** (967 before this work, plus 6 + 13 + 7 + 7 = 33 new). If the count differs, report the actual number rather than the expected one — a mismatch means a test was not collected or an existing one broke.
 
 - [ ] **Step 2: Confirm no frontend impact**
 
