@@ -34,8 +34,23 @@ _CONDITIONS = [
     ({"case.roic_stable": 0.70}, "roic_above_marginal_return"),
     ({"case.terminal_growth": -0.20}, "roic_below_growth_magnitude"),
     ({"case.target_year": 2000}, "horizon_incoherent"),
-    ({"segment.Core.ramp_start_year": 0}, "ramp_incoherent"),
-    ({"segment.Core.ramp_start_year": 50}, "ramp_incoherent"),
+    # Fix round 2: these two used to both map to the single `ramp_incoherent`
+    # bucket; relabeled to the split codes below.
+    ({"segment.Core.ramp_start_year": 0}, "ramp_start_year_below_one"),
+    ({"segment.Core.ramp_start_year": 50}, "ramp_conflicts_with_base_revenue"),
+    # Fix round 2 additions. `curve_conflicts_with_ramp` needs a growth curve
+    # (initial_growth or waypoint_gap_fraction) combined with a delayed ramp
+    # start -- neither field alone reaches it, since both guards are gated on
+    # `ramp_start_year > 1` (or base_revenue == 0). Smallest combination that
+    # triggers it: pin initial_growth and delay the ramp by one year.
+    ({"segment.Core.initial_growth": 0.1, "segment.Core.ramp_start_year": 2},
+     "curve_conflicts_with_ramp"),
+    # `ramp_leaves_no_years` needs a zero-base segment (so revenue_path takes
+    # the ramp branch at all) whose ramp start leaves fewer than one year to
+    # reach the target within the 10-year horizon.
+    ({"segment.Core.base_revenue": 0.0, "segment.Core.ramp_start_year": 11},
+     "ramp_leaves_no_years"),
+    ({"case.wacc_stable": -2.0}, "wacc_below_negative_one"),
 ]
 
 

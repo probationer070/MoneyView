@@ -39,16 +39,26 @@ REFUSAL_CODES: tuple[tuple[str, str], ...] = (
     ("non_positive_rate", "must be positive"),
     ("roic_above_marginal_return", "exceeds the target-year marginal return"),
     ("roic_below_growth_magnitude", "must exceed the magnitude of terminal growth"),
-    # Bare field name, not a phrase: it also matches three OTHER engine
-    # messages not covered by any test condition here (initial_growth vs.
-    # ramp conflict, waypoint_gap_fraction vs. ramp conflict, and
-    # insufficient years to ramp over the horizon) -- see task-3-report.md,
-    # "ramp_incoherent bucket scope". All are ramp_start_year-incoherence in
-    # the broad sense this code names, so the sweep is accepted, not an
-    # oversight. Placed after every other row: nothing above matches
-    # "ramp_start_year" and nothing below needs to run first.
-    ("ramp_incoherent", "ramp_start_year"),
+    # Fix round 2: `ramp_incoherent` (a bare "ramp_start_year" marker) used to
+    # cover this whole group under one code and one reported message, but it
+    # actually swept five distinct raise sites into that one bucket -- a
+    # count wearing a label it had not earned. Split on the phrase each
+    # message uses to name ITS OWN cause. `"is incoherent with base_revenue"`
+    # (revenue_path) and `"is incoherent with a ramped segment"`
+    # (SegmentSpec.__post_init__) look similar but are disjoint phrases from
+    # disjoint raise sites -- neither is a substring of the other, confirmed
+    # directly against both real messages; see task-3-report.md.
+    ("ramp_start_year_below_one", "ramp_start_year must be at least 1"),
+    ("ramp_conflicts_with_base_revenue", "is incoherent with base_revenue"),
+    # One row, two raise sites (initial_growth vs. ramp, and
+    # waypoint_gap_fraction vs. ramp): both use this identical phrase for the
+    # same underlying conflict -- a growth curve that assumes revenue already
+    # exists clashing with a ramp that starts it at zero -- so one code is
+    # correct here, not an oversight the other three rows had to fix.
+    ("curve_conflicts_with_ramp", "is incoherent with a ramped segment"),
+    ("ramp_leaves_no_years", "leaves no years to ramp over"),
     ("horizon_incoherent", "must be after base_year"),
+    ("wacc_below_negative_one", "wacc must exceed -100%"),
 )
 
 
