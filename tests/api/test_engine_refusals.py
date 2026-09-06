@@ -100,17 +100,49 @@ def test_the_first_matching_row_wins_and_the_table_is_ordered():
     assert codes.index("roic_below_wacc") < codes.index("terminal_spread_not_positive")
 
 
-def _raise_message_fragments(path: str) -> list[tuple[int, list[str]]]:
-    """Every `raise ValueError(...)` in the engine, as (line number, literal
-    fragments). An f-string's interpolations are dropped and its literal parts
-    kept separately -- checking per-fragment rather than joined, so no marker can
-    accidentally match across an interpolation boundary."""
+# The engine sources this table must cover. engine_refusals.py's docstring has
+# claimed since its first commit that the rows were derived from raise sites in
+# BOTH of these; parsing both makes that claim true rather than narrowing the
+# claim to the one file the test used to read.
+_ENGINE_SOURCES = (
+    "packages/core_finance/segment_valuation.py",
+    "packages/core_finance/dcf.py",
+)
+
+
+def _raise_message_fragments(
+    path: str,
+) -> tuple[list[tuple[int, list[str]]], list[tuple[int, str]]]:
+    """Split a file's `raise ValueError(...)` sites into the readable and the
+    unreadable, as `(readable, unreadable)`.
+
+    `readable` is (line number, literal fragments). An f-string's interpolations
+    are dropped and its literal parts kept separately -- checking per-fragment
+    rather than joined, so no marker can accidentally match across an
+    interpolation boundary.
+
+    `unreadable` is (line number, the argument rendered back to source) for every
+    site that HAS an argument yet yields no string literal: `+` concatenation,
+    `%` formatting, `.format()`, or a message assembled into a variable first.
+    These are REPORTED, not skipped. A message this parser cannot read is a
+    message no marker can be checked against, which makes such a site exactly as
+    unclassified as one with no row -- and it used to fall through `parts = []`
+    into silence. `raise ValueError` and `raise ValueError()` carry no message at
+    all and are neither readable nor reported.
+
+    The callee test accepts a bare `ValueError(...)` and any attribute form
+    ending in ValueError (`builtins.ValueError(...)`), which the previous
+    `func.id` check saw only the first of.
+    """
     tree = ast.parse(pathlib.Path(path).read_text(encoding="utf-8"))
-    found = []
+    readable: list[tuple[int, list[str]]] = []
+    unreadable: list[tuple[int, str]] = []
     for node in ast.walk(tree):
         if not (isinstance(node, ast.Raise) and isinstance(node.exc, ast.Call)):
             continue
-        if getattr(node.exc.func, "id", None) != "ValueError" or not node.exc.args:
+        func = node.exc.func
+        callee = getattr(func, "id", None) or getattr(func, "attr", None) or ""
+        if not callee.endswith("ValueError") or not node.exc.args:
             continue
         arg = node.exc.args[0]
         if isinstance(arg, ast.JoinedStr):
@@ -121,14 +153,22 @@ def _raise_message_fragments(path: str) -> list[tuple[int, list[str]]]:
         else:
             parts = []
         if parts:
-            found.append((node.lineno, parts))
-    return found
+            readable.append((node.lineno, parts))
+        else:
+            unreadable.append((node.lineno, ast.unparse(arg)))
+    return readable, unreadable
 
 
-# Raise sites deliberately NOT classified, each with the reason it cannot be
-# reached by perturbing a numeric input of an already-valid stored case.
-_UNCLASSIFIED_BY_DESIGN = {
-    570: (
+# Raise sites deliberately NOT classified, keyed by (file name, line number).
+# Three headed tiers, and they are NOT equivalent -- an entry's tier says how
+# much weight its exclusion can bear.
+#
+# TIER 1 -- dead given the engine's own invariants. No input this module can
+# produce reaches these, because an earlier guard on the same call path has
+# already rejected it. They stop being dead only if one of those upstream guards
+# is weakened, which is a code change, not a sampler change.
+_DEAD_GIVEN_ENGINE_INVARIANTS = {
+    ("segment_valuation.py", 570): (
         "tax_path's rate_schedule/ebit length-mismatch guard. Its one call site "
         "(run_case, segment_valuation.py:921) always builds rate_schedule via "
         "tax_rate_path with the identical horizon n that produced ebit "
@@ -138,7 +178,7 @@ _UNCLASSIFIED_BY_DESIGN = {
         "guard against a hypothetical future caller of tax_path with a "
         "hand-built schedule, not a case-input validation."
     ),
-    811: (
+    ("segment_valuation.py", 811): (
         "marginal_roic's empty-segments guard. run_case (segment_valuation.py:890) "
         "already raises 'a valuation case needs at least one segment' before "
         "marginal_roic is ever called (segment_valuation.py:927), and "
@@ -148,7 +188,7 @@ _UNCLASSIFIED_BY_DESIGN = {
         "by calling marginal_roic() directly with an empty list, bypassing "
         "run_case entirely."
     ),
-    822: (
+    ("segment_valuation.py", 822): (
         "marginal_roic's non-positive-capital guard. total_capital sums "
         "revenue_i / sales_to_capital_late_i across segments; revenue_i > 0 is "
         "already guaranteed by revenue_path's own target-revenue guard "
@@ -159,7 +199,7 @@ _UNCLASSIFIED_BY_DESIGN = {
         "positive terms cannot be <= 0 through any override this module "
         "exposes."
     ),
-    890: (
+    ("segment_valuation.py", 890): (
         "run_case's own empty-segments guard. create_case (valuation_case.py) "
         "refuses to store a case with no segments, and run_case_payload only "
         "overrides fields of a stored case's EXISTING segments -- it copies "
@@ -167,52 +207,166 @@ _UNCLASSIFIED_BY_DESIGN = {
         "removes one. No numeric override can make an already-valid stored "
         "case's segment list empty."
     ),
-    114: (
+    ("dcf.py", 117): (
+        "calculate_intrinsic_value_per_share's non-positive-share-count guard. "
+        "Reached from segment_valuation.py with diluted shares derived from "
+        "shares_basic + shares_new, and CaseSpec.__post_init__ already "
+        "guarantees shares_basic > 0 and shares_new >= 0, so the divisor cannot "
+        "reach zero on this path. A zero or negative shares_basic is refused "
+        "upstream and classified as non_positive_rate, which is why no sampled "
+        "share count arrives here."
+    ),
+}
+
+# TIER 2 -- reachable only by NULLING a field that is already set. Mechanically
+# reachable through the very interface /simulate will call: run_case_payload's
+# override loop does no None validation of its own, so `{"case.x": None}` does
+# reach these. They rest on an assumption about a sampler that DOES NOT EXIST
+# YET -- that it perturbs distributions over already-set numeric fields and
+# never removes one -- not on an engine invariant. If /simulate ever gains a
+# "what if this were never set" draw, every entry here needs a row instead.
+_REACHABLE_ONLY_BY_NULLING = {
+    ("segment_valuation.py", 114): (
         "SegmentSpec's None-value guard for its required fields (name, "
         "base_revenue, base_margin, margin_target, sales_to_capital_early, "
         "sales_to_capital_late, ramp_start_year). A None here means a field was "
         "REMOVED, not that a number moved to an implausible value -- distinct "
-        "from every magnitude guard this table classifies. /simulate perturbs "
-        "distributions over already-set numeric fields; it does not null them."
+        "from every magnitude guard this table classifies."
     ),
-    183: (
+    ("segment_valuation.py", 183): (
         "target_revenue()'s None-value guard: fires only when revenue_target "
         "is None AND (tam_target is None or market_share_target is None). "
         "create_case's _validate_by_engine (valuation_case.py) runs this exact "
         "engine path at write time, so any STORED case already has one of "
         "these three endpoint fields resolvable -- reaching this guard needs "
-        "revenue_target to be NULLED on a segment that already has it set, not "
-        "a numeric value perturbed. Same category as line 114 above."
+        "revenue_target to be NULLED on a segment that already has it set. "
+        "Verified live that nulling it does reach this raise."
     ),
-    678: (
+    ("segment_valuation.py", 678): (
         "CaseSpec's None-value guard for its required fields (base_year, "
         "target_year, riskfree_rate, wacc_initial, wacc_stable, "
         "wacc_converge_from, marginal_tax_rate, nol_balance, roic_stable, cash, "
-        "debt, ipo_proceeds, shares_basic, shares_new). Same category as line "
-        "114: a None means a field was removed, not a number perturbed to an "
-        "implausible magnitude."
+        "debt, ipo_proceeds, shares_basic, shares_new). Same shape as line 114."
     ),
+}
+
+# TIER 3 -- not on this engine's call path at all. Neither an invariant nor an
+# assumption about the sampler: segment_valuation.py never calls this code.
+_NOT_ON_THE_SEGMENT_VALUATION_PATH = {
+    ("dcf.py", 54): (
+        "calculate_terminal_value's WACC-vs-growth guard. segment_valuation.py "
+        "does not import it -- its dcf import pulls only calculate_equity_value "
+        "and calculate_intrinsic_value_per_share -- so no /simulate draw can "
+        "reach this raise. It is reached through multi_stage_dcf and "
+        "corporate_dcf.py, a separate engine with its own callers. The "
+        "equivalent condition on THIS path is segment_valuation's own terminal "
+        "spread guard, which has a row (terminal_spread_not_positive)."
+    ),
+}
+
+_UNCLASSIFIED_BY_DESIGN = {
+    **_DEAD_GIVEN_ENGINE_INVARIANTS,
+    **_REACHABLE_ONLY_BY_NULLING,
+    **_NOT_ON_THE_SEGMENT_VALUATION_PATH,
 }
 
 
 def test_every_engine_raise_site_is_classified_or_explicitly_excluded():
     """Completeness by CONSTRUCTION rather than by imagination.
 
-    The parametrized tests above check the conditions we thought to try; they
-    cannot fail for a message nobody has imagined. Three review rounds each
-    found another uncovered message that way. This test reads the engine's own
-    source, so a new `raise ValueError` added tomorrow fails here until someone
-    either gives it a row or records why it needs none."""
-    for line, fragments in _raise_message_fragments(
-        "packages/core_finance/segment_valuation.py"
-    ):
-        if line in _UNCLASSIFIED_BY_DESIGN:
-            continue
-        matched = any(marker in fragment
-                      for fragment in fragments
-                      for _, marker in REFUSAL_CODES)
-        assert matched, (
-            f"segment_valuation.py:{line} raises a message no row matches: "
-            f"{fragments!r}. Add a row, or add the line to "
-            "_UNCLASSIFIED_BY_DESIGN with the reason it is unreachable."
-        )
+    GUARANTEES: for every `raise ValueError(...)` written literally in
+    _ENGINE_SOURCES, either some row's marker matches one of its literal message
+    fragments, or its (file, line) is in _UNCLASSIFIED_BY_DESIGN with a written
+    reason. A site whose message cannot be read statically (`+` concatenation,
+    `%`, `.format()`, a variable) fails here in the same breath as a site with no
+    row, because a message that cannot be read cannot be checked against a
+    marker. Allowlist entries must themselves still name real raise sites, so an
+    entry left behind by an edit above it fails rather than quietly excusing a
+    line that has moved.
+
+    DOES NOT GUARANTEE: (a) that a matching marker is the RIGHT code -- matching
+    is by substring, so a new site whose message happens to contain an existing
+    marker is absorbed under that code silently, which is precisely what the old
+    single `ramp_incoherent` row did; (b) anything about files outside
+    _ENGINE_SOURCES; (c) anything about `raise err` where the exception object
+    was built on an earlier line -- that is a Raise whose exc is not a Call, and
+    it is skipped; (d) anything about non-ValueError exceptions, or about
+    ValueErrors raised out of numpy or the stdlib on engine input.
+    """
+    problems: list[str] = []
+    seen: set[tuple[str, int]] = set()
+
+    for source in _ENGINE_SOURCES:
+        name = pathlib.PurePath(source).name
+        readable, unreadable = _raise_message_fragments(source)
+
+        for line, rendered in unreadable:
+            seen.add((name, line))
+            if (name, line) in _UNCLASSIFIED_BY_DESIGN:
+                continue
+            problems.append(
+                f"{name}:{line} raises a ValueError whose message cannot be read "
+                f"statically: {rendered}. A message this test cannot read is a "
+                "message no row can be checked against. Use an inline string or "
+                "an f-string, or add the line to _UNCLASSIFIED_BY_DESIGN with "
+                "the reason it needs no row."
+            )
+
+        for line, fragments in readable:
+            seen.add((name, line))
+            if (name, line) in _UNCLASSIFIED_BY_DESIGN:
+                continue
+            matched = any(marker in fragment
+                          for fragment in fragments
+                          for _, marker in REFUSAL_CODES)
+            if not matched:
+                problems.append(
+                    f"{name}:{line} raises a message no row matches: "
+                    f"{fragments!r}. Add a row, or add the line to "
+                    "_UNCLASSIFIED_BY_DESIGN with the reason it is unreachable."
+                )
+
+    for key in sorted(_UNCLASSIFIED_BY_DESIGN):
+        if key not in seen:
+            problems.append(
+                f"_UNCLASSIFIED_BY_DESIGN excuses {key[0]}:{key[1]}, which is no "
+                "longer a raise ValueError site. Line numbers shift when the "
+                "file above them is edited; re-point the entry at the line the "
+                "site moved to, or delete it."
+            )
+
+    assert not problems, "\n".join(problems)
+
+
+def test_a_raise_whose_message_cannot_be_read_is_reported_not_skipped(tmp_path):
+    """The guard above is itself guarded.
+
+    Its whole value depends on _raise_message_fragments REPORTING what it cannot
+    parse instead of dropping it, and a green structural run cannot tell those
+    two apart -- exactly the blind spot the structural test exists to end, one
+    level up. A fixture module rather than a temporary edit to the real engine,
+    so there is nothing to restore afterwards.
+    """
+    fixture = tmp_path / "raises_fixture.py"
+    fixture.write_text(
+        "import builtins\n"
+        "\n"
+        "\n"
+        "def f(x):\n"
+        "    if x:\n"
+        '        raise ValueError("cannot reach a target of " + str(x))\n'
+        '    raise builtins.ValueError(f"plain {x} message")\n',
+        encoding="utf-8",
+    )
+
+    readable, unreadable = _raise_message_fragments(str(fixture))
+
+    # The `+`-concatenated site is reported, and is NOT quietly sitting among
+    # the sites that did get checked against the table.
+    assert [line for line, _ in unreadable] == [6]
+    assert "str(x)" in unreadable[0][1]
+    assert 6 not in [line for line, _ in readable]
+
+    # The attribute form is recognised as a ValueError at all, which the old
+    # bare-`func.id` callee check did not manage.
+    assert readable == [(7, ["plain ", " message"])]
