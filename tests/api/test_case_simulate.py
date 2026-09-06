@@ -6,6 +6,8 @@ from apps.api.services.case_simulate import (
     MIN_RUNS,
     REFUSED_FRACTION_CAP,
     SimulateRefused,
+    _draw,
+    _is_suppressed,
     simulate_case,
 )
 from apps.api.services.valuation_case import create_case
@@ -67,7 +69,7 @@ def test_the_accounting_identity_holds_when_samples_are_refused(parent_id):
             "shape": "uniform", "low": 0.020, "high": 0.090}}},
     })
     assert result["runs_refused"] > 0
-    assert result["runs_valid"] + result["runs_refused"] == 2000
+    assert result["runs_valid"] + result["runs_refused"] == result["runs_requested"]
     assert sum(group["count"] for group in result["refusals"]) == result["runs_refused"]
 
 
@@ -169,3 +171,28 @@ def test_a_claim_on_an_unnarrated_field_is_refused(parent_id):
             "case": {"wacc_stable": {
                 "shape": "normal", "mean": 0.074, "sd": 0.001,
                 "claim": "c", "three_p": "possible"}}}})
+
+
+def test_the_suppression_boundary_is_inclusive():
+    """No sampling fixture lands on exactly REFUSED_FRACTION_CAP -- the
+    omission fixture above hits 0.8825 -- so the boundary is pinned directly
+    against the extracted decision rather than against a brittle sample."""
+    assert _is_suppressed(REFUSED_FRACTION_CAP) is True
+    assert _is_suppressed(REFUSED_FRACTION_CAP - 0.0001) is False
+    assert _is_suppressed(REFUSED_FRACTION_CAP + 0.01) is True
+
+
+def test_a_sampled_integer_field_is_rounded_not_truncated():
+    """`_native`'s int() truncates toward zero, so without `_draw`'s rint every
+    sampled INTEGER field would be biased low by half a unit and its top value
+    would never occur. Measured over uniform(3, 7): mean 5.00 rounded against
+    4.50 truncated, distinct values [3,4,5,6,7] against [3,4,5,6]."""
+    drawn = _draw(
+        {"case.wacc_converge_from": {"shape": "uniform",
+                                     "params": {"low": 3.0, "high": 7.0}}},
+        20000, np.random.default_rng(42),
+    )
+    values = drawn["case.wacc_converge_from"]
+    assert np.array_equal(values, np.rint(values))   # integral, not truncated
+    assert values.mean() == pytest.approx(5.0, abs=0.05)
+    assert set(np.unique(values).tolist()) == {3.0, 4.0, 5.0, 6.0, 7.0}

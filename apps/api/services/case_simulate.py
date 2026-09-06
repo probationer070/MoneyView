@@ -51,6 +51,13 @@ class SimulateRefused(Exception):
     prefix so a route can map it to a status without parsing prose."""
 
 
+def _is_suppressed(refused_fraction: float) -> bool:
+    """At the cap exactly, the summary statistics are suppressed. Extracted so
+    the boundary is testable: no sampling fixture lands on exactly 0.10, and one
+    engineered to would be brittle against any engine change."""
+    return refused_fraction >= REFUSED_FRACTION_CAP
+
+
 def _distribution(key: str, field: str, raw: object) -> dict:
     """Validate one distribution against the narrative rule and its own shape."""
     if not isinstance(raw, dict):
@@ -133,6 +140,15 @@ def _draw(planned: dict[str, dict], runs: int, rng: np.random.Generator) -> dict
     INTEGER columns, and a float reaching the engine raises `TypeError: can't
     multiply sequence by non-int of type 'float'` three layers down -- a 500,
     and the exact defect ERROR-LOG records against /fork.
+
+    `np.rint` HERE, not just `_native`'s `int()` at the point of use: `rint`
+    rounds to the nearest integer where `int()` truncates toward zero. Those
+    are different numbers, not different representations of the same one --
+    dropping this step would silently bias every sampled INTEGER field low by
+    half a unit and make its top value unreachable (measured over
+    uniform(3, 7): mean 5.00 rounded against 4.50 truncated). `_native`'s
+    conversion exists to give the engine a Python `int` rather than a numpy
+    scalar; it does not stand in for the rounding done here.
     """
     drawn: dict[str, np.ndarray] = {}
     for key, plan in planned.items():
@@ -192,7 +208,7 @@ def simulate_case(case_id: int, request: dict) -> dict:
         "refusals": sorted(refusals.values(), key=lambda g: (-g["count"], g["code"])),
     }
 
-    if refused_fraction >= REFUSED_FRACTION_CAP:
+    if _is_suppressed(refused_fraction):
         result["suppressed"] = (
             f"refused_fraction {refused_fraction:.4g} >= {REFUSED_FRACTION_CAP}: "
             "the surviving sample describes the distribution of "
