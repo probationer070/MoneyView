@@ -228,3 +228,29 @@ def test_the_accounting_identity_holds_for_non_finite_results(parent_id):
         }},
     })
     assert result["runs_valid"] + result["runs_refused"] == result["runs_requested"]
+
+
+def test_a_partly_non_finite_run_reports_over_the_survivors_and_says_so(parent_id):
+    """The subtlest state this service produces: some draws overflow, the
+    refused fraction stays under the cap, and the percentiles are therefore
+    computed over the survivors -- conditional on acceptance, as spec section 8
+    describes. The conditioning is not hidden: refused_fraction and the refusal
+    group both report it. Measured at this seed: 966 finite, 34 non-finite."""
+    result = simulate_case(parent_id, {
+        "runs": 1000, "seed": 42,
+        "distributions": {"case": {
+            "cash": {"shape": "uniform", "low": 1e307, "high": 1e308},
+            "ipo_proceeds": {"shape": "uniform", "low": 1e307, "high": 1e308},
+        }},
+    })
+
+    assert result["runs_refused"] > 0
+    assert result["refused_fraction"] < REFUSED_FRACTION_CAP
+    assert result["runs_valid"] + result["runs_refused"] == result["runs_requested"]
+
+    # Below the cap, the summary IS reported -- over the survivors only.
+    assert "p50" in result
+    assert result["runs_valid"] < result["runs_requested"]
+
+    # And the conditioning is visible rather than implied.
+    assert [group["code"] for group in result["refusals"]] == ["non_finite_result"]
