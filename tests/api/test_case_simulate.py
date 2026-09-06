@@ -1,0 +1,171 @@
+import numpy as np
+import pytest
+
+from apps.api.services.case_simulate import (
+    MAX_RUNS,
+    MIN_RUNS,
+    REFUSED_FRACTION_CAP,
+    SimulateRefused,
+    simulate_case,
+)
+from apps.api.services.valuation_case import create_case
+from tests.api.test_case_fork import _parent_payload
+
+
+@pytest.fixture()
+def parent_id() -> int:
+    return create_case(_parent_payload())
+
+
+def _narrow(runs: int = 1000, seed: int = 42) -> dict:
+    """A distribution tight enough that every draw is runnable."""
+    return {
+        "runs": runs,
+        "seed": seed,
+        "distributions": {"case": {"wacc_stable": {
+            "shape": "uniform", "low": 0.073, "high": 0.075,
+        }}},
+    }
+
+
+def test_the_bounds_are_named_constants():
+    assert (MIN_RUNS, MAX_RUNS, REFUSED_FRACTION_CAP) == (1000, 20000, 0.10)
+
+
+def test_a_clean_run_reports_percentiles_and_accounting(parent_id):
+    result = simulate_case(parent_id, _narrow())
+    assert result["runs_requested"] == 1000
+    assert result["runs_valid"] + result["runs_refused"] == result["runs_requested"]
+    assert result["runs_refused"] == 0
+    assert result["p10"] < result["p50"] < result["p90"]
+    assert result["metric"] == "value_per_share_diluted"
+    assert len(result["histogram"]) > 0
+
+
+def test_the_seed_is_always_reported_and_reproduces_the_run(parent_id):
+    """A simulation nobody can reproduce cannot be reviewed."""
+    first = simulate_case(parent_id, _narrow(seed=7))
+    second = simulate_case(parent_id, _narrow(seed=7))
+    assert first["seed"] == 7
+    assert (first["p10"], first["p50"], first["p90"]) == (
+        second["p10"], second["p50"], second["p90"])
+
+
+def test_an_absent_seed_is_generated_and_reported(parent_id):
+    request = _narrow()
+    del request["seed"]
+    result = simulate_case(parent_id, request)
+    assert isinstance(result["seed"], int)
+
+
+def test_the_accounting_identity_holds_when_samples_are_refused(parent_id):
+    """A band wide enough to straddle the engine's terminal-spread guard. The
+    identity is what makes silent dropping impossible to hide."""
+    result = simulate_case(parent_id, {
+        "runs": 2000, "seed": 42,
+        "distributions": {"case": {"wacc_stable": {
+            "shape": "uniform", "low": 0.020, "high": 0.090}}},
+    })
+    assert result["runs_refused"] > 0
+    assert result["runs_valid"] + result["runs_refused"] == 2000
+    assert sum(group["count"] for group in result["refusals"]) == result["runs_refused"]
+
+
+def test_above_the_threshold_the_numbers_are_omitted_not_nulled(parent_id):
+    """Absent keys, never null and never zero: a refusal is content, not a zero
+    wearing a value's clothes."""
+    result = simulate_case(parent_id, {
+        "runs": 2000, "seed": 42,
+        "distributions": {"case": {"terminal_growth": {
+            "shape": "uniform", "low": 0.020, "high": 0.200}}},
+    })
+    assert result["refused_fraction"] >= REFUSED_FRACTION_CAP
+    for omitted in ("p10", "p50", "p90", "mean", "histogram",
+                    "association_among_accepted_samples"):
+        assert omitted not in result
+    assert "conditional on the engine accepting" in result["suppressed"]
+    assert result["refusals"]
+
+
+def test_below_the_threshold_the_association_is_named_for_its_conditioning(parent_id):
+    """The name carries the conditioning so it survives being pasted into a
+    spreadsheet away from the disclosure."""
+    result = simulate_case(parent_id, _narrow())
+    rows = result["association_among_accepted_samples"]
+    assert [row["input"] for row in rows] == ["case.wacc_stable"]
+    assert rows[0]["spearman"] < 0  # a higher discount rate lowers value
+
+
+def test_a_sampled_integer_field_reaches_the_engine_as_an_int(parent_id):
+    """wacc_converge_from is an INTEGER column. A float there raises
+    `TypeError: can't multiply sequence by non-int of type 'float'` three layers
+    down -- a 500, and the exact defect ERROR-LOG records for /fork."""
+    result = simulate_case(parent_id, {
+        "runs": 1000, "seed": 42,
+        "distributions": {"case": {"wacc_converge_from": {
+            "shape": "uniform", "low": 3.0, "high": 7.0}}},
+    })
+    assert result["runs_refused"] == 0
+    assert result["runs_valid"] == 1000
+
+
+def test_an_unknown_case_field_is_refused(parent_id):
+    with pytest.raises(SimulateRefused, match="unknown_field"):
+        simulate_case(parent_id, {"runs": 1000, "distributions": {
+            "case": {"not_a_column": {"shape": "normal", "mean": 1.0, "sd": 0.1}}}})
+
+
+def test_a_non_numeric_column_is_refused(parent_id):
+    """ticker and as_of_date identify the case rather than value it."""
+    with pytest.raises(SimulateRefused, match="unknown_field"):
+        simulate_case(parent_id, {"runs": 1000, "distributions": {
+            "case": {"as_of_date": {"shape": "normal", "mean": 1.0, "sd": 0.1}}}})
+
+
+def test_an_unknown_segment_is_refused(parent_id):
+    with pytest.raises(SimulateRefused, match="unknown_segment"):
+        simulate_case(parent_id, {"runs": 1000, "distributions": {
+            "segments": {"Cor": {"margin_target": {
+                "shape": "normal", "mean": 0.28, "sd": 0.01,
+                "claim": "c", "three_p": "possible"}}}}})
+
+
+def test_an_unknown_shape_is_refused(parent_id):
+    with pytest.raises(SimulateRefused, match="unknown_shape"):
+        simulate_case(parent_id, {"runs": 1000, "distributions": {
+            "case": {"wacc_stable": {"shape": "lognormal", "mean": 0.07, "sd": 0.01}}}})
+
+
+def test_incoherent_parameters_are_refused(parent_id):
+    with pytest.raises(SimulateRefused, match="invalid_distribution"):
+        simulate_case(parent_id, {"runs": 1000, "distributions": {
+            "case": {"wacc_stable": {"shape": "uniform", "low": 0.09, "high": 0.07}}}})
+
+
+@pytest.mark.parametrize("runs", [999, 20001, 0, -5])
+def test_runs_outside_the_band_is_refused(parent_id, runs):
+    with pytest.raises(SimulateRefused, match="invalid_runs"):
+        simulate_case(parent_id, {"runs": runs, "distributions": {
+            "case": {"wacc_stable": {"shape": "normal", "mean": 0.074, "sd": 0.001}}}})
+
+
+def test_no_distributions_is_refused(parent_id):
+    with pytest.raises(SimulateRefused, match="no_distributions"):
+        simulate_case(parent_id, {"runs": 1000, "distributions": {}})
+
+
+def test_a_narrated_field_needs_a_claim_and_three_p(parent_id):
+    """The narrative rule applies unchanged: a distribution asserts MORE than a
+    point estimate, so it needs a stated basis, not less of one."""
+    with pytest.raises(SimulateRefused, match="narrative_required"):
+        simulate_case(parent_id, {"runs": 1000, "distributions": {
+            "segments": {"Core": {"margin_target": {
+                "shape": "normal", "mean": 0.28, "sd": 0.01}}}}})
+
+
+def test_a_claim_on_an_unnarrated_field_is_refused(parent_id):
+    with pytest.raises(SimulateRefused, match="unexpected_narrative"):
+        simulate_case(parent_id, {"runs": 1000, "distributions": {
+            "case": {"wacc_stable": {
+                "shape": "normal", "mean": 0.074, "sd": 0.001,
+                "claim": "c", "three_p": "possible"}}}})
