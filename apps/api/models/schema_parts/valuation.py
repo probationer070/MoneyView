@@ -73,6 +73,24 @@ class ValuationCaseCreated(BaseModel):
     id: int
 
 
+class SimulateDistributions(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    case: dict[str, Any] = {}
+    segments: dict[str, dict[str, Any]] = {}
+
+
+class SimulateRequest(BaseModel):
+    """The envelope is known; the leaves are not. A leaf is a distribution
+    object whose parameters differ by shape, so it stays `Any` and
+    `case_simulate` validates it."""
+    model_config = ConfigDict(extra="forbid")
+
+    runs: int
+    seed: int | None = None
+    distributions: SimulateDistributions = SimulateDistributions()
+
+
 class ForkOverrides(BaseModel):
     """The envelope is known; the leaves are not. A leaf is a bare scalar for
     an unnarrated field or a {value, claim, three_p} object for a narrated

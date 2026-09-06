@@ -2265,3 +2265,107 @@ prefix. Related to, but distinct from, the `unrunnable_coalition` entry above: b
 "diff 500s on a case nobody tested against the real seed", but that one is an
 engine-level refusal reached only inside a Shapley coalition, and this one is a
 validation-layer crash reached on the very first call.
+
+## 2026-09-06: `simulate_case` 500s when two entirely finite stated parameters overflow to `inf` inside the engine
+
+Date: 2026-09-06
+Command: not test-discovered -- found by probing the review questions directly against
+`apps/api/services/case_simulate.py` after a dispatched reviewer hit a rate limit, by
+sweeping single-field extremes (1e±300) and then paired combinations of settable case
+fields. `{"case.cash": 1e308, "case.ipo_proceeds": 1e308}` and
+`{"segment.Core.margin_target": 1e300, "case.shares_basic": 1e-300}` both produced
+`value_per_share_diluted = inf` with the engine raising nothing; end to end through
+`simulate_case`, with both `cash` and `ipo_proceeds` distributed
+`uniform(9.9e307, 1.0e308)`, every one of 1000 draws overflowed and the call raised
+`ValueError: autodetected range of [2.3646264743494388e+305, inf] is not finite` from
+inside `np.histogram` -- a bare `ValueError` from a numpy frame that the route's
+`SimulateRefused`/`CaseNotFound` handling does not name, so it escapes as a 500 on a
+request whose every stated distribution parameter is finite and passes
+`distributions.validate`.
+Root cause: `simulate_case`'s sampling loop only ever branches on the engine RAISING
+(`except ValueError`, classified by `engine_refusals.classify`). It never checked the
+metric it received on the SUCCESS path. `cash` and `ipo_proceeds` are summed together in
+the engine's equity bridge; each value is a legitimate finite `float`, but their sum can
+exceed float64's max (~1.7977e308) and silently becomes `inf` -- a successful return with
+a number that is not one. Nothing before `np.histogram` treated "the engine returned
+non-finite" as a distinct, expected outcome of a Monte Carlo draw.
+Fix: after obtaining `value = run_case_payload(case, overrides)[METRIC]` and before
+appending it, `simulate_case` now checks `math.isfinite(value)`. A non-finite result is
+counted into `refusals` under a new code, `non_finite_result`, and the row is skipped
+(`continue`) rather than appended to `values` -- the same accounting treatment as an
+engine refusal, because a draw that produces nothing usable is exactly what the refusal
+accounting exists for, even though the engine itself raised nothing.
+`non_finite_result` is deliberately NOT added to `engine_refusals.REFUSAL_CODES`: that
+table maps engine refusal MESSAGES (a `raise ValueError` site), and this is a successful
+return, not a message to match.
+Files changed: `apps/api/services/case_simulate.py`, `tests/api/test_case_simulate.py`.
+Prevention: `tests/api/test_case_simulate.py::test_a_non_finite_engine_result_is_counted_not_raised`
+reproduces the exact `cash`/`ipo_proceeds` band above and asserts the call returns
+normally with `runs_refused == 1000`, `refused_fraction == 1.0`, suppression active, and a
+`non_finite_result` refusal group;
+`test_the_accounting_identity_holds_for_non_finite_results` asserts
+`runs_valid + runs_refused == runs_requested` still holds on that same response.
+Mutation-verified: removing the `math.isfinite` guard reproduces the exact numpy
+`ValueError` above rather than a clean refusal. A wider, non-overflowing band
+(`cash`/`ipo_proceeds` both `uniform(1e307, 1e308)`) reaches a MIXED state -- 34 of 1000
+draws non-finite, `refused_fraction = 0.034` (below the suppression cap) -- and the
+response is not suppressed: it reports `p10`/`p50`/`p90`/`mean`/`histogram`/
+`association_among_accepted_samples` computed over the 966 finite survivors only, with
+the accounting identity still holding across all three fields. This mixed case is not
+separately asserted by a checked-in test when this entry was written;
+commit `a1a7d86` added `test_a_partly_non_finite_run_reports_over_the_survivors_and_says_so`
+one commit later, which pins exactly that state.
+
+
+## 2026-09-06: `/simulate` 500s on a well-formed request whose distribution drew infinities
+
+Date: 2026-09-06
+
+Command: `POST /api/v1/valuation/cases/{id}/simulate` with
+`{"case": {"wacc_converge_from": {"shape": "normal", "mean": 1e308, "sd": 1e308}}}`,
+and separately with `{"case": {"shares_basic": {"shape": "normal", "mean": 1.79e308, "sd": 1e306}}}`.
+
+Failure: HTTP 500 on both. The first raised
+`OverflowError: cannot convert float infinity to integer` from `_native`'s
+`int(value)`, which is called outside the sampling loop's `try`. The second was
+worse: the infinite draws were ACCEPTED by the engine (the value came back 0.0,
+finite), so they landed in `accepted_rows` and the failure surfaced later inside
+`spearman` as `x and y must be finite`. Neither is a refusal a caller can act on.
+
+Root cause: three modules held three different non-finite rules and none of
+them owned the DRAW. `distributions.py` rejects non-finite *parameters*,
+`rank_correlation.py` rejects non-finite *inputs*, and `case_simulate.py` counts
+a non-finite engine *result* as a refused sample. Finite parameters do not imply
+finite draws -- `normal(1e308, 1e308)` yields 229 infinities per 1000 from
+parameters `validate` accepts without complaint -- so an infinite draw fell
+through the gap between "parameters" and "results".
+
+A prior review had established that `math.isfinite` was a complete guard, and
+that was true of the engine's RETURN path; the finding was then generalised to
+the endpoint, which it did not cover. The gap was one frame earlier.
+
+Fix: `_draw` now refuses a distribution whose draws are not all finite,
+raising `SimulateRefused("invalid_distribution: ...")` naming the field and how
+many of the draws overflowed. Refused rather than counted, because a
+distribution whose draws overflow is a property of the caller's stated request,
+not an unlucky sample. That leaves one home per rule: `distributions.py` owns
+parameters, `case_simulate` owns draws and results, and `rank_correlation`'s
+guard becomes unreachable defence in depth from this path.
+
+Found in the same pass and fixed alongside: every surviving value can be finite
+while an AGGREGATE of them is not. 966 survivors near 1e306 sum to `inf`, so
+`mean` overflowed while every percentile stayed finite, and it reached the wire
+as `"mean": null` -- the shape the omit-not-null rule exists to prevent, and
+indistinguishable to a reader from an unmeasurable value. Each summary figure is
+now kept or omitted on its own merit, with a `not_finite` note naming what was
+dropped and why.
+
+Files changed: `apps/api/services/case_simulate.py`,
+`tests/api/test_case_simulate.py`.
+
+Prevention: found by the final whole-branch review probing the boundary
+between the three modules' non-finite rules -- not by any test, and not by the
+eleven per-task fix rounds that preceded it. The lesson is narrower than "test
+more": when two modules each guard a different stage of the same value, the
+untested territory is the stage BETWEEN them, and nobody owns it by default.
+Both paths now have tests, and both fail if the draw guard is removed.
