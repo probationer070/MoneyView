@@ -67,6 +67,18 @@ def test_it_matches_a_hand_computed_case():
     assert spearman(x, y) == pytest.approx(0.8)
 
 
+@pytest.mark.parametrize("bad_side,x,y", [
+    ("x", np.array([1.0, np.nan, 3.0]), np.array([1.0, 2.0, 3.0])),
+    ("y", np.array([1.0, 2.0, 3.0]), np.array([1.0, np.nan, 3.0])),
+])
+def test_the_refusal_names_which_array_was_not_finite(bad_side, x, y):
+    """`/simulate` now passes engine output here, so this message reaches a
+    debugger staring at a 10,000-sample run. "x and y must be finite" tells them
+    which function complained and not which array to look at."""
+    with pytest.raises(ValueError, match=f"^{bad_side} must be finite"):
+        spearman(x, y)
+
+
 def test_nan_in_x_raises():
     """A NaN is not silently ranked. np.argsort sorts it to the end and
     np.unique treats it as its own value, so without this guard a NaN would be

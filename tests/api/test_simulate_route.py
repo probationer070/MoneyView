@@ -119,3 +119,24 @@ def test_an_unmeasurable_association_is_null_and_that_is_deliberate(parent_id):
     rows = response.json()["data"]["association_among_accepted_samples"]
     assert [row["input"] for row in rows] == ["case.wacc_converge_from"]
     assert rows[0]["spearman"] is None
+
+
+def test_an_overflowed_aggregate_is_omitted_at_the_wire_not_nulled(parent_id):
+    """The sibling suppression path got a wire-level test for exactly this
+    reason; per-figure omission needs one too. Every surviving value here is
+    finite while their SUM overflows, so `mean` is dropped and the percentiles --
+    which are correct -- are kept. A `null` mean would be indistinguishable to a
+    reader from an unmeasurable one, and it is one `response_model` edit away."""
+    response = _post(parent_id, {
+        "runs": 1000, "seed": 42,
+        "distributions": {"case": {
+            "cash": {"shape": "uniform", "low": 1e307, "high": 1e308},
+            "ipo_proceeds": {"shape": "uniform", "low": 1e307, "high": 1e308},
+        }},
+    })
+    assert response.status_code == 200, response.text
+    data = response.json()["data"]
+    assert "mean" not in data
+    assert "mean" in data["not_finite"]
+    for kept in ("p10", "p50", "p90"):
+        assert kept in data, f"{kept} was correctly computed and must survive"

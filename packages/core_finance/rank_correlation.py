@@ -47,7 +47,11 @@ def spearman(x: np.ndarray, y: np.ndarray) -> float | None:
         # the coefficient: measured, one NaN in a 4-element array returns 0.4
         # rather than raising. A plausible-looking wrong number is worse than an
         # error, and /simulate will pass engine output here.
-        raise ValueError("x and y must be finite; filter NaN before correlating")
+        offender = "x" if not np.isfinite(x).all() else "y"
+        raise ValueError(
+            f"{offender} must be finite; filter non-finite values before "
+            "correlating"
+        )
     if x.size == 0:
         return None
 

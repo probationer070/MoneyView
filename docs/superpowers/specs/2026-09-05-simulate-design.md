@@ -322,6 +322,32 @@ than folklore.
 }
 ```
 
+### 7.2 A summary figure that overflows is omitted, not nulled
+
+Every surviving value can be finite while an **aggregate** of them is not:
+966 survivors near 1e306 sum past float max, so `mean` overflows while every
+percentile stays finite. Amended 2026-09-06, after the implementation found it.
+
+Each summary figure is therefore kept or omitted **on its own merit**, and a
+`not_finite` note names what was dropped and why:
+
+```jsonc
+{"p10": 3.1e305, "p50": 8.8e305, "p90": 1.5e306,
+ "not_finite": "omitted ['mean']: the surviving values are individually finite
+   but this aggregate of them overflows, so it cannot be reported as a number"}
+```
+
+This is **not** §6.3's suppression, and the distinction matters. Suppression
+drops the whole block because the *conditioning* compromises every figure in it.
+Here the percentiles are individually correct, and discarding them to hide a
+broken mean would throw away answers the caller asked for. What the two share is
+the rule they both serve: a figure that cannot be reported honestly is **absent**,
+never `null` — the JSON boundary renders a non-finite float as `null`, and a
+reader cannot tell an overflowed mean from an unmeasurable one.
+
+The cost, stated: a client must handle a summary that carries some figures and
+not others. That is a third response shape beyond the two §7 shows.
+
 ### 7.1 The ranking is an association, not a contribution
 
 Spearman rank correlation between each sampled input and the sampled output,
@@ -376,6 +402,7 @@ code, and there is no `{code, detail}` envelope. New prefixes are marked.
 | a claim on an unnarrated field | 422 | `unexpected_narrative:` |
 | a `shape` that is not one of the three | 422 | `unknown_shape:` **(new)** |
 | a shape's parameters missing or incoherent (`low >= high`, `sd <= 0`, `mode` outside `[low, high]`) | 422 | `invalid_distribution:` **(new)** |
+| a distribution whose DRAWS overflow though its parameters are finite | 422 | `invalid_distribution:` |
 | `runs` outside 1,000–20,000 | 422 | `invalid_runs:` **(new)** |
 | no distributions supplied | 422 | `no_distributions:` **(new)** |
 

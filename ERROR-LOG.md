@@ -2317,20 +2317,22 @@ commit `a1a7d86` added `test_a_partly_non_finite_run_reports_over_the_survivors_
 one commit later, which pins exactly that state.
 
 
-## 2026-09-06 -- `/simulate` returned 500 on a well-formed request whose distribution drew infinities
+## 2026-09-06: `/simulate` 500s on a well-formed request whose distribution drew infinities
 
-**Command:** `POST /api/v1/valuation/cases/{id}/simulate` with
+Date: 2026-09-06
+
+Command: `POST /api/v1/valuation/cases/{id}/simulate` with
 `{"case": {"wacc_converge_from": {"shape": "normal", "mean": 1e308, "sd": 1e308}}}`,
 and separately with `{"case": {"shares_basic": {"shape": "normal", "mean": 1.79e308, "sd": 1e306}}}`.
 
-**Failure:** HTTP 500 on both. The first raised
+Failure: HTTP 500 on both. The first raised
 `OverflowError: cannot convert float infinity to integer` from `_native`'s
 `int(value)`, which is called outside the sampling loop's `try`. The second was
 worse: the infinite draws were ACCEPTED by the engine (the value came back 0.0,
 finite), so they landed in `accepted_rows` and the failure surfaced later inside
 `spearman` as `x and y must be finite`. Neither is a refusal a caller can act on.
 
-**Root cause:** three modules held three different non-finite rules and none of
+Root cause: three modules held three different non-finite rules and none of
 them owned the DRAW. `distributions.py` rejects non-finite *parameters*,
 `rank_correlation.py` rejects non-finite *inputs*, and `case_simulate.py` counts
 a non-finite engine *result* as a refused sample. Finite parameters do not imply
@@ -2342,7 +2344,7 @@ A prior review had established that `math.isfinite` was a complete guard, and
 that was true of the engine's RETURN path; the finding was then generalised to
 the endpoint, which it did not cover. The gap was one frame earlier.
 
-**Fix:** `_draw` now refuses a distribution whose draws are not all finite,
+Fix: `_draw` now refuses a distribution whose draws are not all finite,
 raising `SimulateRefused("invalid_distribution: ...")` naming the field and how
 many of the draws overflowed. Refused rather than counted, because a
 distribution whose draws overflow is a property of the caller's stated request,
@@ -2358,10 +2360,10 @@ indistinguishable to a reader from an unmeasurable value. Each summary figure is
 now kept or omitted on its own merit, with a `not_finite` note naming what was
 dropped and why.
 
-**Files changed:** `apps/api/services/case_simulate.py`,
+Files changed: `apps/api/services/case_simulate.py`,
 `tests/api/test_case_simulate.py`.
 
-**Prevention:** found by the final whole-branch review probing the boundary
+Prevention: found by the final whole-branch review probing the boundary
 between the three modules' non-finite rules -- not by any test, and not by the
 eleven per-task fix rounds that preceded it. The lesson is narrower than "test
 more": when two modules each guard a different stage of the same value, the
