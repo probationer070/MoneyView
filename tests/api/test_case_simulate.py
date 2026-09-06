@@ -298,6 +298,25 @@ def test_the_association_pairs_each_output_with_the_draw_that_produced_it(parent
     reported = {row["input"]: row["spearman"]
                 for row in result["association_among_accepted_samples"]}
     assert reported[key] == pytest.approx(expected, rel=1e-12)
+
+    # The same replay pins each reported quantile to the quantile it is NAMED
+    # for. Spec section 10's first row -- "return the mean where p50 is asked
+    # for" -- passed 335 tests before this assertion existed, because the only
+    # other check on p10/p50/p90 was that they are in ascending order, which any
+    # monotone triple satisfies. A percentile is a specific number, not a
+    # position in a sorted list of three.
+    survivors = np.asarray(observed, dtype=float)
+    assert result["p10"] == pytest.approx(float(np.percentile(survivors, 10)), rel=1e-12)
+    assert result["p50"] == pytest.approx(float(np.percentile(survivors, 50)), rel=1e-12)
+    assert result["p90"] == pytest.approx(float(np.percentile(survivors, 90)), rel=1e-12)
+
+    # This fixture's survivors are near 1e306, so their SUM overflows while
+    # every percentile stays finite. `mean` is therefore omitted -- not null --
+    # and the response says which figure went and why. Each summary figure is
+    # kept or dropped on its own merit rather than as a block.
+    assert "mean" not in result
+    assert not math.isfinite(float(survivors.mean()))
+    assert "mean" in result["not_finite"]
     assert len(accepted_x) == result["runs_valid"]
 
 
@@ -327,3 +346,35 @@ def test_max_runs_is_accepted_by_the_bounds_check(parent_id):
     an empty distributions dict fails on no_distributions, not invalid_runs."""
     with pytest.raises(SimulateRefused, match="no_distributions"):
         simulate_case(parent_id, {"runs": MAX_RUNS, "distributions": {}})
+
+
+def test_a_distribution_whose_draws_overflow_is_refused(parent_id):
+    """Finite PARAMETERS do not imply finite DRAWS: normal(1e308, 1e308) yields
+    infinities from parameters `distributions.validate` accepts, because the
+    overflow happens in the draw rather than in the stated numbers.
+
+    Before this guard nothing owned that gap -- distributions.py owns parameters
+    and the sampling loop owns engine RESULTS -- so an infinite draw reached
+    `_native`'s int() as an uncaught OverflowError, or was accepted by the engine
+    and later raised inside `spearman`. Both were 500s on a well-formed request.
+    Refused rather than counted: a distribution whose draws overflow is one the
+    caller got wrong, which is a property of the request, not an unlucky sample.
+    """
+    with pytest.raises(SimulateRefused, match="invalid_distribution"):
+        simulate_case(parent_id, {
+            "runs": 1000, "seed": 42,
+            "distributions": {"case": {"wacc_converge_from": {
+                "shape": "normal", "mean": 1e308, "sd": 1e308}}},
+        })
+
+
+def test_the_other_overflow_path_is_refused_too(parent_id):
+    """The second 500 the review found, via a different field: infinite draws
+    the ENGINE accepts (value -> 0.0, finite) land in accepted_rows and reach
+    `spearman`, which refuses non-finite input. Same guard closes both."""
+    with pytest.raises(SimulateRefused, match="invalid_distribution"):
+        simulate_case(parent_id, {
+            "runs": 1000, "seed": 42,
+            "distributions": {"case": {"shares_basic": {
+                "shape": "normal", "mean": 1.79e308, "sd": 1e306}}},
+        })

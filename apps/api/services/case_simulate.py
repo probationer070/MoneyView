@@ -171,6 +171,22 @@ def _draw(planned: dict[str, dict], runs: int, rng: np.random.Generator) -> dict
     drawn: dict[str, np.ndarray] = {}
     for key, plan in planned.items():
         values = sample(plan["shape"], plan["params"], runs, rng)
+        if not np.isfinite(values).all():
+            # Finite PARAMETERS do not imply finite DRAWS: normal(1e308, 1e308)
+            # yields infinities from parameters `distributions.validate`
+            # accepts. Nothing owned this gap -- distributions.py owns
+            # parameters and the sampling loop owns engine RESULTS -- so an
+            # infinite draw reached `_native`'s int() as an uncaught
+            # OverflowError, or was accepted by the engine and later raised
+            # inside `spearman`. Both were 500s on a well-formed request.
+            #
+            # Refused rather than counted: this is a property of the caller's
+            # STATED distribution, not an unlucky sample.
+            raise SimulateRefused(
+                f"invalid_distribution: {key} drew "
+                f"{int((~np.isfinite(values)).sum())} non-finite values of "
+                f"{runs} -- its parameters are finite but its draws are not"
+            )
         field = key.rsplit(".", 1)[1]
         if field in _INTEGER_FIELDS:
             values = np.rint(values)
@@ -254,13 +270,34 @@ def simulate_case(case_id: int, request: dict) -> dict:
         return result
 
     observed = np.asarray(values, dtype=float)
-    counts, edges = np.histogram(observed, bins=_HISTOGRAM_BINS)
-    accepted = np.asarray(accepted_rows, dtype=int)
-    result.update({
+
+    # Every surviving VALUE can be finite while an AGGREGATE of them is not:
+    # 966 survivors near 1e306 sum to inf, so `mean` overflows while every
+    # percentile stays finite. Each figure is kept or omitted on its own merit.
+    # Omitted, never null: the JSON boundary renders a non-finite float as
+    # `null`, and a reader cannot tell an overflowed mean from an unmeasurable
+    # one. Dropping the percentiles too would discard correct answers.
+    summary = {
         "p10": float(np.percentile(observed, 10)),
         "p50": float(np.percentile(observed, 50)),
         "p90": float(np.percentile(observed, 90)),
         "mean": float(observed.mean()),
+    }
+    overflowed = sorted(name for name, figure in summary.items()
+                        if not math.isfinite(figure))
+    for name in overflowed:
+        del summary[name]
+    if overflowed:
+        result["not_finite"] = (
+            f"omitted {overflowed}: the surviving values are individually "
+            "finite but this aggregate of them overflows, so it cannot be "
+            "reported as a number"
+        )
+
+    counts, edges = np.histogram(observed, bins=_HISTOGRAM_BINS)
+    accepted = np.asarray(accepted_rows, dtype=int)
+    result.update({
+        **summary,
         "histogram": [
             {"lower": float(edges[i]), "upper": float(edges[i + 1]), "count": int(counts[i])}
             for i in range(len(counts))
