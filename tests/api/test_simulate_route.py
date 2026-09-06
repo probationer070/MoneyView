@@ -83,3 +83,39 @@ def test_a_malformed_body_is_a_422_from_the_schema(parent_id):
     string -- assert the status, not a prefix."""
     assert _post(parent_id, {"runs": 1000, "distributions": "nope"}).status_code == 422
     assert _post(parent_id, {"distributions": {"case": {}}}).status_code == 422
+
+
+def test_a_suppressed_response_omits_the_summary_at_the_wire(parent_id):
+    """The omit-not-null rule is pinned at the service layer, but it survives
+    HTTP only because the route passes the dict through unchanged. One
+    `response_model` edit away from silently emitting nulls, so it is asserted
+    where it can actually break."""
+    response = _post(parent_id, {
+        "runs": 1000, "seed": 42,
+        "distributions": {"case": {"terminal_growth": {
+            "shape": "uniform", "low": 0.020, "high": 0.200}}},
+    })
+    assert response.status_code == 200, response.text
+    data = response.json()["data"]
+    assert data["refused_fraction"] >= 0.10
+    for omitted in ("p10", "p50", "p90", "mean", "histogram",
+                    "association_among_accepted_samples"):
+        assert omitted not in data, f"{omitted} should be omitted, not present"
+    assert "conditional on the engine accepting" in data["suppressed"]
+
+
+def test_an_unmeasurable_association_is_null_and_that_is_deliberate(parent_id):
+    """A degenerate band -- every draw rounds to the same integer -- makes the
+    association unmeasurable rather than zero. `null` is the honest wire value
+    for that: 0.0 would claim "measured, found unrelated", which is a different
+    statement. This is the one deliberate null in the response, so it is pinned
+    rather than left to look like an oversight."""
+    response = _post(parent_id, {
+        "runs": 1000, "seed": 42,
+        "distributions": {"case": {"wacc_converge_from": {
+            "shape": "uniform", "low": 3.1, "high": 3.4}}},
+    })
+    assert response.status_code == 200, response.text
+    rows = response.json()["data"]["association_among_accepted_samples"]
+    assert [row["input"] for row in rows] == ["case.wacc_converge_from"]
+    assert rows[0]["spearman"] is None

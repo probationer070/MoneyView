@@ -2312,4 +2312,58 @@ draws non-finite, `refused_fraction = 0.034` (below the suppression cap) -- and 
 response is not suppressed: it reports `p10`/`p50`/`p90`/`mean`/`histogram`/
 `association_among_accepted_samples` computed over the 966 finite survivors only, with
 the accounting identity still holding across all three fields. This mixed case is not
-separately asserted by a checked-in test as of this entry.
+separately asserted by a checked-in test when this entry was written;
+commit `a1a7d86` added `test_a_partly_non_finite_run_reports_over_the_survivors_and_says_so`
+one commit later, which pins exactly that state.
+
+
+## 2026-09-06 -- `/simulate` returned 500 on a well-formed request whose distribution drew infinities
+
+**Command:** `POST /api/v1/valuation/cases/{id}/simulate` with
+`{"case": {"wacc_converge_from": {"shape": "normal", "mean": 1e308, "sd": 1e308}}}`,
+and separately with `{"case": {"shares_basic": {"shape": "normal", "mean": 1.79e308, "sd": 1e306}}}`.
+
+**Failure:** HTTP 500 on both. The first raised
+`OverflowError: cannot convert float infinity to integer` from `_native`'s
+`int(value)`, which is called outside the sampling loop's `try`. The second was
+worse: the infinite draws were ACCEPTED by the engine (the value came back 0.0,
+finite), so they landed in `accepted_rows` and the failure surfaced later inside
+`spearman` as `x and y must be finite`. Neither is a refusal a caller can act on.
+
+**Root cause:** three modules held three different non-finite rules and none of
+them owned the DRAW. `distributions.py` rejects non-finite *parameters*,
+`rank_correlation.py` rejects non-finite *inputs*, and `case_simulate.py` counts
+a non-finite engine *result* as a refused sample. Finite parameters do not imply
+finite draws -- `normal(1e308, 1e308)` yields 229 infinities per 1000 from
+parameters `validate` accepts without complaint -- so an infinite draw fell
+through the gap between "parameters" and "results".
+
+A prior review had established that `math.isfinite` was a complete guard, and
+that was true of the engine's RETURN path; the finding was then generalised to
+the endpoint, which it did not cover. The gap was one frame earlier.
+
+**Fix:** `_draw` now refuses a distribution whose draws are not all finite,
+raising `SimulateRefused("invalid_distribution: ...")` naming the field and how
+many of the draws overflowed. Refused rather than counted, because a
+distribution whose draws overflow is a property of the caller's stated request,
+not an unlucky sample. That leaves one home per rule: `distributions.py` owns
+parameters, `case_simulate` owns draws and results, and `rank_correlation`'s
+guard becomes unreachable defence in depth from this path.
+
+Found in the same pass and fixed alongside: every surviving value can be finite
+while an AGGREGATE of them is not. 966 survivors near 1e306 sum to `inf`, so
+`mean` overflowed while every percentile stayed finite, and it reached the wire
+as `"mean": null` -- the shape the omit-not-null rule exists to prevent, and
+indistinguishable to a reader from an unmeasurable value. Each summary figure is
+now kept or omitted on its own merit, with a `not_finite` note naming what was
+dropped and why.
+
+**Files changed:** `apps/api/services/case_simulate.py`,
+`tests/api/test_case_simulate.py`.
+
+**Prevention:** found by the final whole-branch review probing the boundary
+between the three modules' non-finite rules -- not by any test, and not by the
+eleven per-task fix rounds that preceded it. The lesson is narrower than "test
+more": when two modules each guard a different stage of the same value, the
+untested territory is the stage BETWEEN them, and nobody owns it by default.
+Both paths now have tests, and both fail if the draw guard is removed.

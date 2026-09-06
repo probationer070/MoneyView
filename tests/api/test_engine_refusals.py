@@ -93,9 +93,15 @@ def test_an_unrecognised_message_is_other_not_a_guess():
 
 
 def test_the_first_matching_row_wins_and_the_table_is_ordered():
-    """`roic_stable ... must exceed wacc_stable` also contains 'must exceed',
-    which the spread row could match. Order is load-bearing, so it is asserted
-    rather than left to reading order."""
+    """Order is DEFENSIVE INSURANCE, not currently load-bearing.
+
+    This docstring used to claim the two rows could collide because both
+    messages contain "must exceed". They cannot: the markers are
+    "must exceed wacc_stable" and "terminal spread is not positive", and neither
+    message contains the other's -- reordering the table leaves both classifying
+    correctly, and `test_no_raise_site_matches_two_markers` asserts that no
+    message anywhere matches two markers. The assertion stays because order
+    WOULD become load-bearing if either marker were ever weakened."""
     codes = [code for code, _ in REFUSAL_CODES]
     assert codes.index("roic_below_wacc") < codes.index("terminal_spread_not_positive")
 
@@ -370,3 +376,71 @@ def test_a_raise_whose_message_cannot_be_read_is_reported_not_skipped(tmp_path):
     # The attribute form is recognised as a ValueError at all, which the old
     # bare-`func.id` callee check did not manage.
     assert readable == [(7, ["plain ", " message"])]
+
+
+# code -> how many engine raise sites that code currently claims. Measured, not
+# assumed: `_raise_message_fragments` produces it, and the test below recomputes
+# it live.
+_EXPECTED_SITE_COUNTS = {
+    "curve_conflicts_with_ramp": 2,
+    "gap_curve_wrong_horizon": 1,
+    "horizon_incoherent": 3,
+    "initial_growth_below_negative_one": 1,
+    "negative_balance": 6,
+    "non_positive_rate": 7,
+    "ramp_conflicts_with_base_revenue": 1,
+    "ramp_leaves_no_years": 1,
+    "ramp_start_year_below_one": 1,
+    "rate_out_of_unit_interval": 2,
+    "roic_above_marginal_return": 1,
+    "roic_below_growth_magnitude": 1,
+    "roic_below_wacc": 1,
+    "target_revenue_unreachable": 2,
+    "terminal_growth_above_riskfree": 1,
+    "terminal_spread_not_positive": 1,
+    "two_curves_conflict": 1,
+    "wacc_below_negative_one": 1,
+    "waypoint_gap_fraction_out_of_range": 1,
+}
+
+
+def _live_site_counts() -> tuple[dict[str, int], list[tuple[str, int, list[str]]]]:
+    """Per-code raise-site counts, and any site matching more than one marker."""
+    counts: dict[str, int] = {}
+    multi: list[tuple[str, int, list[str]]] = []
+    for source in _ENGINE_SOURCES:
+        readable, _ = _raise_message_fragments(source)
+        for line, fragments in readable:
+            hits = {code for code, marker in REFUSAL_CODES
+                    for fragment in fragments if marker in fragment}
+            if len(hits) > 1:
+                multi.append((source, line, sorted(hits)))
+            for code in hits:
+                counts[code] = counts.get(code, 0) + 1
+    return counts, multi
+
+
+def test_each_code_claims_the_number_of_raise_sites_it_is_expected_to():
+    """Closes the escape the structural test cannot see on its own.
+
+    That test catches an engine message matched by NO row. It cannot catch one
+    matched by the WRONG row: a new raise whose message happens to contain an
+    existing marker is absorbed silently, and since /simulate counts refusals BY
+    GROUP, a mis-grouped site corrupts the very number this table produces. That
+    is what the old bare-token `ramp_start_year` row did to five distinct guards.
+
+    Counting sites per code catches it -- absorption moves a count 1 -> 2 -- and
+    unlike a code -> {file:line} map it is immune to line drift, so it costs one
+    integer edit exactly when someone adds a raise site, which is the moment a
+    human should look at the grouping anyway."""
+    counts, _ = _live_site_counts()
+    assert counts == _EXPECTED_SITE_COUNTS
+
+
+def test_no_raise_site_matches_two_markers():
+    """The ordering test asserts the table's order; this asserts order cannot
+    matter. If no message matches two markers, first-match-wins is insurance
+    rather than behaviour -- which is what `engine_refusals`'s own comment says,
+    and what the docstring on the ordering test used to deny."""
+    _, multi = _live_site_counts()
+    assert multi == []

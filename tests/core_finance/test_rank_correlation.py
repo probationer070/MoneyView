@@ -93,10 +93,15 @@ def test_infinity_raises():
 
 
 def test_empty_input_is_none_with_no_warning():
-    """Zero valid samples is a real outcome /simulate can reach when every
-    draw is refused. None is the right answer, but the empty-slice arithmetic
+    """None is the right answer for zero samples, and the empty-slice arithmetic
     on the way there must not emit a numpy RuntimeWarning -- a run configured
-    with -W error would fail on it otherwise."""
+    with -W error would fail on it otherwise.
+
+    Note on reachability: /simulate cannot actually reach this. When every draw
+    is refused the refused fraction is 1.0, which suppresses the summary and
+    returns before `spearman` is ever called. The guard is defence in depth for
+    any future caller, not a live path -- an earlier version of this docstring
+    claimed otherwise."""
     with warnings.catch_warnings():
         warnings.simplefilter("error")
         result = spearman(np.array([]), np.array([]))

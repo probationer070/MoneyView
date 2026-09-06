@@ -63,6 +63,12 @@ def test_the_same_seed_gives_the_same_draw():
     ("normal", {"mean": 0.1, "sd": float("inf")}, "must be finite"),
     ("uniform", {"low": float("nan"), "high": 1.0}, "must be finite"),
     ("uniform", {"low": 0.0, "high": float("inf")}, "must be finite"),
+    # NOTE: this triangular case does NOT isolate the finiteness guard.
+    # Triangular's chained `low <= mode <= high` is False for a NaN in ANY
+    # of the three positions, so with the guard removed this case still
+    # raises -- it fails on a message mismatch ("mode must lie between"),
+    # not on a missing exception. Verified by mutation. The cases that DO
+    # isolate the guard are the normal and uniform ones above.
     ("triangular", {"low": 0.0, "mode": float("nan"), "high": 1.0}, "must be finite"),
 ])
 def test_invalid_parameters_are_refused_by_name(shape, params, message):
@@ -71,6 +77,20 @@ def test_invalid_parameters_are_refused_by_name(shape, params, message):
     frame, and a bool reaching the engine becomes 1.0 -- a stored assumption
     nobody typed."""
     with pytest.raises(ValueError, match=message):
+        validate(shape, params)
+
+
+@pytest.mark.parametrize("shape,params", [
+    ("uniform", {"low": 0.07, "high": 0.08, "mode": 0.09}),
+    ("uniform", {"low": 0.07, "high": 0.08, "typo": 5}),
+    ("normal", {"mean": 0.1, "sd": 0.2, "low": 0.0}),
+    ("triangular", {"low": 0.0, "mode": 0.5, "high": 1.0, "sd": 0.1}),
+])
+def test_unknown_parameters_are_refused_rather_than_ignored(shape, params):
+    """`mode` on a `uniform` is not a harmless extra: silently ignoring it hands
+    the caller a different distribution from the one they wrote down, and this
+    endpoint exists to take a stated distribution seriously."""
+    with pytest.raises(ValueError, match="unknown parameter"):
         validate(shape, params)
 
 

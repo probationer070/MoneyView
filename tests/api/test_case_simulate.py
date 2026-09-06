@@ -332,6 +332,22 @@ def test_confidence_absent_on_a_narrated_field_is_accepted(parent_id):
     assert result["runs_requested"] == 1000
 
 
+@pytest.mark.parametrize("supplied", ["", None, 0, "totally_not_a_real_value"])
+def test_a_supplied_falsy_or_invalid_confidence_is_refused(parent_id, supplied):
+    """The falsy cases are the point. `case_fork` shipped `or "assumed"`, which
+    treated a SUPPLIED empty string, null or zero as absent and silently stored
+    the default -- a confidence level nobody chose. That was fixed there and the
+    same `in raw` rather than `or` pattern is used here; these rows are what
+    would catch a regression back to it."""
+    with pytest.raises(SimulateRefused, match="narrative_required"):
+        simulate_case(parent_id, {
+            "runs": 1000,
+            "distributions": {"segments": {"Core": {"margin_target": {
+                "shape": "normal", "mean": 0.28, "sd": 0.01,
+                "claim": "c", "three_p": "possible",
+                "confidence": supplied}}}}})
+
+
 def test_a_supplied_invalid_confidence_is_refused(parent_id):
     with pytest.raises(SimulateRefused, match="narrative_required"):
         simulate_case(parent_id, {"runs": 1000, "distributions": {

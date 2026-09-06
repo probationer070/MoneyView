@@ -56,6 +56,18 @@ def validate(shape: str, params: Mapping[str, object]) -> None:
             f"{shape} needs parameters {list(required)}, missing {missing}"
         )
 
+    unknown = sorted(set(params) - set(required))
+    if unknown:
+        # A caller who writes `mode` on a `uniform`, or misspells a parameter,
+        # otherwise gets a silently DIFFERENT distribution from the one they
+        # described -- and this endpoint exists to take a stated distribution
+        # seriously. `case_simulate` strips the non-parameter keys (shape,
+        # claim, three_p, confidence, evidence_source) before calling here, so
+        # anything left over is genuinely unrecognised.
+        raise ValueError(
+            f"{shape} got unknown parameter(s) {unknown}; it takes {list(required)}"
+        )
+
     values = {name: _number(shape, name, params[name]) for name in required}
 
     if shape == "normal":

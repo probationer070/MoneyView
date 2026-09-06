@@ -378,12 +378,13 @@ and CLAUDE.md section 8. Suite: 882 passing, no skips or xfails.
       per draw, and reports percentiles and a per-input association over the
       accepted draws. Spec: `docs/superpowers/specs/2026-09-05-simulate-design.md`.
       Plan: `docs/superpowers/plans/2026-09-05-simulate.md`. Commits
-      `e4b726c..0b4bdab`. Four modules: `packages/core_finance/distributions.py`
+      `f11bba0..2977714`. Four modules: `packages/core_finance/distributions.py`
       (shapes and sampling), `packages/core_finance/rank_correlation.py`
       (Spearman), `apps/api/services/engine_refusals.py` (refusal
       classification), `apps/api/services/case_simulate.py` (the service), and
       one route in `apps/api/routes/valuation.py`. Suite: 1042 -> 1160
-      (`tests/api` 808 -> 859).
+      (`tests/api` 774 -> 859, all 85 in three new files; no pre-existing
+      `tests/api` file was modified).
 
       **Distributions are caller-stated, not derived, for the same reason a
       forked field carries a claim.** A distribution asserts more than a point
