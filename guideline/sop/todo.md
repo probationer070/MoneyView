@@ -225,7 +225,7 @@ and CLAUDE.md section 8. Suite: 882 passing, no skips or xfails.
 
 ---
 
-## Track C - Frontend  [C1 SHIPPED 2026-09-04; C2 HALF-SHIPPED 2026-09-05 -- /fork and /diff done, Monte Carlo and /pricing open]
+## Track C - Frontend  [C1 SHIPPED 2026-09-04; C2 STILL OPEN -- /fork, /diff and /simulate shipped 2026-09-05/06, /pricing and any UI remain]
 
 - [x] **C1. The valuation tab -- shipped 2026-09-04.** `/valuation` surfaces
       `GET /api/v1/valuation/verdict/{ticker}`, which had shipped with no UI at
@@ -277,9 +277,9 @@ and CLAUDE.md section 8. Suite: 882 passing, no skips or xfails.
       in this page; refusal is the majority state in the real data, and the page
       was designed for it and stays correct when A1 lands.
 
-- [ ] **C2. 3c - uncertainty and attribution.** STILL OPEN, but half of it
-      shipped 2026-09-05: **`/fork` and `/diff` are done; Monte Carlo
-      (`/simulate`) and `/pricing` are not.** Spec:
+- [ ] **C2. 3c - uncertainty and attribution.** STILL OPEN, but two-thirds of it
+      shipped 2026-09-05/06: **`/fork`, `/diff` and `/simulate` are done;
+      `/pricing` is not, and neither is any UI.** Spec (`/fork`/`/diff`):
       `docs/superpowers/specs/2026-09-04-fork-and-diff-design.md`.
       Plan: `docs/superpowers/plans/2026-09-04-fork-and-diff.md`.
       A separate subsystem from C1: no shared endpoint, no shared component, and
@@ -372,9 +372,133 @@ and CLAUDE.md section 8. Suite: 882 passing, no skips or xfails.
       passed for the wrong reason and were found by mutation; the count is in
       the record because it is the argument for running the gate at all.
 
-      Still open in C2: Monte Carlo (`/simulate`), `/pricing`, and any UI --
-      `/fork` and `/diff` are HTTP-only, exactly as `/valuation/verdict` was
-      before C1.
+      **`/simulate` — Monte Carlo over stated input distributions, shipped
+      2026-09-06.** `POST /api/v1/valuation/cases/{id}/simulate` samples every
+      distributed input independently, runs the segment build-up engine once
+      per draw, and reports percentiles and a per-input association over the
+      accepted draws. Spec: `docs/superpowers/specs/2026-09-05-simulate-design.md`.
+      Plan: `docs/superpowers/plans/2026-09-05-simulate.md`. Commits
+      `e4b726c..0b4bdab`. Four modules: `packages/core_finance/distributions.py`
+      (shapes and sampling), `packages/core_finance/rank_correlation.py`
+      (Spearman), `apps/api/services/engine_refusals.py` (refusal
+      classification), `apps/api/services/case_simulate.py` (the service), and
+      one route in `apps/api/routes/valuation.py`. Suite: 1042 -> 1160
+      (`tests/api` 808 -> 859).
+
+      **Distributions are caller-stated, not derived, for the same reason a
+      forked field carries a claim.** A distribution asserts more than a point
+      estimate -- not just a value but a shape and a spread -- so every
+      distributed input carries a `claim` and a `three_p` exactly as
+      `case_fork._unwrap` requires for a narrated field, refused with
+      `narrative_required:` if either is absent. Deriving spread from
+      `industry_benchmark` was rejected: its `stdev_price` (94 rows, vintage
+      2026-01-01) is price dispersion ACROSS FIRMS, not dispersion of a DCF
+      input -- mapping it onto `wacc_stable` or `margin_target` would attach a
+      basis it has not earned, the defect class `ERROR-LOG.md` already records
+      four times elsewhere. A fixed +/- band was rejected too: honest about
+      being arbitrary, but every reported percentile then inherits an arbitrary
+      width the reader cannot see.
+
+      **Three shapes only** -- `triangular` (`low`/`mode`/`high`, the natural
+      form of an elicited range), `normal` (`mean`/`sd`, symmetric
+      uncertainty), `uniform` (`low`/`high`, "anywhere in this band, no view").
+      `lognormal` is deliberately absent: truncation against the engine's own
+      bounds governs the tails far more than tail shape does, and a shape
+      nobody asked for is a shape nobody has justified.
+
+      **The accounting identity is `runs_valid + runs_refused ==
+      runs_requested`,** asserted on every response, because a refused sample
+      is data about the model, not a failed request -- `/diff` refuses the
+      whole request when one coalition is unrunnable, but refusing a
+      10,000-run simulation over one bad tail draw would make the endpoint
+      unusable exactly when the caller's stated spread is widest. Dropping a
+      refused sample does not bias an estimate of the same quantity: it
+      changes WHICH quantity is estimated, from the distribution of
+      `value_per_share_diluted` under the stated distributions to that
+      distribution CONDITIONAL on the engine accepting the inputs. Below
+      `REFUSED_FRACTION_CAP = 0.10` the response still reports
+      `refused_fraction` so that conditioning is visible even when small; at or
+      above it, `p10`/`p50`/`p90`/`mean`/`histogram`/
+      `association_among_accepted_samples` are OMITTED -- keys absent, never
+      `null` and never zero, the same "a refusal is content" rule C1's verdict
+      panel already follows.
+
+      **The ranking is an association, deliberately not a contribution.**
+      `/diff`'s contributions are exact Shapley values in per-share units that
+      sum to the difference being explained. `association_among_accepted_samples`
+      is Spearman rank correlation between each sampled input and the sampled
+      output, computed free from the same accepted draws: unitless, summing to
+      nothing, describing monotonic association rather than an exact
+      decomposition. The field is named for its conditioning rather than
+      called `association` bare, so the conditional-on-acceptance reading
+      travels with the number into whatever spreadsheet it lands in.
+
+      **The single most useful sentence for the next reader: a linear fixture
+      cannot distinguish Spearman from Pearson.** The engine is nonlinear and
+      monotonic, so Pearson would understate a strong curved relationship and
+      misrank a nonlinear driver below a weak linear one -- but a
+      hand-computed LINEAR test cannot show that, because the two coefficients
+      agree on a line. This is the THIRD appearance of that exact trap in this
+      repository (the Shapley-vs-sequential-walk test in `/diff` needed a
+      nonlinear fixture for the same reason one plan earlier, and
+      `rank_correlation`'s own hand-computed formula test turned out unable to
+      discriminate the two, for the same reason, when checked) -- and it is
+      the FIRST time it was designed against up front,
+      `test_a_monotonic_nonlinear_relation_is_exactly_one`, rather than
+      rediscovered after a mutation slipped through.
+
+      Mutations, each shown to fail a named test, picked for what they teach
+      rather than for completeness -- the ledger records every mutation run
+      across all six tasks of this plan:
+
+      | Guarantee | Mutation that failed it |
+      | --- | --- |
+      | A distribution parameter is rejected before it reaches numpy | `sd=NaN` / `low=NaN` admitted silently, `sample()` returning an all-NaN array with no exception -- `distributions.py` now rejects NaN and +/-infinity before any shape-specific check |
+      | Spearman, not positional ranking | `x=[1,1,2,3]` against `y=[10,20,30,40]` gives 0.9487 with average ranks and exactly 1.0 with positional ranks -- the ORIGINAL tie fixture was co-monotonic in both x and y and could not tell the two apart, and was replaced |
+      | A non-finite association input raises rather than silently folding in | `spearman([1, nan, 3, 4], [1,2,3,4])` returned a plausible 0.4 instead of raising, because `np.argsort` sorts NaN to the end -- now raises |
+      | Sampled INTEGER fields are rounded, not truncated | dropping `np.rint` in `_draw` biases every sampled integer field low by ~0.5 (measured over `uniform(3,7)`, 20,000 draws: mean 5.0023 rounded vs 4.4992 truncated, top value unreachable) -- `_native`'s `int()` is a type conversion, not a substitute rounding step |
+      | `runs_requested` is the field actually reported | `runs_requested = len(values)` escaped the first round because the identity test compared against a literal `2000`, not `result["runs_requested"]` -- fixed by reading the field itself |
+      | Suppression fires exactly at the cap | `>=` -> `>` in an extracted `_is_suppressed` predicate, tested directly at exactly 0.10 -- no sampling fixture lands on that fraction by chance |
+      | A non-finite engine result is counted, not a 500 | `cash=1e308` + `ipo_proceeds=1e308` overflows to `inf` inside the engine with no `raise`, reaching `np.histogram` as an uncaught `ValueError` -- now caught by an explicit `math.isfinite` check and counted under `non_finite_result`, a code deliberately kept OUT of `engine_refusals.REFUSAL_CODES` since there is no raise site to enumerate |
+      | The association pairs each output with the draw that produced it | `spearman(drawn[key][accepted], ...)` -> `spearman(drawn[key][:len(accepted)], ...)` -- same array length, wrong pairing -- left every other test green and collapsed the true coefficient from 0.6747 to 0.0789; caught only by an independent-replay oracle that reseeds and reruns the same draw itself |
+      | Refusal codes are complete against the engine's own source, not against what anyone imagined | a structural test `ast`-parses every `raise ValueError` in `segment_valuation.py` and `dcf.py` and requires each matched by a code or an explicit allowlisted reason; three rounds of hand-driven perturbation found nine uncovered messages (6, then 1, then 2) before the parser existed, and the parser itself surfaced two more on its first run |
+      | An unparseable raise site fails loudly rather than being silently skipped | a raise built by `+`-concatenation, `%`-formatting, `.format()`, or a message assembled in a variable first all extracted zero fragments and fell through unseen -- the parser now fails the site instead of skipping it |
+      | All nine spec section 9 refusal prefixes are pinned through HTTP, not only at the service layer | replacing `SimulateRefused`'s detail with a constant fails all eight prefix-parametrized route tests |
+
+      **Known, parked limitation carried forward from the refusal-classifier
+      work:** a MATCHED refusal code is not necessarily a CORRECTLY matched
+      one -- matching is substring-across-the-whole-table, so a reworded engine
+      message could be silently absorbed under the wrong code while still
+      passing the completeness test. Recorded in the structural test's own
+      docstring rather than fixed here: the fix needs a design decision (an
+      exact code -> line-number map) with a maintenance cost nobody has weighed
+      yet, and /simulate's whole purpose is counting refusals BY GROUP, so a
+      mis-grouped site corrupts the number this table exists to produce -- a
+      priority for a future round, not something to absorb inside this one.
+      Also carried forward: the confidence-validation tests cover only one
+      invalid string, not the falsy `""`/`None`/`0` cases `case_fork` was
+      specifically fixed for.
+
+      **Verified before writing this entry** (2026-09-06, HEAD `0b4bdab`):
+      `python -m pytest -q` -> **1160 passed** (`tests/api` alone: 859,
+      matching the figure already on record at this HEAD; the plan's baseline
+      before it started was 1042). `git diff --name-only renewal..HEAD --
+      apps/web` -> **empty**: this work is API-only, as designed. Re-measured
+      through `simulate_case` itself, not `run_case_payload` alone: a
+      1,000-run simulation on the one-segment fixture this plan's own suite
+      uses throughout (`tests/api/test_case_fork._parent_payload`) took
+      0.5544s / 0.5562s / 0.5476s wall clock across three runs, **~0.55
+      ms/run** -- AGREEING with the spec's section 4.3 figure of 0.550 ms/run
+      for that same fixture, which had been measured only through
+      `run_case_payload`. So the real end-to-end path adds no measurable
+      overhead beyond the engine call itself. The four-segment seeded case's
+      faster figure (0.134 ms/run) and the 4x gap between the two remain
+      UNEXPLAINED, as the spec already states; that stored case was not
+      available inside the isolated test database to re-measure, and this
+      entry does not claim to have closed that gap.
+
+      Still open in C2: `/pricing`, and any UI -- `/fork`, `/diff` and
+      `/simulate` are HTTP-only, exactly as `/valuation/verdict` was before C1.
 
 ---
 
