@@ -59,6 +59,20 @@ REFUSAL_CODES: tuple[tuple[str, str], ...] = (
     ("ramp_leaves_no_years", "leaves no years to ramp over"),
     ("horizon_incoherent", "must be after base_year"),
     ("wacc_below_negative_one", "wacc must exceed -100%"),
+    # Not shortened to "must exceed -100%": that would collide with
+    # `wacc_below_negative_one`'s message, which contains the identical bare
+    # phrase for a different field.
+    ("initial_growth_below_negative_one", "initial_growth must exceed -100%"),
+    ("waypoint_gap_fraction_out_of_range", "must lie strictly between 0 and 1"),
+    # Found by the structural test (fix round 3): reachable by combining a
+    # stored segment's waypoint_gap_fraction with a sampled target_year/
+    # base_year that changes the horizon away from the 10-year, two-5-year-
+    # block shape the gap-closing curve is hardcoded for.
+    ("gap_curve_wrong_horizon", "the gap-closing curve is defined for a"),
+    # Found by the structural test: setting BOTH curve-selecting fields at
+    # once on a stored segment (both numeric, both real values) is a
+    # reachable combination, same pattern as `curve_conflicts_with_ramp`.
+    ("two_curves_conflict", "are different revenue curves and cannot both be set"),
 )
 
 
