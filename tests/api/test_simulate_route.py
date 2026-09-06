@@ -45,6 +45,16 @@ def test_simulating_an_unknown_case_is_a_404():
     ({"runs": 1000, "distributions": {"case": {"nope": {
         "shape": "normal", "mean": 1.0, "sd": 0.1}}}}, "unknown_field:"),
     ({"runs": 1000, "distributions": {}}, "no_distributions:"),
+    ({"runs": 1000, "distributions": {"segments": {"Cor": {"margin_target": {
+        "shape": "normal", "mean": 0.28, "sd": 0.01,
+        "claim": "c", "three_p": "possible"}}}}}, "unknown_segment:"),
+    ({"runs": 1000, "distributions": {"case": {"wacc_stable": {
+        "shape": "uniform", "low": 0.09, "high": 0.07}}}}, "invalid_distribution:"),
+    ({"runs": 1000, "distributions": {"segments": {"Core": {"margin_target": {
+        "shape": "normal", "mean": 0.28, "sd": 0.01}}}}}, "narrative_required:"),
+    ({"runs": 1000, "distributions": {"case": {"wacc_stable": {
+        "shape": "normal", "mean": 0.074, "sd": 0.001,
+        "claim": "c", "three_p": "possible"}}}}, "unexpected_narrative:"),
 ])
 def test_a_refused_request_carries_its_prefix(parent_id, body, prefix):
     """The prefix IS the code: a caller branches on it without parsing prose."""
