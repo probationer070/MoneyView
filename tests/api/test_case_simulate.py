@@ -1,16 +1,22 @@
+import math
+
 import numpy as np
 import pytest
 
 from apps.api.services.case_simulate import (
     MAX_RUNS,
+    METRIC,
     MIN_RUNS,
     REFUSED_FRACTION_CAP,
     SimulateRefused,
     _draw,
     _is_suppressed,
+    _native,
+    _plan,
     simulate_case,
 )
-from apps.api.services.valuation_case import create_case
+from apps.api.services.valuation_case import create_case, load_case, run_case_payload
+from packages.core_finance.rank_correlation import spearman
 from tests.api.test_case_fork import _parent_payload
 
 
@@ -254,3 +260,70 @@ def test_a_partly_non_finite_run_reports_over_the_survivors_and_says_so(parent_i
 
     # And the conditioning is visible rather than implied.
     assert [group["code"] for group in result["refusals"]] == ["non_finite_result"]
+
+
+def test_the_association_pairs_each_output_with_the_draw_that_produced_it(parent_id):
+    """The reported association is only meaningful if each sampled value is
+    paired with the output THAT draw produced. An off-by-correspondence bug --
+    right array length, wrong pairing -- leaves every other assertion in this
+    file green while silently reporting an association between values that never
+    met. Recomputed here from an independent replay of the same seeded draw."""
+    request = {
+        "runs": 1000, "seed": 42,
+        "distributions": {"case": {
+            "cash": {"shape": "uniform", "low": 1e307, "high": 1e308},
+            "ipo_proceeds": {"shape": "uniform", "low": 1e307, "high": 1e308},
+        }},
+    }
+    result = simulate_case(parent_id, request)
+
+    # Independent replay: same seed, same draws, run the engine ourselves.
+    case = load_case(parent_id)
+    planned = _plan(case, request["distributions"])
+    drawn = _draw(planned, request["runs"], np.random.default_rng(request["seed"]))
+    key = next(iter(drawn))
+    accepted_x, observed = [], []
+    for row in range(request["runs"]):
+        overrides = {k: _native(drawn[k][row], k) for k in drawn}
+        try:
+            value = run_case_payload(case, overrides)[METRIC]
+        except ValueError:
+            continue
+        if not math.isfinite(value):
+            continue
+        accepted_x.append(drawn[key][row])
+        observed.append(value)
+
+    expected = spearman(np.asarray(accepted_x), np.asarray(observed))
+    reported = {row["input"]: row["spearman"]
+                for row in result["association_among_accepted_samples"]}
+    assert reported[key] == pytest.approx(expected, rel=1e-12)
+    assert len(accepted_x) == result["runs_valid"]
+
+
+def test_confidence_absent_on_a_narrated_field_is_accepted(parent_id):
+    """confidence defaults the same way case_fork._unwrap defaults it: only a
+    SUPPLIED value is validated, an absent one is fine."""
+    result = simulate_case(parent_id, {
+        "runs": 1000, "seed": 42,
+        "distributions": {"segments": {"Core": {"margin_target": {
+            "shape": "normal", "mean": 0.28, "sd": 0.01,
+            "claim": "c", "three_p": "possible"}}}},
+    })
+    assert result["runs_requested"] == 1000
+
+
+def test_a_supplied_invalid_confidence_is_refused(parent_id):
+    with pytest.raises(SimulateRefused, match="narrative_required"):
+        simulate_case(parent_id, {"runs": 1000, "distributions": {
+            "segments": {"Core": {"margin_target": {
+                "shape": "normal", "mean": 0.28, "sd": 0.01,
+                "claim": "c", "three_p": "possible",
+                "confidence": "totally_not_a_real_value"}}}}})
+
+
+def test_max_runs_is_accepted_by_the_bounds_check(parent_id):
+    """Proves MAX_RUNS clears the runs bound without paying for 20,000 samples:
+    an empty distributions dict fails on no_distributions, not invalid_runs."""
+    with pytest.raises(SimulateRefused, match="no_distributions"):
+        simulate_case(parent_id, {"runs": MAX_RUNS, "distributions": {}})

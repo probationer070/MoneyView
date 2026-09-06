@@ -19,6 +19,7 @@ import secrets
 import numpy as np
 
 from apps.api.services.case_fork import (
+    _CONFIDENCE,
     _INTEGER_FIELDS,
     _NON_NUMERIC_CASE_FIELDS,
     _SETTABLE_CASE_FIELDS,
@@ -85,6 +86,15 @@ def _distribution(key: str, field: str, raw: object) -> dict:
             raise SimulateRefused(
                 f"narrative_required: {key} needs a three_p of {sorted(_THREE_P)}"
             )
+        # `in raw`, not `or`: an ABSENT confidence defaults (case_fork._unwrap does
+        # the same), but a SUPPLIED value that is not one of the three is refused
+        # here rather than reaching sqlite's CHECK constraint or, here, nothing at
+        # all -- spec section 4.2 requires it validated, same as three_p.
+        if "confidence" in raw and str(raw["confidence"]) not in _CONFIDENCE:
+            raise SimulateRefused(
+                f"narrative_required: {key} needs a confidence of "
+                f"{sorted(_CONFIDENCE)}, got {raw['confidence']!r}"
+            )
     elif claim:
         raise SimulateRefused(
             f"unexpected_narrative: {key} is not a narrated field, so it takes a "
@@ -105,6 +115,13 @@ def _plan(case: dict, distributions: dict) -> dict[str, dict]:
     planned: dict[str, dict] = {}
 
     for field, raw in (distributions.get("case") or {}).items():
+        # `field in _NON_NUMERIC_CASE_FIELDS` is unreachable BY CONSTRUCTION today:
+        # `_SETTABLE_CASE_FIELDS` (case_fork.py) already subtracts
+        # `_NON_NUMERIC_CASE_FIELDS`, so `ticker`/`as_of_date` always fail the first
+        # clause first. Kept anyway as defence in depth -- a deliberate pre-flight
+        # ruling, not dead code to delete nor a live check anything currently
+        # depends on; if `_SETTABLE_CASE_FIELDS`'s definition ever changes, this
+        # clause is what still catches it.
         if field not in _SETTABLE_CASE_FIELDS or field in _NON_NUMERIC_CASE_FIELDS:
             raise SimulateRefused(
                 f"unknown_field: case.{field} is not a settable numeric case column"
