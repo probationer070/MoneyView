@@ -196,3 +196,35 @@ def test_a_sampled_integer_field_is_rounded_not_truncated():
     assert np.array_equal(values, np.rint(values))   # integral, not truncated
     assert values.mean() == pytest.approx(5.0, abs=0.05)
     assert set(np.unique(values).tolist()) == {3.0, 4.0, 5.0, 6.0, 7.0}
+
+
+def test_a_non_finite_engine_result_is_counted_not_raised(parent_id):
+    """cash and ipo_proceeds are each finite and pass distributions.validate, but
+    their SUM overflows float64 inside the engine's equity bridge -- the engine
+    returns successfully with inf, which reaches np.histogram as a bare
+    ValueError ("autodetected range ... is not finite") if not caught here. Every
+    draw in this band overflows, so the response is suppressed like any other
+    all-refused run rather than 500ing."""
+    result = simulate_case(parent_id, {
+        "runs": 1000, "seed": 42,
+        "distributions": {"case": {
+            "cash": {"shape": "uniform", "low": 9.9e307, "high": 1.0e308},
+            "ipo_proceeds": {"shape": "uniform", "low": 9.9e307, "high": 1.0e308},
+        }},
+    })
+    assert result["runs_refused"] == 1000
+    assert result["refused_fraction"] == 1.0
+    assert "suppressed" in result
+    codes = {group["code"] for group in result["refusals"]}
+    assert "non_finite_result" in codes
+
+
+def test_the_accounting_identity_holds_for_non_finite_results(parent_id):
+    result = simulate_case(parent_id, {
+        "runs": 1000, "seed": 42,
+        "distributions": {"case": {
+            "cash": {"shape": "uniform", "low": 9.9e307, "high": 1.0e308},
+            "ipo_proceeds": {"shape": "uniform", "low": 9.9e307, "high": 1.0e308},
+        }},
+    })
+    assert result["runs_valid"] + result["runs_refused"] == result["runs_requested"]

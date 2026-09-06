@@ -13,6 +13,7 @@ rule over it.
 """
 from __future__ import annotations
 
+import math
 import secrets
 
 import numpy as np
@@ -187,7 +188,25 @@ def simulate_case(case_id: int, request: dict) -> dict:
     for row in range(runs):
         overrides = {key: _native(drawn[key][row], key) for key in keys}
         try:
-            values.append(run_case_payload(case, overrides)[METRIC])
+            value = run_case_payload(case, overrides)[METRIC]
+            if not math.isfinite(value):
+                # NOT an engine refusal -- the engine returned successfully, with a
+                # number that is not one. Reachable with entirely finite stated
+                # parameters: cash and ipo_proceeds both near 1e308 overflow to inf
+                # when summed inside the engine. Counted rather than raised, because
+                # a draw that produces nothing usable is exactly what the refusal
+                # accounting is for, and letting it through reaches np.histogram as
+                # "autodetected range ... is not finite" -- a 500 on a valid request.
+                # Deliberately NOT added to engine_refusals.REFUSAL_CODES: that table
+                # maps engine refusal MESSAGES, and this is not one -- the engine did
+                # not raise.
+                group = refusals.setdefault("non_finite_result", {
+                    "code": "non_finite_result", "count": 0,
+                    "message": f"the engine returned a non-finite {METRIC} ({value})",
+                })
+                group["count"] += 1
+                continue
+            values.append(value)
             accepted_rows.append(row)
         except ValueError as exc:
             message = str(exc)

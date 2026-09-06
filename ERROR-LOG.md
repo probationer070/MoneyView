@@ -2265,3 +2265,51 @@ prefix. Related to, but distinct from, the `unrunnable_coalition` entry above: b
 "diff 500s on a case nobody tested against the real seed", but that one is an
 engine-level refusal reached only inside a Shapley coalition, and this one is a
 validation-layer crash reached on the very first call.
+
+## 2026-09-06: `simulate_case` 500s when two entirely finite stated parameters overflow to `inf` inside the engine
+
+Date: 2026-09-06
+Command: not test-discovered -- found by probing the review questions directly against
+`apps/api/services/case_simulate.py` after a dispatched reviewer hit a rate limit, by
+sweeping single-field extremes (1e±300) and then paired combinations of settable case
+fields. `{"case.cash": 1e308, "case.ipo_proceeds": 1e308}` and
+`{"segment.Core.margin_target": 1e300, "case.shares_basic": 1e-300}` both produced
+`value_per_share_diluted = inf` with the engine raising nothing; end to end through
+`simulate_case`, with both `cash` and `ipo_proceeds` distributed
+`uniform(9.9e307, 1.0e308)`, every one of 1000 draws overflowed and the call raised
+`ValueError: autodetected range of [2.3646264743494388e+305, inf] is not finite` from
+inside `np.histogram` -- a bare `ValueError` from a numpy frame that the route's
+`SimulateRefused`/`CaseNotFound` handling does not name, so it escapes as a 500 on a
+request whose every stated distribution parameter is finite and passes
+`distributions.validate`.
+Root cause: `simulate_case`'s sampling loop only ever branches on the engine RAISING
+(`except ValueError`, classified by `engine_refusals.classify`). It never checked the
+metric it received on the SUCCESS path. `cash` and `ipo_proceeds` are summed together in
+the engine's equity bridge; each value is a legitimate finite `float`, but their sum can
+exceed float64's max (~1.7977e308) and silently becomes `inf` -- a successful return with
+a number that is not one. Nothing before `np.histogram` treated "the engine returned
+non-finite" as a distinct, expected outcome of a Monte Carlo draw.
+Fix: after obtaining `value = run_case_payload(case, overrides)[METRIC]` and before
+appending it, `simulate_case` now checks `math.isfinite(value)`. A non-finite result is
+counted into `refusals` under a new code, `non_finite_result`, and the row is skipped
+(`continue`) rather than appended to `values` -- the same accounting treatment as an
+engine refusal, because a draw that produces nothing usable is exactly what the refusal
+accounting exists for, even though the engine itself raised nothing.
+`non_finite_result` is deliberately NOT added to `engine_refusals.REFUSAL_CODES`: that
+table maps engine refusal MESSAGES (a `raise ValueError` site), and this is a successful
+return, not a message to match.
+Files changed: `apps/api/services/case_simulate.py`, `tests/api/test_case_simulate.py`.
+Prevention: `tests/api/test_case_simulate.py::test_a_non_finite_engine_result_is_counted_not_raised`
+reproduces the exact `cash`/`ipo_proceeds` band above and asserts the call returns
+normally with `runs_refused == 1000`, `refused_fraction == 1.0`, suppression active, and a
+`non_finite_result` refusal group;
+`test_the_accounting_identity_holds_for_non_finite_results` asserts
+`runs_valid + runs_refused == runs_requested` still holds on that same response.
+Mutation-verified: removing the `math.isfinite` guard reproduces the exact numpy
+`ValueError` above rather than a clean refusal. A wider, non-overflowing band
+(`cash`/`ipo_proceeds` both `uniform(1e307, 1e308)`) reaches a MIXED state -- 34 of 1000
+draws non-finite, `refused_fraction = 0.034` (below the suppression cap) -- and the
+response is not suppressed: it reports `p10`/`p50`/`p90`/`mean`/`histogram`/
+`association_among_accepted_samples` computed over the 966 finite survivors only, with
+the accounting identity still holding across all three fields. This mixed case is not
+separately asserted by a checked-in test as of this entry.
