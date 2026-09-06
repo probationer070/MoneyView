@@ -28,6 +28,14 @@ _CONDITIONS = [
     # ratio 1e9, well inside the reachable range up to ~9.9e23 at the engine's
     # explosive-growth bound, so it does NOT raise at all.
     ({"segment.Core.revenue_target": 1.0e30}, "target_revenue_unreachable"),
+    # Fix round 1: five more conditions the review found with no row, all
+    # reachable through fields the /simulate sampler draws directly
+    # (roic_stable, terminal_growth, target_year, ramp_start_year).
+    ({"case.roic_stable": 0.70}, "roic_above_marginal_return"),
+    ({"case.terminal_growth": -0.20}, "roic_below_growth_magnitude"),
+    ({"case.target_year": 2000}, "horizon_incoherent"),
+    ({"segment.Core.ramp_start_year": 0}, "ramp_incoherent"),
+    ({"segment.Core.ramp_start_year": 50}, "ramp_incoherent"),
 ]
 
 
