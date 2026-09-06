@@ -10,6 +10,7 @@ from apps.api.models.schemas import (
     APIResponse,
     ConservativeCaseResult,
     ForkRequest,
+    SimulateRequest,
     ValuationCaseCreated,
     ValuationCaseInput,
     ValuationCaseSummary,
@@ -18,6 +19,7 @@ from apps.api.models.schemas import (
 from apps.api.services.acquisition.store import load_price_bars
 from apps.api.services.case_diff import DiffRefused, diff_case
 from apps.api.services.case_fork import ForkRefused, fork_case
+from apps.api.services.case_simulate import SimulateRefused, simulate_case
 from apps.api.services.company_baseline import (
     find_conservative_case_id,
     generate_conservative_case_for_ticker,
@@ -156,6 +158,25 @@ def diff_valuation_case(case_id: int):
         # replays them through `effective_changes`, so a field that should
         # have been excluded from that reconstruction would otherwise escape
         # as a 500 instead of a refusal.
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/cases/{case_id}/simulate", response_model=APIResponse[dict])
+def simulate_valuation_case(case_id: int, payload: SimulateRequest = Body(...)):
+    """Sample stated distributions over a stored case and report the spread.
+
+    A refused SAMPLE is not a failed request: a draw the engine rejects is data
+    about the model, and it is counted and reported inside a 200. Only a
+    malformed request fails. Above `REFUSED_FRACTION_CAP` the summary statistics
+    are omitted entirely, because the surviving sample describes the metric
+    conditional on the engine accepting the inputs rather than the distribution
+    the caller stated.
+    """
+    try:
+        return APIResponse(data=simulate_case(case_id, payload.model_dump()))
+    except CaseNotFound as exc:
+        raise HTTPException(status_code=404, detail=f"no_case: {exc}") from exc
+    except SimulateRefused as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
