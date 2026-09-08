@@ -18,7 +18,7 @@ MoneyView reports numbers. It does not, anywhere, say what they mean.
 
 `docs/dcf-valuation.md` does this well for one family — it explains DCF from
 first principles and then how this backend actually computes it. Nothing
-comparable exists for the other ~45 reported quantities. A reader looking at
+comparable exists for the other 41. A reader looking at
 `dcf_gap: 0.182` has no way to learn that it is a horizonless fraction that must
 never be compared with an annualised return.
 
@@ -56,7 +56,11 @@ slip through, and each is a class this repository has already been bitten by:
 **Excluded**, because there is no method to explain: identifiers, names, dates,
 sources, counts, and raw statement passthroughs.
 
-Measured inventory: **50 entries across 7 families.**
+Inventory: **50 candidate entries across 7 families**, enumerated 2026-09-08
+against the rule above. This is an enumeration, not a code-derived count -- I
+listed what passes the test, and a different reader could reasonably judge one or
+two differently. The implementation plan's first task confirms the list against
+the code before any entry is written, and reports what it added or dropped.
 
 | Family | Entries |
 | --- | --- |
@@ -111,7 +115,9 @@ assumption deserves to know the blast radius.
 
 ### 3.5 Where it is shown
 Endpoint and screen — or "HTTP-only, no UI", which is currently true of `/fork`,
-`/diff` and `/simulate`.
+`/diff` and `/simulate`. Verified 2026-09-08: `apps/web` references
+`/valuation/verdict/{ticker}` and nothing under `/valuation/cases/`, so those
+three endpoints have no UI consumer at all.
 
 ### 3.6 How to read it
 Unit, direction and sign, **and the interpretation a reader should not make**.
