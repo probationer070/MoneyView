@@ -17,15 +17,16 @@ a human review step.
 | --- | --- | --- |
 | [`price-signals`](price-signals.md) | 3 | Raw reads off a ticker's own price and volume history. |
 | `discount-rates-and-returns` | 4 | What return the market is pricing in, versus what return is required. |
-| `fundamental-quality` | 7 | Return on capital, growth, and the tax rate — and whether each is trustworthy. |
+| [`fundamental-quality`](fundamental-quality.md) | 7 | Return on capital, growth, and the tax rate — and whether each is trustworthy. |
 | `dcf-mechanics` | 8 | The discounted-cash-flow build itself: terminal value, net debt, per-share value. |
 | `verdict-panel` | 3 | How price and value signals are framed and gapped into the read-only evidence panel. |
 | `industry-benchmarks` | 5 | Sector reference values and how a subject's own figure is normalised against them. |
 | `attribution-and-uncertainty` | 7 | What moved a valuation, by how much, and how much confidence attaches to the answer. |
 
-`price-signals`, `discount-rates-and-returns`, `attribution-and-uncertainty`,
-and `verdict-panel` are written so far; the other three families are pending
-later passes. Their counts above are the source-backed totals confirmed in
+`price-signals`, `discount-rates-and-returns`, `fundamental-quality`,
+`attribution-and-uncertainty`, and `verdict-panel` are written so far; the
+other two families are pending later passes. Their counts above are the
+source-backed totals confirmed in
 [`inventory.md`](inventory.md), not the original spec's candidate counts —
 where the two disagreed, the inventory won. `price-signals` itself is written
 at 3 entries rather than the inventory's 4: `pe_change` was found to have zero
