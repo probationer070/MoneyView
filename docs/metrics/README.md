@@ -23,8 +23,9 @@ a human review step.
 | `industry-benchmarks` | 5 | Sector reference values and how a subject's own figure is normalised against them. |
 | `attribution-and-uncertainty` | 7 | What moved a valuation, by how much, and how much confidence attaches to the answer. |
 
-Only `price-signals` is written so far; the other six families are pending
-later passes. Their counts above are the source-backed totals confirmed in
+`price-signals`, `attribution-and-uncertainty`, and `verdict-panel` are
+written so far; the other four families are pending later passes. Their
+counts above are the source-backed totals confirmed in
 [`inventory.md`](inventory.md), not the original spec's candidate counts —
 where the two disagreed, the inventory won. `price-signals` itself is written
 at 3 entries rather than the inventory's 4: `pe_change` was found to have zero
