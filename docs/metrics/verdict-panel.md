@@ -14,6 +14,25 @@ because it is the number a reader is most likely to set beside `dcf_gap` on
 a chart and treat as the same kind of quantity, which it structurally is
 not: one carries a stated time horizon and the other carries none at all.
 
+> **Note on scope.** `docs/superpowers/specs/2026-09-08-metric-reference-design.md`'s
+> §5 structure table and `docs/superpowers/plans/2026-09-08-metric-reference.md`
+> both still list `verdict-panel.md` at 6 entries. Both were written on
+> 2026-09-08 as part of the original 50-candidate enumeration, *before*
+> Task 1 read the actual source and confirmed what each family's candidates
+> resolve to — `docs/metrics/inventory.md` is that confirmation, produced
+> after the spec and the plan, and per this project's own override rule
+> (`docs/metrics/README.md:29-30`, `task-3-brief.md:37`: "if the inventory
+> disagrees with the spec, follow the inventory") it is authoritative where
+> the two disagree. `inventory.md`'s table lists exactly three
+> `verdict-panel` rows as "distinct" — `dcf_gap`, `direction` (the fixed
+> framing constant), and `price_move_pct` — and no fourth, fifth, or sixth
+> candidate for this family appears anywhere in its "distinct", "duplicate",
+> or "not present" accounting. This file therefore has three entries, not
+> the spec's or the plan's six. Neither the design spec nor the plan is
+> modified here — both are historical planning documents outside this
+> task's file list — this note exists so a reader landing on either of them,
+> or on this file, does not have to wonder where three entries went.
+
 ### `dcf_gap`
 
 Source: `apps/api/services/valuation_verdict.py:486` — `build_verdict`
@@ -135,10 +154,12 @@ about how to weigh the rows that follow it.
 **Where it is shown.** `GET /api/v1/valuation/verdict/{ticker}`, Valuation
 tab, rendered as prose directly under the ticker name
 (`apps/web/app/valuation/components/VerdictPanel.tsx:24-29`,
-`data-testid="verdict-direction"`). The component's own comment: "Framing,
-rendered as prose. Not a headline verdict," and "`direction` is a fixed
-constant identical for every ticker; the backend deliberately computes no
-verdict and neither does this component" (lines 11-13).
+`data-testid="verdict-direction"`). The component carries two separate
+comments making the same point: "Framing, rendered as prose. Not a headline
+verdict." immediately above the rendered paragraph (line 23), and, in the
+component's own doc comment, "`direction` is a fixed constant identical for
+every ticker; the backend deliberately computes no verdict and neither does
+this component" (lines 11-13).
 
 **How to read it.** Not a value to compare across tickers — reading two
 tickers' `direction` strings side by side and expecting them to differ finds
@@ -198,9 +219,10 @@ strictly after `decided_on`
 `close is not None`), loaded with a small limit
 (`_OUTCOME_BARS_LIMIT = 30`, line 227) since only the newest qualifying bar
 is ever needed. Never persisted: `get_decision`/`list_decisions` compute it
-fresh on every read — the module's own docstring: "A persisted outcome is
-correct only until the next bar arrives and then silently wrong, with
-nothing to reveal it; computing on read cannot go stale." Guards: returns
+fresh on every read — `outcome_for`'s own function docstring
+(`investment_decision.py:16-25`): "A persisted outcome is correct only until
+the next bar arrives and then silently wrong, with nothing to reveal it;
+computing on read cannot go stale." Guards: returns
 `price_move: None` with a `reason` of `"no price recorded at decision time"`
 if `price_at_decision` is `None` or `<= 0`, or `"no bar with a close after
 {decided_on}"` if no qualifying bar exists.

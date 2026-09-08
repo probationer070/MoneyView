@@ -226,7 +226,7 @@ above), so none currently holds a forked narrative override to inspect.
 
 ### `REFUSED_FRACTION_CAP`
 
-Source: `apps/api/services/case_simulate.py:60` — `_is_suppressed`
+Source: `apps/api/services/case_simulate.py:46` — `REFUSED_FRACTION_CAP`
 
 **What it is.** The fraction of Monte Carlo draws the pricing engine is
 allowed to refuse before `/simulate` stops reporting summary statistics
@@ -288,7 +288,7 @@ split — confirmed by reading `case_simulate.py:46-60,250-270` directly.
 
 ### `SHAPLEY_INPUT_CAP`
 
-Source: `apps/api/services/case_diff.py:93` — `diff_case`
+Source: `apps/api/services/case_diff.py:31` — `SHAPLEY_INPUT_CAP`
 
 **What it is.** The largest number of simultaneously changed inputs `/diff`
 will attribute with Shapley values before refusing outright, rather than

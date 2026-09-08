@@ -33,6 +33,19 @@ callers anywhere under `apps/` while writing this file, the same "not present"
 test the inventory already applies to `packages/core_finance/hurdle_rate.py`
 and `risk_analysis.py`. See the note at the top of `price-signals.md`.
 
+`verdict-panel` is written at 3 entries, not the 6 both
+`docs/superpowers/specs/2026-09-08-metric-reference-design.md`'s §5 structure
+table and `docs/superpowers/plans/2026-09-08-metric-reference.md` still list
+it at. Both of those were written as part of the original 50-candidate
+enumeration, before Task 1 confirmed each family's candidates against the
+actual source; `inventory.md` is that later, source-backed confirmation, and
+per the override rule above it wins where the two disagree. `inventory.md`
+lists exactly three `verdict-panel` rows as distinct — `dcf_gap`,
+`direction`, `price_move_pct` — with no fourth candidate anywhere in its
+distinct, duplicate, or not-present accounting. Neither the design spec nor
+the plan is corrected here; they are historical planning documents outside
+this reference's own file list. See the note at the top of `verdict-panel.md`.
+
 ## Entry template
 
 Every entry in every family file uses exactly this shape. The checker parses
