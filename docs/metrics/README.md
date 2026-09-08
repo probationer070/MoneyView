@@ -23,9 +23,9 @@ a human review step.
 | `industry-benchmarks` | 5 | Sector reference values and how a subject's own figure is normalised against them. |
 | `attribution-and-uncertainty` | 7 | What moved a valuation, by how much, and how much confidence attaches to the answer. |
 
-`price-signals`, `attribution-and-uncertainty`, and `verdict-panel` are
-written so far; the other four families are pending later passes. Their
-counts above are the source-backed totals confirmed in
+`price-signals`, `discount-rates-and-returns`, `attribution-and-uncertainty`,
+and `verdict-panel` are written so far; the other three families are pending
+later passes. Their counts above are the source-backed totals confirmed in
 [`inventory.md`](inventory.md), not the original spec's candidate counts —
 where the two disagreed, the inventory won. `price-signals` itself is written
 at 3 entries rather than the inventory's 4: `pe_change` was found to have zero
@@ -45,6 +45,21 @@ lists exactly three `verdict-panel` rows as distinct — `dcf_gap`,
 distinct, duplicate, or not-present accounting. Neither the design spec nor
 the plan is corrected here; they are historical planning documents outside
 this reference's own file list. See the note at the top of `verdict-panel.md`.
+
+`discount-rates-and-returns` is written at 4 entries, not the 11 both the
+design spec's §5 structure table and the plan still list it at, for the same
+reason: `inventory.md` lists exactly four rows as distinct for this family —
+`market_expected_return`, `capm_expected_return`, `dcf_implied_return`,
+`expected_return_spread` — and moves the plan's other seven candidates to
+"not present". All seven are the combined functions of
+`packages/core_finance/hurdle_rate.py` and `packages/core_finance/beta.py`,
+neither of which has a single caller anywhere under `apps/`. This does not
+mean the codebase reports no WACC or beta at all — the WACC and beta a
+reader actually sees (`apps/api/services/corporate_dcf.py:132,309`) are a
+clamped input and a stored passthrough, not those two modules' formulas, and
+are recorded in `inventory.md`'s "Follow-up candidates" table rather than
+dropped outright. See the note at the top of
+`discount-rates-and-returns.md`.
 
 ## Entry template
 
