@@ -6,14 +6,22 @@ whether the resulting number is even trustworthy enough to act on. All seven
 live in `packages/core_finance/corporate_statement_metrics.py` and are wired
 into the app by `apps/api/services/corporate_statement_metrics.py`, which
 duplicates the same functions privately under leading-underscore names near
-the top of that file and then immediately shadows every one of them with a
+the top of that file and then shadows most of them with a
 `from packages.core_finance.corporate_statement_metrics import ... as
 _name` block (`apps/api/services/corporate_statement_metrics.py:599-623`).
 Because Python resolves a module-level name at call time, the later import
-wins for every call site in the file — the earlier private definitions
-(`apps/api/services/corporate_statement_metrics.py:291-596`) are dead code,
-never reached at runtime. This reference documents the live code path: the
-`packages/core_finance` functions, as consumed through those import aliases.
+wins for every call site naming one of the shadowed identifiers. Two of the
+twelve private definitions are not in that import block at all —
+`_annual_growth_rates` (`:437`) and `_valid_revenue_points` (`:450`) — and so
+still bind to their own `apps/api` copies at runtime. They are dead for a
+different reason, not shadowing: their only caller, `_stable_growth_payload`,
+IS one of the shadowed ten, so nothing in the live call graph ever reaches
+either of them. Every one of the twelve private definitions
+(`apps/api/services/corporate_statement_metrics.py:291-596`) is dead code
+either way — ten by direct shadowing, two transitively through a caller that
+is. This reference documents the live code path: the `packages/core_finance`
+functions, as consumed through those import aliases (directly, or via
+`_stable_growth_payload` for the two that aren't).
 
 NOPAT and average invested capital feed ROIC, which is one number computed
 three different ways depending on a caller-chosen basis; ROIC quality does not
@@ -99,7 +107,13 @@ value, across all 135 tickers with locally stored statements
 more than 0.5 percentage points** — e.g. AAPL's displayed ROIC reads 60.69%
 while its displayed NOPAT/invested-capital pair implies 66.60%. This is not a
 rounding artifact; it is the structural consequence of showing a single
-year's inputs beside a multi-year-averaged output. Query: iterate
+year's inputs beside a multi-year-averaged output. One partial mitigation:
+the same audit response does carry a `final_roic_value` row whose `source`
+reads `Computed from recent_average basis`
+(`apps/api/services/corporate_statement_metrics.py:1498`), so the basis is
+disclosed in the payload — it is simply never reconciled with the NOPAT and
+invested-capital figures displayed just above it, which is what a reader
+actually compares. Query: iterate
 `metric_audit_for_ticker` for every `DISTINCT ticker` in
 `corporate_statements`, compare `roic.value` to
 `100 * inputs_used["nopat"].value / inputs_used["average_invested_capital"].value`.
@@ -278,14 +292,18 @@ names which basis produced the number you're looking at unless you also
 read the request's own `roic_basis` parameter or the UI's basis label — the
 figure is not self-describing.
 
-**Common misreading.** Assuming `recent_average` means "the average of this
-company's ROIC over its recent-average trend" is somehow smoother or more
-representative than a single year — it is a mechanical average of up to 3
-yearly ratios, silently shortened when a year is missing, not a
-trend-adjusted or weighted figure. A second, related misreading: assuming
-the NOPAT and invested-capital figures shown in the same audit response
-explain a `recent_average` or `all_year_average` ROIC number — they don't;
-see the `NOPAT` entry's measured 76% divergence.
+**Common misreading.** Assuming `recent_average` is a ratio built from the
+last 3 years' summed NOPAT over summed average invested capital — it is not.
+It is the average of three already-computed yearly *ratios* (`values[-3:]`
+in `roic_value`, above), which is not the same number as NOPAT-sum over
+capital-sum whenever the ratios' own denominators differ year to year: an
+average of ratios, not a ratio of averages. The distinction is not academic
+— the audit panel displays a single year's NOPAT and invested capital beside
+this averaged figure, giving a reader every visual cue to assume those two
+displayed inputs produce the displayed ROIC (see the `NOPAT` entry's
+measured 76% divergence), and they structurally cannot: an average of
+ratios was never going to equal a ratio built from any one year's inputs,
+displayed or not.
 
 **Current state.** (2026-09-08) Measured against `data/processed/moneyview.db`'s
 135 tickers with stored statements (default `recent_average` basis, real
@@ -349,11 +367,15 @@ entry), so `selected_average_capital`, if not `None`, is always the average
 of two positive numbers or a single positive one — it can never be
 zero or negative in the code as it stands today, confirmed by reading
 `:289-346` and `:522-526` together; `unstable_roic_denominator`
-(`"suspicious"`, average invested capital is less than 10% of `|NOPAT|`,
-i.e. an implied single-year ratio magnitude over 1000% — a much tighter
-bound than the next rule's 300%, and tested against the *selected record's*
-own single-year NOPAT/capital pair, not the basis-dispatched, possibly
-multi-year-averaged `roic` value the reader actually sees); `outlier_roic`
+(`"suspicious"`, average invested capital is less than the greater of 10% of
+`|NOPAT|` or a `1.0` absolute floor — immaterial in this codebase since
+`average invested capital`'s own guard already refuses anything below
+`MIN_INVESTED_CAPITAL` (1,000,000), but the entry above is otherwise
+exhaustive about guards, so worth stating — i.e. an implied single-year
+ratio magnitude over 1000% — a much tighter bound than the next rule's 300%,
+and tested against the *selected record's* own single-year NOPAT/capital
+pair, not the basis-dispatched, possibly multi-year-averaged `roic` value
+the reader actually sees); `outlier_roic`
 (`"suspicious"`, `|derived_roic| > 300%`, tested against the actual reported
 figure, whatever basis produced it). Because only the first matching
 `ROIC_QUALITY_RULES` rule contributes a `reason`, a record that trips both
@@ -597,10 +619,10 @@ this company actually pay this year."
 **How it is calculated here.** For each of the (up to 5, most recent)
 `matching_years` between `pretax_income_by_year` and `tax_expense_by_year`
 (`:245-251,256`), a raw rate `tax / pretax` is computed and kept only if
-`pretax > 0` and the raw rate is `is_valid_statement_tax_rate` — strictly
-between `0` and `0.50` (`:210-211,262`) — silently discarding negative
-pretax years, negative or zero rates, and rates above 50%, not flagging or
-counting them anywhere in the returned payload. The **median** (not mean) of
+`pretax > 0` and the raw rate is `is_valid_statement_tax_rate` — `(0,
+0.50]`, `0` excluded and `0.50` included (`:210-211,262`) — silently
+discarding negative pretax years, non-positive rates, and rates above 50%,
+not flagging or counting them anywhere in the returned payload. The **median** (not mean) of
 whatever valid rates survive is taken (`:265`, `_median` is a true
 even-count-averaging median, `:235-242`), then clamped to `[0.15, 0.30]`
 (`TAX_RATE_RULE.clamp`, `:19-20,273`) — so even a company with a genuinely

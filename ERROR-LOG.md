@@ -26,6 +26,80 @@ reveal that; only checking the code did.
 
 An entry states what was true when it was written. Nothing updates it on its own.
 
+## 2026-09-09: CAPM relevers beta with a debt-to-capital weight instead of debt-to-equity
+
+Date: 2026-09-09
+Command: manual review while writing `docs/metrics/discount-rates-and-returns.md`'s
+`capm_expected_return` entry -- reading `apps/api/services/corporate_comparison.py:1129-1131`
+against `apps/api/services/corporate_statement_metrics.py:800-803,825-827,1053-1061`, then
+re-measuring beta across a live 135-ticker pull under both the coded formula and the correct
+substitution.
+Failure: silent, a numeric defect with no exception. `capm_expected_return` is built from a
+beta relevered with the wrong quantity for every company carrying any debt at all, not just
+extreme cases.
+Root cause: `debt_ratio` is defined at `apps/api/services/corporate_statement_metrics.py:802`
+as `_bounded(latest_debt / (latest_debt + latest_equity) * 100, 0, 90)` -- `D/(D+E)`, a
+debt-to-capital percentage. `apps/api/services/corporate_comparison.py:1130` does
+`debt_to_equity = max(float(metrics.debt_ratio) / 100, 0.0)` and feeds it to the Hamada
+relever formula at `:1131`, but `D/(D+E) != D/E` whenever any debt exists
+(`D/E - D/(D+E) = D^2/(E(D+E)) > 0` for all `D, E > 0`), so the substitution understates the
+leverage term for every levered company, growing with leverage -- not only past some
+threshold. This codebase already has the correct conversion: `_statement_debt_to_equity`
+(`corporate_statement_metrics.py:1053-1061`) converts on its fallback path as `dr/(100-dr)`
+= D/E, against `corporate_comparison.py:1130`'s `dr/100` = D/(D+E). The round trip is
+inconsistent by construction: `corporate_statement_metrics.py:825-827` **unlevers** with the
+true D/E to produce `metrics.unlevered_beta`, and `corporate_comparison.py:1131` then
+**relevers** that value with a capital weight, so it cannot recover the original levered beta.
+Fix: not fixed -- this entry records the defect; the fix is its own work. Confirmed impact:
+108 of 135 tickers get a different beta under the correct substitution, understating
+`capm_expected_return` by up to 14.08pp (STX, STEM, SKYX, DOCN, all `debt_ratio` 90.00: coded
+beta 0.6844 against a correct 3.2440), then BE 12.65pp, AES 11.26pp, ORCL 7.39pp.
+Files changed: none (record only). `docs/metrics/discount-rates-and-returns.md`'s
+`capm_expected_return` entry documents this as the live behavior.
+Prevention: the misleading local variable name `debt_to_equity` at
+`corporate_comparison.py:1130` is what let this survive review -- it names the textbook
+quantity while holding a different one. When a formula's input is a locally computed
+intermediate rather than a passed-through named field, name it for what it actually holds,
+not for the textbook symbol it stands in for. When the same codebase already has a correct
+conversion for the same pair of raw values (here, `_statement_debt_to_equity`), a second call
+site computing the "same" ratio a different way is worth a direct comparison before trusting
+either.
+
+## 2026-09-09: The ROIC audit displays a single year's inputs beside a multi-year-averaged output
+
+Date: 2026-09-09
+Command: manual review while writing `docs/metrics/fundamental-quality.md`'s `NOPAT` entry --
+iterating `metric_audit_for_ticker` for every `DISTINCT ticker` in `corporate_statements` and
+comparing `roic.value` to `100 * inputs_used["nopat"].value /
+inputs_used["average_invested_capital"].value`.
+Failure: silent, a display mismatch with no exception. Under the app's default
+`recent_average` ROIC basis, the ROIC audit panel shows a NOPAT and an average-invested-capital
+figure that do not divide to the ROIC value displayed beside them.
+Root cause: `_select_roic_record` (`apps/api/services/corporate_statement_metrics.py:999-1009`)
+returns `roic_records[-1]` -- the latest year -- for any non-`annual` basis. `roic_value`
+(`packages/core_finance/corporate_statement_metrics.py:499-509`) returns `average(values[-3:])`
+for `recent_average`, the app's default basis -- an average of up to three already-computed
+yearly ratios. The audit emits that single latest-year record's `nopat` and
+`average_invested_capital` (`apps/api/services/corporate_statement_metrics.py:1491,1497`)
+beside the multi-year-averaged `roic` value, so the two figures shown side by side generally
+cannot reproduce each other.
+Fix: not fixed -- this entry records the defect; the fix is its own work. Confirmed impact:
+102 of 135 tickers diverge by more than 0.5pp -- e.g. AAPL displays 60.69% ROIC where its own
+displayed inputs imply 66.60%; ALGM displays 10.05% where its inputs imply -1.22%, a sign
+flip. One partial mitigation already exists: the audit does carry a `final_roic_value` row
+whose `source` reads `Computed from recent_average basis`
+(`apps/api/services/corporate_statement_metrics.py:1498`), so the basis is disclosed in the
+payload -- it is simply never reconciled with the NOPAT/invested-capital inputs displayed
+above it.
+Files changed: none (record only). `docs/metrics/fundamental-quality.md`'s `NOPAT` entry
+documents this as the live behavior.
+Prevention: an audit view that displays "inputs" beside a "result" implies the inputs produce
+the result; when a result is basis-dispatched (single year vs. multi-year average) but its
+displayed inputs are selected by a different, single-year rule, that implication is false by
+construction. A basis-aware audit should either select inputs consistent with the reported
+basis, or label the displayed inputs as belonging to one specific year, distinct from the
+reported figure's own basis.
+
 ## 2026-09-04: `openpyxl` missing from `pyproject.toml` blocks the API from booting on a clean checkout
 
 Date: 2026-09-04

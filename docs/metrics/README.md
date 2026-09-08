@@ -16,7 +16,7 @@ a human review step.
 | Family | Entries | Covers |
 | --- | --- | --- |
 | [`price-signals`](price-signals.md) | 3 | Raw reads off a ticker's own price and volume history. |
-| `discount-rates-and-returns` | 4 | What return the market is pricing in, versus what return is required. |
+| [`discount-rates-and-returns`](discount-rates-and-returns.md) | 4 | What return the market is pricing in, versus what return is required. |
 | [`fundamental-quality`](fundamental-quality.md) | 7 | Return on capital, growth, and the tax rate — and whether each is trustworthy. |
 | `dcf-mechanics` | 8 | The discounted-cash-flow build itself: terminal value, net debt, per-share value. |
 | `verdict-panel` | 3 | How price and value signals are framed and gapped into the read-only evidence panel. |

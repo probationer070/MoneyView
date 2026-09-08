@@ -126,8 +126,9 @@ variation** — exactly `round((0.042 + 0.055) * 100, 2)`. Separately,
 `DEFAULT_SNAPSHOT_MODE = "snapshot"`) currently returns **zero rows** —
 `SELECT COUNT(*) FROM corporate_comparison_snapshots_v3` is 0, so no snapshot
 has ever been taken — yet still reports a live `market_expected_return: 9.7`
-at the top level of the response (`_empty_snapshot_response`,
-`corporate_comparison.py:472-473`), because that field alone needs no
+at the top level of the response (`_market_expected_return_pct`,
+`corporate_comparison.py:472-473`, called from `_empty_snapshot_response`
+at `:118-128`, specifically `:128`), because that field alone needs no
 per-ticker data to compute. Re-measure rather than quote; only the two
 constants are load-bearing here, not the ticker universe.
 
@@ -168,11 +169,18 @@ named `debt_to_equity`, but `metrics.debt_ratio` is defined elsewhere
 weight, not a debt-to-equity ratio. Feeding a `[0, 0.9]`-bounded
 capital-structure weight into a formula whose textbook denominator is D/E
 (unbounded above 1 for a levered firm) understates the leverage effect on
-beta for any company whose true D/E exceeds roughly 9 (debt over 90% of
-capital), and mislabels what the variable holds for every other company. No
-guard beyond the `max(..., 0.0)` floor on the final beta (never negative);
-`calculate_capm_expected_return` itself has no guard at all — unconditional
-arithmetic once beta resolves.
+beta for **every levered company, with the error growing in leverage** —
+algebraically, `D/E − D/(D+E) = D²/(E(D+E)) > 0` for all `D, E > 0`, so the
+substitution understates the leverage term as soon as any debt exists at
+all, not only past some threshold; at `debt_ratio = 50%` the leverage term
+is already halved. It also mislabels what the variable holds for every
+company, levered or not. Measured directly: **108 of 135 tickers get a
+different beta** under the correct D/E substitution. Worst cases — STX,
+STEM, SKYX, DOCN (`debt_ratio` 90.00) — show a coded beta of 0.6844 against
+a correct 3.2440, understating `capm_expected_return` by **14.08pp**; then
+BE 12.65pp, AES 11.26pp, ORCL 7.39pp. No guard beyond the `max(..., 0.0)`
+floor on the final beta (never negative); `calculate_capm_expected_return`
+itself has no guard at all — unconditional arithmetic once beta resolves.
 
 **What it affects.** Reported directly as the `capm_expected_return` column.
 Not consumed by any of the other three figures in this family — unlike
@@ -374,9 +382,12 @@ the same table — when it is a verbatim copy of `dcf_implied_return`, so this
 metric's real inputs are `(dcf_implied_return, market_expected_return)`,
 never `capm_expected_return`.
 
-**Current state.** (2026-09-08) Measured in the same live pull as the other
-three entries: across the 140 rows, `expected_return_spread` ranges from
-about **-155.56 to over 6,550,000**, for the same reasons
+**Current state.** (2026-09-09) Re-measured in a fresh live pull (140 rows,
+`portfolio_plus_benchmark` universe, real loaders): `expected_return_spread`
+ranges from about **-225.38 (AES) to over 6,550,000**, for the same reasons
 `dcf_implied_return`'s entry documents — `market_expected_return` is a fixed
 9.7 subtracted from every row, so this figure's spread and its extremes
-track `dcf_implied_return`'s directly. Re-measure rather than quote.
+track `dcf_implied_return`'s directly. A previously reported minimum of
+-155.56 did not reproduce; it is today's second-lowest (SO), not the
+minimum — a price-sensitive extreme that moved between passes. Re-measure
+rather than quote.
