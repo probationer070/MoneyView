@@ -38,6 +38,28 @@ Every entry in every family file uses exactly this shape. The checker parses
 it, so the field names and the `Source:` line are load-bearing, not
 decoration.
 
+**The `Source:` line's two parts answer two different questions.** The line
+number points at **where the metric is computed**. The symbol names the
+**enclosing definition** — the function or class the computation lives
+inside — which for an inline calculation (`price / eps` written directly in
+a branch of `build_verdict`, say, rather than in its own function) is not
+defined at that line; it is defined wherever `def`/`class` for that name
+appears in the file. The checker verifies the symbol is defined *somewhere*
+in the cited file, deliberately not at the cited line, because pinning the
+line would break every entry on any edit above it. `docs/metrics/price-signals.md`'s
+`trailing_pe` entry is the worked example: `valuation_verdict.py:446` is
+where `price / eps` is written; `build_verdict` (defined at line 238) is the
+function it's written inside.
+
+**The `Current state` field carries its date immediately after the label,
+not inside it** — `**Current state.** (YYYY-MM-DD) ...` — because the checker
+matches the literal substring `**Current state.` and a date placed *inside*
+the bold span (`**Current state (YYYY-MM-DD).**`) breaks that match: nothing
+in the required text is exactly `**Current state.` when a parenthetical sits
+between "state" and the period. The form below is checker-verified, not
+merely styled to look that way, and still puts the staleness marker before
+the sentence for a skimming reader.
+
 ```markdown
 ### `metric_name`
 
@@ -58,7 +80,7 @@ denominator and window, annualisation, fallback, guards.
 
 **Common misreading.** The plausible wrong reading, stated as a wrong reading.
 
-**Current state (YYYY-MM-DD).** What it does today; what it refuses and why.
+**Current state.** (YYYY-MM-DD) What it does today; what it refuses and why.
 ```
 
 ## What earns an entry

@@ -80,7 +80,7 @@ set, and is never comparable to an annualised return.
 **Common misreading.** Read as a positive loss percentage. `-0.094` is a 9.4%
 decline, not a 9.4% gain and not 0.094%.
 
-**Current state.** Measured 2026-09-08 by calling `build_verdict(ticker)` for
+**Current state.** (2026-09-08) Measured by calling `build_verdict(ticker)` for
 all 139 tickers in the live watchlist (`SELECT ticker FROM watchlist` against
 `data/processed/moneyview.db`) and reading each result's
 `["rows"]["drawdown"]["reason"]`. **84 of 139 currently return a value; 55
@@ -134,7 +134,7 @@ means the recent window's mean volume runs at 1.20x the baseline mean.
 **Common misreading.** Read as a proportion. `1.195` is `×1.20`, not `+19.5%`
 and not `119.5%`.
 
-**Current state.** Measured 2026-09-08 by calling `build_verdict(ticker)` for
+**Current state.** (2026-09-08) Measured by calling `build_verdict(ticker)` for
 all 139 live watchlist tickers and reading each result's
 `["rows"]["volume"]["reason"]`. All 139 currently return a value (some via
 the 90/252 primary call, others via the fallback); none refuse (0
@@ -208,7 +208,7 @@ from `price_signals.py`'s `trailing_pe_series` function. It does not — that
 function exists, is tested, and is never called; the reported value is a
 separate, hand-written `price / eps` with different EPS-selection logic.
 
-**Current state.** Measured 2026-09-08 by calling `build_verdict(ticker)` for
+**Current state.** (2026-09-08) Measured by calling `build_verdict(ticker)` for
 all 139 live watchlist tickers and reading each result's
 `["rows"]["trailing_pe"]["reason"]`. **108 of 139 currently return a value
 from the "own PE" branch documented above; 31 refuse** — 0 `no_statements`,
