@@ -1,0 +1,74 @@
+# Metric Reference
+
+MoneyView reports numbers. This is where each one that a reader could
+misunderstand is explained: what it is, what question it answers, exactly how
+this codebase computes it, and the specific wrong belief a reader could form
+about it.
+
+Every entry cites the code it describes (`file:line` and a symbol that must be
+defined in that file). `scripts/check_metric_docs.py` enforces the citation and
+the presence of all eight fields on every commit; it does not and cannot judge
+whether a "common misreading" is one a person could actually have — that stays
+a human review step.
+
+## Families
+
+| Family | Entries | Covers |
+| --- | --- | --- |
+| [`price-signals`](price-signals.md) | 3 | Raw reads off a ticker's own price and volume history. |
+| `discount-rates-and-returns` | 4 | What return the market is pricing in, versus what return is required. |
+| `fundamental-quality` | 7 | Return on capital, growth, and the tax rate — and whether each is trustworthy. |
+| `dcf-mechanics` | 8 | The discounted-cash-flow build itself: terminal value, net debt, per-share value. |
+| `verdict-panel` | 3 | How price and value signals are framed and gapped into the read-only evidence panel. |
+| `industry-benchmarks` | 5 | Sector reference values and how a subject's own figure is normalised against them. |
+| `attribution-and-uncertainty` | 7 | What moved a valuation, by how much, and how much confidence attaches to the answer. |
+
+Only `price-signals` is written so far; the other six families are pending
+later passes. Their counts above are the source-backed totals confirmed in
+[`inventory.md`](inventory.md), not the original spec's candidate counts —
+where the two disagreed, the inventory won. `price-signals` itself is written
+at 3 entries rather than the inventory's 4: `pe_change` was found to have zero
+callers anywhere under `apps/` while writing this file, the same "not present"
+test the inventory already applies to `packages/core_finance/hurdle_rate.py`
+and `risk_analysis.py`. See the note at the top of `price-signals.md`.
+
+## Entry template
+
+Every entry in every family file uses exactly this shape. The checker parses
+it, so the field names and the `Source:` line are load-bearing, not
+decoration.
+
+```markdown
+### `metric_name`
+
+Source: `packages/core_finance/price_signals.py:19` — `drawdown_from_peak`
+
+**What it is.** One sentence a non-specialist can hold.
+
+**Why this metric.** What it answers that a neighbouring metric does not.
+
+**How it is calculated here.** The implementation's semantics: sign convention,
+denominator and window, annualisation, fallback, guards.
+
+**What it affects.** What downstream consumes it.
+
+**Where it is shown.** Endpoint and screen, or "HTTP-only, no UI".
+
+**How to read it.** Unit, direction and sign, and the reading NOT to make.
+
+**Common misreading.** The plausible wrong reading, stated as a wrong reading.
+
+**Current state (YYYY-MM-DD).** What it does today; what it refuses and why.
+```
+
+## What earns an entry
+
+A field earns an entry when it carries **material interpretive ambiguity** --
+when a competent reader could form a wrong belief about what the number means.
+That is broader than "the calculation had a defensible alternative", which would
+drop three classes: thresholds (no competing formula, the question is what the
+threshold does), normalisations (uncontroversial formula, contested denominator),
+and association measures (trivial to compute, easy to read as a contribution).
+
+Identifiers, names, dates, sources, counts and raw statement passthroughs get no
+entry: there is no method to explain.
