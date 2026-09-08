@@ -60,8 +60,8 @@ def _problems_for_entry(entry: str, heading: str, doc: Path, repo_root: Path) ->
             # entry wrong.
             symbol = match.group(3)
             defined = re.search(
-                rf"^\s*(?:def|class)\s+{re.escape(symbol)}"
-                rf"|^\s*{re.escape(symbol)}\s*[:=]",
+                rf"^\s*(?:def|class)\s+{re.escape(symbol)}\b"
+                rf"|^\s*{re.escape(symbol)}\s*[:=](?!=)",
                 body,
                 re.MULTILINE,
             )

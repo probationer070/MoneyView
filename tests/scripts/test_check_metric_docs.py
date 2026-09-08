@@ -101,3 +101,16 @@ def test_the_inventory_file_is_not_treated_as_an_entry_file(tmp_path):
     (docs / "inventory.md").write_text("# Inventory\n\n| a | b |\n", encoding="utf-8")
     (docs / "README.md").write_text("# Metrics\n\nprose\n", encoding="utf-8")
     assert check_metric_docs(docs, repo) == []
+
+
+def test_a_symbol_that_only_appears_in_a_comparison_is_not_treated_as_defined(tmp_path):
+    """`foo == bar` at line-start satisfies a naive `^\\s*foo\\s*[:=]` by matching
+    the first `=` of `==`. A comparison is a USE, not a definition, and a checker
+    that accepts it reports "symbol exists" for a symbol that does not."""
+    docs, repo = _write(tmp_path, _entry("`pkg/thing.py:2` -- `compared`"))
+    (repo / "pkg" / "thing.py").write_text(
+        "a = 1\nb = 2\ncompared == a\n", encoding="utf-8"
+    )
+    problems = check_metric_docs(docs, repo)
+    assert len(problems) == 1
+    assert "compared" in problems[0]
