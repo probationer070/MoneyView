@@ -50,10 +50,19 @@ window to the last `_DRAWDOWN_BARS = 252` *usable* closes (line 273; NULL
 closes are dropped first, so 252 kept closes can span more than 252 calendar
 days) and refuses the whole row with `insufficient_history` if fewer than 252
 usable closes exist (lines 274–286), separately reporting `non_positive_peak`
-if the window's own maximum is `<= 0` (line 287). A peer-mean comparison is
-computed alongside it from other tickers' closes over the *same calendar
-span*, not their own last-252-bar window, but that comparison is a value
-attached next to `drawdown`, not part of what this entry documents.
+if the window's own maximum is `<= 0` (line 287). **A third guard refuses the
+row for a reason that has nothing to do with the subject's own closes:** if
+`resolve_peers(ticker)` (`apps/api/services/peer_set.py:17`) cannot find at
+least `MIN_PEERS = 3` same-industry tickers, `build_verdict` refuses the
+*entire* `drawdown` row with that failure's own reason —
+`peer_set_too_thin: N peers` or `no_industry: {ticker}` — at
+`valuation_verdict.py:294-295`, even though `drawdown_from_peak` itself never
+ran and would have succeeded on the subject's own closes alone. The peer-mean
+comparison shown alongside a *successful* row is computed from other
+tickers' closes over the *same calendar span*, not their own last-252-bar
+window; that comparison is a value attached next to `drawdown`, not part of
+what this entry documents — but its prerequisite, the peer set resolving at
+all, is a real gate on whether `drawdown` reports anything.
 
 **What it affects.** Only the verdict panel's `drawdown` row and, when the
 peer set resolves, a peer-mean figure shown beside it. Nothing further
@@ -73,11 +82,15 @@ decline, not a 9.4% gain and not 0.094%.
 
 **Current state.** Measured 2026-09-08 by calling `build_verdict(ticker)` for
 all 139 tickers in the live watchlist (`SELECT ticker FROM watchlist` against
-`data/processed/moneyview.db`) and checking each `drawdown` row's `reason`
-field. All 139 currently return a value; none refuse (0 `insufficient_history`,
-0 `non_positive_peak`). Re-measure rather than quote — this reflects only the
-history stored today, and a newly-added ticker with under 252 bars of history
-would refuse.
+`data/processed/moneyview.db`) and reading each result's
+`["rows"]["drawdown"]["reason"]`. **84 of 139 currently return a value; 55
+refuse** — 0 `insufficient_history`, 0 `non_positive_peak`, but **51
+`peer_set_too_thin` and 4 `no_industry`**, both from the peer-set guard above,
+not from `drawdown_from_peak` itself. This is the *verdict-panel row's*
+coverage, gated on peer resolution; it is a different, narrower quantity than
+`drawdown_from_peak`'s own success rate over the subject's closes alone,
+which this measurement did not isolate. Re-measure rather than quote — this
+reflects only the history and industry mappings stored today.
 
 ### `volume_ratio`
 
@@ -121,12 +134,13 @@ means the recent window's mean volume runs at 1.20x the baseline mean.
 **Common misreading.** Read as a proportion. `1.195` is `×1.20`, not `+19.5%`
 and not `119.5%`.
 
-**Current state.** Measured 2026-09-08 with the same method as `drawdown`:
-`build_verdict(ticker)` for all 139 live watchlist tickers, checking the
-`volume` row's `reason` field. All 139 currently return a value (some via the
-90/252 primary call, others via the fallback); none refuse (0 `zero_volume`,
-0 `no_volume`, 0 `insufficient_history` on this row). Re-measure rather than
-quote.
+**Current state.** Measured 2026-09-08 by calling `build_verdict(ticker)` for
+all 139 live watchlist tickers and reading each result's
+`["rows"]["volume"]["reason"]`. All 139 currently return a value (some via
+the 90/252 primary call, others via the fallback); none refuse (0
+`zero_volume`, 0 `no_volume`, 0 `insufficient_history` on this row). Unlike
+`drawdown`, this row has no peer-set or benchmark gate, so its coverage is
+the subject's own bars alone. Re-measure rather than quote.
 
 ### `trailing_pe`
 
@@ -155,7 +169,17 @@ beyond the annual EPS figure itself; the result is a point-in-time ratio, not
 a rate. Guards: refuses with `no_statements` if no statement bundle is stored
 for the ticker at all; refuses with `no_positive_eps` if every annual period
 examined has EPS `<= 0` or missing; refuses with `insufficient_history` if
-there is no usable close. **Divergence from the textbook / from this same
+there is no usable close. **A prior guard gates all three of those, and has
+nothing to do with the subject's own EPS or price:** `price / eps` is never
+even attempted unless `resolve_for_ticker(ticker)`
+(`apps/api/services/industry_benchmark_store.py:143`) first resolves a
+Damodaran sector benchmark for the ticker's industry (refuses with
+`no_industry`/other `bench_reason` text if not, line 383) *and* that
+benchmark carries a `trailing_pe` column with at least 3 surviving
+contributing industries (refuses with `no_sector_pe` otherwise, lines
+384-387). A ticker with a perfectly good own EPS and price still reports no
+`trailing_pe` value if its sector benchmark does not resolve. **Divergence
+from the textbook / from this same
 module:** `packages/core_finance/price_signals.py:45` defines a second,
 differently-scoped implementation, `trailing_pe_series`, which pairs each
 close with whatever EPS covers that close's own year across a whole series.
@@ -184,9 +208,12 @@ from `price_signals.py`'s `trailing_pe_series` function. It does not — that
 function exists, is tested, and is never called; the reported value is a
 separate, hand-written `price / eps` with different EPS-selection logic.
 
-**Current state.** Measured 2026-09-08 with the same method as `drawdown`:
-`build_verdict(ticker)` for all 139 live watchlist tickers, checking the
-`trailing_pe` row's `reason` field. All 139 currently return a value from the
-"own PE" branch documented above; none refuse (0 `no_statements`, 0
-`no_positive_eps`, 0 `insufficient_history` on this row). Re-measure rather
-than quote.
+**Current state.** Measured 2026-09-08 by calling `build_verdict(ticker)` for
+all 139 live watchlist tickers and reading each result's
+`["rows"]["trailing_pe"]["reason"]`. **108 of 139 currently return a value
+from the "own PE" branch documented above; 31 refuse** — 0 `no_statements`,
+0 `insufficient_history`, but **27 `no_positive_eps` and 4 `no_industry`**;
+the 4 `no_industry` refusals are the sector-benchmark gate above, not a
+failure of the subject's own EPS or price (the same 4 tickers also fail
+`drawdown`'s peer-set gate, since both read the same
+`corporate_quote_facts.industry` column). Re-measure rather than quote.

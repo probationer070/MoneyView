@@ -7,18 +7,26 @@ candidates enumerated from the outside; this is what a family-by-family read of
 `packages/core_finance/` and the four named `apps/api` files actually has, with
 every claim checked against a specific `file:line`.
 
-**Headline finding.** Of the spec's 50 candidates: **38 confirmed distinct**
+**Headline finding.** Of the spec's 50 candidates: **37 confirmed distinct**
 implementation sites, **4 duplicates** of another candidate already in this
 table (`trailing_pe_series`, `dcf_implied_return_pct`, `roic`-at-decision,
-`wacc`-at-decision), and **8 not present** — the named function exists in
+`wacc`-at-decision), and **9 not present** — the named function exists in
 source but is never invoked from anywhere under `apps/`, confirmed by a
 repo-wide grep for its import, not merely absent from the one call site the
 spec author had in mind (`calculate_crp`, `calculate_wacc`,
 `decompose_hurdle_rate`, `wacc_sensitivity`, `unlever_beta`, `relever_beta`,
-`bottom_up_beta`, `calculate_fcff`). One additional duplicate
+`bottom_up_beta`, `calculate_fcff`, `pe_change`). One additional duplicate
 (`stock_expected_return`) was found but was never one of the spec's named 50,
 so it is recorded but not counted in the totals below. 4 genuinely new
 candidates were found and deliberately not added — see "Follow-up candidates".
+
+**Correction (2026-09-08, during Task 3):** `pe_change` was originally listed
+as "distinct" below and has been moved to "Dropped candidates" as not
+present — it has no caller under `apps/`, the same test already applied to
+`hurdle_rate.py` and `risk_analysis.py`, which the original pass missed for
+this one row. See that table entry for the full reasoning. This changes the
+confirmed-distinct/not-present split from 38/8 to 37/9; the total (50) is
+unaffected.
 
 Two entire core_finance modules turned up nothing: `risk_analysis.py`
 (`payback_period`, `sensitivity_analysis`, `monte_carlo_npv`) is dead code with
@@ -27,7 +35,7 @@ is likewise never imported by `apps/` at all — WACC and the beta used against 
 are reported as stored/passthrough inputs, not computed by this module's
 formulas. See "Notable findings" at the end.
 
-38 confirmed + 4 duplicates + 8 not-present = 50. **This exact reconciliation to
+37 confirmed + 4 duplicates + 9 not-present = 50. **This exact reconciliation to
 50 is itself a flag, not a clean result** — see the note at the end of this file
 before trusting it.
 
@@ -36,7 +44,6 @@ before trusting it.
 | `drawdown` | price-signals | `packages/core_finance/price_signals.py:19` `drawdown_from_peak` | distinct |
 | `volume_ratio` | price-signals | `packages/core_finance/price_signals.py:35` `volume_ratio` | distinct |
 | `trailing_pe` | price-signals | `apps/api/services/valuation_verdict.py:446` (inline `price / eps`) | distinct |
-| `pe_change` | price-signals | `packages/core_finance/price_signals.py:63` `pe_change` | distinct |
 | `market_expected_return` | discount-rates-and-returns | `packages/core_finance/expected_return.py:32` `calculate_market_expected_return`; reported `apps/api/services/corporate_comparison.py:449,473` | distinct |
 | `capm_expected_return` | discount-rates-and-returns | `packages/core_finance/expected_return.py:41` `calculate_capm_expected_return`; reported `apps/api/services/corporate_comparison.py:447` | distinct |
 | `dcf_implied_return` | discount-rates-and-returns | `packages/core_finance/expected_return.py:54` `calculate_dcf_implied_return`; reported `apps/api/services/corporate_comparison.py:446` | distinct |
@@ -77,6 +84,7 @@ before trusting it.
 | Candidate | Why |
 | --- | --- |
 | `trailing_pe_series` (`packages/core_finance/price_signals.py:45`) | duplicate of `trailing_pe`. Confirmed unreferenced by any `apps/api` caller (grepped repo-wide); `valuation_verdict.py:446` computes the reported `trailing_pe` field directly as `price / eps`, not through this series function. Same concept, two formulas — the entry for `trailing_pe` should note this divergence rather than documenting a second, unused one. |
+| `pe_change` (`packages/core_finance/price_signals.py:63`) | not present, same reason as `calculate_crp` and the other `hurdle_rate.py` rows below: referenced only by its own module and `tests/core_finance/test_price_signals.py`, with no caller anywhere under `apps/` (confirmed by `grep -rn "pe_change" apps/`, zero hits). It produces no reported number, and this is a reference of *reported* metrics — a function nobody's response ever carries earns no entry regardless of how cleanly it's implemented or tested. **Correction, not an original Task 1 finding:** this row was originally listed above as "distinct." It was caught while writing `docs/metrics/price-signals.md` (Task 3), whose `trailing_pe` entry required reading the rest of `price_signals.py` and applying the same "not present" test this document already uses for `hurdle_rate.py` and `risk_analysis.py`, which the original confirmation pass did not apply to this one candidate. Moved here 2026-09-08; the totals in the "Headline finding" and "On the reconciliation to exactly 50" sections above/below were updated to match (confirmed distinct 38→37, not present 8→9). |
 | `stock_expected_return` (`packages/core_finance/expected_return.py:27,89`) | duplicate of `dcf_implied_return`. `ExpectedReturnResult.stock_expected_return` is assigned literally as `dcf_implied_return` (line 89) — the two fields are numerically identical by construction, always. Not one of the spec's named 11 for this family, but worth recording because a future editor could mistake it for a sixth CAPM-family metric. |
 | `dcf_implied_return_pct` (`apps/api/models/schema_parts/decision.py:67`) | duplicate/snapshot of `dcf_implied_return`. Populated via `apps/api/services/investment_decision.py:91-101`, which calls `apps/api/services/corporate_comparison.py:372` (`_dcf_snapshot`) — the same `calculate_expected_return_result` already documented under `dcf_implied_return`. This copy exists to freeze the figure at decision time. **The surviving `dcf_implied_return` entry must document that `decision.py` freezes this value at decision time and does not reflect later assumption changes** (`DEFAULT_RISK_FREE_RATE`/`DEFAULT_EQUITY_RISK_PREMIUM` can change after the decision was recorded; see `metric_schema_version` in Follow-up candidates, which exists for exactly this reason) — a reader comparing a stored decision's figure against today's live `dcf_implied_return` is comparing two different vintages of the same formula, not a discrepancy in the formula itself. |
 | `roic` (`apps/api/models/schema_parts/decision.py:68`) | duplicate/snapshot of ROIC. Populated directly as `round(float(metrics.roic), 2)` at `apps/api/services/investment_decision.py:102` (and identically at `apps/api/services/corporate_comparison.py:354`) — read straight from the same `metrics` object `_dcf_snapshot` is called alongside, not through `_dcf_snapshot` itself. **The surviving ROIC entry must document the same freezing behaviour as `dcf_implied_return_pct` above**: this is ROIC as computed at decision time, not a live figure that moves as later statements arrive. |
@@ -111,7 +119,7 @@ Genuinely new metrics found while confirming, recorded rather than absorbed.
 
 ## On the reconciliation to exactly 50
 
-38 distinct + 4 duplicate + 8 not-present sums to exactly 50, matching the
+37 distinct + 4 duplicate + 9 not-present sums to exactly 50, matching the
 spec's total. That is called out explicitly per the task instructions: **an
 exact match is a reason for suspicion, not confidence.** Two things make this
 particular reconciliation more defensible than a coincidence would be:
