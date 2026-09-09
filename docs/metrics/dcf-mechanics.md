@@ -72,16 +72,19 @@ so `calculate_terminal_value`'s own `ValueError` is, through the shipped grid,
 unreachable dead code: the caller already filters out every input that would
 trigger it.
 
-**A measured divergence, not just a theoretical one.** `dcf.py:236-239` documents
-the grid's centre (`is_base`) cell as reproducing the headline valuation "exactly."
-It does not, and a test already says so:
+This is a measured divergence, not just a theoretical one. `dcf.py:236-239`
+documents the grid's centre (`is_base`) cell as reproducing the headline
+valuation "exactly." It does not, and two tests already say so:
 `tests/api/test_corporate_dcf_sensitivity.py::test_the_base_cell_reproduces_the_reported_enterprise_value`
 (lines 92-102) asserts agreement only to `abs=0.01`, with its own comment stating
 why -- "the two paths really are different code... multi_stage_dcf publishes 2dp
-and the report 4dp, so agreement can only be asserted to the coarser of the two."
-The headline path sums FIVE *already-rounded-to-4dp* per-year present values
-(`corporate_dcf.py:146-155`); the grid path (`calculate_npv`, below) sums the
-*unrounded* present values and rounds only the total, to 2dp. I measured this
+and the report 4dp, so agreement can only be asserted to the coarser of the two" --
+and the sibling `test_the_base_cell_reproduces_the_reported_per_share_value`
+(lines 105-113) carries that same 0.01 through the equity bridge, pinning
+per-share agreement to `abs=0.01/15.0`, tighter than the discussion below might
+suggest. The headline path sums FIVE *already-rounded-to-4dp* per-year present
+values (`corporate_dcf.py:146-155`); the grid path (`calculate_npv`, below) sums
+the *unrounded* present values and rounds only the total, to 2dp. I measured this
 directly rather than take the comment's word for it: calling
 `build_dcf_full_report` for every ticker in the live watchlist (`SELECT ticker FROM
 watchlist` against `data/processed/moneyview.db`) with the same loaders
@@ -92,9 +95,16 @@ report's headline `enterprise_value` to its own sensitivity grid's `is_base` cel
 and not investigated further here). Across those 115, the two paths' enterprise
 values differed by as much as **$0.005bn** (ticker `TRP`: base cell 232.2 vs.
 headline 232.205) and the per-share values by as much as **$0.346** (ticker `TWIN`:
-18495.071 vs. 18494.7251) -- small relative to either figure, but real, present on
-live data, and exactly the size the rounding-order difference predicts, not a
-larger or more alarming divergence.
+18495.071 vs. 18494.7251) in absolute terms -- small relative to either figure.
+Measured in *relative* terms instead, the worst case is a different ticker
+entirely: **`MSTR`'s base cell (0.0204) and headline (0.0264) per-share figures
+are both themselves tiny, so their $0.006 gap is a 22.7% disagreement** on the
+number a reader acts on -- not small at all, even though the absolute dollar
+amount is the smallest in the sample. Only 1 of 109 tickers with a measurable
+relative divergence exceeds 1% and 3 exceed 0.1%, so the rounding-order
+explanation above still accounts for the size of every divergence measured; it
+is only the "small relative to either figure" framing that does not survive the
+worst live case.
 
 **What it affects.** Only the sensitivity grid's per-cell `enterprise_value`,
 `terminal_value`, `pv_terminal`, `tv_share_pct`, and (through the shared equity
@@ -399,12 +409,16 @@ be a delayed-start ramp). **Only one of the four shapes is exercised by anything
 that reaches a reader today.** `apps/api/services/conservative_case.py:295-297`
 hardcodes every auto-generated conservative case's segments to
 `ramp_start_year=1, initial_growth=None, waypoint_gap_fraction=None` -- shape (4),
-the decaying-growth default -- and every one of the 31 stored `valuation_case`
-rows in the live database is exactly such an auto-generated conservative case (0
-forked, per `attribution-and-uncertainty.md`'s Shapley entry). The other three
-shapes are reachable only through a hand-authored `POST /api/v1/valuation/cases`
-payload specifying different `SegmentSpec` fields directly -- a real, HTTP-only
-capability, but one no case in the live database currently uses.
+the decaying-growth default -- and 30 of the 31 stored `valuation_case` rows in
+the live database are exactly such an auto-generated conservative case. The
+remaining row, `two_segment_parent`, is a hand-authored case (0 forked, per
+`attribution-and-uncertainty.md`'s Shapley entry) -- but both of its segments
+also set `ramp_start_year=1, initial_growth=NULL, waypoint_gap_fraction=NULL`,
+the same shape (4), so every one of the 31 stored rows currently exercises this
+shape regardless of how it was created. The other three shapes are reachable
+only through a hand-authored `POST /api/v1/valuation/cases` payload specifying
+different `SegmentSpec` fields directly -- a real, HTTP-only capability, but
+one no case in the live database currently uses.
 
 **What it affects.** Feeds `ebit` (`revenue x margin`), which feeds `reinvestment`
 (below) and `fcff`, which feed `enterprise_value`/`equity_value`/
@@ -431,11 +445,12 @@ fields were set when the case was authored, not a labelled field on the segment'
 own reported revenue array.
 
 **Current state.** (2026-09-09) Confirmed directly: `conservative_case.py:295-297`
-hardcodes shape (4) for every auto-generated case, and all 31 stored
-`valuation_case` rows are auto-generated conservative cases (measured under
-Shapley contribution in `attribution-and-uncertainty.md`). No stored case
-currently exercises shapes (1), (2), or (3) -- re-measure if a hand-authored case
-is ever created.
+hardcodes shape (4) for every auto-generated case; 30 of the 31 stored
+`valuation_case` rows are auto-generated conservative cases, and the
+remaining row, `two_segment_parent`, is a hand-authored case whose two
+segments also happen to set the shape-(4) fields. No stored case currently
+exercises shapes (1), (2), or (3) -- re-measure if a hand-authored case
+setting different `SegmentSpec` fields is ever created.
 
 ### sales-to-capital reinvestment
 
@@ -447,12 +462,10 @@ year's revenue growth and an assumed sales-to-capital efficiency ratio:
 
 **Why this metric.** It is the *only* reinvestment mechanism the segment model
 carries -- there is no separate capex, depreciation, or working-capital schedule
-to reconcile against, unlike `corporate_dcf.py`'s FCFF product (built on
-`calculate_fcff`'s explicit `depreciation - capex - delta_nwc` terms, though that
-function itself is dead code, see the scope note above). A dollar of revenue
-growth here always consumes capital at a rate fixed entirely by the
-`sales_to_capital` assumption -- there is no way for this model to represent, say,
-capex running ahead of or behind revenue growth in a given year.
+to reconcile against. A dollar of revenue growth here always consumes capital at
+a rate fixed entirely by the `sales_to_capital` assumption -- there is no way for
+this model to represent, say, capex running ahead of or behind revenue growth in
+a given year.
 
 **How it is calculated here.** `(revenue - previous) / ratio`, where `ratio` is
 `sales_to_capital_early` for years 1 through 5 and `sales_to_capital_late`
@@ -481,11 +494,10 @@ segment with `sales_to_capital` set very high reports very little reinvestment
 per dollar of new revenue, which reads as capital-efficient growth regardless of
 whether that efficiency assumption is realistic for the segment in question.
 
-**Common misreading.** Treating this figure as decomposable into the capex and
-depreciation components `corporate_dcf.py`'s FCFF formula names explicitly. It is
-not: this is a single lump derived purely from the revenue delta and one assumed
-ratio, with no separate depreciation add-back or working-capital term anywhere in
-the segment model.
+**Common misreading.** Treating this figure as decomposable into separate capex
+and depreciation components. It is not: this is a single lump derived purely
+from the revenue delta and one assumed ratio, with no separate depreciation
+add-back or working-capital term anywhere in the segment model.
 
 **Current state.** (2026-09-09) Confirmed by reading `segment_valuation.py:485-517`
 that the ramp-year guard and the early/late ratio switch are the only two branches
@@ -553,9 +565,10 @@ reproduce. The converse assumption -- that a small value is automatically safer
 model-validity signal.
 
 **Current state.** (2026-09-09) Measured directly against the live database:
-calling `run_stored_case` for all 31 stored `valuation_case` rows (all 31 are
-root conservative cases, per the measurement in `revenue_path`'s entry above) and
-reading each result's `terminal_capital_intensity_change`. **0 of 31 are negative
+calling `run_stored_case` for all 31 stored `valuation_case` rows (30 root
+auto-generated conservative cases plus the hand-authored `two_segment_parent`,
+per the measurement in `revenue_path`'s entry above) and reading each result's
+`terminal_capital_intensity_change`. **0 of 31 are negative
 beyond floating-point tolerance (minimum observed: -1.1e-16, i.e. exactly zero);
 9 of 31 are strictly positive, up to a maximum of 3.3125** (331%). The remaining
 22 report exactly zero -- `roic_stable` set equal to the segment's own

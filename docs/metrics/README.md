@@ -19,9 +19,9 @@ a human review step.
 | [`discount-rates-and-returns`](discount-rates-and-returns.md) | 4 | What return the market is pricing in, versus what return is required. |
 | [`fundamental-quality`](fundamental-quality.md) | 7 | Return on capital, growth, and the tax rate — and whether each is trustworthy. |
 | [`dcf-mechanics`](dcf-mechanics.md) | 8 | The discounted-cash-flow build itself: terminal value, net debt, per-share value. |
-| `verdict-panel` | 3 | How price and value signals are framed and gapped into the read-only evidence panel. |
+| [`verdict-panel`](verdict-panel.md) | 3 | How price and value signals are framed and gapped into the read-only evidence panel. |
 | [`industry-benchmarks`](industry-benchmarks.md) | 5 | Sector reference values and how a subject's own figure is normalised against them. |
-| `attribution-and-uncertainty` | 7 | What moved a valuation, by how much, and how much confidence attaches to the answer. |
+| [`attribution-and-uncertainty`](attribution-and-uncertainty.md) | 7 | What moved a valuation, by how much, and how much confidence attaches to the answer. |
 
 All seven families are written. Their counts above are the
 source-backed totals confirmed in

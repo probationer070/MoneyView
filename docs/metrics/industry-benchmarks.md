@@ -19,7 +19,7 @@ loading a stored vintage and mapping a ticker to a sector — lives in
 metrics itself.
 
 `apps/api/services/company_baseline.py` is the ticker-level entry point above
-all of this: it assembles a company's own baseline figures and calls
+all of this: it assembles a company's own baseline figures and defines
 `generate_conservative_case`, which calls `resolve_for_ticker` (→
 `resolve_benchmark`) and `build_conservative_case` (→ `fade`,
 `column_by_key`) in turn — but it never calls any of the five functions below
@@ -357,17 +357,27 @@ apply convergence twice (the function's own docstring says so directly).
 exactly six fields — `operating_margin`, `after_tax_roc`, `sales_to_capital`,
 `revenue_growth`, `effective_tax_rate`, `cost_of_capital` — but stores a
 justifying narrative claim (`_claim`/`_missing_claim`, naming the benchmark,
-the company's own value, and the chosen endpoint) for only four of them:
-`margin_target`, `sales_to_capital_early`/`sales_to_capital_late` (the same
-computed value, narrated twice under the segment's two ratio fields), and
-`revenue_target`. **The `effective_tax_rate` and `cost_of_capital` fades are
-computed identically but their meta dict is discarded** (bound to `_`, lines
-226-229) before it can become a narrative — not a decision to omit these two
-specifically, but a consequence of scope: `wacc_initial`/`wacc_stable`/
-`effective_tax_rate` are case-level fields, and this codebase's
-narrative-claim discipline (`NARRATED_FIELDS`, `valuation_case.py:31`)
-applies only to segment-level fields, so there is no case-level slot for the
-claim to go in. When a benchmark column is absent from `resolve_benchmark`'s
+the company's own value, and the chosen endpoint) for only three of them:
+`operating_margin` (narrated as `margin_target`), `sales_to_capital`
+(narrated twice, once under each of the segment's two ratio fields,
+`sales_to_capital_early`/`sales_to_capital_late`), and `revenue_growth`
+(narrated as `revenue_target`) — four narrated output columns from three
+narrated input fields. **The other three fades' meta dicts are discarded**
+(bound to `_`): `after_tax_roc` at lines 217-218, alongside `effective_tax_rate`
+and `cost_of_capital` at lines 226-229. This is a consequence of scope, not a
+decision to omit these three specifically: `roic_stable`,
+`effective_tax_rate`, and `wacc_initial`/`wacc_stable` are all case-level
+fields, and this codebase's narrative-claim discipline (`NARRATED_FIELDS`,
+`valuation_case.py:31-42`) applies only to segment-level fields, so there is
+no case-level slot for any of the three claims to go in. **The gap this
+leaves is unmarked, not merely undocumented**: a stored case's fields carry
+no flag distinguishing a faded case-level value from one that was never
+faded at all — `after_tax_roc` feeds `roic_stable` (`conservative_case.py:237`,
+`roic_stable = min(faded_roc, implied_marginal_roc)`), which is exactly what
+gates the `run_case` raise documented in this file's sibling
+(`dcf-mechanics.md`'s `terminal_capital_intensity_change` entry), so the
+missing provenance sits on a field with real downstream consequence, not an
+inert one. When a benchmark column is absent from `resolve_benchmark`'s
 result (dropped for too few surviving industries, per that entry), `fade` is
 never called for it at all — `faded()`'s own `average is None` branch
 (`conservative_case.py:200-208`) short-circuits to the company's own value
