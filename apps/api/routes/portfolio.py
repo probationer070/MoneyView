@@ -69,8 +69,11 @@ def get_watchlist():
             previous_close = bars[-1].close
             sparkline = [bars[-1].close]
         else:
-            last_close = 0.0
-            previous_close = 0.0
+            # No bar carries a usable close -- either the ticker has no history or every
+            # cached bar was unsettled. Report that, rather than a 0.0 the tile would
+            # render as a real price and DeltaBadge would score as a -100% collapse.
+            last_close = None
+            previous_close = None
             sparkline = []
 
         result.append(
@@ -81,7 +84,11 @@ def get_watchlist():
                 group_name=row["group_name"] or "custom",
                 weight=float(row["weight"] or 0.0),
                 last_close=last_close,
-                delta=DeltaBadge.compute(last_close, previous_close),
+                delta=(
+                    DeltaBadge.compute(last_close, previous_close)
+                    if last_close is not None and previous_close is not None
+                    else None
+                ),
                 sparkline=sparkline,
                 id=int(row["id"]),
             )

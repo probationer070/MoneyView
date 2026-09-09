@@ -130,3 +130,44 @@ def test_non_finite_bar_is_never_written():
 
     written_dates = [params[1] for params in connection.inserts]
     assert written_dates == ["2026-09-04"]
+
+
+# --- the watchlist row: a missing price is null, never zero ------------------
+
+
+def test_watchlist_reports_no_price_rather_than_zero_when_every_bar_is_priceless(monkeypatch):
+    """The tile renders "—" for a null and "$0.0" for a zero.
+
+    `formatClose` (StockTile.tsx:18) already refuses to invent a stand-in 0, so the
+    only reason the grid showed $0.00 was that the API sent one. With every bar
+    dropped as priceless the series is empty, and the row must say so.
+    """
+    from apps.api.routes import portfolio as portfolio_routes
+
+    monkeypatch.setattr(portfolio_routes, "ensure_watchlist_bootstrapped", lambda *_: None)
+    monkeypatch.setattr(portfolio_routes._mkt, "get_stock_ohlcv", lambda *a, **k: [])
+
+    class _Cursor:
+        @staticmethod
+        def fetchall():
+            return [{
+                "ticker": "AAPL", "name": "Apple", "sector": "Tech",
+                "group_name": "core", "weight": 0.0, "id": 1,
+            }]
+
+    class _Rows:
+        def execute(self, *_):
+            return _Cursor()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    monkeypatch.setattr(portfolio_routes, "get_db", lambda: _Rows())
+
+    rows = portfolio_routes.get_watchlist()
+
+    assert rows[0].last_close is None
+    assert rows[0].delta is None
