@@ -490,7 +490,10 @@ class MarketDataService:
         return None
 
     def _rows_are_fresh(self, rows) -> bool:
-        latest = self._latest_row_date(rows)
+        # Only a bar carrying a price counts. An unsettled bar has today's date and no
+        # close, so counting it made the cache look current and suppressed the refetch
+        # that would have replaced it -- the defect kept its own repair from running.
+        latest = self._latest_row_date([r for r in rows if self._is_priced(r["close"])])
         return latest is not None and latest >= self._previous_trading_day()
 
     def _rows_cover_period(self, rows, period: int | MarketDataFreshnessRule) -> bool:
