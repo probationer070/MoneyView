@@ -297,13 +297,20 @@ last 3 years' summed NOPAT over summed average invested capital — it is not.
 It is the average of three already-computed yearly *ratios* (`values[-3:]`
 in `roic_value`, above), which is not the same number as NOPAT-sum over
 capital-sum whenever the ratios' own denominators differ year to year: an
-average of ratios, not a ratio of averages. The distinction is not academic
-— the audit panel displays a single year's NOPAT and invested capital beside
-this averaged figure, giving a reader every visual cue to assume those two
-displayed inputs produce the displayed ROIC (see the `NOPAT` entry's
-measured 76% divergence), and they structurally cannot: an average of
-ratios was never going to equal a ratio built from any one year's inputs,
-displayed or not.
+average of ratios, not a ratio of averages. A second misreading concerns
+*which years* it averages, and neither the API name nor the UI says: the
+basis selector offers "Recent multi-year average" against "All available
+years average" (`CorporateAssumptionsPanel.tsx:134-135`) with no year count
+on either, but `recent_average` is fixed at exactly the last three entries
+of `roic_points` and `all_year_average` at up to five (`matching_years`,
+`:245-251`, keeps the five most recent overlapping years) — a reader who
+reads "recent multi-year" as "every year I can see charted here" has
+selected the wrong one of the two bases, and gets a different number. Worse,
+`roic_points` holds no gaps to see: a year whose NOPAT or invested capital
+refused is dropped from the list entirely rather than held as a hole
+(`:374-375`), so `values[-3:]` silently reaches back past it — "the last
+three years" can span four or five fiscal years, with nothing in the
+response distinguishing that from three consecutive ones.
 
 **Current state.** (2026-09-08) Measured against `data/processed/moneyview.db`'s
 135 tickers with stored statements (default `recent_average` basis, real

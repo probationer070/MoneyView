@@ -132,3 +132,27 @@ and association measures (trivial to compute, easy to read as a contribution).
 
 Identifiers, names, dates, sources, counts and raw statement passthroughs get no
 entry: there is no method to explain.
+
+## Known gaps
+
+**This reference is not complete, and nothing about its structure says so.**
+The 37 entries above are the metrics `inventory.md` confirmed against source
+while reconciling the design spec's original 50 candidates. Confirming that
+list also turned up four metrics that are live, reported, and pass the
+inclusion rule stated above — recorded in `inventory.md`'s "Follow-up
+candidates" table rather than absorbed, because this plan's scope was the
+confirmed 37. They are listed here so a reader does not mistake their absence
+for a judgment that they carry no interpretive ambiguity:
+
+| Candidate | Source | Why it may deserve an entry |
+| --- | --- | --- |
+| `wacc`, as actually reported | `apps/api/services/corporate_dcf.py:132` (floored at 0.001), `:295` (`wacc_used`) | The WACC a reader sees is a caller-supplied assumption clamped at a floor, not `packages/core_finance/hurdle_rate.py`'s `(E/V)r_e + (D/V)r_d(1-t)` decomposition — that module has no caller under `apps/` at all. Its floor and its interaction with `terminal_growth`'s own clamp (`min(terminal_growth_rate, wacc - 0.005)`, `:133`) are implementation semantics no textbook definition would predict. |
+| `unlevered_beta`, as actually reported | `apps/api/services/corporate_dcf.py:309` (`DCFWaccBreakdown`) | Reported as `params.unlevered_beta or metrics.unlevered_beta` — a stored passthrough. The word "unlevered" invites the belief that this codebase performed the unlevering; on this path it did not. |
+| Sensitivity grid (`sensitivity_grid`/`sensitivity_cell`, `undefined_reason`) | `packages/core_finance/dcf.py:226,181`; reported at `apps/api/services/corporate_dcf.py:230-259` | The grid's `is_base` cell and the same report's headline figures are two independent implementations of one formula set, and `dcf.py:236-239` claims they agree "exactly." They agree to a rounding step, not exactly — measured, tested, and documented in [`dcf-mechanics.md`](dcf-mechanics.md)'s `calculate_terminal_value` entry, which covers the divergence but not the grid's own cell semantics (`undefined_reason`, the axis construction). |
+| `metric_schema_version` | `apps/api/models/schema_parts/decision.py:80` | Exists precisely because a stored decision's dollar figures can be silently reinterpreted under today's `DEFAULT_RISK_FREE_RATE`/`DEFAULT_EQUITY_RISK_PREMIUM` once those change (its own comments, `:70-79`). A version stamp whose whole purpose is to mark when a number stopped meaning what it said is a material-ambiguity candidate, not an identifier — and its sibling column on the comparison snapshots (`apps/api/services/db.py:797`, defaulted to `0`) already produced exactly the misreading an entry would guard against: `ERROR-LOG.md`'s second 2026-08-05 entry records the UI reading `0` as "the definition changed" when it means the earlier definition went unrecorded. |
+
+`inventory.md` also records the metrics deliberately given **no** entry —
+four duplicates of a documented metric and nine functions with no caller
+anywhere under `apps/` — with the reasoning for each. A reader who cannot
+find a metric here should check that file before concluding it was
+overlooked.

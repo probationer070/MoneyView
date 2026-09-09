@@ -361,12 +361,25 @@ price. It is never negative unless `equity_value` itself is negative (a company
 whose bridge leaves it owing more than it is worth), which the function does not
 special-case.
 
-**Common misreading.** Treating a `ValueError` surfacing from this function as a
-data problem discovered here. It is not, in the current wiring: every caller
-already refuses to invoke it with an invalid share count and substitutes `None`
-instead. If this exception reaches the API boundary, something upstream skipped
-its own guard -- a code defect in that caller, not an expected refusal path this
-function is meant to signal.
+**Common misreading.** Reading "diluted" in `value_per_share_diluted` as the
+accounting diluted share count -- issued shares plus options, convertibles and
+the rest of the conventional dilution -- the way the same word means on the
+corporate DCF report. In the segment model it does not: the denominator is
+`case.shares_basic + case.shares_new` over an equity value that *includes*
+`case.ipo_proceeds` (`segment_valuation.py:969-973,1003`), so "diluted" here
+means **post-money**, the new shares and the money they raised both counted in.
+Its sibling `value_per_share_basic` (`:994-1000`) is the pre-money figure --
+`shares_basic` alone, over an equity value computed without the proceeds. The
+corporate DCF report's own `intrinsic_value_per_share` divides by
+`diluted_shares_outstanding`, the statement's diluted average share count
+(`equity_bridge.py:140-150`), which is the conventional meaning. Two figures,
+one word, two different denominators -- and it is the segment model's
+post-money one that the verdict panel's `dcf_gap` compares against a quoted
+market price. A second, narrower misreading: treating a `ValueError` surfacing
+from this function as a data problem discovered here. Every caller already
+refuses to invoke it with an invalid share count and substitutes `None`, so
+this exception reaching the API boundary means a caller skipped its own guard
+-- a code defect there, not a refusal path this function signals.
 
 **Current state.** (2026-09-09) Confirmed by reading all guarded call sites
 (`corporate_dcf.py:368-372`, `corporate_comparison.py:414-418`,

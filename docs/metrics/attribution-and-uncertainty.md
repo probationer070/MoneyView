@@ -330,10 +330,21 @@ case and its parent (case fields plus segment fields, combined), not the
 number of segments in the case and not the number of override keys submitted
 in the original fork request.
 
-**Common misreading.** Read as a soft limit past which the attribution
-becomes "less accurate," rather than a hard refusal past which none is
-computed at all. There is no partial or approximate Shapley result above the
-cap — the endpoint returns 422 and no `contributions` array whatsoever.
+**Common misreading.** Read as a statement about Shapley's own validity —
+"past 12 inputs the attribution stops being meaningful" — when the number is
+purely a latency budget. The comment above the constant derives it from
+`2^12 = 4096` engine runs at a measured 3.98 ms each, about 16 seconds: the
+edge of a tolerable synchronous request. Nothing about Shapley degrades at 13
+inputs; the same 13 would attribute exactly as soundly given the time to run
+`2^13` evaluations. A second misreading, about what is being counted: the cap
+counts changed *dimensions* as `effective_changes` resolves them
+(`case_fork.py:147-163` — an override equal to the parent's stored value is
+discarded before counting), not override keys in the fork request and not
+segments in the case. That function's own docstring says so directly: "the
+attribution cap and `changed_input_count` describe changed dimensions, not
+request keys." A fork submitting 30 keys of which 8 differ from the parent is
+8 against the cap, not 30. Above the cap there is no partial or approximate
+result to fall back on — 422, and no `contributions` array at all.
 
 **Current state.** (2026-09-08) Verified: 0 of 31 stored `valuation_case`
 rows currently have a `parent_case_id` (same measurement as under Shapley
