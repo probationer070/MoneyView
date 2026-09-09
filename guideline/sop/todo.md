@@ -821,6 +821,12 @@ Track F on another branch, and two Track Fs would collide at merge.
       acquisition run and this fix carries a value derived from `0.0`. Stored
       `valuation_case` rows and any persisted snapshot are the places to look.
 
+- [ ] **G5. 32 duplicate news rows are still stored.** Same article, same url, two
+      rows, from the pre-fix hash that included the headline. The read now collapses by
+      url so they never reach a tile, and the write path can no longer add more, so this
+      is inert cleanup rather than a fix -- same standing as G2. `ERROR-LOG.md`
+      2026-09-10.
+
 - [ ] **G4. The tile grid's "Held" filter shows 12 stocks nobody chose.** Not a
       hard-coded limit: `StockTileGrid.tsx` falls back to the 12 most recent when
       *no* stock has a weight, and `weight > 0` is currently 0 of 139 rows. The

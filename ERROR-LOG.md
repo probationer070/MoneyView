@@ -26,6 +26,91 @@ reveal that; only checking the code did.
 
 An entry states what was true when it was written. Nothing updates it on its own.
 
+## 2026-09-10: a relabelled publisher minted a duplicate article and collided a React key
+
+Date: 2026-09-10
+Command: opening the Portfolio tab (console error, `StockTileGrid.tsx:106`).
+Failure: `Encountered two children with the same key,
+https://news.google.com/rss/articles/CBMi8AF...`. React warns that non-unique keys
+may duplicate or omit children.
+Root cause: `NewsService._hash` and a second, independent copy of the same expression
+in `acquisition/store.py` both hashed `headline + url`, and that hash is the `UNIQUE`
+column the `INSERT OR IGNORE` dedup relies on. Google News rewrites the publisher
+suffix between fetches, so one story arrived twice:
+
+    id 376  "... Shares of American Express Company $AXP - MarketBeat"
+    id 506  "... Shares of American Express Company $AXP - marketbeat.com"
+
+Same ticker, same url, same date, different hash. Measured: 32 duplicated
+`(ticker, url)` pairs across 11 tickers, 400 distinct urls in 432 rows, and **zero**
+duplicate `(ticker, hash)` groups -- the constraint was working perfectly on the wrong
+identity. `StockTile.tsx:105` then keyed each article on `article.url`, and two rows
+sharing a url collided.
+
+The reported stack pointed at `StockTileGrid.tsx:107`, where the key is
+`stock.ticker` -- a ticker cannot be a url. That line is the owner boundary React
+attributes the render to, not the site of the duplicate key. The real map is one
+component down.
+
+A second, latent defect sat in the same expression: the hash omitted the ticker
+entirely, so one article naming two companies would have been stored for the first
+ticker and silently dropped for the second. No such rows exist today, which is why it
+had never surfaced.
+
+Fix: fixed. `news_identity_hash(ticker, url)` is now the single identity, shared by
+both write paths, and excludes the headline. `get_news_bulk` also collapses by url so
+the 32 rows already stored stop reaching the tile without deleting any of the user's
+data; it over-fetches first, because deduping after a `LIMIT` of exactly `per_ticker`
+would return a short tile rather than a correct one. Verified against the live
+database: 11 tickers held duplicates, 0 now serve one, and each still fills three
+articles. No frontend change.
+Files changed: `apps/api/services/news_service.py`,
+`apps/api/services/acquisition/store.py`, `tests/api/test_news_article_identity.py`.
+Prevention: `test_save_news_persists_and_dedupes_by_hash` already existed and passed
+throughout. It saves the **same** article twice, so it can only ever exercise an exact
+repeat -- the case that leaks needs the headline to vary while the url holds still. A
+dedup test that never varies the volatile field tests the constraint, not the identity.
+The general form: **when dedup is keyed on a hash, the test has to vary each field the
+hash includes, one at a time.** Duplicated logic made it worse -- two copies of the
+hash, free to drift, and fixing one would have left the other.
+
+## 2026-09-10: every route 404ed on a dev server whose code was sound (unreproduced)
+
+Date: 2026-09-10
+Command: `npm run dev` in `apps/web` (Next.js 16.2.2, Turbopack).
+Failure: `Ready in 4.2s`, then `GET / 404` repeatedly -- 2.2s on the first request,
+then ~50ms. The app did not open at all.
+Root cause: **not established.** By the time it was investigated the failure was gone.
+
+Ruled out by inspection and by test: `app/page.tsx` and `app/layout.tsx` both present
+and tracked; no `middleware.ts`; no `pages/` directory to conflict with `app/`; no
+`basePath` or rewrites in `next.config.ts`; the `@/*` tsconfig alias resolves. Starting
+from the repo root instead of `apps/web` fails differently -- `npx next dev` there tries
+to download Next 16.3.4, and the reported log shows 16.2.2 -- so a wrong working
+directory was not it either.
+
+Verified working from both cache states: with the existing `.next` (200 on `/`,
+`/portfolio`, `/corporate`) and after `rm -rf .next` forcing a full rebuild (200 on all
+three). The cold rebuild's `GET / 200 in 4.1s` closely matches the reported
+`GET / 404 in 2.2s`, so the server was doing real compilation work in both cases.
+
+The one informative detail in the report: `application-code: 212ms` on a 404 means Next
+compiled and rendered something -- the not-found boundary -- rather than failing to find
+the app directory. The route manifest simply did not contain `/`, and the fast repeats
+are a cached negative. That profile fits a stale or corrupt Turbopack cache in
+`.next/dev`.
+Fix: not fixed, because nothing was found to fix. `apps/web/.next` was deleted during
+investigation, which is also the remedy for a corrupt Turbopack cache, so the symptom
+may have been cleared as a side effect. That is a plausible cause, not a demonstrated
+one, and this entry should not be read as saying the cause is known.
+Files changed: none.
+Prevention: the diagnostic that separates the two cases, if it recurs:
+`cd apps/web && rm -rf .next && npm run dev`. If a cold build serves `/`, it was the
+cache. If it still 404s, the next useful bit is whether `/portfolio` 404s too --
+everything failing points at route discovery, `/` alone points at the root page.
+Recorded despite being unresolved because a second occurrence with this entry in hand
+is far cheaper to diagnose than a second occurrence without it.
+
 ## 2026-09-09: an unsettled bar became a $0.00 price for 136 of 139 watchlist tickers
 
 Date: 2026-09-09
