@@ -26,6 +26,58 @@ reveal that; only checking the code did.
 
 An entry states what was true when it was written. Nothing updates it on its own.
 
+## 2026-09-09: an unsettled bar became a $0.00 price for 136 of 139 watchlist tickers
+
+Date: 2026-09-09
+Command: opening the Portfolio tab's stock tile grid (`GET /portfolio/watchlist`).
+Failure: every tile but three showed a price of `$0.0` and a delta of `-100%`. Pure
+Storage rendered correctly, which made it look like a per-ticker data problem rather
+than a systemic one.
+Root cause: three defects in series, none of which is visible from either end alone.
+
+1. The provider returns the *current* day's bar with a real volume and NaN for OHLC
+   before the session settles. `StockOHLCV.close` is typed `float`, and NaN **is** a
+   float, so the bar passed validation unchallenged and was persisted.
+2. SQLite stores NaN as NULL. So the value that went in as NaN came back as None --
+   the absence changed shape in transit, which is why a write-side `is not None`
+   check would never have fired.
+3. `market_data.py` read it back as `float(row["close"] or 0)`. `None or 0` is `0`,
+   so absence became `0.0`, and `DeltaBadge.compute(0.0, 319.97)` scored it as a
+   -100% collapse against the genuine prior close.
+
+Pure Storage was not special: it is one of three tickers the bad run missed entirely,
+so its newest bar was an older, priced one. The three survivors were the tell.
+
+A fourth defect made this self-sustaining. `_rows_are_fresh` measured freshness from
+the raw rows, so a priceless bar dated today made the cache look current and
+suppressed the refetch that would have replaced it. The defect prevented its own
+repair.
+
+Fix: fixed. `_is_priced` gates on `math.isfinite` rather than `is not None`, because
+the value is NaN at the write site and NULL only after the sqlite round trip -- a
+None-only guard covers the read and misses the write. Applied at four points: bars
+with no usable close are never persisted, are dropped on read rather than coerced,
+are excluded from the freshness measurement, and an empty series now reports
+`last_close: null` instead of `0.0`. The 138 pre-existing NULL rows were left in
+place: the read guard makes them inert, and deleting a user's rows was not
+necessary to fix the defect.
+Files changed: `apps/api/services/market_data.py`,
+`apps/api/routes/portfolio.py`, `apps/api/models/schema_parts/watchlist.py`,
+`tests/api/test_priceless_bars.py`.
+Prevention: the frontend was already correct -- `StockTile.tsx:18` says "A missing
+close stays missing: a neutral dash, never a stand-in 0" and renders `-` for null.
+The API was lying to a UI built to handle the truth, so no amount of frontend care
+could have caught this. The lesson is narrower than "validate inputs": **a `float`
+field does not reject NaN, and a storage round trip can change absence from NaN to
+NULL.** Any guard written at one end must be checked at the other.
+
+One test in this batch initially passed for the wrong reason. `_latest_row_date`
+returns the first parseable row rather than the maximum, so it depends on
+`_select_ohlcv_rows`' `ORDER BY date DESC`; an oldest-first fixture made the
+freshness test pass while asserting nothing. It was caught only because the sibling
+assertion -- that a *priced* newest bar still counts as fresh -- failed at the same
+time. A single test would have shipped green and empty.
+
 ## 2026-09-04: `openpyxl` missing from `pyproject.toml` blocks the API from booting on a clean checkout
 
 Date: 2026-09-04

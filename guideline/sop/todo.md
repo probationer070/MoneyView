@@ -793,6 +793,42 @@ Recorded so nobody rediscovers them as bugs:
 
 ---
 
+## Track G - Market data integrity  [G1 SHIPPED 2026-09-09; G2-G4 open]
+
+Reported as "tile prices all show $0.0". The display was the symptom; the cause was
+a bar with no settled price surviving all the way to the wire. `ERROR-LOG.md`
+2026-09-09 carries the full account.
+
+Lettered G rather than F because PR #28 (the metric reference) introduces its own
+Track F on another branch, and two Track Fs would collide at merge.
+
+- [x] **G1. An unsettled bar must never become a price.** The provider returns the
+      current day's OHLC as NaN with a real volume; NaN passes a `float` field and
+      sqlite stores it as NULL, so `float(row["close"] or 0)` published `0.0` and
+      the delta read `-100%`. 136 of 139 tickers. Guarded with `math.isfinite` at
+      four points -- never persisted, dropped on read, excluded from the freshness
+      measurement, and reported as `last_close: null` when no priced bar remains.
+      Five mutations verified. Commits `947fb26`, `6ef4415`, `f1253b8`.
+
+- [ ] **G2. The 138 pre-existing NULL-close rows are still in the database.** The
+      read guard makes them inert, so this is cleanup rather than a fix, and it was
+      deliberately not done as part of G1 -- deleting a user's rows was not needed
+      to correct the behaviour. Worth a one-off script if the row count grows.
+
+- [ ] **G3. Check what else read a poisoned close while the defect was live.**
+      `drawdown`, `trailing_pe` and `dcf_gap` all consume "latest close". They are
+      fixed going forward by G1, but any stored artefact computed between the bad
+      acquisition run and this fix carries a value derived from `0.0`. Stored
+      `valuation_case` rows and any persisted snapshot are the places to look.
+
+- [ ] **G4. The tile grid's "Held" filter shows 12 stocks nobody chose.** Not a
+      hard-coded limit: `StockTileGrid.tsx` falls back to the 12 most recent when
+      *no* stock has a weight, and `weight > 0` is currently 0 of 139 rows. The
+      fallback banner says so, but it evidently does not read as an explanation.
+      Either the weights want setting or the empty-Held state wants a clearer
+      surface -- a UX decision, not a bug fix.
+
+
 ## Archived
 
 - `guideline/sop/todo4.md` -- all completed tracks through 2026-08-30.
