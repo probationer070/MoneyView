@@ -21,7 +21,7 @@ not: one carries a stated time horizon and the other carries none at all.
 > Task 1 read the actual source and confirmed what each family's candidates
 > resolve to — `docs/metrics/inventory.md` is that confirmation, produced
 > after the spec and the plan, and per this project's own override rule
-> (`docs/metrics/README.md:29-30`, `task-3-brief.md:37`: "if the inventory
+> (`docs/metrics/README.md:26-29`, `task-3-brief.md:37`: "if the inventory
 > disagrees with the spec, follow the inventory") it is authoritative where
 > the two disagree. `inventory.md`'s table lists exactly three
 > `verdict-panel` rows as "distinct" — `dcf_gap`, `direction` (the fixed

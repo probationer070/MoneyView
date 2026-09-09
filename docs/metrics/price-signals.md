@@ -8,21 +8,25 @@ average to compute their own value — the peer and Damodaran-sector
 comparisons a reader sees alongside them are a separate figure attached
 afterward, not part of the calculation documented here.
 
-> **Note on scope.** `docs/metrics/inventory.md` lists four `price-signals`
-> candidates as "distinct": `drawdown`, `volume_ratio`, `trailing_pe`, and
-> `pe_change`. Writing this file's `trailing_pe` entry required reading all of
-> `packages/core_finance/price_signals.py`, and that reading turned up that
-> `pe_change` (`price_signals.py:63`) is never called from anywhere under
-> `apps/` — confirmed by `grep -rn "pe_change" apps/`, which returns zero
-> matches; only `tests/core_finance/test_price_signals.py` calls it. That is
-> exactly the "not present" test the inventory itself already applied to
-> `packages/core_finance/hurdle_rate.py` and `risk_analysis.py` (see
-> inventory.md's "Notable findings"), and by that same test `pe_change` earns
-> no entry here: nothing under `apps/` ever reports this number, so no reader
-> ever meets it and there is no belief for an entry to correct. This file
-> therefore has three entries, not the inventory's four. `inventory.md` itself
-> is unmodified — this note flags the discrepancy for whoever next revises it,
-> rather than silently rewriting a prior task's deliverable.
+> **Note on scope.** `docs/superpowers/specs/2026-09-08-metric-reference-design.md`'s
+> §5 structure table and `docs/superpowers/plans/2026-09-08-metric-reference.md`
+> both list `price-signals` at 4 candidates: `drawdown`, `volume_ratio`,
+> `trailing_pe`, and `pe_change`. Writing this file's `trailing_pe` entry
+> required reading all of `packages/core_finance/price_signals.py`, and that
+> reading turned up that `pe_change` (`price_signals.py:63`) is never called
+> from anywhere under `apps/` — confirmed by `grep -rn "pe_change" apps/`,
+> which returns zero matches; only `tests/core_finance/test_price_signals.py`
+> calls it. That is exactly the "not present" test `inventory.md` already
+> applied to `packages/core_finance/hurdle_rate.py` and `risk_analysis.py`
+> (see inventory.md's "Notable findings"), and by that same test `pe_change`
+> earns no entry here: nothing under `apps/` ever reports this number, so no
+> reader ever meets it and there is no belief for an entry to correct.
+> `inventory.md` was corrected in the same commit that fixed this file's
+> coverage figures: `pe_change` now sits in its "Dropped candidates" table as
+> not present, and its main table lists exactly three `price-signals` metrics
+> as distinct. This file and `inventory.md` now agree — both count 3, both
+> call `pe_change` not-present — leaving only the plan's and design spec's
+> original count of 4 as the figure this note explains the departure from.
 
 ### `drawdown`
 

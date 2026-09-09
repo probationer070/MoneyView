@@ -21,7 +21,7 @@ happened the one time that mattered.
 > original 50-candidate enumeration, before Task 1 read the actual source and
 > confirmed what each family's candidates resolve to —
 > `docs/metrics/inventory.md` is that later, source-backed confirmation, and
-> per this project's own override rule (`docs/metrics/README.md:29-30`,
+> per this project's own override rule (`docs/metrics/README.md:26-29`,
 > `task-3-brief.md:37`) it wins where the two disagree. `inventory.md` lists
 > exactly four `discount-rates-and-returns` rows as "distinct" —
 > `market_expected_return`, `capm_expected_return`, `dcf_implied_return`,

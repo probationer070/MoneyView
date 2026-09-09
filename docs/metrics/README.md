@@ -84,7 +84,16 @@ a branch of `build_verdict`, say, rather than in its own function) is not
 defined at that line; it is defined wherever `def`/`class` for that name
 appears in the file. The checker verifies the symbol is defined *somewhere*
 in the cited file, deliberately not at the cited line, because pinning the
-line would break every entry on any edit above it. `docs/metrics/price-signals.md`'s
+line would break every entry on any edit above it. **That means a citation
+can still pass while pointing at the wrong line within the right file:** a
+mutation the reviewer constructed and ran — an entry whose `Source:` line
+reads `pkg/dcf.py:1 — calculate_npv` when line 1 is actually
+`calculate_terminal_value`'s `def` — passes all 16 checker tests, because
+the checker only confirms `calculate_npv` is defined somewhere in `dcf.py`,
+not that line 1 is where. No live entry exhibits this; it is a latent gap in
+what the citation buys, not a demonstrated defect, and is left as-is: the
+trade (line number as reading aid, file plus symbol as the assertion) is
+deliberate. `docs/metrics/price-signals.md`'s
 `trailing_pe` entry is the worked example: `valuation_verdict.py:446` is
 where `price / eps` is written; `build_verdict` (defined at line 238) is the
 function it's written inside.

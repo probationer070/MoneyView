@@ -130,7 +130,7 @@ particular reconciliation more defensible than a coincidence would be:
    confirmed at their full spec counts (7 and 5) with no drops at all. A
    shallow pass that just accepted the spec's list would show 50/50/0/0
    everywhere; this one does not.
-2. The two families with drops (`price-signals`, `discount-rates-and-returns`,
+2. The four families with drops (`price-signals`, `discount-rates-and-returns`,
    `dcf-mechanics`, `verdict-panel`) each have an independently-verified
    reason cited above (a grep with zero hits, a literal field aliasing, a
    dataclass line assigning one field from another) rather than a judgment
