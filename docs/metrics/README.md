@@ -18,14 +18,14 @@ a human review step.
 | [`price-signals`](price-signals.md) | 3 | Raw reads off a ticker's own price and volume history. |
 | [`discount-rates-and-returns`](discount-rates-and-returns.md) | 4 | What return the market is pricing in, versus what return is required. |
 | [`fundamental-quality`](fundamental-quality.md) | 7 | Return on capital, growth, and the tax rate — and whether each is trustworthy. |
-| `dcf-mechanics` | 8 | The discounted-cash-flow build itself: terminal value, net debt, per-share value. |
+| [`dcf-mechanics`](dcf-mechanics.md) | 8 | The discounted-cash-flow build itself: terminal value, net debt, per-share value. |
 | `verdict-panel` | 3 | How price and value signals are framed and gapped into the read-only evidence panel. |
 | `industry-benchmarks` | 5 | Sector reference values and how a subject's own figure is normalised against them. |
 | `attribution-and-uncertainty` | 7 | What moved a valuation, by how much, and how much confidence attaches to the answer. |
 
 `price-signals`, `discount-rates-and-returns`, `fundamental-quality`,
-`attribution-and-uncertainty`, and `verdict-panel` are written so far; the
-other two families are pending later passes. Their counts above are the
+`attribution-and-uncertainty`, `verdict-panel`, and `dcf-mechanics` are written
+so far; `industry-benchmarks` is pending a later pass. Their counts above are the
 source-backed totals confirmed in
 [`inventory.md`](inventory.md), not the original spec's candidate counts —
 where the two disagreed, the inventory won. `price-signals` itself is written
@@ -61,6 +61,16 @@ clamped input and a stored passthrough, not those two modules' formulas, and
 are recorded in `inventory.md`'s "Follow-up candidates" table rather than
 dropped outright. See the note at the top of
 `discount-rates-and-returns.md`.
+
+`dcf-mechanics` is written at 8 entries, not the 9 both
+`.superpowers/sdd/2026-09-08-metric-reference/task-6-brief.md` and the original
+50-candidate enumeration list it at. `inventory.md:99,117` moved
+`calculate_fcff` (`packages/core_finance/dcf.py:13`) to "not present": a
+repo-wide grep for it under `apps/` returns zero matches, and it is unreachable
+even from `packages/core_finance` itself — both `multi_stage_dcf` and
+`sensitivity_grid` take a pre-computed FCFF list as an argument rather than
+deriving one. The confirmed eight are at `inventory.md:58-65`. See the note at
+the top of `dcf-mechanics.md`.
 
 ## Entry template
 
