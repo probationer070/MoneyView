@@ -98,6 +98,28 @@ def test_where_the_safety_bound_binds_the_spread_is_exactly_the_margin():
     assert pinned, "no sampled ticker bound on wacc_safety; this test proved nothing"
 
 
+def _seed_floor_ticker(ticker: str) -> None:
+    """Write a genuine (non-generic-default) `corporate_metrics` row with ALGM's shape.
+
+    The isolated test database has no real financial data, so every real watchlist ticker
+    below falls back to `corporate_metrics_service.default_metrics`, whose growth is
+    always `5.0 + (seed % 9)` -- never negative, so the sweep alone can never revisit the
+    scenario this test exists to catch. Seeding one genuine row with growth below the
+    floor (ALGM's real -13.71%) makes the floor case reachable without touching
+    `data/processed/moneyview.db`.
+    """
+    from apps.api.services import db as db_service
+
+    with db_service.get_db() as conn:
+        conn.execute(
+            """INSERT OR REPLACE INTO corporate_metrics
+               (ticker, growth, roic, wacc, debt_ratio, unlevered_beta, crp,
+                reinvestment, fcff, innovation, market_share, governance, esg_penalty)
+               VALUES (?, -13.71, 9.0, 13.16, 20.0, 1.1, 1.1, 30.0, 90.0, 50.0, 40.0, 55.0, 10.0)""",
+            (ticker,),
+        )
+
+
 def test_the_reported_constraint_and_spread_describe_the_same_number():
     """The two fields are computed by different paths; they must agree on every ticker.
 
@@ -110,6 +132,8 @@ def test_the_reported_constraint_and_spread_describe_the_same_number():
     from packages.core_finance.terminal_growth import derive_terminal_growth
 
     tickers = _watchlist_tickers()
+    _seed_floor_ticker("ZFLOOR")
+    tickers = tickers + ["ZFLOOR"]
 
     mismatched = []
     checked = 0
