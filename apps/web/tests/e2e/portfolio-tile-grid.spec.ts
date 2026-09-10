@@ -267,6 +267,18 @@ function groupedWatchlist(): PortfolioStockFixture[] {
   ];
 }
 
+test("a tile shows its weight as a percentage, not as the raw fraction", async ({ page }) => {
+  // `weight` is stored as a fraction and PortfolioAllocationEditor edits it as
+  // `weight * 100`. The tile rendered it raw, so a 25% allocation read as "wt 0.3%" --
+  // an order-of-magnitude error in a figure sitting beside a real price.
+  await mockPortfolioPageApi(page, undefined, {
+    watchlist: [{ ...bulkWatchlist(1, 0.25)[0], ticker: "WGT1", group_name: "custom", id: 1 }],
+  });
+  await gotoGrid(page, "WGT1");
+
+  await expect(page.getByTestId("stock-tile-WGT1")).toContainText("wt 25.0%");
+});
+
 test("the grid shows a group, not whatever had a weight", async ({ page }) => {
   await mockPortfolioPageApi(page, undefined, { watchlist: groupedWatchlist() });
   await gotoGrid(page, "KEEP1");
