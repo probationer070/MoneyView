@@ -51,7 +51,7 @@ interface TickerSearchProps {
  * matched however the browser chose to, and the Decision Log matched nothing. A reader
  * who types "micro" wants Microsoft, and one who types "MS" wants the ticker.
  */
-export function matchTickerItems(
+function matchTickerItems(
   items: TickerSearchItem[],
   query: string,
   limit = 8,

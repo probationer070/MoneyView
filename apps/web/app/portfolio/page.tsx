@@ -1116,9 +1116,15 @@ export default function PortfolioPage() {
   // watchlist is referentially stable across renders: watchlistQuery.data defaults to the
   // module-level EMPTY_WATCHLIST, not a fresh literal, so these memos only recompute when
   // the data or the grid controls actually change.
+  // Resolved once and shared: both memos below need the same answer, and each was
+  // rebuilding the group list to get it.
+  const effectiveGridFilter = useMemo(
+    () => resolveGroupFilter(watchlist, gridFilter),
+    [watchlist, gridFilter],
+  );
   const visibleStocks = useMemo(
-    () => selectVisibleStocks(watchlist, resolveGroupFilter(watchlist, gridFilter), gridSearch).stocks,
-    [watchlist, gridFilter, gridSearch],
+    () => selectVisibleStocks(watchlist, effectiveGridFilter, gridSearch).stocks,
+    [watchlist, effectiveGridFilter, gridSearch],
   );
   const visibleTickers = useMemo(
     () => visibleStocks.map((stock) => stock.ticker),
@@ -1129,9 +1135,9 @@ export default function PortfolioPage() {
   // visibleTickers, so the press-time capture still matches exactly what is on screen.
   const debouncedGridSearch = useDebounce(gridSearch, 400);
   const newsQueryTickers = useMemo(
-    () => selectVisibleStocks(watchlist, resolveGroupFilter(watchlist, gridFilter), debouncedGridSearch)
+    () => selectVisibleStocks(watchlist, effectiveGridFilter, debouncedGridSearch)
       .stocks.map((stock) => stock.ticker),
-    [watchlist, gridFilter, debouncedGridSearch],
+    [watchlist, effectiveGridFilter, debouncedGridSearch],
   );
 
   const bulkNewsQuery = useQuery({

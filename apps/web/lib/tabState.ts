@@ -24,7 +24,7 @@ export function tabStateKey(tab: string, concern: string): string {
   return `${NAMESPACE}.${tab}.${concern}`;
 }
 
-export function readTabState<T>(key: string): T | null {
+function readTabState<T>(key: string): T | null {
   if (typeof window === "undefined") return null;
   try {
     const raw = window.sessionStorage.getItem(key);
@@ -36,7 +36,7 @@ export function readTabState<T>(key: string): T | null {
   }
 }
 
-export function writeTabState<T>(key: string, value: T): void {
+function writeTabState<T>(key: string, value: T): void {
   if (typeof window === "undefined") return;
   try {
     window.sessionStorage.setItem(key, JSON.stringify(value));

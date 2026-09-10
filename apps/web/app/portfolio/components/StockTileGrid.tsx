@@ -40,7 +40,12 @@ export function availableGroups(stocks: PortfolioStock[]): string[] {
  */
 export function resolveGroupFilter(stocks: PortfolioStock[], filter: GridFilter): GridFilter {
   if (filter === ALL_GROUPS) return ALL_GROUPS;
-  const groups = availableGroups(stocks);
+  return resolveFromGroups(availableGroups(stocks), filter);
+}
+
+/** The same rule against a group list the caller already has, so it is not rebuilt. */
+function resolveFromGroups(groups: string[], filter: GridFilter): GridFilter {
+  if (filter === ALL_GROUPS) return ALL_GROUPS;
   return groups.includes(filter) ? filter : groups[0] ?? ALL_GROUPS;
 }
 
@@ -96,7 +101,7 @@ export function StockTileGrid({
 }: StockTileGridProps) {
   const groups = useMemo(() => availableGroups(stocks), [stocks]);
 
-  const effectiveFilter = useMemo(() => resolveGroupFilter(stocks, filter), [stocks, filter]);
+  const effectiveFilter = useMemo(() => resolveFromGroups(groups, filter), [groups, filter]);
 
   const { stocks: visible } = useMemo(
     () => selectVisibleStocks(stocks, effectiveFilter, search),

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useMemo, useRef } from "react";
 import { createChart, IChartApi, ISeriesApi, ColorType, CrosshairMode, CandlestickSeries, HistogramSeries, LineSeries } from "lightweight-charts";
 import { TVCandle, TVVolume, sanitizeTooltip } from "@/lib/transformers";
 import { emitClientPerformanceEvent } from "@/lib/api";
@@ -37,9 +37,11 @@ const TVChart: React.FC<TVChartProps> = ({
     // -- which left every candle black. Resolve to a concrete value before the series is
     // created. The fallbacks match globals.css: red is a gain and blue is a loss, the
     // convention the rest of the app states in copy.
-    const resolvedUp = resolveCssColor(upColor ?? colorAccent, "#E54545");
-    const resolvedDown = resolveCssColor(downColor, "#4589E5");
-    const resolvedAccent = resolveCssColor(colorAccent, "#E54545");
+    // Memoised: each call is a getComputedStyle, which is a style read, and these ran on
+    // every render of a chart that re-renders on every data tick.
+    const resolvedUp = useMemo(() => resolveCssColor(upColor ?? colorAccent, "#E54545"), [upColor, colorAccent]);
+    const resolvedDown = useMemo(() => resolveCssColor(downColor, "#4589E5"), [downColor]);
+    const resolvedAccent = useMemo(() => resolveCssColor(colorAccent, "#E54545"), [colorAccent]);
 
     const chartContainerRef = useRef<HTMLDivElement>(null);
     const chartRef = useRef<IChartApi | null>(null);

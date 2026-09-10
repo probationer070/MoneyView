@@ -30,10 +30,6 @@ def news_identity_hash(ticker: str, url: str) -> str:
 class NewsService:
     """Read / write news articles with deduplication via MD5 hash."""
 
-    @staticmethod
-    def _hash(ticker: str, url: str) -> str:
-        return news_identity_hash(ticker, url)
-
     def get_news(
         self,
         ticker:  Optional[str] = None,
