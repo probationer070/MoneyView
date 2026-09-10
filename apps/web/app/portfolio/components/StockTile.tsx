@@ -16,8 +16,10 @@ function relativeAge(published: string): string {
 }
 
 // A missing close stays missing: a neutral dash, never a stand-in 0.
-function formatClose(lastClose: number): string {
-  if (!Number.isFinite(lastClose)) return "—";
+function formatClose(lastClose: number | null): string {
+  // `Number.isFinite` is not a type guard for null, so the null arm is explicit. The
+  // runtime behaviour is unchanged -- Number.isFinite(null) is already false.
+  if (lastClose === null || !Number.isFinite(lastClose)) return "—";
   return `${lastClose.toLocaleString(undefined, {
     minimumFractionDigits: 1,
     maximumFractionDigits: 1,

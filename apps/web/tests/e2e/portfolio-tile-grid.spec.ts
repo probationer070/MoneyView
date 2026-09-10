@@ -267,6 +267,39 @@ function groupedWatchlist(): PortfolioStockFixture[] {
   ];
 }
 
+test("a ticker with no priced bar renders a dash everywhere, and crashes nothing", async ({ page }) => {
+  // The API reports an absent price as null rather than 0. The tile always handled that,
+  // but the holdings row called `.toLocaleString()` on the value directly, which throws on
+  // null -- and page.tsx typed the field as `number`, so the compiler believed the lie and
+  // never flagged it. Both the grid and the holdings panel are checked here.
+  const crashes: string[] = [];
+  page.on("pageerror", (error) => crashes.push(error.message));
+
+  await mockPortfolioPageApi(page, undefined, {
+    watchlist: [
+      {
+        ...bulkWatchlist(1, 0)[0],
+        ticker: "NULLP",
+        name: "No Priced Bar",
+        group_name: "custom",
+        id: 1,
+        last_close: null,
+        delta: null,
+        sparkline: [],
+      },
+    ] as never,
+  });
+  await gotoGrid(page, "NULLP");
+
+  await expect(page.getByTestId("stock-tile-NULLP")).toContainText("—");
+
+  await rail(page).getByRole("button", { name: RAIL_HOLDINGS }).click();
+  await expect(panel(page)).toBeVisible();
+  await expect(panel(page).getByText("NULLP")).toBeVisible();
+
+  expect(crashes, `uncaught page errors: ${crashes.join(" | ")}`).toEqual([]);
+});
+
 test("a tile shows its weight as a percentage, not as the raw fraction", async ({ page }) => {
   // `weight` is stored as a fraction and PortfolioAllocationEditor edits it as
   // `weight * 100`. The tile rendered it raw, so a 25% allocation read as "wt 0.3%" --

@@ -212,9 +212,17 @@ export function StockDetailModal({
     () => newsQuery.data?.pages.flat() ?? detailQuery.data?.news ?? [],
     [detailQuery.data?.news, newsQuery.data?.pages],
   );
+  // `last_close` is null when no bar carries a usable close, so this can be null even
+  // though the price series usually supplies it. Guarded once here rather than at each of
+  // the three render sites below.
   const currentPrice = prices.at(-1)?.close ?? stock.last_close;
   const previousPrice = prices.length > 1 ? prices[prices.length - 2].close : currentPrice;
-  const priceChangePct = previousPrice ? ((currentPrice - previousPrice) / previousPrice) * 100 : 0;
+  const priceChangePct =
+    currentPrice !== null && previousPrice ? ((currentPrice - previousPrice) / previousPrice) * 100 : 0;
+  const currentPriceLabel =
+    currentPrice === null
+      ? "—"
+      : `$${currentPrice.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}`;
   const priceTone = priceChangePct >= 0 ? "text-[var(--delta-up)]" : "text-[var(--delta-down)]";
   const sparklineTrendPct = summarizeSparklineTrend(stock.sparkline);
   
@@ -355,7 +363,7 @@ export function StockDetailModal({
   const headerRight = (
     <>
       <p className={`text-2xl font-black tabular-nums ${priceTone}`}>
-        ${currentPrice.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+        {currentPriceLabel}
       </p>
       <p className={`text-sm font-bold ${priceTone}`}>
         {priceChangePct >= 0 ? "+" : ""}{priceChangePct.toFixed(1)}%
@@ -415,7 +423,7 @@ export function StockDetailModal({
         <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-muted)] p-4">
           <div className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Price</div>
           <div className="mt-2 text-2xl font-black tabular-nums text-[var(--text-primary)]">
-            ${currentPrice.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+            {currentPriceLabel}
           </div>
         </div>
         <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-muted)] p-4">

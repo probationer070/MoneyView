@@ -90,8 +90,11 @@ export interface PortfolioStock {
   sector: string;
   group_name: string;
   weight: number;
-  last_close: number;
-  delta: WatchlistDelta;
+  // Nullable because "no priced bar" is a real state the API now reports honestly rather
+  // than as 0. Declaring these non-null was a lie the compiler believed, which is how a
+  // `.toLocaleString()` on null reached the holdings panel.
+  last_close: number | null;
+  delta: WatchlistDelta | null;
   sparkline: number[];
   // Watchlist insertion order. The only recency signal the row carries, and the
   // tile grid's no-weights fallback orders by it. 0 means "not a watchlist row".
@@ -2738,10 +2741,15 @@ export default function PortfolioPage() {
                         <StockIdentity stock={stock} />
                         <div className="text-right flex flex-row justify-between items-end gap-4">
                           <div className="font-semibold tabular-nums">
-                            {stock.last_close.toLocaleString(undefined, {
-                              minimumFractionDigits: 1,
-                              maximumFractionDigits: 1,
-                            })}$
+                            {/* A dash, never a stand-in 0 -- the same convention the tile
+                                uses. This called .toLocaleString() on the value directly,
+                                which throws once the API reports an absent price as null. */}
+                            {stock.last_close === null
+                              ? "—"
+                              : `${stock.last_close.toLocaleString(undefined, {
+                                  minimumFractionDigits: 1,
+                                  maximumFractionDigits: 1,
+                                })}$`}
                           </div>
                           <DeltaBadge value={deltaPct} className="mt-1" />
                           <p className="sr-only">{portfolioStatus("change", deltaPct)}</p>
