@@ -815,11 +815,17 @@ Track F on another branch, and two Track Fs would collide at merge.
       deliberately not done as part of G1 -- deleting a user's rows was not needed
       to correct the behaviour. Worth a one-off script if the row count grows.
 
-- [ ] **G3. Check what else read a poisoned close while the defect was live.**
-      `drawdown`, `trailing_pe` and `dcf_gap` all consume "latest close". They are
-      fixed going forward by G1, but any stored artefact computed between the bad
-      acquisition run and this fix carries a value derived from `0.0`. Stored
-      `valuation_case` rows and any persisted snapshot are the places to look.
+- [x] **G3. Check what else read a poisoned close while the defect was live.** CLOSED
+      2026-09-10: **nothing durable was poisoned.** Audited every table that could hold a
+      derived figure, and each is either empty or predates the 2026-09-08 bad run:
+      `corporate_comparison_snapshots` / `_v2` / `_v3` and `investment_decision` all hold
+      **0 rows**; `valuation_case` (31 rows) stores assumptions only -- rates, growth,
+      tax -- with no price or close column; `corporate_metrics` (7 rows) is likewise
+      assumptions, all written 2026-04-09 to 2026-05-21, months before the defect;
+      `industry_benchmark` is vintage 2026-01-01. Every consumer of "latest close"
+      computes on read, so the wrong number was rendered but never stored.
+      Incidental finding: `indices` holds exactly one NULL-close row, dated 2026-07-24 --
+      isolated, unrelated to the 136-row event, and inert under the same read guard as G2.
 
 - [ ] **G5. 32 duplicate news rows are still stored.** Same article, same url, two
       rows, from the pre-fix hash that included the headline. The read now collapses by
