@@ -10,6 +10,7 @@ from packages.core_finance.dcf import (
     calculate_intrinsic_value_per_share,
     sensitivity_grid,
 )
+from packages.core_finance.terminal_growth import derive_terminal_growth
 
 from apps.api.models.schemas import (
     DCFAssumptionSummary,
@@ -231,6 +232,15 @@ def _build_dcf_outputs(
     # The measured share, not a proxy for it: how much of this enterprise value is the
     # discounted perpetuity rather than the five explicit years.
     terminal_value_share_pct = pv_terminal / enterprise_value * 100
+    # Recovered rather than threaded: the builder already holds both inputs, and passing a
+    # derivation record through every caller would make the params object carry state that
+    # only one consumer reads. Stage 1 passes no ceiling, so this reproduces the same
+    # comparison the params builder made.
+    terminal_derivation = derive_terminal_growth(
+        company_growth=params.revenue_growth_rate,
+        wacc=wacc,
+        ceiling=None,
+    )
     agency_discount = 1 - min(max(esg_penalty, 0), 80) / 400
     dcf_multiple = enterprise_value / base_fcff
     baseline_multiple = 1 / max(wacc - terminal_growth, 0.005)
@@ -356,6 +366,8 @@ def _build_dcf_outputs(
         current_price=round(float(current_price), 2),
         upside_pct=round(float(upside_pct), 2),
         terminal_value_share_pct=round(float(terminal_value_share_pct), 2),
+        wacc_minus_terminal_growth=round(float(wacc - terminal_growth), 6),
+        terminal_growth_binding_constraint=terminal_derivation.binding_constraint,
         status=status,
         generated_at=generated_at,
     )
