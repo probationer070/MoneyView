@@ -580,8 +580,26 @@ measured rather than argued about.
 
 **Files:**
 - Modify: `apps/api/services/corporate_metrics_service.py:504-506`
+- Modify: `apps/api/services/corporate_comparison.py:386` — the second derivation site
 - Modify: `apps/api/services/corporate_dcf.py` — pass the ceiling in the Task 2 call
 - Test: `tests/api/test_terminal_diagnostics.py` (extend)
+
+**Two derivation sites, two safety clamps. Change only the derivations.**
+
+`min(..., wacc - 0.005)` appears at four places, and they are not the same thing:
+
+| Site | What it bounds | Change? |
+| --- | --- | --- |
+| `corporate_metrics_service.py:505` | `metrics.growth` — a **derivation** | **Yes** |
+| `corporate_comparison.py:386` | `metrics.growth` — a **derivation** | **Yes** |
+| `corporate_dcf.py:204` | `params.terminal_growth_rate`, already derived or hand-set by the what-if sliders | **No** |
+| `monte_carlo.py:191` | `request.terminal_growth`, supplied and sampled | **No** |
+
+The last two bound a value arriving from outside, which is exactly what a safety net is
+for; giving them the ceiling would silently rewrite a number a caller deliberately chose.
+The first two compute the rate from company metrics, and leaving either behind would make
+the comparison table and the DCF report disagree about the same ticker — the shape of
+divergence `ERROR-LOG.md` already records for the base case and the sensitivity grid.
 
 **Interfaces:**
 - Consumes: `derive_terminal_growth`, `TERMINAL_GROWTH_CEILING` from Task 1.
@@ -680,6 +698,70 @@ from packages.core_finance.terminal_growth import (
 )
 ```
 
+- [ ] **Step 3b: Apply the ceiling at the second derivation site**
+
+Replace `apps/api/services/corporate_comparison.py:386`:
+
+```python
+        terminal_growth = min(growth_rate, wacc - 0.005)
+```
+
+with:
+
+```python
+        # The same derivation as corporate_metrics_service, and it must stay the same:
+        # this figure feeds the comparison table's dcf_value and dcf_implied_return, so a
+        # ceiling applied in one place and not the other would show one ticker two
+        # different terminal growth rates on two screens.
+        terminal_growth = derive_terminal_growth(
+            company_growth=growth_rate,
+            wacc=wacc,
+            ceiling=TERMINAL_GROWTH_CEILING,
+        ).rate
+```
+
+Add to that file's imports:
+
+```python
+from packages.core_finance.terminal_growth import (
+    TERMINAL_GROWTH_CEILING,
+    derive_terminal_growth,
+)
+```
+
+Add this test to `tests/api/test_terminal_diagnostics.py`:
+
+```python
+def test_both_derivation_sites_agree_on_the_same_ticker():
+    """A ceiling applied in one derivation and not the other splits one ticker in two.
+
+    corporate_comparison computes the comparison table's dcf_value; corporate_dcf computes
+    the report. They read the same metrics, so they must reach the same terminal growth.
+    """
+    from apps.api.services import corporate_comparison
+
+    metrics = corporate_route._metrics_for_ticker("AAPL")
+    wacc = max(float(metrics.wacc) / 100, 0.001)
+    growth_rate = float(metrics.growth) / 100
+
+    from packages.core_finance.terminal_growth import (
+        TERMINAL_GROWTH_CEILING,
+        derive_terminal_growth,
+    )
+
+    expected = derive_terminal_growth(
+        company_growth=growth_rate, wacc=wacc, ceiling=TERMINAL_GROWTH_CEILING
+    ).rate
+    params = corporate_route._valuation_params_from_metrics(metrics)
+
+    assert params.terminal_growth_rate == pytest.approx(max(expected, -0.1))
+    assert "wacc - 0.005" not in inspect.getsource(corporate_comparison._dcf_upside_fields)
+```
+
+Add `import inspect` to the test file's imports. If `_dcf_upside_fields` is not the
+enclosing function name at `corporate_comparison.py:386`, use whatever function encloses
+that line — the assertion's point is that the raw clamp is gone from the derivation.
+
 - [ ] **Step 4: Pass the ceiling in the report builder**
 
 In `apps/api/services/corporate_dcf.py`, change the Task 2 call so the reported diagnosis
@@ -757,7 +839,7 @@ every binding constraint `wacc_safety`.
 - [ ] **Step 9: Commit**
 
 ```bash
-git add apps/api/services/corporate_metrics_service.py apps/api/services/corporate_dcf.py tests/api/test_terminal_diagnostics.py
+git add apps/api/services/corporate_metrics_service.py apps/api/services/corporate_comparison.py apps/api/services/corporate_dcf.py tests/api/test_terminal_diagnostics.py
 git commit -m "fix: bound terminal growth by an economic ceiling, not only by WACC"
 ```
 

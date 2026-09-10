@@ -373,6 +373,7 @@ The distinction that matters is which bound **bound**.
 | `company_growth` is the smallest | use it; `binding_constraint = "company"` |
 | `terminal_growth_ceiling` is the smallest | clamp; `binding_constraint = "ceiling"` |
 | `wacc - safety_margin` is the smallest | clamp; `binding_constraint = "wacc_safety"` |
+| ceiling and `wacc - safety_margin` are exactly equal | report `"ceiling"`. A reader told `wacc_safety` concludes the arithmetic cornered the model; told `ceiling` they conclude a judgement was applied. When both are true, the judgement is the more useful answer. |
 | regime is `INSUFFICIENT_EVIDENCE` | fallback (§5.7); `binding_constraint = "insufficient_evidence"` |
 | `ROIC <= 0`, or reinvestment above maximum | **refuse** (§5.6) |
 | `g >= WACC` after all bounds | **refuse** — indicates a bypassed bound |
