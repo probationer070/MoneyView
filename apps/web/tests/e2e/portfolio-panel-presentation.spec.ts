@@ -116,9 +116,11 @@ test("a panel holding a wide table opens wide enough to use it", async ({ page }
   }
 });
 
-test("a panel never spills past the viewport it opens in", async ({ page }) => {
-  // The widest tier is 74rem. On a narrower window the clamp has to win, or the panel
-  // covers the rail that closes it.
+test("a wide panel stays inside the box it is positioned in", async ({ page }) => {
+  // The widest tier is 74rem. The app shell centres a shrink-to-fit root, so this panel's
+  // containing block is often much narrower than the viewport -- 552px at a 1024px
+  // viewport. Because the panel is `right-0`, anything wider than its parent grows
+  // leftward and off-screen, taking the leftmost columns with it.
   await page.setViewportSize({ width: 1024, height: 800 });
   await mockPortfolioPageApi(page);
   await gotoGrid(page);
@@ -126,10 +128,21 @@ test("a panel never spills past the viewport it opens in", async ({ page }) => {
   await rail(page).getByRole("button", { name: RAIL_HOLDINGS }).click();
   await expect(panel(page)).toBeVisible();
 
-  const box = await panel(page).boundingBox();
-  expect(box).not.toBeNull();
-  expect(box!.x + box!.width).toBeLessThanOrEqual(1024);
-  await expect(rail(page)).toBeVisible();
+  // Asserting `x + width <= viewport` looked reasonable and verified nothing: the right
+  // edge is pinned by `right-0`, so that sum is structurally constant. Removing the clamp
+  // left it green. The parent's width is the load-bearing comparison.
+  const measured = await panel(page).evaluate((el) => ({
+    panelWidth: el.getBoundingClientRect().width,
+    parentWidth: el.parentElement!.getBoundingClientRect().width,
+    left: el.getBoundingClientRect().left,
+  }));
+
+  expect(
+    measured.panelWidth,
+    `panel is ${measured.panelWidth}px inside a ${measured.parentWidth}px containing block`,
+  ).toBeLessThanOrEqual(measured.parentWidth + 1);
+  expect(measured.left, "panel starts left of the viewport").toBeGreaterThanOrEqual(0);
+  await expect(rail(page).getByRole("button", { name: RAIL_HOLDINGS })).toBeVisible();
 });
 
 test("controls inside a panel are big enough to hit", async ({ page }) => {

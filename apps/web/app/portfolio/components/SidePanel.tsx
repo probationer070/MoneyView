@@ -15,20 +15,27 @@ import { X } from "lucide-react";
  * column they scrolled horizontally and showed under half their columns -- weights and
  * status were off-screen, and the controls were unreachable without scrolling first.
  *
- * The clamp leaves room for the 3.5rem rail plus a margin, so a wide panel never covers
- * the whole viewport on a smaller screen. Below `lg` every panel is full-width: a 1184px
- * slide-over on a narrow window would cover everything anyway, so it does so deliberately.
+ * Each tier is paired with `max-w-full` below, which is what keeps a wide panel inside its
+ * own containing block. A viewport clamp (`min(74rem, calc(100vw - 4rem))`) was tried first
+ * and is wrong: the app shell centres a shrink-to-fit root, so at a 1024px viewport this
+ * panel's containing block is 552px, not 1024. That clamp computed a correct 960px against
+ * the wrong reference, and the panel -- being `right-0` -- grew leftward and overhung the
+ * viewport's left edge by 72px. `max-w-full` measures the parent, which is the box the panel
+ * is actually positioned in.
+ *
+ * Below `lg` every panel is full-width: a 1184px slide-over on a narrow window would cover
+ * everything anyway, so it does so deliberately.
  *
  * Written as complete literal class strings because Tailwind scans for those; an
  * interpolated width would compile to nothing.
  */
 const PANEL_WIDTHS = {
   /** Prose and a few figures. */
-  narrow: "lg:w-[min(35rem,calc(100vw-4rem))]",
+  narrow: "lg:w-[35rem]",
   /** Stacked sections, no wide table. */
-  wide: "lg:w-[min(45rem,calc(100vw-4rem))]",
+  wide: "lg:w-[45rem]",
   /** A `min-w-[1120px]` table. */
-  widest: "lg:w-[min(74rem,calc(100vw-4rem))]",
+  widest: "lg:w-[74rem]",
 } as const;
 
 export type PanelWidth = keyof typeof PANEL_WIDTHS;
@@ -121,7 +128,7 @@ export function SidePanel({ open, title, width = "wide", description, onClose, c
       onKeyDown={handleDialogKeyDown}
       data-testid="portfolio-side-panel"
       className={clsx(
-        "absolute inset-y-0 right-0 z-30 w-full overflow-y-auto",
+        "absolute inset-y-0 right-0 z-30 w-full max-w-full overflow-y-auto",
         PANEL_WIDTHS[width],
         "border-l border-[var(--border)] bg-[var(--bg-surface)] shadow-lg",
         "focus-visible:outline-none",
