@@ -883,11 +883,15 @@ shipped on `fix-priceless-bars` (PR #29); E shipped with them.
       as a secondary net. Finance-logic SOP applies; the ceiling is a judgement about the
       world, so it needs a decision, not a default. `ERROR-LOG.md` 2026-09-10.
 
-- [ ] **H11. Nothing surfaces `terminal_value_share_pct`.** Found alongside H8. The figure
-      is computed and returned on every DCF report, and no surface reads it -- so a
-      valuation that is 98% terminal assumption looks exactly like one that is 60%. This is
-      what let H8 sit invisible. Cheap to fix independently of H8, and worth doing first:
-      it makes the problem visible without changing a single valuation.
+- [ ] **H11. `terminal_value_share_pct` is displayed without a threshold.** CORRECTED
+      2026-09-10: this was filed as "nothing surfaces it", which is false. It is shown as a
+      "Terminal Value Share" tile (`DcfCoreModulesGraph.tsx:52-61`), clickable into a
+      calculation detail, and per-cell in `DcfSensitivityTable.tsx:91`. What is missing is
+      any threshold -- 96.25% and 60% render identically as a plain percentage. The number
+      was visible throughout; nothing told a reader that one of those two means the
+      valuation is almost entirely one assumption. Still worth doing first, and still
+      changes no valuation, but the work is a warning state and the missing companion
+      diagnostics (spread, binding constraint), not surfacing a hidden field.
 
 
 ## Archived

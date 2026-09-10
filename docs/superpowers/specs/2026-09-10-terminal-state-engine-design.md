@@ -390,7 +390,7 @@ the cheapest, because **it changes no valuation**.
 
 | Field | Why |
 | --- | --- |
-| `terminal_value_share_pct` | Already computed and returned today. **Nothing reads it.** That is why the current defect stayed invisible: a valuation 98% composed of one assumption looks identical to one at 60%. |
+| `terminal_value_share_pct` | Computed and **already displayed** — a tile in `DcfCoreModulesGraph.tsx:52-61` and per-cell in `DcfSensitivityTable.tsx:91`. What is missing is a **threshold**: 96.25% and 60% render identically as a plain percentage. Gains a warning state (§7.4), not a new field. |
 | `wacc_minus_terminal_growth` | The spread the whole terminal value turns on |
 | `terminal_growth_binding_constraint` | `company` / `ceiling` / `wacc_safety` / `insufficient_evidence` |
 | `implied_reinvestment_rate` | Whether the growth is paid for |
@@ -456,8 +456,17 @@ long runway may legitimately sit high; the point is that the reader can see it.
 Stage 3 and 4 respectively, and pulling either forward would make Stage 2's effect
 unattributable.
 
-Stage 1 first, deliberately: it makes the defect visible before anything changes, and
+Stage 1 first, deliberately: it makes the defect legible before anything changes, and
 gives every later stage a measured before-and-after instead of an argument.
+
+**A correction worth carrying into the plan.** An earlier draft of this spec, and the
+`ERROR-LOG.md` entry beside it, asserted that nothing in the product surfaced
+`terminal_value_share_pct`. That was false — it has been on screen throughout. The real
+gap is that a 96% reading and a 60% reading look the same, and nothing tells a reader that
+one of them means the valuation is almost entirely one assumption. Stage 1 is therefore a
+warning state and the two missing companion figures, not the surfacing of a hidden field.
+**A figure can be fully visible and still not be information**, which is a sharper lesson
+than the one the draft recorded.
 
 Each stage gets its own implementation plan. Stages 1-2 may share one; 3 and 4 must not,
 because 4 introduces a classifier whose bands need their own review.

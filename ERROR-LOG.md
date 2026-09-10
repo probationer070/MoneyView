@@ -88,9 +88,17 @@ justified limit is what makes the number defensible -- and here that second boun
 (`le=0.1`), sat one layer away in the response model, and was reached only as an
 exception rather than consulted as a constraint.
 
-Detection is the other half. Nothing in the product surfaces
-`terminal_value_share_pct`, so a valuation that is 98% terminal assumption reads exactly
-like one that is 60%. The figure is computed and returned; nothing looks at it.
+Detection is the other half, and the first version of this entry got it wrong. It said
+nothing in the product surfaces `terminal_value_share_pct`. That is false, and the
+correction matters more than the original claim: the figure IS displayed -- a "Terminal
+Value Share" tile in `DcfCoreModulesGraph.tsx:52-61`, clickable into a calculation detail,
+and per-cell in `DcfSensitivityTable.tsx:91`.
+
+What is missing is a threshold. 96.25% and 60% render identically, as a plain percentage
+with nothing marking one of them as a valuation resting almost entirely on a single
+assumption. The number was on screen the whole time. Nobody had been given a reason to
+read it as alarming, which is a different and more interesting failure than not showing it
+at all -- **a figure can be fully visible and still not be information.**
 
 ## 2026-09-10: a relabelled publisher minted a duplicate article and collided a React key
 
