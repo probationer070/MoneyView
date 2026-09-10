@@ -63,14 +63,22 @@ def test_a_negative_ceiling_is_honoured_rather_than_floored_at_zero():
 
 
 def test_ties_resolve_to_the_more_economic_bound():
-    """When the ceiling and the safety bound are equal, the ceiling is the reason.
+    """When the ceiling and the safety bound are exactly equal, the ceiling is the reason.
 
     Arbitrary only in appearance: reporting `wacc_safety` here would tell a reader the
     arithmetic constrained them when an economic judgement did so equally.
-    """
-    result = derive_terminal_growth(company_growth=0.5, wacc=0.035, ceiling=0.03)
 
-    assert result.rate == pytest.approx(0.03)
+    The values are powers of two so the tie is exact. The obvious decimal choice is not a
+    tie at all -- `0.035 - 0.005` is `0.030000000000000002`, so a ceiling of `0.03` wins by
+    being strictly smaller and the ordering under test never runs. That was the first
+    version of this test, and it passed against both orderings.
+    """
+    result = derive_terminal_growth(
+        company_growth=0.75, wacc=1.0, ceiling=0.5, safety_margin=0.5
+    )
+
+    assert result.wacc_safety_bound == 0.5          # exact, not approx -- the tie is the point
+    assert result.rate == pytest.approx(0.5)
     assert result.binding_constraint == "ceiling"
 
 
