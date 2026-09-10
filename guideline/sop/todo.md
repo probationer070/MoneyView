@@ -877,8 +877,12 @@ shipped on `fix-priceless-bars` (PR #29); E shipped with them.
       valuable, so nothing breaks; they classify as acquisition re-runs them. A forced
       backfill would mean 139 live provider calls, which is what earned the Yahoo rate
       limit already recorded.
-- [ ] **H10. Tab state covers the portfolio grid only.** The mechanism is generic; the
-      valuation ticker, corporate universe and decision filters are not wired to it yet.
+- [x] **H10. Tab state covers the portfolio grid only.** CLOSED 2026-09-10. Extended to
+      the Valuation tab's ticker -- the tab's entire subject, previously discarded on every
+      departure -- and to the five Corporate controls that decide what the comparison
+      computes: universe, benchmark, custom tickers, sort key and direction. Retyping a
+      custom universe was the most repeated cost on that page. The Decision Log has no
+      view state to keep; its only field is a form input that should not survive a submit.
 
 
 ## Archived

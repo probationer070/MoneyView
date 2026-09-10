@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { RefreshCw } from "lucide-react";
 import { fetchApi } from "@/lib/api";
 import { TickerSearch } from "@/components/ui/TickerSearch";
+import { tabStateKey, useTabState } from "@/lib/tabState";
 import { bridgedEstimatedValue, UNBRIDGED_PLACEHOLDER, UNBRIDGED_REASON } from "@/lib/bridgeQuality";
 import { useDevMonitorPageLoad } from "@/hooks/useDevMonitorPageLoad";
 import type {
@@ -155,11 +156,18 @@ export default function CorporateAnalysisPage() {
   const [latestLoadedMetrics, setLatestLoadedMetrics] = useState<CorporateMetricsApi | null>(null);
   const [roicBasis, setRoicBasis] = useState<RoicBasis>("recent_average");
   const [roicYear, setRoicYear] = useState("2025");
-  const [comparisonSortKey, setComparisonSortKey] = useState<ComparisonSortKey>("expected_return_spread");
-  const [comparisonSortDirection, setComparisonSortDirection] = useState<"desc" | "asc">("desc");
-  const [comparisonUniverse, setComparisonUniverse] = useState<ComparisonUniverse>("watchlist_plus_benchmark");
-  const [comparisonBenchmarkTicker, setComparisonBenchmarkTicker] = useState(DEFAULT_PORTFOLIO_BENCHMARK_TICKER);
-  const [comparisonCustomTickersInput, setComparisonCustomTickersInput] = useState("AAPL, MSFT");
+  // Kept per tab. These five decide what the comparison computes, and retyping a custom
+  // universe after stepping away to read a decision was the most repeated cost on this page.
+  const [comparisonSortKey, setComparisonSortKey] = useTabState<ComparisonSortKey>(
+    tabStateKey("corporate", "sortKey"), "expected_return_spread");
+  const [comparisonSortDirection, setComparisonSortDirection] = useTabState<"desc" | "asc">(
+    tabStateKey("corporate", "sortDirection"), "desc");
+  const [comparisonUniverse, setComparisonUniverse] = useTabState<ComparisonUniverse>(
+    tabStateKey("corporate", "universe"), "watchlist_plus_benchmark");
+  const [comparisonBenchmarkTicker, setComparisonBenchmarkTicker] = useTabState(
+    tabStateKey("corporate", "benchmarkTicker"), DEFAULT_PORTFOLIO_BENCHMARK_TICKER);
+  const [comparisonCustomTickersInput, setComparisonCustomTickersInput] = useTabState(
+    tabStateKey("corporate", "customTickers"), "AAPL, MSFT");
   const [sourceDataRequestedTicker, setSourceDataRequestedTicker] = useState<string | null>(() => readSessionCache<CachedCalculation<string, CorporateMetricHistoryApi>>(METRIC_HISTORY_CACHE_KEY)?.snapshot ?? null);
   const [sourceDataRefreshToken, setSourceDataRefreshToken] = useState<string | null>(null);
   const [cachedMetricsHistory] = useState<CorporateMetricHistoryApi | null>(() => readSessionCache<CachedCalculation<string, CorporateMetricHistoryApi>>(METRIC_HISTORY_CACHE_KEY)?.result ?? null);
