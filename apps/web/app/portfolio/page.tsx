@@ -2787,16 +2787,24 @@ export default function PortfolioPage() {
         panels={{
           snapshot: {
             title: "Latest Snapshot Summary",
+            // Figures and prose, no wide table.
+            width: "wide",
             description: "Daily comparison snapshot summary for the selected portfolio-side universe. This keeps the latest persisted stock-comparison record visible on the Portfolio page and points you back to the per-stock table for the meaningful comparison metrics.",
             body: snapshotPanelBody,
           },
-          attribution: { title: "Attribution", body: attributionPanelBody },
+          // A waterfall chart and a short table; the narrowest of the four.
+          attribution: { title: "Attribution", width: "narrow", body: attributionPanelBody },
           allocation: {
+            // PortfolioAllocationEditor's table is min-w-[1120px]: at 480px its weight
+            // inputs, save state and sliders were off-screen behind a horizontal scroll.
+            width: "widest",
             title: "Portfolio Allocation Workspace",
             description: "Add names from the holdings panel, then set each weight here. Slider moves and double-click manual edits save automatically, and the total investment amount drives the money-based summaries in this panel.",
             body: allocationPanelBody,
           },
           holdings: {
+            // The holdings table is min-w-[760px], lg:min-w-[1120px] (page.tsx:468).
+            width: "widest",
             title: "Watchlist Holdings",
             description: "This section is the tracking watchlist: holdings, current close, day-over-day percentage change, and a recent price sparkline. Good/bad follows local convention: red indicates price gain, blue indicates price loss.",
             body: holdingsPanelBody,

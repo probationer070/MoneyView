@@ -7,9 +7,37 @@ import { IconButton } from "@/components/ui/IconButton";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { X } from "lucide-react";
 
+/**
+ * How wide a panel opens, chosen by what its body actually needs to render.
+ *
+ * Every panel used to share one `max-w-[480px]` cap. Both table bodies declare
+ * `min-w-[1120px]` (`PortfolioAllocationEditor.tsx:145`, `page.tsx:468`), so in a 480px
+ * column they scrolled horizontally and showed under half their columns -- weights and
+ * status were off-screen, and the controls were unreachable without scrolling first.
+ *
+ * The clamp leaves room for the 3.5rem rail plus a margin, so a wide panel never covers
+ * the whole viewport on a smaller screen. Below `lg` every panel is full-width: a 1184px
+ * slide-over on a narrow window would cover everything anyway, so it does so deliberately.
+ *
+ * Written as complete literal class strings because Tailwind scans for those; an
+ * interpolated width would compile to nothing.
+ */
+const PANEL_WIDTHS = {
+  /** Prose and a few figures. */
+  narrow: "lg:w-[min(35rem,calc(100vw-4rem))]",
+  /** Stacked sections, no wide table. */
+  wide: "lg:w-[min(45rem,calc(100vw-4rem))]",
+  /** A `min-w-[1120px]` table. */
+  widest: "lg:w-[min(74rem,calc(100vw-4rem))]",
+} as const;
+
+export type PanelWidth = keyof typeof PANEL_WIDTHS;
+
 interface SidePanelProps {
   open: boolean;
   title: string;
+  /** Defaults to `wide`; pick `widest` for any body holding one of the 1120px tables. */
+  width?: PanelWidth;
   /**
    * Explanatory copy for the title, shown as its tooltip. It lives here rather than in
    * each panel body because the header already renders the title: a body that repeated
@@ -20,7 +48,7 @@ interface SidePanelProps {
   children: ReactNode;
 }
 
-export function SidePanel({ open, title, description, onClose, children }: SidePanelProps) {
+export function SidePanel({ open, title, width = "wide", description, onClose, children }: SidePanelProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const previouslyFocusedRef = useRef<HTMLElement | null>(null);
 
@@ -93,7 +121,8 @@ export function SidePanel({ open, title, description, onClose, children }: SideP
       onKeyDown={handleDialogKeyDown}
       data-testid="portfolio-side-panel"
       className={clsx(
-        "absolute inset-y-0 right-0 z-30 w-full max-w-[480px] overflow-y-auto",
+        "absolute inset-y-0 right-0 z-30 w-full overflow-y-auto",
+        PANEL_WIDTHS[width],
         "border-l border-[var(--border)] bg-[var(--bg-surface)] shadow-lg",
         "focus-visible:outline-none",
       )}
@@ -106,8 +135,20 @@ export function SidePanel({ open, title, description, onClose, children }: SideP
       </div>
       {/* space-y-6 is the page's section rhythm. Panel bodies are fragments of several
           sibling <section>s with no spacing of their own, so without it they butt
-          together and the panel reads as one undifferentiated block. */}
-      <div className="space-y-6 p-4">{children}</div>
+          together and the panel reads as one undifferentiated block.
+
+          The control floor is here rather than in each body: these were laid out for a
+          full-width section at `px-2 py-1 text-xs`, roughly 26px tall, which is under a
+          comfortable click target once they are packed into a panel. Setting it once at
+          the boundary keeps every panel consistent and needs no edit per component. */}
+      <div
+        className={clsx(
+          "space-y-6 p-4",
+          "[&_input]:min-h-9 [&_select]:min-h-9 [&_button]:min-h-9",
+        )}
+      >
+        {children}
+      </div>
     </div>
   );
 }
