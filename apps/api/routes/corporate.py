@@ -43,7 +43,13 @@ from apps.api.services.corporate_comparison import (
     load_corporate_comparison_stock_history,
     save_corporate_comparison_snapshot,
 )
-from apps.api.services.corporate_dcf import build_bulk_dcf_reports, build_dcf_full_report, build_dcf_summary
+from apps.api.services.corporate_dcf import (
+    build_bulk_dcf_reports,
+    build_dcf_full_report,
+    build_dcf_summary,
+    partition_valuable_tickers,
+)
+from apps.api.services.db import get_db
 from apps.api.services.corporate_statement_metrics import (
     DEFAULT_EQUITY_RISK_PREMIUM,
     DEFAULT_RISK_FREE_RATE,
@@ -334,8 +340,20 @@ def get_dcf_full_report(ticker: str, params: ValuationAssumptions):
 @router.post("/dcf/reports/bulk", response_model=APIResponse[BulkDcfReports])
 def get_bulk_dcf_reports(request: CorporateDcfBatchRequest):
     """Calculate full DCF reports for a list of comparison tickers."""
+    # Refuse what a DCF cannot value before spending a report on it. The watchlist carries
+    # gold and silver ETFs, which have no cash flows of their own; a number produced for
+    # one is meaningless rather than imprecise.
+    with get_db() as conn:
+        instrument_types = {
+            str(row["ticker"]): str(row["instrument_type"] or "")
+            for row in conn.execute(
+                "SELECT ticker, instrument_type FROM corporate_quote_facts"
+            )
+        }
+    valuable, not_companies = partition_valuable_tickers(request.tickers, instrument_types)
+
     result = build_bulk_dcf_reports(
-        request.tickers,
+        valuable,
         current_price_loader=_latest_market_price,
         metrics_loader=_metrics_for_ticker,
         valuation_params_builder=_valuation_params_from_metrics,
@@ -349,7 +367,7 @@ def get_bulk_dcf_reports(request: CorporateDcfBatchRequest):
     # be a completeness the response has not earned.
     return APIResponse(
         status="ok",
-        data=BulkDcfReports(reports=result.reports, skipped=result.skipped),
+        data=BulkDcfReports(reports=result.reports, skipped=not_companies + result.skipped),
         meta=APIMeta(last_updated_at=datetime.now(timezone.utc).isoformat(), request_id=""),
     )
 

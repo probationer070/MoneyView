@@ -477,6 +477,9 @@ CREATE TABLE IF NOT EXISTS corporate_quote_facts (
     beta                REAL,
     sector              TEXT DEFAULT '',
     industry            TEXT DEFAULT '',
+    -- yfinance quoteType, normalised. '' means the provider was never asked, which is
+    -- treated as "value it" rather than "skip it" -- see partition_valuable_tickers.
+    instrument_type     TEXT DEFAULT '',
     fetched_at          TEXT NOT NULL
 );
 
@@ -805,6 +808,8 @@ def _ensure_schema_compatibility(conn: sqlite3.Connection) -> None:
     quote_facts_columns = {row["name"] for row in conn.execute("PRAGMA table_info(corporate_quote_facts)")}
     if "beta" not in quote_facts_columns:
         conn.execute("ALTER TABLE corporate_quote_facts ADD COLUMN beta REAL")
+    if "instrument_type" not in quote_facts_columns:
+        conn.execute("ALTER TABLE corporate_quote_facts ADD COLUMN instrument_type TEXT DEFAULT ''")
     if "sector" not in quote_facts_columns:
         conn.execute("ALTER TABLE corporate_quote_facts ADD COLUMN sector TEXT DEFAULT ''")
     if "industry" not in quote_facts_columns:

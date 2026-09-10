@@ -95,6 +95,40 @@ def build_dcf_full_report(
     return full_report
 
 
+def partition_valuable_tickers(
+    tickers: list[str],
+    instrument_types: dict[str, str],
+) -> tuple[list[str], list[SkippedDcfTicker]]:
+    """Split a batch into what a DCF can value and what it cannot.
+
+    A discounted cash flow model discounts a firm's own future cash flows. An ETF, an
+    index or a currency has none, so a number produced for one is meaningless rather than
+    imprecise -- and the watchlist carries gold and silver ETFs that went through the
+    batch unchallenged.
+
+    A ticker with no recorded type is treated as valuable. Every row acquired before the
+    `instrument_type` column existed is unclassified, so excluding the unknown would empty
+    the batch on the day this ships; valuing a handful of funds for one more acquisition
+    cycle is the smaller error, and each classified refusal is named either way.
+    """
+    not_operating_companies = {"etf", "index", "mutualfund", "currency", "cryptocurrency", "future"}
+    valuable: list[str] = []
+    refused: list[SkippedDcfTicker] = []
+    for ticker in tickers:
+        kind = (instrument_types.get(ticker) or "").strip().lower()
+        if kind in not_operating_companies:
+            refused.append(
+                SkippedDcfTicker(
+                    ticker=ticker,
+                    reason=f"not_an_operating_company: {ticker} is an {kind}; a DCF discounts "
+                           "a firm's own cash flows and this instrument has none",
+                )
+            )
+            continue
+        valuable.append(ticker)
+    return valuable, refused
+
+
 def build_bulk_dcf_reports(
     tickers: list[str],
     *,
