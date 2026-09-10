@@ -26,6 +26,72 @@ reveal that; only checking the code did.
 
 An entry states what was true when it was written. Nothing updates it on its own.
 
+## 2026-09-10: terminal growth is clamped to WACC, so terminal value is 96% of most valuations
+
+Date: 2026-09-10
+Command: `POST /corporate/dcf/reports/bulk`, and every single-ticker DCF report.
+Failure: two symptoms from one cause.
+
+1. **Visible:** ~22% of the watchlist cannot be valued at all.
+   `ValuationAssumptions.terminal_growth_rate` is bounded `le=0.1`
+   (`apps/api/models/schema_parts/corporate.py:51`), and the derived rate exceeds it --
+   9 of the first 40 watchlist tickers raise a `ValidationError`. ASM derives 0.1415,
+   AMD 0.1364, ANET 0.1334, ARIS 0.1254, AXP 0.1055.
+2. **Silent, and much larger:** for the tickers that DO value, terminal value is
+   almost the entire answer. Measured over 18 reports that built successfully:
+   **median terminal_value_share_pct 96.25%**, nine above 95%, highest ATEX at
+   **98.92%**. The explicit multi-year projection contributes under 4% of the
+   valuation, and every affected company receives essentially the same multiple.
+
+Root cause: `apps/api/services/corporate_metrics_service.py:505`
+
+    terminal_growth_rate = min(growth_rate, wacc - 0.005)
+
+Gordon growth is `TV = FCFF x (1 + g) / (WACC - g)`, so the whole terminal value turns
+on the spread `WACC - g`. The clamp above correctly prevents the MATHEMATICAL failure
+-- at `g >= WACC` the denominator is zero or negative and the value explodes or goes
+negative. It says nothing about whether `g` is economically possible.
+
+Two consequences follow.
+
+`g` is a growth rate assumed to hold FOREVER. Long-run nominal GDP is roughly 3-4%; a
+firm growing faster than that in perpetuity eventually exceeds the whole economy, which
+is what the model's `le=0.1` bound encodes. But the clamp is anchored to WACC rather
+than to plausibility, so a company with a 14.65% WACC is handed 14.15% perpetual growth
+-- mathematically safe, economically indefensible, and then refused by the model's own
+bound. Symptom 1 is that refusal.
+
+Worse, because the clamp pins `g` at exactly `WACC - 0.005` whenever company growth
+exceeds that, the denominator becomes 0.005 for everyone it touches. Measured across 40
+watchlist tickers, **the clamp binds for 23 of them**, and each gets a terminal value of
+203x to 228x FCFF regardless of the business. Symptom 2 is that multiple.
+
+The relationship between the two symptoms is worth stating plainly: the refusals are the
+LUCKY cases. They fail loudly. The 23 that pass quietly report a fixed multiple wearing
+a discounted-cash-flow's clothes.
+
+Fix: not fixed -- this entry records the defect; the fix is its own work. The change
+wanted is a plausibility ceiling on terminal growth (a long-run rate such as the
+risk-free rate, or ~2.5-3%) with `wacc - 0.005` kept only as a secondary safety net.
+That is a finance-logic change under `guideline/sop/finance-logic.md`: it moves reported
+valuations for most of the watchlist, and the ceiling is a judgement about the world
+rather than about the code, so it needs a decision rather than a default. Tracked as H8.
+Files changed: none.
+Prevention: the guard that exists proves the hazard was understood -- someone knew `g`
+approaching WACC destroys the model, and wrote a clamp for it. What was missing is that
+a clamp expressed *relative to another input* has no opinion about magnitude. `wacc -
+0.005` is a safe distance, not a plausible rate, and the two look identical in code.
+
+The general form: **when a guard is written as a distance from another variable, it
+bounds the arithmetic, not the meaning.** A second bound against an absolute, externally
+justified limit is what makes the number defensible -- and here that second bound existed
+(`le=0.1`), sat one layer away in the response model, and was reached only as an
+exception rather than consulted as a constraint.
+
+Detection is the other half. Nothing in the product surfaces
+`terminal_value_share_pct`, so a valuation that is 98% terminal assumption reads exactly
+like one that is 60%. The figure is computed and returned; nothing looks at it.
+
 ## 2026-09-10: a relabelled publisher minted a duplicate article and collided a React key
 
 Date: 2026-09-10

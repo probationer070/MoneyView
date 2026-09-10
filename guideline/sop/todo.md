@@ -867,22 +867,27 @@ shipped on `fix-priceless-bars` (PR #29); E shipped with them.
       unifying downward would have cost click-to-select, and the Decision Log had no
       suggestions at all.
 
-- [ ] **H8. Derived terminal growth exceeds its own cap for ~22% of the watchlist.**
-      Found by H3, deliberately not fixed there. `_valuation_params_from_metrics`
-      derives `terminal_growth_rate` from company growth with no clamp, against a model
-      cap of 0.1. Clamping would change reported valuations for a fifth of the
-      watchlist without saying so -- a finance-logic decision with its own SOP, not a
-      side effect of a batching fix.
-- [ ] **H9. Existing quote-fact rows carry no instrument_type.** They are treated as
-      valuable, so nothing breaks; they classify as acquisition re-runs them. A forced
-      backfill would mean 139 live provider calls, which is what earned the Yahoo rate
-      limit already recorded.
-- [x] **H10. Tab state covers the portfolio grid only.** CLOSED 2026-09-10. Extended to
-      the Valuation tab's ticker -- the tab's entire subject, previously discarded on every
-      departure -- and to the five Corporate controls that decide what the comparison
-      computes: universe, benchmark, custom tickers, sort key and direction. Retyping a
-      custom universe was the most repeated cost on that page. The Decision Log has no
-      view state to keep; its only field is a form input that should not survive a submit.
+- [ ] **H8. Terminal growth is clamped to WACC, so terminal value is 96% of most
+      valuations.** RAISED IN PRIORITY 2026-09-10 after measuring the consequence, and
+      restated: the ~22% that cannot be valued are the *symptom*, not the defect.
+      `corporate_metrics_service.py:505` sets `terminal_growth_rate = min(growth, wacc -
+      0.005)`. That guards the arithmetic -- at `g >= WACC` the Gordon denominator is zero
+      or negative -- and nothing else. Because it pins `g` exactly 0.5pp below WACC, the
+      denominator becomes 0.005 for **23 of 40** watchlist tickers, giving each a terminal
+      value of 203x-228x FCFF regardless of the business. Measured across 18 reports that
+      built: **median terminal_value_share_pct 96.25%**, nine above 95%, ATEX at 98.92%.
+      The explicit projection contributes under 4% of the answer. The 9 of 40 that raise
+      on the model's `le=0.1` bound are the lucky ones -- they fail loudly; the rest report
+      a fixed multiple wearing a DCF's clothes.
+      Wanted: a plausibility ceiling (risk-free rate, or ~2.5-3%) with `wacc - 0.005` kept
+      as a secondary net. Finance-logic SOP applies; the ceiling is a judgement about the
+      world, so it needs a decision, not a default. `ERROR-LOG.md` 2026-09-10.
+
+- [ ] **H11. Nothing surfaces `terminal_value_share_pct`.** Found alongside H8. The figure
+      is computed and returned on every DCF report, and no surface reads it -- so a
+      valuation that is 98% terminal assumption looks exactly like one that is 60%. This is
+      what let H8 sit invisible. Cheap to fix independently of H8, and worth doing first:
+      it makes the problem visible without changing a single valuation.
 
 
 ## Archived
