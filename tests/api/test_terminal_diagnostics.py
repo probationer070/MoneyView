@@ -13,6 +13,7 @@ import pytest
 
 from apps.api.routes import corporate as corporate_route
 from apps.api.services.corporate_dcf import build_dcf_full_report
+from apps.api.services import db as db_service
 from packages.core_finance.terminal_growth import SAFETY_MARGIN
 
 
@@ -50,13 +51,33 @@ def test_stage_one_never_reports_a_ceiling_because_none_is_applied():
     assert summary.terminal_growth_binding_constraint != "ceiling"
 
 
-def test_the_spread_equals_the_safety_margin_when_the_safety_bound_binds():
-    """Today's defect, characterised: the bound that binds pins the spread at 50bp.
+def test_where_the_safety_bound_binds_the_spread_is_exactly_the_margin():
+    """Today's defect, characterised: where that bound binds, the spread is pinned at 50bp.
 
-    This is expected to FAIL after Stage 2 for tickers whose growth exceeds the ceiling,
-    and that failure is the point -- it is how the change proves itself.
+    Two assertions, and the second is the important one. Guarding a single-ticker assertion
+    on the binding constraint makes it vacuous whenever the guard is false -- AAPL binds on
+    "company", so the first version of this test asserted nothing at all. Sweeping a sample
+    and then requiring that the sample contained at least one such ticker is what stops a
+    green run from meaning "the condition never occurred".
+
+    Expected to change after Stage 2 for tickers whose growth exceeds the ceiling. That
+    change is the point, and this test is how it becomes visible.
     """
-    summary = _report().summary
+    # Use a representative sample from the live watchlist. These tickers cover a range of
+    # growth rates and WACC values, ensuring we hit both "company" and "wacc_safety" bindings.
+    test_tickers = [
+        "AAPL", "MSFT", "AMZN", "GOOGL", "META", "NVDA", "TSLA", "NFLX", "ADBE", "CRM",
+        "JPM", "BAC", "JNJ", "PFE", "KO", "PG", "WMT", "XOM", "CVX", "MCD",
+    ]
 
-    if summary.terminal_growth_binding_constraint == "wacc_safety":
-        assert summary.wacc_minus_terminal_growth == pytest.approx(SAFETY_MARGIN)
+    pinned = []
+    for ticker in test_tickers:
+        try:
+            summary = _report(ticker).summary
+        except Exception:
+            continue
+        if summary.terminal_growth_binding_constraint == "wacc_safety":
+            pinned.append(ticker)
+            assert summary.wacc_minus_terminal_growth == pytest.approx(SAFETY_MARGIN), ticker
+
+    assert pinned, "no sampled ticker bound on wacc_safety; this test proved nothing"
