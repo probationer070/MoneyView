@@ -152,9 +152,10 @@ class MarketDataService:
         # returns NaN for the current day's OHLC before the session settles (volume is
         # already real), NaN passes a float field, and sqlite stores NaN as NULL -- so
         # `float(r["close"] or 0)` published 0.00 as a price and the watchlist reported
-        # every such ticker as -100%. Drop the row instead: the caller then sees the last
-        # bar that actually has a price, and `_priceless_bar_dates` reports what was
-        # dropped so staleness can be surfaced rather than silently served.
+        # every such ticker as -100%. Drop the row instead, so the caller sees the last bar
+        # that actually has a price. The drop is not announced on the wire: `_rows_are_fresh`
+        # ignores priceless bars too, so a cache holding one no longer looks current and the
+        # refetch that replaces it runs. Surfacing the staleness itself is todo H-series work.
         return [
             StockOHLCV(
                 date=str(r["date"]),
@@ -184,14 +185,6 @@ class MarketDataService:
             return math.isfinite(float(close))
         except (TypeError, ValueError):
             return False
-
-    @staticmethod
-    def _priceless_bar_dates(rows) -> List[str]:
-        """Dates present in the cache whose close is unusable, newest first."""
-        return sorted(
-            (str(r["date"]) for r in rows if not MarketDataService._is_priced(r["close"])),
-            reverse=True,
-        )
 
     @staticmethod
     def _normalise_date(df: pd.DataFrame) -> pd.DataFrame:

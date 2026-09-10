@@ -86,7 +86,7 @@ test("panel copy does not describe a layout the panel does not have", async ({ p
 });
 
 // The panels opened at one shared `max-w-[480px]`, but two of the four bodies declare a
-// `min-w-[1120px]` table (PortfolioAllocationEditor.tsx:145, page.tsx:468). Those two
+// `min-w-[1120px]` table (PortfolioAllocationEditor.tsx:145, page.tsx:480). Those two
 // scrolled horizontally and hid their own controls: weight inputs, save state and sliders
 // sat off-screen, so the panel could be open and still not usable. Width is now chosen per
 // panel. These assert geometry rather than class names -- the class is how it is done

@@ -11,7 +11,7 @@ import { X } from "lucide-react";
  * How wide a panel opens, chosen by what its body actually needs to render.
  *
  * Every panel used to share one `max-w-[480px]` cap. Both table bodies declare
- * `min-w-[1120px]` (`PortfolioAllocationEditor.tsx:145`, `page.tsx:468`), so in a 480px
+ * `min-w-[1120px]` (`PortfolioAllocationEditor.tsx:145`, `page.tsx:480`), so in a 480px
  * column they scrolled horizontally and showed under half their columns -- weights and
  * status were off-screen, and the controls were unreachable without scrolling first.
  *

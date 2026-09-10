@@ -2841,7 +2841,7 @@ export default function PortfolioPage() {
             body: allocationPanelBody,
           },
           holdings: {
-            // The holdings table is min-w-[760px], lg:min-w-[1120px] (page.tsx:468).
+            // The holdings table is min-w-[760px], lg:min-w-[1120px] (page.tsx:480).
             width: "widest",
             title: "Watchlist Holdings",
             description: "This section is the tracking watchlist: holdings, current close, day-over-day percentage change, and a recent price sparkline. Good/bad follows local convention: red indicates price gain, blue indicates price loss.",
