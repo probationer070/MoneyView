@@ -36,6 +36,17 @@ long-run growth -- `industry_benchmark.revenue_growth` is a trailing five-year a
 reaching +47.8%, which is a recovery, not a perpetuity.
 """
 
+TERMINAL_GROWTH_FLOOR = -0.1
+"""The least a terminal growth rate may be, pre-existing rather than new here.
+
+Both derivation paths (`corporate_metrics_service.py`, `corporate_dcf.py`) already apply
+`max(terminal_growth, -0.1)` after their three-way bound. It was never modelled here, so a
+company shrinking faster than this floor got a number the floor decided and a label
+(`"company"`) that said otherwise. Modelled now as a fourth bound rather than pre-floored
+into `company_growth`, because a bound that decides the number for real tickers must be
+nameable.
+"""
+
 
 @dataclass(frozen=True)
 class TerminalGrowthDerivation:
@@ -46,6 +57,7 @@ class TerminalGrowthDerivation:
     company_growth: float
     ceiling: float | None
     wacc_safety_bound: float
+    floor: float
 
 
 def derive_terminal_growth(
@@ -54,6 +66,7 @@ def derive_terminal_growth(
     *,
     ceiling: float | None = None,
     safety_margin: float = SAFETY_MARGIN,
+    floor: float = TERMINAL_GROWTH_FLOOR,
 ) -> TerminalGrowthDerivation:
     """Terminal growth, plus which of its bounds produced it."""
     wacc_safety_bound = wacc - safety_margin
@@ -69,10 +82,17 @@ def derive_terminal_growth(
 
     binding_constraint, rate = min(candidates, key=lambda item: item[1])
 
+    # Applied last and overriding: the floor is a floor, not a fourth candidate in the
+    # same min(). A rate below it is not permitted regardless of which of the other three
+    # produced it.
+    if rate < floor:
+        binding_constraint, rate = "floor", floor
+
     return TerminalGrowthDerivation(
         rate=rate,
         binding_constraint=binding_constraint,
         company_growth=company_growth,
         ceiling=ceiling,
         wacc_safety_bound=wacc_safety_bound,
+        floor=floor,
     )

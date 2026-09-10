@@ -11,6 +11,7 @@ import pytest
 from packages.core_finance.terminal_growth import (
     SAFETY_MARGIN,
     TERMINAL_GROWTH_CEILING,
+    TERMINAL_GROWTH_FLOOR,
     derive_terminal_growth,
 )
 
@@ -85,3 +86,22 @@ def test_ties_resolve_to_the_more_economic_bound():
 def test_the_pinned_constants_are_what_the_plan_says():
     assert SAFETY_MARGIN == 0.005
     assert TERMINAL_GROWTH_CEILING == 0.03
+
+
+def test_the_floor_binds_a_company_shrinking_faster_than_it_permits():
+    """ALGM's shape: growth below the floor, so the floor decides the rate.
+
+    Reported as `"company"` before the floor was modelled, with a spread that implied a
+    different rate than the label did.
+    """
+    result = derive_terminal_growth(company_growth=-0.1371, wacc=0.0945, ceiling=0.03)
+
+    assert result.rate == pytest.approx(TERMINAL_GROWTH_FLOOR)
+    assert result.binding_constraint == "floor"
+
+
+def test_the_floor_does_not_bind_a_company_above_it():
+    result = derive_terminal_growth(company_growth=-0.05, wacc=0.0945, ceiling=0.03)
+
+    assert result.rate == pytest.approx(-0.05)
+    assert result.binding_constraint == "company"
