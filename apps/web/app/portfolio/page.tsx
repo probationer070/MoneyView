@@ -35,6 +35,7 @@ import { PortfolioAllocationEditor } from "./components/PortfolioAllocationEdito
 import { PortfolioCommandCenter } from "./components/PortfolioCommandCenter";
 import { PortfolioShell } from "./components/PortfolioShell";
 import { resolveGroupFilter, selectVisibleStocks, StockTileGrid, type GridFilter } from "./components/StockTileGrid";
+import { tabStateKey, useTabState } from "@/lib/tabState";
 import { acquireNews, fetchBulkNews, summarizeAcquisition } from "@/lib/portfolioNews";
 import type {
   CorporateComparisonHistoryPoint,
@@ -913,8 +914,13 @@ export default function PortfolioPage() {
   // "custom" is the curated group seeded from stock_targets.json. It replaces the old
   // "held" filter, which meant weight > 0 and therefore matched nothing at all while every
   // weight was 0 -- see FOLLOWED_GROUP.
-  const [gridFilter, setGridFilter] = useState<GridFilter>(FOLLOWED_GROUP);
-  const [gridSearch, setGridSearch] = useState("");
+  // Kept per tab, so leaving Portfolio and coming back does not discard the filter and
+  // search the user had set. Session-scoped: see lib/tabState.
+  const [gridFilter, setGridFilter] = useTabState<GridFilter>(
+    tabStateKey("portfolio", "gridFilter"),
+    FOLLOWED_GROUP,
+  );
+  const [gridSearch, setGridSearch] = useTabState(tabStateKey("portfolio", "gridSearch"), "");
   const [refreshSummary, setRefreshSummary] = useState<string | null>(null);
   const [portfolioComparisonRequestedSnapshot, setPortfolioComparisonRequestedSnapshot] = useState<PortfolioComparisonRequestSnapshot | null>(
     () => readSessionCache<CachedCalculation<PortfolioComparisonRequestSnapshot, CorporateComparisonResponse>>(PORTFOLIO_COMPARISON_CACHE_KEY)?.snapshot ?? null,

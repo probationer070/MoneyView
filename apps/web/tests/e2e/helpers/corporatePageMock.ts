@@ -734,7 +734,11 @@ export async function mockCorporatePageApi(page: Page, stats?: CorporatePageMock
       if (stats) stats.dcfBulkReportRequests += 1;
       const payload = JSON.parse(route.request().postData() ?? "{}");
       const tickers = Array.isArray(payload.tickers) ? payload.tickers : [];
-      return json(route, tickers.map((ticker: string, index: number) => ({
+      // `{reports, skipped}`, not a bare array: the endpoint now names the tickers it
+      // could not value instead of failing the whole batch on the first one.
+      return json(route, {
+        skipped: [],
+        reports: tickers.map((ticker: string, index: number) => ({
         ...mockDcfFullReport,
         // withBridgeQuality is applied last so the "missing" rewrite overrides the per-index
         // estimated_value/upside_pct/status values above it, exactly as the backend would.
@@ -754,7 +758,8 @@ export async function mockCorporatePageApi(page: Page, stats?: CorporatePageMock
           ticker,
           generated_at: nowIso(),
         },
-      })));
+        })),
+      });
     }
 
     if (pathname === `${API_PREFIX}/corporate/dcf/AAPL` && method === "POST") {

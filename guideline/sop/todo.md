@@ -827,12 +827,52 @@ Track F on another branch, and two Track Fs would collide at merge.
       is inert cleanup rather than a fix -- same standing as G2. `ERROR-LOG.md`
       2026-09-10.
 
-- [ ] **G4. The tile grid's "Held" filter shows 12 stocks nobody chose.** Not a
-      hard-coded limit: `StockTileGrid.tsx` falls back to the 12 most recent when
-      *no* stock has a weight, and `weight > 0` is currently 0 of 139 rows. The
-      fallback banner says so, but it evidently does not read as an explanation.
-      Either the weights want setting or the empty-Held state wants a clearer
-      surface -- a UX decision, not a bug fix.
+- [x] **G4. The tile grid's "Held" filter shows 12 stocks nobody chose.** CLOSED
+      2026-09-10, not by explaining the fallback but by removing the need for it.
+      Membership is now `group_name` -- a list of names that costs no numbers to
+      curate -- and each tile carries a follow control. Weight goes back to being only
+      what attribution consumes. Commit `33637d7`.
+
+
+## Track H - The seven reported issues  [2026-09-10]
+
+Reported together on 2026-09-10 and decomposed into five sub-projects. A, B, C and D
+shipped on `fix-priceless-bars` (PR #29); E shipped with them.
+
+- [x] **H1. Tile prices all read $0.00 / -100%.** An unsettled bar (NaN OHLC, real
+      volume) stored as NULL and read back as 0.0. 136 of 139 tickers. See ERROR-LOG
+      2026-09-09 and Track G.
+- [x] **H2. Portfolio panels too small to use.** One `max-w-[480px]` for four panels,
+      two of which hold a `min-w-[1120px]` table. Width is now per panel, with a 36px
+      floor on controls. Commits `fa93451`, `e1b648e`.
+- [x] **H3. Batch DCF "Failed to fetch".** One unvaluable ticker raised out of the
+      endpoint and returned nothing for the other 138. 9 of the first 40 watchlist
+      tickers raise, all on `terminal_growth_rate > 0.1`. Commit `f44e92b`.
+- [x] **H4. ETF / company / index metadata.** yfinance `quoteType`, captured from the
+      `info` payload already fetched. ETFs and indices no longer go through a DCF.
+      Commit `1b0b5ea`.
+- [x] **H5. News fails for ALL, and needs pacing.** `MAX_ACQUIRE_TICKERS = 100` was
+      enforced on the read as well as the refresh, against 143 watchlist rows. Client
+      now chunks both; the crawler paces between real fetches. Commit `c43a702`.
+- [x] **H6. Tab state is lost on navigation.** `useTabState` keeps per-tab state in
+      sessionStorage. Applied to the portfolio grid's filter and search.
+- [x] **H7. Three separate ticker searches.** Unified onto one `TickerSearch`
+      component. Modelled on Corporate's list rather than Valuation's `datalist`:
+      unifying downward would have cost click-to-select, and the Decision Log had no
+      suggestions at all.
+
+- [ ] **H8. Derived terminal growth exceeds its own cap for ~22% of the watchlist.**
+      Found by H3, deliberately not fixed there. `_valuation_params_from_metrics`
+      derives `terminal_growth_rate` from company growth with no clamp, against a model
+      cap of 0.1. Clamping would change reported valuations for a fifth of the
+      watchlist without saying so -- a finance-logic decision with its own SOP, not a
+      side effect of a batching fix.
+- [ ] **H9. Existing quote-fact rows carry no instrument_type.** They are treated as
+      valuable, so nothing breaks; they classify as acquisition re-runs them. A forced
+      backfill would mean 139 live provider calls, which is what earned the Yahoo rate
+      limit already recorded.
+- [ ] **H10. Tab state covers the portfolio grid only.** The mechanism is generic; the
+      valuation ticker, corporate universe and decision filters are not wired to it yet.
 
 
 ## Archived

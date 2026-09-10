@@ -6,6 +6,7 @@ import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { RefreshCw } from "lucide-react";
 import { fetchApi } from "@/lib/api";
+import { TickerSearch } from "@/components/ui/TickerSearch";
 import { bridgedEstimatedValue, UNBRIDGED_PLACEHOLDER, UNBRIDGED_REASON } from "@/lib/bridgeQuality";
 import { useDevMonitorPageLoad } from "@/hooks/useDevMonitorPageLoad";
 import type {
@@ -251,15 +252,6 @@ export default function CorporateAnalysisPage() {
   const companies = useMemo(() => mergeCompanies(companiesQuery.data), [companiesQuery.data]);
   const watchlistHoldings = watchlistQuery.data ?? EMPTY_WATCHLIST_HOLDINGS;
   const activeCompany = companyForTicker(assumptions.ticker, companies);
-  const showCompanyResults = companySearch.trim().length > 0;
-  const filteredCompanies = useMemo(() => {
-    const query = companySearch.trim().toLowerCase();
-    if (!query) return companies;
-    const startsWith = companies.filter((company) => company.name.toLowerCase().startsWith(query));
-    return startsWith.length > 0
-      ? startsWith
-      : companies.filter((company) => company.name.toLowerCase().includes(query));
-  }, [companies, companySearch]);
 
   // Hydrate and persist assumption state across backend storage and browser fallback storage.
   const metricsHistoryQuery = useQuery<CorporateMetricHistoryApi>({
@@ -891,43 +883,24 @@ export default function CorporateAnalysisPage() {
         <div className="flex w-full flex-col gap-2 min-[1300px]:items-end">
           <div id="company-search-container" className="flex w-full flex-col gap-2 min-[1300px]:flex-row min-[1300px]:justify-end">
             <div className="flex w-full min-w-0 flex-col gap-2 text-sm font-semibold text-[var(--text-primary)] min-[1300px]:max-w-2xl">
-              {/* Company Search: absolute results overlay prevents the dropdown from pushing layout. */}
-              <div className="relative flex flex-col gap-2">
-                <label htmlFor="company-search">Company Search</label>
-                <input
-                  id="company-search"
-                  name="company-search-no-history"
-                  type="text"
-                  value={companySearch}
-                  onChange={(event) => setCompanySearch(event.target.value)}
-                  placeholder="Type a company name"
-                  autoComplete="off"
-                  autoCorrect="off"
-                  autoCapitalize="none"
-                  spellCheck={false}
-                  className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-sm"
-                />
-                {showCompanyResults && (
-                  <div className="absolute left-0 right-0 top-full z-30 mt-1 max-h-28 overflow-auto rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-1 shadow-lg">
-                    {filteredCompanies.map((company) => (
-                      <button
-                        key={company.ticker}
-                        type="button"
-                        onClick={() => {
-                          selectTicker(company.ticker);
-                        }}
-                        className={`block w-full rounded px-3 py-2 text-left text-sm transition hover:bg-[var(--surface)] ${company.ticker === assumptions.ticker ? "bg-[var(--surface)] font-bold text-[var(--text-primary)]" : "text-[var(--text-muted)]"
-                          }`}
-                      >
-                        {company.name}
-                      </button>
-                    ))}
-                    {filteredCompanies.length === 0 && (
-                      <div className="px-3 py-2 text-xs text-[var(--text-muted)]">No saved companies match that name.</div>
-                    )}
-                  </div>
-                )}
-              </div>
+              {/* The shared search. Corporate's overlay was the richest of the three
+                  implementations, so the shared component was modelled on it rather than on
+                  Valuation's datalist: unifying downward would have cost the click-to-select
+                  list, which is the only way to find a company whose ticker you do not know. */}
+              <TickerSearch
+                id="company-search"
+                label="Company Search"
+                value={companySearch}
+                onChange={setCompanySearch}
+                onSelect={(ticker) => {
+                  selectTicker(ticker);
+                  setCompanySearch("");
+                }}
+                items={companies}
+                selectedTicker={assumptions.ticker}
+                placeholder="Type a company name"
+                className="w-full"
+              />
               {/* Backend DCF: quick link into the intrinsic valuation detail modal. */}
               <button
                 type="button"
