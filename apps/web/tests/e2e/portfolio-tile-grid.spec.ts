@@ -252,31 +252,90 @@ test("typing a four character search issues one bulk news request and never blan
   expect(await headlines.count()).toBeGreaterThan(0);
 });
 
-test("the fallback banner appears when no weights are set", async ({ page }) => {
-  // Only this page gets a zero-weight universe. The shared fixture keeps its weights
-  // because the rest of the portfolio specs assert against them.
+// The grid used to decide membership by `weight > 0`, and fell back to the twelve most
+// recently added stocks behind a banner when nothing had a weight -- which was true of all
+// 139 rows in the real database. Nobody chose those twelve. Membership is now `group_name`,
+// a list of names that costs no numbers to curate, and the two tests that pinned the
+// fallback are replaced by these rather than deleted: the behaviour they covered is gone
+// on purpose.
+
+function groupedWatchlist(): PortfolioStockFixture[] {
+  return [
+    { ...bulkWatchlist(1, 0)[0], ticker: "KEEP1", name: "Followed One", group_name: "custom", id: 1 },
+    { ...bulkWatchlist(1, 0)[0], ticker: "KEEP2", name: "Followed Two", group_name: "custom", id: 2 },
+    { ...bulkWatchlist(1, 0)[0], ticker: "REST1", name: "Rest One", group_name: "total", id: 3 },
+  ];
+}
+
+test("the grid shows a group, not whatever had a weight", async ({ page }) => {
+  await mockPortfolioPageApi(page, undefined, { watchlist: groupedWatchlist() });
+  await gotoGrid(page, "KEEP1");
+
+  await expect(page.getByTestId("stock-tile-KEEP2")).toBeVisible();
+  await expect(page.getByTestId("stock-tile-REST1")).toHaveCount(0);
+
+  // Every weight here is 0. Under the old rule this universe had no holdings at all and
+  // the grid would have substituted the most recent twelve.
+  await expect(page.getByTestId("grid-fallback-banner")).toHaveCount(0);
+});
+
+test("switching to All shows every group", async ({ page }) => {
+  await mockPortfolioPageApi(page, undefined, { watchlist: groupedWatchlist() });
+  await gotoGrid(page, "KEEP1");
+
+  await page.getByTestId("grid-filter").selectOption("all");
+
+  await expect(page.getByTestId("stock-tile-REST1")).toBeVisible();
+  await expect(page.getByTestId("stock-tile-KEEP1")).toBeVisible();
+});
+
+test("a filter naming a group the data does not have falls back to one it does", async ({ page }) => {
+  // The built-in seed groups everything as `built_in`, so a literal default of `custom`
+  // would render an empty grid on a fresh install.
   await mockPortfolioPageApi(page, undefined, { watchlist: bulkWatchlist(3, 0) });
   await gotoGrid(page, "TST1");
 
-  await expect(page.getByTestId("grid-fallback-banner")).toContainText("No weights set");
+  // The grid's direct children are the per-tile wrappers that host the follow control;
+  // the tile button itself is one level down.
+  await expect(page.getByTestId("stock-tile-grid").locator('> [data-testid^="stock-tile-cell-"]')).toHaveCount(3);
+  await expect(page.getByTestId("grid-filter")).toHaveValue("built_in");
 });
 
-test("the no-weights fallback shows the twelve most recent stocks, newest first", async ({ page }) => {
-  await mockPortfolioPageApi(page, undefined, { watchlist: bulkWatchlist(16, 0) });
-  await gotoGrid(page, "TST16");
+test("following a stock moves it into the followed group and shows it", async ({ page }) => {
+  await mockPortfolioPageApi(page, undefined, { watchlist: groupedWatchlist() });
+  await gotoGrid(page, "KEEP1");
 
-  // Direct children only: the grid container's own testid is "stock-tile-grid", which a
-  // bare prefix match would count as a thirteenth tile.
-  const tiles = page.getByTestId("stock-tile-grid").locator('> [data-testid^="stock-tile-"]');
-  await expect(tiles).toHaveCount(12);
+  await page.getByTestId("grid-filter").selectOption("all");
+  await expect(page.getByTestId("stock-tile-REST1")).toBeVisible();
 
-  const order = await tiles.evaluateAll((elements) =>
-    elements.map((element) => element.getAttribute("data-testid")?.replace("stock-tile-", "") ?? ""),
-  );
-  // Highest id first: the fallback is "most recent", and id is the only recency signal a
-  // watchlist row carries.
-  expect(order).toEqual([16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5].map((index) => `TST${index}`));
-  await expect(page.getByTestId("stock-tile-TST4")).toHaveCount(0);
+  await page.getByTestId("stock-tile-follow-REST1").click();
+
+  // Back to the followed group: the stock that was outside it is now inside.
+  await page.getByTestId("grid-filter").selectOption("custom");
+  await expect(page.getByTestId("stock-tile-REST1")).toBeVisible();
+});
+
+test("unfollowing removes a stock from the group without deleting it", async ({ page }) => {
+  await mockPortfolioPageApi(page, undefined, { watchlist: groupedWatchlist() });
+  await gotoGrid(page, "KEEP1");
+
+  await page.getByTestId("stock-tile-follow-KEEP1").click();
+  await expect(page.getByTestId("stock-tile-KEEP1")).toHaveCount(0);
+
+  // Still on the watchlist -- unfollow is a group move, not a delete.
+  await page.getByTestId("grid-filter").selectOption("all");
+  await expect(page.getByTestId("stock-tile-KEEP1")).toBeVisible();
+});
+
+test("the follow control is not nested inside the tile button", async ({ page }) => {
+  // The tile is itself a <button>. A nested button is invalid HTML that browsers reparent,
+  // which would move the control out of the tile and break its position.
+  await mockPortfolioPageApi(page, undefined, { watchlist: groupedWatchlist() });
+  await gotoGrid(page, "KEEP1");
+
+  const nested = page.locator('[data-testid="stock-tile-KEEP1"] [data-testid="stock-tile-follow-KEEP1"]');
+  await expect(nested).toHaveCount(0);
+  await expect(page.getByTestId("stock-tile-follow-KEEP1")).toBeVisible();
 });
 
 test("refresh reports refreshed, current and named failures", async ({ page }) => {

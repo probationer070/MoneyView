@@ -14,6 +14,7 @@ from apps.api.models.schemas import (
     DeltaBadge,
     PortfolioPreferences,
     PortfolioStock,
+    WatchlistGroupUpdate,
     WatchlistItem,
     WatchlistResyncResult,
     WatchlistSyncStatus,
@@ -194,6 +195,51 @@ def upsert_watchlist_item(item: WatchlistItem = Body(...)):
             logger.warning("watchlist.schedule_acquisition_failed ticker=%s error=%s",
                            normalized.ticker, error)
     return normalized
+
+
+@router.post("/watchlist/{ticker}/group", response_model=WatchlistItem)
+def set_watchlist_group(ticker: str, payload: WatchlistGroupUpdate = Body(...)):
+    """Move one ticker into a group, touching nothing else.
+
+    Deliberately not `POST /watchlist`. That endpoint is a full-row upsert and
+    `WatchlistItem.weight` defaults to 0.0, so a caller who sends only a ticker and a
+    group silently zeroes the allocation -- and flattens name and sector too. Group
+    membership decides what the tile grid shows, so this gets toggled casually and must
+    never cost a weight the user set deliberately.
+    """
+    normalized_ticker = ticker.upper().strip()
+    group_name = payload.group_name.strip()
+    if not group_name:
+        raise HTTPException(
+            status_code=422,
+            detail="invalid_group_name: group_name must be a non-empty name; "
+                   "defaulting it here would move the row somewhere the caller did not ask for",
+        )
+
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT ticker, name, sector, weight FROM watchlist WHERE ticker = ?",
+            (normalized_ticker,),
+        ).fetchone()
+        if row is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"unknown_ticker: {normalized_ticker} is not on the watchlist; "
+                       "add it before changing its group",
+            )
+        conn.execute(
+            "UPDATE watchlist SET group_name = ? WHERE ticker = ?",
+            (group_name, normalized_ticker),
+        )
+
+    mark_watchlist_state("user_mutation")
+    return WatchlistItem(
+        ticker=normalized_ticker,
+        name=row["name"] or normalized_ticker,
+        sector=row["sector"] or "",
+        group_name=group_name,
+        weight=float(row["weight"] or 0.0),
+    )
 
 
 @router.post("/watchlist/resync", response_model=APIResponse[WatchlistResyncResult])

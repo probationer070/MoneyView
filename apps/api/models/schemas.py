@@ -100,6 +100,7 @@ from .schema_parts.portfolio_reporting import (
 from .schema_parts.watchlist import (
     PortfolioPreferences,
     PortfolioStock,
+    WatchlistGroupUpdate,
     WatchlistItem,
     WatchlistResyncResult,
     WatchlistSyncResult,
@@ -187,6 +188,7 @@ __all__ = [
     "SectorAttribution",
     "PortfolioPreferences",
     "PortfolioStock",
+    "WatchlistGroupUpdate",
     "WatchlistItem",
     "WatchlistResyncResult",
     "WatchlistSyncResult",

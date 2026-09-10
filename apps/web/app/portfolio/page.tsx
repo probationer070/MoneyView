@@ -34,7 +34,7 @@ import { PortfolioAttributionSummary } from "./components/PortfolioAttributionSu
 import { PortfolioAllocationEditor } from "./components/PortfolioAllocationEditor";
 import { PortfolioCommandCenter } from "./components/PortfolioCommandCenter";
 import { PortfolioShell } from "./components/PortfolioShell";
-import { selectVisibleStocks, StockTileGrid, type GridFilter } from "./components/StockTileGrid";
+import { resolveGroupFilter, selectVisibleStocks, StockTileGrid, type GridFilter } from "./components/StockTileGrid";
 import { acquireNews, fetchBulkNews, summarizeAcquisition } from "@/lib/portfolioNews";
 import type {
   CorporateComparisonHistoryPoint,
@@ -322,6 +322,17 @@ function readStoredPortfolioDateFilters() {
 }
 
 const EMPTY_WATCHLIST: PortfolioStock[] = [];
+/**
+ * The group the tile grid's follow control adds to and removes from.
+ *
+ * `custom` is the group `stock_targets.json` already uses for hand-picked names, so
+ * following a stock in the UI and adding it to that file mean the same thing. Removing
+ * follow moves a row to `total` rather than deleting it: the stock stays on the
+ * watchlist and keeps its weight, it just leaves the followed view.
+ */
+export const FOLLOWED_GROUP = "custom";
+const UNFOLLOWED_GROUP = "total";
+
 const WEIGHT_SUM_TOLERANCE = 1e-6;
 export const MOVING_AVERAGE_WINDOWS = [5, 20, 60, 120] as const;
 export const MOVING_AVERAGE_COLORS: Record<(typeof MOVING_AVERAGE_WINDOWS)[number], string> = {
@@ -899,7 +910,10 @@ export default function PortfolioPage() {
   const [applyAllocationToSnapshot, setApplyAllocationToSnapshot] = useState(false);
   const [sectorFilter, setSectorFilter] = useState("All Sectors");
   const [collapsedSectors, setCollapsedSectors] = useState<Record<string, boolean>>({});
-  const [gridFilter, setGridFilter] = useState<GridFilter>("held");
+  // "custom" is the curated group seeded from stock_targets.json. It replaces the old
+  // "held" filter, which meant weight > 0 and therefore matched nothing at all while every
+  // weight was 0 -- see FOLLOWED_GROUP.
+  const [gridFilter, setGridFilter] = useState<GridFilter>(FOLLOWED_GROUP);
   const [gridSearch, setGridSearch] = useState("");
   const [refreshSummary, setRefreshSummary] = useState<string | null>(null);
   const [portfolioComparisonRequestedSnapshot, setPortfolioComparisonRequestedSnapshot] = useState<PortfolioComparisonRequestSnapshot | null>(
@@ -1094,7 +1108,7 @@ export default function PortfolioPage() {
   // module-level EMPTY_WATCHLIST, not a fresh literal, so these memos only recompute when
   // the data or the grid controls actually change.
   const visibleStocks = useMemo(
-    () => selectVisibleStocks(watchlist, gridFilter, gridSearch).stocks,
+    () => selectVisibleStocks(watchlist, resolveGroupFilter(watchlist, gridFilter), gridSearch).stocks,
     [watchlist, gridFilter, gridSearch],
   );
   const visibleTickers = useMemo(
@@ -1106,7 +1120,8 @@ export default function PortfolioPage() {
   // visibleTickers, so the press-time capture still matches exactly what is on screen.
   const debouncedGridSearch = useDebounce(gridSearch, 400);
   const newsQueryTickers = useMemo(
-    () => selectVisibleStocks(watchlist, gridFilter, debouncedGridSearch).stocks.map((stock) => stock.ticker),
+    () => selectVisibleStocks(watchlist, resolveGroupFilter(watchlist, gridFilter), debouncedGridSearch)
+      .stocks.map((stock) => stock.ticker),
     [watchlist, gridFilter, debouncedGridSearch],
   );
 
@@ -1138,6 +1153,23 @@ export default function PortfolioPage() {
     if (!subject || (subject.filter === gridFilter && subject.search === gridSearch)) return summary;
     return `${summary} · for the stocks visible when you pressed Refresh`;
   };
+
+  const toggleFollow = useMutation({
+    mutationFn: async (stock: PortfolioStock) => {
+      const nextGroup = stock.group_name === FOLLOWED_GROUP ? UNFOLLOWED_GROUP : FOLLOWED_GROUP;
+      // The dedicated group endpoint, never POST /watchlist. That one is a full-row upsert
+      // whose weight defaults to 0.0, so following a stock through it would silently wipe
+      // an allocation the user set deliberately.
+      return fetchApi(`/portfolio/watchlist/${encodeURIComponent(stock.ticker)}/group`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ group_name: nextGroup }),
+      });
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["portfolio-watchlist"] });
+    },
+  });
 
   const refreshNews = useMutation({
     // The visible set is captured here, when Refresh is pressed. A filter change while
@@ -2891,6 +2923,8 @@ export default function PortfolioPage() {
           newsByTicker={bulkNewsQuery.data?.tickers ?? {}}
           filter={gridFilter}
           onFilterChange={setGridFilter}
+          followedGroup={FOLLOWED_GROUP}
+          onToggleFollow={(stock) => toggleFollow.mutate(stock)}
           search={gridSearch}
           onSearchChange={setGridSearch}
           onOpenStock={openStockDetail}

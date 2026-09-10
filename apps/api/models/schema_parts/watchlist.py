@@ -17,6 +17,16 @@ class WatchlistItem(BaseModel):
     weight: float = Field(default=0.0, ge=0.0, le=1.0)
 
 
+class WatchlistGroupUpdate(BaseModel):
+    """Body for moving one watchlist row between groups.
+
+    A dedicated body rather than reusing WatchlistItem: that model carries defaults for
+    every other column, and a partial send through it would overwrite them.
+    """
+
+    group_name: str
+
+
 class WatchlistResyncResult(BaseModel):
     """Summary of an explicit watchlist reload from stock_targets.json."""
 

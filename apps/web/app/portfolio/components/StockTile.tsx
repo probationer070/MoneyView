@@ -1,5 +1,6 @@
 "use client";
 
+import clsx from "clsx";
 import { DeltaBadge } from "@/components/ui/DeltaBadge";
 import { TileSparkline } from "./TileSparkline";
 import type { NewsArticle, PortfolioStock } from "../page";
@@ -55,17 +56,24 @@ interface StockTileProps {
   news: NewsArticle[];
   /** `null` = never checked; `undefined` = not yet known. See newsSummary. */
   lastCheckedAt: string | null | undefined;
-  showWeight: boolean;
+  /** Whether this stock is in the group the grid currently treats as "followed". */
+  followed: boolean;
+  onToggleFollow: (stock: PortfolioStock) => void;
   onOpen: (stock: PortfolioStock) => void;
 }
 
-export function StockTile({ stock, news, lastCheckedAt, showWeight, onOpen }: StockTileProps) {
+export function StockTile({ stock, news, lastCheckedAt, followed, onToggleFollow, onOpen }: StockTileProps) {
   // aria-label names the button, and an explicit name suppresses the descendant text, so
   // the headlines -- the thing this tile exists to show -- are not in the name. They are
   // attached as the button's DESCRIPTION instead, which assistive tech announces after the
   // name rather than in place of it.
   const newsId = `stock-tile-news-${stock.ticker}`;
   return (
+    // The follow control is a SIBLING of the tile button, not a child: the tile is itself
+    // a <button>, and a nested button is invalid HTML that browsers reparent -- there is a
+    // spec test asserting the tile holds only phrasing content. Positioned over the tile's
+    // top-right corner, which the header row leaves free.
+    <div className="relative" data-testid={`stock-tile-cell-${stock.ticker}`}>
     <button
       type="button"
       onClick={() => onOpen(stock)}
@@ -86,9 +94,13 @@ export function StockTile({ stock, news, lastCheckedAt, showWeight, onOpen }: St
           <span className="block min-w-0 flex-1">
             <TileSparkline data={stock.sparkline} />
           </span>
-          {showWeight ? (
+          {/* Only when there is one to show: every tile reading "wt 0.0%" is noise, and
+              the grid no longer decides membership by weight. `weight` is stored as a
+              fraction -- PortfolioAllocationEditor edits it as `weight * 100` -- so
+              rendering it raw published 0.25 as "wt 0.3%" rather than "wt 25.0%". */}
+          {stock.weight > 0 ? (
             <span className="shrink-0 text-[length:var(--type-helper)] text-[var(--text-muted)]">
-              wt {stock.weight.toFixed(1)}%
+              wt {(stock.weight * 100).toFixed(1)}%
             </span>
           ) : null}
         </span>
@@ -111,5 +123,24 @@ export function StockTile({ stock, news, lastCheckedAt, showWeight, onOpen }: St
         )}
       </span>
     </button>
+      <button
+        type="button"
+        onClick={() => onToggleFollow(stock)}
+        aria-pressed={followed}
+        aria-label={followed ? `Unfollow ${stock.ticker}` : `Follow ${stock.ticker}`}
+        title={followed ? "Followed — click to remove" : "Follow this stock"}
+        data-testid={`stock-tile-follow-${stock.ticker}`}
+        className={clsx(
+          "absolute right-1 top-1 flex h-7 w-7 items-center justify-center rounded-[var(--radius-sm)]",
+          "text-sm font-bold leading-none transition-colors",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--state-info)]",
+          followed
+            ? "bg-[var(--state-info)] text-[var(--bg-surface)]"
+            : "border border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text-primary)]",
+        )}
+      >
+        {followed ? "✓" : "+"}
+      </button>
+    </div>
   );
 }
