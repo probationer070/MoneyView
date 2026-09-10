@@ -4,6 +4,7 @@ import React, { useEffect, useRef } from "react";
 import { createChart, IChartApi, ISeriesApi, ColorType, CrosshairMode, CandlestickSeries, HistogramSeries, LineSeries } from "lightweight-charts";
 import { TVCandle, TVVolume, sanitizeTooltip } from "@/lib/transformers";
 import { emitClientPerformanceEvent } from "@/lib/api";
+import { resolveCssColor } from "@/lib/cssColor";
 
 export interface TVLineSeries {
     title: string;
@@ -32,6 +33,14 @@ const TVChart: React.FC<TVChartProps> = ({
     downColor = "var(--delta-down)",
     tickerName = "Overview"
 }) => {
+    // Canvas cannot resolve a CSS custom property, and silently ignores an invalid colour
+    // -- which left every candle black. Resolve to a concrete value before the series is
+    // created. The fallbacks match globals.css: red is a gain and blue is a loss, the
+    // convention the rest of the app states in copy.
+    const resolvedUp = resolveCssColor(upColor ?? colorAccent, "#E54545");
+    const resolvedDown = resolveCssColor(downColor, "#4589E5");
+    const resolvedAccent = resolveCssColor(colorAccent, "#E54545");
+
     const chartContainerRef = useRef<HTMLDivElement>(null);
     const chartRef = useRef<IChartApi | null>(null);
     const candleSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
@@ -73,16 +82,16 @@ const TVChart: React.FC<TVChartProps> = ({
 
             // 2. Candlestick Series setup (v5 API Migration)
             const candleSeries = chart.addSeries(CandlestickSeries, {
-                upColor: upColor ?? colorAccent,
-                downColor,
+                upColor: resolvedUp,
+                downColor: resolvedDown,
                 borderVisible: false,
-                wickUpColor: upColor ?? colorAccent,
-                wickDownColor: downColor,
+                wickUpColor: resolvedUp,
+                wickDownColor: resolvedDown,
             });
 
             // 3. Volume Histogram Series setup (v5 API Migration)
             const volumeSeries = chart.addSeries(HistogramSeries, {
-                color: colorAccent,
+                color: resolvedAccent,
                 priceFormat: {
                     type: "volume",
                 },
@@ -169,7 +178,7 @@ const TVChart: React.FC<TVChartProps> = ({
             });
             throw error;
         }
-    }, [colorAccent, downColor, height, lineSeriesData, pointCount, tickerName, upColor, volumePointCount]); // Explicit rigid dependency bounds
+    }, [resolvedAccent, resolvedDown, height, lineSeriesData, pointCount, tickerName, resolvedUp, volumePointCount]); // Explicit rigid dependency bounds
 
     // ----------------------------------------------------
     // Execute Data Updates seamlessly off main render
