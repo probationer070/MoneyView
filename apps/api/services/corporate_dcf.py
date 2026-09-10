@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Callable
 
@@ -21,7 +22,24 @@ from apps.api.models.schemas import (
     CorporateMetrics,
     ValuationAssumptions,
 )
-from apps.api.models.schema_parts.corporate import BridgeInputMeta, BridgeSource
+from apps.api.models.schema_parts.corporate import (
+    BridgeInputMeta,
+    BridgeSource,
+    SkippedDcfTicker,
+)
+
+
+@dataclass(frozen=True)
+class BulkDcfResult:
+    """What a batch produced and what it could not.
+
+    A plain dataclass rather than a pydantic model: the reports were just built and
+    validated by the report builder, and re-validating every one of them to put them in a
+    container buys nothing. The route maps this onto `BulkDcfReports` for the wire.
+    """
+
+    reports: list[DCFFullReport]
+    skipped: list[SkippedDcfTicker]
 from apps.api.services.corporate_statement_metrics import _pick_worst_quality
 from apps.api.services.equity_bridge import load_equity_bridge
 
@@ -87,8 +105,19 @@ def build_bulk_dcf_reports(
     risk_free_rate: float,
     equity_risk_premium: float = DEFAULT_EQUITY_RISK_PREMIUM,
     country_risk_premium: float = DEFAULT_COUNTRY_RISK_PREMIUM,
-) -> list[DCFFullReport]:
-    """Build full DCF reports for a deduplicated ticker list."""
+) -> BulkDcfResult:
+    """Build full DCF reports for a deduplicated ticker list.
+
+    A ticker that cannot be valued is skipped with its reason rather than raised, because
+    this feeds "Calculate All Reports": one unvaluable name used to return nothing at all
+    for every other ticker in the batch. `ValuationAssumptions.terminal_growth_rate` is
+    capped at 0.1 while the params builder derives that rate from company growth without
+    clamping, so on the live watchlist 5 of the first 20 tickers raised -- the button
+    could not succeed on any realistic universe.
+
+    Skips are returned, never swallowed. A batch that quietly reported 134 of 139 would
+    be a completeness this result has not earned.
+    """
 
     normalized_tickers: list[str] = []
     for raw_ticker in tickers:
@@ -97,10 +126,11 @@ def build_bulk_dcf_reports(
             normalized_tickers.append(ticker)
 
     reports: list[DCFFullReport] = []
+    skipped: list[SkippedDcfTicker] = []
     for ticker in normalized_tickers:
-        metrics = metrics_loader(ticker)
-        reports.append(
-            report_builder(
+        try:
+            metrics = metrics_loader(ticker)
+            report = report_builder(
                 ticker=ticker,
                 params=valuation_params_builder(metrics),
                 current_price_loader=current_price_loader,
@@ -109,8 +139,15 @@ def build_bulk_dcf_reports(
                 equity_risk_premium=equity_risk_premium,
                 country_risk_premium=country_risk_premium,
             )
-        )
-    return reports
+        except Exception as error:  # noqa: BLE001 - any per-ticker failure is a skip
+            # Deliberately broad. The known cause is a pydantic ValidationError on a
+            # derived terminal growth above the model's 0.1 cap, but the loader and the
+            # report builder each reach data of their own, and a batch that dies on the
+            # eleventh ticker is worth less than one that names it and continues.
+            skipped.append(SkippedDcfTicker(ticker=ticker, reason=f"{type(error).__name__}: {error}"))
+            continue
+        reports.append(report)
+    return BulkDcfResult(reports=reports, skipped=skipped)
 
 
 def _build_dcf_outputs(

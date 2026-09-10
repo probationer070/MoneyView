@@ -191,6 +191,10 @@ export default function CorporateAnalysisPage() {
   const [bulkDcfReportsLoading, setBulkDcfReportsLoading] = useState(false);
   const [bulkDcfReportsError, setBulkDcfReportsError] = useState<string | null>(null);
   const [bulkDcfReportsLastUpdatedAt, setBulkDcfReportsLastUpdatedAt] = useState<string | null>(null);
+  // Tickers the batch could not value, with the reason. Surfaced rather than dropped: a
+  // run that quietly returned 134 reports for 139 tickers would claim a completeness it
+  // does not have.
+  const [bulkDcfSkipped, setBulkDcfSkipped] = useState<{ ticker: string; reason: string }[]>([]);
   const [comparisonRequestedSnapshot, setComparisonRequestedSnapshot] = useState<ComparisonRequestSnapshot | null>(() => readSessionCache<CachedCalculation<ComparisonRequestSnapshot, CorporateComparisonApi>>(COMPARISON_CACHE_KEY)?.snapshot ?? null);
   const [comparisonCachedResult] = useState<CorporateComparisonApi | null>(() => readSessionCache<CachedCalculation<ComparisonRequestSnapshot, CorporateComparisonApi>>(COMPARISON_CACHE_KEY)?.result ?? null);
   const [comparisonLastUpdatedAt] = useState<string | null>(() => readSessionCache<CachedCalculation<ComparisonRequestSnapshot, CorporateComparisonApi>>(COMPARISON_CACHE_KEY)?.lastUpdatedAt ?? null);
@@ -686,12 +690,17 @@ export default function CorporateAnalysisPage() {
 
     setBulkDcfReportsLoading(true);
     setBulkDcfReportsError(null);
+    setBulkDcfSkipped([]);
     try {
-      const reports = await fetchApi<DCFFullReport[]>("/corporate/dcf/reports/bulk", {
+      const batch = await fetchApi<{
+        reports: DCFFullReport[];
+        skipped: { ticker: string; reason: string }[];
+      }>("/corporate/dcf/reports/bulk", {
         method: "POST",
         body: JSON.stringify({ tickers } satisfies CorporateDcfBatchRequest),
       });
-      setBulkDcfReports(reports);
+      setBulkDcfReports(batch.reports ?? []);
+      setBulkDcfSkipped(batch.skipped ?? []);
       setBulkDcfReportsLastUpdatedAt(new Date().toISOString());
     } catch (error) {
       setBulkDcfReportsError(error instanceof Error ? error.message : "Failed to calculate reports for the current comparison universe.");
@@ -1148,6 +1157,7 @@ export default function CorporateAnalysisPage() {
           bulkDcfReportsError={bulkDcfReportsError}
           bulkDcfReports={bulkDcfReports}
           bulkDcfReportsLastUpdatedAt={bulkDcfReportsLastUpdatedAt}
+          bulkDcfSkipped={bulkDcfSkipped}
           onCalculateAllDcfReports={() => void handleCalculateAllDcfReports()}
           formatPct2={pct2}
           formatMoney={moneyText}

@@ -21,6 +21,8 @@ from .schema_parts.dev_monitor import (
 )
 from .schema_parts.corporate import (
     BridgeInputMeta,
+    BulkDcfReports,
+    SkippedDcfTicker,
     BridgeSource,
     DCFAssumptionSummary,
     DCFFullReport,
@@ -111,6 +113,8 @@ __all__ = [
     "APIMeta",
     "APIResponse",
     "BridgeInputMeta",
+    "BulkDcfReports",
+    "SkippedDcfTicker",
     "BridgeSource",
     "ComparisonUniverseEnum",
     "LogTailResponse",

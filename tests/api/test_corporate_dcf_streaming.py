@@ -182,7 +182,7 @@ def test_bulk_dcf_service_normalizes_and_deduplicates_tickers():
             "risk_free_rate": risk_free_rate,
         }
 
-    reports = build_bulk_dcf_reports(
+    result = build_bulk_dcf_reports(
         [" aapl ", "AAPL", "", "msft"],
         current_price_loader=lambda ticker: {"AAPL": 210.4, "MSFT": 430.0}[ticker],
         metrics_loader=_mock_metrics,
@@ -194,8 +194,11 @@ def test_bulk_dcf_service_normalizes_and_deduplicates_tickers():
     )
 
     assert seen_tickers == ["AAPL", "MSFT"]
-    assert [report["ticker"] for report in reports] == ["AAPL", "MSFT"]
-    assert reports[0]["price"] == 210.4
+    # The builder now returns reports alongside the tickers it could not value, so one
+    # unvaluable name cannot cost the batch. A clean run skips nothing.
+    assert [report["ticker"] for report in result.reports] == ["AAPL", "MSFT"]
+    assert result.reports[0]["price"] == 210.4
+    assert result.skipped == []
 
 
 def test_valuation_params_from_metrics_accepts_stabilized_metric_metadata():

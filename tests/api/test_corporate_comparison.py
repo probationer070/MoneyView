@@ -840,11 +840,15 @@ def test_corporate_bulk_dcf_reports_returns_full_reports_for_requested_tickers(t
     response = client.post("/api/v1/corporate/dcf/reports/bulk", json={"tickers": ["AAPL", "MSFT"]})
 
     assert response.status_code == 200
+    # `data` now carries the tickers the batch could not value alongside the reports, so
+    # a single unvaluable name cannot return nothing for every other ticker.
     payload = response.json()["data"]
-    assert [report["summary"]["ticker"] for report in payload] == ["AAPL", "MSFT"]
-    assert payload[0]["summary"]["report_id"] == "bulk-aapl"
-    assert payload[1]["summary"]["report_id"] == "bulk-msft"
-    assert payload[0]["summary"]["estimated_value"] == 125.0
+    reports = payload["reports"]
+    assert payload["skipped"] == []
+    assert [report["summary"]["ticker"] for report in reports] == ["AAPL", "MSFT"]
+    assert reports[0]["summary"]["report_id"] == "bulk-aapl"
+    assert reports[1]["summary"]["report_id"] == "bulk-msft"
+    assert reports[0]["summary"]["estimated_value"] == 125.0
 
 
 def test_corporate_comparison_snapshot_uses_kst_business_date_and_365_day_retention(tmp_path, monkeypatch):

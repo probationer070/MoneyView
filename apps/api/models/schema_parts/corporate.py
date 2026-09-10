@@ -182,6 +182,25 @@ class DCFFullReport(BaseModel):
     fcff_scale: float
 
 
+class SkippedDcfTicker(BaseModel):
+    """One ticker a batch could not value, and why.
+
+    Named rather than dropped: `Calculate All Reports` returning fewer reports than
+    tickers, with nothing saying which or why, would be a completeness the response has
+    not earned.
+    """
+
+    ticker: str
+    reason: str
+
+
+class BulkDcfReports(BaseModel):
+    """The wire shape of a batch: what it valued, and what it could not."""
+
+    reports: list[DCFFullReport] = Field(default_factory=list)
+    skipped: list[SkippedDcfTicker] = Field(default_factory=list)
+
+
 class RiskAssumptions(BaseModel):
     """Bounds for Monte Carlo risk logic."""
 

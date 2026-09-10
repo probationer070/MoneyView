@@ -16,6 +16,7 @@ from apps.api.core.transport_progress import log_transport_phase
 from apps.api.models.schemas import (
     APIResponse,
     APIMeta,
+    BulkDcfReports,
     DCFFullReport,
     CorporateComparisonSnapshotDeleteResult,
     CorporateCompany,
@@ -330,10 +331,10 @@ def get_dcf_full_report(ticker: str, params: ValuationAssumptions):
     )
 
 
-@router.post("/dcf/reports/bulk", response_model=APIResponse[list[DCFFullReport]])
+@router.post("/dcf/reports/bulk", response_model=APIResponse[BulkDcfReports])
 def get_bulk_dcf_reports(request: CorporateDcfBatchRequest):
     """Calculate full DCF reports for a list of comparison tickers."""
-    reports = build_bulk_dcf_reports(
+    result = build_bulk_dcf_reports(
         request.tickers,
         current_price_loader=_latest_market_price,
         metrics_loader=_metrics_for_ticker,
@@ -343,9 +344,12 @@ def get_bulk_dcf_reports(request: CorporateDcfBatchRequest):
         equity_risk_premium=DEFAULT_EQUITY_RISK_PREMIUM,
         country_risk_premium=KOREA_COUNTRY_RISK_PREMIUM,
     )
+    # `skipped` travels with the reports rather than being logged and dropped. A batch
+    # that returned 134 reports for 139 tickers with nothing naming the other five would
+    # be a completeness the response has not earned.
     return APIResponse(
         status="ok",
-        data=reports,
+        data=BulkDcfReports(reports=result.reports, skipped=result.skipped),
         meta=APIMeta(last_updated_at=datetime.now(timezone.utc).isoformat(), request_id=""),
     )
 
