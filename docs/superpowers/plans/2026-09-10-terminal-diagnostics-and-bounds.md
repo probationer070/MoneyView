@@ -30,6 +30,12 @@ TypeScript, Playwright.
 - Every test must be mutation-verified per `CLAUDE.md` §8: name the broken implementation
   it was shown to reject, or call it unverified.
 - No `git add -A`. Stage by explicit path — the working tree carries unrelated user files.
+- **No test may open `data/processed/moneyview.db`.** `tests/conftest.py:161` and
+  `tests/__init__.py` refuse it at import time — a guard added after a test wrote a
+  fabricated Damodaran vintage into the developer's real database. Use
+  `_watchlist_tickers()` in `tests/api/test_terminal_diagnostics.py`, which bootstraps the
+  isolated test database from the checked-in `stock_targets.json` seed. The measurement
+  scripts in Task 4 Step 7 are shell commands, not tests, and may read it.
 
 ---
 
@@ -66,8 +72,12 @@ what makes Stage 1 safe.
   - `@dataclass(frozen=True) TerminalGrowthDerivation` with fields
     `rate: float`, `binding_constraint: str`, `company_growth: float`,
     `ceiling: float | None`, `wacc_safety_bound: float`
-  - `derive_terminal_growth(company_growth: float, wacc: float, *, ceiling: float | None = None, safety_margin: float = SAFETY_MARGIN) -> TerminalGrowthDerivation`
-  - `binding_constraint` is one of `"company"`, `"ceiling"`, `"wacc_safety"`.
+  - `derive_terminal_growth(company_growth: float, wacc: float, *, ceiling: float | None = None, safety_margin: float = SAFETY_MARGIN, floor: float = TERMINAL_GROWTH_FLOOR) -> TerminalGrowthDerivation`
+  - `binding_constraint` is one of `"company"`, `"ceiling"`, `"wacc_safety"`, `"floor"`.
+  - `TERMINAL_GROWTH_FLOOR: float = -0.1` — the pre-existing `max(..., -0.1)` in both
+    derivation paths, modelled rather than ignored. Amended after Task 2's review found
+    that omitting it made the diagnostic report `"company"` for 8 tickers whose number the
+    floor decided.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -339,16 +349,36 @@ def test_stage_one_never_reports_a_ceiling_because_none_is_applied():
     assert summary.terminal_growth_binding_constraint != "ceiling"
 
 
-def test_the_spread_equals_the_safety_margin_when_the_safety_bound_binds():
-    """Today's defect, characterised: the bound that binds pins the spread at 50bp.
+def test_where_the_safety_bound_binds_the_spread_is_exactly_the_margin():
+    """Today's defect, characterised: where that bound binds, the spread is pinned at 50bp.
 
-    This is expected to FAIL after Stage 2 for tickers whose growth exceeds the ceiling,
-    and that failure is the point -- it is how the change proves itself.
+    Two assertions, and the second is the important one. Guarding a single-ticker assertion
+    on the binding constraint makes it vacuous whenever the guard is false -- AAPL binds on
+    "company", so the first version of this test asserted nothing at all. Sweeping a sample
+    and then requiring that the sample contained at least one such ticker is what stops a
+    green run from meaning "the condition never occurred".
+
+    Expected to change after Stage 2 for tickers whose growth exceeds the ceiling. That
+    change is the point, and this test is how it becomes visible.
     """
-    summary = _report().summary
+    # NOT `sqlite3.connect("data/processed/moneyview.db")`. `tests/conftest.py:161` and
+    # `tests/__init__.py` both refuse that path outright -- a guard added after a test
+    # wrote a fabricated Damodaran vintage into the developer's real database. Use the
+    # hermetic helper Task 2 introduced, which bootstraps the isolated test database from
+    # the checked-in `stock_targets.json` seed and yields the same ticker roster.
+    tickers = _watchlist_tickers(limit=20)
 
-    if summary.terminal_growth_binding_constraint == "wacc_safety":
-        assert summary.wacc_minus_terminal_growth == pytest.approx(SAFETY_MARGIN)
+    pinned = []
+    for ticker in tickers:
+        try:
+            summary = _report(ticker).summary
+        except Exception:
+            continue
+        if summary.terminal_growth_binding_constraint == "wacc_safety":
+            pinned.append(ticker)
+            assert summary.wacc_minus_terminal_growth == pytest.approx(SAFETY_MARGIN), ticker
+
+    assert pinned, "no sampled ticker bound on wacc_safety; this test proved nothing"
 ```
 
 - [ ] **Step 2: Run the tests to verify they fail**
@@ -421,8 +451,8 @@ find what was altered.
 | Mutation | Must fail |
 | --- | --- |
 | `ceiling=TERMINAL_GROWTH_CEILING` in the builder call | `test_stage_one_never_reports_a_ceiling_because_none_is_applied` |
-| `wacc_minus_terminal_growth=round(float(wacc), 6)` | `test_the_spread_equals_the_safety_margin_when_the_safety_bound_binds` |
-| `terminal_growth_binding_constraint="company"` hard-coded | `test_the_spread_equals_the_safety_margin_when_the_safety_bound_binds` |
+| `wacc_minus_terminal_growth=round(float(wacc), 6)` | `test_where_the_safety_bound_binds_the_spread_is_exactly_the_margin` |
+| `terminal_growth_binding_constraint="company"` hard-coded | `test_where_the_safety_bound_binds_the_spread_is_exactly_the_margin` — on its `assert pinned` line, which is the vacuity guard |
 
 - [ ] **Step 8: Commit**
 
@@ -637,12 +667,12 @@ def test_the_watchlist_no_longer_pins_on_the_safety_margin_alone():
     would turn it into a target. The claim is narrower -- no ticker arrives at
     `wacc - safety_margin` merely because its growth exceeded WACC.
     """
-    import sqlite3
-
-    connection = sqlite3.connect("data/processed/moneyview.db")
-    tickers = [row[0] for row in connection.execute(
-        "SELECT ticker FROM watchlist ORDER BY ticker LIMIT 20"
-    )]
+    # NOT `sqlite3.connect("data/processed/moneyview.db")`. `tests/conftest.py:161` and
+    # `tests/__init__.py` both refuse that path outright -- a guard added after a test
+    # wrote a fabricated Damodaran vintage into the developer's real database. Use the
+    # hermetic helper Task 2 introduced, which bootstraps the isolated test database from
+    # the checked-in `stock_targets.json` seed and yields the same ticker roster.
+    tickers = _watchlist_tickers(limit=20)
 
     pinned = []
     for ticker in tickers:
@@ -857,7 +887,7 @@ git commit -m "fix: bound terminal growth by an economic ceiling, not only by WA
 | §7.4 warning, share is never a target | Task 3, and Task 4 Step 1's second test asserts the mechanism rather than the share |
 | §8 Stage 1 changes no valuation | Task 2 Step 6 |
 | §8 Stage 2 introduces no industry logic or classifier | No task references `industry_benchmark` or a regime |
-| §10.1 defect reproduced before it is fixed | Task 2's `test_the_spread_equals_the_safety_margin_when_the_safety_bound_binds`, plus the Task 4 Step 7 baseline |
+| §10.1 defect reproduced before it is fixed | Task 2's `test_where_the_safety_bound_binds_the_spread_is_exactly_the_margin`, plus the Task 4 Step 7 baseline |
 | §10.2 defect mechanism gone | Task 4 `test_the_watchlist_no_longer_pins_on_the_safety_margin_alone` |
 | §10.3 each bound binds independently | Task 1's three binding tests |
 | §10.9 mutation verification | Every task's mutation step |
