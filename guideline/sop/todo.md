@@ -767,6 +767,63 @@ left standing, since a known limit nobody re-checks becomes a false claim.)
 
 ---
 
+## Track F - Metric reference  [DOCS SHIPPED 2026-09-09; two ERROR-LOG defects and one provenance gap queued, none fixed]
+
+`docs/metrics/` — a per-family metric reference: 37 entries across seven
+family files (`price-signals`, `discount-rates-and-returns`,
+`fundamental-quality`, `dcf-mechanics`, `verdict-panel`,
+`industry-benchmarks`, `attribution-and-uncertainty`), a source-backed
+`inventory.md` reconciling the original 50-candidate spec against what the
+codebase actually calls, and `scripts/check_metric_docs.py` (16 tests)
+enforcing the citation and eight-field shape of every entry. Spec:
+`docs/superpowers/specs/2026-09-08-metric-reference-design.md`. Plan:
+`docs/superpowers/plans/2026-09-08-metric-reference.md`.
+
+- [x] **F1. The reference itself — done 2026-09-09**, including a final fix
+      round correcting three stale self-references: a `price-signals.md`
+      "Note on scope" blockquote narrating an already-settled discrepancy
+      with `inventory.md` as if it were still open; a `README.md`
+      line-range citation (the override rule) carried, wrong, into
+      `verdict-panel.md` and `discount-rates-and-returns.md`; and an
+      `inventory.md` line reading "two families with drops" while naming
+      four.
+
+- [ ] **F2. CAPM debt-weight defect — recorded, not fixed.** `ERROR-LOG.md`
+      2026-09-09: `corporate_comparison.py:1130` relevers beta with
+      `debt_ratio` (`D/(D+E)`, a debt-to-capital weight) fed into a Hamada
+      formula wanting `D/E`. 108 of 135 tickers get a different beta under
+      the correct substitution; worst case 14.08pp (STX/STEM/SKYX/DOCN).
+      Documented as live behavior in
+      `docs/metrics/discount-rates-and-returns.md`'s `capm_expected_return`
+      entry. Fix is application code (`corporate_comparison.py`), out of
+      scope for the docs-only branch that recorded it.
+
+- [ ] **F3. ROIC audit basis mismatch — recorded, not fixed.** `ERROR-LOG.md`
+      2026-09-09: the metric audit displays single-year NOPAT and average
+      invested capital beside a `recent_average`-basis ROIC that is a
+      three-year average of yearly ratios, so the displayed inputs generally
+      cannot reproduce the displayed ROIC. 102 of 135 tickers diverge
+      >0.5pp (AAPL: displays 60.69%, inputs imply 66.60%). Documented in
+      `docs/metrics/fundamental-quality.md`'s `NOPAT` entry. Fix is
+      application code (`apps/api/services/corporate_statement_metrics.py`),
+      out of scope here.
+
+- [ ] **F4. Unmarked fade provenance gap.** A stored conservative case's
+      `wacc_initial`/`wacc_stable`/`effective_tax_rate` (and `roic_stable`,
+      via `after_tax_roc`) carry no flag distinguishing a faded case-level
+      value from one that was never faded — `fade`'s meta dict is discarded
+      for these three case-level fields because the narrative-claim
+      machinery only covers segment-level fields
+      (`conservative_case.py:217-229`). No value computes wrong (the
+      `ERROR-LOG.md` bar in CLAUDE.md §7 is not met), so this is deliberately
+      **not** an `ERROR-LOG.md` entry — it is missing provenance metadata, a
+      different thing from a wrong number. Already fully accounted for in
+      `docs/metrics/industry-benchmarks.md`'s `fade` entry; no further
+      documentation change is owed. Fix, if taken, is a case-level flag or a
+      narrated claim for `wacc_initial`/`wacc_stable`/`effective_tax_rate`.
+
+---
+
 ## Known limits, accepted deliberately
 
 Recorded so nobody rediscovers them as bugs:
