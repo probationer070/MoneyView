@@ -9,11 +9,13 @@ change, and the characterisation test here is what makes that change visible rat
 merely asserted.
 """
 
+import inspect
+
 import pytest
 
 from apps.api.routes import corporate as corporate_route
 from apps.api.services.corporate_dcf import build_dcf_full_report
-from packages.core_finance.terminal_growth import SAFETY_MARGIN
+from packages.core_finance.terminal_growth import SAFETY_MARGIN, TERMINAL_GROWTH_CEILING
 
 
 def _watchlist_tickers(limit: int | None = None) -> list[str]:
@@ -61,41 +63,7 @@ def test_the_report_states_the_spread_the_terminal_value_turns_on():
 def test_the_report_names_the_binding_constraint():
     summary = _report().summary
 
-    assert summary.terminal_growth_binding_constraint in {"company", "wacc_safety"}
-
-
-def test_stage_one_never_reports_a_ceiling_because_none_is_applied():
-    """The ceiling arrives in Stage 2. Reporting it here would be a lie about the run."""
-    summary = _report().summary
-
-    assert summary.terminal_growth_binding_constraint != "ceiling"
-
-
-def test_where_the_safety_bound_binds_the_spread_is_exactly_the_margin():
-    """Today's defect, characterised: where that bound binds, the spread is pinned at 50bp.
-
-    Two assertions, and the second is the important one. Guarding a single-ticker assertion
-    on the binding constraint makes it vacuous whenever the guard is false -- AAPL binds on
-    "company", so the first version of this test asserted nothing at all. Sweeping a sample
-    and then requiring that the sample contained at least one such ticker is what stops a
-    green run from meaning "the condition never occurred".
-
-    Expected to change after Stage 2 for tickers whose growth exceeds the ceiling. That
-    change is the point, and this test is how it becomes visible.
-    """
-    test_tickers = _watchlist_tickers(limit=20)
-
-    pinned = []
-    for ticker in test_tickers:
-        try:
-            summary = _report(ticker).summary
-        except Exception:
-            continue
-        if summary.terminal_growth_binding_constraint == "wacc_safety":
-            pinned.append(ticker)
-            assert summary.wacc_minus_terminal_growth == pytest.approx(SAFETY_MARGIN), ticker
-
-    assert pinned, "no sampled ticker bound on wacc_safety; this test proved nothing"
+    assert summary.terminal_growth_binding_constraint in {"company", "wacc_safety", "ceiling"}
 
 
 def _seed_floor_ticker(ticker: str) -> None:
@@ -146,7 +114,7 @@ def test_the_reported_constraint_and_spread_describe_the_same_number():
         checked += 1
         wacc = max(float(metrics.wacc) / 100, 0.001)
         expected = derive_terminal_growth(
-            company_growth=float(metrics.growth) / 100, wacc=wacc, ceiling=None
+            company_growth=float(metrics.growth) / 100, wacc=wacc, ceiling=TERMINAL_GROWTH_CEILING
         )
         implied_rate = wacc - summary.wacc_minus_terminal_growth
         if abs(implied_rate - expected.rate) > 1e-9:
@@ -154,3 +122,77 @@ def test_the_reported_constraint_and_spread_describe_the_same_number():
 
     assert checked > 50, f"only {checked} tickers valued; this test proved little"
     assert mismatched == [], f"spread and constraint disagree: {mismatched[:5]}"
+
+
+def test_a_fast_grower_is_bound_by_the_ceiling_not_the_safety_margin():
+    """AMD derived 0.1364 under the old clamp -- 50bp below its 14.14% WACC.
+
+    That rate is refused by ValuationAssumptions' own `le=0.1` bound, which is why 9 of the
+    first 40 watchlist tickers could not be valued at all. Under the ceiling it is 3%, and
+    the report says the ceiling is why.
+    """
+    from packages.core_finance.terminal_growth import derive_terminal_growth
+
+    result = derive_terminal_growth(
+        company_growth=0.18, wacc=0.1414, ceiling=TERMINAL_GROWTH_CEILING
+    )
+
+    assert result.rate == pytest.approx(TERMINAL_GROWTH_CEILING)
+    assert result.binding_constraint == "ceiling"
+
+
+def test_the_watchlist_no_longer_pins_on_the_safety_margin_alone():
+    """The defect mechanism, tested directly rather than through a share threshold.
+
+    Not `terminal_share < 90%`: the share is a diagnostic, and asserting a bound on it
+    would turn it into a target. The claim is narrower -- no ticker arrives at
+    `wacc - safety_margin` merely because its growth exceeded WACC.
+    """
+    # NOT `sqlite3.connect("data/processed/moneyview.db")`. `tests/conftest.py:161` and
+    # `tests/__init__.py` both refuse that path outright -- a guard added after a test
+    # wrote a fabricated Damodaran vintage into the developer's real database. Use the
+    # hermetic helper Task 2 introduced, which bootstraps the isolated test database from
+    # the checked-in `stock_targets.json` seed and yields the same ticker roster.
+    tickers = _watchlist_tickers(limit=20)
+
+    pinned = []
+    for ticker in tickers:
+        try:
+            summary = _report(ticker).summary
+        except Exception:
+            continue
+        if (
+            summary.terminal_growth_binding_constraint == "wacc_safety"
+            and summary.wacc_minus_terminal_growth == pytest.approx(SAFETY_MARGIN)
+        ):
+            # Legitimate only when WACC is genuinely below the ceiling plus the margin.
+            wacc = float(corporate_route._metrics_for_ticker(ticker).wacc) / 100
+            if wacc >= TERMINAL_GROWTH_CEILING + SAFETY_MARGIN:
+                pinned.append(ticker)
+
+    assert pinned == [], f"still pinned on the safety margin alone: {pinned}"
+
+
+def test_both_derivation_sites_agree_on_the_same_ticker():
+    """A ceiling applied in one derivation and not the other splits one ticker in two.
+
+    corporate_comparison computes the comparison table's dcf_value; corporate_dcf computes
+    the report. They read the same metrics, so they must reach the same terminal growth.
+    """
+    from apps.api.services import corporate_comparison
+
+    metrics = corporate_route._metrics_for_ticker("AAPL")
+    wacc = max(float(metrics.wacc) / 100, 0.001)
+    growth_rate = float(metrics.growth) / 100
+
+    from packages.core_finance.terminal_growth import derive_terminal_growth
+
+    expected = derive_terminal_growth(
+        company_growth=growth_rate, wacc=wacc, ceiling=TERMINAL_GROWTH_CEILING
+    ).rate
+    params = corporate_route._valuation_params_from_metrics(metrics)
+
+    assert params.terminal_growth_rate == pytest.approx(expected)
+    source = inspect.getsource(corporate_comparison._dcf_snapshot)
+    assert "wacc - 0.005" not in source
+    assert "derive_terminal_growth" in source

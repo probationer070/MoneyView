@@ -70,13 +70,23 @@ The relationship between the two symptoms is worth stating plainly: the refusals
 LUCKY cases. They fail loudly. The 23 that pass quietly report a fixed multiple wearing
 a discounted-cash-flow's clothes.
 
-Fix: not fixed -- this entry records the defect; the fix is its own work. The change
-wanted is a plausibility ceiling on terminal growth (a long-run rate such as the
-risk-free rate, or ~2.5-3%) with `wacc - 0.005` kept only as a secondary safety net.
-That is a finance-logic change under `guideline/sop/finance-logic.md`: it moves reported
-valuations for most of the watchlist, and the ceiling is a judgement about the world
-rather than about the code, so it needs a decision rather than a default. Tracked as H8.
-Files changed: none.
+Fix: fixed, 2026-09-11 (Task 4 of the terminal-diagnostics-and-bounds plan). A
+`TERMINAL_GROWTH_CEILING = 0.03` (`packages/core_finance/terminal_growth.py`) now sits
+between company growth and the `wacc - 0.005` safety margin in `derive_terminal_growth`,
+consumed at both derivation sites (`corporate_metrics_service.py`,
+`corporate_comparison.py`); `wacc - 0.005` is kept, exactly as this entry asked, but only
+as the secondary safety net, not the plausibility bound. Measured against this entry's
+own 18-report/96.25%-median baseline: 25 of 25 sampled watchlist reports now build (the
+9-of-40 refusals this entry called "the lucky cases" mostly stop happening), median
+`terminal_value_share_pct` falls to 75.33%, and the binding-constraint distribution moves
+from 100% `wacc_safety` to `{ceiling: 20, company: 4, floor: 1}` -- no ticker in the
+sample still pins on the safety margin alone at a WACC where the ceiling should have
+governed. Tracked as H8.
+Files changed: apps/api/services/corporate_metrics_service.py,
+apps/api/services/corporate_comparison.py, apps/api/services/corporate_dcf.py,
+packages/core_finance/terminal_growth.py (ceiling constant and floor-as-fourth-bound,
+landed in an earlier task on this same plan), tests/api/test_terminal_diagnostics.py,
+tests/api/test_corporate_comparison.py, tests/api/test_corporate_dcf_streaming.py.
 Prevention: the guard that exists proves the hazard was understood -- someone knew `g`
 approaching WACC destroys the model, and wrote a clamp for it. What was missing is that
 a clamp expressed *relative to another input* has no opinion about magnitude. `wacc -

@@ -10,7 +10,7 @@ from packages.core_finance.dcf import (
     calculate_intrinsic_value_per_share,
     sensitivity_grid,
 )
-from packages.core_finance.terminal_growth import derive_terminal_growth
+from packages.core_finance.terminal_growth import TERMINAL_GROWTH_CEILING, derive_terminal_growth
 
 from apps.api.models.schemas import (
     DCFAssumptionSummary,
@@ -234,12 +234,11 @@ def _build_dcf_outputs(
     terminal_value_share_pct = pv_terminal / enterprise_value * 100
     # Recovered rather than threaded: the builder already holds both inputs, and passing a
     # derivation record through every caller would make the params object carry state that
-    # only one consumer reads. Stage 1 passes no ceiling, so this reproduces the same
-    # comparison the params builder made.
+    # only one consumer reads.
     terminal_derivation = derive_terminal_growth(
         company_growth=params.revenue_growth_rate,
         wacc=wacc,
-        ceiling=None,
+        ceiling=TERMINAL_GROWTH_CEILING,
     )
     agency_discount = 1 - min(max(esg_penalty, 0), 80) / 400
     dcf_multiple = enterprise_value / base_fcff

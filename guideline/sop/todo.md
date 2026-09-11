@@ -867,7 +867,7 @@ shipped on `fix-priceless-bars` (PR #29); E shipped with them.
       unifying downward would have cost click-to-select, and the Decision Log had no
       suggestions at all.
 
-- [ ] **H8. Terminal growth is clamped to WACC, so terminal value is 96% of most
+- [x] **H8. Terminal growth is clamped to WACC, so terminal value is 96% of most
       valuations.** RAISED IN PRIORITY 2026-09-10 after measuring the consequence, and
       restated: the ~22% that cannot be valued are the *symptom*, not the defect.
       `corporate_metrics_service.py:505` sets `terminal_growth_rate = min(growth, wacc -
@@ -879,9 +879,28 @@ shipped on `fix-priceless-bars` (PR #29); E shipped with them.
       The explicit projection contributes under 4% of the answer. The 9 of 40 that raise
       on the model's `le=0.1` bound are the lucky ones -- they fail loudly; the rest report
       a fixed multiple wearing a DCF's clothes.
-      Wanted: a plausibility ceiling (risk-free rate, or ~2.5-3%) with `wacc - 0.005` kept
-      as a secondary net. Finance-logic SOP applies; the ceiling is a judgement about the
-      world, so it needs a decision, not a default. `ERROR-LOG.md` 2026-09-10.
+
+      **CLOSED 2026-09-11**, `terminal-diagnostics-and-bounds` Task 4 (of a four-task plan
+      whose earlier tasks built the diagnostics without moving a number). `TERMINAL_GROWTH_
+      CEILING = 0.03` now sits between company growth and `wacc - safety_margin` inside
+      `derive_terminal_growth` (`packages/core_finance/terminal_growth.py`), consumed at
+      both derivation sites -- `corporate_metrics_service.py`'s params builder and
+      `corporate_comparison.py`'s `_dcf_snapshot` -- and reported by `corporate_dcf.py`'s
+      `terminal_growth_binding_constraint`. `wacc - 0.005` stays exactly where it was, as a
+      secondary safety net, not the plausibility bound; the two safety-net sites
+      (`corporate_dcf.py`'s own re-clamp of `params.terminal_growth_rate`, `monte_carlo.py`)
+      were deliberately left alone -- they bound a value arriving from outside, which a
+      ceiling would silently overwrite.
+
+      Re-measured against this entry's own baseline (18 reports, median share 96.25%,
+      every binding constraint `wacc_safety`): 25 of 25 sampled watchlist reports now
+      build, median `terminal_value_share_pct` falls to **75.33%**, and the binding
+      distribution is `{ceiling: 20, company: 4, floor: 1}` -- zero `wacc_safety`. Five
+      pre-existing tests had hardcoded valuations that moved and were recomputed by hand,
+      not loosened to a range (`tests/api/test_corporate_comparison.py`,
+      `tests/api/test_corporate_dcf_streaming.py`); see `ERROR-LOG.md` 2026-09-10 (Fix
+      line amended) for the full mutation matrix and the two places it diverged from the
+      task brief's predictions.
 
 - [ ] **H11. `terminal_value_share_pct` is displayed without a threshold.** CORRECTED
       2026-09-10: this was filed as "nothing surfaces it", which is false. It is shown as a

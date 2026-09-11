@@ -118,24 +118,25 @@ def _snapshot(bridge, *, price=100.0):
 # every exact-value assertion below is traceable to arithmetic done once, by hand, rather
 # than re-derived ad hoc per test (and rather than re-importing _dcf_snapshot's own DCF
 # math, which would make the assertion tautological against the code it is checking).
-# base_fcff=92; growth=0.06; wacc=0.10; terminal_growth=min(0.06, 0.095)=0.06
+# base_fcff=92; growth=0.06; wacc=0.10; terminal_growth=derive_terminal_growth(0.06, 0.10,
+# ceiling=0.03) -- 0.06 exceeds the 3% ceiling, so the ceiling binds at 0.03, not 0.06.
 # projected = [92*1.06**y for y in 1..5]; pv_fcff = sum(cf / 1.10**y)
-# terminal_value = projected[-1]*1.06 / (0.10-0.06); pv_terminal = terminal_value / 1.10**5
-_FIXTURE_ENTERPRISE_VALUE = 2438.0  # round(pv_fcff + pv_terminal, 2)
+# terminal_value = projected[-1]*1.03 / (0.10-0.03); pv_terminal = terminal_value / 1.10**5
+_FIXTURE_ENTERPRISE_VALUE = 1537.03  # round(pv_fcff + pv_terminal, 2)
 
 
 def test_a_resolved_bridge_produces_a_per_share_value_not_an_enterprise_value():
     # net_debt was hardcoded 0.0 at line 372, so estimated_value was enterprise value
     # under a per-share label and status was permanently "Bridge Incomplete". A bound of
-    # "< 1000.0" passes whether or not net_debt is actually subtracted (162.5 ignoring it
-    # vs. 158.53 applying it), so the exact value is asserted instead: (2438 - 60) / 15.
+    # "< 1000.0" passes whether or not net_debt is actually subtracted, so the exact value
+    # is asserted instead: (_FIXTURE_ENTERPRISE_VALUE - 60) / 15.
     dcf = _snapshot(_resolved_bridge(net_debt=60.0, non_op=0.0, shares=15.0))
     assert dcf["bridge_quality"] == "ok"
     # _dcf_snapshot's "status" is internal: CorporateComparisonRow has no status field,
     # so this verdict is not surfaced by the comparison table. Asserted because it is
     # real behaviour of this function, not because a user can see it.
     assert dcf["status"] in {"Undervalued", "Overvalued"}
-    assert dcf["estimated_value"] == pytest.approx(158.53, abs=0.01)
+    assert dcf["estimated_value"] == pytest.approx(98.47, abs=0.01)
 
 
 def test_an_unresolved_bridge_reports_missing_and_falls_back_to_enterprise_value():
@@ -157,10 +158,10 @@ def test_the_dcf_implied_return_is_no_longer_pinned_at_zero():
     assert few_shares["dcf_implied_return"] != many_shares["dcf_implied_return"]
     assert few_shares["dcf_implied_return"] != 0.0
     assert few_shares["stock_expected_return"] == few_shares["dcf_implied_return"]
-    # Exact values: per_share = (2438 - 60) / shares; dcf_implied_return =
-    # (per_share / current_price - 1) * 100, current_price = 100.0 (the _snapshot default).
-    assert few_shares["dcf_implied_return"] == pytest.approx(2278.0, abs=0.01)
-    assert many_shares["dcf_implied_return"] == pytest.approx(-97.62, abs=0.01)
+    # Exact values: per_share = (_FIXTURE_ENTERPRISE_VALUE - 60) / shares; dcf_implied_return
+    # = (per_share / current_price - 1) * 100, current_price = 100.0 (the _snapshot default).
+    assert few_shares["dcf_implied_return"] == pytest.approx(1377.03, abs=0.01)
+    assert many_shares["dcf_implied_return"] == pytest.approx(-98.52, abs=0.01)
 
 
 def test_an_estimated_bridge_still_produces_a_value():
@@ -176,12 +177,12 @@ def test_an_estimated_bridge_still_produces_a_value():
     # Internal only, as above: not surfaced by CorporateComparisonRow.
     assert dcf["status"] in {"Undervalued", "Overvalued"}
     # Same net_debt and shares as the "ok" resolved-bridge fixture above, with
-    # non_operating_assets absent. Asserting the same 158.53 here is the actual test of
+    # non_operating_assets absent. Asserting the same 98.47 here is the actual test of
     # the deliberate "sums as 0.0 when estimated" exception -- without it, an
     # implementation that instead treated an estimated-but-absent non_operating_assets as
-    # disqualifying (falling back to enterprise value, ~2438) would still pass this test
+    # disqualifying (falling back to enterprise value, ~1537) would still pass this test
     # on the status/quality checks alone.
-    assert dcf["estimated_value"] == pytest.approx(158.53, abs=0.01)
+    assert dcf["estimated_value"] == pytest.approx(98.47, abs=0.01)
 
 
 def _insert_snapshot_rows(

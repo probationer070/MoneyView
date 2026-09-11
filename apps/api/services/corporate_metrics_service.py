@@ -26,6 +26,10 @@ from apps.api.services.corporate_statement_metrics import (
 from apps.api.services.db import get_db
 from apps.api.services.market_data import MarketDataService
 from apps.api.services.watchlist_seed import ensure_watchlist_bootstrapped, load_watchlist_seed
+from packages.core_finance.terminal_growth import (
+    TERMINAL_GROWTH_CEILING,
+    derive_terminal_growth,
+)
 
 logger = setup_logger(__name__)
 _MKT = MarketDataService()
@@ -502,8 +506,14 @@ def valuation_params_from_metrics(metrics: CorporateMetrics) -> ValuationAssumpt
         maximum=1.0,
     )
     wacc = max(float(metrics.wacc) / 100, 0.001)
-    terminal_growth_rate = min(growth_rate, wacc - 0.005)
-    terminal_growth_rate = max(terminal_growth_rate, -0.1)
+    # Three bounds, three jobs. `wacc - safety_margin` used to carry the economic ceiling's
+    # work as well as its own, which pinned terminal growth 50bp below WACC for 23 of 40
+    # watchlist tickers and valued each at roughly 203x-228x FCFF.
+    terminal_growth_rate = derive_terminal_growth(
+        company_growth=growth_rate,
+        wacc=wacc,
+        ceiling=TERMINAL_GROWTH_CEILING,
+    ).rate
     return ValuationAssumptions(
         revenue_growth_rate=growth_rate,
         operating_margin=operating_margin,
