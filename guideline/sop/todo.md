@@ -926,6 +926,11 @@ shipped on `fix-priceless-bars` (PR #29); E shipped with them.
       valuation is almost entirely one assumption. Still worth doing first, and still
       changes no valuation, but the work is a warning state and the missing companion
       diagnostics (spread, binding constraint), not surfacing a hidden field.
+      PARTLY DONE 2026-09-11 on `terminal-bounds`: the warning state ships at a 90%
+      threshold and the spread renders beside it (`DcfCoreModulesGraph.tsx`,
+      `wacc_minus_terminal_growth`, mutation-verified against the raw-fraction defect).
+      Open: `terminal_growth_binding_constraint` is on the payload and typed in
+      `packages/shared-types/corporate.ts`, but no surface reads it yet.
 
 
 ## Archived

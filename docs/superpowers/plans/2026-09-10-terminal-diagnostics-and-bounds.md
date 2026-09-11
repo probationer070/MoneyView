@@ -622,7 +622,7 @@ measured rather than argued about.
 | --- | --- | --- |
 | `corporate_metrics_service.py:505` | `metrics.growth` — a **derivation** | **Yes** |
 | `corporate_comparison.py:386` | `metrics.growth` — a **derivation** | **Yes** |
-| `corporate_dcf.py:204` | `params.terminal_growth_rate`, already derived or hand-set by the what-if sliders | **No** |
+| `corporate_dcf.py:204` | `params.terminal_growth_rate` — derived on the bulk path, taken straight from the request body on all three single-ticker routes | **No** |
 | `monte_carlo.py:191` | `request.terminal_growth`, supplied and sampled | **No** |
 
 The last two bound a value arriving from outside, which is exactly what a safety net is
@@ -904,13 +904,26 @@ plumbing is idiosyncratic and copying it wrongly is likelier than reading it.
 **Type consistency.** `derive_terminal_growth(company_growth, wacc, *, ceiling, safety_margin)`
 and `TerminalGrowthDerivation.{rate, binding_constraint, company_growth, ceiling,
 wacc_safety_bound}` are used with those exact names in Tasks 2 and 4.
-`binding_constraint` values are `"company" | "ceiling" | "wacc_safety"` throughout.
+`binding_constraint` values are `"company" | "ceiling" | "wacc_safety" | "floor"` throughout
+(the floor joined them in Task 2's fix round), plus `None` from Task 4's fix round where the
+reconstruction cannot vouch for the rate.
 `DCFSummary.wacc_minus_terminal_growth` and
 `DCFSummary.terminal_growth_binding_constraint` are read in Task 3 under those names.
 
-**One risk worth naming.** Task 2 recovers the derivation in the report builder rather than
-threading it from the params builder, so the two could disagree if a caller supplies
-hand-set params — which the what-if sliders do. In that case the reported binding
-constraint describes the bounds as they would apply to the supplied growth, which is the
-useful reading, but it is a reconstruction rather than a record. Task 4's third mutation
-guards the version of this that would actually mislead.
+**One risk worth naming — and it was worse than this paragraph estimated.** Task 2 recovers
+the derivation in the report builder rather than threading it from the params builder, so
+the two disagree whenever a caller supplies hand-set params.
+
+This called that the what-if sliders and judged the reconstruction "the useful reading".
+Both were wrong, and Task 4's review caught it. `_valuation_params_from_metrics` has exactly
+one caller — the bulk endpoint. All three single-ticker DCF routes take `params` from the
+request body, and `apps/web/app/corporate/corporateUtils.ts:56` fills `terminal_growth_rate`
+with `clamp(snapshot.growth / 100, -0.1, 0.1)`: company growth, no ceiling. So the divergent
+path is the default path, not an edge case, and once Task 4 gave the reconstruction a
+ceiling the real rate never passed through, the report named a bound that did not run —
+`constraint=ceiling` beside a spread of 0.005 that can only be `wacc_safety`.
+
+Task 4's fix round settled it: the constraint is emitted only when the reconstruction's rate
+equals the rate that ran, and is `None` otherwise. A reconstruction that cannot vouch for
+the number says nothing. Threading a real derivation record through `ValuationAssumptions`,
+so a hand-set rate can be attributed honestly rather than merely disclaimed, is Stage 3.

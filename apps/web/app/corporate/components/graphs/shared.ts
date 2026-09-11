@@ -48,6 +48,11 @@ export interface ValueMatrixPoint {
   fcff: number;
 }
 
+// A deliberately narrow view of `DcfSummary` in packages/shared-types/corporate.ts: the
+// fields these graphs read, with optionality the canonical type does not have because a
+// result restored from sessionStorage can predate a field. It omits
+// `terminal_growth_binding_constraint`, which the backend does send -- no surface reads it
+// yet, and an unread field here would be one more place to drift.
 export interface DcfResult {
   estimated_value: number;
   // Optional because a DCF result restored from sessionStorage can predate the field. The

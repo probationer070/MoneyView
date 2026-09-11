@@ -3,8 +3,19 @@
 Date: 2026-09-10
 Status: draft, revised after review
 Scope: how terminal value assumptions are derived. Touches
-`corporate_metrics_service.valuation_params_from_metrics`, the DCF report schema, and
-the surfaces that display a valuation. No change to the DCF arithmetic itself.
+`corporate_metrics_service.valuation_params_from_metrics`, `corporate_comparison._dcf_snapshot`
+— the second derivation site, found mid-implementation and easy to miss, since a ceiling
+applied in one and not the other shows one ticker two different terminal growth rates on
+two screens — the DCF report schema, and the surfaces that display a valuation. No change
+to the DCF arithmetic itself.
+
+**What Stage 2 does not reach.** Those two derivation sites feed the bulk endpoint and the
+comparison table. The three single-ticker DCF routes (`corporate.py` 301, 322, 376) take
+`params` from the request body, and the web client fills `terminal_growth_rate` from company
+growth with no ceiling (`corporateUtils.ts:56`), so their valuations are unchanged by Stage
+2 and still rest almost entirely on terminal value. Their reports say `None` for the binding
+constraint rather than naming a bound the number never passed through. Closing that gap
+needs a derivation record threaded through `ValuationAssumptions`, which is Stage 3.
 
 > Every figure below was measured against this repository on 2026-09-10 and the
 > measurement is named, so a reviewer can disagree with the evidence rather than only
