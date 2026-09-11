@@ -53,6 +53,9 @@ export interface DcfResult {
   // Optional because a DCF result restored from sessionStorage can predate the field. The
   // backend always sends it; a cache written by an earlier build does not.
   terminal_value_share_pct?: number;
+  // Nullable because the backend only derives it when a terminal growth rate was resolved;
+  // optional for the same cache-restore reason as terminal_value_share_pct above.
+  wacc_minus_terminal_growth?: number | null;
   intrinsic_value_per_share?: number | null;
   enterprise_value?: number;
   equity_value?: number | null;

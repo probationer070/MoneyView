@@ -45,6 +45,9 @@ export type CorporatePageMockOptions = {
    * so one bulk table can carry all three states at once.
    */
   dcfBridgeQuality?: BridgeQuality;
+  /** Overrides terminal_value_share_pct on the full report's summary, for tests exercising
+   *  the terminal-share warning threshold. */
+  dcfTerminalValueSharePct?: number;
 };
 
 export type BridgeQuality = "ok" | "estimated" | "missing";
@@ -298,8 +301,15 @@ const mockMetricAudit = (ticker: string): CorporateMetricAudit => ({
 
 export async function mockCorporatePageApi(page: Page, stats?: CorporatePageMockStats, options?: CorporatePageMockOptions) {
   const singleBridge = options?.dcfBridgeQuality ?? "ok";
-  const dcfSummary = withBridgeQuality(mockDcfSummary, singleBridge);
-  const dcfSummaryResponse = withBridgeQuality(mockDcfSummaryResponse, singleBridge);
+  const terminalShareOverride = options?.dcfTerminalValueSharePct;
+  const baseSummary = terminalShareOverride != null
+    ? { ...mockDcfSummary, terminal_value_share_pct: terminalShareOverride }
+    : mockDcfSummary;
+  const baseSummaryResponse = terminalShareOverride != null
+    ? { ...mockDcfSummaryResponse, terminal_value_share_pct: terminalShareOverride }
+    : mockDcfSummaryResponse;
+  const dcfSummary = withBridgeQuality(baseSummary, singleBridge);
+  const dcfSummaryResponse = withBridgeQuality(baseSummaryResponse, singleBridge);
   const dcfFullReport: DcfFullReport = {
     ...mockDcfFullReport,
     summary: dcfSummary,
