@@ -4,6 +4,9 @@ import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { bridgedEstimatedValue, UNBRIDGED_PLACEHOLDER, UNBRIDGED_REASON } from "@/lib/bridgeQuality";
 import { type DcfResult, type DetailKey, moneyText, pct } from "./shared";
 
+/** Above this, the explicit forecast contributes little enough to be worth flagging. */
+const TERMINAL_SHARE_WARNING_PCT = 90;
+
 export function DcfCoreModulesGraph({
   sustainableGrowth,
   fcff,
@@ -59,6 +62,22 @@ export function DcfCoreModulesGraph({
               ? "N/A"
               : pct(dcfResult.terminal_value_share_pct)}
           </div>
+          {/* A share this high means the explicit forecast contributes almost nothing, so
+              the valuation is a restatement of the terminal assumptions. Shown as a state
+              rather than a clamp: the share is a diagnostic, and steering it would hide
+              the very thing worth seeing. */}
+          {dcfResult?.terminal_value_share_pct != null
+          && dcfResult.terminal_value_share_pct >= TERMINAL_SHARE_WARNING_PCT ? (
+            <div
+              data-testid="terminal-share-warning"
+              className="mt-1 text-[length:var(--type-helper)] text-[var(--delta-down)]"
+            >
+              Mostly terminal value
+              {dcfResult.wacc_minus_terminal_growth != null
+                ? ` · WACC − g = ${pct(dcfResult.wacc_minus_terminal_growth * 100)}`
+                : ""}
+            </div>
+          ) : null}
         </button>
         <button
           type="button"

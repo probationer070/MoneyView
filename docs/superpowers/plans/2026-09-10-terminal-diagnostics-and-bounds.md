@@ -30,6 +30,12 @@ TypeScript, Playwright.
 - Every test must be mutation-verified per `CLAUDE.md` §8: name the broken implementation
   it was shown to reject, or call it unverified.
 - No `git add -A`. Stage by explicit path — the working tree carries unrelated user files.
+- **No test may open `data/processed/moneyview.db`.** `tests/conftest.py:161` and
+  `tests/__init__.py` refuse it at import time — a guard added after a test wrote a
+  fabricated Damodaran vintage into the developer's real database. Use
+  `_watchlist_tickers()` in `tests/api/test_terminal_diagnostics.py`, which bootstraps the
+  isolated test database from the checked-in `stock_targets.json` seed. The measurement
+  scripts in Task 4 Step 7 are shell commands, not tests, and may read it.
 
 ---
 
@@ -66,8 +72,12 @@ what makes Stage 1 safe.
   - `@dataclass(frozen=True) TerminalGrowthDerivation` with fields
     `rate: float`, `binding_constraint: str`, `company_growth: float`,
     `ceiling: float | None`, `wacc_safety_bound: float`
-  - `derive_terminal_growth(company_growth: float, wacc: float, *, ceiling: float | None = None, safety_margin: float = SAFETY_MARGIN) -> TerminalGrowthDerivation`
-  - `binding_constraint` is one of `"company"`, `"ceiling"`, `"wacc_safety"`.
+  - `derive_terminal_growth(company_growth: float, wacc: float, *, ceiling: float | None = None, safety_margin: float = SAFETY_MARGIN, floor: float = TERMINAL_GROWTH_FLOOR) -> TerminalGrowthDerivation`
+  - `binding_constraint` is one of `"company"`, `"ceiling"`, `"wacc_safety"`, `"floor"`.
+  - `TERMINAL_GROWTH_FLOOR: float = -0.1` — the pre-existing `max(..., -0.1)` in both
+    derivation paths, modelled rather than ignored. Amended after Task 2's review found
+    that omitting it made the diagnostic report `"company"` for 8 tickers whose number the
+    floor decided.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -339,16 +349,36 @@ def test_stage_one_never_reports_a_ceiling_because_none_is_applied():
     assert summary.terminal_growth_binding_constraint != "ceiling"
 
 
-def test_the_spread_equals_the_safety_margin_when_the_safety_bound_binds():
-    """Today's defect, characterised: the bound that binds pins the spread at 50bp.
+def test_where_the_safety_bound_binds_the_spread_is_exactly_the_margin():
+    """Today's defect, characterised: where that bound binds, the spread is pinned at 50bp.
 
-    This is expected to FAIL after Stage 2 for tickers whose growth exceeds the ceiling,
-    and that failure is the point -- it is how the change proves itself.
+    Two assertions, and the second is the important one. Guarding a single-ticker assertion
+    on the binding constraint makes it vacuous whenever the guard is false -- AAPL binds on
+    "company", so the first version of this test asserted nothing at all. Sweeping a sample
+    and then requiring that the sample contained at least one such ticker is what stops a
+    green run from meaning "the condition never occurred".
+
+    Expected to change after Stage 2 for tickers whose growth exceeds the ceiling. That
+    change is the point, and this test is how it becomes visible.
     """
-    summary = _report().summary
+    # NOT `sqlite3.connect("data/processed/moneyview.db")`. `tests/conftest.py:161` and
+    # `tests/__init__.py` both refuse that path outright -- a guard added after a test
+    # wrote a fabricated Damodaran vintage into the developer's real database. Use the
+    # hermetic helper Task 2 introduced, which bootstraps the isolated test database from
+    # the checked-in `stock_targets.json` seed and yields the same ticker roster.
+    tickers = _watchlist_tickers(limit=20)
 
-    if summary.terminal_growth_binding_constraint == "wacc_safety":
-        assert summary.wacc_minus_terminal_growth == pytest.approx(SAFETY_MARGIN)
+    pinned = []
+    for ticker in tickers:
+        try:
+            summary = _report(ticker).summary
+        except Exception:
+            continue
+        if summary.terminal_growth_binding_constraint == "wacc_safety":
+            pinned.append(ticker)
+            assert summary.wacc_minus_terminal_growth == pytest.approx(SAFETY_MARGIN), ticker
+
+    assert pinned, "no sampled ticker bound on wacc_safety; this test proved nothing"
 ```
 
 - [ ] **Step 2: Run the tests to verify they fail**
@@ -421,8 +451,8 @@ find what was altered.
 | Mutation | Must fail |
 | --- | --- |
 | `ceiling=TERMINAL_GROWTH_CEILING` in the builder call | `test_stage_one_never_reports_a_ceiling_because_none_is_applied` |
-| `wacc_minus_terminal_growth=round(float(wacc), 6)` | `test_the_spread_equals_the_safety_margin_when_the_safety_bound_binds` |
-| `terminal_growth_binding_constraint="company"` hard-coded | `test_the_spread_equals_the_safety_margin_when_the_safety_bound_binds` |
+| `wacc_minus_terminal_growth=round(float(wacc), 6)` | `test_where_the_safety_bound_binds_the_spread_is_exactly_the_margin` |
+| `terminal_growth_binding_constraint="company"` hard-coded | `test_where_the_safety_bound_binds_the_spread_is_exactly_the_margin` — on its `assert pinned` line, which is the vacuity guard |
 
 - [ ] **Step 8: Commit**
 
@@ -580,8 +610,26 @@ measured rather than argued about.
 
 **Files:**
 - Modify: `apps/api/services/corporate_metrics_service.py:504-506`
+- Modify: `apps/api/services/corporate_comparison.py:386` — the second derivation site
 - Modify: `apps/api/services/corporate_dcf.py` — pass the ceiling in the Task 2 call
 - Test: `tests/api/test_terminal_diagnostics.py` (extend)
+
+**Two derivation sites, two safety clamps. Change only the derivations.**
+
+`min(..., wacc - 0.005)` appears at four places, and they are not the same thing:
+
+| Site | What it bounds | Change? |
+| --- | --- | --- |
+| `corporate_metrics_service.py:505` | `metrics.growth` — a **derivation** | **Yes** |
+| `corporate_comparison.py:386` | `metrics.growth` — a **derivation** | **Yes** |
+| `corporate_dcf.py:204` | `params.terminal_growth_rate` — derived on the bulk path, taken straight from the request body on all three single-ticker routes | **No** |
+| `monte_carlo.py:191` | `request.terminal_growth`, supplied and sampled | **No** |
+
+The last two bound a value arriving from outside, which is exactly what a safety net is
+for; giving them the ceiling would silently rewrite a number a caller deliberately chose.
+The first two compute the rate from company metrics, and leaving either behind would make
+the comparison table and the DCF report disagree about the same ticker — the shape of
+divergence `ERROR-LOG.md` already records for the base case and the sensitivity grid.
 
 **Interfaces:**
 - Consumes: `derive_terminal_growth`, `TERMINAL_GROWTH_CEILING` from Task 1.
@@ -619,12 +667,12 @@ def test_the_watchlist_no_longer_pins_on_the_safety_margin_alone():
     would turn it into a target. The claim is narrower -- no ticker arrives at
     `wacc - safety_margin` merely because its growth exceeded WACC.
     """
-    import sqlite3
-
-    connection = sqlite3.connect("data/processed/moneyview.db")
-    tickers = [row[0] for row in connection.execute(
-        "SELECT ticker FROM watchlist ORDER BY ticker LIMIT 20"
-    )]
+    # NOT `sqlite3.connect("data/processed/moneyview.db")`. `tests/conftest.py:161` and
+    # `tests/__init__.py` both refuse that path outright -- a guard added after a test
+    # wrote a fabricated Damodaran vintage into the developer's real database. Use the
+    # hermetic helper Task 2 introduced, which bootstraps the isolated test database from
+    # the checked-in `stock_targets.json` seed and yields the same ticker roster.
+    tickers = _watchlist_tickers(limit=20)
 
     pinned = []
     for ticker in tickers:
@@ -679,6 +727,70 @@ from packages.core_finance.terminal_growth import (
     derive_terminal_growth,
 )
 ```
+
+- [ ] **Step 3b: Apply the ceiling at the second derivation site**
+
+Replace `apps/api/services/corporate_comparison.py:386`:
+
+```python
+        terminal_growth = min(growth_rate, wacc - 0.005)
+```
+
+with:
+
+```python
+        # The same derivation as corporate_metrics_service, and it must stay the same:
+        # this figure feeds the comparison table's dcf_value and dcf_implied_return, so a
+        # ceiling applied in one place and not the other would show one ticker two
+        # different terminal growth rates on two screens.
+        terminal_growth = derive_terminal_growth(
+            company_growth=growth_rate,
+            wacc=wacc,
+            ceiling=TERMINAL_GROWTH_CEILING,
+        ).rate
+```
+
+Add to that file's imports:
+
+```python
+from packages.core_finance.terminal_growth import (
+    TERMINAL_GROWTH_CEILING,
+    derive_terminal_growth,
+)
+```
+
+Add this test to `tests/api/test_terminal_diagnostics.py`:
+
+```python
+def test_both_derivation_sites_agree_on_the_same_ticker():
+    """A ceiling applied in one derivation and not the other splits one ticker in two.
+
+    corporate_comparison computes the comparison table's dcf_value; corporate_dcf computes
+    the report. They read the same metrics, so they must reach the same terminal growth.
+    """
+    from apps.api.services import corporate_comparison
+
+    metrics = corporate_route._metrics_for_ticker("AAPL")
+    wacc = max(float(metrics.wacc) / 100, 0.001)
+    growth_rate = float(metrics.growth) / 100
+
+    from packages.core_finance.terminal_growth import (
+        TERMINAL_GROWTH_CEILING,
+        derive_terminal_growth,
+    )
+
+    expected = derive_terminal_growth(
+        company_growth=growth_rate, wacc=wacc, ceiling=TERMINAL_GROWTH_CEILING
+    ).rate
+    params = corporate_route._valuation_params_from_metrics(metrics)
+
+    assert params.terminal_growth_rate == pytest.approx(max(expected, -0.1))
+    assert "wacc - 0.005" not in inspect.getsource(corporate_comparison._dcf_upside_fields)
+```
+
+Add `import inspect` to the test file's imports. If `_dcf_upside_fields` is not the
+enclosing function name at `corporate_comparison.py:386`, use whatever function encloses
+that line — the assertion's point is that the raw clamp is gone from the derivation.
 
 - [ ] **Step 4: Pass the ceiling in the report builder**
 
@@ -757,7 +869,7 @@ every binding constraint `wacc_safety`.
 - [ ] **Step 9: Commit**
 
 ```bash
-git add apps/api/services/corporate_metrics_service.py apps/api/services/corporate_dcf.py tests/api/test_terminal_diagnostics.py
+git add apps/api/services/corporate_metrics_service.py apps/api/services/corporate_comparison.py apps/api/services/corporate_dcf.py tests/api/test_terminal_diagnostics.py
 git commit -m "fix: bound terminal growth by an economic ceiling, not only by WACC"
 ```
 
@@ -775,7 +887,7 @@ git commit -m "fix: bound terminal growth by an economic ceiling, not only by WA
 | §7.4 warning, share is never a target | Task 3, and Task 4 Step 1's second test asserts the mechanism rather than the share |
 | §8 Stage 1 changes no valuation | Task 2 Step 6 |
 | §8 Stage 2 introduces no industry logic or classifier | No task references `industry_benchmark` or a regime |
-| §10.1 defect reproduced before it is fixed | Task 2's `test_the_spread_equals_the_safety_margin_when_the_safety_bound_binds`, plus the Task 4 Step 7 baseline |
+| §10.1 defect reproduced before it is fixed | Task 2's `test_where_the_safety_bound_binds_the_spread_is_exactly_the_margin`, plus the Task 4 Step 7 baseline |
 | §10.2 defect mechanism gone | Task 4 `test_the_watchlist_no_longer_pins_on_the_safety_margin_alone` |
 | §10.3 each bound binds independently | Task 1's three binding tests |
 | §10.9 mutation verification | Every task's mutation step |
@@ -792,13 +904,26 @@ plumbing is idiosyncratic and copying it wrongly is likelier than reading it.
 **Type consistency.** `derive_terminal_growth(company_growth, wacc, *, ceiling, safety_margin)`
 and `TerminalGrowthDerivation.{rate, binding_constraint, company_growth, ceiling,
 wacc_safety_bound}` are used with those exact names in Tasks 2 and 4.
-`binding_constraint` values are `"company" | "ceiling" | "wacc_safety"` throughout.
+`binding_constraint` values are `"company" | "ceiling" | "wacc_safety" | "floor"` throughout
+(the floor joined them in Task 2's fix round), plus `None` from Task 4's fix round where the
+reconstruction cannot vouch for the rate.
 `DCFSummary.wacc_minus_terminal_growth` and
 `DCFSummary.terminal_growth_binding_constraint` are read in Task 3 under those names.
 
-**One risk worth naming.** Task 2 recovers the derivation in the report builder rather than
-threading it from the params builder, so the two could disagree if a caller supplies
-hand-set params — which the what-if sliders do. In that case the reported binding
-constraint describes the bounds as they would apply to the supplied growth, which is the
-useful reading, but it is a reconstruction rather than a record. Task 4's third mutation
-guards the version of this that would actually mislead.
+**One risk worth naming — and it was worse than this paragraph estimated.** Task 2 recovers
+the derivation in the report builder rather than threading it from the params builder, so
+the two disagree whenever a caller supplies hand-set params.
+
+This called that the what-if sliders and judged the reconstruction "the useful reading".
+Both were wrong, and Task 4's review caught it. `_valuation_params_from_metrics` has exactly
+one caller — the bulk endpoint. All three single-ticker DCF routes take `params` from the
+request body, and `apps/web/app/corporate/corporateUtils.ts:56` fills `terminal_growth_rate`
+with `clamp(snapshot.growth / 100, -0.1, 0.1)`: company growth, no ceiling. So the divergent
+path is the default path, not an edge case, and once Task 4 gave the reconstruction a
+ceiling the real rate never passed through, the report named a bound that did not run —
+`constraint=ceiling` beside a spread of 0.005 that can only be `wacc_safety`.
+
+Task 4's fix round settled it: the constraint is emitted only when the reconstruction's rate
+equals the rate that ran, and is `None` otherwise. A reconstruction that cannot vouch for
+the number says nothing. Threading a real derivation record through `ValuationAssumptions`,
+so a hand-set rate can be attributed honestly rather than merely disclaimed, is Stage 3.

@@ -244,4 +244,6 @@ def test_valuation_params_from_metrics_accepts_stabilized_metric_metadata():
 
     assert params.revenue_growth_rate == 0.06
     assert params.operating_margin == 0.18
-    assert params.terminal_growth_rate == 0.06
+    # growth (6%) exceeds the 3% terminal growth ceiling, so the ceiling binds instead of
+    # company growth: derive_terminal_growth(0.06, 0.10, ceiling=0.03) -> 0.03.
+    assert params.terminal_growth_rate == 0.03

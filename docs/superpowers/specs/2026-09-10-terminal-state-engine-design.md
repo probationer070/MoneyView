@@ -3,8 +3,19 @@
 Date: 2026-09-10
 Status: draft, revised after review
 Scope: how terminal value assumptions are derived. Touches
-`corporate_metrics_service.valuation_params_from_metrics`, the DCF report schema, and
-the surfaces that display a valuation. No change to the DCF arithmetic itself.
+`corporate_metrics_service.valuation_params_from_metrics`, `corporate_comparison._dcf_snapshot`
+— the second derivation site, found mid-implementation and easy to miss, since a ceiling
+applied in one and not the other shows one ticker two different terminal growth rates on
+two screens — the DCF report schema, and the surfaces that display a valuation. No change
+to the DCF arithmetic itself.
+
+**What Stage 2 does not reach.** Those two derivation sites feed the bulk endpoint and the
+comparison table. The three single-ticker DCF routes (`corporate.py` 301, 322, 376) take
+`params` from the request body, and the web client fills `terminal_growth_rate` from company
+growth with no ceiling (`corporateUtils.ts:56`), so their valuations are unchanged by Stage
+2 and still rest almost entirely on terminal value. Their reports say `None` for the binding
+constraint rather than naming a bound the number never passed through. Closing that gap
+needs a derivation record threaded through `ValuationAssumptions`, which is Stage 3.
 
 > Every figure below was measured against this repository on 2026-09-10 and the
 > measurement is named, so a reviewer can disagree with the evidence rather than only
@@ -30,6 +41,7 @@ here.
 | **industry benchmark growth** | `industry_benchmark.revenue_growth` — *trailing 5-year average* industry revenue growth (§2.2). A structural baseline, not a forecast. |
 | **macro ceiling** | The configured long-run nominal growth bound on perpetual growth. A parameter, not data. |
 | **safety margin** | The distance below WACC at which the Gordon denominator is considered unsafe. |
+| **floor** | The most negative terminal growth the model will assume, `-0.1` today. A *fourth* bound, applied after the three in §5.1, and pre-existing: `max(..., -0.1)` sits in both derivation paths. The first draft of this spec did not model it, and a diagnostic built without it reported `"company"` for 8 watchlist tickers whose number the floor had actually decided. |
 | **terminal state** | The set `{g, ROIC, reinvestment, WACC, margin, tax}` describing the mature company. |
 | **regime** | Which of five bands a company falls into (§4.3). |
 | **binding constraint** | Which bound actually determined terminal growth. |
@@ -255,10 +267,13 @@ return before growth is considered — a company earning below its cost of capit
 ### 5.1 Terminal growth
 
 ```python
-terminal_growth_rate = min(
-    company_growth,          # company-specific expectation
-    terminal_growth_ceiling, # what an economy permits, in perpetuity
-    wacc - safety_margin,    # what the arithmetic permits
+terminal_growth_rate = max(
+    min(
+        company_growth,          # company-specific expectation
+        terminal_growth_ceiling, # what an economy permits, in perpetuity
+        wacc - safety_margin,    # what the arithmetic permits
+    ),
+    floor,                       # the most negative rate the model will assume
 )
 ```
 
@@ -373,6 +388,8 @@ The distinction that matters is which bound **bound**.
 | `company_growth` is the smallest | use it; `binding_constraint = "company"` |
 | `terminal_growth_ceiling` is the smallest | clamp; `binding_constraint = "ceiling"` |
 | `wacc - safety_margin` is the smallest | clamp; `binding_constraint = "wacc_safety"` |
+| ceiling and `wacc - safety_margin` are exactly equal | report `"ceiling"`. A reader told `wacc_safety` concludes the arithmetic cornered the model; told `ceiling` they conclude a judgement was applied. When both are true, the judgement is the more useful answer. |
+| `floor` is the largest — the rate would otherwise fall below it | clamp up; `binding_constraint = "floor"` |
 | regime is `INSUFFICIENT_EVIDENCE` | fallback (§5.7); `binding_constraint = "insufficient_evidence"` |
 | `ROIC <= 0`, or reinvestment above maximum | **refuse** (§5.6) |
 | `g >= WACC` after all bounds | **refuse** — indicates a bypassed bound |

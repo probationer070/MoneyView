@@ -879,9 +879,43 @@ shipped on `fix-priceless-bars` (PR #29); E shipped with them.
       The explicit projection contributes under 4% of the answer. The 9 of 40 that raise
       on the model's `le=0.1` bound are the lucky ones -- they fail loudly; the rest report
       a fixed multiple wearing a DCF's clothes.
-      Wanted: a plausibility ceiling (risk-free rate, or ~2.5-3%) with `wacc - 0.005` kept
-      as a secondary net. Finance-logic SOP applies; the ceiling is a judgement about the
-      world, so it needs a decision, not a default. `ERROR-LOG.md` 2026-09-10.
+
+      **REOPENED AND SPLIT 2026-09-11.** `terminal-diagnostics-and-bounds` Task 4 closed
+      the **bulk and comparison half only**; a fix-round-1 review found the dispatch had
+      wrongly assumed the divergent path (a hand-set `terminal_growth_rate`) was an
+      edge case reached only by the what-if sliders. It is the default path for every
+      single-ticker DCF route.
+
+      **Done: the bulk endpoint and the comparison table.** `TERMINAL_GROWTH_CEILING =
+      0.03` now sits between company growth and `wacc - safety_margin` inside
+      `derive_terminal_growth` (`packages/core_finance/terminal_growth.py`), consumed by
+      `corporate_metrics_service.valuation_params_from_metrics` (the bulk endpoint's only
+      caller) and `corporate_comparison._dcf_snapshot` (the comparison table). `wacc -
+      0.005` stays exactly where it was, as a secondary safety net, not the plausibility
+      bound; the two safety-net sites (`corporate_dcf.py`'s own re-clamp of
+      `params.terminal_growth_rate`, `monte_carlo.py`) were deliberately left alone --
+      they bound a value arriving from outside, which a ceiling would silently overwrite.
+      Re-measured against this entry's own baseline (18 reports, median share 96.25%,
+      every binding constraint `wacc_safety`), through the bulk path: 25 of 25 sampled
+      watchlist reports now build, median `terminal_value_share_pct` falls to **75.33%**,
+      and the binding distribution is `{ceiling: 20, company: 4, floor: 1}` -- zero
+      `wacc_safety`. Five pre-existing tests had hardcoded valuations that moved and were
+      recomputed by hand, not loosened to a range (`tests/api/test_corporate_comparison.py`,
+      `tests/api/test_corporate_dcf_streaming.py`).
+
+      **Open: the three single-ticker DCF routes.** `apps/api/routes/corporate.py:301,
+      322, 376` take `terminal_growth_rate` straight from the request body;
+      `apps/web/app/corporate/corporateUtils.ts:56` fills it from company growth clamped
+      to `[-0.1, 0.1]`, no ceiling. Those reports still show close to 96% terminal share.
+      A fix-round-1 correction stopped `corporate_dcf.py` from mislabelling this path --
+      `terminal_growth_binding_constraint` was a reconstruction from `revenue_growth_rate`
+      that assumed the ceiling had applied everywhere, so a single-ticker report could
+      show `constraint=ceiling` beside a spread that could only be `wacc_safety`. It now
+      reports `None` when the reconstruction's rate does not match the rate that actually
+      ran, rather than naming a bound the number never passed through. The label is
+      correct now; the valuation on this path is still unfixed. See `ERROR-LOG.md`
+      2026-09-10 (Fix line amended twice) for the full mutation matrix and where the
+      original task brief diverged from what shipped.
 
 - [ ] **H11. `terminal_value_share_pct` is displayed without a threshold.** CORRECTED
       2026-09-10: this was filed as "nothing surfaces it", which is false. It is shown as a
@@ -892,6 +926,11 @@ shipped on `fix-priceless-bars` (PR #29); E shipped with them.
       valuation is almost entirely one assumption. Still worth doing first, and still
       changes no valuation, but the work is a warning state and the missing companion
       diagnostics (spread, binding constraint), not surfacing a hidden field.
+      PARTLY DONE 2026-09-11 on `terminal-bounds`: the warning state ships at a 90%
+      threshold and the spread renders beside it (`DcfCoreModulesGraph.tsx`,
+      `wacc_minus_terminal_growth`, mutation-verified against the raw-fraction defect).
+      Open: `terminal_growth_binding_constraint` is on the payload and typed in
+      `packages/shared-types/corporate.ts`, but no surface reads it yet.
 
 
 ## Archived
