@@ -70,18 +70,32 @@ The relationship between the two symptoms is worth stating plainly: the refusals
 LUCKY cases. They fail loudly. The 23 that pass quietly report a fixed multiple wearing
 a discounted-cash-flow's clothes.
 
-Fix: fixed, 2026-09-11 (Task 4 of the terminal-diagnostics-and-bounds plan). A
-`TERMINAL_GROWTH_CEILING = 0.03` (`packages/core_finance/terminal_growth.py`) now sits
-between company growth and the `wacc - 0.005` safety margin in `derive_terminal_growth`,
-consumed at both derivation sites (`corporate_metrics_service.py`,
-`corporate_comparison.py`); `wacc - 0.005` is kept, exactly as this entry asked, but only
-as the secondary safety net, not the plausibility bound. Measured against this entry's
-own 18-report/96.25%-median baseline: 25 of 25 sampled watchlist reports now build (the
-9-of-40 refusals this entry called "the lucky cases" mostly stop happening), median
-`terminal_value_share_pct` falls to 75.33%, and the binding-constraint distribution moves
-from 100% `wacc_safety` to `{ceiling: 20, company: 4, floor: 1}` -- no ticker in the
-sample still pins on the safety margin alone at a WACC where the ceiling should have
-governed. Tracked as H8.
+Fix: fixed for the bulk and comparison paths only, 2026-09-11 (Task 4 of the
+terminal-diagnostics-and-bounds plan). This `Command:` line names `POST
+/corporate/dcf/reports/bulk` "and every single-ticker DCF report" -- only the first is
+fixed. A `TERMINAL_GROWTH_CEILING = 0.03` (`packages/core_finance/terminal_growth.py`)
+now sits between company growth and the `wacc - 0.005` safety margin in
+`derive_terminal_growth`, consumed by `corporate_metrics_service.valuation_params_from_
+metrics` (the bulk endpoint's only caller) and `corporate_comparison._dcf_snapshot` (the
+comparison table); `wacc - 0.005` is kept, exactly as this entry asked, but only as the
+secondary safety net, not the plausibility bound. Measured against this entry's own
+18-report/96.25%-median baseline, through the bulk path: 25 of 25 sampled watchlist
+reports now build (the 9-of-40 refusals this entry called "the lucky cases" mostly stop
+happening), median `terminal_value_share_pct` falls to 75.33%, and the binding-constraint
+distribution moves from 100% `wacc_safety` to `{ceiling: 20, company: 4, floor: 1}`.
+
+**The three single-ticker DCF routes are still unfixed** (`apps/api/routes/corporate.py`
+lines 301, 322, 376): each takes `terminal_growth_rate` straight from the request body,
+and the web client (`apps/web/app/corporate/corporateUtils.ts:56`) fills it from company
+growth clamped only to `[-0.1, 0.1]` -- no ceiling. Those reports still show close to
+96% terminal share. A fix-round-1 review caught that the report builder's diagnostic
+fields (`terminal_growth_binding_constraint`) were reconstructing an answer as if the
+ceiling had applied on every path, when it had applied on the bulk path only -- so a
+single-ticker report could show `constraint=ceiling` beside a spread that could only be
+`wacc_safety`. `apps/api/services/corporate_dcf.py` now reports `None` for the
+constraint whenever the reconstruction's rate does not match the rate that actually ran,
+rather than naming a bound the number never passed through. Tracked as H8, reopened and
+split -- see `guideline/sop/todo.md`.
 Files changed: apps/api/services/corporate_metrics_service.py,
 apps/api/services/corporate_comparison.py, apps/api/services/corporate_dcf.py,
 packages/core_finance/terminal_growth.py (ceiling constant and floor-as-fourth-bound,

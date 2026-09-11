@@ -240,6 +240,17 @@ def _build_dcf_outputs(
         wacc=wacc,
         ceiling=TERMINAL_GROWTH_CEILING,
     )
+    # A reconstruction, not a record. It describes the bounds as they apply to company
+    # growth, which is the rate that ran only when `_valuation_params_from_metrics` built
+    # these params -- the bulk endpoint's path. Every single-ticker route takes
+    # `terminal_growth_rate` from the request body, and the web client fills it from
+    # company growth with no ceiling, so the reconstruction would name a bound the number
+    # never passed through. Say nothing rather than say that.
+    terminal_growth_binding_constraint = (
+        terminal_derivation.binding_constraint
+        if abs(terminal_derivation.rate - terminal_growth) < 1e-9
+        else None
+    )
     agency_discount = 1 - min(max(esg_penalty, 0), 80) / 400
     dcf_multiple = enterprise_value / base_fcff
     baseline_multiple = 1 / max(wacc - terminal_growth, 0.005)
@@ -366,7 +377,7 @@ def _build_dcf_outputs(
         upside_pct=round(float(upside_pct), 2),
         terminal_value_share_pct=round(float(terminal_value_share_pct), 2),
         wacc_minus_terminal_growth=round(float(wacc - terminal_growth), 6),
-        terminal_growth_binding_constraint=terminal_derivation.binding_constraint,
+        terminal_growth_binding_constraint=terminal_growth_binding_constraint,
         status=status,
         generated_at=generated_at,
     )

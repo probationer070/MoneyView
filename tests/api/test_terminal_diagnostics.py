@@ -13,6 +13,7 @@ import inspect
 
 import pytest
 
+from apps.api.models.schemas import ValuationAssumptions
 from apps.api.routes import corporate as corporate_route
 from apps.api.services.corporate_dcf import build_dcf_full_report
 from packages.core_finance.terminal_growth import SAFETY_MARGIN, TERMINAL_GROWTH_CEILING
@@ -42,6 +43,25 @@ def _watchlist_tickers(limit: int | None = None) -> list[str]:
 def _report(ticker: str = "AAPL"):
     metrics = corporate_route._metrics_for_ticker(ticker)
     params = corporate_route._valuation_params_from_metrics(metrics)
+    return build_dcf_full_report(
+        ticker=ticker,
+        params=params,
+        current_price_loader=corporate_route._latest_market_price,
+        metrics_loader=corporate_route._metrics_for_ticker,
+        risk_free_rate=corporate_route.DEFAULT_RISK_FREE_RATE,
+        equity_risk_premium=corporate_route.DEFAULT_EQUITY_RISK_PREMIUM,
+        country_risk_premium=corporate_route.KOREA_COUNTRY_RISK_PREMIUM,
+    )
+
+
+def _report_from_params(params: ValuationAssumptions, *, ticker: str = "AAPL"):
+    """Like `_report`, but taking params directly rather than building them from metrics.
+
+    `_report` always routes through `_valuation_params_from_metrics` -- the bulk
+    endpoint's path, where the reconstructed terminal-growth derivation agrees with the
+    rate that ran by construction. Testing the single-ticker routes' shape (a hand-set
+    `terminal_growth_rate` the ceiling never bounded) needs params supplied directly.
+    """
     return build_dcf_full_report(
         ticker=ticker,
         params=params,
@@ -137,7 +157,10 @@ def test_a_fast_grower_is_bound_by_the_ceiling_not_the_safety_margin():
         company_growth=0.18, wacc=0.1414, ceiling=TERMINAL_GROWTH_CEILING
     )
 
-    assert result.rate == pytest.approx(TERMINAL_GROWTH_CEILING)
+    # Literal, not TERMINAL_GROWTH_CEILING: an expectation derived from the constant under
+    # test cannot detect that constant changing. The binding_constraint assertion below
+    # still carries the mutation.
+    assert result.rate == pytest.approx(0.03)
     assert result.binding_constraint == "ceiling"
 
 
@@ -166,8 +189,12 @@ def test_the_watchlist_no_longer_pins_on_the_safety_margin_alone():
             and summary.wacc_minus_terminal_growth == pytest.approx(SAFETY_MARGIN)
         ):
             # Legitimate only when WACC is genuinely below the ceiling plus the margin.
+            # Hardcoded (0.03 + 0.005) as of this commit, deliberately not imported as
+            # TERMINAL_GROWTH_CEILING + SAFETY_MARGIN: a legitimacy threshold derived from
+            # the constant under test cannot distinguish "the ceiling is working" from "the
+            # ceiling moved and the test moved with it".
             wacc = float(corporate_route._metrics_for_ticker(ticker).wacc) / 100
-            if wacc >= TERMINAL_GROWTH_CEILING + SAFETY_MARGIN:
+            if wacc >= 0.035:
                 pinned.append(ticker)
 
     assert pinned == [], f"still pinned on the safety margin alone: {pinned}"
@@ -196,3 +223,39 @@ def test_both_derivation_sites_agree_on_the_same_ticker():
     source = inspect.getsource(corporate_comparison._dcf_snapshot)
     assert "wacc - 0.005" not in source
     assert "derive_terminal_growth" in source
+
+
+def test_a_hand_set_terminal_rate_is_not_attributed_to_a_bound_it_never_passed():
+    """The constraint is a reconstruction, and it must refuse to speak when it cannot know.
+
+    `_valuation_params_from_metrics` feeds only the bulk endpoint. Every single-ticker DCF
+    route takes `terminal_growth_rate` from the request body, and the web client sends
+    company growth with no ceiling -- so reconstructing the bounds from
+    `revenue_growth_rate` named a 3% ceiling on a rate that was never bounded by one, while
+    the spread beside it implied a different rate entirely.
+    """
+    params = ValuationAssumptions(
+        revenue_growth_rate=0.10,
+        operating_margin=0.2,
+        tax_rate=0.25,
+        wacc=0.08,
+        terminal_growth_rate=0.10,   # what the browser actually sends: growth, unbounded
+        fcff=100.0,
+    )
+    summary = _report_from_params(params).summary
+
+    # The rate that ran is min(0.10, 0.075) = 0.075, so the spread is the safety margin.
+    assert summary.wacc_minus_terminal_growth == pytest.approx(SAFETY_MARGIN)
+    assert summary.terminal_growth_binding_constraint is None
+
+
+def test_builder_params_still_name_their_bound():
+    """The guard must not silence the path where the reconstruction IS a record."""
+    metrics = corporate_route._metrics_for_ticker("AAPL")
+    params = corporate_route._valuation_params_from_metrics(metrics)
+    summary = _report_from_params(params, ticker="AAPL").summary
+
+    assert summary.terminal_growth_binding_constraint is not None
+    wacc = max(float(metrics.wacc) / 100, 0.001)
+    implied = wacc - summary.wacc_minus_terminal_growth
+    assert implied == pytest.approx(params.terminal_growth_rate)
