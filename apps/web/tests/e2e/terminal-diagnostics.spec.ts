@@ -33,3 +33,19 @@ test("an ordinary terminal share is not marked", async ({ page }) => {
 
   await expect(page.getByTestId(WARNING)).toHaveCount(0);
 });
+
+test("the spread renders as a percentage, not as the raw fraction", async ({ page }) => {
+  // `wacc_minus_terminal_growth` is a fraction. Rendered raw it reads "0.5%" where "50%"
+  // is meant -- an order-of-magnitude error in a figure sitting beside a valuation, and
+  // one this repository has shipped before on the stock tile's weight field. Until this
+  // test existed the `* 100` was exercised by nothing.
+  await mockCorporatePageApi(page, undefined, {
+    dcfTerminalValueSharePct: 96.2,
+    dcfWaccMinusTerminalGrowth: 0.083,
+  });
+  await gotoCorporate(page);
+  await page.getByRole("button", { name: "Refresh DCF" }).click();
+
+  await expect(page.getByTestId(WARNING)).toContainText("8.3%");
+  await expect(page.getByTestId(WARNING)).not.toContainText("0.1%");
+});

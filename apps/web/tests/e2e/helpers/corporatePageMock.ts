@@ -48,6 +48,9 @@ export type CorporatePageMockOptions = {
   /** Overrides terminal_value_share_pct on the full report's summary, for tests exercising
    *  the terminal-share warning threshold. */
   dcfTerminalValueSharePct?: number;
+  /** Overrides wacc_minus_terminal_growth on the full report's summary, for tests
+   *  exercising the WACC - g readout beside the terminal-share warning. */
+  dcfWaccMinusTerminalGrowth?: number;
 };
 
 export type BridgeQuality = "ok" | "estimated" | "missing";
@@ -102,6 +105,8 @@ const mockDcfSummary: DcfSummary = {
   // 1034.1 / 1462.4, the present_value_of_terminal and enterprise_value below. Derived
   // rather than picked so the tile, the base grid cell, and the full report agree.
   terminal_value_share_pct: 70.71,
+  wacc_minus_terminal_growth: null,
+  terminal_growth_binding_constraint: null,
   status: "Undervalued",
   generated_at: "2026-04-11T12:00:00Z",
 };
@@ -302,12 +307,15 @@ const mockMetricAudit = (ticker: string): CorporateMetricAudit => ({
 export async function mockCorporatePageApi(page: Page, stats?: CorporatePageMockStats, options?: CorporatePageMockOptions) {
   const singleBridge = options?.dcfBridgeQuality ?? "ok";
   const terminalShareOverride = options?.dcfTerminalValueSharePct;
-  const baseSummary = terminalShareOverride != null
-    ? { ...mockDcfSummary, terminal_value_share_pct: terminalShareOverride }
-    : mockDcfSummary;
-  const baseSummaryResponse = terminalShareOverride != null
-    ? { ...mockDcfSummaryResponse, terminal_value_share_pct: terminalShareOverride }
-    : mockDcfSummaryResponse;
+  const waccMinusTerminalGrowthOverride = options?.dcfWaccMinusTerminalGrowth;
+  const summaryOverrides = {
+    ...(terminalShareOverride != null ? { terminal_value_share_pct: terminalShareOverride } : {}),
+    ...(waccMinusTerminalGrowthOverride != null
+      ? { wacc_minus_terminal_growth: waccMinusTerminalGrowthOverride }
+      : {}),
+  };
+  const baseSummary = { ...mockDcfSummary, ...summaryOverrides };
+  const baseSummaryResponse = { ...mockDcfSummaryResponse, ...summaryOverrides };
   const dcfSummary = withBridgeQuality(baseSummary, singleBridge);
   const dcfSummaryResponse = withBridgeQuality(baseSummaryResponse, singleBridge);
   const dcfFullReport: DcfFullReport = {
