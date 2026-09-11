@@ -35,10 +35,12 @@ test("an ordinary terminal share is not marked", async ({ page }) => {
 });
 
 test("the spread renders as a percentage, not as the raw fraction", async ({ page }) => {
-  // `wacc_minus_terminal_growth` is a fraction. Rendered raw it reads "0.5%" where "50%"
-  // is meant -- an order-of-magnitude error in a figure sitting beside a valuation, and
-  // one this repository has shipped before on the stock tile's weight field. Until this
-  // test existed the `* 100` was exercised by nothing.
+  // `wacc_minus_terminal_growth` is a fraction. Rendered raw, the 0.083 below reads
+  // "0.1%" where "8.3%" is meant -- an order-of-magnitude error in a figure sitting beside
+  // a valuation, and one this repository has shipped before on the stock tile's weight
+  // field. Asserting the absence of "0.1%" is what makes this test fail on that exact
+  // defect rather than on some other string matching. Until it existed the `* 100` was
+  // exercised by nothing.
   await mockCorporatePageApi(page, undefined, {
     dcfTerminalValueSharePct: 96.2,
     dcfWaccMinusTerminalGrowth: 0.083,
