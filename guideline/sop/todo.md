@@ -850,6 +850,146 @@ Recorded so nobody rediscovers them as bugs:
 
 ---
 
+## Track G - Market data integrity  [G1 SHIPPED 2026-09-09; G2-G4 open]
+
+Reported as "tile prices all show $0.0". The display was the symptom; the cause was
+a bar with no settled price surviving all the way to the wire. `ERROR-LOG.md`
+2026-09-09 carries the full account.
+
+Lettered G rather than F because PR #28 (the metric reference) introduces its own
+Track F on another branch, and two Track Fs would collide at merge.
+
+- [x] **G1. An unsettled bar must never become a price.** The provider returns the
+      current day's OHLC as NaN with a real volume; NaN passes a `float` field and
+      sqlite stores it as NULL, so `float(row["close"] or 0)` published `0.0` and
+      the delta read `-100%`. 136 of 139 tickers. Guarded with `math.isfinite` at
+      four points -- never persisted, dropped on read, excluded from the freshness
+      measurement, and reported as `last_close: null` when no priced bar remains.
+      Five mutations verified. Commits `947fb26`, `6ef4415`, `f1253b8`.
+
+- [ ] **G2. The 138 pre-existing NULL-close rows are still in the database.** The
+      read guard makes them inert, so this is cleanup rather than a fix, and it was
+      deliberately not done as part of G1 -- deleting a user's rows was not needed
+      to correct the behaviour. Worth a one-off script if the row count grows.
+
+- [x] **G3. Check what else read a poisoned close while the defect was live.** CLOSED
+      2026-09-10: **nothing durable was poisoned.** Audited every table that could hold a
+      derived figure, and each is either empty or predates the 2026-09-08 bad run:
+      `corporate_comparison_snapshots` / `_v2` / `_v3` and `investment_decision` all hold
+      **0 rows**; `valuation_case` (31 rows) stores assumptions only -- rates, growth,
+      tax -- with no price or close column; `corporate_metrics` (7 rows) is likewise
+      assumptions, all written 2026-04-09 to 2026-05-21, months before the defect;
+      `industry_benchmark` is vintage 2026-01-01. Every consumer of "latest close"
+      computes on read, so the wrong number was rendered but never stored.
+      Incidental finding: `indices` holds exactly one NULL-close row, dated 2026-07-24 --
+      isolated, unrelated to the 136-row event, and inert under the same read guard as G2.
+
+- [ ] **G5. 32 duplicate news rows are still stored.** Same article, same url, two
+      rows, from the pre-fix hash that included the headline. The read now collapses by
+      url so they never reach a tile, and the write path can no longer add more, so this
+      is inert cleanup rather than a fix -- same standing as G2. `ERROR-LOG.md`
+      2026-09-10.
+
+- [x] **G4. The tile grid's "Held" filter shows 12 stocks nobody chose.** CLOSED
+      2026-09-10, not by explaining the fallback but by removing the need for it.
+      Membership is now `group_name` -- a list of names that costs no numbers to
+      curate -- and each tile carries a follow control. Weight goes back to being only
+      what attribution consumes. Commit `33637d7`.
+
+
+## Track H - The seven reported issues  [2026-09-10]
+
+Reported together on 2026-09-10 and decomposed into five sub-projects. A, B, C and D
+shipped on `fix-priceless-bars` (PR #29); E shipped with them.
+
+- [x] **H1. Tile prices all read $0.00 / -100%.** An unsettled bar (NaN OHLC, real
+      volume) stored as NULL and read back as 0.0. 136 of 139 tickers. See ERROR-LOG
+      2026-09-09 and Track G.
+- [x] **H2. Portfolio panels too small to use.** One `max-w-[480px]` for four panels,
+      two of which hold a `min-w-[1120px]` table. Width is now per panel, with a 36px
+      floor on controls. Commits `fa93451`, `e1b648e`.
+- [x] **H3. Batch DCF "Failed to fetch".** One unvaluable ticker raised out of the
+      endpoint and returned nothing for the other 138. 9 of the first 40 watchlist
+      tickers raise, all on `terminal_growth_rate > 0.1`. Commit `f44e92b`.
+- [x] **H4. ETF / company / index metadata.** yfinance `quoteType`, captured from the
+      `info` payload already fetched. ETFs and indices no longer go through a DCF.
+      Commit `1b0b5ea`.
+- [x] **H5. News fails for ALL, and needs pacing.** `MAX_ACQUIRE_TICKERS = 100` was
+      enforced on the read as well as the refresh, against 143 watchlist rows. Client
+      now chunks both; the crawler paces between real fetches. Commit `c43a702`.
+- [x] **H6. Tab state is lost on navigation.** `useTabState` keeps per-tab state in
+      sessionStorage. Applied to the portfolio grid's filter and search.
+- [x] **H7. Three separate ticker searches.** Unified onto one `TickerSearch`
+      component. Modelled on Corporate's list rather than Valuation's `datalist`:
+      unifying downward would have cost click-to-select, and the Decision Log had no
+      suggestions at all.
+
+- [ ] **H8. Terminal growth is clamped to WACC, so terminal value is 96% of most
+      valuations.** RAISED IN PRIORITY 2026-09-10 after measuring the consequence, and
+      restated: the ~22% that cannot be valued are the *symptom*, not the defect.
+      `corporate_metrics_service.py:505` sets `terminal_growth_rate = min(growth, wacc -
+      0.005)`. That guards the arithmetic -- at `g >= WACC` the Gordon denominator is zero
+      or negative -- and nothing else. Because it pins `g` exactly 0.5pp below WACC, the
+      denominator becomes 0.005 for **23 of 40** watchlist tickers, giving each a terminal
+      value of 203x-228x FCFF regardless of the business. Measured across 18 reports that
+      built: **median terminal_value_share_pct 96.25%**, nine above 95%, ATEX at 98.92%.
+      The explicit projection contributes under 4% of the answer. The 9 of 40 that raise
+      on the model's `le=0.1` bound are the lucky ones -- they fail loudly; the rest report
+      a fixed multiple wearing a DCF's clothes.
+
+      **REOPENED AND SPLIT 2026-09-11.** `terminal-diagnostics-and-bounds` Task 4 closed
+      the **bulk and comparison half only**; a fix-round-1 review found the dispatch had
+      wrongly assumed the divergent path (a hand-set `terminal_growth_rate`) was an
+      edge case reached only by the what-if sliders. It is the default path for every
+      single-ticker DCF route.
+
+      **Done: the bulk endpoint and the comparison table.** `TERMINAL_GROWTH_CEILING =
+      0.03` now sits between company growth and `wacc - safety_margin` inside
+      `derive_terminal_growth` (`packages/core_finance/terminal_growth.py`), consumed by
+      `corporate_metrics_service.valuation_params_from_metrics` (the bulk endpoint's only
+      caller) and `corporate_comparison._dcf_snapshot` (the comparison table). `wacc -
+      0.005` stays exactly where it was, as a secondary safety net, not the plausibility
+      bound; the two safety-net sites (`corporate_dcf.py`'s own re-clamp of
+      `params.terminal_growth_rate`, `monte_carlo.py`) were deliberately left alone --
+      they bound a value arriving from outside, which a ceiling would silently overwrite.
+      Re-measured against this entry's own baseline (18 reports, median share 96.25%,
+      every binding constraint `wacc_safety`), through the bulk path: 25 of 25 sampled
+      watchlist reports now build, median `terminal_value_share_pct` falls to **75.33%**,
+      and the binding distribution is `{ceiling: 20, company: 4, floor: 1}` -- zero
+      `wacc_safety`. Five pre-existing tests had hardcoded valuations that moved and were
+      recomputed by hand, not loosened to a range (`tests/api/test_corporate_comparison.py`,
+      `tests/api/test_corporate_dcf_streaming.py`).
+
+      **Open: the three single-ticker DCF routes.** `apps/api/routes/corporate.py:301,
+      322, 376` take `terminal_growth_rate` straight from the request body;
+      `apps/web/app/corporate/corporateUtils.ts:56` fills it from company growth clamped
+      to `[-0.1, 0.1]`, no ceiling. Those reports still show close to 96% terminal share.
+      A fix-round-1 correction stopped `corporate_dcf.py` from mislabelling this path --
+      `terminal_growth_binding_constraint` was a reconstruction from `revenue_growth_rate`
+      that assumed the ceiling had applied everywhere, so a single-ticker report could
+      show `constraint=ceiling` beside a spread that could only be `wacc_safety`. It now
+      reports `None` when the reconstruction's rate does not match the rate that actually
+      ran, rather than naming a bound the number never passed through. The label is
+      correct now; the valuation on this path is still unfixed. See `ERROR-LOG.md`
+      2026-09-10 (Fix line amended twice) for the full mutation matrix and where the
+      original task brief diverged from what shipped.
+
+- [ ] **H11. `terminal_value_share_pct` is displayed without a threshold.** CORRECTED
+      2026-09-10: this was filed as "nothing surfaces it", which is false. It is shown as a
+      "Terminal Value Share" tile (`DcfCoreModulesGraph.tsx:52-61`), clickable into a
+      calculation detail, and per-cell in `DcfSensitivityTable.tsx:91`. What is missing is
+      any threshold -- 96.25% and 60% render identically as a plain percentage. The number
+      was visible throughout; nothing told a reader that one of those two means the
+      valuation is almost entirely one assumption. Still worth doing first, and still
+      changes no valuation, but the work is a warning state and the missing companion
+      diagnostics (spread, binding constraint), not surfacing a hidden field.
+      PARTLY DONE 2026-09-11 on `terminal-bounds`: the warning state ships at a 90%
+      threshold and the spread renders beside it (`DcfCoreModulesGraph.tsx`,
+      `wacc_minus_terminal_growth`, mutation-verified against the raw-fraction defect).
+      Open: `terminal_growth_binding_constraint` is on the payload and typed in
+      `packages/shared-types/corporate.ts`, but no surface reads it yet.
+
+
 ## Archived
 
 - `guideline/sop/todo4.md` -- all completed tracks through 2026-08-30.

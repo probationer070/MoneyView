@@ -12,12 +12,23 @@ from apps.api.models.schemas import NewsArticle, SentimentEnum
 logger = logging.getLogger(__name__)
 
 
+def news_identity_hash(ticker: str, url: str) -> str:
+    """The identity of a news article: its URL, under a ticker.
+
+    Deliberately excludes the headline. Google News rewrites the publisher suffix
+    between fetches -- the same story arrives as "... - MarketBeat" and later as
+    "... - marketbeat.com" -- so hashing the headline let a cosmetic relabelling mint
+    a second row for one article, which the tile then rendered twice under the same
+    React key. 32 such pairs accumulated in the live database.
+
+    The ticker is part of the identity because one article can name two companies and
+    must be kept for each. Hashing the url alone would silently drop the second.
+    """
+    return hashlib.md5(f"{ticker.upper()}::{url}".encode()).hexdigest()
+
+
 class NewsService:
     """Read / write news articles with deduplication via MD5 hash."""
-
-    @staticmethod
-    def _hash(headline: str, url: str) -> str:
-        return hashlib.md5(f"{headline}{url}".encode()).hexdigest()
 
     def get_news(
         self,
@@ -104,6 +115,24 @@ class NewsService:
             ))
         return articles[offset:offset + limit]
 
+    @staticmethod
+    def _collapse_by_url(rows) -> list:
+        """One row per url, keeping the first -- which the ORDER BY made the newest.
+
+        A url of "" is not an identity: undated indicator-style rows can share it, and
+        collapsing those would hide real articles. Those pass through untouched.
+        """
+        seen: set[str] = set()
+        kept = []
+        for row in rows:
+            url = row["url"] or ""
+            if url and url in seen:
+                continue
+            if url:
+                seen.add(url)
+            kept.append(row)
+        return kept
+
     def get_news_bulk(self, tickers: List[str], per_ticker: int = 3) -> dict:
         """One query per ticker inside one request, plus the acquisition state join.
 
@@ -123,8 +152,14 @@ class NewsService:
                                 published_date DESC,
                                 id DESC
                        LIMIT ?""",
-                    (ticker, per_ticker),
+                    # Over-fetch, then collapse by url below. Rows written before the
+                    # identity fix can hold the same article twice under different
+                    # headlines, and two tiles keyed on one url is a React key collision.
+                    # Deduping after a LIMIT of exactly per_ticker would silently return
+                    # a short tile instead, so the slack is taken here.
+                    (ticker, per_ticker * 3),
                 ).fetchall()
+                rows = self._collapse_by_url(rows)[:per_ticker]
                 state = conn.execute(
                     "SELECT last_checked_at FROM acquisition_state"
                     " WHERE data_class = 'news' AND subject = ?",
@@ -141,7 +176,7 @@ class NewsService:
 
     def save_article(self, article: NewsArticle) -> bool:
         """Persist a single article; skip if duplicate (hash collision)."""
-        h = self._hash(article.headline, article.url)
+        h = news_identity_hash(article.ticker, article.url)
         try:
             with get_db() as conn:
                 conn.execute(

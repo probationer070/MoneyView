@@ -219,7 +219,10 @@ test("corporate page refresh restores the selected ticker without auto-fetching 
   await expect(page.getByRole("heading", { name: /Corporate Analysis/i })).toBeVisible({ timeout: 60_000 });
 
   await page.getByLabel("Company Search").fill("Microsoft");
-  await page.getByRole("button", { name: "Microsoft" }).click();
+  // `option`, not `button`: the three per-tab searches were unified onto one component,
+  // and its suggestions are a real listbox whose children carry role="option". The
+  // behaviour under test -- picking a company by name selects its ticker -- is unchanged.
+  await page.getByRole("option", { name: "Microsoft" }).click();
   await expect(page.getByText(/Microsoft: hurdle rate/i)).toBeVisible();
 
   await page.reload({ waitUntil: "domcontentloaded" });

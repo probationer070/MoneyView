@@ -13,6 +13,10 @@ import { GRID_STYLE, fmtCurrencyCompactTick, fmtPctTick, withAxisProps, withCate
 import { CorporateComparisonTable } from "./CorporateComparisonTable";
 import type { CalculationDetailKey } from "./calculationDetailTypes";
 
+// One skip per line in the tooltip. Declared here because a "\n" written inline in
+// JSX is easy to mangle and hard to see when it breaks.
+const SKIP_TOOLTIP_SEPARATOR = "\n";
+
 type ComparisonSortKey = "roic_minus_wacc" | "dcf_value" | "expected_return_spread";
 type ComparisonUniverse = "watchlist_plus_benchmark" | "custom";
 
@@ -106,6 +110,7 @@ export function TargetStockComparisonSection({
   bulkDcfReportsError,
   bulkDcfReports,
   bulkDcfReportsLastUpdatedAt,
+  bulkDcfSkipped,
   onCalculateAllDcfReports,
   formatPct2,
   formatMoney,
@@ -147,6 +152,7 @@ export function TargetStockComparisonSection({
   bulkDcfReportsError: string | null;
   bulkDcfReports: DcfFullReport[];
   bulkDcfReportsLastUpdatedAt: string | null;
+  bulkDcfSkipped: { ticker: string; reason: string }[];
   onCalculateAllDcfReports: () => void;
   formatPct2: (value: number) => string;
   formatMoney: (value: number) => string;
@@ -477,6 +483,14 @@ export function TargetStockComparisonSection({
                 </div>
                 <div className="text-xs text-[var(--text-muted)]">
                   {bulkDcfReportsLastUpdatedAt ? `Last calculated ${formatDateTime(bulkDcfReportsLastUpdatedAt)}` : "No batch reports calculated yet"}
+                  {bulkDcfSkipped.length > 0 ? (
+                    <span className="ml-2 text-[var(--text-muted)]">
+                      · {bulkDcfSkipped.length} skipped:{" "}
+                      <span title={bulkDcfSkipped.map((skip) => `${skip.ticker}: ${skip.reason}`).join(SKIP_TOOLTIP_SEPARATOR)}>
+                        {bulkDcfSkipped.map((skip) => skip.ticker).join(", ")}
+                      </span>
+                    </span>
+                  ) : null}
                 </div>
               </div>
               {bulkDcfReportsLoading && (

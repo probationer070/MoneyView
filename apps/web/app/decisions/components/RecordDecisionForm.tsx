@@ -3,6 +3,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { fetchApi } from "@/lib/api";
+import { TickerSearch, type TickerSearchItem } from "@/components/ui/TickerSearch";
 import { DECISION_ACTIONS, type DecisionAction } from "../decisionTypes";
 
 /**
@@ -11,7 +12,7 @@ import { DECISION_ACTIONS, type DecisionAction } from "../decisionTypes";
  * for display and would be stored as what the user believed, undetectably.
  * The request model is extra="forbid", so adding a field here is a 422.
  */
-export function RecordDecisionForm() {
+export function RecordDecisionForm({ watchlist = [] }: { watchlist?: TickerSearchItem[] }) {
   const queryClient = useQueryClient();
   const [ticker, setTicker] = useState("");
   const [action, setAction] = useState<DecisionAction>("buy");
@@ -58,14 +59,18 @@ export function RecordDecisionForm() {
           the controls are announced as a group, and the browser supplies the
           semantics instead of custom interaction code. */}
       <form onSubmit={submit} className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-end">
-        <label className="flex flex-col gap-1 text-xs text-[var(--text-secondary)]">
-          Ticker
-          <input
-            value={ticker}
-            onChange={(event) => setTicker(event.target.value)}
-            className="rounded-[var(--radius-sm)] border border-[var(--border-default)] bg-transparent px-2 py-1 text-[var(--text-primary)]"
-          />
-        </label>
+        {/* The shared search, so recording a decision offers the same suggestions as
+            valuing a company. This field had none at all: the ticker was typed blind, and
+            a typo produced a decision row against a symbol that does not exist. */}
+        <TickerSearch
+          id="decision-ticker"
+          label="Ticker"
+          value={ticker}
+          onChange={setTicker}
+          onSelect={setTicker}
+          items={watchlist}
+          className="min-w-[14rem]"
+        />
         <label className="flex flex-col gap-1 text-xs text-[var(--text-secondary)]">
           Action
           <select

@@ -15,6 +15,12 @@ export interface DcfSummary {
    * forecast.
    */
   terminal_value_share_pct: number;
+  /** The spread the terminal value turns on, as a fraction (not a percentage). Null when
+   *  a terminal growth rate could not be resolved. */
+  wacc_minus_terminal_growth: number | null;
+  /** Which bound decided the terminal growth rate: "company" | "ceiling" | "wacc_safety" |
+   *  "floor". Null on the same condition as wacc_minus_terminal_growth. */
+  terminal_growth_binding_constraint: string | null;
   status: string;
   generated_at: string;
 }

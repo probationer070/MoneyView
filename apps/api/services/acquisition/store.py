@@ -5,7 +5,6 @@ so moving statements onto disk changes no metric code.
 """
 from __future__ import annotations
 
-import hashlib
 from datetime import date, datetime, timezone
 
 import pandas as pd
@@ -14,6 +13,7 @@ from apps.api.models.schemas import NewsArticle
 from apps.api.services.acquisition.sources.quote_facts import QuoteFacts
 from apps.api.services.acquisition.sources.statements import StatementRow
 from apps.api.services.db import get_db
+from apps.api.services.news_service import news_identity_hash
 
 _BUNDLE_KEYS: tuple[tuple[str, str, str], ...] = (
     ("income", "income", "annual"),
@@ -54,10 +54,12 @@ def save_quote_facts(ticker: str, facts: QuoteFacts) -> None:
     with get_db() as conn:
         conn.execute(
             """INSERT OR REPLACE INTO corporate_quote_facts
-                   (ticker, market_cap, shares_outstanding, currency, beta, sector, industry, fetched_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                   (ticker, market_cap, shares_outstanding, currency, beta, sector, industry,
+                    instrument_type, fetched_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (ticker, facts.market_cap, facts.shares_outstanding, facts.currency, facts.beta,
-             facts.sector, facts.industry, datetime.now(timezone.utc).isoformat()),
+             facts.sector, facts.industry, facts.instrument_type,
+             datetime.now(timezone.utc).isoformat()),
         )
 
 
@@ -97,7 +99,10 @@ def save_news(ticker: str, articles: list[NewsArticle]) -> None:
                     article.published_date,
                     article.sentiment.value,
                     article.importance,
-                    hashlib.md5(f"{article.headline}{article.url}".encode()).hexdigest(),
+                    # Identity is (ticker, url). This was a second, independent copy of
+                    # news_service's hash, so the two could drift -- and both hashed the
+                    # headline, which Google News rewrites between fetches.
+                    news_identity_hash(ticker, article.url),
                 )
                 for article in articles
             ],

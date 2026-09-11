@@ -29,6 +29,10 @@ from packages.core_finance.expected_return import (
     calculate_expected_return_result,
     calculate_market_expected_return,
 )
+from packages.core_finance.terminal_growth import (
+    TERMINAL_GROWTH_CEILING,
+    derive_terminal_growth,
+)
 
 KST = ZoneInfo("Asia/Seoul")
 SNAPSHOT_RETENTION_DAYS = 365
@@ -383,8 +387,15 @@ def _dcf_snapshot(
         base_fcff = max(float(metrics.fcff), 1.0)
         wacc = max(float(metrics.wacc) / 100, 0.001)
         growth_rate = float(metrics.growth) / 100
-        terminal_growth = min(growth_rate, wacc - 0.005)
-        terminal_growth = max(terminal_growth, -0.1)
+        # The same derivation as corporate_metrics_service, and it must stay the same:
+        # this figure feeds the comparison table's dcf_value and dcf_implied_return, so a
+        # ceiling applied in one place and not the other would show one ticker two
+        # different terminal growth rates on two screens.
+        terminal_growth = derive_terminal_growth(
+            company_growth=growth_rate,
+            wacc=wacc,
+            ceiling=TERMINAL_GROWTH_CEILING,
+        ).rate
 
         projected_fcff = [base_fcff * ((1 + growth_rate) ** year) for year in range(1, 6)]
         pv_fcff = sum(cash_flow / ((1 + wacc) ** year) for year, cash_flow in enumerate(projected_fcff, start=1))

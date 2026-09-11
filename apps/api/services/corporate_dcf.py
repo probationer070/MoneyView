@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Callable
 
@@ -9,6 +10,7 @@ from packages.core_finance.dcf import (
     calculate_intrinsic_value_per_share,
     sensitivity_grid,
 )
+from packages.core_finance.terminal_growth import TERMINAL_GROWTH_CEILING, derive_terminal_growth
 
 from apps.api.models.schemas import (
     DCFAssumptionSummary,
@@ -21,7 +23,24 @@ from apps.api.models.schemas import (
     CorporateMetrics,
     ValuationAssumptions,
 )
-from apps.api.models.schema_parts.corporate import BridgeInputMeta, BridgeSource
+from apps.api.models.schema_parts.corporate import (
+    BridgeInputMeta,
+    BridgeSource,
+    SkippedDcfTicker,
+)
+
+
+@dataclass(frozen=True)
+class BulkDcfResult:
+    """What a batch produced and what it could not.
+
+    A plain dataclass rather than a pydantic model: the reports were just built and
+    validated by the report builder, and re-validating every one of them to put them in a
+    container buys nothing. The route maps this onto `BulkDcfReports` for the wire.
+    """
+
+    reports: list[DCFFullReport]
+    skipped: list[SkippedDcfTicker]
 from apps.api.services.corporate_statement_metrics import _pick_worst_quality
 from apps.api.services.equity_bridge import load_equity_bridge
 
@@ -77,6 +96,40 @@ def build_dcf_full_report(
     return full_report
 
 
+def partition_valuable_tickers(
+    tickers: list[str],
+    instrument_types: dict[str, str],
+) -> tuple[list[str], list[SkippedDcfTicker]]:
+    """Split a batch into what a DCF can value and what it cannot.
+
+    A discounted cash flow model discounts a firm's own future cash flows. An ETF, an
+    index or a currency has none, so a number produced for one is meaningless rather than
+    imprecise -- and the watchlist carries gold and silver ETFs that went through the
+    batch unchallenged.
+
+    A ticker with no recorded type is treated as valuable. Every row acquired before the
+    `instrument_type` column existed is unclassified, so excluding the unknown would empty
+    the batch on the day this ships; valuing a handful of funds for one more acquisition
+    cycle is the smaller error, and each classified refusal is named either way.
+    """
+    not_operating_companies = {"etf", "index", "mutualfund", "currency", "cryptocurrency", "future"}
+    valuable: list[str] = []
+    refused: list[SkippedDcfTicker] = []
+    for ticker in tickers:
+        kind = (instrument_types.get(ticker) or "").strip().lower()
+        if kind in not_operating_companies:
+            refused.append(
+                SkippedDcfTicker(
+                    ticker=ticker,
+                    reason=f"not_an_operating_company: {ticker} is an {kind}; a DCF discounts "
+                           "a firm's own cash flows and this instrument has none",
+                )
+            )
+            continue
+        valuable.append(ticker)
+    return valuable, refused
+
+
 def build_bulk_dcf_reports(
     tickers: list[str],
     *,
@@ -87,8 +140,19 @@ def build_bulk_dcf_reports(
     risk_free_rate: float,
     equity_risk_premium: float = DEFAULT_EQUITY_RISK_PREMIUM,
     country_risk_premium: float = DEFAULT_COUNTRY_RISK_PREMIUM,
-) -> list[DCFFullReport]:
-    """Build full DCF reports for a deduplicated ticker list."""
+) -> BulkDcfResult:
+    """Build full DCF reports for a deduplicated ticker list.
+
+    A ticker that cannot be valued is skipped with its reason rather than raised, because
+    this feeds "Calculate All Reports": one unvaluable name used to return nothing at all
+    for every other ticker in the batch. `ValuationAssumptions.terminal_growth_rate` is
+    capped at 0.1 while the params builder derives that rate from company growth without
+    clamping, so on the live watchlist 5 of the first 20 tickers raised -- the button
+    could not succeed on any realistic universe.
+
+    Skips are returned, never swallowed. A batch that quietly reported 134 of 139 would
+    be a completeness this result has not earned.
+    """
 
     normalized_tickers: list[str] = []
     for raw_ticker in tickers:
@@ -97,10 +161,11 @@ def build_bulk_dcf_reports(
             normalized_tickers.append(ticker)
 
     reports: list[DCFFullReport] = []
+    skipped: list[SkippedDcfTicker] = []
     for ticker in normalized_tickers:
-        metrics = metrics_loader(ticker)
-        reports.append(
-            report_builder(
+        try:
+            metrics = metrics_loader(ticker)
+            report = report_builder(
                 ticker=ticker,
                 params=valuation_params_builder(metrics),
                 current_price_loader=current_price_loader,
@@ -109,8 +174,15 @@ def build_bulk_dcf_reports(
                 equity_risk_premium=equity_risk_premium,
                 country_risk_premium=country_risk_premium,
             )
-        )
-    return reports
+        except Exception as error:  # noqa: BLE001 - any per-ticker failure is a skip
+            # Deliberately broad. The known cause is a pydantic ValidationError on a
+            # derived terminal growth above the model's 0.1 cap, but the loader and the
+            # report builder each reach data of their own, and a batch that dies on the
+            # eleventh ticker is worth less than one that names it and continues.
+            skipped.append(SkippedDcfTicker(ticker=ticker, reason=f"{type(error).__name__}: {error}"))
+            continue
+        reports.append(report)
+    return BulkDcfResult(reports=reports, skipped=skipped)
 
 
 def _build_dcf_outputs(
@@ -160,6 +232,25 @@ def _build_dcf_outputs(
     # The measured share, not a proxy for it: how much of this enterprise value is the
     # discounted perpetuity rather than the five explicit years.
     terminal_value_share_pct = pv_terminal / enterprise_value * 100
+    # Recovered rather than threaded: the builder already holds both inputs, and passing a
+    # derivation record through every caller would make the params object carry state that
+    # only one consumer reads.
+    terminal_derivation = derive_terminal_growth(
+        company_growth=params.revenue_growth_rate,
+        wacc=wacc,
+        ceiling=TERMINAL_GROWTH_CEILING,
+    )
+    # A reconstruction, not a record. It describes the bounds as they apply to company
+    # growth, which is the rate that ran only when `_valuation_params_from_metrics` built
+    # these params -- the bulk endpoint's path. Every single-ticker route takes
+    # `terminal_growth_rate` from the request body, and the web client fills it from
+    # company growth with no ceiling, so the reconstruction would name a bound the number
+    # never passed through. Say nothing rather than say that.
+    terminal_growth_binding_constraint = (
+        terminal_derivation.binding_constraint
+        if abs(terminal_derivation.rate - terminal_growth) < 1e-9
+        else None
+    )
     agency_discount = 1 - min(max(esg_penalty, 0), 80) / 400
     dcf_multiple = enterprise_value / base_fcff
     baseline_multiple = 1 / max(wacc - terminal_growth, 0.005)
@@ -285,6 +376,8 @@ def _build_dcf_outputs(
         current_price=round(float(current_price), 2),
         upside_pct=round(float(upside_pct), 2),
         terminal_value_share_pct=round(float(terminal_value_share_pct), 2),
+        wacc_minus_terminal_growth=round(float(wacc - terminal_growth), 6),
+        terminal_growth_binding_constraint=terminal_growth_binding_constraint,
         status=status,
         generated_at=generated_at,
     )

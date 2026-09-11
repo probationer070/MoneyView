@@ -570,6 +570,25 @@ export async function mockPortfolioPageApi(page: Page, stats?: PortfolioPageMock
       return json(route, metricAudit(ticker));
     }
 
+    // Group membership has its own endpoint precisely because the upsert above would
+    // reset weight, name and sector to their defaults. Mirroring that here keeps the mock
+    // honest: a test that follows a weighted stock must still see its weight afterwards.
+    if (/\/portfolio\/watchlist\/[^/]+\/group$/.test(pathname) && method === "POST") {
+      const ticker = decodeURIComponent(pathname.split("/").slice(-2)[0]).toUpperCase();
+      const payload = JSON.parse(route.request().postData() ?? "{}");
+      const existingRow = watchlist.find((item) => item.ticker === ticker);
+      if (!existingRow) {
+        return route.fulfill({
+          status: 404,
+          contentType: "application/json",
+          body: JSON.stringify({ detail: `unknown_ticker: ${ticker} is not on the watchlist` }),
+        });
+      }
+      const nextRow: PortfolioStock = { ...existingRow, group_name: payload.group_name };
+      watchlist = watchlist.map((item) => (item.ticker === ticker ? nextRow : item));
+      return json(route, nextRow);
+    }
+
     if (pathname === `${API_PREFIX}/portfolio/watchlist` && method === "POST") {
       const payload = JSON.parse(route.request().postData() ?? "{}");
       const existingRow = watchlist.find((item) => item.ticker === payload.ticker);

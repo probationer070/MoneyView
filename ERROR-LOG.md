@@ -26,79 +26,240 @@ reveal that; only checking the code did.
 
 An entry states what was true when it was written. Nothing updates it on its own.
 
-## 2026-09-09: CAPM relevers beta with a debt-to-capital weight instead of debt-to-equity
+## 2026-09-10: terminal growth is clamped to WACC, so terminal value is 96% of most valuations
+
+Date: 2026-09-10
+Command: `POST /corporate/dcf/reports/bulk`, and every single-ticker DCF report.
+Failure: two symptoms from one cause.
+
+1. **Visible:** ~22% of the watchlist cannot be valued at all.
+   `ValuationAssumptions.terminal_growth_rate` is bounded `le=0.1`
+   (`apps/api/models/schema_parts/corporate.py:51`), and the derived rate exceeds it --
+   9 of the first 40 watchlist tickers raise a `ValidationError`. ASM derives 0.1415,
+   AMD 0.1364, ANET 0.1334, ARIS 0.1254, AXP 0.1055.
+2. **Silent, and much larger:** for the tickers that DO value, terminal value is
+   almost the entire answer. Measured over 18 reports that built successfully:
+   **median terminal_value_share_pct 96.25%**, nine above 95%, highest ATEX at
+   **98.92%**. The explicit multi-year projection contributes under 4% of the
+   valuation, and every affected company receives essentially the same multiple.
+
+Root cause: `apps/api/services/corporate_metrics_service.py:505`
+
+    terminal_growth_rate = min(growth_rate, wacc - 0.005)
+
+Gordon growth is `TV = FCFF x (1 + g) / (WACC - g)`, so the whole terminal value turns
+on the spread `WACC - g`. The clamp above correctly prevents the MATHEMATICAL failure
+-- at `g >= WACC` the denominator is zero or negative and the value explodes or goes
+negative. It says nothing about whether `g` is economically possible.
+
+Two consequences follow.
+
+`g` is a growth rate assumed to hold FOREVER. Long-run nominal GDP is roughly 3-4%; a
+firm growing faster than that in perpetuity eventually exceeds the whole economy, which
+is what the model's `le=0.1` bound encodes. But the clamp is anchored to WACC rather
+than to plausibility, so a company with a 14.65% WACC is handed 14.15% perpetual growth
+-- mathematically safe, economically indefensible, and then refused by the model's own
+bound. Symptom 1 is that refusal.
+
+Worse, because the clamp pins `g` at exactly `WACC - 0.005` whenever company growth
+exceeds that, the denominator becomes 0.005 for everyone it touches. Measured across 40
+watchlist tickers, **the clamp binds for 23 of them**, and each gets a terminal value of
+203x to 228x FCFF regardless of the business. Symptom 2 is that multiple.
+
+The relationship between the two symptoms is worth stating plainly: the refusals are the
+LUCKY cases. They fail loudly. The 23 that pass quietly report a fixed multiple wearing
+a discounted-cash-flow's clothes.
+
+Fix: fixed for the bulk and comparison paths only, 2026-09-11 (Task 4 of the
+terminal-diagnostics-and-bounds plan). This `Command:` line names `POST
+/corporate/dcf/reports/bulk` "and every single-ticker DCF report" -- only the first is
+fixed. A `TERMINAL_GROWTH_CEILING = 0.03` (`packages/core_finance/terminal_growth.py`)
+now sits between company growth and the `wacc - 0.005` safety margin in
+`derive_terminal_growth`, consumed by `corporate_metrics_service.valuation_params_from_
+metrics` (the bulk endpoint's only caller) and `corporate_comparison._dcf_snapshot` (the
+comparison table); `wacc - 0.005` is kept, exactly as this entry asked, but only as the
+secondary safety net, not the plausibility bound. Measured against this entry's own
+18-report/96.25%-median baseline, through the bulk path: 25 of 25 sampled watchlist
+reports now build (the 9-of-40 refusals this entry called "the lucky cases" mostly stop
+happening), median `terminal_value_share_pct` falls to 75.33%, and the binding-constraint
+distribution moves from 100% `wacc_safety` to `{ceiling: 20, company: 4, floor: 1}`.
+
+**The three single-ticker DCF routes are still unfixed** (`apps/api/routes/corporate.py`
+lines 301, 322, 376): each takes `terminal_growth_rate` straight from the request body,
+and the web client (`apps/web/app/corporate/corporateUtils.ts:56`) fills it from company
+growth clamped only to `[-0.1, 0.1]` -- no ceiling. Those reports still show close to
+96% terminal share. A fix-round-1 review caught that the report builder's diagnostic
+fields (`terminal_growth_binding_constraint`) were reconstructing an answer as if the
+ceiling had applied on every path, when it had applied on the bulk path only -- so a
+single-ticker report could show `constraint=ceiling` beside a spread that could only be
+`wacc_safety`. `apps/api/services/corporate_dcf.py` now reports `None` for the
+constraint whenever the reconstruction's rate does not match the rate that actually ran,
+rather than naming a bound the number never passed through. Tracked as H8, reopened and
+split -- see `guideline/sop/todo.md`.
+Files changed: apps/api/services/corporate_metrics_service.py,
+apps/api/services/corporate_comparison.py, apps/api/services/corporate_dcf.py,
+packages/core_finance/terminal_growth.py (ceiling constant and floor-as-fourth-bound,
+landed in an earlier task on this same plan), tests/api/test_terminal_diagnostics.py,
+tests/api/test_corporate_comparison.py, tests/api/test_corporate_dcf_streaming.py.
+Prevention: the guard that exists proves the hazard was understood -- someone knew `g`
+approaching WACC destroys the model, and wrote a clamp for it. What was missing is that
+a clamp expressed *relative to another input* has no opinion about magnitude. `wacc -
+0.005` is a safe distance, not a plausible rate, and the two look identical in code.
+
+The general form: **when a guard is written as a distance from another variable, it
+bounds the arithmetic, not the meaning.** A second bound against an absolute, externally
+justified limit is what makes the number defensible -- and here that second bound existed
+(`le=0.1`), sat one layer away in the response model, and was reached only as an
+exception rather than consulted as a constraint.
+
+Detection is the other half, and the first version of this entry got it wrong. It said
+nothing in the product surfaces `terminal_value_share_pct`. That is false, and the
+correction matters more than the original claim: the figure IS displayed -- a "Terminal
+Value Share" tile in `DcfCoreModulesGraph.tsx:52-61`, clickable into a calculation detail,
+and per-cell in `DcfSensitivityTable.tsx:91`.
+
+What is missing is a threshold. 96.25% and 60% render identically, as a plain percentage
+with nothing marking one of them as a valuation resting almost entirely on a single
+assumption. The number was on screen the whole time. Nobody had been given a reason to
+read it as alarming, which is a different and more interesting failure than not showing it
+at all -- **a figure can be fully visible and still not be information.**
+
+## 2026-09-10: a relabelled publisher minted a duplicate article and collided a React key
+
+Date: 2026-09-10
+Command: opening the Portfolio tab (console error, `StockTileGrid.tsx:106`).
+Failure: `Encountered two children with the same key,
+https://news.google.com/rss/articles/CBMi8AF...`. React warns that non-unique keys
+may duplicate or omit children.
+Root cause: `NewsService._hash` and a second, independent copy of the same expression
+in `acquisition/store.py` both hashed `headline + url`, and that hash is the `UNIQUE`
+column the `INSERT OR IGNORE` dedup relies on. Google News rewrites the publisher
+suffix between fetches, so one story arrived twice:
+
+    id 376  "... Shares of American Express Company $AXP - MarketBeat"
+    id 506  "... Shares of American Express Company $AXP - marketbeat.com"
+
+Same ticker, same url, same date, different hash. Measured: 32 duplicated
+`(ticker, url)` pairs across 11 tickers, 400 distinct urls in 432 rows, and **zero**
+duplicate `(ticker, hash)` groups -- the constraint was working perfectly on the wrong
+identity. `StockTile.tsx:105` then keyed each article on `article.url`, and two rows
+sharing a url collided.
+
+The reported stack pointed at `StockTileGrid.tsx:107`, where the key is
+`stock.ticker` -- a ticker cannot be a url. That line is the owner boundary React
+attributes the render to, not the site of the duplicate key. The real map is one
+component down.
+
+A second, latent defect sat in the same expression: the hash omitted the ticker
+entirely, so one article naming two companies would have been stored for the first
+ticker and silently dropped for the second. No such rows exist today, which is why it
+had never surfaced.
+
+Fix: fixed. `news_identity_hash(ticker, url)` is now the single identity, shared by
+both write paths, and excludes the headline. `get_news_bulk` also collapses by url so
+the 32 rows already stored stop reaching the tile without deleting any of the user's
+data; it over-fetches first, because deduping after a `LIMIT` of exactly `per_ticker`
+would return a short tile rather than a correct one. Verified against the live
+database: 11 tickers held duplicates, 0 now serve one, and each still fills three
+articles. No frontend change.
+Files changed: `apps/api/services/news_service.py`,
+`apps/api/services/acquisition/store.py`, `tests/api/test_news_article_identity.py`.
+Prevention: `test_save_news_persists_and_dedupes_by_hash` already existed and passed
+throughout. It saves the **same** article twice, so it can only ever exercise an exact
+repeat -- the case that leaks needs the headline to vary while the url holds still. A
+dedup test that never varies the volatile field tests the constraint, not the identity.
+The general form: **when dedup is keyed on a hash, the test has to vary each field the
+hash includes, one at a time.** Duplicated logic made it worse -- two copies of the
+hash, free to drift, and fixing one would have left the other.
+
+## 2026-09-10: every route 404ed on a dev server whose code was sound (unreproduced)
+
+Date: 2026-09-10
+Command: `npm run dev` in `apps/web` (Next.js 16.2.2, Turbopack).
+Failure: `Ready in 4.2s`, then `GET / 404` repeatedly -- 2.2s on the first request,
+then ~50ms. The app did not open at all.
+Root cause: **not established.** By the time it was investigated the failure was gone.
+
+Ruled out by inspection and by test: `app/page.tsx` and `app/layout.tsx` both present
+and tracked; no `middleware.ts`; no `pages/` directory to conflict with `app/`; no
+`basePath` or rewrites in `next.config.ts`; the `@/*` tsconfig alias resolves. Starting
+from the repo root instead of `apps/web` fails differently -- `npx next dev` there tries
+to download Next 16.3.4, and the reported log shows 16.2.2 -- so a wrong working
+directory was not it either.
+
+Verified working from both cache states: with the existing `.next` (200 on `/`,
+`/portfolio`, `/corporate`) and after `rm -rf .next` forcing a full rebuild (200 on all
+three). The cold rebuild's `GET / 200 in 4.1s` closely matches the reported
+`GET / 404 in 2.2s`, so the server was doing real compilation work in both cases.
+
+The one informative detail in the report: `application-code: 212ms` on a 404 means Next
+compiled and rendered something -- the not-found boundary -- rather than failing to find
+the app directory. The route manifest simply did not contain `/`, and the fast repeats
+are a cached negative. That profile fits a stale or corrupt Turbopack cache in
+`.next/dev`.
+Fix: not fixed, because nothing was found to fix. `apps/web/.next` was deleted during
+investigation, which is also the remedy for a corrupt Turbopack cache, so the symptom
+may have been cleared as a side effect. That is a plausible cause, not a demonstrated
+one, and this entry should not be read as saying the cause is known.
+Files changed: none.
+Prevention: the diagnostic that separates the two cases, if it recurs:
+`cd apps/web && rm -rf .next && npm run dev`. If a cold build serves `/`, it was the
+cache. If it still 404s, the next useful bit is whether `/portfolio` 404s too --
+everything failing points at route discovery, `/` alone points at the root page.
+Recorded despite being unresolved because a second occurrence with this entry in hand
+is far cheaper to diagnose than a second occurrence without it.
+
+## 2026-09-09: an unsettled bar became a $0.00 price for 136 of 139 watchlist tickers
 
 Date: 2026-09-09
-Command: manual review while writing `docs/metrics/discount-rates-and-returns.md`'s
-`capm_expected_return` entry -- reading `apps/api/services/corporate_comparison.py:1129-1131`
-against `apps/api/services/corporate_statement_metrics.py:800-803,825-827,1053-1061`, then
-re-measuring beta across a live 135-ticker pull under both the coded formula and the correct
-substitution.
-Failure: silent, a numeric defect with no exception. `capm_expected_return` is built from a
-beta relevered with the wrong quantity for every company carrying any debt at all, not just
-extreme cases.
-Root cause: `debt_ratio` is defined at `apps/api/services/corporate_statement_metrics.py:802`
-as `_bounded(latest_debt / (latest_debt + latest_equity) * 100, 0, 90)` -- `D/(D+E)`, a
-debt-to-capital percentage. `apps/api/services/corporate_comparison.py:1130` does
-`debt_to_equity = max(float(metrics.debt_ratio) / 100, 0.0)` and feeds it to the Hamada
-relever formula at `:1131`, but `D/(D+E) != D/E` whenever any debt exists
-(`D/E - D/(D+E) = D^2/(E(D+E)) > 0` for all `D, E > 0`), so the substitution understates the
-leverage term for every levered company, growing with leverage -- not only past some
-threshold. This codebase already has the correct conversion: `_statement_debt_to_equity`
-(`corporate_statement_metrics.py:1053-1061`) converts on its fallback path as `dr/(100-dr)`
-= D/E, against `corporate_comparison.py:1130`'s `dr/100` = D/(D+E). The round trip is
-inconsistent by construction: `corporate_statement_metrics.py:825-827` **unlevers** with the
-true D/E to produce `metrics.unlevered_beta`, and `corporate_comparison.py:1131` then
-**relevers** that value with a capital weight, so it cannot recover the original levered beta.
-Fix: not fixed -- this entry records the defect; the fix is its own work. Confirmed impact:
-108 of 135 tickers get a different beta under the correct substitution, understating
-`capm_expected_return` by up to 14.08pp (STX, STEM, SKYX, DOCN, all `debt_ratio` 90.00: coded
-beta 0.6844 against a correct 3.2440), then BE 12.65pp, AES 11.26pp, ORCL 7.39pp.
-Files changed: none (record only). `docs/metrics/discount-rates-and-returns.md`'s
-`capm_expected_return` entry documents this as the live behavior.
-Prevention: the misleading local variable name `debt_to_equity` at
-`corporate_comparison.py:1130` is what let this survive review -- it names the textbook
-quantity while holding a different one. When a formula's input is a locally computed
-intermediate rather than a passed-through named field, name it for what it actually holds,
-not for the textbook symbol it stands in for. When the same codebase already has a correct
-conversion for the same pair of raw values (here, `_statement_debt_to_equity`), a second call
-site computing the "same" ratio a different way is worth a direct comparison before trusting
-either.
+Command: opening the Portfolio tab's stock tile grid (`GET /portfolio/watchlist`).
+Failure: every tile but three showed a price of `$0.0` and a delta of `-100%`. Pure
+Storage rendered correctly, which made it look like a per-ticker data problem rather
+than a systemic one.
+Root cause: three defects in series, none of which is visible from either end alone.
 
-## 2026-09-09: The ROIC audit displays a single year's inputs beside a multi-year-averaged output
+1. The provider returns the *current* day's bar with a real volume and NaN for OHLC
+   before the session settles. `StockOHLCV.close` is typed `float`, and NaN **is** a
+   float, so the bar passed validation unchallenged and was persisted.
+2. SQLite stores NaN as NULL. So the value that went in as NaN came back as None --
+   the absence changed shape in transit, which is why a write-side `is not None`
+   check would never have fired.
+3. `market_data.py` read it back as `float(row["close"] or 0)`. `None or 0` is `0`,
+   so absence became `0.0`, and `DeltaBadge.compute(0.0, 319.97)` scored it as a
+   -100% collapse against the genuine prior close.
 
-Date: 2026-09-09
-Command: manual review while writing `docs/metrics/fundamental-quality.md`'s `NOPAT` entry --
-iterating `metric_audit_for_ticker` for every `DISTINCT ticker` in `corporate_statements` and
-comparing `roic.value` to `100 * inputs_used["nopat"].value /
-inputs_used["average_invested_capital"].value`.
-Failure: silent, a display mismatch with no exception. Under the app's default
-`recent_average` ROIC basis, the ROIC audit panel shows a NOPAT and an average-invested-capital
-figure that do not divide to the ROIC value displayed beside them.
-Root cause: `_select_roic_record` (`apps/api/services/corporate_statement_metrics.py:999-1009`)
-returns `roic_records[-1]` -- the latest year -- for any non-`annual` basis. `roic_value`
-(`packages/core_finance/corporate_statement_metrics.py:499-509`) returns `average(values[-3:])`
-for `recent_average`, the app's default basis -- an average of up to three already-computed
-yearly ratios. The audit emits that single latest-year record's `nopat` and
-`average_invested_capital` (`apps/api/services/corporate_statement_metrics.py:1491,1497`)
-beside the multi-year-averaged `roic` value, so the two figures shown side by side generally
-cannot reproduce each other.
-Fix: not fixed -- this entry records the defect; the fix is its own work. Confirmed impact:
-102 of 135 tickers diverge by more than 0.5pp -- e.g. AAPL displays 60.69% ROIC where its own
-displayed inputs imply 66.60%; ALGM displays 10.05% where its inputs imply -1.22%, a sign
-flip. One partial mitigation already exists: the audit does carry a `final_roic_value` row
-whose `source` reads `Computed from recent_average basis`
-(`apps/api/services/corporate_statement_metrics.py:1498`), so the basis is disclosed in the
-payload -- it is simply never reconciled with the NOPAT/invested-capital inputs displayed
-above it.
-Files changed: none (record only). `docs/metrics/fundamental-quality.md`'s `NOPAT` entry
-documents this as the live behavior.
-Prevention: an audit view that displays "inputs" beside a "result" implies the inputs produce
-the result; when a result is basis-dispatched (single year vs. multi-year average) but its
-displayed inputs are selected by a different, single-year rule, that implication is false by
-construction. A basis-aware audit should either select inputs consistent with the reported
-basis, or label the displayed inputs as belonging to one specific year, distinct from the
-reported figure's own basis.
+Pure Storage was not special: it is one of three tickers the bad run missed entirely,
+so its newest bar was an older, priced one. The three survivors were the tell.
+
+A fourth defect made this self-sustaining. `_rows_are_fresh` measured freshness from
+the raw rows, so a priceless bar dated today made the cache look current and
+suppressed the refetch that would have replaced it. The defect prevented its own
+repair.
+
+Fix: fixed. `_is_priced` gates on `math.isfinite` rather than `is not None`, because
+the value is NaN at the write site and NULL only after the sqlite round trip -- a
+None-only guard covers the read and misses the write. Applied at four points: bars
+with no usable close are never persisted, are dropped on read rather than coerced,
+are excluded from the freshness measurement, and an empty series now reports
+`last_close: null` instead of `0.0`. The 138 pre-existing NULL rows were left in
+place: the read guard makes them inert, and deleting a user's rows was not
+necessary to fix the defect.
+Files changed: `apps/api/services/market_data.py`,
+`apps/api/routes/portfolio.py`, `apps/api/models/schema_parts/watchlist.py`,
+`tests/api/test_priceless_bars.py`.
+Prevention: the frontend was already correct -- `StockTile.tsx:18` says "A missing
+close stays missing: a neutral dash, never a stand-in 0" and renders `-` for null.
+The API was lying to a UI built to handle the truth, so no amount of frontend care
+could have caught this. The lesson is narrower than "validate inputs": **a `float`
+field does not reject NaN, and a storage round trip can change absence from NaN to
+NULL.** Any guard written at one end must be checked at the other.
+
+One test in this batch initially passed for the wrong reason. `_latest_row_date`
+returns the first parseable row rather than the maximum, so it depends on
+`_select_ohlcv_rows`' `ORDER BY date DESC`; an oldest-first fixture made the
+freshness test pass while asserting nothing. It was caught only because the sibling
+assertion -- that a *priced* newest bar still counts as fresh -- failed at the same
+time. A single test would have shipped green and empty.
 
 ## 2026-09-04: `openpyxl` missing from `pyproject.toml` blocks the API from booting on a clean checkout
 

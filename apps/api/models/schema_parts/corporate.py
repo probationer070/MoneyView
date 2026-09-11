@@ -79,6 +79,11 @@ class DCFSummary(BaseModel):
     # says the valuation rests on the perpetuity assumption rather than on the explicit
     # forecast -- the concentration risk the sensitivity grid puts a range around.
     terminal_value_share_pct: float
+    # Why the terminal growth rate is what it is. `terminal_value_share_pct` says a
+    # valuation rests on the perpetuity; these two say which bound put it there, which is
+    # the question a reader asks next and could not previously answer.
+    wacc_minus_terminal_growth: float | None = None
+    terminal_growth_binding_constraint: str | None = None
     status: str
     generated_at: str
 
@@ -180,6 +185,25 @@ class DCFFullReport(BaseModel):
     dcf_multiple: float
     baseline_multiple: float
     fcff_scale: float
+
+
+class SkippedDcfTicker(BaseModel):
+    """One ticker a batch could not value, and why.
+
+    Named rather than dropped: `Calculate All Reports` returning fewer reports than
+    tickers, with nothing saying which or why, would be a completeness the response has
+    not earned.
+    """
+
+    ticker: str
+    reason: str
+
+
+class BulkDcfReports(BaseModel):
+    """The wire shape of a batch: what it valued, and what it could not."""
+
+    reports: list[DCFFullReport] = Field(default_factory=list)
+    skipped: list[SkippedDcfTicker] = Field(default_factory=list)
 
 
 class RiskAssumptions(BaseModel):

@@ -7,6 +7,8 @@ POST /api/news/acquire
 """
 
 import asyncio
+import os
+import time
 from datetime import datetime, timezone
 from typing import List, Optional
 
@@ -25,6 +27,15 @@ router = APIRouter()
 _svc   = NewsService()
 
 MAX_ACQUIRE_TICKERS = 100
+
+# Pause between crawls that actually reached the provider. The batch was already
+# sequential at a measured 0.8-1.0s per crawl, but back-to-back requests to one provider
+# across the whole watchlist is the shape that gets a client classified as automated.
+#
+# Applied only between real fetches: the hourly freshness boundary skips most tickers
+# without making a request, and pausing after a skip would pay the whole cost of pacing
+# while buying none of its protection.
+NEWS_CRAWL_DELAY_SECONDS = float(os.getenv("MONEYVIEW_NEWS_CRAWL_DELAY_SECONDS", "0.4"))
 
 
 @router.get("/feed", response_model=List[NewsArticle])
@@ -92,6 +103,12 @@ def acquire_news_batch(tickers, *, now, fetcher=fetch_news) -> list[dict]:
     names = _watchlist_names()
     seen: set[str] = set()
     results: list[dict] = []
+    # Set when a crawl actually reached the provider, cleared by the pause that follows it.
+    # Freshness is only known after acquire_point_in_time returns, so a ticker that turns
+    # out fresh can still cost one pause -- the pause was already paid before the call
+    # that revealed it. Pacing that waited to learn the answer would have to duplicate the
+    # boundary logic to ask first.
+    pause_owed = False
 
     for raw in tickers:
         ticker = str(raw).upper().strip()
@@ -99,6 +116,11 @@ def acquire_news_batch(tickers, *, now, fetcher=fetch_news) -> list[dict]:
             continue
         seen.add(ticker)
         company_name = names[ticker]
+        # Before the crawl, never after the last one: N fetches need N-1 gaps, and a
+        # trailing sleep would only delay the response.
+        if pause_owed and NEWS_CRAWL_DELAY_SECONDS > 0:
+            time.sleep(NEWS_CRAWL_DELAY_SECONDS)
+            pause_owed = False
         outcome = acquire_point_in_time(
             "news",
             ticker,
@@ -107,6 +129,10 @@ def acquire_news_batch(tickers, *, now, fetcher=fetch_news) -> list[dict]:
             saver=save_news,
             coverage=news_coverage,
         )
+        # "fresh" means the boundary answered without asking the provider, so it neither
+        # needs pacing nor counts toward the request rate. A failure did reach out.
+        if outcome.reason != "fresh":
+            pause_owed = True
         results.append({
             "ticker": ticker,
             "status": outcome.reason,

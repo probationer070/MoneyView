@@ -1,15 +1,20 @@
 "use client";
 
 import { useState } from "react";
+import { TickerSearch } from "@/components/ui/TickerSearch";
 import type { WatchlistItem } from "../verdictTypes";
 
 /**
- * A plain input with a datalist of watchlist suggestions.
+ * The Valuation tab's ticker entry, now the shared `TickerSearch`.
  *
- * The suggestions are OPTIONAL by construction: `items` may be empty while the
- * watchlist request is still in flight (2-3.5s in production, because that
- * endpoint fetches a live quote per ticker), and the input still accepts any
- * symbol typed in. The panel must never wait on suggestions.
+ * The two properties this panel depends on are preserved by that component: suggestions
+ * are optional, because `items` may be empty while the watchlist request is in flight
+ * (2-3.5s in production, since that endpoint fetches a live quote per ticker), and any
+ * symbol may be typed whether or not it is on the watchlist.
+ *
+ * What changed is that a company name now matches too, and the suggestions are clickable
+ * rather than a browser `datalist` -- the same behaviour as the other two searches, which
+ * is the point of sharing it.
  */
 export function TickerPicker({
   items,
@@ -28,20 +33,18 @@ export function TickerPicker({
 
   return (
     <form onSubmit={submit} className="mb-6 flex flex-wrap items-end gap-3">
-      <label className="flex flex-col gap-1 text-xs text-[var(--text-secondary)]">
-        Ticker
-        <input
-          value={draft}
-          onChange={(event) => setDraft(event.target.value)}
-          list="valuation-ticker-suggestions"
-          className="rounded-[var(--radius-sm)] border border-[var(--border-default)] bg-transparent px-2 py-1 text-[var(--text-primary)]"
-        />
-      </label>
-      <datalist id="valuation-ticker-suggestions">
-        {items.map((item) => (
-          <option key={item.ticker} value={item.ticker}>{item.name}</option>
-        ))}
-      </datalist>
+      <TickerSearch
+        id="valuation-ticker"
+        label="Ticker"
+        value={draft}
+        onChange={setDraft}
+        onSelect={(ticker) => {
+          setDraft(ticker);
+          onSubmit(ticker);
+        }}
+        items={items}
+        className="min-w-[16rem]"
+      />
       <button
         type="submit"
         className="rounded-[var(--radius-sm)] border border-[var(--border-default)] px-3 py-1.5 text-sm font-medium text-[var(--text-primary)]"

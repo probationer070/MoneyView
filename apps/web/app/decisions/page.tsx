@@ -21,6 +21,18 @@ export default function DecisionsPage() {
     refetchOnWindowFocus: false,
   });
 
+  // The same query key Valuation uses, so navigating between the two tabs reuses one
+  // cached watchlist rather than paying that request twice -- it fetches a live quote per
+  // ticker and takes 2-3.5s in production.
+  const watchlistQuery = useQuery<{ ticker: string; name: string }[]>({
+    queryKey: ["watchlist-tickers"],
+    queryFn: () => fetchApi<{ ticker: string; name: string }[]>("/portfolio/watchlist", {
+      monitor: { operation: "frontend.query.watchlist_tickers", component: "decisions_page" },
+    }),
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
+  });
+
   const decisions = decisionsQuery.data ?? [];
 
   return (
@@ -29,7 +41,7 @@ export default function DecisionsPage() {
         title="Decision Log"
         subtitle="What was believed about a ticker, when, and why. Figures are captured by the server at record time and never edited."
       />
-      <RecordDecisionForm />
+      <RecordDecisionForm watchlist={watchlistQuery.data ?? []} />
       {!decisionsQuery.isLoading && !decisionsQuery.isError && (
         <DecisionOutcomeScatter decisions={decisions} />
       )}
