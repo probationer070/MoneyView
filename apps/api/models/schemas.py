@@ -21,6 +21,8 @@ from .schema_parts.dev_monitor import (
 )
 from .schema_parts.corporate import (
     BridgeInputMeta,
+    BulkDcfReports,
+    SkippedDcfTicker,
     BridgeSource,
     DCFAssumptionSummary,
     DCFFullReport,
@@ -100,6 +102,7 @@ from .schema_parts.portfolio_reporting import (
 from .schema_parts.watchlist import (
     PortfolioPreferences,
     PortfolioStock,
+    WatchlistGroupUpdate,
     WatchlistItem,
     WatchlistResyncResult,
     WatchlistSyncResult,
@@ -110,6 +113,8 @@ __all__ = [
     "APIMeta",
     "APIResponse",
     "BridgeInputMeta",
+    "BulkDcfReports",
+    "SkippedDcfTicker",
     "BridgeSource",
     "ComparisonUniverseEnum",
     "LogTailResponse",
@@ -187,6 +192,7 @@ __all__ = [
     "SectorAttribution",
     "PortfolioPreferences",
     "PortfolioStock",
+    "WatchlistGroupUpdate",
     "WatchlistItem",
     "WatchlistResyncResult",
     "WatchlistSyncResult",

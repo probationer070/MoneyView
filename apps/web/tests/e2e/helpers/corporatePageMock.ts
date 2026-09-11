@@ -45,6 +45,12 @@ export type CorporatePageMockOptions = {
    * so one bulk table can carry all three states at once.
    */
   dcfBridgeQuality?: BridgeQuality;
+  /** Overrides terminal_value_share_pct on the full report's summary, for tests exercising
+   *  the terminal-share warning threshold. */
+  dcfTerminalValueSharePct?: number;
+  /** Overrides wacc_minus_terminal_growth on the full report's summary, for tests
+   *  exercising the WACC - g readout beside the terminal-share warning. */
+  dcfWaccMinusTerminalGrowth?: number;
 };
 
 export type BridgeQuality = "ok" | "estimated" | "missing";
@@ -99,6 +105,8 @@ const mockDcfSummary: DcfSummary = {
   // 1034.1 / 1462.4, the present_value_of_terminal and enterprise_value below. Derived
   // rather than picked so the tile, the base grid cell, and the full report agree.
   terminal_value_share_pct: 70.71,
+  wacc_minus_terminal_growth: null,
+  terminal_growth_binding_constraint: null,
   status: "Undervalued",
   generated_at: "2026-04-11T12:00:00Z",
 };
@@ -298,8 +306,18 @@ const mockMetricAudit = (ticker: string): CorporateMetricAudit => ({
 
 export async function mockCorporatePageApi(page: Page, stats?: CorporatePageMockStats, options?: CorporatePageMockOptions) {
   const singleBridge = options?.dcfBridgeQuality ?? "ok";
-  const dcfSummary = withBridgeQuality(mockDcfSummary, singleBridge);
-  const dcfSummaryResponse = withBridgeQuality(mockDcfSummaryResponse, singleBridge);
+  const terminalShareOverride = options?.dcfTerminalValueSharePct;
+  const waccMinusTerminalGrowthOverride = options?.dcfWaccMinusTerminalGrowth;
+  const summaryOverrides = {
+    ...(terminalShareOverride != null ? { terminal_value_share_pct: terminalShareOverride } : {}),
+    ...(waccMinusTerminalGrowthOverride != null
+      ? { wacc_minus_terminal_growth: waccMinusTerminalGrowthOverride }
+      : {}),
+  };
+  const baseSummary = { ...mockDcfSummary, ...summaryOverrides };
+  const baseSummaryResponse = { ...mockDcfSummaryResponse, ...summaryOverrides };
+  const dcfSummary = withBridgeQuality(baseSummary, singleBridge);
+  const dcfSummaryResponse = withBridgeQuality(baseSummaryResponse, singleBridge);
   const dcfFullReport: DcfFullReport = {
     ...mockDcfFullReport,
     summary: dcfSummary,
@@ -734,7 +752,11 @@ export async function mockCorporatePageApi(page: Page, stats?: CorporatePageMock
       if (stats) stats.dcfBulkReportRequests += 1;
       const payload = JSON.parse(route.request().postData() ?? "{}");
       const tickers = Array.isArray(payload.tickers) ? payload.tickers : [];
-      return json(route, tickers.map((ticker: string, index: number) => ({
+      // `{reports, skipped}`, not a bare array: the endpoint now names the tickers it
+      // could not value instead of failing the whole batch on the first one.
+      return json(route, {
+        skipped: [],
+        reports: tickers.map((ticker: string, index: number) => ({
         ...mockDcfFullReport,
         // withBridgeQuality is applied last so the "missing" rewrite overrides the per-index
         // estimated_value/upside_pct/status values above it, exactly as the backend would.
@@ -754,7 +776,8 @@ export async function mockCorporatePageApi(page: Page, stats?: CorporatePageMock
           ticker,
           generated_at: nowIso(),
         },
-      })));
+        })),
+      });
     }
 
     if (pathname === `${API_PREFIX}/corporate/dcf/AAPL` && method === "POST") {

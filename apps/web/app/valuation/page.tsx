@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { tabStateKey, useTabState } from "@/lib/tabState";
 import { fetchApi } from "@/lib/api";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { useDevMonitorPageLoad } from "@/hooks/useDevMonitorPageLoad";
@@ -11,7 +11,12 @@ import type { VerdictPanel, WatchlistItem } from "./verdictTypes";
 
 export default function ValuationPage() {
   useDevMonitorPageLoad({ component: "valuation_page" });
-  const [ticker, setTicker] = useState<string | null>(null);
+  // Kept per tab: leaving Valuation to check something and coming back used to discard
+  // the ticker under examination, which is the tab's entire subject.
+  const [ticker, setTicker] = useTabState<string | null>(
+    tabStateKey("valuation", "ticker"),
+    null,
+  );
 
   // Suggestions only. Deliberately NOT awaited by anything below: this endpoint
   // fetches a live quote per ticker and takes 2-3.5s.

@@ -25,6 +25,21 @@ class QuoteFacts:
     beta: float | None = None
     sector: str = ""
     industry: str = ""
+    # yfinance's own `quoteType`, normalised. Read from the same `info` payload the fields
+    # above come from, so classifying a ticker costs no extra provider call -- which
+    # matters: concurrent live fetching has already earned this project a Yahoo rate limit.
+    instrument_type: str = ""
+
+
+def normalize_instrument_type(raw: str | None) -> str:
+    """yfinance's `quoteType`, lowercased, or "" when the provider did not say.
+
+    Absence stays absent rather than defaulting to equity: a default of equity is exactly
+    what would put a gold ETF through a discounted cash flow model. Unrecognised values
+    pass through rather than collapsing to "other", because CRYPTOCURRENCY and CURRENCY
+    are real answers and recording them beats erasing them.
+    """
+    return str(raw or "").strip().lower()
 
 
 def _default_ticker_factory(symbol: str):
@@ -67,4 +82,5 @@ def fetch_quote_facts(
         beta=_optional_float(info.get("beta")),
         sector=str(info.get("sector") or ""),
         industry=str(info.get("industry") or ""),
+        instrument_type=normalize_instrument_type(info.get("quoteType")),
     )

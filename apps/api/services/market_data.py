@@ -8,6 +8,7 @@ when the newest stored bar is older than the previous trading day.
 from __future__ import annotations
 
 import logging
+import math
 import os
 import sys
 import threading
@@ -147,19 +148,43 @@ class MarketDataService:
             seen_dates.add(row_date)
             deduped_rows.append(row)
 
+        # A bar whose close is absent is not a cheap bar, it is not a bar. The provider
+        # returns NaN for the current day's OHLC before the session settles (volume is
+        # already real), NaN passes a float field, and sqlite stores NaN as NULL -- so
+        # `float(r["close"] or 0)` published 0.00 as a price and the watchlist reported
+        # every such ticker as -100%. Drop the row instead, so the caller sees the last bar
+        # that actually has a price. The drop is not announced on the wire: `_rows_are_fresh`
+        # ignores priceless bars too, so a cache holding one no longer looks current and the
+        # refetch that replaces it runs. Surfacing the staleness itself is todo H-series work.
         return [
             StockOHLCV(
                 date=str(r["date"]),
                 open=float(r["open"] or 0),
                 high=float(r["high"] or 0),
                 low=float(r["low"] or 0),
-                close=float(r["close"] or 0),
+                close=float(r["close"]),
                 volume=int(r["volume"] or 0),
                 dividends=float(MarketDataService._row_get(r, "dividends", 0) or 0),
                 stock_splits=float(MarketDataService._row_get(r, "stock_splits", 0) or 0),
             )
             for r in deduped_rows
+            if MarketDataService._is_priced(r["close"])
         ]
+
+    @staticmethod
+    def _is_priced(close) -> bool:
+        """True when a close is a real number a reader may treat as a price.
+
+        Checked with `math.isfinite` rather than `is not None`: at the write site the
+        value is NaN, and only becomes NULL by passing through sqlite. A None-only guard
+        catches the read side and misses the write side entirely.
+        """
+        if close is None:
+            return False
+        try:
+            return math.isfinite(float(close))
+        except (TypeError, ValueError):
+            return False
 
     @staticmethod
     def _normalise_date(df: pd.DataFrame) -> pd.DataFrame:
@@ -458,7 +483,10 @@ class MarketDataService:
         return None
 
     def _rows_are_fresh(self, rows) -> bool:
-        latest = self._latest_row_date(rows)
+        # Only a bar carrying a price counts. An unsettled bar has today's date and no
+        # close, so counting it made the cache look current and suppressed the refetch
+        # that would have replaced it -- the defect kept its own repair from running.
+        latest = self._latest_row_date([r for r in rows if self._is_priced(r["close"])])
         return latest is not None and latest >= self._previous_trading_day()
 
     def _rows_cover_period(self, rows, period: int | MarketDataFreshnessRule) -> bool:
@@ -965,56 +993,72 @@ class MarketDataService:
         )
 
     def _save_ohlcv_rows(self, ticker: str, rows: List[StockOHLCV]) -> None:
+        with get_db() as conn:
+            self._save_ohlcv_rows_to_connection(conn, ticker, rows)
+
+    def _save_ohlcv_rows_to_connection(self, conn, ticker: str, rows: List[StockOHLCV]) -> None:
         table = "indices" if ticker in MARKET_INDICES.values() else "stocks"
         index_name = self._index_name_for_ticker(ticker)
 
-        with get_db() as conn:
-            columns = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
-            has_actions = {"dividends", "stock_splits"}.issubset(columns)
+        # Never persist an unsettled bar. The provider reports the current day with a
+        # real volume and NaN prices; NaN survives the float field and lands in sqlite
+        # as NULL, which is how 136 of 139 tickers acquired a priceless newest bar.
+        # Dropping it here means the cache never holds a row a reader has to defend
+        # against -- the read-side guard covers databases written before this.
+        skipped = [row.date for row in rows if not self._is_priced(row.close)]
+        if skipped:
+            logger.warning(
+                "Skipped %d unsettled bar(s) for %s with no usable close: %s",
+                len(skipped), ticker, ", ".join(skipped),
+            )
+        rows = [row for row in rows if self._is_priced(row.close)]
 
-            for row in rows:
-                if table == "indices" and has_actions:
-                    conn.execute(
-                        """INSERT OR REPLACE INTO indices
-                           (name, ticker, date, open, high, low, close, volume, dividends, stock_splits)
-                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                        (
-                            index_name,
-                            ticker,
-                            row.date,
-                            row.open,
-                            row.high,
-                            row.low,
-                            row.close,
-                            row.volume,
-                            row.dividends,
-                            row.stock_splits,
-                        ),
-                    )
-                elif table == "indices":
-                    conn.execute(
-                        """INSERT OR REPLACE INTO indices
-                           (name, ticker, date, open, high, low, close, volume)
-                           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                        (index_name, ticker, row.date, row.open, row.high, row.low, row.close, row.volume),
-                    )
-                else:
-                    conn.execute(
-                        """INSERT OR REPLACE INTO stocks
-                           (ticker, date, open, high, low, close, volume, dividends, stock_splits)
-                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                        (
-                            ticker,
-                            row.date,
-                            row.open,
-                            row.high,
-                            row.low,
-                            row.close,
-                            row.volume,
-                            row.dividends,
-                            row.stock_splits,
-                        ),
-                    )
+        columns = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
+        has_actions = {"dividends", "stock_splits"}.issubset(columns)
+
+        for row in rows:
+            if table == "indices" and has_actions:
+                conn.execute(
+                    """INSERT OR REPLACE INTO indices
+                       (name, ticker, date, open, high, low, close, volume, dividends, stock_splits)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        index_name,
+                        ticker,
+                        row.date,
+                        row.open,
+                        row.high,
+                        row.low,
+                        row.close,
+                        row.volume,
+                        row.dividends,
+                        row.stock_splits,
+                    ),
+                )
+            elif table == "indices":
+                conn.execute(
+                    """INSERT OR REPLACE INTO indices
+                       (name, ticker, date, open, high, low, close, volume)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (index_name, ticker, row.date, row.open, row.high, row.low, row.close, row.volume),
+                )
+            else:
+                conn.execute(
+                    """INSERT OR REPLACE INTO stocks
+                       (ticker, date, open, high, low, close, volume, dividends, stock_splits)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        ticker,
+                        row.date,
+                        row.open,
+                        row.high,
+                        row.low,
+                        row.close,
+                        row.volume,
+                        row.dividends,
+                        row.stock_splits,
+                    ),
+                )
 
     def _fetch_yahoo_chart_ohlcv(self, ticker: str, period: str = DEFAULT_OHLCV_PERIOD) -> List[StockOHLCV]:
         """Direct Yahoo chart API fallback, mirroring GlobalMacroCollector."""
