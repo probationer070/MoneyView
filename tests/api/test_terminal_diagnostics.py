@@ -179,11 +179,13 @@ def test_the_watchlist_no_longer_pins_on_the_safety_margin_alone():
     tickers = _watchlist_tickers(limit=20)
 
     pinned = []
+    checked = 0
     for ticker in tickers:
         try:
             summary = _report(ticker).summary
         except Exception:
             continue
+        checked += 1
         if (
             summary.terminal_growth_binding_constraint == "wacc_safety"
             and summary.wacc_minus_terminal_growth == pytest.approx(SAFETY_MARGIN)
@@ -197,6 +199,11 @@ def test_the_watchlist_no_longer_pins_on_the_safety_margin_alone():
             if wacc >= 0.035:
                 pinned.append(ticker)
 
+    # The assertion under test is that a list is EMPTY, so it passes for free if the loop
+    # never ran. `except Exception: continue` makes that a live possibility -- a bootstrap
+    # or schema breakage would swallow every ticker and leave this test green while proving
+    # nothing. That is the exact shape of two vacuous tests already caught on this branch.
+    assert checked > 0, "no sampled ticker was valued; this test proved nothing"
     assert pinned == [], f"still pinned on the safety margin alone: {pinned}"
 
 
