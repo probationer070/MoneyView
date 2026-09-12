@@ -990,6 +990,74 @@ shipped on `fix-priceless-bars` (PR #29); E shipped with them.
       `packages/shared-types/corporate.ts`, but no surface reads it yet.
 
 
+## Track I - Portfolio count, tile button, watchlist drift  [A1, A2, B1, B3 SHIPPED 2026-09-12]
+
+The first of four sub-projects decomposed from one request on 2026-09-12. Design and
+decisions: `docs/superpowers/plans/2026-09-12-portfolio-count-and-watchlist-drift.md`.
+Branched from `renewal` @ `1af14ad`; baseline 1265 Python tests.
+
+- [x] **I-A1. Holdings count in the tile grid.** `12 of 143 · 7 followed` in the sticky
+      header of `StockTileGrid.tsx`. Three figures, not one: the user was offered
+      followed-only and visible-of-total-only and chose both. The line is a sibling of the
+      controls rather than of the grid body, so it survives scrolling and the empty state.
+      Mutation-verified three ways -- total reporting the visible set, followed count
+      reporting the visible set, and the line hidden when the body is empty.
+
+- [x] **I-A2. The follow `+` no longer overlaps the delta badge.** Two parts. `w-full` on
+      the tile button, because a `<button>` is fit-content sized: the card was only as wide
+      as its content, so a short-content tile stopped 200px short of its cell and the follow
+      control -- positioned against the CELL -- sat in the gap beside the card instead of on
+      it. Then `pr-6` on the header row reserves the button's footprint. The button stays
+      absolute and stays a DOM sibling of the tile (nested buttons are invalid HTML; a spec
+      test pins it). The original defect was a false comment claiming the header row left the
+      corner free -- see ERROR-LOG 2026-09-12.
+
+      The `w-full` half was found *by* the verification, not by the brief: the first overlap
+      test passed with the `pr-6` removed, because the mock's short headlines meant the two
+      elements were 168px apart and no padding could have changed that. It was first filed
+      as noted-not-fixed (it changes every tile's width), then asked for and done. The test
+      now asserts the precondition, so the two fixes guard each other: remove the padding and
+      the boxes intersect, remove the width and the precondition fires with
+      "the tile must fill its grid cell". Both mutations verified.
+
+- [x] **I-B1. Additive watchlist merge, so a second machine picks up new tickers.**
+      `merge_missing_watchlist_items` in `watchlist_seed.py`, called from
+      `GET /portfolio/watchlist`. `INSERT OR IGNORE` only: never deletes, never overwrites
+      a curated `weight`/`group_name`/`name`. Chosen over auto-resync specifically because
+      `resync_watchlist_from_json` `DELETE`s the table; it is left untouched as the
+      deliberate full replace. See ERROR-LOG 2026-09-12. Mutation-verified against an
+      overwriting merge and a deleting merge.
+
+- [x] **I-B3. Drift line in the startup data-status block.**
+      `Watchlist: 138/143 tracked tickers  (5 in seed not yet imported)`.
+
+      **Deviation from the brief, deliberate.** The brief called this "a rendering change
+      only" because `gather_status` already returns `watchlist_rows` and
+      `tracked_tickers`. It cannot be: those are two independent counts, and their
+      difference is not the number of un-imported seed tickers. A machine with 5
+      locally-curated tickers that is also missing 5 seed tickers has equal counts, and a
+      subtraction reports **no drift at all** -- a false negative on exactly the condition
+      I-B1 exists to repair. `gather_status` now compares the ticker *sets* and returns
+      `seed_not_imported`. `test_locally_curated_tickers_do_not_mask_missing_seed_tickers`
+      pins it: the count-subtraction implementation passes 12 of the file's 13 tests and
+      fails only that one.
+
+**Not in scope, deferred in this order** (recorded in full at the foot of the brief):
+
+- [ ] **I-C. Market-event vertical bands on stock charts.** lightweight-charts v5 has no
+      native vertical span -- needs a series primitive (the v5 plugin API), an event data
+      model, and a decision about who maintains the event list.
+- [ ] **I-D. Thematic, political and sentiment indicators.** The `indicators` table holds
+      **0 rows**, so this is an acquisition project first. The design conversation
+      recommended making politics *observable rather than scored*: policy-sensitive
+      spreads with a stated basis, anchored to real event dates, rather than a subjective
+      left/right number -- which would be the "number wearing a basis it has not earned"
+      defect this repo keeps finding. For Fear & Greed, CNN publishes no official API;
+      prefer VIX plus breadth, and label any scraped figure as scraped.
+
+      C and D share an overlay layer; building C first means D reuses it.
+
+
 ## Archived
 
 - `guideline/sop/todo4.md` -- all completed tracks through 2026-08-30.

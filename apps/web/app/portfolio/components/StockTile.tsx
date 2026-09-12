@@ -73,8 +73,10 @@ export function StockTile({ stock, news, lastCheckedAt, followed, onToggleFollow
   return (
     // The follow control is a SIBLING of the tile button, not a child: the tile is itself
     // a <button>, and a nested button is invalid HTML that browsers reparent -- there is a
-    // spec test asserting the tile holds only phrasing content. Positioned over the tile's
-    // top-right corner, which the header row leaves free.
+    // spec test asserting the tile holds only phrasing content. It is absolutely positioned
+    // over the tile's top-right corner, which the header row does NOT leave free -- the
+    // DeltaBadge is right-aligned into exactly that corner. The header row reserves the
+    // button's footprint with `pr-6`; see the note there.
     <div className="relative" data-testid={`stock-tile-cell-${stock.ticker}`}>
     <button
       type="button"
@@ -82,10 +84,19 @@ export function StockTile({ stock, news, lastCheckedAt, followed, onToggleFollow
       aria-label={tileLabel(stock)}
       aria-describedby={newsId}
       data-testid={`stock-tile-${stock.ticker}`}
-      className="flex flex-col gap-0 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] text-left transition-colors hover:border-[var(--border-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--state-info)]"
+      // `w-full` because a <button> is fit-content sized: without it the card was only as
+      // wide as its content, so a tile with short headlines stopped well short of its grid
+      // cell (measured: 182px of a 382px cell) while the follow control -- positioned
+      // against the CELL -- sat in the gap to the right of the card, outside it. Card width
+      // must not depend on how long today's headline is.
+      className="flex w-full flex-col gap-0 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] text-left transition-colors hover:border-[var(--border-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--state-info)]"
     >
       <span className="flex flex-col gap-1 p-3">
-        <span className="flex items-baseline justify-between gap-2">
+        {/* `pr-6` reserves the follow button's footprint. The button is `h-7 w-7` (28px) at
+            `right-1` (4px), so it spans 4-32px from the tile's right edge; content starts
+            12px in (`p-3`), so 24px of padding clears it. Without this the DeltaBadge --
+            right-aligned by `justify-between` -- renders underneath the button. */}
+        <span className="flex items-baseline justify-between gap-2 pr-6">
           <span className="font-bold text-[var(--text-primary)]">{stock.ticker}</span>
           <DeltaBadge value={stock.delta?.delta_pct} />
         </span>

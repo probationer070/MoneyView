@@ -108,31 +108,50 @@ export function StockTileGrid({
     [stocks, effectiveFilter, search],
   );
 
+  const followedCount = useMemo(
+    () => stocks.filter((stock) => stock.group_name === followedGroup).length,
+    [stocks, followedGroup],
+  );
+
   return (
     <div className="flex flex-col gap-3 p-4">
-      <div className="sticky top-0 z-10 flex flex-wrap items-center gap-3 bg-[var(--bg-canvas)] pb-2">
-        <select
-          value={effectiveFilter}
-          onChange={(event) => onFilterChange(event.target.value as GridFilter)}
-          aria-label="Grid filter"
-          data-testid="grid-filter"
-          className="rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--bg-surface)] px-2 py-1 text-sm"
+      {/* The count line is a sibling of the controls, not of the grid body, so it survives
+          both scrolling (it is inside the sticky header) and the empty state (EmptyState
+          replaces the body only). */}
+      <div className="sticky top-0 z-10 flex flex-col gap-1 bg-[var(--bg-canvas)] pb-2">
+        <div className="flex flex-wrap items-center gap-3">
+          <select
+            value={effectiveFilter}
+            onChange={(event) => onFilterChange(event.target.value as GridFilter)}
+            aria-label="Grid filter"
+            data-testid="grid-filter"
+            className="rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--bg-surface)] px-2 py-1 text-sm"
+          >
+            {groups.map((group) => (
+              <option key={group} value={group}>
+                {group === "custom" ? "Followed" : group.replace(/_/g, " ")}
+              </option>
+            ))}
+            <option value={ALL_GROUPS}>All</option>
+          </select>
+          <input
+            value={search}
+            onChange={(event) => onSearchChange(event.target.value)}
+            placeholder="Search ticker or name"
+            aria-label="Search stocks"
+            data-testid="grid-search"
+            className="min-w-[12rem] flex-1 rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--bg-surface)] px-2 py-1 text-sm"
+          />
+        </div>
+        {/* Three separate figures, not one: how many the filter and search leave on screen,
+            how many exist at all, and how many are followed. A single combined number
+            cannot say which of the three moved. */}
+        <span
+          data-testid="grid-count"
+          className="text-[length:var(--type-helper)] text-[var(--text-muted)]"
         >
-          {groups.map((group) => (
-            <option key={group} value={group}>
-              {group === "custom" ? "Followed" : group.replace(/_/g, " ")}
-            </option>
-          ))}
-          <option value={ALL_GROUPS}>All</option>
-        </select>
-        <input
-          value={search}
-          onChange={(event) => onSearchChange(event.target.value)}
-          placeholder="Search ticker or name"
-          aria-label="Search stocks"
-          data-testid="grid-search"
-          className="min-w-[12rem] flex-1 rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--bg-surface)] px-2 py-1 text-sm"
-        />
+          {`${visible.length} of ${stocks.length} · ${followedCount} followed`}
+        </span>
       </div>
 
       {visible.length === 0 ? (

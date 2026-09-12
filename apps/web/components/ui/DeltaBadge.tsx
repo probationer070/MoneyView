@@ -15,6 +15,7 @@ export function DeltaBadge({ value, className }: DeltaBadgeProps) {
   // the badge sit inside a <button> or other phrasing-only context. StockTile needs that.
   return (
     <span
+      data-testid="delta-badge"
       className={clsx(
         "inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-sm font-medium",
         isPositive ? "text-[var(--delta-up)] bg-[var(--delta-up)]/10" : "",

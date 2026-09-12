@@ -372,6 +372,117 @@ test("unfollowing removes a stock from the group without deleting it", async ({ 
   await expect(page.getByTestId("stock-tile-KEEP1")).toBeVisible();
 });
 
+/**
+ * Six stocks, two of them followed, so the three figures in the count line are all
+ * distinct once a search narrows the visible set. A fixture where any two of them
+ * coincided would let a count that reported the wrong one still read correctly.
+ */
+function countableWatchlist(): PortfolioStockFixture[] {
+  return [
+    { ...bulkWatchlist(1, 0)[0], ticker: "FOLA", name: "Followed A", group_name: "custom", id: 1 },
+    { ...bulkWatchlist(1, 0)[0], ticker: "FOLB", name: "Followed B", group_name: "custom", id: 2 },
+    ...bulkWatchlist(4, 0).map((stock, index) => ({ ...stock, group_name: "total", id: index + 3 })),
+  ];
+}
+
+test("the count line separates the visible count from the total and the followed", async ({ page }) => {
+  await mockPortfolioPageApi(page, undefined, { watchlist: countableWatchlist() });
+  await gotoGrid(page, "FOLA");
+
+  const count = page.getByTestId("grid-count");
+  await expect(count).toHaveText("2 of 6 · 2 followed");
+
+  await page.getByTestId("grid-search").fill("FOLA");
+  await expect(page.getByTestId("stock-tile-FOLB")).toHaveCount(0);
+
+  // Only the first figure may move. A single combined count would satisfy a weaker
+  // assertion while hiding whether the filter or the total was the thing that changed:
+  // the total is the full set passed in, and the followed count is a property of that
+  // set, so neither is a function of the search.
+  await expect(count).toHaveText("1 of 6 · 2 followed");
+
+  // The line lives in the sticky header, a sibling of the controls rather than of the
+  // grid body, so the empty state must replace the tiles and leave it standing. A count
+  // that vanished exactly when it read 0 would hide the total at the one moment a reader
+  // needs it to explain why the grid is blank.
+  await page.getByTestId("grid-search").fill("NOSUCHTICKER");
+  await expect(page.getByTestId("stock-tile-grid")).toHaveCount(0);
+  await expect(count).toHaveText("0 of 6 · 2 followed");
+});
+
+test("the count line stays on screen when the grid is scrolled", async ({ page }) => {
+  // It is inside the `sticky top-0` header for this reason. A count that scrolls away is
+  // no use while a reader is looking at the tiles it describes, and the requirement is
+  // invisible in the markup once the line is a sibling of the controls rather than of the
+  // body -- moving it out of the sticky container would break this and nothing else.
+  await mockPortfolioPageApi(page, undefined, { watchlist: bulkWatchlist(24, 0.04) });
+  await gotoGrid(page, "TST1");
+
+  const count = page.getByTestId("grid-count");
+  await expect(count).toHaveText("24 of 24 · 0 followed");
+
+  const region = page.getByTestId("portfolio-scroll-region");
+  await region.evaluate((element) => {
+    element.scrollTop = element.scrollHeight;
+  });
+  expect(await region.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+
+  // Still visible, and still inside the scroll region's own viewport rather than pushed
+  // above it -- `toBeVisible` alone is satisfied by an element scrolled out of the region.
+  await expect(count).toBeVisible();
+  const countBox = await count.boundingBox();
+  const regionBox = await region.boundingBox();
+  expect(countBox).not.toBeNull();
+  expect(regionBox).not.toBeNull();
+  expect(countBox!.y).toBeGreaterThanOrEqual(regionBox!.y - 1);
+  expect(countBox!.y + countBox!.height).toBeLessThanOrEqual(regionBox!.y + regionBox!.height + 1);
+});
+
+test("the follow button does not overlap the delta badge", async ({ page }) => {
+  // The tile's comment used to claim the header row left the top-right corner free. It
+  // does not: DeltaBadge is right-aligned by `justify-between` into exactly the corner the
+  // absolutely-positioned follow button occupies. Asserting both are merely visible would
+  // pass with them stacked on top of each other, so this compares their boxes.
+  await mockPortfolioPageApi(page, undefined, { watchlist: groupedWatchlist() });
+  await gotoGrid(page, "KEEP1");
+
+  const badge = page.getByTestId("stock-tile-KEEP1").getByTestId("delta-badge");
+  const button = page.getByTestId("stock-tile-follow-KEEP1");
+  await expect(badge).toBeVisible();
+  await expect(button).toBeVisible();
+
+  // The precondition that makes this comparison mean anything, asserted rather than
+  // assumed. The follow control is positioned against the CELL, so unless the tile fills
+  // the cell the control is not over the card at all and the boxes below cannot overlap
+  // however the padding is set. `w-full` on the tile is what guarantees it; before that,
+  // the card was fit-content sized and this test passed with the `pr-6` removed, because
+  // the mock's short headlines left the tile 182px wide inside a 382px cell.
+  const cellBox = await page.getByTestId("stock-tile-cell-KEEP1").boundingBox();
+  const tileBox = await page.getByTestId("stock-tile-KEEP1").boundingBox();
+  expect(cellBox).not.toBeNull();
+  expect(tileBox).not.toBeNull();
+  expect(
+    tileBox!.x + tileBox!.width,
+    "the tile must fill its grid cell, or the follow control is not over the card at all",
+  ).toBeCloseTo(cellBox!.x + cellBox!.width, 0);
+
+  const badgeBox = await badge.boundingBox();
+  const buttonBox = await button.boundingBox();
+  expect(badgeBox).not.toBeNull();
+  expect(buttonBox).not.toBeNull();
+
+  const intersects =
+    badgeBox!.x < buttonBox!.x + buttonBox!.width &&
+    buttonBox!.x < badgeBox!.x + badgeBox!.width &&
+    badgeBox!.y < buttonBox!.y + buttonBox!.height &&
+    buttonBox!.y < badgeBox!.y + badgeBox!.height;
+
+  expect(
+    intersects,
+    `badge ${JSON.stringify(badgeBox)} overlaps follow button ${JSON.stringify(buttonBox)}`,
+  ).toBe(false);
+});
+
 test("the follow control is not nested inside the tile button", async ({ page }) => {
   // The tile is itself a <button>. A nested button is invalid HTML that browsers reparent,
   // which would move the control out of the tile and break its position.

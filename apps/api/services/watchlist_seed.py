@@ -1,10 +1,13 @@
 import json
+import logging
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Tuple
 
 from apps.api.models.schemas import WatchlistItem, WatchlistResyncResult, WatchlistSyncResult
 from apps.api.services.db import get_db
+
+logger = logging.getLogger(__name__)
 
 WATCHLIST_STATE_DATASET = "watchlist_state"
 WATCHLIST_SYNC_DATASET = "watchlist_sync_status"
@@ -52,6 +55,46 @@ def ensure_watchlist_bootstrapped(json_path: Path) -> None:
                 (item.ticker.upper(), item.name, item.sector, item.group_name, item.weight),
             )
         _mark_watchlist_state(conn, source)
+
+
+def merge_missing_watchlist_items(json_path: Path) -> list[str]:
+    """Insert seed tickers the table does not have. Never delete, never overwrite.
+
+    `ensure_watchlist_bootstrapped` seeds once and then returns early forever, so a ticker
+    added to the seed after a machine was first set up never reaches it. This closes that
+    gap without the destructiveness of `resync_watchlist_from_json`, which DELETEs the
+    table and would discard weights curated on that machine.
+
+    Returns the tickers actually inserted, so the caller can report a self-heal rather than
+    guess one happened.
+    """
+    items = _load_watchlist_from_json(json_path)
+    if not items:
+        return []
+
+    added: list[str] = []
+    with get_db() as conn:
+        for item in _dedupe_watchlist_items(items).values():
+            # OR IGNORE is the whole guarantee: a ticker already present hits the UNIQUE
+            # constraint on `watchlist.ticker` and the row is left exactly as it is, so
+            # weight, group_name and name curated on this machine survive. rowcount then
+            # distinguishes an insert from an ignore without a second query.
+            cursor = conn.execute(
+                """INSERT OR IGNORE INTO watchlist (ticker, name, sector, group_name, weight)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (item.ticker, item.name, item.sector, item.group_name, item.weight),
+            )
+            if cursor.rowcount:
+                added.append(item.ticker)
+
+    if added:
+        logger.info(
+            "watchlist seed merge inserted %d missing ticker(s) from %s: %s",
+            len(added),
+            json_path,
+            ", ".join(added),
+        )
+    return added
 
 
 def mark_watchlist_state(source: str) -> None:
