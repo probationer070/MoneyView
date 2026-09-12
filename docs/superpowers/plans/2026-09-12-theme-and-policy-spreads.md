@@ -32,6 +32,10 @@
   arguments passed before any window filtering) may keep literal dates — but say in a comment
   why it is exempt, so the next reader does not have to re-derive it.
 - **Market Overview's route is `/`**, rendered by `apps/web/app/page.tsx`. Not `/market`.
+- **`MarketDetailModal` (lines 355-665) and `MarketOverviewClient` (from line 666) are
+  separate components.** The Daily/Monthly chart and its toggle live in the modal;
+  `SpreadsSection` lives in the client. Each chart surface owns its own `showEvents` state,
+  matching `OHLCVChartCard`'s existing pattern — no state is lifted across that boundary.
 - **`get_stock_ohlcv` defaults to `table="stocks"`.** Any read of `^GSPC` or `^VIX` must pass
   `table="indices"` (via `MarketDataService._table_for_ticker`) or it silently returns nothing.
 - **Deliberate deviation from the spec, stated:** the query parameter is `window_days: int = 90`, not the spec's `window=90d`. Parsing `"90d"` adds a string parser and a malformed-input failure mode to express an integer. Task 3 Step 8 amends the spec so the two agree.
@@ -1207,124 +1211,135 @@ git commit -m "feat: theme and policy spreads on Market Overview, each naming it
 
 ---
 
-### Task 6: The event-line toggle on Market Overview
+### Task 6: Event-line toggles on Market Overview
 
 **Files:**
-- Modify: `apps/web/components/market/MarketOverviewClient.tsx`
+- Modify: `apps/web/components/market/MarketOverviewClient.tsx` (inside `MarketDetailModal`)
+- Modify: `apps/web/components/market/SpreadsSection.tsx`
+- Create: `apps/web/tests/e2e/helpers/chartInk.ts`
+- Modify: `apps/web/tests/e2e/market-event-lines.spec.ts`
 - Test: `apps/web/tests/e2e/market-spreads.spec.ts` (append)
 
 **Interfaces:**
-- Consumes: `useMarketEvents()` and `TVChart`'s `events` / `showEvents` props, both shipped in I-C1 (PR #34); `<SpreadsSection showEvents />` from Task 5.
-- Produces: `apps/web/tests/e2e/helpers/chartInk.ts` exporting `inkProfile` and `stableInkProfile`, imported by both chart specs.
+- Consumes: `useMarketEvents()` and `TVChart`'s `events` / `showEvents` props, both shipped in I-C1.
+- Produces: `apps/web/tests/e2e/helpers/chartInk.ts` exporting `inkProfile(page, selector)` and `stableInkProfile(page, selector)`, imported by both chart specs.
 
-**Why this task exists:** `MarketOverviewClient` renders `TVChart` directly rather than through `OHLCVChartCard`, so it never received the toggle I-C1 added. It is the surface where the overlay matters most: the 28 Feb 2026 event is loudest on the oil series, which moved 67.02 → 81.01 in five sessions.
+**Read this first — the original version of this task was wrong and was rewritten.** It told you to
+put one toggle beside the Daily/Monthly group and pass its state to `<SpreadsSection />`. Those
+live in **different components**: `MarketDetailModal` spans lines 355-665 and owns the
+Daily/Monthly chart (its toggle is at line ~503), while `MarketOverviewClient` starts at line 666
+and is where `<SpreadsSection />` renders (line ~765). One piece of local state cannot govern both
+without lifting it across that boundary, and the modal's chart is only on screen once a user has
+opened an index — so a test that loads `/` would never see a toggle placed there.
 
-- [ ] **Step 1: Write the failing test**
+**The design, corrected:** each chart surface owns its own toggle, which is already this
+codebase's established pattern — `OHLCVChartCard` holds its own `useState(true)` for exactly this.
 
-Append to `apps/web/tests/e2e/market-spreads.spec.ts`:
+- `MarketDetailModal` gets a toggle beside its Daily/Monthly group, governing its own chart.
+- `SpreadsSection` gets a toggle in its own header, governing its cards, and **drops the
+  `showEvents` prop** Task 5 added. That prop existed only because the original plan intended to
+  pass state across the component boundary; with each surface owning its state, a prop no caller
+  passes is dead API.
+
+**Why this task exists:** `MarketOverviewClient` renders `TVChart` directly rather than through
+`OHLCVChartCard`, so it never received the toggle I-C1 added. This is the surface where the
+overlay matters most: the 28 Feb 2026 event is loudest on the oil series, which moved 67.02 to
+81.01 in five sessions, and oil's daily/monthly chart is the modal one.
+
+- [ ] **Step 1: Extract the canvas helpers both specs need**
+
+`aria-pressed` flipping proves a button has state, **not** that the chart changed. Deleting a
+`showEvents` prop from a `TVChart` call leaves an attribute-only assertion passing, so the tests
+below must measure pixels. `tests/e2e/market-event-lines.spec.ts` already contains exactly the
+right helpers; move them so both specs share one implementation.
+
+Create `apps/web/tests/e2e/helpers/chartInk.ts`, moving `inkProfile` and `stableInkProfile` there
+from `market-event-lines.spec.ts` **unchanged** — including the polling loop in
+`stableInkProfile`, which exists because a previous chart-pixel test in this repository read stale
+coordinates. Parameterise the container selector rather than hardcoding the modal one:
 
 ```typescript
-test("the market overview chart has an event toggle", async ({ page }) => {
+import type { Page } from "@playwright/test";
+
+/** Ink per x column across every canvas inside `selector`, in bitmap pixels. */
+export async function inkProfile(page: Page, selector: string): Promise<{ ink: number[]; height: number }> {
+  return page.evaluate((sel) => {
+    const container = document.querySelector(sel);
+    if (!container) return { ink: [], height: 0 };
+    const canvases = Array.from(container.querySelectorAll("canvas")) as HTMLCanvasElement[];
+    const width = canvases.reduce((max, canvas) => Math.max(max, canvas.width), 0);
+    const height = canvases.reduce((max, canvas) => Math.max(max, canvas.height), 0);
+    const ink = new Array<number>(width).fill(0);
+    for (const canvas of canvases) {
+      const ctx = canvas.getContext("2d");
+      if (!ctx || canvas.width === 0) continue;
+      const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      for (let y = 0; y < canvas.height; y += 1) {
+        for (let x = 0; x < canvas.width; x += 1) {
+          if (image.data[(y * canvas.width + x) * 4 + 3] > 0) ink[x] += 1;
+        }
+      }
+    }
+    return { ink, height };
+  }, selector);
+}
+
+/** Sample only once the canvas has stopped changing, so no reading is mid-animation. */
+export async function stableInkProfile(page: Page, selector: string): Promise<{ ink: number[]; height: number }> {
+  let previous = await inkProfile(page, selector);
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    await page.waitForTimeout(250);
+    const current = await inkProfile(page, selector);
+    if (current.ink.length > 0 && JSON.stringify(current.ink) === JSON.stringify(previous.ink)) {
+      return current;
+    }
+    previous = current;
+  }
+  return previous;
+}
+```
+
+Update `market-event-lines.spec.ts` to import them and pass its own selector
+(`'[role="dialog"] [data-testid="tv-chart"]'`), delete its local copies, and **re-run that whole
+spec** to confirm all four of its tests still pass after the move. A test-helper refactor that
+silently breaks the tests it serves is worse than leaving the duplication alone.
+
+- [ ] **Step 2: Write the failing tests**
+
+Append to `apps/web/tests/e2e/market-spreads.spec.ts` (it already imports `expect`, `test` and
+`Page`, and defines `mockSpreads` and `computed`):
+
+```typescript
+import { stableInkProfile } from "./helpers/chartInk";
+
+const IRAN_EVENT = [{
+  id: "us-iran-strikes-begin-2026-02-28",
+  label: "U.S. strikes on Iran begin",
+  category: "geopolitical",
+  start_date: "2026-02-28",
+  end_date: null,
+  source: "https://example.com/timeline",
+  note: "",
+}];
+
+async function mockEvents(page: Page) {
   await page.route("**/api/v1/market/events**", async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify([{
-        id: "us-iran-strikes-begin-2026-02-28",
-        label: "U.S. strikes on Iran begin",
-        category: "geopolitical",
-        start_date: "2026-02-28", end_date: null,
-        source: "https://example.com/timeline", note: "",
-      }]),
-    });
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(IRAN_EVENT) });
   });
+}
+
+test("the spreads section has its own event toggle that changes what is painted", async ({ page }) => {
+  // The assertion is the ink diff, not aria-pressed: a button whose state flips while the chart
+  // ignores it would satisfy an attribute-only check.
+  await mockEvents(page);
+  await mockSpreads(page, [computed()]);
   await page.goto("/", { waitUntil: "domcontentloaded" });
 
-  const toggle = page.getByTestId("market-events-toggle");
+  const toggle = page.getByTestId("spreads-events-toggle");
   await expect(toggle).toBeVisible({ timeout: 60_000 });
   await expect(toggle).toHaveAttribute("aria-pressed", "true");
 
-  await toggle.click();
-  await expect(toggle).toHaveAttribute("aria-pressed", "false");
-});
-```
-
-- [ ] **Step 2: Run to verify it fails**
-
-Run: `cd apps/web && npx playwright test tests/e2e/market-spreads.spec.ts --reporter=line -g "event toggle"`
-Expected: FAIL — `market-events-toggle` not found.
-
-- [ ] **Step 3: Wire it in**
-
-In `apps/web/components/market/MarketOverviewClient.tsx`:
-
-Add imports and state:
-
-```tsx
-import { useMarketEvents } from "@/lib/useMarketEvents";
-```
-
-```tsx
-  const [showEvents, setShowEvents] = useState(true);
-  const { lines: eventLines } = useMarketEvents();
-```
-
-Add the button inside the existing `<div className="flex flex-wrap gap-2">` that holds the Daily/Monthly group, after that group's closing `</div>`:
-
-```tsx
-                    {eventLines.length > 0 ? (
-                      <button
-                        type="button"
-                        onClick={() => setShowEvents((shown) => !shown)}
-                        aria-pressed={showEvents}
-                        data-testid="market-events-toggle"
-                        className={`rounded-[var(--radius)] border px-3 py-1 text-xs font-semibold ${
-                          showEvents
-                            ? "border-[var(--state-warning)] text-[var(--state-warning)]"
-                            : "border-[var(--border)] text-[var(--text-muted)]"
-                        }`}
-                      >
-                        Market events
-                      </button>
-                    ) : null}
-```
-
-Pass them to the chart, extending the existing `<TVChart ... />` call:
-
-```tsx
-                      events={eventLines}
-                      showEvents={showEvents}
-```
-
-And pass the same state to the spreads section from Task 5, so one toggle governs the whole
-page rather than the main chart and the spread cards disagreeing:
-
-```tsx
-<SpreadsSection showEvents={showEvents} />
-```
-
-- [ ] **Step 4: Run to verify it passes**
-
-Run: `cd apps/web && npx playwright test tests/e2e/market-spreads.spec.ts --reporter=line`
-Expected: PASS, 4 tests.
-
-- [ ] **Step 5: Make the toggle assertion real, not attribute-deep**
-
-`aria-pressed` flipping proves the button has state, **not** that the chart changed. Deleting
-the `showEvents={showEvents}` prop leaves that assertion passing, so as written the test
-cannot catch the most likely wiring mistake.
-
-Extract the canvas helpers already used by `tests/e2e/market-event-lines.spec.ts` into
-`apps/web/tests/e2e/helpers/chartInk.ts`, exporting `inkProfile(page, selector)` and
-`stableInkProfile(page, selector)` unchanged from that file — including the polling loop,
-which exists because a previous chart-pixel test in this repository read stale coordinates.
-Update `market-event-lines.spec.ts` to import them instead of declaring them locally, and
-re-run that whole spec to confirm all four of its tests still pass after the move.
-
-Then append to the toggle test:
-
-```typescript
-  const selector = '[data-testid="tv-chart"]';
+  const selector = '[data-testid="spread-chart-ai"]';
   const withLine = await stableInkProfile(page, selector);
   await toggle.click();
   await expect(toggle).toHaveAttribute("aria-pressed", "false");
@@ -1332,22 +1347,110 @@ Then append to the toggle test:
 
   const changed = withLine.ink.filter((value, index) => value !== (withoutLine.ink[index] ?? 0));
   expect(changed.length, "toggling must change what is painted, not just the button").toBeGreaterThan(0);
+});
+
+test("the index detail chart has its own event toggle that changes what is painted", async ({ page }) => {
+  // This toggle lives inside MarketDetailModal, so the modal must be open for it to exist at all.
+  await mockEvents(page);
+  await mockSpreads(page, [computed()]);
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  await page.getByText("Oil (WTI)").first().click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toBeVisible({ timeout: 60_000 });
+
+  const toggle = dialog.getByTestId("market-events-toggle");
+  await expect(toggle).toBeVisible();
+  await expect(toggle).toHaveAttribute("aria-pressed", "true");
+
+  const selector = '[role="dialog"] [data-testid="tv-chart"]';
+  const withLine = await stableInkProfile(page, selector);
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-pressed", "false");
+  const withoutLine = await stableInkProfile(page, selector);
+
+  const changed = withLine.ink.filter((value, index) => value !== (withoutLine.ink[index] ?? 0));
+  expect(changed.length, "toggling must change what is painted, not just the button").toBeGreaterThan(0);
+});
 ```
 
-- [ ] **Step 6: Mutation-verify**
+If the Oil card's accessible text differs from `Oil (WTI)`, use whatever `market-overview.spec.ts`
+already uses to open a detail modal rather than inventing a selector.
+
+- [ ] **Step 3: Run to verify they fail**
+
+Run: `cd apps/web && npx playwright test tests/e2e/market-spreads.spec.ts --reporter=line`
+Expected: the two new tests FAIL — neither `spreads-events-toggle` nor `market-events-toggle` exists.
+
+- [ ] **Step 4: Give `SpreadsSection` its own toggle and drop the dead prop**
+
+In `apps/web/components/market/SpreadsSection.tsx`: remove the `showEvents` prop from
+`SpreadsSection`'s signature, add `const [showEvents, setShowEvents] = useState(true);` (matching
+`OHLCVChartCard`'s pattern), and render the toggle in the section header beside the `<h3>`, in a
+flex row so heading and control share a line:
+
+```tsx
+        {lines.length > 0 ? (
+          <button
+            type="button"
+            onClick={() => setShowEvents((shown) => !shown)}
+            aria-pressed={showEvents}
+            data-testid="spreads-events-toggle"
+            className={`rounded-[var(--radius-sm)] border px-3 py-1 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--state-info)] ${
+              showEvents
+                ? "border-[var(--state-warning)] text-[var(--state-warning)]"
+                : "border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+            }`}
+          >
+            Market events
+          </button>
+        ) : null}
+```
+
+- [ ] **Step 5: Give `MarketDetailModal` its own toggle**
+
+Inside `MarketDetailModal` (starts line ~355), add `import { useMarketEvents } from "@/lib/useMarketEvents";`
+at the top of the file if absent, then in the component body:
+
+```tsx
+  const [showEvents, setShowEvents] = useState(true);
+  const { lines: eventLines } = useMarketEvents();
+```
+
+Add the button inside the existing `<div className="flex flex-wrap gap-2">` that holds the
+Daily/Monthly group (line ~500), immediately after that group's closing `</div>`, using the same
+markup as Step 4 but with `data-testid="market-events-toggle"`.
+
+Pass both to that component's existing `<TVChart ... />` call (line ~530):
+
+```tsx
+                      events={eventLines}
+                      showEvents={showEvents}
+```
+
+- [ ] **Step 6: Run to verify they pass**
+
+Run: `cd apps/web && npx playwright test tests/e2e/market-spreads.spec.ts tests/e2e/market-event-lines.spec.ts --reporter=line`
+Expected: all pass — the market-spreads tests plus all four market-event-lines tests after the
+helper move.
+
+- [ ] **Step 7: Mutation-verify**
 
 | Mutation | Edit | Must fail |
 |---|---|---|
-| `showEvents` not passed to the chart | delete the `showEvents={showEvents}` prop | `the market overview chart has an event toggle` — at the ink-diff assertion, not the attribute |
-| `events` not passed to the chart | delete the `events={eventLines}` prop | same test — nothing is painted either way, so the diff is empty |
-| `SpreadsSection` not given the toggle value | revert it to `<SpreadsSection />` | add an ink-diff on `[data-testid="spread-chart-ai"]`; without the prop the spread charts keep their lines while the main chart loses them |
+| `showEvents` not passed to the spread charts | delete `showEvents={showEvents}` from `SpreadCard`'s `TVChart` | `the spreads section has its own event toggle...` — at the ink diff, not the attribute |
+| `events` not passed to the spread charts | delete `events={events}` from `SpreadCard`'s `TVChart` | same test — nothing painted either way, so the diff is empty |
+| modal toggle not wired | delete `showEvents={showEvents}` from `MarketDetailModal`'s `TVChart` | `the index detail chart has its own event toggle...` — at its ink diff |
 
-- [ ] **Step 7: Commit**
+Both tests carry an ink diff precisely so these three mutations are catchable. If any mutation
+leaves its test passing, the test is not verified — report that rather than moving on.
 
-```bash
-git add apps/web/components/market/MarketOverviewClient.tsx apps/web/tests/e2e/market-spreads.spec.ts apps/web/tests/e2e/helpers/chartInk.ts apps/web/tests/e2e/market-event-lines.spec.ts
-git commit -m "feat: event-line toggle on the Market Overview chart and its spread cards"
-```
+- [ ] **Step 8: Verify and commit**
+
+Run: `cd apps/web && npx tsc --noEmit && npx eslint components/market lib tests/e2e`
+Expected: exit 0, no errors.
+
+Commit with message: `feat: event-line toggles on the Market Overview chart and its spread cards`
 
 ---
 
