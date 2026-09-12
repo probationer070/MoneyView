@@ -234,7 +234,9 @@ toggle, so the spreads sit beside the indices they are measured against.
 - **Window is fixed at 90 days in v1.** The API takes a `window` parameter because the engine
   is windowed, but no UI control ships for it; one more control on a page that already has a
   daily/monthly toggle needs a reason, and nobody has asked for a second window yet.
-- `^VIX` as its own series in the same section.
+- `^VIX` is registered in `MARKET_INDICES`, which gives it a card in the existing index
+  strip on this page rather than a slot in the spreads grid. It is a market series like
+  Gold and Oil, not a spread, and the spread card would need a second mode to host it.
 - The I-C1 event lines overlay these charts, which is the point: the 28 Feb 2026 line should
   be readable against the defence spread.
 

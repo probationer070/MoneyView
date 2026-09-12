@@ -206,3 +206,13 @@ def test_the_route_accepts_a_window_in_days(monkeypatch):
     payload = response.json()
     assert all(row["requested_window_days"] == 30 for row in payload)
     assert all(row["refused_reason"] is None for row in payload), payload
+
+
+def test_vix_routes_to_the_indices_table_not_stocks():
+    """`_table_for_ticker` decides by membership in MARKET_INDICES. A ^VIX missing from that
+    dict would be written to and read from `stocks`, so it would silently never join the
+    rows the index card list reads."""
+    from apps.api.services.market_data import MARKET_INDICES, MarketDataService
+
+    assert "^VIX" in MARKET_INDICES.values()
+    assert MarketDataService._table_for_ticker("^VIX") == "indices"
