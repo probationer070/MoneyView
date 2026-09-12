@@ -16,6 +16,7 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { ModalShell } from "@/components/ui/ModalShell";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { SparklineCard } from "@/components/data/SparklineCard";
+import { SpreadsSection } from "@/components/market/SpreadsSection";
 
 export interface MarketIndexQuote {
   name: string;
@@ -760,6 +761,8 @@ export function MarketOverviewClient({
           </div>
         )}
       </section>
+
+      <SpreadsSection />
 
       {selectedIndex ? <MarketDetailModal item={selectedIndex} onClose={() => setSelectedIndex(null)} /> : null}
     </>
