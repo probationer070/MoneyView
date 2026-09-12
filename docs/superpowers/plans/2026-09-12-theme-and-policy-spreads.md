@@ -22,6 +22,11 @@
 - **Benchmark is `^GSPC`.** Already cached; still subject to the ordinary daily-bars freshness rule.
 - **No new data class, no new freshness policy, no use of the `indicators` table.**
 - **Every test must be shown to fail on a broken implementation** before it is reported as verified (CLAUDE.md §8). Each task below carries its own mutation step naming the mutation.
+- **No test fixture may be pinned to a fixed calendar date.** `build_spreads` derives its
+  window from a reference date, so fixed bar dates silently age out of it and the assertions
+  still pass on the refused path — a green test asserting nothing. Service tests inject a
+  fixed `today=`; route tests (which cannot inject one) derive their bar dates from
+  `date.today()` and assert `refused_reason is None` to prove the computed path ran.
 - **Market Overview's route is `/`**, rendered by `apps/web/app/page.tsx`. Not `/market`.
 - **`get_stock_ohlcv` defaults to `table="stocks"`.** Any read of `^GSPC` or `^VIX` must pass
   `table="indices"` (via `MarketDataService._table_for_ticker`) or it silently returns nothing.
@@ -317,7 +322,7 @@ git commit -m "feat: relative-strength engine joined on common dates, based on o
 - Produces:
   - `@dataclass(frozen=True) SpreadPair(id: str, label: str, numerator: str, denominator: str)`
   - `SPREAD_PAIRS: tuple[SpreadPair, ...]` — the source of truth for which tickers this feature needs
-  - `build_spreads(window_days: int = DEFAULT_WINDOW_DAYS, *, service: Optional[MarketDataService] = None) -> list[dict]` — one dict per pair, keys exactly matching `MarketSpread` in Task 3
+  - `build_spreads(window_days: int = DEFAULT_WINDOW_DAYS, *, service: Optional[MarketDataService] = None, today: Optional[date] = None) -> list[dict]` — one dict per pair, keys exactly matching `MarketSpread` in Task 3. `today` defaults to `date.today()` and exists so tests can pin the window; production callers omit it.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -641,13 +646,38 @@ git commit -m "feat: spread registry and builder, with refusals stated rather th
 
 - [ ] **Step 1: Write the failing route test**
 
+**Read this before writing the fixtures.** The route calls `build_spreads(window_days)` and
+does NOT forward a reference date — exposing a test hook in the public API would be worse
+than the problem it solves — so these fixtures run against the real `date.today()`. Bars
+pinned to fixed calendar dates therefore age out of the trailing window, every pair takes the
+refused path, and **these assertions still pass**: `basis` is non-empty on a refusal too, and
+`(refused_reason is None) != (series == [])` holds either way. That is a green test asserting
+nothing, and it is the same defect Ruling E fixed in Task 2. So derive the bar dates from
+today, and assert the computed path was actually exercised.
+
 Append to `tests/api/test_market_spreads.py`:
 
 ```python
-def test_the_route_serves_one_row_per_pair_each_with_a_basis(monkeypatch):
-    bars = _bars([("2026-01-05", 100.0), ("2026-01-06", 110.0)])
-    stub = _StubService({pair.numerator: bars for pair in SPREAD_PAIRS}
+def _recent_bars():
+    """Two bars a few days old, so they are inside the trailing window on ANY run date.
+
+    Derived from today rather than pinned: a fixed date silently falls out of the window as
+    time passes, and every assertion below still passes on the refused path, so the test
+    would go green having exercised nothing.
+    """
+    recent = date.today() - timedelta(days=5)
+    earlier = date.today() - timedelta(days=6)
+    return _bars([(earlier.isoformat(), 100.0), (recent.isoformat(), 110.0)])
+
+
+def _stub_every_ticker():
+    bars = _recent_bars()
+    return _StubService({pair.numerator: bars for pair in SPREAD_PAIRS}
                         | {pair.denominator: bars for pair in SPREAD_PAIRS})
+
+
+def test_the_route_serves_one_row_per_pair_each_with_a_basis(monkeypatch):
+    stub = _stub_every_ticker()
     monkeypatch.setattr(spreads_service, "MarketDataService", lambda: stub)
 
     response = TestClient(app).get("/api/v1/market/spreads")
@@ -655,22 +685,28 @@ def test_the_route_serves_one_row_per_pair_each_with_a_basis(monkeypatch):
     assert response.status_code == 200
     payload = response.json()
     assert len(payload) == len(SPREAD_PAIRS)
+    # The precondition that makes the rest meaningful: the computed path ran. Without this,
+    # every assertion below is satisfied by a fully refused response.
+    assert all(row["refused_reason"] is None for row in payload), payload
     for row in payload:
         assert row["basis"].strip()
+        assert row["numerator"] in row["basis"]
         assert (row["refused_reason"] is None) != (row["series"] == [])
 
 
 def test_the_route_accepts_a_window_in_days(monkeypatch):
-    bars = _bars([("2026-01-05", 100.0), ("2026-01-06", 110.0)])
-    stub = _StubService({pair.numerator: bars for pair in SPREAD_PAIRS}
-                        | {pair.denominator: bars for pair in SPREAD_PAIRS})
+    stub = _stub_every_ticker()
     monkeypatch.setattr(spreads_service, "MarketDataService", lambda: stub)
 
     response = TestClient(app).get("/api/v1/market/spreads?window_days=30")
 
     assert response.status_code == 200
-    assert all(row["requested_window_days"] == 30 for row in response.json())
+    payload = response.json()
+    assert all(row["requested_window_days"] == 30 for row in payload)
+    assert all(row["refused_reason"] is None for row in payload), payload
 ```
+
+The test module needs `from datetime import date, timedelta` if Task 2 did not already add it.
 
 - [ ] **Step 2: Run to verify it fails**
 
@@ -745,7 +781,14 @@ def get_market_spreads(
 - [ ] **Step 6: Run to verify it passes**
 
 Run: `python -m pytest tests/api/test_market_spreads.py -q`
-Expected: PASS, 8 tests.
+Expected: PASS — Task 2's tests plus these two.
+
+- [ ] **Step 6b: Mutation-verify the route tests**
+
+| Mutation | Edit | Must fail |
+|---|---|---|
+| fixtures pinned to a stale date | `_recent_bars` returns bars dated `2026-01-05`/`2026-01-06` | both route tests, at the `refused_reason is None` precondition — this is the mutation proving the tests exercise the computed path rather than the refused one |
+| route ignores the query parameter | `return build_spreads()` | `test_the_route_accepts_a_window_in_days` |
 
 - [ ] **Step 7: Mirror the contract into shared types**
 
