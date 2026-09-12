@@ -398,6 +398,46 @@ catch {
     ) -PassThru
 }
 
+function Show-DataStatus {
+    <#
+      Reports whether the local database exists and how populated it is, via
+      scripts/check_data_status.py -- a read-only, stdlib-only script safe to run before
+      or after the backend has started. It never fetches data itself: this repo has no
+      bulk "download everything" command, so the launcher does not invent one -- it
+      surfaces what check_data_status.py can already see (acquisition_state, row counts)
+      and names the existing on-demand and MONEYVIEW_PREWARM_TICKERS mechanisms.
+
+      Never fatal: a status check must not block startup because of an unrelated
+      Python error, so failures are reported and swallowed rather than thrown.
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string]$RepoRoot,
+        [Parameter(Mandatory = $true)]$Runtime
+    )
+
+    Write-Host ""
+    Write-Host "Data status:" -ForegroundColor Cyan
+    $scriptPath = Join-Path $RepoRoot "scripts\check_data_status.py"
+    # `conda run` buffers stdout and re-emits a blank line after every real line unless
+    # told not to capture output -- harmless for the other PythonArgumentList call sites,
+    # which stream or discard rather than display, but this function is the first to
+    # print a captured conda-run result verbatim, so it is the first to show the artifact.
+    $argumentList = if ($Runtime.PythonFilePath -eq "conda") {
+        @("run", "--no-capture-output", "-n", $Runtime.Name, "python", $scriptPath)
+    }
+    else {
+        $Runtime.PythonArgumentList + @($scriptPath)
+    }
+    $result = Invoke-ExternalCapture -FilePath $Runtime.PythonFilePath -ArgumentList $argumentList
+    if ($result.Success) {
+        Write-Host $result.Output
+    }
+    else {
+        Write-Host "  (status check failed to run -- this does not block startup)" -ForegroundColor DarkYellow
+        Write-Host "  $($result.Output)" -ForegroundColor DarkYellow
+    }
+}
+
 function Wait-StartupTarget {
     param(
         [Parameter(Mandatory = $true)]$Process,
@@ -512,6 +552,7 @@ if ($CheckOnly) {
     Write-Host "Check-only mode passed. No processes started." -ForegroundColor Green
     Write-Host "API port candidate: $ApiPort"
     Write-Host "Frontend port: $WebPort"
+    Show-DataStatus -RepoRoot $repoRoot -Runtime $backendRuntime
     exit 0
 }
 
@@ -562,6 +603,7 @@ else {
 }
 Write-Host "API log:        $backendLog"
 Write-Host "next-server log:$frontendLog"
+Show-DataStatus -RepoRoot $repoRoot -Runtime $backendRuntime
 Write-Host ""
 Write-Host "Two PowerShell windows were opened for the API Server and next-server. Close those windows to stop the local runtime."
 
