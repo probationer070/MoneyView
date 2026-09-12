@@ -32,6 +32,7 @@ from apps.api.services.watchlist_seed import (
     ensure_watchlist_bootstrapped,
     get_watchlist_sync_status,
     mark_watchlist_state,
+    merge_missing_watchlist_items,
     resync_watchlist_from_json,
     sync_watchlist_to_json,
 )
@@ -53,6 +54,12 @@ def get_watchlist():
     Seed once from JSON or built-in defaults when local state is empty.
     """
     ensure_watchlist_bootstrapped(_WATCHLIST_JSON)
+    # The bootstrap seeds once and then returns early forever, so a ticker added to the
+    # seed after this machine was first set up would never arrive. Merging here -- on an
+    # endpoint the portfolio page already hits on every load -- is what lets a second
+    # machine self-heal without a startup hook, and additively, so weights curated here
+    # are not replaced by the seed's.
+    merge_missing_watchlist_items(_WATCHLIST_JSON)
 
     with get_db() as conn:
         rows = conn.execute("SELECT * FROM watchlist ORDER BY group_name, ticker").fetchall()

@@ -2944,6 +2944,7 @@ export default function PortfolioPage() {
           filter={gridFilter}
           onFilterChange={setGridFilter}
           followedGroup={FOLLOWED_GROUP}
+          unfollowedGroup={UNFOLLOWED_GROUP}
           onToggleFollow={(stock) => toggleFollow.mutate(stock)}
           search={gridSearch}
           onSearchChange={setGridSearch}

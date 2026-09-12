@@ -158,3 +158,84 @@ def test_render_text_for_a_missing_database_does_not_claim_bulk_download(tmp_pat
     text = render_text(status)
 
     assert "bulk" in text.lower() and "not" in text.lower()
+
+
+def _insert_watchlist(db_path: Path, tickers: list[str]) -> None:
+    conn = sqlite3.connect(str(db_path))
+    for ticker in tickers:
+        conn.execute(
+            "INSERT INTO watchlist (ticker, name, sector, group_name, weight) "
+            "VALUES (?, ?, '', 'custom', 0.0)",
+            (ticker, ticker),
+        )
+    conn.commit()
+    conn.close()
+
+
+def test_render_text_reports_seed_tickers_the_database_has_not_imported(tmp_path):
+    """The drift this line exists for: the seed is committed with tickers a machine that
+    bootstrapped earlier never received, because the bootstrap only ever runs once."""
+    db_path = tmp_path / "drifted.db"
+    _make_empty_db(db_path)
+    _insert_watchlist(db_path, ["AAPL", "MSFT", "NVDA"])
+    seed_path = tmp_path / "seed.json"
+    _make_seed(seed_path, ["AAPL", "MSFT", "NVDA", "SPCX", "CRCL"])
+
+    status = gather_status(db_path=db_path, seed_path=seed_path)
+    text = render_text(status)
+
+    assert status["seed_not_imported"] == 2
+    assert "Watchlist: 3/5 tracked tickers  (2 in seed not yet imported)" in text
+
+
+def test_a_watchlist_holding_every_seed_ticker_reports_no_drift(tmp_path):
+    """Silence is the claim here. A machine that has imported everything must not be told
+    it is behind, and the line must stay in its existing one-line style."""
+    db_path = tmp_path / "aligned.db"
+    _make_empty_db(db_path)
+    _insert_watchlist(db_path, ["AAPL", "MSFT"])
+    seed_path = tmp_path / "seed.json"
+    _make_seed(seed_path, ["AAPL", "MSFT"])
+
+    status = gather_status(db_path=db_path, seed_path=seed_path)
+    text = render_text(status)
+
+    assert status["seed_not_imported"] == 0
+    assert "Watchlist: 2/2 tracked tickers" in text
+    assert "not yet imported" not in text
+
+
+def test_locally_curated_tickers_do_not_mask_missing_seed_tickers(tmp_path):
+    """The reason this is a set difference and not `tracked - watchlist_rows`.
+
+    Three rows against a three-ticker seed: the counts agree exactly, so a subtraction
+    reports no drift at all -- while two of the seed's tickers are in fact missing. That
+    is a false negative on precisely the condition the merge exists to repair, and it is
+    the mutation this test was written to catch."""
+    db_path = tmp_path / "curated.db"
+    _make_empty_db(db_path)
+    _insert_watchlist(db_path, ["AAPL", "LOCAL1", "LOCAL2"])
+    seed_path = tmp_path / "seed.json"
+    _make_seed(seed_path, ["AAPL", "MSFT", "NVDA"])
+
+    status = gather_status(db_path=db_path, seed_path=seed_path)
+
+    assert status["watchlist_rows"] == status["tracked_tickers"] == 3
+    assert status["seed_not_imported"] == 2
+    assert "(2 in seed not yet imported)" in render_text(status)
+
+
+def test_a_database_with_no_readable_seed_omits_the_comparison(tmp_path):
+    """No seed is not the same fact as a seed with nothing missing, so the line must omit
+    the comparison rather than report a drift of zero against a file it never read."""
+    db_path = tmp_path / "no-seed.db"
+    _make_empty_db(db_path)
+    _insert_watchlist(db_path, ["AAPL"])
+
+    status = gather_status(db_path=db_path, seed_path=tmp_path / "absent.json")
+    text = render_text(status)
+
+    assert status["tracked_tickers"] is None
+    assert status["seed_not_imported"] is None
+    assert "Watchlist: 1 tracked tickers" in text
+    assert "not yet imported" not in text

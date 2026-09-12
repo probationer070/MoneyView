@@ -1,7 +1,15 @@
 # Portfolio count, tile button, and watchlist drift — implementation brief
 
-> **Status:** designed and approved 2026-09-12, not yet implemented. Handoff to a fresh
-> session.
+> **Status:** IMPLEMENTED 2026-09-12 on `worktree-portfolio-count-watchlist-drift`, branched
+> from `renewal` @ `1af14ad`. A1, A2, B1 and B3 all shipped; see `guideline/sop/todo.md`
+> Track I, and ERROR-LOG.md 2026-09-12 for the two defect records.
+>
+> **One deviation, in B3.** This brief calls the drift line "a rendering change only"
+> because `gather_status` already returns both numbers. It is not: `watchlist_rows` and
+> `tracked_tickers` are independent counts whose difference is not the number of
+> un-imported seed tickers, and on a machine with locally-curated tickers the subtraction
+> reports no drift in exactly the case B1 exists to repair. `gather_status` now compares the
+> ticker sets. See the B3 section and Track I.
 >
 > **Branch from `renewal`.** An earlier revision of this brief said to start from
 > `add-data-status-check`, because item B3 edits `scripts/check_data_status.py` and that

@@ -57,11 +57,14 @@ def _count(conn: sqlite3.Connection, table: str, *, distinct: str | None = None)
     return conn.execute(f"SELECT COUNT({column}) FROM {table}").fetchone()[0]
 
 
-def _tracked_ticker_count(seed_path: Path | None = None) -> int | None:
+def _seed_tickers(seed_path: Path | None = None) -> set[str] | None:
     """Tickers this repo is configured to track, independent of what is cached.
 
     Read directly from the JSON seed rather than through `watchlist_seed.py`'s loader,
     which can also write a regenerated file -- a status check must never mutate anything.
+
+    `None` means "no readable seed", which is a different fact from an empty seed and is
+    what lets the caller omit the comparison rather than report a drift of zero.
     """
     path = seed_path if seed_path is not None else STOCK_TARGETS_JSON
     if not path.exists():
@@ -76,7 +79,17 @@ def _tracked_ticker_count(seed_path: Path | None = None) -> int | None:
             ticker = item.get("ticker")
             if ticker:
                 tickers.add(str(ticker).upper())
-    return len(tickers)
+    return tickers
+
+
+def _watchlist_tickers(conn: sqlite3.Connection) -> set[str]:
+    if not _table_exists(conn, "watchlist"):
+        return set()
+    return {
+        str(row[0]).upper()
+        for row in conn.execute("SELECT ticker FROM watchlist").fetchall()
+        if row[0]
+    }
 
 
 def gather_status(db_path: Path | None = None, seed_path: Path | None = None) -> dict:
@@ -101,7 +114,16 @@ def gather_status(db_path: Path | None = None, seed_path: Path | None = None) ->
         integrity = conn.execute("PRAGMA quick_check").fetchone()[0]
 
         watchlist_rows = _count(conn, "watchlist")
-        tracked = _tracked_ticker_count(seed_path)
+        seed_tickers = _seed_tickers(seed_path)
+        tracked = len(seed_tickers) if seed_tickers is not None else None
+
+        # The count difference is NOT this number. A machine holding locally-curated
+        # tickers can match the seed's row count while still missing several of its
+        # tickers, and subtracting the two counts would report no drift at all in exactly
+        # the case the merge exists to repair. Compare the sets.
+        seed_not_imported = (
+            len(seed_tickers - _watchlist_tickers(conn)) if seed_tickers is not None else None
+        )
 
         priced_tickers = _count(conn, "stocks", distinct="ticker")
         statement_tickers = _count(conn, "corporate_statements", distinct="ticker")
@@ -141,6 +163,7 @@ def gather_status(db_path: Path | None = None, seed_path: Path | None = None) ->
             "integrity": integrity,
             "watchlist_rows": watchlist_rows,
             "tracked_tickers": tracked,
+            "seed_not_imported": seed_not_imported,
             "priced_tickers": priced_tickers,
             "statement_tickers": statement_tickers,
             "news_rows": news_rows,
@@ -179,7 +202,12 @@ def render_text(status: dict) -> str:
     lines.append(f"Database:  {verdict_label}  ({status['db_path']}, {size_mb:.1f} MB, integrity={status['integrity']})")
     tracked = status["tracked_tickers"]
     tracked_str = f"/{tracked}" if tracked is not None else ""
-    lines.append(f"Watchlist: {status['watchlist_rows']}{tracked_str} tracked tickers")
+    # Only when the seed holds tickers this database does not: a machine that has already
+    # imported everything says nothing extra, and the GET /portfolio/watchlist merge clears
+    # this on the next portfolio page load.
+    not_imported = status.get("seed_not_imported") or 0
+    drift = f"  ({not_imported} in seed not yet imported)" if not_imported else ""
+    lines.append(f"Watchlist: {status['watchlist_rows']}{tracked_str} tracked tickers{drift}")
     lines.append(
         f"Cached:    {status['priced_tickers']} tickers priced, "
         f"{status['statement_tickers']} with statements, "

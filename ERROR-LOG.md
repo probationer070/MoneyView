@@ -26,6 +26,135 @@ reveal that; only checking the code did.
 
 An entry states what was true when it was written. Nothing updates it on its own.
 
+## 2026-09-12: the grid filter offered "total", which meant everything except the total
+
+Date: 2026-09-12
+Command: none -- reported from use: "having both ALL and total is confusing because their
+meaning isn't clear".
+Failure: worse than unclear, the label named the opposite of its effect. The filter rendered
+each group's stored name verbatim, so the option read "total" while filtering to
+`group_name = 'total'` -- which is `UNFOLLOWED_GROUP`, the group unfollowing moves a stock
+INTO. On the live database that is 136 of 143 rows: choosing "total" showed everything the
+reader does NOT follow, next to an "All" option that did show all 143. Two adjacent options
+whose labels were near-synonyms, one of them inverted.
+Root cause: the dropdown mapped a storage identifier straight onto a user-facing label --
+`group.replace(/_/g, " ")` with a single special case for `custom`. `custom` had been given
+a real label ("Followed") precisely because its stored name says nothing to a reader; `total`
+needed the same treatment and did not get it. A group name is an internal key, and rendering
+one raw makes the UI inherit whatever the seed file happened to call it.
+Fix: `groupLabel(group, followedGroup, unfollowedGroup)` in `StockTileGrid.tsx` -- "Followed",
+"Not followed", "All". The stored group names are untouched: renaming `total` would mean
+migrating `stock_targets.json` and every stored row, and `UNFOLLOWED_GROUP` is the contract
+the follow/unfollow round-trip depends on. The label was the defect. The hardcoded `"custom"`
+in the grid went with it, so the followed group is now named in one place and passed in.
+Files changed: `apps/web/app/portfolio/components/StockTileGrid.tsx`,
+`apps/web/app/portfolio/page.tsx`, `apps/web/tests/e2e/portfolio-tile-grid.spec.ts`.
+Prevention: the test asserts the WHOLE option list -- `["Followed", "Not followed", "All"]` --
+rather than the presence of "Not followed". The defect was two options that failed to
+distinguish themselves from each other, and a presence check cannot see that; only the full
+list can. Mutation-verified by restoring the bare-group-name label. **A stored identifier is
+not a label. If one group needed a hand-written name because its key reads as nonsense to a
+user, every group did.**
+
+## 2026-09-12: the watchlist bootstrap runs once, so a second machine never receives a new ticker
+
+Date: 2026-09-12
+Command: none -- reported from use. `SPCX` and the rest of the `custom` group were missing
+from the watchlist on a second PC, and that machine's watchlist read as "insufficient".
+Failure: silent, and it reads as a missing file rather than a stale table. All 8 `custom`
+tickers (CRCL, IAUM, MP, NRG, SCCO, SLV, SNDK, SPCX) *are* committed in
+`apps/api/services/webscrap/stock_targets.json`, so the seed was never absent. The second
+machine had simply bootstrapped its watchlist before those tickers were added to the seed,
+and nothing ever reconsidered the table afterwards. The separate "insufficient" symptom is
+a different branch: with no JSON reachable, `load_watchlist_seed` falls back to the 5
+`DEFAULT_WATCHLIST_ITEMS`.
+Root cause: `ensure_watchlist_bootstrapped` is one-shot by construction --
+`SELECT COUNT(*) FROM watchlist` returns early on any row at all, and `_has_watchlist_state`
+returns early once `dataset_metadata` holds `watchlist_state`. Both guards exist to stop the
+seed from overwriting user curation, and both are correct for that purpose. Neither leaves
+any path by which a ticker added to the seed later can arrive. The gap is structural, not a
+regression: it opens the first time a machine is set up and never closes.
+Fix: `merge_missing_watchlist_items` (`apps/api/services/watchlist_seed.py`) inserts seed
+tickers the table lacks with `INSERT OR IGNORE`, which the `UNIQUE` constraint on
+`watchlist.ticker` turns into a genuine no-op for rows that already exist -- so `weight`,
+`group_name` and `name` curated on that machine are never touched, and a ticker present in
+the DB but absent from the seed is never deleted. It is called from
+`GET /portfolio/watchlist`, which the portfolio page already hits on every load, so the
+other machine self-heals without any startup wiring. `resync_watchlist_from_json` is left
+exactly as it was: it remains the deliberate full replace, and it `DELETE`s the table, which
+is precisely why it could not be used for this.
+Files changed: `apps/api/services/watchlist_seed.py`, `apps/api/routes/portfolio.py`,
+`tests/api/test_watchlist_merge.py`.
+Prevention: the additive merge was chosen over auto-resync specifically so machine-local
+curation survives, and that property is the one under test. Mutation-verified: an
+`INSERT OR REPLACE` merge fails `test_an_existing_rows_weight_and_group_survive_the_merge`
+at the stored-row assertion (`('Apple Inc.', ..., 'custom', 0.1)` against
+`('My Apple', ..., 'manual', 0.9)`), and a merge that `DELETE`s first fails
+`test_a_db_ticker_absent_from_the_seed_is_never_deleted`. More generally: **a guard that
+prevents overwriting is not the same as a guard that prevents arriving, and a one-shot
+bootstrap silently becomes a permanent ceiling on what a machine can ever learn.**
+
+## 2026-09-12: a tile comment asserted the header row was free, and the delta badge was under the button
+
+Date: 2026-09-12
+Command: none -- visible in the portfolio grid.
+Failure: silent and visual. `StockTile`'s follow button is absolutely positioned at
+`right-1 top-1` (`h-7 w-7`), and `DeltaBadge` is right-aligned into the same corner by the
+header row's `justify-between`. The badge rendered underneath the button.
+Root cause: not the positioning -- the code's own comment. It stated the button was
+"positioned over the tile's top-right corner, which the header row leaves free", and the
+header row does not leave it free. The claim was false when written and is the reason the
+overlap was not obvious to anyone reading the file: the comment answered the question a
+reader would otherwise have asked.
+Fix: two parts, and the second was found while verifying the first. `w-full` on the tile
+button, because a `<button>` is fit-content sized and the card was therefore only as wide as
+its content -- so the follow control, positioned against the CELL, sat in the gap to the
+right of a short card rather than on it (measured: a 182px card in a 382px cell, the control
+168px clear of it). Card width must not depend on how long today's headline is. Then `pr-6`
+(24px) on the header row reserves the button's footprint -- the button spans 4-32px from the
+tile's right edge and content starts 12px in (`p-3`), so 24px clears it with margin. The comment now says what is actually true and points at the padding that makes it
+so. The button stays absolute and stays a DOM *sibling* of the tile: the tile is itself a
+`<button>`, a nested button is invalid HTML that browsers reparent, and
+`tests/e2e/portfolio-tile-grid.spec.ts` asserts the tile holds only phrasing content.
+Files changed: `apps/web/app/portfolio/components/StockTile.tsx` (`w-full` and `pr-6`),
+`apps/web/components/ui/DeltaBadge.tsx` (a `data-testid` so the badge is addressable),
+`apps/web/tests/e2e/portfolio-tile-grid.spec.ts`.
+Prevention: the new test compares the two elements' `boundingBox()` rectangles for
+intersection. Mutation-verified by removing the `pr-6`. A test asserting both elements are
+merely *visible* passes with them stacked exactly on top of each other, which is the state
+being fixed -- so for an overlap defect, visibility is not an assertion about anything.
+**A comment that explains why a layout is safe is a claim, and it can be the thing that is
+wrong.**
+
+The first version of that test was itself worthless, and only the mutation run revealed it.
+It passed with the `pr-6` removed. Measured cause: the tile is a `<button>`, so it is
+**fit-content sized** and fills its grid cell only when its content demands the full width.
+Against the mock's short headlines ("AAPL headline one") the tile is 182px inside a 382px
+cell, so the follow control -- positioned against the CELL, not the tile -- sits 168px to
+the *right* of the card, nowhere near the badge. Boxes measured on the pristine source:
+`cellRight=734 tileRight=537 badgeRight=500 buttonLeft=702`. With one realistically long
+headline the tile fills its cell (`tileRight=734`), the badge lands at 697 against a button
+at 702, and removing the `pr-6` then moves the badge to 721 and the test fails as it should.
+The test now carries that long headline and **asserts the precondition** -- that the tile
+fills its cell -- so a future fixture whose content is too short fails loudly instead of
+going quiet. Two lessons: an overlap test needs the geometry that makes the overlap
+reachable, not merely both elements on the page; and a mocked fixture's content dimensions
+are part of what it is asserting, even when the assertion never mentions them.
+
+That fit-content sizing was itself the second defect, and it is **fixed** here rather than
+noted: a tile whose content was short did not fill its cell, so its `+` rendered outside the
+card in the gap between cards, and the overlap this entry is about was reachable only once a
+headline happened to be long enough. `w-full` pins every card to its cell and makes the
+control's placement independent of content length. It was filed as noted-not-fixed on first
+writing because it changes the width of every tile in the grid; that was raised and the
+change was asked for.
+
+The overlap test's precondition assertion is now what protects it: with `w-full` removed the
+test fails with "the tile must fill its grid cell, or the follow control is not over the card
+at all" (expected 734, received 534). So the two fixes guard each other -- remove the padding
+and the boxes intersect; remove the width and the precondition fires. Neither can be dropped
+quietly.
+
 ## 2026-09-12: the snapshot backup's microsecond stamp does not make its name unique
 
 Date: 2026-09-12
