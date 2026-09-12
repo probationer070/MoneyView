@@ -3,9 +3,10 @@
 > **Status:** designed and approved 2026-09-12, not yet implemented. Handoff to a fresh
 > session.
 >
-> **Start from branch `add-data-status-check`**, not `renewal`. Item B3 edits
-> `scripts/check_data_status.py`, which exists only on that branch (commit `3c38924`,
-> unmerged). Starting from `renewal` will not find it.
+> **Branch from `renewal`.** An earlier revision of this brief said to start from
+> `add-data-status-check`, because item B3 edits `scripts/check_data_status.py` and that
+> file existed only there. PR #31 merged that branch into `renewal` on 2026-09-12
+> (`110dae4`), so the file is now on `renewal` and the old instruction is wrong.
 
 This is **bounded** work with an approved design — no spec document, no ceremony beyond
 what is written here. It is the first of four sub-projects decomposed from one request;
