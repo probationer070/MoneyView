@@ -3,16 +3,29 @@ Market routes — Tab 2: Market Overview.
 
 GET /api/market/indices          → all index summary cards
 GET /api/market/index/{ticker}   → single index OHLCV history
+GET /api/market/events           → dated events drawn as vertical lines on price charts
 """
 
 from fastapi import APIRouter, Query
 from typing import List
 
-from apps.api.models.schemas import IndexQuote, MarketIndexDetail, StockOHLCV
+from apps.api.models.schemas import IndexQuote, MarketEvent, MarketIndexDetail, StockOHLCV
 from apps.api.services.market_data import MarketDataService
+from apps.api.services.market_events import load_market_events
 
 router = APIRouter()
 _svc   = MarketDataService()
+
+
+@router.get("/events", response_model=List[MarketEvent])
+def get_market_events():
+    """Return the committed market events charts draw as vertical lines.
+
+    Read from a committed JSON file on every request rather than a table: the events are
+    asserted facts that travel with the repository, so every machine has the same ones after
+    a pull and there is nothing to seed or merge.
+    """
+    return load_market_events()
 
 
 @router.get("/indices", response_model=List[IndexQuote])
