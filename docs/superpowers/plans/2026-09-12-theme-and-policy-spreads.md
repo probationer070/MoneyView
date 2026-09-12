@@ -22,11 +22,15 @@
 - **Benchmark is `^GSPC`.** Already cached; still subject to the ordinary daily-bars freshness rule.
 - **No new data class, no new freshness policy, no use of the `indicators` table.**
 - **Every test must be shown to fail on a broken implementation** before it is reported as verified (CLAUDE.md §8). Each task below carries its own mutation step naming the mutation.
-- **No test fixture may be pinned to a fixed calendar date.** `build_spreads` derives its
-  window from a reference date, so fixed bar dates silently age out of it and the assertions
-  still pass on the refused path — a green test asserting nothing. Service tests inject a
-  fixed `today=`; route tests (which cannot inject one) derive their bar dates from
-  `date.today()` and assert `refused_reason is None` to prove the computed path ran.
+- **No test fixture whose assertions depend on window placement may be pinned to a fixed
+  calendar date.** `build_spreads` derives its window from a reference date, so fixed bar
+  dates silently age out of it and the assertions still pass on the refused path — a green
+  test asserting nothing. Service tests inject a fixed `today=`; route tests (which cannot
+  inject one) derive their bar dates from `date.today()` and assert `refused_reason is None`
+  to prove the computed path ran. A fixture whose assertions hold regardless of window
+  placement (e.g. one proving two series share no dates at all, or one asserting on the
+  arguments passed before any window filtering) may keep literal dates — but say in a comment
+  why it is exempt, so the next reader does not have to re-derive it.
 - **Market Overview's route is `/`**, rendered by `apps/web/app/page.tsx`. Not `/market`.
 - **`get_stock_ohlcv` defaults to `table="stocks"`.** Any read of `^GSPC` or `^VIX` must pass
   `table="indices"` (via `MarketDataService._table_for_ticker`) or it silently returns nothing.
