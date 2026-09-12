@@ -49,10 +49,19 @@ def build_spreads(
     window_days: int = DEFAULT_WINDOW_DAYS,
     *,
     service: Optional[MarketDataService] = None,
+    today: Optional[date] = None,
 ) -> List[dict]:
-    """One row per pair, each either a series with a basis or a stated refusal."""
+    """One row per pair, each either a series with a basis or a stated refusal.
+
+    The window is relative to a reference date, not baked into any fixture: production
+    callers omit `today` and get the real calendar date. Tests inject a fixed one, because a
+    fixture pinned to real calendar dates silently falls outside the trailing window as time
+    passes -- which already made one test pass while asserting nothing (its rows all took the
+    refused path, and `_refused()`'s basis also happens to name both tickers).
+    """
     market = service if service is not None else MarketDataService()
-    window_start = (date.today() - timedelta(days=window_days)).isoformat()
+    reference = today if today is not None else date.today()
+    window_start = (reference - timedelta(days=window_days)).isoformat()
 
     rows: List[dict] = []
     for pair in SPREAD_PAIRS:
