@@ -161,3 +161,44 @@ def test_the_guard_points_at_this_repository_s_real_database():
     """
     expected = Path(__file__).resolve().parents[2] / "data" / "processed" / "moneyview.db"
     assert reset_module._REAL_DB == expected.resolve(), reset_module._REAL_DB
+
+
+class _FrozenClock:
+    """A clock that never advances, standing in for one that advances too coarsely.
+
+    Not an artificial scenario. `time.get_clock_info("time").resolution` is 0.015625 s
+    on Windows, and 20,000 consecutive `datetime.now()` calls on the developer machine
+    this was written on returned 79 distinct values -- roughly 253 calls per tick. So
+    two backups taken in the same tick genuinely receive the same `%f` microseconds.
+    Freezing the clock makes that collision happen every run instead of 9 times in 30,
+    which is the difference between a test that proves the fix and one that merely
+    tends to.
+    """
+
+    @staticmethod
+    def now(tz=None):
+        from datetime import datetime as _real
+
+        return _real(2026, 9, 12, 10, 53, 55, 985842, tzinfo=tz)
+
+
+def test_two_backups_in_the_same_clock_tick_do_not_overwrite_each_other(monkeypatch, tmp_path):
+    """The 2026-09-04 loss, reachable again through a gap the microsecond stamp left open.
+
+    `_back_up`'s docstring says the timestamp "carries microseconds because a fixed name
+    silently clobbers the previous backup". On a clock whose granularity is coarser than a
+    microsecond, that is exactly what the name still is -- fixed -- and the second backup
+    overwrote the first, destroying the copy taken before the incident being investigated.
+    """
+    monkeypatch.setattr(reset_module, "datetime", _FrozenClock)
+
+    source = tmp_path / "moneyview.db"
+    sqlite3.connect(str(source)).close()
+
+    first = reset_module._back_up(source)
+    second = reset_module._back_up(source)
+
+    assert first != second, "both backups claimed the same filename"
+    assert first.exists() and second.exists()
+    backups = sorted(tmp_path.glob("moneyview.db.pre-snapshot-reset-*"))
+    assert len(backups) == 2, backups

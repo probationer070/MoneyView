@@ -169,10 +169,13 @@ that `gather_status` already returns both numbers, so this is a rendering change
   call it unverified. The two named explicitly here are the `pr-6` removal (A2) and a merge
   that overwrites instead of ignoring (B1 test 2).
 
-**Known flake, not yours:** `tests/scripts/test_reset_snapshots.py::test_a_second_reset_does_not_overwrite_the_first_backup`
-fails intermittently — a microsecond-timestamp collision in backup naming. It failed once
-and passed on a re-run of the byte-identical tree. If it fails, re-run before investigating;
-it is unrelated to this work and out of scope.
+**Previously listed here as a known flake — it was not one, and it is now fixed.**
+`tests/scripts/test_reset_snapshots.py::test_a_second_reset_does_not_overwrite_the_first_backup`
+was failing intermittently, and this brief told you to re-run rather than investigate. That
+was wrong. The assertion had never actually been read: `_back_up` gave two backups the same
+filename and the second overwrote the first, in 9 of 30 measured trials — the 2026-09-04
+forensic loss reopened, because `%f` inherits a Windows clock granularity of 15.6 ms. Fixed
+on branch `fix-backup-name-collision` (ERROR-LOG.md 2026-09-12). Nothing to work around.
 
 ---
 

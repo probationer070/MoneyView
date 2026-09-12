@@ -26,6 +26,36 @@ reveal that; only checking the code did.
 
 An entry states what was true when it was written. Nothing updates it on its own.
 
+## 2026-09-12: the snapshot backup's microsecond stamp does not make its name unique
+
+Date: 2026-09-12
+Command: `python -m pytest tests/scripts/test_reset_snapshots.py::test_a_second_reset_does_not_overwrite_the_first_backup`,
+which failed once in a full-suite run and passed in isolation and on a re-run.
+Failure: silent, and it is the 2026-09-04 loss reopened. `scripts/reset_snapshots.py::_back_up`
+named each backup with `datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S_%f")`. Two backups
+taken close together received the SAME name, and the second overwrote the first -- so a caller
+was told a copy had been taken while the copy it was meant to protect was destroyed.
+Root cause: `%f` is only as fine as the clock behind it. On Windows
+`time.get_clock_info("time").resolution` is 0.015625 s, so microseconds in that format string
+are decorative. Measured on the developer machine: 20,000 consecutive `datetime.now()` calls
+returned **79 distinct values** (~253 calls per tick, minimum observed tick 309 us), and two
+back-to-back `_back_up` calls collided in **9 of 30 trials**. The 2026-09-04 entry records the
+same loss and this timestamp was the fix for it; the fix did not hold on this platform.
+Fix: `_claim_backup_path` reserves the name with `os.open(..., O_CREAT | O_EXCL)` and appends
+`-1`, `-2` ... until the claim succeeds, so uniqueness is enforced rather than hoped for.
+O_EXCL rather than an `exists()` check, because check-then-create leaves a window for a
+concurrent claim. The empty file it leaves is handed to sqlite3, which initialises it in place
+-- verified that both backups still come back 233 KB with their rows and `quick_check = ok`.
+Files changed: `scripts/reset_snapshots.py`, `tests/scripts/test_reset_snapshots.py`.
+Prevention: the existing test caught this, but only about 30% of the time, and an intermittent
+failure reads as a flake -- it was in fact dismissed as one twice in the session that found it,
+and recorded as "unrelated, out of scope" in a commit message, a PR body and a handoff brief
+before anyone read the assertion. The new test freezes the clock, so the collision is certain
+rather than likely. **A test that fails intermittently is evidence of a real defect until its
+assertion has actually been read; "flaky" is a conclusion, not a description.** More generally:
+a uniqueness guarantee derived from a clock inherits that clock's granularity, which is a
+platform property and not a property of the format string.
+
 ## 2026-09-10: terminal growth is clamped to WACC, so terminal value is 96% of most valuations
 
 Date: 2026-09-10
