@@ -5,6 +5,13 @@ import { createChart, IChartApi, ISeriesApi, ColorType, CrosshairMode, Candlesti
 import { TVCandle, TVVolume, sanitizeTooltip } from "@/lib/transformers";
 import { emitClientPerformanceEvent } from "@/lib/api";
 import { resolveCssColor } from "@/lib/cssColor";
+import { EventLinesPrimitive, type EventLineSpec } from "@/components/charts/primitives/EventLinesPrimitive";
+
+// Event line appearance. Semi-transparent so the price is readable through it, and wide
+// enough to be prominent at any zoom.
+const EVENT_LINE_ALPHA = 0.55;
+const EVENT_LINE_WIDTH = 2;
+const EVENT_LINE_FALLBACK_COLOR = "#E8A028";
 
 export interface TVLineSeries {
     title: string;
@@ -14,6 +21,12 @@ export interface TVLineSeries {
 
 interface TVChartProps {
     data: TVCandle[];
+    /** Dated market events drawn as vertical lines behind the price. */
+    events?: EventLineSpec[];
+    /** Whether those lines are drawn. The caller owns the toggle. */
+    showEvents?: boolean;
+    /** Event line colour; resolved through resolveCssColor like every other canvas colour. */
+    eventColor?: string;
     volumeData?: TVVolume[];
     lineSeriesData?: TVLineSeries[];
     height?: number;
@@ -25,6 +38,9 @@ interface TVChartProps {
 
 const TVChart: React.FC<TVChartProps> = ({
     data,
+    events = [],
+    showEvents = true,
+    eventColor = "var(--state-warning)",
     volumeData,
     lineSeriesData = [],
     height = 500,
@@ -42,11 +58,13 @@ const TVChart: React.FC<TVChartProps> = ({
     const resolvedUp = useMemo(() => resolveCssColor(upColor ?? colorAccent, "#E54545"), [upColor, colorAccent]);
     const resolvedDown = useMemo(() => resolveCssColor(downColor, "#4589E5"), [downColor]);
     const resolvedAccent = useMemo(() => resolveCssColor(colorAccent, "#E54545"), [colorAccent]);
+    const resolvedEvent = useMemo(() => resolveCssColor(eventColor, EVENT_LINE_FALLBACK_COLOR), [eventColor]);
 
     const chartContainerRef = useRef<HTMLDivElement>(null);
     const chartRef = useRef<IChartApi | null>(null);
     const candleSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
     const volumeSeriesRef = useRef<ISeriesApi<"Histogram"> | null>(null);
+    const eventLinesRef = useRef<EventLinesPrimitive | null>(null);
     const lineSeriesRefs = useRef<Array<ISeriesApi<"Line">>>([]);
     const safeTickerName = sanitizeTooltip(tickerName);
     const mountedAtRef = useRef<number | null>(null);
@@ -111,6 +129,26 @@ const TVChart: React.FC<TVChartProps> = ({
             chartRef.current = chart;
             candleSeriesRef.current = candleSeries;
             volumeSeriesRef.current = volumeSeries;
+
+            // Attached to the PANE, not to a series: the line then spans the full plot
+            // height including the volume overlay, and survives a series being replaced.
+            //
+            // Constructed EMPTY and invisible on purpose. The event props are deliberately
+            // absent from this effect's dependency list -- rebuilding the chart whenever the
+            // toggle flipped would throw away the reader's zoom and pan -- and reading them
+            // here anyway would be a stale closure over the first render's values. The effect
+            // below owns them, and runs immediately after this one on mount, so the real
+            // events land before the first paint the user sees.
+            const eventLines = new EventLinesPrimitive({
+                events: [],
+                barTimes: [],
+                color: EVENT_LINE_FALLBACK_COLOR,
+                alpha: EVENT_LINE_ALPHA,
+                lineWidth: EVENT_LINE_WIDTH,
+                visible: false,
+            });
+            chart.panes()[0].attachPrimitive(eventLines);
+            eventLinesRef.current = eventLines;
             lineSeriesRefs.current = lineSeriesData.map((series) =>
                 chart.addSeries(LineSeries, {
                     color: series.color,
@@ -159,6 +197,7 @@ const TVChart: React.FC<TVChartProps> = ({
             return () => {
                 resizeObserver.disconnect();
                 cancelAnimationFrame(animationFrameId);
+                eventLinesRef.current = null;
                 chart.remove();
             };
         } catch (error) {
@@ -221,9 +260,21 @@ const TVChart: React.FC<TVChartProps> = ({
         }
     }, [data, lineSeriesData, pointCount, tickerName, volumeData, volumePointCount]); // Only recompute on strict data matrix swaps
 
+    // Event lines are pushed into the live primitive rather than handled in the init effect,
+    // so toggling them repaints without rebuilding the chart (and without losing zoom/pan).
+    useEffect(() => {
+        eventLinesRef.current?.update({
+            events,
+            barTimes: data.map((bar) => bar.time),
+            color: resolvedEvent,
+            visible: showEvents,
+        });
+    }, [events, showEvents, data, resolvedEvent]);
+
     return (
         <div 
-            ref={chartContainerRef} 
+            ref={chartContainerRef}
+            data-testid="tv-chart"
             aria-label={`${safeTickerName} price chart`}
             className="w-full relative rounded-lg border border-[var(--border)] bg-[var(--text-primary)]"
             style={{ minHeight: height }}
@@ -235,5 +286,12 @@ const TVChart: React.FC<TVChartProps> = ({
 // or unrelated DCF Slider parameter toggles (Step B).
 export default React.memo(TVChart, (prevProps, nextProps) => {
     // Only repaint if raw OHLCV fundamentally shifts.
-    return prevProps.data === nextProps.data && prevProps.volumeData === nextProps.volumeData && prevProps.lineSeriesData === nextProps.lineSeriesData;
+    // showEvents and events MUST be compared here. This comparator blocks re-renders on
+    // everything it does not name, so omitting them makes the event toggle a no-op that
+    // looks wired up correctly from the call site.
+    return prevProps.data === nextProps.data
+        && prevProps.volumeData === nextProps.volumeData
+        && prevProps.lineSeriesData === nextProps.lineSeriesData
+        && prevProps.showEvents === nextProps.showEvents
+        && prevProps.events === nextProps.events;
 });

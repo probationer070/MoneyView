@@ -181,3 +181,25 @@ class MarketIndexDetail(BaseModel):
     volume_summary: MarketVolumeSummary
     data_quality: MarketDataQuality
     market_regime: Optional[MarketRegimeContext] = None
+
+
+class MarketEvent(BaseModel):
+    """A dated market-moving event, drawn as a vertical line on price charts.
+
+    Asserted, not derived: these are claims about the world (a policy decision, a military
+    operation) rather than computations over bars, so `source` is required and non-empty.
+    That field is the whole reason a reader can trust the line -- see
+    `apps.api.services.market_events`.
+
+    `end_date` is None for a point-in-time event, which is the common case. A range is left
+    representable because an operation or a shock has a duration, and the renderer treats a
+    null end as a single line rather than a zero-width band.
+    """
+
+    id: str
+    label: str
+    category: str
+    start_date: str
+    end_date: Optional[str] = None
+    source: str
+    note: str = ""

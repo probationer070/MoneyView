@@ -1052,9 +1052,53 @@ Branched from `renewal` @ `1af14ad`; baseline 1265 Python tests.
 
 **Not in scope, deferred in this order** (recorded in full at the foot of the brief):
 
-- [ ] **I-C. Market-event vertical bands on stock charts.** lightweight-charts v5 has no
-      native vertical span -- needs a series primitive (the v5 plugin API), an event data
-      model, and a decision about who maintains the event list.
+- [x] **I-C1. One market-event vertical line, toggleable.** SHIPPED 2026-09-12. Scope was
+      narrowed by the user from the full event system to a single line: the start of U.S.
+      military operations against Iran, on the daily and monthly stock charts, with an
+      on/off toggle.
+
+      **Provenance.** Asserted events live in one committed file,
+      `apps/api/services/market_events.json`, read at request time by
+      `market_events.py` and served by `GET /market/events`. No DB table and no seeding, on
+      purpose: that is the drift class of ERROR-LOG 2026-09-12, where a one-shot bootstrap
+      could never pick up a later addition. `load_market_events` REFUSES an event with an
+      empty `source` or a non-ISO date, loudly -- a skipped event is a line that silently
+      does not appear, which reads as "nothing happened then".
+
+      The date is `2026-02-28`, Operation Epic Fury (ordered 27 Feb 20:38 UTC, first strikes
+      28 Feb 06:35 UTC), sourced in the file. Deliberately NOT supplied from model memory:
+      the knowledge cutoff predates the event and a wrong date would corrupt every read
+      taken off the chart while looking entirely plausible. The later 7 May and 7 Jul waves
+      are not listed; only the start was asked for, and each costs one JSON entry.
+
+      **The weekend problem, which is the whole implementation.** 28 Feb 2026 was a
+      Saturday: `^GSPC` runs Fri 27 Feb straight to Mon 2 Mar, so `timeToCoordinate` returns
+      null and the naive implementation draws nothing at all for exactly the events most
+      worth marking. `eventCoordinate` uses an exact bar when one exists and otherwise places
+      the line midway between the bracketing bars -- inside the closed-market gap, which is
+      what happened -- and draws nothing for an event outside the loaded range rather than
+      clamping it to an edge, where it would assert a date the chart is not showing.
+
+      **Verified by eight mutations**, all caught: snapping to a neighbouring bar (collapses
+      `friday < saturday < monday` to `281.5 == 281.5`), exact-match-only resolution, the
+      `visible` flag ignored, half-height drawing, out-of-range clamping, and -- twice, before
+      and after a refactor -- `showEvents` dropped from `TVChart`'s `React.memo` comparator,
+      which makes the toggle a silent no-op while looking correctly wired at the call site.
+      The tests measure the canvas by diffing a per-column ink profile with the line toggled
+      off, and poll until the profile is stable, because a previous chart-pixel test in this
+      repo read stale coordinates.
+
+      Not wired: `MarketOverviewClient` (the index/oil charts) uses `TVChart` directly rather
+      than through `OHLCVChartCard`, so it has no toggle yet. Worth doing -- the oil series is
+      where this event is most visible, moving 67.02 to 81.01 in five sessions.
+
+- [ ] **I-C2. The rest of the event system, if wanted.** Derived events computed from the
+      cached `indices` rows with a stated basis (S&P low, oil shock over a threshold,
+      drawdown), event categories with per-category toggles, and `GET /market/events`
+      filtering. Designed but not built; the brief at
+      `docs/superpowers/plans/2026-09-12-portfolio-count-and-watchlist-drift.md` and this
+      session's design hold the detail. **The count difference is not the drift number** --
+      the same trap as I-B3.
 - [ ] **I-D. Thematic, political and sentiment indicators.** The `indicators` table holds
       **0 rows**, so this is an acquisition project first. The design conversation
       recommended making politics *observable rather than scored*: policy-sensitive

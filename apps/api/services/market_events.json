@@ -1,0 +1,13 @@
+{
+  "events": [
+    {
+      "id": "us-iran-strikes-begin-2026-02-28",
+      "label": "U.S. strikes on Iran begin",
+      "category": "geopolitical",
+      "start_date": "2026-02-28",
+      "end_date": null,
+      "source": "https://en.wikipedia.org/wiki/July_2026_United_States_strikes_against_Iran",
+      "note": "Operation Epic Fury. Ordered 27 Feb 2026 20:38 UTC; first coordinated airstrikes announced 28 Feb 2026 06:35 UTC. 28 Feb 2026 was a Saturday, so there is no trading bar on the date itself -- the first session after the event was Mon 2 Mar 2026, when WTI moved 67.02 to 71.23 and went on to 81.01 by 5 Mar. Later U.S. strike waves on 7 May and 7 Jul 2026 are deliberately not listed here; only the start was asked for."
+    }
+  ]
+}

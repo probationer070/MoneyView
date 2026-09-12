@@ -1,5 +1,6 @@
 export * from "./generated/portfolio";
 export * from "./corporate";
+export * from "./market";
 export * from "./portfolio";
 
 // Explicit re-export, and it must stay explicit.
