@@ -22,6 +22,9 @@
 - **Benchmark is `^GSPC`.** Already cached; still subject to the ordinary daily-bars freshness rule.
 - **No new data class, no new freshness policy, no use of the `indicators` table.**
 - **Every test must be shown to fail on a broken implementation** before it is reported as verified (CLAUDE.md §8). Each task below carries its own mutation step naming the mutation.
+- **Market Overview's route is `/`**, rendered by `apps/web/app/page.tsx`. Not `/market`.
+- **`get_stock_ohlcv` defaults to `table="stocks"`.** Any read of `^GSPC` or `^VIX` must pass
+  `table="indices"` (via `MarketDataService._table_for_ticker`) or it silently returns nothing.
 - **Deliberate deviation from the spec, stated:** the query parameter is `window_days: int = 90`, not the spec's `window=90d`. Parsing `"90d"` adds a string parser and a malformed-input failure mode to express an integer. Task 3 Step 8 amends the spec so the two agree.
 
 ---
@@ -350,7 +353,7 @@ class _StubService:
         self.requested = []
 
     def get_stock_ohlcv(self, ticker, period="5y", table=None):
-        self.requested.append(ticker)
+        self.requested.append((ticker, table))
         return self.bars_by_ticker.get(ticker, [])
 
 
@@ -433,6 +436,20 @@ def test_the_reported_window_is_the_one_actually_used():
     assert row["actual_window_end"] == "2026-09-11"
     assert row["actual_window_days"] == 88
     assert row["observations"] == 2
+
+
+def test_the_benchmark_is_read_from_the_indices_table_not_stocks():
+    """`get_stock_ohlcv` defaults to table="stocks" and ^GSPC lives in `indices`. Getting
+    this wrong returns no bars, so the pair refuses with "no overlapping history" -- a
+    message that blames the data and hides the bug. Pinned on the argument, not the result."""
+    bars = _bars([("2026-01-05", 100.0), ("2026-01-06", 110.0)])
+    stub = _StubService({pair.numerator: bars for pair in SPREAD_PAIRS}
+                        | {pair.denominator: bars for pair in SPREAD_PAIRS})
+
+    build_spreads(window_days=90, service=stub)
+
+    assert ("^GSPC", "indices") in stub.requested
+    assert ("BOTZ", "stocks") in stub.requested
 
 
 def test_the_registry_names_every_ticker_the_feature_needs():
@@ -572,8 +589,14 @@ def _closes_by_date(market, ticker: str) -> Dict[str, float]:
 
     A missing close is dropped rather than coerced: an unsettled bar stored as 0.0 once made
     136 of 139 tickers read as a -100% collapse (ERROR-LOG 2026-09-09).
+
+    The table MUST be routed explicitly. `get_stock_ohlcv` defaults to `table="stocks"`, and
+    `^GSPC` -- the benchmark for four of the five pairs -- lives in `indices`. Reading it from
+    `stocks` returns nothing, so every one of those pairs would refuse with "no overlapping
+    history", a reason pointing at the data rather than at this line.
     """
-    bars = market.get_stock_ohlcv(ticker, period="5y")
+    table = MarketDataService._table_for_ticker(ticker)
+    bars = market.get_stock_ohlcv(ticker, period="5y", table=table)
     return {bar.date: float(bar.close) for bar in bars if bar.close is not None}
 ```
 
@@ -591,6 +614,7 @@ Expected: PASS, 6 tests.
 | silent refusal | in `_refused`, set `"refused_reason": None` | `test_a_refusal_never_arrives_as_an_empty_series_with_no_reason` |
 | requested window echoed as actual | `"actual_window_days": window_days` | `test_the_reported_window_is_the_one_actually_used` |
 | a ticker dropped from the registry | delete the `defence` entry | `test_the_registry_names_every_ticker_the_feature_needs` |
+| table routing removed | `bars = market.get_stock_ohlcv(ticker, period="5y")` | `test_the_benchmark_is_read_from_the_indices_table_not_stocks` |
 
 - [ ] **Step 6: Commit**
 
@@ -886,6 +910,8 @@ import { expect, test, type Page } from "@playwright/test";
  * produced it, and that a refused pair is visibly refused rather than absent or flat.
  */
 
+// Market Overview renders from `apps/web/app/page.tsx`, so its route is `/` and not
+// `/market`. Every existing spec for this page (market-overview.spec.ts) uses `/` too.
 async function mockSpreads(page: Page, rows: unknown[]) {
   await page.route("**/api/v1/market/spreads**", async (route) => {
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(rows) });
@@ -920,7 +946,7 @@ test("every spread card names the tickers and window that produced it", async ({
   // A figure labelled "AI +3.4%" asserts a fact about AI. "BOTZ vs ^GSPC" lets a reader
   // reject the proxy instead.
   await mockSpreads(page, [computed()]);
-  await page.goto("/market", { waitUntil: "domcontentloaded" });
+  await page.goto("/", { waitUntil: "domcontentloaded" });
 
   const card = page.getByTestId("spread-card-ai");
   await expect(card).toBeVisible({ timeout: 60_000 });
@@ -933,7 +959,7 @@ test("a refused pair keeps its card and shows the reason", async ({ page }) => {
   // Not an empty chart, not a line flat at 100 -- which is indistinguishable from a real
   // result showing no relative movement -- and never hidden.
   await mockSpreads(page, [computed(), refused()]);
-  await page.goto("/market", { waitUntil: "domcontentloaded" });
+  await page.goto("/", { waitUntil: "domcontentloaded" });
 
   const card = page.getByTestId("spread-card-defence");
   await expect(card).toBeVisible({ timeout: 60_000 });
@@ -946,7 +972,7 @@ test("a refused pair keeps its card and shows the reason", async ({ page }) => {
 
 test("a computed pair renders its latest value and its chart", async ({ page }) => {
   await mockSpreads(page, [computed()]);
-  await page.goto("/market", { waitUntil: "domcontentloaded" });
+  await page.goto("/", { waitUntil: "domcontentloaded" });
 
   const card = page.getByTestId("spread-card-ai");
   await expect(card).toContainText("103.4");
@@ -1165,7 +1191,7 @@ test("the market overview chart has an event toggle", async ({ page }) => {
       }]),
     });
   });
-  await page.goto("/market", { waitUntil: "domcontentloaded" });
+  await page.goto("/", { waitUntil: "domcontentloaded" });
 
   const toggle = page.getByTestId("market-events-toggle");
   await expect(toggle).toBeVisible({ timeout: 60_000 });
