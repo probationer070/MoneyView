@@ -24,6 +24,12 @@ from packages.core_finance.relative_strength import DEFAULT_WINDOW_DAYS, relativ
 
 logger = logging.getLogger(__name__)
 
+# Bound separately from the name above: the route test swaps `MarketDataService` itself for a
+# stub factory so `build_spreads` picks up a fixture service, but the table-routing rule below
+# is not part of what gets stubbed -- `_table_for_ticker` must still resolve against the real
+# class even when the module-level `MarketDataService` name has been monkeypatched.
+_TABLE_ROUTER = MarketDataService
+
 
 @dataclass(frozen=True)
 class SpreadPair:
@@ -130,6 +136,6 @@ def _closes_by_date(market, ticker: str) -> Dict[str, float]:
     `stocks` returns nothing, so every one of those pairs would refuse with "no overlapping
     history", a reason pointing at the data rather than at this line.
     """
-    table = MarketDataService._table_for_ticker(ticker)
+    table = _TABLE_ROUTER._table_for_ticker(ticker)
     bars = market.get_stock_ohlcv(ticker, period="5y", table=table)
     return {bar.date: float(bar.close) for bar in bars if bar.close is not None}

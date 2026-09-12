@@ -158,3 +158,51 @@ def test_the_window_is_relative_to_the_injected_reference_date():
 
     assert next(r for r in inside if r["id"] == pair.id)["latest"] == pytest.approx(150.0)
     assert next(r for r in outside if r["id"] == pair.id)["refused_reason"]
+
+
+def _recent_bars():
+    """Two bars a few days old, so they are inside the trailing window on ANY run date.
+
+    Derived from today rather than pinned: a fixed date silently falls out of the window as
+    time passes, and every assertion below still passes on the refused path, so the test
+    would go green having exercised nothing.
+    """
+    recent = date.today() - timedelta(days=5)
+    earlier = date.today() - timedelta(days=6)
+    return _bars([(earlier.isoformat(), 100.0), (recent.isoformat(), 110.0)])
+
+
+def _stub_every_ticker():
+    bars = _recent_bars()
+    return _StubService({pair.numerator: bars for pair in SPREAD_PAIRS}
+                        | {pair.denominator: bars for pair in SPREAD_PAIRS})
+
+
+def test_the_route_serves_one_row_per_pair_each_with_a_basis(monkeypatch):
+    stub = _stub_every_ticker()
+    monkeypatch.setattr(spreads_service, "MarketDataService", lambda: stub)
+
+    response = TestClient(app).get("/api/v1/market/spreads")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert len(payload) == len(SPREAD_PAIRS)
+    # The precondition that makes the rest meaningful: the computed path ran. Without this,
+    # every assertion below is satisfied by a fully refused response.
+    assert all(row["refused_reason"] is None for row in payload), payload
+    for row in payload:
+        assert row["basis"].strip()
+        assert row["numerator"] in row["basis"]
+        assert (row["refused_reason"] is None) != (row["series"] == [])
+
+
+def test_the_route_accepts_a_window_in_days(monkeypatch):
+    stub = _stub_every_ticker()
+    monkeypatch.setattr(spreads_service, "MarketDataService", lambda: stub)
+
+    response = TestClient(app).get("/api/v1/market/spreads?window_days=30")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert all(row["requested_window_days"] == 30 for row in payload)
+    assert all(row["refused_reason"] is None for row in payload), payload

@@ -184,7 +184,7 @@ tables that already hold price series.
 
 ## API
 
-`GET /market/spreads?window=90d` returns one entry per pair:
+`GET /market/spreads?window_days=90` returns one entry per pair:
 
 ```
 { "id": "ai", "label": "AI",
@@ -206,6 +206,10 @@ parameter's `90d` form and the date-based acquisition layer. `actual_window_star
 is the inclusive calendar span between them — so a young ETF reports 88 where 90 was asked
 for, rather than silently presenting a shorter history as if it were comparable to a full
 one. The ambiguous `window_days` field is gone.
+
+The parameter is `window_days` as an integer rather than the `90d` string this spec
+originally specified: parsing `"90d"` adds a string parser and a malformed-input failure
+mode in order to express an integer. The value is still calendar days.
 
 `observations` is the count of emitted points, which is **not** derivable from the calendar
 span (62 sessions inside 88 calendar days). Without it a reader cannot tell a thin series

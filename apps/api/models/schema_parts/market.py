@@ -203,3 +203,41 @@ class MarketEvent(BaseModel):
     end_date: Optional[str] = None
     source: str
     note: str = ""
+
+
+class MarketSpreadPoint(BaseModel):
+    """One date on a relative-strength series."""
+
+    date: str
+    value: float
+
+
+class MarketSpread(BaseModel):
+    """Relative strength of one ticker against another, indexed to 100 at the base date.
+
+    `basis` is required and names both tickers and the base date, because "relative
+    strength" alone does not distinguish a ratio of returns from a difference of returns
+    from a regression beta.
+
+    A pair that cannot be computed carries `refused_reason` and an empty `series`. The two
+    are mutually exclusive on purpose: an empty series with no reason would read as a flat
+    result rather than an absence.
+
+    Window figures are CALENDAR days. `observations` is the session count, which is not
+    derivable from the calendar span -- 62 sessions inside 88 days -- and without it a thin
+    series is indistinguishable from a dense one.
+    """
+
+    id: str
+    label: str
+    numerator: str
+    denominator: str
+    requested_window_days: int
+    actual_window_start: Optional[str] = None
+    actual_window_end: Optional[str] = None
+    actual_window_days: Optional[int] = None
+    observations: int = 0
+    basis: str
+    series: List[MarketSpreadPoint] = Field(default_factory=list)
+    latest: Optional[float] = None
+    refused_reason: Optional[str] = None
