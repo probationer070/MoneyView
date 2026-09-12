@@ -43,6 +43,26 @@ export function resolveGroupFilter(stocks: PortfolioStock[], filter: GridFilter)
   return resolveFromGroups(availableGroups(stocks), filter);
 }
 
+/**
+ * What a group is called on screen.
+ *
+ * The bare group name was actively misleading for one of them: `total` is the group
+ * unfollowing moves a stock INTO (page.tsx's `UNFOLLOWED_GROUP`), so an option reading
+ * "total" filtered to the stocks the reader does NOT follow -- 136 of 143 on the live
+ * database -- while sitting next to an `All` option that really did mean all 143. It named
+ * the opposite of what it did.
+ *
+ * The group names in the data are left alone: renaming `total` would mean migrating
+ * stock_targets.json and every stored row, and `UNFOLLOWED_GROUP` is the contract the
+ * follow/unfollow round-trip depends on. The label was the defect, so the label is what
+ * changed.
+ */
+export function groupLabel(group: string, followedGroup: string, unfollowedGroup: string): string {
+  if (group === followedGroup) return "Followed";
+  if (group === unfollowedGroup) return "Not followed";
+  return group.replace(/_/g, " ");
+}
+
 /** The same rule against a group list the caller already has, so it is not rebuilt. */
 function resolveFromGroups(groups: string[], filter: GridFilter): GridFilter {
   if (filter === ALL_GROUPS) return ALL_GROUPS;
@@ -92,12 +112,14 @@ interface StockTileGridProps {
   onOpenStock: (stock: PortfolioStock) => void;
   /** The group a tile's follow control moves a stock into and out of. */
   followedGroup: string;
+  /** The group unfollowing moves a stock into. Named here only to label it; see groupLabel. */
+  unfollowedGroup: string;
   onToggleFollow: (stock: PortfolioStock) => void;
 }
 
 export function StockTileGrid({
   stocks, newsByTicker, filter, onFilterChange, search, onSearchChange, onOpenStock,
-  followedGroup, onToggleFollow,
+  followedGroup, unfollowedGroup, onToggleFollow,
 }: StockTileGridProps) {
   const groups = useMemo(() => availableGroups(stocks), [stocks]);
 
@@ -129,7 +151,7 @@ export function StockTileGrid({
           >
             {groups.map((group) => (
               <option key={group} value={group}>
-                {group === "custom" ? "Followed" : group.replace(/_/g, " ")}
+                {groupLabel(group, followedGroup, unfollowedGroup)}
               </option>
             ))}
             <option value={ALL_GROUPS}>All</option>

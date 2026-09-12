@@ -1020,6 +1020,14 @@ Branched from `renewal` @ `1af14ad`; baseline 1265 Python tests.
       the boxes intersect, remove the width and the precondition fires with
       "the tile must fill its grid cell". Both mutations verified.
 
+- [x] **I-A4. The filter names groups by what they do.** "Followed" / "Not followed" /
+      "All", via `groupLabel`. Reported after A1 shipped: the dropdown rendered each stored
+      group name raw, so `total` -- which is `UNFOLLOWED_GROUP` -- read as "total" while
+      filtering to the 136 rows the reader does not follow, beside an "All" that meant all
+      143. Stored group names untouched; see ERROR-LOG 2026-09-12. The test asserts the whole
+      option list, because the defect was two options that did not distinguish themselves.
+      Mutation-verified against the bare-name label.
+
 - [x] **I-B1. Additive watchlist merge, so a second machine picks up new tickers.**
       `merge_missing_watchlist_items` in `watchlist_seed.py`, called from
       `GET /portfolio/watchlist`. `INSERT OR IGNORE` only: never deletes, never overwrites

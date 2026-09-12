@@ -410,6 +410,19 @@ test("the count line separates the visible count from the total and the followed
   await expect(count).toHaveText("0 of 6 · 2 followed");
 });
 
+test("the filter names the groups by what they do, not by their stored group name", async ({ page }) => {
+  // `total` is the group unfollowing moves a stock into, so an option reading "total"
+  // filtered to the stocks the reader does NOT follow while sitting beside an "All" option
+  // that really did mean everything -- 136 of 143 against 143 on the live database. The
+  // whole option set is asserted, not just the presence of "Not followed": the defect was
+  // two options whose labels did not distinguish them, and only the full list shows that.
+  await mockPortfolioPageApi(page, undefined, { watchlist: groupedWatchlist() });
+  await gotoGrid(page, "KEEP1");
+
+  const options = await page.getByTestId("grid-filter").locator("option").allTextContents();
+  expect(options).toEqual(["Followed", "Not followed", "All"]);
+});
+
 test("the count line stays on screen when the grid is scrolled", async ({ page }) => {
   // It is inside the `sticky top-0` header for this reason. A count that scrolls away is
   // no use while a reader is looking at the tiles it describes, and the requirement is

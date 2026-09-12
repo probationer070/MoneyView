@@ -26,6 +26,36 @@ reveal that; only checking the code did.
 
 An entry states what was true when it was written. Nothing updates it on its own.
 
+## 2026-09-12: the grid filter offered "total", which meant everything except the total
+
+Date: 2026-09-12
+Command: none -- reported from use: "having both ALL and total is confusing because their
+meaning isn't clear".
+Failure: worse than unclear, the label named the opposite of its effect. The filter rendered
+each group's stored name verbatim, so the option read "total" while filtering to
+`group_name = 'total'` -- which is `UNFOLLOWED_GROUP`, the group unfollowing moves a stock
+INTO. On the live database that is 136 of 143 rows: choosing "total" showed everything the
+reader does NOT follow, next to an "All" option that did show all 143. Two adjacent options
+whose labels were near-synonyms, one of them inverted.
+Root cause: the dropdown mapped a storage identifier straight onto a user-facing label --
+`group.replace(/_/g, " ")` with a single special case for `custom`. `custom` had been given
+a real label ("Followed") precisely because its stored name says nothing to a reader; `total`
+needed the same treatment and did not get it. A group name is an internal key, and rendering
+one raw makes the UI inherit whatever the seed file happened to call it.
+Fix: `groupLabel(group, followedGroup, unfollowedGroup)` in `StockTileGrid.tsx` -- "Followed",
+"Not followed", "All". The stored group names are untouched: renaming `total` would mean
+migrating `stock_targets.json` and every stored row, and `UNFOLLOWED_GROUP` is the contract
+the follow/unfollow round-trip depends on. The label was the defect. The hardcoded `"custom"`
+in the grid went with it, so the followed group is now named in one place and passed in.
+Files changed: `apps/web/app/portfolio/components/StockTileGrid.tsx`,
+`apps/web/app/portfolio/page.tsx`, `apps/web/tests/e2e/portfolio-tile-grid.spec.ts`.
+Prevention: the test asserts the WHOLE option list -- `["Followed", "Not followed", "All"]` --
+rather than the presence of "Not followed". The defect was two options that failed to
+distinguish themselves from each other, and a presence check cannot see that; only the full
+list can. Mutation-verified by restoring the bare-group-name label. **A stored identifier is
+not a label. If one group needed a hand-written name because its key reads as nonsense to a
+user, every group did.**
+
 ## 2026-09-12: the watchlist bootstrap runs once, so a second machine never receives a new ticker
 
 Date: 2026-09-12
