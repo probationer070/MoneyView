@@ -3,6 +3,10 @@ import { mockMarketPageApi } from "./helpers/marketPageMock";
 
 test("market overview renders deterministically from shared dashboard fixtures", async ({ page }) => {
   await mockMarketPageApi(page);
+  // Registered before navigation so the request cannot slip past it.
+  const spreadsResponse = page.waitForResponse((response) =>
+    new URL(response.url()).pathname === "/api/v1/market/spreads",
+  );
   await page.goto("/", { waitUntil: "domcontentloaded" });
 
   await expect(page.getByRole("heading", { name: "Market Overview", exact: true })).toBeVisible({ timeout: 60_000 });
@@ -12,10 +16,11 @@ test("market overview renders deterministically from shared dashboard fixtures",
   await expect(page.getByText("Nasdaq")).toBeVisible();
   await expect(page.getByText("^IXIC", { exact: true })).toBeVisible();
 
-  // Under the shared fixtures the spreads endpoint returns no rows, so the section must be absent.
-  // This pins that the page is fully fixture-driven: if the helper stopped mocking spreads, real
-  // cards would render here and this would fail.
-  await expect(page.getByTestId("spreads-section")).toHaveCount(0);
+  // Asserts on the response, not the DOM. A "section is absent" check passes vacuously if it
+  // runs before the spreads fetch resolves, which it can: the fetch lands seconds after the index
+  // cards. The response body proves the page received the fixture's empty list rather than live
+  // rows, with no timing in between.
+  expect(await (await spreadsResponse).json()).toEqual([]);
 });
 
 test("market overview opens and closes detail from both card and table views", async ({ page }) => {
