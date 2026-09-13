@@ -17,6 +17,7 @@ import { ModalShell } from "@/components/ui/ModalShell";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { SparklineCard } from "@/components/data/SparklineCard";
 import { SpreadsSection } from "@/components/market/SpreadsSection";
+import { useMarketEvents } from "@/lib/useMarketEvents";
 
 export interface MarketIndexQuote {
   name: string;
@@ -356,6 +357,8 @@ function MarketDetailModal({ item, onClose }: { item: MarketIndexQuote; onClose:
   const trendSummary = useMemo(() => summarizeTrend(item.sparkline), [item.sparkline]);
   const chartColor = (item.delta.delta_pct ?? 0) >= 0 ? "var(--delta-up)" : "var(--delta-down)";
   const [chartTimeframe, setChartTimeframe] = useState<"daily" | "monthly">("daily");
+  const [showEvents, setShowEvents] = useState(true);
+  const { lines: eventLines } = useMarketEvents();
   const detailQuery = useQuery<MarketIndexDetail>({
     queryKey: ["market-index-detail", item.ticker],
     queryFn: () =>
@@ -513,6 +516,21 @@ function MarketDetailModal({ item, onClose }: { item: MarketIndexQuote; onClose:
                         Monthly
                       </button>
                     </div>
+                    {eventLines.length > 0 ? (
+                      <button
+                        type="button"
+                        onClick={() => setShowEvents((shown) => !shown)}
+                        aria-pressed={showEvents}
+                        data-testid="market-events-toggle"
+                        className={`rounded-[var(--radius-sm)] border px-3 py-1 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--state-info)] ${
+                          showEvents
+                            ? "border-[var(--state-warning)] text-[var(--state-warning)]"
+                            : "border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                        }`}
+                      >
+                        Market events
+                      </button>
+                    ) : null}
                   </div>
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2 text-xs text-[var(--text-muted)]">
@@ -535,6 +553,8 @@ function MarketDetailModal({ item, onClose }: { item: MarketIndexQuote; onClose:
                       height={420}
                       tickerName={`${item.name} ${chartTimeframe}`}
                       colorAccent={chartColor}
+                      events={eventLines}
+                      showEvents={showEvents}
                     />
                   ) : (
                     <div className="flex h-[420px] items-center justify-center text-sm text-[var(--text-muted)]">

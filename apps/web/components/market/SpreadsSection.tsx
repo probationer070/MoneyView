@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import TVChart from "@/components/charts/TVChart";
 import type { EventLineSpec } from "@/components/charts/primitives/EventLinesPrimitive";
 import { useMarketEvents } from "@/lib/useMarketEvents";
@@ -78,9 +78,10 @@ function SpreadCard({
   );
 }
 
-export function SpreadsSection({ showEvents = true }: { showEvents?: boolean }) {
+export function SpreadsSection() {
   const { spreads } = useMarketSpreads();
   const { lines } = useMarketEvents();
+  const [showEvents, setShowEvents] = useState(true);
   if (spreads.length === 0) return null;
 
   return (
@@ -88,7 +89,24 @@ export function SpreadsSection({ showEvents = true }: { showEvents?: boolean }) 
       data-testid="spreads-section"
       className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4"
     >
-      <h3 className="text-lg font-bold text-[var(--text-primary)]">Themes and policy spreads</h3>
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <h3 className="text-lg font-bold text-[var(--text-primary)]">Themes and policy spreads</h3>
+        {lines.length > 0 ? (
+          <button
+            type="button"
+            onClick={() => setShowEvents((shown) => !shown)}
+            aria-pressed={showEvents}
+            data-testid="spreads-events-toggle"
+            className={`rounded-[var(--radius-sm)] border px-3 py-1 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--state-info)] ${
+              showEvents
+                ? "border-[var(--state-warning)] text-[var(--state-warning)]"
+                : "border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+            }`}
+          >
+            Market events
+          </button>
+        ) : null}
+      </div>
       <p className="mt-1 text-sm text-[var(--text-muted)]">
         Relative strength against a benchmark, indexed to 100 at the start of each window. Each
         card names the tickers it is computed from — the theme names are proxies, not measurements.
