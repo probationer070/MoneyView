@@ -8,9 +8,14 @@ test("market overview renders deterministically from shared dashboard fixtures",
   await expect(page.getByRole("heading", { name: "Market Overview", exact: true })).toBeVisible({ timeout: 60_000 });
   await expect(page.getByText("Real-time snapshot of major global and domestic indices")).toBeVisible();
   await expect(page.getByText("S&P 500")).toBeVisible();
-  await expect(page.getByText("^GSPC")).toBeVisible();
+  await expect(page.getByText("^GSPC", { exact: true })).toBeVisible();
   await expect(page.getByText("Nasdaq")).toBeVisible();
-  await expect(page.getByText("^IXIC")).toBeVisible();
+  await expect(page.getByText("^IXIC", { exact: true })).toBeVisible();
+
+  // Under the shared fixtures the spreads endpoint returns no rows, so the section must be absent.
+  // This pins that the page is fully fixture-driven: if the helper stopped mocking spreads, real
+  // cards would render here and this would fail.
+  await expect(page.getByTestId("spreads-section")).toHaveCount(0);
 });
 
 test("market overview opens and closes detail from both card and table views", async ({ page }) => {
