@@ -503,6 +503,7 @@ export function StockDetailModal({
             downColor="var(--delta-down)"
             loading={detailQuery.isLoading}
             timeframe={timeframe}
+            eventGranularity={timeframe === "monthly" ? "month" : "day"}
             onTimeframeChange={(value) => setTimeframe(value as "daily" | "monthly")}
             timeframeOptions={[
               { value: "daily", label: "Daily" },

@@ -2,6 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import TVChart, { NO_LINE_SERIES, type TVLineSeries } from "@/components/charts/TVChart";
+import type { EventGranularity } from "@/components/charts/primitives/EventLinesPrimitive";
 import { ToggleGroup } from "@/components/ui/ToggleGroup";
 import type { TVCandle, TVVolume } from "@/lib/transformers";
 import { ChartPanelFrame } from "@/components/charts/ChartPanelFrame";
@@ -19,6 +20,8 @@ interface OHLCVChartCardProps {
   upColor?: string;
   downColor?: string;
   timeframe?: string;
+  /** Pass "month" when data holds monthly candles, so event lines land on the right candle. */
+  eventGranularity?: EventGranularity;
   timeframeOptions?: Array<{ value: string; label: string }>;
   onTimeframeChange?: (value: string) => void;
   actions?: ReactNode;
@@ -47,6 +50,7 @@ export function OHLCVChartCard({
   upColor,
   downColor,
   timeframe,
+  eventGranularity,
   timeframeOptions,
   onTimeframeChange,
   actions,
@@ -133,6 +137,7 @@ export function OHLCVChartCard({
           data={data}
           events={lines}
           showEvents={showEvents}
+          eventGranularity={eventGranularity}
           volumeData={volumeData}
           lineSeriesData={lineSeriesData}
           height={height}

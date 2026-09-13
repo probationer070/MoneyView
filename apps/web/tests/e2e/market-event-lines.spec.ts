@@ -167,6 +167,34 @@ test("the line sits in the closed-market gap, between the Friday and the Monday"
   expect(saturday, `friday=${friday} saturday=${saturday} monday=${monday}`).toBeLessThan(monday);
 });
 
+test("on the monthly chart, an event sits on its month's candle -- including the newest month", async ({ page }) => {
+  // Monthly bars carry their month's FIRST trading day (aggregateMonthlyBars), so BARS become
+  // two candles dated 2026-02-23 and 2026-03-02. Placed by day, a 28 Feb event landed between
+  // the two candles, asserting it happened between months; and a 4 Mar event, being after the
+  // newest bar's date, was treated as outside the chart and not drawn at all -- the recent
+  // event, which is the one a reader is most likely to be looking for.
+  const monthlyColumnFor = async (date: string) => {
+    await mockChartAndEvents(page, [{ date }]);
+    const dialog = await openChart(page);
+    const monthly = dialog.getByRole("button", { name: "Monthly", exact: true });
+    await monthly.click();
+    await expect(monthly).toHaveAttribute("aria-pressed", "true");
+    const { columns } = await lineColumns(page, dialog);
+    expect(columns.length, `no line drawn on the monthly chart for ${date}`).toBeGreaterThan(0);
+    return (columns[0] + columns[columns.length - 1]) / 2;
+  };
+
+  const newestMonthCandle = await monthlyColumnFor("2026-03-02");
+  const newestMonthLater = await monthlyColumnFor("2026-03-04");
+  expect(Math.abs(newestMonthLater - newestMonthCandle), `4 Mar=${newestMonthLater} March candle=${newestMonthCandle}`).toBeLessThanOrEqual(2);
+
+  const februaryCandle = await monthlyColumnFor("2026-02-23");
+  const februaryLater = await monthlyColumnFor("2026-02-28");
+  expect(Math.abs(februaryLater - februaryCandle), `28 Feb=${februaryLater} February candle=${februaryCandle}`).toBeLessThanOrEqual(2);
+  // Guard against both candles collapsing onto one column, which would pass the checks above.
+  expect(Math.abs(newestMonthCandle - februaryCandle)).toBeGreaterThan(20);
+});
+
 test("the toggle removes the line and the legend together", async ({ page }) => {
   await mockChartAndEvents(page, [{ date: "2026-02-28", label: "U.S. strikes on Iran begin" }]);
   const dialog = await openChart(page);

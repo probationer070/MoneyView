@@ -5,7 +5,7 @@ import { createChart, IChartApi, ISeriesApi, ColorType, CrosshairMode, Candlesti
 import { TVCandle, TVVolume, sanitizeTooltip } from "@/lib/transformers";
 import { emitClientPerformanceEvent } from "@/lib/api";
 import { resolveCssColor } from "@/lib/cssColor";
-import { EventLinesPrimitive, type EventLineSpec } from "@/components/charts/primitives/EventLinesPrimitive";
+import { EventLinesPrimitive, type EventGranularity, type EventLineSpec } from "@/components/charts/primitives/EventLinesPrimitive";
 
 // Event line appearance. Semi-transparent so the price is readable through it, and wide
 // enough to be prominent at any zoom.
@@ -42,6 +42,9 @@ interface TVChartProps {
     showEvents?: boolean;
     /** Event line colour; resolved through resolveCssColor like every other canvas colour. */
     eventColor?: string;
+    /** What one candle spans. Monthly candles are dated by their first trading day, so an event
+     *  must be matched to its month rather than bracketed by day -- see eventCoordinate. */
+    eventGranularity?: EventGranularity;
     volumeData?: TVVolume[];
     lineSeriesData?: TVLineSeries[];
     height?: number;
@@ -56,6 +59,7 @@ const TVChart: React.FC<TVChartProps> = ({
     events = NO_EVENTS,
     showEvents = true,
     eventColor = "var(--state-warning)",
+    eventGranularity = "day",
     volumeData,
     lineSeriesData = NO_LINE_SERIES,
     height = 500,
@@ -157,6 +161,7 @@ const TVChart: React.FC<TVChartProps> = ({
             const eventLines = new EventLinesPrimitive({
                 events: [],
                 barTimes: [],
+                granularity: "day",
                 color: EVENT_LINE_FALLBACK_COLOR,
                 alpha: EVENT_LINE_ALPHA,
                 lineWidth: EVENT_LINE_WIDTH,
@@ -281,10 +286,11 @@ const TVChart: React.FC<TVChartProps> = ({
         eventLinesRef.current?.update({
             events,
             barTimes: data.map((bar) => bar.time),
+            granularity: eventGranularity,
             color: resolvedEvent,
             visible: showEvents,
         });
-    }, [events, showEvents, data, resolvedEvent]);
+    }, [events, showEvents, data, eventGranularity, resolvedEvent]);
 
     return (
         <div 
@@ -308,5 +314,6 @@ export default React.memo(TVChart, (prevProps, nextProps) => {
         && prevProps.volumeData === nextProps.volumeData
         && prevProps.lineSeriesData === nextProps.lineSeriesData
         && prevProps.showEvents === nextProps.showEvents
-        && prevProps.events === nextProps.events;
+        && prevProps.events === nextProps.events
+        && prevProps.eventGranularity === nextProps.eventGranularity;
 });
