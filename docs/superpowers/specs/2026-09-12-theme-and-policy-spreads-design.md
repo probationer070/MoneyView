@@ -11,7 +11,9 @@
 > - each chart surface owns its own event toggle (Ruling H), rather than one control
 >   spanning two components;
 > - a shared `EventsToggle` component was extracted, and `SpreadsSection`'s `showEvents` prop
->   was removed.
+>   was removed;
+> - acquisition on a cache miss or a stale cache is synchronous, in the request, not a
+>   background refresh as the body of this document originally stated.
 >
 > **The review changed five contract details and caught one factual error.** The join and
 > base-date rule, the window-day semantics and `latest` were all underspecified enough that
@@ -179,8 +181,9 @@ only implemented trigger, but it would put six instruments the user does not hol
 `apps/api/services/market_spreads.py` is the single source of truth for which pairs exist and
 which tickers they need. The spreads route acquires them **lazily through the existing
 `MarketDataService.get_stock_ohlcv` path**, which is how the detail page already acquires a
-ticker nobody has opened before — cache read, background refresh when past the boundary. No
-watchlist pollution, no new scheduler, and no new env var.
+ticker nobody has opened before — a cache read that, on a miss or a stale cache, fetches live
+data synchronously in the request, not in the background. No watchlist pollution, no new
+scheduler, and no new env var.
 
 `^VIX` additionally needs a `MARKET_INDICES` entry, because `_table_for_ticker` decides
 between the `indices` and `stocks` tables by membership in that dict. The six ETFs are

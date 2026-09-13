@@ -1168,7 +1168,14 @@ Branched from `renewal` @ `1af14ad`; baseline 1265 Python tests.
       `apps/api/services/market_spreads.py`; `OHLCVChartCard` should adopt the new shared
       `EventsToggle` component once PR #34 merges, rather than keeping its own third copy of
       the toggle markup; a failed `/market/spreads` fetch renders nothing with no logging
-      anywhere, so a broken endpoint would be invisible.
+      anywhere, so a broken endpoint would be invisible. Also: acquisition on a cache miss or
+      a stale cache fetches live data synchronously, in the request -- not in the background --
+      so the first `/market/spreads` request after the daily cache boundary passes performs up
+      to seven synchronous live fetches in a row with no per-request timeout, during which
+      `SpreadsSection` renders nothing (it returns `null` for an empty list, indistinguishable
+      from "there are no spreads"); this recurs every day, not just on first deploy. An earlier
+      version of this design's documents claimed this path used a background refresh, which
+      was wrong and has been corrected.
 
       C and D share an overlay layer; building C first means D reuses it.
 

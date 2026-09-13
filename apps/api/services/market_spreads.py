@@ -2,8 +2,11 @@
 
 `SPREAD_PAIRS` is the single source of truth for which pairs exist and which tickers they
 need. Tickers are pulled through `MarketDataService.get_stock_ohlcv`, the same lazy path the
-detail page uses for a ticker nobody has opened -- cache read, background refresh past the
-daily boundary.
+detail page uses for a ticker nobody has opened -- a cache read that, on a miss or a stale
+cache, fetches live data INLINE, in the request, not in the background. That means the first
+`/market/spreads` request after the cache goes stale past the daily boundary -- which happens
+every day, not just on first deploy -- performs up to seven synchronous live fetches in a row
+(the six ETFs plus `^GSPC` once) before the response can be returned.
 
 Registering these by adding them to the watchlist was rejected: it is the only implemented
 acquisition trigger, but it would put six instruments the user does not hold into the
@@ -14,15 +17,12 @@ per-machine configuration rather than a registry that travels with the repositor
 
 from __future__ import annotations
 
-import logging
 from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Dict, List, Optional
 
 from apps.api.services.market_data import MarketDataService
 from packages.core_finance.relative_strength import DEFAULT_WINDOW_DAYS, relative_strength
-
-logger = logging.getLogger(__name__)
 
 # Bound separately from the name above: the route test swaps `MarketDataService` itself for a
 # stub factory so `build_spreads` picks up a fixture service, but the table-routing rule below

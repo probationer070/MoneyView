@@ -86,8 +86,8 @@ own in-window membership instead of depending on the wall clock. (3) the event f
 date derived from the mocked series' own first bar, with a comment explaining why. (4) the
 DOM absence check was replaced with a `page.waitForResponse` registered before navigation,
 asserting the response body equals `[]` -- a check that cannot pass before the fetch happens.
-Files changed: `packages/core_finance/relative_strength.py` and its tests,
-`apps/api/routes/market.py` and its tests, `apps/web/tests/e2e/market-spreads.spec.ts`,
+Files changed: `apps/api/services/market_spreads.py` and `tests/api/test_market_spreads.py`,
+`apps/web/tests/e2e/market-spreads.spec.ts`, `apps/web/tests/e2e/helpers/marketPageMock.ts`,
 `apps/web/tests/e2e/market-overview.spec.ts`.
 Prevention: a fixture date must be checked against the range of the data it has to fall
 inside, and an absence assertion must be anchored to the completion of the event it rules

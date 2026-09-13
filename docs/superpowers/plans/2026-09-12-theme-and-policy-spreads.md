@@ -489,8 +489,11 @@ Create `apps/api/services/market_spreads.py`:
 
 `SPREAD_PAIRS` is the single source of truth for which pairs exist and which tickers they
 need. Tickers are pulled through `MarketDataService.get_stock_ohlcv`, the same lazy path the
-detail page uses for a ticker nobody has opened -- cache read, background refresh past the
-daily boundary.
+detail page uses for a ticker nobody has opened -- a cache read that, on a miss or a stale
+cache, fetches live data INLINE, in the request, not in the background. That means the first
+`/market/spreads` request after the cache goes stale past the daily boundary -- which happens
+every day, not just on first deploy -- performs up to seven synchronous live fetches in a row
+(the six ETFs plus `^GSPC` once) before the response can be returned.
 
 Registering these by adding them to the watchlist was rejected: it is the only implemented
 acquisition trigger, but it would put six instruments the user does not hold into the
