@@ -1066,10 +1066,11 @@ Branched from `renewal` @ `1af14ad`; baseline 1265 Python tests.
       does not appear, which reads as "nothing happened then".
 
       The date is `2026-02-28`, Operation Epic Fury (ordered 27 Feb 20:38 UTC, first strikes
-      28 Feb 06:35 UTC), sourced in the file. Deliberately NOT supplied from model memory:
-      the knowledge cutoff predates the event and a wrong date would corrupt every read
-      taken off the chart while looking entirely plausible. The later 7 May and 7 Jul waves
-      are not listed; only the start was asked for, and each costs one JSON entry.
+      announced 28 Feb 06:35 UTC), sourced in the file to the Wikipedia timeline of the war,
+      where both times are stated. Deliberately NOT supplied from model memory: the knowledge
+      cutoff predates the event and a wrong date would corrupt every read taken off the chart
+      while looking entirely plausible. Later strikes are not listed; only the start was
+      asked for, and each costs one JSON entry.
 
       **The weekend problem, which is the whole implementation.** 28 Feb 2026 was a
       Saturday: `^GSPC` runs Fri 27 Feb straight to Mon 2 Mar, so `timeToCoordinate` returns
@@ -1091,6 +1092,14 @@ Branched from `renewal` @ `1af14ad`; baseline 1265 Python tests.
       Not wired: `MarketOverviewClient` (the index/oil charts) uses `TVChart` directly rather
       than through `OHLCVChartCard`, so it has no toggle yet. Worth doing -- the oil series is
       where this event is most visible, moving 67.02 to 81.01 in five sessions.
+
+      **Review fixes, 2026-09-13** (ERROR-LOG, four entries that day). The first version
+      shipped three defects the tests could not see: the detail page's chart was rebuilt --
+      losing zoom -- when events arrived or toggled (a `[]` default prop; every test ran in
+      the portfolio modal, which memoises it); monthly candles placed events by the daily
+      rule, so they sat between months or, in the newest month, vanished; and the source
+      URL was a page about the July strikes. Also fixed, pre-existing: every `/detail` page
+      rendered "No data available for UNDEFINED" (Next.js 16 async `params`).
 
 - [ ] **I-C2. The rest of the event system, if wanted.** Derived events computed from the
       cached `indices` rows with a stated basis (S&P low, oil shock over a threshold,
