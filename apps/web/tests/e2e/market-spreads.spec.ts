@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { stableInkProfile } from "./helpers/chartInk";
+import { mockMarketPageApi } from "./helpers/marketPageMock";
 
 /**
  * The section's contract is that a reader can never see a theme figure without seeing what
@@ -120,13 +121,30 @@ test("the spreads section has its own event toggle that changes what is painted"
 
 test("the index detail chart has its own event toggle that changes what is painted", async ({ page }) => {
   // This toggle lives inside MarketDetailModal, so the modal must be open for it to exist at all.
+  //
+  // Hermetic, not live-data-dependent: mockMarketPageApi supplies the ^GSPC detail fixture so
+  // this doesn't depend on whatever CL=F rows happen to be in the local database. S&P 500 (not
+  // Oil) because the fixture only has ^GSPC/^IXIC/GC=F/KRW=X/BTC-USD entries and the overview
+  // fixture has no Oil card. Monthly (not Daily) because ^GSPC's daily_history only spans
+  // 2026-04-07..2026-04-11 -- the Feb 2026 event would draw nothing there -- while its
+  // monthly_history has a bar dated exactly 2026-02-28, an exact match for IRAN_EVENT's real
+  // date, so no date override is needed. This also means the monthly chart -- otherwise
+  // untested for event lines -- gets covered here.
+  //
+  // mockMarketPageApi's catch-all `**/*` route continues (to the network) any path it doesn't
+  // recognise, which would otherwise swallow /market/events and /market/spreads before they
+  // reach the mocks below. Registering those two AFTER it means Playwright tries them first
+  // (last-registered wins), so they fulfill before the catch-all ever sees the request -- the
+  // same order market-event-lines.spec.ts uses for its base mock plus overrides.
+  await mockMarketPageApi(page);
   await mockEvents(page);
   await mockSpreads(page, [computed()]);
   await page.goto("/", { waitUntil: "domcontentloaded" });
 
-  await page.getByText("Oil (WTI)").first().click();
+  await page.getByRole("button", { name: "Open detail for S&P 500" }).click();
   const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible({ timeout: 60_000 });
+  await dialog.getByRole("button", { name: "Monthly" }).click();
 
   const toggle = dialog.getByTestId("market-events-toggle");
   await expect(toggle).toBeVisible();

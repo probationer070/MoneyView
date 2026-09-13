@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import TVChart from "@/components/charts/TVChart";
+import { EventsToggle } from "@/components/charts/EventsToggle";
 import type { EventLineSpec } from "@/components/charts/primitives/EventLinesPrimitive";
 import { useMarketEvents } from "@/lib/useMarketEvents";
 import { useMarketSpreads } from "@/lib/useMarketSpreads";
@@ -92,19 +93,11 @@ export function SpreadsSection() {
       <div className="flex flex-wrap items-start justify-between gap-2">
         <h3 className="text-lg font-bold text-[var(--text-primary)]">Themes and policy spreads</h3>
         {lines.length > 0 ? (
-          <button
-            type="button"
-            onClick={() => setShowEvents((shown) => !shown)}
-            aria-pressed={showEvents}
-            data-testid="spreads-events-toggle"
-            className={`rounded-[var(--radius-sm)] border px-3 py-1 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--state-info)] ${
-              showEvents
-                ? "border-[var(--state-warning)] text-[var(--state-warning)]"
-                : "border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text-primary)]"
-            }`}
-          >
-            Market events
-          </button>
+          <EventsToggle
+            pressed={showEvents}
+            onToggle={() => setShowEvents((shown) => !shown)}
+            testId="spreads-events-toggle"
+          />
         ) : null}
       </div>
       <p className="mt-1 text-sm text-[var(--text-muted)]">

@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { fetchApi } from "@/lib/api";
 import { useDevMonitorPageLoad } from "@/hooks/useDevMonitorPageLoad";
 import TVChart from "@/components/charts/TVChart";
+import { EventsToggle } from "@/components/charts/EventsToggle";
 import { DeltaBadge } from "@/components/ui/DeltaBadge";
 import { ViewToggle, type ViewMode } from "@/components/ui/ViewToggle";
 import { type RawOHLCV, transformToTVCandles, transformToTVVolume } from "@/lib/transformers";
@@ -517,19 +518,11 @@ function MarketDetailModal({ item, onClose }: { item: MarketIndexQuote; onClose:
                       </button>
                     </div>
                     {eventLines.length > 0 ? (
-                      <button
-                        type="button"
-                        onClick={() => setShowEvents((shown) => !shown)}
-                        aria-pressed={showEvents}
-                        data-testid="market-events-toggle"
-                        className={`rounded-[var(--radius-sm)] border px-3 py-1 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--state-info)] ${
-                          showEvents
-                            ? "border-[var(--state-warning)] text-[var(--state-warning)]"
-                            : "border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text-primary)]"
-                        }`}
-                      >
-                        Market events
-                      </button>
+                      <EventsToggle
+                        pressed={showEvents}
+                        onToggle={() => setShowEvents((shown) => !shown)}
+                        testId="market-events-toggle"
+                      />
                     ) : null}
                   </div>
                 </div>
