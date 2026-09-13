@@ -19,6 +19,21 @@ export interface TVLineSeries {
     data: Array<{ time: string; value: number }>;
 }
 
+/**
+ * Stable empties for the array props, used as defaults instead of `[]` literals.
+ *
+ * The setup effect below depends on `lineSeriesData` by IDENTITY, and rebuilding the chart
+ * discards the reader's zoom and pan. A `= []` default is a new array on every render, so a
+ * caller that omitted the prop -- the ticker detail page -- got the chart torn down and
+ * recreated whenever anything re-rendered it: when the event list arrived, and on every
+ * click of the event toggle. Measured on /detail/AAPL: all 7 canvases replaced.
+ *
+ * Exported so `OHLCVChartCard` uses the same instance for its own default rather than
+ * reintroducing the defect one layer up. Never mutate these.
+ */
+export const NO_LINE_SERIES: TVLineSeries[] = [];
+const NO_EVENTS: EventLineSpec[] = [];
+
 interface TVChartProps {
     data: TVCandle[];
     /** Dated market events drawn as vertical lines behind the price. */
@@ -38,11 +53,11 @@ interface TVChartProps {
 
 const TVChart: React.FC<TVChartProps> = ({
     data,
-    events = [],
+    events = NO_EVENTS,
     showEvents = true,
     eventColor = "var(--state-warning)",
     volumeData,
-    lineSeriesData = [],
+    lineSeriesData = NO_LINE_SERIES,
     height = 500,
     colorAccent = "var(--delta-up)",
     upColor,

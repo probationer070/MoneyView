@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import TVChart, { type TVLineSeries } from "@/components/charts/TVChart";
+import TVChart, { NO_LINE_SERIES, type TVLineSeries } from "@/components/charts/TVChart";
 import { ToggleGroup } from "@/components/ui/ToggleGroup";
 import type { TVCandle, TVVolume } from "@/lib/transformers";
 import { ChartPanelFrame } from "@/components/charts/ChartPanelFrame";
@@ -37,7 +37,10 @@ export function OHLCVChartCard({
   description,
   data,
   volumeData,
-  lineSeriesData = [],
+  // The shared stable empty, not `[]`: this card re-renders on its own event state, and a fresh
+  // array here reaches TVChart's identity-keyed setup effect and rebuilds the chart. See
+  // NO_LINE_SERIES in TVChart.tsx.
+  lineSeriesData = NO_LINE_SERIES,
   height = 420,
   tickerName,
   colorAccent,
