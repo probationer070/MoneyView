@@ -119,6 +119,71 @@ test("the spreads section has its own event toggle that changes what is painted"
   expect(changed.length, "toggling must change what is painted, not just the button").toBeGreaterThan(0);
 });
 
+test("a spread chart is not rebuilt when its event toggle is clicked", async ({ page }) => {
+  // SpreadCard passes TVChart no line series. TVChart's setup effect depends on that prop's
+  // identity, so a `[]` default rebuilt the chart on every toggle -- discarding zoom and pan --
+  // while the ink diff above still passed. A marker on the canvases does not survive a rebuild.
+  await mockEvents(page, [{ ...IRAN_EVENT[0], start_date: "2026-06-15" }]);
+  await mockSpreads(page, [computed()]);
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const toggle = page.getByTestId("spreads-events-toggle");
+  await expect(toggle).toBeVisible({ timeout: 60_000 });
+  const selector = '[data-testid="spread-chart-ai"] canvas';
+  await expect.poll(() => page.locator(selector).count(), { timeout: 30_000 }).toBeGreaterThan(0);
+  await page.waitForTimeout(500);
+  await page.evaluate((sel) => {
+    for (const canvas of Array.from(document.querySelectorAll(sel))) (canvas as unknown as { __probe?: boolean }).__probe = true;
+  }, selector);
+
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-pressed", "false");
+  await page.waitForTimeout(500);
+  const after = await page.evaluate((sel) => {
+    const canvases = Array.from(document.querySelectorAll(sel));
+    return { marked: canvases.filter((canvas) => (canvas as unknown as { __probe?: boolean }).__probe).length, total: canvases.length };
+  }, selector);
+  expect(after.total, "the spread chart must still be on the page").toBeGreaterThan(0);
+  expect(after.marked, `rebuilt when the toggle was clicked: ${JSON.stringify(after)}`).toBe(after.total);
+});
+
+test("on the index detail's monthly chart, an event sits on its month's candle", async ({ page }) => {
+  // The API dates each monthly bar by its month's first trading day (_aggregate_monthly_bars);
+  // this fixture dates them at month end. Either way the event's day rarely matches a bar, and
+  // the daily rule bracketed a mid-month event between two months' candles. A 10 Mar event must
+  // land on the March candle, which is where the 31 Mar event lands.
+  await mockMarketPageApi(page);
+  await mockSpreads(page, [computed()]);
+
+  const monthlyColumnFor = async (date: string) => {
+    await mockEvents(page, [{ ...IRAN_EVENT[0], start_date: date }]);
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await page.getByRole("button", { name: "Open detail for S&P 500" }).click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog).toBeVisible({ timeout: 60_000 });
+    await dialog.getByRole("button", { name: "Monthly" }).click();
+
+    const toggle = dialog.getByTestId("market-events-toggle");
+    await expect(toggle).toHaveAttribute("aria-pressed", "true");
+    const chart = '[role="dialog"] [data-testid="tv-chart"]';
+    const withLine = await stableInkProfile(page, chart);
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-pressed", "false");
+    const withoutLine = await stableInkProfile(page, chart);
+
+    const columns = withLine.ink.flatMap((value, x) => (value > (withoutLine.ink[x] ?? 0) ? [x] : []));
+    expect(columns.length, `no line drawn on the monthly chart for ${date}`).toBeGreaterThan(0);
+    return (columns[0] + columns[columns.length - 1]) / 2;
+  };
+
+  const marchCandle = await monthlyColumnFor("2026-03-31");
+  const midMarch = await monthlyColumnFor("2026-03-10");
+  const februaryCandle = await monthlyColumnFor("2026-02-28");
+  expect(Math.abs(midMarch - marchCandle), `10 Mar=${midMarch} March candle=${marchCandle}`).toBeLessThanOrEqual(2);
+  // Guard: the candles must be distinguishable, or the check above proves nothing.
+  expect(Math.abs(marchCandle - februaryCandle)).toBeGreaterThan(20);
+});
+
 test("the index detail chart has its own event toggle that changes what is painted", async ({ page }) => {
   // This toggle lives inside MarketDetailModal, so the modal must be open for it to exist at all.
   //
@@ -128,8 +193,8 @@ test("the index detail chart has its own event toggle that changes what is paint
   // fixture has no Oil card. Monthly (not Daily) because ^GSPC's daily_history only spans
   // 2026-04-07..2026-04-11 -- the Feb 2026 event would draw nothing there -- while its
   // monthly_history has a bar dated exactly 2026-02-28, an exact match for IRAN_EVENT's real
-  // date, so no date override is needed. This also means the monthly chart -- otherwise
-  // untested for event lines -- gets covered here.
+  // date, so no date override is needed. Placement on the monthly chart is tested separately
+  // above; this one checks only that the toggle changes what is painted.
   //
   // mockMarketPageApi's catch-all `**/*` route continues (to the network) any path it doesn't
   // recognise, which would otherwise swallow /market/events and /market/spreads before they

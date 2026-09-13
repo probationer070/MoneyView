@@ -548,6 +548,7 @@ function MarketDetailModal({ item, onClose }: { item: MarketIndexQuote; onClose:
                       colorAccent={chartColor}
                       events={eventLines}
                       showEvents={showEvents}
+                      eventGranularity={chartTimeframe === "monthly" ? "month" : "day"}
                     />
                   ) : (
                     <div className="flex h-[420px] items-center justify-center text-sm text-[var(--text-muted)]">

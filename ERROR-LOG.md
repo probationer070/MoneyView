@@ -135,6 +135,10 @@ Prevention: the spec marks the canvases and requires the marker to survive event
 the toggle flipping. Mutation: reverting the card's default to `[]` fails it with
 `{"marked":0,"total":7}`. A test of a prop's effect has to run on a caller that omits the prop,
 not only on one that memoises it.
+The spreads section (theme-policy-spreads) had the same defect: `SpreadCard` passes no line
+series, so each spread chart was rebuilt on every click of its toggle, while the existing ink-diff
+test passed. Fixed by the same default; market-spreads.spec.ts "a spread chart is not rebuilt"
+fails with `{"marked":0,"total":7}` when `TVChart`'s default is reverted to `[]`.
 
 ## 2026-09-13: event lines on the monthly chart sat between months, or were not drawn
 
@@ -159,6 +163,10 @@ Prevention: four mutations caught -- the modal not passing the granularity, `TVC
 hardcoding "day", the month rule covering only the newest month (28 Feb at 314.5px vs the
 February candle at 156px), and matching on the year. Every chart mode the request names gets a
 test.
+The Market Overview index modal (theme-policy-spreads) had the same defect: the API's
+`_aggregate_monthly_bars` also dates by first trading day. It now passes the granularity from its
+Daily/Monthly toggle; market-spreads.spec.ts fails with "10 Mar=262.5 March candle=328" when it
+does not.
 
 ## 2026-09-13: the Iran event cited a page about a different strike
 
