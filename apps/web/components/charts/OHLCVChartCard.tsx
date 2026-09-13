@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import TVChart, { type TVLineSeries } from "@/components/charts/TVChart";
+import TVChart, { NO_LINE_SERIES, type TVLineSeries } from "@/components/charts/TVChart";
+import type { EventGranularity } from "@/components/charts/primitives/EventLinesPrimitive";
 import { ToggleGroup } from "@/components/ui/ToggleGroup";
 import type { TVCandle, TVVolume } from "@/lib/transformers";
 import { ChartPanelFrame } from "@/components/charts/ChartPanelFrame";
@@ -19,6 +20,8 @@ interface OHLCVChartCardProps {
   upColor?: string;
   downColor?: string;
   timeframe?: string;
+  /** Pass "month" when data holds monthly candles, so event lines land on the right candle. */
+  eventGranularity?: EventGranularity;
   timeframeOptions?: Array<{ value: string; label: string }>;
   onTimeframeChange?: (value: string) => void;
   actions?: ReactNode;
@@ -37,13 +40,17 @@ export function OHLCVChartCard({
   description,
   data,
   volumeData,
-  lineSeriesData = [],
+  // The shared stable empty, not `[]`: this card re-renders on its own event state, and a fresh
+  // array here reaches TVChart's identity-keyed setup effect and rebuilds the chart. See
+  // NO_LINE_SERIES in TVChart.tsx.
+  lineSeriesData = NO_LINE_SERIES,
   height = 420,
   tickerName,
   colorAccent,
   upColor,
   downColor,
   timeframe,
+  eventGranularity,
   timeframeOptions,
   onTimeframeChange,
   actions,
@@ -130,6 +137,7 @@ export function OHLCVChartCard({
           data={data}
           events={lines}
           showEvents={showEvents}
+          eventGranularity={eventGranularity}
           volumeData={volumeData}
           lineSeriesData={lineSeriesData}
           height={height}

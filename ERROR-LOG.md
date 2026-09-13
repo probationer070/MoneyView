@@ -96,6 +96,92 @@ caught three of the four on its own; the fourth (the absence check) needed a col
 invocation specifically because a warm, repeated run hid it -- a mutation that only fails
 warm is not yet verified.
 
+## 2026-09-13: every /detail/<ticker> page rendered "No data available for UNDEFINED"
+
+Date: 2026-09-13
+Command: npx playwright test tests/e2e/detail-chart-stability.spec.ts (first red run, which
+failed for this reason instead of the one it was written for)
+Failure: /detail/AAPL -- and every other ticker -- fetched `/detail/UNDEFINED/ohlcv` and
+rendered "No data available for UNDEFINED". The web server logged a sync-dynamic-API warning;
+nothing reached the browser. Pre-existing on `renewal`, not introduced by the event-line work.
+Root cause: in Next.js 16 a page's `params` is a Promise. The page typed it as a plain object,
+so the compiler accepted `params.ticker`, which is undefined at runtime.
+Fix: `await params` before reading the ticker. It is the app's only dynamic route.
+Files changed: apps/web/app/detail/[ticker]/page.tsx,
+apps/web/tests/e2e/detail-chart-stability.spec.ts
+Prevention: the spec waits for either the chart or the no-data message, then asserts no
+"UNDEFINED" -- in that order, because the absence check alone passes before anything renders.
+Mutation: reading `params.ticker` synchronously fails it with "the page read no ticker from its
+route".
+
+## 2026-09-13: the detail chart was rebuilt, discarding zoom, when event lines arrived or toggled
+
+Date: 2026-09-13
+Command: Opus review of PR #34; confirmed with npx playwright test
+tests/e2e/detail-chart-stability.spec.ts
+Failure: on /detail/<ticker> the chart was torn down and recreated when the events request
+resolved and on every click of the "Market events" toggle, snapping any zoom or pan back to the
+full history. Measured: all 7 canvases replaced (`{"marked":0,"total":7}`). The toggle's own
+comments claimed the opposite -- that it repaints without a rebuild -- and every event-line test
+passed, because they all ran in the portfolio modal.
+Root cause: `TVChart`'s setup effect depends on `lineSeriesData` by identity, and both `TVChart`
+and `OHLCVChartCard` defaulted it to a `[]` literal, a new array per render. The portfolio modal
+passes a memoised series, so it never saw a new identity; the detail page passes none. Once the
+card owned the toggle state and fetched events, it re-rendered on both.
+Fix: default to a shared stable empty (`NO_LINE_SERIES`, and `NO_EVENTS` for `events`).
+Files changed: apps/web/components/charts/TVChart.tsx,
+apps/web/components/charts/OHLCVChartCard.tsx, apps/web/tests/e2e/detail-chart-stability.spec.ts
+Prevention: the spec marks the canvases and requires the marker to survive events arriving and
+the toggle flipping. Mutation: reverting the card's default to `[]` fails it with
+`{"marked":0,"total":7}`. A test of a prop's effect has to run on a caller that omits the prop,
+not only on one that memoises it.
+
+## 2026-09-13: event lines on the monthly chart sat between months, or were not drawn
+
+Date: 2026-09-13
+Command: Opus review of PR #34; confirmed with npx playwright test
+tests/e2e/event-coordinate.spec.ts tests/e2e/market-event-lines.spec.ts
+Failure: on the portfolio modal's Monthly view, a 28 Feb event was drawn between the February
+and March candles (pure test: 15, expected 10), and an event in the newest month after that
+month's first trading day was not drawn at all (null) -- the most recent event, the one a reader
+is most likely to look for. Only daily charts had been tested, although monthly was in the
+request.
+Root cause: `aggregateMonthlyBars` dates each monthly candle by its month's first trading day,
+and `eventCoordinate` applied the daily rule (exact bar, else midway between the bracketing
+bars, else outside the range) to those dates.
+Fix: `eventCoordinate` takes a granularity; with "month" it returns the candle for the event's
+month. The modal passes it from its Daily/Monthly toggle through `OHLCVChartCard` and `TVChart`.
+Files changed: apps/web/components/charts/primitives/EventLinesPrimitive.ts,
+apps/web/components/charts/TVChart.tsx, apps/web/components/charts/OHLCVChartCard.tsx,
+apps/web/app/portfolio/components/StockDetailModal.tsx, apps/web/tests/e2e/event-coordinate.spec.ts,
+apps/web/tests/e2e/market-event-lines.spec.ts
+Prevention: four mutations caught -- the modal not passing the granularity, `TVChart`
+hardcoding "day", the month rule covering only the newest month (28 Feb at 314.5px vs the
+February candle at 156px), and matching on the year. Every chart mode the request names gets a
+test.
+
+## 2026-09-13: the Iran event cited a page about a different strike
+
+Date: 2026-09-13
+Command: Opus review of PR #34
+Failure: `market_events.json` gave the 28 Feb 2026 start of Operation Epic Fury a `source` of
+`https://en.wikipedia.org/wiki/July_2026_United_States_strikes_against_Iran` -- a page about
+the July strikes. The loader's "every event has a source" rule was satisfied by a citation that
+does not support the date, which is worse than no source: it looks checked. The note also
+carried WTI figures that no cited page contains, and "7 May and 7 Jul strike waves" that could
+not be confirmed.
+Root cause: the source URL was recorded without being fetched and checked against the claim it
+backs. The WTI figures came from the local database's `CL=F` closes and were written as if from
+the source.
+Fix: source is now `https://en.wikipedia.org/wiki/Timeline_of_the_2026_Iran_war`, fetched
+2026-09-13; it states "20:38 UTC -- US president Donald Trump gives the order to proceed with
+Operation Epic Fury" (27 Feb) and "At 06:35 UTC, CENTCOM announced that it 'and partner forces'
+had begun airstrikes against Iran" (28 Feb). The note attributes the WTI figures to the local
+database, and the unconfirmed later-strike dates are removed.
+Files changed: apps/api/services/market_events.json, guideline/sop/todo.md
+Prevention: a source is fetched and the specific claim found on it before it is committed. The
+loader can only check that a source exists, not that it says anything.
+
 ## 2026-09-12: the grid filter offered "total", which meant everything except the total
 
 Date: 2026-09-12

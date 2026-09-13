@@ -24,6 +24,9 @@ export interface EventLineSpec {
   date: string;
 }
 
+/** What one bar of the chart spans, which decides the bar an event belongs to. */
+export type EventGranularity = "day" | "month";
+
 /**
  * Where an event's line belongs on the x axis, given the bars actually loaded.
  *
@@ -38,14 +41,26 @@ export interface EventLineSpec {
  * what actually happened. An event outside the loaded range is not drawn, rather than being
  * clamped to an edge where it would assert a date the chart is not showing.
  *
+ * Monthly bars need their own rule. Each one is dated by its month's FIRST trading day, so the
+ * day rule would bracket a mid-month event between two months' candles, and would treat any
+ * event in the newest month after its first day as beyond the loaded range and draw nothing.
+ * With `granularity` "month" the line sits on the bar for the event's month.
+ *
  * Exported and pure so this is unit-testable without a canvas.
  */
 export function eventCoordinate(
   date: string,
   barTimes: readonly string[],
   timeToCoordinate: (time: string) => number | null,
+  granularity: EventGranularity = "day",
 ): number | null {
   if (barTimes.length === 0) return null;
+
+  if (granularity === "month") {
+    const month = date.slice(0, 7);
+    const bar = barTimes.find((time) => time.slice(0, 7) === month);
+    return bar === undefined ? null : timeToCoordinate(bar);
+  }
 
   // Bars arrive sorted; a binary search is not worth it for a few thousand.
   let before: string | null = null;
@@ -115,6 +130,7 @@ class EventLinesPaneView implements IPanePrimitivePaneView {
 export interface EventLinesOptions {
   events: readonly EventLineSpec[];
   barTimes: readonly string[];
+  granularity: EventGranularity;
   /** Already resolved to something a canvas can paint -- see `resolveCssColor`. */
   color: string;
   alpha: number;
@@ -164,7 +180,7 @@ export class EventLinesPrimitive implements IPanePrimitive<Time> {
 
     const xs: number[] = [];
     for (const event of this.options.events) {
-      const x = eventCoordinate(event.date, this.options.barTimes, toCoordinate);
+      const x = eventCoordinate(event.date, this.options.barTimes, toCoordinate, this.options.granularity);
       if (x !== null) xs.push(x);
     }
     if (xs.length === 0) return null;
