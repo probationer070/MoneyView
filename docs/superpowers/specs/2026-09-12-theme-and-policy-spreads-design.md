@@ -1,9 +1,17 @@
 # Theme and policy spreads — design
 
-> **Status:** designed 2026-09-12, revised the same day after a design-review pass, approved
-> for planning, not yet implemented. Sub-project **I-D**, the last of the four decomposed
-> from the 2026-09-10 request. Builds on I-C1 (market event lines, PR #34), whose event
-> overlay this reuses.
+> **Status:** IMPLEMENTED 2026-09-13 on branch `theme-policy-spreads`. Sub-project **I-D**,
+> the last of the four decomposed from the 2026-09-10 request. Builds on I-C1 (market event
+> lines, PR #34), whose event overlay this reuses.
+>
+> **Deviations from this spec found during implementation:**
+> - the query parameter is `window_days` as an integer, not `window=90d`;
+> - `^VIX` is registered in `MARKET_INDICES` and appears in the index strip, not the spreads
+>   grid;
+> - each chart surface owns its own event toggle (Ruling H), rather than one control
+>   spanning two components;
+> - a shared `EventsToggle` component was extracted, and `SpreadsSection`'s `showEvents` prop
+>   was removed.
 >
 > **The review changed five contract details and caught one factual error.** The join and
 > base-date rule, the window-day semantics and `latest` were all underspecified enough that
