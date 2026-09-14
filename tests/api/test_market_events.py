@@ -7,8 +7,11 @@ where it came from. That requirement is the feature, and it is what these tests 
 """
 
 import json
+import re
 import sys
+from datetime import date
 from pathlib import Path
+from urllib.parse import unquote, urlparse
 
 import pytest
 from fastapi.testclient import TestClient
@@ -48,6 +51,52 @@ def test_the_committed_file_carries_the_iran_operation_start(tmp_path):
     assert len(iran) == 1, f"expected exactly one Iran event, got {[e.id for e in iran]}"
     assert iran[0].start_date == "2026-02-28"
     assert iran[0].source, "an asserted date with no source is exactly what this forbids"
+
+
+_MONTHS = (
+    "january", "february", "march", "april", "may", "june",
+    "july", "august", "september", "october", "november", "december",
+)
+
+
+def test_no_committed_source_names_a_different_month_or_year_than_its_event():
+    """A source must at least not contradict its own event's date.
+
+    This cannot confirm that a page supports a date -- only fetching and reading it can. It
+    catches the cheapest wrong citation, which is the one this file shipped: the 28 Feb 2026
+    start of Operation Epic Fury cited `July_2026_United_States_strikes_against_Iran`, and
+    `test_the_committed_file_carries_the_iran_operation_start` passed it because it only asked
+    whether `source` was non-empty (ERROR-LOG.md 2026-09-13).
+
+    Months are matched as whole words of the URL path, so `mayor` or `marching` is not May or
+    March; years are any standalone 19xx/20xx.
+    """
+    events = load_market_events()
+    assert events, "no committed events, so no source was checked"
+
+    for event in events:
+        url = urlparse(event.source)
+        assert url.scheme == "https", f"{event.id}: source is not an https URL: {event.source!r}"
+
+        dates = [date.fromisoformat(event.start_date)]
+        if event.end_date is not None:
+            dates.append(date.fromisoformat(event.end_date))
+        allowed_months = {_MONTHS[d.month - 1] for d in dates}
+        allowed_years = {str(d.year) for d in dates}
+
+        path = unquote(url.path).lower()
+        words = set(re.split(r"[^a-z]+", path))
+        named_months = words & set(_MONTHS)
+        named_years = set(re.findall(r"(?<!\d)((?:19|20)\d{2})(?!\d)", path))
+
+        assert named_months <= allowed_months, (
+            f"{event.id} is dated {event.start_date} but its source names "
+            f"{sorted(named_months)}: {event.source}"
+        )
+        assert named_years <= allowed_years, (
+            f"{event.id} is dated {event.start_date} but its source names "
+            f"{sorted(named_years)}: {event.source}"
+        )
 
 
 def test_an_event_without_a_source_is_refused(tmp_path):
