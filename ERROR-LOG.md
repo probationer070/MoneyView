@@ -26,6 +26,23 @@ reveal that; only checking the code did.
 
 An entry states what was true when it was written. Nothing updates it on its own.
 
+## 2026-09-14: a relative-strength test named a guarantee it never checked
+
+Date: 2026-09-14
+Command: test-spec audit; mutation run of tests/core_finance/test_relative_strength.py
+Failure: `test_the_default_window_is_derived_from_the_module_constant_not_mirrored` asserted only
+`DEFAULT_WINDOW_DAYS > 0` and that a dataclass holds a float. It passed with the constant changed
+from 90 to 1. Its name promised protection against fixtures mirroring the window; it exercised no
+fixture and no window.
+Root cause: the test restated guidance from its docstring instead of testing a consequence of it.
+Fix: removed it, and added `test_the_route_default_window_is_the_engine_default` to
+tests/api/test_market_spreads.py. The default window is stated twice -- `Query(default=90)` on the
+route and `window_days=DEFAULT_WINDOW_DAYS` on `build_spreads` -- and the new test fails if either
+moves alone: `{90} == {1}` with the constant at 1, `{30} == {90}` with the route default at 30.
+Files changed: tests/core_finance/test_relative_strength.py, tests/api/test_market_spreads.py
+Prevention: a test whose name states a guarantee must fail when that guarantee is broken; a test
+that only touches a constant's sign or type cannot.
+
 ## 2026-09-14: four Playwright tests stayed green with the behaviour they guard removed
 
 Date: 2026-09-14
@@ -64,6 +81,76 @@ apps/web/tests/e2e/high-risk-render-regression.spec.ts
 Prevention: a check for something that must NOT happen needs the moment it would happen held open
 or observed, not a check timed to land before it; a helper that searches must be bounded to the
 thing named.
+
+## 2026-09-13: a new section on a shared page broke two existing specs that no task gate ran
+
+Date: 2026-09-13
+Command: `npx playwright test` (full suite, run by the branch controller per
+guideline/sop/finishing-a-development-branch before integration).
+Failure: after Task 5 added a spreads section to `/`, the full suite failed
+`market-overview.spec.ts` and `market-overview.live.spec.ts` with a strict-mode violation:
+`expect(page.getByText("^GSPC")).toBeVisible()` resolved to 5 elements instead of 1, because
+the new spread cards legitimately render `"BOTZ vs ^GSPC · 90d"`, `"CIBR vs ^GSPC · 90d"`,
+and so on, and `getByText` is a substring match. The same output carried a second, quieter
+defect: `market-overview.spec.ts` claims to render deterministically from shared dashboard
+fixtures, but the elements it matched were real spread cards -- `mockMarketPageApi`'s
+catch-all `route.continue()`s any endpoint it does not explicitly mock, and the spreads and
+events endpoints added by this branch were not in its list, so that "deterministic" spec had
+silently started fetching live data.
+Root cause: two over-broad substring locators, plus a mock helper that was never updated to
+cover endpoints added after it was written -- and, as the process cause, every per-task gate
+in this plan ran only that task's own new spec, never the existing specs of the page it
+changed, so a regression in a shared page surfaced only when the full suite ran.
+Fix: `{ exact: true }` on the ticker locators in both specs; `mockMarketPageApi` now returns
+deterministic empty responses for `/market/spreads` and `/market/events` ahead of its
+catch-all; determinism is asserted on the response body itself (`page.waitForResponse`
+registered before navigation, body equals `[]`) rather than on a DOM absence that can pass
+before the fetch it is meant to rule out even lands.
+Files changed: `apps/web/tests/e2e/market-overview.spec.ts`,
+`apps/web/tests/e2e/market-overview.live.spec.ts`,
+`apps/web/tests/e2e/helpers/marketPageMock.ts`.
+Prevention: when a task changes a shared page, run that page's existing specs as part of the
+task's own gate, not only the spec the task added. A mock helper with a network-forwarding
+catch-all needs every new endpoint added to it in the same change that starts calling that
+endpoint from a component the helper's specs render.
+
+## 2026-09-13: four assertions in one plan passed or failed on dates and timing, not behaviour
+
+Date: 2026-09-13
+Command: `python -m pytest tests/ -q`, `npx playwright test` (per-task and full-suite runs
+during the theme-and-policy-spreads plan).
+Failure: four separate assertions in the same plan were green or red because of a fixture
+date or a timing assumption, not because of the behaviour they claimed to check. (1) Two
+service-test fixtures dated 2026-01-05/06 aged out of the engine's 90-day trailing window
+between when the plan was written and when it ran, so every row took the refused path and
+`test_every_pair_carries_a_basis_naming_both_tickers` passed for the wrong reason --
+`_refused()` embeds ticker names in its basis too, so the assertion held with the computed
+path never exercised. (2) The Task 3 route-test fixtures carried the same exposure, for the
+same reason. (3) An event fixture dated 2026-02-28 was used against a mocked series spanning
+2026-06-15..2026-09-11; `eventCoordinate` correctly draws nothing for an event outside the
+loaded range, so the test would have FAILED AGAINST A CORRECT IMPLEMENTATION. (4) A
+`toHaveCount(0)` absence check on the spreads section was satisfied the instant nothing had
+rendered YET -- the `/market/spreads` fetch lands 2-3 seconds after the index cards -- so it
+passed on a cold server and only failed once repeated with `--repeat-each=5` on a warm one.
+Root cause: in each case the plan's author wrote a fixture date or an assertion without
+reasoning about the date range or timing of the data it had to fall inside. This traces to
+the plan text, not to the implementers who executed it -- the ledger for this branch records
+each of the four as the plan author's own error, caught during execution.
+Fix: (1) and (2) inject a reference date (`today: date | None = None`, defaulting to
+`date.today()`) into the service and route functions under test, so fixtures assert their
+own in-window membership instead of depending on the wall clock. (3) the event fixture uses a
+date derived from the mocked series' own first bar, with a comment explaining why. (4) the
+DOM absence check was replaced with a `page.waitForResponse` registered before navigation,
+asserting the response body equals `[]` -- a check that cannot pass before the fetch happens.
+Files changed: `apps/api/services/market_spreads.py` and `tests/api/test_market_spreads.py`,
+`apps/web/tests/e2e/market-spreads.spec.ts`, `apps/web/tests/e2e/helpers/marketPageMock.ts`,
+`apps/web/tests/e2e/market-overview.spec.ts`.
+Prevention: a fixture date must be checked against the range of the data it has to fall
+inside, and an absence assertion must be anchored to the completion of the event it rules
+out, never to the absence of evidence at the moment the assertion runs. The mutation matrix
+caught three of the four on its own; the fourth (the absence check) needed a cold single
+invocation specifically because a warm, repeated run hid it -- a mutation that only fails
+warm is not yet verified.
 
 ## 2026-09-13: every /detail/<ticker> page rendered "No data available for UNDEFINED"
 
@@ -104,6 +191,10 @@ Prevention: the spec marks the canvases and requires the marker to survive event
 the toggle flipping. Mutation: reverting the card's default to `[]` fails it with
 `{"marked":0,"total":7}`. A test of a prop's effect has to run on a caller that omits the prop,
 not only on one that memoises it.
+The spreads section (theme-policy-spreads) had the same defect: `SpreadCard` passes no line
+series, so each spread chart was rebuilt on every click of its toggle, while the existing ink-diff
+test passed. Fixed by the same default; market-spreads.spec.ts "a spread chart is not rebuilt"
+fails with `{"marked":0,"total":7}` when `TVChart`'s default is reverted to `[]`.
 
 ## 2026-09-13: event lines on the monthly chart sat between months, or were not drawn
 
@@ -128,6 +219,10 @@ Prevention: four mutations caught -- the modal not passing the granularity, `TVC
 hardcoding "day", the month rule covering only the newest month (28 Feb at 314.5px vs the
 February candle at 156px), and matching on the year. Every chart mode the request names gets a
 test.
+The Market Overview index modal (theme-policy-spreads) had the same defect: the API's
+`_aggregate_monthly_bars` also dates by first trading day. It now passes the granularity from its
+Daily/Monthly toggle; market-spreads.spec.ts fails with "10 Mar=262.5 March candle=328" when it
+does not.
 
 ## 2026-09-13: the Iran event cited a page about a different strike
 

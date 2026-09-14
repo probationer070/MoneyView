@@ -24,3 +24,35 @@ export interface MarketEvent {
   source: string;
   note: string;
 }
+
+/** One date on a relative-strength series. Mirrors `MarketSpreadPoint`. */
+export interface MarketSpreadPoint {
+  date: string;
+  value: number;
+}
+
+/**
+ * Relative strength of one ticker against another, indexed to 100 at the base date.
+ *
+ * Mirrors `MarketSpread` in `apps/api/models/schema_parts/market.py`.
+ *
+ * `basis` is non-empty on every row, refusals included, and `refused_reason` and a
+ * populated `series` are mutually exclusive: an empty series with no reason would render
+ * as a flat result rather than an absence. Window figures are calendar days; `observations`
+ * carries the session count.
+ */
+export interface MarketSpread {
+  id: string;
+  label: string;
+  numerator: string;
+  denominator: string;
+  requested_window_days: number;
+  actual_window_start: string | null;
+  actual_window_end: string | null;
+  actual_window_days: number | null;
+  observations: number;
+  basis: string;
+  series: MarketSpreadPoint[];
+  latest: number | null;
+  refused_reason: string | null;
+}

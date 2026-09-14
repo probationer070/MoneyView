@@ -1108,13 +1108,83 @@ Branched from `renewal` @ `1af14ad`; baseline 1265 Python tests.
       `docs/superpowers/plans/2026-09-12-portfolio-count-and-watchlist-drift.md` and this
       session's design hold the detail. **The count difference is not the drift number** --
       the same trap as I-B3.
-- [ ] **I-D. Thematic, political and sentiment indicators.** The `indicators` table holds
-      **0 rows**, so this is an acquisition project first. The design conversation
-      recommended making politics *observable rather than scored*: policy-sensitive
-      spreads with a stated basis, anchored to real event dates, rather than a subjective
-      left/right number -- which would be the "number wearing a basis it has not earned"
-      defect this repo keeps finding. For Fear & Greed, CNN publishes no official API;
-      prefer VIX plus breadth, and label any scraped figure as scraped.
+- [x] **I-D. Thematic, political and sentiment indicators.** SHIPPED 2026-09-13. This entry
+      originally read: "The `indicators` table holds 0 rows, so this is an acquisition
+      project first." That was wrong as a plan, not merely stale -- the shipped design needed
+      no new acquisition class and never touched the `indicators` table at all. The five
+      relative-strength pairs and `^VIX` are daily price series in the existing daily-bars
+      class, acquired through the same `get_stock_ohlcv` path every stock and index already
+      uses.
+
+      **What shipped.** Five relative-strength pairs on Market Overview -- AI (`BOTZ` vs
+      `^GSPC`), cybersecurity (`CIBR` vs `^GSPC`), cloud (`SKYY` vs `^GSPC`), energy policy
+      (`ICLN` vs `XLE`), defence (`ITA` vs `^GSPC`) -- plus `^VIX` as a plain series in the
+      existing index strip. Event-line toggles now sit on both the Market Overview detail
+      chart and the spreads section, each owning its own toggle.
+
+      **Two requirements reshaped, both approved by the user.** Politics is represented as
+      observable policy-sensitive spreads rather than a left/right score, because a
+      left/right number requires asserting which assets are left- or right-coded and
+      publishing an editorial figure that looks like a measurement and cannot be falsified --
+      the same "number wearing a basis it has not earned" defect this log keeps catching.
+      Fear & Greed becomes `^VIX`: CNN publishes no official API for its index, so any figure
+      here would be scraped from an unstable page or a composite wearing CNN's name; `^VIX`
+      is a real published series needing one registry entry and no composite.
+
+      **The engine.** One ratio-of-returns computation in `packages/core_finance`:
+      `strength(A, B, t) = (A_t / A_0) / (B_t / B_0) x 100`, joined on exact common trading
+      dates with no forward fill, both `A_0` and `B_0` taken from one shared base date rather
+      than each side's own first observation. The formula ships in the payload's `basis`
+      field rather than being asserted from a label.
+
+      **Acquisition.** The five pairs plus `^VIX` are registered in a `SPREAD_PAIRS` list and
+      acquired lazily through the existing `get_stock_ohlcv` path -- no new acquisition
+      class, no new scheduler, no new env var. Triggering acquisition from the watchlist was
+      considered and rejected: it would inject six instruments into the user's holdings and
+      into the holdings count, the exact trap I-B3 and I-C2 both name. No scheduled warmer
+      exists yet to hook into instead.
+
+      **Verification.** Every task was mutation-verified before being reported, per CLAUDE.md
+      section 8 -- e.g. the engine's forward-fill mutation had to be deepened until it
+      produced a genuine wrong date list instead of a crash before it counted as caught, and
+      the UI toggle mutations had to fail at the canvas ink-diff assertion, never merely at
+      `aria-pressed`. Final gates on HEAD `5afe0e5`: `pytest` 1302 passed (baseline 1282 + 20
+      new), 5 pre-existing third-party warnings; `tsc --noEmit` exit 0; `playwright test` 154
+      passed, 0 failed; `eslint .` exit 1 on one pre-existing error outside this branch's
+      files (see below), every web file this branch changed lints clean.
+
+      **The lessons, the most valuable part of this run.** Four separate assertions in this
+      plan were green or red because of dates or timing rather than behaviour: fixtures aging
+      out of a trailing window (Ruling E), the Task 3 route fixtures carrying the same
+      exposure, an event dated outside the series it overlays (Ruling I), and a
+      `toHaveCount(0)` absence check that passed on a cold server because it ran before the
+      fetch it was meant to rule out (Ruling P). Per-task gates ran only each task's own new
+      spec, so a real regression -- Task 5's spreads section colliding with two existing
+      Market Overview specs on the substring `^GSPC` -- surfaced only when the full suite ran
+      (Ruling O). Two implementers were killed by the 600-second stall watchdog during
+      Playwright-heavy work (Rulings G, L); both times the uncommitted work on disk matched
+      the brief and only verification was missing, so a fresh agent finished the evidence
+      rather than re-implementing.
+
+      **Known pre-existing issue, not fixed.** `apps/web/components/ui/ModalShell.tsx:45`
+      fails the `react-hooks/refs` rule (`onCloseRef.current = onClose` during render). It
+      predates this branch -- introduced 2026-08-02 in commit `1e4abf0` -- and that line is
+      the deliberate mechanism of an ERROR-LOG'd fix keeping ModalShell's Escape listener
+      alive across a caller re-render, so it needs someone reading that entry before touching
+      it, not a drive-by lint fix. Left alone deliberately (Ruling N).
+
+      **Deferred minors worth a follow-up:** the unused `logger` in
+      `apps/api/services/market_spreads.py`; `OHLCVChartCard` should adopt the new shared
+      `EventsToggle` component once PR #34 merges, rather than keeping its own third copy of
+      the toggle markup; a failed `/market/spreads` fetch renders nothing with no logging
+      anywhere, so a broken endpoint would be invisible. Also: acquisition on a cache miss or
+      a stale cache fetches live data synchronously, in the request -- not in the background --
+      so the first `/market/spreads` request after the daily cache boundary passes performs up
+      to seven synchronous live fetches in a row with no per-request timeout, during which
+      `SpreadsSection` renders nothing (it returns `null` for an empty list, indistinguishable
+      from "there are no spreads"); this recurs every day, not just on first deploy. An earlier
+      version of this design's documents claimed this path used a background refresh, which
+      was wrong and has been corrected.
 
       C and D share an overlay layer; building C first means D reuses it.
 

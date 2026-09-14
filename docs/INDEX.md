@@ -91,6 +91,7 @@ sub-project and feeding an implementation plan.
 | `2026-09-08-metric-reference-design.md` | The metric reference: what earns an entry, the eight-field template, and the required common-misreading field |
 | `plans/2026-09-08-metric-reference.md` | Task-by-task plan for the metric reference: confirm the enumeration against source first, then a citation/symbol checker, then seven family files |
 | `plans/2026-09-05-simulate.md` | Task-by-task plan for `/simulate`: numpy-only sampling and Spearman, engine-refusal codes with a tested completeness table, and suppression above a 10% refused fraction |
+| `2026-09-12-theme-and-policy-spreads-design.md` | Track I-D: theme and policy relative-strength spreads on Market Overview, event-line toggles, and why acquisition is lazy through the existing OHLCV path rather than a new scheduler or watchlist entry |
 
 ## Process SOPs (`guideline/sop/`)
 

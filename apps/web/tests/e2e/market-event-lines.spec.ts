@@ -1,5 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
 import { mockPortfolioPageApi } from "./helpers/portfolioPageMock";
+import { stableInkProfile } from "./helpers/chartInk";
+
+const CHART_SELECTOR = '[role="dialog"] [data-testid="tv-chart"]';
 
 /**
  * The event line is canvas pixels, so there is no element to assert on. These tests measure
@@ -68,52 +71,15 @@ async function openChart(page: Page) {
   return dialog;
 }
 
-/** Ink per x column across every canvas in the modal's chart, in bitmap pixels. */
-async function inkProfile(page: Page): Promise<{ ink: number[]; height: number }> {
-  return page.evaluate(() => {
-    const container = document.querySelector('[role="dialog"] [data-testid="tv-chart"]');
-    if (!container) return { ink: [], height: 0 };
-    const canvases = Array.from(container.querySelectorAll("canvas")) as HTMLCanvasElement[];
-    const width = canvases.reduce((max, canvas) => Math.max(max, canvas.width), 0);
-    const height = canvases.reduce((max, canvas) => Math.max(max, canvas.height), 0);
-    const ink = new Array<number>(width).fill(0);
-    for (const canvas of canvases) {
-      const ctx = canvas.getContext("2d");
-      if (!ctx || canvas.width === 0) continue;
-      const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      for (let y = 0; y < canvas.height; y += 1) {
-        for (let x = 0; x < canvas.width; x += 1) {
-          if (image.data[(y * canvas.width + x) * 4 + 3] > 0) ink[x] += 1;
-        }
-      }
-    }
-    return { ink, height };
-  });
-}
-
-/** Sample only once the canvas has stopped changing, so no reading is mid-animation. */
-async function stableInkProfile(page: Page): Promise<{ ink: number[]; height: number }> {
-  let previous = await inkProfile(page);
-  for (let attempt = 0; attempt < 20; attempt += 1) {
-    await page.waitForTimeout(250);
-    const current = await inkProfile(page);
-    if (current.ink.length > 0 && JSON.stringify(current.ink) === JSON.stringify(previous.ink)) {
-      return current;
-    }
-    previous = current;
-  }
-  return previous;
-}
-
 /** The columns the line occupies, found by removing everything the chart draws without it. */
 async function lineColumns(page: Page, dialog: ReturnType<Page["getByRole"]>) {
   const toggle = dialog.getByTestId("chart-events-toggle");
   await expect(toggle).toHaveAttribute("aria-pressed", "true");
-  const withLine = await stableInkProfile(page);
+  const withLine = await stableInkProfile(page, CHART_SELECTOR);
 
   await toggle.click();
   await expect(toggle).toHaveAttribute("aria-pressed", "false");
-  const withoutLine = await stableInkProfile(page);
+  const withoutLine = await stableInkProfile(page, CHART_SELECTOR);
 
   const columns: number[] = [];
   let peak = 0;

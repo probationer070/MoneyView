@@ -173,6 +173,12 @@ def test_build_market_regime_context_summarizes_breadth_and_cross_asset_signals(
     }
 
     def fake_get_stock_ohlcv(ticker: str, period: str = "1mo", table: str = "indices"):
+        # MarketDataService iterates every ticker in MARKET_INDICES, not just the ones this
+        # fixture names deltas for. A ticker the registry gains later (e.g. ^VIX) must be
+        # skipped like any other instrument this quote fixture has no opinion on, not crash
+        # the stub -- so any ticker missing from `quotes` gets no bars.
+        if ticker not in quotes:
+            return []
         latest = date(2026, 4, 11)
         delta = quotes[ticker].delta.delta_pct
         prev_close = 100.0
