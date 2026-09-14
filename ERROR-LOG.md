@@ -205,7 +205,10 @@ had begun airstrikes against Iran" (28 Feb). The note attributes the WTI figures
 database, and the unconfirmed later-strike dates are removed.
 Files changed: apps/api/services/market_events.json, guideline/sop/todo.md
 Prevention: a source is fetched and the specific claim found on it before it is committed. The
-loader can only check that a source exists, not that it says anything.
+loader can only check that a source exists, not that it says anything. Added 2026-09-14:
+`test_no_committed_source_names_a_different_month_or_year_than_its_event` rejects a source whose
+URL names a month or year other than its event's, or that is not https. It fails on the July
+link that shipped; it still cannot confirm what a page says.
 
 ## 2026-09-12: the grid filter offered "total", which meant everything except the total
 
