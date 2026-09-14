@@ -35,16 +35,28 @@ test("simulation lab keeps heavy runs idle on first load and only looks up price
   await expect(page.getByText("No analysis run yet").first()).toBeVisible();
   await expect(page.getByRole("button", { name: "Run Path Simulation" })).toBeVisible();
 
+  // The page's timers run on a fake clock from here, so "no lookup yet" can be checked after
+  // every pending timer has fired rather than after a guessed wait. With a real 300ms wait this
+  // test stayed green against a lookup debounced 800ms after typing -- the exact behaviour it
+  // exists to forbid (ERROR-LOG.md 2026-09-14).
+  await page.clock.install();
+  const flushPageTimers = async () => {
+    await page.clock.runFor(60_000);
+    // A request issued by a timer that just fired still has to reach the route handler.
+    await page.waitForTimeout(250);
+  };
+
   await page.getByRole("tab", { name: /Corporate Valuation/i }).click();
   await expect(page.getByText("No analysis run yet").first()).toBeVisible();
   await expect(page.getByText("Run the valuation engine to generate fair value distribution, undervaluation probability, z-score, and DCF uncertainty summaries.")).toBeVisible();
-  await page.waitForTimeout(300);
-  expect(priceLookupRequests).toBe(0);
+  await flushPageTimers();
+  expect(priceLookupRequests, "a price lookup ran with no ticker entered").toBe(0);
 
   await page.getByLabel("Ticker").fill("AAPL");
-  await page.waitForTimeout(300);
-  expect(priceLookupRequests).toBe(0);
+  await flushPageTimers();
+  expect(priceLookupRequests, "a price lookup ran from typing, before the field was left").toBe(0);
 
+  await page.clock.resume();
   await page.getByLabel("Ticker").press("Tab");
   await expect(page.getByText("AAPL price loaded from cache.")).toBeVisible();
   expect(priceLookupRequests).toBe(1);

@@ -26,6 +26,27 @@ reveal that; only checking the code did.
 
 An entry states what was true when it was written. Nothing updates it on its own.
 
+## 2026-09-14: the price-lookup-on-blur test waited 300ms for a lookup that could come later
+
+Date: 2026-09-14
+Command: follow-up to the test-spec audit; simulation-lab-price-autofill.spec.ts re-run against a
+lookup triggered 800ms after typing, with no blur
+Failure: "simulation lab keeps heavy runs idle on first load and only looks up price after user blur"
+stayed green. It asserted zero lookups after a real `waitForTimeout(300)`, so any trigger slower
+than that -- a debounced lookup-as-you-type, the obvious wrong implementation -- fired after the
+check.
+Root cause: an absence asserted after a guessed wait proves only that nothing happened in that
+window.
+Fix: the page runs on Playwright's fake clock for that stretch. Each "no lookup yet" check follows
+`page.clock.runFor(60_000)`, which fires every pending page timer, then the clock resumes before
+the blur. Now fails with "a price lookup ran from typing, before the field was left" (received 2).
+The sibling corporate "stays idle until refresh" check was run against an auto-refresh 800ms after
+load and does catch it, so it was left alone; a trigger delayed well past page load would still
+slip by it.
+Files changed: apps/web/tests/e2e/simulation-lab-price-autofill.spec.ts
+Prevention: for "nothing happens until X", drive the clock past every pending timer instead of
+waiting a fixed interval.
+
 ## 2026-09-14: four Playwright tests stayed green with the behaviour they guard removed
 
 Date: 2026-09-14
