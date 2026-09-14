@@ -64,6 +64,7 @@ but check `docs/architecture/` first for the authoritative system description.
 | --- | --- |
 | `api-usage.md` | Backend API usage walkthrough and examples |
 | `local-run-resources.md` | Measured RAM/CPU cost of `run MoneyView`, the `/dev/*` tool URLs and the flag they need, and operational hazards |
+| `git-worktrees.md` | Using git worktrees here: creating and removing them, the editable-install import trap, e2e port collisions, per-worktree data, Windows path length |
 | `dcf-valuation.md` | DCF valuation methodology, user-facing explanation |
 | `metrics/README.md` | Metric reference entry point: what earns an entry, the eight-field template, seven family files, and the gaps the reference does not cover |
 | `risk-return-minard.md` | Record of the removed Risk-Return Minard chart and why |
