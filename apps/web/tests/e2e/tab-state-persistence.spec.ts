@@ -120,19 +120,26 @@ test("each tab keeps its own state under its own key", async ({ page }) => {
 test("a new session starts clean", async ({ browser }) => {
   // sessionStorage, not localStorage: a filter restored days later would quietly show a
   // subset of the watchlist with nothing explaining why.
-  const first = await browser.newContext();
-  const firstPage = await first.newPage();
+  //
+  // A new TAB in the same browser context, not a new context. A fresh context starts with
+  // empty localStorage as well as empty sessionStorage, so the previous version of this test
+  // stayed green with the state moved to localStorage -- the regression it exists to catch.
+  // Tabs in one context share localStorage and not sessionStorage, which is the distinction.
+  const context = await browser.newContext();
+  const firstPage = await context.newPage();
   await mockPortfolioPageApi(firstPage);
   await gotoPortfolio(firstPage);
   await firstPage.getByTestId("grid-search").fill("AAP");
   await expect(firstPage.getByTestId("grid-search")).toHaveValue("AAP");
-  await first.close();
 
-  const second = await browser.newContext();
-  const secondPage = await second.newPage();
+  const secondPage = await context.newPage();
   await mockPortfolioPageApi(secondPage);
   await gotoPortfolio(secondPage);
+  // State is restored in an effect after hydration. The tiles render from a query that runs
+  // after that effect, so waiting for one keeps the empty check below from passing before a
+  // restore has had its chance.
+  await expect(secondPage.getByTestId("stock-tile-AAPL")).toBeVisible();
 
   await expect(secondPage.getByTestId("grid-search")).toHaveValue("");
-  await second.close();
+  await context.close();
 });

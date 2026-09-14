@@ -36,9 +36,14 @@ async function expectScrollRegionContained(region: Locator) {
   const dimensions = await region.evaluate((element) => ({
     clientWidth: element.clientWidth,
     scrollWidth: element.scrollWidth,
+    overflowX: window.getComputedStyle(element).overflowX,
   }));
   expect(dimensions.clientWidth).toBeGreaterThan(0);
-  expect(dimensions.scrollWidth).toBeGreaterThanOrEqual(dimensions.clientWidth);
+  // The precondition: the content really is wider than the region, so there is something to
+  // contain. This used to be `scrollWidth >= clientWidth`, which is true of every element, and
+  // the helper passed with the region's scrolling removed.
+  expect(dimensions.scrollWidth, "the table no longer overflows its region at this width").toBeGreaterThan(dimensions.clientWidth);
+  expect(["auto", "scroll"], "the overflowing table is not contained by a scrolling region").toContain(dimensions.overflowX);
 }
 
 async function expectChartPanelRendered(page: Page, title: string) {
@@ -46,18 +51,18 @@ async function expectChartPanelRendered(page: Page, title: string) {
   await expect(titleNode).toBeVisible({ timeout: 30_000 });
   await expect
     .poll(async () => titleNode.evaluate((element) => {
-      let current = element.parentElement;
-      while (current && current !== document.body) {
-        const hasRenderedChartSvg = Array.from(current.querySelectorAll("svg")).some((svg) => {
-          const rect = svg.getBoundingClientRect();
-          const style = window.getComputedStyle(svg);
-          return rect.width > 20 && rect.height > 20 && style.display !== "none" && style.visibility !== "hidden";
-        });
-        if (hasRenderedChartSvg) return true;
-        current = current.parentElement;
-      }
-      return false;
-    }))
+      // The chart's own card, not any ancestor. Walking up to <body> found the neighbouring
+      // chart's svg -- or a lucide icon -- so this passed with the Sector Allocation chart
+      // replaced by its empty state. Every panel this is called with sits in a <section> or a
+      // bordered card, and a drawn chart is a recharts surface, not any svg.
+      const card = element.closest("section, .border");
+      if (!card) return false;
+      return Array.from(card.querySelectorAll("svg.recharts-surface")).some((svg) => {
+        const rect = svg.getBoundingClientRect();
+        const style = window.getComputedStyle(svg);
+        return rect.width > 20 && rect.height > 20 && style.display !== "none" && style.visibility !== "hidden";
+      });
+    }), { message: `no chart drawn inside the "${title}" panel` })
     .toBeTruthy();
 }
 
