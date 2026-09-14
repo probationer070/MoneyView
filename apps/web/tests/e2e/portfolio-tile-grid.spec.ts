@@ -342,9 +342,11 @@ test("the grid shows a group, not whatever had a weight", async ({ page }) => {
   await expect(page.getByTestId("stock-tile-KEEP2")).toBeVisible();
   await expect(page.getByTestId("stock-tile-REST1")).toHaveCount(0);
 
-  // Every weight here is 0. Under the old rule this universe had no holdings at all and
-  // the grid would have substituted the most recent twelve.
-  await expect(page.getByTestId("grid-fallback-banner")).toHaveCount(0);
+  // Every weight here is 0. Under the old rule this universe had no holdings at all and the
+  // grid substituted the most recent stocks behind a fallback banner. Exactly the group's two
+  // tiles, not "no banner": the banner's testid no longer exists anywhere, so checking for its
+  // absence could never fail (ERROR-LOG.md 2026-09-14).
+  await expect(page.getByTestId("stock-tile-grid").locator('> [data-testid^="stock-tile-cell-"]')).toHaveCount(2);
 });
 
 test("switching to All shows every group", async ({ page }) => {

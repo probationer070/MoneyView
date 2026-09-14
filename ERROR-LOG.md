@@ -26,6 +26,25 @@ reveal that; only checking the code did.
 
 An entry states what was true when it was written. Nothing updates it on its own.
 
+## 2026-09-14: a grid test asserted the absence of a banner that no longer exists
+
+Date: 2026-09-14
+Command: test-spec audit; grep for `grid-fallback-banner` across apps/web/app, components and lib
+Failure: portfolio-tile-grid.spec.ts "the grid shows a group, not whatever had a weight" ended with
+`expect(getByTestId("grid-fallback-banner")).toHaveCount(0)`. The fallback and its banner were
+removed when grid membership moved to `group_name`, so that testid exists nowhere and the check
+could never fail.
+Root cause: the behaviour was deleted and the assertion about it was kept, reading as a guard.
+Fix: replaced with an exact count of the grid's tiles (2, the group's members). Fails with
+`Expected: 2, Received: 3` when the grid adds one tile outside the group -- a mutation that leaves
+the test's existing REST1-absent check green. Separately removed
+tests/api/test_corporate_companies_registry.py, a copy of the same-named test in
+test_watchlist_resync.py whose only difference was a weaker `source in {portfolio, watchlist}`.
+Files changed: apps/web/tests/e2e/portfolio-tile-grid.spec.ts,
+tests/api/test_corporate_companies_registry.py (deleted)
+Prevention: when a feature is removed, delete or rewrite the assertions that named it; an absence
+check on a selector nothing renders is permanently true.
+
 ## 2026-09-14: the price-lookup-on-blur test waited 300ms for a lookup that could come later
 
 Date: 2026-09-14
