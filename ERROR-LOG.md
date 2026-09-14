@@ -26,6 +26,45 @@ reveal that; only checking the code did.
 
 An entry states what was true when it was written. Nothing updates it on its own.
 
+## 2026-09-14: four Playwright tests stayed green with the behaviour they guard removed
+
+Date: 2026-09-14
+Command: test-spec audit; each test re-run against a source edit that removes what its name promises
+Failure: all four passed against the broken implementation.
+- portfolio-tile-grid.spec.ts "...never blanks the headlines": passed with `placeholderData` removed
+  from the bulk-news query. It counted headlines right after each keystroke, before the 400ms
+  debounce issued the new key, so the window where the grid blanks was never sampled.
+- simulation-lab-price-autofill.spec.ts "ignores stale lookup responses": passed with BOTH the
+  request abort and the stale-response guard removed. OLD was delayed 400ms and the field was
+  checked the moment NEW landed -- before OLD could arrive.
+- tab-state-persistence.spec.ts "a new session starts clean": passed with tab state moved to
+  localStorage. A fresh browser context has empty localStorage too, so it could not tell them apart.
+- high-risk-render-regression.spec.ts: two helpers could not fail. `expectScrollRegionContained`
+  asserted `scrollWidth >= clientWidth`, true of every element, and passed with the allocation
+  table's scrolling removed. `expectChartPanelRendered` walked every ancestor up to <body> for any
+  svg, and passed with the Sector Allocation chart replaced by its empty state (it found the
+  neighbouring chart or an icon).
+Root cause: each check ran outside the condition it named -- too early (two), in a setup that
+cannot express the difference (one), or over a scope wide enough to find something else (one).
+Fix: the tile-grid test holds the new key's news request open and samples headlines across the
+hold; the stale-lookup test holds OLD until NEW has landed, delivers it, then checks (and releases
+in `finally`: a failure before the release left the route handler waiting and teardown hung for
+44 minutes); the session test opens a second tab in the SAME context, which shares localStorage
+but not sessionStorage, after a tile proves the restore effect ran; the scroll helper asserts the
+table overflows and the region's overflow-x is auto/scroll; the chart helper scopes to the title's
+own card and requires an `svg.recharts-surface`.
+Verified: each now fails against the edit above ("headlines blanked while the news request was in
+flight", stale "NEW price loaded" message gone, `"AAP"` restored in the new tab, overflow-x
+`visible`, `no chart drawn inside the "Sector Allocation" panel`), and the stale-lookup test still
+passes with only one of its two protections removed, since either alone is sufficient.
+Files changed: apps/web/tests/e2e/portfolio-tile-grid.spec.ts,
+apps/web/tests/e2e/simulation-lab-price-autofill.spec.ts,
+apps/web/tests/e2e/tab-state-persistence.spec.ts,
+apps/web/tests/e2e/high-risk-render-regression.spec.ts
+Prevention: a check for something that must NOT happen needs the moment it would happen held open
+or observed, not a check timed to land before it; a helper that searches must be bounded to the
+thing named.
+
 ## 2026-09-13: every /detail/<ticker> page rendered "No data available for UNDEFINED"
 
 Date: 2026-09-13

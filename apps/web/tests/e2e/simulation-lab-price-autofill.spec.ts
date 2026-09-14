@@ -168,29 +168,49 @@ test("simulation lab shows inline not-found feedback for invalid tickers", async
 });
 
 test("simulation lab ignores stale lookup responses for an older ticker", async ({ page }) => {
+  // The OLD response is held until NEW has landed, then delivered, and only then is the field
+  // checked. The previous version delayed OLD by 400ms and checked the field the moment NEW
+  // appeared -- before OLD could arrive -- so it stayed green with both the request abort and
+  // the stale-response guard removed.
+  let releaseOld: () => void = () => {};
+  const oldReleased = new Promise<void>((resolve) => {
+    releaseOld = resolve;
+  });
+  let oldDelivered: () => void = () => {};
+  const oldDone = new Promise<void>((resolve) => {
+    oldDelivered = resolve;
+  });
+
   await page.route("**/api/v1/stock/*/price", async (route) => {
     const url = new URL(route.request().url());
     const ticker = decodeURIComponent(url.pathname.split("/").at(-2) ?? "");
 
     if (ticker === "OLD") {
-      await new Promise((resolve) => setTimeout(resolve, 400));
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({
-          status: "ok",
-          data: {
-            ticker: "OLD",
+      await oldReleased;
+      try {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
             status: "ok",
-            price: 12345,
-            as_of_date: "2026-04-19",
-            source: "cache",
-            freshness_status: "fresh_cache",
-            retry_after_seconds: null,
-            detail_note: "Latest price served from local cache.",
-          },
-        }),
-      });
+            data: {
+              ticker: "OLD",
+              status: "ok",
+              price: 12345,
+              as_of_date: "2026-04-19",
+              source: "cache",
+              freshness_status: "fresh_cache",
+              retry_after_seconds: null,
+              detail_note: "Latest price served from local cache.",
+            },
+          }),
+        });
+      } catch {
+        // The page aborted the OLD request when NEW started, so there is nothing to deliver.
+        // That is one of the two protections this test covers, not a test failure.
+      } finally {
+        oldDelivered();
+      }
       return;
     }
 
@@ -213,13 +233,26 @@ test("simulation lab ignores stale lookup responses for an older ticker", async 
     });
   });
 
-  await openCorporateValuationTab(page);
-  await page.getByLabel("Ticker").fill("OLD");
-  await page.getByLabel("Ticker").press("Tab");
-  await page.getByLabel("Ticker").fill("NEW");
-  await page.getByLabel("Ticker").press("Tab");
+  try {
+    await openCorporateValuationTab(page);
+    await page.getByLabel("Ticker").fill("OLD");
+    await page.getByLabel("Ticker").press("Tab");
+    await page.getByLabel("Ticker").fill("NEW");
+    await page.getByLabel("Ticker").press("Tab");
 
-  await expect(page.getByText("NEW price loaded from cache.")).toBeVisible();
-  await expect(page.getByLabel("Current stock price")).toHaveValue("67890");
-  await expect(page.getByLabel("Current stock price")).not.toHaveValue("12345");
+    await expect(page.getByText("NEW price loaded from cache.")).toBeVisible();
+    await expect(page.getByLabel("Current stock price")).toHaveValue("67890");
+
+    releaseOld();
+    await oldDone;
+    // A response the page does accept is applied within a render; 500ms after delivery is
+    // far past that, so still holding NEW's values here means OLD was discarded.
+    await page.waitForTimeout(500);
+    await expect(page.getByLabel("Current stock price")).toHaveValue("67890");
+    await expect(page.getByText("NEW price loaded from cache.")).toBeVisible();
+  } finally {
+    // A failure before the release above would otherwise leave the OLD route handler waiting
+    // forever, and Playwright's teardown waits on it -- observed as a 44-minute hang.
+    releaseOld();
+  }
 });

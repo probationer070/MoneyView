@@ -226,6 +226,19 @@ test("search filters the grid", async ({ page }) => {
 
 test("typing a four character search issues one bulk news request and never blanks the headlines", async ({ page }) => {
   await mockPortfolioPageApi(page);
+  // Holds the search's news request open once armed, then defers to the base mock. Without
+  // the hold, the window this test is about -- the new key issued, its data not yet back --
+  // closes in a few milliseconds and no check lands inside it. Removing `placeholderData`
+  // from the bulk-news query left the previous version of this test green.
+  let holdNews = false;
+  let releaseNews: () => void = () => {};
+  const newsReleased = new Promise<void>((resolve) => {
+    releaseNews = resolve;
+  });
+  await page.route("**/api/v1/news/feed/bulk**", async (route) => {
+    if (holdNews) await newsReleased;
+    await route.fallback();
+  });
   await gotoGrid(page);
   await expect(page.getByTestId("stock-tile-AAPL")).toContainText("AAPL headline one");
   await page.waitForLoadState("networkidle");
@@ -237,13 +250,23 @@ test("typing a four character search issues one bulk news request and never blan
 
   const headlines = page.getByText(/AAPL headline/);
   const search = page.getByTestId("grid-search");
+  holdNews = true;
   await search.click();
   for (const character of "AAPL") {
     await search.pressSequentially(character);
-    // placeholderData must hold the previous news on the tiles while the debounced key
-    // catches up, or the grid blanks on every keystroke.
     expect(await headlines.count()).toBeGreaterThan(0);
   }
+
+  // The debounced key has changed and its request is in flight, held open. placeholderData
+  // must keep the previous news on the tiles for as long as that lasts; without it the data
+  // is undefined for the new key and every headline disappears. Sampled across the hold
+  // rather than once, because the blank arrives on the render after the key changes.
+  await expect.poll(() => bulkRequests).toBe(1);
+  for (let sample = 0; sample < 10; sample += 1) {
+    expect(await headlines.count(), `headlines blanked while the news request was in flight (sample ${sample})`).toBeGreaterThan(0);
+    await page.waitForTimeout(100);
+  }
+  releaseNews();
 
   await expect(page.getByTestId("stock-tile-MSFT")).toHaveCount(0);
   // 400ms debounce plus the round trip, then a margin for any extra request to show up.
