@@ -196,6 +196,27 @@ def test_the_route_serves_one_row_per_pair_each_with_a_basis(monkeypatch):
         assert (row["refused_reason"] is None) != (row["series"] == [])
 
 
+def test_the_route_default_window_is_the_engine_default(monkeypatch):
+    """One default, stated twice: the route declares `Query(default=90)` and `build_spreads`
+    takes `window_days=DEFAULT_WINDOW_DAYS`. Changing either alone would leave the page and
+    every direct caller of the service disagreeing about what "the default window" means,
+    with nothing on screen to show it.
+
+    Replaces a test in test_relative_strength.py that asserted only `DEFAULT_WINDOW_DAYS > 0`
+    and passed with the constant changed from 90 to 1 (ERROR-LOG.md 2026-09-14)."""
+    from packages.core_finance.relative_strength import DEFAULT_WINDOW_DAYS
+
+    stub = _stub_every_ticker()
+    monkeypatch.setattr(spreads_service, "MarketDataService", lambda: stub)
+
+    response = TestClient(app).get("/api/v1/market/spreads")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload, "no rows came back, so no window was compared"
+    assert {row["requested_window_days"] for row in payload} == {DEFAULT_WINDOW_DAYS}
+
+
 def test_the_route_accepts_a_window_in_days(monkeypatch):
     stub = _stub_every_ticker()
     monkeypatch.setattr(spreads_service, "MarketDataService", lambda: stub)

@@ -26,6 +26,23 @@ reveal that; only checking the code did.
 
 An entry states what was true when it was written. Nothing updates it on its own.
 
+## 2026-09-14: a relative-strength test named a guarantee it never checked
+
+Date: 2026-09-14
+Command: test-spec audit; mutation run of tests/core_finance/test_relative_strength.py
+Failure: `test_the_default_window_is_derived_from_the_module_constant_not_mirrored` asserted only
+`DEFAULT_WINDOW_DAYS > 0` and that a dataclass holds a float. It passed with the constant changed
+from 90 to 1. Its name promised protection against fixtures mirroring the window; it exercised no
+fixture and no window.
+Root cause: the test restated guidance from its docstring instead of testing a consequence of it.
+Fix: removed it, and added `test_the_route_default_window_is_the_engine_default` to
+tests/api/test_market_spreads.py. The default window is stated twice -- `Query(default=90)` on the
+route and `window_days=DEFAULT_WINDOW_DAYS` on `build_spreads` -- and the new test fails if either
+moves alone: `{90} == {1}` with the constant at 1, `{30} == {90}` with the route default at 30.
+Files changed: tests/core_finance/test_relative_strength.py, tests/api/test_market_spreads.py
+Prevention: a test whose name states a guarantee must fail when that guarantee is broken; a test
+that only touches a constant's sign or type cannot.
+
 ## 2026-09-13: a new section on a shared page broke two existing specs that no task gate ran
 
 Date: 2026-09-13

@@ -13,11 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import pytest
 
-from packages.core_finance.relative_strength import (
-    DEFAULT_WINDOW_DAYS,
-    RelativeStrengthPoint,
-    relative_strength,
-)
+from packages.core_finance.relative_strength import relative_strength
 
 
 def test_an_identical_pair_is_exactly_100_at_every_date():
@@ -112,10 +108,3 @@ def test_a_zero_base_refuses_rather_than_dividing():
     assert result.points == []
     assert "zero" in result.refused_reason
 
-
-def test_the_default_window_is_derived_from_the_module_constant_not_mirrored():
-    """Derive fixture spans from DEFAULT_WINDOW_DAYS rather than hardcoding 90. A fixture
-    tuned to today's value of a constant can stop reaching what it probes when the constant
-    changes, and then passes while asserting nothing (observed 2026-09-03)."""
-    assert DEFAULT_WINDOW_DAYS > 0
-    assert isinstance(RelativeStrengthPoint("2026-01-01", 100.0).value, float)
