@@ -8,9 +8,12 @@ import { DiagnosticWorkbench } from "@/components/workbenches/DiagnosticWorkbenc
 import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
 
 interface PageProps {
-  params: {
+  // A Promise in Next.js 16, not a plain object. Typed as the object it used to be, the
+  // compiler accepted `params.ticker`, which is undefined at runtime -- so every ticker's page
+  // fetched /detail/UNDEFINED and rendered "No data available for UNDEFINED".
+  params: Promise<{
     ticker: string;
-  };
+  }>;
 }
 
 interface StockOHLCV {
@@ -35,7 +38,8 @@ interface Technicals {
 }
 
 export default async function TickerDetailPage({ params }: PageProps) {
-  const ticker = decodeURIComponent(params.ticker).toUpperCase();
+  const { ticker: routeTicker } = await params;
+  const ticker = decodeURIComponent(routeTicker).toUpperCase();
   const apiBaseUrl = serverApiBaseUrl();
 
   // Parallel fetching from FastAPI

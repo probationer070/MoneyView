@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { fetchApi } from "@/lib/api";
 import { useDevMonitorPageLoad } from "@/hooks/useDevMonitorPageLoad";
 import TVChart from "@/components/charts/TVChart";
+import { EventsToggle } from "@/components/charts/EventsToggle";
 import { DeltaBadge } from "@/components/ui/DeltaBadge";
 import { ViewToggle, type ViewMode } from "@/components/ui/ViewToggle";
 import { type RawOHLCV, transformToTVCandles, transformToTVVolume } from "@/lib/transformers";
@@ -16,6 +17,8 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { ModalShell } from "@/components/ui/ModalShell";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { SparklineCard } from "@/components/data/SparklineCard";
+import { SpreadsSection } from "@/components/market/SpreadsSection";
+import { useMarketEvents } from "@/lib/useMarketEvents";
 
 export interface MarketIndexQuote {
   name: string;
@@ -355,6 +358,8 @@ function MarketDetailModal({ item, onClose }: { item: MarketIndexQuote; onClose:
   const trendSummary = useMemo(() => summarizeTrend(item.sparkline), [item.sparkline]);
   const chartColor = (item.delta.delta_pct ?? 0) >= 0 ? "var(--delta-up)" : "var(--delta-down)";
   const [chartTimeframe, setChartTimeframe] = useState<"daily" | "monthly">("daily");
+  const [showEvents, setShowEvents] = useState(true);
+  const { lines: eventLines } = useMarketEvents();
   const detailQuery = useQuery<MarketIndexDetail>({
     queryKey: ["market-index-detail", item.ticker],
     queryFn: () =>
@@ -512,6 +517,13 @@ function MarketDetailModal({ item, onClose }: { item: MarketIndexQuote; onClose:
                         Monthly
                       </button>
                     </div>
+                    {eventLines.length > 0 ? (
+                      <EventsToggle
+                        pressed={showEvents}
+                        onToggle={() => setShowEvents((shown) => !shown)}
+                        testId="market-events-toggle"
+                      />
+                    ) : null}
                   </div>
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2 text-xs text-[var(--text-muted)]">
@@ -534,6 +546,9 @@ function MarketDetailModal({ item, onClose }: { item: MarketIndexQuote; onClose:
                       height={420}
                       tickerName={`${item.name} ${chartTimeframe}`}
                       colorAccent={chartColor}
+                      events={eventLines}
+                      showEvents={showEvents}
+                      eventGranularity={chartTimeframe === "monthly" ? "month" : "day"}
                     />
                   ) : (
                     <div className="flex h-[420px] items-center justify-center text-sm text-[var(--text-muted)]">
@@ -760,6 +775,8 @@ export function MarketOverviewClient({
           </div>
         )}
       </section>
+
+      <SpreadsSection />
 
       {selectedIndex ? <MarketDetailModal item={selectedIndex} onClose={() => setSelectedIndex(null)} /> : null}
     </>

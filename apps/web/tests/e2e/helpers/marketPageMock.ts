@@ -48,6 +48,18 @@ export async function mockMarketPageApi(
       }
     }
 
+    // The Market Overview page also requests spreads and event lines. Without these, the
+    // catch-all below forwards them to the live API and any spec using this helper silently
+    // stops being deterministic. Specs that need real-looking rows register their own mocks
+    // AFTER calling this helper; Playwright matches the most recently registered handler first,
+    // so theirs still win.
+    if (pathname === `${API_PREFIX}/market/spreads` && method === "GET") {
+      return json(route, []);
+    }
+    if (pathname === `${API_PREFIX}/market/events` && method === "GET") {
+      return json(route, []);
+    }
+
     return route.continue();
   });
 }

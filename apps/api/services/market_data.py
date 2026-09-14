@@ -83,6 +83,7 @@ MARKET_INDICES = {
     "Natural Gas": "NG=F",
     "USD/KRW": "KRW=X",
     "Bitcoin": "BTC-USD",
+    "Volatility (VIX)": "^VIX",
 }
 
 INSTRUMENT_METADATA = {
@@ -90,6 +91,7 @@ INSTRUMENT_METADATA = {
     "^DJI": {"instrument_type": "index", "unit_label": "index points"},
     "^IXIC": {"instrument_type": "index", "unit_label": "index points"},
     "^KS200": {"instrument_type": "index", "unit_label": "index points"},
+    "^VIX": {"instrument_type": "index", "unit_label": "index points"},
     "GC=F": {"instrument_type": "commodity", "unit_label": "USD per ounce"},
     "CL=F": {"instrument_type": "commodity", "unit_label": "USD per barrel"},
     "NG=F": {"instrument_type": "commodity", "unit_label": "USD per MMBtu"},
