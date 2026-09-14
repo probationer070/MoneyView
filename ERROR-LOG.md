@@ -26,6 +26,46 @@ reveal that; only checking the code did.
 
 An entry states what was true when it was written. Nothing updates it on its own.
 
+## 2026-09-14: a grid test asserted the absence of a banner that no longer exists
+
+Date: 2026-09-14
+Command: test-spec audit; grep for `grid-fallback-banner` across apps/web/app, components and lib
+Failure: portfolio-tile-grid.spec.ts "the grid shows a group, not whatever had a weight" ended with
+`expect(getByTestId("grid-fallback-banner")).toHaveCount(0)`. The fallback and its banner were
+removed when grid membership moved to `group_name`, so that testid exists nowhere and the check
+could never fail.
+Root cause: the behaviour was deleted and the assertion about it was kept, reading as a guard.
+Fix: replaced with an exact count of the grid's tiles (2, the group's members). Fails with
+`Expected: 2, Received: 3` when the grid adds one tile outside the group -- a mutation that leaves
+the test's existing REST1-absent check green. Separately removed
+tests/api/test_corporate_companies_registry.py, a copy of the same-named test in
+test_watchlist_resync.py whose only difference was a weaker `source in {portfolio, watchlist}`.
+Files changed: apps/web/tests/e2e/portfolio-tile-grid.spec.ts,
+tests/api/test_corporate_companies_registry.py (deleted)
+Prevention: when a feature is removed, delete or rewrite the assertions that named it; an absence
+check on a selector nothing renders is permanently true.
+
+## 2026-09-14: the price-lookup-on-blur test waited 300ms for a lookup that could come later
+
+Date: 2026-09-14
+Command: follow-up to the test-spec audit; simulation-lab-price-autofill.spec.ts re-run against a
+lookup triggered 800ms after typing, with no blur
+Failure: "simulation lab keeps heavy runs idle on first load and only looks up price after user blur"
+stayed green. It asserted zero lookups after a real `waitForTimeout(300)`, so any trigger slower
+than that -- a debounced lookup-as-you-type, the obvious wrong implementation -- fired after the
+check.
+Root cause: an absence asserted after a guessed wait proves only that nothing happened in that
+window.
+Fix: the page runs on Playwright's fake clock for that stretch. Each "no lookup yet" check follows
+`page.clock.runFor(60_000)`, which fires every pending page timer, then the clock resumes before
+the blur. Now fails with "a price lookup ran from typing, before the field was left" (received 2).
+The sibling corporate "stays idle until refresh" check was run against an auto-refresh 800ms after
+load and does catch it, so it was left alone; a trigger delayed well past page load would still
+slip by it.
+Files changed: apps/web/tests/e2e/simulation-lab-price-autofill.spec.ts
+Prevention: for "nothing happens until X", drive the clock past every pending timer instead of
+waiting a fixed interval.
+
 ## 2026-09-14: a relative-strength test named a guarantee it never checked
 
 Date: 2026-09-14
