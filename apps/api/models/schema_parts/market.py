@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -183,17 +183,19 @@ class MarketIndexDetail(BaseModel):
     market_regime: Optional[MarketRegimeContext] = None
 
 
+EventOrigin = Literal["builtin", "rule", "user"]
+
+
 class MarketEvent(BaseModel):
-    """A dated market-moving event, drawn as a vertical line on price charts.
+    """A dated event drawn as a vertical line on price charts.
 
-    Asserted, not derived: these are claims about the world (a policy decision, a military
-    operation) rather than computations over bars, so `source` is required and non-empty.
-    That field is the whole reason a reader can trust the line -- see
-    `apps.api.services.market_events`.
+    Built-in and rule events are asserted facts and carry a source; a user's own event may not,
+    and `origin` is what lets the chart say so rather than presenting it as checked. See
+    `apps.api.services.events`.
 
-    `end_date` is None for a point-in-time event, which is the common case. A range is left
-    representable because an operation or a shock has a duration, and the renderer treats a
-    null end as a single line rather than a zero-width band.
+    `missing_category` is set only on a user event whose category was removed from the
+    built-in file: the event is then served as `uncategorized` and keeps the old id here, so
+    the Events page can ask for a new one instead of the event silently changing meaning.
     """
 
     id: str
@@ -201,8 +203,26 @@ class MarketEvent(BaseModel):
     category: str
     start_date: str
     end_date: Optional[str] = None
-    source: str
+    source: Optional[str] = None
     note: str = ""
+    origin: EventOrigin = "builtin"
+    missing_category: Optional[str] = None
+
+
+class EventCategory(BaseModel):
+    """A category after resolution: file defaults, then saved overrides, then visibility.
+
+    `visible` is a per-machine display preference (the global chart filter), not part of the
+    category's definition. `overridden` is true only when a saved override makes a built-in's
+    label or colour differ from its file default.
+    """
+
+    id: str
+    label: str
+    color: str
+    origin: Literal["builtin", "user"]
+    visible: bool = True
+    overridden: bool = False
 
 
 class MarketSpreadPoint(BaseModel):
