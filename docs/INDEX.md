@@ -93,6 +93,7 @@ sub-project and feeding an implementation plan.
 | `plans/2026-09-08-metric-reference.md` | Task-by-task plan for the metric reference: confirm the enumeration against source first, then a citation/symbol checker, then seven family files |
 | `plans/2026-09-05-simulate.md` | Task-by-task plan for `/simulate`: numpy-only sampling and Spearman, engine-refusal codes with a tested completeness table, and suppression above a 10% refused fraction |
 | `2026-09-12-theme-and-policy-spreads-design.md` | Track I-D: theme and policy relative-strength spreads on Market Overview, event-line toggles, and why acquisition is lazy through the existing OHLCV path rather than a new scheduler or watchlist entry |
+| `2026-09-15-market-event-registry-design.md` | Market event registry: pluggable file, rule and user event sources, colored categories with one global filter, hover tooltips, and the `/events` page (draft) |
 
 ## Process SOPs (`guideline/sop/`)
 
