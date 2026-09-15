@@ -4,15 +4,18 @@ Market routes — Tab 2: Market Overview.
 GET /api/market/indices          → all index summary cards
 GET /api/market/index/{ticker}   → single index OHLCV history
 GET /api/market/events           → dated events drawn as vertical lines on price charts
+GET /api/market/event-categories → resolved event categories (colour, visibility)
 GET /api/market/spreads            → theme and policy relative-strength spreads
 """
 
-from fastapi import APIRouter, Query
-from typing import List
+from typing import List, Optional
 
-from apps.api.models.schemas import IndexQuote, MarketEvent, MarketIndexDetail, MarketSpread, StockOHLCV
+from fastapi import APIRouter, HTTPException, Query
+
+from apps.api.models.schemas import EventCategory, IndexQuote, MarketEvent, MarketIndexDetail, MarketSpread, StockOHLCV
+from apps.api.services.events import EventDataError, default_registry, resolved_categories
+from apps.api.services.events.validation import parse_iso_date
 from apps.api.services.market_data import MarketDataService
-from apps.api.services.market_events import load_market_events
 from apps.api.services.market_spreads import build_spreads
 
 router = APIRouter()
@@ -33,14 +36,27 @@ def get_market_spreads(
 
 
 @router.get("/events", response_model=List[MarketEvent])
-def get_market_events():
-    """Return the committed market events charts draw as vertical lines.
+def get_market_events(
+    start: Optional[str] = Query(default=None, description="ISO date; events ending before it are left out"),
+    end: Optional[str] = Query(default=None, description="ISO date; events starting after it are left out"),
+):
+    """Events from every registered source, with categories resolved.
 
-    Read from a committed JSON file on every request rather than a table: the events are
-    asserted facts that travel with the repository, so every machine has the same ones after
-    a pull and there is nothing to seed or merge.
+    Built-in events are read from committed files on every request, so every machine has the
+    same ones after a pull and there is nothing to seed.
     """
-    return load_market_events()
+    try:
+        start_day = parse_iso_date(start, what="start") if start else None
+        end_day = parse_iso_date(end, what="end") if end else None
+    except EventDataError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return default_registry().events(start_day, end_day)
+
+
+@router.get("/event-categories", response_model=List[EventCategory])
+def get_event_categories():
+    """Categories after resolution: file defaults, saved overrides, user categories, visibility."""
+    return list(resolved_categories().values())
 
 
 @router.get("/indices", response_model=List[IndexQuote])

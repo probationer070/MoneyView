@@ -1,0 +1,17 @@
+{
+  "rules": [
+    {
+      "id": "quad-witching",
+      "category": "quad-witching",
+      "label": "Quadruple witching",
+      "note": "Quarterly expiration of stock index futures, stock index options, stock options and single-stock futures: the third Friday of March, June, September and December, or the previous trading day when that Friday is an exchange holiday.",
+      "source": "https://cdn.cboe.com/resources/regulation/rule_book/C1_Exchange_Rule_Book.pdf",
+      "kind": "nth_weekday_of_month",
+      "months": [3, 6, 9, 12],
+      "weekday": "FRI",
+      "nth": 3,
+      "if_closed": "previous_trading_day",
+      "from": "2020-01-01"
+    }
+  ]
+}
