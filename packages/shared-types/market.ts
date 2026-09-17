@@ -38,6 +38,30 @@ export interface EventCategory {
   overridden: boolean;
 }
 
+/** A user event as submitted. Mirrors `MarketEventInput`; `id` and `origin` are the server's. */
+export interface MarketEventInput {
+  label: string;
+  category: string;
+  start_date: string;
+  end_date?: string | null;
+  source?: string | null;
+  note?: string;
+}
+
+/** Mirrors `EventCategoryInput`. */
+export interface EventCategoryInput {
+  label: string;
+  /** `#RRGGBB`. */
+  color: string;
+}
+
+/** Mirrors `EventCategoryPatch`: only the fields present change. */
+export interface EventCategoryPatch {
+  label?: string;
+  color?: string;
+  visible?: boolean;
+}
+
 /** One date on a relative-strength series. Mirrors `MarketSpreadPoint`. */
 export interface MarketSpreadPoint {
   date: string;

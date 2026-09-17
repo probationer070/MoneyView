@@ -20,9 +20,12 @@ from pathlib import Path
 from typing import Callable, Iterable, Mapping
 
 from apps.api.models.schemas import EventCategory, MarketEvent
+from apps.api.services.db import get_db
+from apps.api.services.events import store
 from apps.api.services.events.categories import REQUIRED_CATEGORY, load_builtin_categories, resolve_categories
 from apps.api.services.events.rules import RuleEventSource, TradingCalendar, exchange_calendar
 from apps.api.services.events.sources import EventSource, FileEventSource
+from apps.api.services.events.user_source import UserEventSource
 from apps.api.services.events.validation import EventDataError
 
 EVENTS_DIR = Path(__file__).resolve().parent
@@ -91,11 +94,14 @@ def builtin_sources(events_dir: Path | None = None, calendar: TradingCalendar | 
 
 def resolved_categories(events_dir: Path | None = None) -> dict[str, EventCategory]:
     builtins = load_builtin_categories(_events_dir(events_dir) / CATEGORIES_FILE)
-    return resolve_categories(builtins, [], {})
+    with get_db() as conn:
+        rows = store.list_category_rows(conn)
+        visibility = store.list_visibility(conn)
+    return resolve_categories(builtins, rows, visibility)
 
 
 def default_registry(events_dir: Path | None = None, calendar: TradingCalendar | None = None) -> EventRegistry:
     return EventRegistry(
-        builtin_sources(events_dir, calendar),
+        [*builtin_sources(events_dir, calendar), UserEventSource()],
         lambda: resolved_categories(events_dir),
     )
