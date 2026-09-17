@@ -45,7 +45,10 @@ test("unchecking a category removes its lines from every chart, and stays unchec
   const withLines = await Promise.all(charts.map((chart) => stableInkProfile(page, chart)));
 
   await filter.click();
-  await page.getByTestId("spreads-events-filter-option-fomc").uncheck();
+  // click + a polled assertion, not .uncheck(): query updates reach React one macrotask after the click.
+  const fomcOption = page.getByTestId("spreads-events-filter-option-fomc");
+  await fomcOption.click();
+  await expect(fomcOption).not.toBeChecked();
   await expect(filter).toHaveText(/Events · 0 of 1/);
   await filter.click();
 
@@ -84,7 +87,9 @@ test("a failed filter save is undone and says so", async ({ page }) => {
   const filter = page.getByTestId("spreads-events-filter");
   await expect(filter).toHaveText(/Events · 1 of 1/);
   await filter.click();
-  await page.getByTestId("spreads-events-filter-option-fomc").uncheck();
+  // click + a polled assertion, not .uncheck(): query updates reach React one macrotask after the click.
+  const fomcCheckbox = page.getByTestId("spreads-events-filter-option-fomc");
+  await fomcCheckbox.click();
 
   await expect(page.getByTestId("spreads-events-filter-error")).toBeVisible();
   await expect(filter).toHaveText(/Events · 1 of 1/);
