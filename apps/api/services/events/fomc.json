@@ -485,6 +485,15 @@
       "end_date": null,
       "source": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20260729a.htm",
       "note": "Scheduled meeting, 28–29 July 2026."
+    },
+    {
+      "id": "fomc-2026-09-16",
+      "label": "FOMC: hike 25bp to 3.75–4.00%",
+      "category": "fomc",
+      "start_date": "2026-09-16",
+      "end_date": null,
+      "source": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20260916a.htm",
+      "note": "Scheduled meeting, 15–16 September 2026."
     }
   ]
 }
