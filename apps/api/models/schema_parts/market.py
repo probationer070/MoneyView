@@ -225,6 +225,36 @@ class EventCategory(BaseModel):
     overridden: bool = False
 
 
+class MarketEventInput(BaseModel):
+    """A user event as submitted. `origin` and `id` are the server's, so they are forbidden here."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    label: str
+    category: str
+    start_date: str
+    end_date: Optional[str] = None
+    source: Optional[str] = None
+    note: str = ""
+
+
+class EventCategoryInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    label: str
+    color: str
+
+
+class EventCategoryPatch(BaseModel):
+    """Only the fields present in the request change; absent ones are left as they are."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    label: Optional[str] = None
+    color: Optional[str] = None
+    visible: Optional[bool] = None
+
+
 class MarketSpreadPoint(BaseModel):
     """One date on a relative-strength series."""
 
