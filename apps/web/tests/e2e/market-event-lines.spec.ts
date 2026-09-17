@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { mockPortfolioPageApi } from "./helpers/portfolioPageMock";
 import { stableInkProfile } from "./helpers/chartInk";
+import { GEOPOLITICAL, mockEventsApi, setAllEventCategories } from "./helpers/eventsApiMock";
 
 const CHART_SELECTOR = '[role="dialog"] [data-testid="tv-chart"]';
 
@@ -42,22 +43,15 @@ async function mockChartAndEvents(page: Page, events: Array<{ date: string; labe
       body: JSON.stringify({ ticker: "AAPL", prices: priceSeries(), news: [] }),
     });
   });
-  await page.route("**/api/v1/market/events**", async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify(
-        events.map((event, index) => ({
-          id: `event-${index}`,
-          label: event.label ?? "U.S. strikes on Iran begin",
-          category: "geopolitical",
-          start_date: event.date,
-          end_date: null,
-          source: "https://example.com/timeline",
-          note: "",
-        })),
-      ),
-    });
+  await mockEventsApi(page, {
+    categories: [GEOPOLITICAL],
+    events: events.map((event, index) => ({
+      id: `event-${index}`,
+      label: event.label ?? "U.S. strikes on Iran begin",
+      category: "geopolitical",
+      start_date: event.date,
+      source: "https://example.com/timeline",
+    })),
   });
 }
 
@@ -73,12 +67,11 @@ async function openChart(page: Page) {
 
 /** The columns the line occupies, found by removing everything the chart draws without it. */
 async function lineColumns(page: Page, dialog: ReturnType<Page["getByRole"]>) {
-  const toggle = dialog.getByTestId("chart-events-toggle");
-  await expect(toggle).toHaveAttribute("aria-pressed", "true");
+  const filter = dialog.getByTestId("chart-events-filter");
+  await expect(filter).toHaveText(/Events · 1 of 1/);
   const withLine = await stableInkProfile(page, CHART_SELECTOR);
 
-  await toggle.click();
-  await expect(toggle).toHaveAttribute("aria-pressed", "false");
+  await setAllEventCategories(dialog, "chart-events-filter", false);
   const withoutLine = await stableInkProfile(page, CHART_SELECTOR);
 
   const columns: number[] = [];
@@ -161,7 +154,7 @@ test("on the monthly chart, an event sits on its month's candle -- including the
   expect(Math.abs(newestMonthCandle - februaryCandle)).toBeGreaterThan(20);
 });
 
-test("the toggle removes the line and the legend together", async ({ page }) => {
+test("hiding every category removes the line and the legend together", async ({ page }) => {
   await mockChartAndEvents(page, [{ date: "2026-02-28", label: "U.S. strikes on Iran begin" }]);
   const dialog = await openChart(page);
 
@@ -169,7 +162,7 @@ test("the toggle removes the line and the legend together", async ({ page }) => 
   await expect(legend).toContainText("U.S. strikes on Iran begin");
   await expect(legend).toContainText("2026-02-28");
 
-  await dialog.getByTestId("chart-events-toggle").click();
+  await setAllEventCategories(dialog, "chart-events-filter", false);
   await expect(legend).toHaveCount(0);
 });
 

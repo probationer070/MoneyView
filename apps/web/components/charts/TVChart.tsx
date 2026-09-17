@@ -1,17 +1,17 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef } from "react";
-import { createChart, IChartApi, ISeriesApi, ColorType, CrosshairMode, CandlestickSeries, HistogramSeries, LineSeries } from "lightweight-charts";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { createChart, IChartApi, ISeriesApi, ColorType, CrosshairMode, CandlestickSeries, HistogramSeries, LineSeries, type MouseEventParams, type Time } from "lightweight-charts";
 import { TVCandle, TVVolume, sanitizeTooltip } from "@/lib/transformers";
 import { emitClientPerformanceEvent } from "@/lib/api";
 import { resolveCssColor } from "@/lib/cssColor";
-import { EventLinesPrimitive, type EventGranularity, type EventLineSpec } from "@/components/charts/primitives/EventLinesPrimitive";
+import { EventLinesPrimitive, eventsNearX, type EventGranularity, type EventHit, type EventLineSpec } from "@/components/charts/primitives/EventLinesPrimitive";
+import { EventTooltip } from "@/components/charts/EventTooltip";
 
 // Event line appearance. Semi-transparent so the price is readable through it, and wide
 // enough to be prominent at any zoom.
 const EVENT_LINE_ALPHA = 0.55;
 const EVENT_LINE_WIDTH = 2;
-const EVENT_LINE_FALLBACK_COLOR = "#E8A028";
 
 export interface TVLineSeries {
     title: string;
@@ -38,10 +38,6 @@ interface TVChartProps {
     data: TVCandle[];
     /** Dated market events drawn as vertical lines behind the price. */
     events?: EventLineSpec[];
-    /** Whether those lines are drawn. The caller owns the toggle. */
-    showEvents?: boolean;
-    /** Event line colour; resolved through resolveCssColor like every other canvas colour. */
-    eventColor?: string;
     /** What one candle spans. Monthly candles are dated by their first trading day, so an event
      *  must be matched to its month rather than bracketed by day -- see eventCoordinate. */
     eventGranularity?: EventGranularity;
@@ -57,8 +53,6 @@ interface TVChartProps {
 const TVChart: React.FC<TVChartProps> = ({
     data,
     events = NO_EVENTS,
-    showEvents = true,
-    eventColor = "var(--state-warning)",
     eventGranularity = "day",
     volumeData,
     lineSeriesData = NO_LINE_SERIES,
@@ -77,7 +71,6 @@ const TVChart: React.FC<TVChartProps> = ({
     const resolvedUp = useMemo(() => resolveCssColor(upColor ?? colorAccent, "#E54545"), [upColor, colorAccent]);
     const resolvedDown = useMemo(() => resolveCssColor(downColor, "#4589E5"), [downColor]);
     const resolvedAccent = useMemo(() => resolveCssColor(colorAccent, "#E54545"), [colorAccent]);
-    const resolvedEvent = useMemo(() => resolveCssColor(eventColor, EVENT_LINE_FALLBACK_COLOR), [eventColor]);
 
     const chartContainerRef = useRef<HTMLDivElement>(null);
     const chartRef = useRef<IChartApi | null>(null);
@@ -85,6 +78,9 @@ const TVChart: React.FC<TVChartProps> = ({
     const volumeSeriesRef = useRef<ISeriesApi<"Histogram"> | null>(null);
     const eventLinesRef = useRef<EventLinesPrimitive | null>(null);
     const lineSeriesRefs = useRef<Array<ISeriesApi<"Line">>>([]);
+    // What the pointer is over. Set from the crosshair handler inside the setup effect, so hovering
+    // never becomes a dependency of that effect and cannot rebuild the chart.
+    const [hover, setHover] = useState<EventHit | null>(null);
     const safeTickerName = sanitizeTooltip(tickerName);
     const mountedAtRef = useRef<number | null>(null);
     const hasReportedRenderRef = useRef(false);
@@ -162,13 +158,30 @@ const TVChart: React.FC<TVChartProps> = ({
                 events: [],
                 barTimes: [],
                 granularity: "day",
-                color: EVENT_LINE_FALLBACK_COLOR,
                 alpha: EVENT_LINE_ALPHA,
                 lineWidth: EVENT_LINE_WIDTH,
                 visible: false,
             });
             chart.panes()[0].attachPrimitive(eventLines);
             eventLinesRef.current = eventLines;
+
+            // Reads the primitive through its ref on every move, so it always hit-tests the lines
+            // currently drawn -- never a stale closure over the first render's events.
+            const handleCrosshairMove = (param: MouseEventParams<Time>) => {
+                const container = chartContainerRef.current;
+                const near = param.point && container
+                    ? eventsNearX(param.point.x, eventLinesRef.current?.placedLines() ?? [])
+                    : null;
+                const next = near && container ? { ...near, width: container.clientWidth } : null;
+                setHover((previous) => {
+                    if (previous === null || next === null) return next;
+                    const same = previous.x === next.x
+                        && previous.events.length === next.events.length
+                        && previous.events.every((event, index) => event.id === next.events[index].id);
+                    return same ? previous : next;
+                });
+            };
+            chart.subscribeCrosshairMove(handleCrosshairMove);
             lineSeriesRefs.current = lineSeriesData.map((series) =>
                 chart.addSeries(LineSeries, {
                     color: series.color,
@@ -218,6 +231,7 @@ const TVChart: React.FC<TVChartProps> = ({
                 resizeObserver.disconnect();
                 cancelAnimationFrame(animationFrameId);
                 eventLinesRef.current = null;
+                chart.unsubscribeCrosshairMove(handleCrosshairMove);
                 chart.remove();
             };
         } catch (error) {
@@ -280,26 +294,26 @@ const TVChart: React.FC<TVChartProps> = ({
         }
     }, [data, lineSeriesData, pointCount, tickerName, volumeData, volumePointCount]); // Only recompute on strict data matrix swaps
 
-    // Event lines are pushed into the live primitive rather than handled in the init effect,
-    // so toggling them repaints without rebuilding the chart (and without losing zoom/pan).
+    // Pushed into the live primitive rather than handled in the init effect, so a filter change
+    // repaints without rebuilding the chart (and without losing zoom/pan).
     useEffect(() => {
         eventLinesRef.current?.update({
             events,
             barTimes: data.map((bar) => bar.time),
             granularity: eventGranularity,
-            color: resolvedEvent,
-            visible: showEvents,
+            visible: true,
         });
-    }, [events, showEvents, data, eventGranularity, resolvedEvent]);
+    }, [events, data, eventGranularity]);
 
     return (
-        <div 
-            ref={chartContainerRef}
+        <div
             data-testid="tv-chart"
             aria-label={`${safeTickerName} price chart`}
             className="w-full relative rounded-lg border border-[var(--border)] bg-[var(--text-primary)]"
-            style={{ minHeight: height }}
-        />
+        >
+            <div ref={chartContainerRef} className="w-full" style={{ minHeight: height }} />
+            {hover ? <EventTooltip x={hover.x} width={hover.width} events={hover.events} /> : null}
+        </div>
     );
 };
 
@@ -307,13 +321,12 @@ const TVChart: React.FC<TVChartProps> = ({
 // or unrelated DCF Slider parameter toggles (Step B).
 export default React.memo(TVChart, (prevProps, nextProps) => {
     // Only repaint if raw OHLCV fundamentally shifts.
-    // showEvents and events MUST be compared here. This comparator blocks re-renders on
-    // everything it does not name, so omitting them makes the event toggle a no-op that
-    // looks wired up correctly from the call site.
+    // events MUST be compared here. This comparator blocks re-renders on everything it does
+    // not name, so omitting it makes the event filter a no-op that looks wired up correctly
+    // from the call site.
     return prevProps.data === nextProps.data
         && prevProps.volumeData === nextProps.volumeData
         && prevProps.lineSeriesData === nextProps.lineSeriesData
-        && prevProps.showEvents === nextProps.showEvents
         && prevProps.events === nextProps.events
         && prevProps.eventGranularity === nextProps.eventGranularity;
 });
