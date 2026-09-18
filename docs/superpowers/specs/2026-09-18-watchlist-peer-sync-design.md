@@ -1,6 +1,6 @@
 # Watchlist peer sync: design
 
-> **Status:** DRAFT 2026-09-18. Not implemented.
+> **Status:** Implemented on branch `watchlist-peer-sync` (2026-09-18).
 >
 > **Scope:** personal use across the owner's own PCs, not an open-source feature. The repository
 > is public, so this design also takes the owner's watchlist **out of** the committed seed file.
@@ -51,7 +51,7 @@ These must never be confused. Much of this design exists to keep personal data o
 | --- | --- | --- | --- |
 | Public starter seed | `apps/api/services/webscrap/stock_targets.json` | 5 neutral default tickers | yes, public |
 | Peer sync files | `<MONEYVIEW_SYNC_DIR>\MoneyView\watchlist.<pc_id>.json` | each PC's full merged state, with timestamps and tombstones | never |
-| Personal export | `data/exports/watchlist-export.json` | the current Watchlist in the plain seed format, with no timestamps or tombstones | never (`data/` is git-ignored) |
+| Personal export | `data/exports/watchlist-export.json` | the current Watchlist in the plain seed format, with no timestamps or tombstones | never (`data/exports/` is explicitly git-ignored) |
 
 ---
 
@@ -85,16 +85,27 @@ this: every copy of one change carries the same key, whichever PC's file it is r
 
 ### `pc_id`
 
-- Generated once as the computer name, a hyphen, and 4 random lowercase hex digits, e.g. `DESKTOP-JAE-7f3a`.
+- Generated once as the computer name, a hyphen, and 4 random lowercase hex digits, e.g. `DESKTOP-A1B2-7f3a`.
 - Stored in this database's `dataset_metadata` (`dataset_name = 'watchlist_sync_pc_id'`), so it stays the same for this data directory even if the PC is renamed.
 - Never derived from a filename.
 
 ### Baseline timestamp
 
 `BASELINE_TS = "1970-01-01T00:00:00.000Z"` is a **fixed constant**, never generated. Rows that
-exist when sync is first enabled get it, as do rows seeded into an empty database while sync is on.
-Every real change made after sync is enabled is newer than the baseline, so it wins. Two baseline
-rows are decided by the author `pc_id`.
+exist when sync is first enabled get it. Every real change made after sync is enabled is newer than
+the baseline, so it wins. Two baseline rows are decided by the author `pc_id`.
+
+Rows seeded from the starter seed (the bootstrap and the sync-off seed merge) get
+`SEED_TS = "0000-01-01T00:00:00.000Z"` instead. It is below the baseline, so a starter default never
+outranks a real installation's row or any tombstone, whichever PC's id sorts higher.
+
+### Causal stamps
+
+A local change is stamped strictly above the last stamp this process issued **and** above the current
+`updated_at` of the ticker's row and `removed_at` of its tombstone. A change therefore outranks the
+version the user saw, even when that version came from a peer whose clock runs ahead of this PC's, or
+this PC's clock stepped back. A delete records its tombstone before removing the row, so the tombstone
+sees the row it replaces.
 
 ### Peer file
 
@@ -103,14 +114,14 @@ Path: `<MONEYVIEW_SYNC_DIR>\MoneyView\watchlist.<pc_id>.json`, UTF-8. Each PC wr
 ```json
 {
   "format_version": 1,
-  "pc_id": "DESKTOP-JAE-7f3a",
+  "pc_id": "DESKTOP-A1B2-7f3a",
   "written_at": "2026-09-18T11:00:00.123Z",
   "watchlist": [
     {"ticker": "AAPL", "name": "Apple Inc.", "sector": "Technology", "group_name": "custom",
-     "weight": 0.1, "updated_at": "2026-09-18T10:59:58.001Z", "updated_by": "DESKTOP-JAE-7f3a"}
+     "weight": 0.1, "updated_at": "2026-09-18T10:59:58.001Z", "updated_by": "DESKTOP-A1B2-7f3a"}
   ],
   "removed": [
-    {"ticker": "MSFT", "removed_at": "2026-09-18T10:30:00.000Z", "removed_by": "LAPTOP-JAE-19c2"}
+    {"ticker": "MSFT", "removed_at": "2026-09-18T10:30:00.000Z", "removed_by": "LAPTOP-C3D4-19c2"}
   ]
 }
 ```
@@ -198,8 +209,8 @@ Sync runs only while `MONEYVIEW_SYNC_DIR` is set.
 | --- | --- |
 | API startup | Best-effort read → merge → write. A failure is recorded as `last_error`, and **startup never fails** because of it. |
 | `GET /portfolio/watchlist` | Read → merge → write, then respond. **Invariant:** the response never shows an older state than any readable peer file holds. |
-| Any change to a synced Watchlist field (the rule applies to every synced field, current and future) | Set `updated_at = now` and `updated_by = own pc_id`, then publish. |
-| Any delete | Delete the row and upsert the tombstone with `removed_at = now` and `removed_by = own pc_id`, then publish. |
+| Any change to a synced Watchlist field (the rule applies to every synced field, current and future) | Set `updated_at` to a causal stamp (§1: `now`, raised above the stamps the change replaces) and `updated_by = own pc_id`, then publish. |
+| Any delete | Upsert the tombstone with `removed_at` = a causal stamp and `removed_by = own pc_id`, delete the row, then publish. |
 
 **Rules:**
 - **One lock per API process** covers the whole transaction: read peer files → merge → update the local
@@ -220,8 +231,8 @@ is recorded and reported by the status route. This is the core local-first guara
 This route is **read-only**. It reports the last recorded sync and never triggers one:
 
 ```json
-{"enabled": true, "pc_id": "DESKTOP-JAE-7f3a",
- "peers": [{"pc_id": "LAPTOP-JAE-19c2", "written_at": "2026-09-18T11:02:00.000Z"}],
+{"enabled": true, "pc_id": "DESKTOP-A1B2-7f3a",
+ "peers": [{"pc_id": "LAPTOP-C3D4-19c2", "written_at": "2026-09-18T11:02:00.000Z"}],
  "skipped_files": [], "last_sync_at": "2026-09-18T11:03:10.500Z", "last_error": null}
 ```
 
@@ -309,10 +320,12 @@ After the change, `apps/api/services/webscrap/stock_targets.json` is exactly:
 1. At least one readable peer file exists → run the normal merge. The empty DB becomes the **merged
    effective state across all readable peer files**, not one arbitrary peer. No defaults are seeded,
    even if that merged state is empty.
-2. No readable peer file → run today's bootstrap: seed from the committed file. If that file is missing or
-   unreadable, the existing hard-coded `DEFAULT_WATCHLIST_ITEMS` fallback applies, exactly as today. This
-   is the committed seed file, not a sync file: its absence is not a sync failure and sets no
-   `last_error`. The seeded rows get `updated_at = BASELINE_TS` and `updated_by = own pc_id`.
+2. No peer file at all, readable or skipped → run today's bootstrap: seed from the committed file. If that
+   file is missing or unreadable, the existing hard-coded `DEFAULT_WATCHLIST_ITEMS` fallback applies,
+   exactly as today. This is the committed seed file, not a sync file: its absence is not a sync failure
+   and sets no `last_error`. The seeded rows get `updated_at = SEED_TS` and `updated_by = own pc_id`.
+3. Only unreadable (skipped) peer files → nothing is seeded and the PC is not marked bootstrapped. An
+   unreadable peer is never "no peers": the PC stays empty until a later sync reads the file.
 
 **Export and Import are independent rules:**
 - Export is **always** retargeted, whether or not sync is on. It never writes anywhere under
@@ -352,7 +365,9 @@ Every new test must be shown to fail against a named broken implementation befor
 - **Fresh PC with peers:** a new, empty PC takes the merged peer state (from two peers), not the defaults.
 - **Empty merged peer state:** readable peer files exist, but their merged Watchlist is empty (everything
   is tombstoned). The fresh PC stays empty, and no defaults are inserted.
-- **Fresh PC without peers:** a new, empty PC with no peers gets the 5 defaults at `BASELINE_TS`.
+- **Fresh PC without peers:** a new, empty PC with no peers gets the 5 defaults at `SEED_TS`.
+- **Fresh PC with only an unreadable peer file** stays empty, and the file is listed in `skipped_files`.
+- **Seeded defaults never outrank a real row**, even from a PC whose id sorts higher.
 - **Off, then on again:** an edit made while sync was off keeps its real timestamp, and wins over an
   older peer row once sync is switched back on.
 - **Seed merge must not revive a deletion** (critical regression test). With sync on, a ticker deleted on
