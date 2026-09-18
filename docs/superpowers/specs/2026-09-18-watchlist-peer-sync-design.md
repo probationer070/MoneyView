@@ -111,9 +111,10 @@ Path: `<MONEYVIEW_SYNC_DIR>\MoneyView\watchlist.<pc_id>.json`, UTF-8. Each PC wr
   status line only. It never decides a merge.
 
 **Which files count:** only names matching exactly `watchlist.<pc_id>.json`, where `<pc_id>` matches
-`[A-Za-z0-9-]+`. Temporary files (`*.tmp`) and cloud conflict copies are ignored. Examples of conflict
-copies are `watchlist.X (1).json`, `watchlist.X-DESKTOP.json` and anything with spaces or brackets.
-A matching file whose content `pc_id` differs from its filename is skipped and reported.
+`[A-Za-z0-9-]+`. Temporary files (`*.tmp`) and conflict copies with spaces or brackets, such as
+`watchlist.X (1).json`, never match. A conflict copy that does match the pattern, such as
+`watchlist.X-DESKTOP.json`, is caught by the second rule: a matching file whose content `pc_id`
+differs from its filename is skipped and reported.
 
 ### Merge (per ticker)
 
