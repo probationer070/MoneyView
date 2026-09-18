@@ -29,6 +29,8 @@ config/*.local.env
 data/cache/
 data/raw/
 data/processed/
+# The owner's personal watchlist Export (watchlist-export.json); never commit it.
+data/exports/
 apps/web/.next/
 .next/
 yt_extractor/
