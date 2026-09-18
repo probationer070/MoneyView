@@ -155,12 +155,16 @@ test("on the monthly chart, an event sits on its month's candle -- including the
 });
 
 test("hiding every category removes the line and the legend together", async ({ page }) => {
-  await mockChartAndEvents(page, [{ date: "2026-02-28", label: "U.S. strikes on Iran begin" }]);
+  await mockChartAndEvents(page, [
+    { date: "2026-02-28", label: "U.S. strikes on Iran begin" },
+    { date: "2026-03-03", label: "Second geopolitical event" },
+  ]);
   const dialog = await openChart(page);
 
   const legend = dialog.getByTestId("chart-events-legend");
-  await expect(legend).toContainText("U.S. strikes on Iran begin");
-  await expect(legend).toContainText("2026-02-28");
+  await expect(legend).toContainText("Geopolitical");
+  await expect(legend.getByTestId("chart-events-legend-item")).toHaveCount(1);
+  await expect(dialog.getByTestId("chart-events-filter")).toHaveText(/Events · 1 of 1/);
 
   await setAllEventCategories(dialog, "chart-events-filter", false);
   await expect(legend).toHaveCount(0);
