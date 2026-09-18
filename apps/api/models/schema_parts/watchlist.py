@@ -55,6 +55,29 @@ class WatchlistSyncStatus(BaseModel):
     json_path: str = ""
 
 
+class WatchlistPeer(BaseModel):
+    """Another PC seen in the sync folder. `written_at` is its last successful file write."""
+
+    pc_id: str
+    written_at: str
+
+
+class WatchlistSkippedFile(BaseModel):
+    name: str
+    reason: str
+
+
+class WatchlistPeerSyncStatus(BaseModel):
+    """The last recorded peer-sync attempt. Replaced as a whole by every attempt (spec §2)."""
+
+    enabled: bool = False
+    pc_id: Optional[str] = None
+    peers: List[WatchlistPeer] = Field(default_factory=list)
+    skipped_files: List[WatchlistSkippedFile] = Field(default_factory=list)
+    last_sync_at: Optional[str] = None
+    last_error: Optional[str] = None
+
+
 class PortfolioPreferences(BaseModel):
     """Persisted portfolio workspace preferences shared by allocation tools."""
 

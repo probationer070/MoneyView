@@ -21,38 +21,61 @@ DEFAULT_WATCHLIST_ITEMS: List[WatchlistItem] = [
 ]
 DEFAULT_WATCHLIST_METADATA: Dict[str, WatchlistItem] = {item.ticker: item for item in DEFAULT_WATCHLIST_ITEMS}
 
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+# The committed PUBLIC seed. MoneyView reads it and must never write it: that is how the owner's
+# personal list ended up in a public repository.
+SEED_JSON = Path(__file__).resolve().parent / "webscrap" / "stock_targets.json"
+# Personal export, git-ignored under data/.
+EXPORT_JSON = _REPO_ROOT / "data" / "exports" / "watchlist-export.json"
+
 
 def load_watchlist_seed(json_path: Path) -> Tuple[List[WatchlistItem], str]:
     """Load bootstrap watchlist items from JSON, DB regeneration, or built-in defaults."""
     items = _load_watchlist_from_json(json_path)
     if items:
         return items, "json_seed"
-    regenerated = _regenerate_watchlist_json_from_db(json_path)
+    with get_db() as conn:
+        regenerated = _build_watchlist_items_from_db(conn)
     if regenerated:
         return regenerated, "db_regenerated_json"
     return list(DEFAULT_WATCHLIST_ITEMS), "built_in_seed"
 
 
 def ensure_watchlist_bootstrapped(json_path: Path) -> None:
-    """Seed the watchlist table once when it is empty and no user/bootstrap state exists."""
-    with get_db() as conn:
-        if not json_path.exists():
-            regenerated = _build_watchlist_items_from_db(conn)
-            if regenerated:
-                _write_watchlist_json(json_path, regenerated)
+    """Seed an empty watchlist, sync-aware (spec §3, bootstrap precedence).
 
+    With sync on, the whole decision happens inside run_sync, after peer discovery: a readable peer
+    wins over the seed, and the seed is used only when no peer exists. With sync off, today's
+    behaviour is kept.
+    """
+    from apps.api.services.watchlist_sync import service as watchlist_sync
+
+    if watchlist_sync.is_enabled():
+        watchlist_sync.run_sync("bootstrap", seed_json=json_path)
+        return
+    bootstrap_from_seed(json_path)
+
+
+def bootstrap_from_seed(json_path: Path) -> None:
+    """Seed the table once when it is empty and no user/bootstrap state exists. Seeded rows get the
+    baseline stamp, so any real change on any PC outranks them. Never writes the seed file."""
+    with get_db() as conn:
         row = conn.execute("SELECT COUNT(*) AS count FROM watchlist").fetchone()
         if row and int(row["count"]) > 0:
             return
         if _has_watchlist_state(conn):
             return
 
+        from apps.api.services.watchlist_sync import store as sync_store
+        from apps.api.services.watchlist_sync.model import BASELINE_TS
+
+        pc_id = sync_store.get_or_create_pc_id(conn)
         items, source = load_watchlist_seed(json_path)
         for item in items:
             conn.execute(
-                """INSERT OR IGNORE INTO watchlist (ticker, name, sector, group_name, weight)
-                   VALUES (?, ?, ?, ?, ?)""",
-                (item.ticker.upper(), item.name, item.sector, item.group_name, item.weight),
+                """INSERT OR IGNORE INTO watchlist (ticker, name, sector, group_name, weight, updated_at, updated_by)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (item.ticker.upper(), item.name, item.sector, item.group_name, item.weight, BASELINE_TS, pc_id),
             )
         _mark_watchlist_state(conn, source)
 
@@ -72,17 +95,21 @@ def merge_missing_watchlist_items(json_path: Path) -> list[str]:
     if not items:
         return []
 
+    from apps.api.services.watchlist_sync import store as sync_store
+    from apps.api.services.watchlist_sync.model import BASELINE_TS
+
     added: list[str] = []
     with get_db() as conn:
+        pc_id = sync_store.get_or_create_pc_id(conn)
         for item in _dedupe_watchlist_items(items).values():
             # OR IGNORE is the whole guarantee: a ticker already present hits the UNIQUE
             # constraint on `watchlist.ticker` and the row is left exactly as it is, so
             # weight, group_name and name curated on this machine survive. rowcount then
             # distinguishes an insert from an ignore without a second query.
             cursor = conn.execute(
-                """INSERT OR IGNORE INTO watchlist (ticker, name, sector, group_name, weight)
-                   VALUES (?, ?, ?, ?, ?)""",
-                (item.ticker, item.name, item.sector, item.group_name, item.weight),
+                """INSERT OR IGNORE INTO watchlist (ticker, name, sector, group_name, weight, updated_at, updated_by)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (item.ticker, item.name, item.sector, item.group_name, item.weight, BASELINE_TS, pc_id),
             )
             if cursor.rowcount:
                 added.append(item.ticker)
@@ -109,15 +136,19 @@ def resync_watchlist_from_json(json_path: Path) -> WatchlistResyncResult:
     if not items:
         raise ValueError(f"no valid watchlist items found in {json_path}")
 
+    from apps.api.services.watchlist_sync import store as sync_store
+    from apps.api.services.watchlist_sync.model import BASELINE_TS
+
     normalized_items = list(_dedupe_watchlist_items(items).values())
     synced_at = datetime.now(timezone.utc).isoformat()
     with get_db() as conn:
+        pc_id = sync_store.get_or_create_pc_id(conn)
         conn.execute("DELETE FROM watchlist")
         for item in normalized_items:
             conn.execute(
-                """INSERT INTO watchlist (ticker, name, sector, group_name, weight)
-                   VALUES (?, ?, ?, ?, ?)""",
-                (item.ticker, item.name, item.sector, item.group_name, item.weight),
+                """INSERT INTO watchlist (ticker, name, sector, group_name, weight, updated_at, updated_by)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (item.ticker, item.name, item.sector, item.group_name, item.weight, BASELINE_TS, pc_id),
             )
         _mark_watchlist_state(conn, "manual_json_resync")
         _mark_watchlist_sync_status(conn, "manual_json_resync", synced_at)
@@ -206,14 +237,6 @@ def _dedupe_watchlist_items(items: List[WatchlistItem]) -> Dict[str, WatchlistIt
             continue
         deduped[ticker] = item.model_copy(update={"ticker": ticker})
     return deduped
-
-
-def _regenerate_watchlist_json_from_db(json_path: Path) -> List[WatchlistItem]:
-    with get_db() as conn:
-        items = _build_watchlist_items_from_db(conn)
-    if items:
-        _write_watchlist_json(json_path, items)
-    return items
 
 
 def _build_watchlist_items_from_db(conn) -> List[WatchlistItem]:
