@@ -58,6 +58,8 @@ test("built-in rows are read-only, and a user's own event can be edited and dele
 test("an added event is listed and then drawn on a chart", async ({ page }) => {
   await openEventsPage(page, [], [MINE, UNCATEGORIZED]);
 
+  await expect(page.getByTestId("event-form").getByLabel("Category")).toHaveValue("uncategorized");
+
   const form = page.getByTestId("event-form");
   await form.getByLabel("Date", { exact: true }).fill("2026-06-15");
   await form.getByLabel("Label").fill("Bought AI basket");
@@ -88,12 +90,14 @@ test("a refusal from the server is shown on the form", async ({ page }) => {
 });
 
 test("a built-in category offers Reset only once changed, and Reset restores its colour", async ({ page }) => {
-  await openEventsPage(page, [], [FOMC_CATEGORY, UNCATEGORIZED]);
+  const state = await openEventsPage(page, [], [FOMC_CATEGORY, UNCATEGORIZED]);
 
   await expect(page.getByTestId("category-reset-fomc")).toHaveCount(0);
   await page.getByTestId("category-color-fomc").fill("#0000ff");
   await page.getByTestId("category-save-fomc").click();
   await expect(page.getByTestId("category-reset-fomc")).toBeVisible();
+
+  expect(state.patches.at(-1)).toEqual({ id: "fomc", body: { color: "#0000ff" } });
 
   await page.getByTestId("category-reset-fomc").click();
   await expect(page.getByTestId("category-color-fomc")).toHaveValue("#e54545");

@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { EventApiError } from "@/lib/marketEventsApi";
 import { useCreateCategory, useDeleteCategory, usePatchCategory, useResetCategory, useSetCategoriesVisible } from "@/lib/useEventMutations";
 import type { EventCategory, MarketEvent } from "@/lib/useMarketEvents";
+import type { EventCategoryPatch } from "../../../../../packages/shared-types";
 
 const describe = (err: unknown, fallback: string) => (err instanceof EventApiError ? err.detail : fallback);
 
@@ -26,7 +27,12 @@ function CategoryRow({ category, usedBy }: { category: EventCategory; usedBy: nu
       <input type="text" aria-label={`${category.label} name`} maxLength={120} value={label} onChange={(e) => setLabel(e.target.value)}
         className="rounded-[var(--radius-sm)] border border-[var(--border-default)] px-2 py-1" />
       <button type="button" data-testid={`category-save-${category.id}`} disabled={!dirty || patch.isPending}
-        onClick={() => patch.mutate({ id: category.id, patch: { label: label.trim(), color } }, { onError: (err) => setError(describe(err, "Could not save.")), onSuccess: () => setError(null) })}
+        onClick={() => {
+          const patchBody: EventCategoryPatch = {};
+          if (label.trim() !== category.label) patchBody.label = label.trim();
+          if (color.toLowerCase() !== category.color.toLowerCase()) patchBody.color = color;
+          patch.mutate({ id: category.id, patch: patchBody }, { onError: (err) => setError(describe(err, "Could not save.")), onSuccess: () => setError(null) });
+        }}
         className="rounded border border-[var(--border)] px-2 py-1 font-semibold disabled:opacity-40">
         Save
       </button>

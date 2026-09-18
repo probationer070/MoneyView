@@ -14,7 +14,9 @@ export function EventForm({ categories, editing, onDone }: { categories: EventCa
   const [startDate, setStartDate] = useState(editing?.start_date ?? "");
   const [endDate, setEndDate] = useState(editing?.end_date ?? "");
   const [label, setLabel] = useState(editing?.label ?? "");
-  const [category, setCategory] = useState(editing?.category ?? categories[0]?.id ?? "");
+  const [category, setCategory] = useState(
+    editing?.category ?? categories.find((c) => c.id === "uncategorized")?.id ?? categories[0]?.id ?? "",
+  );
   const [note, setNote] = useState(editing?.note ?? "");
   const [source, setSource] = useState(editing?.source ?? "");
   const [error, setError] = useState<string | null>(null);
