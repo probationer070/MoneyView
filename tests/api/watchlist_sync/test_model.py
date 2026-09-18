@@ -1,7 +1,7 @@
 """Pure merge rules (spec §1, Merge; §3, Testing: merge function)."""
 
 import itertools
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from apps.api.services.watchlist_sync.model import (
     BASELINE_TS,
@@ -30,6 +30,12 @@ def state(rows=(), removed=()):
 def test_format_is_utc_milliseconds_with_z():
     moment = datetime(2026, 9, 18, 20, 0, 0, 123456, tzinfo=timezone.utc)
     assert format_ts(moment) == "2026-09-18T20:00:00.123Z"
+    # A non-UTC offset converts to UTC, not just re-labels the same clock time.
+    offset_moment = datetime(2026, 9, 18, 12, 0, 0, 999999, tzinfo=timezone(timedelta(hours=9)))
+    assert format_ts(offset_moment) == "2026-09-18T03:00:00.999Z"
+    # microsecond=999999 truncates to ".999Z", not rounds up.
+    truncated_moment = datetime(2026, 9, 18, 20, 0, 0, 999999, tzinfo=timezone.utc)
+    assert format_ts(truncated_moment) == "2026-09-18T20:00:00.999Z"
 
 
 def test_stamps_strictly_increase_even_within_one_millisecond():
@@ -68,6 +74,21 @@ def test_an_older_remote_removal_does_not_delete_a_newer_local_row():
     assert "AAPL" in merge_states([local, remote]).rows
 
 
+def test_the_add_remove_boundary_is_a_strictly_greater_remove_key():
+    # All three cases share one timestamp, so only the author (not the timestamp) can decide,
+    # and the exact tie must resolve to "present" -- only a strictly greater remove_key removes.
+    ts = "2026-09-18T10:00:00.000Z"
+    larger_author_removal = merge_states([state([row(by="PC-A-0001", ts=ts)]),
+                                          state(removed=[tomb(by="PC-C-0003", ts=ts)])])
+    assert "AAPL" not in larger_author_removal.rows
+    smaller_author_removal = merge_states([state([row(by="PC-C-0003", ts=ts)]),
+                                           state(removed=[tomb(by="PC-A-0001", ts=ts)])])
+    assert "AAPL" in smaller_author_removal.rows
+    equal_keys = merge_states([state([row(by="PC-B-0002", ts=ts)]),
+                               state(removed=[tomb(by="PC-B-0002", ts=ts)])])
+    assert "AAPL" in equal_keys.rows
+
+
 def test_an_equal_timestamp_is_decided_by_the_larger_author():
     # The content tie-break alone would pick "zz-from-a"; only the author makes C win.
     a = row(by="PC-A-0001", group="zz-from-a")
@@ -78,10 +99,14 @@ def test_an_equal_timestamp_is_decided_by_the_larger_author():
 def test_republishing_a_change_does_not_change_the_winner():
     a = row(by="PC-A-0001", group="from-a", ts="2026-09-18T10:00:00.000Z")
     c = row(by="PC-C-0003", group="from-c", ts="2026-09-18T10:00:00.000Z")
-    before = merge_states([state([a]), state([c])])
+    no_duplicate = merge_states([state([a]), state([c])]).rows["AAPL"]
+    assert no_duplicate.group_name == "from-c"
     # B imported A's change and republished it: same author, same time, in a third file.
-    after = merge_states([state([a]), state([a]), state([c])])
-    assert before.rows["AAPL"] == after.rows["AAPL"]
+    # However the three files are read, republishing a is not allowed to change the winner.
+    for order in itertools.permutations([state([a]), state([a]), state([c])]):
+        merged = merge_states(order).rows["AAPL"]
+        assert merged.group_name == "from-c"
+        assert merged == no_duplicate
 
 
 def test_three_way_conflict_converges_regardless_of_order():
