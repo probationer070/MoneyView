@@ -16,6 +16,7 @@ from apps.api.models.schemas import (
     PortfolioStock,
     WatchlistGroupUpdate,
     WatchlistItem,
+    WatchlistPeerSyncStatus,
     WatchlistResyncResult,
     WatchlistSyncStatus,
     WatchlistSyncResult,
@@ -28,6 +29,7 @@ from apps.api.services.db import get_db
 from apps.api.services.market_data import MarketDataService
 from apps.api.services.news_service import NewsService
 from apps.api.services.portfolio_service import PortfolioAnalyticsService
+from apps.api.services import watchlist_seed
 from apps.api.services.watchlist_seed import (
     ensure_watchlist_bootstrapped,
     get_watchlist_sync_status,
@@ -36,6 +38,9 @@ from apps.api.services.watchlist_seed import (
     resync_watchlist_from_json,
     sync_watchlist_to_json,
 )
+from apps.api.services.watchlist_sync import service as watchlist_sync
+from apps.api.services.watchlist_sync import store as watchlist_sync_store
+from apps.api.services.watchlist_sync.model import next_stamp
 
 _API_ROOT = Path(__file__).resolve().parents[1]
 _WATCHLIST_JSON = _API_ROOT / "services" / "webscrap" / "stock_targets.json"
@@ -53,13 +58,13 @@ def get_watchlist():
     Return all watchlist stocks with latest close, delta badge, and sparkline.
     Seed once from JSON or built-in defaults when local state is empty.
     """
+    # With sync on, this runs the full peer sync (spec §2): the response never shows an older
+    # state than a readable peer file holds.
     ensure_watchlist_bootstrapped(_WATCHLIST_JSON)
-    # The bootstrap seeds once and then returns early forever, so a ticker added to the
-    # seed after this machine was first set up would never arrive. Merging here -- on an
-    # endpoint the portfolio page already hits on every load -- is what lets a second
-    # machine self-heal without a startup hook, and additively, so weights curated here
-    # are not replaced by the seed's.
-    merge_missing_watchlist_items(_WATCHLIST_JSON)
+    if not watchlist_sync.is_enabled():
+        # Sync replaces the git-based seed merge; left on, it would revive a ticker deleted on
+        # another PC (spec §3).
+        merge_missing_watchlist_items(_WATCHLIST_JSON)
 
     with get_db() as conn:
         rows = conn.execute("SELECT * FROM watchlist ORDER BY group_name, ticker").fetchall()
@@ -174,14 +179,23 @@ def upsert_watchlist_item(item: WatchlistItem = Body(...)):
 
     with get_db() as conn:
         existing = conn.execute(
-            "SELECT ticker FROM watchlist WHERE ticker = ?", (normalized.ticker,)
+            "SELECT name, sector, group_name, weight, updated_at, updated_by FROM watchlist WHERE ticker = ?",
+            (normalized.ticker,),
         ).fetchone()
+        changed = existing is None or (
+            existing["name"], existing["sector"], existing["group_name"], float(existing["weight"] or 0.0)
+        ) != (normalized.name, normalized.sector, normalized.group_name, normalized.weight)
+        pc_id = watchlist_sync.local_pc_id(conn)
+        stamp = next_stamp() if changed else existing["updated_at"]
+        author = pc_id if changed else existing["updated_by"]
         conn.execute(
-            """INSERT OR REPLACE INTO watchlist (ticker, name, sector, group_name, weight)
-               VALUES (?, ?, ?, ?, ?)""",
-            (normalized.ticker, normalized.name, normalized.sector, normalized.group_name, normalized.weight),
+            """INSERT OR REPLACE INTO watchlist (ticker, name, sector, group_name, weight, updated_at, updated_by)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (normalized.ticker, normalized.name, normalized.sector, normalized.group_name,
+             normalized.weight, stamp, author),
         )
     mark_watchlist_state("user_mutation")
+    watchlist_sync.run_sync("mutation")
     # Adding a stock is the natural moment to acquire its history: one 10-year backfill,
     # off the request path. Without it the next comparison discovers the ticker and pays
     # a live fetch in-band while a user waits.
@@ -225,7 +239,7 @@ def set_watchlist_group(ticker: str, payload: WatchlistGroupUpdate = Body(...)):
 
     with get_db() as conn:
         row = conn.execute(
-            "SELECT ticker, name, sector, weight FROM watchlist WHERE ticker = ?",
+            "SELECT ticker, name, sector, weight, group_name FROM watchlist WHERE ticker = ?",
             (normalized_ticker,),
         ).fetchone()
         if row is None:
@@ -234,12 +248,12 @@ def set_watchlist_group(ticker: str, payload: WatchlistGroupUpdate = Body(...)):
                 detail=f"unknown_ticker: {normalized_ticker} is not on the watchlist; "
                        "add it before changing its group",
             )
-        conn.execute(
-            "UPDATE watchlist SET group_name = ? WHERE ticker = ?",
-            (group_name, normalized_ticker),
-        )
+        if row["group_name"] != group_name:
+            conn.execute("UPDATE watchlist SET group_name = ? WHERE ticker = ?", (group_name, normalized_ticker))
+            watchlist_sync_store.stamp_row(conn, normalized_ticker, watchlist_sync.local_pc_id(conn))
 
     mark_watchlist_state("user_mutation")
+    watchlist_sync.run_sync("mutation")
     return WatchlistItem(
         ticker=normalized_ticker,
         name=row["name"] or normalized_ticker,
@@ -252,6 +266,10 @@ def set_watchlist_group(ticker: str, payload: WatchlistGroupUpdate = Body(...)):
 @router.post("/watchlist/resync", response_model=APIResponse[WatchlistResyncResult])
 def resync_watchlist():
     """Explicitly replace the watchlist table with the current stock_targets.json contents."""
+    if watchlist_sync.is_enabled():
+        # The server guard is authoritative; hiding the button is only convenience (spec §3).
+        raise HTTPException(status_code=409, detail="Import is unavailable while watchlist sync is on: "
+                            "a bulk replace would be undone by the next merge and would never reach other PCs.")
     try:
         result = resync_watchlist_from_json(_WATCHLIST_JSON)
     except ValueError as exc:
@@ -261,9 +279,9 @@ def resync_watchlist():
 
 @router.post("/watchlist/sync", response_model=APIResponse[WatchlistSyncResult])
 def sync_watchlist():
-    """Safely export the current DB-backed watchlist into stock_targets.json."""
+    """Export the DB-backed watchlist to the personal, git-ignored data/exports/watchlist-export.json."""
     try:
-        result = sync_watchlist_to_json(_WATCHLIST_JSON)
+        result = sync_watchlist_to_json(watchlist_seed.EXPORT_JSON)
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return APIResponse(data=result)
@@ -272,7 +290,13 @@ def sync_watchlist():
 @router.get("/watchlist/sync-status", response_model=APIResponse[WatchlistSyncStatus])
 def get_watchlist_sync_metadata():
     """Return the last explicit watchlist sync/import metadata."""
-    return APIResponse(data=WatchlistSyncStatus(**get_watchlist_sync_status(_WATCHLIST_JSON)))
+    return APIResponse(data=WatchlistSyncStatus(**get_watchlist_sync_status(watchlist_seed.EXPORT_JSON)))
+
+
+@router.get("/watchlist/peer-sync", response_model=APIResponse[WatchlistPeerSyncStatus])
+def get_watchlist_peer_sync():
+    """Last recorded peer-sync attempt. Read-only: it never triggers a sync (spec §2)."""
+    return APIResponse(data=watchlist_sync.current_status())
 
 
 @router.delete("/watchlist/{ticker}")
@@ -284,7 +308,11 @@ def delete_watchlist_item(ticker: str):
         if row is None:
             raise HTTPException(status_code=404, detail=f"watchlist ticker not found: {normalized_ticker}")
         conn.execute("DELETE FROM watchlist WHERE ticker = ?", (normalized_ticker,))
+        if watchlist_sync.is_enabled():
+            # Tombstones only while sync is on (spec §1, Switch).
+            watchlist_sync_store.record_removal(conn, normalized_ticker, watchlist_sync.local_pc_id(conn))
     mark_watchlist_state("user_mutation")
+    watchlist_sync.run_sync("mutation")
     try:
         retire_subject("equity_bars", normalized_ticker)
     except Exception as error:  # noqa: BLE001 - best-effort, never fails the delete

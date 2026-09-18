@@ -103,6 +103,12 @@ async def lifespan(app: FastAPI):
     init_db()
     logger.info("Database ready.")
 
+    # Best-effort watchlist peer sync (spec §2): run_sync never raises, so an unavailable
+    # folder only records last_error and startup continues.
+    from apps.api.services.watchlist_sync import service as watchlist_sync
+
+    watchlist_sync.run_sync("startup")
+
     task_wal = asyncio.create_task(wal_flush_cycle())
 
     # Read at call time, not import time, so a test process that sets this in

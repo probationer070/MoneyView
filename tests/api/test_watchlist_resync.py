@@ -8,6 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from apps.api.main import app
 from apps.api.services import db as db_service
+from apps.api.services import watchlist_seed
 
 
 def _write_watchlist_json(path: Path, payload: dict) -> None:
@@ -172,6 +173,10 @@ def test_watchlist_resync_rejects_empty_json(tmp_path, monkeypatch):
 def test_watchlist_sync_exports_db_weights_to_json(tmp_path, monkeypatch):
     db_path = tmp_path / "moneyview.db"
     json_path = tmp_path / "stock_targets.json"
+    # Export now writes the personal, git-ignored export file, not stock_targets.json
+    # (task 6: Export retargeted).
+    export_path = tmp_path / "watchlist-export.json"
+    monkeypatch.setattr(watchlist_seed, "EXPORT_JSON", export_path)
 
     monkeypatch.setattr(db_service, "_DB_PATH", db_path)
     db_service.init_db()
@@ -199,9 +204,9 @@ def test_watchlist_sync_exports_db_weights_to_json(tmp_path, monkeypatch):
     assert payload["item_count"] == 2
     assert payload["source"] == "watchlist_db_sync"
     assert payload["preserved_weights"] is True
-    assert payload["json_path"] == str(json_path)
+    assert payload["json_path"] == str(export_path)
 
-    exported = json.loads(json_path.read_text(encoding="utf-8"))
+    exported = json.loads(export_path.read_text(encoding="utf-8"))
     assert exported["core"]["targets"] == [
         {"ticker": "AAPL", "name": "Apple", "sector": "Technology", "weight": 0.35},
         {"ticker": "MSFT", "name": "Microsoft", "sector": "Technology", "weight": 0.25},
@@ -211,6 +216,10 @@ def test_watchlist_sync_exports_db_weights_to_json(tmp_path, monkeypatch):
 def test_watchlist_sync_status_tracks_last_explicit_action(tmp_path, monkeypatch):
     db_path = tmp_path / "moneyview.db"
     json_path = tmp_path / "stock_targets.json"
+    # Export now writes the personal, git-ignored export file, not stock_targets.json
+    # (task 6: Export retargeted).
+    export_path = tmp_path / "watchlist-export.json"
+    monkeypatch.setattr(watchlist_seed, "EXPORT_JSON", export_path)
     _write_watchlist_json(
         json_path,
         {
@@ -244,7 +253,7 @@ def test_watchlist_sync_status_tracks_last_explicit_action(tmp_path, monkeypatch
     assert status_after_sync.status_code == 200
     sync_payload = status_after_sync.json()["data"]
     assert sync_payload["source"] == "watchlist_db_sync"
-    assert sync_payload["json_path"] == str(json_path)
+    assert sync_payload["json_path"] == str(export_path)
     assert sync_payload["last_updated_at"]
 
     import_response = client.post("/api/v1/portfolio/watchlist/resync")
@@ -254,7 +263,8 @@ def test_watchlist_sync_status_tracks_last_explicit_action(tmp_path, monkeypatch
     assert status_after_import.status_code == 200
     import_payload = status_after_import.json()["data"]
     assert import_payload["source"] == "manual_json_resync"
-    assert import_payload["json_path"] == str(json_path)
+    # get_watchlist_sync_metadata always reports the export path (task 6: Export retargeted).
+    assert import_payload["json_path"] == str(export_path)
     assert import_payload["last_updated_at"]
 
 
