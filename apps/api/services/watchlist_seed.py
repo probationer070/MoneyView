@@ -57,8 +57,9 @@ def ensure_watchlist_bootstrapped(json_path: Path) -> None:
 
 
 def bootstrap_from_seed(json_path: Path) -> None:
-    """Seed the table once when it is empty and no user/bootstrap state exists. Seeded rows get the
-    baseline stamp, so any real change on any PC outranks them. Never writes the seed file."""
+    """Seed the table once when it is empty and no user/bootstrap state exists. Seeded rows get
+    SEED_TS, below every real stamp, so any real row or change on any PC outranks them. Never writes
+    the seed file."""
     with get_db() as conn:
         row = conn.execute("SELECT COUNT(*) AS count FROM watchlist").fetchone()
         if row and int(row["count"]) > 0:
@@ -67,7 +68,7 @@ def bootstrap_from_seed(json_path: Path) -> None:
             return
 
         from apps.api.services.watchlist_sync import store as sync_store
-        from apps.api.services.watchlist_sync.model import BASELINE_TS
+        from apps.api.services.watchlist_sync.model import SEED_TS
 
         pc_id = sync_store.get_or_create_pc_id(conn)
         items, source = load_watchlist_seed(json_path)
@@ -75,7 +76,7 @@ def bootstrap_from_seed(json_path: Path) -> None:
             conn.execute(
                 """INSERT OR IGNORE INTO watchlist (ticker, name, sector, group_name, weight, updated_at, updated_by)
                    VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                (item.ticker.upper(), item.name, item.sector, item.group_name, item.weight, BASELINE_TS, pc_id),
+                (item.ticker.upper(), item.name, item.sector, item.group_name, item.weight, SEED_TS, pc_id),
             )
         _mark_watchlist_state(conn, source)
 
@@ -96,7 +97,7 @@ def merge_missing_watchlist_items(json_path: Path) -> list[str]:
         return []
 
     from apps.api.services.watchlist_sync import store as sync_store
-    from apps.api.services.watchlist_sync.model import BASELINE_TS
+    from apps.api.services.watchlist_sync.model import SEED_TS
 
     added: list[str] = []
     with get_db() as conn:
@@ -109,7 +110,7 @@ def merge_missing_watchlist_items(json_path: Path) -> list[str]:
             cursor = conn.execute(
                 """INSERT OR IGNORE INTO watchlist (ticker, name, sector, group_name, weight, updated_at, updated_by)
                    VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                (item.ticker, item.name, item.sector, item.group_name, item.weight, BASELINE_TS, pc_id),
+                (item.ticker, item.name, item.sector, item.group_name, item.weight, SEED_TS, pc_id),
             )
             if cursor.rowcount:
                 added.append(item.ticker)

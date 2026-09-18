@@ -9,7 +9,7 @@ from apps.api.services import db as db_service
 from apps.api.services import watchlist_seed
 from apps.api.services.db import get_db
 from apps.api.services.watchlist_sync import files, service, store
-from apps.api.services.watchlist_sync.model import BASELINE_TS, SyncState, Tombstone, next_stamp
+from apps.api.services.watchlist_sync.model import BASELINE_TS, SEED_TS, SyncState, Tombstone, next_stamp
 
 
 class PC:
@@ -112,9 +112,49 @@ def test_a_fresh_pc_with_peers_takes_their_merged_list_not_the_defaults(tmp_path
     assert "SEED" not in fresh.rows(), "defaults are not seeded when a readable peer exists"
 
 
-def test_a_fresh_pc_without_peers_gets_the_seed_at_the_baseline(tmp_path, monkeypatch, cloud):
+def test_a_fresh_pc_without_peers_gets_the_seed_at_seed_ts(tmp_path, monkeypatch, cloud):
     fresh = PC(tmp_path, "PC-NEW", monkeypatch).sync()
-    assert fresh.rows()["SEED"]["updated_at"] == BASELINE_TS
+    assert fresh.rows()["SEED"]["updated_at"] == SEED_TS
+
+
+def test_a_fresh_pc_whose_only_peer_file_is_unreadable_stays_empty(tmp_path, monkeypatch, cloud):
+    """An unreadable peer (e.g. an online-only cloud placeholder) is never "no peers": seeding the
+    starter defaults here would spread them to every PC once the file becomes readable."""
+    (cloud / "MoneyView").mkdir()
+    bad = cloud / "MoneyView" / "watchlist.PC-BROKEN-0000.json"
+    bad.write_text("{", encoding="utf-8")
+
+    fresh = PC(tmp_path, "PC-NEW", monkeypatch).sync()
+
+    assert fresh.rows() == {}
+    assert [s.name for s in service.current_status().skipped_files] == [bad.name]
+    with get_db() as conn:
+        marker = conn.execute("SELECT 1 FROM dataset_metadata WHERE dataset_name = ?",
+                              (watchlist_seed.WATCHLIST_STATE_DATASET,)).fetchone()
+    assert marker is None, "only skipped files: the PC is not bootstrapped, so a later sync can still decide"
+
+
+def test_seeded_defaults_never_outrank_a_real_row_from_a_higher_sorting_pc(tmp_path, monkeypatch, cloud):
+    """A's pc_id sorts above B's, so at an equal timestamp A's row would win the author tiebreak.
+    Seeded at SEED_TS, A's starter SEED must still lose to B's real SEED stamped at the baseline."""
+    a, b = PC(tmp_path, "PC-Z", monkeypatch), PC(tmp_path, "PC-B", monkeypatch)
+    b.use()
+    with get_db() as conn:
+        conn.execute("INSERT INTO watchlist (ticker, name, sector, group_name, weight) VALUES ('SEED', 'Seed', '', 'total', 0.4)")
+    a.sync()                                        # fresh, no peers: seeds its starter SEED
+    assert a.rows()["SEED"]["weight"] == 0.0
+    for _ in range(2):
+        b.sync(); a.sync()
+    ids = {}
+    for pc in (a, b):
+        pc.use()
+        with get_db() as conn:
+            ids[pc.name] = service.local_pc_id(conn)
+    b_id = ids["PC-B"]
+    assert ids["PC-Z"] > b_id, "precondition: A would win an equal-timestamp tie"
+    for pc in (a, b):
+        seed = pc.rows()["SEED"]
+        assert (seed["group_name"], seed["weight"], seed["updated_at"], seed["updated_by"]) == ("total", 0.4, BASELINE_TS, b_id), pc.name
 
 
 def test_an_empty_merged_peer_state_leaves_a_fresh_pc_empty(tmp_path, monkeypatch, cloud):
@@ -336,7 +376,7 @@ def test_a_pc_that_joins_through_peers_is_marked_bootstrapped(tmp_path, monkeypa
     The peer's file is fabricated directly (rather than driven through a second simulated PC's own
     `run_sync`) so it can hold exactly what this test needs: an empty watchlist and a tombstone for
     an unrelated ticker, never "SEED" itself. A "SEED" tombstone would get copied into the fresh
-    PC's own local table during its first sync and, by outranking a later BASELINE_TS reseed, would
+    PC's own local table during its first sync and, by outranking a later SEED_TS reseed, would
     hide this exact bug regardless of whether the fix is present.
     """
     peer_pc_id = "PC-PEER-0000"

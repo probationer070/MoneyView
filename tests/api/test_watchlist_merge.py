@@ -185,3 +185,17 @@ def test_the_watchlist_endpoint_merges_so_a_second_machine_self_heals(tmp_path, 
 
     assert response.status_code == 200
     assert sorted(row["ticker"] for row in response.json()) == ["NRG", "SCCO"]
+
+
+def test_merged_seed_rows_are_stamped_below_every_real_row(tmp_path, monkeypatch):
+    """Seed rows get SEED_TS, so a starter default never outranks a real row once sync is on."""
+    from apps.api.services.watchlist_sync.model import SEED_TS
+
+    _init_db(tmp_path, monkeypatch)
+    seed = tmp_path / "stock_targets.json"
+    _write_seed(seed, {"custom": [{"ticker": "SPCX", "name": "SpaceX ETF", "sector": "Aerospace", "weight": 0.0}]})
+
+    merge_missing_watchlist_items(seed)
+
+    with db_service.get_db() as conn:
+        assert conn.execute("SELECT updated_at FROM watchlist WHERE ticker = 'SPCX'").fetchone()[0] == SEED_TS

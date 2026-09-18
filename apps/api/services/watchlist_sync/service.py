@@ -58,8 +58,10 @@ def run_sync(trigger: str, seed_json: Path | None = None) -> None:
             peers, skipped = read_peer_files(root, pc_id)
             with get_db() as conn:
                 empty = store.watchlist_is_empty(conn)
-            if empty and not peers:
-                # Spec §3 precedence: with no readable peer, a fresh PC runs today's bootstrap.
+            if empty and not peers and not skipped:
+                # Spec §3 precedence: with no peer file at all, a fresh PC runs today's bootstrap.
+                # An unreadable peer is never "no peers": the PC stays empty until a later sync
+                # reads it, rather than spreading starter defaults.
                 from apps.api.services import watchlist_seed
 
                 watchlist_seed.bootstrap_from_seed(seed_json or watchlist_seed.SEED_JSON)

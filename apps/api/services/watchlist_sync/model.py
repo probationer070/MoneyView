@@ -16,6 +16,8 @@ from datetime import datetime, timedelta, timezone
 from typing import Iterable
 
 BASELINE_TS = "1970-01-01T00:00:00.000Z"
+# Below BASELINE_TS, so starter defaults never outrank a real installation's rows or any tombstone.
+SEED_TS = "0000-01-01T00:00:00.000Z"
 TS_PATTERN = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z")
 _TS_FORMAT = "%Y-%m-%dT%H:%M:%S.%fZ"
 
