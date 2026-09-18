@@ -6,7 +6,7 @@
 > is public, so this design also takes the owner's watchlist **out of** the committed seed file.
 >
 > **Review:** sections 1–3 were each reviewed in chat. The owner's detailed feedback on every
-> section is already applied below.
+> section is already applied below, as is the owner's final review of the complete document (15 points).
 
 ## What was asked
 
@@ -69,9 +69,19 @@ ticker, and they sync together as one row.
 | --- | --- |
 | `watchlist.updated_at` TEXT | The row's **logical modification time**, as UTC ISO-8601 with milliseconds, e.g. `2026-09-18T11:00:00.123Z`. It is set when the row is added or any synced field actually changes. An import keeps the incoming value. It never changes on a read, on a merge that keeps the local row, on a file rewrite, or on a restart. |
 | `watchlist.updated_by` TEXT | The `pc_id` of the PC that **authored** the change. A PC republishes rows it has imported, so the author can't be taken from the file's `pc_id`. Without it, the winner of a tie could change depending on which PC happened to republish. |
-| `watchlist_removed(ticker TEXT PRIMARY KEY, removed_at TEXT, removed_by TEXT)` | Tombstones. A delete removes the row and upserts the tombstone. Tombstones are kept indefinitely: there are few, and pruning one could let an old copy come back. |
+| `watchlist_removed(ticker TEXT PRIMARY KEY, removed_at TEXT, removed_by TEXT)` | Tombstones. A delete removes the row and upserts the tombstone. Tombstones are kept indefinitely: there are few, and pruning one could let an old copy come back. When a newer add or edit wins, the older tombstone **stays stored and is simply ineffective**; it is still published, and it loses every comparison against that newer add. |
 
-The change key is `(timestamp, author_pc_id)`, compared as a tuple. **The larger tuple wins.**
+Both kinds of change are ordered by the same **change key**, compared as a tuple. **The larger tuple wins.**
+
+```text
+add_key    = (updated_at, updated_by)    for a watchlist row
+remove_key = (removed_at, removed_by)    for a tombstone
+```
+
+**Authorship never changes in transit.** Importing a row or tombstone from a peer file stores its
+`updated_by`/`removed_by` exactly as received, and republishing writes it out unchanged. Only a
+change actually made on this PC sets the author to this PC's `pc_id`. Republish stability depends on
+this: every copy of one change carries the same key, whichever PC's file it is read from.
 
 ### `pc_id`
 
@@ -121,11 +131,17 @@ differs from its filename is skipped and reported.
 The inputs are the local database plus every readable peer file.
 
 ```text
-latest_add    = max over all rows       by (updated_at, updated_by)
-latest_remove = max over all tombstones by (removed_at, removed_by)
-if latest_remove > latest_add  -> absent: delete the local row, keep the tombstone
-else                           -> present: store latest_add with ITS updated_at and updated_by
+latest_add    = the row with the largest add_key       among the local DB and all peer files
+latest_remove = the tombstone with the largest remove_key among the local DB and all peer files
+if latest_remove exists and remove_key(latest_remove) > add_key(latest_add), or no row exists
+                 -> absent:  delete the local row; store latest_remove as the tombstone
+else             -> present: store latest_add, with its own updated_at and updated_by (as received);
+                             store latest_remove too, if any (kept, but ineffective)
 ```
+
+**This PC's own file is never a merge input.** The local database is this PC's authority; its own
+file is only ever written. A file that carries this PC's filename but a different `pc_id` inside is
+ignored as an input, reported, and replaced by this PC's next successful publish.
 
 File modification times and the order in which files arrive play no part in the merge. After a merge,
 the local database is the effective state, and it is what this PC publishes.
@@ -137,7 +153,10 @@ This runs once per data directory and is recorded in `dataset_metadata`
 
 - Every existing row that has no `updated_at` yet gets `updated_at = BASELINE_TS` and
   `updated_by = <own pc_id>`. This covers every row of an installation that predates this feature.
-  Rows that already carry a timestamp keep it.
+- Rows that already carry a timestamp keep it. They exist because timestamps are maintained even while
+  sync is off (§1, Switch): any row added or edited after this feature ships, but before sync is first
+  enabled, already has a real `updated_at`. That change is real, so it keeps its time and beats a
+  baseline row from another PC.
 - No tombstones are created for tickers deleted earlier.
 - **The first merge between PCs is therefore the union** of their Watchlists. Only deletions made after
   sync was enabled can propagate.
@@ -180,7 +199,7 @@ Sync runs only while `MONEYVIEW_SYNC_DIR` is set.
 | API startup | Best-effort read → merge → write. A failure is recorded as `last_error`, and **startup never fails** because of it. |
 | `GET /portfolio/watchlist` | Read → merge → write, then respond. **Invariant:** the response never shows an older state than any readable peer file holds. |
 | Any change to a synced Watchlist field (the rule applies to every synced field, current and future) | Set `updated_at = now` and `updated_by = own pc_id`, then publish. |
-| Any delete | Upsert the tombstone, then publish. |
+| Any delete | Delete the row and upsert the tombstone with `removed_at = now` and `removed_by = own pc_id`, then publish. |
 
 **Rules:**
 - **One lock per API process** covers the whole transaction: read peer files → merge → update the local
@@ -205,6 +224,15 @@ This route is **read-only**. It reports the last recorded sync and never trigger
  "peers": [{"pc_id": "LAPTOP-JAE-19c2", "written_at": "2026-09-18T11:02:00.000Z"}],
  "skipped_files": [], "last_sync_at": "2026-09-18T11:03:10.500Z", "last_error": null}
 ```
+
+**Lifecycle:** every sync attempt replaces the recorded status as a whole.
+- `skipped_files` lists the files skipped **during the last attempt only**. It is not an accumulating
+  history.
+- `last_error` is the last attempt's error. A later attempt that completes (the folder is reachable and
+  this PC's file is written) sets it back to `null`, so a transient cloud problem does not leave a
+  permanent warning. Skipped peer files alone do not set `last_error`; they are reported in
+  `skipped_files`.
+- The status lives in memory in the API process. After a restart it is refreshed by the startup sync.
 
 The Portfolio page shows one status line beside the holdings count. The time shown is the **most recent**
 peer `written_at`.
@@ -262,7 +290,9 @@ After the change, `apps/api/services/webscrap/stock_targets.json` is exactly:
   *add* (`INSERT OR IGNORE`), so a PC that pulls the smaller file loses nothing.
 - **Recommended order for the owner:**
   1. Enable sync on both PCs.
-  2. Check that the status line reads "Synced with 1 other PC" and the full list is present on both.
+  2. On each PC, check that the status line reads "Synced with 1 other PC", **and** that the Watchlist
+     itself holds every ticker from both PCs. The status line only proves a peer file was read, not that
+     the lists match.
   3. Then merge the PR that swaps the seed file.
 
 ### The four existing paths
@@ -279,8 +309,10 @@ After the change, `apps/api/services/webscrap/stock_targets.json` is exactly:
 1. At least one readable peer file exists → run the normal merge. The empty DB becomes the **merged
    effective state across all readable peer files**, not one arbitrary peer. No defaults are seeded,
    even if that merged state is empty.
-2. No readable peer file → seed the 5 defaults from the committed file (or the built-in list, if the file
-   is unreadable), with `updated_at = BASELINE_TS` and `updated_by = own pc_id`.
+2. No readable peer file → run today's bootstrap: seed from the committed file. If that file is missing or
+   unreadable, the existing hard-coded `DEFAULT_WATCHLIST_ITEMS` fallback applies, exactly as today. This
+   is the committed seed file, not a sync file: its absence is not a sync failure and sets no
+   `last_error`. The seeded rows get `updated_at = BASELINE_TS` and `updated_by = own pc_id`.
 
 **Export and Import are independent rules:**
 - Export is **always** retargeted, whether or not sync is on. It never writes anywhere under
@@ -306,14 +338,20 @@ Every new test must be shown to fail against a named broken implementation befor
 | An older remote removal against a newer local row | The row stays. |
 | Equal timestamps | The larger `updated_by` wins. |
 | **Republish stability** | Copying A's change into B's file (same `updated_by`) does not change the winner. |
+| **Authorship kept on import** | A row imported from B's file keeps `updated_by = B` in A's database and in A's published file. |
 | **Three-way conflict**: A, B and C each hold a different version of one ticker | Every merge order converges on the same `(updated_at, updated_by)` winner. |
 | Baseline rows on two PCs | The result is the union. |
 
 **Two simulated PCs** (two SQLite files, two `pc_id`s, one temporary sync folder):
 - **Propagation:** a ticker added on A appears on B. A deletion on B removes the ticker on A.
+- **Imported tombstones are republished** (three PCs). B deletes a ticker; A syncs and republishes B's
+  tombstone; B's file is then removed from the folder; C syncs and still deletes the ticker, from A's
+  file alone.
 - **Independent edits:** simultaneous edits to different tickers both survive.
 - **First sync** gives the union. No earlier deletion is reconstructed.
 - **Fresh PC with peers:** a new, empty PC takes the merged peer state (from two peers), not the defaults.
+- **Empty merged peer state:** readable peer files exist, but their merged Watchlist is empty (everything
+  is tombstoned). The fresh PC stays empty, and no defaults are inserted.
 - **Fresh PC without peers:** a new, empty PC with no peers gets the 5 defaults at `BASELINE_TS`.
 - **Off, then on again:** an edit made while sync was off keeps its real timestamp, and wins over an
   older peer row once sync is switched back on.
@@ -332,12 +370,17 @@ Every new test must be shown to fail against a named broken implementation befor
 | `watchlist.X.json.tmp` holding a different state | Ignored by the merge. |
 | Conflict-copy names such as `watchlist.X (1).json` | Ignored. |
 | **Atomic write failure** (a simulated `os.replace` failure) | The previous valid file is intact and still parses. |
-| **Failed publish, then retry** | The folder is made unwritable, a local edit succeeds and is kept in SQLite, `last_error` is set. The folder becomes writable again; on the next `GET /portfolio/watchlist` the file contains the edit. |
+| **Failed publish, then retry** | A publish failure is **injected** by patching the write/replace call, not by OS folder permissions, which are unreliable on Windows and OneDrive. A local edit succeeds and is kept in SQLite, and `last_error` is set. The injection is removed; on the next `GET /portfolio/watchlist` the file contains the edit and `last_error` is `null`. |
+| **Partial peer availability** (three PCs) | A's file is valid, B's is invalid JSON, C's is valid. The merge includes A's and C's changes, and `skipped_files` lists only B's file. |
+| **Own filename, foreign content** | A file named with this PC's id but a different `pc_id` inside is not used as a merge input, is reported, and is replaced by this PC's next publish. |
+| **Skipped-file lifecycle** | A file skipped in one attempt is no longer listed after a later attempt in which it reads correctly. |
 
 **Routes and startup:**
 - `GET /portfolio/watchlist` returns the merged list.
 - With a missing folder it returns **200** with the local list, and `/peer-sync` reports `last_error`.
 - `/peer-sync` is read-only: this PC's file modification time and the DB are unchanged after the call.
+- **`pc_id` persistence:** closing and reopening the same database returns the same `pc_id`, and changing
+  the reported computer name (patched) does not change it.
 - **Startup with an unavailable folder** doesn't prevent the API from starting.
 - **Import cannot bypass the UI restriction:** `POST /portfolio/watchlist/resync` returns `409` while sync
   is on. The server guard is authoritative.
