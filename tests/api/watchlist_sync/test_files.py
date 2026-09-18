@@ -144,3 +144,103 @@ def test_the_moneyview_subfolder_is_created_inside_an_existing_root(tmp_path):
     write_own_file(tmp_path, ME, _state(by=ME), "2026-09-18T10:00:01.000Z")
     assert own_file_path(tmp_path, ME).parent == tmp_path / "MoneyView"
     assert read_peer_files(tmp_path, own_pc_id="PC-OTHER-1111")[0][0].pc_id == ME
+
+
+# --- Fix round 1 (I1-I4) ---
+
+
+def test_an_overflowing_weight_is_skipped_beside_a_good_peer(tmp_path):
+    folder = _folder(tmp_path)
+    write_own_file(tmp_path, C, _state("NVDA", by=C), "2026-09-18T10:00:01.000Z")
+    huge_weight = "9" * 400
+    text = (
+        '{"format_version": 1, "pc_id": "%s", "written_at": "2026-09-18T10:00:01.000Z", '
+        '"watchlist": [{"ticker": "AAPL", "name": "Apple", "sector": "Technology", '
+        '"group_name": "custom", "weight": %s, "updated_at": "2026-09-18T10:00:00.000Z", '
+        '"updated_by": "%s"}], "removed": []}' % (A, huge_weight, A)
+    )
+    (folder / f"watchlist.{A}.json").write_text(text, encoding="utf-8")
+
+    peers, skipped = read_peer_files(tmp_path, own_pc_id=ME)
+
+    assert [p.pc_id for p in peers] == [C]
+    assert [s.name for s in skipped] == [f"watchlist.{A}.json"]
+
+
+def test_deeply_nested_json_is_skipped_and_reported(tmp_path):
+    folder = _folder(tmp_path)
+    (folder / f"watchlist.{A}.json").write_text("[" * 100000, encoding="utf-8")
+
+    peers, skipped = read_peer_files(tmp_path, own_pc_id=ME)
+
+    assert peers == []
+    assert [s.name for s in skipped] == [f"watchlist.{A}.json"]
+
+
+def test_a_non_list_watchlist_is_skipped(tmp_path):
+    folder = _folder(tmp_path)
+    write_own_file(tmp_path, A, _state(), "2026-09-18T10:00:01.000Z")
+    path = folder / f"watchlist.{A}.json"
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload["watchlist"] = {}
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    peers, skipped = read_peer_files(tmp_path, own_pc_id=ME)
+
+    assert peers == [] and skipped[0].name == f"watchlist.{A}.json"
+
+
+def test_a_missing_removed_key_is_skipped_beside_a_good_peer(tmp_path):
+    folder = _folder(tmp_path)
+    write_own_file(tmp_path, C, _state("NVDA", by=C), "2026-09-18T10:00:01.000Z")
+    write_own_file(tmp_path, A, _state(), "2026-09-18T10:00:01.000Z")
+    path = folder / f"watchlist.{A}.json"
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    del payload["removed"]
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    peers, skipped = read_peer_files(tmp_path, own_pc_id=ME)
+
+    assert [p.pc_id for p in peers] == [C]
+    assert [s.name for s in skipped] == [f"watchlist.{A}.json"]
+
+
+def test_watchlist_as_a_number_is_skipped_beside_a_good_peer(tmp_path):
+    folder = _folder(tmp_path)
+    write_own_file(tmp_path, C, _state("NVDA", by=C), "2026-09-18T10:00:01.000Z")
+    write_own_file(tmp_path, A, _state(), "2026-09-18T10:00:01.000Z")
+    path = folder / f"watchlist.{A}.json"
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload["watchlist"] = 5
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    peers, skipped = read_peer_files(tmp_path, own_pc_id=ME)
+
+    assert [p.pc_id for p in peers] == [C]
+    assert [s.name for s in skipped] == [f"watchlist.{A}.json"]
+
+
+def test_a_row_with_an_empty_updated_by_is_skipped(tmp_path):
+    folder = _folder(tmp_path)
+    write_own_file(tmp_path, A, _state(), "2026-09-18T10:00:01.000Z")
+    path = folder / f"watchlist.{A}.json"
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload["watchlist"][0]["updated_by"] = ""
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    peers, skipped = read_peer_files(tmp_path, own_pc_id=ME)
+
+    assert peers == [] and skipped[0].name == f"watchlist.{A}.json"
+
+
+def test_writing_an_invalid_state_raises_and_creates_no_file(tmp_path):
+    _folder(tmp_path)
+    bad_state = SyncState(
+        rows={"AAPL": SyncRow("AAPL", "Apple", "Technology", "custom", 0.1, "2026-09-18T10:00:00.000Z", "")},
+        removed={},
+    )
+
+    with pytest.raises(ValueError):
+        write_own_file(tmp_path, A, bad_state, "2026-09-18T10:00:01.000Z")
+
+    assert not own_file_path(tmp_path, A).exists()

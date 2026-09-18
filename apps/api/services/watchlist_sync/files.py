@@ -66,6 +66,10 @@ def _parse(payload: dict) -> PeerFile:
         raise ValueError("the file is not a JSON object")
     if payload.get("format_version") != FORMAT_VERSION:
         raise ValueError(f"unsupported format_version {payload.get('format_version')!r}")
+    if not isinstance(payload["watchlist"], list):
+        raise ValueError("watchlist is not a list")
+    if not isinstance(payload["removed"], list):
+        raise ValueError("removed is not a list")
     rows: dict[str, SyncRow] = {}
     for raw in payload["watchlist"]:
         ticker = raw["ticker"]
@@ -114,8 +118,9 @@ def read_peer_files(root: Path, own_pc_id: str) -> tuple[list[PeerFile], list[Sk
             continue
         try:
             peer = _parse(json.loads(path.read_text(encoding="utf-8")))
-        except (OSError, ValueError, KeyError, TypeError) as error:
-            skipped.append(SkippedFile(path.name, f"unreadable: {error}"))
+        except Exception as error:
+            # Each peer file is untrusted, independent input; one bad file must never block the others.
+            skipped.append(SkippedFile(path.name, f"unreadable: {type(error).__name__}: {error}"))
             continue
         if peer.pc_id != match.group(1):
             skipped.append(SkippedFile(path.name, f"pc_id {peer.pc_id!r} inside does not match the filename"))
@@ -143,6 +148,7 @@ def write_own_file(root: Path, pc_id: str, state: SyncState, written_at: str) ->
             for t in sorted(state.removed.values(), key=lambda t: t.ticker)
         ],
     }
+    _parse(payload)  # fail loudly here rather than publish a state peers would reject
     final = own_file_path(root, pc_id)
     temporary = final.with_name(final.name + ".tmp")
     temporary.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
