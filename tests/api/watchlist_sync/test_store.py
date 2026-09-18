@@ -35,8 +35,8 @@ def test_an_old_database_gains_the_columns_without_losing_rows(tmp_path, monkeyp
     db_service.init_db()
 
     with get_db() as conn:
-        row = conn.execute("SELECT ticker, weight, updated_at FROM watchlist").fetchone()
-    assert (row["ticker"], row["weight"], row["updated_at"]) == ("AAPL", 0.4, None)
+        row = conn.execute("SELECT ticker, weight, updated_at, updated_by FROM watchlist").fetchone()
+    assert (row["ticker"], row["weight"], row["updated_at"], row["updated_by"]) == ("AAPL", 0.4, None, None)
 
 
 def test_pc_id_is_generated_once_and_survives_a_rename(monkeypatch):
@@ -91,13 +91,31 @@ def test_ensure_first_sync_stamps_new_null_rows_on_every_call_but_the_marker_is_
 def test_apply_state_writes_rows_tombstones_and_deletes_absent_rows_keeping_authors():
     _insert("AAPL")
     _insert("OLD")
+    with get_db() as conn:
+        # A local tombstone that the merge has since superseded with a newer one by another
+        # author: apply_state must overwrite it, not leave the older one in place.
+        conn.execute(
+            "INSERT INTO watchlist_removed (ticker, removed_at, removed_by) VALUES (?, ?, ?)",
+            ("TSLA", "2026-09-18T09:00:00.000Z", "PC-A-0001"),
+        )
     merged = SyncState(
-        rows={"AAPL": SyncRow("AAPL", "Apple", "Tech", "total", 0.3, "2026-09-18T10:00:00.000Z", "PC-B-0002")},
-        removed={"OLD": Tombstone("OLD", "2026-09-18T10:00:00.000Z", "PC-B-0002")},
+        rows={
+            "AAPL": SyncRow("AAPL", "Apple", "Tech", "total", 0.3, "2026-09-18T10:00:00.000Z", "PC-B-0002"),
+            # No local row for MSFT: apply_state's insert path, not its update path.
+            "MSFT": SyncRow("MSFT", "Microsoft", "Tech", "custom", 0.2, "2026-09-18T11:00:00.000Z", "PC-C-0003"),
+        },
+        removed={
+            "OLD": Tombstone("OLD", "2026-09-18T10:00:00.000Z", "PC-B-0002"),
+            "TSLA": Tombstone("TSLA", "2026-09-18T12:00:00.000Z", "PC-D-0004"),
+        },
     )
     with get_db() as conn:
         store.apply_state(conn, merged)
-        assert store.read_local_state(conn) == merged
+        state = store.read_local_state(conn)
+
+    assert state == merged
+    assert state.rows["MSFT"].updated_by == "PC-C-0003"
+    assert state.removed["TSLA"] == Tombstone("TSLA", "2026-09-18T12:00:00.000Z", "PC-D-0004")
 
 
 def test_stamp_row_and_record_removal_use_this_pc():
