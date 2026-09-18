@@ -1,6 +1,7 @@
 """Two or three simulated PCs sharing one sync folder (spec §3, Testing: simulated PCs)."""
 
 import json
+import sqlite3
 
 import pytest
 
@@ -8,7 +9,7 @@ from apps.api.services import db as db_service
 from apps.api.services import watchlist_seed
 from apps.api.services.db import get_db
 from apps.api.services.watchlist_sync import files, service, store
-from apps.api.services.watchlist_sync.model import BASELINE_TS
+from apps.api.services.watchlist_sync.model import BASELINE_TS, SyncState, Tombstone, next_stamp
 
 
 class PC:
@@ -219,9 +220,21 @@ def test_both_pcs_converge_on_identical_state(tmp_path, monkeypatch, cloud):
 def test_sync_off_does_nothing(tmp_path, monkeypatch):
     monkeypatch.delenv("MONEYVIEW_SYNC_DIR", raising=False)
     a = PC(tmp_path, "PC-A", monkeypatch)
+    with get_db() as conn:
+        conn.execute(
+            "INSERT INTO watchlist (ticker, name, sector, group_name, weight) VALUES (?, ?, '', 'custom', 0.0)",
+            ("UNSTAMPED", "UNSTAMPED"),
+        )
     service.run_sync("test")
     assert service.current_status().enabled is False
     assert not (tmp_path / "MoneyView").exists()
+    with get_db() as conn:
+        marker = conn.execute(
+            "SELECT 1 FROM dataset_metadata WHERE dataset_name = 'watchlist_sync_enabled_at'"
+        ).fetchone()
+        row = conn.execute("SELECT updated_at FROM watchlist WHERE ticker = 'UNSTAMPED'").fetchone()
+    assert marker is None
+    assert row["updated_at"] is None
 
 
 def test_ensure_watchlist_bootstrapped_prefers_peers_over_the_seed_on_a_truly_fresh_pc(tmp_path, monkeypatch, cloud):
@@ -255,7 +268,90 @@ def test_ensure_first_sync_runs_before_read_local_state_on_every_run(tmp_path, m
     a.sync()
     assert a.rows()["UNSTAMPED"]["updated_at"] == BASELINE_TS
     assert a.rows()["UNSTAMPED"]["updated_by"] == pc_id
-    with get_db() as conn:
-        published = json.loads(files.own_file_path(cloud, pc_id).read_text(encoding="utf-8"))
-    assert "UNSTAMPED" in {row["ticker"] for row in published["watchlist"]}
+    published = json.loads(files.own_file_path(cloud, pc_id).read_text(encoding="utf-8"))
+    published_row = next(row for row in published["watchlist"] if row["ticker"] == "UNSTAMPED")
+    assert published_row["updated_at"] == BASELINE_TS
+    assert published_row["updated_by"] == pc_id
     assert service.current_status().last_error is None
+
+
+def test_a_concurrent_local_write_is_not_silently_lost_during_run_sync(tmp_path, monkeypatch, cloud):
+    """I1: the read-merge-apply block opens with `BEGIN IMMEDIATE`, holding SQLite's write lock for
+    the whole snapshot-then-apply window. Without it, a second connection could commit a new row
+    between `read_local_state` and `apply_state`; `apply_state` re-reads `current` from the DB, so
+    that freshly committed row would show up there but not in the older `merged` snapshot, and get
+    silently DELETEd as if it were a row that had disappeared.
+
+    The racing writer uses a short `timeout` rather than the default so it fails fast instead of
+    waiting out the busy timeout: with the lock held by the same connection/thread as `run_sync`,
+    a long wait would just be a slow, deterministic deadlock, not a useful assertion.
+    """
+    a = PC(tmp_path, "PC-A", monkeypatch).sync()
+    a.use()
+    with get_db() as conn:
+        pc_id = service.local_pc_id(conn)
+
+    real_merge_states = service.merge_states
+    blocked = {"value": False}
+
+    def racing_merge_states(states):
+        try:
+            race_conn = sqlite3.connect(str(db_service._DB_PATH), timeout=0.2)
+            try:
+                race_conn.execute(
+                    "INSERT INTO watchlist (ticker, name, sector, group_name, weight) VALUES ('RACE', 'RACE', '', 'custom', 0.0)"
+                )
+                store.stamp_row(race_conn, "RACE", pc_id)
+                race_conn.commit()
+            finally:
+                race_conn.close()
+        except sqlite3.OperationalError as error:
+            if "database is locked" not in str(error):
+                raise
+            blocked["value"] = True
+        return real_merge_states(states)
+
+    monkeypatch.setattr(service, "merge_states", racing_merge_states)
+    a.sync()
+    monkeypatch.setattr(service, "merge_states", real_merge_states)
+
+    assert blocked["value"], "the concurrent writer must be held off by BEGIN IMMEDIATE, not merely lucky"
+
+    # Once run_sync's transaction has closed, the same write must succeed and stick -- the lock
+    # only serialises the critical section, it does not wedge the database.
+    with get_db() as conn:
+        conn.execute(
+            "INSERT INTO watchlist (ticker, name, sector, group_name, weight) VALUES ('RACE', 'RACE', '', 'custom', 0.0)"
+        )
+        store.stamp_row(conn, "RACE", pc_id)
+    assert "RACE" in a.rows()
+
+
+def test_a_pc_that_joins_through_peers_is_marked_bootstrapped(tmp_path, monkeypatch, cloud):
+    """I2: a PC whose empty table is filled entirely from a peer (no local bootstrap ran) must
+    still be marked bootstrapped. Otherwise a later attempt where every peer file happens to be
+    unreadable looks exactly like a genuinely fresh PC, and the seed defaults get inserted and
+    spread back out to every other PC through this one's own published file.
+
+    The peer's file is fabricated directly (rather than driven through a second simulated PC's own
+    `run_sync`) so it can hold exactly what this test needs: an empty watchlist and a tombstone for
+    an unrelated ticker, never "SEED" itself. A "SEED" tombstone would get copied into the fresh
+    PC's own local table during its first sync and, by outranking a later BASELINE_TS reseed, would
+    hide this exact bug regardless of whether the fix is present.
+    """
+    peer_pc_id = "PC-PEER-0000"
+    peer_state = SyncState(
+        rows={},
+        removed={"TEMP": Tombstone(ticker="TEMP", removed_at=next_stamp(), removed_by=peer_pc_id)},
+    )
+    files.write_own_file(cloud, peer_pc_id, peer_state, next_stamp())
+
+    fresh = PC(tmp_path, "PC-NEW", monkeypatch).sync()  # empty local table, one peer: merged empty
+    assert fresh.rows() == {}
+
+    # The only peer fresh has ever seen becomes unreadable: the next sync finds no readable peer.
+    files.own_file_path(cloud, peer_pc_id).write_text("{", encoding="utf-8")
+
+    fresh.use()
+    fresh.sync()
+    assert fresh.rows() == {}, "a PC already bootstrapped through a peer must not reseed just because that peer went unreadable"

@@ -63,7 +63,18 @@ def run_sync(trigger: str, seed_json: Path | None = None) -> None:
                 from apps.api.services import watchlist_seed
 
                 watchlist_seed.bootstrap_from_seed(seed_json or watchlist_seed.SEED_JSON)
+            elif empty and peers:
+                # I2: a PC that joins an existing sync through peers is bootstrapped too, or a
+                # later attempt where every peer file is unreadable would look fresh again and
+                # reseed the defaults, spreading them back out to every other PC.
+                from apps.api.services import watchlist_seed
+
+                watchlist_seed.mark_watchlist_state("peer_sync")
             with get_db() as conn:
+                # Serialises this read-merge-apply window against every other SQLite writer, so a
+                # local write landing between the snapshot and apply_state can never be silently
+                # deleted or overwritten (I1).
+                conn.execute("BEGIN IMMEDIATE")
                 merged = merge_states([store.read_local_state(conn), *(peer.state for peer in peers)])
                 store.apply_state(conn, merged)
             finished = next_stamp()
