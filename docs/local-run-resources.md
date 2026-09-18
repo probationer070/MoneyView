@@ -156,3 +156,21 @@ The frontend resolves the backend through `NEXT_PUBLIC_API_BASE_URL`, defaulting
   report for what was frozen or neutralised to produce it
 - `docs/architecture/local-first-runtime.md` — the runtime architecture and policy this
   document reports measurements for
+
+---
+
+## Watchlist sync between your PCs
+
+1. Pick a folder a cloud client keeps in sync, e.g. `C:\Users\<you>\OneDrive\MoneyView-sync`.
+   In OneDrive, set it to "Always keep on this device" (recommended; an online-only file is
+   skipped and retried, never read as empty).
+2. In `config/.env` (copy `config/.env.example` if you have none), set
+   `MONEYVIEW_SYNC_DIR=C:\Users\<you>\OneDrive\MoneyView-sync`.
+3. Restart MoneyView. The Portfolio page shows the sync status beside the holdings count.
+
+Each PC writes only `MoneyView\watchlist.<pc_id>.json` in that folder. Your first sync merges
+both PCs' lists (a union); deletions made after that propagate. With the variable unset, sync is
+off and nothing changes. Design: `docs/superpowers/specs/2026-09-18-watchlist-peer-sync-design.md`.
+
+Test and e2e processes set `MONEYVIEW_SKIP_LOCAL_ENV=1`, so they never read `config/.env` and
+never touch your real sync folder.

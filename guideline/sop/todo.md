@@ -1189,6 +1189,15 @@ Branched from `renewal` @ `1af14ad`; baseline 1265 Python tests.
       C and D share an overlay layer; building C first means D reuses it.
 
 
+## Track K - Watchlist peer sync  [2026-09-18]
+
+Spec: `docs/superpowers/specs/2026-09-18-watchlist-peer-sync-design.md`.
+Plan: `docs/superpowers/plans/2026-09-18-watchlist-peer-sync.md`.
+
+- [ ] **K-1. Sync feature** (PR 1, open)
+- [ ] **K-2. Neutral public seed** (PR 2): merge only after sync is on for both PCs and both
+      Watchlists hold every ticker
+
 ## Archived
 
 - `guideline/sop/todo4.md` -- all completed tracks through 2026-08-30.

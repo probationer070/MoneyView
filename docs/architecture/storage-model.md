@@ -139,21 +139,22 @@ Bootstrap behavior is:
 2. if `watchlist` is empty and no managed watchlist state exists, seed from JSON when possible
 3. if JSON is absent and DB-derived regeneration is not possible, seed from built-in defaults
 
+With peer sync on, an empty database is filled from the peers' merged list when any peer file is
+readable, and from the seed only when none is; the seed file is read-only to MoneyView and holds
+neutral starter tickers.
+
 ### 4.3 Managed State Flag
 
 After user mutation or explicit sync/import actions, `dataset_metadata` records watchlist state so the backend does not silently reseed deleted defaults later.
 
 ### 4.4 Sync Model
 
-**Safe sync: DB to JSON**
-- exports the SQLite-backed watchlist into `stock_targets.json`
-- preserves user-managed weights
-- records sync metadata in `dataset_metadata`
+**Export** (DB → `data/exports/watchlist-export.json`, git-ignored). Never writes the committed seed.
 
-**Destructive import: JSON to DB**
-- clears and replaces `watchlist` with JSON contents
-- requires explicit user action
-- records import metadata in `dataset_metadata`
+**Destructive import** (seed → DB). Refused (409) while peer sync is on.
+
+**Peer sync** (`MONEYVIEW_SYNC_DIR`). One file per PC in a cloud-synced folder, merged per ticker
+by `(updated_at, updated_by)` with tombstones in `watchlist_removed`. See the spec above.
 
 ## 5. Corporate Comparison Snapshot Storage
 
