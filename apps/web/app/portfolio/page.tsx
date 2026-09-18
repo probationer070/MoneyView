@@ -1,7 +1,7 @@
 "use client";
 
 import { type FormEvent, type KeyboardEvent as ReactKeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Camera, ChevronDown, ChevronRight, PieChart, RefreshCw, SlidersHorizontal, Table as TableIcon, Trash2 } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
@@ -1066,6 +1066,9 @@ export default function PortfolioPage() {
     queryFn: () => fetchApi<WatchlistPeerSyncStatusData>("/portfolio/watchlist/peer-sync"),
     enabled: watchlistQuery.isSuccess,
     refetchOnWindowFocus: false,
+    // The key changes on every watchlist refetch; keep showing the last status until the new one
+    // arrives, or the line blinks out and Import briefly reappears while sync is on.
+    placeholderData: keepPreviousData,
   });
   const portfolioPreferencesQuery = useQuery<PortfolioPreferences>({
     queryKey: ["portfolio-preferences"],

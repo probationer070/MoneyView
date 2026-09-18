@@ -1196,7 +1196,7 @@ Plan: `docs/superpowers/plans/2026-09-18-watchlist-peer-sync.md`.
 
 - [ ] **K-1. Sync feature** (PR 1, open)
 - [ ] **K-2. Neutral public seed** (PR 2): merge only after sync is on for both PCs and both
-      Watchlists hold every ticker
+      Watchlists hold every ticker with the same weights and groups
 
 ## Archived
 

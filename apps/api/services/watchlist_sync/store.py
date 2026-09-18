@@ -96,13 +96,24 @@ def apply_state(conn: sqlite3.Connection, state: SyncState) -> None:
         )
 
 
+def causal_stamp(conn: sqlite3.Connection, ticker: str) -> str:
+    """A stamp for a local change to `ticker` that outranks the row and tombstone the user saw,
+    even when those came from a peer whose clock runs ahead of this PC's."""
+    row = conn.execute("SELECT updated_at FROM watchlist WHERE ticker = ?", (ticker,)).fetchone()
+    tomb = conn.execute("SELECT removed_at FROM watchlist_removed WHERE ticker = ?", (ticker,)).fetchone()
+    seen = [value for value in (row and row["updated_at"], tomb and tomb["removed_at"]) if value]
+    return next_stamp(after=max(seen, default=None))
+
+
 def stamp_row(conn: sqlite3.Connection, ticker: str, pc_id: str) -> None:
-    conn.execute("UPDATE watchlist SET updated_at = ?, updated_by = ? WHERE ticker = ?", (next_stamp(), pc_id, ticker))
+    conn.execute("UPDATE watchlist SET updated_at = ?, updated_by = ? WHERE ticker = ?",
+                 (causal_stamp(conn, ticker), pc_id, ticker))
 
 
 def record_removal(conn: sqlite3.Connection, ticker: str, pc_id: str) -> None:
+    """Call before deleting the row, so the tombstone outranks the version being deleted."""
     conn.execute(
         """INSERT INTO watchlist_removed (ticker, removed_at, removed_by) VALUES (?, ?, ?)
            ON CONFLICT(ticker) DO UPDATE SET removed_at = excluded.removed_at, removed_by = excluded.removed_by""",
-        (ticker, next_stamp(), pc_id),
+        (ticker, causal_stamp(conn, ticker), pc_id),
     )

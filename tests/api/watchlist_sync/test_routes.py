@@ -2,13 +2,14 @@
 
 import json
 
+import pytest
 from fastapi.testclient import TestClient
 
 from apps.api.main import app
 from apps.api.routes import portfolio as portfolio_routes
 from apps.api.services import watchlist_seed
 from apps.api.services.db import get_db
-from apps.api.services.watchlist_sync import files, service
+from apps.api.services.watchlist_sync import files, model, service
 
 client = TestClient(app)
 BASE = "/api/v1/portfolio/watchlist"
@@ -248,3 +249,72 @@ def test_startup_with_an_unavailable_folder_still_starts(tmp_path, monkeypatch):
     monkeypatch.setenv("MONEYVIEW_DISABLE_STARTUP_JOBS", "1")
     with TestClient(app) as started:
         assert started.get("/api/v1/healthz").status_code == 200
+
+
+FUTURE = "2099-01-01T00:00:00.000Z"
+
+
+def _plant_future_peer(root, rows=(), removed=()):
+    """A peer whose clock is far ahead of this PC's (or this PC's clock stepped back)."""
+    (root / "MoneyView").mkdir(exist_ok=True)
+    (root / "MoneyView" / "watchlist.PC-AHEAD-0001.json").write_text(json.dumps({
+        "format_version": 1, "pc_id": "PC-AHEAD-0001", "written_at": FUTURE,
+        "watchlist": [{"ticker": t, "name": t, "sector": "", "group_name": "custom", "weight": 0.1,
+                       "updated_at": FUTURE, "updated_by": "PC-AHEAD-0001"} for t in rows],
+        "removed": [{"ticker": t, "removed_at": FUTURE, "removed_by": "PC-AHEAD-0001"} for t in removed]}),
+        encoding="utf-8")
+
+
+def _isolate_stamp_clock(monkeypatch):
+    # These tests issue stamps past 2099; restore the process clock at teardown so later tests
+    # still see stamps near the real time.
+    monkeypatch.setattr(model, "_last_issued", model._last_issued)
+
+
+@pytest.mark.parametrize("edit", ["group route", "upsert"])
+def test_a_local_edit_outranks_the_peer_version_it_replaced_even_from_a_clock_ahead(tmp_path, monkeypatch, edit):
+    _isolate_stamp_clock(monkeypatch)
+    root = _enable(tmp_path, monkeypatch)
+    _plant_future_peer(root, rows=["AHEAD"])
+    assert "AHEAD" in {row["ticker"] for row in client.get(BASE).json()}
+
+    if edit == "group route":
+        client.post(f"{BASE}/AHEAD/group", json={"group_name": "total"})
+    else:
+        client.post(BASE, json={"ticker": "AHEAD", "name": "AHEAD", "sector": "", "group_name": "total", "weight": 0.1})
+
+    with get_db() as conn:
+        row = conn.execute("SELECT group_name, updated_at FROM watchlist WHERE ticker = 'AHEAD'").fetchone()
+    assert service.current_status().last_error is None
+    assert row["group_name"] == "total", "the route's sync restored the peer's older-in-intent version"
+    assert row["updated_at"] > FUTURE
+
+
+def test_a_local_delete_outranks_the_peer_row_it_removed_even_from_a_clock_ahead(tmp_path, monkeypatch):
+    _isolate_stamp_clock(monkeypatch)
+    root = _enable(tmp_path, monkeypatch)
+    _plant_future_peer(root, rows=["AHEAD"])
+    client.get(BASE)
+
+    client.delete(f"{BASE}/AHEAD")
+
+    with get_db() as conn:
+        present = conn.execute("SELECT 1 FROM watchlist WHERE ticker = 'AHEAD'").fetchone()
+        tomb = conn.execute("SELECT removed_at FROM watchlist_removed WHERE ticker = 'AHEAD'").fetchone()
+    assert service.current_status().last_error is None
+    assert present is None, "the route's sync resurrected a ticker the user deleted"
+    assert tomb["removed_at"] > FUTURE
+
+
+def test_re_adding_a_ticker_outranks_its_tombstone_even_from_a_clock_ahead(tmp_path, monkeypatch):
+    _isolate_stamp_clock(monkeypatch)
+    root = _enable(tmp_path, monkeypatch)
+    _plant_future_peer(root, removed=["AHEAD"])
+    client.get(BASE)
+
+    client.post(BASE, json={"ticker": "AHEAD", "name": "AHEAD", "sector": "", "group_name": "custom", "weight": 0.1})
+
+    with get_db() as conn:
+        row = conn.execute("SELECT updated_at FROM watchlist WHERE ticker = 'AHEAD'").fetchone()
+    assert row is not None, "the route's sync applied the older-in-intent tombstone over the re-add"
+    assert row["updated_at"] > FUTURE

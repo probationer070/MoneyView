@@ -18,19 +18,18 @@ export function WatchlistPeerSyncStatus({ status }: { status: WatchlistPeerSyncS
   if (!status?.enabled) return null;
   let text: string;
   let warn = false;
+  const n = status.skipped_files.length;
+  const skipped = n > 0 ? ` · ${n} file${n === 1 ? "" : "s"} skipped, will retry` : "";
   if (status.last_error) {
     text = "Sync unavailable · changes are kept on this PC";
     warn = true;
   } else if (status.peers.length === 0) {
-    text = "Sync on · no other PC has synced yet";
+    text = `Sync on · no other PC has synced yet${skipped}`;
   } else {
     const latest = status.peers.map((peer) => peer.written_at).sort().at(-1)!;
     const count = status.peers.length;
     text = count === 1 ? `Synced with 1 other PC · ${localTime(latest)}` : `Synced with ${count} other PCs · latest ${localTime(latest)}`;
-    if (status.skipped_files.length > 0) {
-      const n = status.skipped_files.length;
-      text += ` · ${n} file${n === 1 ? "" : "s"} skipped, will retry`;
-    }
+    text += skipped;
   }
   return (
     <span

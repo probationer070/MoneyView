@@ -3,6 +3,7 @@
 import itertools
 from datetime import datetime, timedelta, timezone
 
+from apps.api.services.watchlist_sync import model
 from apps.api.services.watchlist_sync.model import (
     BASELINE_TS,
     SyncRow,
@@ -42,6 +43,12 @@ def test_stamps_strictly_increase_even_within_one_millisecond():
     moment = datetime(2000, 1, 1, tzinfo=timezone.utc)
     first, second = next_stamp(moment), next_stamp(moment)
     assert second > first
+
+
+def test_a_stamp_outranks_the_version_it_follows_even_from_a_clock_ahead(monkeypatch):
+    # Restored at teardown, so the 2099 stamp this issues does not carry into later tests.
+    monkeypatch.setattr(model, "_last_issued", model._last_issued)
+    assert next_stamp(after="2099-01-01T00:00:00.000Z") > "2099-01-01T00:00:00.000Z"
 
 
 def test_a_later_edit_wins():

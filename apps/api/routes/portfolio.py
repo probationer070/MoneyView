@@ -40,7 +40,6 @@ from apps.api.services.watchlist_seed import (
 )
 from apps.api.services.watchlist_sync import service as watchlist_sync
 from apps.api.services.watchlist_sync import store as watchlist_sync_store
-from apps.api.services.watchlist_sync.model import next_stamp
 
 _API_ROOT = Path(__file__).resolve().parents[1]
 _WATCHLIST_JSON = _API_ROOT / "services" / "webscrap" / "stock_targets.json"
@@ -186,7 +185,7 @@ def upsert_watchlist_item(item: WatchlistItem = Body(...)):
             existing["name"], existing["sector"], existing["group_name"], float(existing["weight"] or 0.0)
         ) != (normalized.name, normalized.sector, normalized.group_name, normalized.weight)
         pc_id = watchlist_sync.local_pc_id(conn)
-        stamp = next_stamp() if changed else existing["updated_at"]
+        stamp = watchlist_sync_store.causal_stamp(conn, normalized.ticker) if changed else existing["updated_at"]
         author = pc_id if changed else existing["updated_by"]
         conn.execute(
             """INSERT OR REPLACE INTO watchlist (ticker, name, sector, group_name, weight, updated_at, updated_by)
@@ -307,10 +306,11 @@ def delete_watchlist_item(ticker: str):
         row = conn.execute("SELECT ticker FROM watchlist WHERE ticker = ?", (normalized_ticker,)).fetchone()
         if row is None:
             raise HTTPException(status_code=404, detail=f"watchlist ticker not found: {normalized_ticker}")
-        conn.execute("DELETE FROM watchlist WHERE ticker = ?", (normalized_ticker,))
         if watchlist_sync.is_enabled():
-            # Tombstones only while sync is on (spec §1, Switch).
+            # Tombstones only while sync is on (spec §1, Switch). Recorded before the DELETE, so
+            # the tombstone outranks the row being deleted (causal stamp).
             watchlist_sync_store.record_removal(conn, normalized_ticker, watchlist_sync.local_pc_id(conn))
+        conn.execute("DELETE FROM watchlist WHERE ticker = ?", (normalized_ticker,))
     mark_watchlist_state("user_mutation")
     watchlist_sync.run_sync("mutation")
     try:
