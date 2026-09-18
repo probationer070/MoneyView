@@ -35,11 +35,20 @@ test("one peer shows the peer count and its last write time", async ({ page }) =
 });
 
 test("two peers show the most recent write time", async ({ page }) => {
+  const olderIso = "2026-09-18T01:00:00.000Z";
+  const newerIso = "2026-09-18T02:02:00.000Z";
   await openWith(page, on({ peers: [
-    { pc_id: "PC-B-0002", written_at: "2026-09-18T01:00:00.000Z" },
-    { pc_id: "PC-C-0003", written_at: "2026-09-18T02:02:00.000Z" },
+    { pc_id: "PC-B-0002", written_at: olderIso },
+    { pc_id: "PC-C-0003", written_at: newerIso },
   ] }));
-  await expect(line(page)).toContainText("Synced with 2 other PCs · latest");
+  const formatTime = (iso: string) => page.evaluate(
+    (value) => new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+    iso,
+  );
+  const expectedNewer = await formatTime(newerIso);
+  const expectedOlder = await formatTime(olderIso);
+  await expect(line(page)).toContainText(`Synced with 2 other PCs · latest ${expectedNewer}`);
+  await expect(line(page)).not.toContainText(expectedOlder);
 });
 
 test("no peers yet says so", async ({ page }) => {
