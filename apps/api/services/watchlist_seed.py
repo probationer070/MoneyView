@@ -163,7 +163,8 @@ def resync_watchlist_from_json(json_path: Path) -> WatchlistResyncResult:
 
 
 def sync_watchlist_to_json(json_path: Path) -> WatchlistSyncResult:
-    """Safely export the current DB-backed watchlist into stock_targets.json."""
+    """Safely export the current DB-backed watchlist to `json_path`. The route passes the personal,
+    git-ignored data/exports/watchlist-export.json."""
     with get_db() as conn:
         items = _build_watchlist_items_from_watchlist(conn)
     if not items:
