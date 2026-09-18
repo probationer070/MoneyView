@@ -68,10 +68,13 @@ def nth_weekday_of_month(rule: Mapping[str, Any], calendar: TradingCalendar, sta
         for month in sorted(months):
             first = date(year, month, 1)
             day = first + timedelta(days=(weekday - first.weekday()) % 7 + 7 * (nth - 1))
-            if not start <= day <= end:
+            if day < start:
+                continue
+            if day > calendar.last_session():
                 continue
             if not calendar.is_session(day):
                 day = calendar.previous_session(day)
+            # Range-check after the holiday shift: a Friday past the range end can shift back into it.
             if start <= day <= end:
                 days.append(day)
     return days
