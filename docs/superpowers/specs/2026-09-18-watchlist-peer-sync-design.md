@@ -253,7 +253,7 @@ peer `written_at`.
 | Off | *(nothing)* |
 | OK | `Synced with 1 other PC · 11:02`, or `Synced with 2 other PCs · latest 11:02` |
 | No peers yet | `Sync on · no other PC has synced yet` |
-| A peer file skipped | `Synced · 1 file skipped, will retry` |
+| A peer file skipped | `Synced with 1 other PC · 11:02 · 1 file skipped, will retry`, or `Sync on · no other PC has synced yet · 1 file skipped, will retry` |
 | Folder unavailable | `Sync unavailable · changes are kept on this PC`, in the warning colour |
 
 ### Configuration
