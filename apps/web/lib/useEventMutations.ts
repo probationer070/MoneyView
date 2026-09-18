@@ -60,6 +60,7 @@ export function useSetCategoriesVisible() {
     },
   });
 
+  const { mutate: startMutation } = mutation;
   const mutate = useCallback(
     (changes: Array<{ id: string; visible: boolean }>) => {
       if (changes.length === 0) return;
@@ -68,9 +69,9 @@ export function useSetCategoriesVisible() {
       queryClient.setQueryData<EventCategory[]>(EVENT_CATEGORIES_KEY, (current) =>
         current?.map((category) => (next.has(category.id) ? { ...category, visible: next.get(category.id)! } : category)),
       );
-      mutation.mutate(changes);
+      startMutation(changes);
     },
-    [queryClient, mutation.mutate],
+    [queryClient, startMutation],
   );
 
   return { mutate, isError: mutation.isError, isPending: mutation.isPending };
