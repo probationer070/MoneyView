@@ -149,9 +149,18 @@ def test_import_is_refused_while_sync_is_on_even_without_the_ui(tmp_path, monkey
 
 def test_export_writes_the_personal_file_never_the_committed_seed(tmp_path, monkeypatch):
     _quiet_prices(monkeypatch)
+    # A regression that has Export write to _WATCHLIST_JSON (mutation 6, task-6-report.md) must
+    # never be able to reach the real committed seed even while this test is proving it -- so
+    # _WATCHLIST_JSON and SEED_JSON are redirected to a private copy, not the real file. The
+    # session-wide guard in tests/conftest.py (_guard_the_committed_seed) is the last resort;
+    # this test does not depend on it.
+    seed_copy = tmp_path / "stock_targets.json"
+    seed_copy.write_bytes(watchlist_seed.SEED_JSON.read_bytes())
+    monkeypatch.setattr(portfolio_routes, "_WATCHLIST_JSON", seed_copy)
+    monkeypatch.setattr(watchlist_seed, "SEED_JSON", seed_copy)
     export = tmp_path / "exports" / "watchlist-export.json"
     monkeypatch.setattr(watchlist_seed, "EXPORT_JSON", export)
-    seed_before = watchlist_seed.SEED_JSON.read_bytes()
+    seed_before = seed_copy.read_bytes()
     client.post(BASE, json={"ticker": "NVDA", "name": "NVIDIA", "sector": "", "group_name": "custom", "weight": 0.1})
 
     for sync_dir in (None, tmp_path / "cloud"):
@@ -165,7 +174,7 @@ def test_export_writes_the_personal_file_never_the_committed_seed(tmp_path, monk
         assert response.json()["data"]["json_path"] == str(export)
 
     assert "NVDA" in export.read_text(encoding="utf-8")
-    assert watchlist_seed.SEED_JSON.read_bytes() == seed_before
+    assert seed_copy.read_bytes() == seed_before
 
 
 def test_upsert_runs_sync_after_its_own_transaction_commits(tmp_path, monkeypatch):
@@ -185,6 +194,53 @@ def test_upsert_runs_sync_after_its_own_transaction_commits(tmp_path, monkeypatc
         pc_id = service.local_pc_id(conn)
     published = json.loads(files.own_file_path(root, pc_id).read_text(encoding="utf-8"))
     assert "DEADLOCK" in {r["ticker"] for r in published["watchlist"]}
+
+
+def test_group_change_runs_sync_after_its_own_transaction_commits(tmp_path, monkeypatch):
+    """Same no-self-deadlock guard as the upsert test (fix round 1, I2), for set_watchlist_group."""
+    root = _enable(tmp_path, monkeypatch)
+    client.post(BASE, json={"ticker": "NVDA", "name": "NVIDIA", "sector": "", "group_name": "custom", "weight": 0.1})
+
+    response = client.post(f"{BASE}/NVDA/group", json={"group_name": "total"})
+
+    assert response.status_code == 200
+    assert service.current_status().last_error is None
+    with get_db() as conn:
+        pc_id = service.local_pc_id(conn)
+    published = json.loads(files.own_file_path(root, pc_id).read_text(encoding="utf-8"))
+    row = next(r for r in published["watchlist"] if r["ticker"] == "NVDA")
+    assert row["group_name"] == "total"
+
+
+def test_delete_runs_sync_after_its_own_transaction_commits(tmp_path, monkeypatch):
+    """Same no-self-deadlock guard as the upsert test (fix round 1, I2), for delete_watchlist_item."""
+    root = _enable(tmp_path, monkeypatch)
+    client.post(BASE, json={"ticker": "GONE", "name": "Gone", "sector": "", "group_name": "custom", "weight": 0.0})
+
+    response = client.delete(f"{BASE}/GONE")
+
+    assert response.status_code == 200
+    assert service.current_status().last_error is None
+    with get_db() as conn:
+        pc_id = service.local_pc_id(conn)
+    published = json.loads(files.own_file_path(root, pc_id).read_text(encoding="utf-8"))
+    assert "GONE" not in {r["ticker"] for r in published["watchlist"]}
+    assert "GONE" in {r["ticker"] for r in published["removed"]}
+
+
+def test_reposting_the_same_group_does_not_restamp(tmp_path, monkeypatch):
+    """set_watchlist_group must stamp only when the group actually changes (fix round 1, I3)."""
+    _enable(tmp_path, monkeypatch)
+    client.post(BASE, json={"ticker": "NVDA", "name": "NVIDIA", "sector": "", "group_name": "custom", "weight": 0.1})
+    client.post(f"{BASE}/NVDA/group", json={"group_name": "total"})
+    with get_db() as conn:
+        first = conn.execute("SELECT updated_at FROM watchlist WHERE ticker = 'NVDA'").fetchone()[0]
+
+    client.post(f"{BASE}/NVDA/group", json={"group_name": "total"})
+
+    with get_db() as conn:
+        second = conn.execute("SELECT updated_at FROM watchlist WHERE ticker = 'NVDA'").fetchone()[0]
+    assert first == second
 
 
 def test_startup_with_an_unavailable_folder_still_starts(tmp_path, monkeypatch):

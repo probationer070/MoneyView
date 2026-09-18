@@ -193,6 +193,26 @@ def _no_real_sync_dir(monkeypatch):
 
 
 @pytest.fixture(autouse=True, scope="session")
+def _guard_the_committed_seed():
+    """Fail the session, and restore the file, if any test writes to the committed watchlist seed.
+
+    apps/api/services/webscrap/stock_targets.json is the public seed MoneyView must never write --
+    an Export regression once wrote real data over it during this suite's own RED run (task-6-report.md,
+    fix round 1, I1). Resolved from the repo root (this file's parent), not cwd, since pytest's cwd
+    depends on how it is invoked. This is a last-resort net: individual tests that exercise Export
+    must still redirect _WATCHLIST_JSON/SEED_JSON/EXPORT_JSON themselves, as
+    test_export_writes_the_personal_file_never_the_committed_seed does.
+    """
+    seed_path = Path(__file__).resolve().parent.parent / "apps" / "api" / "services" / "webscrap" / "stock_targets.json"
+    original = seed_path.read_bytes()
+    yield
+    current = seed_path.read_bytes()
+    if current != original:
+        seed_path.write_bytes(original)
+        pytest.fail(f"tests modified the committed seed file at {seed_path}; restored it", pytrace=False)
+
+
+@pytest.fixture(autouse=True, scope="session")
 def _disable_startup_jobs():
     """Stop the FastAPI lifespan starting its live-data warmers under pytest.
 
