@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import re
 
 from apps.api.models.schemas import EventCategory, EventCategoryInput, EventCategoryPatch, MarketEvent, MarketEventInput
@@ -78,7 +79,10 @@ def create_user_category(payload: EventCategoryInput) -> EventCategory:
     check_color(payload.color, what=what)
     slug = _NON_SLUG.sub("-", payload.label.strip().lower()).strip("-")
     if not slug:
-        raise EventDataError("category label must contain a letter or a digit")
+        if not any(ch.isalnum() for ch in payload.label):
+            raise EventDataError("category label must contain a letter or a digit")
+        # Non-ASCII labels (e.g. Korean) have no ASCII slug; a stable hash keeps ids ASCII and duplicates detectable.
+        slug = hashlib.sha1(payload.label.strip().encode("utf-8")).hexdigest()[:10]
     category_id = f"{USER_PREFIX}{slug}"
     if category_id in registry.resolved_categories():
         raise EventDataError(f"a category with id {category_id!r} already exists")

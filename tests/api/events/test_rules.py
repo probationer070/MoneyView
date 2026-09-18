@@ -72,6 +72,18 @@ def test_a_closed_friday_moves_to_the_previous_session():
     ]
 
 
+def test_a_shifted_date_is_kept_when_the_range_ends_between_it_and_the_scheduled_friday():
+    source = RuleEventSource(QUAD, FakeCalendar(closed={date(2026, 6, 19)}), where="test")
+
+    assert _dates(source, date(2026, 6, 1), date(2026, 6, 18)) == ["2026-06-18"]
+
+
+def test_the_real_nyse_calendar_keeps_the_juneteenth_expiry_when_the_range_ends_on_it():
+    source = RuleEventSource(QUAD, exchange_calendar("XNYS"), where="test")
+
+    assert _dates(source, date(2026, 6, 1), date(2026, 6, 18)) == ["2026-06-18"]
+
+
 def test_generated_events_carry_the_rule_fields_and_rule_origin():
     [event] = RuleEventSource(QUAD, FakeCalendar(), where="test").events(date(2026, 3, 1), date(2026, 3, 31))
 
