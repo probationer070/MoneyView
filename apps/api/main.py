@@ -19,6 +19,11 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from apps.api.core.logger import configure_logging, setup_logger
+from apps.api.core.local_env import load_local_env
+
+# Before anything reads the environment. Settings such as MONEYVIEW_SYNC_DIR are read at call time,
+# so loading here, at import, covers every later read.
+load_local_env()
 from apps.api.core.middleware import StructuralMiddleware
 from apps.api.core.responses import NonFiniteSafeJSONResponse
 from apps.api.core.transport_progress import TransportProgressMiddleware

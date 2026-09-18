@@ -10,6 +10,10 @@ import pytest
 
 from apps.api.services import db as db_service
 
+# Must run before any test module imports apps.api.main, which loads config/.env at import time.
+# Without this, a MONEYVIEW_SYNC_DIR the owner set for real sync would leak into every test run.
+os.environ["MONEYVIEW_SKIP_LOCAL_ENV"] = "1"
+
 
 def pytest_configure(config):
     if config.option.basetemp:
@@ -177,6 +181,15 @@ def _forbid_the_real_database():
     sqlite3.connect = guarded_connect
     yield
     sqlite3.connect = real_connect
+
+
+@pytest.fixture(autouse=True)
+def _no_real_sync_dir(monkeypatch):
+    """Never let a developer's shell-set MONEYVIEW_SYNC_DIR reach a test.
+
+    Tests that exercise sync must set it themselves, on their own tmp_path.
+    """
+    monkeypatch.delenv("MONEYVIEW_SYNC_DIR", raising=False)
 
 
 @pytest.fixture(autouse=True, scope="session")
