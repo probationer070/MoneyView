@@ -130,6 +130,20 @@ def test_a_user_category_gets_a_user_prefixed_id_and_duplicates_are_refused():
     assert "already exists" in duplicate.text
 
 
+def test_a_category_named_without_ascii_letters_gets_a_stable_user_id():
+    created = client.post(CATEGORIES, json={"label": "내 거래", "color": "#4589E5"})
+
+    assert created.status_code == 201, created.text
+    body = created.json()
+    assert body["id"].startswith("user-")
+    assert len(body["id"]) == len("user-") + 10
+    assert body["label"] == "내 거래"
+
+    duplicate = client.post(CATEGORIES, json={"label": "내 거래", "color": "#000000"})
+    assert duplicate.status_code == 422
+    assert "already exists" in duplicate.text
+
+
 @pytest.mark.parametrize("body", [{"label": "x", "color": "blue"}, {"label": "!!!", "color": "#000000"}])
 def test_an_invalid_new_category_is_a_422(body):
     assert client.post(CATEGORIES, json=body).status_code == 422

@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 import TVChart, { NO_LINE_SERIES, type TVLineSeries } from "@/components/charts/TVChart";
 import type { EventGranularity } from "@/components/charts/primitives/EventLinesPrimitive";
 import { ToggleGroup } from "@/components/ui/ToggleGroup";
@@ -68,6 +68,21 @@ export function OHLCVChartCard({
 
   const { lines } = useMarketEvents();
 
+  const categoryLegend = useMemo(() => {
+    const byKey = new Map<string, { label: string; color: string; count: number }>();
+    for (const line of lines) {
+      const label = line.categoryLabel ?? "Events";
+      const key = `${label}|${line.color}`;
+      const existing = byKey.get(key);
+      if (existing) {
+        existing.count += 1;
+      } else {
+        byKey.set(key, { label, color: line.color, count: 1 });
+      }
+    }
+    return Array.from(byKey.entries()).map(([key, entry]) => ({ key, ...entry }));
+  }, [lines]);
+
   return (
     <ChartPanelFrame
       title={title}
@@ -94,17 +109,19 @@ export function OHLCVChartCard({
         {actions}
       </div>
       {/* Canvas lines are invisible to assistive tech and unlabelled to a sighted reader; this list
-          is their legend and the only textual record of what is drawn. */}
-      {lines.length > 0 ? (
+          is their legend and the only textual record of what is drawn -- the tooltip gives each
+          event's detail. */}
+      {categoryLegend.length > 0 ? (
         <div data-testid="chart-events-legend" className="mt-3 flex flex-wrap gap-2 text-xs text-[var(--text-muted)]">
-          {lines.map((line) => (
+          {categoryLegend.map((entry) => (
             <span
-              key={line.id}
+              key={entry.key}
+              data-testid="chart-events-legend-item"
               className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] px-2 py-1"
-              title={line.note || undefined}
+              title={`${entry.count} event(s) in this category`}
             >
-              <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: line.color }} />
-              {line.label} · {line.date}
+              <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: entry.color }} />
+              {entry.label}
             </span>
           ))}
         </div>
