@@ -29,17 +29,20 @@ _clock_lock = threading.Lock()
 _last_issued = BASELINE_TS
 
 
-def next_stamp(now: datetime | None = None) -> str:
-    """A timestamp strictly greater than any this process issued before.
+def next_stamp(now: datetime | None = None, after: str | None = None) -> str:
+    """A timestamp strictly greater than any this process issued before, and than `after`.
 
     Two edits within one millisecond on one PC would otherwise share a key while holding different
-    contents, and the winner would depend on read order.
+    contents, and the winner would depend on read order. `after` is the stamp of the version the
+    user saw: a local change must outrank it even when a peer's clock is ahead of this PC's.
     """
     global _last_issued
     with _clock_lock:
         candidate = format_ts(now or datetime.now(timezone.utc))
-        if candidate <= _last_issued:
-            previous = datetime.strptime(_last_issued, _TS_FORMAT).replace(tzinfo=timezone.utc)
+        # Never below BASELINE_TS, so SEED_TS (year 0000, which strptime cannot parse) is never parsed.
+        floor = max(_last_issued, after or BASELINE_TS)
+        if candidate <= floor:
+            previous = datetime.strptime(floor, _TS_FORMAT).replace(tzinfo=timezone.utc)
             candidate = format_ts(previous + timedelta(milliseconds=1))
         _last_issued = candidate
         return candidate

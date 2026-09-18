@@ -53,8 +53,8 @@ class PC:
         self.use()
         with get_db() as conn:
             pc_id = service.local_pc_id(conn)
-            conn.execute("DELETE FROM watchlist WHERE ticker = ?", (ticker,))
             store.record_removal(conn, ticker, pc_id)
+            conn.execute("DELETE FROM watchlist WHERE ticker = ?", (ticker,))
         return self.sync()
 
 
