@@ -150,7 +150,7 @@ export async function mockPortfolioPageApi(page: Page, stats?: PortfolioPageMock
   let syncStatus = {
     source: "",
     last_updated_at: "",
-    json_path: "C:\\Learn\\Economy\\MoneyView\\apps\\api\\services\\webscrap\\stock_targets.json",
+    json_path: "C:\\Learn\\Economy\\MoneyView\\data\\exports\\watchlist-export.json",
   };
   let portfolioComparisonSnapshot = {
     mode: "snapshot",
@@ -379,6 +379,13 @@ export async function mockPortfolioPageApi(page: Page, stats?: PortfolioPageMock
 
     if (pathname === `${API_PREFIX}/portfolio/watchlist/sync-status` && method === "GET") {
       return json(route, { status: "ok", data: syncStatus });
+    }
+
+    if (pathname === `${API_PREFIX}/portfolio/watchlist/peer-sync` && method === "GET") {
+      return json(route, {
+        status: "ok",
+        data: { enabled: false, pc_id: null, peers: [], skipped_files: [], last_sync_at: null, last_error: null },
+      });
     }
 
     if (pathname === `${API_PREFIX}/portfolio/preferences` && method === "GET") {

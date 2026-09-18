@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { StockTile } from "./StockTile";
 import type { NewsArticle, PortfolioStock } from "../page";
@@ -115,11 +115,13 @@ interface StockTileGridProps {
   /** The group unfollowing moves a stock into. Named here only to label it; see groupLabel. */
   unfollowedGroup: string;
   onToggleFollow: (stock: PortfolioStock) => void;
+  /** Rendered right after the grid-count line, inside the same header row. */
+  statusSlot?: ReactNode;
 }
 
 export function StockTileGrid({
   stocks, newsByTicker, filter, onFilterChange, search, onSearchChange, onOpenStock,
-  followedGroup, unfollowedGroup, onToggleFollow,
+  followedGroup, unfollowedGroup, onToggleFollow, statusSlot,
 }: StockTileGridProps) {
   const groups = useMemo(() => availableGroups(stocks), [stocks]);
 
@@ -174,6 +176,7 @@ export function StockTileGrid({
         >
           {`${visible.length} of ${stocks.length} · ${followedCount} followed`}
         </span>
+        {statusSlot}
       </div>
 
       {visible.length === 0 ? (

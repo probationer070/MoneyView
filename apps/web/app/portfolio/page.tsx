@@ -35,6 +35,7 @@ import { PortfolioAllocationEditor } from "./components/PortfolioAllocationEdito
 import { PortfolioCommandCenter } from "./components/PortfolioCommandCenter";
 import { PortfolioShell } from "./components/PortfolioShell";
 import { resolveGroupFilter, selectVisibleStocks, StockTileGrid, type GridFilter } from "./components/StockTileGrid";
+import { WatchlistPeerSyncStatus, type WatchlistPeerSyncStatusData } from "./components/WatchlistPeerSyncStatus";
 import { tabStateKey, useTabState } from "@/lib/tabState";
 import { acquireNews, fetchBulkNews, summarizeAcquisition } from "@/lib/portfolioNews";
 import type {
@@ -1058,6 +1059,14 @@ export default function PortfolioPage() {
     }),
     staleTime: 1000 * 30,
   });
+  // Keyed on the watchlist fetch time: the status route is read-only, so it must be read after
+  // the watchlist GET (which performs the sync) has completed, not in parallel with it.
+  const peerSyncQuery = useQuery<WatchlistPeerSyncStatusData>({
+    queryKey: ["portfolio-watchlist-peer-sync", watchlistQuery.dataUpdatedAt],
+    queryFn: () => fetchApi<WatchlistPeerSyncStatusData>("/portfolio/watchlist/peer-sync"),
+    enabled: watchlistQuery.isSuccess,
+    refetchOnWindowFocus: false,
+  });
   const portfolioPreferencesQuery = useQuery<PortfolioPreferences>({
     queryKey: ["portfolio-preferences"],
     queryFn: () => fetchApi<PortfolioPreferences>("/portfolio/preferences", {
@@ -1747,7 +1756,7 @@ export default function PortfolioPage() {
       }),
     onSuccess: async (result) => {
       await refreshPortfolioQueries();
-      setMutationMessage(`Exported ${result.item_count} holdings to stock_targets.json from the DB-backed watchlist.`);
+      setMutationMessage(`Exported ${result.item_count} holdings to data/exports/watchlist-export.json.`);
     },
     onError: (error) => {
       setMutationMessage(error instanceof Error ? error.message : "Failed to sync watchlist to JSON.");
@@ -2595,6 +2604,7 @@ export default function PortfolioPage() {
             importingJson={resyncWatchlistMutation.isPending}
             importJsonArmed={importJsonArmed}
             setImportJsonArmed={setImportJsonArmed}
+            importUnavailableReason={peerSyncQuery.data?.enabled ? "Import is unavailable while watchlist sync is on." : null}
             syncStatus={syncStatusQuery.data}
             formatSyncTimestamp={formatSyncTimestamp}
             formatSectorLabel={sectorLabel}
@@ -2949,6 +2959,7 @@ export default function PortfolioPage() {
           search={gridSearch}
           onSearchChange={setGridSearch}
           onOpenStock={openStockDetail}
+          statusSlot={<WatchlistPeerSyncStatus status={peerSyncQuery.data} />}
         />
       </PortfolioShell>
       {/* Stock detail modal renders on demand when a holding is selected. */}

@@ -282,7 +282,7 @@ test("weight editing and sync or import controls are visible and actionable", as
 
   await openPortfolioPanel(page, "allocation");
   await page.getByRole("button", { name: "Export Watchlist To JSON" }).click();
-  await expect(page.getByText("Exported 1 holdings to stock_targets.json from the DB-backed watchlist.")).toBeVisible();
+  await expect(page.getByText("Exported 1 holdings to data/exports/watchlist-export.json.")).toBeVisible();
   await expect(page.getByText("Last sync/import source: watchlist_db_sync")).toBeVisible();
 
   page.once("dialog", async (dialog) => {
