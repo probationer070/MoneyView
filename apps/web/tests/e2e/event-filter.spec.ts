@@ -61,10 +61,36 @@ test("unchecking a category removes its lines from every chart, and stays unchec
   await page.reload({ waitUntil: "domcontentloaded" });
   await expect(page.getByTestId("spreads-events-filter")).toHaveText(/Events · 0 of 1/, { timeout: 60_000 });
   const afterReload = await stableInkProfile(page, charts[0]);
+  expect(afterReload.ink.some((v) => v > 0), "the chart must have painted after reload").toBe(true);
   expect(addedColumns(withLines[0], afterReload).length, "after reload the line must still be hidden").toBeGreaterThan(0);
 
   await page.getByRole("button", { name: "Open detail for S&P 500" }).click();
   await expect(page.getByRole("dialog").getByTestId("market-events-filter"), "the modal shares the filter").toHaveText(/Events · 0 of 1/);
+});
+
+test("the filter shows the change before the server confirms it", async ({ page }) => {
+  let releasePatch: () => void = () => {};
+  const patchHeld = new Promise<void>((resolve) => {
+    releasePatch = resolve;
+  });
+  await openOverview(page, { events: [FOMC_EVENT], categories: [FOMC_CATEGORY], holdCategoryPatch: patchHeld });
+
+  const filter = page.getByTestId("spreads-events-filter");
+  await expect(filter).toHaveText(/Events · 1 of 1/);
+  await filter.click();
+  const fomcOption = page.getByTestId("spreads-events-filter-option-fomc");
+
+  try {
+    await fomcOption.click();
+    // The cache write happens synchronously in `mutate`, before the PATCH even starts, so the
+    // filter must already show the change while the (held) request is still in flight.
+    await expect(fomcOption).not.toBeChecked();
+    await expect(filter).toHaveText(/Events · 0 of 1/);
+  } finally {
+    releasePatch();
+  }
+
+  await expect(filter).toHaveText(/Events · 0 of 1/);
 });
 
 test("a failed categories request says Events unavailable while the charts still render", async ({ page }) => {

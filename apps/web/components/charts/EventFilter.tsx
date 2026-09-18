@@ -87,7 +87,7 @@ export function EventFilter({ testId }: { testId: string }) {
               </ul>
               {setVisible.isError ? (
                 <p role="alert" data-testid={`${testId}-error`} className="text-[var(--state-warning)]">
-                  That change could not be saved, so it was undone.
+                  Some changes could not be saved; the filter shows what was saved.
                 </p>
               ) : null}
             </div>

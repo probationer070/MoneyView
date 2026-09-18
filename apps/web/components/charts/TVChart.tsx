@@ -150,7 +150,7 @@ const TVChart: React.FC<TVChartProps> = ({
             //
             // Constructed EMPTY and invisible on purpose. The event props are deliberately
             // absent from this effect's dependency list -- rebuilding the chart whenever the
-            // toggle flipped would throw away the reader's zoom and pan -- and reading them
+            // filter changed would throw away the reader's zoom and pan -- and reading them
             // here anyway would be a stale closure over the first render's values. The effect
             // below owns them, and runs immediately after this one on mount, so the real
             // events land before the first paint the user sees.

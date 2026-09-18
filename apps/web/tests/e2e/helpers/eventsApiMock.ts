@@ -46,6 +46,8 @@ interface Options {
   categoriesStatus?: number;
   /** Hold GET /market/events until this settles. */
   holdEvents?: Promise<void>;
+  /** Hold PATCH /market/event-categories/{id} until this settles. */
+  holdCategoryPatch?: Promise<void>;
 }
 
 function normalize(event: MockEvent): Required<MockEvent> {
@@ -64,7 +66,11 @@ export async function mockEventsApi(page: Page, options: Options = {}): Promise<
     patches: [],
   };
   const defaults = new Map(state.categories.filter((c) => c.origin === "builtin").map((c) => [c.id, { label: c.label, color: c.color }]));
-  let nextUserEvent = 1 + state.events.filter((e) => e.origin === "user").length;
+  // The highest existing user-<n> id, not the count: a delete must never let a later create reuse a freed number.
+  const userEventNumbers = state.events
+    .filter((e) => e.origin === "user")
+    .map((e) => Number(e.id.match(/^user-(\d+)$/)?.[1] ?? 0));
+  let nextUserEvent = (userEventNumbers.length > 0 ? Math.max(...userEventNumbers) : 0) + 1;
 
   await page.route("**/api/v1/market/event-categories**", async (route) => {
     const request = route.request();
@@ -75,10 +81,11 @@ export async function mockEventsApi(page: Page, options: Options = {}): Promise<
     }
     if (rest === "" && method === "POST") {
       const body = request.postDataJSON() as { label: string; color: string };
-      const category: MockCategory = {
-        id: `user-${body.label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`,
-        label: body.label, color: body.color, visible: true, origin: "user", overridden: false,
-      };
+      const id = `user-${body.label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`;
+      if (state.categories.some((c) => c.id === id)) {
+        return reply(route, 422, { detail: `a category with id '${id}' already exists` });
+      }
+      const category: MockCategory = { id, label: body.label, color: body.color, visible: true, origin: "user", overridden: false };
       state.categories.push(category);
       return reply(route, 201, category);
     }
@@ -92,6 +99,7 @@ export async function mockEventsApi(page: Page, options: Options = {}): Promise<
       return reply(route, 204);
     }
     if (method === "PATCH") {
+      if (options.holdCategoryPatch) await options.holdCategoryPatch;
       const body = request.postDataJSON() as Record<string, unknown>;
       state.patches.push({ id: category.id, body });
       Object.assign(category, body);

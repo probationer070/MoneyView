@@ -29,25 +29,31 @@ export const useResetCategory = () => useEventsWrite((id: string) => eventsApi.r
 export const useDeleteCategory = () => useEventsWrite((id: string) => eventsApi.deleteCategory(id));
 
 /**
- * The global filter. Optimistic, so every chart updates on the click; a failed save rolls the
- * cache back to what the server holds, and the caller shows the error.
+ * The global filter. Optimistic, so every chart updates on the click.
  *
- * The optimistic cache write happens synchronously in `mutate`, on the same tick as the click --
- * not in `onMutate`. TanStack's own mutation dispatch (the `pending` status change) re-renders
- * every observer, including the controlled checkbox reading `category.visible`, before an async
- * `onMutate` (which must be awaited past `cancelQueries`) gets to apply the optimistic update.
- * That intermediate render showed the checkbox its OLD value, snapping a just-clicked box back
- * before the real update landed -- invisible to a person, but exactly what made Playwright's
- * `.uncheck()` report "did not change its state". Writing the cache before calling the inner
- * mutation means there is no tick where the checkbox can observe the pre-click value.
+ * The optimistic cache write happens synchronously in `mutate`, before the mutation starts, so
+ * the controlled checkbox reading `category.visible` never renders the pre-click value: TanStack's
+ * own mutation dispatch also re-renders every observer, and if the cache write happened only
+ * inside `onMutate` (necessarily async -- an `onMutate` handler always resolves at least one tick
+ * later, even doing no awaited work itself), that dispatch's render would land first, showing the
+ * old value.
+ *
+ * `cancelQueries` is fired and not awaited: query-core cancels an in-flight fetch by rejecting its
+ * promise synchronously and reverting the query to its last good data, so there is nothing this
+ * call needs to wait for before the next line reads that data.
+ *
+ * A change can be `["a", "b"]` (the "All"/"None" buttons) and only one PATCH can fail -- restoring
+ * the whole snapshot to `previous` on any single failure would silently undo the ones that
+ * succeeded. On failure the categories are instead refetched, so the filter shows exactly what the
+ * server actually saved, whichever changes that turned out to be.
  */
 export function useSetCategoriesVisible() {
   const queryClient = useQueryClient();
   const mutation = useMutation({
-    mutationFn: ({ changes }: { changes: Array<{ id: string; visible: boolean }>; previous: EventCategory[] | undefined }) =>
+    mutationFn: (changes: Array<{ id: string; visible: boolean }>) =>
       Promise.all(changes.map((change) => eventsApi.patchCategory(change.id, { visible: change.visible }))),
-    onError: (_error, { previous }) => {
-      if (previous) queryClient.setQueryData(EVENT_CATEGORIES_KEY, previous);
+    onError: () => {
+      void queryClient.invalidateQueries({ queryKey: EVENT_CATEGORIES_KEY });
     },
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: EVENT_CATEGORIES_KEY });
@@ -58,14 +64,13 @@ export function useSetCategoriesVisible() {
     (changes: Array<{ id: string; visible: boolean }>) => {
       if (changes.length === 0) return;
       void queryClient.cancelQueries({ queryKey: EVENT_CATEGORIES_KEY });
-      const previous = queryClient.getQueryData<EventCategory[]>(EVENT_CATEGORIES_KEY);
       const next = new Map(changes.map((change) => [change.id, change.visible]));
       queryClient.setQueryData<EventCategory[]>(EVENT_CATEGORIES_KEY, (current) =>
         current?.map((category) => (next.has(category.id) ? { ...category, visible: next.get(category.id)! } : category)),
       );
-      mutation.mutate({ changes, previous });
+      mutation.mutate(changes);
     },
-    [queryClient, mutation],
+    [queryClient, mutation.mutate],
   );
 
   return { mutate, isError: mutation.isError, isPending: mutation.isPending };

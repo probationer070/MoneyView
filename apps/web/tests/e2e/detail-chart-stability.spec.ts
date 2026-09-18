@@ -2,13 +2,13 @@ import { expect, test, type Page } from "@playwright/test";
 import { GEOPOLITICAL, mockEventsApi, setAllEventCategories } from "./helpers/eventsApiMock";
 
 /**
- * The ticker detail page must not rebuild its chart when event lines arrive or are toggled.
+ * The ticker detail page must not rebuild its chart when event lines arrive or the filter changes.
  *
  * A rebuild runs `chart.remove()` and creates the chart again, which throws away the reader's
  * zoom and pan and snaps the view back to the full history. `TVChart`'s setup effect depends on
  * the identity of `lineSeriesData`, and the detail page passes none, so a default of `[]` gave
  * the chart a new array on every render of `OHLCVChartCard` -- which, once that card owned the
- * event toggle and fetched the events, happened on first load and on every click.
+ * event filter and fetched the events, happened on first load and on every click.
  *
  * Every other event-line test runs in the portfolio modal, which passes a memoised series and
  * so never exposed this. That is why this one opens `/detail`.
