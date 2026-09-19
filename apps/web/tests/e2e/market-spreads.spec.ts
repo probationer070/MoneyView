@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { stableInkProfile } from "./helpers/chartInk";
 import { mockMarketPageApi } from "./helpers/marketPageMock";
+import { GEOPOLITICAL, mockEventsApi, setAllEventCategories, type MockEvent } from "./helpers/eventsApiMock";
 
 /**
  * The section's contract is that a reader can never see a theme figure without seeing what
@@ -87,48 +88,45 @@ const IRAN_EVENT = [{
 }];
 
 async function mockEvents(page: Page, events: unknown[] = IRAN_EVENT) {
-  await page.route("**/api/v1/market/events**", async (route) => {
-    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(events) });
-  });
+  await mockEventsApi(page, { events: events as MockEvent[], categories: [GEOPOLITICAL] });
 }
 
-test("the spreads section has its own event toggle that changes what is painted", async ({ page }) => {
-  // The assertion is the ink diff, not aria-pressed: a button whose state flips while the chart
-  // ignores it would satisfy an attribute-only check.
+test("the spreads section's event filter changes what is painted", async ({ page }) => {
+  // The assertion is the ink diff, not the filter's text: a control whose state flips while the
+  // chart ignores it would satisfy a text-only check.
   //
   // IRAN_EVENT's date (2026-02-28) predates computed()'s window (2026-06-15 to 2026-09-11)
   // entirely, so eventCoordinate (EventLinesPrimitive.ts) never finds a bracketing bar and no
-  // line is drawn regardless of whether the toggle is wired correctly -- confirmed by
+  // line is drawn regardless of whether the filter is wired correctly -- confirmed by
   // temporarily widening the window, which made the assertion pass. Use the window's own
   // first bar date instead, so the event always resolves to a coordinate.
   await mockEvents(page, [{ ...IRAN_EVENT[0], start_date: "2026-06-15" }]);
   await mockSpreads(page, [computed()]);
   await page.goto("/", { waitUntil: "domcontentloaded" });
 
-  const toggle = page.getByTestId("spreads-events-toggle");
-  await expect(toggle).toBeVisible({ timeout: 60_000 });
-  await expect(toggle).toHaveAttribute("aria-pressed", "true");
+  const filter = page.getByTestId("spreads-events-filter");
+  await expect(filter).toBeVisible({ timeout: 60_000 });
+  await expect(filter).toHaveText(/Events · 1 of 1/);
 
   const selector = '[data-testid="spread-chart-ai"]';
   const withLine = await stableInkProfile(page, selector);
-  await toggle.click();
-  await expect(toggle).toHaveAttribute("aria-pressed", "false");
+  await setAllEventCategories(page, "spreads-events-filter", false);
   const withoutLine = await stableInkProfile(page, selector);
 
   const changed = withLine.ink.filter((value, index) => value !== (withoutLine.ink[index] ?? 0));
-  expect(changed.length, "toggling must change what is painted, not just the button").toBeGreaterThan(0);
+  expect(changed.length, "the filter change must change what is painted, not just the button").toBeGreaterThan(0);
 });
 
-test("a spread chart is not rebuilt when its event toggle is clicked", async ({ page }) => {
+test("a spread chart is not rebuilt when the event filter changes", async ({ page }) => {
   // SpreadCard passes TVChart no line series. TVChart's setup effect depends on that prop's
-  // identity, so a `[]` default rebuilt the chart on every toggle -- discarding zoom and pan --
-  // while the ink diff above still passed. A marker on the canvases does not survive a rebuild.
+  // identity, so a `[]` default rebuilt the chart on every filter change -- discarding zoom and
+  // pan -- while the ink diff above still passed. A marker on the canvases does not survive a rebuild.
   await mockEvents(page, [{ ...IRAN_EVENT[0], start_date: "2026-06-15" }]);
   await mockSpreads(page, [computed()]);
   await page.goto("/", { waitUntil: "domcontentloaded" });
 
-  const toggle = page.getByTestId("spreads-events-toggle");
-  await expect(toggle).toBeVisible({ timeout: 60_000 });
+  const filter = page.getByTestId("spreads-events-filter");
+  await expect(filter).toBeVisible({ timeout: 60_000 });
   const selector = '[data-testid="spread-chart-ai"] canvas';
   await expect.poll(() => page.locator(selector).count(), { timeout: 30_000 }).toBeGreaterThan(0);
   await page.waitForTimeout(500);
@@ -136,15 +134,14 @@ test("a spread chart is not rebuilt when its event toggle is clicked", async ({ 
     for (const canvas of Array.from(document.querySelectorAll(sel))) (canvas as unknown as { __probe?: boolean }).__probe = true;
   }, selector);
 
-  await toggle.click();
-  await expect(toggle).toHaveAttribute("aria-pressed", "false");
+  await setAllEventCategories(page, "spreads-events-filter", false);
   await page.waitForTimeout(500);
   const after = await page.evaluate((sel) => {
     const canvases = Array.from(document.querySelectorAll(sel));
     return { marked: canvases.filter((canvas) => (canvas as unknown as { __probe?: boolean }).__probe).length, total: canvases.length };
   }, selector);
   expect(after.total, "the spread chart must still be on the page").toBeGreaterThan(0);
-  expect(after.marked, `rebuilt when the toggle was clicked: ${JSON.stringify(after)}`).toBe(after.total);
+  expect(after.marked, `rebuilt when the filter changed: ${JSON.stringify(after)}`).toBe(after.total);
 });
 
 test("on the index detail's monthly chart, an event sits on its month's candle", async ({ page }) => {
@@ -163,12 +160,11 @@ test("on the index detail's monthly chart, an event sits on its month's candle",
     await expect(dialog).toBeVisible({ timeout: 60_000 });
     await dialog.getByRole("button", { name: "Monthly" }).click();
 
-    const toggle = dialog.getByTestId("market-events-toggle");
-    await expect(toggle).toHaveAttribute("aria-pressed", "true");
+    const filter = dialog.getByTestId("market-events-filter");
+    await expect(filter).toHaveText(/Events · 1 of 1/);
     const chart = '[role="dialog"] [data-testid="tv-chart"]';
     const withLine = await stableInkProfile(page, chart);
-    await toggle.click();
-    await expect(toggle).toHaveAttribute("aria-pressed", "false");
+    await setAllEventCategories(dialog, "market-events-filter", false);
     const withoutLine = await stableInkProfile(page, chart);
 
     const columns = withLine.ink.flatMap((value, x) => (value > (withoutLine.ink[x] ?? 0) ? [x] : []));
@@ -184,8 +180,8 @@ test("on the index detail's monthly chart, an event sits on its month's candle",
   expect(Math.abs(marchCandle - februaryCandle)).toBeGreaterThan(20);
 });
 
-test("the index detail chart has its own event toggle that changes what is painted", async ({ page }) => {
-  // This toggle lives inside MarketDetailModal, so the modal must be open for it to exist at all.
+test("the index detail chart's event filter changes what is painted", async ({ page }) => {
+  // This filter lives inside MarketDetailModal, so the modal must be open for it to exist at all.
   //
   // Hermetic, not live-data-dependent: mockMarketPageApi supplies the ^GSPC detail fixture so
   // this doesn't depend on whatever CL=F rows happen to be in the local database. S&P 500 (not
@@ -194,7 +190,7 @@ test("the index detail chart has its own event toggle that changes what is paint
   // 2026-04-07..2026-04-11 -- the Feb 2026 event would draw nothing there -- while its
   // monthly_history has a bar dated exactly 2026-02-28, an exact match for IRAN_EVENT's real
   // date, so no date override is needed. Placement on the monthly chart is tested separately
-  // above; this one checks only that the toggle changes what is painted.
+  // above; this one checks only that the filter changes what is painted.
   //
   // mockMarketPageApi's catch-all `**/*` route continues (to the network) any path it doesn't
   // recognise, which would otherwise swallow /market/events and /market/spreads before they
@@ -211,16 +207,15 @@ test("the index detail chart has its own event toggle that changes what is paint
   await expect(dialog).toBeVisible({ timeout: 60_000 });
   await dialog.getByRole("button", { name: "Monthly" }).click();
 
-  const toggle = dialog.getByTestId("market-events-toggle");
-  await expect(toggle).toBeVisible();
-  await expect(toggle).toHaveAttribute("aria-pressed", "true");
+  const filter = dialog.getByTestId("market-events-filter");
+  await expect(filter).toBeVisible();
+  await expect(filter).toHaveText(/Events · 1 of 1/);
 
   const selector = '[role="dialog"] [data-testid="tv-chart"]';
   const withLine = await stableInkProfile(page, selector);
-  await toggle.click();
-  await expect(toggle).toHaveAttribute("aria-pressed", "false");
+  await setAllEventCategories(dialog, "market-events-filter", false);
   const withoutLine = await stableInkProfile(page, selector);
 
   const changed = withLine.ink.filter((value, index) => value !== (withoutLine.ink[index] ?? 0));
-  expect(changed.length, "toggling must change what is painted, not just the button").toBeGreaterThan(0);
+  expect(changed.length, "the filter change must change what is painted, not just the button").toBeGreaterThan(0);
 });

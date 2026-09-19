@@ -1,0 +1,44 @@
+MoneyView Tab Reference: Events
+
+Tab
+- Events
+
+Route
+- `/events`
+
+Primary Goal
+- Manage the dated events drawn as vertical lines on every price chart.
+- Add, edit and delete the user's own events; recolour, rename, hide, reset and add categories.
+
+Design Intent
+- Charts only display and filter events; every edit happens here, in one place.
+- Built-in events are asserted facts from sourced data files, so they are read-only here and say so.
+- A user's own event may have no source; charts label it "Added by you, no source".
+
+Layout Structure
+
+1. Page Header
+- Title: `Events`
+
+2. Add / Edit Event Form
+- Date, optional end date, label, category, note, optional source URL.
+- Server refusals are shown verbatim in one alert (each names its field).
+
+3. Categories Panel
+- Per category: show-on-charts checkbox (the same global filter as every chart), colour, name, Save.
+- Built-ins with a saved change offer Reset to default (label and colour; visibility is kept).
+- User categories can be deleted only while no event uses them.
+
+4. All Events Table
+- Newest first; filter by category and by origin, including "Needs category".
+- Built-in and rule rows read "from a data file"; user rows have Edit and Delete (with confirm).
+
+Important Behavior
+- Visibility is one global, per-machine filter stored in SQLite; it is not synced.
+- A user event whose built-in category was removed shows as Uncategorized and is flagged.
+
+Primary Data Sources
+- `GET/POST/PUT/DELETE /api/v1/market/events`
+- `GET/POST/PATCH/DELETE /api/v1/market/event-categories` and `DELETE .../{id}/override`
+- Built-ins: `apps/api/services/events/*.json`; user data: SQLite `user_event`, `event_category`,
+  `event_category_visibility`

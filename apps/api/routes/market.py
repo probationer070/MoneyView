@@ -6,14 +6,33 @@ GET /api/market/index/{ticker}   → single index OHLCV history
 GET /api/market/events           → dated events drawn as vertical lines on price charts
 GET /api/market/event-categories → resolved event categories (colour, visibility)
 GET /api/market/spreads            → theme and policy relative-strength spreads
+POST   /api/market/events                        → create a user event
+PUT    /api/market/events/{id}                    → edit a user event
+DELETE /api/market/events/{id}                    → delete a user event
+POST   /api/market/event-categories               → create a user category
+PATCH  /api/market/event-categories/{id}           → edit a category or its visibility
+DELETE /api/market/event-categories/{id}/override → restore a built-in category's file defaults
+DELETE /api/market/event-categories/{id}           → delete a user category
 """
 
+from contextlib import contextmanager
 from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Body, HTTPException, Query, Response
 
-from apps.api.models.schemas import EventCategory, IndexQuote, MarketEvent, MarketIndexDetail, MarketSpread, StockOHLCV
+from apps.api.models.schemas import (
+    EventCategory,
+    EventCategoryInput,
+    EventCategoryPatch,
+    IndexQuote,
+    MarketEvent,
+    MarketEventInput,
+    MarketIndexDetail,
+    MarketSpread,
+    StockOHLCV,
+)
 from apps.api.services.events import EventDataError, default_registry, resolved_categories
+from apps.api.services.events import service as event_service
 from apps.api.services.events.validation import parse_iso_date
 from apps.api.services.market_data import MarketDataService
 from apps.api.services.market_spreads import build_spreads
@@ -57,6 +76,64 @@ def get_market_events(
 def get_event_categories():
     """Categories after resolution: file defaults, saved overrides, user categories, visibility."""
     return list(resolved_categories().values())
+
+
+@contextmanager
+def _event_errors():
+    try:
+        yield
+    except event_service.EventNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except event_service.EventConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except EventDataError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/events", response_model=MarketEvent, status_code=201)
+def create_market_event(payload: MarketEventInput = Body(...)):
+    with _event_errors():
+        return event_service.create_user_event(payload)
+
+
+@router.put("/events/{event_id}", response_model=MarketEvent)
+def update_market_event(event_id: str, payload: MarketEventInput = Body(...)):
+    with _event_errors():
+        return event_service.update_user_event(event_id, payload)
+
+
+@router.delete("/events/{event_id}", status_code=204)
+def delete_market_event(event_id: str):
+    with _event_errors():
+        event_service.delete_user_event(event_id)
+    return Response(status_code=204)
+
+
+@router.post("/event-categories", response_model=EventCategory, status_code=201)
+def create_event_category(payload: EventCategoryInput = Body(...)):
+    with _event_errors():
+        return event_service.create_user_category(payload)
+
+
+@router.patch("/event-categories/{category_id}", response_model=EventCategory)
+def patch_event_category(category_id: str, patch: EventCategoryPatch = Body(...)):
+    with _event_errors():
+        return event_service.patch_category(category_id, patch)
+
+
+@router.delete("/event-categories/{category_id}/override", status_code=204)
+def reset_event_category(category_id: str):
+    """Restore a built-in category's file label and colour. Visibility is a preference and stays."""
+    with _event_errors():
+        event_service.reset_category(category_id)
+    return Response(status_code=204)
+
+
+@router.delete("/event-categories/{category_id}", status_code=204)
+def delete_event_category(category_id: str):
+    with _event_errors():
+        event_service.delete_user_category(category_id)
+    return Response(status_code=204)
 
 
 @router.get("/indices", response_model=List[IndexQuote])

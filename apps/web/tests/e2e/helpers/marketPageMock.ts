@@ -59,6 +59,9 @@ export async function mockMarketPageApi(
     if (pathname === `${API_PREFIX}/market/events` && method === "GET") {
       return json(route, []);
     }
+    if (pathname === `${API_PREFIX}/market/event-categories` && method === "GET") {
+      return json(route, []);
+    }
 
     return route.continue();
   });
