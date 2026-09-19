@@ -22,6 +22,21 @@ TS_PATTERN = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z")
 _TS_FORMAT = "%Y-%m-%dT%H:%M:%S.%fZ"
 
 
+def is_valid_ts(value: str) -> bool:
+    """A stamp next_stamp can safely use as `after`: the fixed format, a real date, and room for
+    +1 ms after it. SEED_TS is the one allowed exception (strptime cannot parse year 0000, and
+    next_stamp never parses it because its floor starts at BASELINE_TS)."""
+    if not TS_PATTERN.fullmatch(value):
+        return False
+    if value == SEED_TS:
+        return True
+    try:
+        moment = datetime.strptime(value, _TS_FORMAT)
+    except ValueError:
+        return False
+    return moment.year < 9999
+
+
 def format_ts(moment: datetime) -> str:
     utc = moment.astimezone(timezone.utc)
     return utc.strftime("%Y-%m-%dT%H:%M:%S.") + f"{utc.microsecond // 1000:03d}Z"

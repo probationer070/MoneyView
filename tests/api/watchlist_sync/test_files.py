@@ -244,3 +244,38 @@ def test_writing_an_invalid_state_raises_and_creates_no_file(tmp_path):
         write_own_file(tmp_path, A, bad_state, "2026-09-18T10:00:01.000Z")
 
     assert not own_file_path(tmp_path, A).exists()
+
+
+@pytest.mark.parametrize(
+    ("section", "field", "stamp"),
+    [
+        ("watchlist", "updated_at", "2026-13-01T00:00:00.000Z"),   # month 13
+        ("watchlist", "updated_at", "2026-02-30T00:00:00.000Z"),   # no such day
+        ("removed", "removed_at", "9999-12-31T23:59:59.999Z"),     # no room for +1 ms after it
+    ],
+)
+def test_a_well_shaped_but_impossible_stamp_is_skipped(tmp_path, section, field, stamp):
+    # These match the timestamp pattern, and before this check they were imported. The next local
+    # edit or delete of that ticker then passed them to next_stamp(after=...), which raised, so the
+    # route returned 500 and the ticker could not be changed on any PC that imported the file.
+    folder = _folder(tmp_path)
+    write_own_file(tmp_path, A, _state(), "2026-09-18T10:00:01.000Z")
+    path = folder / f"watchlist.{A}.json"
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload[section][0][field] = stamp
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    peers, skipped = read_peer_files(tmp_path, own_pc_id=ME)
+
+    assert peers == [] and skipped[0].name == f"watchlist.{A}.json"
+
+
+def test_the_seed_stamp_is_still_accepted(tmp_path):
+    from apps.api.services.watchlist_sync.model import SEED_TS
+
+    _folder(tmp_path)
+    write_own_file(tmp_path, A, _state(ts=SEED_TS), "2026-09-18T10:00:01.000Z")
+
+    [peer], skipped = read_peer_files(tmp_path, own_pc_id=ME)
+
+    assert skipped == [] and peer.state.rows["AAPL"].updated_at == SEED_TS
