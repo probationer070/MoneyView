@@ -318,3 +318,54 @@ def test_re_adding_a_ticker_outranks_its_tombstone_even_from_a_clock_ahead(tmp_p
         row = conn.execute("SELECT updated_at FROM watchlist WHERE ticker = 'AHEAD'").fetchone()
     assert row is not None, "the route's sync applied the older-in-intent tombstone over the re-add"
     assert row["updated_at"] > FUTURE
+
+
+def _count_syncs(monkeypatch):
+    calls = []
+    real = service.run_sync
+
+    def counting(trigger, *args, **kwargs):
+        calls.append(trigger)
+        return real(trigger, *args, **kwargs)
+
+    monkeypatch.setattr(service, "run_sync", counting)
+    return calls
+
+
+def test_corporate_does_not_run_a_sync_when_the_watchlist_already_has_rows(tmp_path, monkeypatch):
+    # Spec §2 names GET /portfolio/watchlist as the read trigger. Corporate calls the bootstrap on
+    # every list/detail request, and a full sync there means a cloud-file write per Corporate click.
+    from apps.api.services import corporate_metrics_service
+
+    _enable(tmp_path, monkeypatch)
+    with get_db() as conn:
+        conn.execute(
+            "INSERT INTO watchlist (ticker, name, sector, group_name, weight, updated_at, updated_by) "
+            "VALUES ('KEEP', 'Keep', '', 'custom', 0.0, ?, 'PC-ME-00ff')",
+            (model.BASELINE_TS,),
+        )
+    calls = _count_syncs(monkeypatch)
+
+    corporate_metrics_service.seed_watchlist_from_json_if_empty(watchlist_seed.SEED_JSON)
+
+    assert calls == []
+
+
+def test_corporate_still_bootstraps_an_empty_watchlist_from_peers_first(tmp_path, monkeypatch):
+    from apps.api.services import corporate_metrics_service
+
+    root = _enable(tmp_path, monkeypatch)
+    (root / "MoneyView").mkdir()
+    (root / "MoneyView" / "watchlist.PC-PEER-0001.json").write_text(json.dumps({
+        "format_version": 1, "pc_id": "PC-PEER-0001", "written_at": "2026-09-18T10:00:00.000Z",
+        "watchlist": [{"ticker": "PEER", "name": "Peer", "sector": "", "group_name": "custom", "weight": 0.0,
+                       "updated_at": "2026-09-18T10:00:00.000Z", "updated_by": "PC-PEER-0001"}],
+        "removed": []}), encoding="utf-8")
+    calls = _count_syncs(monkeypatch)
+
+    corporate_metrics_service.seed_watchlist_from_json_if_empty(watchlist_seed.SEED_JSON)
+
+    with get_db() as conn:
+        tickers = {r["ticker"] for r in conn.execute("SELECT ticker FROM watchlist")}
+    assert calls == ["bootstrap"]
+    assert tickers == {"PEER"}, "a fresh PC reached through Corporate still takes the peers' list, not the seed"
