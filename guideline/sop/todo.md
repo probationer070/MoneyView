@@ -1212,7 +1212,7 @@ Plan: `docs/superpowers/plans/2026-09-18-watchlist-peer-sync.md`.
 - [x] **K-1. Sync feature** (PR #44, merged)
 - [x] **K-2. Neutral public seed** (PR #45, merged): merged after sync was on for both PCs and both
       Watchlists hold every ticker with the same weights and groups
-- [ ] **K-3. Review follow-ups** (open): impossible peer stamps are skipped instead of crashing
+- [x] **K-3. Review follow-ups** (PR #46, merged): impossible peer stamps are skipped instead of crashing
       edits; Corporate no longer runs a full sync once the watchlist has rows; git-worktrees.md
       names the ignored `data/` folders
 
