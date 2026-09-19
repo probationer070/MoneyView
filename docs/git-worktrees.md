@@ -18,7 +18,7 @@ stopped run. Each one was hit or reproduced in this repo.
 | --- | --- |
 | Commits, branches, tags, remotes (`git fetch` in one updates all) | The checked-out branch and the working files |
 | The stash stack | `apps/web/node_modules` and `apps/web/.next` |
-| Git config and hooks | `data/` (git-ignored), including `data/processed/moneyview.db` |
+| Git config and hooks | The git-ignored parts of `data/` (`cache/`, `raw/`, `processed/`, `exports/`), including `data/processed/moneyview.db` |
 | The conda `moneyview` env, whose editable install points at the **main checkout** | |
 | | `config/.env` (git-ignored) |
 | | Uncommitted and untracked changes |
