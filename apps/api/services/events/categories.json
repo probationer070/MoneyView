@@ -1,0 +1,8 @@
+{
+  "categories": [
+    { "id": "fomc", "label": "Fed rate decisions", "color": "#E54545" },
+    { "id": "quad-witching", "label": "Quadruple witching", "color": "#7C5CFF" },
+    { "id": "geopolitical", "label": "Geopolitical", "color": "#E8A028" },
+    { "id": "uncategorized", "label": "Uncategorized", "color": "#9DA5A2" }
+  ]
+}

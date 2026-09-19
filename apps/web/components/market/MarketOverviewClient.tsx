@@ -6,7 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { fetchApi } from "@/lib/api";
 import { useDevMonitorPageLoad } from "@/hooks/useDevMonitorPageLoad";
 import TVChart from "@/components/charts/TVChart";
-import { EventsToggle } from "@/components/charts/EventsToggle";
+import { EventFilter } from "@/components/charts/EventFilter";
 import { DeltaBadge } from "@/components/ui/DeltaBadge";
 import { ViewToggle, type ViewMode } from "@/components/ui/ViewToggle";
 import { type RawOHLCV, transformToTVCandles, transformToTVVolume } from "@/lib/transformers";
@@ -358,7 +358,6 @@ function MarketDetailModal({ item, onClose }: { item: MarketIndexQuote; onClose:
   const trendSummary = useMemo(() => summarizeTrend(item.sparkline), [item.sparkline]);
   const chartColor = (item.delta.delta_pct ?? 0) >= 0 ? "var(--delta-up)" : "var(--delta-down)";
   const [chartTimeframe, setChartTimeframe] = useState<"daily" | "monthly">("daily");
-  const [showEvents, setShowEvents] = useState(true);
   const { lines: eventLines } = useMarketEvents();
   const detailQuery = useQuery<MarketIndexDetail>({
     queryKey: ["market-index-detail", item.ticker],
@@ -517,13 +516,7 @@ function MarketDetailModal({ item, onClose }: { item: MarketIndexQuote; onClose:
                         Monthly
                       </button>
                     </div>
-                    {eventLines.length > 0 ? (
-                      <EventsToggle
-                        pressed={showEvents}
-                        onToggle={() => setShowEvents((shown) => !shown)}
-                        testId="market-events-toggle"
-                      />
-                    ) : null}
+                    <EventFilter testId="market-events-filter" />
                   </div>
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2 text-xs text-[var(--text-muted)]">
@@ -547,7 +540,6 @@ function MarketDetailModal({ item, onClose }: { item: MarketIndexQuote; onClose:
                       tickerName={`${item.name} ${chartTimeframe}`}
                       colorAccent={chartColor}
                       events={eventLines}
-                      showEvents={showEvents}
                       eventGranularity={chartTimeframe === "monthly" ? "month" : "day"}
                     />
                   ) : (

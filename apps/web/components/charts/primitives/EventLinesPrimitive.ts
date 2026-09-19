@@ -20,8 +20,29 @@ type RenderTarget = Parameters<IPrimitivePaneRenderer["draw"]>[0];
 export interface EventLineSpec {
   id: string;
   label: string;
-  /** ISO `YYYY-MM-DD`. */
+  /** ISO `YYYY-MM-DD`: where the line is drawn. */
   date: string;
+  /** `#RRGGBB`, from the event's category. */
+  color: string;
+  endDate?: string | null;
+  note?: string;
+  categoryLabel?: string;
+  source?: string | null;
+  origin?: "builtin" | "rule" | "user";
+}
+
+/** One drawn x position and every event on it. `colors` holds each distinct colour once, in event order. */
+export interface PlacedEventLine {
+  x: number;
+  events: EventLineSpec[];
+  colors: string[];
+}
+
+/** What the pointer is over: the anchoring line's x, the chart width for flipping, and the events. */
+export interface EventHit {
+  x: number;
+  width: number;
+  events: EventLineSpec[];
 }
 
 /** What one bar of the chart spans, which decides the bar an event belongs to. */
@@ -85,28 +106,66 @@ export function eventCoordinate(
   return (left + right) / 2;
 }
 
+/**
+ * Place every event, grouping events that land on the same pixel into one line. Two categories on
+ * one date -- or on one monthly candle -- then draw as adjacent stripes instead of one hiding the other.
+ */
+export function placeEventLines(
+  events: readonly EventLineSpec[],
+  barTimes: readonly string[],
+  timeToCoordinate: (time: string) => number | null,
+  granularity: EventGranularity,
+): PlacedEventLine[] {
+  const byPixel = new Map<number, PlacedEventLine>();
+  for (const event of events) {
+    const x = eventCoordinate(event.date, barTimes, timeToCoordinate, granularity);
+    if (x === null) continue;
+    const key = Math.round(x);
+    const placed = byPixel.get(key) ?? { x, events: [], colors: [] };
+    placed.events.push(event);
+    if (!placed.colors.includes(event.color)) placed.colors.push(event.color);
+    byPixel.set(key, placed);
+  }
+  return [...byPixel.values()].sort((a, b) => a.x - b.x);
+}
+
+/**
+ * The events under the pointer: every line within `tolerancePx`, nearest first, anchored at the
+ * nearest line so the tooltip sits on it rather than chasing the pointer.
+ */
+export function eventsNearX(
+  x: number,
+  placed: readonly PlacedEventLine[],
+  tolerancePx = 6,
+): { x: number; events: EventLineSpec[] } | null {
+  const hits = placed
+    .filter((line) => Math.abs(line.x - x) <= tolerancePx)
+    .sort((a, b) => Math.abs(a.x - x) - Math.abs(b.x - x));
+  if (hits.length === 0) return null;
+  return { x: hits[0].x, events: hits.flatMap((line) => line.events) };
+}
+
 class EventLinesRenderer implements IPrimitivePaneRenderer {
   public constructor(
-    private readonly xs: readonly number[],
-    private readonly color: string,
+    private readonly lines: readonly PlacedEventLine[],
     private readonly alpha: number,
     private readonly lineWidth: number,
   ) {}
 
   public draw(target: RenderTarget): void {
-    if (this.xs.length === 0) return;
+    if (this.lines.length === 0) return;
     target.useBitmapCoordinateSpace((scope) => {
       const ctx = scope.context;
       ctx.save();
-      // globalAlpha rather than an rgba() string: the colour arrives already resolved from a
-      // CSS custom property, and re-parsing it into components to add an alpha channel would
-      // mean handling hex, rgb() and named forms. Compositing is the same either way.
       ctx.globalAlpha = this.alpha;
-      ctx.fillStyle = this.color;
       const width = Math.max(1, Math.round(this.lineWidth * scope.horizontalPixelRatio));
-      for (const x of this.xs) {
-        const centre = Math.round(x * scope.horizontalPixelRatio);
-        ctx.fillRect(centre - Math.floor(width / 2), 0, width, scope.bitmapSize.height);
+      for (const line of this.lines) {
+        const left = Math.round(line.x * scope.horizontalPixelRatio) - Math.floor(width / 2);
+        // Each further colour is a stripe immediately to the right, so every category stays visible.
+        line.colors.forEach((color, index) => {
+          ctx.fillStyle = color;
+          ctx.fillRect(left + index * width, 0, width, scope.bitmapSize.height);
+        });
       }
       ctx.restore();
     });
@@ -131,8 +190,6 @@ export interface EventLinesOptions {
   events: readonly EventLineSpec[];
   barTimes: readonly string[];
   granularity: EventGranularity;
-  /** Already resolved to something a canvas can paint -- see `resolveCssColor`. */
-  color: string;
   alpha: number;
   lineWidth: number;
   visible: boolean;
@@ -173,17 +230,21 @@ export class EventLinesPrimitive implements IPanePrimitive<Time> {
     this.requestUpdate?.();
   }
 
-  public buildRenderer(): IPrimitivePaneRenderer | null {
-    if (!this.options.visible || !this.chart) return null;
+  /** The lines as currently placed. Also read by TVChart's hover handler, so both agree on x. */
+  public placedLines(): PlacedEventLine[] {
+    if (!this.options.visible || !this.chart) return [];
     const timeScale = this.chart.timeScale();
-    const toCoordinate = (time: string) => timeScale.timeToCoordinate(time as Time);
+    return placeEventLines(
+      this.options.events,
+      this.options.barTimes,
+      (time) => timeScale.timeToCoordinate(time as Time),
+      this.options.granularity,
+    );
+  }
 
-    const xs: number[] = [];
-    for (const event of this.options.events) {
-      const x = eventCoordinate(event.date, this.options.barTimes, toCoordinate, this.options.granularity);
-      if (x !== null) xs.push(x);
-    }
-    if (xs.length === 0) return null;
-    return new EventLinesRenderer(xs, this.options.color, this.options.alpha, this.options.lineWidth);
+  public buildRenderer(): IPrimitivePaneRenderer | null {
+    const lines = this.placedLines();
+    if (lines.length === 0) return null;
+    return new EventLinesRenderer(lines, this.options.alpha, this.options.lineWidth);
   }
 }

@@ -600,6 +600,35 @@ CREATE TABLE IF NOT EXISTS industry_benchmark (
     stdev_price        REAL,
     PRIMARY KEY (vintage, industry_name)
 );
+
+-- ============================================================
+-- Market events: the user's own events, category overrides and user categories, and the
+-- global chart filter. Built-in events and categories are NOT here -- they are read from
+-- committed files on every request (apps/api/services/events).
+-- ============================================================
+CREATE TABLE IF NOT EXISTS user_event (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,  -- AUTOINCREMENT: a deleted id is never reused
+    label       TEXT NOT NULL,
+    category    TEXT NOT NULL,
+    start_date  TEXT NOT NULL,
+    end_date    TEXT,
+    source      TEXT,
+    note        TEXT NOT NULL DEFAULT '',
+    created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
+CREATE TABLE IF NOT EXISTS event_category (
+    id          TEXT PRIMARY KEY,
+    kind        TEXT NOT NULL CHECK (kind IN ('override', 'user')),
+    label       TEXT,
+    color       TEXT,
+    created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
+CREATE TABLE IF NOT EXISTS event_category_visibility (
+    category_id TEXT PRIMARY KEY,
+    visible     INTEGER NOT NULL CHECK (visible IN (0, 1))
+);
 """
 
 
