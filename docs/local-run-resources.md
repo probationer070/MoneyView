@@ -156,3 +156,32 @@ The frontend resolves the backend through `NEXT_PUBLIC_API_BASE_URL`, defaulting
   report for what was frozen or neutralised to produce it
 - `docs/architecture/local-first-runtime.md` — the runtime architecture and policy this
   document reports measurements for
+
+---
+
+## Watchlist sync between your PCs
+
+1. Pick a folder a cloud client keeps in sync, e.g. `C:\Users\<you>\OneDrive\MoneyView-sync`.
+   In OneDrive, set it to "Always keep on this device" (recommended; an online-only file is
+   skipped and retried, never read as empty).
+2. In `config/.env` (copy `config/.env.example` if you have none), set
+   `MONEYVIEW_SYNC_DIR=C:\Users\<you>\OneDrive\MoneyView-sync`.
+3. Restart MoneyView. The Portfolio page shows the sync status beside the holdings count.
+
+Each PC writes only `MoneyView\watchlist.<pc_id>.json` in that folder. Your first sync merges
+both PCs' lists (a union); deletions made after that propagate. With the variable unset, sync is
+off and nothing changes. Design: `docs/superpowers/specs/2026-09-18-watchlist-peer-sync-design.md`.
+
+- **First sync.** For a ticker that already exists on both PCs with different weight, group or
+  name, the whole row from the PC whose id sorts higher wins. After enabling sync on both PCs,
+  check that tickers, weights and groups match before relying on it.
+- Deletions and Imports made while sync is off do not propagate. Only changes made while sync is
+  on do.
+- Do not copy `data/` from one PC to another. The copy carries the same PC id, both PCs then
+  write the same file, and they never sync.
+- If the sync folder is missing, or a peer file is unreadable (e.g. online-only), the status line
+  says so. A fresh PC then stays empty until the file is readable, rather than being filled with
+  starter defaults.
+
+Test and e2e processes set `MONEYVIEW_SKIP_LOCAL_ENV=1`, so they never read `config/.env` and
+never touch your real sync folder.

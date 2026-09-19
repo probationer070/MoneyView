@@ -19,6 +19,11 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from apps.api.core.logger import configure_logging, setup_logger
+from apps.api.core.local_env import load_local_env
+
+# Before anything reads the environment. Settings such as MONEYVIEW_SYNC_DIR are read at call time,
+# so loading here, at import, covers every later read.
+load_local_env()
 from apps.api.core.middleware import StructuralMiddleware
 from apps.api.core.responses import NonFiniteSafeJSONResponse
 from apps.api.core.transport_progress import TransportProgressMiddleware
@@ -97,6 +102,12 @@ async def lifespan(app: FastAPI):
     logger.info("MoneyView API starting; initialising database.")
     init_db()
     logger.info("Database ready.")
+
+    # Best-effort watchlist peer sync (spec §2): run_sync never raises, so an unavailable
+    # folder only records last_error and startup continues.
+    from apps.api.services.watchlist_sync import service as watchlist_sync
+
+    watchlist_sync.run_sync("startup")
 
     task_wal = asyncio.create_task(wal_flush_cycle())
 

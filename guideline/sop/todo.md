@@ -1194,15 +1194,24 @@ Branched from `renewal` @ `1af14ad`; baseline 1265 Python tests.
 Spec: `docs/superpowers/specs/2026-09-15-market-event-registry-design.md`.
 Plan: `docs/superpowers/plans/2026-09-15-market-event-registry.md`.
 
-- [ ] **J-A. Registry, sources, categories, FOMC and quad-witching data, read routes** (PR #40, open)
-- [ ] **J-B. Write routes and SQLite for user events, overrides, visibility** (PR #41, open, stacked on #40)
-- [ ] **J-C. Coloured lines, hover tooltip, one global filter** (PR #42, open, stacked on #41; reverses I-D Ruling H)
-- [ ] **J-D. The Events page** (PR #43, open, stacked on #42)
+- [x] **J-A. Registry, sources, categories, FOMC and quad-witching data, read routes** (PR #40, merged)
+- [x] **J-B. Write routes and SQLite for user events, overrides, visibility** (PR #41, merged)
+- [x] **J-C. Coloured lines, hover tooltip, one global filter** (PR #42, merged; reverses I-D Ruling H)
+- [x] **J-D. The Events page** (PR #43, merged)
 
 Known limits, accepted deliberately: user events and category edits are per machine and not
 synced; the tooltip shows a source's host, not a link; the XNYS calendar's coverage is fixed
 when the API process starts (one year ahead), so a server left running for a year stops
 generating quad-witching dates past that point until restarted.
+
+## Track K - Watchlist peer sync  [2026-09-18]
+
+Spec: `docs/superpowers/specs/2026-09-18-watchlist-peer-sync-design.md`.
+Plan: `docs/superpowers/plans/2026-09-18-watchlist-peer-sync.md`.
+
+- [ ] **K-1. Sync feature** (PR #44, open)
+- [ ] **K-2. Neutral public seed** (PR #45, open): merge only after sync is on for both PCs and both
+      Watchlists hold every ticker with the same weights and groups
 
 
 ## Archived

@@ -42,6 +42,8 @@ interface PortfolioCommandCenterProps {
   importingJson: boolean;
   importJsonArmed: boolean;
   setImportJsonArmed: (value: boolean) => void;
+  /** Null when Import is available. Otherwise the reason shown in its place. */
+  importUnavailableReason: string | null;
   syncStatus?: WatchlistSyncStatusView;
   formatSyncTimestamp: (value: string) => string;
   formatSectorLabel: (value: string) => string;
@@ -73,6 +75,7 @@ export function PortfolioCommandCenter({
   importingJson,
   importJsonArmed,
   setImportJsonArmed,
+  importUnavailableReason,
   syncStatus,
   formatSyncTimestamp,
   formatSectorLabel,
@@ -250,28 +253,34 @@ export function PortfolioCommandCenter({
             <RefreshCw className={`h-3.5 w-3.5 ${exportingWatchlist ? "animate-spin" : ""}`} />
             {exportingWatchlist ? "Exporting..." : "Export Watchlist To JSON"}
           </button>
-          <button
-            type="button"
-            onClick={onImportJson}
-            disabled={importingJson || !importJsonArmed}
-            className="inline-flex items-center justify-center gap-2 rounded-[var(--radius)] border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900 hover:bg-amber-100 disabled:opacity-50"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${importingJson ? "animate-spin" : ""}`} />
-            {importingJson ? "Importing..." : "Import JSON Into DB"}
-          </button>
+          {importUnavailableReason === null && (
+            <button
+              type="button"
+              onClick={onImportJson}
+              disabled={importingJson || !importJsonArmed}
+              className="inline-flex items-center justify-center gap-2 rounded-[var(--radius)] border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900 hover:bg-amber-100 disabled:opacity-50"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${importingJson ? "animate-spin" : ""}`} />
+              {importingJson ? "Importing..." : "Import JSON Into DB"}
+            </button>
+          )}
         </div>
-        <label className="mt-3 flex items-start gap-2 rounded-[var(--radius)] border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-          <input
-            type="checkbox"
-            checked={importJsonArmed}
-            onChange={(event) => setImportJsonArmed(event.target.checked)}
-            aria-label="Arm destructive JSON import"
-            className="mt-0.5"
-          />
-          <span>I understand Import JSON replaces the DB watchlist from file and can overwrite saved weights.</span>
-        </label>
+        {importUnavailableReason === null ? (
+          <label className="mt-3 flex items-start gap-2 rounded-[var(--radius)] border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+            <input
+              type="checkbox"
+              checked={importJsonArmed}
+              onChange={(event) => setImportJsonArmed(event.target.checked)}
+              aria-label="Arm destructive JSON import"
+              className="mt-0.5"
+            />
+            <span>I understand Import JSON replaces the DB watchlist from file and can overwrite saved weights.</span>
+          </label>
+        ) : (
+          <p className="mt-3 text-xs text-[var(--text-muted)]">{importUnavailableReason}</p>
+        )}
         <p className="mt-3 text-sm text-[var(--text-muted)]">
-          Export writes the current DB-backed watchlist, including weights, into `stock_targets.json`. Import is the explicit replace-from-file path and stays intentionally destructive.
+          Export writes the current DB-backed watchlist, including weights, into data/exports/watchlist-export.json (git-ignored, personal). Import replaces the watchlist from the committed starter seed and is intentionally destructive.
         </p>
         <div className="mt-3 rounded-[var(--radius)] bg-[var(--bg-surface)] p-3 text-sm text-[var(--text-muted)]">
           <div>Last sync/import source: {syncStatus?.source || "None recorded"}</div>

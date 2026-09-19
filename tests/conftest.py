@@ -10,6 +10,10 @@ import pytest
 
 from apps.api.services import db as db_service
 
+# Must run before any test module imports apps.api.main, which loads config/.env at import time.
+# Without this, a MONEYVIEW_SYNC_DIR the owner set for real sync would leak into every test run.
+os.environ["MONEYVIEW_SKIP_LOCAL_ENV"] = "1"
+
 
 def pytest_configure(config):
     if config.option.basetemp:
@@ -177,6 +181,35 @@ def _forbid_the_real_database():
     sqlite3.connect = guarded_connect
     yield
     sqlite3.connect = real_connect
+
+
+@pytest.fixture(autouse=True)
+def _no_real_sync_dir(monkeypatch):
+    """Never let a developer's shell-set MONEYVIEW_SYNC_DIR reach a test.
+
+    Tests that exercise sync must set it themselves, on their own tmp_path.
+    """
+    monkeypatch.delenv("MONEYVIEW_SYNC_DIR", raising=False)
+
+
+@pytest.fixture(autouse=True, scope="session")
+def _guard_the_committed_seed():
+    """Fail the session, and restore the file, if any test writes to the committed watchlist seed.
+
+    apps/api/services/webscrap/stock_targets.json is the public seed MoneyView must never write --
+    an Export regression once wrote real data over it during this suite's own RED run (task-6-report.md,
+    fix round 1, I1). Resolved from the repo root (this file's parent), not cwd, since pytest's cwd
+    depends on how it is invoked. This is a last-resort net: individual tests that exercise Export
+    must still redirect _WATCHLIST_JSON/SEED_JSON/EXPORT_JSON themselves, as
+    test_export_writes_the_personal_file_never_the_committed_seed does.
+    """
+    seed_path = Path(__file__).resolve().parent.parent / "apps" / "api" / "services" / "webscrap" / "stock_targets.json"
+    original = seed_path.read_bytes()
+    yield
+    current = seed_path.read_bytes()
+    if current != original:
+        seed_path.write_bytes(original)
+        pytest.fail(f"tests modified the committed seed file at {seed_path}; restored it", pytrace=False)
 
 
 @pytest.fixture(autouse=True, scope="session")

@@ -93,6 +93,9 @@ Push-Location $repoRoot
 try {
     try {
         $env:DB_PATH = $dbPath
+        # Keep this run away from the owner's real config/.env, so e2e never publishes into their real sync folder.
+        $env:MONEYVIEW_SKIP_LOCAL_ENV = "1"
+        Remove-Item Env:MONEYVIEW_SYNC_DIR -ErrorAction SilentlyContinue
         & $python "scripts/seed_e2e_market_cache.py"
         if ($LASTEXITCODE -ne 0) {
             throw "Failed to seed E2E market cache."

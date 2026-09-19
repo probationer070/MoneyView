@@ -293,7 +293,16 @@ CREATE TABLE IF NOT EXISTS watchlist (
     name       TEXT DEFAULT '',
     sector     TEXT DEFAULT '',
     group_name TEXT DEFAULT 'custom',
-    weight     REAL DEFAULT 0.0
+    weight     REAL DEFAULT 0.0,
+    updated_at TEXT,   -- logical change time for peer sync (UTC ms, Z); NULL until first stamped
+    updated_by TEXT    -- pc_id that authored that change
+);
+
+-- Peer-sync tombstones: a removal remembered so an older copy on another PC cannot revive it.
+CREATE TABLE IF NOT EXISTS watchlist_removed (
+    ticker     TEXT PRIMARY KEY,
+    removed_at TEXT NOT NULL,
+    removed_by TEXT NOT NULL
 );
 
 -- ============================================================
@@ -892,6 +901,12 @@ def _ensure_schema_compatibility(conn: sqlite3.Connection) -> None:
         count = len(watchlist_rows)
         if count > 0:
             conn.execute("UPDATE watchlist SET weight = ?", (1.0 / count,))
+    # Nullable, additive: existing rows keep every value, and a NULL `updated_at` is stamped with
+    # the baseline the first time sync runs (watchlist_sync.store.ensure_first_sync).
+    if "updated_at" not in watchlist_columns:
+        conn.execute("ALTER TABLE watchlist ADD COLUMN updated_at TEXT")
+    if "updated_by" not in watchlist_columns:
+        conn.execute("ALTER TABLE watchlist ADD COLUMN updated_by TEXT")
     conn.execute(
         """INSERT OR IGNORE INTO portfolio_preferences
            (singleton_id, total_investment_amount, transaction_fee_rate, updated_at)
