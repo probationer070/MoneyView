@@ -86,7 +86,7 @@ export default async function TickerDetailPage({ params }: PageProps) {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <ErrorBoundary fallbackTitle="Price Matrix Offline" fallbackMessage="The TradingView webGL engine failed to boot due to extreme data scaling.">
-          <div className="lg:col-span-2 overflow-hidden">
+          <div className="lg:col-span-2">
             <OHLCVChartCard
               title="Price Trend & Matrix (5Y)"
               description="OHLCV candlesticks and volume rendered through the shared lightweight-charts wrapper used across detail and portfolio drill-down surfaces."
