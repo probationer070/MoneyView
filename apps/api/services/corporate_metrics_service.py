@@ -291,6 +291,12 @@ def latest_market_price(ticker: str) -> float:
 
 
 def seed_watchlist_from_json_if_empty(watchlist_json: Path = WATCHLIST_JSON) -> None:
+    # Only an empty watchlist needs bootstrapping. With peer sync on, the bootstrap is a full sync
+    # (a cloud-file write), and GET /portfolio/watchlist is the read trigger (spec §2), so Corporate
+    # must not pay one on every request once the table has rows.
+    with get_db() as conn:
+        if conn.execute("SELECT 1 FROM watchlist LIMIT 1").fetchone():
+            return
     ensure_watchlist_bootstrapped(watchlist_json)
 
 

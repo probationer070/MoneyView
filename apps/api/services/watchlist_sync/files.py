@@ -14,7 +14,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from apps.api.services.watchlist_sync.model import TS_PATTERN, SyncRow, SyncState, Tombstone
+from apps.api.services.watchlist_sync.model import SyncRow, SyncState, Tombstone, is_valid_ts
 
 FORMAT_VERSION = 1
 SYNC_SUBDIR = "MoneyView"
@@ -50,8 +50,8 @@ def _require_root(root: Path) -> Path:
 
 
 def _ts(value, what: str) -> str:
-    if not isinstance(value, str) or not TS_PATTERN.fullmatch(value):
-        raise ValueError(f"{what}={value!r} is not a UTC millisecond timestamp")
+    if not isinstance(value, str) or not is_valid_ts(value):
+        raise ValueError(f"{what}={value!r} is not a valid UTC millisecond timestamp")
     return value
 
 
