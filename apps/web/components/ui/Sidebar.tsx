@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, PieChart, Newspaper, Activity, Building2, Orbit, NotebookPen, Scale } from "lucide-react";
+import { LayoutDashboard, PieChart, Newspaper, Activity, Building2, Orbit, NotebookPen, Scale, CalendarDays } from "lucide-react";
 import clsx from "clsx";
 
 const navItems = [
@@ -13,6 +13,7 @@ const navItems = [
   { href: "/monte-carlo", label: "Monte Carlo", icon: Orbit },
   { href: "/decisions", label: "Decision Log", icon: NotebookPen },
   { href: "/valuation", label: "Valuation", icon: Scale },
+  { href: "/events", label: "Events", icon: CalendarDays },
 ];
 
 export function Sidebar({
@@ -58,10 +59,8 @@ export function Sidebar({
                 href={item.href}
                 onClick={onClose}
                 className={clsx(
-                  "flex items-center gap-3 rounded-[var(--radius)] px-3 py-2 transition-colors",
-                  isActive
-                    ? "bg-[var(--surface)] text-white font-medium"
-                    : "text-[var(--text-muted)] hover:bg-[var(--surface)] hover:text-[var(--text-primary)]"
+                  "flex items-center gap-3 rounded-[var(--radius)] px-3 py-2 font-bold text-black transition-colors",
+                  isActive ? "bg-[var(--surface)]" : "hover:bg-[var(--surface)]"
                 )}
               >
                 <Icon className="h-5 w-5" />

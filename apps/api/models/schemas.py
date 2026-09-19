@@ -63,7 +63,7 @@ from .schema_parts.valuation import (
     VerdictPanel,
     VerdictRow,
 )
-from .schema_parts.market import DeltaBadge, IndicatorRecord, IndexQuote, MarketDataQuality, MarketEvent, MarketIndexDetail, MarketRegimeContext, MarketSpread, MarketSpreadPoint, MarketVolumeSummary, StockOHLCV, StockPriceLookup
+from .schema_parts.market import DeltaBadge, EventCategory, EventCategoryInput, EventCategoryPatch, IndicatorRecord, IndexQuote, MarketDataQuality, MarketEvent, MarketEventInput, MarketIndexDetail, MarketRegimeContext, MarketSpread, MarketSpreadPoint, MarketVolumeSummary, StockOHLCV, StockPriceLookup
 from .schema_parts.news import MonteCarloResult, NewsArticle, TechnicalIndicators
 from .schema_parts.decision import (
     DecisionCreated,
@@ -156,6 +156,10 @@ __all__ = [
     "IndexQuote",
     "MarketDataQuality",
     "MarketEvent",
+    "MarketEventInput",
+    "EventCategory",
+    "EventCategoryInput",
+    "EventCategoryPatch",
     "MarketIndexDetail",
     "MarketRegimeContext",
     "MarketSpread",

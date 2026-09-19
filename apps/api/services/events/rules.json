@@ -1,0 +1,17 @@
+{
+  "rules": [
+    {
+      "id": "quad-witching",
+      "category": "quad-witching",
+      "label": "Quadruple witching",
+      "note": "Quarterly options expiration day. The Cboe Rule Book defines expiration as the third Friday of the expiration month, or the preceding business day when the exchange is closed that Friday; this rule applies it to March, June, September and December. Futures expiring the same day are not covered by this source.",
+      "source": "https://cdn.cboe.com/resources/regulation/rule_book/C1_Exchange_Rule_Book.pdf",
+      "kind": "nth_weekday_of_month",
+      "months": [3, 6, 9, 12],
+      "weekday": "FRI",
+      "nth": 3,
+      "if_closed": "previous_trading_day",
+      "from": "2020-01-01"
+    }
+  ]
+}

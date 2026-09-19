@@ -1,0 +1,499 @@
+{
+  "events": [
+    {
+      "id": "fomc-2020-01-29",
+      "label": "FOMC: hold at 1.50–1.75%",
+      "category": "fomc",
+      "start_date": "2020-01-29",
+      "end_date": null,
+      "source": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20200129a.htm",
+      "note": "Scheduled meeting, 28–29 January 2020."
+    },
+    {
+      "id": "fomc-2020-03-03",
+      "label": "FOMC: cut 50bp to 1.00–1.25%",
+      "category": "fomc",
+      "start_date": "2020-03-03",
+      "end_date": null,
+      "source": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20200303a.htm",
+      "note": "Unscheduled meeting, 2 March 2020; announced 3 March."
+    },
+    {
+      "id": "fomc-2020-03-15",
+      "label": "FOMC: cut 100bp to 0.00–0.25%",
+      "category": "fomc",
+      "start_date": "2020-03-15",
+      "end_date": null,
+      "source": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20200315a.htm",
+      "note": "Unscheduled meeting, 15 March 2020; announced 15 March."
+    },
+    {
+      "id": "fomc-2020-04-29",
+      "label": "FOMC: hold at 0.00–0.25%",
+      "category": "fomc",
+      "start_date": "2020-04-29",
+      "end_date": null,
+      "source": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20200429a.htm",
+      "note": "Scheduled meeting, 28–29 April 2020."
+    },
+    {
+      "id": "fomc-2020-06-10",
+      "label": "FOMC: hold at 0.00–0.25%",
+      "category": "fomc",
+      "start_date": "2020-06-10",
+      "end_date": null,
+      "source": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20200610a.htm",
+      "note": "Scheduled meeting, 9–10 June 2020."
+    },
+    {
+      "id": "fomc-2020-07-29",
+      "label": "FOMC: hold at 0.00–0.25%",
+      "category": "fomc",
+      "start_date": "2020-07-29",
+      "end_date": null,
+      "source": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20200729a.htm",
+      "note": "Scheduled meeting, 28–29 July 2020."
+    },
+    {
+      "id": "fomc-2020-09-16",
+      "label": "FOMC: hold at 0.00–0.25%",
+      "category": "fomc",
+      "start_date": "2020-09-16",
+      "end_date": null,
+      "source": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20200916a.htm",
+      "note": "Scheduled meeting, 15–16 September 2020."
+    },
+    {
+      "id": "fomc-2020-11-05",
+      "label": "FOMC: hold at 0.00–0.25%",
+      "category": "fomc",
+      "start_date": "2020-11-05",
+      "end_date": null,
+      "source": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20201105a.htm",
+      "note": "Scheduled meeting, 4–5 November 2020."
+    },
+    {
+      "id": "fomc-2020-12-16",
+      "label": "FOMC: hold at 0.00–0.25%",
+      "category": "fomc",
+      "start_date": "2020-12-16",
+      "end_date": null,
+      "source": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20201216a.htm",
+      "note": "Scheduled meeting, 15–16 December 2020."
+    },
+    {
+      "id": "fomc-2021-01-27",
+      "label": "FOMC: hold at 0.00–0.25%",
+      "category": "fomc",
+      "start_date": "2021-01-27",
+      "end_date": null,
+      "source": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20210127a.htm",
+      "note": "Scheduled meeting, 26–27 January 2021."
+    },
+    {
+      "id": "fomc-2021-03-17",
+      "label": "FOMC: hold at 0.00–0.25%",
+      "category": "fomc",
+      "start_date": "2021-03-17",
+      "end_date": null,
+      "source": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20210317a.htm",
+      "note": "Scheduled meeting, 16–17 March 2021."
+    },
+    {
+      "id": "fomc-2021-04-28",
+      "label": "FOMC: hold at 0.00–0.25%",
+      "category": "fomc",
+      "start_date": "2021-04-28",
+      "end_date": null,
+      "source": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20210428a.htm",
+      "note": "Scheduled meeting, 27–28 April 2021."
+    },
+    {
+      "id": "fomc-2021-06-16",
+      "label": "FOMC: hold at 0.00–0.25%",
+      "category": "fomc",
+      "start_date": "2021-06-16",
+      "end_date": null,
+      "source": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20210616a.htm",
+      "note": "Scheduled meeting, 15–16 June 2021."
+    },
+    {
+      "id": "fomc-2021-07-28",
+      "label": "FOMC: hold at 0.00–0.25%",
+      "category": "fomc",
+      "start_date": "2021-07-28",
+      "end_date": null,
+      "source": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20210728a.htm",
+      "note": "Scheduled meeting, 27–28 July 2021."
+    },
+    {
+      "id": "fomc-2021-09-22",
+      "label": "FOMC: hold at 0.00–0.25%",
+      "category": "fomc",
+      "start_date": "2021-09-22",
+      "end_date": null,
+      "source": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20210922a.htm",
+      "note": "Scheduled meeting, 21–22 September 2021."
+    },
+    {
+      "id": "fomc-2021-11-03",
+      "label": "FOMC: hold at 0.00–0.25%",
+      "category": "fomc",
+      "start_date": "2021-11-03",
+      "end_date": null,
+      "source": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20211103a.htm",
+      "note": "Scheduled meeting, 2–3 November 2021."
+    },
+    {
+      "id": "fomc-2021-12-15",
+      "label": "FOMC: hold at 0.00–0.25%",
+      "category": "fomc",
+      "start_date": "2021-12-15",
+      "end_date": null,
+      "source": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20211215a.htm",
+      "note": "Scheduled meeting, 14–15 December 2021."
+    },
+    {
+      "id": "fomc-2022-01-26",
+      "label": "FOMC: hold at 0.00–0.25%",
+      "category": "fomc",
+      "start_date": "2022-01-26",
+      "end_date": null,
+      "source": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20220126a.htm",
+      "note": "Scheduled meeting, 25–26 January 2022."
+    },
+    {
+      "id": "fomc-2022-03-16",
+      "label": "FOMC: hike 25bp to 0.25–0.50%",
+      "category": "fomc",
+      "start_date": "2022-03-16",
+      "end_date": null,
+      "source": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20220316a.htm",
+      "note": "Scheduled meeting, 15–16 March 2022."
+    },
+    {
+      "id": "fomc-2022-05-04",
+      "label": "FOMC: hike 50bp to 0.75–1.00%",
+      "category": "fomc",
+      "start_date": "2022-05-04",
+      "end_date": null,
+      "source": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20220504a.htm",
+      "note": "Scheduled meeting, 3–4 May 2022."
+    },
+    {
+      "id": "fomc-2022-06-15",
+      "label": "FOMC: hike 75bp to 1.50–1.75%",
+      "category": "fomc",
+      "start_date": "2022-06-15",
+      "end_date": null,
+      "source": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20220615a.htm",
+      "note": "Scheduled meeting, 14–15 June 2022."
+    },
+    {
+      "id": "fomc-2022-07-27",
+      "label": "FOMC: hike 75bp to 2.25–2.50%",
+      "category": "fomc",
+      "start_date": "2022-07-27",
+      "end_date": null,
+      "source": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20220727a.htm",
+      "note": "Scheduled meeting, 26–27 July 2022."
+    },
+    {
+      "id": "fomc-2022-09-21",
+      "label": "FOMC: hike 75bp to 3.00–3.25%",
+      "category": "fomc",
+      "start_date": "2022-09-21",
+      "end_date": null,
+      "source": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20220921a.htm",
+      "note": "Scheduled meeting, 20–21 September 2022."
+    },
+    {
+      "id": "fomc-2022-11-02",
+      "label": "FOMC: hike 75bp to 3.75–4.00%",
+      "category": "fomc",
+      "start_date": "2022-11-02",
+      "end_date": null,
+      "source": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20221102a.htm",
+      "note": "Scheduled meeting, 1–2 November 2022."
+    },
+    {
+      "id": "fomc-2022-12-14",
+      "label": "FOMC: hike 50bp to 4.25–4.50%",
+      "category": "fomc",
+      "start_date": "2022-12-14",
+      "end_date": null,
+      "source": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20221214a.htm",
+      "note": "Scheduled meeting, 13–14 December 2022."
+    },
+    {
+      "id": "fomc-2023-02-01",
+      "label": "FOMC: hike 25bp to 4.50–4.75%",
+      "category": "fomc",
+      "start_date": "2023-02-01",
+      "end_date": null,
+      "source": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20230201a.htm",
+      "note": "Scheduled meeting, 31 January–1 February 2023."
+    },
+    {
+      "id": "fomc-2023-03-22",
+      "label": "FOMC: hike 25bp to 4.75–5.00%",
+      "category": "fomc",
+      "start_date": "2023-03-22",
+      "end_date": null,
+      "source": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20230322a.htm",
+      "note": "Scheduled meeting, 21–22 March 2023."
+    },
+    {
+      "id": "fomc-2023-05-03",
+      "label": "FOMC: hike 25bp to 5.00–5.25%",
+      "category": "fomc",
+      "start_date": "2023-05-03",
+      "end_date": null,
+      "source": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20230503a.htm",
+      "note": "Scheduled meeting, 2–3 May 2023."
+    },
+    {
+      "id": "fomc-2023-06-14",
+      "label": "FOMC: hold at 5.00–5.25%",
+      "category": "fomc",
+      "start_date": "2023-06-14",
+      "end_date": null,
+      "source": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20230614a.htm",
+      "note": "Scheduled meeting, 13–14 June 2023."
+    },
+    {
+      "id": "fomc-2023-07-26",
+      "label": "FOMC: hike 25bp to 5.25–5.50%",
+      "category": "fomc",
+      "start_date": "2023-07-26",
+      "end_date": null,
+      "source": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20230726a.htm",
+      "note": "Scheduled meeting, 25–26 July 2023."
+    },
+    {
+      "id": "fomc-2023-09-20",
+      "label": "FOMC: hold at 5.25–5.50%",
+      "category": "fomc",
+      "start_date": "2023-09-20",
+      "end_date": null,
+      "source": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20230920a.htm",
+      "note": "Scheduled meeting, 19–20 September 2023."
+    },
+    {
+      "id": "fomc-2023-11-01",
+      "label": "FOMC: hold at 5.25–5.50%",
+      "category": "fomc",
+      "start_date": "2023-11-01",
+      "end_date": null,
+      "source": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20231101a.htm",
+      "note": "Scheduled meeting, 31 October–1 November 2023."
+    },
+    {
+      "id": "fomc-2023-12-13",
+      "label": "FOMC: hold at 5.25–5.50%",
+      "category": "fomc",
+      "start_date": "2023-12-13",
+      "end_date": null,
+      "source": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20231213a.htm",
+      "note": "Scheduled meeting, 12–13 December 2023."
+    },
+    {
+      "id": "fomc-2024-01-31",
+      "label": "FOMC: hold at 5.25–5.50%",
+      "category": "fomc",
+      "start_date": "2024-01-31",
+      "end_date": null,
+      "source": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20240131a.htm",
+      "note": "Scheduled meeting, 30–31 January 2024."
+    },
+    {
+      "id": "fomc-2024-03-20",
+      "label": "FOMC: hold at 5.25–5.50%",
+      "category": "fomc",
+      "start_date": "2024-03-20",
+      "end_date": null,
+      "source": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20240320a.htm",
+      "note": "Scheduled meeting, 19–20 March 2024."
+    },
+    {
+      "id": "fomc-2024-05-01",
+      "label": "FOMC: hold at 5.25–5.50%",
+      "category": "fomc",
+      "start_date": "2024-05-01",
+      "end_date": null,
+      "source": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20240501a.htm",
+      "note": "Scheduled meeting, 30 April–1 May 2024."
+    },
+    {
+      "id": "fomc-2024-06-12",
+      "label": "FOMC: hold at 5.25–5.50%",
+      "category": "fomc",
+      "start_date": "2024-06-12",
+      "end_date": null,
+      "source": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20240612a.htm",
+      "note": "Scheduled meeting, 11–12 June 2024."
+    },
+    {
+      "id": "fomc-2024-07-31",
+      "label": "FOMC: hold at 5.25–5.50%",
+      "category": "fomc",
+      "start_date": "2024-07-31",
+      "end_date": null,
+      "source": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20240731a.htm",
+      "note": "Scheduled meeting, 30–31 July 2024."
+    },
+    {
+      "id": "fomc-2024-09-18",
+      "label": "FOMC: cut 50bp to 4.75–5.00%",
+      "category": "fomc",
+      "start_date": "2024-09-18",
+      "end_date": null,
+      "source": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20240918a.htm",
+      "note": "Scheduled meeting, 17–18 September 2024."
+    },
+    {
+      "id": "fomc-2024-11-07",
+      "label": "FOMC: cut 25bp to 4.50–4.75%",
+      "category": "fomc",
+      "start_date": "2024-11-07",
+      "end_date": null,
+      "source": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20241107a.htm",
+      "note": "Scheduled meeting, 6–7 November 2024."
+    },
+    {
+      "id": "fomc-2024-12-18",
+      "label": "FOMC: cut 25bp to 4.25–4.50%",
+      "category": "fomc",
+      "start_date": "2024-12-18",
+      "end_date": null,
+      "source": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20241218a.htm",
+      "note": "Scheduled meeting, 17–18 December 2024."
+    },
+    {
+      "id": "fomc-2025-01-29",
+      "label": "FOMC: hold at 4.25–4.50%",
+      "category": "fomc",
+      "start_date": "2025-01-29",
+      "end_date": null,
+      "source": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20250129a.htm",
+      "note": "Scheduled meeting, 28–29 January 2025."
+    },
+    {
+      "id": "fomc-2025-03-19",
+      "label": "FOMC: hold at 4.25–4.50%",
+      "category": "fomc",
+      "start_date": "2025-03-19",
+      "end_date": null,
+      "source": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20250319a.htm",
+      "note": "Scheduled meeting, 18–19 March 2025."
+    },
+    {
+      "id": "fomc-2025-05-07",
+      "label": "FOMC: hold at 4.25–4.50%",
+      "category": "fomc",
+      "start_date": "2025-05-07",
+      "end_date": null,
+      "source": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20250507a.htm",
+      "note": "Scheduled meeting, 6–7 May 2025."
+    },
+    {
+      "id": "fomc-2025-06-18",
+      "label": "FOMC: hold at 4.25–4.50%",
+      "category": "fomc",
+      "start_date": "2025-06-18",
+      "end_date": null,
+      "source": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20250618a.htm",
+      "note": "Scheduled meeting, 17–18 June 2025."
+    },
+    {
+      "id": "fomc-2025-07-30",
+      "label": "FOMC: hold at 4.25–4.50%",
+      "category": "fomc",
+      "start_date": "2025-07-30",
+      "end_date": null,
+      "source": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20250730a.htm",
+      "note": "Scheduled meeting, 29–30 July 2025."
+    },
+    {
+      "id": "fomc-2025-09-17",
+      "label": "FOMC: cut 25bp to 4.00–4.25%",
+      "category": "fomc",
+      "start_date": "2025-09-17",
+      "end_date": null,
+      "source": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20250917a.htm",
+      "note": "Scheduled meeting, 16–17 September 2025."
+    },
+    {
+      "id": "fomc-2025-10-29",
+      "label": "FOMC: cut 25bp to 3.75–4.00%",
+      "category": "fomc",
+      "start_date": "2025-10-29",
+      "end_date": null,
+      "source": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20251029a.htm",
+      "note": "Scheduled meeting, 28–29 October 2025."
+    },
+    {
+      "id": "fomc-2025-12-10",
+      "label": "FOMC: cut 25bp to 3.50–3.75%",
+      "category": "fomc",
+      "start_date": "2025-12-10",
+      "end_date": null,
+      "source": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20251210a.htm",
+      "note": "Scheduled meeting, 9–10 December 2025."
+    },
+    {
+      "id": "fomc-2026-01-28",
+      "label": "FOMC: hold at 3.50–3.75%",
+      "category": "fomc",
+      "start_date": "2026-01-28",
+      "end_date": null,
+      "source": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20260128a.htm",
+      "note": "Scheduled meeting, 27–28 January 2026."
+    },
+    {
+      "id": "fomc-2026-03-18",
+      "label": "FOMC: hold at 3.50–3.75%",
+      "category": "fomc",
+      "start_date": "2026-03-18",
+      "end_date": null,
+      "source": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20260318a.htm",
+      "note": "Scheduled meeting, 17–18 March 2026."
+    },
+    {
+      "id": "fomc-2026-04-29",
+      "label": "FOMC: hold at 3.50–3.75%",
+      "category": "fomc",
+      "start_date": "2026-04-29",
+      "end_date": null,
+      "source": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20260429a.htm",
+      "note": "Scheduled meeting, 28–29 April 2026."
+    },
+    {
+      "id": "fomc-2026-06-17",
+      "label": "FOMC: hold at 3.50–3.75%",
+      "category": "fomc",
+      "start_date": "2026-06-17",
+      "end_date": null,
+      "source": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20260617a.htm",
+      "note": "Scheduled meeting, 16–17 June 2026."
+    },
+    {
+      "id": "fomc-2026-07-29",
+      "label": "FOMC: hold at 3.50–3.75%",
+      "category": "fomc",
+      "start_date": "2026-07-29",
+      "end_date": null,
+      "source": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20260729a.htm",
+      "note": "Scheduled meeting, 28–29 July 2026."
+    },
+    {
+      "id": "fomc-2026-09-16",
+      "label": "FOMC: hike 25bp to 3.75–4.00%",
+      "category": "fomc",
+      "start_date": "2026-09-16",
+      "end_date": null,
+      "source": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20260916a.htm",
+      "note": "Scheduled meeting, 15–16 September 2026."
+    }
+  ]
+}

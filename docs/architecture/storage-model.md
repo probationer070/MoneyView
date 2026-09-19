@@ -83,6 +83,18 @@ The backend also runs periodic WAL truncation during runtime and attempts a fina
   `watchlist_state`
   `watchlist_sync_status`
 
+**`user_event`**, **`event_category`**, **`event_category_visibility`**
+- the user's own chart events, category overrides and user categories, and the global event
+  filter (see `apps/api/services/events` and `docs/superpowers/specs/2026-09-15-market-event-registry-design.md`)
+- built-in events and categories are **not** stored here: they are read from committed JSON in
+  `apps/api/services/events/` on every request, so a new built-in reaches every machine without
+  a seed step
+- `event_category.kind` is `override` (a built-in's label/colour, reset by deleting the row) or
+  `user` (ids prefixed `user-`); an override whose id has left `categories.json` is ignored, not
+  resurrected
+- `user_event.id` is `AUTOINCREMENT`, so a deleted event's id is never reused
+- these rows are per machine and are not synced
+
 ### 3.4 Corporate Analysis Tables
 
 **`corporate_metrics`**

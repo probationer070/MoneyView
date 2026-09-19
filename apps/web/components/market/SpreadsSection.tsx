@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import TVChart from "@/components/charts/TVChart";
-import { EventsToggle } from "@/components/charts/EventsToggle";
+import { EventFilter } from "@/components/charts/EventFilter";
 import type { EventLineSpec } from "@/components/charts/primitives/EventLinesPrimitive";
 import { useMarketEvents } from "@/lib/useMarketEvents";
 import { useMarketSpreads } from "@/lib/useMarketSpreads";
@@ -27,11 +27,9 @@ function toCandles(spread: MarketSpread): TVCandle[] {
 function SpreadCard({
   spread,
   events,
-  showEvents,
 }: {
   spread: MarketSpread;
   events: EventLineSpec[];
-  showEvents: boolean;
 }) {
   const candles = useMemo(() => toCandles(spread), [spread]);
   const window = `${spread.requested_window_days}d`;
@@ -69,7 +67,6 @@ function SpreadCard({
           <TVChart
             data={candles}
             events={events}
-            showEvents={showEvents}
             height={140}
             tickerName={`${spread.label} spread`}
           />
@@ -82,7 +79,6 @@ function SpreadCard({
 export function SpreadsSection() {
   const { spreads } = useMarketSpreads();
   const { lines } = useMarketEvents();
-  const [showEvents, setShowEvents] = useState(true);
   if (spreads.length === 0) return null;
 
   return (
@@ -92,13 +88,7 @@ export function SpreadsSection() {
     >
       <div className="flex flex-wrap items-start justify-between gap-2">
         <h3 className="text-lg font-bold text-[var(--text-primary)]">Themes and policy spreads</h3>
-        {lines.length > 0 ? (
-          <EventsToggle
-            pressed={showEvents}
-            onToggle={() => setShowEvents((shown) => !shown)}
-            testId="spreads-events-toggle"
-          />
-        ) : null}
+        <EventFilter testId="spreads-events-filter" />
       </div>
       <p className="mt-1 text-sm text-[var(--text-muted)]">
         Relative strength against a benchmark, indexed to 100 at the start of each window. Each
@@ -106,7 +96,7 @@ export function SpreadsSection() {
       </p>
       <div className="mt-4 grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))" }}>
         {spreads.map((spread) => (
-          <SpreadCard key={spread.id} spread={spread} events={lines} showEvents={showEvents} />
+          <SpreadCard key={spread.id} spread={spread} events={lines} />
         ))}
       </div>
     </section>

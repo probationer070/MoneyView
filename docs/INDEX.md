@@ -93,6 +93,8 @@ sub-project and feeding an implementation plan.
 | `plans/2026-09-08-metric-reference.md` | Task-by-task plan for the metric reference: confirm the enumeration against source first, then a citation/symbol checker, then seven family files |
 | `plans/2026-09-05-simulate.md` | Task-by-task plan for `/simulate`: numpy-only sampling and Spearman, engine-refusal codes with a tested completeness table, and suppression above a 10% refused fraction |
 | `2026-09-12-theme-and-policy-spreads-design.md` | Track I-D: theme and policy relative-strength spreads on Market Overview, event-line toggles, and why acquisition is lazy through the existing OHLCV path rather than a new scheduler or watchlist entry |
+| `2026-09-15-market-event-registry-design.md` | Market event registry: pluggable file, rule and user event sources, colored categories with one global filter, hover tooltips, and the `/events` page (draft) |
+| `plans/2026-09-15-market-event-registry.md` | Task-by-task plan for the event registry in four PRs: registry and sourced data, write routes and SQLite, coloured lines with tooltip and one global filter, and the `/events` page |
 | `2026-09-18-watchlist-peer-sync-design.md` | Watchlist sync between the owner's PCs through a cloud-synced folder: one file per PC, per-ticker last-writer-wins with tombstones, and the public seed replaced by neutral defaults |
 | `plans/2026-09-18-watchlist-peer-sync.md` | Task-by-task plan for watchlist peer sync: pure merge model, defensive peer files, run_sync under one lock, status line; the neutral seed ships as a second PR merged only after both PCs sync |
 

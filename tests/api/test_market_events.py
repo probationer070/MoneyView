@@ -1,57 +1,27 @@
-"""Market events are asserted facts, so the loader's job is to refuse unsourced ones.
+"""The committed events and categories, and the read routes that serve them.
 
-These dates cannot be derived from price data -- a military operation's start is a claim
-about the world, not a computation over bars -- so the only thing standing between the chart
-and an authoritative-looking line at a made-up date is the requirement that every event cite
-where it came from. That requirement is the feature, and it is what these tests pin.
+Events are asserted facts, so the loader's job is to refuse unsourced or inconsistent ones.
+These tests read the COMMITTED files through the real registry: a mistake in a data file fails
+here before it merges.
 """
 
-import json
 import re
-import sys
 from datetime import date
-from pathlib import Path
 from urllib.parse import unquote, urlparse
 
-import pytest
 from fastapi.testclient import TestClient
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-
 from apps.api.main import app
-from apps.api.services.market_events import MARKET_EVENTS_JSON, load_market_events
+from apps.api.services.events.registry import (
+    CATEGORIES_FILE,
+    EVENTS_DIR,
+    builtin_sources,
+    default_registry,
+    resolved_categories,
+)
+from apps.api.services.events.sources import FileEventSource
 
-
-def _write_events(path: Path, events: list[dict]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps({"events": events}, indent=2), encoding="utf-8")
-
-
-def _event(**overrides) -> dict:
-    base = {
-        "id": "test-event",
-        "label": "Test event",
-        "category": "geopolitical",
-        "start_date": "2026-02-28",
-        "end_date": None,
-        "source": "https://example.com/timeline",
-        "note": "",
-    }
-    base.update(overrides)
-    return base
-
-
-def test_the_committed_file_carries_the_iran_operation_start(tmp_path):
-    """The fact the feature exists for. Pinned here because a chart marking the wrong day
-    is worse than a chart marking nothing -- every read taken off it would be wrong, and
-    nothing about the line would look amiss."""
-    events = load_market_events()
-
-    iran = [event for event in events if "iran" in event.id.lower()]
-    assert len(iran) == 1, f"expected exactly one Iran event, got {[e.id for e in iran]}"
-    assert iran[0].start_date == "2026-02-28"
-    assert iran[0].source, "an asserted date with no source is exactly what this forbids"
-
+client = TestClient(app)
 
 _MONTHS = (
     "january", "february", "march", "april", "may", "june",
@@ -59,20 +29,53 @@ _MONTHS = (
 )
 
 
-def test_no_committed_source_names_a_different_month_or_year_than_its_event():
-    """A source must at least not contradict its own event's date.
+def _file_events():
+    return [
+        event
+        for source in builtin_sources()
+        if isinstance(source, FileEventSource)
+        for event in source.events(None, None)
+    ]
 
-    This cannot confirm that a page supports a date -- only fetching and reading it can. It
-    catches the cheapest wrong citation, which is the one this file shipped: the 28 Feb 2026
-    start of Operation Epic Fury cited `July_2026_United_States_strikes_against_Iran`, and
-    `test_the_committed_file_carries_the_iran_operation_start` passed it because it only asked
-    whether `source` was non-empty (ERROR-LOG.md 2026-09-13).
 
-    Months are matched as whole words of the URL path, so `mayor` or `marching` is not May or
-    March; years are any standalone 19xx/20xx.
+def test_the_committed_data_resolves_without_error():
+    """Every committed event and rule names a built-in category, ids are unique, and every file
+    validates -- the registry raises on any of those, so a clean call is the assertion."""
+    assert default_registry().events(), "no committed events at all"
+
+
+def test_the_committed_file_carries_the_iran_operation_start():
+    """A chart marking the wrong day is worse than a chart marking nothing."""
+    iran = [event for event in default_registry().events() if "iran" in event.id.lower()]
+
+    assert [event.start_date for event in iran] == ["2026-02-28"]
+    assert iran[0].source, "an asserted date with no source is exactly what this forbids"
+    assert iran[0].category == "geopolitical"
+
+
+def test_the_committed_categories_include_the_required_ones_with_hex_colors():
+    categories = resolved_categories()
+
+    assert {"fomc", "quad-witching", "geopolitical", "uncategorized"} <= set(categories)
+    assert categories["fomc"].color.upper() == "#E54545", "rate decisions were asked for in red"
+
+
+def test_quad_witching_in_2026_comes_from_the_rule_and_skips_juneteenth():
+    events = default_registry().events(date(2026, 1, 1), date(2026, 12, 31))
+    quad = [event for event in events if event.category == "quad-witching"]
+
+    assert [event.start_date for event in quad] == ["2026-03-20", "2026-06-18", "2026-09-18", "2026-12-18"]
+    assert all(event.origin == "rule" and event.source.startswith("https://") for event in quad)
+
+
+def test_no_committed_file_source_names_a_different_month_or_year_than_its_event():
+    """A source must at least not contradict its own event's date (ERROR-LOG.md 2026-09-13).
+
+    Months are whole words of the URL path, so `mayor` is not May; years are standalone 19xx/20xx.
+    Rule events are excluded: their source states a rule, not a date.
     """
-    events = load_market_events()
-    assert events, "no committed events, so no source was checked"
+    events = _file_events()
+    assert events, "no committed file events, so no source was checked"
 
     for event in events:
         url = urlparse(event.source)
@@ -85,74 +88,49 @@ def test_no_committed_source_names_a_different_month_or_year_than_its_event():
         allowed_years = {str(d.year) for d in dates}
 
         path = unquote(url.path).lower()
-        words = set(re.split(r"[^a-z]+", path))
-        named_months = words & set(_MONTHS)
+        named_months = set(re.split(r"[^a-z]+", path)) & set(_MONTHS)
         named_years = set(re.findall(r"(?<!\d)((?:19|20)\d{2})(?!\d)", path))
 
-        assert named_months <= allowed_months, (
-            f"{event.id} is dated {event.start_date} but its source names "
-            f"{sorted(named_months)}: {event.source}"
-        )
-        assert named_years <= allowed_years, (
-            f"{event.id} is dated {event.start_date} but its source names "
-            f"{sorted(named_years)}: {event.source}"
-        )
+        assert named_months <= allowed_months, f"{event.id}: source names {sorted(named_months)}: {event.source}"
+        assert named_years <= allowed_years, f"{event.id}: source names {sorted(named_years)}: {event.source}"
 
 
-def test_an_event_without_a_source_is_refused(tmp_path):
-    """Loudly, not by skipping it. A skipped event is a line that silently does not appear,
-    which reads as 'nothing happened then' -- a false statement the reader cannot detect."""
-    path = tmp_path / "market_events.json"
-    _write_events(path, [_event(source="")])
-
-    with pytest.raises(ValueError) as excinfo:
-        load_market_events(path)
-
-    assert "source" in str(excinfo.value)
-    assert "test-event" in str(excinfo.value), "the message must name which event is unsourced"
+def test_the_registry_reads_the_folder_the_categories_file_is_in():
+    """If the loader's folder and the committed files drift apart, every test above passes
+    against files nothing reads."""
+    assert (EVENTS_DIR / CATEGORIES_FILE).exists()
 
 
-def test_an_event_with_an_unparseable_date_is_refused(tmp_path):
-    """A typo in a committed date would otherwise place the line somewhere arbitrary, or
-    nowhere, with no error -- the chart cannot tell a bad date from a quiet day."""
-    path = tmp_path / "market_events.json"
-    _write_events(path, [_event(start_date="28-02-2026")])
+def test_the_events_route_serves_the_committed_events_with_origin():
+    response = client.get("/api/v1/market/events")
 
-    with pytest.raises(ValueError) as excinfo:
-        load_market_events(path)
-
-    assert "start_date" in str(excinfo.value) or "date" in str(excinfo.value)
-
-
-def test_a_well_formed_event_round_trips(tmp_path):
-    path = tmp_path / "market_events.json"
-    _write_events(path, [_event(id="ok-1", label="Something", start_date="2026-03-02")])
-
-    events = load_market_events(path)
-
-    assert len(events) == 1
-    assert events[0].id == "ok-1"
-    assert events[0].start_date == "2026-03-02"
-    assert events[0].end_date is None
-
-
-def test_a_missing_file_yields_no_events_rather_than_raising(tmp_path):
-    """A chart with no events is a normal state; a chart that 500s because a file is absent
-    is not. This is the one failure mode that must stay quiet."""
-    assert load_market_events(tmp_path / "absent.json") == []
-
-
-def test_the_route_serves_the_committed_events():
-    response = TestClient(app).get("/api/v1/market/events")
-
-    assert response.status_code == 200
+    assert response.status_code == 200, response.text
     payload = response.json()
-    assert any(event["start_date"] == "2026-02-28" for event in payload), payload
-    assert all(event["source"] for event in payload), "the route must not serve an unsourced event"
+    iran = [event for event in payload if event["start_date"] == "2026-02-28"]
+    assert iran and iran[0]["origin"] == "builtin"
+    assert all(event["source"] for event in payload if event["origin"] != "user")
 
 
-def test_the_committed_file_is_where_the_service_says_it_is():
-    """The loader's default path and the committed file must be the same file. If they drift,
-    every test above passes against a file nothing reads."""
-    assert MARKET_EVENTS_JSON.exists(), f"{MARKET_EVENTS_JSON} does not exist"
-    assert json.loads(MARKET_EVENTS_JSON.read_text(encoding="utf-8"))["events"]
+def test_the_events_route_limits_to_the_requested_range():
+    response = client.get("/api/v1/market/events", params={"start": "2026-02-01", "end": "2026-02-28"})
+
+    assert response.status_code == 200, response.text
+    assert {event["start_date"][:7] for event in response.json()} == {"2026-02"}
+
+
+def test_a_malformed_range_is_a_422_naming_the_parameter():
+    response = client.get("/api/v1/market/events", params={"start": "20260201"})
+
+    assert response.status_code == 422
+    assert "start" in response.text
+
+
+def test_the_categories_route_serves_resolved_categories():
+    response = client.get("/api/v1/market/event-categories")
+
+    assert response.status_code == 200, response.text
+    by_id = {category["id"]: category for category in response.json()}
+    assert by_id["fomc"] == {
+        "id": "fomc", "label": "Fed rate decisions", "color": "#E54545",
+        "origin": "builtin", "visible": True, "overridden": False,
+    }
