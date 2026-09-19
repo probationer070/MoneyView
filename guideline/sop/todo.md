@@ -1189,6 +1189,22 @@ Branched from `renewal` @ `1af14ad`; baseline 1265 Python tests.
       C and D share an overlay layer; building C first means D reuses it.
 
 
+## Track J - Market event registry  [2026-09-15]
+
+Spec: `docs/superpowers/specs/2026-09-15-market-event-registry-design.md`.
+Plan: `docs/superpowers/plans/2026-09-15-market-event-registry.md`.
+
+- [ ] **J-A. Registry, sources, categories, FOMC and quad-witching data, read routes** (PR #40, open)
+- [ ] **J-B. Write routes and SQLite for user events, overrides, visibility** (PR #41, open, stacked on #40)
+- [ ] **J-C. Coloured lines, hover tooltip, one global filter** (PR #42, open, stacked on #41; reverses I-D Ruling H)
+- [ ] **J-D. The Events page** (PR #43, open, stacked on #42)
+
+Known limits, accepted deliberately: user events and category edits are per machine and not
+synced; the tooltip shows a source's host, not a link; the XNYS calendar's coverage is fixed
+when the API process starts (one year ahead), so a server left running for a year stops
+generating quad-witching dates past that point until restarted.
+
+
 ## Archived
 
 - `guideline/sop/todo4.md` -- all completed tracks through 2026-08-30.

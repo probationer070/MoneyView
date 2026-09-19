@@ -1,13 +1,14 @@
 import { expect, test, type Page } from "@playwright/test";
+import { GEOPOLITICAL, mockEventsApi, setAllEventCategories } from "./helpers/eventsApiMock";
 
 /**
- * The ticker detail page must not rebuild its chart when event lines arrive or are toggled.
+ * The ticker detail page must not rebuild its chart when event lines arrive or the filter changes.
  *
  * A rebuild runs `chart.remove()` and creates the chart again, which throws away the reader's
  * zoom and pan and snaps the view back to the full history. `TVChart`'s setup effect depends on
  * the identity of `lineSeriesData`, and the detail page passes none, so a default of `[]` gave
  * the chart a new array on every render of `OHLCVChartCard` -- which, once that card owned the
- * event toggle and fetched the events, happened on first load and on every click.
+ * event filter and fetched the events, happened on first load and on every click.
  *
  * Every other event-line test runs in the portfolio modal, which passes a memoised series and
  * so never exposed this. That is why this one opens `/detail`.
@@ -57,28 +58,23 @@ test("the detail page reads its ticker from the route", async ({ page }) => {
   await expect(page.locator(CHART).first(), "the detail page needs AAPL history in the local database").toBeVisible();
 });
 
-test("the detail chart is not rebuilt when event lines arrive or are toggled", async ({ page }) => {
+test("the detail chart is not rebuilt when event lines arrive or the filter changes", async ({ page }) => {
   let releaseEvents: () => void = () => {};
   const eventsHeld = new Promise<void>((resolve) => {
     releaseEvents = resolve;
   });
 
   // Held until the canvases are marked, so the arrival of events is observed as its own step.
-  await page.route("**/api/v1/market/events**", async (route) => {
-    await eventsHeld;
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify([{
-        id: "us-iran-strikes-begin-2026-02-28",
-        label: "U.S. strikes on Iran begin",
-        category: "geopolitical",
-        start_date: "2026-02-28",
-        end_date: null,
-        source: "https://example.com/timeline",
-        note: "",
-      }]),
-    });
+  await mockEventsApi(page, {
+    categories: [GEOPOLITICAL],
+    holdEvents: eventsHeld,
+    events: [{
+      id: "us-iran-strikes-begin-2026-02-28",
+      label: "U.S. strikes on Iran begin",
+      category: "geopolitical",
+      start_date: "2026-02-28",
+      source: "https://example.com/timeline",
+    }],
   });
 
   await page.goto("/detail/AAPL", { waitUntil: "domcontentloaded" });
@@ -92,21 +88,20 @@ test("the detail chart is not rebuilt when event lines arrive or are toggled", a
   const markedAtStart = await markCanvases(page);
   expect((await markedCanvases(page)).marked).toBe(markedAtStart);
 
-  // 1. Events arrive. The card re-renders to show its toggle; the chart must not be rebuilt.
+  // 1. Events arrive. The card re-renders to show its filter; the chart must not be rebuilt.
   releaseEvents();
-  const toggle = page.getByTestId("chart-events-toggle");
-  await expect(toggle).toBeVisible({ timeout: 30_000 });
+  const filter = page.getByTestId("chart-events-filter");
+  await expect(filter).toHaveText(/Events · 1 of 1/, { timeout: 30_000 });
   await page.waitForTimeout(500);
   const afterEvents = await markedCanvases(page);
   // Guarded: with no canvases at all, `marked === total` would hold at 0 and prove nothing.
   expect(afterEvents.total, "the chart must still be on the page").toBeGreaterThan(0);
   expect(afterEvents.marked, `rebuilt when events arrived: ${JSON.stringify(afterEvents)}`).toBe(afterEvents.total);
 
-  // 2. The toggle flips. Same requirement.
-  await toggle.click();
-  await expect(toggle).toHaveAttribute("aria-pressed", "false");
+  // 2. The filter hides every category. Same requirement.
+  await setAllEventCategories(page, "chart-events-filter", false);
   await page.waitForTimeout(500);
-  const afterToggle = await markedCanvases(page);
-  expect(afterToggle.marked, `rebuilt when the toggle was clicked: ${JSON.stringify(afterToggle)}`).toBe(afterToggle.total);
-  expect(afterToggle.total).toBeGreaterThan(0);
+  const afterFilter = await markedCanvases(page);
+  expect(afterFilter.marked, `rebuilt when the filter changed: ${JSON.stringify(afterFilter)}`).toBe(afterFilter.total);
+  expect(afterFilter.total).toBeGreaterThan(0);
 });

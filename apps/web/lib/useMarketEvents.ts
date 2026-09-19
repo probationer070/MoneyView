@@ -1,41 +1,69 @@
 "use client";
 
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { fetchApi } from "@/lib/api";
+import { buildEventLines } from "@/lib/eventLines";
 import type { EventLineSpec } from "@/components/charts/primitives/EventLinesPrimitive";
-import type { MarketEvent } from "../../../packages/shared-types";
+import type { EventCategory, MarketEvent } from "../../../packages/shared-types";
 
-export type { MarketEvent };
+export type { EventCategory, MarketEvent };
+
+export const MARKET_EVENTS_KEY = ["market-events"] as const;
+export const EVENT_CATEGORIES_KEY = ["market-event-categories"] as const;
+
+export type EventsStatus = "loading" | "ready" | "unavailable";
+
+// Stable empties: TVChart is React.memo and compares `events` by identity, so a fresh [] per render
+// would re-render every chart on every unrelated parent render.
+const NO_EVENTS: MarketEvent[] = [];
+const NO_CATEGORIES: EventCategory[] = [];
+const NO_LINES: EventLineSpec[] = [];
 
 /**
- * The dated events charts draw as vertical lines.
+ * Events, categories, and the lines every chart draws, under two shared query keys so all charts
+ * on all pages read one cache and one global filter.
  *
- * One shared query key, so every chart on a page reads the same cached response rather than
- * refetching per card. The events are committed reference data that only changes when the
- * repository does, hence the long stale time -- refetching them on window focus would be
- * pure noise.
- *
- * A failure yields an empty list rather than an error state: a chart with no event lines is
- * a normal chart, and a marker feature must not be able to take a price chart down.
+ * A failure draws no lines -- an overlay must never take a price chart down -- but it is reported
+ * as `unavailable`, so the filter can say so instead of looking like "no events".
  */
 export function useMarketEvents() {
-  const query = useQuery({
-    queryKey: ["market-events"],
+  const eventsQuery = useQuery({
+    queryKey: MARKET_EVENTS_KEY,
     queryFn: () => fetchApi<MarketEvent[]>("/market/events"),
     staleTime: Infinity,
     refetchOnWindowFocus: false,
+    retry: 1,
+  });
+  const categoriesQuery = useQuery({
+    queryKey: EVENT_CATEGORIES_KEY,
+    queryFn: () => fetchApi<EventCategory[]>("/market/event-categories"),
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+    retry: 1,
   });
 
-  // Both arrays are memoised on the query data because TVChart is wrapped in React.memo and
-  // compares `events` by identity. A fresh array on every render would make that comparison
-  // always false, re-rendering the chart on every unrelated parent render -- which is the
-  // exact cost the memo exists to avoid.
-  const events = useMemo<MarketEvent[]>(() => query.data ?? [], [query.data]);
-  const lines = useMemo<EventLineSpec[]>(
-    () => events.map((event) => ({ id: event.id, label: event.label, date: event.start_date })),
-    [events],
-  );
+  const events = eventsQuery.data ?? NO_EVENTS;
+  const categories = categoriesQuery.data ?? NO_CATEGORIES;
+  const status: EventsStatus =
+    eventsQuery.isError || categoriesQuery.isError
+      ? "unavailable"
+      : eventsQuery.data === undefined || categoriesQuery.data === undefined
+        ? "loading"
+        : "ready";
 
-  return { events, lines, isLoading: query.isLoading };
+  const lines = useMemo(
+    () => (status === "ready" ? buildEventLines(events, categories) : NO_LINES),
+    [status, events, categories],
+  );
+  const visibleCount = useMemo(() => categories.filter((category) => category.visible).length, [categories]);
+
+  const { refetch: refetchEvents } = eventsQuery;
+  const { refetch: refetchCategories } = categoriesQuery;
+  const refetch = useCallback(() => {
+    void refetchEvents();
+    void refetchCategories();
+  }, [refetchEvents, refetchCategories]);
+
+  return { events, categories, lines, status, visibleCount, refetch };
 }

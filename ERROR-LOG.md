@@ -26,6 +26,25 @@ reveal that; only checking the code did.
 
 An entry states what was true when it was written. Nothing updates it on its own.
 
+## 2026-09-18: the event filter's popover was clipped on the ticker detail page
+
+Date: 2026-09-18
+Command: Playwright task-C2-C3-C4 verification; `npx playwright test tests/e2e/detail-chart-stability.spec.ts`
+Failure: on `/detail/<ticker>`, `EventFilter`'s popover rendered but its "All"/"None"/checkbox row was
+unclickable -- Playwright reported the click intercepted by the page's `<main>` element. Caught by
+detail-chart-stability.spec.ts once the ticker detail page's chart card started rendering the filter
+in place of the old, popover-less toggle.
+Root cause: the chart card's wrapping `<div>` in apps/web/app/detail/[ticker]/page.tsx carried
+`overflow-hidden`. That never mattered for the old toggle, which had no popover, but it clipped any
+absolutely positioned child -- including the filter's popover -- so its buttons were painted nowhere
+a pointer could reach them.
+Fix: removed `overflow-hidden` from that wrapper (commit 6239f2e).
+tests/e2e/high-risk-render-regression.spec.ts still passes 2/2 with the class removed.
+Files changed: apps/web/app/detail/[ticker]/page.tsx
+Prevention: popovers rendered inside a chart card are now exercised by the event filter specs on all
+three surfaces (the spreads section, the market overview modal, and the ticker detail page), so a
+clipping ancestor on any of them fails a test instead of only being found by hand.
+
 ## 2026-09-14: a grid test asserted the absence of a banner that no longer exists
 
 Date: 2026-09-14

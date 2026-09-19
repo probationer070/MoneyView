@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 import TVChart, { NO_LINE_SERIES, type TVLineSeries } from "@/components/charts/TVChart";
 import type { EventGranularity } from "@/components/charts/primitives/EventLinesPrimitive";
 import { ToggleGroup } from "@/components/ui/ToggleGroup";
 import type { TVCandle, TVVolume } from "@/lib/transformers";
 import { ChartPanelFrame } from "@/components/charts/ChartPanelFrame";
 import { useMarketEvents } from "@/lib/useMarketEvents";
+import { EventFilter } from "@/components/charts/EventFilter";
 
 interface OHLCVChartCardProps {
   title: string;
@@ -65,11 +66,22 @@ export function OHLCVChartCard({
 }: OHLCVChartCardProps) {
   const hasToggle = Boolean(timeframe && timeframeOptions && onTimeframeChange);
 
-  // Default on: the lines exist to be noticed, and a marker you have to go and enable is a
-  // marker you forget is available. The toggle is here because a chart crowded with context
-  // is worth being able to clear back to bare price.
-  const [showEvents, setShowEvents] = useState(true);
-  const { events, lines } = useMarketEvents();
+  const { lines } = useMarketEvents();
+
+  const categoryLegend = useMemo(() => {
+    const byKey = new Map<string, { label: string; color: string; count: number }>();
+    for (const line of lines) {
+      const label = line.categoryLabel ?? "Events";
+      const key = `${label}|${line.color}`;
+      const existing = byKey.get(key);
+      if (existing) {
+        existing.count += 1;
+      } else {
+        byKey.set(key, { label, color: line.color, count: 1 });
+      }
+    }
+    return Array.from(byKey.entries()).map(([key, entry]) => ({ key, ...entry }));
+  }, [lines]);
 
   return (
     <ChartPanelFrame
@@ -93,39 +105,23 @@ export function OHLCVChartCard({
             options={timeframeOptions!}
           />
         ) : null}
-        {lines.length > 0 ? (
-          <button
-            type="button"
-            onClick={() => setShowEvents((shown) => !shown)}
-            aria-pressed={showEvents}
-            data-testid="chart-events-toggle"
-            className={`rounded-[var(--radius-sm)] border px-3 py-1 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--state-info)] ${
-              showEvents
-                ? "border-[var(--state-warning)] text-[var(--state-warning)]"
-                : "border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text-primary)]"
-            }`}
-          >
-            Market events
-          </button>
-        ) : null}
+        <EventFilter testId="chart-events-filter" />
         {actions}
       </div>
-      {/* The lines are canvas pixels, so assistive tech cannot see them at all and a sighted
-          reader has nothing telling them what an unlabelled vertical line means. The same
-          list serves as the legend and as the only textual record of what is drawn. */}
-      {showEvents && events.length > 0 ? (
-        <div
-          data-testid="chart-events-legend"
-          className="mt-3 flex flex-wrap gap-2 text-xs text-[var(--text-muted)]"
-        >
-          {events.map((event) => (
+      {/* Canvas lines are invisible to assistive tech and unlabelled to a sighted reader; this list
+          is their legend and the only textual record of what is drawn -- the tooltip gives each
+          event's detail. */}
+      {categoryLegend.length > 0 ? (
+        <div data-testid="chart-events-legend" className="mt-3 flex flex-wrap gap-2 text-xs text-[var(--text-muted)]">
+          {categoryLegend.map((entry) => (
             <span
-              key={event.id}
+              key={entry.key}
+              data-testid="chart-events-legend-item"
               className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] px-2 py-1"
-              title={event.note || undefined}
+              title={`${entry.count} event(s) in this category`}
             >
-              <span className="h-2.5 w-2.5 rounded-full bg-[var(--state-warning)]" />
-              {event.label} · {event.start_date}
+              <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: entry.color }} />
+              {entry.label}
             </span>
           ))}
         </div>
@@ -136,7 +132,6 @@ export function OHLCVChartCard({
         <TVChart
           data={data}
           events={lines}
-          showEvents={showEvents}
           eventGranularity={eventGranularity}
           volumeData={volumeData}
           lineSeriesData={lineSeriesData}
