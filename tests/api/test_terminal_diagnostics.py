@@ -10,6 +10,8 @@ merely asserted.
 """
 
 import inspect
+import json
+from pathlib import Path
 
 import pytest
 
@@ -19,25 +21,39 @@ from apps.api.services.corporate_dcf import build_dcf_full_report
 from packages.core_finance.terminal_growth import SAFETY_MARGIN, TERMINAL_GROWTH_CEILING
 
 
-def _watchlist_tickers(limit: int | None = None) -> list[str]:
-    """Real watchlist tickers, without opening `data/processed/moneyview.db`.
+def _watchlist_tickers(limit: int | None = None, json_path: Path | None = None) -> list[str]:
+    """Watchlist tickers, without opening `data/processed/moneyview.db`.
 
     tests/conftest.py's `_forbid_the_real_database` fixture (and `tests/__init__.py`'s
     same refusal armed at import time) refuse any connection to that file -- deliberately,
     after the 2026-09-03 incident recorded in ERROR-LOG.md. `ensure_watchlist_bootstrapped`
-    loads the identical ticker roster from the checked-in
-    `apps/api/services/webscrap/stock_targets.json` seed into this test's isolated
-    database, so the sweep below still exercises the real watchlist.
+    loads a ticker roster into this test's isolated database, so the sweep below still
+    exercises a real watchlist shape.
+
+    `json_path` defaults to the checked-in `stock_targets.json` seed (now a 5-ticker
+    neutral starter list per spec §3); pass a test's own seed file for a sweep that needs
+    a specific ticker count, so the assertion never depends on the committed seed's size.
     """
     from apps.api.services import db as db_service
     from apps.api.services.watchlist_seed import ensure_watchlist_bootstrapped
 
-    ensure_watchlist_bootstrapped(corporate_route._WATCHLIST_JSON)
+    ensure_watchlist_bootstrapped(json_path or corporate_route._WATCHLIST_JSON)
     query = "SELECT ticker FROM watchlist ORDER BY ticker"
     if limit is not None:
         query += f" LIMIT {int(limit)}"
     with db_service.get_db() as conn:
         return [row["ticker"] for row in conn.execute(query)]
+
+
+def _write_large_synthetic_seed(path: Path, count: int = 60) -> None:
+    """A seed of `count` synthetic tickers, independent of the committed seed and of any
+    personal list -- large enough that `checked > 50` below is never at the mercy of how
+    many tickers the committed seed happens to hold."""
+    targets = [
+        {"ticker": f"ZSYN{i:04d}", "name": f"Synthetic {i}", "sector": "Technology", "weight": 0.0}
+        for i in range(count)
+    ]
+    path.write_text(json.dumps({"custom": {"targets": targets}}), encoding="utf-8")
 
 
 def _report(ticker: str = "AAPL"):
@@ -108,7 +124,7 @@ def _seed_floor_ticker(ticker: str) -> None:
         )
 
 
-def test_the_reported_constraint_and_spread_describe_the_same_number():
+def test_the_reported_constraint_and_spread_describe_the_same_number(tmp_path):
     """The two fields are computed by different paths; they must agree on every ticker.
 
     They did not. `derive_terminal_growth` modelled three bounds while the computation
@@ -116,10 +132,17 @@ def test_the_reported_constraint_and_spread_describe_the_same_number():
     the named constraint implied another. 8 watchlist tickers were affected -- ALGM, DNN,
     LGO, MXL, OXY, RGTI, SGML, STEM -- and none of the tests noticed, because no fixture
     grew below -0.1.
+
+    The sweep below needs more than 50 valued tickers to be a real sweep (see the
+    `checked > 50` assertion). It uses its own synthetic seed rather than the committed
+    `stock_targets.json` -- now a 5-ticker neutral starter list per spec §3 -- so this
+    test's strength never depends on how many tickers the public seed happens to hold.
     """
     from packages.core_finance.terminal_growth import derive_terminal_growth
 
-    tickers = _watchlist_tickers()
+    seed_path = tmp_path / "stock_targets.json"
+    _write_large_synthetic_seed(seed_path)
+    tickers = _watchlist_tickers(json_path=seed_path)
     _seed_floor_ticker("ZFLOOR")
     tickers = tickers + ["ZFLOOR"]
 
