@@ -54,6 +54,17 @@ def test_the_payload_is_replaced_whole_never_merged_field_by_field():
         "a segment removed on the winning PC must not survive from the losing copy"
 
 
+def test_a_losing_records_extra_top_level_key_does_not_survive():
+    loser = rec(name="A")
+    loser.payload["stale_section"] = {"x": 1}
+    winner = rec(ts="2026-09-20T10:05:00.000Z", name="A")
+
+    merged = merge_record_states([state([loser]), state([winner])])
+
+    assert merged.records[(CASE, "u1")].payload == winner.payload
+    assert "stale_section" not in merged.records[(CASE, "u1")].payload
+
+
 def test_a_newer_remote_removal_deletes_an_older_local_record():
     merged = merge_record_states([state([rec(ts="2026-09-20T10:00:00.000Z")]),
                                   state(removed=[tomb(ts="2026-09-20T10:00:00.001Z")])])
@@ -78,6 +89,17 @@ def test_an_equal_timestamp_is_decided_by_the_larger_author():
     a = rec(by="PC-A-0001", name="zz-from-a")   # content alone would pick this one
     c = rec(by="PC-C-0003", name="from-c")
     assert merge_record_states([state([a]), state([c])]).records[(CASE, "u1")].payload["case"]["case_name"] == "from-c"
+
+
+def test_an_exact_tie_is_broken_by_the_larger_canonical_payload():
+    a = rec(ts="2026-09-20T10:00:00.000Z", by="PC-A-0001", name="aaa")
+    z = rec(ts="2026-09-20T10:00:00.000Z", by="PC-A-0001", name="zzz")
+
+    assert merge_record_states([state([a]), state([z])]).records[(CASE, "u1")].payload["case"]["case_name"] == "zzz"
+
+    winners = {merge_record_states(state([v]) for v in order).records[(CASE, "u1")].payload["case"]["case_name"]
+               for order in itertools.permutations([a, z])}
+    assert winners == {"zzz"}
 
 
 def test_the_same_uid_in_two_kinds_is_two_records():
