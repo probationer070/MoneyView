@@ -301,7 +301,7 @@ git commit -m "feat(records-sync): stable record ids and the record_sync bookkee
 - Produces:
   - `kinds.KIND_VALUATION_CASE`, `KIND_DECISION`, `KIND_USER_EVENT`, `KIND_CATEGORY`,
     `KIND_VISIBILITY`, `KIND_PREFERENCES`, and `KINDS: dict[str, Kind]`
-  - `Kind(name, table, uid_column, columns, child_specs, natural_key)`
+  - `Kind(name, table, uid_column, columns, generates_uid, natural_key, children, singleton_uid)`
   - `merge.Record(kind, uid, updated_at, updated_by, payload)` with `.add_key()` and `.order_key()`
   - `merge.RecordTombstone(kind, uid, removed_at, removed_by)` with `.remove_key()`
   - `merge.RecordState(records: dict[tuple[str, str], Record], removed: dict[tuple[str, str], RecordTombstone])`
@@ -1109,10 +1109,12 @@ def _case_payload(name="Case", segments=("core",)):
 
 
 def _insert_local_case(conn, name="Local"):
+    # Every NOT NULL column that has no default: case_name, as_of_date, base_year, target_year,
+    # riskfree_rate, wacc_initial, wacc_stable, marginal_tax_rate, roic_stable, shares_basic.
     cursor = conn.execute("INSERT INTO valuation_case (case_name, as_of_date, base_year, target_year, "
                           "riskfree_rate, wacc_initial, wacc_stable, wacc_converge_from, "
-                          "marginal_tax_rate, roic_stable, terminal_growth) "
-                          "VALUES (?, '2026-01-01', 2026, 2031, 0.03, 0.09, 0.08, 5, 0.21, 0.12, 0.02)",
+                          "marginal_tax_rate, roic_stable, terminal_growth, shares_basic) "
+                          "VALUES (?, '2026-01-01', 2026, 2031, 0.03, 0.09, 0.08, 5, 0.21, 0.12, 0.02, 10.0)",
                           (name,))
     return int(cursor.lastrowid)
 
@@ -1142,8 +1144,9 @@ def test_read_local_state_builds_the_whole_case_tree():
     with get_db() as conn:
         case_id = _insert_local_case(conn, "Tree")
         segment = conn.execute("INSERT INTO segment (case_id, name, base_revenue, base_margin, margin_target, "
-                               "sales_to_capital_early, ramp_start_year, initial_growth, waypoint_gap_fraction) "
-                               "VALUES (?, 'core', 100.0, 0.2, 0.25, 2.0, 1, 0.2, 0.5)", (case_id,))
+                               "sales_to_capital_early, sales_to_capital_late, ramp_start_year, "
+                               "initial_growth, waypoint_gap_fraction) "
+                               "VALUES (?, 'core', 100.0, 0.2, 0.25, 2.0, 2.5, 1, 0.2, 0.5)", (case_id,))
         conn.execute("INSERT INTO segment_narrative (segment_id, input_field, claim, confidence, three_p) "
                      "VALUES (?, 'revenue_target', 'why', 'assumed', 'plausible')", (int(segment.lastrowid),))
         store.backfill_uids(conn)
