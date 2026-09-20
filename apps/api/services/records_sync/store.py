@@ -255,6 +255,7 @@ def apply_state(conn: sqlite3.Connection, state: RecordState) -> list[str]:
         renamed.extend(kind_renames)
 
         to_insert: dict[str, dict] = {}
+        existing: set[str] = set()
         for uid, record in incoming.items():
             payload = _with_natural_key(kind, record.payload, resolved[uid]) if uid in resolved else record.payload
             local_row = _local_row(conn, kind, uid)
@@ -262,6 +263,8 @@ def apply_state(conn: sqlite3.Connection, state: RecordState) -> list[str]:
             if local_payload == payload:
                 continue
             to_insert[uid] = payload
+            if local_row is not None:
+                existing.add(uid)
 
         # Two passes, not one uid at a time: a natural_key value can MOVE between two surviving
         # uids (X="Alpha" -> "Beta", Y="Beta" -> "Gamma") without ever clashing within the
@@ -269,7 +272,7 @@ def apply_state(conn: sqlite3.Connection, state: RecordState) -> list[str]:
         # X inserted first collides with Y's still-present old value. Deleting every row that is
         # about to be rewritten first, before any insert, removes that ordering dependence.
         for uid in to_insert:
-            if _local_row(conn, kind, uid) is not None:
+            if uid in existing:
                 _delete_by_uid(conn, kind, uid)
         for uid, payload in to_insert.items():
             _insert_record(conn, kind, uid, payload)

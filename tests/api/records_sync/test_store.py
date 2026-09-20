@@ -383,19 +383,43 @@ def test_apply_state_upserts_the_singleton_preferences_row_in_place():
     assert (rows[0]["total_investment_amount"], rows[0]["transaction_fee_rate"]) == (9000.0, 0.002)
 
 
+def _category_payload(category_id, label):
+    return {"id": category_id, "kind": "user", "label": label, "color": "#fff",
+            "created_at": "2026-01-01T00:00:00.000Z"}
+
+
 def test_apply_state_inserts_and_deletes_an_event_category_under_its_own_id():
-    payload = {"id": "cat-x", "kind": "user", "label": "Cat X", "color": "#fff",
-               "created_at": "2026-01-01T00:00:00.000Z"}
+    # Two rows, not one: asserting COUNT(*) == 0 with only ever one row in the table would pass
+    # identically for a delete that lost its uid scoping and truncated the whole table.
     with get_db() as conn:
         store.apply_state(conn, RecordState(records={
-            ("event_category", "cat-x"): Record("event_category", "cat-x", TS, "PC-B-0002", payload)}))
+            ("event_category", "cat-x"): Record("event_category", "cat-x", TS, "PC-B-0002",
+                                                 _category_payload("cat-x", "Cat X")),
+            ("event_category", "cat-y"): Record("event_category", "cat-y", TS, "PC-B-0002",
+                                                 _category_payload("cat-y", "Cat Y")),
+        }))
         row = conn.execute("SELECT id, label FROM event_category WHERE id = 'cat-x'").fetchone()
         assert row is not None and row["label"] == "Cat X"
+        y_rowid_before = conn.execute(
+            "SELECT rowid FROM event_category WHERE id = 'cat-y'"
+        ).fetchone()[0]
 
-        store.apply_state(conn, RecordState())
-        count = conn.execute("SELECT COUNT(*) FROM event_category").fetchone()[0]
+        # cat-y's payload is unchanged from the first call, so a correctly scoped delete leaves
+        # its row untouched (rowid stable) -- values alone cannot tell "untouched" apart from
+        # "deleted and immediately recreated with the same content", which is why this second
+        # call also checks the physical row identity, not just what a SELECT shows afterwards.
+        store.apply_state(conn, RecordState(records={
+            ("event_category", "cat-y"): Record("event_category", "cat-y", TS, "PC-B-0002",
+                                                 _category_payload("cat-y", "Cat Y"))}))
+        remaining = conn.execute("SELECT id, label FROM event_category").fetchall()
+        y_rowid_after = conn.execute(
+            "SELECT rowid FROM event_category WHERE id = 'cat-y'"
+        ).fetchone()[0]
 
-    assert count == 0, "a category absent from the merged state must be deleted"
+    assert [(r["id"], r["label"]) for r in remaining] == [("cat-y", "Cat Y")], \
+        "cat-x (absent from the merged state) must be deleted, cat-y must survive untouched"
+    assert y_rowid_after == y_rowid_before, \
+        "cat-y's own row must never be deleted, even transiently, by a delete scoped to cat-x"
 
 
 def test_apply_state_inserts_an_event_category_visibility_row_under_category_id():
