@@ -32,11 +32,18 @@ class ChildSpec:
 class Kind:
     name: str
     table: str
-    uid_column: str          # the column holding the record's cross-PC identity
-    columns: tuple[str, ...]  # payload columns, excluding local ids and the uid
+    uid_column: str          # the LOCAL column used to locate the row (see singleton_uid below)
+    # payload columns, excluding local ids. A kind whose identity is natural -- generates_uid is
+    # False and it is not a singleton -- carries its own identity column here, because that value
+    # must be written on insert. A kind with generates_uid=True does not: sync_uid is generated,
+    # not payload.
+    columns: tuple[str, ...]
     generates_uid: bool = False   # True: a new row needs a generated sync_uid
     natural_key: str | None = None  # a UNIQUE column that two PCs can collide on (spec §5)
     children: tuple[ChildSpec, ...] = ()
+    # When set, this is the record's cross-PC identity INSTEAD of uid_column, and the table holds
+    # exactly one row: found locally by uid_column (e.g. "singleton_id = 1"), identified across
+    # PCs by this fixed string.
     singleton_uid: str | None = None
 
 
@@ -103,6 +110,8 @@ KINDS: dict[str, Kind] = {
     KIND_PREFERENCES: Kind(
         name=KIND_PREFERENCES,
         table="portfolio_preferences",
+        # The row is found locally by singleton_id = 1; it is identified across PCs by
+        # singleton_uid below, not by uid_column.
         uid_column="singleton_id",
         columns=("total_investment_amount", "transaction_fee_rate", "updated_at"),
         singleton_uid="portfolio_preferences",
