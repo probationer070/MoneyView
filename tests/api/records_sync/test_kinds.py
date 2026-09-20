@@ -51,3 +51,33 @@ def test_the_uid_column_is_a_payload_column_only_when_the_identity_is_natural():
             assert kind.uid_column not in kind.columns, name
         elif kind.singleton_uid is None:
             assert kind.uid_column in kind.columns, name
+
+
+def test_every_real_column_is_declared_or_explicitly_excluded():
+    # The registry is otherwise checked in one direction only (every declared column exists in
+    # the schema). This is the reverse check: a real column added to one of these tables later,
+    # but not added here, would otherwise silently never sync, with no test failing.
+    excluded = {
+        "id",              # surrogate local primary key (valuation_case, investment_decision, user_event, segment)
+        "sync_uid",        # generated cross-PC identity, written by backfill_uids -- not a payload column
+        "case_id",         # segment's local parent pointer
+        "segment_id",      # segment_narrative's local parent pointer
+        "parent_case_id",  # valuation_case's local fork-provenance pointer; never travels (spec §1)
+        "singleton_id",    # portfolio_preferences' local row locator; singleton_uid is the real identity
+    }
+
+    def _check(conn, table, declared):
+        columns = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
+        undeclared = columns - declared - excluded
+        assert not undeclared, f"{table} has undeclared columns {undeclared}"
+
+    def _check_child(conn, child):
+        _check(conn, child.table, set(child.columns))
+        for grandchild in child.children:
+            _check_child(conn, grandchild)
+
+    with get_db() as conn:
+        for kind in KINDS.values():
+            _check(conn, kind.table, set(kind.columns))
+            for child in kind.children:
+                _check_child(conn, child)

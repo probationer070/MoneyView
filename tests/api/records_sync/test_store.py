@@ -96,3 +96,159 @@ def test_each_synced_table_has_a_unique_index_on_sync_uid_alone():
                 and [r["name"] for r in conn.execute(f"PRAGMA index_info({index['name']})")] == ["sync_uid"]
             ]
             assert matching, f"{table} has no unique index on sync_uid alone: {indexes}"
+
+
+from apps.api.services.peer_sync.model import BASELINE_TS
+from apps.api.services.records_sync import store
+from apps.api.services.records_sync.merge import Record, RecordState, RecordTombstone
+
+PC = "PC-ME-00ff"
+TS = "2026-09-20T10:00:00.000Z"
+
+
+def _case_payload(name="Case", segments=("core",)):
+    return {
+        "case": {"case_name": name, "ticker": "AAPL", "as_of_date": "2026-01-01", "base_year": 2026,
+                 "target_year": 2031, "riskfree_rate": 0.03, "wacc_initial": 0.09,
+                 "wacc_stable": 0.08, "wacc_converge_from": 5, "marginal_tax_rate": 0.21,
+                 "nol_balance": 0.0, "roic_stable": 0.12, "terminal_growth": 0.02,
+                 "effective_tax_rate": 0.18, "cash": 1.0, "debt": 0.0, "ipo_proceeds": 0.0,
+                 "shares_basic": 10.0, "shares_new": 0.0},
+        "segments": [{"name": s, "base_revenue": 100.0, "base_margin": 0.2, "tam_target": None,
+                      "market_share_target": None, "revenue_target": 200.0, "margin_target": 0.25,
+                      "sales_to_capital_early": 2.0, "sales_to_capital_late": 2.5,
+                      "ramp_start_year": 1, "initial_growth": 0.2, "waypoint_gap_fraction": 0.5,
+                      "narratives": [{"input_field": "revenue_target", "claim": f"why {s}",
+                                      "evidence_source": None, "confidence": "assumed",
+                                      "three_p": "plausible"}]}
+                     for s in segments],
+    }
+
+
+def _insert_local_case(conn, name="Local"):
+    # Every NOT NULL column that has no default: case_name, as_of_date, base_year, target_year,
+    # riskfree_rate, wacc_initial, wacc_stable, marginal_tax_rate, roic_stable, shares_basic.
+    cursor = conn.execute("INSERT INTO valuation_case (case_name, as_of_date, base_year, target_year, "
+                          "riskfree_rate, wacc_initial, wacc_stable, wacc_converge_from, "
+                          "marginal_tax_rate, roic_stable, terminal_growth, shares_basic) "
+                          "VALUES (?, '2026-01-01', 2026, 2031, 0.03, 0.09, 0.08, 5, 0.21, 0.12, 0.02, 10.0)",
+                          (name,))
+    return int(cursor.lastrowid)
+
+
+def test_backfill_gives_every_row_a_uid_once(tmp_path):
+    with get_db() as conn:
+        _insert_local_case(conn, "One")
+        _insert_local_case(conn, "Two")
+        assert store.backfill_uids(conn) == 2
+        uids = [r["sync_uid"] for r in conn.execute("SELECT sync_uid FROM valuation_case ORDER BY id")]
+        assert all(uids) and len(set(uids)) == 2
+        assert store.backfill_uids(conn) == 0, "a second run must not re-issue uids"
+        again = [r["sync_uid"] for r in conn.execute("SELECT sync_uid FROM valuation_case ORDER BY id")]
+        assert again == uids
+
+
+def test_first_sync_stamps_unstamped_records_with_the_baseline():
+    with get_db() as conn:
+        _insert_local_case(conn, "One")
+        store.backfill_uids(conn)
+        store.ensure_first_sync(conn, PC)
+        row = conn.execute("SELECT updated_at, updated_by FROM record_sync WHERE kind = 'valuation_case'").fetchone()
+    assert (row["updated_at"], row["updated_by"]) == (BASELINE_TS, PC)
+
+
+def test_read_local_state_builds_the_whole_case_tree():
+    with get_db() as conn:
+        case_id = _insert_local_case(conn, "Tree")
+        segment = conn.execute("INSERT INTO segment (case_id, name, base_revenue, base_margin, margin_target, "
+                               "sales_to_capital_early, sales_to_capital_late, ramp_start_year, "
+                               "initial_growth, waypoint_gap_fraction) "
+                               "VALUES (?, 'core', 100.0, 0.2, 0.25, 2.0, 2.5, 1, 0.2, 0.5)", (case_id,))
+        conn.execute("INSERT INTO segment_narrative (segment_id, input_field, claim, confidence, three_p) "
+                     "VALUES (?, 'revenue_target', 'why', 'assumed', 'plausible')", (int(segment.lastrowid),))
+        store.backfill_uids(conn)
+        store.ensure_first_sync(conn, PC)
+        state = store.read_local_state(conn)
+
+    [record] = [r for r in state.records.values() if r.kind == "valuation_case"]
+    assert record.payload["case"]["case_name"] == "Tree"
+    assert [s["name"] for s in record.payload["segments"]] == ["core"]
+    assert record.payload["segments"][0]["narratives"][0]["claim"] == "why"
+    assert "id" not in record.payload["case"] and "case_id" not in record.payload["segments"][0]
+
+
+def test_apply_state_inserts_a_peer_case_with_local_ids_and_no_orphans():
+    incoming = Record("valuation_case", "peer-uid", TS, "PC-B-0002", _case_payload("Peer", ("a", "b")))
+    with get_db() as conn:
+        store.apply_state(conn, RecordState(records={("valuation_case", "peer-uid"): incoming}))
+        case = conn.execute("SELECT id, case_name, sync_uid FROM valuation_case").fetchone()
+        segments = conn.execute("SELECT id, case_id, name FROM segment ORDER BY name").fetchall()
+        narratives = conn.execute("SELECT segment_id FROM segment_narrative").fetchall()
+
+    assert (case["case_name"], case["sync_uid"]) == ("Peer", "peer-uid")
+    assert [s["name"] for s in segments] == ["a", "b"]
+    assert {s["case_id"] for s in segments} == {case["id"]}
+    assert {n["segment_id"] for n in narratives} == {s["id"] for s in segments}
+
+
+def test_apply_state_replaces_the_whole_tree_dropping_a_removed_segment():
+    with get_db() as conn:
+        store.apply_state(conn, RecordState(records={
+            ("valuation_case", "u"): Record("valuation_case", "u", TS, "PC-B-0002", _case_payload("C", ("a", "b")))}))
+        store.apply_state(conn, RecordState(records={
+            ("valuation_case", "u"): Record("valuation_case", "u", "2026-09-20T10:05:00.000Z", "PC-B-0002",
+                                            _case_payload("C", ("a",)))}))
+        names = [r["name"] for r in conn.execute("SELECT name FROM segment")]
+        assert names == ["a"]
+        assert conn.execute("SELECT COUNT(*) FROM segment_narrative").fetchone()[0] == 1
+
+
+def test_apply_state_deletes_a_record_absent_from_the_merged_state():
+    with get_db() as conn:
+        store.apply_state(conn, RecordState(records={
+            ("valuation_case", "u"): Record("valuation_case", "u", TS, "PC-B-0002", _case_payload("Gone"))}))
+        store.apply_state(conn, RecordState(
+            removed={("valuation_case", "u"): RecordTombstone("valuation_case", "u", "2026-09-20T11:00:00.000Z", "PC-B-0002")}))
+        assert conn.execute("SELECT COUNT(*) FROM valuation_case").fetchone()[0] == 0
+        tomb = conn.execute("SELECT removed_at FROM record_sync WHERE uid = 'u'").fetchone()
+    assert tomb["removed_at"] == "2026-09-20T11:00:00.000Z"
+
+
+def test_an_unchanged_record_is_not_rewritten():
+    record = Record("valuation_case", "u", TS, "PC-B-0002", _case_payload("Same"))
+    with get_db() as conn:
+        store.apply_state(conn, RecordState(records={("valuation_case", "u"): record}))
+        before = conn.execute("SELECT id FROM valuation_case").fetchone()["id"]
+        store.apply_state(conn, RecordState(records={("valuation_case", "u"): record}))
+        after = conn.execute("SELECT id FROM valuation_case").fetchone()["id"]
+    assert after == before, "re-applying an identical record must not delete and re-insert it"
+
+
+def test_a_name_clash_between_two_uids_renames_the_older_and_reports_it():
+    older = Record("valuation_case", "old-uid", TS, "PC-A-0001", _case_payload("Shared"))
+    newer = Record("valuation_case", "new-uid", "2026-09-20T10:05:00.000Z", "PC-B-0002", _case_payload("Shared"))
+    with get_db() as conn:
+        renamed = store.apply_state(conn, RecordState(records={
+            ("valuation_case", "old-uid"): older, ("valuation_case", "new-uid"): newer}))
+        rows = {r["sync_uid"]: r["case_name"] for r in conn.execute("SELECT sync_uid, case_name FROM valuation_case")}
+        stamps = {r["uid"]: r["updated_at"] for r in conn.execute("SELECT uid, updated_at FROM record_sync")}
+
+    assert rows["new-uid"] == "Shared"
+    assert rows["old-uid"].startswith("Shared (from ")
+    assert renamed and "Shared" in renamed[0]
+    assert stamps["old-uid"] == TS, "a local repair must not restamp the record as a new authored change"
+
+
+def test_stamp_and_record_removal_use_this_pc_and_outrank_what_they_replace():
+    with get_db() as conn:
+        store.stamp(conn, "user_event", "u1", PC)
+        first = conn.execute("SELECT updated_at FROM record_sync WHERE uid = 'u1'").fetchone()["updated_at"]
+        conn.execute("UPDATE record_sync SET updated_at = '2099-01-01T00:00:00.000Z' WHERE uid = 'u1'")
+        store.stamp(conn, "user_event", "u1", PC)
+        second = conn.execute("SELECT updated_at FROM record_sync WHERE uid = 'u1'").fetchone()["updated_at"]
+        store.record_removal(conn, "user_event", "u1", PC)
+        row = conn.execute("SELECT removed_at, removed_by FROM record_sync WHERE uid = 'u1'").fetchone()
+
+    assert first > BASELINE_TS
+    assert second > "2099-01-01T00:00:00.000Z", "a local edit must outrank a peer stamp from an ahead clock"
+    assert row["removed_at"] > second and row["removed_by"] == PC
