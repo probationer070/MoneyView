@@ -92,16 +92,24 @@ def _payload_of_row(conn: sqlite3.Connection, kind: Kind, row: sqlite3.Row) -> d
 
 
 def read_local_state(conn: sqlite3.Connection) -> RecordState:
-    """The local database, shaped as a RecordState. A row whose record_sync entry has removed_at
-    set is a tombstone, not a record -- it is skipped here and picked up in the removed pass."""
+    """The local database, shaped as a RecordState. record_sync can hold both an add and a remove
+    for the same (kind, uid) at once (a re-add locally, or a merged state where an add newer than
+    its tombstone kept the record while the tombstone -- ineffective or not -- is kept too, spec
+    §5). Presence is decided by comparing keys, the same rule merge.py uses: a record is present
+    unless its remove_key is strictly greater than its add_key -- never by "removed_at is not
+    null" alone, which would treat every re-added-after-delete record as absent."""
     records: dict[tuple[str, str], Record] = {}
     for kind in KINDS.values():
         for uid, row in _local_rows(conn, kind):
             sync = conn.execute(
-                "SELECT updated_at, updated_by, removed_at FROM record_sync WHERE kind = ? AND uid = ?",
+                "SELECT updated_at, updated_by, removed_at, removed_by FROM record_sync WHERE kind = ? AND uid = ?",
                 (kind.name, uid),
             ).fetchone()
-            if sync is None or sync["removed_at"] is not None:
+            if sync is None or sync["updated_at"] is None:
+                continue
+            add_key = (sync["updated_at"], sync["updated_by"])
+            remove_key = (sync["removed_at"], sync["removed_by"]) if sync["removed_at"] is not None else None
+            if remove_key is not None and remove_key > add_key:
                 continue
             records[(kind.name, uid)] = Record(
                 kind.name, uid, sync["updated_at"], sync["updated_by"], _payload_of_row(conn, kind, row)
@@ -204,17 +212,27 @@ def _insert_record(conn: sqlite3.Connection, kind: Kind, uid: str, payload: dict
     )
 
 
-def _upsert_record_sync(
-    conn: sqlite3.Connection, kind: str, uid: str,
-    updated_at: str | None, updated_by: str | None, removed_at: str | None, removed_by: str | None,
-) -> None:
+def _upsert_added(conn: sqlite3.Connection, kind: str, uid: str, updated_at: str, updated_by: str) -> None:
+    """Write the add half of record_sync only. Never touches removed_at/removed_by: a present
+    record can also carry a tombstone (an add newer than its tombstone, or a local re-add), and
+    that tombstone must survive to be republished (spec §5 keeps every tombstone)."""
     conn.execute(
-        """INSERT INTO record_sync (kind, uid, updated_at, updated_by, removed_at, removed_by)
-           VALUES (?, ?, ?, ?, ?, ?)
+        """INSERT INTO record_sync (kind, uid, updated_at, updated_by) VALUES (?, ?, ?, ?)
            ON CONFLICT(kind, uid) DO UPDATE SET updated_at = excluded.updated_at,
-               updated_by = excluded.updated_by, removed_at = excluded.removed_at,
+               updated_by = excluded.updated_by""",
+        (kind, uid, updated_at, updated_by),
+    )
+
+
+def _upsert_removed(conn: sqlite3.Connection, kind: str, uid: str, removed_at: str, removed_by: str) -> None:
+    """Write the remove half of record_sync only. Never touches updated_at/updated_by, for the
+    same reason: a tombstone older than the record it was applied alongside must not erase that
+    record's stamp."""
+    conn.execute(
+        """INSERT INTO record_sync (kind, uid, removed_at, removed_by) VALUES (?, ?, ?, ?)
+           ON CONFLICT(kind, uid) DO UPDATE SET removed_at = excluded.removed_at,
                removed_by = excluded.removed_by""",
-        (kind, uid, updated_at, updated_by, removed_at, removed_by),
+        (kind, uid, removed_at, removed_by),
     )
 
 
@@ -246,9 +264,9 @@ def apply_state(conn: sqlite3.Connection, state: RecordState) -> list[str]:
             _insert_record(conn, kind, uid, payload)
 
     for (kind_name, uid), record in state.records.items():
-        _upsert_record_sync(conn, kind_name, uid, record.updated_at, record.updated_by, None, None)
+        _upsert_added(conn, kind_name, uid, record.updated_at, record.updated_by)
     for (kind_name, uid), tomb in state.removed.items():
-        _upsert_record_sync(conn, kind_name, uid, None, None, tomb.removed_at, tomb.removed_by)
+        _upsert_removed(conn, kind_name, uid, tomb.removed_at, tomb.removed_by)
 
     return renamed
 
@@ -264,26 +282,18 @@ def _causal_stamp(conn: sqlite3.Connection, kind: str, uid: str) -> str:
 
 
 def stamp(conn: sqlite3.Connection, kind: str, uid: str, pc_id: str) -> None:
-    """Record a local add/edit of (kind, uid). Clears removed_at/removed_by: a re-add is not a
-    deletion."""
-    conn.execute(
-        """INSERT INTO record_sync (kind, uid, updated_at, updated_by, removed_at, removed_by)
-           VALUES (?, ?, ?, ?, NULL, NULL)
-           ON CONFLICT(kind, uid) DO UPDATE SET updated_at = excluded.updated_at,
-               updated_by = excluded.updated_by, removed_at = NULL, removed_by = NULL""",
-        (kind, uid, _causal_stamp(conn, kind, uid), pc_id),
-    )
+    """Record a local add/edit of (kind, uid). Does not clear removed_at/removed_by: a local
+    re-add already outranks its own tombstone by key (the causal stamp's `after` is the greater
+    of the record's and the tombstone's current stamp), and the tombstone must survive to be
+    republished (spec §5 keeps every tombstone, including ones a newer add makes ineffective)."""
+    _upsert_added(conn, kind, uid, _causal_stamp(conn, kind, uid), pc_id)
 
 
 def record_removal(conn: sqlite3.Connection, kind: str, uid: str, pc_id: str) -> None:
     """Call before (or after) deleting the local row: the tombstone outranks the version being
-    removed, even when that version came from a peer whose clock runs ahead of this PC's."""
-    conn.execute(
-        """INSERT INTO record_sync (kind, uid, removed_at, removed_by) VALUES (?, ?, ?, ?)
-           ON CONFLICT(kind, uid) DO UPDATE SET removed_at = excluded.removed_at,
-               removed_by = excluded.removed_by""",
-        (kind, uid, _causal_stamp(conn, kind, uid), pc_id),
-    )
+    removed, even when that version came from a peer whose clock runs ahead of this PC's. Does
+    not touch updated_at/updated_by, for the same reason `stamp` does not touch removed_at/by."""
+    _upsert_removed(conn, kind, uid, _causal_stamp(conn, kind, uid), pc_id)
 
 
 def uid_of(conn: sqlite3.Connection, kind: str, local_id) -> str | None:

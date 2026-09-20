@@ -252,3 +252,63 @@ def test_stamp_and_record_removal_use_this_pc_and_outrank_what_they_replace():
     assert first > BASELINE_TS
     assert second > "2099-01-01T00:00:00.000Z", "a local edit must outrank a peer stamp from an ahead clock"
     assert row["removed_at"] > second and row["removed_by"] == PC
+
+
+def _event_payload(label="Event"):
+    return {"label": label, "category": "fomc", "start_date": "2026-01-01", "end_date": None,
+            "source": None, "note": "", "created_at": "2026-01-01T00:00:00.000Z"}
+
+
+def test_apply_state_keeps_a_record_and_its_older_tombstone_side_by_side():
+    # A merge can legitimately return both: an add newer than its own tombstone keeps the
+    # record present, but every tombstone is kept regardless (spec S5), including one a newer
+    # add has made ineffective. Both halves of record_sync must survive the apply.
+    record = Record("user_event", "u1", "2026-09-20T12:00:00.000Z", "PC-A-0001", _event_payload("Kept"))
+    tomb = RecordTombstone("user_event", "u1", "2026-09-20T11:00:00.000Z", "PC-B-0002")
+    with get_db() as conn:
+        store.apply_state(conn, RecordState(
+            records={("user_event", "u1"): record}, removed={("user_event", "u1"): tomb}))
+        sync = conn.execute(
+            "SELECT updated_at, updated_by, removed_at, removed_by FROM record_sync WHERE uid = 'u1'"
+        ).fetchone()
+        exists = conn.execute("SELECT COUNT(*) FROM user_event WHERE sync_uid = 'u1'").fetchone()[0]
+        state = store.read_local_state(conn)
+
+    assert (sync["updated_at"], sync["updated_by"]) == ("2026-09-20T12:00:00.000Z", "PC-A-0001")
+    assert (sync["removed_at"], sync["removed_by"]) == ("2026-09-20T11:00:00.000Z", "PC-B-0002")
+    assert exists == 1, "the record row must still exist locally"
+    assert ("user_event", "u1") in state.records, "an add newer than its own tombstone is present"
+    assert ("user_event", "u1") in state.removed, "the ineffective tombstone must still be kept"
+
+
+def test_local_delete_then_re_add_keeps_the_tombstone_and_the_record_outranks_it():
+    with get_db() as conn:
+        conn.execute("INSERT INTO user_event (label, category, start_date, sync_uid) VALUES "
+                     "('E', 'fomc', '2026-01-01', 'u2')")
+        store.stamp(conn, "user_event", "u2", PC)
+        store.record_removal(conn, "user_event", "u2", PC)
+        store.stamp(conn, "user_event", "u2", PC)
+        row = conn.execute(
+            "SELECT updated_at, removed_at FROM record_sync WHERE uid = 'u2'"
+        ).fetchone()
+        state = store.read_local_state(conn)
+
+    assert row["removed_at"] is not None, "the tombstone must survive a re-add, to be republished"
+    assert row["updated_at"] > row["removed_at"], "the re-add must outrank its own tombstone"
+    assert ("user_event", "u2") in state.records, "a re-add that outranks its own tombstone is present"
+
+
+def test_a_newer_tombstone_still_makes_the_record_absent_from_read_local_state():
+    # A row can physically linger locally (e.g. before a delete route gets around to removing
+    # it) while record_sync already shows a tombstone newer than the record's own stamp.
+    # read_local_state must still report it absent -- presence is decided by record_sync's keys,
+    # never by whether a local row happens to exist.
+    with get_db() as conn:
+        conn.execute("INSERT INTO user_event (label, category, start_date, sync_uid) VALUES "
+                     "('E', 'fomc', '2026-01-01', 'u3')")
+        store.stamp(conn, "user_event", "u3", PC)
+        store.record_removal(conn, "user_event", "u3", PC)
+        state = store.read_local_state(conn)
+
+    assert ("user_event", "u3") not in state.records
+    assert ("user_event", "u3") in state.removed
