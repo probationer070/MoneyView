@@ -109,7 +109,9 @@ def test_an_impossible_stamp_is_skipped(tmp_path):
     payload["records"][0]["updated_at"] = "2026-13-01T00:00:00.000Z"
     path.write_text(json.dumps(payload), encoding="utf-8")
 
-    assert read_peer_files(tmp_path, own_pc_id=ME)[0] == []
+    peers, skipped = read_peer_files(tmp_path, own_pc_id=ME)
+
+    assert peers == [] and "2026-13-01T00:00:00.000Z" in skipped[0].reason
 
 
 def test_one_bad_file_does_not_poison_the_others(tmp_path):
@@ -203,3 +205,65 @@ def test_a_literal_nan_token_in_a_peer_file_is_skipped_and_reported(tmp_path):
     peers, skipped = read_peer_files(tmp_path, own_pc_id=ME)
 
     assert peers == [] and skipped[0].name == f"records.{A}.json"
+
+
+def test_a_tombstone_with_a_null_uid_is_skipped_and_reported(tmp_path):
+    folder = _folder(tmp_path)
+    write_own_file(tmp_path, A, _state(), "2026-09-20T10:00:01.000Z")
+    path = folder / f"records.{A}.json"
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload["removed"][0]["uid"] = None
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    peers, skipped = read_peer_files(tmp_path, own_pc_id=ME)
+
+    assert peers == [] and "user_event" in skipped[0].reason
+
+
+def test_a_non_scalar_value_in_a_payload_column_is_an_error(tmp_path):
+    folder = _folder(tmp_path)
+    write_own_file(tmp_path, A, _state(), "2026-09-20T10:00:01.000Z")
+    path = folder / f"records.{A}.json"
+    baseline = path.read_text(encoding="utf-8")
+
+    for column, bad in (("ticker", {"a": 1}), ("base_year", [])):
+        payload = json.loads(baseline)
+        payload["records"][0]["payload"]["case"][column] = bad
+        path.write_text(json.dumps(payload), encoding="utf-8")
+
+        peers, skipped = read_peer_files(tmp_path, own_pc_id=ME)
+
+        assert peers == [] and column in skipped[0].reason
+
+
+def test_an_unknown_column_in_a_narrative_is_skipped_and_reported(tmp_path):
+    # The narrative sits three levels deep (case -> segments -> narratives). This proves the
+    # recursive check reaches the bottom of the tree, not just the top-level case.
+    folder = _folder(tmp_path)
+    write_own_file(tmp_path, A, _state(), "2026-09-20T10:00:01.000Z")
+    path = folder / f"records.{A}.json"
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload["records"][0]["payload"]["segments"][0]["narratives"][0]["brand_new_column"] = 1
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    peers, skipped = read_peer_files(tmp_path, own_pc_id=ME)
+
+    assert peers == [] and "brand_new_column" in skipped[0].reason
+
+
+def test_a_flat_kind_record_missing_a_column_is_an_error(tmp_path):
+    # event_category has a flat payload (no children), unlike valuation_case. This proves the
+    # non-children branch of _check_payload validates too, not just the case-with-children branch.
+    folder = _folder(tmp_path)
+    category = Record("event_category", "cat1", TS, A,
+                       {"id": "cat1", "kind": "manual", "label": "Cat", "color": "#fff", "created_at": TS})
+    state = RecordState(records={("event_category", "cat1"): category})
+    write_own_file(tmp_path, A, state, "2026-09-20T10:00:01.000Z")
+    path = folder / f"records.{A}.json"
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    del payload["records"][0]["payload"]["color"]
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    peers, skipped = read_peer_files(tmp_path, own_pc_id=ME)
+
+    assert peers == [] and "color" in skipped[0].reason

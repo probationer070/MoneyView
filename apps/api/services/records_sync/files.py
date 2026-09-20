@@ -66,9 +66,12 @@ def _check_tree(node: dict, columns: tuple[str, ...], children: tuple[ChildSpec,
     if present - expected:
         raise ValueError(f"{what} has unknown columns {sorted(present - expected)}")
     # JSON has no NaN/Infinity; a file only Python's lenient json module can parse defeats the
-    # point of validating peers' files.
+    # point of validating peers' files. A dict or list in a scalar column would only fail later,
+    # at the SQLite bind, with a far less useful error.
     for column in columns:
         value = node[column]
+        if not (value is None or isinstance(value, (bool, int, float, str))):
+            raise ValueError(f"{what}.{column}={value!r} is not a scalar (got {type(value).__name__})")
         if isinstance(value, float) and not math.isfinite(value):
             raise ValueError(f"{what}.{column}={value!r} is not a finite number")
     for child in children:
@@ -125,11 +128,14 @@ def _parse(payload: dict) -> RecordPeerFile:
     for raw in payload["removed"]:
         if raw["kind"] not in KINDS:
             raise ValueError(f"unknown kind {raw['kind']!r}")
-        key = (raw["kind"], raw["uid"])
+        uid = raw["uid"]
+        if not isinstance(uid, str) or not uid:
+            raise ValueError(f"{raw['kind']}: invalid tombstone uid {uid!r}")
+        key = (raw["kind"], uid)
         if key in removed:
             raise ValueError(f"duplicate tombstone {key}")
         removed[key] = RecordTombstone(
-            kind=raw["kind"], uid=raw["uid"],
+            kind=raw["kind"], uid=uid,
             removed_at=_ts(raw["removed_at"], f"{key} removed_at"),
             removed_by=_pc(raw["removed_by"], f"{key} removed_by"),
         )
