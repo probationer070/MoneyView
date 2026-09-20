@@ -9,6 +9,7 @@ validated with this module's own reader before it is published.
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 from dataclasses import dataclass
@@ -64,6 +65,12 @@ def _check_tree(node: dict, columns: tuple[str, ...], children: tuple[ChildSpec,
     # would silently drop whatever the owner wrote in it.
     if present - expected:
         raise ValueError(f"{what} has unknown columns {sorted(present - expected)}")
+    # JSON has no NaN/Infinity; a file only Python's lenient json module can parse defeats the
+    # point of validating peers' files.
+    for column in columns:
+        value = node[column]
+        if isinstance(value, float) and not math.isfinite(value):
+            raise ValueError(f"{what}.{column}={value!r} is not a finite number")
     for child in children:
         rows = node[child.key]
         if not isinstance(rows, list):
@@ -184,6 +191,6 @@ def write_own_file(root: Path, pc_id: str, state: RecordState, written_at: str) 
     _parse(payload)
     final = own_file_path(root, pc_id)
     temporary = final.with_name(final.name + ".tmp")
-    temporary.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+    temporary.write_text(json.dumps(payload, indent=2, ensure_ascii=False, allow_nan=False), encoding="utf-8")
     os.replace(temporary, final)
     return final

@@ -163,3 +163,43 @@ def test_a_missing_sync_root_is_unavailable_and_is_not_created(tmp_path):
     with pytest.raises(SyncFolderUnavailable):
         read_peer_files(root, own_pc_id=ME)
     assert not root.exists()
+
+
+def test_a_filename_with_junk_around_it_is_not_read_or_reported(tmp_path):
+    folder = _folder(tmp_path)
+    write_own_file(tmp_path, A, _state(), "2026-09-20T10:00:01.000Z")
+    good_text = (folder / f"records.{A}.json").read_text(encoding="utf-8")
+    (folder / f"records.{A}.json.bak").write_text(good_text, encoding="utf-8")
+    (folder / f"backup.records.{A}.json").write_text(good_text, encoding="utf-8")
+
+    peers, skipped = read_peer_files(tmp_path, own_pc_id=ME)
+
+    assert [p.pc_id for p in peers] == [A]
+    assert skipped == []
+
+
+def test_write_own_file_rejects_a_non_finite_value_and_creates_no_file(tmp_path):
+    _folder(tmp_path)
+    for bad in (float("nan"), float("inf")):
+        state = _state()
+        state.records[("valuation_case", "u1")].payload["case"]["riskfree_rate"] = bad
+
+        with pytest.raises(ValueError):
+            write_own_file(tmp_path, A, state, "2026-09-20T10:00:01.000Z")
+
+        assert not own_file_path(tmp_path, A).exists()
+
+
+def test_a_literal_nan_token_in_a_peer_file_is_skipped_and_reported(tmp_path):
+    # Python's json module reads (and by default writes) the bare NaN token even though it is not
+    # valid JSON. This proves the reader rejects it rather than relying on a parse error.
+    folder = _folder(tmp_path)
+    write_own_file(tmp_path, A, _state(), "2026-09-20T10:00:01.000Z")
+    path = folder / f"records.{A}.json"
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload["records"][0]["payload"]["case"]["riskfree_rate"] = float("nan")
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    peers, skipped = read_peer_files(tmp_path, own_pc_id=ME)
+
+    assert peers == [] and skipped[0].name == f"records.{A}.json"
