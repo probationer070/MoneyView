@@ -266,6 +266,9 @@ def list_decisions(*, bars_loader=load_price_bars) -> list[dict]:
                 "SELECT * FROM investment_decision ORDER BY decided_at DESC, id DESC"
             )
         ]
+    # sync_uid is peer-sync identity plumbing, not response data -- see spec §3.
+    for row in rows:
+        row.pop("sync_uid", None)
     bars_by_ticker: dict[str, list[dict]] = {}
     for row in rows:
         ticker = str(row["ticker"])
