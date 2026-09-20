@@ -524,7 +524,6 @@ CREATE TABLE IF NOT EXISTS valuation_case (
     parent_case_id     INTEGER REFERENCES valuation_case(id),
     sync_uid           TEXT
 );
-CREATE UNIQUE INDEX IF NOT EXISTS idx_valuation_case_sync_uid ON valuation_case(sync_uid);
 
 CREATE TABLE IF NOT EXISTS investment_decision (
     id                         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -553,7 +552,6 @@ CREATE TABLE IF NOT EXISTS investment_decision (
     figures_unavailable_reason TEXT,
     sync_uid                   TEXT
 );
-CREATE UNIQUE INDEX IF NOT EXISTS idx_investment_decision_sync_uid ON investment_decision(sync_uid);
 -- No retention policy, deliberately. Snapshots expire; decisions do not.
 
 CREATE TABLE IF NOT EXISTS segment (
@@ -621,7 +619,6 @@ CREATE TABLE IF NOT EXISTS user_event (
     created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     sync_uid    TEXT
 );
-CREATE UNIQUE INDEX IF NOT EXISTS idx_user_event_sync_uid ON user_event(sync_uid);
 
 CREATE TABLE IF NOT EXISTS event_category (
     id          TEXT PRIMARY KEY,
@@ -659,16 +656,9 @@ def init_db() -> None:
         try:
             conn.executescript(_CREATE_SCHEMA_SQL)
         except sqlite3.OperationalError as exc:
-            if "no such column: universe_key" in str(exc):
-                logger.info("DB bootstrap detected legacy snapshot tables without universe columns; applying compatibility migrations.")
-            elif "no such column: sync_uid" in str(exc):
-                # A legacy valuation_case/investment_decision/user_event table predates
-                # sync_uid, so the CREATE UNIQUE INDEX statements above abort the script
-                # before it reaches record_sync. _ensure_schema_compatibility below adds
-                # the missing columns and (with its own fallback) record_sync itself.
-                logger.info("DB bootstrap detected legacy record tables without sync_uid; applying compatibility migrations.")
-            else:
+            if "no such column: universe_key" not in str(exc):
                 raise
+            logger.info("DB bootstrap detected legacy snapshot tables without universe columns; applying compatibility migrations.")
         _ensure_schema_compatibility(conn)
         conn.commit()
         logger.info("DB initialised at %s", _DB_PATH.resolve())
@@ -938,20 +928,12 @@ def _ensure_schema_compatibility(conn: sqlite3.Connection) -> None:
         columns = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
         if columns and "sync_uid" not in columns:
             conn.execute(f"ALTER TABLE {table} ADD COLUMN sync_uid TEXT")
-            conn.execute(f"CREATE UNIQUE INDEX IF NOT EXISTS idx_{table}_sync_uid ON {table}(sync_uid)")
-    # Fallback for a legacy database where the ALTERs above caused executescript to abort
-    # before reaching record_sync's own CREATE TABLE statement (it comes later in the script).
-    conn.execute(
-        """CREATE TABLE IF NOT EXISTS record_sync (
-            kind       TEXT NOT NULL,
-            uid        TEXT NOT NULL,
-            updated_at TEXT,
-            updated_by TEXT,
-            removed_at TEXT,
-            removed_by TEXT,
-            PRIMARY KEY (kind, uid)
-        )"""
-    )
+    # Unconditional and idempotent: the create script never defines these indexes (an ALTER
+    # above would otherwise abort executescript partway through, before it reaches every
+    # later CREATE TABLE statement -- including record_sync's own). A fresh database needs
+    # them created here too, since nothing else creates them.
+    for table in ("valuation_case", "investment_decision", "user_event"):
+        conn.execute(f"CREATE UNIQUE INDEX IF NOT EXISTS idx_{table}_sync_uid ON {table}(sync_uid)")
     conn.execute(
         """INSERT OR IGNORE INTO portfolio_preferences
            (singleton_id, total_investment_amount, transaction_fee_rate, updated_at)

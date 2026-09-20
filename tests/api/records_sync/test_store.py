@@ -57,3 +57,42 @@ def test_an_old_database_gains_the_columns_without_losing_rows(tmp_path, monkeyp
     with get_db() as conn:
         row = conn.execute("SELECT label, sync_uid FROM user_event").fetchone()
     assert (row["label"], row["sync_uid"]) == ("kept", None)
+
+
+def test_an_old_database_gains_a_complete_schema(tmp_path, monkeypatch):
+    """A legacy user_event without sync_uid must not make executescript abort partway and
+    silently skip every CREATE TABLE statement after it -- record_sync, event_category and
+    event_category_visibility all come later in the script than user_event."""
+    path = tmp_path / "old_complete.db"
+    raw = sqlite3.connect(path)
+    raw.execute("CREATE TABLE user_event (id INTEGER PRIMARY KEY AUTOINCREMENT, label TEXT NOT NULL, "
+                "category TEXT NOT NULL, start_date TEXT NOT NULL, end_date TEXT, source TEXT, "
+                "note TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL DEFAULT '2026-01-01T00:00:00.000Z')")
+    raw.execute("INSERT INTO user_event (label, category, start_date) VALUES ('kept', 'fomc', '2026-01-01')")
+    raw.commit()
+    raw.close()
+    monkeypatch.setattr(db_service, "_DB_PATH", path)
+
+    db_service.init_db()
+
+    with get_db() as conn:
+        tables = {
+            row["name"]
+            for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        }
+        row = conn.execute("SELECT label, sync_uid FROM user_event").fetchone()
+    assert {"record_sync", "event_category", "event_category_visibility"} <= tables
+    assert (row["label"], row["sync_uid"]) == ("kept", None)
+
+
+def test_each_synced_table_has_a_unique_index_on_sync_uid_alone():
+    with get_db() as conn:
+        for table in UID_TABLES:
+            indexes = conn.execute(f"PRAGMA index_list({table})").fetchall()
+            matching = [
+                index
+                for index in indexes
+                if index["unique"]
+                and [r["name"] for r in conn.execute(f"PRAGMA index_info({index['name']})")] == ["sync_uid"]
+            ]
+            assert matching, f"{table} has no unique index on sync_uid alone: {indexes}"

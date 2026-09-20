@@ -243,6 +243,8 @@ def get_decision(decision_id: int, *, bars_loader=load_price_bars) -> dict | Non
         return None
 
     decision = dict(row)
+    # sync_uid is peer-sync identity plumbing, not response data -- see spec §3.
+    decision.pop("sync_uid", None)
     decision["outcome"] = outcome_for(
         decided_at=str(decision["decided_at"]),
         price_at_decision=decision["price_at_decision"],
@@ -266,11 +268,10 @@ def list_decisions(*, bars_loader=load_price_bars) -> list[dict]:
                 "SELECT * FROM investment_decision ORDER BY decided_at DESC, id DESC"
             )
         ]
-    # sync_uid is peer-sync identity plumbing, not response data -- see spec §3.
-    for row in rows:
-        row.pop("sync_uid", None)
     bars_by_ticker: dict[str, list[dict]] = {}
     for row in rows:
+        # sync_uid is peer-sync identity plumbing, not response data -- see spec §3.
+        row.pop("sync_uid", None)
         ticker = str(row["ticker"])
         if ticker not in bars_by_ticker:
             bars_by_ticker[ticker] = bars_loader(ticker, limit=_OUTCOME_BARS_LIMIT)

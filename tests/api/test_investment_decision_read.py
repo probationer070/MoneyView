@@ -89,6 +89,15 @@ def test_one_decision_is_readable_by_id_with_its_outcome():
     assert row["outcome"]["price_date"] == "2026-12-31"
 
 
+def test_reading_one_decision_does_not_leak_sync_uid():
+    """sync_uid is peer-sync identity plumbing (spec §3), not response data -- the same
+    rule list_decisions follows. get_decision reads with its own SELECT * and must strip
+    it too, not rely on list_decisions having already done so."""
+    decision_id = record_decision(ticker="MSFT", action="buy", memo="m", figures_loader=_figures)
+    row = get_decision(decision_id, bars_loader=_bars)
+    assert "sync_uid" not in row
+
+
 def test_an_unknown_id_is_absent_rather_than_an_empty_decision():
     """None, not a hollow row. A dict with null fields would reach the route as a
     200 describing a decision that was never made."""

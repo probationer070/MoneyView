@@ -240,6 +240,8 @@ def load_case(case_id: int) -> dict:
             raise CaseNotFound(f"no valuation case with id {case_id}")
 
         case = dict(case_row)
+        # sync_uid is peer-sync identity plumbing, not response data -- see spec §3.
+        case.pop("sync_uid", None)
         case["segments"] = []
         for segment_row in conn.execute(
             "SELECT * FROM segment WHERE case_id = ? ORDER BY id", (case_id,)
