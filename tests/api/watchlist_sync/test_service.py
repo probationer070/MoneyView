@@ -9,7 +9,7 @@ from apps.api.services import db as db_service
 from apps.api.services import watchlist_seed
 from apps.api.services.db import get_db
 from apps.api.services.watchlist_sync import files, service, store
-from apps.api.services.watchlist_sync.model import BASELINE_TS, SEED_TS, SyncState, Tombstone, next_stamp
+from apps.api.services.peer_sync.model import BASELINE_TS, SEED_TS, SyncState, Tombstone, next_stamp
 
 
 class PC:

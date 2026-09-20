@@ -68,7 +68,7 @@ def bootstrap_from_seed(json_path: Path) -> None:
             return
 
         from apps.api.services.watchlist_sync import store as sync_store
-        from apps.api.services.watchlist_sync.model import SEED_TS
+        from apps.api.services.peer_sync.model import SEED_TS
 
         pc_id = sync_store.get_or_create_pc_id(conn)
         items, source = load_watchlist_seed(json_path)
@@ -97,7 +97,7 @@ def merge_missing_watchlist_items(json_path: Path) -> list[str]:
         return []
 
     from apps.api.services.watchlist_sync import store as sync_store
-    from apps.api.services.watchlist_sync.model import SEED_TS
+    from apps.api.services.peer_sync.model import SEED_TS
 
     added: list[str] = []
     with get_db() as conn:
@@ -138,7 +138,7 @@ def resync_watchlist_from_json(json_path: Path) -> WatchlistResyncResult:
         raise ValueError(f"no valid watchlist items found in {json_path}")
 
     from apps.api.services.watchlist_sync import store as sync_store
-    from apps.api.services.watchlist_sync.model import BASELINE_TS
+    from apps.api.services.peer_sync.model import BASELINE_TS
 
     normalized_items = list(_dedupe_watchlist_items(items).values())
     synced_at = datetime.now(timezone.utc).isoformat()

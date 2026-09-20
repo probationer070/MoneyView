@@ -3,8 +3,8 @@
 import itertools
 from datetime import datetime, timedelta, timezone
 
-from apps.api.services.watchlist_sync import model
-from apps.api.services.watchlist_sync.model import (
+from apps.api.services.peer_sync import model
+from apps.api.services.peer_sync.model import (
     BASELINE_TS,
     SyncRow,
     SyncState,

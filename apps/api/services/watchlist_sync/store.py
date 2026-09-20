@@ -7,7 +7,7 @@ import re
 import secrets
 import sqlite3
 
-from apps.api.services.watchlist_sync.model import BASELINE_TS, SyncRow, SyncState, Tombstone, next_stamp
+from apps.api.services.peer_sync.model import BASELINE_TS, SyncRow, SyncState, Tombstone, next_stamp
 
 PC_ID_DATASET = "watchlist_sync_pc_id"
 ENABLED_DATASET = "watchlist_sync_enabled_at"

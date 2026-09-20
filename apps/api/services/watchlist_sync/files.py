@@ -14,7 +14,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from apps.api.services.watchlist_sync.model import SyncRow, SyncState, Tombstone, is_valid_ts
+from apps.api.services.peer_sync.model import SyncRow, SyncState, Tombstone, is_valid_ts
 
 FORMAT_VERSION = 1
 SYNC_SUBDIR = "MoneyView"

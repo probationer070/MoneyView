@@ -12,7 +12,7 @@ from apps.api.services.watchlist_sync.files import (
     read_peer_files,
     write_own_file,
 )
-from apps.api.services.watchlist_sync.model import SyncRow, SyncState, Tombstone
+from apps.api.services.peer_sync.model import SyncRow, SyncState, Tombstone
 
 A, B, C, ME = "PC-A-0001", "PC-B-0002", "PC-C-0003", "PC-ME-00ff"
 
@@ -271,7 +271,7 @@ def test_a_well_shaped_but_impossible_stamp_is_skipped(tmp_path, section, field,
 
 
 def test_the_seed_stamp_is_still_accepted(tmp_path):
-    from apps.api.services.watchlist_sync.model import SEED_TS
+    from apps.api.services.peer_sync.model import SEED_TS
 
     _folder(tmp_path)
     write_own_file(tmp_path, A, _state(ts=SEED_TS), "2026-09-18T10:00:01.000Z")

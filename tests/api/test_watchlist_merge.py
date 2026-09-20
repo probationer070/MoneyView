@@ -189,7 +189,7 @@ def test_the_watchlist_endpoint_merges_so_a_second_machine_self_heals(tmp_path, 
 
 def test_merged_seed_rows_are_stamped_below_every_real_row(tmp_path, monkeypatch):
     """Seed rows get SEED_TS, so a starter default never outranks a real row once sync is on."""
-    from apps.api.services.watchlist_sync.model import SEED_TS
+    from apps.api.services.peer_sync.model import SEED_TS
 
     _init_db(tmp_path, monkeypatch)
     seed = tmp_path / "stock_targets.json"

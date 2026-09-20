@@ -9,7 +9,8 @@ from apps.api.main import app
 from apps.api.routes import portfolio as portfolio_routes
 from apps.api.services import watchlist_seed
 from apps.api.services.db import get_db
-from apps.api.services.watchlist_sync import files, model, service
+from apps.api.services.peer_sync import model
+from apps.api.services.watchlist_sync import files, service
 
 client = TestClient(app)
 BASE = "/api/v1/portfolio/watchlist"
