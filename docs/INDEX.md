@@ -97,6 +97,7 @@ sub-project and feeding an implementation plan.
 | `plans/2026-09-15-market-event-registry.md` | Task-by-task plan for the event registry in four PRs: registry and sourced data, write routes and SQLite, coloured lines with tooltip and one global filter, and the `/events` page |
 | `2026-09-18-watchlist-peer-sync-design.md` | Watchlist sync between the owner's PCs through a cloud-synced folder: one file per PC, per-ticker last-writer-wins with tombstones, and the public seed replaced by neutral defaults |
 | `2026-09-20-records-peer-sync-design.md` | Peer sync for the owner's own records - valuation cases with their segments and narratives, decisions, events and categories, portfolio settings - whole-record last-writer-wins over the same cloud folder (approved, not implemented) |
+| `plans/2026-09-20-records-peer-sync.md` | Task-by-task plan for records peer sync: shared peer_sync model, sync_uid and record_sync schema, kind registry, whole-record merge, record file, run_records_sync, wiring and the status line |
 | `plans/2026-09-18-watchlist-peer-sync.md` | Task-by-task plan for watchlist peer sync: pure merge model, defensive peer files, run_sync under one lock, status line; the neutral seed ships as a second PR merged only after both PCs sync |
 
 ## Process SOPs (`guideline/sop/`)
