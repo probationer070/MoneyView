@@ -107,13 +107,14 @@ def read_local_state(conn: sqlite3.Connection) -> RecordState:
             ).fetchone()
             if sync is None or sync["updated_at"] is None:
                 continue
-            add_key = (sync["updated_at"], sync["updated_by"])
-            remove_key = (sync["removed_at"], sync["removed_by"]) if sync["removed_at"] is not None else None
-            if remove_key is not None and remove_key > add_key:
-                continue
-            records[(kind.name, uid)] = Record(
+            record = Record(
                 kind.name, uid, sync["updated_at"], sync["updated_by"], _payload_of_row(conn, kind, row)
             )
+            if sync["removed_at"] is not None:
+                tombstone = RecordTombstone(kind.name, uid, sync["removed_at"], sync["removed_by"])
+                if tombstone.remove_key() > record.add_key():
+                    continue
+            records[(kind.name, uid)] = record
     removed = {
         (row["kind"], row["uid"]): RecordTombstone(row["kind"], row["uid"], row["removed_at"], row["removed_by"])
         for row in conn.execute(
@@ -253,14 +254,24 @@ def apply_state(conn: sqlite3.Connection, state: RecordState) -> list[str]:
         resolved, kind_renames = _resolve_natural_key_clashes(kind, incoming)
         renamed.extend(kind_renames)
 
+        to_insert: dict[str, dict] = {}
         for uid, record in incoming.items():
             payload = _with_natural_key(kind, record.payload, resolved[uid]) if uid in resolved else record.payload
             local_row = _local_row(conn, kind, uid)
             local_payload = _payload_of_row(conn, kind, local_row) if local_row is not None else None
             if local_payload == payload:
                 continue
-            if local_row is not None:
+            to_insert[uid] = payload
+
+        # Two passes, not one uid at a time: a natural_key value can MOVE between two surviving
+        # uids (X="Alpha" -> "Beta", Y="Beta" -> "Gamma") without ever clashing within the
+        # incoming batch. Deleting and inserting one uid at a time would then depend on order --
+        # X inserted first collides with Y's still-present old value. Deleting every row that is
+        # about to be rewritten first, before any insert, removes that ordering dependence.
+        for uid in to_insert:
+            if _local_row(conn, kind, uid) is not None:
                 _delete_by_uid(conn, kind, uid)
+        for uid, payload in to_insert.items():
             _insert_record(conn, kind, uid, payload)
 
     for (kind_name, uid), record in state.records.items():

@@ -312,3 +312,100 @@ def test_a_newer_tombstone_still_makes_the_record_absent_from_read_local_state()
 
     assert ("user_event", "u3") not in state.records
     assert ("user_event", "u3") in state.removed
+
+
+def test_apply_state_swaps_case_names_between_two_surviving_uids():
+    # local X="Alpha", Y="Beta"; incoming X="Beta", Y="Gamma". No within-batch clash (the two
+    # incoming values are distinct), so _resolve_natural_key_clashes renames neither -- but a
+    # one-uid-at-a-time delete+insert still depends on order: renaming X to "Beta" first collides
+    # with Y's still-present old row. The state is built with X's key first, which is exactly the
+    # order that raised IntegrityError under the one-at-a-time apply.
+    with get_db() as conn:
+        x_id = _insert_local_case(conn, "Alpha")
+        y_id = _insert_local_case(conn, "Beta")
+        store.backfill_uids(conn)
+        x_uid = conn.execute("SELECT sync_uid FROM valuation_case WHERE id = ?", (x_id,)).fetchone()[0]
+        y_uid = conn.execute("SELECT sync_uid FROM valuation_case WHERE id = ?", (y_id,)).fetchone()[0]
+
+        store.apply_state(conn, RecordState(records={
+            ("valuation_case", x_uid): Record("valuation_case", x_uid, TS, "PC-B-0002", _case_payload("Beta")),
+            ("valuation_case", y_uid): Record("valuation_case", y_uid, TS, "PC-B-0002", _case_payload("Gamma")),
+        }))
+        rows = {r["sync_uid"]: r["case_name"] for r in conn.execute("SELECT sync_uid, case_name FROM valuation_case")}
+
+    assert rows[x_uid] == "Beta"
+    assert rows[y_uid] == "Gamma"
+
+
+def test_uid_of_covers_singleton_generated_and_natural_branches():
+    # portfolio_preferences already has its one seeded row (db.py init_db) -- the singleton
+    # branch never queries the table anyway, it returns the fixed singleton_uid outright.
+    with get_db() as conn:
+        conn.execute("INSERT INTO user_event (label, category, start_date, sync_uid) VALUES "
+                     "('E', 'fomc', '2026-01-01', 'evt-uid')")
+        event_local_id = conn.execute("SELECT id FROM user_event WHERE sync_uid = 'evt-uid'").fetchone()[0]
+        conn.execute("INSERT INTO event_category (id, kind, label, color) VALUES ('cat-x', 'user', 'Cat X', '#fff')")
+
+        preferences_uid = store.uid_of(conn, "portfolio_preferences", 1)
+        event_uid = store.uid_of(conn, "user_event", event_local_id)
+        category_uid = store.uid_of(conn, "event_category", "cat-x")
+        missing = store.uid_of(conn, "user_event", 999999)
+
+    assert preferences_uid == "portfolio_preferences"
+    assert event_uid == "evt-uid"
+    assert category_uid == "cat-x"
+    assert missing is None
+
+
+def test_apply_state_upserts_the_singleton_preferences_row_in_place():
+    older = {"total_investment_amount": 5000.0, "transaction_fee_rate": 0.001,
+             "updated_at": "2026-01-01T00:00:00.000Z"}
+    newer = {"total_investment_amount": 9000.0, "transaction_fee_rate": 0.002,
+             "updated_at": "2026-02-01T00:00:00.000Z"}
+    with get_db() as conn:
+        store.apply_state(conn, RecordState(records={
+            ("portfolio_preferences", "portfolio_preferences"):
+                Record("portfolio_preferences", "portfolio_preferences", TS, "PC-B-0002", older)}))
+        first = conn.execute(
+            "SELECT total_investment_amount, transaction_fee_rate FROM portfolio_preferences"
+        ).fetchone()
+        assert (first["total_investment_amount"], first["transaction_fee_rate"]) == (5000.0, 0.001)
+
+        store.apply_state(conn, RecordState(records={
+            ("portfolio_preferences", "portfolio_preferences"):
+                Record("portfolio_preferences", "portfolio_preferences", "2026-09-20T10:05:00.000Z",
+                       "PC-B-0002", newer)}))
+        rows = conn.execute(
+            "SELECT total_investment_amount, transaction_fee_rate FROM portfolio_preferences"
+        ).fetchall()
+
+    assert len(rows) == 1, "the CHECK(singleton_id = 1) row must be updated in place, not duplicated"
+    assert (rows[0]["total_investment_amount"], rows[0]["transaction_fee_rate"]) == (9000.0, 0.002)
+
+
+def test_apply_state_inserts_and_deletes_an_event_category_under_its_own_id():
+    payload = {"id": "cat-x", "kind": "user", "label": "Cat X", "color": "#fff",
+               "created_at": "2026-01-01T00:00:00.000Z"}
+    with get_db() as conn:
+        store.apply_state(conn, RecordState(records={
+            ("event_category", "cat-x"): Record("event_category", "cat-x", TS, "PC-B-0002", payload)}))
+        row = conn.execute("SELECT id, label FROM event_category WHERE id = 'cat-x'").fetchone()
+        assert row is not None and row["label"] == "Cat X"
+
+        store.apply_state(conn, RecordState())
+        count = conn.execute("SELECT COUNT(*) FROM event_category").fetchone()[0]
+
+    assert count == 0, "a category absent from the merged state must be deleted"
+
+
+def test_apply_state_inserts_an_event_category_visibility_row_under_category_id():
+    payload = {"category_id": "cat-y", "visible": 1}
+    with get_db() as conn:
+        store.apply_state(conn, RecordState(records={
+            ("event_category_visibility", "cat-y"):
+                Record("event_category_visibility", "cat-y", TS, "PC-B-0002", payload)}))
+        row = conn.execute(
+            "SELECT category_id, visible FROM event_category_visibility WHERE category_id = 'cat-y'"
+        ).fetchone()
+
+    assert row is not None and row["visible"] == 1
