@@ -161,12 +161,13 @@ def _with_natural_key(kind: Kind, payload: dict, value: str) -> dict:
     return resolved
 
 
-def _resolve_natural_key_clashes(kind: Kind, incoming: dict[str, Record]) -> tuple[dict[str, str], list[str]]:
+def _resolve_natural_key_clashes(kind: Kind, incoming: dict[str, Record]) -> dict[str, str]:
     """For a kind with a UNIQUE natural_key column: when two incoming uids want the same value,
-    the one with the larger order_key() keeps it and the rest are renamed. Returns {uid: new
-    value} for every loser, and the flat list of renames for the caller to report."""
+    the one with the larger order_key() keeps it and the rest are renamed. Both copies are kept.
+    Returns {uid: new value} for every loser -- on every sync, not only the one that first
+    repairs the clash, since the merged state always carries the original values."""
     if kind.natural_key is None:
-        return {}, []
+        return {}
 
     groups: dict[str, list[str]] = {}
     for uid, record in incoming.items():
@@ -174,7 +175,6 @@ def _resolve_natural_key_clashes(kind: Kind, incoming: dict[str, Record]) -> tup
 
     used = set(groups)
     resolved: dict[str, str] = {}
-    renames: list[str] = []
     for value, uids in sorted(groups.items()):
         if len(uids) < 2:
             continue
@@ -188,8 +188,7 @@ def _resolve_natural_key_clashes(kind: Kind, incoming: dict[str, Record]) -> tup
                 suffix += 1
             used.add(candidate)
             resolved[loser] = candidate
-            renames.append(candidate)
-    return resolved, renames
+    return resolved
 
 
 def _insert_child(conn: sqlite3.Connection, child: ChildSpec, parent_id: int, payload: dict) -> None:
@@ -264,20 +263,22 @@ def apply_state(conn: sqlite3.Connection, state: RecordState) -> list[str]:
     """Make the local tables equal the merged state. A valuation case is replaced whole -- all its
     columns and all its segments and narratives, never a field at a time -- but its row is updated
     in place, keeping its local id, because a local fork's parent_case_id points at that id.
-    Returns the renames it had to perform to resolve a natural_key clash."""
+    Returns the renames this apply actually performed: a clash already repaired on an earlier sync
+    is not reported again."""
     renamed: list[str] = []
     for kind in KINDS.values():
         absent = [uid for uid in _local_uids(conn, kind) if (kind.name, uid) not in state.records]
         incoming = {uid: record for (k, uid), record in state.records.items() if k == kind.name}
 
-        resolved, kind_renames = _resolve_natural_key_clashes(kind, incoming)
-        renamed.extend(kind_renames)
+        resolved = _resolve_natural_key_clashes(kind, incoming)
 
         to_write: dict[str, dict] = {}
         existing: set[str] = set()
         for uid, record in incoming.items():
             payload = _with_natural_key(kind, record.payload, resolved[uid]) if uid in resolved else record.payload
             local_row = _local_row(conn, kind, uid)
+            if uid in resolved and (local_row is None or local_row[kind.natural_key] != resolved[uid]):
+                renamed.append(resolved[uid])
             local_payload = _payload_of_row(conn, kind, local_row) if local_row is not None else None
             if local_payload == payload:
                 continue

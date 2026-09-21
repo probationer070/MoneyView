@@ -605,3 +605,22 @@ def test_a_fork_arrives_pointing_at_the_other_pcs_local_copy_of_its_parent(tmp_p
     assert b_cases["Parent"]["id"] != a.cases()["Parent"]["id"], "precondition: the local ids differ"
     assert b_cases["Fork"]["parent_case_id"] == b_cases["Parent"]["id"]
     assert b_cases["Parent"]["parent_case_id"] is None
+
+
+def test_a_name_clash_is_reported_only_by_the_sync_that_repairs_it(tmp_path, monkeypatch, cloud):
+    """Final review finding D: with no delete route, a clash is never resolved by the owner, so a
+    rename recomputed and reported on every sync would keep the status line up forever."""
+    a, b = PC(tmp_path, "PC-A", monkeypatch), PC(tmp_path, "PC-B", monkeypatch)
+    a.add_case("Shared")
+    b.add_case("Shared")
+    assert [name for name in service.current_status().renamed if name.startswith("Shared (from ")], \
+        "precondition: the sync that brought A's case to B repaired the clash and said so"
+    b.sync()
+    assert service.current_status().renamed == []
+
+    a.sync()
+    assert [name for name in service.current_status().renamed if name.startswith("Shared (from ")], \
+        "precondition: A renames its own copy on this sync and says so"
+    a.sync()
+    assert service.current_status().renamed == []
+    assert {"Shared"} < set(a.cases()) and set(a.cases()) == set(b.cases()), "both copies are kept on both PCs"
