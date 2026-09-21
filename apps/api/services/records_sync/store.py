@@ -8,8 +8,8 @@ from __future__ import annotations
 import secrets
 import sqlite3
 
-from apps.api.services.peer_sync.model import BASELINE_TS, next_stamp
-from apps.api.services.records_sync.kinds import KINDS, ChildSpec, Kind
+from apps.api.services.peer_sync.model import BASELINE_TS, SEED_TS, next_stamp
+from apps.api.services.records_sync.kinds import KIND_PREFERENCES, KINDS, ChildSpec, Kind
 from apps.api.services.records_sync.merge import Record, RecordState, RecordTombstone
 
 
@@ -61,12 +61,19 @@ def _delete_by_uid(conn: sqlite3.Connection, kind: Kind, uid: str) -> None:
 def ensure_first_sync(conn: sqlite3.Connection, pc_id: str) -> None:
     """Stamp every existing record that has no record_sync row yet with the baseline, on every
     call: an unstamped record must never be published with an empty author (watchlist's Ruling
-    R3, for the same reason)."""
+    R3, for the same reason).
+
+    A portfolio_preferences row whose own updated_at column is still '' (init_db's never-saved
+    default, on every fresh database) is stamped at SEED_TS instead: BASELINE_TS would let that
+    default tie -- and possibly outrank, on the pc_id tiebreak -- a real setting saved on another
+    PC before sync existed there, whose own updated_at is non-empty and so still gets BASELINE_TS.
+    """
     for kind in KINDS.values():
-        for uid in _local_uids(conn, kind):
+        for uid, row in _local_rows(conn, kind):
+            stamp = SEED_TS if kind.name == KIND_PREFERENCES and row["updated_at"] == "" else BASELINE_TS
             conn.execute(
                 "INSERT OR IGNORE INTO record_sync (kind, uid, updated_at, updated_by) VALUES (?, ?, ?, ?)",
-                (kind.name, uid, BASELINE_TS, pc_id),
+                (kind.name, uid, stamp, pc_id),
             )
 
 

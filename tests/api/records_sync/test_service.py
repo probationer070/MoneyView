@@ -7,8 +7,10 @@ import pytest
 
 from apps.api.services import db as db_service
 from apps.api.services.db import get_db
+from apps.api.services.events import store as events_store
 from apps.api.services.records_sync import files, service, store
-from apps.api.services.peer_sync.model import BASELINE_TS
+from apps.api.services.peer_sync.model import BASELINE_TS, SEED_TS
+from apps.api.services.watchlist_sync import files as watchlist_files
 from apps.api.services.watchlist_sync import service as watchlist_service
 from apps.api.services.watchlist_sync import store as watchlist_store
 
@@ -362,14 +364,18 @@ def test_a_records_sync_failure_does_not_stop_watchlist_sync(tmp_path, monkeypat
     a = PC(tmp_path, "PC-A", monkeypatch)
     a.use()
 
-    def boom(conn):
+    def boom(trigger):
         raise RuntimeError("records boom")
 
-    real_backfill = store.backfill_uids
-    monkeypatch.setattr(store, "backfill_uids", boom)
+    real_run_records_sync = service.run_records_sync
+    monkeypatch.setattr(service, "run_records_sync", boom)
     watchlist_service.run_sync("test")
+    monkeypatch.setattr(service, "run_records_sync", real_run_records_sync)
+
     assert watchlist_service.current_status().last_error is None
-    monkeypatch.setattr(store, "backfill_uids", real_backfill)
+    assert watchlist_service.current_status().last_sync_at is not None
+    pc_id = a.pc_id()
+    assert watchlist_files.own_file_path(cloud, pc_id).exists()
 
 
 def test_a_watchlist_sync_failure_does_not_stop_records_sync(tmp_path, monkeypatch, cloud):
@@ -382,8 +388,12 @@ def test_a_watchlist_sync_failure_does_not_stop_records_sync(tmp_path, monkeypat
     real_run_sync = watchlist_service.run_sync
     monkeypatch.setattr(watchlist_service, "run_sync", boom)
     service.run_records_sync("test")
-    assert service.current_status().last_error is None
     monkeypatch.setattr(watchlist_service, "run_sync", real_run_sync)
+
+    assert service.current_status().last_error is None
+    assert service.current_status().last_sync_at is not None
+    pc_id = a.pc_id()
+    assert files.own_file_path(cloud, pc_id).exists()
 
 
 def test_a_concurrent_local_write_is_not_silently_lost_during_records_sync(tmp_path, monkeypatch, cloud):
@@ -428,6 +438,30 @@ def test_a_concurrent_local_write_is_not_silently_lost_during_records_sync(tmp_p
     assert "RACE" in a.events()
 
 
+def test_a_category_created_while_peer_files_are_being_read_is_not_lost(tmp_path, monkeypatch, cloud):
+    """A category has its uid the instant it is inserted (its own id -- event_category does not
+    generate one), and nothing stamps it until the sync that follows. If backfill_uids and
+    ensure_first_sync ran in an earlier transaction than read_local_state/apply_state, a category
+    created in the gap -- while read_peer_files does its (unlocked) cloud-folder I/O -- would have
+    a uid and no record_sync row: invisible to read_local_state, and deleted by apply_state as
+    absent from the merged state."""
+    a = PC(tmp_path, "PC-A", monkeypatch)
+    a.use()
+
+    real_read_peer_files = service.read_peer_files
+
+    def racing_read_peer_files(root, own_pc_id):
+        with get_db() as conn:
+            events_store.insert_user_category(conn, "cat-race", "Race Cat", "#000")
+        return real_read_peer_files(root, own_pc_id)
+
+    monkeypatch.setattr(service, "read_peer_files", racing_read_peer_files)
+    service.run_records_sync("test")
+    monkeypatch.setattr(service, "read_peer_files", real_read_peer_files)
+
+    assert "cat-race" in a.categories()
+
+
 def test_a_decision_round_trips(tmp_path, monkeypatch, cloud):
     a, b = PC(tmp_path, "PC-A", monkeypatch), PC(tmp_path, "PC-B", monkeypatch)
     a.sync(); b.sync()
@@ -468,6 +502,32 @@ def test_a_preferences_round_trips(tmp_path, monkeypatch, cloud):
     a.set_preferences(12345.0)
     b.sync()
     assert b.preferences()["total_investment_amount"] == 12345.0
+
+
+def test_an_unsaved_default_preferences_row_never_outranks_a_real_saved_value(tmp_path, monkeypatch, cloud):
+    """A saved a real amount before peer sync ever ran on it, so its own updated_at column is
+    non-empty and record_sync stamps it BASELINE_TS on first sync -- same as any other kind. B
+    never touched preferences: its row is still init_db's never-saved default, own updated_at ''.
+    If ensure_first_sync stamped that default BASELINE_TS too, both would tie at (BASELINE_TS,
+    higher pc_id) and B's meaningless default could win the pc_id tiebreak over A's real setting.
+    Stamping the never-saved default at SEED_TS (below BASELINE_TS) keeps it from ever winning."""
+    a = PC(tmp_path, "PC-A", monkeypatch)
+    b = PC(tmp_path, "PC-B", monkeypatch)
+    a.use()
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE portfolio_preferences SET total_investment_amount = 50000.0, "
+            "updated_at = '2020-01-01T00:00:00.000Z' WHERE singleton_id = 1"
+        )
+
+    a_id, b_id = a.pc_id(), b.pc_id()
+    assert b_id > a_id, "precondition: B's pc_id must sort higher than A's for the bug to bite"
+
+    for _ in range(2):
+        a.sync(); b.sync()
+
+    assert a.preferences()["total_investment_amount"] == 50000.0
+    assert b.preferences()["total_investment_amount"] == 50000.0
 
 
 def test_ensure_first_sync_runs_before_read_local_state_on_every_run(tmp_path, monkeypatch, cloud):

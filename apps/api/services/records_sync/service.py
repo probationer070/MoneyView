@@ -51,14 +51,19 @@ def run_records_sync(trigger: str) -> None:
         try:
             with get_db() as conn:
                 pc_id = watchlist_store.get_or_create_pc_id(conn)
-                store.backfill_uids(conn)
-                store.ensure_first_sync(conn, pc_id)
             peers, skipped = read_peer_files(root, pc_id)
             with get_db() as conn:
                 # Serialises this read-merge-apply window against every other SQLite writer, so a
                 # local write landing between the snapshot and apply_state can never be silently
-                # deleted or overwritten.
+                # deleted or overwritten. backfill_uids and ensure_first_sync run inside this same
+                # transaction, not in an earlier block: a record inserted while read_peer_files was
+                # doing its (unlocked) cloud-folder I/O could otherwise get a uid -- immediately, for
+                # a natural-identity kind such as event_category -- with no record_sync row yet.
+                # read_local_state would not see it, and apply_state would delete it as absent from
+                # the merged state.
                 conn.execute("BEGIN IMMEDIATE")
+                store.backfill_uids(conn)
+                store.ensure_first_sync(conn, pc_id)
                 merged = merge_record_states([store.read_local_state(conn), *(peer.state for peer in peers)])
                 renamed = store.apply_state(conn, merged)
             finished = next_stamp()
