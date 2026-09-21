@@ -709,3 +709,31 @@ def test_a_peer_record_the_local_schema_would_refuse_is_skipped_and_reported(tmp
     assert [s.name for s in status.skipped_files] == [bad.name]
     assert status.last_error is None
     assert "GOOD" in a.events()
+
+
+def test_settings_saved_on_both_pcs_before_sync_are_decided_by_save_time_not_pc_id(tmp_path, monkeypatch, cloud):
+    """Final review finding E: both saved rows used to be stamped BASELINE_TS, so they tied and
+    the higher pc_id won whatever the save times. The OLDER save sits on the PC whose pc_id sorts
+    higher, so a pc_id tiebreak picks the wrong one."""
+    a, b = PC(tmp_path, "PC-A", monkeypatch), PC(tmp_path, "PC-B", monkeypatch)
+    assert b.pc_id() > a.pc_id(), "precondition: B's pc_id sorts higher"
+    # The save route writes SQLite's CURRENT_TIMESTAMP: 'YYYY-MM-DD HH:MM:SS', UTC.
+    for pc, amount, saved_at in ((a, 22222.0, "2026-06-01 09:00:00"), (b, 11111.0, "2026-01-01 09:00:00")):
+        pc.use()
+        with get_db() as conn:
+            conn.execute(
+                "UPDATE portfolio_preferences SET total_investment_amount = ?, updated_at = ? WHERE singleton_id = 1",
+                (amount, saved_at),
+            )
+
+    for _ in range(2):
+        a.sync(); b.sync()
+
+    assert a.preferences()["total_investment_amount"] == 22222.0
+    assert b.preferences()["total_investment_amount"] == 22222.0
+    a.use()
+    with get_db() as conn:
+        stamp = conn.execute(
+            "SELECT updated_at FROM record_sync WHERE kind = 'portfolio_preferences'"
+        ).fetchone()["updated_at"]
+    assert stamp == "2026-06-01T09:00:00.000Z"
