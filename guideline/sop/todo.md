@@ -1216,6 +1216,24 @@ Plan: `docs/superpowers/plans/2026-09-18-watchlist-peer-sync.md`.
       edits; Corporate no longer runs a full sync once the watchlist has rows; git-worktrees.md
       names the ignored `data/` folders
 
+## Track L - Records peer sync  [2026-09-20]
+
+Spec: `docs/superpowers/specs/2026-09-20-records-peer-sync-design.md`.
+Plan: `docs/superpowers/plans/2026-09-20-records-peer-sync.md`.
+
+- [x] **L-1. Shared `peer_sync` model** — `watchlist_sync/model.py` moved to `peer_sync/model.py`,
+      watchlist behaviour unchanged
+- [x] **L-2. Schema — `sync_uid` columns and `record_sync`** — additive migration, existing rows
+      keep every value
+- [x] **L-3. Kind registry and pure merge** — whole-record replacement, name-clash repair
+- [x] **L-4. The record peer file** — read, per-kind validation, atomic write
+- [x] **L-5. The store** — backfill, read, apply, stamps
+- [x] **L-6. `run_records_sync`** — one lock, its own status
+- [x] **L-7. Wiring** — stamps on every write, triggers, `GET /api/v1/sync/status`
+- [x] **L-8. Status line** — Valuation, Decisions and Events pages
+- [x] **L-9. Docs and gates** — this entry, `docs/local-run-resources.md`,
+      `docs/architecture/storage-model.md`
+
 
 ## Archived
 

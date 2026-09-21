@@ -183,5 +183,21 @@ off and nothing changes. Design: `docs/superpowers/specs/2026-09-18-watchlist-pe
   says so. A fresh PC then stays empty until the file is readable, rather than being filled with
   starter defaults.
 
+The same folder now also carries your hand-written records. Each PC writes
+`MoneyView\records.<pc_id>.json` beside its watchlist file, and the same `MONEYVIEW_SYNC_DIR`
+switch covers both: nothing extra to configure. It carries valuation cases (each with its
+segments and narrative rows, as one unit), investment decisions, user events, category overrides
+and user categories, category visibility, and portfolio settings. Market data does not sync —
+each PC downloads its own. Design: `docs/superpowers/specs/2026-09-20-records-peer-sync-design.md`.
+
+- **The newest edit to one record wins, whole.** Editing the same case, decision, event or
+  setting on both PCs keeps only the newer side's version in full; there is no field-level merge.
+- **Deleting a record deletes it on the other PC too**, the next time that PC syncs.
+- Sync runs at startup, when the Valuation, Decisions or Events page loads, when portfolio
+  settings load, and after every save or delete of one of these records. The Valuation, Decisions
+  and Events pages each show a records-sync status line.
+- Both PCs should run the same app version: a peer file written by a newer version is skipped and
+  reported, never half-applied.
+
 Test and e2e processes set `MONEYVIEW_SKIP_LOCAL_ENV=1`, so they never read `config/.env` and
 never touch your real sync folder.

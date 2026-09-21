@@ -93,7 +93,8 @@ The backend also runs periodic WAL truncation during runtime and attempts a fina
   `user` (ids prefixed `user-`); an override whose id has left `categories.json` is ignored, not
   resurrected
 - `user_event.id` is `AUTOINCREMENT`, so a deleted event's id is never reused
-- these rows are per machine and are not synced
+- with records peer sync on, `user_event`, `event_category` and `event_category_visibility` sync
+  between the owner's PCs; see §10
 
 ### 3.4 Corporate Analysis Tables
 
@@ -293,3 +294,27 @@ When storage behavior changes, review these questions:
 - Did retention, cadence, or versioning behavior change for snapshots?
 - Did watchlist bootstrap or sync semantics change?
 - Did a new runtime cache/log/discovery file become important to system behavior?
+
+## 10. Records Peer Sync
+
+Extends the watchlist's peer-sync mechanism (§4.4) to the records the owner writes by hand.
+Design: `docs/superpowers/specs/2026-09-20-records-peer-sync-design.md`.
+
+**Which kinds sync:** `valuation_case` (with its `segment` and `segment_narrative` rows, as one
+unit), `investment_decision`, `user_event`, `event_category`, `event_category_visibility`, and
+`portfolio_preferences`. Market data (`stocks`, `indices`, `news`, `indicators`, `corporate_*`)
+and `corporate_comparison_snapshots_v3` are out of scope; each PC keeps re-fetching or
+regenerating its own.
+
+**`sync_uid`.** `valuation_case`, `investment_decision` and `user_event` each gain a nullable
+`sync_uid TEXT` column (32 hex chars, `secrets.token_hex(16)`), generated once and never changed
+afterwards. `event_category` and `event_category_visibility` need no new column: their existing
+`id` and `category_id` are already stable across PCs. `portfolio_preferences` is a singleton,
+identified by the fixed string `portfolio_preferences`.
+
+**`record_sync`.** One table holds the causal stamps for every kind, keyed by `(kind, uid)`:
+`updated_at`/`updated_by` for the current version, `removed_at`/`removed_by` once the record is
+deleted. A deleted record's `record_sync` row survives as its tombstone; the row itself is gone
+from its own table. Applying a record replaces its entire tree (case, segments, narratives) from
+the peer's payload; half a case is never applied. The newest edit wins whole record; a deletion
+propagates the same way.
