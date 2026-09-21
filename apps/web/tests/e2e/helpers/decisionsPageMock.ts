@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import { API_PREFIX, json } from "./mockUtils";
+import { API_PREFIX, RECORDS_SYNC_OFF, json } from "./mockUtils";
 import type { DecisionRow } from "../../../app/decisions/decisionTypes";
 
 // The three states a decision row can be in, taken from a real
@@ -97,6 +97,11 @@ export async function mockDecisionsApi(
     }
     return json(route, { status: "ok", data: rows, meta: {} });
   });
+
+  // Records sync status line (RecordsSyncStatus): off by default, overridden per test.
+  await page.route(`**${API_PREFIX}/sync/status`, async (route) =>
+    json(route, { status: "ok", data: { watchlist: {}, records: RECORDS_SYNC_OFF }, meta: {} })
+  );
 
   return stats;
 }

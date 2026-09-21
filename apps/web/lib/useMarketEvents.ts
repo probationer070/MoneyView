@@ -65,5 +65,5 @@ export function useMarketEvents() {
     void refetchCategories();
   }, [refetchEvents, refetchCategories]);
 
-  return { events, categories, lines, status, visibleCount, refetch };
+  return { events, categories, lines, status, visibleCount, refetch, dataUpdatedAt: eventsQuery.dataUpdatedAt };
 }

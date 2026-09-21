@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import { API_PREFIX, json } from "./mockUtils";
+import { API_PREFIX, RECORDS_SYNC_OFF, json } from "./mockUtils";
 import type { VerdictPanel } from "../../../app/valuation/verdictTypes";
 
 // BOTH row states are present on purpose: two computed, two refused. A fixture
@@ -105,4 +105,9 @@ export async function mockValuationApi(page: Page, options: ValuationMockOptions
     }
     return json(route, { status: "ok", data: panel, meta: {} });
   });
+
+  // Records sync status line (RecordsSyncStatus): off by default, overridden per test.
+  await page.route(`**${API_PREFIX}/sync/status`, async (route) =>
+    json(route, { status: "ok", data: { watchlist: {}, records: RECORDS_SYNC_OFF }, meta: {} })
+  );
 }
