@@ -205,6 +205,7 @@ def create_conservative_case(ticker: str):
     """
     case_id, reason = generate_conservative_case_for_ticker(ticker)
     if case_id is not None:
+        records_sync.run_records_sync("mutation")
         return APIResponse(data=_conservative_result(case_id, created=True))
 
     if reason.startswith("no_vintage"):

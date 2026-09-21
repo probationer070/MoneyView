@@ -12,11 +12,13 @@ from apps.api.services.peer_sync.model import BASELINE_TS
 from apps.api.services.records_sync import files as records_files
 from apps.api.services.records_sync import service as records_service
 from apps.api.services.watchlist_sync import store as watchlist_store
+from tests.api.test_valuation_routes import _seed_conservative_inputs
 from tests.api.valuation_fixtures import _case_payload
 
 client = TestClient(app)
 
 CASES = "/api/v1/valuation/cases"
+CONSERVATIVE = "/api/v1/valuation/conservative"
 DECISIONS = "/api/v1/decisions"
 EVENTS = "/api/v1/market/events"
 CATEGORIES = "/api/v1/market/event-categories"
@@ -169,6 +171,29 @@ def test_creating_a_case_publishes_it(tmp_path, monkeypatch):
     assert "Published" in names
 
 
+def test_creating_a_conservative_case_publishes_it(tmp_path, monkeypatch):
+    """Spec S6: any create, edit or delete triggers a sync. create_conservative_case creates
+    through create_case (so it is stamped) but did not call run_records_sync itself -- unlike
+    the plain create and fork routes. Uses the same local-DB seeding as the existing conservative
+    route tests (tests/api/test_valuation_routes.py) so it needs no network access.
+    """
+    _seed_conservative_inputs(ticker="SYNCED")
+    root = _enable(tmp_path, monkeypatch)
+
+    response = client.post(f"{CONSERVATIVE}/SYNCED")
+
+    assert response.status_code == 200, response.text
+    case_id = response.json()["data"]["id"]
+    with get_db() as conn:
+        case_name = conn.execute(
+            "SELECT case_name FROM valuation_case WHERE id = ?", (case_id,)
+        ).fetchone()["case_name"]
+    pc_id = _own_pc_id()
+    published = json.loads(records_files.own_file_path(root, pc_id).read_text(encoding="utf-8"))
+    names = {r["payload"]["case"]["case_name"] for r in published["records"] if r["kind"] == "valuation_case"}
+    assert case_name in names
+
+
 def test_creating_an_event_is_stamped_with_a_causal_timestamp_not_the_baseline(tmp_path, monkeypatch):
     """A write's own stamp() call must run before sync's ensure_first_sync backstop does, and
     must give the record a fresh causal timestamp -- not rely on that backstop's BASELINE_TS. The
@@ -247,6 +272,68 @@ def test_saving_preferences_is_stamped_with_a_causal_timestamp_not_the_baseline(
             "AND uid = 'portfolio_preferences'"
         ).fetchone()
     assert row is not None and row["updated_at"] != BASELINE_TS
+
+
+def test_updating_an_event_restamps_it_with_a_later_timestamp(tmp_path, monkeypatch):
+    """The INSERT-time stamp is not enough: an UPDATE's own stamp() call must run too, or the
+    record stays at its creation-time stamp forever and a peer's older edit -- made after this
+    record was created but before this PC's edit -- would silently outrank a newer local change.
+    """
+    _enable(tmp_path, monkeypatch)
+    created = client.post(EVENTS, json=_event_body(label="Original")).json()
+    number = int(created["id"].removeprefix("user-"))
+    with get_db() as conn:
+        uid = conn.execute("SELECT sync_uid FROM user_event WHERE id = ?", (number,)).fetchone()[0]
+        before = conn.execute(
+            "SELECT updated_at FROM record_sync WHERE kind = 'user_event' AND uid = ?", (uid,)
+        ).fetchone()["updated_at"]
+
+    response = client.put(f"{EVENTS}/{created['id']}", json=_event_body(label="Edited"))
+
+    assert response.status_code == 200, response.text
+    with get_db() as conn:
+        after = conn.execute(
+            "SELECT updated_at FROM record_sync WHERE kind = 'user_event' AND uid = ?", (uid,)
+        ).fetchone()["updated_at"]
+    assert after > before
+
+
+def test_overriding_a_builtin_category_is_stamped_with_a_causal_timestamp_not_the_baseline(tmp_path, monkeypatch):
+    """upsert_category_override has no separate insert step -- its first write on a category
+    nobody has overridden locally IS the upsert -- so this checks the same BASELINE_TS masking
+    risk the other causal-timestamp tests check, for events/store.upsert_category_override.
+    """
+    _enable(tmp_path, monkeypatch)
+
+    response = client.patch(f"{CATEGORIES}/fomc", json={"label": "Overridden"})
+
+    assert response.status_code == 200, response.text
+    pc_id = _own_pc_id()
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT updated_at, updated_by FROM record_sync WHERE kind = 'event_category' AND uid = 'fomc'"
+        ).fetchone()
+    assert row is not None and row["updated_at"] != BASELINE_TS
+    assert row["updated_by"] == pc_id
+
+
+def test_updating_a_user_category_restamps_it_with_a_later_timestamp(tmp_path, monkeypatch):
+    """Same no-restamp guard as the event update test above, for update_user_category."""
+    _enable(tmp_path, monkeypatch)
+    created = client.post(CATEGORIES, json={"label": "Original", "color": "#111111"}).json()
+    with get_db() as conn:
+        before = conn.execute(
+            "SELECT updated_at FROM record_sync WHERE kind = 'event_category' AND uid = ?", (created["id"],)
+        ).fetchone()["updated_at"]
+
+    response = client.patch(f"{CATEGORIES}/{created['id']}", json={"label": "Edited"})
+
+    assert response.status_code == 200, response.text
+    with get_db() as conn:
+        after = conn.execute(
+            "SELECT updated_at FROM record_sync WHERE kind = 'event_category' AND uid = ?", (created["id"],)
+        ).fetchone()["updated_at"]
+    assert after > before
 
 
 # --- tombstones only while sync is on; timestamps regardless ----------------------------------
@@ -436,6 +523,9 @@ def test_startup_with_an_unavailable_folder_still_starts(tmp_path, monkeypatch):
     monkeypatch.setenv("MONEYVIEW_DISABLE_STARTUP_JOBS", "1")
     with TestClient(app) as started:
         assert started.get("/api/v1/healthz").status_code == 200
+        # Proves the records startup sync actually ran (not just that healthz answers): the
+        # folder is unavailable, so a startup sync that ran must have recorded that as an error.
+        assert records_service.current_status().last_error
 
 
 def test_a_records_failure_does_not_break_a_page(tmp_path, monkeypatch):
