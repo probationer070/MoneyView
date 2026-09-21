@@ -9,6 +9,7 @@ from apps.api.services import db as db_service
 from apps.api.services.db import get_db
 from apps.api.services.events import store as events_store
 from apps.api.services.records_sync import files, service, store
+from apps.api.services.records_sync.merge import Record, RecordState
 from apps.api.services.peer_sync.model import BASELINE_TS, SEED_TS
 from apps.api.services.watchlist_sync import files as watchlist_files
 from apps.api.services.watchlist_sync import service as watchlist_service
@@ -624,3 +625,87 @@ def test_a_name_clash_is_reported_only_by_the_sync_that_repairs_it(tmp_path, mon
     a.sync()
     assert service.current_status().renamed == []
     assert {"Shared"} < set(a.cases()) and set(a.cases()) == set(b.cases()), "both copies are kept on both PCs"
+
+
+_TS = "2026-09-20T10:00:00.000Z"
+
+
+def _valid_payload(kind, uid):
+    if kind == "event_category":
+        return {"id": uid, "kind": "user", "label": "Bad", "color": "#000", "created_at": _TS}
+    if kind == "event_category_visibility":
+        return {"category_id": uid, "visible": 1}
+    if kind == "user_event":
+        return {"label": "Bad", "category": "fomc", "start_date": "2026-01-01", "end_date": None,
+                "source": None, "note": "", "created_at": _TS}
+    return {
+        "case": {"case_name": "Bad", "ticker": "AAPL", "as_of_date": "2026-01-01", "base_year": 2026,
+                 "target_year": 2031, "riskfree_rate": 0.03, "wacc_initial": 0.09, "wacc_stable": 0.08,
+                 "wacc_converge_from": 5, "marginal_tax_rate": 0.21, "nol_balance": 0.0,
+                 "roic_stable": 0.12, "terminal_growth": 0.02, "effective_tax_rate": 0.18, "cash": 1.0,
+                 "debt": 0.0, "ipo_proceeds": 0.0, "shares_basic": 10.0, "shares_new": 0.0,
+                 "parent_uid": None},
+        "segments": [{"name": "core", "base_revenue": 100.0, "base_margin": 0.2, "tam_target": None,
+                      "market_share_target": None, "revenue_target": 200.0, "margin_target": 0.25,
+                      "sales_to_capital_early": 2.0, "sales_to_capital_late": 2.5, "ramp_start_year": 1,
+                      "initial_growth": 0.2, "waypoint_gap_fraction": 0.5,
+                      "narratives": [{"input_field": "revenue_target", "claim": "why",
+                                      "evidence_source": None, "confidence": "assumed",
+                                      "three_p": "plausible"}]}],
+    }
+
+
+def _narrative(payload):
+    return payload["segments"][0]["narratives"][0]
+
+
+_GATE_RULES = {
+    # rule: (kind, uid, how the peer's payload breaks it)
+    "identity: event_category id differs from its uid":
+        ("event_category", "other", lambda p: p.update(id="mine")),
+    "identity: visibility category_id differs from its uid":
+        ("event_category_visibility", "other", lambda p: p.update(category_id="mine")),
+    "not null: a record column":
+        ("user_event", "bad-uid", lambda p: p.update(label=None)),
+    "not null: a case column":
+        ("valuation_case", "bad-uid", lambda p: p["case"].update(as_of_date=None)),
+    "not null: a segment column":
+        ("valuation_case", "bad-uid", lambda p: p["segments"][0].update(base_revenue=None)),
+    "not null: a narrative column":
+        ("valuation_case", "bad-uid", lambda p: _narrative(p).update(claim=None)),
+    "check: visible":
+        ("event_category_visibility", "bad-uid", lambda p: p.update(visible=2)),
+    "check: category kind":
+        ("event_category", "bad-uid", lambda p: p.update(kind="builtin")),
+    "check: narrative confidence":
+        ("valuation_case", "bad-uid", lambda p: _narrative(p).update(confidence="guess")),
+    "check: narrative three_p":
+        ("valuation_case", "bad-uid", lambda p: _narrative(p).update(three_p="certain")),
+}
+
+
+@pytest.mark.parametrize("rule", list(_GATE_RULES))
+def test_a_peer_record_the_local_schema_would_refuse_is_skipped_and_reported(tmp_path, monkeypatch, cloud, rule):
+    """Final review finding B: a value that passes the shape checks but breaks a local UNIQUE,
+    NOT NULL or CHECK constraint used to reach apply, roll back every kind on every sync, and
+    leave skipped_files empty. The gate now refuses the file, and a good peer beside it still
+    merges."""
+    kind, uid, breaks = _GATE_RULES[rule]
+    a, b = PC(tmp_path, "PC-A", monkeypatch), PC(tmp_path, "PC-B", monkeypatch)
+    a.add_category("mine")
+    b.add_event("GOOD")
+
+    bad_pc = "PC-BAD-0001"
+    files.write_own_file(cloud, bad_pc, RecordState(records={
+        (kind, uid): Record(kind, uid, _TS, bad_pc, _valid_payload(kind, uid))}), _TS)
+    bad = files.own_file_path(cloud, bad_pc)
+    published = json.loads(bad.read_text(encoding="utf-8"))
+    breaks(published["records"][0]["payload"])
+    bad.write_text(json.dumps(published), encoding="utf-8")
+
+    a.sync()
+
+    status = service.current_status()
+    assert [s.name for s in status.skipped_files] == [bad.name]
+    assert status.last_error is None
+    assert "GOOD" in a.events()

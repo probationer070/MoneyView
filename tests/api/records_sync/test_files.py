@@ -273,7 +273,7 @@ def test_a_flat_kind_record_missing_a_column_is_an_error(tmp_path):
     # non-children branch of _check_payload validates too, not just the case-with-children branch.
     folder = _folder(tmp_path)
     category = Record("event_category", "cat1", TS, A,
-                       {"id": "cat1", "kind": "manual", "label": "Cat", "color": "#fff", "created_at": TS})
+                       {"id": "cat1", "kind": "user", "label": "Cat", "color": "#fff", "created_at": TS})
     state = RecordState(records={("event_category", "cat1"): category})
     write_own_file(tmp_path, A, state, "2026-09-20T10:00:01.000Z")
     path = folder / f"records.{A}.json"

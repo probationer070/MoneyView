@@ -54,7 +54,8 @@ def _pc(value, what: str) -> str:
     return value
 
 
-def _check_tree(node: dict, columns: tuple[str, ...], children: tuple[ChildSpec, ...], what: str) -> None:
+def _check_tree(node: dict, columns: tuple[str, ...], children: tuple[ChildSpec, ...], what: str,
+                not_null: tuple[str, ...] = (), domains: tuple[tuple[str, tuple], ...] = ()) -> None:
     if not isinstance(node, dict):
         raise ValueError(f"{what} is not an object")
     expected = set(columns) | {child.key for child in children}
@@ -74,19 +75,28 @@ def _check_tree(node: dict, columns: tuple[str, ...], children: tuple[ChildSpec,
             raise ValueError(f"{what}.{column}={value!r} is not a scalar (got {type(value).__name__})")
         if isinstance(value, float) and not math.isfinite(value):
             raise ValueError(f"{what}.{column}={value!r} is not a finite number")
+    # A value the local schema's NOT NULL or CHECK would refuse passes every check above, and
+    # would only fail at apply -- rolling back every kind on every sync, with no file reported.
+    for column in not_null:
+        if node[column] is None:
+            raise ValueError(f"{what}.{column} is null, but the local schema requires a value")
+    for column, allowed in domains:
+        if node[column] not in allowed:
+            raise ValueError(f"{what}.{column}={node[column]!r} is not one of {list(allowed)}")
     for child in children:
         rows = node[child.key]
         if not isinstance(rows, list):
             raise ValueError(f"{what}.{child.key} is not a list")
         for index, row in enumerate(rows):
-            _check_tree(row, child.columns, child.children, f"{what}.{child.key}[{index}]")
+            _check_tree(row, child.columns, child.children, f"{what}.{child.key}[{index}]",
+                        child.not_null, child.domains)
 
 
-def _check_payload(kind: Kind, payload: dict) -> None:
+def _check_payload(kind: Kind, uid: str, payload: dict) -> None:
     if kind.children:
         if not isinstance(payload, dict) or set(payload) != {"case", *(c.key for c in kind.children)}:
             raise ValueError(f"{kind.name} payload must hold 'case' and {[c.key for c in kind.children]}")
-        _check_tree(payload["case"], payload_columns(kind), (), f"{kind.name}.case")
+        _check_tree(payload["case"], payload_columns(kind), (), f"{kind.name}.case", kind.not_null, kind.domains)
         if kind.lineage_column:
             parent_uid = payload["case"][PARENT_UID_KEY]
             if not (parent_uid is None or (isinstance(parent_uid, str) and parent_uid)):
@@ -96,9 +106,14 @@ def _check_payload(kind: Kind, payload: dict) -> None:
             if not isinstance(rows, list):
                 raise ValueError(f"{kind.name}.{child.key} is not a list")
             for index, row in enumerate(rows):
-                _check_tree(row, child.columns, child.children, f"{kind.name}.{child.key}[{index}]")
+                _check_tree(row, child.columns, child.children, f"{kind.name}.{child.key}[{index}]",
+                            child.not_null, child.domains)
         return
-    _check_tree(payload, kind.columns, (), f"{kind.name} payload")
+    _check_tree(payload, kind.columns, (), f"{kind.name} payload", kind.not_null, kind.domains)
+    # A natural-identity kind carries its identity in the payload too; the two must agree, or
+    # apply would write the row under a key another record owns.
+    if not kind.generates_uid and kind.singleton_uid is None and payload[kind.uid_column] != uid:
+        raise ValueError(f"{kind.name} {uid!r}: payload {kind.uid_column}={payload[kind.uid_column]!r} differs from its uid")
 
 
 def _parse(payload: dict) -> RecordPeerFile:
@@ -120,7 +135,7 @@ def _parse(payload: dict) -> RecordPeerFile:
         key = (kind.name, uid)
         if key in records:
             raise ValueError(f"duplicate record {key}")
-        _check_payload(kind, raw["payload"])
+        _check_payload(kind, uid, raw["payload"])
         records[key] = Record(
             kind=kind.name, uid=uid,
             updated_at=_ts(raw["updated_at"], f"{kind.name}.{uid} updated_at"),

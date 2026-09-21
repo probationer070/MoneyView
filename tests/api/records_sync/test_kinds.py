@@ -90,3 +90,28 @@ def test_every_real_column_is_declared_or_explicitly_excluded():
             _check(conn, kind.table, set(kind.columns))
             for child in kind.children:
                 _check_child(conn, child)
+
+
+def test_the_declared_not_null_columns_match_the_live_schema():
+    # The gate rejects a peer's null in exactly these columns (final review finding B). A column
+    # made NOT NULL later but not declared here would let a peer's null through to apply, where it
+    # would roll back every kind on every sync. Columns with a DEFAULT are included: the payload
+    # always writes every column explicitly, and an explicit NULL fails NOT NULL even with one.
+    local_ids = {"id", "sync_uid", "case_id", "segment_id", "singleton_id"}
+
+    def _check(conn, table, declared):
+        required = {
+            row["name"] for row in conn.execute(f"PRAGMA table_info({table})") if row["notnull"]
+        } - local_ids
+        assert set(declared) == required, f"{table}: declared {sorted(declared)}, schema {sorted(required)}"
+
+    def _check_child(conn, child):
+        _check(conn, child.table, child.not_null)
+        for grandchild in child.children:
+            _check_child(conn, grandchild)
+
+    with get_db() as conn:
+        for kind in KINDS.values():
+            _check(conn, kind.table, kind.not_null)
+            for child in kind.children:
+                _check_child(conn, child)
