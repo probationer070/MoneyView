@@ -1,6 +1,6 @@
 # Records Peer Sync — Design
 
-> **Status:** approved design, not implemented. Branch `records-peer-sync-spec`.
+> **Status:** implemented on branch `records-peer-sync`.
 > **Decided with the owner on 2026-09-20.** Scope, conflict rule, record kinds and deletion
 > behaviour are the owner's answers, quoted in §1.
 
@@ -147,7 +147,8 @@ Each PC writes one more file beside its watchlist file, in the same folder:
       "uid": "9f2c…",
       "updated_at": "2026-09-19T23:10:00.000Z",
       "updated_by": "DESKTOP-A1B2-4f9c",
-      "payload": { "case": { "…": "every valuation_case column except id and sync_uid" },
+      "payload": { "case": { "…": "every valuation_case column except id, sync_uid and parent_case_id",
+                             "parent_uid": "the sync_uid of the case parent_case_id points at, or null" },
                    "segments": [ { "…": "segment columns except id and case_id",
                                    "narratives": [ { "…": "segment_narrative columns except segment_id" } ] } ] }
     }
@@ -168,10 +169,17 @@ Rules carried over from the watchlist file, and enforced the same way:
 - before publishing, this PC parses its own payload with the reader's parser and refuses to write a
   file peers would reject.
 
+**Fork lineage travels by uid.** `parent_case_id` points at a local id, so it never travels. The
+case payload carries `parent_uid` in its place: the `sync_uid` of the parent case, or `null`. On
+apply, once every case is in place, it is resolved to this PC's local id of the case with that
+uid, or to NULL when that case is not present here.
+
 **Validation is per kind.** Each kind declares its columns and their types, and a record whose
 payload does not match its kind is rejected with the file. A payload column the local schema does not
 have is an error, not something to ignore: it means the peer runs a newer schema, and guessing would
-corrupt a record.
+corrupt a record. So is any value the local schema would refuse at apply -- a null in a NOT NULL
+column, a value outside a CHECK's set, or a category (or visibility) payload whose own id differs
+from its uid -- because failing at apply would roll back every kind on every sync.
 
 Expected size today: 31 cases with 192 narrative rows is well under 1 MB, so the whole state is
 republished on every sync, as the watchlist does. If the file ever exceeds about 5 MB, that is the
@@ -189,10 +197,12 @@ if latest_remove exists and remove_key > add_key, or no record exists
 else             -> present: store latest_add's payload whole, with its own updated_at/updated_by
 ```
 
-**Whole-record replacement.** Applying a record replaces its entire tree: the case row, then all its
-segments and narratives, deleted and re-inserted from the payload under fresh local ids. This is what
-makes "newest edit wins, whole case" true rather than approximately true. Foreign keys with
-`ON DELETE CASCADE` already clean up the children.
+**Whole-record replacement.** Applying a record replaces its entire tree: every column of the case
+row, then all its segments and narratives, deleted and re-inserted from the payload under fresh local
+ids. This is what makes "newest edit wins, whole case" true rather than approximately true. The case
+row itself is updated in place, keeping its local id, because a local fork's `parent_case_id` points
+at that id; only the children are deleted (`ON DELETE CASCADE` takes the narratives with their
+segments).
 
 **A record is only rewritten when it actually differs.** Applying an identical payload is skipped, so
 local ids stay stable across syncs and `AUTOINCREMENT` does not run away.
@@ -200,9 +210,11 @@ local ids stay stable across syncs and `AUTOINCREMENT` does not run away.
 **Natural-key collisions between different uids.** `valuation_case.case_name` is UNIQUE. Two PCs can
 independently create different cases with the same name, so the merge can hold two uids claiming one
 name. The newer `add_key` keeps the name; the older one is renamed to
-`<name> (from <pc_id>)`, kept, and reported in the status. Nothing the owner wrote is deleted to
-resolve a name clash, and the rename is a local repair, not a new authored change: it does not
-restamp the record.
+`<name> (from <pc_id>)`, kept, and reported in the status once, by the sync that performs the
+rename; later syncs do not report it again. Nothing the owner wrote is deleted to resolve a name
+clash -- including two `conservative_<TICKER>_<vintage>` cases, whose names are deterministic, so
+both PCs hold one: both copies are kept. The rename is a local repair, not a new authored change:
+it does not restamp the record.
 
 **First sync** is a union, exactly as the watchlist's was: records that exist before sync is first
 enabled are stamped `(BASELINE_TS, own pc_id)`, so both PCs' pre-existing work survives, and any real
@@ -249,8 +261,11 @@ local, and the line says "changes are kept on this PC".
 There is no separate switch: the owner asked for their PCs to match, not for two dials.
 
 **Migration.** The new column and table are additive: `ALTER TABLE … ADD COLUMN sync_uid TEXT`, a
-unique index, and `CREATE TABLE record_sync`. Existing rows keep every value. A database that never
-enables sync never gains a uid, and behaves exactly as before.
+unique index, and `CREATE TABLE record_sync`. Existing rows keep every value. Rows that existed
+before the migration keep `sync_uid = NULL` until the first records sync backfills them, but every
+row created afterwards gets a uid and a stamp when it is written, whether sync is on or off (§3.1
+and the timestamps rule below). With sync off, nothing reads them, and the app behaves exactly as
+before.
 
 **Timestamps are maintained whether sync is on or off**, as the watchlist does, so a change made
 while sync is off keeps its real time and wins on merit when sync is turned back on. Tombstones are

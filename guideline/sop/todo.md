@@ -1221,17 +1221,17 @@ Plan: `docs/superpowers/plans/2026-09-18-watchlist-peer-sync.md`.
 Spec: `docs/superpowers/specs/2026-09-20-records-peer-sync-design.md`.
 Plan: `docs/superpowers/plans/2026-09-20-records-peer-sync.md`.
 
-- [x] **L-1. Shared `peer_sync` model** — `watchlist_sync/model.py` moved to `peer_sync/model.py`,
+- [ ] **L-1. Shared `peer_sync` model** (PR pending) — `watchlist_sync/model.py` moved to `peer_sync/model.py`,
       watchlist behaviour unchanged
-- [x] **L-2. Schema — `sync_uid` columns and `record_sync`** — additive migration, existing rows
+- [ ] **L-2. Schema — `sync_uid` columns and `record_sync`** (PR pending) — additive migration, existing rows
       keep every value
-- [x] **L-3. Kind registry and pure merge** — whole-record replacement, name-clash repair
-- [x] **L-4. The record peer file** — read, per-kind validation, atomic write
-- [x] **L-5. The store** — backfill, read, apply, stamps
-- [x] **L-6. `run_records_sync`** — one lock, its own status
-- [x] **L-7. Wiring** — stamps on every write, triggers, `GET /api/v1/sync/status`
-- [x] **L-8. Status line** — Valuation, Decisions and Events pages
-- [x] **L-9. Docs and gates** — this entry, `docs/local-run-resources.md`,
+- [ ] **L-3. Kind registry and pure merge** (PR pending) — whole-record replacement, name-clash repair
+- [ ] **L-4. The record peer file** (PR pending) — read, per-kind validation, atomic write
+- [ ] **L-5. The store** (PR pending) — backfill, read, apply, stamps
+- [ ] **L-6. `run_records_sync`** (PR pending) — one lock, its own status
+- [ ] **L-7. Wiring** (PR pending) — stamps on every write, triggers, `GET /api/v1/sync/status`
+- [ ] **L-8. Status line** (PR pending) — Valuation, Decisions and Events pages
+- [ ] **L-9. Docs and gates** (PR pending) — this entry, `docs/local-run-resources.md`,
       `docs/architecture/storage-model.md`
 
 

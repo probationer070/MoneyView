@@ -2,8 +2,6 @@
 
 import itertools
 
-import pytest
-
 from apps.api.services.records_sync.kinds import KINDS
 from apps.api.services.records_sync.merge import (
     Record,
