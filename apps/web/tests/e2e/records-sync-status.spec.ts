@@ -154,6 +154,11 @@ test.describe("records sync status on the events page", () => {
     await expect(page.getByTestId("events-table")).toBeVisible({ timeout: 60_000 });
   }
 
+  test("sync off shows nothing", async ({ page }) => {
+    await openEvents(page, OFF);
+    await expect(line(page)).toHaveCount(0);
+  });
+
   test("sync on shows the status line", async ({ page }) => {
     await openEvents(page, on({}));
     await expect(line(page)).toHaveText("Sync on · no other PC has synced yet");
