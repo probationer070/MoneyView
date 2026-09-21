@@ -12,13 +12,14 @@ from apps.api.services.peer_sync.model import BASELINE_TS
 from apps.api.services.records_sync import files as records_files
 from apps.api.services.records_sync import service as records_service
 from apps.api.services.watchlist_sync import store as watchlist_store
-from tests.api.test_valuation_routes import _seed_conservative_inputs
+from tests.api.test_valuation_routes import _seed_conservative_inputs, _seed_verdict_inputs
 from tests.api.valuation_fixtures import _case_payload
 
 client = TestClient(app)
 
 CASES = "/api/v1/valuation/cases"
 CONSERVATIVE = "/api/v1/valuation/conservative"
+VERDICT = "/api/v1/valuation/verdict"
 DECISIONS = "/api/v1/decisions"
 EVENTS = "/api/v1/market/events"
 CATEGORIES = "/api/v1/market/event-categories"
@@ -142,6 +143,24 @@ def test_get_event_categories_merges_a_peer_file(tmp_path, monkeypatch):
     ids = {row["id"] for row in client.get(CATEGORIES).json()}
 
     assert "user-peer" in ids
+
+
+def test_get_valuation_verdict_merges_a_peer_file(tmp_path, monkeypatch):
+    """valuation_verdict.build_verdict's DCF-gap row reads a stored conservative case
+    (company_baseline.find_conservative_case_id + valuation_case.run_stored_case), so the verdict
+    route reads a synced record just like the other record-read routes and must trigger a records
+    read sync -- or a peer's case never appears here, only after some other route happens to sync.
+    """
+    _seed_verdict_inputs(ticker="AAPL")
+    root = _enable(tmp_path, monkeypatch)
+    _write_peer_records(root, records=[("valuation_case", "peer-case", _peer_case_payload())])
+
+    response = client.get(f"{VERDICT}/AAPL")
+
+    assert response.status_code == 200, response.text
+    with get_db() as conn:
+        names = {row["case_name"] for row in conn.execute("SELECT case_name FROM valuation_case")}
+    assert "Peer Case" in names
 
 
 def test_get_portfolio_preferences_merges_a_peer_file(tmp_path, monkeypatch):

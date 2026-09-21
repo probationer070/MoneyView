@@ -238,4 +238,5 @@ def get_valuation_verdict(ticker: str):
     # `build_verdict` immediately loaded it all a second time (D6).
     if not load_price_bars(ticker, limit=1):
         raise HTTPException(status_code=404, detail=f"no stored price bars for {ticker.upper()}")
+    records_sync.run_records_sync("read")
     return APIResponse(data=VerdictPanel(**build_verdict(ticker)))
