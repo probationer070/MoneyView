@@ -589,3 +589,19 @@ def test_a_forked_case_that_loses_a_name_clash_does_not_stop_records_sync(tmp_pa
     [renamed] = [name for name in a_cases if name.startswith("conservative_AAPL_2026 (from ")]
     assert a_cases[renamed]["id"] == parent_id_before, "the renamed parent keeps its local id"
     assert a_cases["my fork"]["parent_case_id"] == parent_id_before
+
+
+def test_a_fork_arrives_pointing_at_the_other_pcs_local_copy_of_its_parent(tmp_path, monkeypatch, cloud):
+    """Final review finding C: fork lineage travels as the parent's sync_uid and is resolved to
+    the receiving PC's own local id. B holds a case of its own first, so its local ids differ from
+    A's and a copied raw id would point at the wrong case."""
+    a, b = PC(tmp_path, "PC-A", monkeypatch), PC(tmp_path, "PC-B", monkeypatch)
+    b.add_case("B only")
+    a.add_case("Parent")
+    a.add_case("Fork", parent_name="Parent")
+    b.sync()
+
+    b_cases = b.cases()
+    assert b_cases["Parent"]["id"] != a.cases()["Parent"]["id"], "precondition: the local ids differ"
+    assert b_cases["Fork"]["parent_case_id"] == b_cases["Parent"]["id"]
+    assert b_cases["Parent"]["parent_case_id"] is None

@@ -4,7 +4,13 @@ autouse _isolated_db).
 """
 
 from apps.api.services.db import get_db
-from apps.api.services.records_sync.kinds import KIND_PREFERENCES, KIND_VALUATION_CASE, KINDS
+from apps.api.services.records_sync.kinds import (
+    KIND_PREFERENCES,
+    KIND_VALUATION_CASE,
+    KINDS,
+    PARENT_UID_KEY,
+    payload_columns,
+)
 
 
 def _columns(conn, table):
@@ -33,10 +39,13 @@ def test_every_kind_matches_the_live_schema():
                 _assert_child_matches_schema(conn, child)
 
 
-def test_parent_case_id_never_travels():
+def test_parent_case_id_never_travels_but_the_parents_uid_does():
     # parent_case_id points at a LOCAL row id, so it must never be a payload column: a peer's
-    # value would name a different case here.
-    assert "parent_case_id" not in KINDS[KIND_VALUATION_CASE].columns
+    # value would name a different case here. The parent's sync_uid travels in its place.
+    case = KINDS[KIND_VALUATION_CASE]
+    assert "parent_case_id" not in payload_columns(case)
+    assert PARENT_UID_KEY in payload_columns(case)
+    assert case.lineage_column == "parent_case_id"
 
 
 def test_exactly_one_kind_is_a_singleton_identified_across_pcs_by_singleton_uid():
@@ -62,7 +71,7 @@ def test_every_real_column_is_declared_or_explicitly_excluded():
         "sync_uid",        # generated cross-PC identity, written by backfill_uids -- not a payload column
         "case_id",         # segment's local parent pointer
         "segment_id",      # segment_narrative's local parent pointer
-        "parent_case_id",  # valuation_case's local fork-provenance pointer; never travels (spec §1)
+        "parent_case_id",  # valuation_case's local fork pointer; travels as parent_uid instead (spec §4)
         "singleton_id",    # portfolio_preferences' local row locator; singleton_uid is the real identity
     }
 

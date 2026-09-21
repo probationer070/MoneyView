@@ -113,7 +113,7 @@ def _case_payload(name="Case", segments=("core",)):
                  "wacc_stable": 0.08, "wacc_converge_from": 5, "marginal_tax_rate": 0.21,
                  "nol_balance": 0.0, "roic_stable": 0.12, "terminal_growth": 0.02,
                  "effective_tax_rate": 0.18, "cash": 1.0, "debt": 0.0, "ipo_proceeds": 0.0,
-                 "shares_basic": 10.0, "shares_new": 0.0},
+                 "shares_basic": 10.0, "shares_new": 0.0, "parent_uid": None},
         "segments": [{"name": s, "base_revenue": 100.0, "base_margin": 0.2, "tam_target": None,
                       "market_share_target": None, "revenue_target": 200.0, "margin_target": 0.25,
                       "sales_to_capital_early": 2.0, "sales_to_capital_late": 2.5,
@@ -217,6 +217,27 @@ def test_an_updated_case_keeps_its_local_id():
 
     assert after["case_name"] == "C renamed", "precondition: the case really was rewritten"
     assert after["id"] == before
+
+
+def test_deleting_a_parent_case_leaves_its_local_fork_without_a_parent():
+    # A peer tombstone can remove a case that a local fork points at. parent_case_id has no
+    # ON DELETE clause, so the delete must unlink the fork first or the whole apply rolls back.
+    fork = _case_payload("Fork")
+    fork["case"]["parent_uid"] = "p"
+    fork_record = Record("valuation_case", "f", TS, "PC-B-0002", fork)
+    with get_db() as conn:
+        store.apply_state(conn, RecordState(records={
+            ("valuation_case", "p"): Record("valuation_case", "p", TS, "PC-B-0002", _case_payload("Parent")),
+            ("valuation_case", "f"): fork_record}))
+        parent_id = conn.execute("SELECT id FROM valuation_case WHERE sync_uid = 'p'").fetchone()["id"]
+        assert conn.execute("SELECT parent_case_id FROM valuation_case WHERE sync_uid = 'f'").fetchone()[0] == parent_id
+
+        store.apply_state(conn, RecordState(
+            records={("valuation_case", "f"): fork_record},
+            removed={("valuation_case", "p"): RecordTombstone("valuation_case", "p", "2026-09-20T11:00:00.000Z", "PC-B-0002")}))
+        rows = {r["sync_uid"]: r["parent_case_id"] for r in conn.execute("SELECT sync_uid, parent_case_id FROM valuation_case")}
+
+    assert rows == {"f": None}
 
 
 def test_apply_state_deletes_a_record_absent_from_the_merged_state():

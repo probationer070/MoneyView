@@ -68,7 +68,7 @@ def _peer_case_payload(name="Peer Case"):
                  "wacc_stable": 0.08, "wacc_converge_from": 5, "marginal_tax_rate": 0.21,
                  "nol_balance": 0.0, "roic_stable": 0.12, "terminal_growth": 0.02,
                  "effective_tax_rate": 0.18, "cash": 1.0, "debt": 0.0, "ipo_proceeds": 0.0,
-                 "shares_basic": 10.0, "shares_new": 0.0},
+                 "shares_basic": 10.0, "shares_new": 0.0, "parent_uid": None},
         "segments": [{"name": "core", "base_revenue": 100.0, "base_margin": 0.2, "tam_target": None,
                       "market_share_target": None, "revenue_target": 200.0, "margin_target": 0.25,
                       "sales_to_capital_early": 2.0, "sales_to_capital_late": 2.5,

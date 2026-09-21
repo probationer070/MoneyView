@@ -20,7 +20,7 @@ def _state():
                             "wacc_initial": 0.09, "wacc_stable": 0.08, "wacc_converge_from": 5,
                             "marginal_tax_rate": 0.21, "nol_balance": 0.0, "roic_stable": 0.12,
                             "terminal_growth": 0.02, "effective_tax_rate": 0.18, "cash": 1.0,
-                            "debt": 0.0, "ipo_proceeds": 0.0, "shares_basic": 10.0, "shares_new": 0.0},
+                            "debt": 0.0, "ipo_proceeds": 0.0, "shares_basic": 10.0, "shares_new": 0.0, "parent_uid": None},
                    "segments": [{"name": "core", "base_revenue": 100.0, "base_margin": 0.2,
                                  "tam_target": None, "market_share_target": None,
                                  "revenue_target": 200.0, "margin_target": 0.25,
@@ -234,6 +234,23 @@ def test_a_non_scalar_value_in_a_payload_column_is_an_error(tmp_path):
         peers, skipped = read_peer_files(tmp_path, own_pc_id=ME)
 
         assert peers == [] and column in skipped[0].reason
+
+
+def test_a_parent_uid_that_is_not_a_uid_or_null_is_an_error(tmp_path):
+    # parent_uid is looked up as a sync_uid on apply; a number or an empty string names nothing.
+    folder = _folder(tmp_path)
+    write_own_file(tmp_path, A, _state(), "2026-09-20T10:00:01.000Z")
+    path = folder / f"records.{A}.json"
+    baseline = path.read_text(encoding="utf-8")
+
+    for bad in (5, ""):
+        payload = json.loads(baseline)
+        payload["records"][0]["payload"]["case"]["parent_uid"] = bad
+        path.write_text(json.dumps(payload), encoding="utf-8")
+
+        peers, skipped = read_peer_files(tmp_path, own_pc_id=ME)
+
+        assert peers == [] and "parent_uid" in skipped[0].reason
 
 
 def test_an_unknown_column_in_a_narrative_is_skipped_and_reported(tmp_path):

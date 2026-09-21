@@ -9,7 +9,7 @@ import secrets
 import sqlite3
 
 from apps.api.services.peer_sync.model import BASELINE_TS, SEED_TS, next_stamp
-from apps.api.services.records_sync.kinds import KIND_PREFERENCES, KINDS, ChildSpec, Kind
+from apps.api.services.records_sync.kinds import KIND_PREFERENCES, KINDS, PARENT_UID_KEY, ChildSpec, Kind
 from apps.api.services.records_sync.merge import Record, RecordState, RecordTombstone
 
 
@@ -94,9 +94,20 @@ def _read_child_rows(conn: sqlite3.Connection, child: ChildSpec, parent_id: int)
     return items
 
 
+def _lineage_uid(conn: sqlite3.Connection, kind: Kind, row: sqlite3.Row) -> str | None:
+    """The uid of the row this row's lineage column points at, or None."""
+    parent_id = row[kind.lineage_column]
+    if parent_id is None:
+        return None
+    parent = conn.execute(f"SELECT {kind.uid_column} FROM {kind.table} WHERE id = ?", (parent_id,)).fetchone()
+    return parent[0] if parent is not None else None
+
+
 def _payload_of_row(conn: sqlite3.Connection, kind: Kind, row: sqlite3.Row) -> dict:
     if kind.children:
         payload: dict = {"case": {c: row[c] for c in kind.columns}}
+        if kind.lineage_column:
+            payload["case"][PARENT_UID_KEY] = _lineage_uid(conn, kind, row)
         for child in kind.children:
             payload[child.key] = _read_child_rows(conn, child, row["id"])
         return payload
@@ -285,6 +296,14 @@ def apply_state(conn: sqlite3.Connection, state: RecordState) -> list[str]:
                 where, params = _locator(kind, uid)
                 conn.execute(f"UPDATE {kind.table} SET {kind.natural_key} = ? WHERE {where}", (uid, *params))
         for uid in absent:
+            if kind.lineage_column:
+                # A local fork of a case about to be deleted must let go of it first; the lineage
+                # pass below leaves it NULL, because its parent is no longer present.
+                conn.execute(
+                    f"UPDATE {kind.table} SET {kind.lineage_column} = NULL WHERE {kind.lineage_column} IN "
+                    f"(SELECT id FROM {kind.table} WHERE {kind.uid_column} = ?)",
+                    (uid,),
+                )
             _delete_by_uid(conn, kind, uid)
         for uid in existing:
             if kind.children:
@@ -294,6 +313,17 @@ def apply_state(conn: sqlite3.Connection, state: RecordState) -> list[str]:
                     conn.execute(f"DELETE FROM {child.table} WHERE {child.parent_column} = ?", (record_id,))
         for uid, payload in to_write.items():
             _write_record(conn, kind, uid, payload, exists=uid in existing)
+
+        # Lineage last, once every row of the kind is in place: a fork can arrive in the same
+        # batch as its parent, in either order. The parent's uid resolves to THIS PC's local id,
+        # or to NULL when the parent is not present here.
+        if kind.lineage_column:
+            for uid, record in incoming.items():
+                conn.execute(
+                    f"UPDATE {kind.table} SET {kind.lineage_column} = "
+                    f"(SELECT id FROM {kind.table} WHERE {kind.uid_column} = ?) WHERE {kind.uid_column} = ?",
+                    (record.payload["case"][PARENT_UID_KEY], uid),
+                )
 
     for (kind_name, uid), record in state.records.items():
         _upsert_added(conn, kind_name, uid, record.updated_at, record.updated_by)

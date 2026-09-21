@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from apps.api.services.peer_sync.model import is_valid_ts
-from apps.api.services.records_sync.kinds import KINDS, ChildSpec, Kind
+from apps.api.services.records_sync.kinds import KINDS, PARENT_UID_KEY, ChildSpec, Kind, payload_columns
 from apps.api.services.records_sync.merge import Record, RecordState, RecordTombstone
 from apps.api.services.watchlist_sync.files import SYNC_SUBDIR, SkippedFile, SyncFolderUnavailable
 
@@ -86,7 +86,11 @@ def _check_payload(kind: Kind, payload: dict) -> None:
     if kind.children:
         if not isinstance(payload, dict) or set(payload) != {"case", *(c.key for c in kind.children)}:
             raise ValueError(f"{kind.name} payload must hold 'case' and {[c.key for c in kind.children]}")
-        _check_tree(payload["case"], kind.columns, (), f"{kind.name}.case")
+        _check_tree(payload["case"], payload_columns(kind), (), f"{kind.name}.case")
+        if kind.lineage_column:
+            parent_uid = payload["case"][PARENT_UID_KEY]
+            if not (parent_uid is None or (isinstance(parent_uid, str) and parent_uid)):
+                raise ValueError(f"{kind.name}.case.{PARENT_UID_KEY}={parent_uid!r} is not a uid or null")
         for child in kind.children:
             rows = payload[child.key]
             if not isinstance(rows, list):
