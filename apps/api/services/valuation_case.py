@@ -10,9 +10,13 @@ carries the narrative claim that justifies it. See `_validate_narratives`.
 
 from __future__ import annotations
 
+import secrets
 import sqlite3
 
 from apps.api.services.db import get_db
+from apps.api.services.records_sync import store as records_sync_store
+from apps.api.services.records_sync.kinds import KIND_VALUATION_CASE
+from apps.api.services.watchlist_sync.store import get_or_create_pc_id
 from packages.core_finance.segment_valuation import (
     CaseSpec,
     SegmentSpec,
@@ -185,6 +189,8 @@ def create_case(payload: dict) -> int:
                 ) from exc
             raise ValueError(f"could not create case: {message}") from exc
         case_id = int(cursor.lastrowid)
+        sync_uid = secrets.token_hex(16)
+        conn.execute("UPDATE valuation_case SET sync_uid = ? WHERE id = ?", (sync_uid, case_id))
 
         for segment in segments:
             try:
@@ -219,6 +225,8 @@ def create_case(payload: dict) -> int:
                         f"(confidence={narrative.get('confidence')!r}, "
                         f"three_p={narrative.get('three_p')!r}): {exc}"
                     ) from exc
+
+        records_sync_store.stamp(conn, KIND_VALUATION_CASE, sync_uid, get_or_create_pc_id(conn))
     return case_id
 
 

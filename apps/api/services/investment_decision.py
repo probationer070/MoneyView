@@ -54,9 +54,13 @@ def outcome_for(
     }
 
 
+import secrets
 from datetime import datetime, timezone
 
 from apps.api.services.db import get_db
+from apps.api.services.records_sync import store as records_sync_store
+from apps.api.services.records_sync.kinds import KIND_DECISION
+from apps.api.services.watchlist_sync.store import get_or_create_pc_id
 
 ACTIONS = ("buy", "sell", "watch", "pass")
 
@@ -190,12 +194,13 @@ def record_decision(
             figures = None
 
     with get_db() as conn:
+        sync_uid = secrets.token_hex(16)
         cursor = conn.execute(
             """INSERT INTO investment_decision
                (ticker, decided_at, action, memo, price_at_decision, dcf_value,
                 dcf_implied_return, roic, wacc, risk_free_rate, equity_risk_premium,
-                metric_schema_version, figures_source, figures_unavailable_reason)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                metric_schema_version, figures_source, figures_unavailable_reason, sync_uid)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 ticker,
                 datetime.now(timezone.utc).isoformat(),
@@ -211,8 +216,10 @@ def record_decision(
                 METRIC_SCHEMA_VERSION if figures else None,
                 (figures or {}).get("source", "unavailable"),
                 unavailable,
+                sync_uid,
             ),
         )
+        records_sync_store.stamp(conn, KIND_DECISION, sync_uid, get_or_create_pc_id(conn))
         return int(cursor.lastrowid)
 
 

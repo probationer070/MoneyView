@@ -4,7 +4,7 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
-from .watchlist import WatchlistPeer, WatchlistSkippedFile
+from .watchlist import WatchlistPeer, WatchlistPeerSyncStatus, WatchlistSkippedFile
 
 
 class RecordsSyncStatus(BaseModel):
@@ -17,3 +17,10 @@ class RecordsSyncStatus(BaseModel):
     last_sync_at: Optional[str] = None
     last_error: Optional[str] = None
     renamed: List[str] = Field(default_factory=list)
+
+
+class SyncStatus(BaseModel):
+    """Both peer-sync halves, reported together (task 7)."""
+
+    watchlist: WatchlistPeerSyncStatus
+    records: RecordsSyncStatus

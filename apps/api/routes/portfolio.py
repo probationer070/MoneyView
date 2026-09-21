@@ -30,6 +30,9 @@ from apps.api.services.market_data import MarketDataService
 from apps.api.services.news_service import NewsService
 from apps.api.services.portfolio_service import PortfolioAnalyticsService
 from apps.api.services import watchlist_seed
+from apps.api.services.records_sync import service as records_sync
+from apps.api.services.records_sync import store as records_sync_store
+from apps.api.services.records_sync.kinds import KIND_PREFERENCES
 from apps.api.services.watchlist_seed import (
     ensure_watchlist_bootstrapped,
     get_watchlist_sync_status,
@@ -111,6 +114,7 @@ def get_watchlist():
 @router.get("/preferences", response_model=APIResponse[PortfolioPreferences])
 def get_portfolio_preferences():
     """Return persisted portfolio workspace preferences."""
+    records_sync.run_records_sync("read")
     with get_db() as conn:
         row = conn.execute(
             """SELECT total_investment_amount, transaction_fee_rate, updated_at
@@ -137,11 +141,15 @@ def save_portfolio_preferences(preferences: PortfolioPreferences = Body(...)):
                VALUES (1, ?, ?, CURRENT_TIMESTAMP)""",
             (payload.total_investment_amount, payload.transaction_fee_rate),
         )
+        records_sync_store.stamp(
+            conn, KIND_PREFERENCES, KIND_PREFERENCES, watchlist_sync.local_pc_id(conn)
+        )
         row = conn.execute(
             """SELECT total_investment_amount, transaction_fee_rate, updated_at
                FROM portfolio_preferences
                WHERE singleton_id = 1"""
         ).fetchone()
+    records_sync.run_records_sync("mutation")
 
     return APIResponse(
         data=PortfolioPreferences(

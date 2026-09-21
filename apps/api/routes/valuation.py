@@ -24,6 +24,7 @@ from apps.api.services.company_baseline import (
     find_conservative_case_id,
     generate_conservative_case_for_ticker,
 )
+from apps.api.services.records_sync import service as records_sync
 from apps.api.services.valuation_case import (
     CaseNotFound,
     DuplicateCaseName,
@@ -47,11 +48,13 @@ def create_valuation_case(payload: ValuationCaseInput = Body(...)):
         case_id = create_case(payload.model_dump())
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    records_sync.run_records_sync("mutation")
     return APIResponse(data=ValuationCaseCreated(id=case_id))
 
 
 @router.get("/cases", response_model=APIResponse[list[ValuationCaseSummary]])
 def list_valuation_cases():
+    records_sync.run_records_sync("read")
     return APIResponse(data=[ValuationCaseSummary(**case) for case in list_cases()])
 
 
@@ -132,6 +135,7 @@ def fork_valuation_case(case_id: int, payload: ForkRequest = Body(...)):
         ) from exc
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    records_sync.run_records_sync("mutation")
     return APIResponse(data=ValuationCaseCreated(id=new_id))
 
 

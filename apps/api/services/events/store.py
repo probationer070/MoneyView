@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+import secrets
 import sqlite3
 
 from apps.api.models.schemas import MarketEvent, MarketEventInput
 from apps.api.services.events.categories import CategoryRow
+from apps.api.services.records_sync import store as records_sync_store
+from apps.api.services.records_sync.kinds import KIND_CATEGORY, KIND_USER_EVENT, KIND_VISIBILITY
+from apps.api.services.records_sync.service import is_enabled as records_sync_enabled
+from apps.api.services.watchlist_sync.store import get_or_create_pc_id
 
 USER_EVENT_PREFIX = "user-"
 
@@ -48,10 +53,12 @@ def _values(payload: MarketEventInput) -> tuple:
 
 
 def insert_user_event(conn: sqlite3.Connection, payload: MarketEventInput) -> MarketEvent:
+    sync_uid = secrets.token_hex(16)
     cursor = conn.execute(
-        "INSERT INTO user_event (label, category, start_date, end_date, source, note) VALUES (?, ?, ?, ?, ?, ?)",
-        _values(payload),
+        "INSERT INTO user_event (label, category, start_date, end_date, source, note, sync_uid) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (*_values(payload), sync_uid),
     )
+    records_sync_store.stamp(conn, KIND_USER_EVENT, sync_uid, get_or_create_pc_id(conn))
     return get_user_event(conn, cursor.lastrowid)
 
 
@@ -60,10 +67,19 @@ def update_user_event(conn: sqlite3.Connection, number: int, payload: MarketEven
         "UPDATE user_event SET label = ?, category = ?, start_date = ?, end_date = ?, source = ?, note = ? WHERE id = ?",
         (*_values(payload), number),
     )
-    return get_user_event(conn, number) if cursor.rowcount else None
+    if not cursor.rowcount:
+        return None
+    uid = records_sync_store.uid_of(conn, KIND_USER_EVENT, number)
+    if uid is not None:
+        records_sync_store.stamp(conn, KIND_USER_EVENT, uid, get_or_create_pc_id(conn))
+    return get_user_event(conn, number)
 
 
 def delete_user_event(conn: sqlite3.Connection, number: int) -> bool:
+    if records_sync_enabled():
+        uid = records_sync_store.uid_of(conn, KIND_USER_EVENT, number)
+        if uid is not None:
+            records_sync_store.record_removal(conn, KIND_USER_EVENT, uid, get_or_create_pc_id(conn))
     return conn.execute("DELETE FROM user_event WHERE id = ?", (number,)).rowcount > 0
 
 
@@ -89,14 +105,18 @@ def upsert_category_override(conn: sqlite3.Connection, category_id: str, *, labe
              color = COALESCE(excluded.color, event_category.color)""",
         (category_id, label, color),
     )
+    records_sync_store.stamp(conn, KIND_CATEGORY, category_id, get_or_create_pc_id(conn))
 
 
 def delete_category_override(conn: sqlite3.Connection, category_id: str) -> None:
+    if records_sync_enabled():
+        records_sync_store.record_removal(conn, KIND_CATEGORY, category_id, get_or_create_pc_id(conn))
     conn.execute("DELETE FROM event_category WHERE id = ? AND kind = 'override'", (category_id,))
 
 
 def insert_user_category(conn: sqlite3.Connection, category_id: str, label: str, color: str) -> None:
     conn.execute("INSERT INTO event_category (id, kind, label, color) VALUES (?, 'user', ?, ?)", (category_id, label, color))
+    records_sync_store.stamp(conn, KIND_CATEGORY, category_id, get_or_create_pc_id(conn))
 
 
 def update_user_category(conn: sqlite3.Connection, category_id: str, *, label: str | None, color: str | None) -> None:
@@ -104,9 +124,14 @@ def update_user_category(conn: sqlite3.Connection, category_id: str, *, label: s
         "UPDATE event_category SET label = COALESCE(?, label), color = COALESCE(?, color) WHERE id = ? AND kind = 'user'",
         (label, color, category_id),
     )
+    records_sync_store.stamp(conn, KIND_CATEGORY, category_id, get_or_create_pc_id(conn))
 
 
 def delete_user_category(conn: sqlite3.Connection, category_id: str) -> None:
+    if records_sync_enabled():
+        pc_id = get_or_create_pc_id(conn)
+        records_sync_store.record_removal(conn, KIND_CATEGORY, category_id, pc_id)
+        records_sync_store.record_removal(conn, KIND_VISIBILITY, category_id, pc_id)
     conn.execute("DELETE FROM event_category WHERE id = ? AND kind = 'user'", (category_id,))
     conn.execute("DELETE FROM event_category_visibility WHERE category_id = ?", (category_id,))
 
@@ -117,3 +142,4 @@ def set_visibility(conn: sqlite3.Connection, category_id: str, visible: bool) ->
            ON CONFLICT(category_id) DO UPDATE SET visible = excluded.visible""",
         (category_id, int(visible)),
     )
+    records_sync_store.stamp(conn, KIND_VISIBILITY, category_id, get_or_create_pc_id(conn))

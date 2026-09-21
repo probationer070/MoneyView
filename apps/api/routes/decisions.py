@@ -12,6 +12,7 @@ from apps.api.models.schema_parts.decision import (
     DecisionRow,
 )
 from apps.api.services.investment_decision import get_decision, list_decisions, record_decision
+from apps.api.services.records_sync import service as records_sync
 
 router = APIRouter()
 
@@ -24,11 +25,13 @@ def create_decision(payload: DecisionInput = Body(...)):
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    records_sync.run_records_sync("mutation")
     return APIResponse(data=DecisionCreated(id=decision_id))
 
 
 @router.get("", response_model=APIResponse[list[DecisionRow]])
 def get_decisions():
+    records_sync.run_records_sync("read")
     return APIResponse(data=[DecisionRow(**row) for row in list_decisions()])
 
 
