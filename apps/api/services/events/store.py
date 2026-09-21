@@ -109,9 +109,9 @@ def upsert_category_override(conn: sqlite3.Connection, category_id: str, *, labe
 
 
 def delete_category_override(conn: sqlite3.Connection, category_id: str) -> None:
-    if records_sync_enabled():
+    cursor = conn.execute("DELETE FROM event_category WHERE id = ? AND kind = 'override'", (category_id,))
+    if records_sync_enabled() and cursor.rowcount:
         records_sync_store.record_removal(conn, KIND_CATEGORY, category_id, get_or_create_pc_id(conn))
-    conn.execute("DELETE FROM event_category WHERE id = ? AND kind = 'override'", (category_id,))
 
 
 def insert_user_category(conn: sqlite3.Connection, category_id: str, label: str, color: str) -> None:
@@ -128,12 +128,14 @@ def update_user_category(conn: sqlite3.Connection, category_id: str, *, label: s
 
 
 def delete_user_category(conn: sqlite3.Connection, category_id: str) -> None:
+    category_cursor = conn.execute("DELETE FROM event_category WHERE id = ? AND kind = 'user'", (category_id,))
+    visibility_cursor = conn.execute("DELETE FROM event_category_visibility WHERE category_id = ?", (category_id,))
     if records_sync_enabled():
         pc_id = get_or_create_pc_id(conn)
-        records_sync_store.record_removal(conn, KIND_CATEGORY, category_id, pc_id)
-        records_sync_store.record_removal(conn, KIND_VISIBILITY, category_id, pc_id)
-    conn.execute("DELETE FROM event_category WHERE id = ? AND kind = 'user'", (category_id,))
-    conn.execute("DELETE FROM event_category_visibility WHERE category_id = ?", (category_id,))
+        if category_cursor.rowcount:
+            records_sync_store.record_removal(conn, KIND_CATEGORY, category_id, pc_id)
+        if visibility_cursor.rowcount:
+            records_sync_store.record_removal(conn, KIND_VISIBILITY, category_id, pc_id)
 
 
 def set_visibility(conn: sqlite3.Connection, category_id: str, visible: bool) -> None:

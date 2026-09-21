@@ -205,6 +205,50 @@ def test_creating_a_decision_is_stamped_with_a_causal_timestamp_not_the_baseline
     assert row is not None and row["updated_at"] != BASELINE_TS
 
 
+def test_creating_a_category_is_stamped_with_a_causal_timestamp_not_the_baseline(tmp_path, monkeypatch):
+    """Same guard as the event test above, for events/store.insert_user_category."""
+    _enable(tmp_path, monkeypatch)
+
+    created = client.post(CATEGORIES, json={"label": "Stamped Category", "color": "#123456"}).json()
+
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT updated_at FROM record_sync WHERE kind = 'event_category' AND uid = ?", (created["id"],)
+        ).fetchone()
+    assert row is not None and row["updated_at"] != BASELINE_TS
+
+
+def test_setting_visibility_is_stamped_with_a_causal_timestamp_not_the_baseline(tmp_path, monkeypatch):
+    """Same guard as the event test above, for events/store.set_visibility."""
+    _enable(tmp_path, monkeypatch)
+
+    response = client.patch(f"{CATEGORIES}/fomc", json={"visible": False})
+
+    assert response.status_code == 200, response.text
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT updated_at FROM record_sync WHERE kind = 'event_category_visibility' AND uid = 'fomc'"
+        ).fetchone()
+    assert row is not None and row["updated_at"] != BASELINE_TS
+
+
+def test_saving_preferences_is_stamped_with_a_causal_timestamp_not_the_baseline(tmp_path, monkeypatch):
+    """Same guard as the event test above, for PUT /portfolio/preferences."""
+    _enable(tmp_path, monkeypatch)
+
+    response = client.put(PREFERENCES, json={
+        "total_investment_amount": 12345.0, "transaction_fee_rate": 0.002, "updated_at": ""
+    })
+
+    assert response.status_code == 200, response.text
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT updated_at FROM record_sync WHERE kind = 'portfolio_preferences' "
+            "AND uid = 'portfolio_preferences'"
+        ).fetchone()
+    assert row is not None and row["updated_at"] != BASELINE_TS
+
+
 # --- tombstones only while sync is on; timestamps regardless ----------------------------------
 
 
@@ -236,6 +280,78 @@ def test_timestamps_are_kept_with_sync_off(monkeypatch):
             "AND uid = (SELECT sync_uid FROM valuation_case WHERE case_name = 'Offline')"
         ).fetchone()
     assert row["updated_at"] and row["updated_by"]
+
+
+# --- a delete that removes nothing publishes no tombstone --------------------------------------
+
+
+def test_resetting_a_category_with_no_override_writes_no_tombstone(tmp_path, monkeypatch):
+    """'Reset to default' on a built-in category nobody has overridden locally deletes zero rows,
+    so it must not publish a tombstone for it -- that would tell every peer this PC actively
+    removed an override that never existed here."""
+    _enable(tmp_path, monkeypatch)
+
+    response = client.delete(f"{CATEGORIES}/fomc/override")
+
+    assert response.status_code == 204, response.text
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT removed_at FROM record_sync WHERE kind = 'event_category' AND uid = 'fomc'"
+        ).fetchone()
+    assert row is None or row["removed_at"] is None
+
+
+def test_deleting_a_user_category_with_no_visibility_row_writes_no_visibility_tombstone(tmp_path, monkeypatch):
+    """A user category nobody ever set the visibility of has no visibility row to delete, so
+    deleting the category must not tombstone a visibility record that never existed."""
+    _enable(tmp_path, monkeypatch)
+    created = client.post(CATEGORIES, json={"label": "No Visibility", "color": "#abcdef"}).json()
+
+    response = client.delete(f"{CATEGORIES}/{created['id']}")
+
+    assert response.status_code == 204, response.text
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT removed_at FROM record_sync WHERE kind = 'event_category_visibility' AND uid = ?",
+            (created["id"],),
+        ).fetchone()
+    assert row is None or row["removed_at"] is None
+
+
+def test_resetting_an_existing_override_still_tombstones_it(tmp_path, monkeypatch):
+    """A real deletion -- an override that does exist locally -- still tombstones normally."""
+    _enable(tmp_path, monkeypatch)
+    client.patch(f"{CATEGORIES}/fomc", json={"label": "Overridden"})
+
+    response = client.delete(f"{CATEGORIES}/fomc/override")
+
+    assert response.status_code == 204, response.text
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT removed_at FROM record_sync WHERE kind = 'event_category' AND uid = 'fomc'"
+        ).fetchone()
+    assert row is not None and row["removed_at"] is not None
+
+
+def test_deleting_a_user_category_with_a_visibility_row_still_tombstones_both(tmp_path, monkeypatch):
+    """A real deletion of both the category and its visibility row still tombstones both."""
+    _enable(tmp_path, monkeypatch)
+    created = client.post(CATEGORIES, json={"label": "With Visibility", "color": "#abcdef"}).json()
+    client.patch(f"{CATEGORIES}/{created['id']}", json={"visible": False})
+
+    response = client.delete(f"{CATEGORIES}/{created['id']}")
+
+    assert response.status_code == 204, response.text
+    with get_db() as conn:
+        category_tomb = conn.execute(
+            "SELECT removed_at FROM record_sync WHERE kind = 'event_category' AND uid = ?", (created["id"],)
+        ).fetchone()
+        visibility_tomb = conn.execute(
+            "SELECT removed_at FROM record_sync WHERE kind = 'event_category_visibility' AND uid = ?",
+            (created["id"],),
+        ).fetchone()
+    assert category_tomb is not None and category_tomb["removed_at"] is not None
+    assert visibility_tomb is not None and visibility_tomb["removed_at"] is not None
 
 
 # --- the status route is read-only and reports both halves ------------------------------------
