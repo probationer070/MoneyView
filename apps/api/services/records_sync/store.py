@@ -51,11 +51,16 @@ def _local_row(conn: sqlite3.Connection, kind: Kind, uid: str) -> sqlite3.Row | 
     return conn.execute(f"SELECT * FROM {kind.table} WHERE {kind.uid_column} = ?", (uid,)).fetchone()
 
 
-def _delete_by_uid(conn: sqlite3.Connection, kind: Kind, uid: str) -> None:
+def _locator(kind: Kind, uid: str) -> tuple[str, tuple]:
+    """The WHERE clause and its parameters that find a kind's local row by its cross-PC uid."""
     if kind.singleton_uid is not None:
-        conn.execute(f"DELETE FROM {kind.table} WHERE {kind.uid_column} = 1")
-    else:
-        conn.execute(f"DELETE FROM {kind.table} WHERE {kind.uid_column} = ?", (uid,))
+        return f"{kind.uid_column} = 1", ()
+    return f"{kind.uid_column} = ?", (uid,)
+
+
+def _delete_by_uid(conn: sqlite3.Connection, kind: Kind, uid: str) -> None:
+    where, params = _locator(kind, uid)
+    conn.execute(f"DELETE FROM {kind.table} WHERE {where}", params)
 
 
 def ensure_first_sync(conn: sqlite3.Connection, pc_id: str) -> None:
@@ -188,36 +193,36 @@ def _insert_child(conn: sqlite3.Connection, child: ChildSpec, parent_id: int, pa
             _insert_child(conn, grandchild, cursor.lastrowid, row)
 
 
-def _insert_record(conn: sqlite3.Connection, kind: Kind, uid: str, payload: dict) -> None:
-    if kind.children:
-        columns = list(kind.columns)
-        values = [payload["case"][c] for c in columns]
-        if kind.generates_uid:
+def _write_record(conn: sqlite3.Connection, kind: Kind, uid: str, payload: dict, exists: bool) -> None:
+    """UPDATE an existing row in place, keeping its local id (a local fork's parent_case_id points
+    at it), or INSERT a new one; then insert its children, which the caller has already cleared."""
+    row = payload["case"] if kind.children else payload
+    columns = list(kind.columns)
+    values = [row[c] for c in columns]
+    if exists:
+        where, params = _locator(kind, uid)
+        conn.execute(
+            f"UPDATE {kind.table} SET {', '.join(f'{c} = ?' for c in columns)} WHERE {where}",
+            values + list(params),
+        )
+    else:
+        if kind.singleton_uid is not None:
+            columns = columns + [kind.uid_column]
+            values = values + [1]
+        elif kind.generates_uid:
             columns = columns + [kind.uid_column]
             values = values + [uid]
-        cursor = conn.execute(
+        # A natural-identity kind (event_category, event_category_visibility) already carries its
+        # uid_column in kind.columns, so nothing more to add.
+        conn.execute(
             f"INSERT INTO {kind.table} ({', '.join(columns)}) VALUES ({', '.join('?' for _ in columns)})",
             values,
         )
+    if kind.children:
+        record_id = _local_row(conn, kind, uid)["id"]
         for child in kind.children:
-            for row in payload[child.key]:
-                _insert_child(conn, child, cursor.lastrowid, row)
-        return
-
-    columns = list(kind.columns)
-    values = [payload[c] for c in columns]
-    if kind.singleton_uid is not None:
-        columns = columns + [kind.uid_column]
-        values = values + [1]
-    elif kind.generates_uid:
-        columns = columns + [kind.uid_column]
-        values = values + [uid]
-    # A natural-identity kind (event_category, event_category_visibility) already carries its
-    # uid_column in kind.columns, so nothing more to add.
-    conn.execute(
-        f"INSERT INTO {kind.table} ({', '.join(columns)}) VALUES ({', '.join('?' for _ in columns)})",
-        values,
-    )
+            for child_row in payload[child.key]:
+                _insert_child(conn, child, record_id, child_row)
 
 
 def _upsert_added(conn: sqlite3.Connection, kind: str, uid: str, updated_at: str, updated_by: str) -> None:
@@ -245,23 +250,19 @@ def _upsert_removed(conn: sqlite3.Connection, kind: str, uid: str, removed_at: s
 
 
 def apply_state(conn: sqlite3.Connection, state: RecordState) -> list[str]:
-    """Make the local tables equal the merged state. A valuation case is replaced whole: its row
-    and all its segments and narratives, never a field at a time. Returns the renames it had to
-    perform to resolve a natural_key clash."""
+    """Make the local tables equal the merged state. A valuation case is replaced whole -- all its
+    columns and all its segments and narratives, never a field at a time -- but its row is updated
+    in place, keeping its local id, because a local fork's parent_case_id points at that id.
+    Returns the renames it had to perform to resolve a natural_key clash."""
     renamed: list[str] = []
     for kind in KINDS.values():
-        for uid in _local_uids(conn, kind):
-            if (kind.name, uid) not in state.records:
-                _delete_by_uid(conn, kind, uid)
-
+        absent = [uid for uid in _local_uids(conn, kind) if (kind.name, uid) not in state.records]
         incoming = {uid: record for (k, uid), record in state.records.items() if k == kind.name}
-        if not incoming:
-            continue
 
         resolved, kind_renames = _resolve_natural_key_clashes(kind, incoming)
         renamed.extend(kind_renames)
 
-        to_insert: dict[str, dict] = {}
+        to_write: dict[str, dict] = {}
         existing: set[str] = set()
         for uid, record in incoming.items():
             payload = _with_natural_key(kind, record.payload, resolved[uid]) if uid in resolved else record.payload
@@ -269,20 +270,30 @@ def apply_state(conn: sqlite3.Connection, state: RecordState) -> list[str]:
             local_payload = _payload_of_row(conn, kind, local_row) if local_row is not None else None
             if local_payload == payload:
                 continue
-            to_insert[uid] = payload
+            to_write[uid] = payload
             if local_row is not None:
                 existing.add(uid)
 
         # Two passes, not one uid at a time: a natural_key value can MOVE between two surviving
         # uids (X="Alpha" -> "Beta", Y="Beta" -> "Gamma") without ever clashing within the
-        # incoming batch. Deleting and inserting one uid at a time would then depend on order --
-        # X inserted first collides with Y's still-present old value. Deleting every row that is
-        # about to be rewritten first, before any insert, removes that ordering dependence.
-        for uid in to_insert:
-            if uid in existing:
-                _delete_by_uid(conn, kind, uid)
-        for uid, payload in to_insert.items():
-            _insert_record(conn, kind, uid, payload)
+        # incoming batch. Writing one uid at a time would then depend on order -- X written first
+        # collides with Y's still-present old value. Pass 1 parks every row about to be updated
+        # under a unique temporary name (its own uid), deletes every absent row, and clears the
+        # children of every row about to be updated; pass 2 then writes the real values.
+        for uid in existing:
+            if kind.natural_key is not None:
+                where, params = _locator(kind, uid)
+                conn.execute(f"UPDATE {kind.table} SET {kind.natural_key} = ? WHERE {where}", (uid, *params))
+        for uid in absent:
+            _delete_by_uid(conn, kind, uid)
+        for uid in existing:
+            if kind.children:
+                record_id = _local_row(conn, kind, uid)["id"]
+                for child in kind.children:
+                    # Grandchildren go with it: segment_narrative.segment_id is ON DELETE CASCADE.
+                    conn.execute(f"DELETE FROM {child.table} WHERE {child.parent_column} = ?", (record_id,))
+        for uid, payload in to_write.items():
+            _write_record(conn, kind, uid, payload, exists=uid in existing)
 
     for (kind_name, uid), record in state.records.items():
         _upsert_added(conn, kind_name, uid, record.updated_at, record.updated_by)

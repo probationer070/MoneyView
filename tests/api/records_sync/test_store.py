@@ -203,6 +203,22 @@ def test_apply_state_replaces_the_whole_tree_dropping_a_removed_segment():
         assert conn.execute("SELECT COUNT(*) FROM segment_narrative").fetchone()[0] == 1
 
 
+def test_an_updated_case_keeps_its_local_id():
+    # A local fork's parent_case_id points at this id; a delete-and-reinsert would give the case a
+    # new one (AUTOINCREMENT never reuses it) and break every fork of it.
+    with get_db() as conn:
+        store.apply_state(conn, RecordState(records={
+            ("valuation_case", "u"): Record("valuation_case", "u", TS, "PC-B-0002", _case_payload("C", ("a", "b")))}))
+        before = conn.execute("SELECT id FROM valuation_case WHERE sync_uid = 'u'").fetchone()["id"]
+        store.apply_state(conn, RecordState(records={
+            ("valuation_case", "u"): Record("valuation_case", "u", "2026-09-20T10:05:00.000Z", "PC-B-0002",
+                                            _case_payload("C renamed", ("a",)))}))
+        after = conn.execute("SELECT id, case_name FROM valuation_case WHERE sync_uid = 'u'").fetchone()
+
+    assert after["case_name"] == "C renamed", "precondition: the case really was rewritten"
+    assert after["id"] == before
+
+
 def test_apply_state_deletes_a_record_absent_from_the_merged_state():
     with get_db() as conn:
         store.apply_state(conn, RecordState(records={

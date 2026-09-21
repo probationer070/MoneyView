@@ -61,17 +61,23 @@ class PC:
 
     # -- valuation_case --------------------------------------------------
 
-    def add_case(self, case_name, ticker="AAPL"):
+    def add_case(self, case_name, ticker="AAPL", parent_name=None):
         self.use()
         with get_db() as conn:
             pc_id = watchlist_store.get_or_create_pc_id(conn)
+            parent_id = None
+            if parent_name is not None:
+                parent_id = conn.execute(
+                    "SELECT id FROM valuation_case WHERE case_name = ?", (parent_name,)
+                ).fetchone()["id"]
             case_cursor = conn.execute(
                 "INSERT INTO valuation_case (case_name, ticker, as_of_date, base_year, target_year, "
                 "riskfree_rate, wacc_initial, wacc_stable, wacc_converge_from, marginal_tax_rate, "
                 "nol_balance, roic_stable, terminal_growth, effective_tax_rate, cash, debt, "
-                "ipo_proceeds, shares_basic, shares_new) VALUES (?, ?, '2026-01-01', 2026, 2031, "
-                "0.03, 0.09, 0.08, 5, 0.21, 0.0, 0.12, 0.02, 0.18, 1.0, 0.0, 0.0, 10.0, 0.0)",
-                (case_name, ticker),
+                "ipo_proceeds, shares_basic, shares_new, parent_case_id) VALUES (?, ?, '2026-01-01', "
+                "2026, 2031, 0.03, 0.09, 0.08, 5, 0.21, 0.0, 0.12, 0.02, 0.18, 1.0, 0.0, 0.0, 10.0, "
+                "0.0, ?)",
+                (case_name, ticker, parent_id),
             )
             case_id = case_cursor.lastrowid
             segment_cursor = conn.execute(
@@ -554,3 +560,32 @@ def test_ensure_first_sync_runs_before_read_local_state_on_every_run(tmp_path, m
     assert row["updated_at"] == BASELINE_TS
     assert row["updated_by"] == pc_id
     assert service.current_status().last_error is None
+
+
+def test_a_forked_case_that_loses_a_name_clash_does_not_stop_records_sync(tmp_path, monkeypatch, cloud):
+    """Final review finding A. `conservative_<TICKER>_<vintage>` names are deterministic, so both
+    PCs hold one, and forking it is the normal workflow. The name clash renames A's copy locally;
+    a delete-and-reinsert of that case then broke the fork's parent_case_id foreign key, the whole
+    apply rolled back, and nothing after it ever synced again."""
+    a, b = PC(tmp_path, "PC-A", monkeypatch), PC(tmp_path, "PC-B", monkeypatch)
+    a.add_case("conservative_AAPL_2026")
+    a.add_case("my fork", parent_name="conservative_AAPL_2026")
+    b.add_case("conservative_AAPL_2026")
+    assert service.current_status().last_error is None
+
+    parent_id_before = a.cases()["conservative_AAPL_2026"]["id"]
+    a.sync()
+    assert service.current_status().last_error is None
+    b.sync()
+    assert service.current_status().last_error is None
+
+    a.add_event("AFTER-THE-CLASH")
+    assert service.current_status().last_error is None
+    b.sync()
+    assert service.current_status().last_error is None
+    assert "AFTER-THE-CLASH" in b.events()
+
+    a_cases = a.cases()
+    [renamed] = [name for name in a_cases if name.startswith("conservative_AAPL_2026 (from ")]
+    assert a_cases[renamed]["id"] == parent_id_before, "the renamed parent keeps its local id"
+    assert a_cases["my fork"]["parent_case_id"] == parent_id_before
