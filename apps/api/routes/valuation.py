@@ -24,6 +24,7 @@ from apps.api.services.company_baseline import (
     find_conservative_case_id,
     generate_conservative_case_for_ticker,
 )
+from apps.api.services.records_sync import service as records_sync
 from apps.api.services.valuation_case import (
     CaseNotFound,
     DuplicateCaseName,
@@ -47,11 +48,13 @@ def create_valuation_case(payload: ValuationCaseInput = Body(...)):
         case_id = create_case(payload.model_dump())
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    records_sync.run_records_sync("mutation")
     return APIResponse(data=ValuationCaseCreated(id=case_id))
 
 
 @router.get("/cases", response_model=APIResponse[list[ValuationCaseSummary]])
 def list_valuation_cases():
+    records_sync.run_records_sync("read")
     return APIResponse(data=[ValuationCaseSummary(**case) for case in list_cases()])
 
 
@@ -132,6 +135,7 @@ def fork_valuation_case(case_id: int, payload: ForkRequest = Body(...)):
         ) from exc
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    records_sync.run_records_sync("mutation")
     return APIResponse(data=ValuationCaseCreated(id=new_id))
 
 
@@ -201,6 +205,7 @@ def create_conservative_case(ticker: str):
     """
     case_id, reason = generate_conservative_case_for_ticker(ticker)
     if case_id is not None:
+        records_sync.run_records_sync("mutation")
         return APIResponse(data=_conservative_result(case_id, created=True))
 
     if reason.startswith("no_vintage"):
@@ -233,4 +238,5 @@ def get_valuation_verdict(ticker: str):
     # `build_verdict` immediately loaded it all a second time (D6).
     if not load_price_bars(ticker, limit=1):
         raise HTTPException(status_code=404, detail=f"no stored price bars for {ticker.upper()}")
+    records_sync.run_records_sync("read")
     return APIResponse(data=VerdictPanel(**build_verdict(ticker)))

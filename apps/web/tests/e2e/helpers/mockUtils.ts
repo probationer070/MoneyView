@@ -17,3 +17,16 @@ export function nowIso() {
 export function cloneFixture<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
+
+// Default records-sync half for GET /api/v1/sync/status: sync off. Pages that don't test the
+// status line themselves still call this endpoint via RecordsSyncStatus, so every page mock
+// needs a deterministic default; the new spec overrides it per test.
+export const RECORDS_SYNC_OFF = {
+  enabled: false,
+  pc_id: null,
+  peers: [],
+  skipped_files: [],
+  last_sync_at: null,
+  last_error: null,
+  renamed: [],
+};

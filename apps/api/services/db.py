@@ -521,7 +521,8 @@ CREATE TABLE IF NOT EXISTS valuation_case (
     ipo_proceeds       REAL NOT NULL DEFAULT 0,
     shares_basic       REAL NOT NULL,
     shares_new         REAL NOT NULL DEFAULT 0,
-    parent_case_id     INTEGER REFERENCES valuation_case(id)
+    parent_case_id     INTEGER REFERENCES valuation_case(id),
+    sync_uid           TEXT
 );
 
 CREATE TABLE IF NOT EXISTS investment_decision (
@@ -548,7 +549,8 @@ CREATE TABLE IF NOT EXISTS investment_decision (
     -- Populated INSTEAD of the figures when the model cannot value the ticker.
     -- Exactly one side is ever set. A refusal is content, not an error -- the
     -- same rule valuation_verdict.py follows per signal.
-    figures_unavailable_reason TEXT
+    figures_unavailable_reason TEXT,
+    sync_uid                   TEXT
 );
 -- No retention policy, deliberately. Snapshots expire; decisions do not.
 
@@ -614,7 +616,8 @@ CREATE TABLE IF NOT EXISTS user_event (
     end_date    TEXT,
     source      TEXT,
     note        TEXT NOT NULL DEFAULT '',
-    created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    sync_uid    TEXT
 );
 
 CREATE TABLE IF NOT EXISTS event_category (
@@ -628,6 +631,18 @@ CREATE TABLE IF NOT EXISTS event_category (
 CREATE TABLE IF NOT EXISTS event_category_visibility (
     category_id TEXT PRIMARY KEY,
     visible     INTEGER NOT NULL CHECK (visible IN (0, 1))
+);
+
+-- Peer-sync bookkeeping for the owner's own records (spec §3.2). One row per record, and a row
+-- with removed_at set IS that record's tombstone, so it survives the record itself.
+CREATE TABLE IF NOT EXISTS record_sync (
+    kind       TEXT NOT NULL,
+    uid        TEXT NOT NULL,
+    updated_at TEXT,
+    updated_by TEXT,
+    removed_at TEXT,
+    removed_by TEXT,
+    PRIMARY KEY (kind, uid)
 );
 """
 
@@ -907,6 +922,18 @@ def _ensure_schema_compatibility(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE watchlist ADD COLUMN updated_at TEXT")
     if "updated_by" not in watchlist_columns:
         conn.execute("ALTER TABLE watchlist ADD COLUMN updated_by TEXT")
+    # Nullable and additive: existing rows keep every value and get a uid on the first records sync
+    # (records_sync.store.backfill_uids).
+    for table in ("valuation_case", "investment_decision", "user_event"):
+        columns = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
+        if columns and "sync_uid" not in columns:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN sync_uid TEXT")
+    # Unconditional and idempotent: the create script never defines these indexes (an ALTER
+    # above would otherwise abort executescript partway through, before it reaches every
+    # later CREATE TABLE statement -- including record_sync's own). A fresh database needs
+    # them created here too, since nothing else creates them.
+    for table in ("valuation_case", "investment_decision", "user_event"):
+        conn.execute(f"CREATE UNIQUE INDEX IF NOT EXISTS idx_{table}_sync_uid ON {table}(sync_uid)")
     conn.execute(
         """INSERT OR IGNORE INTO portfolio_preferences
            (singleton_id, total_investment_amount, transaction_fee_rate, updated_at)

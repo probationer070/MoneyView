@@ -159,7 +159,7 @@ The frontend resolves the backend through `NEXT_PUBLIC_API_BASE_URL`, defaulting
 
 ---
 
-## Watchlist sync between your PCs
+## Watchlist and records sync between your PCs
 
 1. Pick a folder a cloud client keeps in sync, e.g. `C:\Users\<you>\OneDrive\MoneyView-sync`.
    In OneDrive, set it to "Always keep on this device" (recommended; an online-only file is
@@ -182,6 +182,27 @@ off and nothing changes. Design: `docs/superpowers/specs/2026-09-18-watchlist-pe
 - If the sync folder is missing, or a peer file is unreadable (e.g. online-only), the status line
   says so. A fresh PC then stays empty until the file is readable, rather than being filled with
   starter defaults.
+
+The same folder now also carries your hand-written records. Each PC writes
+`MoneyView\records.<pc_id>.json` beside its watchlist file, and the same `MONEYVIEW_SYNC_DIR`
+switch covers both: nothing extra to configure. It carries valuation cases (each with its
+segments and narrative rows, as one unit), investment decisions, user events, category overrides
+and user categories, category visibility, and portfolio settings. Market data does not sync —
+each PC downloads its own. Design: `docs/superpowers/specs/2026-09-20-records-peer-sync-design.md`.
+
+- **The newest edit to one record wins, whole.** Editing the same decision, event or setting on
+  both PCs keeps only the newer side's version in full; there is no field-level merge.
+- **Deleting a record deletes it on the other PC too**, the next time that PC syncs -- but only if
+  sync was on when you deleted it. A deletion made while sync was off does not propagate.
+- **Two cases with the same name are both kept.** If each PC has a case with the same name (for
+  example the same `conservative_<ticker>_<vintage>` case), the older copy is renamed
+  "`<name> (from <pc>)`", and the status line says so once, on the sync that renames it.
+- Sync runs at startup, whenever a page whose chart shows market events loads, when the
+  Valuation, Decisions or Events page loads, when portfolio settings load, and after every save or
+  delete of one of these records. The Valuation, Decisions and Events pages each show a
+  records-sync status line.
+- Both PCs should run the same app version: a peer file written by a newer version is skipped and
+  reported, never half-applied.
 
 Test and e2e processes set `MONEYVIEW_SKIP_LOCAL_ENV=1`, so they never read `config/.env` and
 never touch your real sync folder.

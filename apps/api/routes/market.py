@@ -36,6 +36,7 @@ from apps.api.services.events import service as event_service
 from apps.api.services.events.validation import parse_iso_date
 from apps.api.services.market_data import MarketDataService
 from apps.api.services.market_spreads import build_spreads
+from apps.api.services.records_sync import service as records_sync
 
 router = APIRouter()
 _svc   = MarketDataService()
@@ -69,12 +70,14 @@ def get_market_events(
         end_day = parse_iso_date(end, what="end") if end else None
     except EventDataError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    records_sync.run_records_sync("read")
     return default_registry().events(start_day, end_day)
 
 
 @router.get("/event-categories", response_model=List[EventCategory])
 def get_event_categories():
     """Categories after resolution: file defaults, saved overrides, user categories, visibility."""
+    records_sync.run_records_sync("read")
     return list(resolved_categories().values())
 
 
@@ -93,32 +96,41 @@ def _event_errors():
 @router.post("/events", response_model=MarketEvent, status_code=201)
 def create_market_event(payload: MarketEventInput = Body(...)):
     with _event_errors():
-        return event_service.create_user_event(payload)
+        created = event_service.create_user_event(payload)
+    records_sync.run_records_sync("mutation")
+    return created
 
 
 @router.put("/events/{event_id}", response_model=MarketEvent)
 def update_market_event(event_id: str, payload: MarketEventInput = Body(...)):
     with _event_errors():
-        return event_service.update_user_event(event_id, payload)
+        updated = event_service.update_user_event(event_id, payload)
+    records_sync.run_records_sync("mutation")
+    return updated
 
 
 @router.delete("/events/{event_id}", status_code=204)
 def delete_market_event(event_id: str):
     with _event_errors():
         event_service.delete_user_event(event_id)
+    records_sync.run_records_sync("mutation")
     return Response(status_code=204)
 
 
 @router.post("/event-categories", response_model=EventCategory, status_code=201)
 def create_event_category(payload: EventCategoryInput = Body(...)):
     with _event_errors():
-        return event_service.create_user_category(payload)
+        created = event_service.create_user_category(payload)
+    records_sync.run_records_sync("mutation")
+    return created
 
 
 @router.patch("/event-categories/{category_id}", response_model=EventCategory)
 def patch_event_category(category_id: str, patch: EventCategoryPatch = Body(...)):
     with _event_errors():
-        return event_service.patch_category(category_id, patch)
+        patched = event_service.patch_category(category_id, patch)
+    records_sync.run_records_sync("mutation")
+    return patched
 
 
 @router.delete("/event-categories/{category_id}/override", status_code=204)
@@ -126,6 +138,7 @@ def reset_event_category(category_id: str):
     """Restore a built-in category's file label and colour. Visibility is a preference and stays."""
     with _event_errors():
         event_service.reset_category(category_id)
+    records_sync.run_records_sync("mutation")
     return Response(status_code=204)
 
 
@@ -133,6 +146,7 @@ def reset_event_category(category_id: str):
 def delete_event_category(category_id: str):
     with _event_errors():
         event_service.delete_user_category(category_id)
+    records_sync.run_records_sync("mutation")
     return Response(status_code=204)
 
 

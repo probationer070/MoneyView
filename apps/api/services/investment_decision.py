@@ -54,9 +54,13 @@ def outcome_for(
     }
 
 
+import secrets
 from datetime import datetime, timezone
 
 from apps.api.services.db import get_db
+from apps.api.services.records_sync import store as records_sync_store
+from apps.api.services.records_sync.kinds import KIND_DECISION
+from apps.api.services.watchlist_sync.store import get_or_create_pc_id
 
 ACTIONS = ("buy", "sell", "watch", "pass")
 
@@ -190,12 +194,13 @@ def record_decision(
             figures = None
 
     with get_db() as conn:
+        sync_uid = secrets.token_hex(16)
         cursor = conn.execute(
             """INSERT INTO investment_decision
                (ticker, decided_at, action, memo, price_at_decision, dcf_value,
                 dcf_implied_return, roic, wacc, risk_free_rate, equity_risk_premium,
-                metric_schema_version, figures_source, figures_unavailable_reason)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                metric_schema_version, figures_source, figures_unavailable_reason, sync_uid)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 ticker,
                 datetime.now(timezone.utc).isoformat(),
@@ -211,8 +216,10 @@ def record_decision(
                 METRIC_SCHEMA_VERSION if figures else None,
                 (figures or {}).get("source", "unavailable"),
                 unavailable,
+                sync_uid,
             ),
         )
+        records_sync_store.stamp(conn, KIND_DECISION, sync_uid, get_or_create_pc_id(conn))
         return int(cursor.lastrowid)
 
 
@@ -243,6 +250,8 @@ def get_decision(decision_id: int, *, bars_loader=load_price_bars) -> dict | Non
         return None
 
     decision = dict(row)
+    # sync_uid is peer-sync identity plumbing, not response data -- see spec §3.
+    decision.pop("sync_uid", None)
     decision["outcome"] = outcome_for(
         decided_at=str(decision["decided_at"]),
         price_at_decision=decision["price_at_decision"],
@@ -268,6 +277,8 @@ def list_decisions(*, bars_loader=load_price_bars) -> list[dict]:
         ]
     bars_by_ticker: dict[str, list[dict]] = {}
     for row in rows:
+        # sync_uid is peer-sync identity plumbing, not response data -- see spec §3.
+        row.pop("sync_uid", None)
         ticker = str(row["ticker"])
         if ticker not in bars_by_ticker:
             bars_by_ticker[ticker] = bars_loader(ticker, limit=_OUTCOME_BARS_LIMIT)

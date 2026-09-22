@@ -111,6 +111,7 @@ from .schema_parts.watchlist import (
     WatchlistSyncResult,
     WatchlistSyncStatus,
 )
+from .schema_parts.sync import RecordsSyncStatus, SyncStatus
 
 __all__ = [
     "APIMeta",
@@ -210,6 +211,8 @@ __all__ = [
     "WatchlistSkippedFile",
     "WatchlistSyncResult",
     "WatchlistSyncStatus",
+    "RecordsSyncStatus",
+    "SyncStatus",
     "SegmentInput",
     "SegmentNarrativeInput",
     "ConservativeCaseResult",

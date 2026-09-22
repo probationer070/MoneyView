@@ -5,7 +5,7 @@ import sqlite3
 from apps.api.services import db as db_service
 from apps.api.services.db import get_db
 from apps.api.services.watchlist_sync import store
-from apps.api.services.watchlist_sync.model import BASELINE_TS, SyncRow, SyncState, Tombstone
+from apps.api.services.peer_sync.model import BASELINE_TS, SyncRow, SyncState, Tombstone
 
 
 def _insert(ticker, group="custom", weight=0.1):

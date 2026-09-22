@@ -5,6 +5,7 @@ import { tabStateKey, useTabState } from "@/lib/tabState";
 import { fetchApi } from "@/lib/api";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { useDevMonitorPageLoad } from "@/hooks/useDevMonitorPageLoad";
+import { RecordsSyncStatus, useRecordsSyncStatus } from "@/app/components/RecordsSyncStatus";
 import { TickerPicker } from "./components/TickerPicker";
 import { VerdictPanelView } from "./components/VerdictPanel";
 import type { VerdictPanel, WatchlistItem } from "./verdictTypes";
@@ -38,6 +39,9 @@ export default function ValuationPage() {
     staleTime: 60_000,
     refetchOnWindowFocus: false,
   });
+  // Keyed on the verdict fetch time, the page's own record read: so this is read after that
+  // fetch has completed, not in parallel with it.
+  const recordsSyncQuery = useRecordsSyncStatus(verdictQuery.dataUpdatedAt, verdictQuery.isSuccess);
 
   return (
     <div className="p-6">
@@ -45,6 +49,7 @@ export default function ValuationPage() {
         title="Valuation"
         subtitle="One evidence panel per ticker. Every row states the basis it was compared against, and a row that cannot be computed says why."
       />
+      <RecordsSyncStatus status={recordsSyncQuery.data} />
 
       <TickerPicker items={watchlistQuery.data ?? []} onSubmit={setTicker} />
 

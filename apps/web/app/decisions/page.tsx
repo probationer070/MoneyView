@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { fetchApi } from "@/lib/api";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { useDevMonitorPageLoad } from "@/hooks/useDevMonitorPageLoad";
+import { RecordsSyncStatus, useRecordsSyncStatus } from "@/app/components/RecordsSyncStatus";
 import { DecisionList } from "./components/DecisionList";
 import { DecisionOutcomeScatter } from "./components/DecisionOutcomeScatter";
 import { RecordDecisionForm } from "./components/RecordDecisionForm";
@@ -20,6 +21,9 @@ export default function DecisionsPage() {
     staleTime: 30_000,
     refetchOnWindowFocus: false,
   });
+  // Keyed on the decisions fetch time: GET /decisions triggers a records sync read, so this
+  // must be read after that fetch has completed, not in parallel with it.
+  const recordsSyncQuery = useRecordsSyncStatus(decisionsQuery.dataUpdatedAt, decisionsQuery.isSuccess);
 
   // The same query key Valuation uses, so navigating between the two tabs reuses one
   // cached watchlist rather than paying that request twice -- it fetches a live quote per
@@ -41,6 +45,7 @@ export default function DecisionsPage() {
         title="Decision Log"
         subtitle="What was believed about a ticker, when, and why. Figures are captured by the server at record time and never edited."
       />
+      <RecordsSyncStatus status={recordsSyncQuery.data} />
       <RecordDecisionForm watchlist={watchlistQuery.data ?? []} />
       {!decisionsQuery.isLoading && !decisionsQuery.isError && (
         <DecisionOutcomeScatter decisions={decisions} />

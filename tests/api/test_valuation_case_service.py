@@ -29,6 +29,14 @@ def test_create_and_load_round_trips_every_field():
     }
 
 
+def test_load_case_does_not_leak_sync_uid():
+    """sync_uid is peer-sync identity plumbing (spec §3), not response data -- the same
+    rule investment_decision's read paths follow."""
+    case_id = create_case(_case_payload())
+    loaded = load_case(case_id)
+    assert "sync_uid" not in loaded
+
+
 def test_segment_stating_both_revenue_target_and_tam_share_is_rejected():
     """Minor B: `SegmentSpec.target_revenue()` gives revenue_target precedence
     over tam_target x market_share_target, so stating both means one narrated,

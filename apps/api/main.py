@@ -39,6 +39,7 @@ from apps.api.routes import (
     portfolio_router,
     report_router,
     stock_router,
+    sync_router,
     valuation_router,
 )
 from apps.api.services.db import get_db, init_db
@@ -105,9 +106,11 @@ async def lifespan(app: FastAPI):
 
     # Best-effort watchlist peer sync (spec §2): run_sync never raises, so an unavailable
     # folder only records last_error and startup continues.
+    from apps.api.services.records_sync import service as records_sync
     from apps.api.services.watchlist_sync import service as watchlist_sync
 
     watchlist_sync.run_sync("startup")
+    records_sync.run_records_sync("startup")
 
     task_wal = asyncio.create_task(wal_flush_cycle())
 
@@ -201,6 +204,7 @@ app.include_router(monte_carlo_router, prefix="/api/v1/monte-carlo", tags=["Mont
 app.include_router(stock_router, prefix="/api/v1/stock", tags=["Stock"])
 app.include_router(valuation_router, prefix="/api/v1/valuation", tags=["Valuation"])
 app.include_router(decisions_router, prefix="/api/v1/decisions", tags=["Decisions"])
+app.include_router(sync_router, prefix="/api/v1/sync", tags=["Sync"])
 
 
 @app.get("/api/v1/health", tags=["Health"])

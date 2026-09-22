@@ -5,7 +5,7 @@ EXPECTED_COLUMNS = {
     "id", "ticker", "decided_at", "action", "memo",
     "price_at_decision", "dcf_value", "dcf_implied_return", "roic", "wacc",
     "risk_free_rate", "equity_risk_premium", "metric_schema_version",
-    "figures_source", "figures_unavailable_reason",
+    "figures_source", "figures_unavailable_reason", "sync_uid",
 }
 
 

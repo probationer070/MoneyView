@@ -3120,3 +3120,33 @@ eleven per-task fix rounds that preceded it. The lesson is narrower than "test
 more": when two modules each guard a different stage of the same value, the
 untested territory is the stage BETWEEN them, and nobody owns it by default.
 Both paths now have tests, and both fail if the draw guard is removed.
+
+## 2026-09-21: records sync stopped for good once a forked valuation case lost a name clash
+
+Date: 2026-09-21
+Command: final whole-branch review of `records-peer-sync`, reproduced with the two-PC `PC` harness in
+`tests/api/records_sync/test_service.py`
+Failure: PC-A held `conservative_AAPL_2026` and a fork of it; PC-B independently held its own
+`conservative_AAPL_2026`. After syncing A, then B, then A, A's `last_error` stayed
+`FOREIGN KEY constraint failed` on every sync, nothing was published, and an event added on A
+afterwards never reached B. The local records kept working, so nothing looked wrong except the
+status line.
+Root cause: `apply_state` (`apps/api/services/records_sync/store.py`) rewrote a changed record by
+DELETE then INSERT. Losing the name clash changes A's own case (it is renamed
+`<name> (from <pc>)`), so A's case was deleted -- but `valuation_case.parent_case_id` references
+`valuation_case(id)` with no ON DELETE clause and `foreign_keys=ON`, so deleting a case a local fork
+points at raised. The whole apply transaction rolled back, and the same clash recurred on every
+later sync. The trigger is ordinary: `conservative_<TICKER>_<vintage>` names are deterministic, so
+both PCs hold them, and forking one is the normal workflow.
+Fix: an existing record is now UPDATED in place, keeping its local id, and only a case's segments and
+narratives are deleted and re-inserted. The Task 5 name-swap guarantee is kept by two passes: pass 1
+parks every case about to be updated under a unique temporary name (its own sync_uid), deletes every
+absent case and clears the children of every case being updated; pass 2 writes the real values,
+inserts new cases, then inserts children.
+Files changed: `apps/api/services/records_sync/store.py`, `tests/api/records_sync/test_service.py`,
+`tests/api/records_sync/test_store.py`, `ERROR-LOG.md`.
+Prevention: `test_a_forked_case_that_loses_a_name_clash_does_not_stop_records_sync` replays the
+reviewer's scenario and `test_an_updated_case_keeps_its_local_id` pins the id; both fail when
+existing cases are deleted and re-inserted again. The wider lesson: "replace the whole record"
+described the data a merge must produce, and was implemented as a row operation. A row that other
+local rows point at by id cannot be replaced by delete-and-insert, whatever the payload says.

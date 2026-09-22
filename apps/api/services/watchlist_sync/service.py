@@ -16,7 +16,7 @@ from apps.api.models.schemas import WatchlistPeer, WatchlistPeerSyncStatus, Watc
 from apps.api.services.db import get_db
 from apps.api.services.watchlist_sync import store
 from apps.api.services.watchlist_sync.files import read_peer_files, write_own_file
-from apps.api.services.watchlist_sync.model import merge_states, next_stamp
+from apps.api.services.peer_sync.model import merge_states, next_stamp
 
 logger = logging.getLogger(__name__)
 

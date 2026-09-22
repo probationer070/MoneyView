@@ -1,4 +1,5 @@
 import { expect, type Locator, type Page, type Route } from "@playwright/test";
+import { RECORDS_SYNC_OFF } from "./mockUtils";
 
 /**
  * A stateful stand-in for the events and categories API. State lives in this test's closure, so a
@@ -148,6 +149,13 @@ export async function mockEventsApi(page: Page, options: Options = {}): Promise<
     }
     return route.fallback();
   });
+
+  // Records sync status line (RecordsSyncStatus): off by default, overridden per test.
+  // Registered after mockMarketPageApi's catch-all so it wins (Playwright tries the
+  // last-registered route first).
+  await page.route("**/api/v1/sync/status", async (route) =>
+    reply(route, 200, { status: "ok", data: { watchlist: {}, records: RECORDS_SYNC_OFF }, meta: {} })
+  );
 
   return state;
 }
