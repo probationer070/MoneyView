@@ -1221,17 +1221,17 @@ Plan: `docs/superpowers/plans/2026-09-18-watchlist-peer-sync.md`.
 Spec: `docs/superpowers/specs/2026-09-20-records-peer-sync-design.md`.
 Plan: `docs/superpowers/plans/2026-09-20-records-peer-sync.md`.
 
-- [ ] **L-1. Shared `peer_sync` model** (PR #48, open) — `watchlist_sync/model.py` moved to `peer_sync/model.py`,
+- [x] **L-1. Shared `peer_sync` model** (PR #48, merged) — `watchlist_sync/model.py` moved to `peer_sync/model.py`,
       watchlist behaviour unchanged
-- [ ] **L-2. Schema — `sync_uid` columns and `record_sync`** (PR #48, open) — additive migration, existing rows
+- [x] **L-2. Schema — `sync_uid` columns and `record_sync`** (PR #48, merged) — additive migration, existing rows
       keep every value
-- [ ] **L-3. Kind registry and pure merge** (PR #48, open) — whole-record replacement, name-clash repair
-- [ ] **L-4. The record peer file** (PR #48, open) — read, per-kind validation, atomic write
-- [ ] **L-5. The store** (PR #48, open) — backfill, read, apply, stamps
-- [ ] **L-6. `run_records_sync`** (PR #48, open) — one lock, its own status
-- [ ] **L-7. Wiring** (PR #48, open) — stamps on every write, triggers, `GET /api/v1/sync/status`
-- [ ] **L-8. Status line** (PR #48, open) — Valuation, Decisions and Events pages
-- [ ] **L-9. Docs and gates** (PR #48, open) — this entry, `docs/local-run-resources.md`,
+- [x] **L-3. Kind registry and pure merge** (PR #48, merged) — whole-record replacement, name-clash repair
+- [x] **L-4. The record peer file** (PR #48, merged) — read, per-kind validation, atomic write
+- [x] **L-5. The store** (PR #48, merged) — backfill, read, apply, stamps
+- [x] **L-6. `run_records_sync`** (PR #48, merged) — one lock, its own status
+- [x] **L-7. Wiring** (PR #48, merged) — stamps on every write, triggers, `GET /api/v1/sync/status`
+- [x] **L-8. Status line** (PR #48, merged) — Valuation, Decisions and Events pages
+- [x] **L-9. Docs and gates** (PR #48, merged) — this entry, `docs/local-run-resources.md`,
       `docs/architecture/storage-model.md`
 
 
