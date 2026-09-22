@@ -1,6 +1,6 @@
 # Records Peer Sync — Design
 
-> **Status:** implemented on branch `records-peer-sync`.
+> **Status:** implemented and merged to `renewal` as PR #48 (2026-09-22).
 > **Decided with the owner on 2026-09-20.** Scope, conflict rule, record kinds and deletion
 > behaviour are the owner's answers, quoted in §1.
 
