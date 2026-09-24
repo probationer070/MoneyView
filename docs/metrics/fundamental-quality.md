@@ -107,13 +107,14 @@ value, across all 135 tickers with locally stored statements
 more than 0.5 percentage points** — e.g. AAPL's displayed ROIC reads 60.69%
 while its displayed NOPAT/invested-capital pair implies 66.60%. This is not a
 rounding artifact; it is the structural consequence of showing a single
-year's inputs beside a multi-year-averaged output. One partial mitigation:
-the same audit response does carry a `final_roic_value` row whose `source`
-reads `Computed from recent_average basis`
-(`apps/api/services/corporate_statement_metrics.py:1498`), so the basis is
-disclosed in the payload — it is simply never reconciled with the NOPAT and
-invested-capital figures displayed just above it, which is what a reader
-actually compares. Query: iterate
+year's inputs beside a multi-year-averaged output. **Fixed 2026-09-24
+(`ERROR-LOG.md` 2026-09-09).** The single-year rows are unchanged, but their
+`source` now ends `| FY<year> only`. Under an averaged basis the audit also
+lists one `roic_fy<year>` row for each year averaged, from the same selection
+the value uses (`_averaged_roic_records`), and `final_roic_value`'s `source`
+reads `Mean of the N yearly ROIC values above (<basis> basis)`. The displayed
+inputs now reproduce the displayed result. The divergence figures above
+describe the audit before that fix. Query: iterate
 `metric_audit_for_ticker` for every `DISTINCT ticker` in
 `corporate_statements`, compare `roic.value` to
 `100 * inputs_used["nopat"].value / inputs_used["average_invested_capital"].value`.

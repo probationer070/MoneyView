@@ -789,7 +789,18 @@ yearly ratios. The audit emits that single latest-year record's `nopat` and
 `average_invested_capital` (`apps/api/services/corporate_statement_metrics.py:1491,1497`)
 beside the multi-year-averaged `roic` value, so the two figures shown side by side generally
 cannot reproduce each other.
-Fix: not fixed -- this entry records the defect; the fix is its own work. Confirmed impact:
+Fix: 2026-09-24. The audit now shows inputs that reproduce the ROIC it displays. The
+single-year NOPAT, operating-income and invested-capital rows keep their values, but
+their `source` ends `| FY<year> only`. Under an averaged basis the audit also lists one
+`roic_fy<year>` row for each year averaged, and `final_roic_value`'s `source` reads
+`Mean of the N yearly ROIC values above (<basis> basis)`. Both the value and those
+rows come from one helper, `_averaged_roic_records`, so they cannot pick different
+years. Tests in `tests/api/test_corporate_metric_audit.py`: the averaged-basis
+test, parametrized over `recent_average` and `all_year_average`, and the annual-basis
+test. Six in-memory mutations, each caught: rows listing every year; single-year rows
+unlabelled; yearly rows dropped; the helper narrowed to two years; the value computed
+from a different selection than the one listed (the mean check alone catches this,
+12.8 vs 12.0); and yearly rows added under the annual basis. Impact before the fix:
 102 of 135 tickers diverge by more than 0.5pp -- e.g. AAPL displays 60.69% ROIC where its own
 displayed inputs imply 66.60%; ALGM displays 10.05% where its inputs imply -1.22%, a sign
 flip. One partial mitigation already exists: the audit does carry a `final_roic_value` row
@@ -797,7 +808,9 @@ whose `source` reads `Computed from recent_average basis`
 (`apps/api/services/corporate_statement_metrics.py:1498`), so the basis is disclosed in the
 payload -- it is simply never reconciled with the NOPAT/invested-capital inputs displayed
 above it.
-Files changed: none (record only). `docs/metrics/fundamental-quality.md`'s `NOPAT` entry
+Files changed: apps/api/services/corporate_statement_metrics.py,
+tests/api/test_corporate_metric_audit.py, docs/metrics/fundamental-quality.md (fix,
+2026-09-24). Originally none (record only); `docs/metrics/fundamental-quality.md`'s `NOPAT` entry
 documents this as the live behavior.
 Prevention: an audit view that displays "inputs" beside a "result" implies the inputs produce
 the result; when a result is basis-dispatched (single year vs. multi-year average) but its

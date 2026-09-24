@@ -801,7 +801,10 @@ enforcing the citation and eight-field shape of every entry. Spec:
       entry. Fix is application code (`corporate_comparison.py`), out of
       scope for the docs-only branch that recorded it.
 
-- [ ] **F3. ROIC audit basis mismatch — recorded, not fixed.** `ERROR-LOG.md`
+- [x] **F3. ROIC audit basis mismatch — FIXED 2026-09-24.** The single-year rows now
+      name their FY. Averaged bases list each yearly ROIC averaged, and the mean of those
+      rows is the displayed ROIC. Mutation-verified (see the ERROR-LOG Fix line).
+      Original record: `ERROR-LOG.md`
       2026-09-09: the metric audit displays single-year NOPAT and average
       invested capital beside a `recent_average`-basis ROIC that is a
       three-year average of yearly ratios, so the displayed inputs generally

@@ -1009,17 +1009,32 @@ def _select_roic_record(
     return next((record for record in roic_records if int(record["year"]) == roic_year), roic_records[-1])
 
 
+def _averaged_roic_records(
+    roic_records: list[dict[str, float | int | None | str | bool]],
+    *,
+    roic_basis: str,
+) -> list[dict[str, float | int | None | str | bool]]:
+    """The yearly records an averaged ROIC basis is the mean of; empty for `annual`.
+
+    One selection for both the value and its audit rows, so the years the audit lists are
+    the years the number was averaged over.
+    """
+    valued = [record for record in roic_records if record["roic"] is not None]
+    if roic_basis == "all_year_average":
+        return valued
+    if roic_basis != "annual":
+        return valued[-3:]
+    return []
+
+
 def _roic_value_for_basis(
     roic_records: list[dict[str, float | int | None | str | bool]],
     selected_roic_record: dict[str, float | int | None | str | bool] | None,
     *,
     roic_basis: str,
 ) -> Optional[float]:
-    roic_values = [float(record["roic"]) for record in roic_records if record["roic"] is not None]
-    if roic_basis == "all_year_average":
-        return _average(roic_values)
     if roic_basis != "annual":
-        return _average(roic_values[-3:])
+        return _average([float(record["roic"]) for record in _averaged_roic_records(roic_records, roic_basis=roic_basis)])
     if selected_roic_record is None:
         return None
     return selected_roic_record["roic"]  # type: ignore[return-value]
@@ -1441,6 +1456,30 @@ def metric_audit_for_ticker(
 
             source_as_of = f"{latest_year}-12-31" if latest_year is not None else None
             roic_source = "Yahoo Finance annual or quarterly statement bundle"
+            # The NOPAT and invested-capital rows come from ONE fiscal year. Under an averaged
+            # basis the final ROIC is a mean of several years' ratios, which those rows cannot
+            # reproduce -- so they name their year, and the averaged years are listed below.
+            roic_year_source = (
+                f"{roic_source} | FY{selected_roic_record['year']} only"
+                if selected_roic_record is not None
+                else roic_source
+            )
+            averaged_roic_records = _averaged_roic_records(roic_records, roic_basis=roic_basis)
+            averaged_roic_inputs = [
+                _audit_input(
+                    field=f"roic_fy{record['year']}",
+                    label=f"ROIC FY{record['year']}",
+                    value=round(float(record["roic"]), 2),
+                    display_value=_display_percent(round(float(record["roic"]), 2), precision=1),
+                    source=f"NOPAT / average invested capital, FY{record['year']}; averaged into final ROIC",
+                )
+                for record in averaged_roic_records
+            ]
+            final_roic_source = (
+                f"Mean of the {len(averaged_roic_records)} yearly ROIC values above ({roic_basis} basis)"
+                if averaged_roic_records
+                else f"Computed from {roic_basis} basis"
+            )
             wacc_source = "Yahoo Finance statement bundle plus market profile"
             spread_value = round((float(roic_value) if roic_value is not None else fallback.roic) - wacc_value, 2)
             spread_quality = _pick_worst_quality(roic_quality, wacc_quality)
@@ -1486,16 +1525,17 @@ def metric_audit_for_ticker(
                     warnings=roic_warnings,
                     confidence=_metric_confidence(roic_quality, "primary" if _is_decision_grade_roic(roic_quality, roic_value) else "fallback"),
                     inputs_used=[
-                        _audit_input(field="operating_income", label="Operating income / EBIT", value=_record_value(selected_roic_record, "operating_income"), display_value=_record_money_display(selected_roic_record, "operating_income"), source=roic_source),
+                        _audit_input(field="operating_income", label="Operating income / EBIT", value=_record_value(selected_roic_record, "operating_income"), display_value=_record_money_display(selected_roic_record, "operating_income"), source=roic_year_source),
                         _audit_input(field="tax_rate", label="Tax rate", value=round(tax_rate, 6), display_value=_display_percent(tax_rate * 100), source=str(tax_result["tax_rate_source"])),
-                        _audit_input(field="nopat", label="NOPAT", value=_record_value(selected_roic_record, "nopat"), display_value=_record_money_display(selected_roic_record, "nopat"), source=roic_source),
+                        _audit_input(field="nopat", label="NOPAT", value=_record_value(selected_roic_record, "nopat"), display_value=_record_money_display(selected_roic_record, "nopat"), source=roic_year_source),
                         _audit_input(field="total_debt", label="Total debt", value=latest_debt, display_value=_display_money(latest_debt), source=roic_source),
                         _audit_input(field="total_equity", label="Total equity", value=latest_equity, display_value=_display_money(latest_equity), source=roic_source),
-                        _audit_input(field="invested_capital", label="Invested capital", value=_record_value(selected_roic_record, "invested_capital_ending"), display_value=_record_money_display(selected_roic_record, "invested_capital_ending"), source=roic_source),
-                        _audit_input(field="invested_capital_beginning", label="Beginning invested capital", value=_record_value(selected_roic_record, "invested_capital_beginning"), display_value=_record_money_display(selected_roic_record, "invested_capital_beginning"), source=roic_source),
-                        _audit_input(field="invested_capital_ending", label="Ending invested capital", value=_record_value(selected_roic_record, "invested_capital_ending"), display_value=_record_money_display(selected_roic_record, "invested_capital_ending"), source=roic_source),
-                        _audit_input(field="average_invested_capital", label="Average invested capital", value=_record_value(selected_roic_record, "average_invested_capital"), display_value=_record_money_display(selected_roic_record, "average_invested_capital"), source=roic_source),
-                        _audit_input(field="final_roic_value", label="Final ROIC value", value=round(float(roic_value), 2) if roic_value is not None else None, display_value=_display_percent(round(float(roic_value), 2), precision=1) if roic_value is not None else "N/A", source=f"Computed from {roic_basis} basis"),
+                        _audit_input(field="invested_capital", label="Invested capital", value=_record_value(selected_roic_record, "invested_capital_ending"), display_value=_record_money_display(selected_roic_record, "invested_capital_ending"), source=roic_year_source),
+                        _audit_input(field="invested_capital_beginning", label="Beginning invested capital", value=_record_value(selected_roic_record, "invested_capital_beginning"), display_value=_record_money_display(selected_roic_record, "invested_capital_beginning"), source=roic_year_source),
+                        _audit_input(field="invested_capital_ending", label="Ending invested capital", value=_record_value(selected_roic_record, "invested_capital_ending"), display_value=_record_money_display(selected_roic_record, "invested_capital_ending"), source=roic_year_source),
+                        _audit_input(field="average_invested_capital", label="Average invested capital", value=_record_value(selected_roic_record, "average_invested_capital"), display_value=_record_money_display(selected_roic_record, "average_invested_capital"), source=roic_year_source),
+                        *averaged_roic_inputs,
+                        _audit_input(field="final_roic_value", label="Final ROIC value", value=round(float(roic_value), 2) if roic_value is not None else None, display_value=_display_percent(round(float(roic_value), 2), precision=1) if roic_value is not None else "N/A", source=final_roic_source),
                     ],
                     source=roic_source,
                     as_of=source_as_of,

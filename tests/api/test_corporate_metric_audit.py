@@ -404,3 +404,72 @@ def test_the_same_stored_data_yields_identical_metrics_twice():
 
     assert first["income"].equals(second["income"])
     assert first["info"] == second["info"]
+
+
+def _five_year_roic_bundle():
+    """2021-2025 with distinct operating income, so each year's ROIC differs and the mean of
+    the last three differs from the mean of all five and from the latest year alone."""
+    years = ["2021-12-31", "2022-12-31", "2023-12-31", "2024-12-31", "2025-12-31"]
+    op_income = [50_000.0, 300_000.0, 100_000.0, 200_000.0, 150_000.0]
+    return _make_bundle(
+        income_rows={
+            year: {
+                "Total Revenue": 1_000_000.0,
+                "Operating Income": income,
+                "Pretax Income": income,
+                "Tax Provision": income * 0.2,
+                "Interest Expense": 5_000.0,
+            }
+            for year, income in zip(years, op_income)
+        },
+        balance_rows={
+            year: {"Total Debt": 200_000.0, "Stockholders Equity": 800_000.0}
+            for year in years
+        },
+        info={"beta": 1.05},
+    )
+
+
+def _roic_audit(tmp_path, monkeypatch, roic_basis: str) -> dict:
+    _init_test_db(tmp_path, monkeypatch)
+    from apps.api.routes import corporate as corporate_route
+
+    monkeypatch.setattr(corporate_route, "_get_yahoo_statement_bundle", lambda ticker, endpoint: _five_year_roic_bundle())
+    response = TestClient(app).get(f"/api/v1/corporate/metrics/AAPL/audit?roic_basis={roic_basis}")
+    assert response.status_code == 200
+    return response.json()["roic"]
+
+
+@pytest.mark.parametrize("roic_basis, averaged_years", [
+    ("recent_average", ["2023", "2024", "2025"]),
+    ("all_year_average", ["2021", "2022", "2023", "2024", "2025"]),
+])
+def test_an_averaged_roic_audit_lists_the_years_that_reproduce_it(tmp_path, monkeypatch, roic_basis, averaged_years):
+    """F3: under an averaged basis the audit showed one year's NOPAT and capital beside a
+    multi-year mean they cannot reproduce (AAPL: 60.69% shown, inputs implying 66.60%).
+
+    The displayed inputs must reproduce the displayed result: the listed yearly ROICs are
+    the years averaged, and their mean is the final value.
+    """
+    roic = _roic_audit(tmp_path, monkeypatch, roic_basis)
+    inputs = {item["field"]: item for item in roic["inputs_used"]}
+    yearly = [item for item in roic["inputs_used"] if item["field"].startswith("roic_fy")]
+
+    assert [item["field"] for item in yearly] == [f"roic_fy{year}" for year in averaged_years]
+    mean_of_listed = sum(item["value"] for item in yearly) / len(yearly)
+    assert inputs["final_roic_value"]["value"] == pytest.approx(mean_of_listed, abs=0.01)
+    assert inputs["final_roic_value"]["source"].startswith(f"Mean of the {len(averaged_years)} yearly ROIC values")
+
+    # The single-year rows name their year rather than passing for the basis's inputs.
+    for field in ("nopat", "average_invested_capital", "operating_income"):
+        assert inputs[field]["source"].endswith("| FY2025 only"), field
+
+
+def test_an_annual_roic_audit_is_reproduced_by_its_own_nopat_and_capital(tmp_path, monkeypatch):
+    """The annual basis needs no yearly list: its NOPAT / average capital IS the result."""
+    roic = _roic_audit(tmp_path, monkeypatch, "annual")
+    inputs = {item["field"]: item for item in roic["inputs_used"]}
+
+    assert not [field for field in inputs if field.startswith("roic_fy")]
+    implied = 100 * inputs["nopat"]["value"] / inputs["average_invested_capital"]["value"]
+    assert inputs["final_roic_value"]["value"] == pytest.approx(implied, abs=0.01)
