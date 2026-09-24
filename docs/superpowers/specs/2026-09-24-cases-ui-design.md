@@ -44,8 +44,9 @@ Agreed with the user on 2026-09-24:
   ticker, as-of date, base → target year, parent (a link to the parent case).
   - A ticker filter, kept per tab with `useTabState` and preset from
     `?ticker=` in the URL.
-  - An empty list says so, and says conservative cases come from the Valuation
-    tab.
+  - An empty list says "No stored cases yet." It does not point to a generator: the
+    Valuation tab has none. `POST /valuation/conservative/{ticker}` exists only as an
+    API call, which the spec wrongly assumed had a UI.
   - Shows `RecordsSyncStatus`, like the other record pages, because reading the
     list triggers a records sync.
 - **`/cases/[id]`, one case.** Five sections, described in §4–§8.
