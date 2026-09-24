@@ -46,10 +46,15 @@ export default function ValuationPage() {
   const recordsSyncQuery = useRecordsSyncStatus(verdictQuery.dataUpdatedAt, verdictQuery.isSuccess);
 
   // Only to decide whether to link. Not awaited by the panel: a slow or failed case list must
-  // never hold up or blank the evidence panel.
+  // never hold up or blank the evidence panel. Gated on the verdict query's own success (like
+  // recordsSyncQuery) rather than firing on mount: GET /valuation/cases and
+  // GET /valuation/verdict/{ticker} both go through records_sync.run_records_sync("read") under
+  // one shared lock (apps/api/routes/valuation.py), so reading the case list first would hold up
+  // -- or add an unwanted sync to -- every Valuation visit, ticker or not.
   const casesQuery = useQuery({
     queryKey: ["cases"],
     queryFn: casesApi.list,
+    enabled: verdictQuery.isSuccess,
     staleTime: 30_000,
     refetchOnWindowFocus: false,
     retry: false,

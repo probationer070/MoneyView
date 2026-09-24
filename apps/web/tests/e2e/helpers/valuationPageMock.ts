@@ -88,9 +88,15 @@ export interface ValuationMockOptions {
   cases?: CaseSummary[];
 }
 
-export async function mockValuationApi(page: Page, options: ValuationMockOptions = {}) {
+export interface ValuationMockStats {
+  /** Requests seen so far against GET /valuation/cases. */
+  casesRequests: () => number;
+}
+
+export async function mockValuationApi(page: Page, options: ValuationMockOptions = {}): Promise<ValuationMockStats> {
   const panel = options.panel ?? VERDICT_FIXTURE;
   const verdictStatus = options.verdictStatus ?? 200;
+  let casesRequestCount = 0;
 
   await page.route(`**${API_PREFIX}/portfolio/watchlist`, async (route) => {
     if (options.stallWatchlist) {
@@ -110,12 +116,15 @@ export async function mockValuationApi(page: Page, options: ValuationMockOptions
 
   // The Valuation page reads the case list to decide whether to link to /cases. Default:
   // none stored, so every pre-existing valuation test sees no link and is unaffected.
-  await page.route(`**${API_PREFIX}/valuation/cases`, async (route) =>
-    json(route, { status: "ok", data: options.cases ?? [], meta: {} }),
-  );
+  await page.route(`**${API_PREFIX}/valuation/cases`, async (route) => {
+    casesRequestCount += 1;
+    return json(route, { status: "ok", data: options.cases ?? [], meta: {} });
+  });
 
   // Records sync status line (RecordsSyncStatus): off by default, overridden per test.
   await page.route(`**${API_PREFIX}/sync/status`, async (route) =>
     json(route, { status: "ok", data: { watchlist: {}, records: RECORDS_SYNC_OFF }, meta: {} })
   );
+
+  return { casesRequests: () => casesRequestCount };
 }
