@@ -76,6 +76,13 @@ export function formatWire(field: FieldMeta, wire: number | null | undefined): s
   return display.toLocaleString("en-US", { maximumFractionDigits: 4 });
 }
 
+const PERCENT = meta("percent", "Percent", "rate");
+
+/** A fraction shown as a percentage (0.074 -> "7.40%"). Goes through fromWire, so the ×100 still lives in one place. */
+export function fmtPercent(fraction: number, digits: number): string {
+  return `${fromWire(PERCENT, fraction).toFixed(digits)}%`;
+}
+
 export function unitSuffix(field: FieldMeta): string {
   return field.unit === "rate" ? "%" : "";
 }

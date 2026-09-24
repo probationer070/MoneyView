@@ -98,9 +98,14 @@ test.describe("one case", () => {
     const valuation = page.getByTestId("case-valuation");
     await expect(valuation.getByTestId("value-per-share-diluted")).toHaveText("49.96");
     await expect(valuation.getByTestId("terminal-share")).toHaveText("66.3%");
-    await expect(valuation.getByRole("table", { name: "Year by year" }).getByRole("row")).toHaveCount(11); // header + 10 years
+    const yearTable = valuation.getByRole("table", { name: "Year by year" });
+    await expect(yearTable.getByRole("row")).toHaveCount(11); // header + 10 years
     await expect(valuation.getByRole("cell", { name: "2026" })).toBeVisible();
     await expect(valuation.getByRole("cell", { name: "2035" })).toBeVisible();
+    const row2026 = yearTable.getByRole("row").filter({ has: page.getByRole("cell", { name: "2026", exact: true }) });
+    await expect(row2026.getByRole("cell", { name: "9.00%" })).toBeVisible();
+    const segmentTable = valuation.getByRole("table", { name: "Segments in the target year" });
+    await expect(segmentTable.getByRole("cell", { name: "27.3%" })).toBeVisible();
   });
 
   test("an engine refusal to run the case is content, not an error and not a zero", async ({ page }) => {

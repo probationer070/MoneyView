@@ -1,4 +1,5 @@
 import type { UseQueryResult } from "@tanstack/react-query";
+import { fmtPercent } from "../caseFields";
 import type { RunResult } from "../caseTypes";
 import { fmtMoney, fmtPerShare } from "../format";
 import { QueryStatus, Section } from "./Section";
@@ -48,7 +49,7 @@ export function ValuationSection({ query }: { query: UseQueryResult<RunResult, u
                     <td className="px-2 py-1">{fmtMoney(run.tax[i])}</td>
                     <td className="px-2 py-1">{fmtMoney(run.reinvestment[i])}</td>
                     <td className="px-2 py-1">{fmtMoney(run.fcff[i])}</td>
-                    <td className="px-2 py-1">{(run.wacc[i] * 100).toFixed(2)}%</td>
+                    <td className="px-2 py-1">{fmtPercent(run.wacc[i], 2)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -69,7 +70,7 @@ export function ValuationSection({ query }: { query: UseQueryResult<RunResult, u
                 <tr key={s.name} className="border-t border-[var(--border)]">
                   <td className="px-2 py-1 text-left">{s.name}</td>
                   <td className="px-2 py-1">{fmtMoney(s.revenue[s.revenue.length - 1])}</td>
-                  <td className="px-2 py-1">{(s.margin[s.margin.length - 1] * 100).toFixed(1)}%</td>
+                  <td className="px-2 py-1">{fmtPercent(s.margin[s.margin.length - 1], 1)}</td>
                   <td className="px-2 py-1">{fmtMoney(s.ebit[s.ebit.length - 1])}</td>
                   <td className="px-2 py-1">{fmtMoney(s.reinvestment[s.reinvestment.length - 1])}</td>
                 </tr>

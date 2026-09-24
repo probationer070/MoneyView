@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import {
-  CASE_FIELDS, SEGMENT_FIELDS, fieldTargets, formatWire, fromWire, labelForInput, metaForInput, toWire,
+  CASE_FIELDS, SEGMENT_FIELDS, fieldTargets, fmtPercent, formatWire, fromWire, labelForInput, metaForInput, toWire,
 } from "../../app/cases/caseFields";
 import { EMPTY_NARRATIVE, buildForkRequest, buildSimulateRequest, rowsNamedIn } from "../../app/cases/changeRows";
 import type { CaseRecord } from "../../app/cases/caseTypes";
@@ -65,6 +65,11 @@ test.describe("case field metadata", () => {
     expect(toWire(cash, 100)).toBe(100);
     const stc = SEGMENT_FIELDS.find((m) => m.field === "sales_to_capital_early")!;
     expect(toWire(stc, 2.5)).toBe(2.5);
+  });
+
+  test("fmtPercent turns a wire fraction into a percentage string", () => {
+    expect(fmtPercent(0.074, 2)).toBe("7.40%");
+    expect(fmtPercent(0.273, 1)).toBe("27.3%");
   });
 
   test("a /diff input key resolves to its field's metadata and label", () => {
