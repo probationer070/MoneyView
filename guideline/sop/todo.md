@@ -987,8 +987,9 @@ shipped on `fix-priceless-bars` (PR #29); E shipped with them.
       Calculation Details now shows the backend's `terminal_growth_used` instead of the old
       clamp rule. Mutation-verified (see the `ERROR-LOG.md` 2026-09-10 fix paragraph).
       The new Playwright test (`terminal-diagnostics.spec.ts`: "the DCF request leaves
-      terminal growth for the backend to derive") has NOT been run yet: a `next dev` was
-      already running on :3000 when it was written.
+      terminal growth for the backend to derive") passes, and fails as it should when
+      `terminal_growth_rate` is put back into `dcfRequestBody` (received 0.06). Run
+      2026-09-24 in a separate worktree, because a `next dev` was holding :3000.
 
 - [ ] **H11. `terminal_value_share_pct` is displayed without a threshold.** CORRECTED
       2026-09-10: this was filed as "nothing surfaces it", which is false. It is shown as a
