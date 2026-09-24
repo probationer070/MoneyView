@@ -537,6 +537,26 @@ single-ticker report could show `constraint=ceiling` beside a spread that could 
 constraint whenever the reconstruction's rate does not match the rate that actually ran,
 rather than naming a bound the number never passed through. Tracked as H8, reopened and
 split -- see `guideline/sop/todo.md`.
+
+Fix (single-ticker routes), 2026-09-24: `ValuationAssumptions.terminal_growth_rate` is
+now optional. When it is omitted, `corporate_dcf._build_dcf_outputs` uses
+`derive_terminal_growth(..., ceiling=TERMINAL_GROWTH_CEILING)`, which is the same
+derivation the bulk path runs. A rate that is sent explicitly is still honoured,
+bounded only by `wacc - 0.005` and the floor. The ceiling is deliberately not applied to
+it, because it would silently overwrite a chosen value. The web client
+(`corporateUtils.dcfRequestBody`) no longer sends the rate. Two Calculation Details rows in
+`buildCalculationDetails.ts` described terminal growth as "growth clamped to backend
+boundary". They now show the backend's `terminal_growth_used`, so the label and the
+number come from the same place. Mutations, run in memory: (1) the omitted path computing
+the rate as growth bounded only by the safety margin fails
+`test_an_omitted_terminal_rate_is_derived_with_the_ceiling` (spread 0.005 vs 0.05) and both
+params of `test_single_ticker_routes_derive_terminal_growth_when_the_body_omits_it`
+(0.095 vs 0.03); (2) the ceiling applied to an explicit rate fails
+`test_a_hand_set_terminal_rate_is_not_attributed_to_a_bound_it_never_passed`.
+Files changed (this fix): apps/api/models/schema_parts/corporate.py,
+apps/api/services/corporate_dcf.py, apps/web/app/corporate/corporateUtils.ts,
+apps/web/app/corporate/buildCalculationDetails.ts, tests/api/test_terminal_diagnostics.py,
+apps/web/tests/e2e/terminal-diagnostics.spec.ts.
 Files changed: apps/api/services/corporate_metrics_service.py,
 apps/api/services/corporate_comparison.py, apps/api/services/corporate_dcf.py,
 packages/core_finance/terminal_growth.py (ceiling constant and floor-as-fourth-bound,

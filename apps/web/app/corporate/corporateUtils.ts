@@ -53,7 +53,8 @@ export function dcfRequestBody(snapshot: DcfRequestSnapshot) {
     operating_margin: clamp(snapshot.roic / 100, -1, 1),
     wacc: snapshot.wacc / 100,
     tax_rate: TAX_RATE,
-    terminal_growth_rate: clamp(snapshot.growth / 100, -0.1, 0.1),
+    // terminal_growth_rate omitted on purpose: the API derives it from revenue growth
+    // with the long-run ceiling (H8). Sending growth here valued ~96% as terminal value.
     fcff: snapshot.fcff,
     esg_penalty: snapshot.esgPenalty,
     reinvestment: snapshot.reinvestment,

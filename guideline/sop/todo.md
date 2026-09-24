@@ -924,7 +924,7 @@ shipped on `fix-priceless-bars` (PR #29); E shipped with them.
       unifying downward would have cost click-to-select, and the Decision Log had no
       suggestions at all.
 
-- [ ] **H8. Terminal growth is clamped to WACC, so terminal value is 96% of most
+- [x] **H8. Terminal growth is clamped to WACC, so terminal value is 96% of most
       valuations.** RAISED IN PRIORITY 2026-09-10 after measuring the consequence, and
       restated: the ~22% that cannot be valued are the *symptom*, not the defect.
       `corporate_metrics_service.py:505` sets `terminal_growth_rate = min(growth, wacc -
@@ -973,6 +973,16 @@ shipped on `fix-priceless-bars` (PR #29); E shipped with them.
       correct now; the valuation on this path is still unfixed. See `ERROR-LOG.md`
       2026-09-10 (Fix line amended twice) for the full mutation matrix and where the
       original task brief diverged from what shipped.
+
+      **CLOSED 2026-09-24: the single-ticker routes are fixed.** `terminal_growth_rate` is
+      now optional on `ValuationAssumptions`. When it is omitted, `corporate_dcf` derives the
+      rate with the ceiling, the same way the bulk path does. An explicit rate is still
+      honoured and never re-bounded by the ceiling. The web client stops sending it, and
+      Calculation Details now shows the backend's `terminal_growth_used` instead of the old
+      clamp rule. Mutation-verified (see the `ERROR-LOG.md` 2026-09-10 fix paragraph).
+      The new Playwright test (`terminal-diagnostics.spec.ts`: "the DCF request leaves
+      terminal growth for the backend to derive") has NOT been run yet: a `next dev` was
+      already running on :3000 when it was written.
 
 - [ ] **H11. `terminal_value_share_pct` is displayed without a threshold.** CORRECTED
       2026-09-10: this was filed as "nothing surfaces it", which is false. It is shown as a

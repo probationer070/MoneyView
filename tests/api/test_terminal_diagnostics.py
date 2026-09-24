@@ -289,3 +289,62 @@ def test_builder_params_still_name_their_bound():
     wacc = max(float(metrics.wacc) / 100, 0.001)
     implied = wacc - summary.wacc_minus_terminal_growth
     assert implied == pytest.approx(params.terminal_growth_rate)
+
+
+def test_an_omitted_terminal_rate_is_derived_with_the_ceiling():
+    """H8: the single-ticker routes value a company the way the bulk endpoint does.
+
+    The web client used to send company growth as `terminal_growth_rate`, so these routes
+    pinned `g` 50bp below WACC and reported ~96% terminal value. Omitting the rate now
+    means "derive it", and the derivation carries the ceiling.
+    """
+    params = ValuationAssumptions(
+        revenue_growth_rate=0.10,
+        operating_margin=0.2,
+        tax_rate=0.25,
+        wacc=0.08,
+        fcff=100.0,
+    )
+    summary = _report_from_params(params).summary
+
+    # min(company 0.10, ceiling 0.03, safety 0.075) = 0.03. Literal, not the constant:
+    # an expectation derived from the constant under test cannot see it change.
+    assert summary.wacc_minus_terminal_growth == pytest.approx(0.08 - 0.03)
+    assert summary.terminal_growth_binding_constraint == "ceiling"
+
+
+@pytest.mark.parametrize("path", ["/api/v1/corporate/dcf/AAPL", "/api/v1/corporate/dcf/AAPL/report"])
+def test_single_ticker_routes_derive_terminal_growth_when_the_body_omits_it(monkeypatch, path):
+    """The body the web client now sends -- no `terminal_growth_rate` -- must be accepted
+    and valued with the ceiling, not rejected as a 422 or valued at the safety margin."""
+    from fastapi.testclient import TestClient
+
+    from apps.api.main import app
+    from apps.api.models.schemas import CorporateMetrics
+
+    monkeypatch.setattr(corporate_route, "_latest_market_price", lambda ticker: 210.4)
+    monkeypatch.setattr(
+        corporate_route,
+        "_metrics_for_ticker",
+        lambda ticker: CorporateMetrics(
+            ticker="AAPL", growth=18.0, roic=18.0, wacc=10.0, debt_ratio=18.0,
+            unlevered_beta=1.05, crp=0.8, reinvestment=34.0, fcff=92.0, innovation=82.0,
+            market_share=64.0, governance=74.0, esg_penalty=22.0,
+        ),
+    )
+    body = {
+        "revenue_growth_rate": 0.18,
+        "operating_margin": 0.18,
+        "tax_rate": 0.25,
+        "wacc": 0.10,
+        "fcff": 92.0,
+        "esg_penalty": 22.0,
+    }
+
+    response = TestClient(app).post(path, json=body)
+
+    assert response.status_code == 200, response.text
+    data = response.json()["data"]
+    assumptions = data.get("assumptions", data)
+    # Under the old client behaviour (growth sent as the rate) this is 0.095.
+    assert assumptions["terminal_growth_used"] == pytest.approx(0.03)
