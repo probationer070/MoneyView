@@ -48,7 +48,10 @@ class ValuationAssumptions(BaseModel):
     operating_margin: float = Field(..., ge=-1.0, le=1.0)
     tax_rate: float = Field(..., ge=0.0, le=1.0)
     wacc: float = Field(..., gt=0.0, le=0.5, description="Must be > 0 against division by zero")
-    terminal_growth_rate: float = Field(..., ge=-0.1, le=0.1)
+    # Omitted means "derive it": company growth bounded by the long-run ceiling and the
+    # Gordon safety margin (`derive_terminal_growth`). A value sent is honoured as given --
+    # an explicit override is never silently re-bounded by the ceiling.
+    terminal_growth_rate: float | None = Field(default=None, ge=-0.1, le=0.1)
     fcff: float | None = Field(default=None, ge=0.0)
     esg_penalty: float | None = Field(default=None, ge=0.0, le=100.0)
     reinvestment: float | None = Field(default=None, ge=0.0, le=100.0)

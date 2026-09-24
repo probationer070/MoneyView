@@ -202,8 +202,20 @@ def _build_dcf_outputs(
     base_fcff = max(float(params.fcff if params.fcff is not None else metrics.fcff), 1.0)
     esg_penalty = float(params.esg_penalty if params.esg_penalty is not None else metrics.esg_penalty)
     wacc = max(float(params.wacc), 0.001)
-    terminal_growth = min(float(params.terminal_growth_rate), wacc - 0.005)
-    terminal_growth = max(terminal_growth, -0.1)
+    terminal_derivation = derive_terminal_growth(
+        company_growth=params.revenue_growth_rate,
+        wacc=wacc,
+        ceiling=TERMINAL_GROWTH_CEILING,
+    )
+    if params.terminal_growth_rate is None:
+        # Omitted: derive it here, with the ceiling, so every single-ticker route values a
+        # company the way the bulk endpoint and the comparison table do.
+        terminal_growth = terminal_derivation.rate
+    else:
+        # Sent explicitly: honoured, bounded only by what the arithmetic requires. The
+        # ceiling is not applied, because it would silently overwrite a chosen rate.
+        terminal_growth = min(float(params.terminal_growth_rate), wacc - 0.005)
+        terminal_growth = max(terminal_growth, -0.1)
     margin_used = float(params.operating_margin)
     growth_used = float(params.revenue_growth_rate)
     generated_at = datetime.now(timezone.utc).isoformat()
@@ -232,20 +244,11 @@ def _build_dcf_outputs(
     # The measured share, not a proxy for it: how much of this enterprise value is the
     # discounted perpetuity rather than the five explicit years.
     terminal_value_share_pct = pv_terminal / enterprise_value * 100
-    # Recovered rather than threaded: the builder already holds both inputs, and passing a
-    # derivation record through every caller would make the params object carry state that
-    # only one consumer reads.
-    terminal_derivation = derive_terminal_growth(
-        company_growth=params.revenue_growth_rate,
-        wacc=wacc,
-        ceiling=TERMINAL_GROWTH_CEILING,
-    )
     # A reconstruction, not a record. It describes the bounds as they apply to company
-    # growth, which is the rate that ran only when `_valuation_params_from_metrics` built
-    # these params -- the bulk endpoint's path. Every single-ticker route takes
-    # `terminal_growth_rate` from the request body, and the web client fills it from
-    # company growth with no ceiling, so the reconstruction would name a bound the number
-    # never passed through. Say nothing rather than say that.
+    # growth, which is the rate that ran when the rate was derived above or when
+    # `_valuation_params_from_metrics` built these params. An explicit
+    # `terminal_growth_rate` that differs never passed through those bounds, so the
+    # reconstruction would name a bound the number never saw. Say nothing rather than say that.
     terminal_growth_binding_constraint = (
         terminal_derivation.binding_constraint
         if abs(terminal_derivation.rate - terminal_growth) < 1e-9

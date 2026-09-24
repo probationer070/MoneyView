@@ -537,6 +537,26 @@ single-ticker report could show `constraint=ceiling` beside a spread that could 
 constraint whenever the reconstruction's rate does not match the rate that actually ran,
 rather than naming a bound the number never passed through. Tracked as H8, reopened and
 split -- see `guideline/sop/todo.md`.
+
+Fix (single-ticker routes), 2026-09-24: `ValuationAssumptions.terminal_growth_rate` is
+now optional. When it is omitted, `corporate_dcf._build_dcf_outputs` uses
+`derive_terminal_growth(..., ceiling=TERMINAL_GROWTH_CEILING)`, which is the same
+derivation the bulk path runs. A rate that is sent explicitly is still honoured,
+bounded only by `wacc - 0.005` and the floor. The ceiling is deliberately not applied to
+it, because it would silently overwrite a chosen value. The web client
+(`corporateUtils.dcfRequestBody`) no longer sends the rate. Two Calculation Details rows in
+`buildCalculationDetails.ts` described terminal growth as "growth clamped to backend
+boundary". They now show the backend's `terminal_growth_used`, so the label and the
+number come from the same place. Mutations, run in memory: (1) the omitted path computing
+the rate as growth bounded only by the safety margin fails
+`test_an_omitted_terminal_rate_is_derived_with_the_ceiling` (spread 0.005 vs 0.05) and both
+params of `test_single_ticker_routes_derive_terminal_growth_when_the_body_omits_it`
+(0.095 vs 0.03); (2) the ceiling applied to an explicit rate fails
+`test_a_hand_set_terminal_rate_is_not_attributed_to_a_bound_it_never_passed`.
+Files changed (this fix): apps/api/models/schema_parts/corporate.py,
+apps/api/services/corporate_dcf.py, apps/web/app/corporate/corporateUtils.ts,
+apps/web/app/corporate/buildCalculationDetails.ts, tests/api/test_terminal_diagnostics.py,
+apps/web/tests/e2e/terminal-diagnostics.spec.ts.
 Files changed: apps/api/services/corporate_metrics_service.py,
 apps/api/services/corporate_comparison.py, apps/api/services/corporate_dcf.py,
 packages/core_finance/terminal_growth.py (ceiling constant and floor-as-fourth-bound,
@@ -726,11 +746,21 @@ threshold. This codebase already has the correct conversion: `_statement_debt_to
 inconsistent by construction: `corporate_statement_metrics.py:825-827` **unlevers** with the
 true D/E to produce `metrics.unlevered_beta`, and `corporate_comparison.py:1131` then
 **relevers** that value with a capital weight, so it cannot recover the original levered beta.
-Fix: not fixed -- this entry records the defect; the fix is its own work. Confirmed impact:
+Fix: 2026-09-24. `_levered_beta_from_metrics` now converts `debt_ratio` to D/E as
+`dr / max(100 - dr, 1)`, the same conversion `_statement_debt_to_equity` uses when
+unlevering. It then calls `packages/core_finance/beta.py`'s `relever_beta` instead of
+repeating the formula by hand. `tests/api/test_corporate_comparison.py::
+test_capm_relevers_beta_with_debt_to_equity_not_debt_to_capital` asserts the published
+`capm_expected_return` for debt_ratio 60 (16.22%, worked out by hand). Reintroducing the
+shipped `dr / 100` in memory fails it with 12.31. Not fixed here: unlevering uses the
+company's own tax rate and relevering uses `DEFAULT_TAX_RATE = 0.21`, so the round trip
+is still not exact for a company whose tax rate differs. Impact before the fix:
 108 of 135 tickers get a different beta under the correct substitution, understating
 `capm_expected_return` by up to 14.08pp (STX, STEM, SKYX, DOCN, all `debt_ratio` 90.00: coded
 beta 0.6844 against a correct 3.2440), then BE 12.65pp, AES 11.26pp, ORCL 7.39pp.
-Files changed: none (record only). `docs/metrics/discount-rates-and-returns.md`'s
+Files changed: apps/api/services/corporate_comparison.py, tests/api/test_corporate_comparison.py,
+docs/metrics/discount-rates-and-returns.md, docs/metrics/inventory.md (fix, 2026-09-24). Originally
+none (record only); `docs/metrics/discount-rates-and-returns.md`'s
 `capm_expected_return` entry documents this as the live behavior.
 Prevention: the misleading local variable name `debt_to_equity` at
 `corporate_comparison.py:1130` is what let this survive review -- it names the textbook
@@ -759,7 +789,18 @@ yearly ratios. The audit emits that single latest-year record's `nopat` and
 `average_invested_capital` (`apps/api/services/corporate_statement_metrics.py:1491,1497`)
 beside the multi-year-averaged `roic` value, so the two figures shown side by side generally
 cannot reproduce each other.
-Fix: not fixed -- this entry records the defect; the fix is its own work. Confirmed impact:
+Fix: 2026-09-24. The audit now shows inputs that reproduce the ROIC it displays. The
+single-year NOPAT, operating-income and invested-capital rows keep their values, but
+their `source` ends `| FY<year> only`. Under an averaged basis the audit also lists one
+`roic_fy<year>` row for each year averaged, and `final_roic_value`'s `source` reads
+`Mean of the N yearly ROIC values above (<basis> basis)`. Both the value and those
+rows come from one helper, `_averaged_roic_records`, so they cannot pick different
+years. Tests in `tests/api/test_corporate_metric_audit.py`: the averaged-basis
+test, parametrized over `recent_average` and `all_year_average`, and the annual-basis
+test. Six in-memory mutations, each caught: rows listing every year; single-year rows
+unlabelled; yearly rows dropped; the helper narrowed to two years; the value computed
+from a different selection than the one listed (the mean check alone catches this,
+12.8 vs 12.0); and yearly rows added under the annual basis. Impact before the fix:
 102 of 135 tickers diverge by more than 0.5pp -- e.g. AAPL displays 60.69% ROIC where its own
 displayed inputs imply 66.60%; ALGM displays 10.05% where its inputs imply -1.22%, a sign
 flip. One partial mitigation already exists: the audit does carry a `final_roic_value` row
@@ -767,7 +808,9 @@ whose `source` reads `Computed from recent_average basis`
 (`apps/api/services/corporate_statement_metrics.py:1498`), so the basis is disclosed in the
 payload -- it is simply never reconciled with the NOPAT/invested-capital inputs displayed
 above it.
-Files changed: none (record only). `docs/metrics/fundamental-quality.md`'s `NOPAT` entry
+Files changed: apps/api/services/corporate_statement_metrics.py,
+tests/api/test_corporate_metric_audit.py, docs/metrics/fundamental-quality.md (fix,
+2026-09-24). Originally none (record only); `docs/metrics/fundamental-quality.md`'s `NOPAT` entry
 documents this as the live behavior.
 Prevention: an audit view that displays "inputs" beside a "result" implies the inputs produce
 the result; when a result is basis-dispatched (single year vs. multi-year average) but its

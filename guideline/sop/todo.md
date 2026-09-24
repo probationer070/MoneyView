@@ -788,7 +788,10 @@ enforcing the citation and eight-field shape of every entry. Spec:
       `inventory.md` line reading "two families with drops" while naming
       four.
 
-- [ ] **F2. CAPM debt-weight defect — recorded, not fixed.** `ERROR-LOG.md`
+- [x] **F2. CAPM debt-weight defect — FIXED 2026-09-24.** `_levered_beta_from_metrics`
+      now converts `debt_ratio` to D/E and calls `relever_beta`. The fix is
+      mutation-verified (see the ERROR-LOG Fix line). Still open: unlevering uses the
+      company's tax rate and relevering uses 0.21. Original record: `ERROR-LOG.md`
       2026-09-09: `corporate_comparison.py:1130` relevers beta with
       `debt_ratio` (`D/(D+E)`, a debt-to-capital weight) fed into a Hamada
       formula wanting `D/E`. 108 of 135 tickers get a different beta under
@@ -798,7 +801,10 @@ enforcing the citation and eight-field shape of every entry. Spec:
       entry. Fix is application code (`corporate_comparison.py`), out of
       scope for the docs-only branch that recorded it.
 
-- [ ] **F3. ROIC audit basis mismatch — recorded, not fixed.** `ERROR-LOG.md`
+- [x] **F3. ROIC audit basis mismatch — FIXED 2026-09-24.** The single-year rows now
+      name their FY. Averaged bases list each yearly ROIC averaged, and the mean of those
+      rows is the displayed ROIC. Mutation-verified (see the ERROR-LOG Fix line).
+      Original record: `ERROR-LOG.md`
       2026-09-09: the metric audit displays single-year NOPAT and average
       invested capital beside a `recent_average`-basis ROIC that is a
       three-year average of yearly ratios, so the displayed inputs generally
@@ -924,7 +930,7 @@ shipped on `fix-priceless-bars` (PR #29); E shipped with them.
       unifying downward would have cost click-to-select, and the Decision Log had no
       suggestions at all.
 
-- [ ] **H8. Terminal growth is clamped to WACC, so terminal value is 96% of most
+- [x] **H8. Terminal growth is clamped to WACC, so terminal value is 96% of most
       valuations.** RAISED IN PRIORITY 2026-09-10 after measuring the consequence, and
       restated: the ~22% that cannot be valued are the *symptom*, not the defect.
       `corporate_metrics_service.py:505` sets `terminal_growth_rate = min(growth, wacc -
@@ -973,6 +979,17 @@ shipped on `fix-priceless-bars` (PR #29); E shipped with them.
       correct now; the valuation on this path is still unfixed. See `ERROR-LOG.md`
       2026-09-10 (Fix line amended twice) for the full mutation matrix and where the
       original task brief diverged from what shipped.
+
+      **CLOSED 2026-09-24: the single-ticker routes are fixed.** `terminal_growth_rate` is
+      now optional on `ValuationAssumptions`. When it is omitted, `corporate_dcf` derives the
+      rate with the ceiling, the same way the bulk path does. An explicit rate is still
+      honoured and never re-bounded by the ceiling. The web client stops sending it, and
+      Calculation Details now shows the backend's `terminal_growth_used` instead of the old
+      clamp rule. Mutation-verified (see the `ERROR-LOG.md` 2026-09-10 fix paragraph).
+      The new Playwright test (`terminal-diagnostics.spec.ts`: "the DCF request leaves
+      terminal growth for the backend to derive") passes, and fails as it should when
+      `terminal_growth_rate` is put back into `dcfRequestBody` (received 0.06). Run
+      2026-09-24 in a separate worktree, because a `next dev` was holding :3000.
 
 - [ ] **H11. `terminal_value_share_pct` is displayed without a threshold.** CORRECTED
       2026-09-10: this was filed as "nothing surfaces it", which is false. It is shown as a

@@ -23,6 +23,7 @@ from apps.api.services.acquisition.store import save_quote_facts, save_statement
 from apps.api.services.corporate_statement_metrics import _pick_worst_quality
 from apps.api.services.db import get_db
 from apps.api.services.equity_bridge import load_equity_bridge
+from packages.core_finance.beta import relever_beta
 from packages.core_finance.dcf import calculate_equity_value, calculate_intrinsic_value_per_share
 from packages.core_finance.expected_return import (
     ExpectedReturnInputs,
@@ -1138,5 +1139,8 @@ def acquire_comparison_datasets(
 
 
 def _levered_beta_from_metrics(metrics: CorporateMetrics) -> float:
-    debt_to_equity = max(float(metrics.debt_ratio) / 100, 0.0)
-    return max(float(metrics.unlevered_beta) * (1 + (1 - DEFAULT_TAX_RATE) * debt_to_equity), 0.0)
+    # `debt_ratio` is D/(D+E) in percent (corporate_statement_metrics); Hamada needs D/E.
+    # Same conversion as `_statement_debt_to_equity`'s fallback, which unlevered this beta.
+    debt_ratio = float(metrics.debt_ratio)
+    debt_to_equity = max(debt_ratio / max(100 - debt_ratio, 1), 0.0)
+    return max(relever_beta(float(metrics.unlevered_beta), DEFAULT_TAX_RATE, debt_to_equity), 0.0)

@@ -51,3 +51,19 @@ test("the spread renders as a percentage, not as the raw fraction", async ({ pag
   await expect(page.getByTestId(WARNING)).toContainText("8.3%");
   await expect(page.getByTestId(WARNING)).not.toContainText("0.1%");
 });
+
+test("the DCF request leaves terminal growth for the backend to derive", async ({ page }) => {
+  // H8: the page used to send company growth as `terminal_growth_rate`, which the API
+  // honours as an explicit override -- so the ceiling never applied and the single-ticker
+  // valuation pinned 50bp under WACC. Omitting it is what lets the API apply the ceiling.
+  await mockCorporatePageApi(page);
+  await gotoCorporate(page);
+  const request = page.waitForRequest(
+    (req) => req.method() === "POST" && /\/corporate\/dcf\/AAPL(\/stream|\/report)?$/.test(new URL(req.url()).pathname),
+  );
+  await page.getByRole("button", { name: "Refresh DCF" }).click();
+
+  const body = (await request).postDataJSON() as Record<string, unknown>;
+  expect(body).toHaveProperty("revenue_growth_rate");
+  expect(body).not.toHaveProperty("terminal_growth_rate");
+});
