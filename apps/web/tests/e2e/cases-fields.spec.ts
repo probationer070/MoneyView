@@ -28,14 +28,32 @@ const current = (key: string) => {
 
 test.describe("case field metadata", () => {
   test("the settable fields match the API: 16 case, 11 segment, 10 narrated", () => {
-    expect(CASE_FIELDS).toHaveLength(16);
-    expect(SEGMENT_FIELDS).toHaveLength(11);
+    expect(CASE_FIELDS.map((m) => m.field).sort()).toEqual([
+      "base_year", "cash", "debt", "effective_tax_rate", "ipo_proceeds", "marginal_tax_rate",
+      "nol_balance", "riskfree_rate", "roic_stable", "shares_basic", "shares_new", "target_year",
+      "terminal_growth", "wacc_converge_from", "wacc_initial", "wacc_stable",
+    ]);
+    expect(SEGMENT_FIELDS.map((m) => m.field).sort()).toEqual([
+      "base_margin", "base_revenue", "initial_growth", "margin_target", "market_share_target",
+      "ramp_start_year", "revenue_target", "sales_to_capital_early", "sales_to_capital_late",
+      "tam_target", "waypoint_gap_fraction",
+    ]);
     expect(SEGMENT_FIELDS.filter((m) => m.narrated).map((m) => m.field).sort()).toEqual([
       "base_margin", "base_revenue", "initial_growth", "margin_target", "market_share_target",
       "revenue_target", "sales_to_capital_early", "sales_to_capital_late", "tam_target",
       "waypoint_gap_fraction",
     ]);
     expect(CASE_FIELDS.some((m) => m.narrated)).toBe(false);
+    expect(
+      [...CASE_FIELDS, ...SEGMENT_FIELDS].filter((m) => m.unit === "rate").map((m) => m.field).sort(),
+    ).toEqual([
+      "base_margin", "effective_tax_rate", "initial_growth", "margin_target", "marginal_tax_rate",
+      "market_share_target", "riskfree_rate", "roic_stable", "terminal_growth", "wacc_initial",
+      "wacc_stable",
+    ]);
+    expect(
+      [...CASE_FIELDS, ...SEGMENT_FIELDS].filter((m) => m.integer).map((m) => m.field).sort(),
+    ).toEqual(["base_year", "ramp_start_year", "target_year", "wacc_converge_from"]);
   });
 
   test("a rate entered as a percentage goes on the wire as a fraction, and back", () => {
@@ -129,6 +147,17 @@ test.describe("the simulate request builder", () => {
     expect(built.request.distributions.segments.Core.margin_target).toEqual({
       shape: "triangular", low: 0.24, mode: 0.28, high: 0.3, claim: "scale", three_p: "possible",
     });
+  });
+
+  test("the seed must be a whole number of 0 or more, or left empty", () => {
+    for (const bad of ["-1", "1.5", "abc"]) {
+      const built = buildSimulateRequest([], "2000", bad, targets);
+      expect(built.seedProblem).toMatch(/whole number of 0 or more/);
+      expect(built.request.seed).toBeUndefined();
+    }
+    const built = buildSimulateRequest([], "2000", "7", targets);
+    expect(built.seedProblem).toBeNull();
+    expect(built.request.seed).toBe(7);
   });
 });
 

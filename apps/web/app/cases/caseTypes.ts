@@ -145,8 +145,11 @@ export interface Association {
 }
 
 /**
- * The summary keys are ABSENT, not null, when the refused fraction reaches the cap
- * (case_simulate.REFUSED_FRACTION_CAP). The UI decides suppression by key presence.
+ * The summary keys (p10/p50/p90/mean/histogram/association_among_accepted_samples) are ABSENT,
+ * not null, in two cases: all of them together when `suppressed` is present (the refused
+ * fraction reached case_simulate.REFUSED_FRACTION_CAP), or individually when `not_finite` names
+ * them (that one statistic overflowed). Suppression must be decided by the presence of
+ * `suppressed`, never by testing any statistic.
  */
 export interface SimulateResult {
   case_id: number;
@@ -157,6 +160,10 @@ export interface SimulateResult {
   runs_refused: number;
   refused_fraction: number;
   refusals: RefusalGroup[];
+  /** Present exactly when the API withheld the summary (refused_fraction >= cap). The API's own sentence. */
+  suppressed?: string;
+  /** Present when one or more of p10/p50/p90/mean overflowed and was omitted on its own; the API's sentence naming which. */
+  not_finite?: string;
   p10?: number;
   p50?: number;
   p90?: number;

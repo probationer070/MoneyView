@@ -146,6 +146,7 @@ export interface SimulateBuild {
   request: SimulateRequest;
   problems: Record<number, string>;
   runsProblem: string | null;
+  seedProblem: string | null;
 }
 
 export function buildSimulateRequest(
@@ -199,13 +200,16 @@ export function buildSimulateRequest(
     Number.isInteger(runs) && runs >= MIN_RUNS && runs <= MAX_RUNS
       ? null
       : `runs must be a whole number from ${MIN_RUNS.toLocaleString("en-US")} to ${MAX_RUNS.toLocaleString("en-US")}`;
-  const seed = seedText.trim() === "" ? undefined : Number(seedText.trim());
+  const seedTrimmed = seedText.trim();
+  const seed = seedTrimmed === "" ? undefined : Number(seedTrimmed);
+  const seedValid = seed !== undefined && Number.isInteger(seed) && seed >= 0;
+  const seedProblem = seedTrimmed === "" || seedValid ? null : "the seed must be a whole number of 0 or more";
   const request: SimulateRequest = {
     runs: Number.isInteger(runs) ? runs : 0,
-    ...(seed !== undefined && Number.isInteger(seed) ? { seed } : {}),
+    ...(seedValid ? { seed } : {}),
     distributions,
   };
-  return { request, problems, runsProblem };
+  return { request, problems, runsProblem, seedProblem };
 }
 
 /** Rows whose field the refusal names as a whole word -- `base_margin` must not match `margin_target`. */
