@@ -84,3 +84,49 @@ test("the valuation page reads the case list only after a panel has loaded", asy
   await expect(page.getByTestId("verdict-panel")).toBeVisible();
   await expect.poll(() => stats.casesRequests()).toBe(1);
 });
+
+async function gotoCase(page: Page, id: number) {
+  await page.goto(`/cases/${id}`, { waitUntil: "domcontentloaded" });
+  await expect(page.getByTestId("case-valuation")).toBeVisible({ timeout: 60_000 });
+}
+
+test.describe("one case", () => {
+  test("the page loads the case the URL names, with its valuation", async ({ page }) => {
+    await mockCasesApi(page);
+    await gotoCase(page, 3);
+    await expect(page.getByRole("heading", { name: "conservative_MSFT_2026-01-01" })).toBeVisible();
+    const valuation = page.getByTestId("case-valuation");
+    await expect(valuation.getByTestId("value-per-share-diluted")).toHaveText("49.96");
+    await expect(valuation.getByTestId("terminal-share")).toHaveText("66.3%");
+    await expect(valuation.getByRole("table", { name: "Year by year" }).getByRole("row")).toHaveCount(11); // header + 10 years
+    await expect(valuation.getByRole("cell", { name: "2026" })).toBeVisible();
+    await expect(valuation.getByRole("cell", { name: "2035" })).toBeVisible();
+  });
+
+  test("an engine refusal to run the case is content, not an error and not a zero", async ({ page }) => {
+    await mockCasesApi(page, { runStatus: 422, runDetail: "WACC must exceed terminal growth: 0.030 >= 0.030" });
+    await gotoCase(page, 1);
+    const valuation = page.getByTestId("case-valuation");
+    await expect(valuation.getByTestId("case-valuation-refusal")).toHaveText("WACC must exceed terminal growth: 0.030 >= 0.030");
+    await expect(valuation.getByRole("alert")).toHaveCount(0);
+    await expect(valuation.getByTestId("value-per-share-diluted")).toHaveCount(0);
+  });
+
+  test("inputs show rates as percentages and narrated fields with their claim", async ({ page }) => {
+    await mockCasesApi(page);
+    await gotoCase(page, 1);
+    const inputs = page.getByTestId("case-inputs");
+    await expect(inputs.getByTestId("input-case.wacc_stable")).toContainText("7.40%");
+    const margin = inputs.getByTestId("input-segment.Core.base_margin");
+    await expect(margin).toContainText("20.00%");
+    await expect(margin).toContainText("trailing three-year margin");
+    await expect(margin).toContainText("probable");
+    await expect(inputs.getByTestId("input-segment.Core.tam_target")).toContainText("not set");
+  });
+
+  test("a fork names its parent", async ({ page }) => {
+    await mockCasesApi(page);
+    await gotoCase(page, 2);
+    await expect(page.getByRole("link", { name: "case 1" })).toHaveAttribute("href", "/cases/1");
+  });
+});
