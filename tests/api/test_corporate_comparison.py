@@ -1658,3 +1658,27 @@ def test_the_version_records_assumptions_in_their_stored_percentage_form():
     assert "erp=5.5" in version, version
     assert "0.042" not in version, version
     assert f"schema={METRIC_SCHEMA_VERSION}" in version, version
+
+
+def test_capm_relevers_beta_with_debt_to_equity_not_debt_to_capital():
+    """F2: `debt_ratio` is D/(D+E); Hamada relevering needs D/E.
+
+    Feeding the capital weight straight in understated leverage for every levered company
+    -- 108 of 135 watchlist tickers, up to 14.08pp of `capm_expected_return` (ERROR-LOG
+    2026-09-09). Asserted on the published figure, not on the helper.
+
+    Hand arithmetic: debt_ratio 60 -> D/E = 60/40 = 1.5; tax 0.21;
+    beta = 1.0 * (1 + 0.79 * 1.5) = 2.185; CAPM = 0.042 + 2.185 * 0.055 = 16.22%.
+    The defect (D/E taken as 0.60) gives beta 1.474 and 12.31%.
+    """
+    metrics = _stub_metrics_loader("AAPL").model_copy(update={"debt_ratio": 60.0, "unlevered_beta": 1.0})
+    snapshot = _dcf_snapshot(
+        ticker="AAPL",
+        metrics=metrics,
+        price_loader=lambda _t: 100.0,
+        risk_free_rate=0.042,
+        equity_risk_premium=0.055,
+        bridge_loader=lambda _t: _starved_bridge(),
+    )
+
+    assert snapshot["capm_expected_return"] == pytest.approx(16.22)

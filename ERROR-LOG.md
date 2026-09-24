@@ -746,11 +746,21 @@ threshold. This codebase already has the correct conversion: `_statement_debt_to
 inconsistent by construction: `corporate_statement_metrics.py:825-827` **unlevers** with the
 true D/E to produce `metrics.unlevered_beta`, and `corporate_comparison.py:1131` then
 **relevers** that value with a capital weight, so it cannot recover the original levered beta.
-Fix: not fixed -- this entry records the defect; the fix is its own work. Confirmed impact:
+Fix: 2026-09-24. `_levered_beta_from_metrics` now converts `debt_ratio` to D/E as
+`dr / max(100 - dr, 1)`, the same conversion `_statement_debt_to_equity` uses when
+unlevering. It then calls `packages/core_finance/beta.py`'s `relever_beta` instead of
+repeating the formula by hand. `tests/api/test_corporate_comparison.py::
+test_capm_relevers_beta_with_debt_to_equity_not_debt_to_capital` asserts the published
+`capm_expected_return` for debt_ratio 60 (16.22%, worked out by hand). Reintroducing the
+shipped `dr / 100` in memory fails it with 12.31. Not fixed here: unlevering uses the
+company's own tax rate and relevering uses `DEFAULT_TAX_RATE = 0.21`, so the round trip
+is still not exact for a company whose tax rate differs. Impact before the fix:
 108 of 135 tickers get a different beta under the correct substitution, understating
 `capm_expected_return` by up to 14.08pp (STX, STEM, SKYX, DOCN, all `debt_ratio` 90.00: coded
 beta 0.6844 against a correct 3.2440), then BE 12.65pp, AES 11.26pp, ORCL 7.39pp.
-Files changed: none (record only). `docs/metrics/discount-rates-and-returns.md`'s
+Files changed: apps/api/services/corporate_comparison.py, tests/api/test_corporate_comparison.py,
+docs/metrics/discount-rates-and-returns.md, docs/metrics/inventory.md (fix, 2026-09-24). Originally
+none (record only); `docs/metrics/discount-rates-and-returns.md`'s
 `capm_expected_return` entry documents this as the live behavior.
 Prevention: the misleading local variable name `debt_to_equity` at
 `corporate_comparison.py:1130` is what let this survive review -- it names the textbook

@@ -153,34 +153,20 @@ decimal out, no annualisation logic of its own — same as
 `market_expected_return`. `risk_free_rate`/`equity_risk_premium` are the
 identical fixed constants (0.042/0.055) `market_expected_return` receives.
 `beta`, unlike those two, is ticker-specific: it is
-`_levered_beta_from_metrics(metrics)`, computed inline at
-`corporate_comparison.py:1129-1131` —
-`max(metrics.unlevered_beta * (1 + (1 - DEFAULT_TAX_RATE) * debt_to_equity),
-0.0)`, where `DEFAULT_TAX_RATE = 0.21` (`corporate_comparison.py:42`) and
-`debt_to_equity = max(metrics.debt_ratio / 100, 0.0)`. This is the identical
-Hamada relever expression `packages/core_finance/beta.py:23`'s
-`relever_beta` defines (`β_L = β_U × [1 + (1−t)(D/E)]`), but hand-duplicated
-rather than calling that function — flagged in `inventory.md`'s "Notable
-findings": a future change to `beta.py`'s formula would not reach this call
-site. **A second divergence worth flagging on its own: the local variable is
-named `debt_to_equity`, but `metrics.debt_ratio` is defined elsewhere
-(`corporate_statement_metrics.py:800-803`) as
-`debt / (debt + equity) * 100`, bounded to `[0, 90]`** — a debt-to-capital
-weight, not a debt-to-equity ratio. Feeding a `[0, 0.9]`-bounded
-capital-structure weight into a formula whose textbook denominator is D/E
-(unbounded above 1 for a levered firm) understates the leverage effect on
-beta for **every levered company, with the error growing in leverage** —
-algebraically, `D/E − D/(D+E) = D²/(E(D+E)) > 0` for all `D, E > 0`, so the
-substitution understates the leverage term as soon as any debt exists at
-all, not only past some threshold; at `debt_ratio = 50%` the leverage term
-is already halved. It also mislabels what the variable holds for every
-company, levered or not. Measured directly: **108 of 135 tickers get a
-different beta** under the correct D/E substitution. Worst cases — STX,
-STEM, SKYX, DOCN (`debt_ratio` 90.00) — show a coded beta of 0.6844 against
-a correct 3.2440, understating `capm_expected_return` by **14.08pp**; then
-BE 12.65pp, AES 11.26pp, ORCL 7.39pp. No guard beyond the `max(..., 0.0)`
-floor on the final beta (never negative); `calculate_capm_expected_return`
-itself has no guard at all — unconditional arithmetic once beta resolves.
+`_levered_beta_from_metrics(metrics)` (`corporate_comparison.py`), which calls
+`packages/core_finance/beta.py`'s `relever_beta`
+(`β_L = β_U × [1 + (1−t)(D/E)]`) with `DEFAULT_TAX_RATE = 0.21` and
+`D/E = debt_ratio / max(100 − debt_ratio, 1)`, floored at 0.0.
+`metrics.debt_ratio` is `debt / (debt + equity) * 100`, bounded to `[0, 90]`
+(`corporate_statement_metrics.py`) — a debt-to-capital weight — so it is
+converted to D/E first, the same conversion `_statement_debt_to_equity` uses
+on the unlevering side. **Fixed 2026-09-24 (`ERROR-LOG.md` 2026-09-09).**
+Until then the capital weight was fed in directly as if it were D/E,
+understating beta for every levered company: 108 of 135 tickers were
+affected, worst STX/STEM/SKYX/DOCN (`debt_ratio` 90.00, beta 0.6844 instead
+of 3.2440, `capm_expected_return` 14.08pp low). The debt ratio cap of 90
+caps D/E at 9. `calculate_capm_expected_return` itself has no guard at all —
+unconditional arithmetic once beta resolves.
 
 **What it affects.** Reported directly as the `capm_expected_return` column.
 Not consumed by any of the other three figures in this family — unlike
@@ -204,14 +190,10 @@ uses a few lines earlier to discount cash flows
 0.001)`). The two can and do differ for the same ticker in the same
 response; reading `capm_expected_return` as "the WACC used" conflates a
 return the model estimates the market requires with the structurally
-unrelated, debt-weighted rate the DCF actually discounted at. A second,
-codebase-specific misreading: assuming the beta feeding this formula came
-from `packages/core_finance/beta.py`'s `relever_beta`. It did not — that
-function is never called; the identical formula is reimplemented by hand at
-`corporate_comparison.py:1129-1131`, fed a capital-structure weight
-mislabeled as debt-to-equity (see above).
+unrelated, debt-weighted rate the DCF actually discounted at.
 
-**Current state.** (2026-09-08) Measured in the same live pull as
+**Current state.** (2026-09-08, before the 2026-09-24 D/E fix, so the range
+below predates it) Measured in the same live pull as
 `market_expected_return` (140 rows, `portfolio_plus_benchmark` universe,
 real loaders): `capm_expected_return` ranges from **6.65 to 24.94** across
 the 140 rows, confirming it does vary per ticker (unlike
