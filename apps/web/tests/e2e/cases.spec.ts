@@ -351,6 +351,30 @@ test.describe("uncertainty (simulate this case)", () => {
     await expect(results.getByTestId("simulate-suppressed")).toHaveCount(0);
   });
 
+  test("p50 itself overflowing does not trip suppression, which reads only the API's own signal", async ({ page }) => {
+    // Distinguishes `"suppressed" in result` from the wrong `!("p50" in result)`: both checks
+    // agree whenever p50 is present, or whenever the whole summary is suppressed (no stats at
+    // all). They disagree only here -- p50 individually omitted, nothing else withheld.
+    const overflowed = {
+      ...SIMULATE_RESULT,
+      not_finite:
+        "omitted ['p50']: the surviving values are individually finite but this aggregate of them overflows, " +
+        "so it cannot be reported as a number",
+    };
+    delete overflowed.p50;
+    await mockCasesApi(page, { simulateResult: overflowed });
+    await gotoCase(page, 1);
+    await addDistribution(page, "case.wacc_stable", "normal", { Mean: "7.4", "Std dev": "0.5" });
+    await page.getByRole("button", { name: "Simulate" }).click();
+    const results = page.getByTestId("simulate-results");
+    await expect(results.getByTestId("simulate-p10")).toBeVisible();
+    await expect(results.getByTestId("simulate-p50")).toHaveCount(0);
+    await expect(results.getByTestId("simulate-p90")).toBeVisible();
+    await expect(results.getByTestId("simulate-mean")).toBeVisible();
+    await expect(results.getByTestId("simulate-not-finite")).toBeVisible();
+    await expect(results.getByTestId("simulate-suppressed")).toHaveCount(0);
+  });
+
   test("the seed is shown and a rerun sends it back", async ({ page }) => {
     const stats = await mockCasesApi(page);
     await gotoCase(page, 1);
