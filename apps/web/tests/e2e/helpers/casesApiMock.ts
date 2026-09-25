@@ -49,11 +49,12 @@ export const RUN_RESULT: RunResult = {
 
 export const DIFF_RESULT: DiffResult = {
   case_id: 2, parent_case_id: 1, metric: "value_per_share_diluted",
-  parent_value_per_share_diluted: 49.96, case_value_per_share_diluted: 44.32,
-  total_difference: -5.64, method: "shapley", changed_input_count: 2,
+  parent_value_per_share_diluted: 49.96, case_value_per_share_diluted: 52.32,
+  total_difference: 2.36, method: "shapley", changed_input_count: 3,
   contributions: [
     { input: "case.wacc_stable", from: 0.074, to: 0.081, contribution: -6.14 },
     { input: "segment.Core.base_margin", from: 0.2, to: 0.22, contribution: 0.5 },
+    { input: "segment.Core.margin_target", from: 0.28, to: 0.35, contribution: 8.0 },
   ],
 };
 

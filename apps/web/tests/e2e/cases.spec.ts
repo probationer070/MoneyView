@@ -141,13 +141,17 @@ test.describe("why a fork's value moved", () => {
     await mockCasesApi(page);
     await gotoCase(page, 2);
     const why = page.getByTestId("case-why");
-    await expect(why.getByTestId("why-headline")).toHaveText("49.96 → 44.32 (−5.64 per share)");
-    await expect(why.getByTestId(/^why-bar-/)).toHaveCount(2);
+    await expect(why.getByTestId("why-headline")).toHaveText("49.96 → 52.32 (+2.36 per share)");
+    await expect(why.getByTestId(/^why-bar-/)).toHaveCount(3);
     await expect(why.getByTestId("why-bar-0")).toContainText("WACC, stable");
     await expect(why.getByTestId("why-bar-0")).toContainText("7.40% → 8.10%");
     await expect(why.getByTestId("why-bar-0")).toContainText("−6.14");
     await expect(why.getByTestId("why-bar-1")).toContainText("Core · Base margin");
-    await expect(why.getByTestId("why-sum")).toHaveText("Contributions sum to −5.64, the whole difference.");
+    await expect(why.getByTestId("why-bar-1")).toContainText("20.00% → 22.00%");
+    await expect(why.getByTestId("why-bar-2")).toContainText("Core · Margin, target");
+    await expect(why.getByTestId("why-bar-2")).toContainText("28.00% → 35.00%");
+    await expect(why.getByTestId("why-bar-2")).toContainText("+8.00");
+    await expect(why.getByTestId("why-sum")).toHaveText("Contributions sum to +2.36, the whole difference.");
     await expect(why.getByRole("alert")).toHaveCount(0);
   });
 
