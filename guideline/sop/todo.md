@@ -225,7 +225,7 @@ and CLAUDE.md section 8. Suite: 882 passing, no skips or xfails.
 
 ---
 
-## Track C - Frontend  [C1 SHIPPED 2026-09-04; C2 STILL OPEN -- /fork, /diff and /simulate shipped 2026-09-05/06, /pricing and any UI remain]
+## Track C - Frontend  [C1 SHIPPED 2026-09-04; C2 UI SHIPPED 2026-09-24 -- /pricing remains]
 
 - [x] **C1. The valuation tab -- shipped 2026-09-04.** `/valuation` surfaces
       `GET /api/v1/valuation/verdict/{ticker}`, which had shipped with no UI at
@@ -498,8 +498,49 @@ and CLAUDE.md section 8. Suite: 882 passing, no skips or xfails.
       available inside the isolated test database to re-measure, and this
       entry does not claim to have closed that gap.
 
-      Still open in C2: `/pricing`, and any UI -- `/fork`, `/diff` and
-      `/simulate` are HTTP-only, exactly as `/valuation/verdict` was before C1.
+      Still open in C2, as of before 2026-09-24: `/pricing`, and any UI --
+      `/fork`, `/diff` and `/simulate` were HTTP-only, exactly as
+      `/valuation/verdict` was before C1.
+
+      **Cases UI -- shipped 2026-09-24.** A new **Cases** tab (`/cases` list,
+      `/cases/[id]` detail) gives `/fork`, `/diff` and `/simulate` a browser
+      interface, entirely on the endpoints above -- no backend change. Spec:
+      `docs/superpowers/specs/2026-09-24-cases-ui-design.md`. Plan:
+      `docs/superpowers/plans/2026-09-24-cases-ui.md`. Ledger:
+      `.superpowers/sdd/2026-09-24-cases-ui/progress.md`. Seven tasks, each
+      reviewed by a separate agent and mutation-checked before the next
+      started: Task 1 shipped `caseFields.ts`'s one percent<->fraction
+      conversion (`toWire`/`fromWire`) and the fork/simulate row-building
+      logic, mutation-checked on rounding, unchanged-row detection and the
+      rate/non-rate field split. Task 2 shipped the `/cases` list and its
+      ticker filter, mutation-checked on URL-vs-stored filter precedence and
+      the case-list/panel request ordering. Task 3 shipped the case detail
+      page's Valuation and Inputs sections, mutation-checked on the
+      4xx-refusal-as-content vs 5xx-as-alert split and the `fmtPercent` route
+      every rate display now goes through. Task 4 shipped Why it moved,
+      mutation-checked on Shapley contribution order (a three-contribution
+      nonlinear fixture, since a two-row or linear fixture cannot distinguish
+      canonical order from a magnitude or signed sort) and the
+      contributions-sum-to-the-difference check. Task 5 shipped Fork this
+      case, mutation-checked on the submit guard against an all-unchanged
+      fork and the refusal/failure ARIA split (`role="status"` vs
+      `role="alert"`). Task 6 shipped Uncertainty (simulate this case),
+      mutation-checked across two rounds (12 mutations total) on suppression
+      via key presence rather than the refused fraction, a single overflowed
+      statistic's `not_finite` message, the histogram's closed last bin and
+      out-of-range caption, and "Rerun with this seed" reproducing the exact
+      prior request rather than the current form; one mutation (`!("p50" in
+      result)` for the suppression check) initially passed spuriously because
+      the existing test only ever overflowed `mean`, not `p50` -- caught by
+      the task's own controller, not left as accepted risk, and closed by
+      adding a test that overflows `p50` alone before re-running that
+      mutation. Task 7 added `cases-real-api.spec.ts`, a Playwright test that
+      forks a case through the UI against the real e2e-harness API (not the
+      mock) and reads the real Shapley attribution; mutation-checked by
+      dropping `toWire`'s `/100`, which sends `wacc_stable` as 810% instead of
+      8.1% and the real engine refuses the fork. No mock/real divergence was
+      found: `casesApiMock.ts`'s response shapes matched the live API exactly.
+      `/pricing` is now the only open part of C2.
 
 ---
 

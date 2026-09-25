@@ -19,6 +19,7 @@ Files
 - `corporate-analysis-tab.txt`
 - `monte-carlo-tab.txt`
 - `events-tab.txt`
+- `cases-tab.txt`
 
 Top-Level Sidebar Tabs Covered
 - Market Overview
@@ -27,6 +28,7 @@ Top-Level Sidebar Tabs Covered
 - Corporate Analysis
 - Monte Carlo
 - Events
+- Cases
 
 Design Coverage
 - The files are not only feature lists.

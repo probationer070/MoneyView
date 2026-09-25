@@ -1,0 +1,51 @@
+Cases Tab
+
+Tab identity
+- Sidebar label: Cases
+- Routes: /cases (list), /cases/[id] (one case)
+
+Purpose
+- Use the stored segment build-up valuation cases without curl: value one, fork it with
+  stated reasons, see why a fork's value moved, and simulate how uncertain its value is.
+
+Design intent
+- Every refusal from the API is content, shown in its own words. A 4xx (a model refusal) is
+  rendered verbatim as ordinary content, role="status", never as a zero. A 5xx or network
+  failure is a real error: role="alert". A refused run, an unattributable fork and a
+  suppressed simulation never render as zeros or errors.
+- A suppressed simulation shows the API's own `suppressed` sentence verbatim, not a UI-authored
+  paraphrase. A single statistic that overflowed on its own (`not_finite`) is simply omitted
+  from the stat row, and the API's `not_finite` sentence is shown alongside the rest.
+- "Rerun with this seed" reruns the exact request that produced the result on screen, not
+  whatever the form currently holds -- it bypasses the form's own validation because that
+  request already succeeded once.
+- The histogram marks the bin holding the case's own value (closing the last bin on its right
+  edge, matching numpy's histogram convention), and says in its caption when that value lies
+  outside the simulated range instead of marking nothing silently.
+- Rates are entered and shown as percentages and travel as fractions; every fraction -> percent
+  conversion, and its inverse, goes through app/cases/caseFields.ts (toWire, fromWire,
+  formatWire, fmtPercent) -- the only place a rate is multiplied or divided by 100.
+- Nothing here is called Monte Carlo: that is the unrelated /monte-carlo tab.
+
+Layout structure
+- /cases: ticker filter (?ticker= presets it), table of cases with their parent.
+- /cases/[id]: Valuation, Inputs, Why it moved (forks only), Fork this case,
+  Uncertainty (simulate this case).
+
+Key sections
+- Valuation: POST /valuation/cases/{id}/run -- per-share values, EV, equity, terminal share,
+  year-by-year build, target-year segments.
+- Why it moved: GET /valuation/cases/{id}/diff -- Shapley contributions per changed input,
+  checked to sum to the difference; refused above 12 changed inputs.
+- Fork this case: POST /valuation/cases/{id}/fork -- a list of changes; narrated fields need
+  a claim and a three_p; a counter shows changed inputs against the cap of 12.
+- Uncertainty: POST /valuation/cases/{id}/simulate -- triangular/normal/uniform per input,
+  1,000-20,000 runs, optional seed; statistics withheld when the API withholds them.
+
+Important behavior
+- The Valuation tab links to /cases?ticker=X when that ticker has stored cases.
+- Simulation results are not stored; the seed reproduces them.
+
+Primary data sources
+- /api/v1/valuation/cases and its /run, /diff, /fork, /simulate sub-routes.
+- Spec: docs/superpowers/specs/2026-09-24-cases-ui-design.md
