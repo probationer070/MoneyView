@@ -8,8 +8,8 @@ import { fmtPerShare } from "../format";
 const signed = (value: number) => `${value >= 0 ? "+" : "−"}${Math.abs(value).toFixed(2)}`;
 
 export function SimulateResults({
-  result, pointValue, onRerun,
-}: { result: SimulateResult; pointValue: number | null; onRerun: (seed: number) => void }) {
+  result, pointValue, onRerun, rerunDisabled,
+}: { result: SimulateResult; pointValue: number | null; onRerun: (seed: number) => void; rerunDisabled: boolean }) {
   // Presence, not the fraction: the API is the one authority on suppression.
   const suppressed = "suppressed" in result;
   const conditioned = result.runs_refused > 0 ? " (among accepted draws)" : "";
@@ -20,11 +20,18 @@ export function SimulateResults({
     const value = result[key];
     return value === undefined ? [] : [{ key, value }];
   });
-  const bins = (result.histogram ?? []).map((bin) => ({
-    ...bin,
-    label: fmtPerShare((bin.lower + bin.upper) / 2),
-    holdsPoint: pointValue !== null && pointValue >= bin.lower && pointValue < bin.upper,
-  }));
+  const histogram = result.histogram ?? [];
+  const bins = histogram.map((bin, i) => {
+    // np.histogram closes the LAST bin on the right; every other bin is half-open, so a
+    // point sitting exactly on the final upper edge would otherwise fall in no bin at all.
+    const isLastBin = i === histogram.length - 1;
+    return {
+      ...bin,
+      label: fmtPerShare((bin.lower + bin.upper) / 2),
+      holdsPoint: pointValue !== null && pointValue >= bin.lower && (isLastBin ? pointValue <= bin.upper : pointValue < bin.upper),
+    };
+  });
+  const markedBin = bins.find((bin) => bin.holdsPoint) ?? null;
   const association = [...(result.association_among_accepted_samples ?? [])].sort(
     (a, b) => Math.abs(b.spearman ?? 0) - Math.abs(a.spearman ?? 0),
   );
@@ -50,7 +57,9 @@ export function SimulateResults({
       )}
       <p data-testid="simulate-seed" className="text-xs text-[var(--text-muted)]">
         Seed {result.seed}.{" "}
-        <button type="button" onClick={() => onRerun(result.seed)} className="underline">Rerun with this seed</button>
+        <button type="button" onClick={() => onRerun(result.seed)} disabled={rerunDisabled} className="underline disabled:opacity-50">
+          Rerun with this seed
+        </button>
       </p>
 
       {suppressed ? (
@@ -72,8 +81,14 @@ export function SimulateResults({
           )}
           <figure data-testid="simulate-histogram">
             <figcaption className="text-xs text-[var(--text-muted)]">
-              Value per share across {result.runs_valid.toLocaleString("en-US")} accepted draws, 32 bins.
-              {pointValue !== null ? ` Marked: the bin holding this case's own value (${fmtPerShare(pointValue)}).` : ""}
+              Value per share across {result.runs_valid.toLocaleString("en-US")} accepted draws, {bins.length} bins.
+              {pointValue !== null && (markedBin ? (
+                <span data-testid="histogram-mark">
+                  {` Marked: the bin from ${fmtPerShare(markedBin.lower)} to ${fmtPerShare(markedBin.upper)} holding this case's own value (${fmtPerShare(pointValue)}).`}
+                </span>
+              ) : (
+                ` This case's own value (${fmtPerShare(pointValue)}) lies outside the simulated range, so no bin is marked.`
+              ))}
             </figcaption>
             <div className="mt-2 h-56 min-h-56 min-w-0">
               <ResponsiveChart className="h-full w-full" minWidth={1} minHeight={1}>

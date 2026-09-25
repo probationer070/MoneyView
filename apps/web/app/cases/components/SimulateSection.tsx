@@ -20,11 +20,14 @@ export function SimulateSection({ record, pointValue }: { record: CaseRecord; po
   const [result, setResult] = useState<SimulateResult | null>(null);
   const [refusal, setRefusal] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
+  // The request that produced the currently-shown result, kept so "Rerun with this seed"
+  // reproduces what is on screen -- not whatever the form happens to hold right now.
+  const [lastRequest, setLastRequest] = useState<SimulateRequest | null>(null);
 
   const built = buildSimulateRequest(rows, runs, seed, byKey);
   const mutation = useMutation({
     mutationFn: (body: SimulateRequest) => casesApi.simulate(record.id, body),
-    onSuccess: (data) => { setResult(data); },
+    onSuccess: (data, variables) => { setResult(data); setLastRequest(variables); },
     onError: (error) => {
       setResult(null);
       if (error instanceof CaseApiError && error.isRefusal) {
@@ -44,6 +47,17 @@ export function SimulateSection({ record, pointValue }: { record: CaseRecord; po
     setFailed(false);
     if (rows.length === 0 || built.runsProblem || built.seedProblem || Object.keys(built.problems).length > 0) return;
     mutation.mutate(request);
+  };
+
+  // Bypasses the form's own guard: `lastRequest` already produced the result on screen, so
+  // it was already valid. A rerun reproduces that request with only the seed changed --
+  // never the current (possibly since-edited) form.
+  const rerun = (usedSeed: number) => {
+    if (!lastRequest) return;
+    setSeed(String(usedSeed));
+    setRefusal(null);
+    setFailed(false);
+    mutation.mutate({ ...lastRequest, seed: usedSeed });
   };
 
   return (
@@ -134,10 +148,8 @@ export function SimulateSection({ record, pointValue }: { record: CaseRecord; po
         <SimulateResults
           result={result}
           pointValue={pointValue}
-          onRerun={(usedSeed) => {
-            setSeed(String(usedSeed));
-            send({ ...built.request, seed: usedSeed });
-          }}
+          onRerun={rerun}
+          rerunDisabled={mutation.isPending}
         />
       )}
     </Section>

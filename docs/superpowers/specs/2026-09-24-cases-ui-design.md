@@ -210,12 +210,11 @@ Each leaf is `{shape, <params>, claim?, three_p?, confidence?}`.
   the API's order.
 - **Seed:** the seed the API used, with **"Rerun with this seed"**.
 - **At or above `REFUSED_FRACTION_CAP` (10%):** the API omits `p10`/`p50`/`p90`/
-  `mean`/`histogram`/`association_among_accepted_samples`. The page then shows
-  none of them, with no zeros and no empty chart. It shows one sentence instead:
-  the surviving draws describe the value only where the engine accepted the
-  inputs, which is not the distribution that was stated. The page checks whether
-  the keys are present, not whether the fraction is below 0.10, so the API stays
-  the single authority on suppression.
+  `mean`/`histogram`/`association_among_accepted_samples` and adds `suppressed`,
+  its own sentence explaining why. The page shows that sentence verbatim, with
+  no statistics, no zeros and no chart. The page checks whether the keys are
+  present, not whether the fraction is below 0.10, so the API stays the single
+  authority on suppression and on the wording shown for it.
 - **Below the cap:**
   - **Statistics:** p10 / p50 / p90 / mean per share. When any draw was refused,
     they are labelled "among accepted draws".

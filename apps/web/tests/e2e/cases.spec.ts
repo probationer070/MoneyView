@@ -322,7 +322,7 @@ test.describe("uncertainty (simulate this case)", () => {
     await page.getByRole("button", { name: "Simulate" }).click();
     const results = page.getByTestId("simulate-results");
     await expect(results.getByTestId("simulate-accounting")).toHaveText("1,500 of 2,000 draws valued · 500 refused (25.0%)");
-    await expect(results.getByTestId("simulate-suppressed")).toBeVisible();
+    await expect(results.getByTestId("simulate-suppressed")).toHaveText(SIMULATE_SUPPRESSED.suppressed!);
     await expect(results.getByTestId("simulate-stats")).toHaveCount(0);
     await expect(results.getByTestId("simulate-histogram")).toHaveCount(0);
     await expect(results.getByTestId("simulate-association")).toHaveCount(0);
@@ -346,7 +346,7 @@ test.describe("uncertainty (simulate this case)", () => {
     await expect(results.getByTestId("simulate-p50")).toBeVisible();
     await expect(results.getByTestId("simulate-p90")).toBeVisible();
     await expect(results.getByTestId("simulate-mean")).toHaveCount(0);
-    await expect(results.getByTestId("simulate-not-finite")).toBeVisible();
+    await expect(results.getByTestId("simulate-not-finite")).toHaveText(overflowed.not_finite);
     await expect(results.getByTestId("simulate-histogram")).toBeVisible();
     await expect(results.getByTestId("simulate-suppressed")).toHaveCount(0);
   });
@@ -371,8 +371,50 @@ test.describe("uncertainty (simulate this case)", () => {
     await expect(results.getByTestId("simulate-p50")).toHaveCount(0);
     await expect(results.getByTestId("simulate-p90")).toBeVisible();
     await expect(results.getByTestId("simulate-mean")).toBeVisible();
-    await expect(results.getByTestId("simulate-not-finite")).toBeVisible();
+    await expect(results.getByTestId("simulate-not-finite")).toHaveText(overflowed.not_finite);
     await expect(results.getByTestId("simulate-suppressed")).toHaveCount(0);
+  });
+
+  // RUN_RESULT.value_per_share_diluted is 49.96, so pointValue is 49.96 for all three tests below.
+  test("the histogram marks the bin holding the case's own value", async ({ page }) => {
+    await mockCasesApi(page); // SIMULATE_RESULT's bins are 35..67 in steps of 1: 49.96 falls in [49, 50).
+    await gotoCase(page, 1);
+    await addDistribution(page, "case.wacc_stable", "normal", { Mean: "7.4", "Std dev": "0.5" });
+    await page.getByRole("button", { name: "Simulate" }).click();
+    const mark = page.getByTestId("simulate-results").getByTestId("histogram-mark");
+    await expect(mark).toContainText("49.00");
+    await expect(mark).toContainText("50.00");
+  });
+
+  test("a point value on the last bin's top edge is still marked, matching np.histogram's closed last bin", async ({ page }) => {
+    const topEdge = {
+      ...SIMULATE_RESULT,
+      histogram: [
+        { lower: 47.96, upper: 48.96, count: 20 },
+        { lower: 48.96, upper: 49.96, count: 15 },
+      ],
+    };
+    await mockCasesApi(page, { simulateResult: topEdge });
+    await gotoCase(page, 1);
+    await addDistribution(page, "case.wacc_stable", "normal", { Mean: "7.4", "Std dev": "0.5" });
+    await page.getByRole("button", { name: "Simulate" }).click();
+    const mark = page.getByTestId("simulate-results").getByTestId("histogram-mark");
+    await expect(mark).toContainText("48.96");
+    await expect(mark).toContainText("49.96");
+  });
+
+  test("a point value outside the simulated range marks no bin", async ({ page }) => {
+    const outside = {
+      ...SIMULATE_RESULT,
+      histogram: Array.from({ length: 32 }, (_, i) => ({ lower: 60 + i, upper: 61 + i, count: 10 + (i % 7) })),
+    };
+    await mockCasesApi(page, { simulateResult: outside });
+    await gotoCase(page, 1);
+    await addDistribution(page, "case.wacc_stable", "normal", { Mean: "7.4", "Std dev": "0.5" });
+    await page.getByRole("button", { name: "Simulate" }).click();
+    const results = page.getByTestId("simulate-results");
+    await expect(results).toContainText("lies outside the simulated range");
+    await expect(results.getByTestId("histogram-mark")).toHaveCount(0);
   });
 
   test("the seed is shown and a rerun sends it back", async ({ page }) => {
@@ -383,6 +425,19 @@ test.describe("uncertainty (simulate this case)", () => {
     await expect(page.getByTestId("simulate-seed")).toContainText("1234");
     await page.getByRole("button", { name: "Rerun with this seed" }).click();
     await expect.poll(() => stats.simulatePosts.length).toBe(2);
+    expect(stats.simulatePosts[1].seed).toBe(1234);
+  });
+
+  test("a rerun reproduces the displayed result, ignoring form edits made since", async ({ page }) => {
+    const stats = await mockCasesApi(page);
+    await gotoCase(page, 1);
+    const row = await addDistribution(page, "case.wacc_stable", "normal", { Mean: "7.4", "Std dev": "0.5" });
+    await page.getByRole("button", { name: "Simulate" }).click();
+    await expect.poll(() => stats.simulatePosts.length).toBe(1);
+    await row.getByLabel("Std dev").fill("1.2");
+    await page.getByRole("button", { name: "Rerun with this seed" }).click();
+    await expect.poll(() => stats.simulatePosts.length).toBe(2);
+    expect(stats.simulatePosts[1].distributions).toEqual(stats.simulatePosts[0].distributions);
     expect(stats.simulatePosts[1].seed).toBe(1234);
   });
 
