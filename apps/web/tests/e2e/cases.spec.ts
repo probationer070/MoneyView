@@ -196,6 +196,9 @@ test.describe("forking a case", () => {
     await addChange(page, 0, "case.wacc_stable", "8.1");
     await page.getByRole("button", { name: "Create fork" }).click();
     await expect(page).toHaveURL(/\/cases\/4$/);
+    await expect(page.getByRole("heading", { name: "higher WACC" })).toBeVisible();
+    await expect(page.getByTestId("fork-row-0")).toHaveCount(0);
+    await expect(page.getByLabel("New case name")).toHaveValue("");
     expect(stats.forkPosts[0]).toEqual({ case_name: "higher WACC", overrides: { case: { wacc_stable: 0.081 }, segments: {} } });
   });
 
@@ -207,6 +210,11 @@ test.describe("forking a case", () => {
     await page.getByRole("button", { name: "Create fork" }).click();
     await expect(row.getByTestId("row-problem")).toContainText("needs a claim");
     expect(stats.forkPosts).toHaveLength(0);
+    const valueInput = row.getByLabel("New value");
+    await expect(valueInput).toHaveAttribute("aria-invalid", "true");
+    const describedBy = await valueInput.getAttribute("aria-describedby");
+    expect(describedBy).toBeTruthy();
+    await expect(page.locator(`#${describedBy}`)).toContainText("needs a claim");
 
     await row.getByLabel("Claim").fill("pricing power holds");
     await row.getByLabel("Three-P").selectOption("plausible");
@@ -242,7 +250,21 @@ test.describe("forking a case", () => {
     await expect(page.getByTestId("fork-refusal")).toHaveText(
       "narrative_required: margin_target needs a three_p of ['plausible', 'possible', 'probable'], got ''",
     );
+    await expect(page.getByTestId("fork-refusal")).toHaveAttribute("role", "status");
     await expect(target).toHaveAttribute("data-highlighted", "true");
     await expect(page.getByTestId("fork-row-0")).toHaveAttribute("data-highlighted", "false");
+  });
+
+  test("a 500 is an error, not a refusal", async ({ page }) => {
+    await mockCasesApi(page, { forkStatus: 500, forkDetail: "internal server error" });
+    await gotoCase(page, 1);
+    await page.getByLabel("New case name").fill("x");
+    await addChange(page, 0, "case.wacc_stable", "8.1");
+    await page.getByRole("button", { name: "Create fork" }).click();
+    const error = page.getByTestId("fork-error");
+    await expect(error).toBeVisible();
+    await expect(error).toHaveAttribute("role", "alert");
+    await expect(page.getByTestId("fork-refusal")).toHaveCount(0);
+    await expect(page.locator('[data-testid^="fork-row-"][data-highlighted="true"]')).toHaveCount(0);
   });
 });

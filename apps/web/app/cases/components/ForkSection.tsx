@@ -25,6 +25,7 @@ export function ForkSection({ record }: { record: CaseRecord }) {
   const [nextId, setNextId] = useState(1);
   const [submitted, setSubmitted] = useState(false);
   const [refusal, setRefusal] = useState<Refusal | null>(null);
+  const [failed, setFailed] = useState(false);
 
   const current = (key: string) => {
     const target = byKey.get(key);
@@ -39,12 +40,15 @@ export function ForkSection({ record }: { record: CaseRecord }) {
       router.push(`/cases/${id}`);
     },
     onError: (error) => {
-      const detail = error instanceof CaseApiError ? error.detail : "Could not create the fork.";
-      setRefusal({
-        detail,
-        rowIds: rowsNamedIn(detail, rows, byKey),
-        name: detail.startsWith("duplicate_case_name"),
-      });
+      if (error instanceof CaseApiError && error.isRefusal) {
+        setRefusal({
+          detail: error.detail,
+          rowIds: rowsNamedIn(error.detail, rows, byKey),
+          name: error.detail.startsWith("duplicate_case_name"),
+        });
+        return;
+      }
+      setFailed(true);
     },
   });
 
@@ -55,9 +59,12 @@ export function ForkSection({ record }: { record: CaseRecord }) {
     event.preventDefault();
     setSubmitted(true);
     setRefusal(null);
+    setFailed(false);
     if (!caseName.trim() || built.changedCount === 0 || Object.keys(built.problems).length > 0) return;
     mutation.mutate(built.request);
   };
+
+  const nameProblem = submitted && !caseName.trim();
 
   return (
     <Section title="Fork this case" testId="case-fork">
@@ -68,10 +75,12 @@ export function ForkSection({ record }: { record: CaseRecord }) {
             value={caseName}
             onChange={(e) => setCaseName(e.target.value)}
             data-highlighted={refusal?.name ? "true" : "false"}
+            aria-invalid={refusal?.name || nameProblem ? true : undefined}
+            aria-describedby={nameProblem ? "fork-name-problem" : undefined}
             className={`${controlClass} ${refusal?.name ? "border-[var(--chart-negative)]" : ""}`}
           />
         </label>
-        {submitted && !caseName.trim() && <p className="text-xs text-[var(--text-secondary)]">A fork needs a name.</p>}
+        {nameProblem && <p id="fork-name-problem" className="text-xs text-[var(--text-secondary)]">A fork needs a name.</p>}
         <p data-testid="fork-counter" className="text-xs text-[var(--text-secondary)]">
           {built.changedCount} of {SHAPLEY_INPUT_CAP} changed inputs
         </p>
@@ -84,6 +93,7 @@ export function ForkSection({ record }: { record: CaseRecord }) {
           const target = byKey.get(row.targetKey);
           const highlighted = refusal?.rowIds.includes(row.id) ?? false;
           const problem = submitted ? built.problems[row.id] : undefined;
+          const problemId = `fork-row-${row.id}-problem`;
           return (
             <div
               key={row.id}
@@ -98,9 +108,21 @@ export function ForkSection({ record }: { record: CaseRecord }) {
                 )}
                 <label className="flex flex-col gap-1 text-xs text-[var(--text-secondary)]">
                   New value{target && unitSuffix(target.meta) ? ` (${unitSuffix(target.meta)})` : ""}
-                  <input value={row.value} onChange={(e) => update(row.id, { value: e.target.value })} inputMode="decimal" className={controlClass} />
+                  <input
+                    value={row.value}
+                    onChange={(e) => update(row.id, { value: e.target.value })}
+                    inputMode="decimal"
+                    aria-invalid={problem || highlighted ? true : undefined}
+                    aria-describedby={problem ? problemId : undefined}
+                    className={controlClass}
+                  />
                 </label>
-                <button type="button" onClick={() => setRows((all) => all.filter((r) => r.id !== row.id))} className="pb-1 text-xs text-[var(--text-muted)] underline">
+                <button
+                  type="button"
+                  onClick={() => setRows((all) => all.filter((r) => r.id !== row.id))}
+                  aria-label={`Remove change ${index + 1}`}
+                  className="pb-1 text-xs text-[var(--text-muted)] underline"
+                >
                   Remove
                 </button>
               </div>
@@ -108,7 +130,7 @@ export function ForkSection({ record }: { record: CaseRecord }) {
                 <NarrativeInputs value={row.narrative} onChange={(narrative) => update(row.id, { narrative })} withEvidence />
               )}
               {built.unchanged.includes(row.id) && <p className="text-xs text-[var(--text-muted)]">unchanged, will be ignored</p>}
-              {problem && <p data-testid="row-problem" className="text-xs text-[var(--text-secondary)]">{problem}</p>}
+              {problem && <p id={problemId} data-testid="row-problem" aria-live="polite" className="text-xs text-[var(--text-secondary)]">{problem}</p>}
             </div>
           );
         })}
@@ -132,7 +154,16 @@ export function ForkSection({ record }: { record: CaseRecord }) {
             {mutation.isPending ? "Creating…" : "Create fork"}
           </button>
         </div>
-        {refusal && <p data-testid="fork-refusal" className="text-sm text-[var(--text-secondary)]">{refusal.detail}</p>}
+        {refusal && (
+          <p data-testid="fork-refusal" role="status" aria-live="polite" className="text-sm text-[var(--text-secondary)]">
+            {refusal.detail}
+          </p>
+        )}
+        {failed && (
+          <p role="alert" data-testid="fork-error" className="text-sm text-[var(--chart-negative)]">
+            Could not create the fork.
+          </p>
+        )}
       </form>
     </Section>
   );
