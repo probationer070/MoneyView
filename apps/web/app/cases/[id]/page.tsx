@@ -9,6 +9,7 @@ import { casesApi, retryUnlessRefused } from "../casesApi";
 import { ForkSection } from "../components/ForkSection";
 import { InputsSection } from "../components/InputsSection";
 import { QueryStatus } from "../components/Section";
+import { SimulateSection } from "../components/SimulateSection";
 import { ValuationSection } from "../components/ValuationSection";
 import { WhyItMovedSection } from "../components/WhyItMovedSection";
 
@@ -62,6 +63,7 @@ export default function CaseDetailPage({ params }: { params: Promise<{ id: strin
           <InputsSection record={record} />
           {record.parent_case_id !== null && <WhyItMovedSection caseId={record.id} />}
           <ForkSection record={record} />
+          <SimulateSection record={record} pointValue={runQuery.data?.value_per_share_diluted ?? null} />
         </>
       )}
     </div>

@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { DIFF_RESULT, SIMULATE_SUPPRESSED, mockCasesApi } from "./helpers/casesApiMock";
+import { DIFF_RESULT, SIMULATE_RESULT, SIMULATE_SUPPRESSED, mockCasesApi } from "./helpers/casesApiMock";
 import { mockValuationApi } from "./helpers/valuationPageMock";
 
 async function gotoCases(page: Page, query = "") {
@@ -266,5 +266,132 @@ test.describe("forking a case", () => {
     await expect(error).toHaveAttribute("role", "alert");
     await expect(page.getByTestId("fork-refusal")).toHaveCount(0);
     await expect(page.locator('[data-testid^="fork-row-"][data-highlighted="true"]')).toHaveCount(0);
+  });
+});
+
+test.describe("uncertainty (simulate this case)", () => {
+  async function addDistribution(page: Page, field: string, shape: string, params: Record<string, string>) {
+    await page.getByRole("button", { name: "Add an input" }).click();
+    const row = page.getByTestId("simulate-row-0");
+    await row.getByLabel("Field").selectOption(field);
+    await row.getByLabel("Shape").selectOption(shape);
+    for (const [label, value] of Object.entries(params)) await row.getByLabel(label).fill(value);
+    return row;
+  }
+
+  test("the section is not called Monte Carlo", async ({ page }) => {
+    await mockCasesApi(page);
+    await gotoCase(page, 1);
+    await expect(page.getByRole("heading", { name: "Uncertainty (simulate this case)" })).toBeVisible();
+    await expect(page.getByTestId("case-simulate")).not.toContainText("Monte Carlo");
+  });
+
+  test("rate parameters are sent as fractions, and results show accounting, stats and association", async ({ page }) => {
+    const stats = await mockCasesApi(page);
+    await gotoCase(page, 1);
+    await addDistribution(page, "case.wacc_stable", "normal", { Mean: "7.4", "Std dev": "0.5" });
+    await page.getByRole("button", { name: "Simulate" }).click();
+
+    expect(stats.simulatePosts[0]).toEqual({
+      runs: 2000,
+      distributions: { case: { wacc_stable: { shape: "normal", mean: 0.074, sd: 0.005 } }, segments: {} },
+    });
+    const results = page.getByTestId("simulate-results");
+    await expect(results.getByTestId("simulate-accounting")).toHaveText("1,934 of 2,000 draws valued · 66 refused (3.3%)");
+    await expect(results.getByTestId("simulate-p50")).toHaveText("49.10");
+    await expect(results.getByText("among accepted draws").first()).toBeVisible();
+    await expect(results.getByTestId("association-0")).toContainText("WACC, stable");
+    await expect(results.getByTestId("association-0")).toContainText("−0.81");
+    await expect(results.getByTestId("simulate-histogram")).toBeVisible();
+  });
+
+  test("association is shown as signed coefficients, never as shares of 100%", async ({ page }) => {
+    await mockCasesApi(page);
+    await gotoCase(page, 1);
+    await addDistribution(page, "case.wacc_stable", "normal", { Mean: "7.4", "Std dev": "0.5" });
+    await page.getByRole("button", { name: "Simulate" }).click();
+    const association = page.getByTestId("simulate-association");
+    await expect(association.getByTestId("association-1")).toContainText("+0.42");
+    await expect(association).not.toContainText("%");
+  });
+
+  test("a suppressed simulation shows the accounting and why, and no statistics at all", async ({ page }) => {
+    await mockCasesApi(page, { simulateResult: SIMULATE_SUPPRESSED });
+    await gotoCase(page, 1);
+    await addDistribution(page, "case.wacc_stable", "uniform", { Low: "6", High: "12" });
+    await page.getByRole("button", { name: "Simulate" }).click();
+    const results = page.getByTestId("simulate-results");
+    await expect(results.getByTestId("simulate-accounting")).toHaveText("1,500 of 2,000 draws valued · 500 refused (25.0%)");
+    await expect(results.getByTestId("simulate-suppressed")).toBeVisible();
+    await expect(results.getByTestId("simulate-stats")).toHaveCount(0);
+    await expect(results.getByTestId("simulate-histogram")).toHaveCount(0);
+    await expect(results.getByTestId("simulate-association")).toHaveCount(0);
+    await expect(results).not.toContainText("0.00");
+  });
+
+  test("an overflowed statistic is omitted on its own, not zeroed", async ({ page }) => {
+    const overflowed = {
+      ...SIMULATE_RESULT,
+      not_finite:
+        "omitted ['mean']: the surviving values are individually finite but this aggregate of them overflows, " +
+        "so it cannot be reported as a number",
+    };
+    delete overflowed.mean;
+    await mockCasesApi(page, { simulateResult: overflowed });
+    await gotoCase(page, 1);
+    await addDistribution(page, "case.wacc_stable", "normal", { Mean: "7.4", "Std dev": "0.5" });
+    await page.getByRole("button", { name: "Simulate" }).click();
+    const results = page.getByTestId("simulate-results");
+    await expect(results.getByTestId("simulate-p10")).toBeVisible();
+    await expect(results.getByTestId("simulate-p50")).toBeVisible();
+    await expect(results.getByTestId("simulate-p90")).toBeVisible();
+    await expect(results.getByTestId("simulate-mean")).toHaveCount(0);
+    await expect(results.getByTestId("simulate-not-finite")).toBeVisible();
+    await expect(results.getByTestId("simulate-histogram")).toBeVisible();
+    await expect(results.getByTestId("simulate-suppressed")).toHaveCount(0);
+  });
+
+  test("the seed is shown and a rerun sends it back", async ({ page }) => {
+    const stats = await mockCasesApi(page);
+    await gotoCase(page, 1);
+    await addDistribution(page, "case.wacc_stable", "normal", { Mean: "7.4", "Std dev": "0.5" });
+    await page.getByRole("button", { name: "Simulate" }).click();
+    await expect(page.getByTestId("simulate-seed")).toContainText("1234");
+    await page.getByRole("button", { name: "Rerun with this seed" }).click();
+    await expect.poll(() => stats.simulatePosts.length).toBe(2);
+    expect(stats.simulatePosts[1].seed).toBe(1234);
+  });
+
+  test("a bad seed blocks sending, with the problem shown", async ({ page }) => {
+    const stats = await mockCasesApi(page);
+    await gotoCase(page, 1);
+    await addDistribution(page, "case.wacc_stable", "normal", { Mean: "7.4", "Std dev": "0.5" });
+    await page.getByLabel("Seed (optional)").fill("-1");
+    await page.getByRole("button", { name: "Simulate" }).click();
+    await expect(page.getByText("the seed must be a whole number of 0 or more")).toBeVisible();
+    expect(stats.simulatePosts.length).toBe(0);
+  });
+
+  test("a refusal to simulate is shown verbatim, not as an error", async ({ page }) => {
+    await mockCasesApi(page, {
+      simulateStatus: 422,
+      simulateDetail: "invalid_distribution: case.wacc_stable: sd must be positive",
+    });
+    await gotoCase(page, 1);
+    await addDistribution(page, "case.wacc_stable", "normal", { Mean: "7.4", "Std dev": "0.5" });
+    await page.getByRole("button", { name: "Simulate" }).click();
+    await expect(page.getByTestId("simulate-refusal")).toHaveText("invalid_distribution: case.wacc_stable: sd must be positive");
+    await expect(page.getByTestId("case-simulate").getByRole("alert")).toHaveCount(0);
+  });
+
+  test("a 500 is an error, not a refusal", async ({ page }) => {
+    await mockCasesApi(page, { simulateStatus: 500, simulateDetail: "internal server error" });
+    await gotoCase(page, 1);
+    await addDistribution(page, "case.wacc_stable", "normal", { Mean: "7.4", "Std dev": "0.5" });
+    await page.getByRole("button", { name: "Simulate" }).click();
+    const error = page.getByTestId("simulate-error");
+    await expect(error).toBeVisible();
+    await expect(error).toHaveAttribute("role", "alert");
+    await expect(page.getByTestId("simulate-refusal")).toHaveCount(0);
   });
 });

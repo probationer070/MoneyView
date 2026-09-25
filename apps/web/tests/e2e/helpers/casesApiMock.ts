@@ -75,6 +75,9 @@ export const SIMULATE_SUPPRESSED: SimulateResult = {
   case_id: 1, metric: "value_per_share_diluted", seed: 99,
   runs_requested: 2000, runs_valid: 1500, runs_refused: 500, refused_fraction: 0.25,
   refusals: [{ code: "terminal_spread", count: 500, message: "WACC must exceed terminal growth" }],
+  suppressed:
+    "refused_fraction 0.25 >= 0.1: the surviving sample describes the distribution of value_per_share_diluted " +
+    "conditional on the engine accepting the inputs, not the distribution the stated inputs describe",
 };
 
 export interface CasesMockOptions {
@@ -88,6 +91,8 @@ export interface CasesMockOptions {
   forkStatus?: number;
   forkDetail?: string;
   simulateResult?: SimulateResult;
+  simulateStatus?: number;
+  simulateDetail?: string;
 }
 
 export interface CasesMockStats {
@@ -140,6 +145,7 @@ export async function mockCasesApi(page: Page, options: CasesMockOptions = {}): 
     }
     const body = JSON.parse(request.postData() ?? "{}") as Record<string, unknown>;
     stats.simulatePosts.push(body);
+    if (options.simulateStatus) return json(route, { detail: options.simulateDetail ?? "refused" }, options.simulateStatus);
     const result = options.simulateResult ?? SIMULATE_RESULT;
     return json(route, { status: "ok", data: { ...result, seed: typeof body.seed === "number" ? body.seed : result.seed }, meta: {} });
   });

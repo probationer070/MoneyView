@@ -219,8 +219,8 @@ Each leaf is `{shape, <params>, claim?, three_p?, confidence?}`.
 - **Below the cap:**
   - **Statistics:** p10 / p50 / p90 / mean per share. When any draw was refused,
     they are labelled "among accepted draws".
-  - **Histogram:** the API's 32 bins, with the case's own point value (§4) drawn
-    as a reference line when §4 computed one.
+  - **Histogram:** the API's 32 bins, with the bin holding the case's own point
+    value (§4) marked, when §4 computed one.
   - **Association:** one row per input with its Spearman coefficient as a signed
     number in [−1, 1], sorted by absolute value, titled "rank association among
     accepted draws". It is never shown as shares, percentages or anything that
