@@ -179,3 +179,70 @@ test.describe("why a fork's value moved", () => {
     await expect(page.getByTestId("case-why")).toHaveCount(0);
   });
 });
+
+test.describe("forking a case", () => {
+  async function addChange(page: Page, index: number, field: string, value: string) {
+    await page.getByRole("button", { name: "Add a change" }).click();
+    const row = page.getByTestId(`fork-row-${index}`);
+    await row.getByLabel("Field").selectOption(field);
+    await row.getByLabel("New value").fill(value);
+    return row;
+  }
+
+  test("a rate typed as a percentage is sent as a fraction, unnarrated as a bare number", async ({ page }) => {
+    const stats = await mockCasesApi(page);
+    await gotoCase(page, 1);
+    await page.getByLabel("New case name").fill("higher WACC");
+    await addChange(page, 0, "case.wacc_stable", "8.1");
+    await page.getByRole("button", { name: "Create fork" }).click();
+    await expect(page).toHaveURL(/\/cases\/4$/);
+    expect(stats.forkPosts[0]).toEqual({ case_name: "higher WACC", overrides: { case: { wacc_stable: 0.081 }, segments: {} } });
+  });
+
+  test("a narrated change is sent with its claim and three_p, and cannot be sent without them", async ({ page }) => {
+    const stats = await mockCasesApi(page);
+    await gotoCase(page, 1);
+    await page.getByLabel("New case name").fill("margin up");
+    const row = await addChange(page, 0, "segment.Core.base_margin", "22");
+    await page.getByRole("button", { name: "Create fork" }).click();
+    await expect(row.getByTestId("row-problem")).toContainText("needs a claim");
+    expect(stats.forkPosts).toHaveLength(0);
+
+    await row.getByLabel("Claim").fill("pricing power holds");
+    await row.getByLabel("Three-P").selectOption("plausible");
+    await page.getByRole("button", { name: "Create fork" }).click();
+    await expect(page).toHaveURL(/\/cases\/4$/);
+    expect(stats.forkPosts[0]).toEqual({
+      case_name: "margin up",
+      overrides: { case: {}, segments: { Core: { base_margin: { value: 0.22, claim: "pricing power holds", three_p: "plausible" } } } },
+    });
+  });
+
+  test("the counter counts only rows that change a value", async ({ page }) => {
+    await mockCasesApi(page);
+    await gotoCase(page, 1);
+    await addChange(page, 0, "case.wacc_stable", "8.1");
+    await addChange(page, 1, "case.terminal_growth", "3");  // equal to the stored 0.03
+    await expect(page.getByTestId("fork-counter")).toHaveText("1 of 12 changed inputs");
+    await expect(page.getByTestId("fork-row-1")).toContainText("unchanged, will be ignored");
+  });
+
+  test("a server refusal is shown verbatim and marks the row it names", async ({ page }) => {
+    await mockCasesApi(page, {
+      forkStatus: 422,
+      forkDetail: "narrative_required: margin_target needs a three_p of ['plausible', 'possible', 'probable'], got ''",
+    });
+    await gotoCase(page, 1);
+    await page.getByLabel("New case name").fill("x");
+    await addChange(page, 0, "case.wacc_stable", "8.1");
+    const target = await addChange(page, 1, "segment.Core.margin_target", "30");
+    await target.getByLabel("Claim").fill("scale");
+    await target.getByLabel("Three-P").selectOption("possible");
+    await page.getByRole("button", { name: "Create fork" }).click();
+    await expect(page.getByTestId("fork-refusal")).toHaveText(
+      "narrative_required: margin_target needs a three_p of ['plausible', 'possible', 'probable'], got ''",
+    );
+    await expect(target).toHaveAttribute("data-highlighted", "true");
+    await expect(page.getByTestId("fork-row-0")).toHaveAttribute("data-highlighted", "false");
+  });
+});

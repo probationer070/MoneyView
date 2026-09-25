@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { useDevMonitorPageLoad } from "@/hooks/useDevMonitorPageLoad";
 import { casesApi, retryUnlessRefused } from "../casesApi";
+import { ForkSection } from "../components/ForkSection";
 import { InputsSection } from "../components/InputsSection";
 import { QueryStatus } from "../components/Section";
 import { ValuationSection } from "../components/ValuationSection";
@@ -60,6 +61,7 @@ export default function CaseDetailPage({ params }: { params: Promise<{ id: strin
           <ValuationSection query={runQuery} />
           <InputsSection record={record} />
           {record.parent_case_id !== null && <WhyItMovedSection caseId={record.id} />}
+          <ForkSection record={record} />
         </>
       )}
     </div>
