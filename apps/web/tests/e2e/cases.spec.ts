@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { mockCasesApi } from "./helpers/casesApiMock";
+import { DIFF_RESULT, SIMULATE_SUPPRESSED, mockCasesApi } from "./helpers/casesApiMock";
 import { mockValuationApi } from "./helpers/valuationPageMock";
 
 async function gotoCases(page: Page, query = "") {
@@ -133,5 +133,45 @@ test.describe("one case", () => {
     await mockCasesApi(page);
     await gotoCase(page, 2);
     await expect(page.getByRole("link", { name: "case 1" })).toHaveAttribute("href", "/cases/1");
+  });
+});
+
+test.describe("why a fork's value moved", () => {
+  test("one bar per changed input, labelled from → to, and the contributions add up", async ({ page }) => {
+    await mockCasesApi(page);
+    await gotoCase(page, 2);
+    const why = page.getByTestId("case-why");
+    await expect(why.getByTestId("why-headline")).toHaveText("49.96 → 44.32 (−5.64 per share)");
+    await expect(why.getByTestId(/^why-bar-/)).toHaveCount(2);
+    await expect(why.getByTestId("why-bar-0")).toContainText("WACC, stable");
+    await expect(why.getByTestId("why-bar-0")).toContainText("7.40% → 8.10%");
+    await expect(why.getByTestId("why-bar-0")).toContainText("−6.14");
+    await expect(why.getByTestId("why-bar-1")).toContainText("Core · Base margin");
+    await expect(why.getByTestId("why-sum")).toHaveText("Contributions sum to −5.64, the whole difference.");
+    await expect(why.getByRole("alert")).toHaveCount(0);
+  });
+
+  test("contributions that do not add up are flagged, not trusted", async ({ page }) => {
+    await mockCasesApi(page, { diffResult: { ...DIFF_RESULT, total_difference: -9.0 } });
+    await gotoCase(page, 2);
+    await expect(page.getByTestId("case-why").getByRole("alert")).toContainText("do not add up");
+  });
+
+  test("a refusal to attribute is content that names the cap", async ({ page }) => {
+    await mockCasesApi(page, {
+      diffStatus: 422,
+      diffDetail: "too_many_changed_inputs: case 2 changes 25 inputs; the Shapley cap is 12",
+    });
+    await gotoCase(page, 2);
+    const why = page.getByTestId("case-why");
+    await expect(why.getByTestId("case-why-refusal")).toContainText("the Shapley cap is 12");
+    await expect(why.getByTestId(/^why-bar-/)).toHaveCount(0);
+    await expect(why.getByRole("alert")).toHaveCount(0);
+  });
+
+  test("a case with no parent has no such section", async ({ page }) => {
+    await mockCasesApi(page);
+    await gotoCase(page, 1);
+    await expect(page.getByTestId("case-why")).toHaveCount(0);
   });
 });

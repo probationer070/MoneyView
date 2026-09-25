@@ -9,6 +9,7 @@ import { casesApi, retryUnlessRefused } from "../casesApi";
 import { InputsSection } from "../components/InputsSection";
 import { QueryStatus } from "../components/Section";
 import { ValuationSection } from "../components/ValuationSection";
+import { WhyItMovedSection } from "../components/WhyItMovedSection";
 
 export default function CaseDetailPage({ params }: { params: Promise<{ id: string }> }) {
   useDevMonitorPageLoad({ component: "case_detail_page" });
@@ -58,6 +59,7 @@ export default function CaseDetailPage({ params }: { params: Promise<{ id: strin
         <>
           <ValuationSection query={runQuery} />
           <InputsSection record={record} />
+          {record.parent_case_id !== null && <WhyItMovedSection caseId={record.id} />}
         </>
       )}
     </div>
