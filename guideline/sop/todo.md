@@ -19,11 +19,17 @@ Legend: `[ ]` not started, `[x]` complete
 
 ## Where things stand (2026-09-26)
 
-`renewal` @ `7646ed6` (PRs through #50 merged). **PR #51 (`cases-ui`) is open**: the
-Cases tab (C2's UI) plus the `/simulate` seed fix. Measured on `cases-ui` @ `9424bdc`:
-**1638 pytest passing**, plus **16 failures that are environmental** (`exchange_calendars`
-is not installed in the local Python env; the same 16 fail on `renewal`), and **267
-Playwright specs passing**.
+`renewal` with PRs through **#53** merged:
+- #51: C2 complete (the Cases tab and `/pricing`), the `/simulate` seed fix, and the
+  news re-key (G5).
+- #52: H11's binding-constraint label.
+- #53: the F2 tax-rate fix.
+
+Measured on the #53 branch after merging `renewal` into it: **1664 pytest passing**,
+plus **16 failures that are environmental**. `exchange_calendars` is not installed in
+the local Python env, and the same 16 fail on every branch. The last full Playwright
+run (the Cases branch, before `/pricing`) had **267 specs passing**; `/pricing` added 3
+more, and the Cases specs pass at 53/53.
 
 **Local-data state, measured 2026-09-26** (read-only query against
 `data/processed/moneyview.db`). Counts, not recollections:
