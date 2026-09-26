@@ -394,7 +394,8 @@ class CorporateComparisonHistoryPoint(BaseModel):
     # snapshot where every non-benchmark row is missing SQL AVG returns NULL over zero
     # rows. Coercing that to 0.0 rendered an absent average as a real $0.0 and a 0.00%
     # spread. stock_count stays the full row count, so it cannot signal the difference.
-    average_expected_return_spread: float | None = None
+    # None also for snapshots before metric v3, which recorded no implied return.
+    average_implied_return_spread: float | None
     average_roic_minus_wacc: float = 0.0
     average_dcf_value: float | None = None
     market_expected_return: float = 0.0
@@ -420,7 +421,8 @@ class CorporateComparisonStockHistoryPoint(BaseModel):
     current_price: float = 0.0
     roic_minus_wacc: float = 0.0
     dcf_implied_return: float = 0.0
-    expected_return_spread: float = 0.0
+    # None when refused or before metric v3 (not recorded); required, never defaulted.
+    implied_return_spread: float | None
     market_expected_return: float = 0.0
 
 

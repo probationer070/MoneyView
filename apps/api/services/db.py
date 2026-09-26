@@ -436,6 +436,9 @@ CREATE TABLE IF NOT EXISTS corporate_comparison_snapshots_v3 (
     has_price_data               INTEGER NOT NULL DEFAULT 1,
     metric_schema_version        INTEGER NOT NULL DEFAULT 1,
     bridge_quality               TEXT NOT NULL DEFAULT '',
+    market_implied_return        REAL,
+    implied_return_spread        REAL,
+    implied_return_refusal       TEXT,
     PRIMARY KEY (snapshot_version, ticker)
 );
 CREATE INDEX IF NOT EXISTS idx_corporate_comparison_snapshots_v3_lookup
@@ -870,6 +873,18 @@ def _ensure_schema_compatibility(conn: sqlite3.Connection) -> None:
         # would silently rewrite the history this column exists to preserve -- the same
         # reasoning as metric_schema_version defaulting to 0 above.
         conn.execute("ALTER TABLE corporate_comparison_snapshots_v3 ADD COLUMN bridge_quality TEXT NOT NULL DEFAULT ''")
+    # Metric v3 (spec 2026-09-26-implied-return-spread). NULL for every earlier row: their
+    # FCFF path was not stored, so the value cannot be recomputed, and NULL reads as "not
+    # recorded", which is what it is. expected_return_spread stays as a column so history
+    # survives, but nothing reads it any more: it subtracted an annual rate from a one-off
+    # gap.
+    for column, sql_type in (
+        ("market_implied_return", "REAL"),
+        ("implied_return_spread", "REAL"),
+        ("implied_return_refusal", "TEXT"),
+    ):
+        if column not in v3_columns:
+            conn.execute(f"ALTER TABLE corporate_comparison_snapshots_v3 ADD COLUMN {column} {sql_type}")
     quote_facts_columns = {row["name"] for row in conn.execute("PRAGMA table_info(corporate_quote_facts)")}
     if "beta" not in quote_facts_columns:
         conn.execute("ALTER TABLE corporate_quote_facts ADD COLUMN beta REAL")

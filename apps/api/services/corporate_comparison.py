@@ -204,9 +204,10 @@ def save_corporate_comparison_snapshot(
                        equity_risk_premium, stock_expected_return_method, ticker, name, sector,
                        group_name, weight, roic, wacc, roic_minus_wacc, dcf_value, current_price,
                        dcf_implied_return, capm_expected_return, stock_expected_return,
-                       market_expected_return, expected_return_spread, stock_expected_return_source,
+                       market_expected_return, market_implied_return, implied_return_spread,
+                       implied_return_refusal, stock_expected_return_source,
                        has_price_data, metric_schema_version, bridge_quality
-                   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     snapshot_version,
                     snapshot_date,
@@ -233,7 +234,9 @@ def save_corporate_comparison_snapshot(
                     row.capm_expected_return,
                     row.stock_expected_return,
                     row.market_expected_return,
-                    row.expected_return_spread,
+                    row.market_implied_return,
+                    row.implied_return_spread,
+                    row.implied_return_refusal,
                     row.stock_expected_return_source,
                     1 if row.has_price_data else 0,
                     METRIC_SCHEMA_VERSION,
@@ -560,7 +563,8 @@ def _load_snapshot_response(
                       risk_free_rate, equity_risk_premium, stock_expected_return_method,
                       weight, roic, wacc, roic_minus_wacc, dcf_value, current_price,
                       dcf_implied_return, capm_expected_return, stock_expected_return,
-                      market_expected_return, expected_return_spread, stock_expected_return_source,
+                      market_expected_return, market_implied_return, implied_return_spread,
+                      implied_return_refusal, stock_expected_return_source,
                       has_price_data, bridge_quality
                FROM corporate_comparison_snapshots_v3
                WHERE snapshot_version = ?
@@ -653,7 +657,9 @@ def _rows_to_response(
             capm_expected_return=float(row["capm_expected_return"] or row["market_expected_return"] or 0.0),
             stock_expected_return=float(row["stock_expected_return"]),
             market_expected_return=float(row["market_expected_return"]),
-            expected_return_spread=float(row["expected_return_spread"]),
+            market_implied_return=_rounded_or_none(row["market_implied_return"]),
+            implied_return_spread=_rounded_or_none(row["implied_return_spread"]),
+            implied_return_refusal=row["implied_return_refusal"],
             stock_expected_return_source=str(row["stock_expected_return_source"] or STOCK_EXPECTED_RETURN_METHOD),
             has_price_data=bool(row["has_price_data"]),
             bridge_quality=str(row["bridge_quality"]),
@@ -732,7 +738,7 @@ def load_corporate_comparison_history(
                       lv.benchmark_ticker,
                       lv.risk_free_rate,
                       lv.equity_risk_premium,
-                      AVG(CASE WHEN s.group_name != ? AND s.bridge_quality != 'missing' THEN s.expected_return_spread END) AS average_expected_return_spread,
+                      AVG(CASE WHEN s.group_name != ? THEN s.implied_return_spread END) AS average_implied_return_spread,
                       AVG(CASE WHEN s.group_name != ? THEN s.roic_minus_wacc END) AS average_roic_minus_wacc,
                       AVG(CASE WHEN s.group_name != ? AND s.bridge_quality != 'missing' THEN s.dcf_value END) AS average_dcf_value,
                       COUNT(CASE WHEN s.group_name != ? THEN 1 END) AS stock_count,
@@ -766,7 +772,7 @@ def load_corporate_comparison_history(
             # NULL stays None. Both of these average only the rows whose bridge resolved,
             # so a snapshot where every non-benchmark row is 'missing' averages nothing --
             # and an average over zero rows is absent, not zero.
-            average_expected_return_spread=_rounded_or_none(row["average_expected_return_spread"]),
+            average_implied_return_spread=_rounded_or_none(row["average_implied_return_spread"]),
             average_roic_minus_wacc=round(float(row["average_roic_minus_wacc"] or 0.0), 2),
             average_dcf_value=_rounded_or_none(row["average_dcf_value"]),
             # MAX, not MIN: every row of a snapshot is written in one transaction so they
@@ -796,7 +802,8 @@ def load_corporate_comparison_snapshot_version(*, snapshot_version: str) -> Corp
                       risk_free_rate, equity_risk_premium, stock_expected_return_method,
                       weight, roic, wacc, roic_minus_wacc, dcf_value, current_price,
                       dcf_implied_return, capm_expected_return, stock_expected_return,
-                      market_expected_return, expected_return_spread, stock_expected_return_source,
+                      market_expected_return, market_implied_return, implied_return_spread,
+                      implied_return_refusal, stock_expected_return_source,
                       has_price_data, bridge_quality
                FROM corporate_comparison_snapshots_v3
                WHERE snapshot_version = ?
@@ -865,7 +872,7 @@ def load_corporate_comparison_stock_history(
                       s.current_price,
                       s.roic_minus_wacc,
                       s.dcf_implied_return,
-                      s.expected_return_spread,
+                      s.implied_return_spread,
                       s.market_expected_return
                FROM latest_versions lv
                JOIN corporate_comparison_snapshots_v3 s
@@ -885,7 +892,7 @@ def load_corporate_comparison_stock_history(
             current_price=round(float(row["current_price"] or 0.0), 2),
             roic_minus_wacc=round(float(row["roic_minus_wacc"] or 0.0), 2),
             dcf_implied_return=round(float(row["dcf_implied_return"] or 0.0), 2),
-            expected_return_spread=round(float(row["expected_return_spread"] or 0.0), 2),
+            implied_return_spread=_rounded_or_none(row["implied_return_spread"]),
             market_expected_return=round(float(row["market_expected_return"] or 0.0), 2),
         )
         for row in rows

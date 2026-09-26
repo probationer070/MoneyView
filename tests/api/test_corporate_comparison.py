@@ -28,6 +28,7 @@ from apps.api.services.corporate_comparison import (
     load_company_universe_data,
     load_corporate_comparison_history,
     load_corporate_comparison_snapshot_version,
+    load_corporate_comparison_stock_history,
     save_corporate_comparison_snapshot,
 )
 from apps.api.services.equity_bridge import EquityBridge
@@ -191,7 +192,7 @@ def _insert_snapshot_rows(
     """Write snapshot rows directly, bypassing the builder, so the aggregate SQL is what
     is under test rather than the row construction that feeds it.
 
-    Each row is (ticker, bridge_quality, dcf_value, expected_return_spread) -- both of the
+    Each row is (ticker, bridge_quality, dcf_value, implied_return_spread) -- both of the
     aggregate columns the 'missing' exclusion is supposed to filter, not just one of them.
     """
     universe_key = _comparison_universe_key(
@@ -201,7 +202,7 @@ def _insert_snapshot_rows(
     )
     taken_at = datetime(2026, 8, 3, 12, 0, tzinfo=timezone.utc).isoformat()
     with db_service.get_db() as conn:
-        for ticker, bridge_quality, dcf_value, expected_return_spread in rows:
+        for ticker, bridge_quality, dcf_value, implied_return_spread in rows:
             conn.execute(
                 """INSERT INTO corporate_comparison_snapshots_v3 (
                        snapshot_version, snapshot_date, universe_key, comparison_universe,
@@ -209,7 +210,7 @@ def _insert_snapshot_rows(
                        risk_free_rate, equity_risk_premium, stock_expected_return_method,
                        ticker, name, sector, group_name, weight, roic, wacc, roic_minus_wacc,
                        dcf_value, current_price, dcf_implied_return, capm_expected_return,
-                       stock_expected_return, market_expected_return, expected_return_spread,
+                       stock_expected_return, market_expected_return, implied_return_spread,
                        stock_expected_return_source, has_price_data, metric_schema_version,
                        bridge_quality
                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
@@ -217,7 +218,7 @@ def _insert_snapshot_rows(
                 ("v1", "2026-08-03", universe_key, "portfolio_plus_benchmark", "^GSPC", "",
                  taken_at, "manual", 4.2, 5.5, "dcf_implied_upside", ticker, ticker,
                  "Technology", "core", 0.1, 18.0, 10.0, 8.0, dcf_value, 100.0, 5.0, 9.0,
-                 5.0, 9.0, expected_return_spread, "dcf_implied_upside", 1,
+                 5.0, 9.0, implied_return_spread, "dcf_implied_upside", 1,
                  metric_schema_version, bridge_quality),
             )
     return universe_key
@@ -248,11 +249,11 @@ def test_missing_rows_are_excluded_from_the_aggregates_but_estimated_rows_are_no
     _insert_snapshot_rows([
         ("AAA", "ok", 100.0, 3.0),
         ("BBB", "estimated", 200.0, 5.0),
-        ("CCC", "missing", 999999.0, 12345.0),
+        ("CCC", "missing", 999999.0, None),
     ])
     point = _history_point()
     assert point.average_dcf_value == pytest.approx(150.0)
-    assert point.average_expected_return_spread == pytest.approx(4.0)
+    assert point.average_implied_return_spread == pytest.approx(4.0)
 
 
 def test_an_all_missing_snapshot_reports_no_average_rather_than_zero(tmp_path, monkeypatch):
@@ -263,10 +264,10 @@ def test_an_all_missing_snapshot_reports_no_average_rather_than_zero(tmp_path, m
     # so it cannot distinguish "average of nothing" from "average happens to be zero".
     monkeypatch.setattr(db_service, "_DB_PATH", tmp_path / "moneyview.db")
     db_service.init_db()
-    _insert_snapshot_rows([("AAA", "missing", 100.0, 3.0), ("BBB", "missing", 200.0, 5.0)])
+    _insert_snapshot_rows([("AAA", "missing", 100.0, None), ("BBB", "missing", 200.0, None)])
     point = _history_point()
     assert point.average_dcf_value is None
-    assert point.average_expected_return_spread is None
+    assert point.average_implied_return_spread is None
     # Not bridge-dependent: its NULL semantics are unchanged, and both rows are non-benchmark.
     assert point.average_roic_minus_wacc == pytest.approx(8.0)
     assert point.stock_count == 2
@@ -279,8 +280,10 @@ def test_legacy_rows_with_an_empty_bridge_quality_stay_in_the_aggregates(
     # exactly as it does today, not be reinterpreted as missing.
     monkeypatch.setattr(db_service, "_DB_PATH", tmp_path / "moneyview.db")
     db_service.init_db()
-    _insert_snapshot_rows([("AAA", "", 100.0, -4.0), ("BBB", "", 200.0, -4.0)])
+    _insert_snapshot_rows([("AAA", "", 100.0, None), ("BBB", "", 200.0, None)])
     assert _history_average_dcf_value() == pytest.approx(150.0)
+    # Rows from before metric v3 recorded no implied return: absent, not zero.
+    assert _history_point().average_implied_return_spread is None
 
 
 def test_the_history_point_reports_the_stored_metric_schema_version(tmp_path, monkeypatch):
@@ -303,7 +306,7 @@ def test_a_snapshot_predating_the_column_reports_version_zero(tmp_path, monkeypa
 def test_the_metric_schema_version_is_bumped():
     # Metric semantics changed, so snapshots from before and after must never compare as
     # like-for-like.
-    assert METRIC_SCHEMA_VERSION == 2
+    assert METRIC_SCHEMA_VERSION == 3
 
 
 def test_a_resolved_bridge_quality_survives_persistence_and_read_back(tmp_path, monkeypatch):
@@ -1837,3 +1840,126 @@ def test_non_operating_assets_lower_market_ev():
     without = _snapshot(_resolved_bridge(non_op=0.0))
     with_assets = _snapshot(_resolved_bridge(non_op=100.0))
     assert with_assets["market_implied_return"] > without["market_implied_return"]
+
+
+def _save_default_snapshot(tmp_path, monkeypatch, *, price=100.0):
+    """A real saved snapshot with AAPL's bridge resolved.
+
+    Monkeypatching `load_equity_bridge` does NOT work here: it is bound as
+    `_dcf_snapshot`'s default argument at import time (see the docstring of
+    `test_a_resolved_bridge_quality_survives_persistence_and_read_back`). So this seeds
+    real statement rows, as that test does, and the unpatched loader resolves them.
+    """
+    monkeypatch.setattr(db_service, "_DB_PATH", tmp_path / "moneyview.db")
+    db_service.init_db()
+    _seed_watchlist()
+    save_statements("AAPL", [
+        StatementRow("AAPL", "balance", "annual", "2025-12-31", "Total Debt", 5_000_000_000.0),
+        StatementRow("AAPL", "balance", "annual", "2025-12-31", "Cash And Cash Equivalents", 1_000_000_000.0),
+        StatementRow("AAPL", "balance", "annual", "2025-12-31", "Investments And Advances", 500_000_000.0),
+        StatementRow("AAPL", "income", "annual", "2025-12-31", "Diluted Average Shares", 2_000_000_000.0),
+    ])
+    return save_corporate_comparison_snapshot(
+        snapshot_source="manual",
+        comparison_universe="portfolio_plus_benchmark",
+        benchmark_ticker="^GSPC",
+        custom_tickers=[],
+        metrics_loader=_stub_metrics_loader,
+        price_loader=lambda _t: price,
+        default_companies={},
+        risk_free_rate=0.042,
+        equity_risk_premium=0.055,
+    )
+
+
+def test_a_v3_snapshot_stores_and_reloads_the_implied_return(tmp_path, monkeypatch):
+    saved = _save_default_snapshot(tmp_path, monkeypatch)
+    live_aapl = next(r for r in saved.rows if r.ticker == "AAPL")
+    # A round trip, not a restated value: the seeded bridge's scaled units are the
+    # bridge's business, and this test is about persistence.
+    assert live_aapl.implied_return_refusal is None and live_aapl.market_implied_return is not None
+    reloaded = load_corporate_comparison_snapshot_version(snapshot_version=saved.snapshot.snapshot_version)
+    aapl = next(r for r in reloaded.rows if r.ticker == "AAPL")
+    assert aapl.market_implied_return == live_aapl.market_implied_return
+    assert aapl.implied_return_spread == live_aapl.implied_return_spread
+    assert aapl.market_implied_return != aapl.implied_return_spread  # the two columns are not crossed
+    assert aapl.implied_return_refusal is None
+    with db_service.get_db() as conn:
+        version = conn.execute("SELECT metric_schema_version FROM corporate_comparison_snapshots_v3 LIMIT 1").fetchone()[0]
+    assert version == 3
+
+
+def test_the_retired_column_is_written_as_its_default_zero(tmp_path, monkeypatch):
+    # The INSERT no longer names expected_return_spread, so what lands there is the
+    # column's DEFAULT. Every DDL for it says `NOT NULL DEFAULT 0.0` (db.py); this makes
+    # that dependency executable rather than documentary.
+    _save_default_snapshot(tmp_path, monkeypatch)
+    with db_service.get_db() as conn:
+        values = {row[0] for row in conn.execute("SELECT expected_return_spread FROM corporate_comparison_snapshots_v3")}
+    assert values == {0.0}
+
+
+def test_the_three_states_are_distinct_on_the_wire(tmp_path, monkeypatch):
+    # The one canonical contract: success = number + no code; refused = null + code;
+    # not recorded (pre-v3) = null + null. Asserted on the serialized API rows.
+    saved = _save_default_snapshot(tmp_path, monkeypatch)
+    success = next(r for r in saved.rows if r.ticker == "AAPL").model_dump()
+    refused = next(r for r in saved.rows if r.ticker == "MSFT").model_dump()  # no statements seeded: bridge unresolved
+    _insert_snapshot_rows([("OLD", "ok", 100.0, None)], metric_schema_version=2)
+    [legacy_row] = load_corporate_comparison_snapshot_version(snapshot_version="v1").rows
+    legacy = legacy_row.model_dump()
+
+    for row in (success, refused, legacy):
+        assert {"market_implied_return", "implied_return_spread", "implied_return_refusal"} <= set(row)
+    assert success["implied_return_spread"] is not None and success["implied_return_refusal"] is None
+    assert refused["implied_return_spread"] is None and refused["implied_return_refusal"] == "bridge_unresolved"
+    assert legacy["implied_return_spread"] is None and legacy["implied_return_refusal"] is None
+
+
+def test_a_refusal_code_survives_persistence(tmp_path, monkeypatch):
+    saved = _save_default_snapshot(tmp_path, monkeypatch, price=0.0)
+    reloaded = load_corporate_comparison_snapshot_version(snapshot_version=saved.snapshot.snapshot_version)
+    aapl = next(r for r in reloaded.rows if r.ticker == "AAPL")
+    assert aapl.implied_return_refusal == "no_price" and aapl.implied_return_spread is None
+
+
+def test_a_pre_v3_row_reloads_as_not_recorded_not_refused(tmp_path, monkeypatch):
+    monkeypatch.setattr(db_service, "_DB_PATH", tmp_path / "moneyview.db")
+    db_service.init_db()
+    _insert_snapshot_rows([("AAA", "ok", 100.0, None)], metric_schema_version=2)
+    with db_service.get_db() as conn:
+        conn.execute("UPDATE corporate_comparison_snapshots_v3 SET expected_return_spread = 42.0")
+    reloaded = load_corporate_comparison_snapshot_version(snapshot_version="v1")
+    [row] = reloaded.rows
+    assert row.implied_return_spread is None and row.implied_return_refusal is None
+    assert "expected_return_spread" not in row.model_dump()
+
+
+def test_the_stock_history_serves_the_implied_spread(tmp_path, monkeypatch):
+    saved = _save_default_snapshot(tmp_path, monkeypatch)
+    live_aapl = next(r for r in saved.rows if r.ticker == "AAPL")
+    history = load_corporate_comparison_stock_history(
+        ticker="AAPL", comparison_universe="portfolio_plus_benchmark", benchmark_ticker="^GSPC", custom_tickers=[])
+    assert history.points[0].implied_return_spread == live_aapl.implied_return_spread
+    assert "expected_return_spread" not in history.points[0].model_dump()
+
+
+def test_a_pre_v3_stock_history_point_is_null_not_zero(tmp_path, monkeypatch):
+    monkeypatch.setattr(db_service, "_DB_PATH", tmp_path / "moneyview.db")
+    db_service.init_db()
+    _insert_snapshot_rows([("AAA", "ok", 100.0, None)], metric_schema_version=2)
+    history = load_corporate_comparison_stock_history(
+        ticker="AAA", comparison_universe="portfolio_plus_benchmark", benchmark_ticker="^GSPC", custom_tickers=[])
+    assert history.points[0].implied_return_spread is None
+
+
+def test_init_db_adds_the_implied_return_columns_to_an_existing_v3_table(tmp_path, monkeypatch):
+    monkeypatch.setattr(db_service, "_DB_PATH", tmp_path / "moneyview.db")
+    db_service.init_db()
+    with db_service.get_db() as conn:
+        for column in ("market_implied_return", "implied_return_spread", "implied_return_refusal"):
+            conn.execute(f"ALTER TABLE corporate_comparison_snapshots_v3 DROP COLUMN {column}")
+    db_service.init_db()
+    with db_service.get_db() as conn:
+        columns = {row["name"] for row in conn.execute("PRAGMA table_info(corporate_comparison_snapshots_v3)")}
+    assert {"market_implied_return", "implied_return_spread", "implied_return_refusal"} <= columns
