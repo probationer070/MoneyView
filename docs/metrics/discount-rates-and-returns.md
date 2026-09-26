@@ -342,9 +342,14 @@ spread    = r - WACC
 ```
 
 `g` is the terminal growth derived at WACC, held fixed while `r` varies. At
-`r = WACC`, `PV` is exactly the table's enterprise value (both call
-`enterprise_present_value`). So the spread is positive exactly when the DCF
-value exceeds the price, a relationship pinned by a test grid.
+`r = WACC`, `PV` equals the table's enterprise value (both call
+`enterprise_present_value`), so the spread is positive exactly when the DCF
+value exceeds the price. The engine test grid pins that relationship.
+
+**Exception: FCFF between 0 and 1 (i.e. under $1B).** The display DCF floors
+FCFF at `1.0`; the implied return uses the real value. In that band the two
+columns can disagree in sign, and the implied return is the correct one. The
+floor is a pre-existing defect recorded in `ERROR-LOG.md` (2026-09-26).
 
 **Refusals.** Refusals are `null` values with a code, checked in this order, first one wins:
 

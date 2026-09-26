@@ -423,6 +423,8 @@ class CorporateComparisonStockHistoryPoint(BaseModel):
     dcf_implied_return: float = 0.0
     # None when refused or before metric v3 (not recorded); required, never defaulted.
     implied_return_spread: float | None
+    # Tells those two apart: a code when refused, None when not recorded.
+    implied_return_refusal: str | None
     market_expected_return: float = 0.0
 
 

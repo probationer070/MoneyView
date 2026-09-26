@@ -128,10 +128,16 @@ find r in [r_min, r_max] such that PV(r) = market_ev
   - `market_implied_return < WACC` ⟺ `PV(WACC) < market_ev`;
   - equality at equality.
 
-  Since `PV(WACC)` is the table's enterprise value and both sides use one bridge, the
-  per-share form follows: the spread is positive exactly when `dcf_value >
-  current_price`. The test checks both forms over a grid of price, FCFF, growth and
-  WACC. A property-style sweep catches any future change that breaks monotonicity
+  When `PV(WACC)` is the table's enterprise value, the per-share form follows: the
+  spread is positive exactly when `dcf_value > current_price`. **That holds only when
+  `fcff >= 1` (i.e. $1B).** The display DCF floors FCFF at `1.0`, but the implied
+  return uses the real FCFF, so for `0 < fcff < 1` the two columns can disagree in
+  sign.
+  - Found in the final review, 2026-09-26.
+  - The floor is a pre-existing display defect, out of scope here (§5); see ERROR-LOG
+    2026-09-26.
+  - The engine test checks the enterprise-value form over a grid of price, FCFF,
+    growth and WACC. A property-style sweep catches any future change that breaks monotonicity
   (e.g. re-deriving `g` per trial rate).
 
 ### 2.4 Refusals: no number, a stated reason

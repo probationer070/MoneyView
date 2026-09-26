@@ -569,6 +569,7 @@ export async function mockPortfolioPageApi(page: Page, stats?: PortfolioPageMock
           roic_minus_wacc: row?.roic_minus_wacc ?? 0,
           dcf_implied_return: row?.dcf_implied_return ?? 0,
           implied_return_spread: row?.implied_return_spread ?? null,
+          implied_return_refusal: row?.implied_return_refusal ?? null,
           market_expected_return: point.market_expected_return,
         };
       });

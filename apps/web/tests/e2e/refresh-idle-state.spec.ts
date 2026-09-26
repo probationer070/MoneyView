@@ -525,7 +525,7 @@ test("portfolio renders cached analysis without auto-fetch, refreshes on demand,
   await openPortfolioPanel(page, "snapshot");
   await expect(page.getByText("Last updated")).toBeVisible();
   await expect(page.getByText("Latest Snapshot Summary").first()).toBeVisible();
-  await expect(page.getByText("Positive Spread")).toBeVisible();
+  await expect(page.getByText("Beats WACC (implied return)")).toBeVisible();
   // The cached portfolio return renders in the attribution panel.
   await openPortfolioPanel(page, "attribution");
   await expect(page.getByText("8.0%").first()).toBeVisible();

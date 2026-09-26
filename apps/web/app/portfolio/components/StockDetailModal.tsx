@@ -18,7 +18,7 @@ import { MetricAuditPanel } from "@/components/ui/MetricAuditPanel";
 import { MetricQualityBadge } from "@/components/ui/MetricQualityBadge";
 
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
-import { IMPLIED_RETURN_NOT_RECORDED } from "@/lib/impliedReturn";
+import { impliedReturnRefusalText } from "@/lib/impliedReturn";
 import { Sparkline } from "@/components/ui/Sparkline";
 import { NewsFeedList } from "@/app/news/components/NewsFeedList";
 import { formatAuditMetricValue, metricAuditReason } from "@/lib/metricAudit";
@@ -269,7 +269,8 @@ export function StockDetailModal({
           suspiciousReason: "Saved snapshot DCF value vs price falls outside the sanity range.",
         }),
         impliedVsWacc: buildPortfolioDisplayMetric(point.implied_return_spread, {
-          missingReason: IMPLIED_RETURN_NOT_RECORDED,
+          // A code means refused in a v3 snapshot; no code means the snapshot predates v3.
+          missingReason: impliedReturnRefusalText(point.implied_return_refusal),
           suspiciousReason: "Saved snapshot implied return vs WACC falls outside the sanity range.",
         }),
       };

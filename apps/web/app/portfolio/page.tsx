@@ -204,8 +204,9 @@ interface CorporateComparisonStockHistoryPoint {
   current_price: number;
   roic_minus_wacc: number;
   dcf_implied_return: number;
-  // Null when refused or before metric v3 (not recorded).
+  // Null when refused or before metric v3 (not recorded); the refusal code tells them apart.
   implied_return_spread: number | null;
+  implied_return_refusal: string | null;
   market_expected_return: number;
 }
 
@@ -1571,7 +1572,13 @@ export default function PortfolioPage() {
       + (row.roicMinusWacc.quality === "suspicious" || row.roicMinusWacc.quality === "invalid" ? 1 : 0)
       + (row.dcfUpside.quality === "suspicious" || row.dcfUpside.quality === "invalid" ? 1 : 0)
     ), 0);
-    const positiveSpreadCount = stockRows.filter((row) => (metricNumericValue(row.impliedVsWacc) ?? 0) > 0).length;
+    // Over holdings that HAVE an implied return: a refused or pre-v3 holding is not one that
+    // fails to beat WACC, and counting its null as "not positive" read as a measured result.
+    const impliedSpreadValues = stockRows
+      .map((row) => metricNumericValue(row.impliedVsWacc))
+      .filter((value): value is number => value != null);
+    const positiveSpreadCount = impliedSpreadValues.filter((value) => value > 0).length;
+    const impliedSpreadCount = impliedSpreadValues.length;
     const positiveEconomicSpreadCount = stockRows.filter((row) => (metricNumericValue(row.roicMinusWacc) ?? 0) > 0).length;
     const positiveDcfCount = stockRows.filter((row) => (metricNumericValue(row.dcfUpside) ?? 0) > 0).length;
     const highestSpreadRow = stockRows
@@ -1581,6 +1588,7 @@ export default function PortfolioPage() {
       stockCount: stockRows.length,
       flaggedMetricsCount,
       positiveSpreadCount,
+      impliedSpreadCount,
       positiveEconomicSpreadCount,
       positiveDcfCount,
       highestSpreadTicker: highestSpreadRow?.ticker ?? "N/A",

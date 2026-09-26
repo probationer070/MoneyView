@@ -1749,7 +1749,7 @@ def test_a_statement_beta_round_trips_through_unlever_and_relever():
     assert _levered_beta_from_metrics(metrics) == pytest.approx(1.5, abs=0.01)
 
 
-from packages.core_finance.expected_return import enterprise_present_value
+from packages.core_finance.expected_return import calculate_market_implied_return, enterprise_present_value
 
 
 def test_the_fixture_implies_a_return_just_below_wacc():
@@ -1821,12 +1821,17 @@ def test_a_non_finite_input_is_refused_not_solved(price, bridge_kwargs, code):
 
 def test_a_sub_unit_fcff_is_solved_on_the_real_cash_flow_not_the_display_floor():
     # Review Focus 3: the display DCF floors fcff at 1.0; the implied return must not.
+    # The price must sit BETWEEN the two present values, or a floored implementation gives
+    # the same sign: PV(WACC) is 8.35 on the real path and 16.71 on the floored (1.0) path,
+    # so at 12.0 the real answer is negative and the floored one positive.
     metrics = _stub_metrics_loader("AAPL").model_copy(update={"fcff": 0.5})
-    dcf = _snapshot(_resolved_bridge(net_debt=0.0, shares=1.0), price=5.0, metrics=metrics)
+    dcf = _snapshot(_resolved_bridge(net_debt=0.0, non_op=0.0, shares=1.0), price=12.0, metrics=metrics)
     assert dcf["implied_return_refusal"] is None
     real_path = [0.5 * 1.06 ** t for t in range(1, 6)]
-    real_ev_at_wacc = enterprise_present_value(real_path, 0.03, 0.10)
-    assert (dcf["implied_return_spread"] > 0) == (real_ev_at_wacc > 5.0)
+    assert enterprise_present_value(real_path, 0.03, 0.10) < 12.0 < enterprise_present_value([1.0 * 1.06 ** t for t in range(1, 6)], 0.03, 0.10)
+    assert dcf["implied_return_spread"] < 0
+    solved = calculate_market_implied_return(real_path, 0.03, 12.0).rate
+    assert dcf["market_implied_return"] == pytest.approx(solved * 100, abs=0.005)
 
 
 def test_the_display_dcf_still_uses_the_shared_present_value():
@@ -1963,3 +1968,13 @@ def test_init_db_adds_the_implied_return_columns_to_an_existing_v3_table(tmp_pat
     with db_service.get_db() as conn:
         columns = {row["name"] for row in conn.execute("PRAGMA table_info(corporate_comparison_snapshots_v3)")}
     assert {"market_implied_return", "implied_return_spread", "implied_return_refusal"} <= columns
+
+
+def test_the_stock_history_carries_the_refusal_so_refused_is_not_read_as_not_recorded(tmp_path, monkeypatch):
+    # Review finding 3: without the code, a refused v3 point and a pre-v3 point are both
+    # just a null spread, and the UI labelled every null "not recorded before metric v3".
+    _save_default_snapshot(tmp_path, monkeypatch, price=0.0)
+    history = load_corporate_comparison_stock_history(
+        ticker="AAPL", comparison_universe="portfolio_plus_benchmark", benchmark_ticker="^GSPC", custom_tickers=[])
+    assert history.points[0].implied_return_spread is None
+    assert history.points[0].implied_return_refusal == "no_price"

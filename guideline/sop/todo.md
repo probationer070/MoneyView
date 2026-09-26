@@ -112,6 +112,11 @@ Each one was re-checked against the code on 2026-09-26 and is still true.
       ordered refusal codes; the old column is retired, not read. Spec
       `docs/superpowers/specs/2026-09-26-implied-return-spread-design.md`; ERROR-LOG
       2026-09-26.
+- [ ] **The comparison DCF floors FCFF at $1B** (`_dcf_snapshot`,
+      `base_fcff = max(fcff, 1.0)`, in billions). This inflates `dcf_value` / "DCF value vs
+      price" for every company with FCFF under $1B, and in that band it can contradict the
+      implied return's sign. Found in the implied-return final review, 2026-09-26, and it
+      predates that work. The fix is to refuse or mark instead of flooring. ERROR-LOG 2026-09-26.
 - [ ] **Deferred from the snapshot overhaul (Track E):** readable snapshot identity and
       charts over snapshot history.
 

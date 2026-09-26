@@ -51,7 +51,7 @@ test("corporate comparison table renders and exposes sorting controls", async ({
   await expect(page.getByRole("button", { name: "NVDA" }).first()).toBeVisible();
 
   await expect(page.getByRole("columnheader", { name: "ROIC - WACC" })).toBeVisible();
-  await expect(page.getByRole("columnheader", { name: "Spread" })).toBeVisible();
+  await expect(page.getByRole("columnheader", { name: "Implied return vs WACC (pts per year)" })).toBeVisible();
   await expect(page.getByRole("columnheader", { name: "Sector" })).toBeVisible();
 });
 

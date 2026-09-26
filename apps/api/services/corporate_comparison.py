@@ -873,6 +873,7 @@ def load_corporate_comparison_stock_history(
                       s.roic_minus_wacc,
                       s.dcf_implied_return,
                       s.implied_return_spread,
+                      s.implied_return_refusal,
                       s.market_expected_return
                FROM latest_versions lv
                JOIN corporate_comparison_snapshots_v3 s
@@ -893,6 +894,7 @@ def load_corporate_comparison_stock_history(
             roic_minus_wacc=round(float(row["roic_minus_wacc"] or 0.0), 2),
             dcf_implied_return=round(float(row["dcf_implied_return"] or 0.0), 2),
             implied_return_spread=_rounded_or_none(row["implied_return_spread"]),
+            implied_return_refusal=row["implied_return_refusal"],
             market_expected_return=round(float(row["market_expected_return"] or 0.0), 2),
         )
         for row in rows

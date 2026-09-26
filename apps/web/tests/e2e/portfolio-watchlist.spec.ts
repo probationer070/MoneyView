@@ -410,9 +410,9 @@ test("the trend delta is not taken across a snapshot that recorded no implied re
         ticker: "AAPL", comparison_universe: "portfolio_plus_benchmark", benchmark_ticker: "^GSPC", custom_tickers: [],
         points: [
           { as_of_date: "2026-09-26", generated_at: "2026-09-26T09:00:00Z", snapshot_version: "v3", snapshot_source: "manual",
-            benchmark_ticker: "^GSPC", current_price: 210, roic_minus_wacc: 8, dcf_implied_return: 12, implied_return_spread: 2.0, market_expected_return: 9.7 },
+            benchmark_ticker: "^GSPC", current_price: 210, roic_minus_wacc: 8, dcf_implied_return: 12, implied_return_spread: 2.0, implied_return_refusal: null, market_expected_return: 9.7 },
           { as_of_date: "2026-08-03", generated_at: "2026-08-03T09:00:00Z", snapshot_version: "v2", snapshot_source: "manual",
-            benchmark_ticker: "^GSPC", current_price: 200, roic_minus_wacc: 8, dcf_implied_return: 10, implied_return_spread: null, market_expected_return: 9.7 },
+            benchmark_ticker: "^GSPC", current_price: 200, roic_minus_wacc: 8, dcf_implied_return: 10, implied_return_spread: null, implied_return_refusal: null, market_expected_return: 9.7 },
         ],
       },
     }),
@@ -426,4 +426,17 @@ test("the trend delta is not taken across a snapshot that recorded no implied re
   await expect(delta).toBeVisible();
   await expect(delta).not.toHaveText("2.00%");
   await expect(delta).toHaveText("N/A");
+});
+
+test("the snapshot summary counts implied returns only over holdings that have one", async ({ page }) => {
+  // Review finding 4: a refused or unrecorded holding is not a holding that fails to beat
+  // WACC. The mock's snapshot has values for AAPL (3.5) and MSFT; MSFT is refused here, so
+  // one holding has a value and it beats WACC.
+  await mockPortfolioPageApi(page, undefined, { nullMetricTicker: "MSFT" });
+  await gotoPortfolio(page);
+  await openPortfolioPanel(page, "snapshot");
+  const card = page.getByTestId("summary-beats-wacc");
+  await expect(card).toContainText("Beats WACC (implied return)");
+  await expect(card).toContainText("1 / 1");
+  await expect(page.getByText("Positive Spread", { exact: true })).toHaveCount(0);
 });
