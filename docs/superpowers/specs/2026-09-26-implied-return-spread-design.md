@@ -78,8 +78,8 @@ Units match the DCF by construction, because it is the same bridge run backwards
     range.
 - **Method:** bisection to `|Δr| < 1e-7`. It is monotone, so there is no bracketing
   ambiguity, and it is deterministic.
-- **Consistency invariant.** It follows from monotonicity and the previous bullet, and
-  is tested:
+- **Consistency invariant.** For every row that is not refused (§2.4), it follows from
+  monotonicity and the previous bullet, and is tested:
   - `implied_return_spread > 0` exactly when `dcf_value > current_price` (bridge
     resolved).
   - `implied_return_spread < 0` exactly when `dcf_value < current_price`.
