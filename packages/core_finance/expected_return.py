@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from math import isfinite
 from typing import Sequence
 
+from packages.core_finance.dcf import fcff_path_is_admissible
+
 
 @dataclass(frozen=True)
 class ExpectedReturnInputs:
@@ -137,8 +139,10 @@ def calculate_market_implied_return(
             f"terminal_growth must be finite and below {_RATE_CEILING - _TERMINAL_SPREAD_FLOOR}; "
             f"got {terminal_growth!r}"
         )
-    # isfinite first: `nan <= 0` is False, so a NaN would otherwise pass as positive.
-    if not fcff_path or any(not isfinite(cash_flow) or cash_flow <= 0 for cash_flow in fcff_path):
+    # The one admissibility definition every DCF shares (dcf.fcff_path_is_admissible):
+    # every year finite and positive. Checked before solving, so a NaN cannot reach the
+    # bisection and come back as a plausible midpoint.
+    if not fcff_path_is_admissible(fcff_path):
         return ImpliedReturn(None, "non_positive_fcff")
     if not isfinite(market_ev) or market_ev <= 0:
         return ImpliedReturn(None, "non_positive_market_ev")
