@@ -8,6 +8,8 @@ from datetime import datetime, timezone
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Body, HTTPException, Query, Request
+
+from packages.core_finance.refusals import EngineRefusal
 from fastapi.responses import StreamingResponse
 
 from apps.api.core.dev_monitor import perf_timer
@@ -297,20 +299,28 @@ def get_corporate_comparison_stock_history(
     )
 
 
+def _refusal_422(exc: EngineRefusal) -> HTTPException:
+    """A DCF the model declines to produce is content for the caller, not a 500."""
+    return HTTPException(status_code=422, detail={"code": exc.code, "message": str(exc)})
+
+
 @router.post("/dcf/{ticker}")
 def dynamic_dcf_model(ticker: str, params: ValuationAssumptions):
     """
     Lightweight non-streaming DCF summary response kept for compatibility paths.
     """
-    summary, assumption_summary = build_dcf_summary(
-        ticker=ticker,
-        params=params,
-        current_price_loader=_latest_market_price,
-        metrics_loader=_metrics_for_ticker,
-        risk_free_rate=DEFAULT_RISK_FREE_RATE,
-        equity_risk_premium=DEFAULT_EQUITY_RISK_PREMIUM,
-        country_risk_premium=KOREA_COUNTRY_RISK_PREMIUM,
-    )
+    try:
+        summary, assumption_summary = build_dcf_summary(
+            ticker=ticker,
+            params=params,
+            current_price_loader=_latest_market_price,
+            metrics_loader=_metrics_for_ticker,
+            risk_free_rate=DEFAULT_RISK_FREE_RATE,
+            equity_risk_premium=DEFAULT_EQUITY_RISK_PREMIUM,
+            country_risk_premium=KOREA_COUNTRY_RISK_PREMIUM,
+        )
+    except EngineRefusal as exc:
+        raise _refusal_422(exc) from exc
     return APIResponse(
         status="ok",
         data={**summary.model_dump(), **assumption_summary.model_dump(exclude={"report_id", "ticker", "generated_at"})},
@@ -321,15 +331,18 @@ def dynamic_dcf_model(ticker: str, params: ValuationAssumptions):
 @router.post("/dcf/{ticker}/report", response_model=APIResponse[DCFFullReport])
 def get_dcf_full_report(ticker: str, params: ValuationAssumptions):
     """Return the full DCF report only on explicit request."""
-    report = build_dcf_full_report(
-        ticker=ticker,
-        params=params,
-        current_price_loader=_latest_market_price,
-        metrics_loader=_metrics_for_ticker,
-        risk_free_rate=DEFAULT_RISK_FREE_RATE,
-        equity_risk_premium=DEFAULT_EQUITY_RISK_PREMIUM,
-        country_risk_premium=KOREA_COUNTRY_RISK_PREMIUM,
-    )
+    try:
+        report = build_dcf_full_report(
+            ticker=ticker,
+            params=params,
+            current_price_loader=_latest_market_price,
+            metrics_loader=_metrics_for_ticker,
+            risk_free_rate=DEFAULT_RISK_FREE_RATE,
+            equity_risk_premium=DEFAULT_EQUITY_RISK_PREMIUM,
+            country_risk_premium=KOREA_COUNTRY_RISK_PREMIUM,
+        )
+    except EngineRefusal as exc:
+        raise _refusal_422(exc) from exc
     return APIResponse(
         status="ok",
         data=report,
@@ -375,12 +388,10 @@ def get_bulk_dcf_reports(request: CorporateDcfBatchRequest):
 @router.post("/dcf/{ticker}/stream")
 async def stream_dcf_summary(request: Request, ticker: str, params: ValuationAssumptions = Body(...)):
     """Stream the phase 1 and phase 2 DCF payloads without shipping the full report."""
-
-    async def event_stream():
-        started_at = time.perf_counter()
-        request_id = getattr(request.state, "request_id", "")
-        bytes_sent = 0
-        chunk_count = 0
+    # Computed before the stream opens: a refusal raised inside the generator would arrive
+    # after the 200 headers, as a stream that dies. Here it is a 422 the client can read.
+    started_at = time.perf_counter()
+    try:
         summary, assumption_summary = build_dcf_summary(
             ticker=ticker,
             params=params,
@@ -390,6 +401,13 @@ async def stream_dcf_summary(request: Request, ticker: str, params: ValuationAss
             equity_risk_premium=DEFAULT_EQUITY_RISK_PREMIUM,
             country_risk_premium=KOREA_COUNTRY_RISK_PREMIUM,
         )
+    except EngineRefusal as exc:
+        raise _refusal_422(exc) from exc
+
+    async def event_stream():
+        request_id = getattr(request.state, "request_id", "")
+        bytes_sent = 0
+        chunk_count = 0
         phase1_event = _sse_event("phase1", {"phase": "phase1", "summary": summary.model_dump()})
         bytes_sent += len(phase1_event.encode("utf-8"))
         chunk_count += 1

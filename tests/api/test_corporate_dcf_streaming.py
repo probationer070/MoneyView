@@ -247,3 +247,18 @@ def test_valuation_params_from_metrics_accepts_stabilized_metric_metadata():
     # growth (6%) exceeds the 3% terminal growth ceiling, so the ceiling binds instead of
     # company growth: derive_terminal_growth(0.06, 0.10, ceiling=0.03) -> 0.03.
     assert params.terminal_growth_rate == 0.03
+
+
+import pytest
+
+
+@pytest.mark.parametrize("path", ["/api/v1/corporate/dcf/AAPL", "/api/v1/corporate/dcf/AAPL/report", "/api/v1/corporate/dcf/AAPL/stream"])
+def test_a_refused_dcf_is_a_422_with_its_code_on_every_route(path, monkeypatch):
+    # A DCF the model declines is content for the caller: 422 with a code, not a 500, and
+    # for the stream not a 200 whose body dies after the headers.
+    monkeypatch.setattr(corporate_route, "_latest_market_price", lambda ticker: 210.4)
+    monkeypatch.setattr(corporate_route, "_metrics_for_ticker", _mock_metrics)
+    client = TestClient(app)
+    response = client.post(path, json={**_valuation_payload(), "fcff": 0.0})
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "non_positive_fcff"
