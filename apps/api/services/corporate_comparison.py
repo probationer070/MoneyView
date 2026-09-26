@@ -206,9 +206,9 @@ def save_corporate_comparison_snapshot(
                        group_name, weight, roic, wacc, roic_minus_wacc, dcf_value, current_price,
                        dcf_implied_return, capm_expected_return, stock_expected_return,
                        market_expected_return, market_implied_return, implied_return_spread,
-                       implied_return_refusal, stock_expected_return_source,
+                       implied_return_refusal, dcf_refusal, stock_expected_return_source,
                        has_price_data, metric_schema_version, bridge_quality
-                   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     snapshot_version,
                     snapshot_date,
@@ -229,15 +229,18 @@ def save_corporate_comparison_snapshot(
                     row.roic,
                     row.wacc,
                     row.roic_minus_wacc,
-                    row.dcf_value,
+                    # NOT NULL columns; a refused row's 0.0 is never served (the reader maps
+                    # dcf_refusal to None).
+                    row.dcf_value if row.dcf_value is not None else 0.0,
                     row.current_price,
-                    row.dcf_implied_return,
+                    row.dcf_implied_return if row.dcf_implied_return is not None else 0.0,
                     row.capm_expected_return,
-                    row.stock_expected_return,
+                    row.stock_expected_return if row.stock_expected_return is not None else 0.0,
                     row.market_expected_return,
                     row.market_implied_return,
                     row.implied_return_spread,
                     row.implied_return_refusal,
+                    row.dcf_refusal,
                     row.stock_expected_return_source,
                     1 if row.has_price_data else 0,
                     METRIC_SCHEMA_VERSION,
@@ -574,7 +577,7 @@ def _load_snapshot_response(
                       weight, roic, wacc, roic_minus_wacc, dcf_value, current_price,
                       dcf_implied_return, capm_expected_return, stock_expected_return,
                       market_expected_return, market_implied_return, implied_return_spread,
-                      implied_return_refusal, stock_expected_return_source,
+                      implied_return_refusal, dcf_refusal, stock_expected_return_source,
                       has_price_data, bridge_quality
                FROM corporate_comparison_snapshots_v3
                WHERE snapshot_version = ?
@@ -661,15 +664,20 @@ def _rows_to_response(
             roic=float(row["roic"]),
             wacc=float(row["wacc"]),
             roic_minus_wacc=float(row["roic_minus_wacc"]),
-            dcf_value=float(row["dcf_value"]),
+            # A refused row stored 0.0 in these NOT NULL columns; it is never served.
+            dcf_value=None if row["dcf_refusal"] is not None else float(row["dcf_value"]),
             current_price=float(row["current_price"]),
-            dcf_implied_return=float(row["dcf_implied_return"] or row["stock_expected_return"] or 0.0),
+            dcf_implied_return=(
+                None if row["dcf_refusal"] is not None
+                else float(row["dcf_implied_return"] or row["stock_expected_return"] or 0.0)
+            ),
             capm_expected_return=float(row["capm_expected_return"] or row["market_expected_return"] or 0.0),
-            stock_expected_return=float(row["stock_expected_return"]),
+            stock_expected_return=None if row["dcf_refusal"] is not None else float(row["stock_expected_return"]),
             market_expected_return=float(row["market_expected_return"]),
             market_implied_return=_rounded_or_none(row["market_implied_return"]),
             implied_return_spread=_rounded_or_none(row["implied_return_spread"]),
             implied_return_refusal=row["implied_return_refusal"],
+            dcf_refusal=row["dcf_refusal"],
             stock_expected_return_source=str(row["stock_expected_return_source"] or STOCK_EXPECTED_RETURN_METHOD),
             has_price_data=bool(row["has_price_data"]),
             bridge_quality=str(row["bridge_quality"]),
@@ -750,7 +758,7 @@ def load_corporate_comparison_history(
                       lv.equity_risk_premium,
                       AVG(CASE WHEN s.group_name != ? THEN s.implied_return_spread END) AS average_implied_return_spread,
                       AVG(CASE WHEN s.group_name != ? THEN s.roic_minus_wacc END) AS average_roic_minus_wacc,
-                      AVG(CASE WHEN s.group_name != ? AND s.bridge_quality != 'missing' THEN s.dcf_value END) AS average_dcf_value,
+                      AVG(CASE WHEN s.group_name != ? AND s.bridge_quality != 'missing' AND s.dcf_refusal IS NULL THEN s.dcf_value END) AS average_dcf_value,
                       COUNT(CASE WHEN s.group_name != ? THEN 1 END) AS stock_count,
                       MAX(s.metric_schema_version) AS metric_schema_version
                FROM latest_versions lv
@@ -813,7 +821,7 @@ def load_corporate_comparison_snapshot_version(*, snapshot_version: str) -> Corp
                       weight, roic, wacc, roic_minus_wacc, dcf_value, current_price,
                       dcf_implied_return, capm_expected_return, stock_expected_return,
                       market_expected_return, market_implied_return, implied_return_spread,
-                      implied_return_refusal, stock_expected_return_source,
+                      implied_return_refusal, dcf_refusal, stock_expected_return_source,
                       has_price_data, bridge_quality
                FROM corporate_comparison_snapshots_v3
                WHERE snapshot_version = ?
@@ -884,6 +892,7 @@ def load_corporate_comparison_stock_history(
                       s.dcf_implied_return,
                       s.implied_return_spread,
                       s.implied_return_refusal,
+                      s.dcf_refusal,
                       s.market_expected_return
                FROM latest_versions lv
                JOIN corporate_comparison_snapshots_v3 s
@@ -902,7 +911,8 @@ def load_corporate_comparison_stock_history(
             benchmark_ticker=str(row["benchmark_ticker"] or normalized_benchmark),
             current_price=round(float(row["current_price"] or 0.0), 2),
             roic_minus_wacc=round(float(row["roic_minus_wacc"] or 0.0), 2),
-            dcf_implied_return=round(float(row["dcf_implied_return"] or 0.0), 2),
+            dcf_implied_return=None if row["dcf_refusal"] else round(float(row["dcf_implied_return"] or 0.0), 2),
+            dcf_refusal=row["dcf_refusal"],
             implied_return_spread=_rounded_or_none(row["implied_return_spread"]),
             implied_return_refusal=row["implied_return_refusal"],
             market_expected_return=round(float(row["market_expected_return"] or 0.0), 2),

@@ -439,6 +439,7 @@ CREATE TABLE IF NOT EXISTS corporate_comparison_snapshots_v3 (
     market_implied_return        REAL,
     implied_return_spread        REAL,
     implied_return_refusal       TEXT,
+    dcf_refusal                  TEXT,
     PRIMARY KEY (snapshot_version, ticker)
 );
 CREATE INDEX IF NOT EXISTS idx_corporate_comparison_snapshots_v3_lookup
@@ -882,6 +883,7 @@ def _ensure_schema_compatibility(conn: sqlite3.Connection) -> None:
         ("market_implied_return", "REAL"),
         ("implied_return_spread", "REAL"),
         ("implied_return_refusal", "TEXT"),
+        ("dcf_refusal", "TEXT"),
     ):
         if column not in v3_columns:
             conn.execute(f"ALTER TABLE corporate_comparison_snapshots_v3 ADD COLUMN {column} {sql_type}")

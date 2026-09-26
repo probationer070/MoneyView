@@ -425,7 +425,9 @@ class CorporateComparisonStockHistoryPoint(BaseModel):
     benchmark_ticker: str = "^GSPC"
     current_price: float = 0.0
     roic_minus_wacc: float = 0.0
-    dcf_implied_return: float = 0.0
+    # None when the DCF refused (dcf_refusal); required, never defaulted.
+    dcf_implied_return: float | None
+    dcf_refusal: str | None
     # None when refused or before metric v3 (not recorded); required, never defaulted.
     implied_return_spread: float | None
     # Tells those two apart: a code when refused, None when not recorded.
