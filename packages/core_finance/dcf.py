@@ -7,6 +7,8 @@ Per GEMINI SOP §2: NumPy-first; no Rust unless profiled bottleneck.
 
 from __future__ import annotations
 
+from packages.core_finance.refusals import EngineRefusal
+
 import numpy as np
 
 
@@ -51,7 +53,7 @@ def calculate_terminal_value(
     Raises ValueError if WACC ≤ growth_rate (model undefined).
     """
     if wacc <= growth_rate:
-        raise ValueError(
+        raise EngineRefusal("wacc_not_above_growth",
             f"WACC must be greater than growth rate. "
             f"Got WACC={wacc:.4f}, g={growth_rate:.4f}."
         )
@@ -114,7 +116,7 @@ def calculate_intrinsic_value_per_share(
     Raises ValueError when share count is unavailable or invalid.
     """
     if diluted_shares_outstanding <= 0:
-        raise ValueError(
+        raise EngineRefusal("non_positive_shares",
             f"Diluted shares outstanding must be greater than zero. "
             f"Got {diluted_shares_outstanding:.4f}."
         )

@@ -14,6 +14,8 @@ billions, share counts in billions of shares, rates as decimal fractions.
 
 from __future__ import annotations
 
+from packages.core_finance.refusals import EngineRefusal
+
 from dataclasses import dataclass
 import math
 
@@ -111,34 +113,34 @@ class SegmentSpec:
         ]
         if missing:
             label = self.name if self.name is not None else "<unnamed segment>"
-            raise ValueError(
+            raise EngineRefusal("missing_required_field",
                 f"{label}: missing required field(s): {', '.join(missing)}"
             )
         if self.ramp_start_year < 1:
-            raise ValueError(
+            raise EngineRefusal("ramp_start_year_below_one",
                 f"{self.name}: ramp_start_year must be at least 1, got "
                 f"{self.ramp_start_year}. Below 1 it produces a revenue path "
                 f"longer than the horizon, which zip() then truncates -- the "
                 f"target-year revenue silently misses its target."
             )
         if self.sales_to_capital_early <= 0:
-            raise ValueError(
+            raise EngineRefusal("non_positive_rate",
                 f"{self.name}: sales_to_capital_early must be positive, got "
                 f"{self.sales_to_capital_early}"
             )
         if self.sales_to_capital_late <= 0:
-            raise ValueError(
+            raise EngineRefusal("non_positive_rate",
                 f"{self.name}: sales_to_capital_late must be positive, got "
                 f"{self.sales_to_capital_late}"
             )
         if self.initial_growth is not None:
             if self.initial_growth <= -1:
-                raise ValueError(
+                raise EngineRefusal("initial_growth_below_negative_one",
                     f"{self.name}: initial_growth must exceed -100%, got "
                     f"{self.initial_growth}"
                 )
             if self.base_revenue == 0 or self.ramp_start_year > 1:
-                raise ValueError(
+                raise EngineRefusal("curve_conflicts_with_ramp",
                     f"{self.name}: initial_growth={self.initial_growth} is "
                     f"incoherent with a ramped segment (base_revenue="
                     f"{self.base_revenue}, ramp_start_year={self.ramp_start_year}); "
@@ -146,7 +148,7 @@ class SegmentSpec:
                 )
         if self.waypoint_gap_fraction is not None:
             if not 0.0 < self.waypoint_gap_fraction < 1.0:
-                raise ValueError(
+                raise EngineRefusal("waypoint_gap_fraction_out_of_range",
                     f"{self.name}: waypoint_gap_fraction must lie strictly "
                     f"between 0 and 1, got {self.waypoint_gap_fraction}. At 0 "
                     f"the midpoint year closes none of the gap and the second "
@@ -154,7 +156,7 @@ class SegmentSpec:
                     f"at target and the second half is flat."
                 )
             if self.initial_growth is not None:
-                raise ValueError(
+                raise EngineRefusal("two_curves_conflict",
                     f"{self.name}: waypoint_gap_fraction and initial_growth are "
                     f"different revenue curves and cannot both be set. The "
                     f"gap-closing curve fixes year-1 revenue from the waypoint, "
@@ -162,7 +164,7 @@ class SegmentSpec:
                     f"year-1 growth rate as well."
                 )
             if self.base_revenue == 0 or self.ramp_start_year > 1:
-                raise ValueError(
+                raise EngineRefusal("curve_conflicts_with_ramp",
                     f"{self.name}: waypoint_gap_fraction="
                     f"{self.waypoint_gap_fraction} is incoherent with a ramped "
                     f"segment (base_revenue={self.base_revenue}, "
@@ -180,7 +182,7 @@ class SegmentSpec:
         if self.revenue_target is not None:
             return float(self.revenue_target)
         if self.tam_target is None or self.market_share_target is None:
-            raise ValueError(
+            raise EngineRefusal("no_revenue_target",
                 f"{self.name}: need (tam_target x market_share_target) or an "
                 f"explicit revenue_target"
             )
@@ -213,7 +215,7 @@ def _solve_first_year_growth(ratio: float, n: int, g_stable: float) -> float:
     """
     low, high = _G1_LOW, _G1_HIGH
     if not _compound(low, n, g_stable) <= ratio <= _compound(high, n, g_stable):
-        raise ValueError(
+        raise EngineRefusal("target_revenue_unreachable",
             f"target revenue ratio {ratio:.6g} is unreachable with a decaying "
             f"growth path over {n} years ending at {g_stable:.4%}"
         )
@@ -307,7 +309,7 @@ def _solve_hump_amplitude(
     if not _compound_anchored(g_init, low, n, g_stable) <= ratio <= _compound_anchored(
         g_init, high, n, g_stable
     ):
-        raise ValueError(
+        raise EngineRefusal("target_revenue_unreachable",
             f"target revenue ratio {ratio:.6g} is unreachable from a year-1 growth "
             f"of {g_init:.4%} over {n} years ending at {g_stable:.4%}"
         )
@@ -325,7 +327,7 @@ def _ramp_revenues(target: float, n: int, ramp_start_year: int) -> list[float]:
     lead = ramp_start_year - 1
     steps = n - lead
     if steps < 1:
-        raise ValueError(
+        raise EngineRefusal("ramp_leaves_no_years",
             f"ramp_start_year {ramp_start_year} leaves no years to ramp over "
             f"within a {n}-year horizon"
         )
@@ -364,7 +366,7 @@ def _gap_closing_revenues(
     construction.
     """
     if n != 2 * _EARLY_YEARS:
-        raise ValueError(
+        raise EngineRefusal("gap_curve_wrong_horizon",
             f"the gap-closing curve is defined for a {2 * _EARLY_YEARS}-year "
             f"horizon in two {_EARLY_YEARS}-year blocks, not {n}. Its "
             f"within-block fractions {_BLOCK_GAP_FRACTIONS} are literal "
@@ -405,13 +407,13 @@ def revenue_path(spec: SegmentSpec, n: int, g_stable: float) -> list[float]:
     """
     target = spec.target_revenue()
     if target <= 0:
-        raise ValueError(f"{spec.name}: target revenue must be positive, got {target}")
+        raise EngineRefusal("non_positive_rate", f"{spec.name}: target revenue must be positive, got {target}")
 
     if spec.base_revenue < 0:
-        raise ValueError(f"{spec.name}: base_revenue must not be negative")
+        raise EngineRefusal("negative_balance", f"{spec.name}: base_revenue must not be negative")
 
     if spec.ramp_start_year > 1 and spec.base_revenue > 0:
-        raise ValueError(
+        raise EngineRefusal("ramp_conflicts_with_base_revenue",
             f"{spec.name}: ramp_start_year={spec.ramp_start_year} is incoherent "
             f"with base_revenue={spec.base_revenue}; a segment already earning "
             f"revenue today cannot also be a delayed-start ramp"
@@ -536,7 +538,7 @@ def tax_rate_path(
     of enterprise value, since it lifts every explicit-period cash flow.
     """
     if not 1 <= converge_from <= n:
-        raise ValueError(
+        raise EngineRefusal("horizon_incoherent",
             f"converge_from must be between 1 and {n}, got {converge_from}"
         )
     lead = converge_from - 1
@@ -567,7 +569,7 @@ def tax_path(
     """
     rates = rate_schedule if rate_schedule is not None else [marginal_rate] * len(ebit)
     if len(rates) != len(ebit):
-        raise ValueError(
+        raise EngineRefusal("rate_schedule_length_mismatch",
             f"rate_schedule has {len(rates)} entries for {len(ebit)} years of EBIT"
         )
     taxes: list[float] = []
@@ -597,7 +599,7 @@ def wacc_path(
     a way that compounds.
     """
     if not 1 <= converge_from <= n:
-        raise ValueError(
+        raise EngineRefusal("horizon_incoherent",
             f"converge_from must be between 1 and {n}, got {converge_from}"
         )
     lead = converge_from - 1
@@ -620,7 +622,7 @@ def discount_factors(waccs: list[float]) -> list[float]:
     accumulated = 1.0
     for wacc in waccs:
         if wacc <= -1:
-            raise ValueError(f"wacc must exceed -100%, got {wacc}")
+            raise EngineRefusal("wacc_below_negative_one", f"wacc must exceed -100%, got {wacc}")
         accumulated /= 1.0 + wacc
         factors.append(accumulated)
     return factors
@@ -675,13 +677,13 @@ class CaseSpec:
             if getattr(self, field) is None
         ]
         if missing:
-            raise ValueError(f"case is missing required field(s): {', '.join(missing)}")
+            raise EngineRefusal("missing_required_field", f"case is missing required field(s): {', '.join(missing)}")
         if self.target_year <= self.base_year:
-            raise ValueError(
+            raise EngineRefusal("horizon_incoherent",
                 f"target_year {self.target_year} must be after base_year {self.base_year}"
             )
         if self.terminal_growth is not None and self.terminal_growth > self.riskfree_rate:
-            raise ValueError(
+            raise EngineRefusal("terminal_growth_above_riskfree",
                 f"terminal growth {self.terminal_growth:.4%} exceeds the riskfree "
                 f"rate {self.riskfree_rate:.4%} -- perpetual growth is capped there"
             )
@@ -691,41 +693,41 @@ class CaseSpec:
             # rejects only wacc <= -1, so a negative wacc_initial reached
             # the runnability gate, passed it, and persisted a case worth
             # 99x its true value per share.
-            raise ValueError(
+            raise EngineRefusal("non_positive_rate",
                 f"wacc_initial must be positive, got {self.wacc_initial}"
             )
         if self.shares_basic <= 0:
-            raise ValueError(f"shares_basic must be positive, got {self.shares_basic}")
+            raise EngineRefusal("non_positive_rate", f"shares_basic must be positive, got {self.shares_basic}")
         if self.nol_balance < 0:
-            raise ValueError(
+            raise EngineRefusal("negative_balance",
                 f"nol_balance must not be negative, got {self.nol_balance}. "
                 f"tax_path adds a negative balance to the taxable base, which "
                 f"overstates tax without raising."
             )
         if not 0.0 <= self.marginal_tax_rate <= 1.0:
-            raise ValueError(
+            raise EngineRefusal("rate_out_of_unit_interval",
                 f"marginal_tax_rate must be a decimal fraction between 0 and 1, "
                 f"got {self.marginal_tax_rate}. A percentage such as 25.0 makes "
                 f"(1 - tau) negative and returns a large negative valuation with "
                 f"no error."
             )
         if self.effective_tax_rate is not None and not 0.0 <= self.effective_tax_rate <= 1.0:
-            raise ValueError(
+            raise EngineRefusal("rate_out_of_unit_interval",
                 f"effective_tax_rate must be a decimal fraction between 0 and 1, "
                 f"got {self.effective_tax_rate}. Same trap as marginal_tax_rate: "
                 f"a percentage such as 10.0 passes silently and taxes away ten "
                 f"times the operating income."
             )
         if self.roic_stable <= 0:
-            raise ValueError(f"roic_stable must be positive, got {self.roic_stable}")
+            raise EngineRefusal("non_positive_rate", f"roic_stable must be positive, got {self.roic_stable}")
         if self.cash < 0:
-            raise ValueError(f"cash must not be negative, got {self.cash}")
+            raise EngineRefusal("negative_balance", f"cash must not be negative, got {self.cash}")
         if self.debt < 0:
-            raise ValueError(f"debt must not be negative, got {self.debt}")
+            raise EngineRefusal("negative_balance", f"debt must not be negative, got {self.debt}")
         if self.ipo_proceeds < 0:
-            raise ValueError(f"ipo_proceeds must not be negative, got {self.ipo_proceeds}")
+            raise EngineRefusal("negative_balance", f"ipo_proceeds must not be negative, got {self.ipo_proceeds}")
         if self.shares_new < 0:
-            raise ValueError(f"shares_new must not be negative, got {self.shares_new}")
+            raise EngineRefusal("negative_balance", f"shares_new must not be negative, got {self.shares_new}")
 
     @property
     def horizon(self) -> int:
@@ -808,7 +810,7 @@ def marginal_roic(segments: list[SegmentSpec], marginal_tax_rate: float) -> floa
     function callable without running a case.
     """
     if not segments:
-        raise ValueError("marginal_roic needs at least one segment")
+        raise EngineRefusal("no_segments", "marginal_roic needs at least one segment")
 
     after_tax = 1.0 - marginal_tax_rate
     total_nopat = 0.0
@@ -819,7 +821,7 @@ def marginal_roic(segments: list[SegmentSpec], marginal_tax_rate: float) -> floa
         total_capital += revenue / spec.sales_to_capital_late
 
     if total_capital <= 0:
-        raise ValueError(
+        raise EngineRefusal("non_positive_target_capital",
             "marginal_roic needs a positive total target-year capital "
             f"(revenue / sales_to_capital_late) to weight by, got {total_capital:.6g}"
         )
@@ -849,12 +851,12 @@ def terminal_value(
     """
     spread = wacc_stable - g_stable
     if spread <= 0:
-        raise ValueError(
+        raise EngineRefusal("terminal_spread_not_positive",
             f"terminal spread is not positive: wacc {wacc_stable:.4%} must exceed "
             f"growth {g_stable:.4%}"
         )
     if roic_stable <= 0:
-        raise ValueError(f"roic_stable must be positive, got {roic_stable}")
+        raise EngineRefusal("non_positive_rate", f"roic_stable must be positive, got {roic_stable}")
     # The reinvestment rate is g / roic_stable, and it must stay inside (-1, 1):
     # above +1 the perpetuity reinvests more than it earns, below -1 it releases
     # more capital than it earns, every year forever. For positive growth the
@@ -866,7 +868,7 @@ def terminal_value(
     # this open, and a declining case at roic_stable=1e-8 valued at 76,599,748
     # against 49.62 at a coherent 0.30.
     if roic_stable <= abs(g_stable):
-        raise ValueError(
+        raise EngineRefusal("roic_below_growth_magnitude",
             f"roic_stable {roic_stable:.4%} must exceed the magnitude of "
             f"terminal growth {g_stable:.4%}: otherwise the terminal "
             f"reinvestment rate g / roic_stable leaves (-1, 1) and the "
@@ -874,7 +876,7 @@ def terminal_value(
             f"every year forever."
         )
     if g_stable > 0 and roic_stable <= wacc_stable:
-        raise ValueError(
+        raise EngineRefusal("roic_below_wacc",
             f"roic_stable {roic_stable:.4%} must exceed wacc_stable "
             f"{wacc_stable:.4%} when terminal growth is positive, otherwise "
             f"terminal growth destroys value"
@@ -887,7 +889,7 @@ def terminal_value(
 def run_case(case: CaseSpec, segments: list[SegmentSpec]) -> CaseResult:
     """Value one case end to end: segments in, value per share out."""
     if not segments:
-        raise ValueError("a valuation case needs at least one segment")
+        raise EngineRefusal("no_segments", "a valuation case needs at least one segment")
 
     n = case.horizon
     g_stable = case.effective_terminal_growth()
@@ -937,7 +939,7 @@ def run_case(case: CaseSpec, segments: list[SegmentSpec]) -> CaseResult:
     # is not guaranteed to land on a bit-identical float to what marginal_roic
     # computes here -- the floor guard below already nudges for the same reason.
     if case.roic_stable > target_year_marginal_roic * (1 + 1e-9):
-        raise ValueError(
+        raise EngineRefusal("roic_above_marginal_return",
             f"roic_stable {case.roic_stable:.4%} exceeds the target-year marginal "
             f"return on new capital {target_year_marginal_roic:.4%}. Margins have "
             f"already converged and sales-to-capital does not change after the "
