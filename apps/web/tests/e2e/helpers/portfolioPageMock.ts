@@ -188,7 +188,9 @@ export async function mockPortfolioPageApi(page: Page, stats?: PortfolioPageMock
         capm_expected_return: 9.7,
         stock_expected_return: 8.5,
         market_expected_return: 9.7,
-        expected_return_spread: -1.2,
+        market_implied_return: -1.2 + 9.7,
+        implied_return_spread: -1.2,
+        implied_return_refusal: null,
       },
       {
         ticker: "AAPL",
@@ -203,7 +205,9 @@ export async function mockPortfolioPageApi(page: Page, stats?: PortfolioPageMock
         capm_expected_return: 11.0,
         stock_expected_return: 13.2,
         market_expected_return: 9.7,
-        expected_return_spread: 3.5,
+        market_implied_return: 3.5 + 9.7,
+        implied_return_spread: 3.5,
+        implied_return_refusal: null,
       },
       {
         ticker: "MSFT",
@@ -218,7 +222,9 @@ export async function mockPortfolioPageApi(page: Page, stats?: PortfolioPageMock
         capm_expected_return: 10.2,
         stock_expected_return: 10.0,
         market_expected_return: 9.7,
-        expected_return_spread: 0.3,
+        market_implied_return: 0.3 + 9.7,
+        implied_return_spread: 0.3,
+        implied_return_refusal: null,
       },
     ],
   };
@@ -239,7 +245,9 @@ export async function mockPortfolioPageApi(page: Page, stats?: PortfolioPageMock
           capm_expected_return: 9.7,
           stock_expected_return: 10,
           market_expected_return: 9.7,
-          expected_return_spread: 0.3,
+          market_implied_return: 0.3 + 9.7,
+          implied_return_spread: 0.3,
+          implied_return_refusal: null,
         },
         ...customTickers.map((ticker, index) => ({
           ticker,
@@ -254,7 +262,9 @@ export async function mockPortfolioPageApi(page: Page, stats?: PortfolioPageMock
           capm_expected_return: 11.26 - index * 0.4,
           stock_expected_return: 14.31 - index,
           market_expected_return: 9.7,
-          expected_return_spread: 4.61 - index,
+          market_implied_return: 4.61 - index + 9.7,
+          implied_return_spread: 4.61 - index,
+          implied_return_refusal: null,
         })),
       ]
       : cloneFixture(benchmarkUniverseFixture.rows);
@@ -270,7 +280,9 @@ export async function mockPortfolioPageApi(page: Page, stats?: PortfolioPageMock
           ...row,
           roic_minus_wacc: null,
           dcf_implied_return: null,
-          expected_return_spread: null,
+          market_implied_return: null,
+          implied_return_spread: null,
+          implied_return_refusal: "no_price",
         };
       });
   };
@@ -556,7 +568,7 @@ export async function mockPortfolioPageApi(page: Page, stats?: PortfolioPageMock
           current_price: row?.current_price ?? 0,
           roic_minus_wacc: row?.roic_minus_wacc ?? 0,
           dcf_implied_return: row?.dcf_implied_return ?? 0,
-          expected_return_spread: row?.expected_return_spread ?? 0,
+          implied_return_spread: row?.implied_return_spread ?? null,
           market_expected_return: point.market_expected_return,
         };
       });

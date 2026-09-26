@@ -16,6 +16,7 @@ type HistoryPointSeed = {
   generated_at: string;
   metric_schema_version: number;
   average_dcf_value: number;
+  average_implied_return_spread?: number | null;
 };
 
 // Newest first, which is the order the real endpoint returns: the history query in
@@ -86,7 +87,7 @@ async function mockPortfolioHistory(page: Page, seeds: HistoryPointSeed[]) {
             comparison_universe: "portfolio_plus_benchmark",
             benchmark_ticker: "^GSPC",
             stock_count: 2,
-            average_expected_return_spread: 2.86,
+            average_implied_return_spread: seed.average_implied_return_spread === undefined ? 2.86 : seed.average_implied_return_spread,
             average_roic_minus_wacc: 10.5,
             average_dcf_value: seed.average_dcf_value,
             metric_schema_version: seed.metric_schema_version,
@@ -158,4 +159,17 @@ test("a history at one metric version shows no boundary", async ({ page }) => {
   await expect(dialog.getByText("Metric schema v2")).toHaveCount(2);
   await expect(dialog.getByText(CHANGED_NOTICE)).toHaveCount(0);
   await expect(dialog.getByText(UNRECORDED_NOTICE)).toHaveCount(0);
+});
+
+test("the history modal marks a pre-v3 average as not recorded", async ({ page }) => {
+  const recorded: HistoryPointSeed = {
+    as_of_date: "2026-09-26", generated_at: "2026-09-26T09:00:00Z",
+    metric_schema_version: 3, average_dcf_value: 160.0, average_implied_return_spread: 1.5,
+  };
+  const notRecorded: HistoryPointSeed = { ...NEW_DEFINITION, average_implied_return_spread: null };
+  await mockPortfolioHistory(page, [recorded, notRecorded]);
+  const dialog = await openSnapshotHistory(page);
+  await expect(historyItem(dialog, recorded)).toContainText("1.50%");
+  await expect(historyItem(dialog, notRecorded)).toContainText("Not recorded before metric v3.");
+  await expect(historyItem(dialog, notRecorded)).not.toContainText("Not available");
 });

@@ -1,4 +1,5 @@
 import type { MetricQuality } from "../../../../packages/shared-types";
+import { impliedReturnRefusalText } from "@/lib/impliedReturn";
 import type {
   CorporateComparisonResponse,
   CorporateComparisonSnapshotMeta,
@@ -24,7 +25,7 @@ export interface PortfolioTickerMetrics {
   ticker: string;
   roicMinusWacc: PortfolioMetricValue;
   dcfUpside: PortfolioMetricValue;
-  expectedVsMarket: PortfolioMetricValue;
+  impliedVsWacc: PortfolioMetricValue;
   volatility: PortfolioMetricValue;
   currentPrice: number | null;
   sourceMode: PortfolioMetricSourceMode;
@@ -226,15 +227,16 @@ export function buildPortfolioTickerMetrics(args: {
         ? buildNumericMetric(row.dcf_implied_return, {
           sourceMode,
           missingReason: "Missing DCF output for this ticker.",
-          suspiciousReason: "DCF upside falls outside the sanity range and is excluded from ranking.",
+          suspiciousReason: "DCF value vs price falls outside the sanity range and is excluded from ranking.",
           stale,
         })
         : buildUnavailableMetric(missingComparisonReason),
-      expectedVsMarket: row
-        ? buildNumericMetric(row.expected_return_spread, {
+      impliedVsWacc: row
+        ? buildNumericMetric(row.implied_return_spread, {
           sourceMode,
-          missingReason: "Missing expected-return comparison for this ticker.",
-          suspiciousReason: "Expected vs Market falls outside the sanity range and is excluded from ranking.",
+          // Says why: a refusal code, or "not recorded before metric v3" when there is none.
+          missingReason: impliedReturnRefusalText(row.implied_return_refusal),
+          suspiciousReason: "Implied return vs WACC falls outside the sanity range and is excluded from ranking.",
           stale,
         })
         : buildUnavailableMetric(missingComparisonReason),
@@ -251,7 +253,7 @@ export function buildPortfolioTickerMetrics(args: {
       snapshotVersion: args.activeSnapshotMeta?.snapshot_version ?? null,
       warnings,
       excludedFromRanking: Boolean(
-        [row?.roic_minus_wacc, row?.dcf_implied_return, row?.expected_return_spread].some((value) => isMetricOutlier(value)),
+        [row?.roic_minus_wacc, row?.dcf_implied_return, row?.implied_return_spread].some((value) => isMetricOutlier(value)),
       ),
     };
     acc[stock.ticker] = metrics;

@@ -157,7 +157,9 @@ interface CorporateComparisonRow {
   current_price: number;
   dcf_implied_return: number;
   capm_expected_return: number;
-  expected_return_spread: number;
+  market_implied_return: number | null;
+  implied_return_spread: number | null;
+  implied_return_refusal: string | null;
 }
 
 export interface CorporateComparisonSnapshotMeta {
@@ -202,7 +204,8 @@ interface CorporateComparisonStockHistoryPoint {
   current_price: number;
   roic_minus_wacc: number;
   dcf_implied_return: number;
-  expected_return_spread: number;
+  // Null when refused or before metric v3 (not recorded).
+  implied_return_spread: number | null;
   market_expected_return: number;
 }
 
@@ -489,8 +492,8 @@ function HoldingsTable({
             <th className="px-4 py-3 text-right font-semibold">Current Price</th>
             <th className="hidden px-4 py-3 text-right font-semibold md:table-cell">Trend</th>
             <th className="px-4 py-3 text-right font-semibold">ROIC - WACC</th>
-            <th className="px-4 py-3 text-right font-semibold">DCF Upside</th>
-            <th className="px-4 py-3 text-right font-semibold">Expected vs Market</th>
+            <th className="px-4 py-3 text-right font-semibold">DCF value vs price (one-off gap)</th>
+            <th className="px-4 py-3 text-right font-semibold">Implied return vs WACC (pts per year)</th>
             <th className="hidden px-4 py-3 text-right font-semibold md:table-cell">Volatility</th>
             <th className="hidden px-4 py-3 text-right font-semibold lg:table-cell">Weight</th>
             <th className="hidden px-4 py-3 text-right font-semibold xl:table-cell">Change</th>
@@ -530,7 +533,7 @@ function HoldingsTable({
                   <MetricCell metric={metrics.dcfUpside} toneClass={portfolioMetricToneClass(metrics.dcfUpside)} />
                 </td>
                 <td className="px-4 py-3 text-right align-top">
-                  <MetricCell metric={metrics.expectedVsMarket} toneClass={portfolioMetricToneClass(metrics.expectedVsMarket)} />
+                  <MetricCell metric={metrics.impliedVsWacc} toneClass={portfolioMetricToneClass(metrics.impliedVsWacc)} />
                 </td>
                 <td className="hidden px-4 py-3 text-right align-top md:table-cell">
                   <MetricCell metric={metrics.volatility} toneClass={portfolioVolatilityToneClass(metrics.volatility)} />
@@ -646,7 +649,7 @@ const EMPTY_COMPARISON_METRICS: PortfolioTickerMetrics = {
   ticker: "",
   roicMinusWacc: { value: null, displayValue: "N/A", quality: "missing", reason: "No portfolio comparison data has been loaded yet." },
   dcfUpside: { value: null, displayValue: "N/A", quality: "missing", reason: "No portfolio comparison data has been loaded yet." },
-  expectedVsMarket: { value: null, displayValue: "N/A", quality: "missing", reason: "No portfolio comparison data has been loaded yet." },
+  impliedVsWacc: { value: null, displayValue: "N/A", quality: "missing", reason: "No portfolio comparison data has been loaded yet." },
   currentPrice: null,
   volatility: { value: null, displayValue: "N/A", quality: "missing", reason: "Not enough price history to estimate volatility." },
   sourceMode: "unavailable",
@@ -1564,16 +1567,16 @@ export default function PortfolioPage() {
     if (stockRows.length === 0) return null;
     const flaggedMetricsCount = stockRows.reduce((sum, row) => (
       sum
-      + (row.expectedVsMarket.quality === "suspicious" || row.expectedVsMarket.quality === "invalid" ? 1 : 0)
+      + (row.impliedVsWacc.quality === "suspicious" || row.impliedVsWacc.quality === "invalid" ? 1 : 0)
       + (row.roicMinusWacc.quality === "suspicious" || row.roicMinusWacc.quality === "invalid" ? 1 : 0)
       + (row.dcfUpside.quality === "suspicious" || row.dcfUpside.quality === "invalid" ? 1 : 0)
     ), 0);
-    const positiveSpreadCount = stockRows.filter((row) => (metricNumericValue(row.expectedVsMarket) ?? 0) > 0).length;
+    const positiveSpreadCount = stockRows.filter((row) => (metricNumericValue(row.impliedVsWacc) ?? 0) > 0).length;
     const positiveEconomicSpreadCount = stockRows.filter((row) => (metricNumericValue(row.roicMinusWacc) ?? 0) > 0).length;
     const positiveDcfCount = stockRows.filter((row) => (metricNumericValue(row.dcfUpside) ?? 0) > 0).length;
     const highestSpreadRow = stockRows
-      .filter((row) => !row.excludedFromRanking && metricNumericValue(row.expectedVsMarket) != null)
-      .sort((left, right) => (metricNumericValue(right.expectedVsMarket) ?? -Infinity) - (metricNumericValue(left.expectedVsMarket) ?? -Infinity))[0] ?? null;
+      .filter((row) => !row.excludedFromRanking && metricNumericValue(row.impliedVsWacc) != null)
+      .sort((left, right) => (metricNumericValue(right.impliedVsWacc) ?? -Infinity) - (metricNumericValue(left.impliedVsWacc) ?? -Infinity))[0] ?? null;
     return {
       stockCount: stockRows.length,
       flaggedMetricsCount,
@@ -1581,7 +1584,7 @@ export default function PortfolioPage() {
       positiveEconomicSpreadCount,
       positiveDcfCount,
       highestSpreadTicker: highestSpreadRow?.ticker ?? "N/A",
-      highestSpreadValue: highestSpreadRow ? metricNumericValue(highestSpreadRow.expectedVsMarket) : null,
+      highestSpreadValue: highestSpreadRow ? metricNumericValue(highestSpreadRow.impliedVsWacc) : null,
     };
   }, [comparisonMetricsByTicker, watchlist]);
   const snapshotHistoryView = portfolioSnapshotHistoryViewState({

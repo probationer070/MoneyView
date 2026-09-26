@@ -18,6 +18,7 @@ import { MetricAuditPanel } from "@/components/ui/MetricAuditPanel";
 import { MetricQualityBadge } from "@/components/ui/MetricQualityBadge";
 
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
+import { IMPLIED_RETURN_NOT_RECORDED } from "@/lib/impliedReturn";
 import { Sparkline } from "@/components/ui/Sparkline";
 import { NewsFeedList } from "@/app/news/components/NewsFeedList";
 import { formatAuditMetricValue, metricAuditReason } from "@/lib/metricAudit";
@@ -237,13 +238,16 @@ export function StockDetailModal({
   const flaggedComparisonMetricCount = [
     comparisonMetrics.roicMinusWacc,
     comparisonMetrics.dcfUpside,
-    comparisonMetrics.expectedVsMarket,
+    comparisonMetrics.impliedVsWacc,
   ].filter((metric) => metric.quality === "suspicious" || metric.quality === "invalid").length;
   
   const earliestSnapshotTrendPoint = snapshotTrendPoints.at(-1) ?? null;
   const latestSnapshotTrendPoint = snapshotTrendPoints[0] ?? null;
-  const expectedSpreadTrendDelta = latestSnapshotTrendPoint && earliestSnapshotTrendPoint
-    ? latestSnapshotTrendPoint.expected_return_spread - earliestSnapshotTrendPoint.expected_return_spread
+  // Only between two points that both recorded it: a pre-v3 point has no implied return,
+  // and subtracting across that boundary would compare two different quantities.
+  const expectedSpreadTrendDelta = latestSnapshotTrendPoint?.implied_return_spread != null
+    && earliestSnapshotTrendPoint?.implied_return_spread != null
+    ? latestSnapshotTrendPoint.implied_return_spread - earliestSnapshotTrendPoint.implied_return_spread
     : null;
   const stockNewsItems = useMemo(
     () => news.map((item, index) => ({ ...item, id: item.id ?? index + 1 })),
@@ -253,7 +257,7 @@ export function StockDetailModal({
     snapshotTrendPoints.reduce<Record<string, {
       roicMinusWacc: ReturnType<typeof buildPortfolioDisplayMetric>;
       dcfUpside: ReturnType<typeof buildPortfolioDisplayMetric>;
-      expectedVsMarket: ReturnType<typeof buildPortfolioDisplayMetric>;
+      impliedVsWacc: ReturnType<typeof buildPortfolioDisplayMetric>;
     }>>((acc, point) => {
       acc[point.snapshot_version] = {
         roicMinusWacc: buildPortfolioDisplayMetric(point.roic_minus_wacc, {
@@ -261,12 +265,12 @@ export function StockDetailModal({
           suspiciousReason: "Saved snapshot ROIC - WACC falls outside the sanity range.",
         }),
         dcfUpside: buildPortfolioDisplayMetric(point.dcf_implied_return, {
-          missingReason: "Saved snapshot is missing DCF upside for this ticker.",
-          suspiciousReason: "Saved snapshot DCF upside falls outside the sanity range.",
+          missingReason: "Saved snapshot is missing DCF value vs price for this ticker.",
+          suspiciousReason: "Saved snapshot DCF value vs price falls outside the sanity range.",
         }),
-        expectedVsMarket: buildPortfolioDisplayMetric(point.expected_return_spread, {
-          missingReason: "Saved snapshot is missing Expected vs Market for this ticker.",
-          suspiciousReason: "Saved snapshot Expected vs Market falls outside the sanity range.",
+        impliedVsWacc: buildPortfolioDisplayMetric(point.implied_return_spread, {
+          missingReason: IMPLIED_RETURN_NOT_RECORDED,
+          suspiciousReason: "Saved snapshot implied return vs WACC falls outside the sanity range.",
         }),
       };
       return acc;
@@ -312,14 +316,14 @@ export function StockDetailModal({
                     {metricSubtitle(metrics.roicMinusWacc) ? <div className="mt-1 text-[11px] leading-tight text-[var(--text-muted)]">{metricSubtitle(metrics.roicMinusWacc)}</div> : null}
                   </div>
                   <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2">
-                    <div className="text-[var(--text-muted)]">DCF Upside</div>
+                    <div className="text-[var(--text-muted)]">DCF value vs price (one-off gap)</div>
                     <div className={`mt-1 font-bold tabular-nums ${metricToneClass(metrics.dcfUpside)}`} title={metricDisplayTitle(metrics.dcfUpside)}>{metrics.dcfUpside.displayValue}</div>
                     {metricSubtitle(metrics.dcfUpside) ? <div className="mt-1 text-[11px] leading-tight text-[var(--text-muted)]">{metricSubtitle(metrics.dcfUpside)}</div> : null}
                   </div>
                   <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2">
-                    <div className="text-[var(--text-muted)]">Expected vs Market</div>
-                    <div className={`mt-1 font-bold tabular-nums ${metricToneClass(metrics.expectedVsMarket)}`} title={metricDisplayTitle(metrics.expectedVsMarket)}>{metrics.expectedVsMarket.displayValue}</div>
-                    {metricSubtitle(metrics.expectedVsMarket) ? <div className="mt-1 text-[11px] leading-tight text-[var(--text-muted)]">{metricSubtitle(metrics.expectedVsMarket)}</div> : null}
+                    <div className="text-[var(--text-muted)]">Implied return vs WACC (pts per year)</div>
+                    <div className={`mt-1 font-bold tabular-nums ${metricToneClass(metrics.impliedVsWacc)}`} title={metricDisplayTitle(metrics.impliedVsWacc)}>{metrics.impliedVsWacc.displayValue}</div>
+                    {metricSubtitle(metrics.impliedVsWacc) ? <div className="mt-1 text-[11px] leading-tight text-[var(--text-muted)]">{metricSubtitle(metrics.impliedVsWacc)}</div> : null}
                   </div>
                   <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2">
                     <div className="text-[var(--text-muted)]">Market Return</div>
@@ -542,7 +546,7 @@ export function StockDetailModal({
                 </div>
                 <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-muted)] p-4">
                   <div className="flex items-center justify-between gap-2 text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
-                    <span>DCF Upside</span>
+                    <span>DCF value vs price (one-off gap)</span>
                     <MetricQualityBadge quality={comparisonMetrics.dcfUpside.quality} />
                   </div>
                   <div className={`mt-2 text-2xl font-black tabular-nums ${metricToneClass(comparisonMetrics.dcfUpside)}`} title={metricDisplayTitle(comparisonMetrics.dcfUpside)}>
@@ -554,14 +558,14 @@ export function StockDetailModal({
                 </div>
                 <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-muted)] p-4">
                   <div className="flex items-center justify-between gap-2 text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
-                    <span>Expected vs Market</span>
-                    <MetricQualityBadge quality={comparisonMetrics.expectedVsMarket.quality} />
+                    <span>Implied return vs WACC (pts per year)</span>
+                    <MetricQualityBadge quality={comparisonMetrics.impliedVsWacc.quality} />
                   </div>
-                  <div className={`mt-2 text-2xl font-black tabular-nums ${metricToneClass(comparisonMetrics.expectedVsMarket)}`} title={metricDisplayTitle(comparisonMetrics.expectedVsMarket)}>
-                    {comparisonMetrics.expectedVsMarket.displayValue}
+                  <div className={`mt-2 text-2xl font-black tabular-nums ${metricToneClass(comparisonMetrics.impliedVsWacc)}`} title={metricDisplayTitle(comparisonMetrics.impliedVsWacc)}>
+                    {comparisonMetrics.impliedVsWacc.displayValue}
                   </div>
                   <p className="mt-2 text-xs text-[var(--text-muted)]">
-                    {metricSubtitle(comparisonMetrics.expectedVsMarket) ?? "Spread between the stock return expectation and the market reference return used in the saved comparison snapshot."}
+                    {metricSubtitle(comparisonMetrics.impliedVsWacc) ?? "The annual return today's market price implies for the whole business, minus its WACC, from the saved comparison snapshot."}
                   </p>
                 </div>
                 <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-muted)] p-4">
@@ -672,9 +676,9 @@ export function StockDetailModal({
                         <p className="mt-1 text-xs text-[var(--text-muted)]">Persisted comparison rows currently available for {stock.ticker}.</p>
                       </div>
                       <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-muted)] p-3">
-                        <div className="text-[length:var(--type-caption)] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Expected Spread Trend</div>
-                        <div className={`mt-1 text-lg font-black ${expectedSpreadTrendDelta == null ? "text-[var(--text-muted)]" : expectedSpreadTrendDelta > 0 ? "text-[var(--delta-up)]" : "text-[var(--delta-down)]"}`}>{formatMetricPercent(expectedSpreadTrendDelta)}</div>
-                        <p className="mt-1 text-xs text-[var(--text-muted)]">Latest versus oldest saved expected-return spread in this history.</p>
+                        <div className="text-[length:var(--type-caption)] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Implied return vs WACC trend</div>
+                        <div data-testid="implied-spread-trend-delta" className={`mt-1 text-lg font-black ${expectedSpreadTrendDelta == null ? "text-[var(--text-muted)]" : expectedSpreadTrendDelta > 0 ? "text-[var(--delta-up)]" : "text-[var(--delta-down)]"}`}>{formatMetricPercent(expectedSpreadTrendDelta)}</div>
+                        <p className="mt-1 text-xs text-[var(--text-muted)]">Latest versus oldest saved implied return vs WACC, only between snapshots that recorded it.</p>
                       </div>
                       <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-muted)] p-3">
                         <div className="text-[length:var(--type-caption)] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Recent Price Sparkline</div>
