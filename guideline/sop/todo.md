@@ -70,13 +70,18 @@ Each one was re-checked against the code on 2026-09-26 and is still true.
       mechanism of an ERROR-LOG'd fix (2026-08-02, commit `1e4abf0`). It keeps the Escape
       listener alive across a caller's re-render. Read that entry before touching it; do
       not make a drive-by lint fix.
-- [ ] **A failed `/market/spreads` fetch is invisible.** `SpreadsSection` returns `null`
-      for an empty list, which looks the same as "there are no spreads", and nothing is
-      logged.
+- [x] **A failed `/market/spreads` fetch is invisible.** FIXED 2026-09-26. The section
+      now always renders, with a loading line, an alert on failure, or "No spreads were
+      returned". Three e2e tests; three mutations caught.
 - [ ] **`/market/spreads` fetches live data inline** on a cache miss or a stale cache,
       with no per-request timeout. The first request after each daily cache boundary can
-      make up to seven live fetches in a row, and `SpreadsSection` shows nothing while
-      they run.
+      make up to seven live fetches in a row. Since 2026-09-26 the section shows
+      "Loading spreads…" meanwhile, instead of nothing. The backend fix is a design
+      decision, because each option trades something:
+      - parallel fetches, which risk Yahoo rate limits;
+      - serving yesterday's cache while refreshing in the background, which shows stale
+        spreads first;
+      - a per-request timeout, which turns a slow day into refusals.
 - [ ] **`/simulate` refusal grouping matches by substring** across the whole code table,
       so a reworded engine message could be absorbed under the wrong code while still
       passing the completeness test. Fixing it needs a design decision: an exact
