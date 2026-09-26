@@ -155,14 +155,16 @@ test.describe("the simulate request builder", () => {
   });
 
   test("the seed must be a whole number of 0 or more, or left empty", () => {
-    for (const bad of ["-1", "1.5", "abc"]) {
+    for (const bad of ["-1", "1.5", "abc", "9007199254740993"]) {
       const built = buildSimulateRequest([], "2000", bad, targets);
       expect(built.seedProblem).toMatch(/whole number of 0 or more/);
       expect(built.request.seed).toBeUndefined();
     }
-    const built = buildSimulateRequest([], "2000", "7", targets);
-    expect(built.seedProblem).toBeNull();
-    expect(built.request.seed).toBe(7);
+    for (const good of ["0", "7"]) {
+      const built = buildSimulateRequest([], "2000", good, targets);
+      expect(built.seedProblem).toBeNull();
+      expect(built.request.seed).toBe(Number(good));
+    }
   });
 });
 

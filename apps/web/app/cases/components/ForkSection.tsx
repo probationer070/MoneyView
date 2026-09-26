@@ -154,6 +154,11 @@ export function ForkSection({ record }: { record: CaseRecord }) {
             {mutation.isPending ? "Creating…" : "Create fork"}
           </button>
         </div>
+        {submitted && built.changedCount === 0 && !nameProblem && Object.keys(built.problems).length === 0 && (
+          <p data-testid="fork-nothing-changed" aria-live="polite" className="text-xs text-[var(--text-secondary)]">
+            Change at least one value to fork.
+          </p>
+        )}
         {refusal && (
           <p data-testid="fork-refusal" role="status" aria-live="polite" className="text-sm text-[var(--text-secondary)]">
             {refusal.detail}

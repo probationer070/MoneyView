@@ -37,7 +37,7 @@ export default function CaseDetailPage({ params }: { params: Promise<{ id: strin
   });
 
   if (!validId) {
-    return <p role="alert" className="p-6 text-[var(--chart-negative)]">Not a case id: {rawId}</p>;
+    return <p className="p-6 text-[var(--text-secondary)]">Not a case id: {rawId}</p>;
   }
   const record = caseQuery.data;
 

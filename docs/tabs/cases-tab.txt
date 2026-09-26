@@ -9,10 +9,12 @@ Purpose
   stated reasons, see why a fork's value moved, and simulate how uncertain its value is.
 
 Design intent
-- Every refusal from the API is content, shown in its own words. A 4xx (a model refusal) is
-  rendered verbatim as ordinary content, role="status", never as a zero. A 5xx or network
-  failure is a real error: role="alert". A refused run, an unattributable fork and a
-  suppressed simulation never render as zeros or errors.
+- Every refusal from the API is content, shown in its own words, never as a zero. A 5xx or
+  network failure is a real error: role="alert". A 4xx (a model refusal) is rendered verbatim
+  as ordinary content -- role="status" in the Fork this case and Uncertainty forms, and a
+  plain paragraph with no role in the read sections (Valuation, Inputs, Why it moved, the
+  cases list), which use Section.tsx's QueryStatus. A refused run, an unattributable fork and
+  a suppressed simulation never render as zeros or errors.
 - A suppressed simulation shows the API's own `suppressed` sentence verbatim, not a UI-authored
   paraphrase. A single statistic that overflowed on its own (`not_finite`) is simply omitted
   from the stat row, and the API's `not_finite` sentence is shown alongside the rest.

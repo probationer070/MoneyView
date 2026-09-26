@@ -511,8 +511,9 @@ and CLAUDE.md section 8. Suite: 882 passing, no skips or xfails.
       reviewed by a separate agent and mutation-checked before the next
       started: Task 1 shipped `caseFields.ts`'s one percent<->fraction
       conversion (`toWire`/`fromWire`) and the fork/simulate row-building
-      logic, mutation-checked on rounding, unchanged-row detection and the
-      rate/non-rate field split. Task 2 shipped the `/cases` list and its
+      logic, mutation-checked on unchanged-row detection and the rate/non-rate
+      field split -- NOT on rounding, as this entry used to claim; no mutation
+      touched `clean()`. Task 2 shipped the `/cases` list and its
       ticker filter, mutation-checked on URL-vs-stored filter precedence and
       the case-list/panel request ordering. Task 3 shipped the case detail
       page's Valuation and Inputs sections, mutation-checked on the
@@ -522,9 +523,11 @@ and CLAUDE.md section 8. Suite: 882 passing, no skips or xfails.
       nonlinear fixture, since a two-row or linear fixture cannot distinguish
       canonical order from a magnitude or signed sort) and the
       contributions-sum-to-the-difference check. Task 5 shipped Fork this
-      case, mutation-checked on the submit guard against an all-unchanged
-      fork and the refusal/failure ARIA split (`role="status"` vs
-      `role="alert"`). Task 6 shipped Uncertainty (simulate this case),
+      case, mutation-checked on the refusal/failure ARIA split
+      (`role="status"` vs `role="alert"`) -- NOT on the submit guard against
+      an all-unchanged fork, as this entry used to claim; that guard shipped
+      with no test of its own until the final review's fix wave (F3/F4
+      below) added one. Task 6 shipped Uncertainty (simulate this case),
       mutation-checked across two rounds (12 mutations total) on suppression
       via key presence rather than the refused fraction, a single overflowed
       statistic's `not_finite` message, the histogram's closed last bin and
@@ -532,15 +535,45 @@ and CLAUDE.md section 8. Suite: 882 passing, no skips or xfails.
       prior request rather than the current form; one mutation (`!("p50" in
       result)` for the suppression check) initially passed spuriously because
       the existing test only ever overflowed `mean`, not `p50` -- caught by
-      the task's own controller, not left as accepted risk, and closed by
-      adding a test that overflows `p50` alone before re-running that
-      mutation. Task 7 added `cases-real-api.spec.ts`, a Playwright test that
-      forks a case through the UI against the real e2e-harness API (not the
-      mock) and reads the real Shapley attribution; mutation-checked by
-      dropping `toWire`'s `/100`, which sends `wacc_stable` as 810% instead of
-      8.1% and the real engine refuses the fork. No mock/real divergence was
-      found: `casesApiMock.ts`'s response shapes matched the live API exactly.
+      the TASK 6 IMPLEMENTER, not by the controller as this entry used to
+      claim, not left as accepted risk, and closed by adding a test that
+      overflows `p50` alone before re-running that mutation. Task 7 added
+      `cases-real-api.spec.ts`, a Playwright test that forks a case through
+      the UI against the real e2e-harness API (not the mock) and reads the
+      real Shapley attribution; mutation-checked by dropping `toWire`'s
+      `/100`, which sends `wacc_stable` as 810% instead of 8.1% and the real
+      engine refuses the fork. No mock/real divergence was found on the
+      four things it compared: `casesApiMock.ts`'s get/run/fork/diff response
+      shapes matched the live API. `list` and `simulate` were NOT compared by
+      that test, and the diff-refusal fixture's wording is not the same
+      string `case_diff.py` raises -- narrower than this entry used to claim.
       `/pricing` is now the only open part of C2.
+
+      **Final whole-branch review fix wave, 2026-09-26** (F1-F10, this same
+      pass): a confirmed backend 500 on a negative `/simulate` seed recorded
+      in `ERROR-LOG.md` (backend fix outstanding, see the follow-up line
+      below); the four corrections to this paragraph above; the missing
+      §12.1 mutation (an unnarrated fork leaf sent as `{value: wire}`) run
+      and shown to fail a named test; a silent "Create fork" on an
+      all-unchanged submit now shows a message; `SimulateSection`'s
+      accessibility brought up to `ForkSection`'s (`aria-invalid`/
+      `aria-describedby` on param, runs and seed inputs, and a labelled
+      Remove button); the empty-cases-list test now actually asserts no
+      generator is named; `docs/tabs/cases-tab.txt` corrected to describe
+      both the `role="status"` forms and the plain-content read sections;
+      the invalid-case-id branch changed from `role="alert"` to plain
+      content, matching every other refusal-class condition; the seed
+      validator now also rejects a seed above `Number.MAX_SAFE_INTEGER`; and
+      several `stats.simulatePosts[0]`/`forkPosts[0]` reads that followed a
+      click with no wait were given an `expect.poll` first.
+
+      **Follow-up, open:** the backend does not validate `/simulate`'s `seed`
+      as a non-negative integer -- a negative seed 500s instead of refusing
+      with `SimulateRefused`. The frontend guard (`changeRows.ts`'s
+      `seedProblem`) blocks it from this UI, but any other caller still hits
+      the 500. Needs either `ge=0` on `SimulateRequest.seed` or an explicit
+      check in `case_simulate.py`; backend is frozen for this branch, so not
+      fixed here. See `ERROR-LOG.md` 2026-09-26.
 
 ---
 

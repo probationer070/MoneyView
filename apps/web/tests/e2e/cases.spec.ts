@@ -31,6 +31,7 @@ test.describe("the cases list", () => {
     await gotoCases(page);
     await expect(page.getByText("No stored cases yet.")).toBeVisible();
     await expect(page.getByTestId(/^case-row-/)).toHaveCount(0);
+    await expect(page.getByRole("main").getByText(/Valuation tab|generat/i)).toHaveCount(0);
   });
 
   test("a failed list load is an error, with no rows", async ({ page }) => {
@@ -133,6 +134,13 @@ test.describe("one case", () => {
     await mockCasesApi(page);
     await gotoCase(page, 2);
     await expect(page.getByRole("link", { name: "case 1" })).toHaveAttribute("href", "/cases/1");
+  });
+
+  test("an invalid id in the URL is content, not an alert", async ({ page }) => {
+    await mockCasesApi(page);
+    await page.goto("/cases/abc", { waitUntil: "domcontentloaded" });
+    await expect(page.getByText("Not a case id: abc")).toBeVisible();
+    await expect(page.getByRole("main").getByRole("alert")).toHaveCount(0);
   });
 });
 
@@ -267,6 +275,16 @@ test.describe("forking a case", () => {
     await expect(page.getByTestId("fork-refusal")).toHaveCount(0);
     await expect(page.locator('[data-testid^="fork-row-"][data-highlighted="true"]')).toHaveCount(0);
   });
+
+  test("submitting with no actual change shows a message and posts nothing", async ({ page }) => {
+    const stats = await mockCasesApi(page);
+    await gotoCase(page, 1);
+    await page.getByLabel("New case name").fill("x");
+    await addChange(page, 0, "case.terminal_growth", "3"); // stored value is 0.03 -- unchanged
+    await page.getByRole("button", { name: "Create fork" }).click();
+    await expect(page.getByTestId("fork-nothing-changed")).toHaveText("Change at least one value to fork.");
+    expect(stats.forkPosts).toHaveLength(0);
+  });
 });
 
 test.describe("uncertainty (simulate this case)", () => {
@@ -291,6 +309,7 @@ test.describe("uncertainty (simulate this case)", () => {
     await gotoCase(page, 1);
     await addDistribution(page, "case.wacc_stable", "normal", { Mean: "7.4", "Std dev": "0.5" });
     await page.getByRole("button", { name: "Simulate" }).click();
+    await expect.poll(() => stats.simulatePosts.length).toBe(1);
 
     expect(stats.simulatePosts[0]).toEqual({
       runs: 2000,
@@ -439,6 +458,20 @@ test.describe("uncertainty (simulate this case)", () => {
     await expect.poll(() => stats.simulatePosts.length).toBe(2);
     expect(stats.simulatePosts[1].distributions).toEqual(stats.simulatePosts[0].distributions);
     expect(stats.simulatePosts[1].seed).toBe(1234);
+  });
+
+  test("a row with a problem is marked aria-invalid on its first param input, described by the problem", async ({ page }) => {
+    await mockCasesApi(page);
+    await gotoCase(page, 1);
+    // A narrated field (margin_target) with its narrative left empty: a row problem, not a
+    // seed or runs problem, so this isolates the param-input wiring F5 adds.
+    const row = await addDistribution(page, "segment.Core.margin_target", "triangular", { Low: "24", "Most likely": "28", High: "30" });
+    await page.getByRole("button", { name: "Simulate" }).click();
+    const firstInput = row.getByLabel("Low");
+    await expect(firstInput).toHaveAttribute("aria-invalid", "true");
+    const describedBy = await firstInput.getAttribute("aria-describedby");
+    expect(describedBy).toBeTruthy();
+    await expect(page.locator(`#${describedBy}`)).toContainText("claim");
   });
 
   test("a bad seed blocks sending, with the problem shown", async ({ page }) => {

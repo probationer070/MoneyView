@@ -202,7 +202,7 @@ export function buildSimulateRequest(
       : `runs must be a whole number from ${MIN_RUNS.toLocaleString("en-US")} to ${MAX_RUNS.toLocaleString("en-US")}`;
   const seedTrimmed = seedText.trim();
   const seed = seedTrimmed === "" ? undefined : Number(seedTrimmed);
-  const seedValid = seed !== undefined && Number.isInteger(seed) && seed >= 0;
+  const seedValid = seed !== undefined && Number.isInteger(seed) && seed >= 0 && seed <= Number.MAX_SAFE_INTEGER;
   const seedProblem = seedTrimmed === "" || seedValid ? null : "the seed must be a whole number of 0 or more";
   const request: SimulateRequest = {
     runs: Number.isInteger(runs) ? runs : 0,

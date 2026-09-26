@@ -92,11 +92,18 @@ export function SimulateSection({ record, pointValue }: { record: CaseRecord; po
                       value={row.params[param.name] ?? ""}
                       onChange={(e) => update(row.id, { params: { ...row.params, [param.name]: e.target.value } })}
                       inputMode="decimal"
+                      aria-invalid={problem ? true : undefined}
+                      aria-describedby={problem ? problemId : undefined}
                       className={`${controlClass} w-24`}
                     />
                   </label>
                 ))}
-                <button type="button" onClick={() => setRows((all) => all.filter((r) => r.id !== row.id))} className="pb-1 text-xs text-[var(--text-muted)] underline">
+                <button
+                  type="button"
+                  onClick={() => setRows((all) => all.filter((r) => r.id !== row.id))}
+                  aria-label={`Remove input ${index + 1}`}
+                  className="pb-1 text-xs text-[var(--text-muted)] underline"
+                >
                   Remove
                 </button>
               </div>
@@ -120,19 +127,33 @@ export function SimulateSection({ record, pointValue }: { record: CaseRecord; po
           </button>
           <label className="flex flex-col gap-1 text-xs text-[var(--text-secondary)]">
             Runs ({MIN_RUNS.toLocaleString("en-US")}–{MAX_RUNS.toLocaleString("en-US")})
-            <input value={runs} onChange={(e) => setRuns(e.target.value)} inputMode="numeric" className={`${controlClass} w-28`} />
+            <input
+              value={runs}
+              onChange={(e) => setRuns(e.target.value)}
+              inputMode="numeric"
+              aria-invalid={submitted && built.runsProblem ? true : undefined}
+              aria-describedby={submitted && built.runsProblem ? "simulate-runs-problem" : undefined}
+              className={`${controlClass} w-28`}
+            />
           </label>
           <label className="flex flex-col gap-1 text-xs text-[var(--text-secondary)]">
             Seed (optional)
-            <input value={seed} onChange={(e) => setSeed(e.target.value)} inputMode="numeric" className={`${controlClass} w-28`} />
+            <input
+              value={seed}
+              onChange={(e) => setSeed(e.target.value)}
+              inputMode="numeric"
+              aria-invalid={submitted && built.seedProblem ? true : undefined}
+              aria-describedby={submitted && built.seedProblem ? "simulate-seed-problem" : undefined}
+              className={`${controlClass} w-28`}
+            />
           </label>
           <button type="submit" disabled={mutation.isPending} aria-busy={mutation.isPending} className="rounded-[var(--radius-sm)] border border-[var(--border-default)] px-3 py-1.5 text-sm font-medium disabled:opacity-50">
             {mutation.isPending ? "Simulating…" : "Simulate"}
           </button>
         </div>
         {submitted && rows.length === 0 && <p aria-live="polite" className="text-xs text-[var(--text-secondary)]">Add at least one input to simulate.</p>}
-        {submitted && built.runsProblem && <p aria-live="polite" className="text-xs text-[var(--text-secondary)]">{built.runsProblem}</p>}
-        {submitted && built.seedProblem && <p aria-live="polite" className="text-xs text-[var(--text-secondary)]">{built.seedProblem}</p>}
+        {submitted && built.runsProblem && <p id="simulate-runs-problem" aria-live="polite" className="text-xs text-[var(--text-secondary)]">{built.runsProblem}</p>}
+        {submitted && built.seedProblem && <p id="simulate-seed-problem" aria-live="polite" className="text-xs text-[var(--text-secondary)]">{built.seedProblem}</p>}
       </form>
       {refusal && (
         <p data-testid="simulate-refusal" role="status" aria-live="polite" className="mt-3 text-sm text-[var(--text-secondary)]">

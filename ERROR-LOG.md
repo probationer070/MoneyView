@@ -3193,3 +3193,29 @@ reviewer's scenario and `test_an_updated_case_keeps_its_local_id` pins the id; b
 existing cases are deleted and re-inserted again. The wider lesson: "replace the whole record"
 described the data a merge must produce, and was implemented as a row operation. A row that other
 local rows point at by id cannot be replaced by delete-and-insert, whatever the payload says.
+
+## 2026-09-26: `/simulate` 500s on a negative seed
+
+Date: 2026-09-26
+Command: whole-branch review of `cases-ui`, reading `apps/api/services/case_simulate.py:210-213`
+against `apps/api/routes/valuation.py`'s simulate route, confirmed with `python -c "import numpy as
+np; np.random.default_rng(-1)"`.
+Failure: `POST /api/v1/valuation/cases/{id}/simulate` with a negative `seed` returns HTTP 500, not a
+refusal.
+Root cause: `case_simulate.simulate_case` passes a caller-supplied `seed` straight to
+`np.random.default_rng(seed)` with no range check. numpy raises `ValueError: expected non-negative
+integer` for any negative seed, and the route only catches `CaseNotFound` and `SimulateRefused`
+(`apps/api/routes/valuation.py`'s `simulate_valuation_case`), so that `ValueError` reaches FastAPI
+unhandled and surfaces as a 500.
+Fix: client-side guard only. `apps/web/app/cases/changeRows.ts`'s `buildSimulateRequest` already
+blocks a negative or non-integer seed before a request is ever sent (`seedProblem`), so the browser
+UI cannot trigger this path. The backend itself is NOT fixed: `simulate_case` still accepts a
+negative seed and still calls `np.random.default_rng` unguarded, so a direct API call (curl, a
+future caller, any client other than this one) still gets a 500. Closing it needs either a
+non-negative-integer request-model constraint (`ge=0` on `SimulateRequest.seed`) or an explicit
+range check in `simulate_case` that raises `SimulateRefused` instead, and is out of scope here: the
+backend is frozen for this branch.
+Files changed: ERROR-LOG.md, guideline/sop/todo.md (follow-up line only; no application code).
+Prevention: none yet on the backend side -- this entry is the record that the gap exists. The
+follow-up is tracked in `guideline/sop/todo.md` next to the C2 track so the next backend change in
+this area closes it rather than rediscovering it.
