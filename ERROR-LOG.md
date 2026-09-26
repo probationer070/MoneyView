@@ -3203,3 +3203,84 @@ reviewer's scenario and `test_an_updated_case_keeps_its_local_id` pins the id; b
 existing cases are deleted and re-inserted again. The wider lesson: "replace the whole record"
 described the data a merge must produce, and was implemented as a row operation. A row that other
 local rows point at by id cannot be replaced by delete-and-insert, whatever the payload says.
+
+## 2026-09-26: `/simulate` 500s on a negative seed
+
+Date: 2026-09-26
+Command: whole-branch review of `cases-ui`, reading `apps/api/services/case_simulate.py:210-213`
+against `apps/api/routes/valuation.py`'s simulate route, confirmed with `python -c "import numpy as
+np; np.random.default_rng(-1)"`.
+Failure: `POST /api/v1/valuation/cases/{id}/simulate` with a negative `seed` returns HTTP 500, not a
+refusal.
+Root cause: `case_simulate.simulate_case` passes a caller-supplied `seed` straight to
+`np.random.default_rng(seed)` with no range check. numpy raises `ValueError: expected non-negative
+integer` for any negative seed, and the route only catches `CaseNotFound` and `SimulateRefused`
+(`apps/api/routes/valuation.py`'s `simulate_valuation_case`), so that `ValueError` reaches FastAPI
+unhandled and surfaces as a 500.
+Fix: first a client-side guard only: `apps/web/app/cases/changeRows.ts`'s `buildSimulateRequest`
+blocks a negative or non-integer seed before a request is sent (`seedProblem`). That left direct
+API callers exposed. The backend was then fixed later the same day, on the same branch:
+`simulate_case` now refuses any seed that is not a non-negative integer with
+`SimulateRefused("invalid_seed: ...")`, mirroring the `invalid_runs` check beside it. The route
+maps that to a 422 like every other simulate refusal. A float or string seed hit the same 500 by a
+different exception (numpy's `TypeError`), and the same check now refuses it. A bool is refused
+too: Python counts it as an int, but no caller means `True` as a seed.
+Tests: `tests/api/test_case_simulate.py::test_a_seed_that_is_not_a_non_negative_integer_is_refused`
+covers -1, 1.5, True and "7". `test_a_zero_seed_is_accepted_and_echoed` covers 0. An `invalid_seed:`
+row in `tests/api/test_simulate_route.py`'s prefix table checks the route's 422. Each clause of the
+guard was mutated in memory, one at a time, and caught by a test only it can fail. Dropping
+`seed < 0` brings back the route 500 and fails [-1]. Dropping the bool check fails [True].
+Dropping the int check fails [1.5] and ["7"].
+Files changed: ERROR-LOG.md, guideline/sop/todo.md, apps/api/services/case_simulate.py,
+tests/api/test_case_simulate.py, tests/api/test_simulate_route.py.
+Prevention: validate every caller-supplied value at the boundary where it can still be refused
+with a named code. `runs` was validated there from the start; `seed` sat three lines below it and
+was passed straight to numpy. A parameter handed to a library that raises its own exception types
+is a 500 waiting for a caller who does not use the one UI that guards it.
+
+## 2026-09-26: legacy news rows are still duplicated on write after the 2026-09-10 hash fix
+
+Date: 2026-09-26
+Command: a todo.md review, re-measuring G5 read-only against `data/processed/moneyview.db`:
+group `news` by `(ticker, url)`, then compare each row's `hash` with
+`news_identity_hash(ticker, url)`.
+Failure: silent. There are 114 duplicate rows across 95 `(ticker, url)` groups, against the 32
+measured on 2026-09-10. G5 said "the write path can no longer add more", and it was wrong.
+Nothing wrong is displayed, because `get_news_bulk` collapses by url, but duplicates keep
+being stored.
+Root cause: the 2026-09-10 fix changed the identity hash from `headline + url` to
+`news_identity_hash(ticker, url)` for NEW writes only. The 432 rows already stored kept
+their old hashes, and there was no migration. Dedup is `INSERT OR IGNORE` on the `UNIQUE`
+hash column, so re-fetching an article first stored before the fix computes a new-scheme
+hash, finds no collision with the old row, and inserts a second copy.
+Evidence:
+- 82 of the 95 groups hold exactly one new-scheme row beside older rows.
+- 2,500 rows carry the new-scheme hash.
+- The remaining 432 are exactly the rows that existed at the fix.
+- It is bounded at one extra copy per pre-fix article, because the new hash collides after that.
+Fix: fixed the same day. `scripts/rekey_news.py` keeps the lowest id per `(ticker, url)`,
+deletes the rest, and gives the kept row `news_identity_hash(ticker, url)`, so the write path
+recognises it from now on. Url-less rows are left alone. It refuses the real database without
+`allow_real_database=True` and backs it up first, reusing `reset_snapshots.py`'s collision-safe
+backup helpers (which gained an optional backup-name label).
+Run against the real database on 2026-09-26, with no app server running:
+- A read-only preview predicted 114 deletions and 400 re-hashes. The run reported exactly
+  `{deleted: 114, rehashed: 400}`.
+- Afterwards: 2,818 rows, 0 duplicate `(ticker, url)` rows, 0 legacy-hash rows, and
+  `PRAGMA integrity_check` ok.
+- The backup `data/processed/moneyview.db.pre-news-rekey-20260926T044735_452687` holds the original 2,932 rows and is also intact.
+Tests: `tests/scripts/test_rekey_news.py`. One test reproduces the defect, then closes it: a
+pre-fix row lets a re-save add a copy, and after the re-key the same save is ignored.
+Six in-memory mutations were each caught by a named test:
+- keeping the highest id instead of the lowest;
+- skipping the re-hash;
+- grouping by url alone;
+- removing the refusal;
+- removing the backup;
+- including url-less rows.
+Files changed: ERROR-LOG.md, guideline/sop/todo.md, scripts/rekey_news.py,
+scripts/reset_snapshots.py (backup label parameter only), tests/scripts/test_rekey_news.py.
+Prevention: changing an identity function that backs a UNIQUE constraint is a data
+migration, not only a code change. Rows written under the old identity must be re-keyed
+in the same change. Otherwise the constraint quietly stops recognising them, and the
+dedup that "works" in tests (which start from an empty table) does not work on real data.

@@ -35,6 +35,23 @@ SNAPSHOT_TABLES = (
 _REAL_DB = (Path(__file__).resolve().parent.parent / "data" / "processed" / "moneyview.db").resolve()
 
 
+def _is_real_database(path: Path) -> bool:
+    """True for this checkout's database, and for ANY checkout's `data/processed/moneyview.db`.
+
+    `_REAL_DB` alone is computed from this file's location, so in a worktree it names the
+    worktree's own (usually absent) database. docs/git-worktrees.md suggests pointing a
+    worktree's DB_PATH at the main checkout's database; the guard then saw that file as
+    ordinary, and would neither refuse nor back it up (ERROR-LOG 2026-09-26, G5 follow-up).
+    Test databases (`<tmp>/moneyview.db`) and the e2e harness's (`moneyview-e2e-<port>.db`)
+    do not match the layout.
+    """
+    return path == _REAL_DB or (
+        path.name == _REAL_DB.name
+        and path.parent.name == "processed"
+        and path.parent.parent.name == "data"
+    )
+
+
 def _database_path(conn: sqlite3.Connection) -> Path | None:
     """The file `conn` is attached to, or None for an in-memory database."""
     for _seq, name, filename in conn.execute("PRAGMA database_list").fetchall():
@@ -43,7 +60,7 @@ def _database_path(conn: sqlite3.Connection) -> Path | None:
     return None
 
 
-def _claim_backup_path(path: Path) -> Path:
+def _claim_backup_path(path: Path, label: str = "snapshot-reset") -> Path:
     """Reserve a backup filename that no concurrent or same-tick run can take.
 
     The microsecond stamp was supposed to make the name unique. It does not, because
@@ -63,7 +80,7 @@ def _claim_backup_path(path: Path) -> Path:
     sqlite3, which initialises it in place.
     """
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S_%f")
-    base = path.with_name(f"{path.name}.pre-snapshot-reset-{stamp}")
+    base = path.with_name(f"{path.name}.pre-{label}-{stamp}")
 
     candidate = base
     attempt = 1
@@ -78,7 +95,7 @@ def _claim_backup_path(path: Path) -> Path:
         return candidate
 
 
-def _back_up(path: Path) -> Path:
+def _back_up(path: Path, label: str = "snapshot-reset") -> Path:
     """Copy the database beside itself, under a name no later run can reuse.
 
     Uses SQLite's own backup API rather than a file copy: the database is in WAL
@@ -94,7 +111,7 @@ def _back_up(path: Path) -> Path:
     the reset overwrote the copy taken before the incident being investigated.
     The timestamp alone does not achieve that -- see `_claim_backup_path`.
     """
-    destination = _claim_backup_path(path)
+    destination = _claim_backup_path(path, label)
     source = sqlite3.connect(f"file:{path.as_posix()}?mode=ro", uri=True)
     copy = sqlite3.connect(str(destination))
     try:
@@ -116,7 +133,7 @@ def reset_snapshots(
     file, an in-memory connection -- is cleared without ceremony.
     """
     path = _database_path(conn)
-    if path is not None and path == _REAL_DB:
+    if path is not None and _is_real_database(path):
         if not allow_real_database:
             raise RuntimeError(
                 f"refusing to clear snapshots in the real database at {path}.\n"

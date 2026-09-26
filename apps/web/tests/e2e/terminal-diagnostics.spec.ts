@@ -67,3 +67,45 @@ test("the DCF request leaves terminal growth for the backend to derive", async (
   expect(body).toHaveProperty("revenue_growth_rate");
   expect(body).not.toHaveProperty("terminal_growth_rate");
 });
+
+const BOUND = "terminal-growth-bound";
+
+test("the terminal value share names the bound that set terminal growth", async ({ page }) => {
+  // H11: the payload has said which bound decided g since 2026-09-11, and nothing read it.
+  // A 96% share set by the long-run ceiling and one set by the WACC safety margin mean
+  // different things: a judgement was applied, versus the arithmetic cornering the model.
+  await mockCorporatePageApi(page, undefined, { dcfBindingConstraint: "ceiling" });
+  await gotoCorporate(page);
+  await page.getByRole("button", { name: "Refresh DCF" }).click();
+
+  await expect(page.getByTestId(BOUND)).toHaveText("Terminal growth set by the long-run ceiling");
+});
+
+test("each known bound has its own wording", async ({ page }) => {
+  await mockCorporatePageApi(page, undefined, { dcfBindingConstraint: "wacc_safety" });
+  await gotoCorporate(page);
+  await page.getByRole("button", { name: "Refresh DCF" }).click();
+
+  await expect(page.getByTestId(BOUND)).toHaveText("Terminal growth set by the WACC safety margin");
+});
+
+test("an unrecognised bound is shown as sent, not hidden", async ({ page }) => {
+  // The backend owns this vocabulary. A code added there before this map learns it must
+  // still reach the reader, rather than the line disappearing as if nothing bound g.
+  await mockCorporatePageApi(page, undefined, { dcfBindingConstraint: "new_bound" });
+  await gotoCorporate(page);
+  await page.getByRole("button", { name: "Refresh DCF" }).click();
+
+  await expect(page.getByTestId(BOUND)).toHaveText("Terminal growth set by new_bound");
+});
+
+test("no bound line when the backend could not name one", async ({ page }) => {
+  // null means the reconstruction did not match the rate that ran (corporate_dcf.py), so
+  // saying nothing is the honest answer. The default mock sends null.
+  await mockCorporatePageApi(page, undefined, { dcfTerminalValueSharePct: 62.0 });
+  await gotoCorporate(page);
+  await page.getByRole("button", { name: "Refresh DCF" }).click();
+
+  await expect(page.getByText("Terminal Value Share")).toBeVisible();
+  await expect(page.getByTestId(BOUND)).toHaveCount(0);
+});

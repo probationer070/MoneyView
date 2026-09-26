@@ -17,43 +17,37 @@ Legend: `[ ]` not started, `[x]` complete
 
 ---
 
-## Where things stand (2026-09-04)
+## Where things stand (2026-09-26)
 
-`renewal` @ `606ec88` (PRs #13-15, #17-20 merged), **967 tests passing** plus
-**112 Playwright** specs, no skips or xfails.
-(942 at the close of the backend track, plus the frontend's 13 e2e tests, the
-snapshot-reset hardening's 5, and E8's 8.)
+`renewal` @ `7646ed6` (PRs through #50 merged). **PR #51 (`cases-ui`) is open**: the
+Cases tab (C2's UI) plus the `/simulate` seed fix. Measured on `cases-ui` @ `9424bdc`:
+**1638 pytest passing**, plus **16 failures that are environmental** (`exchange_calendars`
+is not installed in the local Python env; the same 16 fail on `renewal`), and **267
+Playwright specs passing**.
 
-**Local-data state, measured 2026-09-04** after a full re-acquisition across the
-139-ticker watchlist. Counts, not recollections:
+**Local-data state, measured 2026-09-26** (read-only query against
+`data/processed/moneyview.db`). Counts, not recollections:
 
 | Table | Rows | Coverage |
 | --- | --- | --- |
-| `stocks` | 259,654 | 142 tickers; **every watchlist ticker now has 252+ bars** |
-| `corporate_statements` | 259,261 | 135 tickers (was 1) |
-| `corporate_quote_facts` | -- | 136 tickers (was 1) |
-| `corporate_companies` | 0 | **empty by design** -- one manual writer, and every reader falls back to the watchlist, which carries a name and sector for all 139 |
-| `industry_benchmark` | 94 | Damodaran vintage `2026-01-01`, loaded 2026-09-04 (A1) |
-| `valuation_case` | 30 | conservative cases; 109 tickers refused by the runnability gate |
+| `stocks` | 276,804 | 152 tickers; 2 NULL-close rows left (G2) |
+| `corporate_statements` | 259,261 | 135 tickers |
+| `corporate_quote_facts` | 136 | 136 tickers |
+| `industry_benchmark` | 94 | Damodaran vintage `2026-01-01` only |
+| `valuation_case` | 31 | 31 tickers |
+| `watchlist` | 143 | |
+| `investment_decision` | 0 | the decision log is still empty |
+| `corporate_comparison_snapshots_v3` | 0 | |
+| `news` | 2,818 | 0 duplicates. 114 were removed and 400 rows re-keyed on 2026-09-26 (G5) |
 
-Before this, 88 watchlist tickers held exactly 76 bars each (all starting
-2026-03-09) against 51 with 252+ -- a perfectly bimodal split, the signature of a
-missed initial backfill rather than drift. `plan_range` took the
-`covered_to is None` branch and pulled the full 10-year window for each.
+**Open work, in suggested order:**
+- **F2 follow-up.** Unlevering uses each company's tax rate and relevering uses 0.21. This
+  is a modelling decision for the user.
+- **F4.** Fade provenance flag. **G2.** 2 NULL-close rows. **I-C2.** Price-derived
+  events. All three are optional or cleanup.
 
-The snapshot tables are **empty** as of 2026-09-04 (Track E7's reset), and
-`investment_decision` exists but holds **0 rows** -- the decision log starts from
-nothing. Both counts are measured, not carried forward.
-
-Shipped and merged: the segment build-up engine; the write-time runnability
-gate; the industry-benchmark chain (data, mapping, conservative-case generator)
-with an HTTP route; 56 route handlers moved off the event loop; and the
-over/undervaluation evidence panel with its route.
-
-The original request -- value conservatively against top-industry averages, and
-judge over/undervaluation from drawdown, volume and PE -- is structurally
-complete. What remains is one half-built signal, no frontend, and the
-follow-ups below.
+The 2026-09-04 snapshot this section used to hold (967 tests, the 88-ticker 76-bar
+backfill gap, empty snapshot tables) is in git history.
 
 ---
 
@@ -225,7 +219,7 @@ and CLAUDE.md section 8. Suite: 882 passing, no skips or xfails.
 
 ---
 
-## Track C - Frontend  [C1 SHIPPED 2026-09-04; C2 STILL OPEN -- /fork, /diff and /simulate shipped 2026-09-05/06, /pricing and any UI remain]
+## Track C - Frontend  [C1 SHIPPED 2026-09-04; C2 SHIPPED 2026-09-26]
 
 - [x] **C1. The valuation tab -- shipped 2026-09-04.** `/valuation` surfaces
       `GET /api/v1/valuation/verdict/{ticker}`, which had shipped with no UI at
@@ -276,10 +270,14 @@ and CLAUDE.md section 8. Suite: 882 passing, no skips or xfails.
       blocked on a Damodaran workbook not on this machine. That is not a defect
       in this page; refusal is the majority state in the real data, and the page
       was designed for it and stays correct when A1 lands.
+      *(Superseded 2026-09-04: A1 loaded the vintage, so `trailing_pe` now computes
+      for 108 of 139 tickers and `dcf_gap` for the 30 with a conservative case. See
+      Track A's table.)*
 
-- [ ] **C2. 3c - uncertainty and attribution.** STILL OPEN, but two-thirds of it
-      shipped 2026-09-05/06: **`/fork`, `/diff` and `/simulate` are done;
-      `/pricing` is not, and neither is any UI.** Spec (`/fork`/`/diff`):
+- [x] **C2. 3c - uncertainty and attribution.** COMPLETE 2026-09-26 (PR #51).
+      `/fork`, `/diff` and `/simulate` shipped 2026-09-05/06 as HTTP endpoints. Their
+      UI shipped 2026-09-24/26 as the Cases tab, and `/pricing` shipped 2026-09-26 (see
+      the last paragraph of this entry). The rest of this entry is the history, in order. Spec (`/fork`/`/diff`):
       `docs/superpowers/specs/2026-09-04-fork-and-diff-design.md`.
       Plan: `docs/superpowers/plans/2026-09-04-fork-and-diff.md`.
       A separate subsystem from C1: no shared endpoint, no shared component, and
@@ -498,8 +496,103 @@ and CLAUDE.md section 8. Suite: 882 passing, no skips or xfails.
       available inside the isolated test database to re-measure, and this
       entry does not claim to have closed that gap.
 
-      Still open in C2: `/pricing`, and any UI -- `/fork`, `/diff` and
-      `/simulate` are HTTP-only, exactly as `/valuation/verdict` was before C1.
+      Still open in C2, as of before 2026-09-24: `/pricing`, and any UI --
+      `/fork`, `/diff` and `/simulate` were HTTP-only, exactly as
+      `/valuation/verdict` was before C1.
+
+      **Cases UI -- shipped 2026-09-24.** A new **Cases** tab (`/cases` list,
+      `/cases/[id]` detail) gives `/fork`, `/diff` and `/simulate` a browser
+      interface, on the endpoints above. The only backend change is the seed fix recorded at the end of this entry. Spec:
+      `docs/superpowers/specs/2026-09-24-cases-ui-design.md`. Plan:
+      `docs/superpowers/plans/2026-09-24-cases-ui.md`. (The execution ledger was
+      git-ignored scratch and was deleted when the plan finished. This paragraph,
+      the PR and the commit messages are the record.) Seven tasks, each
+      reviewed by a separate agent and mutation-checked before the next
+      started: Task 1 shipped `caseFields.ts`'s one percent<->fraction
+      conversion (`toWire`/`fromWire`) and the fork/simulate row-building
+      logic, mutation-checked on unchanged-row detection and the rate/non-rate
+      field split -- NOT on rounding, as this entry used to claim; no mutation
+      touched `clean()`. Task 2 shipped the `/cases` list and its
+      ticker filter, mutation-checked on URL-vs-stored filter precedence and
+      the case-list/panel request ordering. Task 3 shipped the case detail
+      page's Valuation and Inputs sections, mutation-checked on the
+      4xx-refusal-as-content vs 5xx-as-alert split and the `fmtPercent` route
+      every rate display now goes through. Task 4 shipped Why it moved,
+      mutation-checked on Shapley contribution order (a three-contribution
+      nonlinear fixture, since a two-row or linear fixture cannot distinguish
+      canonical order from a magnitude or signed sort) and the
+      contributions-sum-to-the-difference check. Task 5 shipped Fork this
+      case, mutation-checked on the refusal/failure ARIA split
+      (`role="status"` vs `role="alert"`) -- NOT on the submit guard against
+      an all-unchanged fork, as this entry used to claim; that guard shipped
+      with no test of its own until the final review's fix wave (F3/F4
+      below) added one. Task 6 shipped Uncertainty (simulate this case),
+      mutation-checked across two rounds (12 mutations total) on suppression
+      via key presence rather than the refused fraction, a single overflowed
+      statistic's `not_finite` message, the histogram's closed last bin and
+      out-of-range caption, and "Rerun with this seed" reproducing the exact
+      prior request rather than the current form; one mutation (`!("p50" in
+      result)` for the suppression check) initially passed spuriously because
+      the existing test only ever overflowed `mean`, not `p50` -- caught by
+      the TASK 6 IMPLEMENTER, not by the controller as this entry used to
+      claim, not left as accepted risk, and closed by adding a test that
+      overflows `p50` alone before re-running that mutation. Task 7 added
+      `cases-real-api.spec.ts`, a Playwright test that forks a case through
+      the UI against the real e2e-harness API (not the mock) and reads the
+      real Shapley attribution; mutation-checked by dropping `toWire`'s
+      `/100`, which sends `wacc_stable` as 810% instead of 8.1% and the real
+      engine refuses the fork. No mock/real divergence was found on the
+      four things it compared: `casesApiMock.ts`'s get/run/fork/diff response
+      shapes matched the live API. `list` and `simulate` were NOT compared by
+      that test, and the diff-refusal fixture's wording is not the same
+      string `case_diff.py` raises -- narrower than this entry used to claim.
+      `/pricing` is now the only open part of C2.
+
+      **Final whole-branch review fix wave, 2026-09-26** (F1-F10, this same
+      pass): a confirmed backend 500 on a negative `/simulate` seed recorded
+      in `ERROR-LOG.md` (since fixed on the backend; see the follow-up line
+      below); the four corrections to this paragraph above; the missing
+      §12.1 mutation (an unnarrated fork leaf sent as `{value: wire}`) run
+      and shown to fail a named test; a silent "Create fork" on an
+      all-unchanged submit now shows a message; `SimulateSection`'s
+      accessibility brought up to `ForkSection`'s (`aria-invalid`/
+      `aria-describedby` on param, runs and seed inputs, and a labelled
+      Remove button); the empty-cases-list test now actually asserts no
+      generator is named; `docs/tabs/cases-tab.txt` corrected to describe
+      both the `role="status"` forms and the plain-content read sections;
+      the invalid-case-id branch changed from `role="alert"` to plain
+      content, matching every other refusal-class condition; the seed
+      validator now also rejects a seed above `Number.MAX_SAFE_INTEGER`; and
+      several `stats.simulatePosts[0]`/`forkPosts[0]` reads that followed a
+      click with no wait were given an `expect.poll` first.
+
+      **Follow-up, CLOSED 2026-09-26:** `/simulate` now refuses a seed that is
+      not a non-negative integer with `invalid_seed:` (422) instead of a 500
+      (`case_simulate.py`, beside the `invalid_runs` check). Each clause of the
+      check was mutation-checked on its own. The frontend guard stays as the
+      first line. See `ERROR-LOG.md` 2026-09-26.
+
+      **`/pricing` -- shipped 2026-09-26, scoped with the user.** The question
+      it answers, and the verdict panel can't: does this DCF agree with what the
+      market pays for the case's industry? `GET /valuation/cases/{id}/pricing`
+      applies the case's OWN Damodaran industry EV/Sales, from the vintage in force
+      on the case date, to its base-year revenue (the sum of its segments). It returns
+      the implied EV beside the DCF's EV and `dcf_to_implied` (a ratio with no
+      horizon, like `dcf_gap`). A "Market cross-check (EV/Sales)" section on each
+      case shows it.
+      - **Why EV/Sales only.** It is the one multiple a case can use without extra
+        inputs, and the only one Damodaran publishes for all 94 industries. P/E
+        and P/B would need earnings or book value, which cases don't store.
+      - **Why the company's own industry, not the sector's top-5 basket** that the
+        P/E row uses. The top of a sector trades at higher multiples, so the basket
+        would inflate the implied value. A test with a 20x sibling industry pins it.
+      - **Refusals** carry prefixes: `no_ticker`, `no_vintage`, `no_industry`,
+        `unmapped_industry`, `thin_industry`, `no_ev_sales`, `no_base_revenue`,
+        `unrunnable_case`.
+      - **Tests.** 15 backend tests; 7 mutations each caught by a test only it fails.
+        3 e2e tests; 2 section mutations caught (direction wording, and the
+        percentage conversion bypassing `fmtPercent`). The real-API test checks that
+        the live refusal reaches the page.
 
 ---
 
@@ -767,7 +860,7 @@ left standing, since a known limit nobody re-checks becomes a false claim.)
 
 ---
 
-## Track F - Metric reference  [DOCS SHIPPED 2026-09-09; two ERROR-LOG defects and one provenance gap queued, none fixed]
+## Track F - Metric reference  [DOCS SHIPPED 2026-09-09; F2 and F3 FIXED 2026-09-24 (PR #50); F4 open]
 
 `docs/metrics/` — a per-family metric reference: 37 entries across seven
 family files (`price-signals`, `discount-rates-and-returns`,
@@ -860,7 +953,7 @@ Recorded so nobody rediscovers them as bugs:
 
 ---
 
-## Track G - Market data integrity  [G1 SHIPPED 2026-09-09; G2-G4 open]
+## Track G - Market data integrity  [G1, G3, G4, G5 DONE; G2 cleanup open]
 
 Reported as "tile prices all show $0.0". The display was the symptom; the cause was
 a bar with no settled price surviving all the way to the wire. `ERROR-LOG.md`
@@ -877,10 +970,13 @@ Track F on another branch, and two Track Fs would collide at merge.
       measurement, and reported as `last_close: null` when no priced bar remains.
       Five mutations verified. Commits `947fb26`, `6ef4415`, `f1253b8`.
 
-- [ ] **G2. The 138 pre-existing NULL-close rows are still in the database.** The
-      read guard makes them inert, so this is cleanup rather than a fix, and it was
-      deliberately not done as part of G1 -- deleting a user's rows was not needed
-      to correct the behaviour. Worth a one-off script if the row count grows.
+- [ ] **G2. NULL-close rows in the database.** The read guard makes them inert, so this
+      is cleanup rather than a fix. It was deliberately left out of G1, because deleting
+      a user's rows was not needed to correct the behaviour.
+      **Re-measured 2026-09-26: 2 rows remain in `stocks`, not 138**:
+      `META 2026-03-16` and `^KS11 2026-04-22`. Later acquisitions replaced the
+      rest. `indices` still holds its single NULL-close row (see G3). Nothing to do
+      unless the count grows again.
 
 - [x] **G3. Check what else read a poisoned close while the defect was live.** CLOSED
       2026-09-10: **nothing durable was poisoned.** Audited every table that could hold a
@@ -894,11 +990,38 @@ Track F on another branch, and two Track Fs would collide at merge.
       Incidental finding: `indices` holds exactly one NULL-close row, dated 2026-07-24 --
       isolated, unrelated to the 136-row event, and inert under the same read guard as G2.
 
-- [ ] **G5. 32 duplicate news rows are still stored.** Same article, same url, two
-      rows, from the pre-fix hash that included the headline. The read now collapses by
-      url so they never reach a tile, and the write path can no longer add more, so this
-      is inert cleanup rather than a fix -- same standing as G2. `ERROR-LOG.md`
-      2026-09-10.
+- [x] **G5. Duplicate news rows -- FIXED 2026-09-26.** The original
+      entry said 32 duplicates remained and "the write path can no longer add more".
+      **The second claim is false.**
+      - **What was measured.** Re-measured read-only on 2026-09-26: 114
+        duplicate rows across 95 `(ticker, url)` groups.
+      - **Why duplicates still appear.** The 2026-09-10 fix changed the identity hash
+        to `ticker::url`, but it did not re-hash the 432 rows already stored under the
+        old headline-based hash. When an old article is fetched again, the new hash
+        does not collide with the old row's hash, so `INSERT OR IGNORE` stores a second
+        copy.
+      - **Evidence.** 82 of the 95 groups hold exactly one row carrying the new hash
+        beside older rows. Exactly 432 rows still carry an old hash, which is every
+        row that predates the fix.
+      - **Impact.** Tiles still show each article once, because the read collapses by
+        url, so nothing wrong is displayed. But storage grows. It is bounded: at most
+        one extra copy per pre-fix article, since after that the new hash collides.
+      - **Fix.** `scripts/rekey_news.py` re-keyed the legacy rows and deleted the
+        duplicates, keeping the lowest id. It was run on the real database after a
+        backup (`data/processed/moneyview.db.pre-news-rekey-20260926T044735_452687`).
+        The result was 114 deleted, 400 re-hashed, 2,818 rows left, 0 duplicates,
+        0 legacy hashes. Tested and mutation-checked
+        (`tests/scripts/test_rekey_news.py`).
+      - **Follow-up, CLOSED 2026-09-26.** The real-database guard in
+        `reset_snapshots.py` and `rekey_news.py` resolved `_REAL_DB` from the script's
+        own location. So from a worktree whose `DB_PATH` points at the main checkout's
+        database, it neither refused nor backed that database up. Both scripts now use
+        `reset_snapshots._is_real_database`, which also counts any
+        `data/processed/moneyview.db` as real. Test and e2e databases don't match that
+        layout. Each script has a test that refuses another checkout's database.
+        Mutation-checked both ways: a location-only check fails the two new tests, and
+        an always-real check fails seven ordinary tests.
+      - **Records.** `ERROR-LOG.md` 2026-09-26 (news) and 2026-09-10.
 
 - [x] **G4. The tile grid's "Held" filter shows 12 stocks nobody chose.** CLOSED
       2026-09-10, not by explaining the fallback but by removing the need for it.
@@ -995,7 +1118,7 @@ shipped on `fix-priceless-bars` (PR #29); E shipped with them.
       `terminal_growth_rate` is put back into `dcfRequestBody` (received 0.06). Run
       2026-09-24 in a separate worktree, because a `next dev` was holding :3000.
 
-- [ ] **H11. `terminal_value_share_pct` is displayed without a threshold.** CORRECTED
+- [x] **H11. `terminal_value_share_pct` is displayed without a threshold.** CORRECTED
       2026-09-10: this was filed as "nothing surfaces it", which is false. It is shown as a
       "Terminal Value Share" tile (`DcfCoreModulesGraph.tsx:52-61`), clickable into a
       calculation detail, and per-cell in `DcfSensitivityTable.tsx:91`. What is missing is
@@ -1007,11 +1130,16 @@ shipped on `fix-priceless-bars` (PR #29); E shipped with them.
       PARTLY DONE 2026-09-11 on `terminal-bounds`: the warning state ships at a 90%
       threshold and the spread renders beside it (`DcfCoreModulesGraph.tsx`,
       `wacc_minus_terminal_growth`, mutation-verified against the raw-fraction defect).
-      Open: `terminal_growth_binding_constraint` is on the payload and typed in
-      `packages/shared-types/corporate.ts`, but no surface reads it yet.
+      **CLOSED 2026-09-26:** `terminal_growth_binding_constraint` is now shown under the
+      Terminal Value Share tile as "Terminal growth set by …" (company growth, the
+      long-run ceiling, the WACC safety margin, or the growth floor). It is shown for
+      any share, not only a high one. An unrecognised code is shown as sent rather than
+      hidden, and a null shows nothing. Four tests in `terminal-diagnostics.spec.ts`,
+      each mutation-checked: labels swapped, unknown codes hidden, line shown only
+      inside the >=90% warning, and a line rendered for a null.
 
 
-## Track I - Portfolio count, tile button, watchlist drift  [A1, A2, B1, B3 SHIPPED 2026-09-12]
+## Track I - Portfolio count, tile button, watchlist drift  [A1, A2, A4, B1, B3, C1, D SHIPPED; C2 mostly superseded by Track J]
 
 The first of four sub-projects decomposed from one request on 2026-09-12. Design and
 decisions: `docs/superpowers/plans/2026-09-12-portfolio-count-and-watchlist-drift.md`.
@@ -1129,6 +1257,15 @@ Branched from `renewal` @ `1af14ad`; baseline 1265 Python tests.
       `docs/superpowers/plans/2026-09-12-portfolio-count-and-watchlist-drift.md` and this
       session's design hold the detail. **The count difference is not the drift number** --
       the same trap as I-B3.
+      **Mostly superseded 2026-09-15 by Track J.** J delivered:
+      - event categories with per-category visibility;
+      - one global filter for every chart;
+      - event sources that come from data or registered functions (FOMC and quad-witching).
+
+      What remains of I-C2 is only the *price-derived* events: S&P low, an oil shock
+      over a threshold, and a drawdown, each computed from cached `indices` rows with a
+      stated basis. A future one would be a registered source in J's registry, not a
+      new system.
 - [x] **I-D. Thematic, political and sentiment indicators.** SHIPPED 2026-09-13. This entry
       originally read: "The `indicators` table holds 0 rows, so this is an acquisition
       project first." That was wrong as a plan, not merely stale -- the shipped design needed

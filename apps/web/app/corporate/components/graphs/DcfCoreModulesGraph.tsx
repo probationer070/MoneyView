@@ -7,6 +7,18 @@ import { type DcfResult, type DetailKey, moneyText, pct } from "./shared";
 /** Above this, the explicit forecast contributes little enough to be worth flagging. */
 const TERMINAL_SHARE_WARNING_PCT = 90;
 
+/**
+ * Reader wording for `terminal_growth_binding_constraint` (packages/core_finance/
+ * terminal_growth.py). The backend owns the vocabulary: an unrecognised code is shown as
+ * sent rather than hidden, so a bound added there still reaches the reader.
+ */
+const BINDING_CONSTRAINT_LABELS: Record<string, string> = {
+  company: "company growth",
+  ceiling: "the long-run ceiling",
+  wacc_safety: "the WACC safety margin",
+  floor: "the growth floor",
+};
+
 export function DcfCoreModulesGraph({
   sustainableGrowth,
   fcff,
@@ -76,6 +88,16 @@ export function DcfCoreModulesGraph({
               {dcfResult.wacc_minus_terminal_growth != null
                 ? ` · WACC − g = ${pct(dcfResult.wacc_minus_terminal_growth * 100)}`
                 : ""}
+            </div>
+          ) : null}
+          {dcfResult?.terminal_growth_binding_constraint ? (
+            <div
+              data-testid="terminal-growth-bound"
+              className="mt-1 text-[length:var(--type-helper)] text-[var(--text-muted)]"
+            >
+              Terminal growth set by{" "}
+              {BINDING_CONSTRAINT_LABELS[dcfResult.terminal_growth_binding_constraint]
+                ?? dcfResult.terminal_growth_binding_constraint}
             </div>
           ) : null}
         </button>

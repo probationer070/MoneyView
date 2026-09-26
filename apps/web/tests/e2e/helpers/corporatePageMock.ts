@@ -51,6 +51,8 @@ export type CorporatePageMockOptions = {
   /** Overrides wacc_minus_terminal_growth on the full report's summary, for tests
    *  exercising the WACC - g readout beside the terminal-share warning. */
   dcfWaccMinusTerminalGrowth?: number;
+  /** Overrides terminal_growth_binding_constraint on the full report's summary (H11). */
+  dcfBindingConstraint?: string;
 };
 
 export type BridgeQuality = "ok" | "estimated" | "missing";
@@ -308,10 +310,14 @@ export async function mockCorporatePageApi(page: Page, stats?: CorporatePageMock
   const singleBridge = options?.dcfBridgeQuality ?? "ok";
   const terminalShareOverride = options?.dcfTerminalValueSharePct;
   const waccMinusTerminalGrowthOverride = options?.dcfWaccMinusTerminalGrowth;
+  const bindingConstraintOverride = options?.dcfBindingConstraint;
   const summaryOverrides = {
     ...(terminalShareOverride != null ? { terminal_value_share_pct: terminalShareOverride } : {}),
     ...(waccMinusTerminalGrowthOverride != null
       ? { wacc_minus_terminal_growth: waccMinusTerminalGrowthOverride }
+      : {}),
+    ...(bindingConstraintOverride != null
+      ? { terminal_growth_binding_constraint: bindingConstraintOverride }
       : {}),
   };
   const baseSummary = { ...mockDcfSummary, ...summaryOverrides };

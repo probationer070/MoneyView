@@ -1,6 +1,7 @@
 import type { Page } from "@playwright/test";
 import { API_PREFIX, RECORDS_SYNC_OFF, json } from "./mockUtils";
 import type { VerdictPanel } from "../../../app/valuation/verdictTypes";
+import type { CaseSummary } from "../../../app/cases/caseTypes";
 
 // BOTH row states are present on purpose: two computed, two refused. A fixture
 // where every row computes would pass against a UI that drops refusals -- and
@@ -84,11 +85,18 @@ export interface ValuationMockOptions {
   verdictStatus?: number;
   /** Hold the watchlist response open, to prove the panel never waits on it. */
   stallWatchlist?: boolean;
+  cases?: CaseSummary[];
 }
 
-export async function mockValuationApi(page: Page, options: ValuationMockOptions = {}) {
+export interface ValuationMockStats {
+  /** Requests seen so far against GET /valuation/cases. */
+  casesRequests: () => number;
+}
+
+export async function mockValuationApi(page: Page, options: ValuationMockOptions = {}): Promise<ValuationMockStats> {
   const panel = options.panel ?? VERDICT_FIXTURE;
   const verdictStatus = options.verdictStatus ?? 200;
+  let casesRequestCount = 0;
 
   await page.route(`**${API_PREFIX}/portfolio/watchlist`, async (route) => {
     if (options.stallWatchlist) {
@@ -106,8 +114,17 @@ export async function mockValuationApi(page: Page, options: ValuationMockOptions
     return json(route, { status: "ok", data: panel, meta: {} });
   });
 
+  // The Valuation page reads the case list to decide whether to link to /cases. Default:
+  // none stored, so every pre-existing valuation test sees no link and is unaffected.
+  await page.route(`**${API_PREFIX}/valuation/cases`, async (route) => {
+    casesRequestCount += 1;
+    return json(route, { status: "ok", data: options.cases ?? [], meta: {} });
+  });
+
   // Records sync status line (RecordsSyncStatus): off by default, overridden per test.
   await page.route(`**${API_PREFIX}/sync/status`, async (route) =>
     json(route, { status: "ok", data: { watchlist: {}, records: RECORDS_SYNC_OFF }, meta: {} })
   );
+
+  return { casesRequests: () => casesRequestCount };
 }
