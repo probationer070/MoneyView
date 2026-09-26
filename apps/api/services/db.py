@@ -583,6 +583,18 @@ CREATE TABLE IF NOT EXISTS segment_narrative (
     PRIMARY KEY (segment_id, input_field)
 );
 
+-- The claim behind a CASE-level input (F4). Same shape and constraints as
+-- segment_narrative; only the fields a conservative case fades are narrated here.
+CREATE TABLE IF NOT EXISTS case_narrative (
+    case_id         INTEGER NOT NULL REFERENCES valuation_case(id) ON DELETE CASCADE,
+    input_field     TEXT NOT NULL,
+    claim           TEXT NOT NULL,
+    evidence_source TEXT,
+    confidence      TEXT NOT NULL CHECK(confidence IN ('confirmed','derived','assumed')),
+    three_p         TEXT NOT NULL CHECK(three_p IN ('possible','plausible','probable')),
+    PRIMARY KEY (case_id, input_field)
+);
+
 CREATE TABLE IF NOT EXISTS industry_benchmark (
     vintage            TEXT NOT NULL,   -- publication date, NOT the fetch date
     industry_name      TEXT NOT NULL,

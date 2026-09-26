@@ -125,7 +125,9 @@ def _payload_of_row(conn: sqlite3.Connection, kind: Kind, row: sqlite3.Row) -> d
         if kind.lineage_column:
             payload["case"][PARENT_UID_KEY] = _lineage_uid(conn, kind, row)
         for child in kind.children:
-            payload[child.key] = _read_child_rows(conn, child, row["id"])
+            rows = _read_child_rows(conn, child, row["id"])
+            if rows or not child.optional:
+                payload[child.key] = rows
         return payload
     return {c: row[c] for c in kind.columns}
 
@@ -247,7 +249,7 @@ def _write_record(conn: sqlite3.Connection, kind: Kind, uid: str, payload: dict,
     if kind.children:
         record_id = _local_row(conn, kind, uid)["id"]
         for child in kind.children:
-            for child_row in payload[child.key]:
+            for child_row in payload.get(child.key, []) if child.optional else payload[child.key]:
                 _insert_child(conn, child, record_id, child_row)
 
 

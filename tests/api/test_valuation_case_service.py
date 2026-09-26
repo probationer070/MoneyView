@@ -336,3 +336,40 @@ def test_a_segment_with_ramp_start_year_none_is_rejected_with_a_valueerror():
     )
     with pytest.raises(ValueError, match="ramp_start_year"):
         create_case(payload)
+
+
+# --- F4: case-level narratives --------------------------------------------------------------
+
+def test_a_case_without_case_narratives_loads_an_empty_list():
+    assert load_case(create_case(_case_payload()))["narratives"] == []
+
+
+def test_case_narratives_round_trip():
+    payload = _case_payload(narratives=[_narrative("wacc_stable"), _narrative("roic_stable")])
+    loaded = load_case(create_case(payload))
+    assert [n["input_field"] for n in loaded["narratives"]] == ["roic_stable", "wacc_stable"]
+    assert loaded["narratives"][1]["claim"] == "placeholder claim for wacc_stable"
+
+
+def test_a_case_narrative_on_an_unnarratable_field_is_rejected():
+    with pytest.raises(ValueError, match="cannot carry one"):
+        create_case(_case_payload(narratives=[_narrative("cash")]))
+
+
+def test_a_case_narrative_named_twice_is_rejected():
+    with pytest.raises(ValueError, match="more than once"):
+        create_case(_case_payload(narratives=[_narrative("wacc_stable"), _narrative("wacc_stable")]))
+
+
+def test_a_case_narrative_on_an_unset_field_is_rejected():
+    with pytest.raises(ValueError, match="left unset"):
+        create_case(_case_payload(effective_tax_rate=None, narratives=[_narrative("effective_tax_rate")]))
+
+
+def test_deleting_a_case_takes_its_case_narratives_with_it():
+    from apps.api.services.db import get_db
+    case_id = create_case(_case_payload(narratives=[_narrative("wacc_stable")]))
+    with get_db() as conn:
+        conn.execute("DELETE FROM valuation_case WHERE id = ?", (case_id,))
+        assert conn.execute("SELECT COUNT(*) FROM case_narrative WHERE case_id = ?",
+                            (case_id,)).fetchone()[0] == 0

@@ -300,8 +300,8 @@ When storage behavior changes, review these questions:
 Extends the watchlist's peer-sync mechanism (§4.4) to the records the owner writes by hand.
 Design: `docs/superpowers/specs/2026-09-20-records-peer-sync-design.md`.
 
-**Which kinds sync:** `valuation_case` (with its `segment` and `segment_narrative` rows, as one
-unit), `investment_decision`, `user_event`, `event_category`, `event_category_visibility`, and
+**Which kinds sync:** `valuation_case` (with its `segment`, `segment_narrative` and
+`case_narrative` rows, as one unit), `investment_decision`, `user_event`, `event_category`, `event_category_visibility`, and
 `portfolio_preferences`. Market data (`stocks`, `indices`, `news`, `indicators`, `corporate_*`)
 and `corporate_comparison_snapshots_v3` are out of scope; each PC keeps re-fetching or
 regenerating its own.
@@ -318,3 +318,10 @@ deleted. A deleted record's `record_sync` row survives as its tombstone; the row
 from its own table. Applying a record replaces its entire tree (case, segments, narratives) from
 the peer's payload; half a case is never applied. The newest edit wins whole record; a deletion
 propagates the same way.
+
+**Adding a child to a synced kind.** A peer rejects any payload key it does not know, and
+skips the whole file when it does. A child added after peers already run the old code must
+therefore be `ChildSpec(optional=True)`. It is written only when it has rows, and read as
+empty when absent. `case_narrative` (F4, 2026-09-26) is the first such child. A case without
+case-level claims publishes exactly the pre-F4 shape. One that has them is unreadable to a
+PC still on older code, so update every PC before generating new conservative cases.

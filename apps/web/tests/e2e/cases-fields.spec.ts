@@ -11,6 +11,7 @@ const RECORD: CaseRecord = {
   riskfree_rate: 0.042, wacc_initial: 0.09, wacc_stable: 0.074, wacc_converge_from: 5,
   marginal_tax_rate: 0.25, effective_tax_rate: 0.15, nol_balance: 0, roic_stable: 0.12,
   terminal_growth: 0.03, cash: 100, debt: 50, ipo_proceeds: 0, shares_basic: 100, shares_new: 0,
+  narratives: [],
   segments: [{
     id: 10, name: "Core", base_revenue: 1000, base_margin: 0.2, tam_target: null,
     market_share_target: null, revenue_target: 2000, margin_target: 0.28,

@@ -441,3 +441,30 @@ def test_a_non_positive_wacc_initial_is_refused_by_the_engine(parent_id):
     /run, the verdict panel's dcf_gap row and /diff as a validated case."""
     with pytest.raises(ValueError, match="wacc_initial must be positive"):
         fork_case(parent_id, "child_case", {"case": {"wacc_initial": -0.5}})
+
+
+# --- F4: case-level narratives through a fork -----------------------------------------------
+
+def _narrated_parent() -> int:
+    from apps.api.services.valuation_case import create_case
+    payload = _parent_payload()
+    payload["narratives"] = [
+        {"input_field": f, "claim": f"parent claim for {f}", "evidence_source": "test",
+         "confidence": "derived", "three_p": "probable"}
+        for f in ("wacc_initial", "wacc_stable", "effective_tax_rate", "roic_stable")
+    ]
+    return create_case(payload)
+
+
+def test_a_fork_drops_the_claim_of_a_case_field_it_changed_and_keeps_the_rest():
+    child = load_case(fork_case(_narrated_parent(), "child_case", {"case": {"wacc_stable": 0.081}}))
+    assert [n["input_field"] for n in child["narratives"]] == [
+        "effective_tax_rate", "roic_stable", "wacc_initial"]
+    assert child["narratives"][0]["claim"] == "parent claim for effective_tax_rate"
+
+
+def test_a_no_op_case_override_keeps_that_fields_claim():
+    child = load_case(fork_case(_narrated_parent(), "child_case",
+                                {"case": {"wacc_stable": 0.074, "roic_stable": 0.13}}))
+    assert "wacc_stable" in {n["input_field"] for n in child["narratives"]}
+    assert "roic_stable" not in {n["input_field"] for n in child["narratives"]}

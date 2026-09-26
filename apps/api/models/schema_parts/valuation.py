@@ -67,6 +67,8 @@ class ValuationCaseInput(BaseModel):
     ipo_proceeds: float = Field(ge=0)
     shares_new: float = Field(ge=0)
     parent_case_id: int | None = None
+    # Claims behind case-level inputs (F4); see valuation_case.CASE_NARRATED_FIELDS.
+    narratives: list[SegmentNarrativeInput] = Field(default_factory=list)
 
 
 class ValuationCaseCreated(BaseModel):

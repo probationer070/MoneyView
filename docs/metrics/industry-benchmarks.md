@@ -385,6 +385,21 @@ with `_missing_claim`, so `after_tax_roc` in a Real Estate case (see
 `resolve_benchmark`'s entry) would be held unfaded, not faded against a
 benchmark that does not exist.
 
+**Closed 2026-09-26 (F4).** The paragraph above describes the code before
+F4. The three discarded meta dicts are now kept. Their claims are stored as
+**case-level narratives**: `valuation_case.CASE_NARRATED_FIELDS` names
+`wacc_initial`, `wacc_stable`, `effective_tax_rate` and `roic_stable`, and
+they are held in the `case_narrative` table. `wacc_initial` and `wacc_stable`
+carry the same `cost_of_capital` claim. The `roic_stable` claim is the
+`after_tax_roc` fade's claim plus the implied marginal return, and it names
+which of the two won the `min`. A column that dropped out still gets the
+`_missing_claim` "held flat, unfaded" wording, so a faded value and a held one
+now read differently. Case-level narratives are optional. A hand-authored
+case need not state them, unlike segment `NARRATED_FIELDS`. A fork keeps the
+parent's claims, except for a case field it actually changed. Only cases
+generated after F4 carry these claims; a conservative case stored earlier has
+none.
+
 **What it affects.** `margin_target`, `sales_to_capital_early`/`_late`,
 `wacc_initial`/`wacc_stable` (kept equal to each other by construction),
 `effective_tax_rate`, and (through compounding `base_revenue` at the faded
@@ -397,9 +412,9 @@ read.
 **Where it is shown.** Never returned directly; the three narrated fades
 (margin, sales-to-capital, revenue growth) are readable as prose via `GET
 /api/v1/valuation/cases/{case_id}`'s segment narratives, HTTP-only, no UI.
-The `wacc`/tax-rate fades are not narrated anywhere (see above) — only their
-post-fade *values* are visible, as plain `wacc_initial`/`effective_tax_rate`
-case fields on the same endpoint. Their downstream effect on
+Since F4 the `wacc`/tax-rate/`roic_stable` fades are narrated too, in the
+same response's case-level `narratives`. The Cases tab's Inputs section shows
+every claim, case-level and segment-level, under its field. Their downstream effect on
 `value_per_share_diluted` reaches the Valuation tab through `dcf_gap`, same
 as every other segment input.
 

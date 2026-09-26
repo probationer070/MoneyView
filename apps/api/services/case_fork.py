@@ -208,6 +208,13 @@ def fork_case(case_id: int, case_name: str, overrides: dict) -> int:
             continue
         payload[field], _, _, _, _ = _unwrap(field, raw)
 
+    # A case-level claim describes the parent's number; one for a field this fork
+    # changed would describe a number that is no longer there, so it is dropped.
+    # Case fields take bare values, so there is no new claim to put in its place.
+    payload["narratives"] = [
+        dict(n) for n in parent["narratives"]
+        if f"case.{n['input_field']}" not in changes
+    ]
     payload["segments"] = []
     for segment in parent["segments"]:
         copy = {field: segment[field] for field in _SEGMENT_COLUMNS}

@@ -130,6 +130,17 @@ test.describe("one case", () => {
     await expect(inputs.getByTestId("input-segment.Core.tam_target")).toContainText("not set");
   });
 
+  test("a case-level input shows its claim, and an unnarrated one shows none", async ({ page }) => {
+    await mockCasesApi(page);
+    await gotoCase(page, 1);
+    const inputs = page.getByTestId("case-inputs");
+    const wacc = inputs.getByTestId("input-case.wacc_stable");
+    await expect(wacc).toContainText("7.40%");
+    await expect(wacc).toContainText("faded up to the sector cost of capital");
+    await expect(wacc).toContainText("damodaran_industry_2026-01-01");
+    await expect(inputs.getByTestId("input-case.wacc_initial")).not.toContainText("faded up");
+  });
+
   test("a fork names its parent", async ({ page }) => {
     await mockCasesApi(page);
     await gotoCase(page, 2);

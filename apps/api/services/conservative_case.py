@@ -214,8 +214,8 @@ def build_conservative_case(
 
     margin_target, margin_meta = faded("operating_margin", baseline.base_margin,
                                        FADE_DIRECTIONS["operating_margin"])
-    faded_roc, _ = faded("after_tax_roc", baseline.current_roic,
-                         FADE_DIRECTIONS["after_tax_roc"])
+    faded_roc, roc_meta = faded("after_tax_roc", baseline.current_roic,
+                                FADE_DIRECTIONS["after_tax_roc"])
     s2c, s2c_meta = faded("sales_to_capital", baseline.current_sales_to_capital,
                           FADE_DIRECTIONS["sales_to_capital"])
     growth, growth_meta = faded("revenue_growth", baseline.current_growth,
@@ -223,10 +223,10 @@ def build_conservative_case(
     # The company's own endpoint is the MARGINAL rate -- no tax benefit it has
     # not demonstrated. A sector averaging below that can only lift the early
     # years' cash flow, so `fade` holds; only a sector above it moves this.
-    tax_rate, _ = faded("effective_tax_rate", marginal_tax_rate,
-                       FADE_DIRECTIONS["effective_tax_rate"])
-    wacc, _ = faded("cost_of_capital", baseline.current_wacc,
-                    FADE_DIRECTIONS["cost_of_capital"])
+    tax_rate, tax_meta = faded("effective_tax_rate", marginal_tax_rate,
+                               FADE_DIRECTIONS["effective_tax_rate"])
+    wacc, wacc_meta = faded("cost_of_capital", baseline.current_wacc,
+                            FADE_DIRECTIONS["cost_of_capital"])
 
     # The worse of the two estimates of the same return -- see the module
     # docstring. `marginal_roic` computes this same product from the segment's
@@ -235,6 +235,21 @@ def build_conservative_case(
     # reason, and there is no cause to shade the value to buy headroom.
     implied_marginal_roc = margin_target * (1.0 - marginal_tax_rate) * s2c
     roic_stable = min(faded_roc, implied_marginal_roc)
+    binding = ("the implied marginal return" if implied_marginal_roc < faded_roc
+               else "the faded after-tax ROC")
+    roic_claim = (
+        f"{roc_meta['claim']} roic_stable is the lower of that and the implied marginal "
+        f"return {implied_marginal_roc:.4f} (margin_target x (1 - marginal tax) x "
+        f"sales_to_capital); {binding} binds."
+    )
+    # F4: these case-level inputs are faded too, and used to be stored with no record of
+    # whether the company's value held or the sector's replaced it.
+    case_narratives = [
+        _narrative("wacc_initial", wacc_meta["claim"], vintage, wacc_meta["three_p"]),
+        _narrative("wacc_stable", wacc_meta["claim"], vintage, wacc_meta["three_p"]),
+        _narrative("effective_tax_rate", tax_meta["claim"], vintage, tax_meta["three_p"]),
+        _narrative("roic_stable", roic_claim, vintage, roc_meta["three_p"]),
+    ]
 
     revenue_target = baseline.base_revenue * (1.0 + growth) ** HORIZON_YEARS
 
@@ -282,6 +297,7 @@ def build_conservative_case(
         "shares_basic": baseline.shares,
         "shares_new": 0.0,
         "parent_case_id": None,
+        "narratives": case_narratives,
         "segments": [{
             "name": ticker.lower(),
             "base_revenue": baseline.base_revenue,

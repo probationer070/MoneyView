@@ -32,6 +32,11 @@ class ChildSpec:
     not_null: tuple[str, ...] = ()   # payload columns the local schema declares NOT NULL
     # (column, allowed values) for every payload column the local schema CHECKs against a set
     domains: tuple[tuple[str, tuple], ...] = ()
+    # Omitted from a payload when empty, and read as empty when absent. A child added after
+    # peers already ran the old code must be optional: an older peer rejects any payload
+    # key it does not know, which skips the WHOLE file, so a key present only when there is
+    # data keeps every existing record readable by that peer until it updates.
+    optional: bool = False
 
 
 @dataclass(frozen=True)
@@ -75,6 +80,17 @@ _SEGMENT_NARRATIVE = ChildSpec(
              ("three_p", ("possible", "plausible", "probable"))),
 )
 
+_CASE_NARRATIVE = ChildSpec(
+    key="narratives",
+    table="case_narrative",
+    parent_column="case_id",
+    columns=("input_field", "claim", "evidence_source", "confidence", "three_p"),
+    not_null=("input_field", "claim", "confidence", "three_p"),
+    domains=(("confidence", ("confirmed", "derived", "assumed")),
+             ("three_p", ("possible", "plausible", "probable"))),
+    optional=True,
+)
+
 _SEGMENT = ChildSpec(
     key="segments",
     table="segment",
@@ -100,7 +116,7 @@ KINDS: dict[str, Kind] = {
                  "debt", "ipo_proceeds", "shares_basic", "shares_new"),
         generates_uid=True,
         natural_key="case_name",
-        children=(_SEGMENT,),
+        children=(_SEGMENT, _CASE_NARRATIVE),
         not_null=("case_name", "as_of_date", "base_year", "target_year", "riskfree_rate",
                   "wacc_initial", "wacc_stable", "wacc_converge_from", "marginal_tax_rate",
                   "nol_balance", "roic_stable", "cash", "debt", "ipo_proceeds", "shares_basic",
