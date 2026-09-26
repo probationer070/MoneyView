@@ -73,15 +73,13 @@ Each one was re-checked against the code on 2026-09-26 and is still true.
 - [x] **A failed `/market/spreads` fetch is invisible.** FIXED 2026-09-26. The section
       now always renders, with a loading line, an alert on failure, or "No spreads were
       returned". Three e2e tests; three mutations caught.
-- [ ] **`/market/spreads` fetches live data inline** on a cache miss or a stale cache,
-      with no per-request timeout. The first request after each daily cache boundary can
-      make up to seven live fetches in a row. Since 2026-09-26 the section shows
-      "Loading spreads…" meanwhile, instead of nothing. The backend fix is a design
-      decision, because each option trades something:
-      - parallel fetches, which risk Yahoo rate limits;
-      - serving yesterday's cache while refreshing in the background, which shows stale
-        spreads first;
-      - a per-request timeout, which turns a slow day into refusals.
+- [x] **`/market/spreads` fetched live data inline.** FIXED 2026-09-26: serving the
+      stale cache with a background refresh, chosen with the user over parallel fetches
+      (Yahoo rate limits) and a timeout (refusals on a slow day). `get_stock_ohlcv(...,
+      refresh="background")` returns a stale cache at once and refreshes it on a daemon
+      thread. At most one refresh runs per ticker, and the marker is cleared even on
+      failure. A cache miss still fetches inline. The default stays inline for every
+      other caller. Six tests; four mutations caught.
 - [ ] **`/simulate` refusal grouping matches by substring** across the whole code table,
       so a reworded engine message could be absorbed under the wrong code while still
       passing the completeness test. Fixing it needs a design decision: an exact
