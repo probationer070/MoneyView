@@ -236,9 +236,8 @@ def simulate_case(case_id: int, request: dict) -> dict:
                 # a draw that produces nothing usable is exactly what the refusal
                 # accounting is for, and letting it through reaches np.histogram as
                 # "autodetected range ... is not finite" -- a 500 on a valid request.
-                # Deliberately NOT added to engine_refusals.REFUSAL_CODES: that table
-                # maps engine refusal MESSAGES, and this is not one -- the engine did
-                # not raise.
+                # Deliberately NOT in core_finance.refusals.ENGINE_REFUSAL_CODES: those
+                # are codes the engine raises, and here the engine did not raise.
                 group = refusals.setdefault("non_finite_result", {
                     "code": "non_finite_result", "count": 0,
                     "message": f"the engine returned a non-finite {METRIC} ({value})",
@@ -249,7 +248,7 @@ def simulate_case(case_id: int, request: dict) -> dict:
             accepted_rows.append(row)
         except ValueError as exc:
             message = str(exc)
-            code = classify(message)
+            code = classify(exc)
             group = refusals.setdefault(code, {"code": code, "count": 0, "message": message})
             group["count"] += 1
 
