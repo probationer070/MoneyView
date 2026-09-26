@@ -43,7 +43,7 @@ def _database_path(conn: sqlite3.Connection) -> Path | None:
     return None
 
 
-def _claim_backup_path(path: Path) -> Path:
+def _claim_backup_path(path: Path, label: str = "snapshot-reset") -> Path:
     """Reserve a backup filename that no concurrent or same-tick run can take.
 
     The microsecond stamp was supposed to make the name unique. It does not, because
@@ -63,7 +63,7 @@ def _claim_backup_path(path: Path) -> Path:
     sqlite3, which initialises it in place.
     """
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S_%f")
-    base = path.with_name(f"{path.name}.pre-snapshot-reset-{stamp}")
+    base = path.with_name(f"{path.name}.pre-{label}-{stamp}")
 
     candidate = base
     attempt = 1
@@ -78,7 +78,7 @@ def _claim_backup_path(path: Path) -> Path:
         return candidate
 
 
-def _back_up(path: Path) -> Path:
+def _back_up(path: Path, label: str = "snapshot-reset") -> Path:
     """Copy the database beside itself, under a name no later run can reuse.
 
     Uses SQLite's own backup API rather than a file copy: the database is in WAL
@@ -94,7 +94,7 @@ def _back_up(path: Path) -> Path:
     the reset overwrote the copy taken before the incident being investigated.
     The timestamp alone does not achieve that -- see `_claim_backup_path`.
     """
-    destination = _claim_backup_path(path)
+    destination = _claim_backup_path(path, label)
     source = sqlite3.connect(f"file:{path.as_posix()}?mode=ro", uri=True)
     copy = sqlite3.connect(str(destination))
     try:

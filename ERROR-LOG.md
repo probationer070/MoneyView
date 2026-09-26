@@ -3248,11 +3248,28 @@ Evidence:
 - 2,500 rows carry the new-scheme hash.
 - The remaining 432 are exactly the rows that existed at the fix.
 - It is bounded at one extra copy per pre-fix article, because the new hash collides after that.
-Fix: not fixed. This entry records the defect. The fix is a one-off migration that re-hashes
-the 432 legacy rows with `news_identity_hash` and deletes the rows that then collide,
-keeping the lowest id. Take a backup first (the `scripts/reset_snapshots.py` precedent).
-Tracked as G5 in `guideline/sop/todo.md`.
-Files changed: ERROR-LOG.md and guideline/sop/todo.md (record only).
+Fix: fixed the same day. `scripts/rekey_news.py` keeps the lowest id per `(ticker, url)`,
+deletes the rest, and gives the kept row `news_identity_hash(ticker, url)`, so the write path
+recognises it from now on. Url-less rows are left alone. It refuses the real database without
+`allow_real_database=True` and backs it up first, reusing `reset_snapshots.py`'s collision-safe
+backup helpers (which gained an optional backup-name label).
+Run against the real database on 2026-09-26, with no app server running:
+- A read-only preview predicted 114 deletions and 400 re-hashes. The run reported exactly
+  `{deleted: 114, rehashed: 400}`.
+- Afterwards: 2,818 rows, 0 duplicate `(ticker, url)` rows, 0 legacy-hash rows, and
+  `PRAGMA integrity_check` ok.
+- The backup `data/processed/moneyview.db.pre-news-rekey-20260926T044735_452687` holds the original 2,932 rows and is also intact.
+Tests: `tests/scripts/test_rekey_news.py`. One test reproduces the defect, then closes it: a
+pre-fix row lets a re-save add a copy, and after the re-key the same save is ignored.
+Six in-memory mutations were each caught by a named test:
+- keeping the highest id instead of the lowest;
+- skipping the re-hash;
+- grouping by url alone;
+- removing the refusal;
+- removing the backup;
+- including url-less rows.
+Files changed: ERROR-LOG.md, guideline/sop/todo.md, scripts/rekey_news.py,
+scripts/reset_snapshots.py (backup label parameter only), tests/scripts/test_rekey_news.py.
 Prevention: changing an identity function that backs a UNIQUE constraint is a data
 migration, not only a code change. Rows written under the old identity must be re-keyed
 in the same change. Otherwise the constraint quietly stops recognising them, and the

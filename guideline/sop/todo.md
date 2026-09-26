@@ -38,11 +38,9 @@ Playwright specs passing**.
 | `watchlist` | 143 | |
 | `investment_decision` | 0 | the decision log is still empty |
 | `corporate_comparison_snapshots_v3` | 0 | |
-| `news` | 2,932 | 114 same-ticker duplicate rows (G5; the duplicates are still growing, see G5) |
+| `news` | 2,818 | 0 duplicates. 114 were removed and 400 rows re-keyed on 2026-09-26 (G5) |
 
 **Open work, in suggested order:**
-- **G5.** Legacy news rows still get duplicated on write (a real defect, recorded
-  2026-09-26 in `ERROR-LOG.md`). Fix it with a one-off re-hash or de-dup of the 432 pre-fix rows.
 - **H11.** `terminal_growth_binding_constraint` is on the payload but no surface reads it.
 - **C2.** `/pricing` has to be scoped against the verdict panel before anything is built.
 - **F2 follow-up.** Unlevering uses each company's tax rate and relevering uses 0.21. This
@@ -931,7 +929,7 @@ Recorded so nobody rediscovers them as bugs:
 
 ---
 
-## Track G - Market data integrity  [G1, G3, G4 DONE; G2 cleanup and G5 defect open]
+## Track G - Market data integrity  [G1, G3, G4, G5 DONE; G2 cleanup open]
 
 Reported as "tile prices all show $0.0". The display was the symptom; the cause was
 a bar with no settled price surviving all the way to the wire. `ERROR-LOG.md`
@@ -968,7 +966,7 @@ Track F on another branch, and two Track Fs would collide at merge.
       Incidental finding: `indices` holds exactly one NULL-close row, dated 2026-07-24 --
       isolated, unrelated to the 136-row event, and inert under the same read guard as G2.
 
-- [ ] **G5. Duplicate news rows -- a live defect, not inert cleanup.** The original
+- [x] **G5. Duplicate news rows -- FIXED 2026-09-26.** The original
       entry said 32 duplicates remained and "the write path can no longer add more".
       **The second claim is false.**
       - **What was measured.** Re-measured read-only on 2026-09-26: 114
@@ -984,10 +982,18 @@ Track F on another branch, and two Track Fs would collide at merge.
       - **Impact.** Tiles still show each article once, because the read collapses by
         url, so nothing wrong is displayed. But storage grows. It is bounded: at most
         one extra copy per pre-fix article, since after that the new hash collides.
-      - **Fix (not done).** A one-off migration that re-hashes the 432 legacy rows to
-        `news_identity_hash(ticker, url)` and deletes the rows that then collide,
-        keeping the lowest id. Use a backup first, following the
-        `reset_snapshots.py` precedent.
+      - **Fix.** `scripts/rekey_news.py` re-keyed the legacy rows and deleted the
+        duplicates, keeping the lowest id. It was run on the real database after a
+        backup (`data/processed/moneyview.db.pre-news-rekey-20260926T044735_452687`).
+        The result was 114 deleted, 400 re-hashed, 2,818 rows left, 0 duplicates,
+        0 legacy hashes. Tested and mutation-checked
+        (`tests/scripts/test_rekey_news.py`).
+      - **Follow-up, open.** The real-database guard in `reset_snapshots.py` and
+        `rekey_news.py` resolves `_REAL_DB` from the script's own location. Run from
+        a worktree whose `DB_PATH` points at the main checkout's database, which
+        `docs/git-worktrees.md` suggests, the guard would not recognise it and would
+        take no backup. The 2026-09-26 run set `_REAL_DB` explicitly for that
+        reason. A fix would compare against the resolved `DB_PATH` as well.
       - **Records.** `ERROR-LOG.md` 2026-09-26 (news) and 2026-09-10.
 
 - [x] **G4. The tile grid's "Held" filter shows 12 stocks nobody chose.** CLOSED
