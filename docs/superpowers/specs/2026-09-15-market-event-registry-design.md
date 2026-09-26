@@ -466,3 +466,25 @@ Each step is its own PR, and each leaves `renewal` working:
 - An economic-calendar API source. The registry is designed for one, but none is built.
 - **Syncing user events or category changes between machines.** They live in each machine's
   local database, while built-in events travel with git.
+
+## Addendum 2026-09-26: computed events (todo I-C2)
+
+A fourth origin, `computed`, covers events detected in cached daily closes rather than asserted
+from a cited page. Code: `apps/api/services/events/price_events.py`, registered in
+`default_registry` through `price_sources()`.
+
+- **S&P 500 drawdown** (`^GSPC`, category `drawdown`). The peak is the highest close before
+  the decline. An episode begins when a close sits at least 10% below it and ends when a close
+  regains it. The event spans peak to trough; the trough is the low. An episode not recovered
+  by the last cached close is `ongoing`. A second dip before the peak is regained belongs to
+  the same episode. That is why Oct 2023 is part of the 2022 episode in the cached data.
+- **Oil shock** (`CL=F`, category `oil-shock`). A session qualifies when its close is at least
+  20% above (`up`) or below (`down`) the close 20 sessions earlier. Qualifying sessions whose
+  windows overlap form one episode, so a sustained move is one event. The episode reports its
+  largest move and the two closes that produced it.
+- **Provenance.** No `source` URL. Instead a structured `basis` (`ComputedBasis`) holds the
+  symbol, `daily_close`, the rule, the threshold, the lookback, the direction, the change, the
+  two closes and their dates, `ongoing`, and `as_of` (the last close read). The `note` is
+  generated from that same object. Events are recomputed per request, so the basis records the
+  exact closes used.
+- **Deliberately not built:** configurable thresholds, more symbols, and volatility bands.
