@@ -19,6 +19,7 @@ from apps.api.models.schemas import (
 from apps.api.services.acquisition.store import load_price_bars
 from apps.api.services.case_diff import DiffRefused, diff_case
 from apps.api.services.case_fork import ForkRefused, fork_case
+from apps.api.services.case_pricing import PricingRefused, price_case
 from apps.api.services.case_simulate import SimulateRefused, simulate_case
 from apps.api.services.company_baseline import (
     find_conservative_case_id,
@@ -181,6 +182,21 @@ def simulate_valuation_case(case_id: int, payload: SimulateRequest = Body(...)):
     except CaseNotFound as exc:
         raise HTTPException(status_code=404, detail=f"no_case: {exc}") from exc
     except SimulateRefused as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.get("/cases/{case_id}/pricing", response_model=APIResponse[dict])
+def price_valuation_case(case_id: int):
+    """The case's base revenue at its industry's EV/Sales, beside the DCF's EV.
+
+    A refusal (no ticker, no industry, a thin industry, no usable EV/Sales, no base
+    revenue, an unrunnable case) is a 422 with its prefix, like every case route.
+    """
+    try:
+        return APIResponse(data=price_case(case_id))
+    except CaseNotFound as exc:
+        raise HTTPException(status_code=404, detail=f"no_case: {exc}") from exc
+    except PricingRefused as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
