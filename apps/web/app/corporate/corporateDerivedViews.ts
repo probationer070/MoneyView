@@ -59,6 +59,17 @@ export function sortComparisonRows(
       const dcfDelta = leftValue - rightValue;
       return sortDirection === "asc" ? dcfDelta : -dcfDelta;
     }
+    if (sortKey === "implied_return_spread") {
+      // Same rule as dcf_value above: a refused or unrecorded row has no position in a
+      // ranking by this spread, so it goes last whichever way the user sorts.
+      const leftValue = left.implied_return_spread;
+      const rightValue = right.implied_return_spread;
+      if (leftValue === null && rightValue === null) return 0;
+      if (leftValue === null) return 1;
+      if (rightValue === null) return -1;
+      const spreadDelta = leftValue - rightValue;
+      return sortDirection === "asc" ? spreadDelta : -spreadDelta;
+    }
     const delta = Number(left[sortKey]) - Number(right[sortKey]);
     return sortDirection === "asc" ? delta : -delta;
   });
@@ -95,7 +106,7 @@ export function buildSimilarComparisonBarData(rows: CorporateComparisonRowApi[],
     ticker: row.ticker,
     sector: row.sector,
     roic_minus_wacc: Number(row.roic_minus_wacc.toFixed(2)),
-    expected_return_spread: Number(row.expected_return_spread.toFixed(2)),
+    implied_return_spread: row.implied_return_spread,
     isSelected: row.ticker === selectedTicker,
   }));
 }
@@ -110,8 +121,10 @@ export function buildSimilarComparisonScatterPeers(rows: CorporateComparisonRowA
       ticker: row.ticker,
       current_price: Number(row.current_price.toFixed(2)),
       dcf_value: Number(row.dcf_value.toFixed(2)),
-      expected_return_spread: Number(row.expected_return_spread.toFixed(2)),
-      bubble_size: Math.max(Math.abs(row.expected_return_spread) * 5, 80),
+      implied_return_spread: row.implied_return_spread,
+      // A refused row keeps its price/value position but has no spread to scale by, so it
+      // is drawn at the base size (spec 2026-09-26-implied-return-spread, plan Task 4).
+      bubble_size: Math.max(Math.abs(row.implied_return_spread ?? 0) * 5, 80),
     }));
 }
 
@@ -121,8 +134,8 @@ export function buildSimilarComparisonScatterSelected(row: CorporateComparisonRo
       ticker: row.ticker,
       current_price: Number(row.current_price.toFixed(2)),
       dcf_value: Number(row.dcf_value.toFixed(2)),
-      expected_return_spread: Number(row.expected_return_spread.toFixed(2)),
-      bubble_size: Math.max(Math.abs(row.expected_return_spread) * 5, 120),
+      implied_return_spread: row.implied_return_spread,
+      bubble_size: Math.max(Math.abs(row.implied_return_spread ?? 0) * 5, 120),
     }]
     : [];
 }

@@ -12,12 +12,12 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { GRID_STYLE, fmtCurrencyCompactTick, fmtPctTick, withAxisProps, withCategoryAxisProps, withTooltipProps } from "@/lib/chartConfig";
 import { CorporateComparisonTable } from "./CorporateComparisonTable";
 import type { CalculationDetailKey } from "./calculationDetailTypes";
+import type { ComparisonSortKey } from "../corporateTypes";
 
 // One skip per line in the tooltip. Declared here because a "\n" written inline in
 // JSX is easy to mangle and hard to see when it breaks.
 const SKIP_TOOLTIP_SEPARATOR = "\n";
 
-type ComparisonSortKey = "roic_minus_wacc" | "dcf_value" | "expected_return_spread";
 type ComparisonUniverse = "watchlist_plus_benchmark" | "custom";
 
 interface ComparisonRow {
@@ -32,7 +32,9 @@ interface ComparisonRow {
   dcf_implied_return: number;
   capm_expected_return: number;
   market_expected_return: number;
-  expected_return_spread: number;
+  market_implied_return: number | null;
+  implied_return_spread: number | null;
+  implied_return_refusal: string | null;
   has_price_data: boolean;
   bridge_quality?: string;
 }
@@ -55,7 +57,7 @@ interface ComparisonData {
 interface ComparisonBarRow {
   ticker: string;
   roic_minus_wacc: number;
-  expected_return_spread: number;
+  implied_return_spread: number | null;
   isSelected: boolean;
 }
 
@@ -63,7 +65,7 @@ interface ComparisonScatterRow {
   ticker: string;
   current_price: number;
   dcf_value: number;
-  expected_return_spread: number;
+  implied_return_spread: number | null;
   bubble_size: number;
 }
 
@@ -298,7 +300,7 @@ export function TargetStockComparisonSection({
                 onChange={(event) => onComparisonSortKeyChange(event.target.value as ComparisonSortKey)}
                 className="w-full rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-xs text-[var(--text-primary)] sm:w-auto"
               >
-                <option value="expected_return_spread">Expected return spread</option>
+                <option value="implied_return_spread">Implied return vs WACC</option>
                 <option value="roic_minus_wacc">ROIC - WACC</option>
                 <option value="dcf_value">DCF value</option>
               </select>
@@ -394,8 +396,11 @@ export function TargetStockComparisonSection({
                   <Tooltip
                     {...withTooltipProps()}
                     formatter={(value, name) => {
-                      const numericValue = typeof value === "number" ? value : Number(value ?? 0);
-                      return [`${numericValue.toFixed(2)}%`, name === "roic_minus_wacc" ? "ROIC - WACC" : "Expected return spread"];
+                      const label = name === "roic_minus_wacc" ? "ROIC - WACC" : "Implied return vs WACC (pts per year)";
+                      // A refused row's spread is null; Number(null) would print a false 0.00%.
+                      if (value == null) return ["none (refused)", label];
+                      const numericValue = typeof value === "number" ? value : Number(value);
+                      return [`${numericValue.toFixed(2)}%`, label];
                     }}
                   />
                   <Bar dataKey="roic_minus_wacc" name="roic_minus_wacc" radius={[6, 6, 0, 0]}>
@@ -403,20 +408,25 @@ export function TargetStockComparisonSection({
                       <Cell key={`${row.ticker}-roic`} fill={row.isSelected ? "#0F766E" : "#60CAAD"} />
                     ))}
                   </Bar>
-                  <Bar dataKey="expected_return_spread" name="expected_return_spread" radius={[6, 6, 0, 0]}>
+                  <Bar dataKey="implied_return_spread" name="implied_return_spread" radius={[6, 6, 0, 0]}>
                     {similarComparisonBarData.map((row) => (
                       <Cell key={`${row.ticker}-spread`} fill={row.isSelected ? "#1D4ED8" : "#94A3B8"} />
                     ))}
                   </Bar>
                 </BarChart>
               </ResponsiveChart>
+              {similarComparisonBarData.some((row) => row.implied_return_spread === null) ? (
+                <p data-testid="similar-spread-refused-note" className="mt-2 text-xs text-[var(--text-muted)]">
+                  No implied return for {similarComparisonBarData.filter((row) => row.implied_return_spread === null).map((row) => row.ticker).join(", ")}; shown without a spread bar, and at the base bubble size in the price-vs-value map.
+                </p>
+              ) : null}
             </section>
 
             <section className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-panel)] p-4">
               <div className="flex flex-col gap-1">
                 <h3 className="text-sm font-bold text-[var(--text-primary)]">Price Vs Fair Value Map</h3>
                 <p className="text-sm text-[var(--text-muted)]">
-                  DCF fair value sits on the vertical axis and current price sits on the horizontal axis. Bubble size expands with the expected-return spread so outliers stand out quickly.
+                  DCF fair value sits on the vertical axis and current price sits on the horizontal axis. Bubble size expands with the implied return vs WACC so outliers stand out quickly.
                 </p>
               </div>
               <ResponsiveChart className="mt-4 h-[320px]" minWidth={1} minHeight={1}>
@@ -440,8 +450,9 @@ export function TargetStockComparisonSection({
                   <Tooltip
                     {...withTooltipProps({ cursor: { strokeDasharray: "3 3" } })}
                     formatter={(value, name) => {
+                      if (name === "implied_return_spread" && value == null) return ["none (refused)", "Implied return vs WACC (pts per year)"];
                       const numericValue = typeof value === "number" ? value : Number(value ?? 0);
-                      if (name === "expected_return_spread") return [`${numericValue.toFixed(2)}%`, "Expected return spread"];
+                      if (name === "implied_return_spread") return [`${numericValue.toFixed(2)}%`, "Implied return vs WACC (pts per year)"];
                       return [formatMoney(numericValue), name === "current_price" ? "Current price" : "DCF value"];
                     }}
                   />

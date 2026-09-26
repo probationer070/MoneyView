@@ -67,6 +67,7 @@ import type {
   StockPriceRow,
   WatchlistHolding,
 } from "./corporateTypes";
+import { isComparisonSortKey } from "./corporateTypes";
 import {
   annualMetricRows,
   clamp,
@@ -158,8 +159,11 @@ export default function CorporateAnalysisPage() {
   const [roicYear, setRoicYear] = useState("2025");
   // Kept per tab. These five decide what the comparison computes, and retyping a custom
   // universe after stepping away to read a decision was the most repeated cost on this page.
-  const [comparisonSortKey, setComparisonSortKey] = useTabState<ComparisonSortKey>(
-    tabStateKey("corporate", "sortKey"), "expected_return_spread");
+  const [storedSortKey, setComparisonSortKey] = useTabState<ComparisonSortKey>(
+    tabStateKey("corporate", "sortKey"), "implied_return_spread");
+  // A key saved before metric v3 ("expected_return_spread") names a field that no longer
+  // exists; sorting by it would compare undefined with undefined.
+  const comparisonSortKey: ComparisonSortKey = isComparisonSortKey(storedSortKey) ? storedSortKey : "implied_return_spread";
   const [comparisonSortDirection, setComparisonSortDirection] = useTabState<"desc" | "asc">(
     tabStateKey("corporate", "sortDirection"), "desc");
   const [comparisonUniverse, setComparisonUniverse] = useTabState<ComparisonUniverse>(

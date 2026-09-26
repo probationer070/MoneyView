@@ -26,7 +26,7 @@ const _carriesMetricSchemaVersion: CorporateComparisonHistoryPoint["metric_schem
 // Nullable, not optional. Both averages cover only the rows whose equity bridge resolved,
 // so a snapshot with no such rows has no average at all and the API sends null. Typing it
 // `?: number` lets a consumer do arithmetic on a value that is null at runtime.
-const _spreadIsNullable: CorporateComparisonHistoryPoint["average_expected_return_spread"] = null;
+const _spreadIsNullable: CorporateComparisonHistoryPoint["average_implied_return_spread"] = null;
 const _dcfValueIsNullable: CorporateComparisonHistoryPoint["average_dcf_value"] = null;
 
 const _responseCarriesPoints: CorporateComparisonHistoryResponse["points"] = [];
