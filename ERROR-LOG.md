@@ -3227,3 +3227,33 @@ Prevention: validate every caller-supplied value at the boundary where it can st
 with a named code. `runs` was validated there from the start; `seed` sat three lines below it and
 was passed straight to numpy. A parameter handed to a library that raises its own exception types
 is a 500 waiting for a caller who does not use the one UI that guards it.
+
+## 2026-09-26: legacy news rows are still duplicated on write after the 2026-09-10 hash fix
+
+Date: 2026-09-26
+Command: a todo.md review, re-measuring G5 read-only against `data/processed/moneyview.db`:
+group `news` by `(ticker, url)`, then compare each row's `hash` with
+`news_identity_hash(ticker, url)`.
+Failure: silent. There are 114 duplicate rows across 95 `(ticker, url)` groups, against the 32
+measured on 2026-09-10. G5 said "the write path can no longer add more", and it was wrong.
+Nothing wrong is displayed, because `get_news_bulk` collapses by url, but duplicates keep
+being stored.
+Root cause: the 2026-09-10 fix changed the identity hash from `headline + url` to
+`news_identity_hash(ticker, url)` for NEW writes only. The 432 rows already stored kept
+their old hashes, and there was no migration. Dedup is `INSERT OR IGNORE` on the `UNIQUE`
+hash column, so re-fetching an article first stored before the fix computes a new-scheme
+hash, finds no collision with the old row, and inserts a second copy.
+Evidence:
+- 82 of the 95 groups hold exactly one new-scheme row beside older rows.
+- 2,500 rows carry the new-scheme hash.
+- The remaining 432 are exactly the rows that existed at the fix.
+- It is bounded at one extra copy per pre-fix article, because the new hash collides after that.
+Fix: not fixed. This entry records the defect. The fix is a one-off migration that re-hashes
+the 432 legacy rows with `news_identity_hash` and deletes the rows that then collide,
+keeping the lowest id. Take a backup first (the `scripts/reset_snapshots.py` precedent).
+Tracked as G5 in `guideline/sop/todo.md`.
+Files changed: ERROR-LOG.md and guideline/sop/todo.md (record only).
+Prevention: changing an identity function that backs a UNIQUE constraint is a data
+migration, not only a code change. Rows written under the old identity must be re-keyed
+in the same change. Otherwise the constraint quietly stops recognising them, and the
+dedup that "works" in tests (which start from an empty table) does not work on real data.
