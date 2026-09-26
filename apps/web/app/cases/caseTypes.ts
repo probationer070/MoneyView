@@ -78,6 +78,22 @@ export interface DiffContribution {
   contribution: number;
 }
 
+/** GET /valuation/cases/{id}/pricing (apps/api/services/case_pricing.py). */
+export interface PricingResult {
+  case_id: number;
+  basis: "ev_sales";
+  vintage: string;
+  industry: string;
+  industry_firms: number;
+  ev_sales: number;
+  base_revenue_total: number;
+  implied_enterprise_value: number;
+  dcf_enterprise_value: number;
+  /** dcf / implied - 1, a fraction with no horizon. */
+  dcf_to_implied: number;
+  source: string;
+}
+
 export interface DiffResult {
   case_id: number;
   parent_case_id: number;

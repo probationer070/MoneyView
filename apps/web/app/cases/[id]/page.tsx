@@ -8,6 +8,7 @@ import { useDevMonitorPageLoad } from "@/hooks/useDevMonitorPageLoad";
 import { casesApi, retryUnlessRefused } from "../casesApi";
 import { ForkSection } from "../components/ForkSection";
 import { InputsSection } from "../components/InputsSection";
+import { PricingSection } from "../components/PricingSection";
 import { QueryStatus } from "../components/Section";
 import { SimulateSection } from "../components/SimulateSection";
 import { ValuationSection } from "../components/ValuationSection";
@@ -60,6 +61,7 @@ export default function CaseDetailPage({ params }: { params: Promise<{ id: strin
       {record && (
         <>
           <ValuationSection query={runQuery} />
+          <PricingSection caseId={record.id} />
           <InputsSection record={record} />
           {record.parent_case_id !== null && <WhyItMovedSection caseId={record.id} />}
           <ForkSection record={record} />

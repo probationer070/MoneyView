@@ -1,6 +1,6 @@
 import { buildApiUrl } from "@/lib/api";
 import type {
-  CaseRecord, CaseSummary, DiffResult, ForkRequest, RunResult, SimulateRequest, SimulateResult,
+  CaseRecord, CaseSummary, DiffResult, ForkRequest, PricingResult, RunResult, SimulateRequest, SimulateResult,
 } from "./caseTypes";
 
 /**
@@ -55,6 +55,7 @@ export const casesApi = {
   // POST, but it computes and stores nothing.
   run: (id: number) => request<RunResult>(`/valuation/cases/${id}/run`, "POST"),
   diff: (id: number) => request<DiffResult>(`/valuation/cases/${id}/diff`, "GET"),
+  pricing: (id: number) => request<PricingResult>(`/valuation/cases/${id}/pricing`, "GET"),
   fork: (id: number, body: ForkRequest) => request<{ id: number }>(`/valuation/cases/${id}/fork`, "POST", body),
   simulate: (id: number, body: SimulateRequest) =>
     request<SimulateResult>(`/valuation/cases/${id}/simulate`, "POST", body),

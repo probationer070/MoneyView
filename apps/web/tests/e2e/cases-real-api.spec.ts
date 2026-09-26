@@ -27,6 +27,9 @@ test("a fork made through the UI is explained by the real Shapley attribution", 
 
   await page.goto(`/cases/${parentId}`, { waitUntil: "domcontentloaded" });
   await expect(page.getByTestId("value-per-share-diluted")).toBeVisible({ timeout: 60_000 });
+  // The harness database is fresh, with no industry data, so the real /pricing refuses.
+  // That checks the live route, its 422 prefix and the page's refusal rendering all agree.
+  await expect(page.getByTestId("case-pricing-refusal")).toContainText("no_vintage:");
 
   await page.getByLabel("New case name").fill(`${name}_fork`);
   await page.getByRole("button", { name: "Add a change" }).click();

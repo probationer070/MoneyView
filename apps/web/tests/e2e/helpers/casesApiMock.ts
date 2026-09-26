@@ -1,7 +1,7 @@
 import type { Page } from "@playwright/test";
 import { API_PREFIX, RECORDS_SYNC_OFF, json } from "./mockUtils";
 import type {
-  CaseRecord, CaseSummary, DiffResult, RunResult, SimulateResult,
+  CaseRecord, CaseSummary, DiffResult, PricingResult, RunResult, SimulateResult,
 } from "../../../app/cases/caseTypes";
 
 // Three cases: a conservative parent, a fork of it, and an unrelated ticker. The list tests
@@ -47,6 +47,15 @@ export const RUN_RESULT: RunResult = {
   value_per_share_basic: 49.96, value_per_share_diluted: 49.96,
 };
 
+// The DCF EV is RUN_RESULT's, so the page's two figures agree with each other.
+// dcf_to_implied = 4946.3 / 8000 - 1 = -0.3817125, i.e. "38.2% below".
+export const PRICING_RESULT: PricingResult = {
+  case_id: 1, basis: "ev_sales", vintage: "2026-01-01", industry: "Semiconductor",
+  industry_firms: 70, ev_sales: 8.0, base_revenue_total: 1000,
+  implied_enterprise_value: 8000, dcf_enterprise_value: 4946.3, dcf_to_implied: -0.3817125,
+  source: "Damodaran 2026-01-01 'Semiconductor' EV/Sales 8.00 (70 firms) x base-year revenue 1,000.0",
+};
+
 export const DIFF_RESULT: DiffResult = {
   case_id: 2, parent_case_id: 1, metric: "value_per_share_diluted",
   parent_value_per_share_diluted: 49.96, case_value_per_share_diluted: 52.32,
@@ -88,6 +97,9 @@ export interface CasesMockOptions {
   diffStatus?: number;
   diffDetail?: string;
   diffResult?: DiffResult;
+  pricingStatus?: number;
+  pricingDetail?: string;
+  pricingResult?: PricingResult;
   forkStatus?: number;
   forkDetail?: string;
   simulateResult?: SimulateResult;
@@ -114,7 +126,7 @@ export async function mockCasesApi(page: Page, options: CasesMockOptions = {}): 
       if (options.listStatus) return json(route, { detail: "internal server error" }, options.listStatus);
       return json(route, { status: "ok", data: cases, meta: {} });
     }
-    const match = /^\/(\d+)(\/(run|diff|fork|simulate))?$/.exec(path);
+    const match = /^\/(\d+)(\/(run|diff|pricing|fork|simulate))?$/.exec(path);
     if (!match) return json(route, { detail: "Not Found" }, 404);
     const id = Number(match[1]);
     const action = match[3];
@@ -127,6 +139,10 @@ export async function mockCasesApi(page: Page, options: CasesMockOptions = {}): 
     if (action === "run") {
       if (options.runStatus) return json(route, { detail: options.runDetail ?? "engine refused" }, options.runStatus);
       return json(route, { status: "ok", data: { ...RUN_RESULT, case_id: id }, meta: {} });
+    }
+    if (action === "pricing") {
+      if (options.pricingStatus) return json(route, { detail: options.pricingDetail ?? "refused" }, options.pricingStatus);
+      return json(route, { status: "ok", data: options.pricingResult ?? PRICING_RESULT, meta: {} });
     }
     if (action === "diff") {
       if (options.diffStatus) return json(route, { detail: options.diffDetail ?? "refused" }, options.diffStatus);

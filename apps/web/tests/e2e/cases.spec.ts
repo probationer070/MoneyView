@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { DIFF_RESULT, SIMULATE_RESULT, SIMULATE_SUPPRESSED, mockCasesApi } from "./helpers/casesApiMock";
+import { DIFF_RESULT, PRICING_RESULT, SIMULATE_RESULT, SIMULATE_SUPPRESSED, mockCasesApi } from "./helpers/casesApiMock";
 import { mockValuationApi } from "./helpers/valuationPageMock";
 
 async function gotoCases(page: Page, query = "") {
@@ -505,5 +505,43 @@ test.describe("uncertainty (simulate this case)", () => {
     await expect(error).toBeVisible();
     await expect(error).toHaveAttribute("role", "alert");
     await expect(page.getByTestId("simulate-refusal")).toHaveCount(0);
+  });
+});
+
+test.describe("market cross-check (EV/Sales)", () => {
+  test("shows the implied EV beside the DCF's, the multiple, the gap and its source", async ({ page }) => {
+    await mockCasesApi(page);
+    await gotoCase(page, 1);
+    const pricing = page.getByTestId("case-pricing");
+    await expect(pricing.getByTestId("pricing-implied-ev")).toHaveText("8,000");
+    await expect(pricing.getByTestId("pricing-dcf-ev")).toHaveText("4,946.3");
+    await expect(pricing.getByTestId("pricing-multiple")).toHaveText("×8.00");
+    // 4946.3 / 8000 - 1 = -0.3817 -> "38.2% below", sign turned into words, never "-38.2%".
+    await expect(pricing.getByTestId("pricing-gap")).toHaveText(
+      "The DCF values the business 38.2% below what its industry's EV/Sales implies.",
+    );
+    await expect(pricing.getByTestId("pricing-source")).toContainText(PRICING_RESULT.source);
+  });
+
+  test("a DCF above the implied value says above", async ({ page }) => {
+    await mockCasesApi(page, { pricingResult: { ...PRICING_RESULT, dcf_to_implied: 0.25 } });
+    await gotoCase(page, 1);
+    await expect(page.getByTestId("pricing-gap")).toHaveText(
+      "The DCF values the business 25.0% above what its industry's EV/Sales implies.",
+    );
+  });
+
+  test("a case that cannot be priced says why, as content", async ({ page }) => {
+    await mockCasesApi(page, {
+      pricingStatus: 422,
+      pricingDetail: "no_ticker: this case has no ticker, so no industry can be found for it",
+    });
+    await gotoCase(page, 1);
+    const pricing = page.getByTestId("case-pricing");
+    await expect(pricing.getByTestId("case-pricing-refusal")).toHaveText(
+      "no_ticker: this case has no ticker, so no industry can be found for it",
+    );
+    await expect(pricing.getByRole("alert")).toHaveCount(0);
+    await expect(pricing.getByTestId("pricing-implied-ev")).toHaveCount(0);
   });
 });
