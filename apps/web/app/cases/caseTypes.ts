@@ -39,6 +39,8 @@ export type CaseRecord = {
   base_year: number;
   target_year: number;
   parent_case_id: number | null;
+  /** Claims behind case-level inputs (valuation_case.CASE_NARRATED_FIELDS); often empty. */
+  narratives: Narrative[];
   segments: SegmentRecord[];
 } & Record<string, unknown>;
 
