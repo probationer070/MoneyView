@@ -249,11 +249,12 @@ looking unconditioned.
 draws is suppressed, not the last fraction still summarized.
 `refused_fraction = runs_refused / runs` (line 251), where `runs_refused`
 counts every draw that either raised a `ValueError` inside
-`run_case_payload` (classified via `engine_refusals.classify`) or produced a
-non-finite `value_per_share_diluted` — the latter counted under a synthetic
-`non_finite_result` code deliberately *not* added to
-`engine_refusals.REFUSAL_CODES`, because the engine did not raise in that
-case (lines 226-241). When `_is_suppressed` is true, `simulate_case` returns
+`run_case_payload` or produced a non-finite `value_per_share_diluted`. A refusal
+is grouped by the code its raise site states (`core_finance.refusals.EngineRefusal`,
+read by `engine_refusals.classify`); before 2026-09-26 the code was matched from
+the message text. A non-finite result is counted under a synthetic
+`non_finite_result` code, deliberately *not* in `ENGINE_REFUSAL_CODES`, because
+the engine did not raise in that case (lines 226-241). When `_is_suppressed` is true, `simulate_case` returns
 early (line 270) with only run counts, `refused_fraction`, and the per-code
 refusal breakdown — every summary field is *omitted* from the response, not
 returned as `null`.
