@@ -107,9 +107,13 @@ Each one was re-checked against the code on 2026-09-26 and is still true.
       test refuses `""`, `None`, `0` and an invalid string. Verified 2026-09-26 by
       reintroducing `case_fork`'s old `raw.get("confidence") and ...` pattern: all three
       falsy rows fail.
-- [ ] **Deferred from the snapshot overhaul (Track E):** readable snapshot identity,
-      charts over snapshot history, and the pre-existing annual-vs-horizonless conflation
-      in `expected_return_spread`, which touches `/corporate`.
+- [x] **The annual-vs-horizonless conflation in `expected_return_spread`.** FIXED
+      2026-09-26: replaced by the market-implied return vs WACC (metric v3), with six
+      ordered refusal codes; the old column is retired, not read. Spec
+      `docs/superpowers/specs/2026-09-26-implied-return-spread-design.md`; ERROR-LOG
+      2026-09-26.
+- [ ] **Deferred from the snapshot overhaul (Track E):** readable snapshot identity and
+      charts over snapshot history.
 
 ---
 

@@ -6,8 +6,9 @@ to earn under this model's stated risk assumptions (`market_expected_return`),
 what return would this specific stock's own systematic risk imply investors
 require (`capm_expected_return`), what return would buying at today's price
 versus this codebase's own modeled intrinsic value imply
-(`dcf_implied_return`), and how far the third of those sits above or below the
-first (`expected_return_spread`). All four are computed in
+(`dcf_implied_return`), and what annual return today's market price implies for
+the whole business, against its WACC (`market_implied_return`,
+`implied_return_spread`). All are computed in
 `packages/core_finance/expected_return.py` and assembled into one payload by
 `apps/api/services/corporate_comparison.py`'s `_dcf_snapshot`, which is why a
 defect in any one of them was never contained to one column — see
@@ -25,7 +26,8 @@ happened the one time that mattered.
 > `task-3-brief.md:37`) it wins where the two disagree. `inventory.md` lists
 > exactly four `discount-rates-and-returns` rows as "distinct" —
 > `market_expected_return`, `capm_expected_return`, `dcf_implied_return`,
-> `expected_return_spread`, all in `packages/core_finance/expected_return.py`
+> `expected_return_spread` (retired 2026-09-26 for `market_implied_return` /
+> `implied_return_spread`), all in `packages/core_finance/expected_return.py`
 > — and moves the plan's other seven candidates to "not present": all four
 > functions in `packages/core_finance/hurdle_rate.py` (`calculate_crp`,
 > `calculate_wacc`, `decompose_hurdle_rate`, `wacc_sensitivity`) and all three
@@ -90,7 +92,7 @@ on.
 
 **What it affects.** Reported directly as the comparison table's
 `market_expected_return` column for every row, and consumed as the
-subtrahend of `expected_return_spread` (below) for every row. It is also the
+subtrahend of the retired `expected_return_spread` (below) for every row until metric v3. It is also the
 one field of these four that the endpoint can compute and return even when
 it has no per-ticker rows at all — see Current state.
 
@@ -244,8 +246,9 @@ is the metric `ERROR-LOG.md` records as having been computed as
 2026-08-03 fix wired a real `bridge_loader` into `_dcf_snapshot`;
 `stock_expected_return` is assigned literally from this value
 (`expected_return.py:89`, `stock_expected_return=dcf_implied_return`), and
-`expected_return_spread` (below) is derived from `stock_expected_return`,
-which is exactly how one defect here became three wrong columns. No
+the old `expected_return_spread` was derived from `stock_expected_return`,
+which is exactly how one defect here became three wrong columns. (That spread
+was retired at metric v3, 2026-09-26; see the entries at the end of this file.) No
 annualisation: this is a single point-in-time percentage gap between two
 numbers observed/modeled today, not a rate over any period. The API's own
 `stock_expected_return_method` field (constant
@@ -256,9 +259,10 @@ Method: dcf implied upside", `TargetStockComparisonSection.tsx:215-218`) —
 but separately from the table's own column headers, so a reader looking only
 at the table does not necessarily connect the two.
 
-**What it affects.** Feeds `stock_expected_return` (literal assignment) and
-`expected_return_spread` (via `stock_expected_return − market_expected_return`);
-reported directly as its own column.
+**What it affects.** Feeds `stock_expected_return` (literal assignment);
+reported directly as its own column, labelled "DCF value vs price (one-off gap)".
+It is **not** an input to `market_implied_return`, which solves for a rate from
+the market's enterprise value instead of dividing two values.
 
 **Where it is shown.** Same endpoint and screen, "DCF Return" column —
 rendered as a clickable button (disabled only for the benchmark row) that
@@ -308,73 +312,84 @@ a reader cannot assume a triple-digit-or-larger `dcf_implied_return` is
 itself evidence of a bug. Re-measure rather than quote; this reflects only
 today's stored statement data.
 
-### `expected_return_spread`
+### `market_implied_return` and `implied_return_spread`
 
-Source: `packages/core_finance/expected_return.py:65` — `calculate_expected_return_spread`
+Source: `packages/core_finance/expected_return.py` —
+`calculate_market_implied_return` and `enterprise_present_value`; the inputs
+and the first two refusals in `apps/api/services/corporate_comparison.py`'s
+`_implied_return`. Spec:
+`docs/superpowers/specs/2026-09-26-implied-return-spread-design.md`.
 
-**What it is.** `stock_expected_return` minus `market_expected_return` — and
-because `stock_expected_return` is always assigned directly from
-`dcf_implied_return` (see that entry), this is, in practice,
-`dcf_implied_return` minus `market_expected_return`.
+**What it is.** `market_implied_return` is the annual discount rate at which
+the comparison's own five-year FCFF DCF equals what the market pays today for
+the whole business. `implied_return_spread` is that rate minus the company's
+WACC. Both are annual. Positive means the market price leaves the business
+earning more than its cost of capital, i.e. it is priced below the DCF value.
 
-**Why this metric.** It is this family's single "is this stock attractively
-priced relative to the market baseline" figure. That distinguishes it from
-`roic_minus_wacc` — an accounting return-on-capital spread, computed
-entirely differently and shown in the same table row and the same
-comparison chart — which measures how efficiently the company already
-deploys its existing capital, not what the DCF implies about buying it
-today.
+**Why this metric.** It replaced `expected_return_spread` (retired, below),
+which subtracted an annual rate from a one-off gap. Comparing an IRR on FCFF
+with WACC puts both sides on the same capital and the same time basis, and
+needs no assumed convergence horizon.
 
 **How it is calculated here.**
-`float(stock_expected_return - market_expected_return)` at
-`expected_return.py:71`, inside `calculate_expected_return_spread` — pure
-subtraction, no guard, decimal in and percent-at-the-wire out (converted at
-`corporate_comparison.py:450`, matching its siblings). Because
-`ExpectedReturnResult.stock_expected_return` is assigned as
-`dcf_implied_return` verbatim (`expected_return.py:89`) rather than an
-independent CAPM- or market-based figure, this metric's name is doubly
-misleading: "stock_expected_return" sounds like it should be
-`capm_expected_return`'s stock-specific cousin, and
-"expected_return_spread" sounds like it should net the DCF figure against
-CAPM's, but it nets the DCF figure against the market baseline, never
-against `capm_expected_return`.
 
-**What it affects.** Reported directly, and charted
-(`apps/web/app/corporate/components/TargetStockComparisonSection.tsx:400`, a
-Recharts bar `dataKey`) as one of three selectable series alongside
-`roic_minus_wacc` and `dcf_value` in the same `<select>` dropdown
-(`TargetStockComparisonSection.tsx:293-297`).
+```text
+FCFF_t    = fcff * (1 + growth)^t, t = 1..5   (the UNFLOORED metrics.fcff)
+PV(r)     = sum FCFF_t / (1+r)^t + FCFF_5 (1+g) / max(r - g, 0.005) / (1+r)^5
+market_ev = price * diluted_shares + net_debt - non_operating_assets (0 if absent)
+solve PV(r) = market_ev for r in [g + 0.005, 10.0], by 64-step bisection
+spread    = r - WACC
+```
 
-**Where it is shown.** Same endpoint and screen, "Spread" column in the
-table (bold, colored by sign — `text-[var(--delta-up)]` /
-`text-[var(--delta-down)]`, `CorporateComparisonTable.tsx:118`), and the bar
-chart above it.
+`g` is the terminal growth derived at WACC, held fixed while `r` varies. At
+`r = WACC`, `PV` is exactly the table's enterprise value (both call
+`enterprise_present_value`). So the spread is positive exactly when the DCF
+value exceeds the price, a relationship pinned by a test grid.
 
-**How to read it.** Unit: a percent, signed; positive means the DCF-implied
-stock return exceeds the market baseline, negative the reverse. Inherits
-every guard and fallback `dcf_implied_return` has (the unresolved-bridge
-`0.0` fallback, the `current_price <= 0` guard), since it is built directly
-on top of that value, offset by the fixed `market_expected_return` constant.
+**Refusals.** Refusals are `null` values with a code, checked in this order, first one wins:
 
-**Common misreading.** Two, both concerning what this figure is confused
-with in the same UI. First: confusing it with `roic_minus_wacc`, which sits
-in the same table row, the same chart-series dropdown, and answers a
-superficially similar "spread" question but from accounting figures (return
-on invested capital versus a blended cost of capital) rather than from a
-DCF-vs-market comparison; the two do not move together and can carry
-opposite signs for the same ticker. Second: assuming "stock" in
-"`stock_expected_return`" names a CAPM-based, beta-adjusted figure
-comparable to `capm_expected_return` — the only other beta-aware return in
-the same table — when it is a verbatim copy of `dcf_implied_return`, so this
-metric's real inputs are `(dcf_implied_return, market_expected_return)`,
-never `capm_expected_return`.
+- `no_price`
+- `bridge_unresolved` (net debt or share count missing)
+- `non_positive_fcff` (any forecast cash flow `<= 0`, which includes growth `<= −100%`)
+- `non_positive_market_ev`
+- `below_model_range` (the market pays more than any return above `g + 0.5%` can price)
+- `above_model_range` (above 1000% per year)
 
-**Current state.** (2026-09-09) Re-measured in a fresh live pull (140 rows,
-`portfolio_plus_benchmark` universe, real loaders): `expected_return_spread`
-ranges from about **-225.38 (AES) to over 6,550,000**, for the same reasons
-`dcf_implied_return`'s entry documents — `market_expected_return` is a fixed
-9.7 subtracted from every row, so this figure's spread and its extremes
-track `dcf_implied_return`'s directly. A previously reported minimum of
--155.56 did not reproduce; it is today's second-lowest (SO), not the
-minimum — a price-sensitive extreme that moved between passes. Re-measure
-rather than quote.
+NaN and ±inf count as "not positive" at every check.
+
+**What it affects.** Reported directly. It also drives:
+
+- the `/corporate` sort and the Similar Stocks bar;
+- bubble size in the price-vs-value map (a refused row is drawn at the base size);
+- Portfolio's "Implied return vs WACC" column and trend;
+- the Snapshot History average (refused and pre-v3 rows excluded).
+
+**Where it is shown.** `/corporate` comparison table ("Market-implied return
+(per year)", "Implied return vs WACC (pts per year)"), Portfolio holdings
+table and stock detail, Snapshot History.
+
+**How to read it.** Percent per year, and percentage points per year. `null`
+has two meanings, and the refusal field tells them apart:
+
+- with a code: refused, and the code says why;
+- with no code: not recorded, because the snapshot predates metric v3.
+
+**Common misreading.** Reading it as `dcf_implied_return`. That field is a
+one-off gap with no time dimension, while this one is a rate per year. A stock
+50% below value might imply only a few points a year over WACC, because the
+discount applies across the whole forecast and terminal period.
+
+**Current state.** Metric v3, 2026-09-26. Snapshots before v3 carry no value;
+they were not recomputed, because their FCFF path was not stored.
+
+### Retired: `expected_return_spread`
+
+It was `dcf_implied_return − market_expected_return`: a one-off gap minus an
+annual rate (`rf + ERP`), a unit error. A stock 9.7% below value read as "in
+line with the market". The 2026-09-09 live pull (140 rows,
+`portfolio_plus_benchmark`, real loaders) measured it from about −225.38 (AES)
+to over 6,550,000. `ERROR-LOG.md` has the 2026-09-26 record.
+
+The SQLite column `corporate_comparison_snapshots_v3.expected_return_spread`
+stays so history survives. From metric v3 it is written as its `NOT NULL
+DEFAULT 0.0` and **no code reads it**. A test pins the `0.0`.

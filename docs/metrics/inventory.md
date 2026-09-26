@@ -47,7 +47,7 @@ before trusting it.
 | `market_expected_return` | discount-rates-and-returns | `packages/core_finance/expected_return.py:32` `calculate_market_expected_return`; reported `apps/api/services/corporate_comparison.py:449,473` | distinct |
 | `capm_expected_return` | discount-rates-and-returns | `packages/core_finance/expected_return.py:41` `calculate_capm_expected_return`; reported `apps/api/services/corporate_comparison.py:447` | distinct |
 | `dcf_implied_return` | discount-rates-and-returns | `packages/core_finance/expected_return.py:54` `calculate_dcf_implied_return`; reported `apps/api/services/corporate_comparison.py:446` | distinct |
-| `expected_return_spread` | discount-rates-and-returns | `packages/core_finance/expected_return.py:65` `calculate_expected_return_spread`; reported `apps/api/services/corporate_comparison.py:450` | distinct |
+| `market_implied_return` / `implied_return_spread` | discount-rates-and-returns | `packages/core_finance/expected_return.py` `calculate_market_implied_return`; inputs in `apps/api/services/corporate_comparison.py` `_implied_return` | distinct (replaced the retired `expected_return_spread`, metric v3 2026-09-26) |
 | NOPAT | fundamental-quality | `packages/core_finance/corporate_statement_metrics.py:279` `calculate_nopat` | distinct |
 | average invested capital (ROIC denominator) | fundamental-quality | `packages/core_finance/corporate_statement_metrics.py:314` `average_invested_capital_result` (calls `calculate_invested_capital:289`) | distinct |
 | ROIC | fundamental-quality | `packages/core_finance/corporate_statement_metrics.py:349` `build_roic_records`, basis dispatch at `:499` `roic_value` | distinct |
