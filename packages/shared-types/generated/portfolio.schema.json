@@ -1,110 +1,191 @@
 {
   "$defs": {
-    "AttributionRequest": {
-      "$defs": {
-        "AttributionMethodEnum": {
-          "const": "brinson_fachler_arithmetic",
-          "enum": [
-            "brinson_fachler_arithmetic"
-          ],
-          "title": "AttributionMethodEnum",
+    "AttributionDataContract": {
+      "properties": {
+        "benchmark_source": {
+          "default": "yfinance_via_sqlite_cache",
+          "title": "Benchmark Source",
           "type": "string"
         },
-        "PeriodEnum": {
-          "enum": [
-            "1w",
-            "1mo",
-            "3mo",
-            "6mo",
-            "1y",
-            "2y",
-            "5y"
-          ],
-          "title": "PeriodEnum",
+        "corporate_actions": {
+          "default": "split_and_dividend_adjusted_total_return",
+          "title": "Corporate Actions",
           "type": "string"
         },
-        "RebalancingEnum": {
-          "enum": [
-            "bop",
-            "eop"
-          ],
-          "title": "RebalancingEnum",
+        "currency": {
+          "default": "USD",
+          "title": "Currency",
           "type": "string"
         },
-        "ReturnFrequencyEnum": {
-          "enum": [
-            "daily",
-            "monthly"
-          ],
-          "title": "ReturnFrequencyEnum",
+        "fx_handling": {
+          "default": "none_usd_only",
+          "title": "Fx Handling",
           "type": "string"
         },
-        "RiskMethodEnum": {
-          "const": "historical",
-          "enum": [
-            "historical"
-          ],
-          "title": "RiskMethodEnum",
+        "missing_data_fallback": {
+          "default": "fail_closed_unless_allow_synthetic_fallback_true",
+          "title": "Missing Data Fallback",
           "type": "string"
         },
-        "RiskProfileInput": {
-          "properties": {
-            "beta_rolling_window": {
-              "default": 252,
-              "maximum": 756,
-              "minimum": 20,
-              "title": "Beta Rolling Window",
-              "type": "integer"
-            },
-            "es_confidence_level": {
-              "default": 0.95,
-              "exclusiveMaximum": 0.999,
-              "exclusiveMinimum": 0.5,
-              "title": "Es Confidence Level",
-              "type": "number"
-            },
-            "es_horizon_days": {
-              "default": 1,
-              "maximum": 30,
-              "minimum": 1,
-              "title": "Es Horizon Days",
-              "type": "integer"
-            },
-            "es_method": {
-              "allOf": [
-                {
-                  "$ref": "#/$defs/RiskMethodEnum"
-                }
-              ],
-              "default": "historical"
-            },
-            "var_confidence_level": {
-              "default": 0.95,
-              "exclusiveMaximum": 0.999,
-              "exclusiveMinimum": 0.5,
-              "title": "Var Confidence Level",
-              "type": "number"
-            },
-            "var_horizon_days": {
-              "default": 1,
-              "maximum": 30,
-              "minimum": 1,
-              "title": "Var Horizon Days",
-              "type": "integer"
-            },
-            "var_method": {
-              "allOf": [
-                {
-                  "$ref": "#/$defs/RiskMethodEnum"
-                }
-              ],
-              "default": "historical"
-            }
-          },
-          "title": "RiskProfileInput",
-          "type": "object"
+        "rebalancing_assumption": {
+          "$ref": "#/$defs/RebalancingEnum"
+        },
+        "return_frequency": {
+          "$ref": "#/$defs/ReturnFrequencyEnum"
+        },
+        "sector_taxonomy": {
+          "default": "watchlist_sector_gics_like",
+          "title": "Sector Taxonomy",
+          "type": "string"
+        },
+        "timezone": {
+          "default": "UTC",
+          "title": "Timezone",
+          "type": "string"
+        },
+        "timezone_cutoff": {
+          "default": "16:00:00",
+          "title": "Timezone Cutoff",
+          "type": "string"
         }
       },
+      "required": [
+        "return_frequency",
+        "rebalancing_assumption"
+      ],
+      "title": "AttributionDataContract",
+      "type": "object"
+    },
+    "AttributionDataQuality": {
+      "properties": {
+        "benchmark_proxy_method": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Benchmark Proxy Method"
+        },
+        "benchmark_proxy_used": {
+          "default": false,
+          "title": "Benchmark Proxy Used",
+          "type": "boolean"
+        },
+        "limitations": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Limitations",
+          "type": "array"
+        },
+        "synthetic_data_used": {
+          "default": false,
+          "title": "Synthetic Data Used",
+          "type": "boolean"
+        },
+        "synthetic_tickers": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Synthetic Tickers",
+          "type": "array"
+        }
+      },
+      "title": "AttributionDataQuality",
+      "type": "object"
+    },
+    "AttributionEffects": {
+      "properties": {
+        "allocation": {
+          "title": "Allocation",
+          "type": "number"
+        },
+        "interaction": {
+          "title": "Interaction",
+          "type": "number"
+        },
+        "selection": {
+          "title": "Selection",
+          "type": "number"
+        }
+      },
+      "required": [
+        "allocation",
+        "selection",
+        "interaction"
+      ],
+      "title": "AttributionEffects",
+      "type": "object"
+    },
+    "AttributionMetadata": {
+      "properties": {
+        "benchmark": {
+          "title": "Benchmark",
+          "type": "string"
+        },
+        "benchmark_weights_source": {
+          "$ref": "#/$defs/BenchmarkWeightsSourceEnum"
+        },
+        "cache_hit": {
+          "default": false,
+          "title": "Cache Hit",
+          "type": "boolean"
+        },
+        "cache_key": {
+          "title": "Cache Key",
+          "type": "string"
+        },
+        "data_contract": {
+          "$ref": "#/$defs/AttributionDataContract"
+        },
+        "data_quality": {
+          "$ref": "#/$defs/AttributionDataQuality"
+        },
+        "generated_at": {
+          "title": "Generated At",
+          "type": "string"
+        },
+        "method": {
+          "$ref": "#/$defs/AttributionMethodEnum"
+        },
+        "period": {
+          "$ref": "#/$defs/PeriodEnum"
+        },
+        "portfolio_hash": {
+          "title": "Portfolio Hash",
+          "type": "string"
+        },
+        "schema_version": {
+          "default": "1.0.0",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "method",
+        "benchmark",
+        "benchmark_weights_source",
+        "period",
+        "generated_at",
+        "portfolio_hash",
+        "cache_key",
+        "data_contract"
+      ],
+      "title": "AttributionMetadata",
+      "type": "object"
+    },
+    "AttributionMethodEnum": {
+      "enum": [
+        "brinson_fachler_arithmetic"
+      ],
+      "title": "AttributionMethodEnum",
+      "type": "string"
+    },
+    "AttributionRequest": {
       "properties": {
         "allow_benchmark_proxy": {
           "default": false,
@@ -140,11 +221,7 @@
           "title": "As Of Date"
         },
         "attribution_method": {
-          "allOf": [
-            {
-              "$ref": "#/$defs/AttributionMethodEnum"
-            }
-          ],
+          "$ref": "#/$defs/AttributionMethodEnum",
           "default": "brinson_fachler_arithmetic"
         },
         "benchmark": {
@@ -186,27 +263,15 @@
           "title": "Date From"
         },
         "period": {
-          "allOf": [
-            {
-              "$ref": "#/$defs/PeriodEnum"
-            }
-          ],
+          "$ref": "#/$defs/PeriodEnum",
           "default": "5y"
         },
         "rebalancing": {
-          "allOf": [
-            {
-              "$ref": "#/$defs/RebalancingEnum"
-            }
-          ],
+          "$ref": "#/$defs/RebalancingEnum",
           "default": "bop"
         },
         "return_frequency": {
-          "allOf": [
-            {
-              "$ref": "#/$defs/ReturnFrequencyEnum"
-            }
-          ],
+          "$ref": "#/$defs/ReturnFrequencyEnum",
           "default": "daily"
         },
         "risk_profile": {
@@ -235,354 +300,6 @@
       "type": "object"
     },
     "AttributionResult": {
-      "$defs": {
-        "AttributionDataContract": {
-          "properties": {
-            "benchmark_source": {
-              "default": "yfinance_via_sqlite_cache",
-              "title": "Benchmark Source",
-              "type": "string"
-            },
-            "corporate_actions": {
-              "default": "split_and_dividend_adjusted_total_return",
-              "title": "Corporate Actions",
-              "type": "string"
-            },
-            "currency": {
-              "default": "USD",
-              "title": "Currency",
-              "type": "string"
-            },
-            "fx_handling": {
-              "default": "none_usd_only",
-              "title": "Fx Handling",
-              "type": "string"
-            },
-            "missing_data_fallback": {
-              "default": "fail_closed_unless_allow_synthetic_fallback_true",
-              "title": "Missing Data Fallback",
-              "type": "string"
-            },
-            "rebalancing_assumption": {
-              "$ref": "#/$defs/RebalancingEnum"
-            },
-            "return_frequency": {
-              "$ref": "#/$defs/ReturnFrequencyEnum"
-            },
-            "sector_taxonomy": {
-              "default": "watchlist_sector_gics_like",
-              "title": "Sector Taxonomy",
-              "type": "string"
-            },
-            "timezone": {
-              "default": "UTC",
-              "title": "Timezone",
-              "type": "string"
-            },
-            "timezone_cutoff": {
-              "default": "16:00:00",
-              "title": "Timezone Cutoff",
-              "type": "string"
-            }
-          },
-          "required": [
-            "return_frequency",
-            "rebalancing_assumption"
-          ],
-          "title": "AttributionDataContract",
-          "type": "object"
-        },
-        "AttributionDataQuality": {
-          "properties": {
-            "benchmark_proxy_method": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "default": null,
-              "title": "Benchmark Proxy Method"
-            },
-            "benchmark_proxy_used": {
-              "default": false,
-              "title": "Benchmark Proxy Used",
-              "type": "boolean"
-            },
-            "limitations": {
-              "items": {
-                "type": "string"
-              },
-              "title": "Limitations",
-              "type": "array"
-            },
-            "synthetic_data_used": {
-              "default": false,
-              "title": "Synthetic Data Used",
-              "type": "boolean"
-            },
-            "synthetic_tickers": {
-              "items": {
-                "type": "string"
-              },
-              "title": "Synthetic Tickers",
-              "type": "array"
-            }
-          },
-          "title": "AttributionDataQuality",
-          "type": "object"
-        },
-        "AttributionEffects": {
-          "properties": {
-            "allocation": {
-              "title": "Allocation",
-              "type": "number"
-            },
-            "interaction": {
-              "title": "Interaction",
-              "type": "number"
-            },
-            "selection": {
-              "title": "Selection",
-              "type": "number"
-            }
-          },
-          "required": [
-            "allocation",
-            "selection",
-            "interaction"
-          ],
-          "title": "AttributionEffects",
-          "type": "object"
-        },
-        "AttributionMetadata": {
-          "properties": {
-            "benchmark": {
-              "title": "Benchmark",
-              "type": "string"
-            },
-            "benchmark_weights_source": {
-              "$ref": "#/$defs/BenchmarkWeightsSourceEnum"
-            },
-            "cache_hit": {
-              "default": false,
-              "title": "Cache Hit",
-              "type": "boolean"
-            },
-            "cache_key": {
-              "title": "Cache Key",
-              "type": "string"
-            },
-            "data_contract": {
-              "$ref": "#/$defs/AttributionDataContract"
-            },
-            "data_quality": {
-              "$ref": "#/$defs/AttributionDataQuality"
-            },
-            "generated_at": {
-              "title": "Generated At",
-              "type": "string"
-            },
-            "method": {
-              "$ref": "#/$defs/AttributionMethodEnum"
-            },
-            "period": {
-              "$ref": "#/$defs/PeriodEnum"
-            },
-            "portfolio_hash": {
-              "title": "Portfolio Hash",
-              "type": "string"
-            },
-            "schema_version": {
-              "default": "1.0.0",
-              "title": "Schema Version",
-              "type": "string"
-            }
-          },
-          "required": [
-            "method",
-            "benchmark",
-            "benchmark_weights_source",
-            "period",
-            "generated_at",
-            "portfolio_hash",
-            "cache_key",
-            "data_contract"
-          ],
-          "title": "AttributionMetadata",
-          "type": "object"
-        },
-        "AttributionMethodEnum": {
-          "const": "brinson_fachler_arithmetic",
-          "enum": [
-            "brinson_fachler_arithmetic"
-          ],
-          "title": "AttributionMethodEnum",
-          "type": "string"
-        },
-        "AttributionTotals": {
-          "properties": {
-            "benchmark_return": {
-              "title": "Benchmark Return",
-              "type": "number"
-            },
-            "portfolio_return": {
-              "title": "Portfolio Return",
-              "type": "number"
-            }
-          },
-          "required": [
-            "portfolio_return",
-            "benchmark_return"
-          ],
-          "title": "AttributionTotals",
-          "type": "object"
-        },
-        "BenchmarkWeightsSourceEnum": {
-          "enum": [
-            "provider_derived",
-            "user_provided"
-          ],
-          "title": "BenchmarkWeightsSourceEnum",
-          "type": "string"
-        },
-        "PeriodEnum": {
-          "enum": [
-            "1w",
-            "1mo",
-            "3mo",
-            "6mo",
-            "1y",
-            "2y",
-            "5y"
-          ],
-          "title": "PeriodEnum",
-          "type": "string"
-        },
-        "RebalancingEnum": {
-          "enum": [
-            "bop",
-            "eop"
-          ],
-          "title": "RebalancingEnum",
-          "type": "string"
-        },
-        "ReturnFrequencyEnum": {
-          "enum": [
-            "daily",
-            "monthly"
-          ],
-          "title": "ReturnFrequencyEnum",
-          "type": "string"
-        },
-        "RiskMethodEnum": {
-          "const": "historical",
-          "enum": [
-            "historical"
-          ],
-          "title": "RiskMethodEnum",
-          "type": "string"
-        },
-        "RiskMetrics": {
-          "properties": {
-            "beta": {
-              "title": "Beta",
-              "type": "number"
-            },
-            "beta_rolling_window": {
-              "title": "Beta Rolling Window",
-              "type": "integer"
-            },
-            "es_95_1d": {
-              "title": "Es 95 1D",
-              "type": "number"
-            },
-            "es_method": {
-              "allOf": [
-                {
-                  "$ref": "#/$defs/RiskMethodEnum"
-                }
-              ],
-              "default": "historical"
-            },
-            "var_95_1d": {
-              "title": "Var 95 1D",
-              "type": "number"
-            },
-            "var_method": {
-              "allOf": [
-                {
-                  "$ref": "#/$defs/RiskMethodEnum"
-                }
-              ],
-              "default": "historical"
-            }
-          },
-          "required": [
-            "beta",
-            "beta_rolling_window",
-            "var_95_1d",
-            "es_95_1d"
-          ],
-          "title": "RiskMetrics",
-          "type": "object"
-        },
-        "SectorAttribution": {
-          "properties": {
-            "active_contribution": {
-              "title": "Active Contribution",
-              "type": "number"
-            },
-            "allocation_effect": {
-              "title": "Allocation Effect",
-              "type": "number"
-            },
-            "benchmark_return": {
-              "title": "Benchmark Return",
-              "type": "number"
-            },
-            "benchmark_weight": {
-              "title": "Benchmark Weight",
-              "type": "number"
-            },
-            "interaction_effect": {
-              "title": "Interaction Effect",
-              "type": "number"
-            },
-            "portfolio_return": {
-              "title": "Portfolio Return",
-              "type": "number"
-            },
-            "portfolio_weight": {
-              "title": "Portfolio Weight",
-              "type": "number"
-            },
-            "sector": {
-              "title": "Sector",
-              "type": "string"
-            },
-            "selection_effect": {
-              "title": "Selection Effect",
-              "type": "number"
-            }
-          },
-          "required": [
-            "sector",
-            "portfolio_weight",
-            "benchmark_weight",
-            "portfolio_return",
-            "benchmark_return",
-            "allocation_effect",
-            "selection_effect",
-            "interaction_effect",
-            "active_contribution"
-          ],
-          "title": "SectorAttribution",
-          "type": "object"
-        }
-      },
       "properties": {
         "active_return": {
           "title": "Active Return",
@@ -619,18 +336,42 @@
       "title": "AttributionResult",
       "type": "object"
     },
-    "CorporateComparisonHistoryPoint": {
-      "$defs": {
-        "ComparisonUniverseEnum": {
-          "enum": [
-            "portfolio_plus_benchmark",
-            "watchlist_plus_benchmark",
-            "custom"
-          ],
-          "title": "ComparisonUniverseEnum",
-          "type": "string"
+    "AttributionTotals": {
+      "properties": {
+        "benchmark_return": {
+          "title": "Benchmark Return",
+          "type": "number"
+        },
+        "portfolio_return": {
+          "title": "Portfolio Return",
+          "type": "number"
         }
       },
+      "required": [
+        "portfolio_return",
+        "benchmark_return"
+      ],
+      "title": "AttributionTotals",
+      "type": "object"
+    },
+    "BenchmarkWeightsSourceEnum": {
+      "enum": [
+        "provider_derived",
+        "user_provided"
+      ],
+      "title": "BenchmarkWeightsSourceEnum",
+      "type": "string"
+    },
+    "ComparisonUniverseEnum": {
+      "enum": [
+        "portfolio_plus_benchmark",
+        "watchlist_plus_benchmark",
+        "custom"
+      ],
+      "title": "ComparisonUniverseEnum",
+      "type": "string"
+    },
+    "CorporateComparisonHistoryPoint": {
       "description": "Snapshot-history summary row for one saved comparison date.",
       "properties": {
         "as_of_date": {
@@ -638,14 +379,27 @@
           "type": "string"
         },
         "average_dcf_value": {
-          "default": 0.0,
-          "title": "Average Dcf Value",
-          "type": "number"
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Average Dcf Value"
         },
-        "average_expected_return_spread": {
-          "default": 0.0,
-          "title": "Average Expected Return Spread",
-          "type": "number"
+        "average_implied_return_spread": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Average Implied Return Spread"
         },
         "average_roic_minus_wacc": {
           "default": 0.0,
@@ -658,11 +412,7 @@
           "type": "string"
         },
         "comparison_universe": {
-          "allOf": [
-            {
-              "$ref": "#/$defs/ComparisonUniverseEnum"
-            }
-          ],
+          "$ref": "#/$defs/ComparisonUniverseEnum",
           "default": "portfolio_plus_benchmark"
         },
         "generated_at": {
@@ -675,6 +425,11 @@
           "title": "Market Expected Return",
           "type": "number"
         },
+        "metric_schema_version": {
+          "default": 0,
+          "title": "Metric Schema Version",
+          "type": "integer"
+        },
         "snapshot_source": {
           "default": "",
           "title": "Snapshot Source",
@@ -685,11 +440,6 @@
           "title": "Snapshot Version",
           "type": "string"
         },
-        "snapshot_versions_for_day": {
-          "default": 1,
-          "title": "Snapshot Versions For Day",
-          "type": "integer"
-        },
         "stock_count": {
           "default": 0,
           "title": "Stock Count",
@@ -697,95 +447,13 @@
         }
       },
       "required": [
-        "as_of_date"
+        "as_of_date",
+        "average_implied_return_spread"
       ],
       "title": "CorporateComparisonHistoryPoint",
       "type": "object"
     },
     "CorporateComparisonHistoryResponse": {
-      "$defs": {
-        "ComparisonUniverseEnum": {
-          "enum": [
-            "portfolio_plus_benchmark",
-            "watchlist_plus_benchmark",
-            "custom"
-          ],
-          "title": "ComparisonUniverseEnum",
-          "type": "string"
-        },
-        "CorporateComparisonHistoryPoint": {
-          "description": "Snapshot-history summary row for one saved comparison date.",
-          "properties": {
-            "as_of_date": {
-              "title": "As Of Date",
-              "type": "string"
-            },
-            "average_dcf_value": {
-              "default": 0.0,
-              "title": "Average Dcf Value",
-              "type": "number"
-            },
-            "average_expected_return_spread": {
-              "default": 0.0,
-              "title": "Average Expected Return Spread",
-              "type": "number"
-            },
-            "average_roic_minus_wacc": {
-              "default": 0.0,
-              "title": "Average Roic Minus Wacc",
-              "type": "number"
-            },
-            "benchmark_ticker": {
-              "default": "^GSPC",
-              "title": "Benchmark Ticker",
-              "type": "string"
-            },
-            "comparison_universe": {
-              "allOf": [
-                {
-                  "$ref": "#/$defs/ComparisonUniverseEnum"
-                }
-              ],
-              "default": "portfolio_plus_benchmark"
-            },
-            "generated_at": {
-              "default": "",
-              "title": "Generated At",
-              "type": "string"
-            },
-            "market_expected_return": {
-              "default": 0.0,
-              "title": "Market Expected Return",
-              "type": "number"
-            },
-            "snapshot_source": {
-              "default": "",
-              "title": "Snapshot Source",
-              "type": "string"
-            },
-            "snapshot_version": {
-              "default": "",
-              "title": "Snapshot Version",
-              "type": "string"
-            },
-            "snapshot_versions_for_day": {
-              "default": 1,
-              "title": "Snapshot Versions For Day",
-              "type": "integer"
-            },
-            "stock_count": {
-              "default": 0,
-              "title": "Stock Count",
-              "type": "integer"
-            }
-          },
-          "required": [
-            "as_of_date"
-          ],
-          "title": "CorporateComparisonHistoryPoint",
-          "type": "object"
-        }
-      },
       "description": "Timeline payload for persisted comparison snapshots.",
       "properties": {
         "benchmark_ticker": {
@@ -794,11 +462,7 @@
           "type": "string"
         },
         "comparison_universe": {
-          "allOf": [
-            {
-              "$ref": "#/$defs/ComparisonUniverseEnum"
-            }
-          ],
+          "$ref": "#/$defs/ComparisonUniverseEnum",
           "default": "portfolio_plus_benchmark"
         },
         "custom_tickers": {
@@ -820,188 +484,6 @@
       "type": "object"
     },
     "CorporateComparisonResponse": {
-      "$defs": {
-        "ComparisonUniverseEnum": {
-          "enum": [
-            "portfolio_plus_benchmark",
-            "watchlist_plus_benchmark",
-            "custom"
-          ],
-          "title": "ComparisonUniverseEnum",
-          "type": "string"
-        },
-        "CorporateComparisonRow": {
-          "description": "Cross-stock comparison row for target-stock valuation and expected return.",
-          "properties": {
-            "capm_expected_return": {
-              "default": 0.0,
-              "title": "Capm Expected Return",
-              "type": "number"
-            },
-            "current_price": {
-              "title": "Current Price",
-              "type": "number"
-            },
-            "dcf_implied_return": {
-              "default": 0.0,
-              "title": "Dcf Implied Return",
-              "type": "number"
-            },
-            "dcf_value": {
-              "title": "Dcf Value",
-              "type": "number"
-            },
-            "expected_return_spread": {
-              "title": "Expected Return Spread",
-              "type": "number"
-            },
-            "group_name": {
-              "default": "custom",
-              "title": "Group Name",
-              "type": "string"
-            },
-            "has_price_data": {
-              "default": true,
-              "title": "Has Price Data",
-              "type": "boolean"
-            },
-            "market_expected_return": {
-              "title": "Market Expected Return",
-              "type": "number"
-            },
-            "name": {
-              "default": "",
-              "title": "Name",
-              "type": "string"
-            },
-            "roic": {
-              "title": "Roic",
-              "type": "number"
-            },
-            "roic_minus_wacc": {
-              "title": "Roic Minus Wacc",
-              "type": "number"
-            },
-            "sector": {
-              "default": "",
-              "title": "Sector",
-              "type": "string"
-            },
-            "stock_expected_return": {
-              "title": "Stock Expected Return",
-              "type": "number"
-            },
-            "stock_expected_return_source": {
-              "default": "dcf_implied_upside",
-              "title": "Stock Expected Return Source",
-              "type": "string"
-            },
-            "ticker": {
-              "title": "Ticker",
-              "type": "string"
-            },
-            "wacc": {
-              "title": "Wacc",
-              "type": "number"
-            },
-            "weight": {
-              "default": 0.0,
-              "title": "Weight",
-              "type": "number"
-            }
-          },
-          "required": [
-            "ticker",
-            "roic",
-            "wacc",
-            "roic_minus_wacc",
-            "dcf_value",
-            "current_price",
-            "stock_expected_return",
-            "market_expected_return",
-            "expected_return_spread"
-          ],
-          "title": "CorporateComparisonRow",
-          "type": "object"
-        },
-        "CorporateComparisonSnapshotMeta": {
-          "description": "Snapshot metadata for live-vs-persisted comparison responses.",
-          "properties": {
-            "as_of_date": {
-              "default": "",
-              "title": "As Of Date",
-              "type": "string"
-            },
-            "benchmark_ticker": {
-              "default": "^GSPC",
-              "title": "Benchmark Ticker",
-              "type": "string"
-            },
-            "comparison_universe": {
-              "allOf": [
-                {
-                  "$ref": "#/$defs/ComparisonUniverseEnum"
-                }
-              ],
-              "default": "portfolio_plus_benchmark"
-            },
-            "custom_tickers": {
-              "items": {
-                "type": "string"
-              },
-              "title": "Custom Tickers",
-              "type": "array"
-            },
-            "generated_at": {
-              "default": "",
-              "title": "Generated At",
-              "type": "string"
-            },
-            "mode": {
-              "default": "snapshot",
-              "title": "Mode",
-              "type": "string"
-            },
-            "snapshot_available": {
-              "default": false,
-              "title": "Snapshot Available",
-              "type": "boolean"
-            },
-            "snapshot_cadence": {
-              "default": "daily_kst_0000",
-              "title": "Snapshot Cadence",
-              "type": "string"
-            },
-            "snapshot_is_stale": {
-              "default": false,
-              "title": "Snapshot Is Stale",
-              "type": "boolean"
-            },
-            "snapshot_retention_days": {
-              "default": 365,
-              "title": "Snapshot Retention Days",
-              "type": "integer"
-            },
-            "snapshot_source": {
-              "default": "",
-              "title": "Snapshot Source",
-              "type": "string"
-            },
-            "snapshot_version": {
-              "default": "",
-              "title": "Snapshot Version",
-              "type": "string"
-            },
-            "snapshot_versions_for_day": {
-              "default": 0,
-              "title": "Snapshot Versions For Day",
-              "type": "integer"
-            }
-          },
-          "title": "CorporateComparisonSnapshotMeta",
-          "type": "object"
-        }
-      },
       "description": "Comparison payload covering all current target stocks.",
       "properties": {
         "comparison_reference_return_method": {
@@ -1048,6 +530,11 @@
     "CorporateComparisonRow": {
       "description": "Cross-stock comparison row for target-stock valuation and expected return.",
       "properties": {
+        "bridge_quality": {
+          "default": "missing",
+          "title": "Bridge Quality",
+          "type": "string"
+        },
         "capm_expected_return": {
           "default": 0.0,
           "title": "Capm Expected Return",
@@ -1066,10 +553,6 @@
           "title": "Dcf Value",
           "type": "number"
         },
-        "expected_return_spread": {
-          "title": "Expected Return Spread",
-          "type": "number"
-        },
         "group_name": {
           "default": "custom",
           "title": "Group Name",
@@ -1080,9 +563,42 @@
           "title": "Has Price Data",
           "type": "boolean"
         },
+        "implied_return_refusal": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Implied Return Refusal"
+        },
+        "implied_return_spread": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Implied Return Spread"
+        },
         "market_expected_return": {
           "title": "Market Expected Return",
           "type": "number"
+        },
+        "market_implied_return": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Market Implied Return"
         },
         "name": {
           "default": "",
@@ -1134,23 +650,14 @@
         "current_price",
         "stock_expected_return",
         "market_expected_return",
-        "expected_return_spread"
+        "market_implied_return",
+        "implied_return_spread",
+        "implied_return_refusal"
       ],
       "title": "CorporateComparisonRow",
       "type": "object"
     },
     "CorporateComparisonSnapshotMeta": {
-      "$defs": {
-        "ComparisonUniverseEnum": {
-          "enum": [
-            "portfolio_plus_benchmark",
-            "watchlist_plus_benchmark",
-            "custom"
-          ],
-          "title": "ComparisonUniverseEnum",
-          "type": "string"
-        }
-      },
       "description": "Snapshot metadata for live-vs-persisted comparison responses.",
       "properties": {
         "as_of_date": {
@@ -1164,11 +671,7 @@
           "type": "string"
         },
         "comparison_universe": {
-          "allOf": [
-            {
-              "$ref": "#/$defs/ComparisonUniverseEnum"
-            }
-          ],
+          "$ref": "#/$defs/ComparisonUniverseEnum",
           "default": "portfolio_plus_benchmark"
         },
         "custom_tickers": {
@@ -1217,275 +720,44 @@
           "default": "",
           "title": "Snapshot Version",
           "type": "string"
-        },
-        "snapshot_versions_for_day": {
-          "default": 0,
-          "title": "Snapshot Versions For Day",
-          "type": "integer"
         }
       },
       "title": "CorporateComparisonSnapshotMeta",
       "type": "object"
     },
+    "PeriodEnum": {
+      "enum": [
+        "1w",
+        "1mo",
+        "3mo",
+        "6mo",
+        "1y",
+        "2y",
+        "5y"
+      ],
+      "title": "PeriodEnum",
+      "type": "string"
+    },
+    "RebalancingEnum": {
+      "enum": [
+        "bop",
+        "eop"
+      ],
+      "title": "RebalancingEnum",
+      "type": "string"
+    },
+    "ReportExportFormatEnum": {
+      "enum": [
+        "html",
+        "pdf",
+        "markdown",
+        "csv",
+        "json"
+      ],
+      "title": "ReportExportFormatEnum",
+      "type": "string"
+    },
     "ReportExportRequest": {
-      "$defs": {
-        "AttributionMethodEnum": {
-          "const": "brinson_fachler_arithmetic",
-          "enum": [
-            "brinson_fachler_arithmetic"
-          ],
-          "title": "AttributionMethodEnum",
-          "type": "string"
-        },
-        "PeriodEnum": {
-          "enum": [
-            "1w",
-            "1mo",
-            "3mo",
-            "6mo",
-            "1y",
-            "2y",
-            "5y"
-          ],
-          "title": "PeriodEnum",
-          "type": "string"
-        },
-        "ReportExportFormatEnum": {
-          "enum": [
-            "html",
-            "pdf",
-            "markdown",
-            "csv",
-            "json"
-          ],
-          "title": "ReportExportFormatEnum",
-          "type": "string"
-        },
-        "ReportFilters": {
-          "properties": {
-            "benchmark": {
-              "default": "^GSPC",
-              "title": "Benchmark",
-              "type": "string"
-            },
-            "currency": {
-              "default": "USD",
-              "title": "Currency",
-              "type": "string"
-            },
-            "date_from": {
-              "anyOf": [
-                {
-                  "format": "date",
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "default": null,
-              "title": "Date From"
-            },
-            "date_to": {
-              "anyOf": [
-                {
-                  "format": "date",
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "default": null,
-              "title": "Date To"
-            },
-            "period": {
-              "allOf": [
-                {
-                  "$ref": "#/$defs/PeriodEnum"
-                }
-              ],
-              "default": "5y"
-            }
-          },
-          "title": "ReportFilters",
-          "type": "object"
-        },
-        "ReportOptions": {
-          "properties": {
-            "formats": {
-              "items": {
-                "$ref": "#/$defs/ReportExportFormatEnum"
-              },
-              "title": "Formats",
-              "type": "array"
-            },
-            "include_methodology": {
-              "default": true,
-              "title": "Include Methodology",
-              "type": "boolean"
-            },
-            "include_risk_metrics": {
-              "default": true,
-              "title": "Include Risk Metrics",
-              "type": "boolean"
-            },
-            "include_sector_table": {
-              "default": true,
-              "title": "Include Sector Table",
-              "type": "boolean"
-            }
-          },
-          "title": "ReportOptions",
-          "type": "object"
-        },
-        "ReportSummaryRequest": {
-          "properties": {
-            "allow_benchmark_proxy": {
-              "default": false,
-              "title": "Allow Benchmark Proxy",
-              "type": "boolean"
-            },
-            "allow_cash": {
-              "default": true,
-              "title": "Allow Cash",
-              "type": "boolean"
-            },
-            "allow_short": {
-              "default": false,
-              "title": "Allow Short",
-              "type": "boolean"
-            },
-            "allow_synthetic_fallback": {
-              "default": false,
-              "title": "Allow Synthetic Fallback",
-              "type": "boolean"
-            },
-            "attribution_method": {
-              "allOf": [
-                {
-                  "$ref": "#/$defs/AttributionMethodEnum"
-                }
-              ],
-              "default": "brinson_fachler_arithmetic"
-            },
-            "benchmark_weights": {
-              "anyOf": [
-                {
-                  "items": {
-                    "type": "number"
-                  },
-                  "type": "array"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "default": null,
-              "title": "Benchmark Weights"
-            },
-            "filters": {
-              "$ref": "#/$defs/ReportFilters"
-            },
-            "report_options": {
-              "$ref": "#/$defs/ReportOptions"
-            },
-            "risk_profile": {
-              "$ref": "#/$defs/RiskProfileInput"
-            },
-            "tickers": {
-              "items": {
-                "type": "string"
-              },
-              "title": "Tickers",
-              "type": "array"
-            },
-            "version": {
-              "default": "phase5-v1",
-              "title": "Version",
-              "type": "string"
-            },
-            "weights": {
-              "items": {
-                "type": "number"
-              },
-              "title": "Weights",
-              "type": "array"
-            }
-          },
-          "required": [
-            "tickers",
-            "weights"
-          ],
-          "title": "ReportSummaryRequest",
-          "type": "object"
-        },
-        "RiskMethodEnum": {
-          "const": "historical",
-          "enum": [
-            "historical"
-          ],
-          "title": "RiskMethodEnum",
-          "type": "string"
-        },
-        "RiskProfileInput": {
-          "properties": {
-            "beta_rolling_window": {
-              "default": 252,
-              "maximum": 756,
-              "minimum": 20,
-              "title": "Beta Rolling Window",
-              "type": "integer"
-            },
-            "es_confidence_level": {
-              "default": 0.95,
-              "exclusiveMaximum": 0.999,
-              "exclusiveMinimum": 0.5,
-              "title": "Es Confidence Level",
-              "type": "number"
-            },
-            "es_horizon_days": {
-              "default": 1,
-              "maximum": 30,
-              "minimum": 1,
-              "title": "Es Horizon Days",
-              "type": "integer"
-            },
-            "es_method": {
-              "allOf": [
-                {
-                  "$ref": "#/$defs/RiskMethodEnum"
-                }
-              ],
-              "default": "historical"
-            },
-            "var_confidence_level": {
-              "default": 0.95,
-              "exclusiveMaximum": 0.999,
-              "exclusiveMinimum": 0.5,
-              "title": "Var Confidence Level",
-              "type": "number"
-            },
-            "var_horizon_days": {
-              "default": 1,
-              "maximum": 30,
-              "minimum": 1,
-              "title": "Var Horizon Days",
-              "type": "integer"
-            },
-            "var_method": {
-              "allOf": [
-                {
-                  "$ref": "#/$defs/RiskMethodEnum"
-                }
-              ],
-              "default": "historical"
-            }
-          },
-          "title": "RiskProfileInput",
-          "type": "object"
-        }
-      },
       "properties": {
         "format": {
           "$ref": "#/$defs/ReportExportFormatEnum"
@@ -1502,19 +774,6 @@
       "type": "object"
     },
     "ReportExportResponse": {
-      "$defs": {
-        "ReportExportFormatEnum": {
-          "enum": [
-            "html",
-            "pdf",
-            "markdown",
-            "csv",
-            "json"
-          ],
-          "title": "ReportExportFormatEnum",
-          "type": "string"
-        }
-      },
       "properties": {
         "content": {
           "title": "Content",
@@ -1541,481 +800,81 @@
       "title": "ReportExportResponse",
       "type": "object"
     },
-    "ReportPayload": {
-      "$defs": {
-        "AttributionDataContract": {
-          "properties": {
-            "benchmark_source": {
-              "default": "yfinance_via_sqlite_cache",
-              "title": "Benchmark Source",
-              "type": "string"
-            },
-            "corporate_actions": {
-              "default": "split_and_dividend_adjusted_total_return",
-              "title": "Corporate Actions",
-              "type": "string"
-            },
-            "currency": {
-              "default": "USD",
-              "title": "Currency",
-              "type": "string"
-            },
-            "fx_handling": {
-              "default": "none_usd_only",
-              "title": "Fx Handling",
-              "type": "string"
-            },
-            "missing_data_fallback": {
-              "default": "fail_closed_unless_allow_synthetic_fallback_true",
-              "title": "Missing Data Fallback",
-              "type": "string"
-            },
-            "rebalancing_assumption": {
-              "$ref": "#/$defs/RebalancingEnum"
-            },
-            "return_frequency": {
-              "$ref": "#/$defs/ReturnFrequencyEnum"
-            },
-            "sector_taxonomy": {
-              "default": "watchlist_sector_gics_like",
-              "title": "Sector Taxonomy",
-              "type": "string"
-            },
-            "timezone": {
-              "default": "UTC",
-              "title": "Timezone",
-              "type": "string"
-            },
-            "timezone_cutoff": {
-              "default": "16:00:00",
-              "title": "Timezone Cutoff",
-              "type": "string"
-            }
-          },
-          "required": [
-            "return_frequency",
-            "rebalancing_assumption"
-          ],
-          "title": "AttributionDataContract",
-          "type": "object"
-        },
-        "AttributionDataQuality": {
-          "properties": {
-            "benchmark_proxy_method": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "default": null,
-              "title": "Benchmark Proxy Method"
-            },
-            "benchmark_proxy_used": {
-              "default": false,
-              "title": "Benchmark Proxy Used",
-              "type": "boolean"
-            },
-            "limitations": {
-              "items": {
-                "type": "string"
-              },
-              "title": "Limitations",
-              "type": "array"
-            },
-            "synthetic_data_used": {
-              "default": false,
-              "title": "Synthetic Data Used",
-              "type": "boolean"
-            },
-            "synthetic_tickers": {
-              "items": {
-                "type": "string"
-              },
-              "title": "Synthetic Tickers",
-              "type": "array"
-            }
-          },
-          "title": "AttributionDataQuality",
-          "type": "object"
-        },
-        "AttributionEffects": {
-          "properties": {
-            "allocation": {
-              "title": "Allocation",
-              "type": "number"
-            },
-            "interaction": {
-              "title": "Interaction",
-              "type": "number"
-            },
-            "selection": {
-              "title": "Selection",
-              "type": "number"
-            }
-          },
-          "required": [
-            "allocation",
-            "selection",
-            "interaction"
-          ],
-          "title": "AttributionEffects",
-          "type": "object"
-        },
-        "AttributionMetadata": {
-          "properties": {
-            "benchmark": {
-              "title": "Benchmark",
-              "type": "string"
-            },
-            "benchmark_weights_source": {
-              "$ref": "#/$defs/BenchmarkWeightsSourceEnum"
-            },
-            "cache_hit": {
-              "default": false,
-              "title": "Cache Hit",
-              "type": "boolean"
-            },
-            "cache_key": {
-              "title": "Cache Key",
-              "type": "string"
-            },
-            "data_contract": {
-              "$ref": "#/$defs/AttributionDataContract"
-            },
-            "data_quality": {
-              "$ref": "#/$defs/AttributionDataQuality"
-            },
-            "generated_at": {
-              "title": "Generated At",
-              "type": "string"
-            },
-            "method": {
-              "$ref": "#/$defs/AttributionMethodEnum"
-            },
-            "period": {
-              "$ref": "#/$defs/PeriodEnum"
-            },
-            "portfolio_hash": {
-              "title": "Portfolio Hash",
-              "type": "string"
-            },
-            "schema_version": {
-              "default": "1.0.0",
-              "title": "Schema Version",
-              "type": "string"
-            }
-          },
-          "required": [
-            "method",
-            "benchmark",
-            "benchmark_weights_source",
-            "period",
-            "generated_at",
-            "portfolio_hash",
-            "cache_key",
-            "data_contract"
-          ],
-          "title": "AttributionMetadata",
-          "type": "object"
-        },
-        "AttributionMethodEnum": {
-          "const": "brinson_fachler_arithmetic",
-          "enum": [
-            "brinson_fachler_arithmetic"
-          ],
-          "title": "AttributionMethodEnum",
+    "ReportFilters": {
+      "properties": {
+        "benchmark": {
+          "default": "^GSPC",
+          "title": "Benchmark",
           "type": "string"
         },
-        "AttributionResult": {
-          "properties": {
-            "active_return": {
-              "title": "Active Return",
-              "type": "number"
-            },
-            "effects": {
-              "$ref": "#/$defs/AttributionEffects"
-            },
-            "metadata": {
-              "$ref": "#/$defs/AttributionMetadata"
-            },
-            "risk_metrics": {
-              "$ref": "#/$defs/RiskMetrics"
-            },
-            "sector_breakdowns": {
-              "items": {
-                "$ref": "#/$defs/SectorAttribution"
-              },
-              "title": "Sector Breakdowns",
-              "type": "array"
-            },
-            "totals": {
-              "$ref": "#/$defs/AttributionTotals"
-            }
-          },
-          "required": [
-            "totals",
-            "active_return",
-            "effects",
-            "sector_breakdowns",
-            "risk_metrics",
-            "metadata"
-          ],
-          "title": "AttributionResult",
-          "type": "object"
-        },
-        "AttributionTotals": {
-          "properties": {
-            "benchmark_return": {
-              "title": "Benchmark Return",
-              "type": "number"
-            },
-            "portfolio_return": {
-              "title": "Portfolio Return",
-              "type": "number"
-            }
-          },
-          "required": [
-            "portfolio_return",
-            "benchmark_return"
-          ],
-          "title": "AttributionTotals",
-          "type": "object"
-        },
-        "BenchmarkWeightsSourceEnum": {
-          "enum": [
-            "provider_derived",
-            "user_provided"
-          ],
-          "title": "BenchmarkWeightsSourceEnum",
+        "currency": {
+          "default": "USD",
+          "title": "Currency",
           "type": "string"
         },
-        "PeriodEnum": {
-          "enum": [
-            "1w",
-            "1mo",
-            "3mo",
-            "6mo",
-            "1y",
-            "2y",
-            "5y"
-          ],
-          "title": "PeriodEnum",
-          "type": "string"
-        },
-        "RebalancingEnum": {
-          "enum": [
-            "bop",
-            "eop"
-          ],
-          "title": "RebalancingEnum",
-          "type": "string"
-        },
-        "ReportExportFormatEnum": {
-          "enum": [
-            "html",
-            "pdf",
-            "markdown",
-            "csv",
-            "json"
-          ],
-          "title": "ReportExportFormatEnum",
-          "type": "string"
-        },
-        "ReportFilters": {
-          "properties": {
-            "benchmark": {
-              "default": "^GSPC",
-              "title": "Benchmark",
+        "date_from": {
+          "anyOf": [
+            {
+              "format": "date",
               "type": "string"
             },
-            "currency": {
-              "default": "USD",
-              "title": "Currency",
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Date From"
+        },
+        "date_to": {
+          "anyOf": [
+            {
+              "format": "date",
               "type": "string"
             },
-            "date_from": {
-              "anyOf": [
-                {
-                  "format": "date",
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "default": null,
-              "title": "Date From"
-            },
-            "date_to": {
-              "anyOf": [
-                {
-                  "format": "date",
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "default": null,
-              "title": "Date To"
-            },
-            "period": {
-              "allOf": [
-                {
-                  "$ref": "#/$defs/PeriodEnum"
-                }
-              ],
-              "default": "5y"
+            {
+              "type": "null"
             }
-          },
-          "title": "ReportFilters",
-          "type": "object"
-        },
-        "ReportOptions": {
-          "properties": {
-            "formats": {
-              "items": {
-                "$ref": "#/$defs/ReportExportFormatEnum"
-              },
-              "title": "Formats",
-              "type": "array"
-            },
-            "include_methodology": {
-              "default": true,
-              "title": "Include Methodology",
-              "type": "boolean"
-            },
-            "include_risk_metrics": {
-              "default": true,
-              "title": "Include Risk Metrics",
-              "type": "boolean"
-            },
-            "include_sector_table": {
-              "default": true,
-              "title": "Include Sector Table",
-              "type": "boolean"
-            }
-          },
-          "title": "ReportOptions",
-          "type": "object"
-        },
-        "ReturnFrequencyEnum": {
-          "enum": [
-            "daily",
-            "monthly"
           ],
-          "title": "ReturnFrequencyEnum",
-          "type": "string"
+          "default": null,
+          "title": "Date To"
         },
-        "RiskMethodEnum": {
-          "const": "historical",
-          "enum": [
-            "historical"
-          ],
-          "title": "RiskMethodEnum",
-          "type": "string"
-        },
-        "RiskMetrics": {
-          "properties": {
-            "beta": {
-              "title": "Beta",
-              "type": "number"
-            },
-            "beta_rolling_window": {
-              "title": "Beta Rolling Window",
-              "type": "integer"
-            },
-            "es_95_1d": {
-              "title": "Es 95 1D",
-              "type": "number"
-            },
-            "es_method": {
-              "allOf": [
-                {
-                  "$ref": "#/$defs/RiskMethodEnum"
-                }
-              ],
-              "default": "historical"
-            },
-            "var_95_1d": {
-              "title": "Var 95 1D",
-              "type": "number"
-            },
-            "var_method": {
-              "allOf": [
-                {
-                  "$ref": "#/$defs/RiskMethodEnum"
-                }
-              ],
-              "default": "historical"
-            }
-          },
-          "required": [
-            "beta",
-            "beta_rolling_window",
-            "var_95_1d",
-            "es_95_1d"
-          ],
-          "title": "RiskMetrics",
-          "type": "object"
-        },
-        "SectorAttribution": {
-          "properties": {
-            "active_contribution": {
-              "title": "Active Contribution",
-              "type": "number"
-            },
-            "allocation_effect": {
-              "title": "Allocation Effect",
-              "type": "number"
-            },
-            "benchmark_return": {
-              "title": "Benchmark Return",
-              "type": "number"
-            },
-            "benchmark_weight": {
-              "title": "Benchmark Weight",
-              "type": "number"
-            },
-            "interaction_effect": {
-              "title": "Interaction Effect",
-              "type": "number"
-            },
-            "portfolio_return": {
-              "title": "Portfolio Return",
-              "type": "number"
-            },
-            "portfolio_weight": {
-              "title": "Portfolio Weight",
-              "type": "number"
-            },
-            "sector": {
-              "title": "Sector",
-              "type": "string"
-            },
-            "selection_effect": {
-              "title": "Selection Effect",
-              "type": "number"
-            }
-          },
-          "required": [
-            "sector",
-            "portfolio_weight",
-            "benchmark_weight",
-            "portfolio_return",
-            "benchmark_return",
-            "allocation_effect",
-            "selection_effect",
-            "interaction_effect",
-            "active_contribution"
-          ],
-          "title": "SectorAttribution",
-          "type": "object"
+        "period": {
+          "$ref": "#/$defs/PeriodEnum",
+          "default": "5y"
         }
       },
+      "title": "ReportFilters",
+      "type": "object"
+    },
+    "ReportOptions": {
+      "properties": {
+        "formats": {
+          "items": {
+            "$ref": "#/$defs/ReportExportFormatEnum"
+          },
+          "title": "Formats",
+          "type": "array"
+        },
+        "include_methodology": {
+          "default": true,
+          "title": "Include Methodology",
+          "type": "boolean"
+        },
+        "include_risk_metrics": {
+          "default": true,
+          "title": "Include Risk Metrics",
+          "type": "boolean"
+        },
+        "include_sector_table": {
+          "default": true,
+          "title": "Include Sector Table",
+          "type": "boolean"
+        }
+      },
+      "title": "ReportOptions",
+      "type": "object"
+    },
+    "ReportPayload": {
       "properties": {
         "attribution": {
           "$ref": "#/$defs/AttributionResult"
@@ -2066,183 +925,6 @@
       "type": "object"
     },
     "ReportSummaryRequest": {
-      "$defs": {
-        "AttributionMethodEnum": {
-          "const": "brinson_fachler_arithmetic",
-          "enum": [
-            "brinson_fachler_arithmetic"
-          ],
-          "title": "AttributionMethodEnum",
-          "type": "string"
-        },
-        "PeriodEnum": {
-          "enum": [
-            "1w",
-            "1mo",
-            "3mo",
-            "6mo",
-            "1y",
-            "2y",
-            "5y"
-          ],
-          "title": "PeriodEnum",
-          "type": "string"
-        },
-        "ReportExportFormatEnum": {
-          "enum": [
-            "html",
-            "pdf",
-            "markdown",
-            "csv",
-            "json"
-          ],
-          "title": "ReportExportFormatEnum",
-          "type": "string"
-        },
-        "ReportFilters": {
-          "properties": {
-            "benchmark": {
-              "default": "^GSPC",
-              "title": "Benchmark",
-              "type": "string"
-            },
-            "currency": {
-              "default": "USD",
-              "title": "Currency",
-              "type": "string"
-            },
-            "date_from": {
-              "anyOf": [
-                {
-                  "format": "date",
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "default": null,
-              "title": "Date From"
-            },
-            "date_to": {
-              "anyOf": [
-                {
-                  "format": "date",
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "default": null,
-              "title": "Date To"
-            },
-            "period": {
-              "allOf": [
-                {
-                  "$ref": "#/$defs/PeriodEnum"
-                }
-              ],
-              "default": "5y"
-            }
-          },
-          "title": "ReportFilters",
-          "type": "object"
-        },
-        "ReportOptions": {
-          "properties": {
-            "formats": {
-              "items": {
-                "$ref": "#/$defs/ReportExportFormatEnum"
-              },
-              "title": "Formats",
-              "type": "array"
-            },
-            "include_methodology": {
-              "default": true,
-              "title": "Include Methodology",
-              "type": "boolean"
-            },
-            "include_risk_metrics": {
-              "default": true,
-              "title": "Include Risk Metrics",
-              "type": "boolean"
-            },
-            "include_sector_table": {
-              "default": true,
-              "title": "Include Sector Table",
-              "type": "boolean"
-            }
-          },
-          "title": "ReportOptions",
-          "type": "object"
-        },
-        "RiskMethodEnum": {
-          "const": "historical",
-          "enum": [
-            "historical"
-          ],
-          "title": "RiskMethodEnum",
-          "type": "string"
-        },
-        "RiskProfileInput": {
-          "properties": {
-            "beta_rolling_window": {
-              "default": 252,
-              "maximum": 756,
-              "minimum": 20,
-              "title": "Beta Rolling Window",
-              "type": "integer"
-            },
-            "es_confidence_level": {
-              "default": 0.95,
-              "exclusiveMaximum": 0.999,
-              "exclusiveMinimum": 0.5,
-              "title": "Es Confidence Level",
-              "type": "number"
-            },
-            "es_horizon_days": {
-              "default": 1,
-              "maximum": 30,
-              "minimum": 1,
-              "title": "Es Horizon Days",
-              "type": "integer"
-            },
-            "es_method": {
-              "allOf": [
-                {
-                  "$ref": "#/$defs/RiskMethodEnum"
-                }
-              ],
-              "default": "historical"
-            },
-            "var_confidence_level": {
-              "default": 0.95,
-              "exclusiveMaximum": 0.999,
-              "exclusiveMinimum": 0.5,
-              "title": "Var Confidence Level",
-              "type": "number"
-            },
-            "var_horizon_days": {
-              "default": 1,
-              "maximum": 30,
-              "minimum": 1,
-              "title": "Var Horizon Days",
-              "type": "integer"
-            },
-            "var_method": {
-              "allOf": [
-                {
-                  "$ref": "#/$defs/RiskMethodEnum"
-                }
-              ],
-              "default": "historical"
-            }
-          },
-          "title": "RiskProfileInput",
-          "type": "object"
-        }
-      },
       "properties": {
         "allow_benchmark_proxy": {
           "default": false,
@@ -2265,11 +947,7 @@
           "type": "boolean"
         },
         "attribution_method": {
-          "allOf": [
-            {
-              "$ref": "#/$defs/AttributionMethodEnum"
-            }
-          ],
+          "$ref": "#/$defs/AttributionMethodEnum",
           "default": "brinson_fachler_arithmetic"
         },
         "benchmark_weights": {
@@ -2323,6 +1001,159 @@
       "title": "ReportSummaryRequest",
       "type": "object"
     },
+    "ReturnFrequencyEnum": {
+      "enum": [
+        "daily",
+        "monthly"
+      ],
+      "title": "ReturnFrequencyEnum",
+      "type": "string"
+    },
+    "RiskMethodEnum": {
+      "enum": [
+        "historical"
+      ],
+      "title": "RiskMethodEnum",
+      "type": "string"
+    },
+    "RiskMetrics": {
+      "properties": {
+        "beta": {
+          "title": "Beta",
+          "type": "number"
+        },
+        "beta_rolling_window": {
+          "title": "Beta Rolling Window",
+          "type": "integer"
+        },
+        "es_95_1d": {
+          "title": "Es 95 1D",
+          "type": "number"
+        },
+        "es_method": {
+          "$ref": "#/$defs/RiskMethodEnum",
+          "default": "historical"
+        },
+        "var_95_1d": {
+          "title": "Var 95 1D",
+          "type": "number"
+        },
+        "var_method": {
+          "$ref": "#/$defs/RiskMethodEnum",
+          "default": "historical"
+        }
+      },
+      "required": [
+        "beta",
+        "beta_rolling_window",
+        "var_95_1d",
+        "es_95_1d"
+      ],
+      "title": "RiskMetrics",
+      "type": "object"
+    },
+    "RiskProfileInput": {
+      "properties": {
+        "beta_rolling_window": {
+          "default": 252,
+          "maximum": 756,
+          "minimum": 20,
+          "title": "Beta Rolling Window",
+          "type": "integer"
+        },
+        "es_confidence_level": {
+          "default": 0.95,
+          "exclusiveMaximum": 0.999,
+          "exclusiveMinimum": 0.5,
+          "title": "Es Confidence Level",
+          "type": "number"
+        },
+        "es_horizon_days": {
+          "default": 1,
+          "maximum": 30,
+          "minimum": 1,
+          "title": "Es Horizon Days",
+          "type": "integer"
+        },
+        "es_method": {
+          "$ref": "#/$defs/RiskMethodEnum",
+          "default": "historical"
+        },
+        "var_confidence_level": {
+          "default": 0.95,
+          "exclusiveMaximum": 0.999,
+          "exclusiveMinimum": 0.5,
+          "title": "Var Confidence Level",
+          "type": "number"
+        },
+        "var_horizon_days": {
+          "default": 1,
+          "maximum": 30,
+          "minimum": 1,
+          "title": "Var Horizon Days",
+          "type": "integer"
+        },
+        "var_method": {
+          "$ref": "#/$defs/RiskMethodEnum",
+          "default": "historical"
+        }
+      },
+      "title": "RiskProfileInput",
+      "type": "object"
+    },
+    "SectorAttribution": {
+      "properties": {
+        "active_contribution": {
+          "title": "Active Contribution",
+          "type": "number"
+        },
+        "allocation_effect": {
+          "title": "Allocation Effect",
+          "type": "number"
+        },
+        "benchmark_return": {
+          "title": "Benchmark Return",
+          "type": "number"
+        },
+        "benchmark_weight": {
+          "title": "Benchmark Weight",
+          "type": "number"
+        },
+        "interaction_effect": {
+          "title": "Interaction Effect",
+          "type": "number"
+        },
+        "portfolio_return": {
+          "title": "Portfolio Return",
+          "type": "number"
+        },
+        "portfolio_weight": {
+          "title": "Portfolio Weight",
+          "type": "number"
+        },
+        "sector": {
+          "title": "Sector",
+          "type": "string"
+        },
+        "selection_effect": {
+          "title": "Selection Effect",
+          "type": "number"
+        }
+      },
+      "required": [
+        "sector",
+        "portfolio_weight",
+        "benchmark_weight",
+        "portfolio_return",
+        "benchmark_return",
+        "allocation_effect",
+        "selection_effect",
+        "interaction_effect",
+        "active_contribution"
+      ],
+      "title": "SectorAttribution",
+      "type": "object"
+    },
     "WatchlistSyncResult": {
       "description": "Summary of a safe DB-to-JSON watchlist sync.",
       "properties": {
@@ -2365,7 +1196,7 @@
       "type": "object"
     },
     "WatchlistSyncStatus": {
-      "description": "Last explicit watchlist sync/import action metadata.",
+      "description": "Last explicit watchlist sync or import action metadata.",
       "properties": {
         "json_path": {
           "default": "",

@@ -2,6 +2,7 @@
 
 import type { CalculationDetailKey } from "./calculationDetailTypes";
 import { bridgedDcfValue } from "../corporateDerivedViews";
+import { impliedReturnRefusalText } from "@/lib/impliedReturn";
 
 export interface ComparisonTableRow {
   ticker: string;
@@ -15,7 +16,9 @@ export interface ComparisonTableRow {
   dcf_implied_return: number;
   capm_expected_return: number;
   market_expected_return: number;
-  expected_return_spread: number;
+  market_implied_return: number | null;
+  implied_return_spread: number | null;
+  implied_return_refusal: string | null;
   has_price_data: boolean;
   bridge_quality?: string;
 }
@@ -49,10 +52,11 @@ export function CorporateComparisonTable({
             <th className="px-4 py-3 text-right font-semibold">ROIC - WACC</th>
             <th className="px-4 py-3 text-right font-semibold">DCF Value</th>
             <th className="px-4 py-3 text-right font-semibold">Current Price</th>
-            <th className="px-4 py-3 text-right font-semibold">DCF Return</th>
+            <th className="px-4 py-3 text-right font-semibold">DCF value vs price (one-off gap)</th>
             <th className="px-4 py-3 text-right font-semibold">CAPM Return</th>
             <th className="px-4 py-3 text-right font-semibold">Market Return</th>
-            <th className="px-4 py-3 text-right font-semibold">Spread</th>
+            <th className="px-4 py-3 text-right font-semibold">Market-implied return (per year)</th>
+            <th className="px-4 py-3 text-right font-semibold">Implied return vs WACC (pts per year)</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-[var(--border)]/60">
@@ -111,12 +115,18 @@ export function CorporateComparisonTable({
                 </td>
                 <td className="px-4 py-3 text-right tabular-nums">{formatPct2(row.capm_expected_return)}</td>
                 <td className="px-4 py-3 text-right tabular-nums">{formatPct2(row.market_expected_return)}</td>
-                {/* Plain text, like the two expected-return cells before it. This spread had
-                    opened the Risk-Return Minard modal, which described a frontend scenario
-                    score built from the assumption sliders -- not this backend number, and not
-                    this row's ticker. It has no calculation detail of its own to link to. */}
-                <td className={`px-4 py-3 text-right font-bold tabular-nums ${row.expected_return_spread >= 0 ? "text-[var(--delta-up)]" : "text-[var(--delta-down)]"}`}>
-                  {formatPct2(row.expected_return_spread)}
+                {/* Annual rates on the same capital as WACC (spec 2026-09-26-implied-return-spread).
+                    A null is a refusal or a pre-v3 snapshot; the title says which. Plain text:
+                    there is no calculation detail of its own to link to. */}
+                <td className="px-4 py-3 text-right tabular-nums" title={row.market_implied_return === null ? impliedReturnRefusalText(row.implied_return_refusal) : undefined}>
+                  {row.market_implied_return === null ? "—" : formatPct2(row.market_implied_return)}
+                </td>
+                <td
+                  data-testid={`implied-return-spread-${row.ticker}`}
+                  title={row.implied_return_spread === null ? impliedReturnRefusalText(row.implied_return_refusal) : undefined}
+                  className={`px-4 py-3 text-right font-bold tabular-nums ${row.implied_return_spread === null ? "text-[var(--text-muted)]" : row.implied_return_spread >= 0 ? "text-[var(--delta-up)]" : "text-[var(--delta-down)]"}`}
+                >
+                  {row.implied_return_spread === null ? "—" : formatPct2(row.implied_return_spread)}
                 </td>
               </tr>
             );

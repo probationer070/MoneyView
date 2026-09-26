@@ -26,8 +26,9 @@ export interface CorporateComparisonHistoryPoint {
   stock_count: number;
   // Nullable: both averages cover only the rows whose equity bridge resolved, so a
   // snapshot with no such rows has no average at all. Render an unavailable state,
-  // never a zero.
-  average_expected_return_spread: number | null;
+  // never a zero. average_implied_return_spread is also null before metric v3, which
+  // recorded no implied return.
+  average_implied_return_spread: number | null;
   average_roic_minus_wacc: number;
   average_dcf_value: number | null;
   // Which definition average_dcf_value carries: enterprise value below 2, intrinsic value

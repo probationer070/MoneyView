@@ -329,7 +329,14 @@ class CorporateComparisonRow(BaseModel):
     capm_expected_return: float = 0.0
     stock_expected_return: float
     market_expected_return: float
-    expected_return_spread: float
+    # Spec 2026-09-26-implied-return-spread. Annual rates in percent. None when refused
+    # (implied_return_refusal says why) or when read from a snapshot before metric v3
+    # (refusal also None: not recorded is not a refusal). Required, not defaulted: the
+    # schema then marks them required-nullable, so the generated TS type is `T | null`,
+    # never an optional property that could be silently absent.
+    market_implied_return: float | None
+    implied_return_spread: float | None
+    implied_return_refusal: str | None
     stock_expected_return_source: str = "dcf_implied_upside"
     has_price_data: bool = True
     # Beside has_price_data, and for the same reason: the three return fields above are
@@ -387,7 +394,8 @@ class CorporateComparisonHistoryPoint(BaseModel):
     # snapshot where every non-benchmark row is missing SQL AVG returns NULL over zero
     # rows. Coercing that to 0.0 rendered an absent average as a real $0.0 and a 0.00%
     # spread. stock_count stays the full row count, so it cannot signal the difference.
-    average_expected_return_spread: float | None = None
+    # None also for snapshots before metric v3, which recorded no implied return.
+    average_implied_return_spread: float | None
     average_roic_minus_wacc: float = 0.0
     average_dcf_value: float | None = None
     market_expected_return: float = 0.0
@@ -413,7 +421,10 @@ class CorporateComparisonStockHistoryPoint(BaseModel):
     current_price: float = 0.0
     roic_minus_wacc: float = 0.0
     dcf_implied_return: float = 0.0
-    expected_return_spread: float = 0.0
+    # None when refused or before metric v3 (not recorded); required, never defaulted.
+    implied_return_spread: float | None
+    # Tells those two apart: a code when refused, None when not recorded.
+    implied_return_refusal: str | None
     market_expected_return: float = 0.0
 
 

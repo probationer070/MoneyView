@@ -21,6 +21,8 @@ export interface ComparisonData {
 
 export interface SnapshotSummary {
   positiveSpreadCount: number;
+  /** Holdings with an implied return (not refused, not pre-v3): the denominator. */
+  impliedSpreadCount: number;
   stockCount: number;
   positiveEconomicSpreadCount: number;
   highestSpreadValue: number | null;
@@ -97,10 +99,12 @@ export function PortfolioSnapshotSummary({
             {activeComparisonData.snapshot.benchmark_ticker}
           </div>
         </div>
-        <div className="rounded-[var(--radius)] bg-[var(--surface-muted)] p-3 text-xs">
-          <div className="text-[var(--text-muted)]">Positive Spread</div>
+        <div data-testid="summary-beats-wacc" className="rounded-[var(--radius)] bg-[var(--surface-muted)] p-3 text-xs">
+          <div className="text-[var(--text-muted)]">Beats WACC (implied return)</div>
           <div className="mt-1 font-bold text-[var(--text-primary)]">
-            {portfolioSnapshotSummary.positiveSpreadCount} / {portfolioSnapshotSummary.stockCount}
+            {portfolioSnapshotSummary.impliedSpreadCount === 0
+              ? "None recorded"
+              : `${portfolioSnapshotSummary.positiveSpreadCount} / ${portfolioSnapshotSummary.impliedSpreadCount}`}
           </div>
         </div>
         <div className="rounded-[var(--radius)] bg-[var(--surface-muted)] p-3 text-xs">
@@ -110,7 +114,7 @@ export function PortfolioSnapshotSummary({
           </div>
         </div>
         <div className="rounded-[var(--radius)] bg-[var(--surface-muted)] p-3 text-xs">
-          <div className="text-[var(--text-muted)]">Top Spread</div>
+          <div className="text-[var(--text-muted)]">Top implied return vs WACC</div>
           <div className={`mt-1 font-bold ${metricToneClass(portfolioSnapshotSummary.highestSpreadValue)}`}>
             {portfolioSnapshotSummary.highestSpreadTicker} {portfolioSnapshotSummary.highestSpreadValue == null ? "" : `(${formatMetricPercent(portfolioSnapshotSummary.highestSpreadValue)})`}
           </div>
@@ -125,7 +129,7 @@ export function PortfolioSnapshotSummary({
         </p>
       </div>
       <div className="mt-3 rounded-[var(--radius)] border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-        Portfolio-level averages for spread, `ROIC - WACC`, and DCF upside are intentionally demoted here. Per-stock values can be distorted by outliers, so the table view below is now the primary comparison surface.
+        Portfolio-level averages for implied return vs WACC, `ROIC - WACC`, and DCF value vs price are intentionally demoted here. Per-stock values can be distorted by outliers, so the table view below is now the primary comparison surface.
         {portfolioSnapshotSummary.flaggedMetricsCount > 0 && ` ${portfolioSnapshotSummary.flaggedMetricsCount} metric value(s) are currently flagged as outliers and render as N/A in the table.`}
       </div>
       <div className="mt-3 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-muted)] p-3 text-sm text-[var(--text-muted)]">

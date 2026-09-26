@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { API_PREFIX, json } from "./helpers/mockUtils";
 import { mockPortfolioPageApi } from "./helpers/portfolioPageMock";
 import { openPortfolioPanel, portfolioModal } from "./helpers/portfolioPanels";
 
@@ -137,8 +138,8 @@ test("clicking a holding opens the stock detail modal", async ({ page }) => {
   await expect(stockDetailDialog.locator("h2").filter({ hasText: "OHLC Candlestick + Volume" })).toBeVisible();
   await expect(stockDetailDialog.getByText("Ticker News Feed (filtered)", { exact: true })).toBeVisible();
   await expect(stockDetailDialog.getByText("ROIC - WACC", { exact: true }).first()).toBeVisible();
-  await expect(stockDetailDialog.getByText("DCF Upside", { exact: true }).first()).toBeVisible();
-  await expect(stockDetailDialog.getByText("Expected vs Market", { exact: true }).first()).toBeVisible();
+  await expect(stockDetailDialog.getByText("DCF value vs price (one-off gap)", { exact: true }).first()).toBeVisible();
+  await expect(stockDetailDialog.getByText("Implied return vs WACC (pts per year)", { exact: true }).first()).toBeVisible();
   await expect(stockDetailDialog.getByText("14.31%").first()).toBeVisible();
   await expect(stockDetailDialog.getByText("4.61%").first()).toBeVisible();
   await expect(stockDetailDialog.getByRole("heading", { name: "ROIC Audit" })).toBeVisible();
@@ -154,7 +155,7 @@ test("clicking a holding opens the stock detail modal", async ({ page }) => {
 
   await expect(stockDetailDialog.getByRole("heading", { name: "Stock History Timeline" })).toBeVisible();
   await expect(stockDetailDialog.getByText("Saved Snapshots", { exact: true })).toBeVisible();
-  await expect(stockDetailDialog.getByText("Expected Spread Trend")).toBeVisible();
+  await expect(stockDetailDialog.getByText("Implied return vs WACC trend")).toBeVisible();
   await expect(stockDetailDialog.getByText("Saved Snapshot History", { exact: true })).toBeVisible();
   await expect(stockDetailDialog.getByRole("heading", { name: "4/11/2026", exact: true })).toBeVisible();
   await expect(stockDetailDialog.getByText("13.20%").first()).toBeVisible();
@@ -325,8 +326,8 @@ test("portfolio table prioritizes comparison columns on mobile", async ({ page }
 
   await expect(page.getByText(/Mobile view keeps the core comparison columns visible first\./).first()).toBeVisible();
   await expect(page.getByRole("columnheader", { name: "ROIC - WACC", exact: true }).first()).toBeVisible();
-  await expect(page.getByRole("columnheader", { name: "DCF Upside", exact: true }).first()).toBeVisible();
-  await expect(page.getByRole("columnheader", { name: "Expected vs Market", exact: true }).first()).toBeVisible();
+  await expect(page.getByRole("columnheader", { name: "DCF value vs price (one-off gap)", exact: true }).first()).toBeVisible();
+  await expect(page.getByRole("columnheader", { name: "Implied return vs WACC (pts per year)", exact: true }).first()).toBeVisible();
   await expect(page.locator("th").filter({ hasText: /^Trend$/ }).first()).toBeHidden();
   await expect(page.getByText("Technology").first()).toBeVisible();
 });
@@ -382,4 +383,60 @@ test("portfolio table and stock modal stay aligned on latest snapshot metric val
   await expect(stockDetailDialog.getByText("14.31%").first()).toBeVisible();
   await expect(stockDetailDialog.getByText("4.61%").first()).toBeVisible();
   await expect(stockDetailDialog.getByText(/Saved snapshot metrics from/)).toBeVisible();
+});
+
+test("the holdings table shows implied return vs WACC, and a refused row says why", async ({ page }) => {
+  await mockPortfolioPageApi(page, undefined, { nullMetricTicker: "MSFT" });
+  await gotoPortfolio(page);
+  await refreshPortfolioAnalysis(page);
+  await openPortfolioPanel(page, "holdings");
+  // Desktop opens on cards; the comparison columns live in the table view.
+  await page.getByRole("button", { name: "Table", exact: true }).click();
+  await expect(page.getByRole("columnheader", { name: "Implied return vs WACC (pts per year)" }).first()).toBeVisible();
+  await expect(page.getByRole("columnheader", { name: "DCF value vs price (one-off gap)" }).first()).toBeVisible();
+  await expect(page.getByRole("columnheader", { name: "Expected vs Market" })).toHaveCount(0);
+  const msft = page.locator("tr", { hasText: "MSFT" }).first();
+  await expect(msft.locator('[title*="No current price"]')).toHaveCount(1);
+});
+
+test("the trend delta is not taken across a snapshot that recorded no implied return", async ({ page }) => {
+  await mockPortfolioPageApi(page);
+  // Registered after the catch-all so it wins (Playwright matches in reverse order).
+  await page.route(
+    (url) => url.pathname === `${API_PREFIX}/corporate/comparison/stock-history`,
+    (route) => json(route, {
+      status: "ok",
+      data: {
+        ticker: "AAPL", comparison_universe: "portfolio_plus_benchmark", benchmark_ticker: "^GSPC", custom_tickers: [],
+        points: [
+          { as_of_date: "2026-09-26", generated_at: "2026-09-26T09:00:00Z", snapshot_version: "v3", snapshot_source: "manual",
+            benchmark_ticker: "^GSPC", current_price: 210, roic_minus_wacc: 8, dcf_implied_return: 12, implied_return_spread: 2.0, implied_return_refusal: null, market_expected_return: 9.7 },
+          { as_of_date: "2026-08-03", generated_at: "2026-08-03T09:00:00Z", snapshot_version: "v2", snapshot_source: "manual",
+            benchmark_ticker: "^GSPC", current_price: 200, roic_minus_wacc: 8, dcf_implied_return: 10, implied_return_spread: null, implied_return_refusal: null, market_expected_return: 9.7 },
+        ],
+      },
+    }),
+  );
+  await clearAllHoldings(page);
+  await addHolding(page, "AAPL", "Apple Inc.", "Technology");
+  await refreshPortfolioAnalysis(page);
+  await openPortfolioPanel(page, "holdings");
+  await page.locator('[role="button"]').filter({ hasText: "Apple Inc." }).first().click();
+  const delta = portfolioModal(page).getByTestId("implied-spread-trend-delta");
+  await expect(delta).toBeVisible();
+  await expect(delta).not.toHaveText("2.00%");
+  await expect(delta).toHaveText("N/A");
+});
+
+test("the snapshot summary counts implied returns only over holdings that have one", async ({ page }) => {
+  // Review finding 4: a refused or unrecorded holding is not a holding that fails to beat
+  // WACC. The mock's snapshot has values for AAPL (3.5) and MSFT; MSFT is refused here, so
+  // one holding has a value and it beats WACC.
+  await mockPortfolioPageApi(page, undefined, { nullMetricTicker: "MSFT" });
+  await gotoPortfolio(page);
+  await openPortfolioPanel(page, "snapshot");
+  const card = page.getByTestId("summary-beats-wacc");
+  await expect(card).toContainText("Beats WACC (implied return)");
+  await expect(card).toContainText("1 / 1");
+  await expect(page.getByText("Positive Spread", { exact: true })).toHaveCount(0);
 });

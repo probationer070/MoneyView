@@ -32,7 +32,7 @@ async function gotoComparison(page: Page) {
 // Sort control is a pair of <select aria-label="Sort by"> / <select aria-label="Direction">
 // beside each other in TargetStockComparisonSection.tsx. Selected by their accessible
 // (aria-label) name rather than position, matching rowCell's header-driven approach.
-async function sortBy(page: Page, key: "dcf_value" | "roic_minus_wacc" | "expected_return_spread", direction: "asc" | "desc") {
+async function sortBy(page: Page, key: "dcf_value" | "roic_minus_wacc" | "implied_return_spread", direction: "asc" | "desc") {
   await page.locator('select[aria-label="Sort by"]').selectOption(key);
   await page.locator('select[aria-label="Direction"]').selectOption(direction);
   // The sort is a synchronous re-render off local state, but give React a tick to flush
@@ -230,4 +230,54 @@ test("a suppressed row is not plotted against current price", async ({ page }) =
   // same-sector peers all carry per-share values and are all still plotted, so the chart is
   // populated and it is only the selected point that was withheld.
   expect([...plottedWithMissSelected].sort()).toEqual(["AAPL", "ESTM", "MSFT"]);
+});
+
+test("the table shows the implied return and its spread over WACC per year", async ({ page }) => {
+  await mockCorporatePageApi(page);
+  await gotoComparison(page);
+  await expect(page.getByRole("columnheader", { name: "Market-implied return (per year)" })).toBeVisible();
+  await expect(page.getByRole("columnheader", { name: "Implied return vs WACC (pts per year)" })).toBeVisible();
+  await expect(page.getByRole("columnheader", { name: "DCF value vs price (one-off gap)" })).toBeVisible();
+  await expect(page.getByRole("columnheader", { name: "Spread", exact: true })).toHaveCount(0);
+  await expect(rowCell(page, "ESTM", "Market-implied return (per year)")).toHaveText("20.00%");
+  await expect(rowCell(page, "ESTM", "Implied return vs WACC (pts per year)")).toHaveText("10.30%");
+});
+
+test("a refused row shows a dash with its reason, and the spread chart says it has no bar", async ({ page }) => {
+  await mockCorporatePageApi(page);
+  await gotoComparison(page);
+  const cell = page.getByTestId("implied-return-spread-MISS");
+  await expect(cell).toHaveText("—");
+  await expect(cell).toHaveAttribute("title", /Net debt or the share count is missing/);
+  await expect(rowCell(page, "MISS", "Market-implied return (per year)")).toHaveText("—");
+  // AAPL shares MISS's sector, so MISS is in the Similar Stocks peer set.
+  await selectSimilarComparison(page, "AAPL");
+  await expect(page.getByTestId("similar-spread-refused-note")).toContainText("MISS");
+  await expect(page.getByTestId("similar-spread-refused-note")).toContainText("base bubble size");
+});
+
+test("refused rows sort last in both directions", async ({ page }) => {
+  await mockCorporatePageApi(page);
+  await gotoComparison(page);
+  await sortBy(page, "implied_return_spread", "desc");
+  const descending = await tickerOrder(page);
+  expect(descending.at(-1)).toBe("MISS");
+  await sortBy(page, "implied_return_spread", "asc");
+  const ascending = await tickerOrder(page);
+  expect(ascending.at(-1)).toBe("MISS");
+  // The non-refused rows really did reverse, so the direction control took effect.
+  expect(ascending.slice(0, -1)).toEqual(descending.slice(0, -1).reverse());
+});
+
+test("a stale saved sort key falls back to the default sort", async ({ page }) => {
+  // Exactly what lib/tabState.ts writes: sessionStorage["moneyview.tab.corporate.sortKey"] = JSON.
+  await page.addInitScript(() => {
+    window.sessionStorage.setItem("moneyview.tab.corporate.sortKey", JSON.stringify("expected_return_spread"));
+  });
+  await mockCorporatePageApi(page);
+  await gotoComparison(page);
+  await expect(page.locator('select[aria-label="Sort by"]')).toHaveValue("implied_return_spread");
+  const restored = await tickerOrder(page);
+  await sortBy(page, "implied_return_spread", "desc");
+  expect(restored).toEqual(await tickerOrder(page));
 });

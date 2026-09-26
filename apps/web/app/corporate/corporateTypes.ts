@@ -138,7 +138,11 @@ export interface CorporateComparisonRowApi {
   capm_expected_return: number;
   stock_expected_return: number;
   market_expected_return: number;
-  expected_return_spread: number;
+  /** Percent per year; null when refused (see implied_return_refusal) or not recorded (pre-v3). */
+  market_implied_return: number | null;
+  /** market_implied_return - wacc, percentage points per year. */
+  implied_return_spread: number | null;
+  implied_return_refusal: string | null;
   stock_expected_return_source: string;
   has_price_data: boolean;
   bridge_quality?: string;
@@ -169,7 +173,11 @@ export interface CorporateComparisonApi {
   rows: CorporateComparisonRowApi[];
 }
 
-export type ComparisonSortKey = "roic_minus_wacc" | "dcf_value" | "expected_return_spread";
+export const COMPARISON_SORT_KEYS = ["implied_return_spread", "roic_minus_wacc", "dcf_value"] as const;
+export type ComparisonSortKey = (typeof COMPARISON_SORT_KEYS)[number];
+export function isComparisonSortKey(value: unknown): value is ComparisonSortKey {
+  return typeof value === "string" && (COMPARISON_SORT_KEYS as readonly string[]).includes(value);
+}
 export type ComparisonUniverse = "watchlist_plus_benchmark" | "custom";
 
 export interface RawDatasetRow {

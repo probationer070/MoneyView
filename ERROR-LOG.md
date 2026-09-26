@@ -26,6 +26,48 @@ reveal that; only checking the code did.
 
 An entry states what was true when it was written. Nothing updates it on its own.
 
+## 2026-09-26: the comparison DCF floors FCFF at $1B, inflating value for smaller companies
+
+Date: 2026-09-26
+Command: final review of the implied-return-spread branch (fresh reviewer)
+Failure: `_dcf_snapshot` (apps/api/services/corporate_comparison.py) values the business on
+`base_fcff = max(metrics.fcff, 1.0)`. `metrics.fcff` is in billions, so every company with FCFF
+between 0 and $1B is valued as if it earned $1B. Its `dcf_value` and `dcf_implied_return` ("DCF value
+vs price") are overstated, by 2x at $0.5B. The new implied return correctly uses the real FCFF, so
+in that band the two columns in one row can disagree in sign. Example: fcff 0.5, market EV 12. PV at
+WACC is 8.35 on the real path and 16.71 on the floored one, so the gap reads positive while the
+implied return reads below WACC.
+Root cause: the floor exists so a value is always on screen, and the band it distorts was never
+bounded. It predates this branch.
+Fix: Not fixed. Out of scope for the implied-return change (spec 2026-09-26 §5). The implied return
+does not use the floor (pinned by
+`test_a_sub_unit_fcff_is_solved_on_the_real_cash_flow_not_the_display_floor`, which rejects a floored
+implementation). The spec and metric doc now state that the per-share sign equivalence holds only
+when fcff >= 1. Tracked in guideline/sop/todo.md.
+Files changed: docs only (spec, docs/metrics/discount-rates-and-returns.md, todo).
+Prevention: a placeholder that keeps a number on screen must say so on screen, or refuse; a silent
+floor is a value presented as measured.
+
+## 2026-09-26: the comparison "Spread" subtracted an annual rate from a one-off gap
+
+Date: 2026-09-26
+Command: `/corporate` comparison table "Spread" column; Portfolio "Expected vs Market"
+Failure: `expected_return_spread = dcf_implied_return - market_expected_return`, i.e.
+`(value / price - 1) - (rf + ERP)`. The first term has no time dimension; the second is per year.
+A stock 9.7% below its DCF value read as a spread of 0 ("in line with the market"). Measured range
+about -225.38 (AES) to over 6,550,000. Provenance: `docs/metrics/discount-rates-and-returns.md`'s
+`expected_return_spread` entry, "Current state (2026-09-09)", a fresh live pull of 140 rows,
+`portfolio_plus_benchmark` universe, real loaders. Price-sensitive: quote it with that date.
+Root cause: neither input stated its unit, and "expected return" named both a horizonless gap and
+an annual rate.
+Fix: replaced by the market-implied return (the IRR at which the comparison DCF equals market EV)
+minus WACC, with six ordered refusal codes; metric schema v3. The old column is retired, not read.
+Spec docs/superpowers/specs/2026-09-26-implied-return-spread-design.md.
+Files changed: apps/api/models/schema_parts/corporate.py, apps/api/services/corporate_comparison.py, apps/api/services/db.py, apps/web/app/corporate/components/CorporateComparisonTable.tsx, apps/web/app/corporate/components/TargetStockComparisonSection.tsx, apps/web/app/corporate/corporateDerivedViews.ts, apps/web/app/corporate/corporateTypes.ts, apps/web/app/corporate/page.tsx, apps/web/app/portfolio/components/SnapshotHistoryModal.tsx, apps/web/app/portfolio/components/StockDetailModal.tsx, apps/web/app/portfolio/page.tsx, apps/web/app/portfolio/portfolioMetrics.ts, apps/web/lib/impliedReturn.ts, apps/web/tests/e2e/corporate-comparison-bridge.spec.ts, apps/web/tests/e2e/fixtures/shared.ts, apps/web/tests/e2e/helpers/corporatePageMock.ts, apps/web/tests/e2e/helpers/portfolioPageMock.ts, apps/web/tests/e2e/portfolio-watchlist.spec.ts, apps/web/tests/e2e/refresh-idle-state.spec.ts, apps/web/tests/e2e/snapshot-history-metric-version.spec.ts, apps/web/tests/types/shared-types-contract.ts, packages/core_finance/__init__.py, packages/core_finance/expected_return.py, packages/shared-types/generated/portfolio.schema.json, packages/shared-types/generated/portfolio.ts, packages/shared-types/portfolio.ts, scripts/export_schema.py, tests/api/test_corporate_comparison.py, tests/core_finance/test_expected_return.py
+Prevention: a metric that subtracts two returns states both units in its docs/metrics entry, and
+this one is pinned by a sign-invariant test (the implied return beats WACC exactly when the DCF
+beats the market) over a grid of inputs.
+
 ## 2026-09-18: the event filter's popover was clipped on the ticker detail page
 
 Date: 2026-09-18

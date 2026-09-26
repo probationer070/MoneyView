@@ -495,13 +495,17 @@ Edge cases:
 Test coverage:
 - covered in `tests/core_finance/test_expected_return.py`
 
-### Expected Return Spread
+### Market-Implied Return
 
-Function:
-- `calculate_expected_return_spread(stock_expected_return, market_expected_return) -> float`
+Functions:
+- `calculate_market_implied_return(fcff_path, terminal_growth, market_ev) -> ImpliedReturn`
+- `enterprise_present_value(fcff_path, terminal_growth, rate) -> float`
 
 Equation:
-- `spread = stock_expected_return - market_expected_return`
+- solve `enterprise_present_value(fcff_path, g, r) = market_ev` for `r` in `[g + 0.005, 10]`
+- `implied_return_spread = r - WACC` (both annual)
+- replaces `calculate_expected_return_spread`, which subtracted an annual rate from a
+  one-off gap (retired 2026-09-26)
 
 Interpretation:
 - active expected-return spread relative to the market baseline

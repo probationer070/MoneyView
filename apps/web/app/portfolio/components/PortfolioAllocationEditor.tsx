@@ -135,7 +135,7 @@ export function PortfolioAllocationEditor({
       )}
 
       <p className="mt-3 text-xs text-[var(--text-muted)]">
-        `Final Profit` uses the current DCF upside metric for each stock and subtracts a `0.2%` transaction fee from the projected exit value. `Apply To Snapshot` keeps auto-saved allocation changes tied to today&apos;s saved comparison snapshot only when you opt in.
+        `Final Profit` uses the current DCF value vs price (a one-off gap, not a rate) for each stock and subtracts a `0.2%` transaction fee from the projected exit value. `Apply To Snapshot` keeps auto-saved allocation changes tied to today&apos;s saved comparison snapshot only when you opt in.
       </p>
 
       <div

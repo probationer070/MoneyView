@@ -30,7 +30,10 @@ from .expected_return import (
     calculate_expected_return_result,
     calculate_market_expected_return,
     calculate_dcf_implied_return,
-    calculate_expected_return_spread,
+    IMPLIED_RETURN_REFUSAL_CODES,
+    ImpliedReturn,
+    calculate_market_implied_return,
+    enterprise_present_value,
 )
 from .corporate_statement_metrics import (
     DEFAULT_TAX_RATE,
@@ -54,7 +57,8 @@ __all__ = [
     "payback_period", "sensitivity_analysis", "monte_carlo_npv",
     "ExpectedReturnInputs", "ExpectedReturnResult", "calculate_expected_return_result",
     "calculate_capm_expected_return", "calculate_market_expected_return",
-    "calculate_dcf_implied_return", "calculate_expected_return_spread",
+    "calculate_dcf_implied_return",
+    "IMPLIED_RETURN_REFUSAL_CODES", "ImpliedReturn", "calculate_market_implied_return", "enterprise_present_value",
     "DEFAULT_TAX_RATE", "MAX_ABS_ROIC", "ROIC_QUALITY_RULES", "ROIC_WARNING_RULES",
     "assess_roic_quality", "average_invested_capital_result", "build_roic_records",
     "calculate_invested_capital", "calculate_nopat", "stable_growth_payload", "stable_tax_result",

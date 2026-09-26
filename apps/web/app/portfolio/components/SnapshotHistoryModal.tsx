@@ -7,6 +7,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { ModalShell } from "@/components/ui/ModalShell";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { IMPLIED_RETURN_NOT_RECORDED } from "@/lib/impliedReturn";
 import type {
   CorporateComparisonHistoryPoint,
   CorporateComparisonHistoryResponse,
@@ -119,14 +120,17 @@ export function SnapshotHistoryModal({
           content: (
             <div className="grid grid-cols-2 gap-3 text-xs md:grid-cols-4 xl:grid-cols-5">
               <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2">
-                <div className="text-[var(--text-muted)]">Avg Spread</div>
-                {point.average_expected_return_spread == null ? (
+                <div className="text-[var(--text-muted)]">Avg implied return vs WACC</div>
+                {point.average_implied_return_spread == null && point.metric_schema_version < 3 ? (
+                  // Before metric v3 no implied return was recorded; that is not "no rows".
+                  <div className="mt-1 font-bold text-[var(--text-muted)]">{IMPLIED_RETURN_NOT_RECORDED}</div>
+                ) : point.average_implied_return_spread == null ? (
                   <div className="mt-1 font-bold text-[var(--text-muted)]" title={NO_BRIDGED_ROWS_TITLE}>
                     Not available
                   </div>
                 ) : (
-                  <div className={`mt-1 font-bold tabular-nums ${point.average_expected_return_spread >= 0 ? "text-[var(--delta-up)]" : "text-[var(--delta-down)]"}`}>
-                    {point.average_expected_return_spread.toFixed(2)}%
+                  <div className={`mt-1 font-bold tabular-nums ${point.average_implied_return_spread >= 0 ? "text-[var(--delta-up)]" : "text-[var(--delta-down)]"}`}>
+                    {point.average_implied_return_spread.toFixed(2)}%
                   </div>
                 )}
               </div>

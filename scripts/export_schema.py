@@ -13,6 +13,8 @@ import json
 import sys
 from pathlib import Path
 
+from pydantic.json_schema import models_json_schema
+
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -40,25 +42,33 @@ SCHEMA_PATH = OUT_DIR / "portfolio.schema.json"
 
 def main() -> None:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
+    # One shared $defs for every model. Calling model_json_schema() per model nested each
+    # model's own $defs under it while its $refs still pointed at the root ("#/$defs/X"),
+    # so json2ts failed with a missing-pointer error and the generated file silently
+    # stopped being regenerated.
+    _, shared = models_json_schema(
+        [(model, "validation") for model in (
+            AttributionRequest,
+            AttributionResult,
+            CorporateComparisonRow,
+            CorporateComparisonSnapshotMeta,
+            CorporateComparisonResponse,
+            CorporateComparisonHistoryPoint,
+            CorporateComparisonHistoryResponse,
+            ReportSummaryRequest,
+            ReportPayload,
+            ReportExportRequest,
+            ReportExportResponse,
+            WatchlistSyncResult,
+            WatchlistSyncStatus,
+        )],
+        ref_template="#/$defs/{model}",
+    )
     schema = {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "title": "MoneyView Portfolio API Schemas",
         "description": "Generated from backend Pydantic models. Do not edit by hand.",
-        "$defs": {
-            "AttributionRequest": AttributionRequest.model_json_schema(),
-            "AttributionResult": AttributionResult.model_json_schema(),
-            "CorporateComparisonRow": CorporateComparisonRow.model_json_schema(),
-            "CorporateComparisonSnapshotMeta": CorporateComparisonSnapshotMeta.model_json_schema(),
-            "CorporateComparisonResponse": CorporateComparisonResponse.model_json_schema(),
-            "CorporateComparisonHistoryPoint": CorporateComparisonHistoryPoint.model_json_schema(),
-            "CorporateComparisonHistoryResponse": CorporateComparisonHistoryResponse.model_json_schema(),
-            "ReportSummaryRequest": ReportSummaryRequest.model_json_schema(),
-            "ReportPayload": ReportPayload.model_json_schema(),
-            "ReportExportRequest": ReportExportRequest.model_json_schema(),
-            "ReportExportResponse": ReportExportResponse.model_json_schema(),
-            "WatchlistSyncResult": WatchlistSyncResult.model_json_schema(),
-            "WatchlistSyncStatus": WatchlistSyncStatus.model_json_schema(),
-        },
+        "$defs": shared["$defs"],
     }
     SCHEMA_PATH.write_text(json.dumps(schema, indent=2, sort_keys=True), encoding="utf-8")
 
