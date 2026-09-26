@@ -89,6 +89,9 @@ export const DCFWorkbench: React.FC<DCFWorkbenchProps> = ({ ticker }) => {
       terminal_growth_rate: 0.02
     }, signal),
     placeholderData: (prev) => prev, // Eliminates UI visual jarring on refetches
+    // A refusal is deterministic: retrying it (AppProvider's default is 3) only held the
+    // skeleton for ~7s and sent the same request 4 times. Other failures keep the default.
+    retry: (failureCount, error) => !(error instanceof DcfRefusalError) && failureCount < 3,
     staleTime: 1000 * 60,
     enabled: Boolean(requestedSnapshot && refreshToken),
   });

@@ -1,5 +1,5 @@
 import { getApiBaseUrl } from "@/lib/api";
-import { impliedReturnRefusalText } from "@/lib/impliedReturn";
+import { knownRefusalText } from "@/lib/impliedReturn";
 
 /**
  * A DCF the backend declined to produce (HTTP 422 {detail: {code, message}}), e.g.
@@ -15,9 +15,13 @@ export class DcfRefusalError extends Error {
     this.code = code;
   }
 
-  /** The reader's sentence, from the same map the comparison table uses. */
+  /**
+   * The reader's sentence: the shared map's wording when it knows the code, else the server's
+   * own message. The routes forward every engine refusal code, not only the mapped ones, and
+   * a raw code like `wacc_not_above_growth` is not a sentence.
+   */
   get readerText(): string {
-    return impliedReturnRefusalText(this.code);
+    return knownRefusalText(this.code) ?? this.message;
   }
 }
 

@@ -19,3 +19,8 @@ export function impliedReturnRefusalText(code: string | null): string {
   if (code === null) return IMPLIED_RETURN_NOT_RECORDED;
   return REFUSAL_TEXT[code] ?? code;
 }
+
+/** The reader wording for a code this map knows, or null (callers then use the server's message). */
+export function knownRefusalText(code: string): string | null {
+  return REFUSAL_TEXT[code] ?? null;
+}
