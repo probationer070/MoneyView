@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from math import isfinite
 from datetime import datetime, timedelta, timezone
 from typing import Callable
 from zoneinfo import ZoneInfo
@@ -27,8 +28,11 @@ from packages.core_finance.beta import relever_beta
 from packages.core_finance.dcf import calculate_equity_value, calculate_intrinsic_value_per_share
 from packages.core_finance.expected_return import (
     ExpectedReturnInputs,
+    ImpliedReturn,
     calculate_expected_return_result,
     calculate_market_expected_return,
+    calculate_market_implied_return,
+    enterprise_present_value,
 )
 from packages.core_finance.terminal_growth import (
     TERMINAL_GROWTH_CEILING,
@@ -50,7 +54,9 @@ DEFAULT_TAX_RATE = 0.21
 # source. Not a database schema version and not a payload format version. It exists
 # because snapshots are immutable and comparable: two computed by different metric code
 # are not like for like, and the comparison feature must be able to see that.
-METRIC_SCHEMA_VERSION = 2
+# 3: expected_return_spread (a one-off gap minus an annual rate) replaced by
+# market_implied_return / implied_return_spread; the old column is retired, not read.
+METRIC_SCHEMA_VERSION = 3
 
 
 @dataclass(frozen=True)
@@ -365,7 +371,9 @@ def _build_live_rows(
                     capm_expected_return=float(dcf["capm_expected_return"]),
                     stock_expected_return=float(dcf["stock_expected_return"]),
                     market_expected_return=float(dcf["market_expected_return"]),
-                    expected_return_spread=float(dcf["expected_return_spread"]),
+                    market_implied_return=dcf["market_implied_return"],
+                    implied_return_spread=dcf["implied_return_spread"],
+                    implied_return_refusal=dcf["implied_return_refusal"],
                     stock_expected_return_source=STOCK_EXPECTED_RETURN_METHOD,
                     has_price_data=float(dcf["current_price"]) > 0,
                     bridge_quality=str(dcf["bridge_quality"]),
@@ -399,11 +407,7 @@ def _dcf_snapshot(
         ).rate
 
         projected_fcff = [base_fcff * ((1 + growth_rate) ** year) for year in range(1, 6)]
-        pv_fcff = sum(cash_flow / ((1 + wacc) ** year) for year, cash_flow in enumerate(projected_fcff, start=1))
-        terminal_cash_flow = projected_fcff[-1] * (1 + terminal_growth)
-        terminal_value = terminal_cash_flow / max(wacc - terminal_growth, 0.005)
-        pv_terminal = terminal_value / ((1 + wacc) ** 5)
-        enterprise_value = pv_fcff + pv_terminal
+        enterprise_value = enterprise_present_value(projected_fcff, terminal_growth, wacc)
 
         bridge = bridge_loader(ticker)
         net_debt = bridge.net_debt.value
@@ -433,6 +437,15 @@ def _dcf_snapshot(
             if intrinsic_value_per_share is not None
             else enterprise_value
         )
+        implied = _implied_return(
+            fcff=float(metrics.fcff),
+            growth_rate=growth_rate,
+            terminal_growth=terminal_growth,
+            current_price=current_price,
+            net_debt=net_debt,
+            non_operating_assets=non_operating_assets,
+            shares=shares,
+        )
 
     with perf_timer(scope="metric", operation="metric.expected_vs_market", ticker=ticker, component="corporate_comparison"):
         expected_returns = calculate_expected_return_result(
@@ -459,7 +472,9 @@ def _dcf_snapshot(
         "capm_expected_return": round(float(expected_returns.capm_expected_return * 100), 2),
         "stock_expected_return": round(float(expected_returns.stock_expected_return * 100), 2),
         "market_expected_return": round(float(expected_returns.market_expected_return * 100), 2),
-        "expected_return_spread": round(float(expected_returns.expected_return_spread * 100), 2),
+        "market_implied_return": None if implied.rate is None else round(implied.rate * 100, 2),
+        "implied_return_spread": None if implied.rate is None else round((implied.rate - wacc) * 100, 2),
+        "implied_return_refusal": implied.refusal,
         # Internal only: CorporateComparisonRow has no status field and never has, and
         # _build_live_rows above does not read this key, so nothing in the comparison
         # table or the persisted snapshot can observe this verdict. The DCFSummary.status
@@ -475,6 +490,35 @@ def _dcf_snapshot(
         "bridge_quality": bridge_quality,
     }
 
+
+
+def _implied_return(
+    *,
+    fcff: float,
+    growth_rate: float,
+    terminal_growth: float,
+    current_price: float,
+    net_debt: float | None,
+    non_operating_assets: float | None,
+    shares: float | None,
+) -> ImpliedReturn:
+    """Spec 2.2-2.4. The first two refusals are checked here because this function owns
+    the price and the bridge; the engine checks the rest, in order.
+
+    `fcff` is the UNFLOORED statement value. The display DCF above floors it at 1.0 so a
+    value exists on screen; an IRR on that placeholder would be invented.
+    """
+    # isfinite before every comparison: `nan <= 0` is False.
+    if current_price is None or not isfinite(current_price) or current_price <= 0:
+        return ImpliedReturn(None, "no_price")
+    if (net_debt is None or not isfinite(net_debt)
+            or shares is None or not isfinite(shares) or shares <= 0):
+        return ImpliedReturn(None, "bridge_unresolved")
+    fcff_path = [fcff * (1 + growth_rate) ** year for year in range(1, 6)]
+    # A NaN non_operating_assets makes market_ev NaN, which the engine refuses as
+    # non_positive_market_ev -- it is optional, so it does not unresolve the bridge.
+    market_ev = current_price * shares + net_debt - (non_operating_assets or 0.0)
+    return calculate_market_implied_return(fcff_path, terminal_growth, market_ev)
 
 def _rounded_or_none(value: object) -> float | None:
     """Round a SQL aggregate, preserving NULL as None rather than collapsing it to 0.0."""

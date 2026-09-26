@@ -1,4 +1,5 @@
 import sys
+import math
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
@@ -101,16 +102,15 @@ def _starved_bridge():
     return EquityBridge(absent, absent, absent)
 
 
-def _snapshot(bridge, *, price=100.0):
+def _snapshot(bridge, *, price=100.0, metrics=None):
     return _dcf_snapshot(
         ticker="AAPL",
-        metrics=_stub_metrics_loader("AAPL"),
+        metrics=metrics or _stub_metrics_loader("AAPL"),
         price_loader=lambda _t: price,
         risk_free_rate=0.042,
         equity_risk_premium=0.055,
         bridge_loader=lambda _t: bridge,
     )
-
 
 # The fixture's own numbers, computed independently of _dcf_snapshot: _stub_metrics_loader
 # gives fcff=92, growth=6%, wacc=10%, which the same five-year-plus-terminal-value formula
@@ -152,7 +152,7 @@ def test_an_unresolved_bridge_reports_missing_and_falls_back_to_enterprise_value
 def test_the_dcf_implied_return_is_no_longer_pinned_at_zero():
     # _dcf_snapshot passed intrinsic_value=current_price, so dcf_implied_return was
     # f(price, price) = 0. stock_expected_return is assigned from it and
-    # expected_return_spread derived from that, so three columns were constant.
+    # the old spread was derived from that, so three columns were constant.
     few_shares = _snapshot(_resolved_bridge(shares=1.0))
     many_shares = _snapshot(_resolved_bridge(shares=1000.0))
     assert few_shares["dcf_implied_return"] != many_shares["dcf_implied_return"]
@@ -416,10 +416,8 @@ def test_corporate_comparison_defaults_to_portfolio_plus_benchmark_snapshot(tmp_
     assert aapl["dcf_value"] > 0
     assert aapl["dcf_implied_return"] == aapl["stock_expected_return"]
     assert aapl["capm_expected_return"] > 0
-    assert aapl["stock_expected_return"] == pytest.approx(
-        aapl["expected_return_spread"] + aapl["market_expected_return"],
-        abs=1e-6,
-    )
+    assert "expected_return_spread" not in aapl
+    assert set(aapl) >= {"market_implied_return", "implied_return_spread", "implied_return_refusal"}
 
     with db_service.get_db() as conn:
         snapshot_rows = conn.execute(
@@ -1746,3 +1744,96 @@ def test_a_statement_beta_round_trips_through_unlever_and_relever():
     assert metrics.tax_rate == pytest.approx(0.30)
     assert metrics.debt_ratio == pytest.approx(40.0)
     assert _levered_beta_from_metrics(metrics) == pytest.approx(1.5, abs=0.01)
+
+
+from packages.core_finance.expected_return import enterprise_present_value
+
+
+def test_the_fixture_implies_a_return_just_below_wacc():
+    # WACC here is the fixture's own metrics.wacc = 10 (percent), which _dcf_snapshot reads
+    # directly (`wacc = max(metrics.wacc / 100, 0.001)`); it is NOT built from the rf/ERP
+    # arguments, which only feed the CAPM and market columns.
+    assert _stub_metrics_loader("AAPL").wacc == 10
+    # market_ev = 100 * 15 + 60 = 1560 > the DCF's 1537.03, so the market pays more than
+    # the DCF value: the implied return sits below WACC (10%) and the per-share DCF value
+    # (98.47) below the price (100). Rate bisected independently: 0.0989840187.
+    dcf = _snapshot(_resolved_bridge(net_debt=60.0, non_op=0.0, shares=15.0))
+    assert dcf["implied_return_refusal"] is None
+    assert dcf["market_implied_return"] == pytest.approx(9.90, abs=0.005)
+    assert dcf["implied_return_spread"] == pytest.approx(-0.10, abs=0.005)
+    assert "expected_return_spread" not in dcf
+
+
+def test_a_price_at_the_dcf_value_implies_a_return_at_wacc():
+    fair = _snapshot(_resolved_bridge())["estimated_value"]  # the per-share DCF value
+    dcf = _snapshot(_resolved_bridge(), price=fair)
+    assert dcf["implied_return_spread"] == pytest.approx(0.0, abs=0.01)
+
+
+def test_the_spread_sign_follows_dcf_value_against_price():
+    cheap = _snapshot(_resolved_bridge(), price=50.0)
+    rich = _snapshot(_resolved_bridge(), price=150.0)
+    assert cheap["estimated_value"] > 50.0 and cheap["implied_return_spread"] > 0
+    assert rich["estimated_value"] < 150.0 and rich["implied_return_spread"] < 0
+
+
+@pytest.mark.parametrize(
+    ("bridge", "price", "metrics_update", "code"),
+    [
+        ("resolved", 0.0, {}, "no_price"),
+        ("starved", 100.0, {}, "bridge_unresolved"),
+        ("starved", 0.0, {}, "no_price"),                      # precedence: price first
+        ("resolved", 100.0, {"fcff": 0.0}, "non_positive_fcff"),
+        ("resolved", 100.0, {"growth": -150.0}, "non_positive_fcff"),
+        ("net_cash", 100.0, {}, "non_positive_market_ev"),
+    ],
+)
+def test_each_service_refusal_leaves_both_returns_null(bridge, price, metrics_update, code):
+    bridges = {
+        "resolved": _resolved_bridge(),
+        "starved": _starved_bridge(),
+        "net_cash": _resolved_bridge(net_debt=-2000.0),  # 100 * 15 - 2000 < 0
+    }
+    metrics = _stub_metrics_loader("AAPL").model_copy(update=metrics_update)
+    dcf = _snapshot(bridges[bridge], price=price, metrics=metrics)
+    assert dcf["implied_return_refusal"] == code
+    assert dcf["market_implied_return"] is None and dcf["implied_return_spread"] is None
+
+
+@pytest.mark.parametrize(
+    ("price", "bridge_kwargs", "code"),
+    [
+        (math.nan, {}, "no_price"),
+        (math.inf, {}, "no_price"),
+        (100.0, {"shares": math.nan}, "bridge_unresolved"),
+        (100.0, {"net_debt": math.nan}, "bridge_unresolved"),
+        (100.0, {"non_op": math.nan}, "non_positive_market_ev"),
+    ],
+)
+def test_a_non_finite_input_is_refused_not_solved(price, bridge_kwargs, code):
+    dcf = _snapshot(_resolved_bridge(**bridge_kwargs), price=price)
+    assert dcf["implied_return_refusal"] == code
+    assert dcf["market_implied_return"] is None and dcf["implied_return_spread"] is None
+
+
+def test_a_sub_unit_fcff_is_solved_on_the_real_cash_flow_not_the_display_floor():
+    # Review Focus 3: the display DCF floors fcff at 1.0; the implied return must not.
+    metrics = _stub_metrics_loader("AAPL").model_copy(update={"fcff": 0.5})
+    dcf = _snapshot(_resolved_bridge(net_debt=0.0, shares=1.0), price=5.0, metrics=metrics)
+    assert dcf["implied_return_refusal"] is None
+    real_path = [0.5 * 1.06 ** t for t in range(1, 6)]
+    real_ev_at_wacc = enterprise_present_value(real_path, 0.03, 0.10)
+    assert (dcf["implied_return_spread"] > 0) == (real_ev_at_wacc > 5.0)
+
+
+def test_the_display_dcf_still_uses_the_shared_present_value():
+    dcf = _snapshot(_starved_bridge())
+    assert dcf["estimated_value"] == pytest.approx(_FIXTURE_ENTERPRISE_VALUE, abs=0.01)
+
+
+def test_non_operating_assets_lower_market_ev():
+    # market_ev = price * shares + net_debt - non_op: more non-operating assets means the
+    # market pays less for the operating business, so the implied return rises.
+    without = _snapshot(_resolved_bridge(non_op=0.0))
+    with_assets = _snapshot(_resolved_bridge(non_op=100.0))
+    assert with_assets["market_implied_return"] > without["market_implied_return"]
