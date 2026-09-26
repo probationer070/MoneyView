@@ -470,3 +470,39 @@ def test_apply_state_inserts_an_event_category_visibility_row_under_category_id(
         ).fetchone()
 
     assert row is not None and row["visible"] == 1
+
+
+
+# --- F4: case-level narratives are an OPTIONAL child ----------------------------------------
+
+_CASE_CLAIM = {"input_field": "wacc_stable", "claim": "faded to the sector",
+               "evidence_source": "damodaran_industry_2026-01-01", "confidence": "derived",
+               "three_p": "probable"}
+
+
+def test_a_case_without_case_narratives_publishes_the_payload_an_older_peer_accepts():
+    # An older peer rejects any payload whose keys are not exactly {"case", "segments"}, and
+    # skips the whole file. Every case that predates F4 must keep publishing that shape.
+    with get_db() as conn:
+        _insert_local_case(conn, "Old shape")
+        store.backfill_uids(conn)
+        store.ensure_first_sync(conn, PC)
+        [record] = [r for r in store.read_local_state(conn).records.values()
+                    if r.kind == "valuation_case"]
+    assert set(record.payload) == {"case", "segments"}
+
+
+def test_a_peer_case_with_case_narratives_round_trips_and_is_replaced_on_update():
+    payload = _case_payload("Narrated")
+    payload["narratives"] = [_CASE_CLAIM]
+    with get_db() as conn:
+        store.apply_state(conn, RecordState(records={
+            ("valuation_case", "u"): Record("valuation_case", "u", TS, "PC-B-0002", payload)}))
+        [record] = [r for r in store.read_local_state(conn).records.values()
+                    if r.kind == "valuation_case"]
+        assert record.payload["narratives"] == [_CASE_CLAIM]
+
+        store.apply_state(conn, RecordState(records={
+            ("valuation_case", "u"): Record("valuation_case", "u", "2026-09-20T10:05:00.000Z",
+                                            "PC-B-0002", _case_payload("Narrated"))}))
+        assert conn.execute("SELECT COUNT(*) FROM case_narrative").fetchone()[0] == 0

@@ -155,6 +155,29 @@ def _validate_by_engine(payload: dict) -> None:
         raise ValueError(f"case is not valuable: {exc}") from exc
 
 
+# Case-level inputs that may carry a narrative: the ones a conservative case fades
+# toward its sector (F4). Optional -- a hand-authored case need not narrate them.
+CASE_NARRATED_FIELDS: tuple[str, ...] = (
+    "wacc_initial", "wacc_stable", "effective_tax_rate", "roic_stable",
+)
+
+
+def _validate_case_narratives(payload: dict) -> None:
+    fields = [n["input_field"] for n in payload.get("narratives") or []]
+    unknown = sorted(set(fields) - set(CASE_NARRATED_FIELDS))
+    if unknown:
+        raise ValueError(
+            f"case narratives name fields that cannot carry one: {unknown}; "
+            f"allowed: {list(CASE_NARRATED_FIELDS)}"
+        )
+    repeated = sorted({f for f in fields if fields.count(f) > 1})
+    if repeated:
+        raise ValueError(f"case narratives name a field more than once: {repeated}")
+    unset = sorted(f for f in fields if payload.get(f) is None)
+    if unset:
+        raise ValueError(f"case narratives describe fields left unset: {unset}")
+
+
 def create_case(payload: dict) -> int:
     """Persist a case, its segments and their narratives in one transaction."""
     segments = payload.get("segments") or []
@@ -162,6 +185,7 @@ def create_case(payload: dict) -> int:
         raise ValueError("a valuation case needs at least one segment")
     for segment in segments:
         _validate_narratives(segment)
+    _validate_case_narratives(payload)
     # D1: `_validate_runnable` used to run here, re-stating two cross-field rules
     # the engine already enforces (`SegmentSpec.__post_init__` for the
     # both-curves-set case, `_gap_closing_revenues` for the 10-year horizon).
@@ -226,6 +250,20 @@ def create_case(payload: dict) -> int:
                         f"three_p={narrative.get('three_p')!r}): {exc}"
                     ) from exc
 
+        for narrative in payload.get("narratives") or []:
+            conn.execute(
+                "INSERT INTO case_narrative (case_id, input_field, claim,"
+                " evidence_source, confidence, three_p) VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    case_id,
+                    narrative["input_field"],
+                    narrative["claim"],
+                    narrative.get("evidence_source"),
+                    narrative["confidence"],
+                    narrative["three_p"],
+                ),
+            )
+
         records_sync_store.stamp(conn, KIND_VALUATION_CASE, sync_uid, get_or_create_pc_id(conn))
     return case_id
 
@@ -250,6 +288,14 @@ def load_case(case_id: int) -> dict:
         case = dict(case_row)
         # sync_uid is peer-sync identity plumbing, not response data -- see spec §3.
         case.pop("sync_uid", None)
+        case["narratives"] = [
+            dict(row)
+            for row in conn.execute(
+                "SELECT input_field, claim, evidence_source, confidence, three_p"
+                " FROM case_narrative WHERE case_id = ? ORDER BY input_field",
+                (case_id,),
+            ).fetchall()
+        ]
         case["segments"] = []
         for segment_row in conn.execute(
             "SELECT * FROM segment WHERE case_id = ? ORDER BY id", (case_id,)

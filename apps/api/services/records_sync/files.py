@@ -94,7 +94,9 @@ def _check_tree(node: dict, columns: tuple[str, ...], children: tuple[ChildSpec,
 
 def _check_payload(kind: Kind, uid: str, payload: dict) -> None:
     if kind.children:
-        if not isinstance(payload, dict) or set(payload) != {"case", *(c.key for c in kind.children)}:
+        required = {"case", *(c.key for c in kind.children if not c.optional)}
+        allowed = required | {c.key for c in kind.children if c.optional}
+        if not isinstance(payload, dict) or not required <= set(payload) <= allowed:
             raise ValueError(f"{kind.name} payload must hold 'case' and {[c.key for c in kind.children]}")
         _check_tree(payload["case"], payload_columns(kind), (), f"{kind.name}.case", kind.not_null, kind.domains)
         if kind.lineage_column:
@@ -102,7 +104,7 @@ def _check_payload(kind: Kind, uid: str, payload: dict) -> None:
             if not (parent_uid is None or (isinstance(parent_uid, str) and parent_uid)):
                 raise ValueError(f"{kind.name}.case.{PARENT_UID_KEY}={parent_uid!r} is not a uid or null")
         for child in kind.children:
-            rows = payload[child.key]
+            rows = payload.get(child.key, []) if child.optional else payload[child.key]
             if not isinstance(rows, list):
                 raise ValueError(f"{kind.name}.{child.key} is not a list")
             for index, row in enumerate(rows):

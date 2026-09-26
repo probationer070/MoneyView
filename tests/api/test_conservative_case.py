@@ -387,3 +387,59 @@ def test_a_sector_too_thin_to_benchmark_gives_a_reason():
     assert benchmark is None
     assert vintage is None
     assert "sector_too_thin" in reason
+
+
+# --- F4: the faded case-level inputs carry their claims -----------------------------------
+
+def _case_claims(case):
+    return {n["input_field"]: n for n in case["narratives"]}
+
+
+def test_every_faded_case_level_input_carries_a_derived_narrative():
+    claims = _case_claims(_build())
+    assert set(claims) == {"wacc_initial", "wacc_stable", "effective_tax_rate", "roic_stable"}
+    assert {n["confidence"] for n in claims.values()} == {"derived"}
+    assert all(n["evidence_source"] == "damodaran_industry_2026-01-01" for n in claims.values())
+
+
+def test_a_faded_cost_of_capital_says_the_sector_replaced_the_company_value():
+    claims = _case_claims(_build())   # company 0.085, sector 0.095: faded up
+    assert "company's own value is 0.0850" in claims["wacc_stable"]["claim"]
+    assert "conservative endpoint is 0.0950" in claims["wacc_stable"]["claim"]
+    assert claims["wacc_initial"]["claim"] == claims["wacc_stable"]["claim"]
+
+
+def test_a_held_cost_of_capital_says_the_company_value_held():
+    claims = _case_claims(_build(baseline={"current_wacc": 0.11}))
+    assert "conservative endpoint is 0.1100" in claims["wacc_stable"]["claim"]
+
+
+def test_the_tax_claim_states_the_rate_it_stored():
+    case = _build(benchmark=_benchmark(effective_tax_rate=0.30))
+    assert "conservative endpoint is 0.3000" in _case_claims(case)["effective_tax_rate"]["claim"]
+
+
+def test_a_dropped_cost_of_capital_column_says_it_was_held_unfaded():
+    bench = _benchmark()
+    columns = {k: v for k, v in bench.columns.items() if k != "cost_of_capital"}
+    case = _build(benchmark=SectorBenchmark(bench.sector, columns, bench.ranked, ()))
+    claim = _case_claims(case)["wacc_stable"]
+    assert "held flat, unfaded" in claim["claim"] and claim["three_p"] == "plausible"
+
+
+def test_the_roic_claim_names_the_implied_marginal_return_when_it_binds():
+    case = _build(benchmark=_benchmark(after_tax_roc=0.234))   # 0.234 vs implied 0.225
+    claim = _case_claims(case)["roic_stable"]["claim"]
+    assert "0.2250" in claim and "the implied marginal return binds" in claim
+
+
+def test_the_roic_claim_names_the_faded_roc_when_it_binds():
+    claim = _case_claims(_build())["roic_stable"]["claim"]   # 0.20 vs implied 0.225
+    assert "the faded after-tax ROC binds" in claim
+
+
+def test_the_case_level_claims_survive_the_case_store():
+    from apps.api.services.valuation_case import load_case
+    case = _build()
+    stored = load_case(create_case(case))
+    assert stored["narratives"] == sorted(case["narratives"], key=lambda n: n["input_field"])

@@ -284,3 +284,41 @@ def test_a_flat_kind_record_missing_a_column_is_an_error(tmp_path):
     peers, skipped = read_peer_files(tmp_path, own_pc_id=ME)
 
     assert peers == [] and "color" in skipped[0].reason
+
+
+
+# --- F4: the optional case-narratives key ---------------------------------------------------
+
+def _rewrite(tmp_path, mutate):
+    folder = _folder(tmp_path)
+    write_own_file(tmp_path, A, _state(), "2026-09-20T10:00:01.000Z")
+    path = folder / f"records.{A}.json"
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    mutate(payload["records"][0]["payload"])
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    return read_peer_files(tmp_path, own_pc_id=ME)
+
+
+def test_a_case_carrying_case_narratives_is_accepted(tmp_path):
+    claim = {"input_field": "wacc_stable", "claim": "c", "evidence_source": None,
+             "confidence": "derived", "three_p": "probable"}
+    peers, skipped = _rewrite(tmp_path, lambda p: p.update(narratives=[claim]))
+    assert skipped == []
+    assert peers[0].state.records[("valuation_case", "u1")].payload["narratives"] == [claim]
+
+
+def test_an_unknown_payload_key_is_still_skipped(tmp_path):
+    peers, skipped = _rewrite(tmp_path, lambda p: p.update(brand_new_child=[]))
+    assert peers == [] and skipped
+
+
+def test_a_missing_required_child_is_still_skipped(tmp_path):
+    peers, skipped = _rewrite(tmp_path, lambda p: p.pop("segments"))
+    assert peers == [] and "must hold" in skipped[0].reason
+
+
+def test_a_case_narrative_outside_its_domain_is_skipped(tmp_path):
+    bad = {"input_field": "wacc_stable", "claim": "c", "evidence_source": None,
+           "confidence": "certain", "three_p": "probable"}
+    peers, skipped = _rewrite(tmp_path, lambda p: p.update(narratives=[bad]))
+    assert peers == [] and "certain" in skipped[0].reason
