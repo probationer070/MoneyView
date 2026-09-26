@@ -50,9 +50,7 @@ export interface ValueMatrixPoint {
 
 // A deliberately narrow view of `DcfSummary` in packages/shared-types/corporate.ts: the
 // fields these graphs read, with optionality the canonical type does not have because a
-// result restored from sessionStorage can predate a field. It omits
-// `terminal_growth_binding_constraint`, which the backend does send -- no surface reads it
-// yet, and an unread field here would be one more place to drift.
+// result restored from sessionStorage can predate a field.
 export interface DcfResult {
   estimated_value: number;
   // Optional because a DCF result restored from sessionStorage can predate the field. The
@@ -61,6 +59,9 @@ export interface DcfResult {
   // Nullable because the backend only derives it when a terminal growth rate was resolved;
   // optional for the same cache-restore reason as terminal_value_share_pct above.
   wacc_minus_terminal_growth?: number | null;
+  // Which bound decided the terminal growth rate (corporate_dcf.py). Null when the
+  // backend could not name one; optional for the same cache-restore reason.
+  terminal_growth_binding_constraint?: string | null;
   intrinsic_value_per_share?: number | null;
   enterprise_value?: number;
   equity_value?: number | null;

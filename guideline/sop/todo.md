@@ -41,7 +41,6 @@ Playwright specs passing**.
 | `news` | 2,818 | 0 duplicates. 114 were removed and 400 rows re-keyed on 2026-09-26 (G5) |
 
 **Open work, in suggested order:**
-- **H11.** `terminal_growth_binding_constraint` is on the payload but no surface reads it.
 - **F2 follow-up.** Unlevering uses each company's tax rate and relevering uses 0.21. This
   is a modelling decision for the user.
 - **F4.** Fade provenance flag. **G2.** 2 NULL-close rows. **I-C2.** Price-derived
@@ -1115,7 +1114,7 @@ shipped on `fix-priceless-bars` (PR #29); E shipped with them.
       `terminal_growth_rate` is put back into `dcfRequestBody` (received 0.06). Run
       2026-09-24 in a separate worktree, because a `next dev` was holding :3000.
 
-- [ ] **H11. `terminal_value_share_pct` is displayed without a threshold.** CORRECTED
+- [x] **H11. `terminal_value_share_pct` is displayed without a threshold.** CORRECTED
       2026-09-10: this was filed as "nothing surfaces it", which is false. It is shown as a
       "Terminal Value Share" tile (`DcfCoreModulesGraph.tsx:52-61`), clickable into a
       calculation detail, and per-cell in `DcfSensitivityTable.tsx:91`. What is missing is
@@ -1127,8 +1126,13 @@ shipped on `fix-priceless-bars` (PR #29); E shipped with them.
       PARTLY DONE 2026-09-11 on `terminal-bounds`: the warning state ships at a 90%
       threshold and the spread renders beside it (`DcfCoreModulesGraph.tsx`,
       `wacc_minus_terminal_growth`, mutation-verified against the raw-fraction defect).
-      Open: `terminal_growth_binding_constraint` is on the payload and typed in
-      `packages/shared-types/corporate.ts`, but no surface reads it yet.
+      **CLOSED 2026-09-26:** `terminal_growth_binding_constraint` is now shown under the
+      Terminal Value Share tile as "Terminal growth set by …" (company growth, the
+      long-run ceiling, the WACC safety margin, or the growth floor). It is shown for
+      any share, not only a high one. An unrecognised code is shown as sent rather than
+      hidden, and a null shows nothing. Four tests in `terminal-diagnostics.spec.ts`,
+      each mutation-checked: labels swapped, unknown codes hidden, line shown only
+      inside the >=90% warning, and a line rendered for a null.
 
 
 ## Track I - Portfolio count, tile button, watchlist drift  [A1, A2, A4, B1, B3, C1, D SHIPPED; C2 mostly superseded by Track J]
