@@ -135,7 +135,7 @@ find r in [r_min, r_max] such that PV(r) = market_ev
   sign.
   - Found in the final review, 2026-09-26.
   - The floor is a pre-existing display defect, out of scope here (§5); see ERROR-LOG
-    2026-09-26.
+    2026-09-26. Resolved by metric v4 (`2026-09-26-dcf-fcff-floor-removal-design.md`).
   - The engine test checks the enterprise-value form over a grid of price, FCFF,
     growth and WACC. A property-style sweep catches any future change that breaks monotonicity
   (e.g. re-deriving `g` per trial rate).
