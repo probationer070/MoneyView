@@ -148,6 +148,18 @@ six codes. They are checked in this order, and the first that applies wins:
 | 5 | `below_model_range` | `market_ev > PV(r_min)` |
 | 6 | `above_model_range` | `market_ev < PV(r_max)` |
 
+- **Non-finite values.**
+  - A NaN or ±inf fails "positive" at every check above, because `nan <= 0` is False and
+    so must be tested explicitly:
+    - FCFF → `non_positive_fcff`;
+    - `market_ev` (including via a NaN `non_operating_assets`) →
+      `non_positive_market_ev`;
+    - price → `no_price`;
+    - `net_debt` or shares → `bridge_unresolved`.
+  - A non-finite `terminal_growth`, or one that empties the bracket (`g + 0.005 >= 10`), is
+    a caller bug rather than a market outcome, so the solver raises `ValueError`. The
+    comparison DCF bounds `g` to `[-0.10, WACC − 0.005]`, so it never happens in practice.
+  - (rev 3, from the plan review.)
 - **Codes, not prose.** The codes are stable, machine-readable, lowercase `snake_case`,
   matching the existing `EngineRefusal` codes (#56). They are a closed set
   (`IMPLIED_RETURN_REFUSAL_CODES`) in `core_finance`, never matched by text.

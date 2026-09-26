@@ -35,6 +35,25 @@ Read it first; this plan argues from it.
 - **Refusal codes, in precedence order:** `no_price`, `bridge_unresolved`,
   `non_positive_fcff`, `non_positive_market_ev`, `below_model_range`,
   `above_model_range`. They are lowercase `snake_case` and never matched by text.
+- **Non-finite inputs are refused, never solved.** A NaN or ±inf is treated as "not a
+  usable positive value" at every check:
+  - FCFF → `non_positive_fcff`;
+  - `market_ev` → `non_positive_market_ev`;
+  - price → `no_price`;
+  - `net_debt`/shares → `bridge_unresolved`.
+
+  A non-finite or out-of-bracket `terminal_growth` is a caller bug, not a data outcome, so
+  it raises `ValueError`.
+- **Required, nullable wire fields.** `market_implied_return`, `implied_return_spread`,
+  `implied_return_refusal`, `average_implied_return_spread` and the stock-history
+  `implied_return_spread` are always present and may be `null`. In Pydantic that means no
+  default; in TypeScript, `: T | null`, never `?:`. Three states, exactly:
+
+  | State | return | refusal |
+  |---|---|---|
+  | success (v3) | number | `null` |
+  | refused (v3) | `null` | code |
+  | not recorded (pre-v3) | `null` | `null` |
 - **No FCFF placeholder:** the implied return uses the **unfloored** `metrics.fcff`. The
   display DCF's `max(fcff, 1.0)` floor is untouched.
 - **Wire units:** `market_implied_return` is percent per year and `implied_return_spread`
@@ -49,6 +68,22 @@ Read it first; this plan argues from it.
   The words "Spread", "Expected vs Market" and "DCF upside" are retired as labels for
   these fields.
 - **Git:** never use `git stash`. Commit only the files a task names.
+- **The Python gate is an allowlist, not a count.** A full run passes when every failing
+  test ID is in this set (the environment lacks `exchange_calendars`; measured on
+  `renewal` 2026-09-26):
+
+  ```text
+  tests/api/events/test_rules.py::test_the_real_nyse_calendar_keeps_the_juneteenth_expiry_when_the_range_ends_on_it
+  tests/api/events/test_rules.py::test_the_real_nyse_calendar_moves_the_juneteenth_2026_expiry_to_thursday
+  tests/api/records_sync/test_routes.py::test_a_records_failure_does_not_break_a_page
+  tests/api/records_sync/test_routes.py::test_get_market_events_merges_a_peer_file
+  tests/api/test_market_event_routes.py::*   (every test in the file)
+  tests/api/test_market_events.py::*         (every test in the file)
+  ```
+
+  Check it with:
+  `python -m pytest -q -p no:cacheprovider tests 2>&1 | grep "^FAILED" | sed 's/ - .*//' | grep -v -e "events/test_rules.py::test_the_real_nyse_calendar" -e "records_sync/test_routes.py::test_a_records_failure_does_not_break_a_page" -e "records_sync/test_routes.py::test_get_market_events_merges_a_peer_file" -e "test_market_event_routes.py::" -e "test_market_events.py::"`.
+  The output must be empty.
 - **Test verification (CLAUDE.md §8):** every task ends with its mutation matrix. Each
   mutation is applied on disk, the named test is run and must FAIL, then the file is
   restored from a saved copy. Do not use `git checkout --` on files that hold this task's
@@ -85,6 +120,8 @@ Read it first; this plan argues from it.
   - `ImpliedReturn(rate: float | None, refusal: str | None)` (frozen dataclass)
   - `enterprise_present_value(fcff_path: Sequence[float], terminal_growth: float, rate: float) -> float`
   - `calculate_market_implied_return(fcff_path: Sequence[float], terminal_growth: float, market_ev: float) -> ImpliedReturn`
+    (raises `ValueError` when `terminal_growth` is non-finite or
+    `terminal_growth + 0.005 >= 10.0`)
   - `ExpectedReturnResult` loses `expected_return_spread`, and
     `calculate_expected_return_spread` is deleted.
 
@@ -184,7 +221,29 @@ def test_a_market_ev_below_the_bracket_is_above_model_range():
 def test_a_refused_result_carries_no_rate():
     result = calculate_market_implied_return([10.0] * 5, 0.0, 0.0)
     assert result.rate is None and result.refusal in IMPLIED_RETURN_REFUSAL_CODES
+
+
+@pytest.mark.parametrize("bad", [math.nan, math.inf, -math.inf])
+def test_a_non_finite_cash_flow_is_refused_not_solved(bad):
+    # nan <= 0 is False: without the finite check a NaN would reach the bisection, make
+    # both bracket comparisons False, and come back as a plausible-looking midpoint.
+    assert calculate_market_implied_return([10.0, bad, 10.0, 10.0, 10.0], 0.0, 100.0).refusal == "non_positive_fcff"
+
+
+@pytest.mark.parametrize("bad", [math.nan, math.inf, -math.inf])
+def test_a_non_finite_market_ev_is_refused_not_solved(bad):
+    assert calculate_market_implied_return([10.0] * 5, 0.0, bad).refusal == "non_positive_market_ev"
+
+
+@pytest.mark.parametrize("bad", [math.nan, math.inf, -math.inf, 9.995, 20.0])
+def test_an_unusable_terminal_growth_is_a_caller_error(bad):
+    # g comes from derive_terminal_growth, bounded to [-0.10, WACC - 0.005]. Anything that
+    # empties the bracket or is non-finite is a bug in the caller, not a market outcome.
+    with pytest.raises(ValueError, match="terminal_growth"):
+        calculate_market_implied_return([10.0] * 5, bad, 100.0)
 ```
+
+Add `import math` at the top of the test module.
 
 - [ ] **Step 2: Run the tests and confirm they fail**
 
@@ -194,8 +253,8 @@ Expected: FAIL on import (`cannot import name 'IMPLIED_RETURN_REFUSAL_CODES'`).
 - [ ] **Step 3: Implement**
 
 In `packages/core_finance/expected_return.py`:
-- Change the import line to `from dataclasses import dataclass` plus
-  `from typing import Sequence`.
+- Change the imports to `from dataclasses import dataclass`, `from math import isfinite`
+  and `from typing import Sequence`.
 - Delete the `expected_return_spread: float` field from `ExpectedReturnResult`.
 - Delete `calculate_expected_return_spread`.
 - Delete the `expected_return_spread=...` argument in `calculate_expected_return_result`.
@@ -248,9 +307,15 @@ def calculate_market_implied_return(
     cash flow is refused first: with every cash flow positive, PV is strictly decreasing
     in the rate, so the root is unique, and without that guarantee it may not be.
     """
-    if not fcff_path or any(cash_flow <= 0 for cash_flow in fcff_path):
+    if not isfinite(terminal_growth) or terminal_growth + _TERMINAL_SPREAD_FLOOR >= _RATE_CEILING:
+        # Not one of the six refusals: those describe the market data. This describes a
+        # caller passing a g the comparison DCF can never produce (it is bounded to
+        # [-0.10, WACC - 0.005]), which would empty or poison the bracket.
+        raise ValueError(f"terminal_growth must be finite and below {_RATE_CEILING - _TERMINAL_SPREAD_FLOOR}; got {terminal_growth!r}")
+    # isfinite first: `nan <= 0` is False, so a NaN would otherwise pass as positive.
+    if not fcff_path or any(not isfinite(cash_flow) or cash_flow <= 0 for cash_flow in fcff_path):
         return ImpliedReturn(None, "non_positive_fcff")
-    if market_ev <= 0:
+    if not isfinite(market_ev) or market_ev <= 0:
         return ImpliedReturn(None, "non_positive_market_ev")
     low = terminal_growth + _TERMINAL_SPREAD_FLOOR
     high = _RATE_CEILING
@@ -288,6 +353,9 @@ named test FAIL:
 |---|---|
 | bisection branch inverted (`> market_ev: high = mid` / `else: low = mid`) | `test_the_solved_rate_reprices_market_ev` |
 | `any(cash_flow <= 0 ...)` → `any(cash_flow < 0 ...)` | `test_a_non_positive_cash_flow_is_refused_before_solving` |
+| `not isfinite(cash_flow) or` removed | `test_a_non_finite_cash_flow_is_refused_not_solved[nan]` |
+| `not isfinite(market_ev) or` removed | `test_a_non_finite_market_ev_is_refused_not_solved[nan]` |
+| the `terminal_growth` `ValueError` guard removed | `test_an_unusable_terminal_growth_is_a_caller_error` |
 | the two refusals swapped in order (market_ev check first) | `test_fcff_refusal_takes_precedence_over_market_ev_refusal` |
 | `low = terminal_growth + _TERMINAL_SPREAD_FLOOR` → `low = terminal_growth` | `test_a_market_ev_above_the_bracket_is_below_model_range` |
 | the `above_model_range` check deleted | `test_a_market_ev_below_the_bracket_is_above_model_range` |
@@ -317,9 +385,9 @@ git commit -m "feat(engine): market-implied return solver with ordered refusal c
   - `_dcf_snapshot(...)` returns the keys `market_implied_return: float | None`,
     `implied_return_spread: float | None` and `implied_return_refusal: str | None`, and no
     longer returns `expected_return_spread`.
-  - `CorporateComparisonRow` has `market_implied_return: float | None = None`,
-    `implied_return_spread: float | None = None` and
-    `implied_return_refusal: str | None = None`, and no `expected_return_spread`.
+  - `CorporateComparisonRow` has `market_implied_return: float | None`,
+    `implied_return_spread: float | None` and `implied_return_refusal: str | None`, all
+    **required** (no default), and no `expected_return_spread`.
   - `METRIC_SCHEMA_VERSION == 3`.
 
 - [ ] **Step 1: Write the failing tests**
@@ -345,6 +413,10 @@ from packages.core_finance.expected_return import enterprise_present_value
 
 
 def test_the_fixture_implies_a_return_just_below_wacc():
+    # WACC here is the fixture's own metrics.wacc = 10 (percent), which _dcf_snapshot reads
+    # directly (`wacc = max(metrics.wacc / 100, 0.001)`); it is NOT built from the rf/ERP
+    # arguments, which only feed the CAPM and market columns.
+    assert _stub_metrics_loader("AAPL").wacc == 10
     # market_ev = 100 * 15 + 60 = 1560 > the DCF's 1537.03, so the market pays more than
     # the DCF value: the implied return sits below WACC (10%) and the per-share DCF value
     # (98.47) below the price (100). Rate bisected independently: 0.0989840187.
@@ -391,6 +463,22 @@ def test_each_service_refusal_leaves_both_returns_null(bridge, price, metrics_up
     assert dcf["market_implied_return"] is None and dcf["implied_return_spread"] is None
 
 
+@pytest.mark.parametrize(
+    ("price", "bridge_kwargs", "code"),
+    [
+        (math.nan, {}, "no_price"),
+        (math.inf, {}, "no_price"),
+        (100.0, {"shares": math.nan}, "bridge_unresolved"),
+        (100.0, {"net_debt": math.nan}, "bridge_unresolved"),
+        (100.0, {"non_op": math.nan}, "non_positive_market_ev"),
+    ],
+)
+def test_a_non_finite_input_is_refused_not_solved(price, bridge_kwargs, code):
+    dcf = _snapshot(_resolved_bridge(**bridge_kwargs), price=price)
+    assert dcf["implied_return_refusal"] == code
+    assert dcf["market_implied_return"] is None and dcf["implied_return_spread"] is None
+
+
 def test_a_sub_unit_fcff_is_solved_on_the_real_cash_flow_not_the_display_floor():
     # Review Focus 3: the display DCF floors fcff at 1.0; the implied return must not.
     metrics = _stub_metrics_loader("AAPL").model_copy(update={"fcff": 0.5})
@@ -413,6 +501,13 @@ def test_non_operating_assets_lower_market_ev():
     with_assets = _snapshot(_resolved_bridge(non_op=100.0))
     assert with_assets["market_implied_return"] > without["market_implied_return"]
 ```
+
+Add `import math` at the top of the module if it is absent.
+
+The NaN-bridge cases may make the display DCF's `estimated_value` NaN too. That is
+pre-existing display behaviour and out of scope. These tests assert only the three new
+fields. If `_dcf_snapshot` raises before reaching them (e.g. `calculate_intrinsic_value_per_share`
+refusing a NaN share count), stop and report instead of widening the change.
 
 Also replace the assertion block in
 `test_corporate_comparison_defaults_to_portfolio_plus_benchmark_snapshot` that reads
@@ -442,10 +537,12 @@ In `apps/api/models/schema_parts/corporate.py`, `CorporateComparisonRow`: delete
 ```python
     # Spec 2026-09-26-implied-return-spread. Annual rates in percent. None when refused
     # (implied_return_refusal says why) or when read from a snapshot before metric v3
-    # (refusal also None: not recorded is not a refusal).
-    market_implied_return: float | None = None
-    implied_return_spread: float | None = None
-    implied_return_refusal: str | None = None
+    # (refusal also None: not recorded is not a refusal). Required, not defaulted: the
+    # schema then marks them required-nullable, so the generated TS type is `T | null`,
+    # never an optional property that could be silently absent.
+    market_implied_return: float | None
+    implied_return_spread: float | None
+    implied_return_refusal: str | None
 ```
 
 In `apps/api/services/corporate_comparison.py`:
@@ -503,14 +600,20 @@ def _implied_return(
     `fcff` is the UNFLOORED statement value. The display DCF above floors it at 1.0 so a
     value exists on screen; an IRR on that placeholder would be invented.
     """
-    if current_price is None or current_price <= 0:
+    # isfinite before every comparison: `nan <= 0` is False.
+    if current_price is None or not isfinite(current_price) or current_price <= 0:
         return ImpliedReturn(None, "no_price")
-    if net_debt is None or shares is None or shares <= 0:
+    if (net_debt is None or not isfinite(net_debt)
+            or shares is None or not isfinite(shares) or shares <= 0):
         return ImpliedReturn(None, "bridge_unresolved")
     fcff_path = [fcff * (1 + growth_rate) ** year for year in range(1, 6)]
+    # A NaN non_operating_assets makes market_ev NaN, which the engine refuses as
+    # non_positive_market_ev -- it is optional, so it does not unresolve the bridge.
     market_ev = current_price * shares + net_debt - (non_operating_assets or 0.0)
     return calculate_market_implied_return(fcff_path, terminal_growth, market_ev)
 ```
+
+Add `from math import isfinite` to the module's imports.
 
 - In the live row builder (the `CorporateComparisonRow(...)` near line 368), replace
   `expected_return_spread=float(dcf["expected_return_spread"]),` with:
@@ -538,6 +641,8 @@ Each mutation is applied to `corporate_comparison.py` from a saved copy:
 | `fcff=float(metrics.fcff)` → `fcff=base_fcff` | `test_each_service_refusal_leaves_both_returns_null[resolved-100.0-metrics_update3-non_positive_fcff]` |
 | the `no_price` and `bridge_unresolved` checks swapped | `test_each_service_refusal_leaves_both_returns_null[starved-0.0-...-no_price]` |
 | `"implied_return_spread": None if ...` → `0.0 if ...` | `test_each_service_refusal_leaves_both_returns_null` |
+| `not isfinite(current_price) or` removed | `test_a_non_finite_input_is_refused_not_solved[nan-bridge_kwargs0-no_price]` |
+| `or not isfinite(shares)` removed | `test_a_non_finite_input_is_refused_not_solved[100.0-bridge_kwargs2-bridge_unresolved]` |
 
 - [ ] **Step 6: Commit**
 
@@ -564,9 +669,9 @@ git commit -m "feat(corporate): comparison rows carry the market-implied return 
 **Interfaces:**
 - Consumes: Task 2's row fields.
 - Produces:
-  - `CorporateComparisonHistoryPoint.average_implied_return_spread: float | None`
-    (replaces `average_expected_return_spread`).
-  - `CorporateComparisonStockHistoryPoint.implied_return_spread: float | None = None`
+  - `CorporateComparisonHistoryPoint.average_implied_return_spread: float | None`,
+    required (replaces `average_expected_return_spread`).
+  - `CorporateComparisonStockHistoryPoint.implied_return_spread: float | None`, required
     (replaces `expected_return_spread`).
   - v3 table columns `market_implied_return REAL`, `implied_return_spread REAL` and
     `implied_return_refusal TEXT`.
@@ -643,6 +748,33 @@ def test_a_v3_snapshot_stores_and_reloads_the_implied_return(tmp_path, monkeypat
     with db_service.get_db() as conn:
         version = conn.execute("SELECT metric_schema_version FROM corporate_comparison_snapshots_v3 LIMIT 1").fetchone()[0]
     assert version == 3
+
+
+def test_the_retired_column_is_written_as_its_default_zero(tmp_path, monkeypatch):
+    # The INSERT no longer names expected_return_spread, so what lands there is the
+    # column's DEFAULT. Every DDL for it says `NOT NULL DEFAULT 0.0` (db.py); this makes
+    # that dependency executable rather than documentary.
+    _save_default_snapshot(tmp_path, monkeypatch)
+    with db_service.get_db() as conn:
+        values = {row[0] for row in conn.execute("SELECT expected_return_spread FROM corporate_comparison_snapshots_v3")}
+    assert values == {0.0}
+
+
+def test_the_three_states_are_distinct_on_the_wire(tmp_path, monkeypatch):
+    # The one canonical contract: success = number + no code; refused = null + code;
+    # not recorded (pre-v3) = null + null. Asserted on the serialized API rows.
+    saved = _save_default_snapshot(tmp_path, monkeypatch)
+    success = next(r for r in saved.rows if r.ticker == "AAPL").model_dump()
+    refused = next(r for r in saved.rows if r.ticker == "MSFT").model_dump()  # no statements seeded: bridge unresolved
+    _insert_snapshot_rows([("OLD", "ok", 100.0, None)], metric_schema_version=2)
+    [legacy_row] = load_corporate_comparison_snapshot_version(snapshot_version="v1").rows
+    legacy = legacy_row.model_dump()
+
+    for row in (success, refused, legacy):
+        assert {"market_implied_return", "implied_return_spread", "implied_return_refusal"} <= set(row)
+    assert success["implied_return_spread"] is not None and success["implied_return_refusal"] is None
+    assert refused["implied_return_spread"] is None and refused["implied_return_refusal"] == "bridge_unresolved"
+    assert legacy["implied_return_spread"] is None and legacy["implied_return_refusal"] is None
 
 
 def test_a_refusal_code_survives_persistence(tmp_path, monkeypatch):
@@ -737,10 +869,12 @@ After the `if "bridge_quality" not in v3_columns:` block (near line 866), add:
 
 In `apps/api/models/schema_parts/corporate.py`:
 - In `CorporateComparisonHistoryPoint`, rename `average_expected_return_spread` to
-  `average_implied_return_spread` and keep `float | None = None`. Add to its comment:
+  `average_implied_return_spread: float | None`, required with no default. Its one
+  constructor passes it explicitly. Add to its comment:
   `None also for snapshots before metric v3, which recorded no implied return.`
 - In `CorporateComparisonStockHistoryPoint`, replace
-  `expected_return_spread: float = 0.0` with `implied_return_spread: float | None = None`.
+  `expected_return_spread: float = 0.0` with `implied_return_spread: float | None`
+  (required).
 
 In `apps/api/services/corporate_comparison.py`:
 - **Snapshot `INSERT`:** in the column list, replace `expected_return_spread,` with
@@ -785,15 +919,14 @@ Expected: PASS.
 | `_rows_to_response` uses `float(row["implied_return_spread"] or 0.0)` | `test_a_pre_v3_row_reloads_as_not_recorded_not_refused` |
 | the aggregate uses `COALESCE(s.implied_return_spread, 0)` | `test_missing_rows_are_excluded_from_the_aggregates_but_estimated_rows_are_not` |
 | the `db.py` migration loop deleted | `test_init_db_adds_the_implied_return_columns_to_an_existing_v3_table` |
+| the `INSERT` writes `row.implied_return_spread` into `expected_return_spread` as well | `test_the_retired_column_is_written_as_its_default_zero` |
+| `_rows_to_response` sets `implied_return_refusal="bridge_unresolved"` whenever the spread is null | `test_the_three_states_are_distinct_on_the_wire` |
 | the stock history builder uses `round(float(... or 0.0), 2)` | `test_a_pre_v3_stock_history_point_is_null_not_zero` |
 
 - [ ] **Step 6: Run the whole Python suite**
 
-Run: `python -m pytest -q -p no:cacheprovider tests`
-Expected: only the 16 known `exchange_calendars` environmental failures
-(`tests/api/test_market_event*.py`, `tests/api/events/test_rules.py::test_the_real_nyse*`,
-`tests/api/records_sync/test_routes.py::test_get_market_events_merges_a_peer_file` and
-`::test_a_records_failure_does_not_break_a_page`). Any other failure is this task's to fix.
+Run the allowlist check from Global Constraints. Its output must be empty. Any test it
+prints is this task's to fix.
 
 - [ ] **Step 7: Commit**
 
@@ -863,15 +996,22 @@ export function impliedReturnRefusalText(code: string | null): string {
   `average_implied_return_spread: number | null;`, and update its comment with "also null
   before metric v3".
 - **`packages/shared-types/generated/portfolio.ts`:**
-  - Run `python scripts/export_schema.py`, then
-    `npx json2ts packages/shared-types/generated/portfolio.schema.json > packages/shared-types/generated/portfolio.ts`
-    from the repo root.
-  - If `json2ts` is unavailable, edit the two occurrences by hand. Near line 135, replace
-    `expected_return_spread: number;` with
-    `market_implied_return?: number | null; implied_return_spread?: number | null; implied_return_refusal?: string | null;`.
-    Near line 175, rename `average_expected_return_spread` to
-    `average_implied_return_spread`. Say so in the commit message
-    (`docs/architecture/schema-evolution.md:23`).
+  - Regenerate it; never hand-edit it. From the repo root, run
+    `python scripts/export_schema.py`, then
+    `npx --yes json-schema-to-typescript@15 packages/shared-types/generated/portfolio.schema.json > packages/shared-types/generated/portfolio.ts`.
+    `json2ts` is **not** installed locally (checked 2026-09-26); this command fetches it
+    for the one run and adds nothing to `package.json`.
+  - Check that the output has `market_implied_return: number | null;` (no `?`) on the row
+    and `average_implied_return_spread: number | null;` on the history point. The
+    required-nullable Pydantic fields from Tasks 2 and 3 are what make that true. If the
+    output shows `?:`, fix the Pydantic model, not the generated file.
+  - If the command cannot run (offline, registry error), **stop and report**. Do not
+    patch the generated file by hand: the source schema and the generated contract must
+    not diverge.
+  - The file drifted since 2026-04-12, so the regeneration may change unrelated
+    interfaces. Keep those changes (they are catch-up, not scope creep) as long as
+    `npx tsc --noEmit -p apps/web` passes. If unrelated drift breaks `tsc`, stop and report
+    it rather than repairing consumers outside this plan.
 - **`apps/web/tests/types/shared-types-contract.ts`:** replace
   `const _spreadIsNullable: CorporateComparisonHistoryPoint["average_expected_return_spread"] = null;`
   with
@@ -943,6 +1083,7 @@ test("a refused row shows a dash with its reason, and the spread chart says it h
   // AAPL shares MISS's sector, so MISS is in the Similar Stocks peer set.
   await selectSimilarComparison(page, "AAPL");
   await expect(page.getByTestId("similar-spread-refused-note")).toContainText("MISS");
+  await expect(page.getByTestId("similar-spread-refused-note")).toContainText("base bubble size");
 });
 
 test("refused rows sort last in both directions", async ({ page }) => {
@@ -1004,6 +1145,12 @@ Expected: FAIL (the new headers are not found; no `implied-return-spread-MISS` t
   `implied_return_spread: row.implied_return_spread,`, and replace the bubble sizes with
   `bubble_size: Math.max(Math.abs(row.implied_return_spread ?? 0) * 5, 80),` (peers) and
   `..., 120)` (selected).
+
+  The chosen semantics for a refused row in this map: it is **still plotted**, because
+  its position (DCF value against price) is valid data, but at the **base bubble size**,
+  because it has no spread to scale by. The tooltip says so; see the
+  `TargetStockComparisonSection` bullet. It is not dropped, which would hide a valid
+  price/value point.
 - **`CorporateComparisonTable.tsx`:**
   - In `ComparisonTableRow`, replace `expected_return_spread: number;` with the three
     fields typed as in `corporateTypes.ts`.
@@ -1034,6 +1181,8 @@ Expected: FAIL (the new headers are not found; no `implied-return-spread-MISS` t
   - Every `"expected_return_spread"` `dataKey`/`name` becomes `"implied_return_spread"`, and
     every tooltip label "Expected return spread" becomes
     "Implied return vs WACC (pts per year)".
+  - In both tooltip `formatter`s, a null spread renders as `["none (refused)", "Implied return vs WACC (pts per year)"]`
+    instead of `Number(null).toFixed(2)`, which would print `0.00%`.
   - The scatter description sentence's "expected-return spread" becomes "implied return
     vs WACC".
   - Under the bar chart, add:
@@ -1041,7 +1190,7 @@ Expected: FAIL (the new headers are not found; no `implied-return-spread-MISS` t
   ```tsx
                 {similarComparisonBarData.some((row) => row.implied_return_spread === null) ? (
                   <p data-testid="similar-spread-refused-note" className="mt-2 text-xs text-[var(--text-muted)]">
-                    No implied return for {similarComparisonBarData.filter((row) => row.implied_return_spread === null).map((row) => row.ticker).join(", ")}; shown without a spread bar.
+                    No implied return for {similarComparisonBarData.filter((row) => row.implied_return_spread === null).map((row) => row.ticker).join(", ")}; shown without a spread bar, and at the base bubble size in the price-vs-value map.
                   </p>
                 ) : null}
   ```
@@ -1308,7 +1457,13 @@ Follow the template at the top of `ERROR-LOG.md`. Append; never rewrite existing
 - **Command:** `/corporate` comparison table, Spread column; Portfolio "Expected vs Market".
 - **Failure:** the spread subtracted an annual rate (`rf + ERP`) from a one-off gap
   (`value / price − 1`). A stock 9.7% below value read as "in line with the market".
-  Measured range: −225 to over 6,550,000.
+  Measured range: about −225.38 (AES) to over 6,550,000.
+  - **Provenance:** `docs/metrics/discount-rates-and-returns.md`, the
+    `expected_return_spread` entry's "Current state (2026-09-09)" paragraph.
+  - **How it was measured:** a fresh live pull of 140 rows, `portfolio_plus_benchmark`
+    universe, real loaders.
+  - Quote it with that date. It is price-sensitive, and the doc itself says to re-measure
+    rather than quote.
 - **Root cause:** the units were never stated on either input, and the name
   "expected return" was used for both.
 - **Fix:** the market-implied return (IRR) against WACC, with refusal codes; metric v3.
@@ -1337,8 +1492,7 @@ Anything else is a leftover reader: fix it, and rerun that task's tests.
 
 - [ ] **Step 5: The full runs**
 
-- `python -m pytest -q -p no:cacheprovider tests`: expect only the 16 known environmental
-  failures.
+- The allowlist check from Global Constraints: its output must be empty.
 - From `apps/web`: `npx tsc --noEmit -p .` and `npx eslint .`.
 - From `apps/web`: the full Playwright suite,
   `npx playwright test --reporter=line 2>&1 | sed 's/\x1b\[[0-9;]*m//g' | tail -5`.
