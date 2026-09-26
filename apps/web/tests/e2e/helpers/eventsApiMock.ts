@@ -26,7 +26,7 @@ export interface MockEvent {
   end_date?: string | null;
   source?: string | null;
   note?: string;
-  origin?: "builtin" | "rule" | "user";
+  origin?: "builtin" | "rule" | "user" | "computed";
   missing_category?: string | null;
 }
 

@@ -183,7 +183,30 @@ class MarketIndexDetail(BaseModel):
     market_regime: Optional[MarketRegimeContext] = None
 
 
-EventOrigin = Literal["builtin", "rule", "user"]
+EventOrigin = Literal["builtin", "rule", "user", "computed"]
+
+
+class ComputedBasis(BaseModel):
+    """What a `computed` event was derived from, precisely enough to recompute it.
+
+    Percentages are in percent (`-25.4`), closes in the symbol's own units. `from_*`/`to_*` are
+    the two closes the reported change is measured between: peak and trough for a drawdown, the
+    largest move's window ends for an oil shock. `as_of` is the last cached close read.
+    """
+
+    symbol: str
+    data_basis: Literal["daily_close"]
+    rule: Literal["drawdown_from_prior_peak", "move_over_sessions"]
+    threshold_pct: float
+    lookback_sessions: Optional[int] = None
+    direction: Literal["up", "down"]
+    change_pct: float
+    from_date: str
+    from_close: float
+    to_date: str
+    to_close: float
+    ongoing: bool
+    as_of: str
 
 
 class MarketEvent(BaseModel):
@@ -207,6 +230,8 @@ class MarketEvent(BaseModel):
     note: str = ""
     origin: EventOrigin = "builtin"
     missing_category: Optional[str] = None
+    # Set only on a `computed` event: the rule and the closes that produced it.
+    basis: Optional[ComputedBasis] = None
 
 
 class EventCategory(BaseModel):

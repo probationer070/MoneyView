@@ -62,7 +62,14 @@ except the items below, all of them optional or cleanup.
       (`META 2026-03-16`, `^KS11 2026-04-22`), and `indices` holds 1. Nothing to do
       unless the count grows again.
 
-- [ ] **I-C2. Price-derived market events, if wanted.** Track J already delivered
+- [x] **I-C2. Price-derived market events.** DONE 2026-09-26. A new `computed` origin
+      covers S&P 500 drawdowns (10% below the prior peak, peak to trough) and oil shocks
+      (±20% over 20 sessions, overlapping windows merged). Both are computed from cached
+      closes, with a structured `basis`. See the addendum in
+      `docs/superpowers/specs/2026-09-15-market-event-registry-design.md`. In the current
+      cache they find 2 drawdowns and 12 oil episodes. 22 pytest tests and 2 e2e tests;
+      16 mutations caught. The original entry follows.
+      Track J already delivered
       categories, per-category visibility, one global filter and registered event
       sources. What remains is only the price-derived events: S&P low, an oil shock
       over a threshold, and a drawdown, each computed from cached `indices` rows with a

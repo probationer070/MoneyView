@@ -22,6 +22,7 @@ from typing import Callable, Iterable, Mapping
 from apps.api.models.schemas import EventCategory, MarketEvent
 from apps.api.services.db import get_db
 from apps.api.services.events import store
+from apps.api.services.events.price_events import price_sources
 from apps.api.services.events.categories import REQUIRED_CATEGORY, load_builtin_categories, resolve_categories
 from apps.api.services.events.rules import RuleEventSource, TradingCalendar, exchange_calendar
 from apps.api.services.events.sources import EventSource, FileEventSource
@@ -102,6 +103,6 @@ def resolved_categories(events_dir: Path | None = None) -> dict[str, EventCatego
 
 def default_registry(events_dir: Path | None = None, calendar: TradingCalendar | None = None) -> EventRegistry:
     return EventRegistry(
-        [*builtin_sources(events_dir, calendar), UserEventSource()],
+        [*builtin_sources(events_dir, calendar), *price_sources(), UserEventSource()],
         lambda: resolved_categories(events_dir),
     )

@@ -3,6 +3,8 @@
     { "id": "fomc", "label": "Fed rate decisions", "color": "#E54545" },
     { "id": "quad-witching", "label": "Quadruple witching", "color": "#7C5CFF" },
     { "id": "geopolitical", "label": "Geopolitical", "color": "#E8A028" },
+    { "id": "drawdown", "label": "S&P 500 drawdowns", "color": "#3B7DD8" },
+    { "id": "oil-shock", "label": "Oil shocks", "color": "#2E9E6A" },
     { "id": "uncategorized", "label": "Uncategorized", "color": "#9DA5A2" }
   ]
 }
