@@ -21,6 +21,13 @@ function formatDateLabel(value: string) {
 // Both bridge-dependent averages arrive null when no row in the snapshot had a resolved
 // equity bridge. That is an absent average, not a zero one, so it must not be styled as a
 // signal or printed as a number.
+// What each metric_schema_version changed, keyed by the version it introduced.
+const VERSION_NOTICES: Record<number, string> = {
+  2: "Metric definition changed. Values before and after this point are not directly comparable.",
+  3: "Implied return vs WACC starts here; earlier snapshots did not record it.",
+  4: "DCF values before this point used a $1B minimum FCFF, which overstated companies with FCFF under $1B and valued cash-burning companies at +$1B. Values across this point are not comparable for those companies.",
+};
+
 const NO_BRIDGED_ROWS_TITLE = "No holding in this snapshot had a resolved equity bridge, so this average covers no rows.";
 
 interface SnapshotHistoryModalProps {
@@ -66,12 +73,17 @@ export function SnapshotHistoryModal({
     points.forEach((point, index) => {
       const previous = points[index + 1];
       if (!previous || previous.metric_schema_version === point.metric_schema_version) return;
-      notices.set(
-        point.snapshot_version,
-        previous.metric_schema_version === 0
-          ? "Metric definition before this point was not recorded, so whether values are comparable across it is unknown."
-          : "Metric definition changed. Values before and after this point are not directly comparable.",
-      );
+      if (previous.metric_schema_version === 0) {
+        notices.set(point.snapshot_version, "Metric definition before this point was not recorded, so whether values are comparable across it is unknown.");
+        return;
+      }
+      // Every version the boundary crosses gets its own line, so the reader learns WHICH
+      // definition changed, not only that one did.
+      const lines: string[] = [];
+      for (let version = previous.metric_schema_version + 1; version <= point.metric_schema_version; version += 1) {
+        if (VERSION_NOTICES[version]) lines.push(VERSION_NOTICES[version]);
+      }
+      notices.set(point.snapshot_version, lines.length ? lines.join(" ") : VERSION_NOTICES[2]);
     });
     return notices;
   }, [history?.points]);

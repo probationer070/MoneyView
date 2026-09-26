@@ -116,3 +116,32 @@ def test_the_cap_that_causes_this_is_real():
     """Pins the upstream constraint, so a later loosening does not silently strand this."""
     with pytest.raises(ValidationError):
         _valid_params(terminal_growth_rate=0.1364)
+
+
+def test_a_cash_burning_ticker_is_skipped_as_a_refusal_not_valued_or_rejected_by_validation():
+    """Review Focus 3: ValuationAssumptions.fcff is ge=0, so the default params builder must
+    hand a negative stored FCFF to the engine as a refusal -- not clamp it to a value, and not
+    trip pydantic validation."""
+    from apps.api.models.schemas import CorporateMetrics
+    from apps.api.services.corporate_dcf import build_dcf_full_report
+    from apps.api.services.corporate_metrics_service import valuation_params_from_metrics
+
+    def metrics(ticker):
+        return CorporateMetrics(
+            ticker=ticker, growth=6, roic=18, wacc=10, debt_ratio=18, unlevered_beta=1.05,
+            crp=0.8, reinvestment=34, fcff=(-0.5 if ticker == "BURN" else 92), innovation=82,
+            market_share=64, governance=74, esg_penalty=22,
+        )
+
+    result = build_bulk_dcf_reports(
+        ["AAPL", "BURN"],
+        current_price_loader=lambda ticker: 100.0,
+        metrics_loader=metrics,
+        valuation_params_builder=valuation_params_from_metrics,
+        report_builder=build_dcf_full_report,
+        risk_free_rate=0.04,
+    )
+    assert [r.summary.ticker for r in result.reports] == ["AAPL"]
+    [skip] = result.skipped
+    assert skip.ticker == "BURN"
+    assert skip.reason.startswith("EngineRefusal: ") and "zero or negative" in skip.reason

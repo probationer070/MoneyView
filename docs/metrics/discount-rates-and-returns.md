@@ -250,7 +250,9 @@ the old `expected_return_spread` was derived from `stock_expected_return`,
 which is exactly how one defect here became three wrong columns. (That spread
 was retired at metric v3, 2026-09-26; see the entries at the end of this file.) No
 annualisation: this is a single point-in-time percentage gap between two
-numbers observed/modeled today, not a rate over any period. The API's own
+numbers observed/modeled today, not a rate over any period. From metric v4 it
+is `None` with `dcf_refusal = non_positive_fcff` when any forecast FCFF is zero
+or negative; the DCF no longer floors FCFF at `1.0` ($1B). The API's own
 `stock_expected_return_method` field (constant
 `STOCK_EXPECTED_RETURN_METHOD = "dcf_implied_upside"`,
 `corporate_comparison.py:36`) discloses the literal-copy relationship to any
@@ -346,10 +348,8 @@ spread    = r - WACC
 `enterprise_present_value`), so the spread is positive exactly when the DCF
 value exceeds the price. The engine test grid pins that relationship.
 
-**Exception: FCFF between 0 and 1 (i.e. under $1B).** The display DCF floors
-FCFF at `1.0`; the implied return uses the real value. In that band the two
-columns can disagree in sign, and the implied return is the correct one. The
-floor is a pre-existing defect recorded in `ERROR-LOG.md` (2026-09-26).
+Since metric v4 the DCF values the real FCFF too (the `$1B` floor is gone), so the
+two columns agree in sign wherever both have a value.
 
 **Refusals.** Refusals are `null` values with a code, checked in this order, first one wins:
 

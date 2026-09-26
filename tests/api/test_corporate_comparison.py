@@ -306,7 +306,7 @@ def test_a_snapshot_predating_the_column_reports_version_zero(tmp_path, monkeypa
 def test_the_metric_schema_version_is_bumped():
     # Metric semantics changed, so snapshots from before and after must never compare as
     # like-for-like.
-    assert METRIC_SCHEMA_VERSION == 3
+    assert METRIC_SCHEMA_VERSION == 4
 
 
 def test_a_resolved_bridge_quality_survives_persistence_and_read_back(tmp_path, monkeypatch):
@@ -1819,20 +1819,6 @@ def test_a_non_finite_input_is_refused_not_solved(price, bridge_kwargs, code):
     assert dcf["market_implied_return"] is None and dcf["implied_return_spread"] is None
 
 
-def test_a_sub_unit_fcff_is_solved_on_the_real_cash_flow_not_the_display_floor():
-    # Review Focus 3: the display DCF floors fcff at 1.0; the implied return must not.
-    # The price must sit BETWEEN the two present values, or a floored implementation gives
-    # the same sign: PV(WACC) is 8.35 on the real path and 16.71 on the floored (1.0) path,
-    # so at 12.0 the real answer is negative and the floored one positive.
-    metrics = _stub_metrics_loader("AAPL").model_copy(update={"fcff": 0.5})
-    dcf = _snapshot(_resolved_bridge(net_debt=0.0, non_op=0.0, shares=1.0), price=12.0, metrics=metrics)
-    assert dcf["implied_return_refusal"] is None
-    real_path = [0.5 * 1.06 ** t for t in range(1, 6)]
-    assert enterprise_present_value(real_path, 0.03, 0.10) < 12.0 < enterprise_present_value([1.0 * 1.06 ** t for t in range(1, 6)], 0.03, 0.10)
-    assert dcf["implied_return_spread"] < 0
-    solved = calculate_market_implied_return(real_path, 0.03, 12.0).rate
-    assert dcf["market_implied_return"] == pytest.approx(solved * 100, abs=0.005)
-
 
 def test_the_display_dcf_still_uses_the_shared_present_value():
     dcf = _snapshot(_starved_bridge())
@@ -1891,7 +1877,7 @@ def test_a_v3_snapshot_stores_and_reloads_the_implied_return(tmp_path, monkeypat
     assert aapl.implied_return_refusal is None
     with db_service.get_db() as conn:
         version = conn.execute("SELECT metric_schema_version FROM corporate_comparison_snapshots_v3 LIMIT 1").fetchone()[0]
-    assert version == 3
+    assert version == METRIC_SCHEMA_VERSION  # v3 introduced these fields; later versions keep them
 
 
 def test_the_retired_column_is_written_as_its_default_zero(tmp_path, monkeypatch):
@@ -1978,3 +1964,115 @@ def test_the_stock_history_carries_the_refusal_so_refused_is_not_read_as_not_rec
         ticker="AAPL", comparison_universe="portfolio_plus_benchmark", benchmark_ticker="^GSPC", custom_tickers=[])
     assert history.points[0].implied_return_spread is None
     assert history.points[0].implied_return_refusal == "no_price"
+
+
+def _metrics_with(**update):
+    return _stub_metrics_loader("AAPL").model_copy(update=update)
+
+
+def test_a_small_positive_fcff_is_valued_on_its_real_cash_flow():
+    # fcff 0.5 (billions): the enterprise value is the 0.5 path's, not the 1.0 path's.
+    dcf = _snapshot(_starved_bridge(), metrics=_metrics_with(fcff=0.5))  # starved: estimated_value = EV
+    real = enterprise_present_value([0.5 * 1.06 ** t for t in range(1, 6)], 0.03, 0.10)
+    floored = enterprise_present_value([1.0 * 1.06 ** t for t in range(1, 6)], 0.03, 0.10)
+    assert dcf["dcf_refusal"] is None
+    assert dcf["estimated_value"] == pytest.approx(real, abs=0.01)
+    assert abs(dcf["estimated_value"] - floored) > 1.0
+
+
+@pytest.mark.parametrize("fcff", [0.0, -0.5])
+def test_a_non_positive_fcff_refuses_both_calculations(fcff):
+    dcf = _snapshot(_resolved_bridge(), metrics=_metrics_with(fcff=fcff))
+    assert dcf["estimated_value"] is None and dcf["dcf_implied_return"] is None
+    assert dcf["stock_expected_return"] is None
+    assert dcf["dcf_refusal"] == "non_positive_fcff"
+    assert dcf["implied_return_spread"] is None
+    assert dcf["implied_return_refusal"] == "non_positive_fcff"
+
+
+def test_a_forecast_path_turning_negative_refuses_both_calculations():
+    dcf = _snapshot(_resolved_bridge(), metrics=_metrics_with(fcff=5.0, growth=-150.0))
+    assert dcf["dcf_refusal"] == "non_positive_fcff"
+    assert dcf["implied_return_refusal"] == "non_positive_fcff"
+
+
+@pytest.mark.parametrize("fcff", [0.2, 0.5, 1.0, 5.0, 50.0])
+@pytest.mark.parametrize("price_multiple", [0.5, 0.9, 1.1, 2.0])
+def test_the_dcf_gap_and_the_implied_return_agree_in_sign(fcff, price_multiple):
+    # Only where BOTH produce a value: the implied return can refuse for range reasons
+    # while the DCF is valid, and that is not a disagreement.
+    fair = _snapshot(_resolved_bridge(net_debt=0.0, non_op=0.0, shares=1.0), metrics=_metrics_with(fcff=fcff))
+    assert fair["estimated_value"] is not None
+    price = fair["estimated_value"] * price_multiple
+    dcf = _snapshot(_resolved_bridge(net_debt=0.0, non_op=0.0, shares=1.0), price=price, metrics=_metrics_with(fcff=fcff))
+    if dcf["estimated_value"] is None or dcf["implied_return_spread"] is None:
+        return
+    assert (dcf["estimated_value"] > price) == (dcf["implied_return_spread"] > 0)
+
+
+def _save_refused_snapshot(tmp_path, monkeypatch):
+    """AAPL seeded with a resolved bridge but zero FCFF, so its DCF refuses."""
+    monkeypatch.setattr(db_service, "_DB_PATH", tmp_path / "moneyview.db")
+    db_service.init_db()
+    _seed_watchlist()
+    save_statements("AAPL", [
+        StatementRow("AAPL", "balance", "annual", "2025-12-31", "Total Debt", 5_000_000_000.0),
+        StatementRow("AAPL", "balance", "annual", "2025-12-31", "Cash And Cash Equivalents", 1_000_000_000.0),
+        StatementRow("AAPL", "income", "annual", "2025-12-31", "Diluted Average Shares", 2_000_000_000.0),
+    ])
+    return save_corporate_comparison_snapshot(
+        snapshot_source="manual", comparison_universe="portfolio_plus_benchmark",
+        benchmark_ticker="^GSPC", custom_tickers=[],
+        metrics_loader=lambda t: _stub_metrics_loader(t).model_copy(update={"fcff": 0.0}) if t == "AAPL" else _stub_metrics_loader(t),
+        price_loader=lambda _t: 100.0, default_companies={},
+        risk_free_rate=0.042, equity_risk_premium=0.055,
+    )
+
+
+def test_a_refused_row_persists_its_code_and_reloads_as_none_not_zero(tmp_path, monkeypatch):
+    saved = _save_refused_snapshot(tmp_path, monkeypatch)
+    reloaded = load_corporate_comparison_snapshot_version(snapshot_version=saved.snapshot.snapshot_version)
+    aapl = next(r for r in reloaded.rows if r.ticker == "AAPL")
+    assert aapl.dcf_refusal == "non_positive_fcff"
+    assert aapl.dcf_value is None and aapl.dcf_implied_return is None and aapl.stock_expected_return is None
+    with db_service.get_db() as conn:
+        stored = conn.execute("SELECT dcf_value, metric_schema_version FROM corporate_comparison_snapshots_v3 WHERE ticker = 'AAPL'").fetchone()
+    assert stored["dcf_value"] == 0.0            # the NOT NULL default, never served
+    assert stored["metric_schema_version"] == 4
+
+
+def test_the_dcf_average_excludes_refused_rows(tmp_path, monkeypatch):
+    monkeypatch.setattr(db_service, "_DB_PATH", tmp_path / "moneyview.db")
+    db_service.init_db()
+    _insert_snapshot_rows([("AAA", "ok", 100.0, None), ("BBB", "ok", 200.0, None)], metric_schema_version=4)
+    with db_service.get_db() as conn:
+        conn.execute("UPDATE corporate_comparison_snapshots_v3 SET dcf_value = 0.0, dcf_refusal = 'non_positive_fcff' WHERE ticker = 'BBB'")
+    assert _history_point().average_dcf_value == pytest.approx(100.0)
+
+
+def test_an_all_refused_snapshot_averages_to_none(tmp_path, monkeypatch):
+    monkeypatch.setattr(db_service, "_DB_PATH", tmp_path / "moneyview.db")
+    db_service.init_db()
+    _insert_snapshot_rows([("AAA", "ok", 0.0, None)], metric_schema_version=4)
+    with db_service.get_db() as conn:
+        conn.execute("UPDATE corporate_comparison_snapshots_v3 SET dcf_refusal = 'non_positive_fcff'")
+    assert _history_point().average_dcf_value is None
+
+
+def test_the_stock_history_carries_the_dcf_refusal(tmp_path, monkeypatch):
+    _save_refused_snapshot(tmp_path, monkeypatch)
+    history = load_corporate_comparison_stock_history(
+        ticker="AAPL", comparison_universe="portfolio_plus_benchmark", benchmark_ticker="^GSPC", custom_tickers=[])
+    assert history.points[0].dcf_refusal == "non_positive_fcff"
+    assert history.points[0].dcf_implied_return is None
+
+
+def test_init_db_adds_the_dcf_refusal_column_to_an_existing_table(tmp_path, monkeypatch):
+    monkeypatch.setattr(db_service, "_DB_PATH", tmp_path / "moneyview.db")
+    db_service.init_db()
+    with db_service.get_db() as conn:
+        conn.execute("ALTER TABLE corporate_comparison_snapshots_v3 DROP COLUMN dcf_refusal")
+    db_service.init_db()
+    with db_service.get_db() as conn:
+        columns = {row["name"] for row in conn.execute("PRAGMA table_info(corporate_comparison_snapshots_v3)")}
+    assert "dcf_refusal" in columns

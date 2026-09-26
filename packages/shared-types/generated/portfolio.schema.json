@@ -545,13 +545,37 @@
           "type": "number"
         },
         "dcf_implied_return": {
-          "default": 0.0,
-          "title": "Dcf Implied Return",
-          "type": "number"
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Dcf Implied Return"
+        },
+        "dcf_refusal": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Dcf Refusal"
         },
         "dcf_value": {
-          "title": "Dcf Value",
-          "type": "number"
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Dcf Value"
         },
         "group_name": {
           "default": "custom",
@@ -619,8 +643,15 @@
           "type": "string"
         },
         "stock_expected_return": {
-          "title": "Stock Expected Return",
-          "type": "number"
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Stock Expected Return"
         },
         "stock_expected_return_source": {
           "default": "dcf_implied_upside",
@@ -648,11 +679,13 @@
         "roic_minus_wacc",
         "dcf_value",
         "current_price",
+        "dcf_implied_return",
         "stock_expected_return",
         "market_expected_return",
         "market_implied_return",
         "implied_return_spread",
-        "implied_return_refusal"
+        "implied_return_refusal",
+        "dcf_refusal"
       ],
       "title": "CorporateComparisonRow",
       "type": "object"

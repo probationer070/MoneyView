@@ -179,3 +179,29 @@ def test_the_dcf_value_does_not_move_with_the_current_price():
     )[0]
     assert cheap.intrinsic_value_per_share == dear.intrinsic_value_per_share
     assert cheap.enterprise_value == dear.enterprise_value
+
+
+from packages.core_finance.refusals import EngineRefusal
+
+
+def test_a_small_positive_fcff_is_valued_on_its_real_cash_flow_single_ticker():
+    # DCFAssumptionSummary.fcff_used records the FCFF the valuation ran on.
+    _summary, assumptions, _report = _outputs(_params(fcff=0.5), _bridge())
+    assert assumptions.fcff_used == pytest.approx(0.5)
+
+
+def test_a_zero_fcff_is_refused_not_floored():
+    with pytest.raises(EngineRefusal) as excinfo:
+        _outputs(_params(fcff=0.0), _bridge())
+    assert excinfo.value.code == "non_positive_fcff"
+
+
+def test_a_negative_stored_fcff_is_refused_when_the_request_leaves_it_to_the_store():
+    with pytest.raises(EngineRefusal):
+        _build_dcf_outputs(
+            ticker="TEST", params=_params(fcff=None),
+            current_price_loader=lambda t: 100.0,
+            metrics_loader=lambda t: _metrics(t).model_copy(update={"fcff": -0.5}),
+            risk_free_rate=0.042, equity_risk_premium=0.055, country_risk_premium=0.008,
+            bridge_loader=lambda t: _bridge(),
+        )

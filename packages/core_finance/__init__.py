@@ -14,6 +14,8 @@ from .dcf import (
     calculate_net_debt,
     calculate_intrinsic_value_per_share,
     multi_stage_dcf,
+    fcff_path_is_admissible,
+    require_admissible_fcff_path,
 )
 from .beta import unlever_beta, relever_beta, bottom_up_beta
 from .hurdle_rate import (
@@ -51,6 +53,7 @@ from .corporate_statement_metrics import (
 
 __all__ = [
     "calculate_fcff", "calculate_growth_rate", "calculate_terminal_value",
+    "fcff_path_is_admissible", "require_admissible_fcff_path",
     "calculate_npv", "calculate_equity_value", "calculate_net_debt", "calculate_intrinsic_value_per_share", "multi_stage_dcf",
     "unlever_beta", "relever_beta", "bottom_up_beta",
     "calculate_crp", "calculate_wacc", "decompose_hurdle_rate", "wacc_sensitivity",

@@ -52,7 +52,10 @@ class ValuationAssumptions(BaseModel):
     # Gordon safety margin (`derive_terminal_growth`). A value sent is honoured as given --
     # an explicit override is never silently re-bounded by the ceiling.
     terminal_growth_rate: float | None = Field(default=None, ge=-0.1, le=0.1)
-    fcff: float | None = Field(default=None, ge=0.0)
+    # Unbounded on purpose: a zero or negative FCFF is a valid input the engine refuses as
+    # non_positive_fcff (spec 2026-09-26-dcf-fcff-floor-removal). A ge=0 bound turned that
+    # refusal into a pydantic validation error the UI could only show as a generic failure.
+    fcff: float | None = Field(default=None)
     esg_penalty: float | None = Field(default=None, ge=0.0, le=100.0)
     reinvestment: float | None = Field(default=None, ge=0.0, le=100.0)
     unlevered_beta: float | None = Field(default=None, ge=0.0, le=5.0)
@@ -323,11 +326,12 @@ class CorporateComparisonRow(BaseModel):
     roic: float
     wacc: float
     roic_minus_wacc: float
-    dcf_value: float
+    # None when the DCF refused (dcf_refusal says why). Required, never defaulted.
+    dcf_value: float | None
     current_price: float
-    dcf_implied_return: float = 0.0
+    dcf_implied_return: float | None
     capm_expected_return: float = 0.0
-    stock_expected_return: float
+    stock_expected_return: float | None
     market_expected_return: float
     # Spec 2026-09-26-implied-return-spread. Annual rates in percent. None when refused
     # (implied_return_refusal says why) or when read from a snapshot before metric v3
@@ -337,6 +341,10 @@ class CorporateComparisonRow(BaseModel):
     market_implied_return: float | None
     implied_return_spread: float | None
     implied_return_refusal: str | None
+    # Why dcf_value / dcf_implied_return / stock_expected_return are None: the DCF itself
+    # refused (spec 2026-09-26-dcf-fcff-floor-removal). Separate from implied_return_refusal
+    # even when both carry the same code -- two calculations, each declining.
+    dcf_refusal: str | None
     stock_expected_return_source: str = "dcf_implied_upside"
     has_price_data: bool = True
     # Beside has_price_data, and for the same reason: the three return fields above are
@@ -420,7 +428,9 @@ class CorporateComparisonStockHistoryPoint(BaseModel):
     benchmark_ticker: str = "^GSPC"
     current_price: float = 0.0
     roic_minus_wacc: float = 0.0
-    dcf_implied_return: float = 0.0
+    # None when the DCF refused (dcf_refusal); required, never defaulted.
+    dcf_implied_return: float | None
+    dcf_refusal: str | None
     # None when refused or before metric v3 (not recorded); required, never defaulted.
     implied_return_spread: float | None
     # Tells those two apart: a code when refused, None when not recorded.

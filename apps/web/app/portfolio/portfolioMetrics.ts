@@ -226,7 +226,7 @@ export function buildPortfolioTickerMetrics(args: {
       dcfUpside: row
         ? buildNumericMetric(row.dcf_implied_return, {
           sourceMode,
-          missingReason: "Missing DCF output for this ticker.",
+          missingReason: row.dcf_refusal ? impliedReturnRefusalText(row.dcf_refusal) : "Missing DCF output for this ticker.",
           suspiciousReason: "DCF value vs price falls outside the sanity range and is excluded from ranking.",
           stale,
         })

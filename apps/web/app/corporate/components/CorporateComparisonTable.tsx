@@ -11,14 +11,15 @@ export interface ComparisonTableRow {
   group_name: string;
   weight: number;
   roic_minus_wacc: number;
-  dcf_value: number;
+  dcf_value: number | null;
   current_price: number;
-  dcf_implied_return: number;
+  dcf_implied_return: number | null;
   capm_expected_return: number;
   market_expected_return: number;
   market_implied_return: number | null;
   implied_return_spread: number | null;
   implied_return_refusal: string | null;
+  dcf_refusal: string | null;
   has_price_data: boolean;
   bridge_quality?: string;
 }
@@ -96,7 +97,9 @@ export function CorporateComparisonTable({
                     type="button"
                     onClick={() => onOpenCalculationForTicker(row.ticker, "backendFairValue")}
                     disabled={row.group_name === "benchmark"}
-                    title={bridged === null ? "The equity bridge did not resolve for this ticker, so no intrinsic value per share is available." : undefined}
+                    title={row.dcf_refusal
+                      ? impliedReturnRefusalText(row.dcf_refusal)
+                      : bridged === null ? "The equity bridge did not resolve for this ticker, so no intrinsic value per share is available." : undefined}
                     className={`font-bold tabular-nums text-[var(--text-primary)] ${row.group_name === "benchmark" ? "cursor-default" : "underline decoration-dotted underline-offset-4 hover:opacity-80"}`}
                   >
                     {bridged === null ? "—" : formatMoney(bridged)}
@@ -108,9 +111,10 @@ export function CorporateComparisonTable({
                     type="button"
                     onClick={() => onOpenCalculationForTicker(row.ticker, "backendDcf")}
                     disabled={row.group_name === "benchmark"}
+                    title={row.dcf_refusal ? impliedReturnRefusalText(row.dcf_refusal) : undefined}
                     className={`tabular-nums text-[var(--text-primary)] ${row.group_name === "benchmark" ? "cursor-default" : "underline decoration-dotted underline-offset-4 hover:opacity-80"}`}
                   >
-                    {formatPct2(row.dcf_implied_return)}
+                    {row.dcf_implied_return === null ? "—" : formatPct2(row.dcf_implied_return)}
                   </button>
                 </td>
                 <td className="px-4 py-3 text-right tabular-nums">{formatPct2(row.capm_expected_return)}</td>

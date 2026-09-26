@@ -39,12 +39,15 @@ WACC is 8.35 on the real path and 16.71 on the floored one, so the gap reads pos
 implied return reads below WACC.
 Root cause: the floor exists so a value is always on screen, and the band it distorts was never
 bounded. It predates this branch.
-Fix: Not fixed. Out of scope for the implied-return change (spec 2026-09-26 §5). The implied return
-does not use the floor (pinned by
-`test_a_sub_unit_fcff_is_solved_on_the_real_cash_flow_not_the_display_floor`, which rejects a floored
-implementation). The spec and metric doc now state that the per-share sign equivalence holds only
-when fcff >= 1. Tracked in guideline/sop/todo.md.
-Files changed: docs only (spec, docs/metrics/discount-rates-and-returns.md, todo).
+Fix: removed in both valuation paths (metric v4): the comparison DCF (`_dcf_snapshot`) and the
+single-ticker DCF (`_build_dcf_outputs`) now value the real FCFF, and a DCF exists only when every
+forecast FCFF is positive (`packages/core_finance/dcf.fcff_path_is_admissible`, shared with the
+implied return). Otherwise it refuses as non_positive_fcff: row/snapshot `dcf_refusal`, history
+average excluded, decision log `figures_unavailable_reason`, 422 on the single-ticker routes, and
+"Not valued" content in the UI. Spec docs/superpowers/specs/2026-09-26-dcf-fcff-floor-removal-design.md.
+Pinned by `test_a_small_positive_fcff_is_valued_on_its_real_cash_flow` (rejects the restored floor)
+and `test_the_dcf_gap_and_the_implied_return_agree_in_sign`.
+Files changed: apps/api/models/schema_parts/corporate.py, apps/api/routes/corporate.py, apps/api/services/corporate_comparison.py, apps/api/services/corporate_dcf.py, apps/api/services/corporate_metrics_service.py, apps/api/services/db.py, apps/api/services/investment_decision.py, apps/web/app/corporate/components/CorporateComparisonTable.tsx, apps/web/app/corporate/components/TargetStockComparisonSection.tsx, apps/web/app/corporate/corporateDerivedViews.ts, apps/web/app/corporate/corporateTypes.ts, apps/web/app/corporate/corporateUtils.ts, apps/web/app/corporate/page.tsx, apps/web/app/portfolio/components/SnapshotHistoryModal.tsx, apps/web/app/portfolio/page.tsx, apps/web/app/portfolio/portfolioMetrics.ts, apps/web/components/workbenches/DCFWorkbench.tsx, apps/web/lib/dcfRefusal.ts, apps/web/tests/e2e/corporate-comparison-bridge.spec.ts, apps/web/tests/e2e/fixtures/shared.ts, apps/web/tests/e2e/helpers/corporatePageMock.ts, apps/web/tests/e2e/helpers/portfolioPageMock.ts, apps/web/tests/e2e/refresh-idle-state.spec.ts, apps/web/tests/e2e/snapshot-history-metric-version.spec.ts, packages/core_finance/__init__.py, packages/core_finance/dcf.py, packages/core_finance/expected_return.py, packages/core_finance/refusals.py, packages/shared-types/generated/portfolio.schema.json, packages/shared-types/generated/portfolio.ts, tests/api/test_bulk_dcf_isolation.py, tests/api/test_corporate_comparison.py, tests/api/test_corporate_dcf_bridge.py, tests/api/test_corporate_dcf_streaming.py, tests/api/test_investment_decision_record.py, tests/core_finance/test_dcf_admissibility.py.
 Prevention: a placeholder that keeps a number on screen must say so on screen, or refuse; a silent
 floor is a value presented as measured.
 

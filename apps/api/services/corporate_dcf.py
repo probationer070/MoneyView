@@ -8,6 +8,7 @@ from typing import Callable
 from packages.core_finance.dcf import (
     calculate_equity_value,
     calculate_intrinsic_value_per_share,
+    require_admissible_fcff_path,
     sensitivity_grid,
 )
 from packages.core_finance.terminal_growth import TERMINAL_GROWTH_CEILING, derive_terminal_growth
@@ -199,7 +200,7 @@ def _build_dcf_outputs(
     ticker = ticker.upper()
     current_price = current_price_loader(ticker)
     metrics = metrics_loader(ticker) if params.fcff is None or params.esg_penalty is None else None
-    base_fcff = max(float(params.fcff if params.fcff is not None else metrics.fcff), 1.0)
+    base_fcff = float(params.fcff if params.fcff is not None else metrics.fcff)
     esg_penalty = float(params.esg_penalty if params.esg_penalty is not None else metrics.esg_penalty)
     wacc = max(float(params.wacc), 0.001)
     terminal_derivation = derive_terminal_growth(
@@ -218,6 +219,10 @@ def _build_dcf_outputs(
         terminal_growth = max(terminal_growth, -0.1)
     margin_used = float(params.operating_margin)
     growth_used = float(params.revenue_growth_rate)
+    # No floor (spec 2026-09-26-dcf-fcff-floor-removal): the same admissibility test the
+    # comparison DCF and the implied return use. A refused path raises the typed refusal,
+    # which the routes return as 422 and the bulk batch lists under `skipped`.
+    require_admissible_fcff_path([base_fcff * ((1 + growth_used) ** year) for year in range(1, 6)])
     generated_at = datetime.now(timezone.utc).isoformat()
 
     projection_rows: list[DCFProjectionRow] = []

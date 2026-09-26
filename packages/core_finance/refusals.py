@@ -14,6 +14,7 @@ from __future__ import annotations
 # Every code an engine raise site may use. `tests/api/test_engine_refusals.py` checks
 # that each raise in the engine uses one of these, as a literal, and that each is used.
 ENGINE_REFUSAL_CODES: frozenset[str] = frozenset({
+    "non_positive_fcff",
     "roic_below_wacc",
     "terminal_spread_not_positive",
     "terminal_growth_above_riskfree",

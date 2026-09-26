@@ -132,17 +132,20 @@ export interface CorporateComparisonRowApi {
   roic: number;
   wacc: number;
   roic_minus_wacc: number;
-  dcf_value: number;
+  /** null when the DCF refused (dcf_refusal says why). */
+  dcf_value: number | null;
   current_price: number;
-  dcf_implied_return: number;
+  dcf_implied_return: number | null;
   capm_expected_return: number;
-  stock_expected_return: number;
+  stock_expected_return: number | null;
   market_expected_return: number;
   /** Percent per year; null when refused (see implied_return_refusal) or not recorded (pre-v3). */
   market_implied_return: number | null;
   /** market_implied_return - wacc, percentage points per year. */
   implied_return_spread: number | null;
   implied_return_refusal: string | null;
+  /** Why the DCF produced no value (e.g. "non_positive_fcff"); separate from implied_return_refusal. */
+  dcf_refusal: string | null;
   stock_expected_return_source: string;
   has_price_data: boolean;
   bridge_quality?: string;

@@ -7,6 +7,9 @@ Per GEMINI SOP §2: NumPy-first; no Rust unless profiled bottleneck.
 
 from __future__ import annotations
 
+from math import isfinite
+from typing import Sequence
+
 from packages.core_finance.refusals import EngineRefusal
 
 import numpy as np
@@ -258,3 +261,23 @@ def sensitivity_grid(
         "terminal_growth_values": terminal_growth_values,
         "cells":                  cells,
     }
+
+
+def fcff_path_is_admissible(fcff_path: Sequence[float]) -> bool:
+    """Whether a DCF may value this forecast: every year finite and strictly positive.
+
+    The single definition shared by the comparison DCF, the single-ticker DCF and the
+    implied-return solver (spec 2026-09-26-dcf-fcff-floor-removal §2). Base FCFF alone is
+    not enough: a positive base with growth <= -100% turns later years non-positive.
+    `isfinite` first, because `nan <= 0` is False.
+    """
+    return bool(fcff_path) and all(isfinite(cash_flow) and cash_flow > 0 for cash_flow in fcff_path)
+
+
+def require_admissible_fcff_path(fcff_path: Sequence[float]) -> None:
+    """Raise the typed refusal when `fcff_path_is_admissible` is False."""
+    if not fcff_path_is_admissible(fcff_path):
+        raise EngineRefusal(
+            "non_positive_fcff",
+            "Free cash flow is zero or negative over the forecast, so the model cannot value it.",
+        )

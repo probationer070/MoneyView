@@ -336,3 +336,15 @@ def test_a_non_default_rate_passed_to_record_decision_reaches_the_loader(monkeyp
     )
     assert seen["risk_free_rate"] == 0.05
     assert seen["equity_risk_premium"] == 0.065
+
+
+def test_a_refused_dcf_is_recorded_as_unavailable_never_as_a_value():
+    row = _row(
+        record_decision(
+            ticker="BURNCO", action="watch", memo="burning cash",
+            figures_loader=_figures_with(dcf_value=None, dcf_implied_return=None, dcf_refusal="non_positive_fcff"),
+        )
+    )
+    assert row["figures_unavailable_reason"] is not None
+    assert "zero or negative" in row["figures_unavailable_reason"]
+    assert row["dcf_value"] is None and row["price_at_decision"] is None
