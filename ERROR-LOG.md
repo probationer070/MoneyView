@@ -752,9 +752,19 @@ unlevering. It then calls `packages/core_finance/beta.py`'s `relever_beta` inste
 repeating the formula by hand. `tests/api/test_corporate_comparison.py::
 test_capm_relevers_beta_with_debt_to_equity_not_debt_to_capital` asserts the published
 `capm_expected_return` for debt_ratio 60 (16.22%, worked out by hand). Reintroducing the
-shipped `dr / 100` in memory fails it with 12.31. Not fixed here: unlevering uses the
-company's own tax rate and relevering uses `DEFAULT_TAX_RATE = 0.21`, so the round trip
-is still not exact for a company whose tax rate differs. Impact before the fix:
+shipped `dr / 100` in memory fails it with 12.31. At first this fix left the tax
+rates mismatched: unlevering used the company's own rate and relevering used
+`DEFAULT_TAX_RATE = 0.21`. That was closed 2026-09-26:
+- `CorporateMetrics.tax_rate` carries the statement rate the beta was unlevered with,
+  and the relever uses it. 0.21 applies only when the rate is unknown.
+- `test_a_statement_beta_round_trips_through_unlever_and_relever` pins the round trip
+  (a 1.5 beta comes back 1.496 at 30%; it would be 1.557 at 21%).
+- Three mutations are each caught: a flat rate again, the statement rate not carried,
+  and a 0% fallback.
+- Measured read-only on the real data: 78 of 123 companies' CAPM return moved by up to
+  ±1.19pp (STEM and STX, at a 15% rate and 90% debt ratio, moved +1.19pp).
+The remaining round-trip imprecision is small and deliberate: `debt_ratio` is capped at
+90 (so D/E is capped at 9), and the unlevered beta is clamped to [0.4, 3.0]. Impact before the fix:
 108 of 135 tickers get a different beta under the correct substitution, understating
 `capm_expected_return` by up to 14.08pp (STX, STEM, SKYX, DOCN, all `debt_ratio` 90.00: coded
 beta 0.6844 against a correct 3.2440), then BE 12.65pp, AES 11.26pp, ORCL 7.39pp.

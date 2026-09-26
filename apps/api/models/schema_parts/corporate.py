@@ -231,6 +231,10 @@ class CorporateMetrics(BaseModel):
     wacc: float = 10.0
     debt_ratio: float = 18.0
     unlevered_beta: float = 1.05
+    # The tax rate `unlevered_beta` was unlevered with, so CAPM can relever with the same
+    # one. None when the beta did not come from statements (saved, manual or default
+    # metrics); the relever then falls back to DEFAULT_TAX_RATE.
+    tax_rate: float | None = None
     crp: float = 0.8
     reinvestment: float = 34.0
     fcff: float = 92.0

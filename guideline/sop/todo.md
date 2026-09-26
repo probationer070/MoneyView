@@ -19,11 +19,17 @@ Legend: `[ ]` not started, `[x]` complete
 
 ## Where things stand (2026-09-26)
 
-`renewal` @ `7646ed6` (PRs through #50 merged). **PR #51 (`cases-ui`) is open**: the
-Cases tab (C2's UI) plus the `/simulate` seed fix. Measured on `cases-ui` @ `9424bdc`:
-**1638 pytest passing**, plus **16 failures that are environmental** (`exchange_calendars`
-is not installed in the local Python env; the same 16 fail on `renewal`), and **267
-Playwright specs passing**.
+`renewal` with PRs through **#53** merged:
+- #51: C2 complete (the Cases tab and `/pricing`), the `/simulate` seed fix, and the
+  news re-key (G5).
+- #52: H11's binding-constraint label.
+- #53: the F2 tax-rate fix.
+
+Measured on the #53 branch after merging `renewal` into it: **1664 pytest passing**,
+plus **16 failures that are environmental**. `exchange_calendars` is not installed in
+the local Python env, and the same 16 fail on every branch. The last full Playwright
+run (the Cases branch, before `/pricing`) had **267 specs passing**; `/pricing` added 3
+more, and the Cases specs pass at 53/53.
 
 **Local-data state, measured 2026-09-26** (read-only query against
 `data/processed/moneyview.db`). Counts, not recollections:
@@ -41,8 +47,6 @@ Playwright specs passing**.
 | `news` | 2,818 | 0 duplicates. 114 were removed and 400 rows re-keyed on 2026-09-26 (G5) |
 
 **Open work, in suggested order:**
-- **F2 follow-up.** Unlevering uses each company's tax rate and relevering uses 0.21. This
-  is a modelling decision for the user.
 - **F4.** Fade provenance flag. **G2.** 2 NULL-close rows. **I-C2.** Price-derived
   events. All three are optional or cleanup.
 
@@ -883,8 +887,12 @@ enforcing the citation and eight-field shape of every entry. Spec:
 
 - [x] **F2. CAPM debt-weight defect — FIXED 2026-09-24.** `_levered_beta_from_metrics`
       now converts `debt_ratio` to D/E and calls `relever_beta`. The fix is
-      mutation-verified (see the ERROR-LOG Fix line). Still open: unlevering uses the
-      company's tax rate and relevering uses 0.21. Original record: `ERROR-LOG.md`
+      mutation-verified (see the ERROR-LOG Fix line). The tax-rate follow-up was CLOSED
+      2026-09-26. Relevering now uses the rate the beta was unlevered with
+      (`CorporateMetrics.tax_rate`, from statements), falling back to 0.21 only when
+      it is unknown. A round-trip test pins it, and it is mutation-checked. The
+      change moved 78 of 123 companies' CAPM return by up to ±1.19pp.
+      Original record: `ERROR-LOG.md`
       2026-09-09: `corporate_comparison.py:1130` relevers beta with
       `debt_ratio` (`D/(D+E)`, a debt-to-capital weight) fed into a Hamada
       formula wanting `D/E`. 108 of 135 tickers get a different beta under

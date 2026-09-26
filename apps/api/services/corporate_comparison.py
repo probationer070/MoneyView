@@ -1143,4 +1143,9 @@ def _levered_beta_from_metrics(metrics: CorporateMetrics) -> float:
     # Same conversion as `_statement_debt_to_equity`'s fallback, which unlevered this beta.
     debt_ratio = float(metrics.debt_ratio)
     debt_to_equity = max(debt_ratio / max(100 - debt_ratio, 1), 0.0)
-    return max(relever_beta(float(metrics.unlevered_beta), DEFAULT_TAX_RATE, debt_to_equity), 0.0)
+    # Relever with the rate the beta was unlevered with (corporate_statement_metrics), so
+    # the round trip returns the beta it started from. A flat rate on one side only
+    # changed every levered company's beta. DEFAULT_TAX_RATE is the fallback when that
+    # rate is unknown (saved, manual or default metrics).
+    tax_rate = metrics.tax_rate if metrics.tax_rate is not None else DEFAULT_TAX_RATE
+    return max(relever_beta(float(metrics.unlevered_beta), tax_rate, debt_to_equity), 0.0)

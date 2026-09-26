@@ -155,8 +155,13 @@ identical fixed constants (0.042/0.055) `market_expected_return` receives.
 `beta`, unlike those two, is ticker-specific: it is
 `_levered_beta_from_metrics(metrics)` (`corporate_comparison.py`), which calls
 `packages/core_finance/beta.py`'s `relever_beta`
-(`β_L = β_U × [1 + (1−t)(D/E)]`) with `DEFAULT_TAX_RATE = 0.21` and
+(`β_L = β_U × [1 + (1−t)(D/E)]`) with `t = metrics.tax_rate` and
 `D/E = debt_ratio / max(100 − debt_ratio, 1)`, floored at 0.0.
+`metrics.tax_rate` is the company's median statement tax rate, the same rate
+`unlevered_beta` was unlevered with. Using the same rate on both sides makes the round
+trip consistent. Before 2026-09-26 relevering used a flat 21%, which moved 78 of 123
+companies' CAPM return by up to ±1.19pp. When the rate is unknown (saved, manual or
+default metrics), `DEFAULT_TAX_RATE = 0.21` is used.
 `metrics.debt_ratio` is `debt / (debt + equity) * 100`, bounded to `[0, 90]`
 (`corporate_statement_metrics.py`) — a debt-to-capital weight — so it is
 converted to D/E first, the same conversion `_statement_debt_to_equity` uses
