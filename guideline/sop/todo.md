@@ -35,7 +35,15 @@ except the items below, all of them optional or cleanup.
 
 ## Open work
 
-- [ ] **F4. Unmarked fade provenance gap.** A stored conservative case's
+- [x] **F4. Unmarked fade provenance gap.** FIXED 2026-09-26 with case-level
+      narratives (`case_narrative`, an optional records-sync child so older peers still
+      read every case without one). A conservative case now stores the claim for
+      `wacc_initial`/`wacc_stable`/`effective_tax_rate`/`roic_stable`; the `roic_stable`
+      claim names which bound won. Forks drop the claim of a case field they change. The
+      Cases tab shows the claims. 22 pytest tests and 1 e2e; 16 mutations caught. **Rollout:** update both
+      PCs before generating a new conservative case, or the older PC skips the file that
+      carries it. The original entry follows.
+      A stored conservative case's
       `wacc_initial`/`wacc_stable`/`effective_tax_rate` (and `roic_stable`,
       via `after_tax_roc`) carry no flag distinguishing a faded case-level
       value from one that was never faded -- `fade`'s meta dict is discarded
