@@ -41,7 +41,6 @@ Playwright specs passing**.
 | `news` | 2,818 | 0 duplicates. 114 were removed and 400 rows re-keyed on 2026-09-26 (G5) |
 
 **Open work, in suggested order:**
-- **H11.** `terminal_growth_binding_constraint` is on the payload but no surface reads it.
 - **F2 follow-up.** Unlevering uses each company's tax rate and relevering uses 0.21. This
   is a modelling decision for the user.
 - **F4.** Fade provenance flag. **G2.** 2 NULL-close rows. **I-C2.** Price-derived
