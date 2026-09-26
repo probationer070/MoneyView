@@ -35,9 +35,11 @@ type ChartRecord = Record<string, string | number | boolean | null | undefined>;
  * surfaces, which carry the same quantity under a different field name.
  */
 export function bridgedDcfValue(
-  row: { dcf_value: number; bridge_quality?: string },
+  row: { dcf_value: number | null; bridge_quality?: string },
 ): number | null {
-  return isBridgeUnresolved(row.bridge_quality) ? null : row.dcf_value;
+  // Null for an unresolved bridge (an enterprise value, not per-share) and for a refused
+  // DCF (no value at all): neither may be presented, sorted or plotted as a per-share value.
+  return isBridgeUnresolved(row.bridge_quality) || row.dcf_value === null ? null : row.dcf_value;
 }
 
 export function sortComparisonRows(
@@ -120,7 +122,7 @@ export function buildSimilarComparisonScatterPeers(rows: CorporateComparisonRowA
     .map((row) => ({
       ticker: row.ticker,
       current_price: Number(row.current_price.toFixed(2)),
-      dcf_value: Number(row.dcf_value.toFixed(2)),
+      dcf_value: Number((bridgedDcfValue(row) as number).toFixed(2)),
       implied_return_spread: row.implied_return_spread,
       // A refused row keeps its price/value position but has no spread to scale by, so it
       // is drawn at the base size (spec 2026-09-26-implied-return-spread, plan Task 4).
@@ -133,7 +135,7 @@ export function buildSimilarComparisonScatterSelected(row: CorporateComparisonRo
     ? [{
       ticker: row.ticker,
       current_price: Number(row.current_price.toFixed(2)),
-      dcf_value: Number(row.dcf_value.toFixed(2)),
+      dcf_value: Number((bridgedDcfValue(row) as number).toFixed(2)),
       implied_return_spread: row.implied_return_spread,
       bubble_size: Math.max(Math.abs(row.implied_return_spread ?? 0) * 5, 120),
     }]

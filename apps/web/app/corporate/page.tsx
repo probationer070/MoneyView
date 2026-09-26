@@ -6,6 +6,7 @@ import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { RefreshCw } from "lucide-react";
 import { fetchApi } from "@/lib/api";
+import { DcfRefusalError } from "@/lib/dcfRefusal";
 import { TickerSearch } from "@/components/ui/TickerSearch";
 import { tabStateKey, useTabState } from "@/lib/tabState";
 import { bridgedEstimatedValue, UNBRIDGED_PLACEHOLDER, UNBRIDGED_REASON } from "@/lib/bridgeQuality";
@@ -200,6 +201,8 @@ export default function CorporateAnalysisPage() {
   const [dcfFullReportLoading, setDcfFullReportLoading] = useState(false);
   const [dcfFullReportError, setDcfFullReportError] = useState<string | null>(null);
   const [dcfStreamError, setDcfStreamError] = useState<string | null>(null);
+  // A DCF the model declined (e.g. non_positive_fcff): shown as content, never as an error.
+  const [dcfRefusal, setDcfRefusal] = useState<DcfRefusalError | null>(null);
   const [bulkDcfReports, setBulkDcfReports] = useState<DCFFullReport[]>([]);
   const [bulkDcfReportsLoading, setBulkDcfReportsLoading] = useState(false);
   const [bulkDcfReportsError, setBulkDcfReportsError] = useState<string | null>(null);
@@ -527,7 +530,8 @@ export default function CorporateAnalysisPage() {
   const dcfCachedForTicker = dcfCachedCalculation?.snapshot.ticker?.trim().toUpperCase() === sourceDataTicker
     ? dcfCachedCalculation
     : null;
-  const dcfDisplayData = dcfStreamResult ?? dcfCachedForTicker?.result ?? null;
+  // A refusal supersedes any cached value, including one computed under the old FCFF floor.
+  const dcfDisplayData = dcfRefusal ? null : dcfStreamResult ?? dcfCachedForTicker?.result ?? null;
   const comparisonDisplayData = comparisonQuery.data ?? comparisonCachedResult;
   const rawMetricsHistoryData = metricsHistoryQuery.data ?? cachedMetricsHistory;
   const rawQuarterlyStatementsData = quarterlyStatementsQuery.data ?? cachedQuarterlyStatements;
@@ -582,6 +586,7 @@ export default function CorporateAnalysisPage() {
     let streamedAssumptions: DCFAssumptionSummary | null = null;
     setDcfStreamStatus("streaming");
     setDcfStreamError(null);
+    setDcfRefusal(null);
     setDcfFullReport(null);
 
     void streamCorporateDcfSummary(dcfRequestedSnapshot, abortController.signal, (payload) => {
@@ -609,6 +614,12 @@ export default function CorporateAnalysisPage() {
       }
     }).catch((error: unknown) => {
       if (abortController.signal.aborted) return;
+      if (error instanceof DcfRefusalError) {
+        setDcfRefusal(error);
+        setDcfStreamResult(null);
+        setDcfStreamStatus("complete");
+        return;
+      }
       setDcfStreamStatus("error");
       setDcfStreamError(error instanceof Error ? error.message : "DCF summary stream failed.");
     }).finally(() => {
@@ -950,7 +961,7 @@ export default function CorporateAnalysisPage() {
                 <button
                   type="button"
                   onClick={() => void handleViewFullDcfReport()}
-                  disabled={dcfFullReportLoading || (!dcfData && dcfStreamStatus === "idle")}
+                  disabled={dcfFullReportLoading || dcfRefusal !== null || (!dcfData && dcfStreamStatus === "idle")}
                   className="inline-flex items-center gap-2 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 font-bold text-[var(--text-primary)] disabled:opacity-60"
                 >
                   {dcfFullReportLoading ? "Loading report..." : "View Full Report"}
@@ -971,6 +982,11 @@ export default function CorporateAnalysisPage() {
                 )}
                 {!dcfData && dcfStreamStatus !== "streaming" && (
                   <span>DCF stays idle on first load until you refresh it.</span>
+                )}
+                {dcfRefusal && (
+                  <span data-testid="dcf-refusal" className="rounded-full bg-[var(--surface-muted)] px-2 py-1 text-[length:var(--type-caption)] font-bold text-[var(--text-secondary)]">
+                    Not valued: {dcfRefusal.readerText}
+                  </span>
                 )}
                 {dcfStreamError && (
                   <span className="rounded-full bg-red-100 px-2 py-1 text-[length:var(--type-caption)] font-bold text-red-800">

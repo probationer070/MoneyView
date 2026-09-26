@@ -194,17 +194,19 @@ test("a suppressed row sorts last in both directions", async ({ page }) => {
   await mockCorporatePageApi(page);
   await gotoComparison(page);
 
+  // Two rows have no per-share value: MISS (unresolved bridge) and BURN (refused DCF).
+  const unvalued = ["BURN", "MISS"];
   await sortBy(page, "dcf_value", "desc");
   const descending = await tickerOrder(page);
-  expect(descending.at(-1)).toBe("MISS");
+  expect(descending.slice(-2).sort()).toEqual(unvalued);
 
   await sortBy(page, "dcf_value", "asc");
   const ascending = await tickerOrder(page);
-  expect(ascending.at(-1)).toBe("MISS");
+  expect(ascending.slice(-2).sort()).toEqual(unvalued);
 
-  // The rest of the table really did reverse, so "MISS last both times" is the null rule
-  // at work and not a table that failed to re-sort at all.
-  expect(ascending.slice(0, -1)).toEqual([...descending.slice(0, -1)].reverse());
+  // The rest of the table really did reverse, so "unvalued last both times" is the null
+  // rule at work and not a table that failed to re-sort at all.
+  expect(ascending.slice(0, -2)).toEqual([...descending.slice(0, -2)].reverse());
 });
 
 test("a suppressed row is not plotted against current price", async ({ page }) => {
@@ -259,14 +261,16 @@ test("a refused row shows a dash with its reason, and the spread chart says it h
 test("refused rows sort last in both directions", async ({ page }) => {
   await mockCorporatePageApi(page);
   await gotoComparison(page);
+  // Two rows have no implied return: MISS (bridge_unresolved) and BURN (non_positive_fcff).
+  const refused = ["BURN", "MISS"];
   await sortBy(page, "implied_return_spread", "desc");
   const descending = await tickerOrder(page);
-  expect(descending.at(-1)).toBe("MISS");
+  expect(descending.slice(-2).sort()).toEqual(refused);
   await sortBy(page, "implied_return_spread", "asc");
   const ascending = await tickerOrder(page);
-  expect(ascending.at(-1)).toBe("MISS");
+  expect(ascending.slice(-2).sort()).toEqual(refused);
   // The non-refused rows really did reverse, so the direction control took effect.
-  expect(ascending.slice(0, -1)).toEqual(descending.slice(0, -1).reverse());
+  expect(ascending.slice(0, -2)).toEqual(descending.slice(0, -2).reverse());
 });
 
 test("a stale saved sort key falls back to the default sort", async ({ page }) => {
@@ -280,4 +284,19 @@ test("a stale saved sort key falls back to the default sort", async ({ page }) =
   const restored = await tickerOrder(page);
   await sortBy(page, "implied_return_spread", "desc");
   expect(restored).toEqual(await tickerOrder(page));
+});
+
+test("a refused DCF shows a dash with its reason in both DCF cells, sorts last and is not plotted", async ({ page }) => {
+  await mockCorporatePageApi(page);
+  await gotoComparison(page);
+  const value = rowCell(page, "BURN", "DCF Value");
+  await expect(value).toHaveText("—");
+  await expect(value.locator("[title]").first()).toHaveAttribute("title", /zero or negative over the forecast/);
+  await expect(rowCell(page, "BURN", "DCF value vs price (one-off gap)")).toHaveText("—");
+  await sortBy(page, "dcf_value", "desc");
+  expect((await tickerOrder(page)).slice(-2)).toContain("BURN");
+  await sortBy(page, "dcf_value", "asc");
+  expect((await tickerOrder(page)).slice(-2)).toContain("BURN");
+  await selectSimilarComparison(page, "AAPL");
+  expect(await plottedTickers(page)).not.toContain("BURN");
 });

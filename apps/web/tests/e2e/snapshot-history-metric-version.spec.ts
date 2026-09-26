@@ -173,3 +173,14 @@ test("the history modal marks a pre-v3 average as not recorded", async ({ page }
   await expect(historyItem(dialog, notRecorded)).toContainText("Not recorded before metric v3.");
   await expect(historyItem(dialog, notRecorded)).not.toContainText("Not available");
 });
+
+test("each boundary names what changed: v3 adds the implied return, v4 drops the FCFF floor", async ({ page }) => {
+  const v4: HistoryPointSeed = { as_of_date: "2026-09-27", generated_at: "2026-09-27T09:00:00Z", metric_schema_version: 4, average_dcf_value: 150.0 };
+  const v3: HistoryPointSeed = { as_of_date: "2026-09-26", generated_at: "2026-09-26T09:00:00Z", metric_schema_version: 3, average_dcf_value: 160.0 };
+  const v2: HistoryPointSeed = { ...NEW_DEFINITION, average_implied_return_spread: null };
+  await mockPortfolioHistory(page, [v4, v3, v2]);
+  const dialog = await openSnapshotHistory(page);
+  await expect(historyItem(dialog, v4)).toContainText("$1B minimum FCFF");
+  await expect(historyItem(dialog, v3)).toContainText("Implied return vs WACC starts here");
+  await expect(historyItem(dialog, v4)).not.toContainText("Implied return vs WACC starts here");
+});

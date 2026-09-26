@@ -27,14 +27,15 @@ interface ComparisonRow {
   group_name: string;
   weight: number;
   roic_minus_wacc: number;
-  dcf_value: number;
+  dcf_value: number | null;
   current_price: number;
-  dcf_implied_return: number;
+  dcf_implied_return: number | null;
   capm_expected_return: number;
   market_expected_return: number;
   market_implied_return: number | null;
   implied_return_spread: number | null;
   implied_return_refusal: string | null;
+  dcf_refusal: string | null;
   has_price_data: boolean;
   bridge_quality?: string;
 }

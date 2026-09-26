@@ -1,4 +1,5 @@
 import { getApiBaseUrl } from "@/lib/api";
+import { readDcfRefusal } from "@/lib/dcfRefusal";
 import type {
   DcfAssumptionSummary as DCFAssumptionSummary,
   DcfSummaryResponse as DCFResult,
@@ -90,6 +91,8 @@ export async function streamCorporateDcfSummary(
     signal,
   });
 
+  const refusal = await readDcfRefusal(response);
+  if (refusal) throw refusal;
   if (!response.ok || !response.body) {
     throw new Error(`DCF stream failed: ${response.status}`);
   }

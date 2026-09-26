@@ -564,6 +564,7 @@ export const benchmarkUniverseFixture = {
       market_implied_return: 0.3 + 9.7,
       implied_return_spread: 0.3,
       implied_return_refusal: null,
+      dcf_refusal: null,
     },
     {
       ticker: "AAPL",
@@ -581,6 +582,7 @@ export const benchmarkUniverseFixture = {
       market_implied_return: 4.61 + 9.7,
       implied_return_spread: 4.61,
       implied_return_refusal: null,
+      dcf_refusal: null,
     },
     {
       ticker: "MSFT",
@@ -598,6 +600,7 @@ export const benchmarkUniverseFixture = {
       market_implied_return: 1.11 + 9.7,
       implied_return_spread: 1.11,
       implied_return_refusal: null,
+      dcf_refusal: null,
     },
   ],
 };

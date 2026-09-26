@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { fetchApi } from "@/lib/api";
+import { DcfRefusalError, postDcf } from "@/lib/dcfRefusal";
 import { RefreshCw } from "lucide-react";
 import { Sliders } from "@/components/ui/Sliders";
 import type { DcfSummaryResponse as DCFResult } from "../../../../packages/shared-types";
@@ -69,7 +69,7 @@ export const DCFWorkbench: React.FC<DCFWorkbenchProps> = ({ ticker }) => {
   }), [ticker, uiState.growth, uiState.margin, uiState.wacc]);
 
   // React Query rigorously managing UI polling and stale boundaries
-  const { data, isFetching, isError } = useQuery<DCFResult>({
+  const { data, isFetching, isError, error } = useQuery<DCFResult>({
     queryKey: [
       "detail-dcf-workbench",
       requestedSnapshot?.ticker ?? "idle",
@@ -78,17 +78,16 @@ export const DCFWorkbench: React.FC<DCFWorkbenchProps> = ({ ticker }) => {
       requestedSnapshot?.growth ?? "idle",
       refreshToken ?? "idle",
     ],
-    queryFn: ({ signal }) => fetchApi(`/corporate/dcf/${ticker}`, {
-      method: "POST",
-      signal, // Wires ReactQuery AbortController cancelling stale inflight loops instantly
-      body: JSON.stringify({
-        revenue_growth_rate: (requestedSnapshot?.growth ?? uiState.growth) / 100,
-        operating_margin: (requestedSnapshot?.margin ?? uiState.margin) / 100,
-        wacc: (requestedSnapshot?.wacc ?? uiState.wacc) / 100,
-        tax_rate: 0.25,
-        terminal_growth_rate: 0.02
-      })
-    }),
+    // postDcf, not fetchApi: a 422 refusal (e.g. non_positive_fcff) must reach the render as
+    // a DcfRefusalError with its code, not as a generic failure. The signal still cancels
+    // stale in-flight requests.
+    queryFn: ({ signal }) => postDcf<DCFResult>(`/corporate/dcf/${ticker}`, {
+      revenue_growth_rate: (requestedSnapshot?.growth ?? uiState.growth) / 100,
+      operating_margin: (requestedSnapshot?.margin ?? uiState.margin) / 100,
+      wacc: (requestedSnapshot?.wacc ?? uiState.wacc) / 100,
+      tax_rate: 0.25,
+      terminal_growth_rate: 0.02
+    }, signal),
     placeholderData: (prev) => prev, // Eliminates UI visual jarring on refetches
     staleTime: 1000 * 60,
     enabled: Boolean(requestedSnapshot && refreshToken),
@@ -172,7 +171,12 @@ export const DCFWorkbench: React.FC<DCFWorkbenchProps> = ({ ticker }) => {
           </div>
         )}
 
-        {isError && (
+        {isError && error instanceof DcfRefusalError && (
+          <p data-testid="dcf-workbench-refusal" className="text-sm rounded-md p-3 border border-[var(--border)] text-[var(--text-secondary)]">
+            Not valued: {error.readerText}
+          </p>
+        )}
+        {isError && !(error instanceof DcfRefusalError) && (
           <div className="text-red-500 text-sm bg-red-50 rounded-md p-3 border border-red-100">
             Backend failed to compute DCF boundaries. Check Pydantic validation logs.
           </div>

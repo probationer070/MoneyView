@@ -125,6 +125,7 @@ test("corporate renders cached calculation results without auto-fetch and refres
             market_implied_return: 0.3 + 9.7,
             implied_return_spread: 0.3,
             implied_return_refusal: null,
+            dcf_refusal: null,
             stock_expected_return_source: "dcf_implied_upside",
             has_price_data: true,
           },
@@ -146,6 +147,7 @@ test("corporate renders cached calculation results without auto-fetch and refres
             market_implied_return: 2.13 + 9.7,
             implied_return_spread: 2.13,
             implied_return_refusal: null,
+            dcf_refusal: null,
             stock_expected_return_source: "dcf_implied_upside",
             has_price_data: true,
           },
@@ -395,6 +397,7 @@ test("portfolio renders cached analysis without auto-fetch, refreshes on demand,
             market_implied_return: -1.2 + 9.7,
             implied_return_spread: -1.2,
             implied_return_refusal: null,
+            dcf_refusal: null,
           },
           {
             ticker: "AAPL",
@@ -410,6 +413,7 @@ test("portfolio renders cached analysis without auto-fetch, refreshes on demand,
             market_implied_return: 3.5 + 9.7,
             implied_return_spread: 3.5,
             implied_return_refusal: null,
+            dcf_refusal: null,
           },
         ],
       },
@@ -563,4 +567,29 @@ test("portfolio renders cached analysis without auto-fetch, refreshes on demand,
   await expect.poll(() => stats.stockDetailRequests).toBe(1);
   await expect.poll(() => stats.stockSnapshotHistoryRequests).toBeGreaterThan(0);
   await expect(stockDetailDialog.getByRole("heading", { name: "Stock History Timeline" })).toBeVisible();
+});
+
+test("a refused single-ticker DCF shows the refusal as content, not an error or a number", async ({ page }) => {
+  // A value cached before the change (computed under the old FCFF floor) must not survive a
+  // refresh that refuses: Review Focus 1.
+  await seedSessionStorage(page, {
+    [CORPORATE_DCF_CACHE_KEY]: {
+      snapshot: { ticker: "AAPL", growth: 6, roic: 18, wacc: 10, debtRatio: 18, unleveredBeta: 1.05, crp: 0.8, reinvestment: 34, fcff: 92, esgPenalty: 22 },
+      result: { estimated_value: 199.9, current_price: 180.2, upside_pct: 10.93, wacc_used: 0.1, margin_used: 0.18, growth_used: 0.06, status: "Cached" },
+      lastUpdatedAt: "2026-04-10T10:00:00Z",
+    },
+  });
+  await mockCorporatePageApi(page);
+  await page.route("**/api/v1/corporate/dcf/*/stream", (route) =>
+    route.fulfill({ status: 422, contentType: "application/json",
+      body: JSON.stringify({ detail: { code: "non_positive_fcff", message: "Free cash flow is zero or negative over the forecast, so the model cannot value it." } }) }));
+  await page.goto("/corporate", { waitUntil: "domcontentloaded" });
+  await expect(page.getByRole("heading", { name: /Corporate Analysis/i })).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByRole("button", { name: /^Intrinsic DCF(?! Value)/i })).toContainText("$199.9");
+  await page.getByRole("button", { name: "Refresh DCF" }).click();
+  const refusal = page.getByTestId("dcf-refusal");
+  await expect(refusal).toContainText("zero or negative over the forecast");
+  await expect(page.getByText(/DCF stream failed/)).toHaveCount(0);
+  // No number stands in for the refused value, including a cached floored one.
+  await expect(page.getByRole("button", { name: /^Intrinsic DCF(?! Value)/i })).not.toContainText("$");
 });
