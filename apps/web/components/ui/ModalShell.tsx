@@ -1,7 +1,7 @@
 "use client";
 
 import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from "react";
-import { useEffect, useCallback, useId, useRef } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useRef } from "react";
 import { X } from "lucide-react";
 import clsx from "clsx";
 import { IconButton } from "@/components/ui/IconButton";
@@ -42,7 +42,12 @@ export function ModalShell({
   // Reading onClose from a ref keeps registration tied to `open` alone.
   // ERROR-LOG.md 2026-08-02.
   const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
+  // Updated after each commit rather than during render (react-hooks/refs). A layout effect
+  // runs before the browser can deliver the next keypress, so Escape always reads the
+  // current onClose, and registration below still depends on `open` alone.
+  useLayoutEffect(() => {
+    onCloseRef.current = onClose;
+  });
 
   const handleEscape = useCallback((e: KeyboardEvent) => {
     if (e.key === "Escape") {

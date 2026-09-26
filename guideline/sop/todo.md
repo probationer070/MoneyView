@@ -65,11 +65,11 @@ except the items below, all of them optional or cleanup.
 
 Each one was re-checked against the code on 2026-09-26 and is still true.
 
-- [ ] **`ModalShell.tsx:45` fails eslint's `react-hooks/refs` rule**
-      (`onCloseRef.current = onClose` during render). That line is the deliberate
-      mechanism of an ERROR-LOG'd fix (2026-08-02, commit `1e4abf0`). It keeps the Escape
-      listener alive across a caller's re-render. Read that entry before touching it; do
-      not make a drive-by lint fix.
+- [x] **`ModalShell.tsx` failed eslint's `react-hooks/refs` rule.** FIXED 2026-09-26.
+      The `onClose` ref is now updated in a layout effect, not during render. Escape
+      registration still depends on `open` alone (ERROR-LOG 2026-08-02). The Escape
+      regression spec (`portfolio-watchlist.spec.ts`) passes 10/10 with the change, and
+      fails when the original bug (registration depending on `onClose`) is reintroduced.
 - [x] **A failed `/market/spreads` fetch is invisible.** FIXED 2026-09-26. The section
       now always renders, with a loading line, an alert on failure, or "No spreads were
       returned". Three e2e tests; three mutations caught.
@@ -80,12 +80,20 @@ Each one was re-checked against the code on 2026-09-26 and is still true.
       thread. At most one refresh runs per ticker, and the marker is cleared even on
       failure. A cache miss still fetches inline. The default stays inline for every
       other caller. Six tests; four mutations caught.
-- [ ] **`/simulate` refusal grouping matches by substring** across the whole code table,
-      so a reworded engine message could be absorbed under the wrong code while still
-      passing the completeness test. Fixing it needs a design decision: an exact
-      code-to-raise-site map, which has a maintenance cost.
-- [ ] **`/simulate`'s confidence-validation tests** cover one invalid string, not the
-      falsy `""`/`None`/`0` cases that `case_fork` was specifically fixed for.
+- [ ] **`/simulate` refusal grouping matches by substring** across the whole code table.
+      So a reworded engine message could lose its own phrase, gain another row's, and be
+      counted under the wrong code, while the completeness and uniqueness checks still
+      pass. The only thing that catches that is pinning each raise site to its expected
+      code, which is a design decision:
+      - **A test-side pin.** Map each raise site to its code. Every new or moved raise
+        then forces a test update. That is the maintenance cost, and also the point.
+      - **Typed refusals in `core_finance`.** Each raise carries its own code, so
+        matching disappears. `engine_refusals.py`'s docstring already names this as the
+        proper fix.
+- [x] **`/simulate`'s confidence-validation tests.** Already covered: a parametrized
+      test refuses `""`, `None`, `0` and an invalid string. Verified 2026-09-26 by
+      reintroducing `case_fork`'s old `raw.get("confidence") and ...` pattern: all three
+      falsy rows fail.
 - [ ] **Deferred from the snapshot overhaul (Track E):** readable snapshot identity,
       charts over snapshot history, and the pre-existing annual-vs-horizonless conflation
       in `expected_return_spread`, which touches `/corporate`.
