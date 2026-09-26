@@ -31,12 +31,17 @@ Design intent
 
 Layout structure
 - /cases: ticker filter (?ticker= presets it), table of cases with their parent.
-- /cases/[id]: Valuation, Inputs, Why it moved (forks only), Fork this case,
-  Uncertainty (simulate this case).
+- /cases/[id]: Valuation, Market cross-check (EV/Sales), Inputs, Why it moved (forks only),
+  Fork this case, Uncertainty (simulate this case).
 
 Key sections
 - Valuation: POST /valuation/cases/{id}/run -- per-share values, EV, equity, terminal share,
   year-by-year build, target-year segments.
+- Market cross-check (EV/Sales): GET /valuation/cases/{id}/pricing -- the case's base-year
+  revenue at its OWN Damodaran industry's EV/Sales (vintage in force on the case date),
+  beside the DCF's EV, with the gap in words and the source named. The industry comes from
+  the case's ticker, so a case with no ticker is refused (no_ticker), as are a thin
+  industry, an unusable multiple and an unrunnable case.
 - Why it moved: GET /valuation/cases/{id}/diff -- Shapley contributions per changed input,
   checked to sum to the difference; refused above 12 changed inputs.
 - Fork this case: POST /valuation/cases/{id}/fork -- a list of changes; narrated fields need

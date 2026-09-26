@@ -42,7 +42,6 @@ Playwright specs passing**.
 
 **Open work, in suggested order:**
 - **H11.** `terminal_growth_binding_constraint` is on the payload but no surface reads it.
-- **C2.** `/pricing` has to be scoped against the verdict panel before anything is built.
 - **F2 follow-up.** Unlevering uses each company's tax rate and relevering uses 0.21. This
   is a modelling decision for the user.
 - **F4.** Fade provenance flag. **G2.** 2 NULL-close rows. **I-C2.** Price-derived
@@ -221,7 +220,7 @@ and CLAUDE.md section 8. Suite: 882 passing, no skips or xfails.
 
 ---
 
-## Track C - Frontend  [C1 SHIPPED 2026-09-04; C2 UI SHIPPED 2026-09-24 -- /pricing remains]
+## Track C - Frontend  [C1 SHIPPED 2026-09-04; C2 SHIPPED 2026-09-26]
 
 - [x] **C1. The valuation tab -- shipped 2026-09-04.** `/valuation` surfaces
       `GET /api/v1/valuation/verdict/{ticker}`, which had shipped with no UI at
@@ -276,10 +275,10 @@ and CLAUDE.md section 8. Suite: 882 passing, no skips or xfails.
       for 108 of 139 tickers and `dcf_gap` for the 30 with a conservative case. See
       Track A's table.)*
 
-- [ ] **C2. 3c - uncertainty and attribution.** OPEN for **`/pricing` only**.
-      `/fork`, `/diff` and `/simulate` shipped 2026-09-05/06 as HTTP endpoints, and
-      their UI shipped 2026-09-24/26 as the Cases tab (PR #51, open; see "Cases UI"
-      below). The rest of this entry is the history, in order. Spec (`/fork`/`/diff`):
+- [x] **C2. 3c - uncertainty and attribution.** COMPLETE 2026-09-26 (PR #51).
+      `/fork`, `/diff` and `/simulate` shipped 2026-09-05/06 as HTTP endpoints. Their
+      UI shipped 2026-09-24/26 as the Cases tab, and `/pricing` shipped 2026-09-26 (see
+      the last paragraph of this entry). The rest of this entry is the history, in order. Spec (`/fork`/`/diff`):
       `docs/superpowers/specs/2026-09-04-fork-and-diff-design.md`.
       Plan: `docs/superpowers/plans/2026-09-04-fork-and-diff.md`.
       A separate subsystem from C1: no shared endpoint, no shared component, and
@@ -573,6 +572,28 @@ and CLAUDE.md section 8. Suite: 882 passing, no skips or xfails.
       (`case_simulate.py`, beside the `invalid_runs` check). Each clause of the
       check was mutation-checked on its own. The frontend guard stays as the
       first line. See `ERROR-LOG.md` 2026-09-26.
+
+      **`/pricing` -- shipped 2026-09-26, scoped with the user.** The question
+      it answers, and the verdict panel can't: does this DCF agree with what the
+      market pays for the case's industry? `GET /valuation/cases/{id}/pricing`
+      applies the case's OWN Damodaran industry EV/Sales, from the vintage in force
+      on the case date, to its base-year revenue (the sum of its segments). It returns
+      the implied EV beside the DCF's EV and `dcf_to_implied` (a ratio with no
+      horizon, like `dcf_gap`). A "Market cross-check (EV/Sales)" section on each
+      case shows it.
+      - **Why EV/Sales only.** It is the one multiple a case can use without extra
+        inputs, and the only one Damodaran publishes for all 94 industries. P/E
+        and P/B would need earnings or book value, which cases don't store.
+      - **Why the company's own industry, not the sector's top-5 basket** that the
+        P/E row uses. The top of a sector trades at higher multiples, so the basket
+        would inflate the implied value. A test with a 20x sibling industry pins it.
+      - **Refusals** carry prefixes: `no_ticker`, `no_vintage`, `no_industry`,
+        `unmapped_industry`, `thin_industry`, `no_ev_sales`, `no_base_revenue`,
+        `unrunnable_case`.
+      - **Tests.** 15 backend tests; 7 mutations each caught by a test only it fails.
+        3 e2e tests; 2 section mutations caught (direction wording, and the
+        percentage conversion bypassing `fmtPercent`). The real-API test checks that
+        the live refusal reaches the page.
 
 ---
 
