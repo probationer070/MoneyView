@@ -157,6 +157,22 @@ def test_runs_outside_the_band_is_refused(parent_id, runs):
             "case": {"wacc_stable": {"shape": "normal", "mean": 0.074, "sd": 0.001}}}})
 
 
+@pytest.mark.parametrize("seed", [-1, 1.5, True, "7"])
+def test_a_seed_that_is_not_a_non_negative_integer_is_refused(parent_id, seed):
+    """np.random.default_rng raises on a negative seed and a TypeError on a float, and
+    both escaped the route as a 500. A bool is an int to Python but not a seed anyone
+    typed, and a string is not a number -- refused like invalid_runs refuses them."""
+    with pytest.raises(SimulateRefused, match="invalid_seed"):
+        simulate_case(parent_id, {"runs": 1000, "seed": seed, "distributions": {
+            "case": {"wacc_stable": {"shape": "normal", "mean": 0.074, "sd": 0.001}}}})
+
+
+def test_a_zero_seed_is_accepted_and_echoed(parent_id):
+    result = simulate_case(parent_id, {"runs": 1000, "seed": 0, "distributions": {
+        "case": {"wacc_stable": {"shape": "normal", "mean": 0.074, "sd": 0.001}}}})
+    assert result["seed"] == 0
+
+
 def test_no_distributions_is_refused(parent_id):
     with pytest.raises(SimulateRefused, match="no_distributions"):
         simulate_case(parent_id, {"runs": 1000, "distributions": {}})

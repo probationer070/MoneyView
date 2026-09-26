@@ -202,3 +202,26 @@ def test_two_backups_in_the_same_clock_tick_do_not_overwrite_each_other(monkeypa
     assert first.exists() and second.exists()
     backups = sorted(tmp_path.glob("moneyview.db.pre-snapshot-reset-*"))
     assert len(backups) == 2, backups
+
+
+def _use_another_checkouts_real_database(monkeypatch, tmp_path) -> Path:
+    """A database at <somewhere>/data/processed/moneyview.db that is NOT the path this
+    script computes from its own location -- the main checkout's database, seen from a
+    worktree whose DB_PATH points at it (docs/git-worktrees.md suggests exactly that).
+    The guard used to compare against its own location only, so it neither refused
+    nor backed up this database (ERROR-LOG 2026-09-26, G5 follow-up)."""
+    other = tmp_path / "other-checkout" / "data" / "processed" / "moneyview.db"
+    other.parent.mkdir(parents=True)
+    monkeypatch.setattr(db_service, "_DB_PATH", other)
+    db_service.init_db()
+    return other
+
+
+def test_another_checkouts_real_database_is_refused_too(monkeypatch, tmp_path):
+    _use_another_checkouts_real_database(monkeypatch, tmp_path)
+    with get_db() as conn:
+        _seed(conn)
+        with pytest.raises(RuntimeError, match="real database"):
+            reset_snapshots(conn)
+        for table in EXPECTED_SNAPSHOT_TABLES:
+            assert conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0] == 1, table

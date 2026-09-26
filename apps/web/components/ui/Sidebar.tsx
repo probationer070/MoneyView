@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, PieChart, Newspaper, Activity, Building2, Orbit, NotebookPen, Scale, CalendarDays } from "lucide-react";
+import { LayoutDashboard, PieChart, Newspaper, Activity, Building2, Orbit, NotebookPen, Scale, CalendarDays, GitFork } from "lucide-react";
 import clsx from "clsx";
 
 const navItems = [
@@ -13,6 +13,7 @@ const navItems = [
   { href: "/monte-carlo", label: "Monte Carlo", icon: Orbit },
   { href: "/decisions", label: "Decision Log", icon: NotebookPen },
   { href: "/valuation", label: "Valuation", icon: Scale },
+  { href: "/cases", label: "Cases", icon: GitFork },
   { href: "/events", label: "Events", icon: CalendarDays },
 ];
 

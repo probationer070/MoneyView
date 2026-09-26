@@ -1,11 +1,13 @@
 "use client";
 
+import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { tabStateKey, useTabState } from "@/lib/tabState";
 import { fetchApi } from "@/lib/api";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { useDevMonitorPageLoad } from "@/hooks/useDevMonitorPageLoad";
 import { RecordsSyncStatus, useRecordsSyncStatus } from "@/app/components/RecordsSyncStatus";
+import { casesApi } from "@/app/cases/casesApi";
 import { TickerPicker } from "./components/TickerPicker";
 import { VerdictPanelView } from "./components/VerdictPanel";
 import type { VerdictPanel, WatchlistItem } from "./verdictTypes";
@@ -43,6 +45,22 @@ export default function ValuationPage() {
   // fetch has completed, not in parallel with it.
   const recordsSyncQuery = useRecordsSyncStatus(verdictQuery.dataUpdatedAt, verdictQuery.isSuccess);
 
+  // Only to decide whether to link. Not awaited by the panel: a slow or failed case list must
+  // never hold up or blank the evidence panel. Gated on the verdict query's own success (like
+  // recordsSyncQuery) rather than firing on mount: GET /valuation/cases and
+  // GET /valuation/verdict/{ticker} both go through records_sync.run_records_sync("read") under
+  // one shared lock (apps/api/routes/valuation.py), so reading the case list first would hold up
+  // -- or add an unwanted sync to -- every Valuation visit, ticker or not.
+  const casesQuery = useQuery({
+    queryKey: ["cases"],
+    queryFn: casesApi.list,
+    enabled: verdictQuery.isSuccess,
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+    retry: false,
+  });
+  const hasCases = ticker !== null && (casesQuery.data ?? []).some((c) => c.ticker === ticker);
+
   return (
     <div className="p-6">
       <PageHeader
@@ -52,6 +70,14 @@ export default function ValuationPage() {
       <RecordsSyncStatus status={recordsSyncQuery.data} />
 
       <TickerPicker items={watchlistQuery.data ?? []} onSubmit={setTicker} />
+
+      {ticker !== null && hasCases && (
+        <p className="mb-4 text-sm">
+          <Link href={`/cases?ticker=${encodeURIComponent(ticker)}`} className="text-[var(--text-primary)] underline underline-offset-2">
+            Stored cases for {ticker} →
+          </Link>
+        </p>
+      )}
 
       {/* The state contract. Loading and error render NO rows and no partial
           panel: either would state an answer the request never returned. */}
