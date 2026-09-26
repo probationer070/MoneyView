@@ -90,7 +90,7 @@ def test_generated_events_carry_the_rule_fields_and_rule_origin():
     assert event.model_dump() == {
         "id": "quad-witching-2026-03-20", "label": "Quadruple witching", "category": "quad-witching",
         "start_date": "2026-03-20", "end_date": None, "source": "https://example.com/expiration-rule",
-        "note": "Quarterly expiration.", "origin": "rule", "missing_category": None,
+        "note": "Quarterly expiration.", "origin": "rule", "missing_category": None, "basis": None,
     }
 
 
