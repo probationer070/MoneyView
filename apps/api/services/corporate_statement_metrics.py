@@ -863,6 +863,7 @@ def yahoo_statement_metrics(
         wacc=round(wacc, 2),
         debt_ratio=round(debt_ratio if debt_ratio is not None else fallback.debt_ratio, 2),
         unlevered_beta=round(unlevered_beta, 2),
+        tax_rate=round(tax_rate, 6),
         crp=KOREA_COUNTRY_RISK_PREMIUM,
         reinvestment=round(reinvestment if reinvestment is not None else fallback.reinvestment, 2),
         fcff=round(fcff_billions if fcff_billions is not None else fallback.fcff, 2),

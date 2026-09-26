@@ -790,8 +790,12 @@ enforcing the citation and eight-field shape of every entry. Spec:
 
 - [x] **F2. CAPM debt-weight defect — FIXED 2026-09-24.** `_levered_beta_from_metrics`
       now converts `debt_ratio` to D/E and calls `relever_beta`. The fix is
-      mutation-verified (see the ERROR-LOG Fix line). Still open: unlevering uses the
-      company's tax rate and relevering uses 0.21. Original record: `ERROR-LOG.md`
+      mutation-verified (see the ERROR-LOG Fix line). The tax-rate follow-up was CLOSED
+      2026-09-26. Relevering now uses the rate the beta was unlevered with
+      (`CorporateMetrics.tax_rate`, from statements), falling back to 0.21 only when
+      it is unknown. A round-trip test pins it, and it is mutation-checked. The
+      change moved 78 of 123 companies' CAPM return by up to ±1.19pp.
+      Original record: `ERROR-LOG.md`
       2026-09-09: `corporate_comparison.py:1130` relevers beta with
       `debt_ratio` (`D/(D+E)`, a debt-to-capital weight) fed into a Hamada
       formula wanting `D/E`. 108 of 135 tickers get a different beta under

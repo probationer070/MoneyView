@@ -1682,3 +1682,67 @@ def test_capm_relevers_beta_with_debt_to_equity_not_debt_to_capital():
     )
 
     assert snapshot["capm_expected_return"] == pytest.approx(16.22)
+
+
+def test_capm_relevers_with_the_rate_the_beta_was_unlevered_with():
+    """F2 follow-up: relever with the company's own tax rate when metrics carry one.
+
+    Hand arithmetic: debt_ratio 60 -> D/E 1.5; tax 0.25;
+    beta = 1.0 * (1 + 0.75 * 1.5) = 2.125; CAPM = 0.042 + 2.125 * 0.055 = 15.89%.
+    The flat 21% would give 16.22% (the test above, which has no rate).
+    """
+    metrics = _stub_metrics_loader("AAPL").model_copy(
+        update={"debt_ratio": 60.0, "unlevered_beta": 1.0, "tax_rate": 0.25}
+    )
+    snapshot = _dcf_snapshot(
+        ticker="AAPL",
+        metrics=metrics,
+        price_loader=lambda _t: 100.0,
+        risk_free_rate=0.042,
+        equity_risk_premium=0.055,
+        bridge_loader=lambda _t: _starved_bridge(),
+    )
+
+    assert snapshot["capm_expected_return"] == pytest.approx(15.89)
+
+
+def test_a_statement_beta_round_trips_through_unlever_and_relever():
+    """The point of the fix, end to end: the beta unlevered from statements comes back
+    when relevered for CAPM. Before it, unlevering used the company's median statement
+    tax rate and relevering used a flat 21%, so even a modestly levered company got a
+    different beta back.
+
+    The company has a 30% tax rate (far from 21% so the test discriminates), a Yahoo
+    beta of 1.5, and D/E 40/60. Unlevered = 1.5 / (1 + 0.7 * 0.6667) = 1.02 at 2 dp.
+    Relevered at 30% = 1.02 * 1.4667 = 1.496. At 21% it would be 1.02 * 1.5267 = 1.557.
+    """
+    import pandas as pd
+    from apps.api.services.corporate_comparison import _levered_beta_from_metrics
+    from apps.api.services.corporate_statement_metrics import yahoo_statement_metrics
+
+    billion = 1_000_000_000.0
+    periods = pd.to_datetime(["2023-12-31", "2024-12-31", "2025-12-31"])
+    income = pd.DataFrame({
+        "Total Revenue": [100 * billion, 110 * billion, 120 * billion],
+        "Operating Income": [20 * billion, 22 * billion, 24 * billion],
+        "Pretax Income": [18 * billion, 20 * billion, 22 * billion],
+        "Tax Provision": [5.4 * billion, 6.0 * billion, 6.6 * billion],
+    }, index=periods).T
+    balance = pd.DataFrame({
+        "Total Debt": [40 * billion], "Stockholders Equity": [60 * billion],
+    }, index=pd.to_datetime(["2025-12-31"])).T
+    empty = pd.DataFrame()
+    bundle = {
+        "ticker": "TEST", "income": income, "balance": balance, "cashflow": empty,
+        "quarterly_income": empty, "quarterly_balance": empty, "quarterly_cashflow": empty,
+        "info": {"beta": 1.5}, "fetched_at": None,
+    }
+
+    metrics = yahoo_statement_metrics(
+        "TEST", _stub_metrics_loader("TEST"), bundle_loader=lambda t, e: bundle
+    )
+
+    assert metrics is not None
+    assert metrics.tax_rate == pytest.approx(0.30)
+    assert metrics.debt_ratio == pytest.approx(40.0)
+    assert _levered_beta_from_metrics(metrics) == pytest.approx(1.5, abs=0.01)
