@@ -114,6 +114,12 @@ INDEX_DB_ALIASES = {
 }
 
 
+# (ticker, period, table) keys with a background refresh in flight. One per key, so every
+# page load during a slow live fetch does not start another one.
+_BACKGROUND_REFRESHES: set[tuple[str, str, str]] = set()
+_BACKGROUND_LOCK = threading.Lock()
+
+
 class MarketDataService:
     """Fetch and persist market index / stock OHLCV data."""
 
@@ -331,6 +337,7 @@ class MarketDataService:
         ticker: str,
         period: str = DEFAULT_OHLCV_PERIOD,
         table: str = "stocks",
+        refresh: str = "inline",
     ) -> tuple[List[StockOHLCV], MarketDataQuality]:
         ticker = ticker.upper()
         freshness_rule = self._freshness_rule(period)
@@ -396,6 +403,24 @@ class MarketDataService:
                 oldest.isoformat() if oldest else "unknown",
                 period,
             )
+            if refresh == "background":
+                # Serve what is cached now and refresh off the request. A stale cache
+                # means yesterday's close, which is worth showing at once; a cache MISS
+                # has nothing to show, so that path above still fetches inline.
+                started = self._refresh_in_background(ticker, period=period, table=table)
+                return cached_rows, self._build_data_quality(
+                    source="cache_fallback",
+                    freshness_status="stale_cache",
+                    requested_period=period,
+                    latest_trading_date=latest_cached_date,
+                    used_live_refresh=False,
+                    used_stale_cache_fallback=True,
+                    detail_note=(
+                        "Served from the latest cached history; a live refresh "
+                        + ("was started" if started else "is already running")
+                        + " in the background."
+                    ),
+                )
             live_rows = self._fill_ohlcv_cache(ticker, period=period, table=table, reason="stale")
             if live_rows:
                 live_rows = live_rows[-freshness_rule.days:]
@@ -498,6 +523,30 @@ class MarketDataService:
             return False
         freshness_rule = MarketDataFreshnessRule("custom", period) if isinstance(period, int) else period
         return (latest - oldest).days >= freshness_rule.minimum_span_days
+
+    def _refresh_in_background(self, ticker: str, *, period: str, table: str) -> bool:
+        """Start one live refresh for this key on a daemon thread. False if one is running.
+
+        The in-flight marker is cleared when the fetch ends, even if it raised, so the next
+        stale read can try again.
+        """
+        key = (ticker, period, table)
+        with _BACKGROUND_LOCK:
+            if key in _BACKGROUND_REFRESHES:
+                return False
+            _BACKGROUND_REFRESHES.add(key)
+
+        def run() -> None:
+            try:
+                self._fill_ohlcv_cache(ticker, period=period, table=table, reason="stale")
+            except Exception:  # noqa: BLE001 - a failed background refresh must not crash a thread silently
+                logger.exception("Background OHLCV refresh failed for %s", ticker)
+            finally:
+                with _BACKGROUND_LOCK:
+                    _BACKGROUND_REFRESHES.discard(key)
+
+        threading.Thread(target=run, name=f"ohlcv-refresh-{ticker}", daemon=True).start()
+        return True
 
     def _fill_ohlcv_cache(self, ticker: str, *, period: str, table: str, reason: str):
         """Fetch live rows to fill the cache, emitting the fill's duration.
@@ -1165,9 +1214,14 @@ class MarketDataService:
         ticker: str,
         period: str = DEFAULT_OHLCV_PERIOD,
         table: str = "stocks",
+        refresh: str = "inline",
     ) -> List[StockOHLCV]:
-        """Read OHLCV from SQLite and refresh live data if locally stale."""
-        bars, _ = self._get_stock_ohlcv_with_metadata(ticker, period=period, table=table)
+        """Read OHLCV from SQLite and refresh live data if locally stale.
+
+        `refresh="background"` serves a stale cache at once and refreshes it off the request
+        (used by the spreads section). A cache miss is still fetched inline either way.
+        """
+        bars, _ = self._get_stock_ohlcv_with_metadata(ticker, period=period, table=table, refresh=refresh)
         return bars
 
     def get_all_indices(self) -> List[IndexQuote]:

@@ -13,8 +13,9 @@ export type { MarketSpread };
  * Memoised on the query data: consumers pass slices of this into memoised chart components
  * that compare props by identity, and a fresh array each render defeats that comparison.
  *
- * A failure yields an empty list rather than an error state -- Market Overview must not go
- * down because a supplementary section could not load.
+ * A failure must never take Market Overview down, but it must not be swallowed either: it
+ * used to be turned into an empty list, which the section then hid, so a broken endpoint
+ * looked exactly like "no spreads". `isError` lets the section say so within itself.
  */
 export function useMarketSpreads(windowDays = 90) {
   const query = useQuery({
@@ -25,5 +26,5 @@ export function useMarketSpreads(windowDays = 90) {
   });
 
   const spreads = useMemo<MarketSpread[]>(() => query.data ?? [], [query.data]);
-  return { spreads, isLoading: query.isLoading };
+  return { spreads, isLoading: query.isLoading, isError: query.isError };
 }

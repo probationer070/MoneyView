@@ -137,5 +137,8 @@ def _closes_by_date(market, ticker: str) -> Dict[str, float]:
     history", a reason pointing at the data rather than at this line.
     """
     table = _TABLE_ROUTER._table_for_ticker(ticker)
-    bars = market.get_stock_ohlcv(ticker, period="5y", table=table)
+    # A stale cache is served at once and refreshed in the background: the first request
+    # of each day used to wait for up to seven live fetches in a row. A day-old point
+    # barely moves a 90-day relative-strength line, and each card states its window end.
+    bars = market.get_stock_ohlcv(ticker, period="5y", table=table, refresh="background")
     return {bar.date: float(bar.close) for bar in bars if bar.close is not None}

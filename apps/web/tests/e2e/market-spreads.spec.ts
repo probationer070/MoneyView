@@ -219,3 +219,43 @@ test("the index detail chart's event filter changes what is painted", async ({ p
   const changed = withLine.ink.filter((value, index) => value !== (withoutLine.ink[index] ?? 0));
   expect(changed.length, "the filter change must change what is painted, not just the button").toBeGreaterThan(0);
 });
+
+test("a failed spreads request is shown as a failure, not as an empty page", async ({ page }) => {
+  // The hook used to turn any failure into an empty list, and the section hid itself on an
+  // empty list, so a broken endpoint looked exactly like "no spreads". The page must stay
+  // up (the failure is confined to this section), but it must say so.
+  await page.route("**/api/v1/market/spreads**", async (route) => {
+    await route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ detail: "boom" }) });
+  });
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const section = page.getByTestId("spreads-section");
+  await expect(section.getByRole("alert")).toContainText("could not be loaded", { timeout: 60_000 });
+  await expect(page.getByTestId(/^spread-card-/)).toHaveCount(0);
+});
+
+test("a slow spreads request shows it is loading instead of nothing", async ({ page }) => {
+  // The first request after each daily cache boundary fetches live data inline and can take
+  // a long time. That wait used to be a blank area.
+  let release: () => void = () => {};
+  const held = new Promise<void>((resolve) => { release = resolve; });
+  await page.route("**/api/v1/market/spreads**", async (route) => {
+    await held;
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([computed()]) });
+  });
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  await expect(page.getByTestId("spreads-loading")).toBeVisible({ timeout: 60_000 });
+  release();
+  await expect(page.getByTestId("spread-card-ai")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId("spreads-loading")).toHaveCount(0);
+});
+
+test("an empty spreads list says so, and is not an error", async ({ page }) => {
+  await mockSpreads(page, []);
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const section = page.getByTestId("spreads-section");
+  await expect(section.getByTestId("spreads-empty")).toBeVisible({ timeout: 60_000 });
+  await expect(section.getByRole("alert")).toHaveCount(0);
+});

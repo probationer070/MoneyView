@@ -70,13 +70,16 @@ Each one was re-checked against the code on 2026-09-26 and is still true.
       mechanism of an ERROR-LOG'd fix (2026-08-02, commit `1e4abf0`). It keeps the Escape
       listener alive across a caller's re-render. Read that entry before touching it; do
       not make a drive-by lint fix.
-- [ ] **A failed `/market/spreads` fetch is invisible.** `SpreadsSection` returns `null`
-      for an empty list, which looks the same as "there are no spreads", and nothing is
-      logged.
-- [ ] **`/market/spreads` fetches live data inline** on a cache miss or a stale cache,
-      with no per-request timeout. The first request after each daily cache boundary can
-      make up to seven live fetches in a row, and `SpreadsSection` shows nothing while
-      they run.
+- [x] **A failed `/market/spreads` fetch is invisible.** FIXED 2026-09-26. The section
+      now always renders, with a loading line, an alert on failure, or "No spreads were
+      returned". Three e2e tests; three mutations caught.
+- [x] **`/market/spreads` fetched live data inline.** FIXED 2026-09-26: serving the
+      stale cache with a background refresh, chosen with the user over parallel fetches
+      (Yahoo rate limits) and a timeout (refusals on a slow day). `get_stock_ohlcv(...,
+      refresh="background")` returns a stale cache at once and refreshes it on a daemon
+      thread. At most one refresh runs per ticker, and the marker is cleared even on
+      failure. A cache miss still fetches inline. The default stays inline for every
+      other caller. Six tests; four mutations caught.
 - [ ] **`/simulate` refusal grouping matches by substring** across the whole code table,
       so a reworded engine message could be absorbed under the wrong code while still
       passing the completeness test. Fixing it needs a design decision: an exact

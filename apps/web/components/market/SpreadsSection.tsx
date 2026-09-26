@@ -77,9 +77,8 @@ function SpreadCard({
 }
 
 export function SpreadsSection() {
-  const { spreads } = useMarketSpreads();
+  const { spreads, isLoading, isError } = useMarketSpreads();
   const { lines } = useMarketEvents();
-  if (spreads.length === 0) return null;
 
   return (
     <section
@@ -94,11 +93,28 @@ export function SpreadsSection() {
         Relative strength against a benchmark, indexed to 100 at the start of each window. Each
         card names the tickers it is computed from — the theme names are proxies, not measurements.
       </p>
-      <div className="mt-4 grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))" }}>
-        {spreads.map((spread) => (
-          <SpreadCard key={spread.id} spread={spread} events={lines} />
-        ))}
-      </div>
+      {/* Loading, failed and empty are three different facts, and each is stated. They used
+          to render identically -- as nothing -- so a broken endpoint or the slow first
+          request of the day could not be told apart from a page with no spreads. */}
+      {isLoading ? (
+        <p data-testid="spreads-loading" role="status" className="mt-4 text-sm text-[var(--text-muted)]">
+          Loading spreads…
+        </p>
+      ) : isError ? (
+        <p role="alert" className="mt-4 text-sm text-[var(--chart-negative)]">
+          The spreads could not be loaded.
+        </p>
+      ) : spreads.length === 0 ? (
+        <p data-testid="spreads-empty" className="mt-4 text-sm text-[var(--text-muted)]">
+          No spreads were returned.
+        </p>
+      ) : (
+        <div className="mt-4 grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))" }}>
+          {spreads.map((spread) => (
+            <SpreadCard key={spread.id} spread={spread} events={lines} />
+          ))}
+        </div>
+      )}
     </section>
   );
 }

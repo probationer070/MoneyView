@@ -32,7 +32,7 @@ class _StubService:
         self.bars_by_ticker = bars_by_ticker
         self.requested = []
 
-    def get_stock_ohlcv(self, ticker, period="5y", table=None):
+    def get_stock_ohlcv(self, ticker, period="5y", table=None, refresh="inline"):
         self.requested.append((ticker, table))
         return self.bars_by_ticker.get(ticker, [])
 
