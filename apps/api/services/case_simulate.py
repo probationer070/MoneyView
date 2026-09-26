@@ -210,6 +210,12 @@ def simulate_case(case_id: int, request: dict) -> dict:
     seed = request.get("seed")
     if seed is None:
         seed = secrets.randbelow(2 ** 31)
+    elif not isinstance(seed, int) or isinstance(seed, bool) or seed < 0:
+        # np.random.default_rng raises ValueError on a negative seed and TypeError on a
+        # float or string, and both escaped the route as a 500 (ERROR-LOG 2026-09-26).
+        raise SimulateRefused(
+            f"invalid_seed: seed must be a non-negative integer, got {seed!r}"
+        )
     rng = np.random.default_rng(seed)
     drawn = _draw(planned, runs, rng)
 

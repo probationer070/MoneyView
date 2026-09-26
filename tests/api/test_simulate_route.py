@@ -55,6 +55,10 @@ def test_simulating_an_unknown_case_is_a_404():
     ({"runs": 1000, "distributions": {"case": {"wacc_stable": {
         "shape": "normal", "mean": 0.074, "sd": 0.001,
         "claim": "c", "three_p": "possible"}}}}, "unexpected_narrative:"),
+    # A negative seed used to 500: np.random.default_rng raises ValueError, uncaught
+    # (ERROR-LOG 2026-09-26). It is a request the caller must change, so it is a 422.
+    ({"runs": 1000, "seed": -1, "distributions": {"case": {"wacc_stable": {
+        "shape": "normal", "mean": 0.074, "sd": 0.001}}}}, "invalid_seed:"),
 ])
 def test_a_refused_request_carries_its_prefix(parent_id, body, prefix):
     """The prefix IS the code: a caller branches on it without parsing prose."""

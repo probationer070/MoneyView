@@ -567,13 +567,11 @@ and CLAUDE.md section 8. Suite: 882 passing, no skips or xfails.
       several `stats.simulatePosts[0]`/`forkPosts[0]` reads that followed a
       click with no wait were given an `expect.poll` first.
 
-      **Follow-up, open:** the backend does not validate `/simulate`'s `seed`
-      as a non-negative integer -- a negative seed 500s instead of refusing
-      with `SimulateRefused`. The frontend guard (`changeRows.ts`'s
-      `seedProblem`) blocks it from this UI, but any other caller still hits
-      the 500. Needs either `ge=0` on `SimulateRequest.seed` or an explicit
-      check in `case_simulate.py`; backend is frozen for this branch, so not
-      fixed here. See `ERROR-LOG.md` 2026-09-26.
+      **Follow-up, CLOSED 2026-09-26:** `/simulate` now refuses a seed that is
+      not a non-negative integer with `invalid_seed:` (422) instead of a 500
+      (`case_simulate.py`, beside the `invalid_runs` check). Each clause of the
+      check was mutation-checked on its own. The frontend guard stays as the
+      first line. See `ERROR-LOG.md` 2026-09-26.
 
 ---
 

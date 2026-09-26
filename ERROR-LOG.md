@@ -3207,15 +3207,23 @@ Root cause: `case_simulate.simulate_case` passes a caller-supplied `seed` straig
 integer` for any negative seed, and the route only catches `CaseNotFound` and `SimulateRefused`
 (`apps/api/routes/valuation.py`'s `simulate_valuation_case`), so that `ValueError` reaches FastAPI
 unhandled and surfaces as a 500.
-Fix: client-side guard only. `apps/web/app/cases/changeRows.ts`'s `buildSimulateRequest` already
-blocks a negative or non-integer seed before a request is ever sent (`seedProblem`), so the browser
-UI cannot trigger this path. The backend itself is NOT fixed: `simulate_case` still accepts a
-negative seed and still calls `np.random.default_rng` unguarded, so a direct API call (curl, a
-future caller, any client other than this one) still gets a 500. Closing it needs either a
-non-negative-integer request-model constraint (`ge=0` on `SimulateRequest.seed`) or an explicit
-range check in `simulate_case` that raises `SimulateRefused` instead, and is out of scope here: the
-backend is frozen for this branch.
-Files changed: ERROR-LOG.md, guideline/sop/todo.md (follow-up line only; no application code).
-Prevention: none yet on the backend side -- this entry is the record that the gap exists. The
-follow-up is tracked in `guideline/sop/todo.md` next to the C2 track so the next backend change in
-this area closes it rather than rediscovering it.
+Fix: first a client-side guard only: `apps/web/app/cases/changeRows.ts`'s `buildSimulateRequest`
+blocks a negative or non-integer seed before a request is sent (`seedProblem`). That left direct
+API callers exposed. The backend was then fixed later the same day, on the same branch:
+`simulate_case` now refuses any seed that is not a non-negative integer with
+`SimulateRefused("invalid_seed: ...")`, mirroring the `invalid_runs` check beside it. The route
+maps that to a 422 like every other simulate refusal. A float or string seed hit the same 500 by a
+different exception (numpy's `TypeError`), and the same check now refuses it. A bool is refused
+too: Python counts it as an int, but no caller means `True` as a seed.
+Tests: `tests/api/test_case_simulate.py::test_a_seed_that_is_not_a_non_negative_integer_is_refused`
+covers -1, 1.5, True and "7". `test_a_zero_seed_is_accepted_and_echoed` covers 0. An `invalid_seed:`
+row in `tests/api/test_simulate_route.py`'s prefix table checks the route's 422. Each clause of the
+guard was mutated in memory, one at a time, and caught by a test only it can fail. Dropping
+`seed < 0` brings back the route 500 and fails [-1]. Dropping the bool check fails [True].
+Dropping the int check fails [1.5] and ["7"].
+Files changed: ERROR-LOG.md, guideline/sop/todo.md, apps/api/services/case_simulate.py,
+tests/api/test_case_simulate.py, tests/api/test_simulate_route.py.
+Prevention: validate every caller-supplied value at the boundary where it can still be refused
+with a named code. `runs` was validated there from the start; `seed` sat three lines below it and
+was passed straight to numpy. A parameter handed to a library that raises its own exception types
+is a 500 waiting for a caller who does not use the one UI that guards it.
