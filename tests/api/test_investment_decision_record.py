@@ -348,3 +348,25 @@ def test_a_refused_dcf_is_recorded_as_unavailable_never_as_a_value():
     assert row["figures_unavailable_reason"] is not None
     assert "zero or negative" in row["figures_unavailable_reason"]
     assert row["dcf_value"] is None and row["price_at_decision"] is None
+
+def test_the_default_loader_carries_the_dcf_refusal_to_the_guard(monkeypatch):
+    """Final-review minor: every other refusal test injects figures directly, so dropping
+    `dcf_refusal` from `_default_figures_loader` would record a NULL-figure row with no reason
+    and every test would still pass. This goes through the default loader itself."""
+    from apps.api.services import corporate_comparison, corporate_metrics_service
+
+    class _Metrics:
+        roic = 10.0
+        wacc = 9.0
+
+    monkeypatch.setattr(
+        corporate_metrics_service, "metrics_for_ticker_with_provenance", lambda ticker: (_Metrics(), True)
+    )
+    monkeypatch.setattr(corporate_metrics_service, "latest_market_price", lambda ticker: 100.0)
+    monkeypatch.setattr(corporate_comparison, "_dcf_snapshot", lambda **_: {
+        "current_price": 100.0, "estimated_value": None, "dcf_implied_return": None,
+        "dcf_refusal": "non_positive_fcff", "bridge_quality": "ok",
+    })
+    row = _row(record_decision(ticker="BURNCO", action="watch", memo="burning cash"))
+    assert row["figures_unavailable_reason"] is not None
+    assert "zero or negative" in row["figures_unavailable_reason"]

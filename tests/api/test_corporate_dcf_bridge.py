@@ -9,6 +9,7 @@ from apps.api.models.schema_parts.corporate import (
 from apps.api.services.corporate_dcf import _build_dcf_outputs
 from apps.api.services.equity_bridge import EquityBridge, load_equity_bridge
 from apps.api.models.schemas import CorporateMetrics
+from packages.core_finance.refusals import EngineRefusal
 
 BILLION = 1_000_000_000.0
 
@@ -180,8 +181,6 @@ def test_the_dcf_value_does_not_move_with_the_current_price():
     assert cheap.intrinsic_value_per_share == dear.intrinsic_value_per_share
     assert cheap.enterprise_value == dear.enterprise_value
 
-
-from packages.core_finance.refusals import EngineRefusal
 
 
 def test_a_small_positive_fcff_is_valued_on_its_real_cash_flow_single_ticker():
