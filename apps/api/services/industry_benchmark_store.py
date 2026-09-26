@@ -140,6 +140,39 @@ def _stored_industry(ticker: str) -> str:
     return (row["industry"] or "") if row else ""
 
 
+def industry_row_for_ticker(
+    ticker: str, *, as_of: str | None = None
+) -> tuple[IndustryRow | None, str | None, str | None]:
+    """The ticker's OWN Damodaran industry row, in the vintage in force on `as_of`.
+
+    Returns `(row, vintage, None)` or `(None, None, reason)`. Unlike
+    `resolve_for_ticker` this is one industry, not the sector's top-5 basket: a
+    multiple applied to a company's own figures should come from its own industry.
+    The top of a sector trades at higher multiples, so the basket would inflate the
+    implied value.
+    """
+    vintage = latest_vintage(on_or_before=as_of)
+    if vintage is None:
+        when = f" on or before {as_of}" if as_of else ""
+        return None, None, f"no_vintage: no industry benchmark data has been loaded{when}"
+
+    industry = _stored_industry(ticker)
+    if not industry:
+        return None, None, f"no_industry: {ticker} has no industry from the quote source"
+
+    mapped = damodaran_industry_for_yahoo(industry)
+    if mapped is None:
+        return None, None, (
+            f"unmapped_industry: {ticker}'s industry {industry!r} is not in "
+            f"YAHOO_TO_DAMODARAN; add it to apps/api/services/industry_maps.py"
+        )
+
+    row = next((row for row in load_vintage(vintage) if row.name == mapped), None)
+    if row is None:
+        return None, None, f"no_industry: {mapped!r} is not in vintage {vintage}"
+    return row, vintage, None
+
+
 def resolve_for_ticker(
     ticker: str, *, as_of: str | None = None
 ) -> tuple[SectorBenchmark | None, str | None, str | None]:

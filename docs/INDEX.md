@@ -47,6 +47,9 @@ styling, or interaction behavior.
 behavior, and data sources for each top-level sidebar tab. See
 [`tabs/index.txt`](tabs/index.txt) for the full file list and coverage notes.
 
+- `tabs/cases-tab.txt` — the Cases tab: forking a stored valuation case with
+  stated reasons, its Shapley why-it-moved, and simulating its uncertainty.
+
 ## Archive (`docs/archive/`)
 
 Superseded documents preserved for history. `corporate-analysis-tab.md`,
@@ -99,6 +102,8 @@ sub-project and feeding an implementation plan.
 | `2026-09-20-records-peer-sync-design.md` | Peer sync for the owner's own records - valuation cases with their segments and narratives, decisions, events and categories, portfolio settings - whole-record last-writer-wins over the same cloud folder |
 | `plans/2026-09-20-records-peer-sync.md` | Task-by-task plan for records peer sync: shared peer_sync model, sync_uid and record_sync schema, kind registry, whole-record merge, record file, run_records_sync, wiring and the status line |
 | `plans/2026-09-18-watchlist-peer-sync.md` | Task-by-task plan for watchlist peer sync: pure merge model, defensive peer files, run_sync under one lock, status line; the neutral seed ships as a second PR merged only after both PCs sync |
+| `2026-09-24-cases-ui-design.md` | Track C2 UI: the Cases tab -- fork a stored case with stated reasons, see why it moved by Shapley, and simulate it over stated distributions, entirely on existing endpoints |
+| `plans/2026-09-24-cases-ui.md` | Task-by-task plan for the Cases tab: caseFields' one percent<->fraction conversion, the case list and detail routes, the fork form, the Shapley why-it-moved section, and the simulate section |
 
 ## Process SOPs (`guideline/sop/`)
 
