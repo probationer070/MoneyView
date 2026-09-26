@@ -6,7 +6,7 @@ import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { RefreshCw } from "lucide-react";
 import { fetchApi } from "@/lib/api";
-import { DcfRefusalError } from "@/lib/dcfRefusal";
+import { DcfRefusalError, postDcf } from "@/lib/dcfRefusal";
 import { TickerSearch } from "@/components/ui/TickerSearch";
 import { tabStateKey, useTabState } from "@/lib/tabState";
 import { bridgedEstimatedValue, UNBRIDGED_PLACEHOLDER, UNBRIDGED_REASON } from "@/lib/bridgeQuality";
@@ -202,7 +202,19 @@ export default function CorporateAnalysisPage() {
   const [dcfFullReportError, setDcfFullReportError] = useState<string | null>(null);
   const [dcfStreamError, setDcfStreamError] = useState<string | null>(null);
   // A DCF the model declined (e.g. non_positive_fcff): shown as content, never as an error.
-  const [dcfRefusal, setDcfRefusal] = useState<DcfRefusalError | null>(null);
+  const [dcfRefusal, setDcfRefusalState] = useState<DcfRefusalError | null>(null);
+  // Recording a refusal also drops the cached result, which may be a value computed under the
+  // old $1B FCFF floor: hiding it only in memory brought it back on the next reload.
+  const setDcfRefusal = (refusal: DcfRefusalError | null) => {
+    setDcfRefusalState(refusal);
+    if (refusal) {
+      try {
+        window.sessionStorage.removeItem(DCF_CACHE_KEY);
+      } catch {
+        // Session cache is optional; the in-memory refusal still supersedes it.
+      }
+    }
+  };
   const [bulkDcfReports, setBulkDcfReports] = useState<DCFFullReport[]>([]);
   const [bulkDcfReportsLoading, setBulkDcfReportsLoading] = useState(false);
   const [bulkDcfReportsError, setBulkDcfReportsError] = useState<string | null>(null);
@@ -680,12 +692,15 @@ export default function CorporateAnalysisPage() {
     setDcfFullReportLoading(true);
     setDcfFullReportError(null);
     try {
-      const report = await fetchApi<DCFFullReport>(`/corporate/dcf/${snapshot.ticker}/report`, {
-        method: "POST",
-        body: JSON.stringify(dcfRequestBody(snapshot)),
-      });
+      // postDcf, not fetchApi: a 422 refusal must reach the page as content with its code.
+      const report = await postDcf<DCFFullReport>(`/corporate/dcf/${snapshot.ticker}/report`, dcfRequestBody(snapshot));
       setDcfFullReport(report);
     } catch (error) {
+      if (error instanceof DcfRefusalError) {
+        setDcfRefusal(error);
+        setDcfStreamResult(null);
+        return;
+      }
       setDcfFullReportError(error instanceof Error ? error.message : "Failed to load the full DCF report.");
     } finally {
       setDcfFullReportLoading(false);

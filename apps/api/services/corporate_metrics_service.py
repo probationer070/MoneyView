@@ -526,11 +526,9 @@ def valuation_params_from_metrics(metrics: CorporateMetrics) -> ValuationAssumpt
         tax_rate=DEFAULT_TAX_RATE,
         wacc=wacc,
         terminal_growth_rate=terminal_growth_rate,
-        # Not clamped: ValuationAssumptions.fcff is ge=0, so a non-positive stored value is
-        # passed as None and the DCF reads the real (negative) figure from the store, which
-        # refuses it as non_positive_fcff instead of valuing a clamped zero or failing
-        # validation.
-        fcff=float(metrics.fcff) if float(metrics.fcff) > 0 else None,
+        # The real value, not clamped: the DCF refuses a non-positive forecast as
+        # non_positive_fcff instead of valuing a clamped placeholder.
+        fcff=float(metrics.fcff),
         esg_penalty=max(min(float(metrics.esg_penalty), 100.0), 0.0),
         reinvestment=max(min(float(metrics.reinvestment), 100.0), 0.0),
         unlevered_beta=max(min(float(metrics.unlevered_beta), 5.0), 0.0),

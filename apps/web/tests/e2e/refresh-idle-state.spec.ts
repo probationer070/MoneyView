@@ -593,3 +593,39 @@ test("a refused single-ticker DCF shows the refusal as content, not an error or 
   // No number stands in for the refused value, including a cached floored one.
   await expect(page.getByRole("button", { name: /^Intrinsic DCF(?! Value)/i })).not.toContainText("$");
 });
+
+const REFUSAL_BODY = JSON.stringify({ detail: { code: "non_positive_fcff", message: "Free cash flow is zero or negative over the forecast, so the model cannot value it." } });
+const FLOORED_CACHE = {
+  snapshot: { ticker: "AAPL", growth: 6, roic: 18, wacc: 10, debtRatio: 18, unleveredBeta: 1.05, crp: 0.8, reinvestment: 34, fcff: 92, esgPenalty: 22 },
+  result: { estimated_value: 199.9, current_price: 180.2, upside_pct: 10.93, wacc_used: 0.1, margin_used: 0.18, growth_used: 0.06, status: "Cached" },
+  lastUpdatedAt: "2026-04-10T10:00:00Z",
+};
+
+// Seeds ONCE (not via addInitScript, which re-seeds on every navigation and would mask a reload).
+async function openCorporateWithCachedDcf(page: Page) {
+  await page.goto("/corporate", { waitUntil: "domcontentloaded" });
+  await page.evaluate(([key, value]) => window.sessionStorage.setItem(key as string, JSON.stringify(value)), [CORPORATE_DCF_CACHE_KEY, FLOORED_CACHE]);
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await expect(page.getByRole("heading", { name: /Corporate Analysis/i })).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByRole("button", { name: /^Intrinsic DCF(?! Value)/i })).toContainText("$199.9");
+}
+
+test("a refusal also clears the cached value, so a reload does not bring the floored number back", async ({ page }) => {
+  await mockCorporatePageApi(page);
+  await page.route("**/api/v1/corporate/dcf/*/stream", (route) => route.fulfill({ status: 422, contentType: "application/json", body: REFUSAL_BODY }));
+  await openCorporateWithCachedDcf(page);
+  await page.getByRole("button", { name: "Refresh DCF" }).click();
+  await expect(page.getByTestId("dcf-refusal")).toBeVisible();
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await expect(page.getByRole("heading", { name: /Corporate Analysis/i })).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByRole("button", { name: /^Intrinsic DCF(?! Value)/i })).not.toContainText("$199.9");
+});
+
+test("the full report shows a refusal as content, not a generic API error", async ({ page }) => {
+  await mockCorporatePageApi(page);
+  await page.route("**/api/v1/corporate/dcf/*/report", (route) => route.fulfill({ status: 422, contentType: "application/json", body: REFUSAL_BODY }));
+  await openCorporateWithCachedDcf(page);
+  await page.getByRole("button", { name: "View Full Report" }).click();
+  await expect(page.getByTestId("dcf-refusal")).toContainText("zero or negative over the forecast");
+  await expect(page.getByText(/API error: 422/)).toHaveCount(0);
+});

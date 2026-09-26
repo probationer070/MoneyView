@@ -52,7 +52,10 @@ class ValuationAssumptions(BaseModel):
     # Gordon safety margin (`derive_terminal_growth`). A value sent is honoured as given --
     # an explicit override is never silently re-bounded by the ceiling.
     terminal_growth_rate: float | None = Field(default=None, ge=-0.1, le=0.1)
-    fcff: float | None = Field(default=None, ge=0.0)
+    # Unbounded on purpose: a zero or negative FCFF is a valid input the engine refuses as
+    # non_positive_fcff (spec 2026-09-26-dcf-fcff-floor-removal). A ge=0 bound turned that
+    # refusal into a pydantic validation error the UI could only show as a generic failure.
+    fcff: float | None = Field(default=None)
     esg_penalty: float | None = Field(default=None, ge=0.0, le=100.0)
     reinvestment: float | None = Field(default=None, ge=0.0, le=100.0)
     unlevered_beta: float | None = Field(default=None, ge=0.0, le=5.0)

@@ -262,3 +262,15 @@ def test_a_refused_dcf_is_a_422_with_its_code_on_every_route(path, monkeypatch):
     response = client.post(path, json={**_valuation_payload(), "fcff": 0.0})
     assert response.status_code == 422
     assert response.json()["detail"]["code"] == "non_positive_fcff"
+
+
+def test_a_negative_fcff_sent_by_the_browser_is_a_refusal_not_a_validation_error(monkeypatch):
+    # Final-review finding 1: the /corporate panel sends the stored FCFF, which is negative for
+    # a cash-burning company. A ge=0 bound turned that into a pydantic 422 with a list
+    # `detail`, which the UI can only show as a generic error.
+    monkeypatch.setattr(corporate_route, "_latest_market_price", lambda ticker: 210.4)
+    monkeypatch.setattr(corporate_route, "_metrics_for_ticker", _mock_metrics)
+    client = TestClient(app)
+    response = client.post("/api/v1/corporate/dcf/AAPL/stream", json={**_valuation_payload(), "fcff": -0.5})
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "non_positive_fcff"
