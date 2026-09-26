@@ -101,8 +101,9 @@ def _default_figures_loader(
     )
     return {
         "price_at_decision": float(dcf["current_price"]),
-        "dcf_value": float(dcf["estimated_value"]),
-        "dcf_implied_return": float(dcf["dcf_implied_return"]),
+        "dcf_value": dcf["estimated_value"],
+        "dcf_implied_return": dcf["dcf_implied_return"],
+        "dcf_refusal": dcf["dcf_refusal"],
         "roic": round(float(metrics.roic), 2),
         "wacc": round(float(metrics.wacc), 2),
         "source": "corporate_comparison._dcf_snapshot",
@@ -178,6 +179,12 @@ def record_decision(
         # than by raising inside the loader, mirroring the price guard above,
         # so the guarantee holds for the default loader specifically without
         # requiring every injected loader to know about it.
+        elif figures.get("dcf_refusal"):
+            unavailable = (
+                f"free cash flow for {ticker} is zero or negative over the forecast "
+                f"({figures['dcf_refusal']}): the model cannot value it"
+            )
+            figures = None
         elif figures.get("bridge_quality") == "missing":
             unavailable = (
                 f"equity bridge for {ticker} is missing (bridge_quality): dcf_value "

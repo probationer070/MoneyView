@@ -323,11 +323,12 @@ class CorporateComparisonRow(BaseModel):
     roic: float
     wacc: float
     roic_minus_wacc: float
-    dcf_value: float
+    # None when the DCF refused (dcf_refusal says why). Required, never defaulted.
+    dcf_value: float | None
     current_price: float
-    dcf_implied_return: float = 0.0
+    dcf_implied_return: float | None
     capm_expected_return: float = 0.0
-    stock_expected_return: float
+    stock_expected_return: float | None
     market_expected_return: float
     # Spec 2026-09-26-implied-return-spread. Annual rates in percent. None when refused
     # (implied_return_refusal says why) or when read from a snapshot before metric v3
@@ -337,6 +338,10 @@ class CorporateComparisonRow(BaseModel):
     market_implied_return: float | None
     implied_return_spread: float | None
     implied_return_refusal: str | None
+    # Why dcf_value / dcf_implied_return / stock_expected_return are None: the DCF itself
+    # refused (spec 2026-09-26-dcf-fcff-floor-removal). Separate from implied_return_refusal
+    # even when both carry the same code -- two calculations, each declining.
+    dcf_refusal: str | None
     stock_expected_return_source: str = "dcf_implied_upside"
     has_price_data: bool = True
     # Beside has_price_data, and for the same reason: the three return fields above are

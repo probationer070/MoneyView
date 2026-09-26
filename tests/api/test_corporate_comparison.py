@@ -1819,20 +1819,6 @@ def test_a_non_finite_input_is_refused_not_solved(price, bridge_kwargs, code):
     assert dcf["market_implied_return"] is None and dcf["implied_return_spread"] is None
 
 
-def test_a_sub_unit_fcff_is_solved_on_the_real_cash_flow_not_the_display_floor():
-    # Review Focus 3: the display DCF floors fcff at 1.0; the implied return must not.
-    # The price must sit BETWEEN the two present values, or a floored implementation gives
-    # the same sign: PV(WACC) is 8.35 on the real path and 16.71 on the floored (1.0) path,
-    # so at 12.0 the real answer is negative and the floored one positive.
-    metrics = _stub_metrics_loader("AAPL").model_copy(update={"fcff": 0.5})
-    dcf = _snapshot(_resolved_bridge(net_debt=0.0, non_op=0.0, shares=1.0), price=12.0, metrics=metrics)
-    assert dcf["implied_return_refusal"] is None
-    real_path = [0.5 * 1.06 ** t for t in range(1, 6)]
-    assert enterprise_present_value(real_path, 0.03, 0.10) < 12.0 < enterprise_present_value([1.0 * 1.06 ** t for t in range(1, 6)], 0.03, 0.10)
-    assert dcf["implied_return_spread"] < 0
-    solved = calculate_market_implied_return(real_path, 0.03, 12.0).rate
-    assert dcf["market_implied_return"] == pytest.approx(solved * 100, abs=0.005)
-
 
 def test_the_display_dcf_still_uses_the_shared_present_value():
     dcf = _snapshot(_starved_bridge())
@@ -1978,3 +1964,47 @@ def test_the_stock_history_carries_the_refusal_so_refused_is_not_read_as_not_rec
         ticker="AAPL", comparison_universe="portfolio_plus_benchmark", benchmark_ticker="^GSPC", custom_tickers=[])
     assert history.points[0].implied_return_spread is None
     assert history.points[0].implied_return_refusal == "no_price"
+
+
+def _metrics_with(**update):
+    return _stub_metrics_loader("AAPL").model_copy(update=update)
+
+
+def test_a_small_positive_fcff_is_valued_on_its_real_cash_flow():
+    # fcff 0.5 (billions): the enterprise value is the 0.5 path's, not the 1.0 path's.
+    dcf = _snapshot(_starved_bridge(), metrics=_metrics_with(fcff=0.5))  # starved: estimated_value = EV
+    real = enterprise_present_value([0.5 * 1.06 ** t for t in range(1, 6)], 0.03, 0.10)
+    floored = enterprise_present_value([1.0 * 1.06 ** t for t in range(1, 6)], 0.03, 0.10)
+    assert dcf["dcf_refusal"] is None
+    assert dcf["estimated_value"] == pytest.approx(real, abs=0.01)
+    assert abs(dcf["estimated_value"] - floored) > 1.0
+
+
+@pytest.mark.parametrize("fcff", [0.0, -0.5])
+def test_a_non_positive_fcff_refuses_both_calculations(fcff):
+    dcf = _snapshot(_resolved_bridge(), metrics=_metrics_with(fcff=fcff))
+    assert dcf["estimated_value"] is None and dcf["dcf_implied_return"] is None
+    assert dcf["stock_expected_return"] is None
+    assert dcf["dcf_refusal"] == "non_positive_fcff"
+    assert dcf["implied_return_spread"] is None
+    assert dcf["implied_return_refusal"] == "non_positive_fcff"
+
+
+def test_a_forecast_path_turning_negative_refuses_both_calculations():
+    dcf = _snapshot(_resolved_bridge(), metrics=_metrics_with(fcff=5.0, growth=-150.0))
+    assert dcf["dcf_refusal"] == "non_positive_fcff"
+    assert dcf["implied_return_refusal"] == "non_positive_fcff"
+
+
+@pytest.mark.parametrize("fcff", [0.2, 0.5, 1.0, 5.0, 50.0])
+@pytest.mark.parametrize("price_multiple", [0.5, 0.9, 1.1, 2.0])
+def test_the_dcf_gap_and_the_implied_return_agree_in_sign(fcff, price_multiple):
+    # Only where BOTH produce a value: the implied return can refuse for range reasons
+    # while the DCF is valid, and that is not a disagreement.
+    fair = _snapshot(_resolved_bridge(net_debt=0.0, non_op=0.0, shares=1.0), metrics=_metrics_with(fcff=fcff))
+    assert fair["estimated_value"] is not None
+    price = fair["estimated_value"] * price_multiple
+    dcf = _snapshot(_resolved_bridge(net_debt=0.0, non_op=0.0, shares=1.0), price=price, metrics=_metrics_with(fcff=fcff))
+    if dcf["estimated_value"] is None or dcf["implied_return_spread"] is None:
+        return
+    assert (dcf["estimated_value"] > price) == (dcf["implied_return_spread"] > 0)
