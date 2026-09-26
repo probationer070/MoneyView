@@ -42,5 +42,6 @@ function sourceHost(source: string | null | undefined): string | null {
 export function eventProvenance(event: EventLineSpec): string {
   const host = sourceHost(event.source);
   if (event.origin === "user") return host ? `Added by you · Source: ${host}` : "Added by you, no source";
+  if (event.origin === "computed") return "Computed from cached prices, no source";
   return host ? `Source: ${host}` : "No source";
 }

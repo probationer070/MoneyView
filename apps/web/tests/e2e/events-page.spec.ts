@@ -127,6 +127,27 @@ test("a new category can be added and used", async ({ page }) => {
   await expect(page.getByTestId("event-form").getByLabel("Category").locator("option", { hasText: "Earnings" })).toHaveCount(1);
 });
 
+test("a computed event is labelled as computed, read-only, with its basis, and filterable", async ({ page }) => {
+  const DRAWDOWN: MockCategory = { id: "drawdown", label: "S&P 500 drawdowns", color: "#3B7DD8", visible: true, origin: "builtin", overridden: false };
+  const computed: MockEvent = {
+    id: "drawdown-gspc-2022-01-03", label: "S&P 500 drawdown -25.4%", category: "drawdown",
+    start_date: "2022-01-03", end_date: "2022-10-12", origin: "computed",
+    note: "Computed from cached daily closes of ^GSPC: -25.43% from the peak close 4796.56 on 2022-01-03 to the trough close 3577.03 on 2022-10-12.",
+  };
+  await openEventsPage(page, [computed, FOMC_EVENT], [DRAWDOWN, FOMC_CATEGORY, UNCATEGORIZED]);
+
+  const row = page.getByTestId("event-row-drawdown-gspc-2022-01-03");
+  await expect(row).toContainText("Computed from prices");
+  await expect(row).toContainText("from cached prices");
+  await expect(row).toContainText("2022-01-03 – 2022-10-12");
+  await expect(row).toContainText("peak close 4796.56");
+  await expect(row.getByRole("button")).toHaveCount(0);
+
+  await page.getByLabel("Filter by origin").selectOption("computed");
+  await expect(row).toBeVisible();
+  await expect(page.getByTestId("event-row-fomc-2026-06-17")).toHaveCount(0);
+});
+
 test("a user event whose category was removed is flagged for a new one", async ({ page }) => {
   await openEventsPage(page, [{ ...MY_EVENT, category: "uncategorized", missing_category: "quad-witching" }], [UNCATEGORIZED]);
 

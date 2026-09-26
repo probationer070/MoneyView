@@ -28,7 +28,7 @@ export interface EventLineSpec {
   note?: string;
   categoryLabel?: string;
   source?: string | null;
-  origin?: "builtin" | "rule" | "user";
+  origin?: "builtin" | "rule" | "user" | "computed";
 }
 
 /** One drawn x position and every event on it. `colors` holds each distinct colour once, in event order. */

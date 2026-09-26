@@ -3,7 +3,27 @@
  */
 
 /** Where an event came from. Decides whether it can be edited and what the tooltip says. */
-export type EventOrigin = "builtin" | "rule" | "user";
+export type EventOrigin = "builtin" | "rule" | "user" | "computed";
+
+/**
+ * What a `computed` event was derived from. Mirrors `ComputedBasis`. Percentages are in percent;
+ * `from_*`/`to_*` are the two closes the change is measured between; `as_of` is the last close read.
+ */
+export interface ComputedBasis {
+  symbol: string;
+  data_basis: "daily_close";
+  rule: "drawdown_from_prior_peak" | "move_over_sessions";
+  threshold_pct: number;
+  lookback_sessions: number | null;
+  direction: "up" | "down";
+  change_pct: number;
+  from_date: string;
+  from_close: number;
+  to_date: string;
+  to_close: number;
+  ongoing: boolean;
+  as_of: string;
+}
 
 /**
  * A dated event drawn as a vertical line on price charts.
@@ -25,6 +45,8 @@ export interface MarketEvent {
   note: string;
   origin: EventOrigin;
   missing_category: string | null;
+  /** Set only on a `computed` event. */
+  basis?: ComputedBasis | null;
 }
 
 /** A resolved event category. Mirrors `EventCategory`. `visible` is the global chart filter. */

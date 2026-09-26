@@ -5,9 +5,9 @@ import { EventApiError } from "@/lib/marketEventsApi";
 import { useDeleteEvent } from "@/lib/useEventMutations";
 import type { EventCategory, MarketEvent } from "@/lib/useMarketEvents";
 
-type OriginFilter = "all" | "builtin" | "rule" | "user" | "needs-category";
+type OriginFilter = "all" | "builtin" | "rule" | "user" | "computed" | "needs-category";
 
-const ORIGIN_LABEL: Record<MarketEvent["origin"], string> = { builtin: "Built-in", rule: "Rule", user: "Added by you" };
+const ORIGIN_LABEL: Record<MarketEvent["origin"], string> = { builtin: "Built-in", rule: "Rule", user: "Added by you", computed: "Computed from prices" };
 
 function host(source: string): string {
   try {
@@ -51,6 +51,7 @@ export function EventsTable({ events, categories, onEdit }: { events: MarketEven
             <option value="builtin">Built-in</option>
             <option value="rule">Rule</option>
             <option value="user">Added by you</option>
+            <option value="computed">Computed from prices</option>
             <option value="needs-category">Needs category</option>
           </select>
         </label>
@@ -104,7 +105,7 @@ export function EventsTable({ events, categories, onEdit }: { events: MarketEven
                         )}
                       </span>
                     ) : (
-                      <span className="text-xs text-[var(--text-muted)]">from a data file</span>
+                      <span className="text-xs text-[var(--text-muted)]">{event.origin === "computed" ? "from cached prices" : "from a data file"}</span>
                     )}
                   </td>
                 </tr>

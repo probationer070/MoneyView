@@ -93,4 +93,8 @@ test.describe("eventProvenance", () => {
   test("a user event with a source says both", () => {
     expect(eventProvenance(line({ origin: "user", source: "https://example.com/n" }))).toBe("Added by you · Source: example.com");
   });
+
+  test("a computed event says it was computed and has no source", () => {
+    expect(eventProvenance(line({ origin: "computed", source: null }))).toBe("Computed from cached prices, no source");
+  });
 });
