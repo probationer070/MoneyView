@@ -19,6 +19,7 @@ from __future__ import annotations
 import sqlite3
 
 from apps.api.services.news_service import news_identity_hash
+from scripts import reset_snapshots
 from scripts.reset_snapshots import _REAL_DB, _back_up, _database_path
 
 # Re-bound here so tests can point this module's guard at their own database without
@@ -34,7 +35,8 @@ def rekey_news(
     Returns `{"deleted": rows removed, "rehashed": kept rows whose hash changed}`.
     """
     path = _database_path(conn)
-    if path is not None and path == _REAL_DB:
+    # This module's own `_REAL_DB` (patchable by tests) or any checkout's real database.
+    if path is not None and (path == _REAL_DB or reset_snapshots._is_real_database(path)):
         if not allow_real_database:
             raise RuntimeError(
                 f"refusing to re-key news in the real database at {path}.\n"

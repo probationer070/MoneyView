@@ -122,3 +122,26 @@ def test_the_real_database_is_backed_up_before_any_row_is_deleted(monkeypatch):
 def test_the_guard_points_at_this_repository_s_real_database():
     expected = Path(__file__).resolve().parents[2] / "data" / "processed" / "moneyview.db"
     assert rekey_module._REAL_DB == expected.resolve(), rekey_module._REAL_DB
+
+
+def _use_another_checkouts_real_database(monkeypatch, tmp_path) -> Path:
+    """A database at <somewhere>/data/processed/moneyview.db that is NOT the path this
+    script computes from its own location -- the main checkout's database, seen from a
+    worktree whose DB_PATH points at it (docs/git-worktrees.md suggests exactly that).
+    The guard used to compare against its own location only, so it neither refused
+    nor backed up this database (ERROR-LOG 2026-09-26, G5 follow-up)."""
+    other = tmp_path / "other-checkout" / "data" / "processed" / "moneyview.db"
+    other.parent.mkdir(parents=True)
+    monkeypatch.setattr(db_service, "_DB_PATH", other)
+    db_service.init_db()
+    return other
+
+
+def test_another_checkouts_real_database_is_refused_too(monkeypatch, tmp_path):
+    _use_another_checkouts_real_database(monkeypatch, tmp_path)
+    with get_db() as conn:
+        _insert(conn, "AXP", URL, "legacy-1")
+        _insert(conn, "AXP", URL, "legacy-2")
+        with pytest.raises(RuntimeError, match="real database"):
+            rekey_news(conn)
+        assert conn.execute("SELECT COUNT(*) FROM news").fetchone()[0] == 2

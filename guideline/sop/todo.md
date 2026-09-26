@@ -988,12 +988,15 @@ Track F on another branch, and two Track Fs would collide at merge.
         The result was 114 deleted, 400 re-hashed, 2,818 rows left, 0 duplicates,
         0 legacy hashes. Tested and mutation-checked
         (`tests/scripts/test_rekey_news.py`).
-      - **Follow-up, open.** The real-database guard in `reset_snapshots.py` and
-        `rekey_news.py` resolves `_REAL_DB` from the script's own location. Run from
-        a worktree whose `DB_PATH` points at the main checkout's database, which
-        `docs/git-worktrees.md` suggests, the guard would not recognise it and would
-        take no backup. The 2026-09-26 run set `_REAL_DB` explicitly for that
-        reason. A fix would compare against the resolved `DB_PATH` as well.
+      - **Follow-up, CLOSED 2026-09-26.** The real-database guard in
+        `reset_snapshots.py` and `rekey_news.py` resolved `_REAL_DB` from the script's
+        own location. So from a worktree whose `DB_PATH` points at the main checkout's
+        database, it neither refused nor backed that database up. Both scripts now use
+        `reset_snapshots._is_real_database`, which also counts any
+        `data/processed/moneyview.db` as real. Test and e2e databases don't match that
+        layout. Each script has a test that refuses another checkout's database.
+        Mutation-checked both ways: a location-only check fails the two new tests, and
+        an always-real check fails seven ordinary tests.
       - **Records.** `ERROR-LOG.md` 2026-09-26 (news) and 2026-09-10.
 
 - [x] **G4. The tile grid's "Held" filter shows 12 stocks nobody chose.** CLOSED
