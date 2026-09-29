@@ -5,6 +5,7 @@ import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import { useState, useEffect, ReactNode } from "react";
 import { Activity, AlertTriangle } from "lucide-react";
 import { setDynamicPort } from "@/lib/api";
+import { resolveBackendPort } from "@/lib/backendPortDiscovery";
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [queryClient] = useState(() => new QueryClient({
@@ -38,20 +39,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
 
       try {
-        const explicitBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
-        const port = explicitBaseUrl
-          ? Number(new URL(explicitBaseUrl).port || "8000")
-          : await fetch("/api/runtime/backend-port", { cache: "no-store" })
-              .then(async (response) => {
-                if (!response.ok) {
-                  throw new Error(`Runtime backend port lookup failed: ${response.status}`);
-                }
-                const payload = await response.json() as { port?: number };
-                if (typeof payload.port !== "number") {
-                  throw new Error("Runtime backend port lookup returned an invalid payload.");
-                }
-                return payload.port;
-              });
+        // A failed lookup falls back to the default port rather than failing the boot;
+        // the health check below decides whether that port is right (see the module).
+        const port = await resolveBackendPort(
+          process.env.NEXT_PUBLIC_API_BASE_URL,
+          () => fetch("/api/runtime/backend-port", { cache: "no-store" }),
+        );
         setDynamicPort(port);
 
         const res = await fetch(`http://127.0.0.1:${port}/api/v1/health`);
