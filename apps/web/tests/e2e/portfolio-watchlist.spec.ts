@@ -440,3 +440,47 @@ test("the snapshot summary counts implied returns only over holdings that have o
   await expect(card).toContainText("1 / 1");
   await expect(page.getByText("Positive Spread", { exact: true })).toHaveCount(0);
 });
+
+async function openAppleDetailWithHistory(page: Page, points: Array<Record<string, unknown>>) {
+  await mockPortfolioPageApi(page);
+  await page.route(
+    (url) => url.pathname === `${API_PREFIX}/corporate/comparison/stock-history`,
+    (route) => json(route, {
+      status: "ok",
+      data: { ticker: "AAPL", comparison_universe: "portfolio_plus_benchmark", benchmark_ticker: "^GSPC", custom_tickers: [], points },
+    }),
+  );
+  await clearAllHoldings(page);
+  await addHolding(page, "AAPL", "Apple Inc.", "Technology");
+  await refreshPortfolioAnalysis(page);
+  await openPortfolioPanel(page, "holdings");
+  await page.locator('[role="button"]').filter({ hasText: "Apple Inc." }).first().click();
+  return portfolioModal(page);
+}
+
+function historyPoint(date: string, version: string, extra: Record<string, unknown>) {
+  return {
+    as_of_date: date, generated_at: `${date}T09:00:00Z`, snapshot_version: version, snapshot_source: "manual",
+    benchmark_ticker: "^GSPC", current_price: 200, roic_minus_wacc: 8, dcf_implied_return: 10, dcf_refusal: null,
+    implied_return_spread: 1.0, implied_return_refusal: null, market_expected_return: 9.7, ...extra,
+  };
+}
+
+test("a refused point in stock history says why its DCF value is absent", async ({ page }) => {
+  const modal = await openAppleDetailWithHistory(page, [
+    historyPoint("2026-09-27", "v4", { dcf_implied_return: null, dcf_refusal: "non_positive_fcff", implied_return_spread: null, implied_return_refusal: "non_positive_fcff" }),
+  ]);
+  await expect(modal.getByText(/zero or negative over the forecast/).first()).toBeVisible();
+  await expect(modal.getByText("Saved snapshot is missing DCF value vs price for this ticker.")).toHaveCount(0);
+});
+
+test("the trend delta uses the latest and oldest points that recorded an implied return", async ({ page }) => {
+  // Newest first: 2.0 (v3), 1.25 (v3), then a pre-v3 point with none. The delta is between the
+  // two recorded points (0.75), not blank because the oldest point predates v3.
+  const modal = await openAppleDetailWithHistory(page, [
+    historyPoint("2026-09-27", "v3b", { implied_return_spread: 2.0 }),
+    historyPoint("2026-09-26", "v3a", { implied_return_spread: 1.25 }),
+    historyPoint("2026-08-03", "v2", { implied_return_spread: null }),
+  ]);
+  await expect(modal.getByTestId("implied-spread-trend-delta")).toHaveText("0.75%");
+});

@@ -253,7 +253,9 @@ export function buildPortfolioTickerMetrics(args: {
       snapshotVersion: args.activeSnapshotMeta?.snapshot_version ?? null,
       warnings,
       excludedFromRanking: Boolean(
-        [row?.roic_minus_wacc, row?.dcf_implied_return, row?.implied_return_spread].some((value) => isMetricOutlier(value)),
+        // Outliers only: a refused or unrecorded (null) metric is not an outlier, and ranking
+        // already skips rows without a value.
+        [row?.roic_minus_wacc, row?.dcf_implied_return, row?.implied_return_spread].some((value) => value != null && isMetricOutlier(value)),
       ),
     };
     acc[stock.ticker] = metrics;

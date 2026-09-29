@@ -521,8 +521,8 @@ def _implied_return(
     """Spec 2.2-2.4. The first two refusals are checked here because this function owns
     the price and the bridge; the engine checks the rest, in order.
 
-    `fcff` is the UNFLOORED statement value. The display DCF above floors it at 1.0 so a
-    value exists on screen; an IRR on that placeholder would be invented.
+    `fcff` is the statement value, unfloored, exactly as the DCF above uses it (metric v4
+    removed the $1B floor from both).
     """
     # isfinite before every comparison: `nan <= 0` is False.
     if current_price is None or not isfinite(current_price) or current_price <= 0:
@@ -787,9 +787,9 @@ def load_corporate_comparison_history(
             comparison_universe=str(row["comparison_universe"] or comparison_universe),
             benchmark_ticker=str(row["benchmark_ticker"] or normalized_benchmark),
             stock_count=int(row["stock_count"] or 0),
-            # NULL stays None. Both of these average only the rows whose bridge resolved,
-            # so a snapshot where every non-benchmark row is 'missing' averages nothing --
-            # and an average over zero rows is absent, not zero.
+            # NULL stays None. These average only rows with a value -- the DCF average skips
+            # missing bridges and refused DCFs; the implied-return average skips every
+            # refusal -- and an average over zero rows is absent, not zero.
             average_implied_return_spread=_rounded_or_none(row["average_implied_return_spread"]),
             average_roic_minus_wacc=round(float(row["average_roic_minus_wacc"] or 0.0), 2),
             average_dcf_value=_rounded_or_none(row["average_dcf_value"]),

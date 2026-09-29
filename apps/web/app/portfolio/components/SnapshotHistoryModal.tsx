@@ -29,6 +29,8 @@ const VERSION_NOTICES: Record<number, string> = {
 };
 
 const NO_BRIDGED_ROWS_TITLE = "No holding in this snapshot had a resolved equity bridge, so this average covers no rows.";
+// From metric v3 an implied return is refused for more than a missing bridge (six codes).
+const NO_IMPLIED_RETURN_TITLE = "Every holding in this snapshot was refused an implied return (a missing equity bridge, a non-positive forecast FCFF, or a price outside the model's range), so this average covers no rows.";
 
 interface SnapshotHistoryModalProps {
   history: CorporateComparisonHistoryResponse | undefined;
@@ -137,7 +139,7 @@ export function SnapshotHistoryModal({
                   // Before metric v3 no implied return was recorded; that is not "no rows".
                   <div className="mt-1 font-bold text-[var(--text-muted)]">{IMPLIED_RETURN_NOT_RECORDED}</div>
                 ) : point.average_implied_return_spread == null ? (
-                  <div className="mt-1 font-bold text-[var(--text-muted)]" title={NO_BRIDGED_ROWS_TITLE}>
+                  <div className="mt-1 font-bold text-[var(--text-muted)]" title={NO_IMPLIED_RETURN_TITLE}>
                     Not available
                   </div>
                 ) : (

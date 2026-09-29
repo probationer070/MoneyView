@@ -1,6 +1,7 @@
 import sys
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -248,8 +249,6 @@ def test_valuation_params_from_metrics_accepts_stabilized_metric_metadata():
     # company growth: derive_terminal_growth(0.06, 0.10, ceiling=0.03) -> 0.03.
     assert params.terminal_growth_rate == 0.03
 
-
-import pytest
 
 
 @pytest.mark.parametrize("path", ["/api/v1/corporate/dcf/AAPL", "/api/v1/corporate/dcf/AAPL/report", "/api/v1/corporate/dcf/AAPL/stream"])

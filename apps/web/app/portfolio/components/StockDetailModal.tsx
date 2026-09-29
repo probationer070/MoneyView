@@ -241,13 +241,12 @@ export function StockDetailModal({
     comparisonMetrics.impliedVsWacc,
   ].filter((metric) => metric.quality === "suspicious" || metric.quality === "invalid").length;
   
-  const earliestSnapshotTrendPoint = snapshotTrendPoints.at(-1) ?? null;
-  const latestSnapshotTrendPoint = snapshotTrendPoints[0] ?? null;
-  // Only between two points that both recorded it: a pre-v3 point has no implied return,
-  // and subtracting across that boundary would compare two different quantities.
-  const expectedSpreadTrendDelta = latestSnapshotTrendPoint?.implied_return_spread != null
-    && earliestSnapshotTrendPoint?.implied_return_spread != null
-    ? latestSnapshotTrendPoint.implied_return_spread - earliestSnapshotTrendPoint.implied_return_spread
+  // Between the latest and oldest points that RECORDED an implied return: a pre-v3 or refused
+  // point has none, and subtracting across it would compare two different quantities. One
+  // pre-v3 point used to blank the delta even when several recorded points existed.
+  const recordedSpreadPoints = snapshotTrendPoints.filter((point) => point.implied_return_spread != null);
+  const expectedSpreadTrendDelta = recordedSpreadPoints.length >= 2
+    ? (recordedSpreadPoints[0].implied_return_spread as number) - (recordedSpreadPoints[recordedSpreadPoints.length - 1].implied_return_spread as number)
     : null;
   const stockNewsItems = useMemo(
     () => news.map((item, index) => ({ ...item, id: item.id ?? index + 1 })),
@@ -265,7 +264,9 @@ export function StockDetailModal({
           suspiciousReason: "Saved snapshot ROIC - WACC falls outside the sanity range.",
         }),
         dcfUpside: buildPortfolioDisplayMetric(point.dcf_implied_return, {
-          missingReason: "Saved snapshot is missing DCF value vs price for this ticker.",
+          missingReason: point.dcf_refusal
+            ? impliedReturnRefusalText(point.dcf_refusal)
+            : "Saved snapshot is missing DCF value vs price for this ticker.",
           suspiciousReason: "Saved snapshot DCF value vs price falls outside the sanity range.",
         }),
         impliedVsWacc: buildPortfolioDisplayMetric(point.implied_return_spread, {

@@ -184,3 +184,19 @@ test("each boundary names what changed: v3 adds the implied return, v4 drops the
   await expect(historyItem(dialog, v3)).toContainText("Implied return vs WACC starts here");
   await expect(historyItem(dialog, v4)).not.toContainText("Implied return vs WACC starts here");
 });
+
+test("an empty v3+ average says every holding was refused or unbridged, not only unbridged", async ({ page }) => {
+  const v3: HistoryPointSeed = { as_of_date: "2026-09-26", generated_at: "2026-09-26T09:00:00Z", metric_schema_version: 3, average_dcf_value: 150.0, average_implied_return_spread: null };
+  await mockPortfolioHistory(page, [v3]);
+  const dialog = await openSnapshotHistory(page);
+  await expect(historyItem(dialog, v3).getByText("Not available").first()).toHaveAttribute("title", /refused/);
+});
+
+test("a boundary that skips a version names every change it crosses", async ({ page }) => {
+  const v4: HistoryPointSeed = { as_of_date: "2026-09-27", generated_at: "2026-09-27T09:00:00Z", metric_schema_version: 4, average_dcf_value: 150.0 };
+  const v2: HistoryPointSeed = { ...NEW_DEFINITION, average_implied_return_spread: null };
+  await mockPortfolioHistory(page, [v4, v2]);
+  const dialog = await openSnapshotHistory(page);
+  await expect(historyItem(dialog, v4)).toContainText("Implied return vs WACC starts here");
+  await expect(historyItem(dialog, v4)).toContainText("$1B minimum FCFF");
+});

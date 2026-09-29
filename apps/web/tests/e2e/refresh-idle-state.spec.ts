@@ -629,3 +629,17 @@ test("the full report shows a refusal as content, not a generic API error", asyn
   await expect(page.getByTestId("dcf-refusal")).toContainText("zero or negative over the forecast");
   await expect(page.getByText(/API error: 422/)).toHaveCount(0);
 });
+
+test("an engine refusal without reader wording shows the server's message, not its code", async ({ page }) => {
+  await mockCorporatePageApi(page);
+  await page.route("**/api/v1/corporate/dcf/*/stream", (route) => route.fulfill({
+    status: 422, contentType: "application/json",
+    body: JSON.stringify({ detail: { code: "wacc_not_above_growth", message: "WACC must exceed terminal growth for a terminal value to exist." } }),
+  }));
+  await page.goto("/corporate", { waitUntil: "domcontentloaded" });
+  await expect(page.getByRole("heading", { name: /Corporate Analysis/i })).toBeVisible({ timeout: 60_000 });
+  await page.getByRole("button", { name: "Refresh DCF" }).click();
+  const refusal = page.getByTestId("dcf-refusal");
+  await expect(refusal).toContainText("WACC must exceed terminal growth");
+  await expect(refusal).not.toContainText("wacc_not_above_growth");
+});
