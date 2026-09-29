@@ -53,6 +53,10 @@ _PEER_COVERAGE = 0.80
 
 _RECENT_DAYS = 90
 _BASELINE_DAYS = 252
+# Fewer usable volumes than this and the fallback window compares a bar with itself
+# (1/1 bars), which is 1.0 by construction. A floor against that tautology, not a
+# statistical minimum: two volumes already make a real, if thin, comparison.
+_MIN_VOLUME_BARS = 2
 
 # Confirmed against a real AAPL bundle fetched from Yahoo on 2026-09-03 (see
 # tests/fixtures/aapl_income_annual.py): the annual income statement carries
@@ -354,6 +358,12 @@ def build_verdict(ticker: str, *, bars_loader=load_price_bars, statements_loader
             # emitted; the count of bars that lack volume stands in its place.
             no_volume = f"0 of {len(bars)} bars have volume"
             rows["volume"] = _row(source=f"own bars: {no_volume}", reason=f"no_volume: {no_volume}")
+    elif len(volumes) < _MIN_VOLUME_BARS:
+        have = f"{len(volumes)} of {len(bars)} bars have volume"
+        rows["volume"] = _row(
+            source=f"own bars: {have}",
+            reason=f"insufficient_history: {have}; a ratio needs at least {_MIN_VOLUME_BARS}",
+        )
     else:
         ratio = volume_ratio(volumes, _RECENT_DAYS, _BASELINE_DAYS)
         if ratio is not None:

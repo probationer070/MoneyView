@@ -1367,3 +1367,28 @@ def test_the_peer_clause_names_the_same_basis_as_the_subject_clause():
                 f"{name} / {row_name} row: a count wears a day unit it did not "
                 f"measure: {other['source']!r}"
             )
+
+
+def test_a_single_usable_volume_is_refused_not_reported_as_one():
+    """Known limit closed (todo, 2026-09-29): with one usable volume the fallback window
+    is 1/1 bars -- the bar compared with itself -- so the ratio was 1.0 by construction and
+    read as "normal volume". It is refused instead, naming the count."""
+    _facts("TGT")
+    bars = [{"date": f"2025-04-{i:02d}", "close": 10.0, "volume": None} for i in range(1, 5)]
+    bars.append({"date": "2025-04-05", "close": 10.0, "volume": 1234})
+    panel = build_verdict("TGT", bars_loader=lambda t, limit=None: bars)
+    volume = panel["rows"]["volume"]
+    assert volume["value"] is None
+    assert volume["reason"] == "insufficient_history: 1 of 5 bars have volume; a ratio needs at least 2"
+    assert volume["source"] == "own bars: 1 of 5 bars have volume"
+
+
+def test_two_usable_volumes_still_give_a_ratio():
+    """The floor is the tautology, not a statistical minimum: two volumes compare the newer
+    bar against both, which is a real (if thin) comparison, and the source says 1/2 bars."""
+    _facts("TGT")
+    bars = [{"date": "2025-04-01", "close": 10.0, "volume": 100}, {"date": "2025-04-02", "close": 10.0, "volume": 300}]
+    panel = build_verdict("TGT", bars_loader=lambda t, limit=None: bars)
+    volume = panel["rows"]["volume"]
+    assert volume["value"] == pytest.approx(1.5)   # 300 / mean(100, 300)
+    assert volume["source"] == "own bars: 1/2 bars"

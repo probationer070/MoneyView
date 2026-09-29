@@ -142,8 +142,10 @@ Recorded so nobody rediscovers them as bugs.
   basis it used. `/pricing` deliberately uses the company's own industry instead.
 - **US-only.** Non-US tickers resolve to US industry benchmarks.
 - **Vintage loading is manual.** An annual dataset does not need a scheduler.
-- **A single usable volume yields a ratio of `1.0` by construction.** The source makes
-  the degeneracy visible (`1/1 bars`); a minimum-bars floor would be cleaner.
+- ~~**A single usable volume yields a ratio of `1.0` by construction.**~~ FIXED 2026-09-29:
+  fewer than 2 usable volumes is refused (`insufficient_history: 1 of N bars have volume;
+  a ratio needs at least 2`) instead of comparing a bar with itself. Two volumes still give
+  a (thin) ratio. The floor removes the tautology; it is not a statistical minimum.
 - **`no_sector_pe` does not distinguish** "the vintage has no PE" from "the PE was
   screened out". Both mean no usable sector PE, and the vintage is named.
 - **`SectorBenchmark.rejected`** carries about 20 no-value entries per basket for the
