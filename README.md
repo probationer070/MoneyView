@@ -13,7 +13,7 @@
 
 ## Contents
 
-[What it is](#what-it-is) · [Requirements](#requirements) · [First-time setup](#first-time-setup) · [Running](#running) · [Screens](#screens) · [Developer dashboards](#developer-dashboards) · [Watchlist](#watchlist) · [Testing](#testing) · [Shared types](#shared-schema-types) · [API](#key-api-endpoints) · [Layout](#repository-layout)
+[User Guide](./docs/USER-GUIDE.md) · [What it is](#what-it-is) · [Requirements](#requirements) · [First-time setup](#first-time-setup) · [Running](#running) · [Screens](#screens) · [Developer dashboards](#developer-dashboards) · [Watchlist](#watchlist) · [Testing](#testing) · [Shared types](#shared-schema-types) · [API](#key-api-endpoints) · [Layout](#repository-layout)
 
 ---
 
@@ -75,6 +75,11 @@ run MoneyView
 
 That is the whole thing. It starts the backend and frontend, opens a PowerShell window for
 each, and opens your browser.
+
+**No command line?** Double-click `Install MoneyView Shortcuts.cmd` once. It puts **MoneyView**
+and **Stop MoneyView** shortcuts on the Desktop and in the Start menu; after that, starting and
+stopping is a double-click. How to use each screen, read the numbers and fix common problems:
+the [User Guide](./docs/USER-GUIDE.md).
 
 **Didn't install the global command?** Run the same thing from the repo root — `.\run.cmd MoneyView`
 in PowerShell, or `run MoneyView` in `cmd.exe`. Both forward to the canonical launcher,

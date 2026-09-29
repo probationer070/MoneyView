@@ -24,11 +24,13 @@ Legend: `[ ]` not started, `[x]` complete
 
 ## Where things stand (2026-09-29)
 
-`renewal` @ `fe2c030`, with PRs through #62 merged. Every open item below is closed except
+`renewal` @ `cb775d9`, with PRs through #64 merged. Every open item below is closed except
 Track E, which is deferred on data (see its entry).
 - **Tests:** 1865 pytest passing, plus 16 environmental failures. `exchange_calendars`
   is not installed in the local Python env, and the same 16 fail on every branch.
 - **Playwright:** 299 specs passed in the last full run (2026-09-27, #61).
+- **Launcher:** double-click shortcuts (`Install MoneyView Shortcuts.cmd`, `scripts/stop_local.ps1`)
+  and the end-user guide `docs/USER-GUIDE.md` were added on 2026-09-29.
 
 ---
 
