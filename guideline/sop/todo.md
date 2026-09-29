@@ -22,14 +22,13 @@ Legend: `[ ]` not started, `[x]` complete
 
 ---
 
-## Where things stand (2026-09-26)
+## Where things stand (2026-09-29)
 
-`renewal` @ `a729016`, with PRs through #53 merged. Every track in `todo5.md` is closed
-except the items below, all of them optional or cleanup.
-- **Tests:** 1664 pytest passing, plus 16 environmental failures. `exchange_calendars`
+`renewal` @ `fe2c030`, with PRs through #62 merged. Every open item below is closed except
+Track E, which is deferred on data (see its entry).
+- **Tests:** 1865 pytest passing, plus 16 environmental failures. `exchange_calendars`
   is not installed in the local Python env, and the same 16 fail on every branch.
-- **Playwright:** 267 specs passed in the last full run, which predates `/pricing`;
-  `/pricing` added 3.
+- **Playwright:** 299 specs passed in the last full run (2026-09-27, #61).
 
 ---
 
@@ -57,10 +56,12 @@ except the items below, all of them optional or cleanup.
       case-level flag or a narrated claim for
       `wacc_initial`/`wacc_stable`/`effective_tax_rate`.
 
-- [ ] **G2. NULL-close rows in the database.** The read guard makes them inert, so this
-      is cleanup rather than a fix. Re-measured 2026-09-26: 2 rows remain in `stocks`
-      (`META 2026-03-16`, `^KS11 2026-04-22`), and `indices` holds 1. Nothing to do
-      unless the count grows again.
+- [x] **G2. NULL-close rows in the database.** DONE 2026-09-29. The last 3 rows (every
+      OHLC column NULL): `stocks` `META 2026-03-16` and `^KS11 2026-04-22`, `indices`
+      `^KS200 2026-07-24`. They were backed up to
+      `data/cache/g2-null-close-rows-2026-09-29.json`, then deleted. 0 remain. Incremental
+      fetches only append newer bars, so nothing re-creates them; the read guard stays for
+      any future one.
 
 - [x] **I-C2. Price-derived market events.** DONE 2026-09-26. A new `computed` origin
       covers S&P 500 drawdowns (10% below the prior peak, peak to trough) and oil shocks
@@ -120,7 +121,11 @@ Each one was re-checked against the code on 2026-09-26 and is still true.
       implied return's sign. Found in the implied-return final review, 2026-09-26, and it
       predates that work. The fix is to refuse or mark instead of flooring. ERROR-LOG 2026-09-26.
 - [ ] **Deferred from the snapshot overhaul (Track E):** readable snapshot identity and
-      charts over snapshot history.
+      charts over snapshot history. **Still blocked on data (re-checked 2026-09-29):**
+      `corporate_comparison_snapshots_v3` holds 0 rows, because snapshots are saved only
+      when you refresh the comparison yourself. The spec's reason ("it would be built and
+      validated against nothing") still holds. Build the charts once history spans several
+      days and metric versions. Readable identity stays cosmetic (spec §9).
 
 ---
 
