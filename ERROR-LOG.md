@@ -26,6 +26,28 @@ reveal that; only checking the code did.
 
 An entry states what was true when it was written. Nothing updates it on its own.
 
+## 2026-09-29: a 404 on the backend-port lookup failed the whole boot
+
+Date: 2026-09-29
+Command: `run MoneyView` (scripts/start_local.ps1 -> `next dev --port 3000`)
+Failure: every GET /api/runtime/backend-port returned 404 (about 40 ms of application code, i.e. Next's
+not-found render, so the route was absent from that server's route table). AppProvider treated a failed
+lookup as fatal, retried for 30 s and showed "System Boot Failure" -- while the API was up and serving
+on :8000, the route's own fallback port.
+Root cause: two parts. (1) The route handler has not changed since 2026-04 and serves 200 on every
+fresh `next dev` tried (plain, lowercase `c:` path, `/` requested first), so the 404 came from that
+server's state -- most likely the Turbopack dev cache in apps/web/.next/dev (last reset 2026-09-12);
+its trace was overwritten before it could be read, so this is the likeliest cause, not a proven one.
+(2) Boot depended on that one lookup with no fallback, so a transient route glitch became a total outage.
+Fix: cleared apps/web/.next/dev (regenerated on the next start). Port resolution moved to
+apps/web/lib/backendPortDiscovery.resolveBackendPort: a non-OK, thrown or malformed lookup falls back to
+8000 and the health check decides; each retry looks the port up again (commit a64ae1f).
+Files changed: apps/web/lib/backendPortDiscovery.ts, apps/web/components/providers/AppProvider.tsx,
+apps/web/tests/e2e/backend-port-discovery.spec.ts
+Prevention: a boot-path lookup with a known default must fall back to it, not fail; pinned by
+backend-port-discovery.spec.ts (the old no-fallback behaviour fails 2 of its tests). If the 404 recurs,
+read apps/web/.next/dev/trace before restarting -- a restart rebuilds the cache and destroys the evidence.
+
 ## 2026-09-26: the comparison DCF floors FCFF at $1B, inflating value for smaller companies
 
 Date: 2026-09-26
