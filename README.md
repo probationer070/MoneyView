@@ -111,6 +111,9 @@ powershell.exe -ExecutionPolicy Bypass -File scripts\start_local.ps1 -OpenBrowse
 | `-DevMonitor` | Enable server-side performance instrumentation (see below) |
 | `-BuildWeb -ProductionWeb` | Production build instead of `next dev` — much lighter |
 
+The Desktop/Start-menu shortcuts wrap this launcher; how they are built and how Stop
+MoneyView picks what to stop: [docs/desktop-shortcuts.md](./docs/desktop-shortcuts.md).
+
 ### Running the halves separately
 
 ```powershell
