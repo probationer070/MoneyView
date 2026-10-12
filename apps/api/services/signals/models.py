@@ -110,7 +110,7 @@ class LevelChangeRule(_AutoBase):
     kind: Literal["level_change"]
     lookback_days: PositiveInt
     op: Op
-    threshold: float = 0.0
+    threshold: float
 
 
 class CompoundCondition(_Strict):
@@ -174,7 +174,9 @@ class LoadedRules:
 
 def load_rules(path: Path | None = None) -> LoadedRules:
     raw = (path or RULES_PATH).read_bytes()
-    return LoadedRules(RulesFile.model_validate(yaml.safe_load(raw)), hashlib.sha256(raw).hexdigest()[:12])
+    # Hash the LF form so a CRLF checkout (core.autocrlf) yields the same version.
+    normalized = raw.replace(b"\r\n", b"\n")
+    return LoadedRules(RulesFile.model_validate(yaml.safe_load(normalized)), hashlib.sha256(normalized).hexdigest()[:12])
 
 
 _current: LoadedRules | None = None

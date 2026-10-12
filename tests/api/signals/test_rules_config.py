@@ -118,3 +118,52 @@ def test_prior_probabilities_must_be_positive(tmp_path):
     path = write_variant(tmp_path, lambda d: d["scenario"]["prior"].update(a=0.0, c=0.55))
     with pytest.raises(ValidationError):
         load_rules(path)
+
+
+def test_line_endings_do_not_change_the_version(tmp_path):
+    content = RULES_PATH.read_bytes().replace(b"\r\n", b"\n")
+    lf = tmp_path / "lf.yaml"
+    crlf = tmp_path / "crlf.yaml"
+    lf.write_bytes(content)
+    crlf.write_bytes(content.replace(b"\n", b"\r\n"))
+    assert load_rules(lf).version == load_rules(crlf).version
+
+
+SHIPPED_MAX_AGE_DAYS = {
+    "b_tnx_sticky": 7,
+    "b_core_cpi_hot": 80,
+    "b_hy_wide": 7,
+    "b_brent_spike": 14,
+    "b_fed_hike": 7,
+    "a_tnx_relief": 7,
+    "a_brent_relief": 14,
+    "a_labor_core": 80,
+}
+
+
+@pytest.mark.parametrize("rule_id, max_age", sorted(SHIPPED_MAX_AGE_DAYS.items()))
+def test_shipped_max_age_days(rule_id, max_age):
+    rule = next(r for r in load_rules().file.rules if r.id == rule_id)
+    assert rule.max_age_days == max_age
+
+
+def test_shipped_auto_and_manual_split_and_fed_hike_kind():
+    rules = load_rules().file.rules
+    auto = [r for r in rules if r.kind != "manual"]
+    manual = [r for r in rules if r.kind == "manual"]
+    assert len(auto) == 8 and len(manual) == 3
+    fed = next(r for r in rules if r.id == "b_fed_hike")
+    assert fed.kind == "level_change" and fed.lookback_days == 7
+
+
+def test_shipped_scenario_values():
+    scenario = load_rules().file.scenario
+    assert (scenario.prior.a, scenario.prior.b, scenario.prior.c) == (0.35, 0.45, 0.20)
+    assert scenario.floor == 0.05 and scenario.cap == 0.85
+    assert scenario.weights.triggered == 1.0 and scenario.weights.near == 0.5
+
+
+def test_level_change_threshold_is_required(tmp_path):
+    path = write_variant(tmp_path, lambda d: next(r for r in d["rules"] if r["id"] == "b_fed_hike").pop("threshold"))
+    with pytest.raises(ValidationError, match="threshold"):
+        load_rules(path)
