@@ -2822,3 +2822,4 @@ git commit -m "feat(signals): /signals page with summary, verdicts, trend and ma
 - `compound` OR mode, once a rule needs it (C10).
 - Korean labels on the page arrive with the design-system plan's i18n task. `label_ko` is already in the API.
 - Scenario names: the spec defines A (upside) and B (correction) but never names C. The page shows "A/B/C" until the owner names them.
+- Sync `signal_manual_inputs` as an optional sync child, so the manual inputs follow the user across PCs (today they are local, like the snapshots).
