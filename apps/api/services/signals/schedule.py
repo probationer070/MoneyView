@@ -31,12 +31,26 @@ def is_due(now_utc: datetime, week_run_at: datetime | None) -> bool:
 
 
 async def signal_cycle(interval_seconds: float = 3600.0) -> None:
+    """Hourly check. A run that reports FRED errors is retried on each later check in the
+    same week once the cutoff has passed. A restart after a failed run does not retry (the
+    snapshot exists); POST /run repairs it."""
+    retry_week: str | None = None
     while True:
         try:
             now = engine.utc_now()
-            snapshot = store.load_snapshot(store.iso_week(now.astimezone(engine.KST).date()))
-            if is_due(now, datetime.fromisoformat(snapshot.run_at) if snapshot else None):
-                await asyncio.to_thread(engine.run)
+            week = store.iso_week(now.astimezone(engine.KST).date())
+            if retry_week != week:
+                retry_week = None
+            snapshot = store.load_snapshot(week)
+            retry = retry_week == week and now >= weekly_cutoff(now)
+            if retry or is_due(now, datetime.fromisoformat(snapshot.run_at) if snapshot else None):
+                outcome = await asyncio.to_thread(engine.run)
+                if outcome.failures:
+                    retry_week = week
+                    logger.warning("Signal run for %s had FRED errors; retrying on the next check: %s",
+                                   week, "; ".join(outcome.failures))
+                else:
+                    retry_week = None
         except Exception:
             logger.exception("Signal cycle failed; retrying next interval.")
         await asyncio.sleep(interval_seconds)

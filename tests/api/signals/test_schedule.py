@@ -1,5 +1,12 @@
+import asyncio
+import inspect
+import logging
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 
+import pytest
+
+from apps.api.services.signals import engine, schedule, store
 from apps.api.services.signals.schedule import is_due, weekly_cutoff
 
 KST = timezone(timedelta(hours=9))
@@ -31,14 +38,6 @@ def test_not_due_before_the_cutoff_or_after_a_post_cutoff_run():
     assert is_due(kst(2026, 10, 10, 8, 0), kst(2026, 10, 9, 20)) is False
     assert is_due(kst(2026, 10, 11, 12), kst(2026, 10, 10, 9, 0)) is False
 
-
-import asyncio  # noqa: E402
-import logging  # noqa: E402
-from types import SimpleNamespace  # noqa: E402
-
-import pytest  # noqa: E402
-
-from apps.api.services.signals import engine, schedule, store  # noqa: E402
 
 
 def _cycle_env(monkeypatch, now, snapshot_run_at):
@@ -206,3 +205,81 @@ def test_lifespan_starts_the_signal_cycle_only_when_startup_jobs_are_enabled(mon
 
     assert asyncio.run(drive(None)) == [1]
     assert asyncio.run(drive("1")) == []
+
+
+def test_the_default_cadence_is_hourly():
+    default = inspect.signature(schedule.signal_cycle).parameters["interval_seconds"].default
+    assert default == 3600.0
+
+
+class _Clock:
+    """Feeds one timestamp per loop pass (utc_now is read once per pass). When the
+    script runs out, it cancels the loop, so each test stops itself."""
+
+    def __init__(self, times):
+        self._times = iter(times)
+        self.current = None
+
+    def __call__(self):
+        try:
+            self.current = next(self._times)
+        except StopIteration:
+            raise asyncio.CancelledError from None
+        return self.current
+
+
+def _drive_fred_retry(monkeypatch, times, failures_per_run, snapshots):
+    """snapshots: week -> run_at (UTC). Each engine.run stamps the week's snapshot with the
+    clock's current time and returns the next scripted failures list."""
+    clock = _Clock(times)
+    runs = []
+    script = iter(failures_per_run)
+
+    def fake_run(*args, **kwargs):
+        runs.append(clock.current)
+        week = store.iso_week(clock.current.astimezone(engine.KST).date())
+        snapshots[week] = clock.current
+        return SimpleNamespace(failures=next(script))
+
+    monkeypatch.setattr(engine, "utc_now", clock)
+    monkeypatch.setattr(engine, "run", fake_run)
+    monkeypatch.setattr(
+        store, "load_snapshot",
+        lambda week: SimpleNamespace(run_at=snapshots[week].isoformat()) if week in snapshots else None,
+    )
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(schedule.signal_cycle(interval_seconds=0))
+    return runs
+
+
+def test_a_post_cutoff_run_with_fred_errors_is_retried_on_the_next_check(monkeypatch):
+    # W41 snapshot is from Friday, so Saturday 09:00 is the first due check.
+    snapshots = {"2026-W41": kst(2026, 10, 9, 20)}
+    times = [kst(2026, 10, 10, 9), kst(2026, 10, 10, 10), kst(2026, 10, 10, 11)]
+    runs = _drive_fred_retry(monkeypatch, times, [["DGS10: HTTP 503"], ["DGS10: HTTP 503"], []], snapshots)
+    assert runs == times
+
+
+def test_a_retry_that_succeeds_stops_further_runs_that_week(monkeypatch):
+    snapshots = {"2026-W41": kst(2026, 10, 9, 20)}
+    times = [kst(2026, 10, 10, 9), kst(2026, 10, 10, 10), kst(2026, 10, 10, 11), kst(2026, 10, 10, 12),
+             kst(2026, 10, 11, 9)]
+    runs = _drive_fred_retry(monkeypatch, times, [["DGS10: HTTP 503"], []], snapshots)
+    assert runs == [kst(2026, 10, 10, 9), kst(2026, 10, 10, 10)]
+
+
+def test_fred_errors_are_not_retried_into_the_next_week(monkeypatch):
+    # W42 already has a Monday snapshot, so it is not due before its own Saturday cutoff.
+    snapshots = {"2026-W41": kst(2026, 10, 9, 20), "2026-W42": kst(2026, 10, 12, 9)}
+    times = [kst(2026, 10, 10, 9), kst(2026, 10, 12, 12), kst(2026, 10, 12, 13)]
+    runs = _drive_fred_retry(monkeypatch, times, [["DGS10: HTTP 503"]], snapshots)
+    assert runs == [kst(2026, 10, 10, 9)]
+
+
+def test_the_fred_error_strings_are_logged_as_a_warning(monkeypatch, caplog):
+    snapshots = {"2026-W41": kst(2026, 10, 9, 20)}
+    times = [kst(2026, 10, 10, 9), kst(2026, 10, 10, 10)]
+    caplog.set_level(logging.WARNING, logger=schedule.logger.name)
+    _drive_fred_retry(monkeypatch, times, [["DGS10: HTTP 503 upstream"], []], snapshots)
+    assert "DGS10: HTTP 503 upstream" in caplog.text
+    assert "WARNING" in caplog.text
