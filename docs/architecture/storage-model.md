@@ -130,6 +130,29 @@ The active canonical snapshot store is:
 
 Older snapshot tables remain part of compatibility history, but new behavior is modeled around `v3`.
 
+### 3.6 Macro Signal Tables
+
+Defined by `_SIGNAL_SCHEMA_SQL` in `apps/api/services/db.py`, created by `init_db`. Spec:
+`docs/superpowers/specs/2026-10-10-macro-signal-engine-spec.md`. Routes: `docs/architecture/moneyview-api-reference.md` §10A.
+
+**`signal_snapshots`**
+- one row per ISO week (KST), `iso_week UNIQUE`, overwritten on each re-run of that week
+- stores `run_at`, `rules_version` (the first 12 hex characters of the sha256 of `rules.yaml` with line endings normalised to LF, so a CRLF checkout gives the same version) and the three probabilities `prob_a`, `prob_b`, `prob_c`
+
+**`signal_results`**
+- one row per rule per snapshot, primary key `(snapshot_id, rule_id)`, `ON DELETE CASCADE` from `signal_snapshots`
+- stores `state` (`triggered`, `near`, `not_triggered`, `stale`), `value`, `observed_at`, `threshold`, `note`
+- `contrib_a`, `contrib_b`, `contrib_c` hold each rule's contribution as computed at run time, so a later `rules.yaml` edit cannot rewrite a stored week
+- `note` carries the stale reason; the run's FRED failure list is not stored here
+
+**`signal_manual_inputs`**
+- the owner's manual signals, primary key `(rule_id, iso_week)`
+- `state` accepts only `triggered`, `near`, `not_triggered`; a week with no row leaves that rule out of the probability (it is not `not_triggered`)
+
+**`fred_cache`**
+- FRED observations, primary key `(series_id, obs_date)`, with `value` and `fetched_at`
+- written after each successful fetch; read as the fallback when FRED fails, so a run with no key or no network still uses the last known data (rules whose data is too old become `stale`)
+
 ## 4. Watchlist Ownership Model
 
 The watchlist workflow follows an explicit local-first ownership model.

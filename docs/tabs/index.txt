@@ -20,6 +20,7 @@ Files
 - `monte-carlo-tab.txt`
 - `events-tab.txt`
 - `cases-tab.txt`
+- `signals-tab.txt`
 
 Top-Level Sidebar Tabs Covered
 - Market Overview
@@ -29,6 +30,7 @@ Top-Level Sidebar Tabs Covered
 - Monte Carlo
 - Events
 - Cases
+- Macro Signals
 
 Design Coverage
 - The files are not only feature lists.

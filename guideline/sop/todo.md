@@ -41,8 +41,12 @@ is deferred on data (see its entry).
 ### Track S: Macro signal engine
 Plan: `docs/superpowers/plans/2026-10-12-macro-signal-engine.md`. Spec + corrections:
 `docs/superpowers/specs/2026-10-10-macro-signal-engine-spec.md`. Baseline 1883 pytest passed.
-- [ ] S2 pure rules  - [ ] S3 scenario  - [ ] S4 FRED fetch  - [ ] S5 rules.yaml
-- [ ] S6 store/fetcher  - [ ] S7 engine+API  - [ ] S8 schedule  - [ ] S9 page  - [ ] S10 docs
+- [x] S2 pure rules  - [x] S3 scenario  - [x] S4 FRED fetch  - [x] S5 rules.yaml
+- [x] S6 store/fetcher  - [x] S7 engine+API  - [x] S8 schedule  - [x] S9 page  - [x] S10 docs
+  - S9: the page is verified against mocked API specs only; live FRED check pending owner
+    FRED_API_KEY in config/.env.
+  - Tests (2026-10-13): pytest 2032 passed, 0 failed (baseline 1883); Playwright 322 passed,
+    0 failed; typecheck and lint clean.
 
 - [ ] **Deferred from the snapshot overhaul (Track E):** readable snapshot identity and
       charts over snapshot history. **Still blocked on data (re-checked 2026-09-29):**

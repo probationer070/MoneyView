@@ -53,6 +53,8 @@ behavior, and data sources for each top-level sidebar tab. See
 
 - `tabs/cases-tab.txt` — the Cases tab: forking a stored valuation case with
   stated reasons, its Shapley why-it-moved, and simulating its uncertainty.
+- `tabs/signals-tab.txt` — the Macro Signals tab: weekly FRED rule verdicts, the heuristic
+  A/B/C scenario probabilities, manual inputs, and the schedule and failure rules.
 
 ## Archive (`docs/archive/`)
 
@@ -113,6 +115,8 @@ sub-project and feeding an implementation plan.
 | `plans/2026-10-12-design-system-formalization.md` | Task-by-task plan for the design-system formalization: tokens, paper migration, lint rules and the lock-down |
 | `2026-10-16-market-one-screen-design.md` | Market Overview on one screen: Instruments and Spreads page tabs, a spread-figure row and a regime line (new `GET /api/market/regime`) on the first screen, and market's paper and en/ko pass |
 | `plans/2026-10-16-market-one-screen.md` | Task-by-task plan for the market one-screen page: owner gate for 25 existing-test rows, `GET /api/market/regime` with an in-memory mutation harness, pure market models, page tabs and the regime line, the five-column Instruments tab with spread figures, and the paper/en-ko pass that takes the market warning cap from 295 to 0 |
+| `2026-10-10-macro-signal-engine-spec.md` | Macro signal engine: FRED rule verdicts and bounded heuristic A/B/C scenario probabilities, with the implementation-plan corrections C1–C11 in its appendix (the Macro Signals tab) |
+| `plans/2026-10-12-macro-signal-engine.md` | Task-by-task plan for the macro signal engine: pure rules, scenario maths, FRED fetch, rules.yaml, store, engine and API, hourly schedule, the /signals page and the docs |
 
 ## Process SOPs (`guideline/sop/`)
 
