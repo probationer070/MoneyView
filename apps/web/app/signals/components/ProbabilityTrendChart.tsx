@@ -1,7 +1,8 @@
 "use client";
 
-import { CartesianGrid, Legend, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { CartesianGrid, Legend, Line, LineChart, ReferenceLine, Tooltip, XAxis, YAxis } from "recharts";
 import type { SignalHistoryPoint } from "../../../../../packages/shared-types";
+import { ResponsiveChart } from "@/components/ui/ResponsiveChart";
 import { DEFAULT_AXIS_PROPS, GRID_STYLE } from "@/lib/chartConfig";
 import { rulesVersionBreaks } from "@/lib/signals";
 import { SIGNALS_COPY as T } from "../copy";
@@ -19,7 +20,7 @@ export function ProbabilityTrendChart({ history }: { history: SignalHistoryPoint
     <section aria-label="trend">
       <h2 className="mb-2 text-sm font-semibold">{T.trend}</h2>
       <div className="h-64" data-testid="trend-chart">
-        <ResponsiveContainer width="100%" height="100%">
+        <ResponsiveChart className="h-full w-full" minWidth={1} minHeight={1} monitorName="signals_trend">
           <LineChart data={history}>
             <CartesianGrid {...GRID_STYLE} />
             <XAxis dataKey="iso_week" {...DEFAULT_AXIS_PROPS} />
@@ -29,7 +30,7 @@ export function ProbabilityTrendChart({ history }: { history: SignalHistoryPoint
             {SERIES.map((s) => <Line key={s.key} dataKey={s.key} name={s.key.toUpperCase()} stroke={s.stroke} dot={false} isAnimationActive={false} />)}
             {breaks.map((w) => <ReferenceLine key={w} x={w} strokeDasharray="4 4" stroke="var(--border-strong)" label={T.trendRulesChanged} />)}
           </LineChart>
-        </ResponsiveContainer>
+        </ResponsiveChart>
       </div>
     </section>
   );

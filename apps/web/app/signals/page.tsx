@@ -9,7 +9,7 @@ import { SummaryBar } from "./components/SummaryBar";
 import { SIGNALS_COPY as T } from "./copy";
 
 export default function SignalsPage() {
-  const { latest, history, manualRules, status, runNow, running, lastRunFailures, saveManual } = useSignals();
+  const { latest, history, manualRules, status, runNow, running, lastRunFailed, lastRunFailures, saveManual } = useSignals();
   return (
     <div className="flex flex-col gap-6 p-6">
       <PageHeader title={T.title} subtitle={T.subtitle} />
@@ -18,6 +18,7 @@ export default function SignalsPage() {
       {status === "ready" ? (
         <>
           <SummaryBar snapshot={latest} onRun={runNow} running={running} />
+          {lastRunFailed ? <p role="alert" className="text-sm text-[var(--state-error)]">{T.runFailed}</p> : null}
           {lastRunFailures.length ? (
             <div role="status" className="text-xs text-[var(--text-secondary)]">
               {T.failures}:

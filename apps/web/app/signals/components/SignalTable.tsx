@@ -19,7 +19,10 @@ export function SignalTable({ results }: { results: SignalResult[] }) {
             className={clsx("border-t border-[var(--border-soft)]", r.state === "stale" && "opacity-50")}>
             <td className="py-2 pr-3" title={r.note}>{r.label_en}</td>
             <td className="pr-3">{r.direction ?? "—"}</td>
-            <td className="pr-3 font-semibold">{T.states[r.state]}</td>
+            <td className="pr-3 font-semibold">
+              {T.states[r.state]}
+              {r.state === "stale" && r.note ? <span className="block text-xs font-normal text-[var(--text-secondary)]">{r.note}</span> : null}
+            </td>
             <td className="pr-3 tabular-nums">{fmt(r.value)}</td>
             <td className="pr-3 tabular-nums">{fmt(r.threshold)}</td>
             <td className="pr-3 tabular-nums">{r.observed_at ?? "—"}</td>

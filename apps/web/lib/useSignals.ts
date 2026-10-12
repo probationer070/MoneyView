@@ -43,7 +43,8 @@ export function useSignals() {
     status,
     runNow: () => run.mutate(),
     running: run.isPending,
-    lastRunFailures: run.data?.failures ?? [],
+    lastRunFailed: run.isError,
+    lastRunFailures: run.data?.failures ?? latest.data?.failures ?? [],
     saveManual: manual.mutateAsync,
   };
 }

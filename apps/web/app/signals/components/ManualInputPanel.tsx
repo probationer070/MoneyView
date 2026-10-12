@@ -9,10 +9,16 @@ type Save = (input: { ruleId: string; state: ManualState; note: string }) => Pro
 function ManualRow({ rule, current, onSave }: { rule: SignalRule; current?: SignalResult; onSave: Save }) {
   const [state, setState] = useState<ManualState | "">(current && current.state !== "stale" ? current.state : "");
   const [note, setNote] = useState(current?.note ?? "");
+  const [saveFailed, setSaveFailed] = useState(false);
   const label = rule.label.en;
   return (
     <form data-testid={`manual-${rule.id}`} className="flex flex-wrap items-center gap-2"
-      onSubmit={(e) => { e.preventDefault(); if (state) void onSave({ ruleId: rule.id, state, note }); }}>
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (!state) return;
+        setSaveFailed(false);
+        onSave({ ruleId: rule.id, state, note }).catch(() => setSaveFailed(true));
+      }}>
       <span className="w-56 text-sm">{label}</span>
       <select aria-label={`${label} state`} value={state} onChange={(e) => setState(e.target.value as ManualState)}
         className="rounded-[var(--radius-sm)] border border-[var(--border-default)] px-2 py-1 text-sm">
@@ -23,6 +29,7 @@ function ManualRow({ rule, current, onSave }: { rule: SignalRule; current?: Sign
         placeholder={T.note} className="flex-1 rounded-[var(--radius-sm)] border border-[var(--border-default)] px-2 py-1 text-sm" />
       <button type="submit" disabled={!state}
         className="rounded-[var(--radius-sm)] border border-[var(--border-accent)] px-3 py-1 text-sm disabled:opacity-50">{T.save}</button>
+      {saveFailed ? <p role="alert" className="w-full text-xs text-[var(--state-error)]">{T.saveFailed}</p> : null}
     </form>
   );
 }

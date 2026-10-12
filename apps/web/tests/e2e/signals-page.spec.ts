@@ -64,3 +64,62 @@ test("failures from a run-now are listed under the summary", async ({ page }) =>
   await expect.poll(() => calls.run).toBe(1);
   await expect(page.getByRole("status")).toContainText("DGS10: FRED request failed");
 });
+
+test("a failed save shows an alert, leaves the form usable and throws nothing unhandled", async ({ page }) => {
+  const pageErrors: string[] = [];
+  page.on("pageerror", (err) => pageErrors.push(err.message));
+  await mockSignalsApi(page, { manualFails: true });
+  await page.goto("/signals", { waitUntil: "domcontentloaded" });
+
+  const iran = page.getByTestId("manual-m_iran_strike");
+  await iran.getByRole("combobox").selectOption("triggered");
+  await iran.getByRole("button", { name: "Save" }).click();
+  await expect(iran.getByRole("alert")).toHaveText("Could not save. Try again.");
+  await expect(iran.getByRole("button", { name: "Save" })).toBeEnabled();
+  expect(pageErrors).toEqual([]);
+});
+
+test("a failed run shows an alert and re-enables the button", async ({ page }) => {
+  await mockSignalsApi(page, { runFails: true });
+  await page.goto("/signals", { waitUntil: "domcontentloaded" });
+
+  await page.getByRole("button", { name: "Run now" }).click();
+  await expect(page.getByRole("alert").filter({ hasText: "The run failed" })).toHaveText("The run failed. Check the server log.");
+  await expect(page.getByRole("button", { name: "Run now" })).toBeEnabled();
+});
+
+test("failures stored with the latest snapshot are listed after a reload", async ({ page }) => {
+  await mockSignalsApi(page, { latestFailures: ["DGS10: FRED request failed"] });
+  await page.goto("/signals", { waitUntil: "domcontentloaded" });
+  await expect(page.getByRole("status")).toContainText("DGS10: FRED request failed");
+});
+
+test("a stale row shows the reason the engine stored", async ({ page }) => {
+  await mockSignalsApi(page);
+  await page.goto("/signals", { waitUntil: "domcontentloaded" });
+  await expect(page.getByTestId("row-b_brent_spike")).toContainText("FRED DCOILBRENTEU: no observation in the last 30 days");
+});
+
+test("with no snapshot and no history the page shows the empty state without crashing", async ({ page }) => {
+  const pageErrors: string[] = [];
+  page.on("pageerror", (err) => pageErrors.push(err.message));
+  await mockSignalsApi(page, { noSnapshot: true, emptyHistory: true });
+  await page.goto("/signals", { waitUntil: "domcontentloaded" });
+
+  await expect(page.getByText("No snapshot yet. Run the engine to create this week's.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Run now" })).toBeVisible();
+  await expect(page.getByRole("table", { name: "signals" })).toHaveCount(0);
+  await expect(page.getByTestId("disclaimer")).toContainText("not investment advice");
+  expect(pageErrors).toEqual([]);
+});
+
+test("the trend chart mounts without a zero-size warning", async ({ page }) => {
+  const warnings: string[] = [];
+  page.on("console", (msg) => {
+    if (msg.text().includes("width(-1)") || msg.text().includes("height(-1)")) warnings.push(msg.text());
+  });
+  await mockSignalsApi(page);
+  await page.goto("/signals", { waitUntil: "domcontentloaded" });
+  await expect(page.getByTestId("trend-chart").locator(".recharts-line").first()).toBeAttached();
+  expect(warnings).toEqual([]);
+});
