@@ -25,16 +25,16 @@ const RULES = { version: "v2", scenario: {}, rules: [
   manualRule("m_breadth", "Market breadth improving"),
 ] };
 
-export async function mockSignalsApi(page: Page) {
-  const calls = { run: 0, manual: [] as { url: string; body: unknown }[] };
+export async function mockSignalsApi(page: Page, options: { runFailures?: string[] } = {}) {
+  const calls = { run: 0, manual: [] as { url: string; method: string; body: unknown }[] };
   let latest: unknown = SNAPSHOT;
   const ok = (data: unknown) => ({ status: 200, contentType: "application/json", body: JSON.stringify({ status: "ok", data, meta: {} }) });
   await page.route("**/api/v1/signals/latest", (r) => r.fulfill(ok(latest)));
   await page.route("**/api/v1/signals/history**", (r) => r.fulfill(ok(HISTORY)));
   await page.route("**/api/v1/signals/rules", (r) => r.fulfill(ok(RULES)));
-  await page.route("**/api/v1/signals/run", (r) => { calls.run += 1; return r.fulfill(ok(SNAPSHOT)); });
+  await page.route("**/api/v1/signals/run", (r) => { calls.run += 1; return r.fulfill(ok({ ...SNAPSHOT, failures: options.runFailures ?? [] })); });
   await page.route("**/api/v1/signals/manual/*", (r) => {
-    calls.manual.push({ url: r.request().url(), body: r.request().postDataJSON() });
+    calls.manual.push({ url: r.request().url(), method: r.request().method(), body: r.request().postDataJSON() });
     latest = { ...SNAPSHOT, probs: { a: 0.2, b: 0.55, c: 0.25 } };
     return r.fulfill(ok({ iso_week: "2026-W41", snapshot: latest }));
   });

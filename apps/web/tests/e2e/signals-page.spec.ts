@@ -32,3 +32,35 @@ test("summary, table, trend break, manual save and disclaimer", async ({ page })
 
   await expect(page.getByTestId("disclaimer")).toContainText("not investment advice");
 });
+
+test("the disclaimer is shown word for word", async ({ page }) => {
+  await mockSignalsApi(page);
+  await page.goto("/signals", { waitUntil: "domcontentloaded" });
+  await expect(page.getByTestId("disclaimer")).toHaveText(
+    "These probabilities are a heuristic built from subjective likelihood ratios, not a statistical model estimate, and are not investment advice.",
+  );
+});
+
+test("a manual save PUTs to that rule's endpoint with the chosen state and note", async ({ page }) => {
+  const calls = await mockSignalsApi(page);
+  await page.goto("/signals", { waitUntil: "domcontentloaded" });
+
+  const iran = page.getByTestId("manual-m_iran_strike");
+  await iran.getByRole("combobox").selectOption("near");
+  await page.getByLabel("Iran strikes resume Note").fill("ceasefire talks stalled");
+  await iran.getByRole("button", { name: "Save" }).click();
+  await expect.poll(() => calls.manual.length).toBe(1);
+  expect(calls.manual[0].method).toBe("PUT");
+  expect(new URL(calls.manual[0].url).pathname).toBe("/api/v1/signals/manual/m_iran_strike");
+  expect(calls.manual[0].body).toEqual({ state: "near", note: "ceasefire talks stalled" });
+});
+
+test("failures from a run-now are listed under the summary", async ({ page }) => {
+  const calls = await mockSignalsApi(page, { runFailures: ["DGS10: FRED request failed"] });
+  await page.goto("/signals", { waitUntil: "domcontentloaded" });
+  await expect(page.getByText("DGS10: FRED request failed")).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Run now" }).click();
+  await expect.poll(() => calls.run).toBe(1);
+  await expect(page.getByRole("status")).toContainText("DGS10: FRED request failed");
+});
