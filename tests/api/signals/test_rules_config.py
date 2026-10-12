@@ -153,7 +153,7 @@ def test_shipped_auto_and_manual_split_and_fed_hike_kind():
     manual = [r for r in rules if r.kind == "manual"]
     assert len(auto) == 8 and len(manual) == 3
     fed = next(r for r in rules if r.id == "b_fed_hike")
-    assert fed.kind == "level_change" and fed.lookback_days == 7
+    assert fed.kind == "level_change" and fed.lookback_days == 14
 
 
 def test_shipped_scenario_values():

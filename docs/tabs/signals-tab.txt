@@ -71,8 +71,9 @@ Known limitations
 Corrections from the implementation plan (spec appendix, "구현 계획에서 확정한 수정 사항 (2026-10-12)")
 - C1  Probabilities are bounded, not clipped and renormalised: pinned values never leave [5%, 85%].
 - C2  Staleness is per rule: daily 7 days, Brent 14, monthly 80.
-- C3  b_fed_hike compares the latest value with the value `lookback_days: 7` before as_of, not with
-      the previous snapshot, so the rule stays pure.
+- C3  b_fed_hike compares the latest value with the value `lookback_days: 14` before as_of, not with
+      the previous snapshot, so the rule stays pure. The baseline date is the earlier of that and the
+      date of the previous stored snapshot (C3a).
 - C4  Two integration tests: with 3 manual inputs, 11 results; with none, 8 results.
 - C5  Percent changes and means are rounded to 9 places before comparison, so 0.250 triggers.
 - C6  Endpoints are under /api/v1/signals/*.

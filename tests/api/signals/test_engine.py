@@ -1,11 +1,11 @@
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 
 from apps.api.services.db import get_db
 from apps.api.services.signals import engine, store
 from apps.api.services.signals.models import get_rules
-from packages.core_finance.macro_signals.rules import Evaluation
+from packages.core_finance.macro_signals.rules import Evaluation, Observation
 from packages.core_finance.macro_signals.scenario import ActiveSignal, posterior
 
 from .conftest import AS_OF
@@ -144,3 +144,54 @@ def test_a_manual_put_on_a_week_judged_under_older_rules_re_judges_every_rule(fi
     snapshot = engine.rescore("2026-W41")
     assert snapshot.rules_version == get_rules().version
     assert states(snapshot) == {**EXPECTED, "m_iran_strike": "triggered"}
+
+
+def fed_source(fixture_source, *, hike_on):
+    """The fixture source, with DFEDTARU at 4.00 until hike_on and 4.25 from then on."""
+    base = fixture_source()
+
+    def source(series_id, start):
+        if series_id != "DFEDTARU":
+            return base(series_id, start)
+        days = [date(2026, 9, 1) + timedelta(days=i) for i in range(60)]
+        return [Observation(d, 4.25 if d >= hike_on else 4.00) for d in days if d >= start]
+    return source
+
+
+def run_at(monkeypatch, moment: datetime):
+    monkeypatch.setattr(engine, "utc_now", lambda: moment)
+
+
+def fed_row(snapshot):
+    return next(r for r in snapshot.results if r.rule_id == "b_fed_hike")
+
+
+def test_a_hike_missed_while_the_pc_was_off_is_judged_in_the_next_week(fixture_source, monkeypatch):
+    # Hike effective Thu 2026-10-08 (W41). The PC was off on Sat 10-10, so the last stored run is Sat 10-03 (W40).
+    source = fed_source(fixture_source, hike_on=date(2026, 10, 8))
+    run_at(monkeypatch, datetime(2026, 10, 2, 23, 51, tzinfo=UTC))   # Sat 10-03 08:51 KST
+    engine.run(date(2026, 10, 3), source=source)
+    run_at(monkeypatch, datetime(2026, 10, 16, 23, 51, tzinfo=UTC))  # Sat 10-17 08:51 KST
+    snapshot = engine.run(date(2026, 10, 17), source=source).snapshot
+    assert snapshot.iso_week == "2026-W42"
+    assert fed_row(snapshot).state == "triggered" and fed_row(snapshot).value == 0.25
+
+
+def test_the_baseline_reaches_back_to_the_previous_snapshot_when_the_gap_exceeds_the_lookback(fixture_source, monkeypatch):
+    # Last stored run Sat 09-19 (W38); hike effective Thu 09-24 (W39); next run Sat 10-17.
+    # as_of - 14 is 10-03, already after the hike, so only the previous snapshot's date reaches back past it.
+    source = fed_source(fixture_source, hike_on=date(2026, 9, 24))
+    run_at(monkeypatch, datetime(2026, 9, 18, 23, 51, tzinfo=UTC))   # Sat 09-19 08:51 KST
+    engine.run(date(2026, 9, 19), source=source)
+    run_at(monkeypatch, datetime(2026, 10, 16, 23, 51, tzinfo=UTC))  # Sat 10-17 08:51 KST
+    row = fed_row(engine.run(date(2026, 10, 17), source=source).snapshot)
+    assert row.state == "triggered"
+    assert row.note == "change since 2026-09-19"
+
+
+def test_without_a_previous_snapshot_the_baseline_is_fourteen_days_back(fixture_source, monkeypatch):
+    source = fed_source(fixture_source, hike_on=date(2026, 10, 8))
+    run_at(monkeypatch, datetime(2026, 10, 16, 23, 51, tzinfo=UTC))  # Sat 10-17 08:51 KST
+    row = fed_row(engine.run(date(2026, 10, 17), source=source).snapshot)
+    assert row.state == "triggered"
+    assert row.note == "change since 2026-10-03"

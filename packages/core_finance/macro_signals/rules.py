@@ -130,11 +130,15 @@ def mom_pct(observations, as_of, *, op, threshold, near_threshold=None):
     return _grade(value, observed_at, op, threshold, near_threshold, "month-over-month %")
 
 
-def level_change(observations, as_of, *, lookback_days, op, threshold):
+def level_change(observations, as_of, *, lookback_days, op, threshold, since: date | None = None):
+    """`since` (the previous stored snapshot's date) reaches the baseline further back when it is
+    earlier than the lookback, so a change missed while the engine was not running is still seen."""
     usable = upto(observations, as_of)
     if not usable:
         return stale("no observations")
     cutoff = as_of - timedelta(days=lookback_days)
+    if since is not None:
+        cutoff = min(cutoff, since)
     baseline = [o for o in usable if o.date <= cutoff]
     if not baseline:
         return stale(f"no observation on or before {cutoff.isoformat()}", usable[-1].date)

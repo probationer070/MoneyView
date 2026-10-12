@@ -157,6 +157,35 @@ def test_level_change_baseline_is_latest_observation_on_or_before_cutoff():
     assert ev.note == "change since 2026-10-02"
 
 
+# Hike between 2026-09-15 and 2026-09-26. With lookback 14 the cutoff is 2026-09-25.
+FED_OBS = [
+    Observation(date(2026, 9, 10), 4.00),
+    Observation(date(2026, 9, 15), 4.00),
+    Observation(date(2026, 9, 20), 4.25),
+    Observation(date(2026, 9, 26), 4.30),
+    Observation(AS_OF, 4.25),
+]
+
+
+def test_level_change_since_earlier_than_the_lookback_reaches_back_to_it():
+    ev = level_change(FED_OBS, AS_OF, lookback_days=14, op=">", threshold=0.0, since=date(2026, 9, 16))
+    assert ev.state == "triggered" and ev.value == 0.25
+    assert ev.note == "change since 2026-09-15"
+
+
+def test_level_change_without_since_is_the_plain_lookback():
+    ev = level_change(FED_OBS, AS_OF, lookback_days=14, op=">", threshold=0.0)
+    assert ev.state == "not_triggered" and ev.value == 0.0
+    assert ev.note == "change since 2026-09-20"
+    assert level_change(FED_OBS, AS_OF, lookback_days=14, op=">", threshold=0.0, since=None) == ev
+
+
+def test_level_change_since_later_than_the_lookback_keeps_the_lookback_cutoff():
+    ev = level_change(FED_OBS, AS_OF, lookback_days=14, op=">", threshold=0.0, since=date(2026, 9, 28))
+    assert ev.value == 0.0
+    assert ev.note == "change since 2026-09-20"
+
+
 def test_mom_diff_value_rounds_the_float_difference():
     # 100.3 - 100.1 is 0.20000000000000284 unrounded; the rounded value is exactly 0.2.
     point = mom_diff_value(monthly([("2026-07-01", 100.1), ("2026-08-01", 100.3)]))

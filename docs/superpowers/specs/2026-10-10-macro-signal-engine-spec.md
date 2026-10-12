@@ -287,3 +287,5 @@ Next.js에 `/signals` 페이지 하나를 추가한다. 데이터는 모두 클�
 | C9 | `signal_results` has no contribution columns | `GET /latest` must return the per-signal contributions from the run. Recomputing them later with a since-edited `rules.yaml` would show numbers the run never produced. | `signal_results` gains `contrib_a`, `contrib_b`, `contrib_c`. |
 | C10 | `compound` supports AND/OR | Only AND is used, by `a_labor_core`. | Only "all conditions" is implemented. OR waits until a rule needs it (YAGNI). |
 | C11 | Status labels in Korean (발동 / 근접 / 미발동 / 데이터 지연) | The app's UI is English today. The owner decided on a bilingual UI, delivered by the design-system plan. | `rules.yaml` labels carry both `ko` and `en`, and the API returns both. The page's own strings sit in one `copy.ts` in English, which the design-system plan's i18n task moves into the message catalogs. |
+
+C3a (2026-10-13, owner): lookback 14 days, and the baseline reaches back to the previous stored snapshot so a hike is never missed while the PC is off.

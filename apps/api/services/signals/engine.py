@@ -36,7 +36,14 @@ class RunOutcome:
     failures: list[str]
 
 
-def evaluate_rule(rule, fetched: Mapping[str, FetchedSeries], as_of: date) -> r.Evaluation:
+def previous_run_date(week: str) -> date | None:
+    """KST date of the last stored run before `week`: the baseline start for b_fed_hike."""
+    previous = store.previous_snapshot(week)
+    return datetime.fromisoformat(previous.run_at).astimezone(KST).date() if previous else None
+
+
+def evaluate_rule(rule, fetched: Mapping[str, FetchedSeries], as_of: date,
+                  since: date | None = None) -> r.Evaluation:
     for series_id in rule.series:
         series = fetched[series_id]
         if r.is_stale(series.observations, as_of, rule.max_age_days):
@@ -53,7 +60,8 @@ def evaluate_rule(rule, fetched: Mapping[str, FetchedSeries], as_of: date) -> r.
     if rule.kind == "mom_pct":
         return r.mom_pct(obs, as_of, op=rule.op, threshold=rule.threshold, near_threshold=rule.near_threshold)
     if rule.kind == "level_change":
-        return r.level_change(obs, as_of, lookback_days=rule.lookback_days, op=rule.op, threshold=rule.threshold)
+        return r.level_change(obs, as_of, lookback_days=rule.lookback_days, op=rule.op,
+                              threshold=rule.threshold, since=since)
     conditions = []
     for c in rule.conditions:
         usable = r.upto(fetched[c.series].observations, as_of)
@@ -112,7 +120,8 @@ def _run(as_of: date | None, source) -> RunOutcome:
     series_ids = sorted({s for rule in auto for s in rule.series})
     fetched = {sid: fetcher.get_series(sid, start) for sid in series_ids}
     week = store.iso_week(as_of)
-    evaluations = {rule.id: evaluate_rule(rule, fetched, as_of) for rule in auto}
+    since = previous_run_date(week)
+    evaluations = {rule.id: evaluate_rule(rule, fetched, as_of, since) for rule in auto}
     evaluations.update(_manual(loaded, week))
     snapshot = _save(loaded, week, utc_now().isoformat(timespec="seconds"), evaluations)
     return RunOutcome(snapshot, [f.error for f in fetched.values() if f.error])
