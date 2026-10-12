@@ -133,3 +133,14 @@ def test_kst_date_rolls_over_before_utc(monkeypatch):
     monkeypatch.setattr(engine, "utc_now", lambda: datetime(2026, 10, 11, 16, tzinfo=UTC))
     assert engine.kst_today() == date(2026, 10, 12)
     assert store.iso_week(engine.kst_today()) == "2026-W42"
+
+
+def test_a_manual_put_on_a_week_judged_under_older_rules_re_judges_every_rule(fixture_source, monkeypatch):
+    monkeypatch.setattr(engine, "utc_now", lambda: datetime(2026, 10, 10, 12, tzinfo=UTC))
+    monkeypatch.setattr(engine, "default_source", lambda: fixture_source())
+    store.save_snapshot(iso_week="2026-W41", run_at="2026-10-09T00:00:00+00:00", rules_version="old-rules",
+                        probs={"a": 0.35, "b": 0.45, "c": 0.20}, results=[])
+    store.put_manual_input("m_iran_strike", "2026-W41", "triggered", "", "t")
+    snapshot = engine.rescore("2026-W41")
+    assert snapshot.rules_version == get_rules().version
+    assert states(snapshot) == {**EXPECTED, "m_iran_strike": "triggered"}

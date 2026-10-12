@@ -65,7 +65,7 @@ class FREDCollector(BaseCollector):
             # Raised outside the except block so no __context__ holds the requests exception.
             raise FredFetchError(f"{series_id}: {failed}") from None
         if response.status_code != 200:
-            detail = response.text[:200].replace(self.api_key, "***")
+            detail = response.text.replace(self.api_key, "***")[:200]
             raise FredFetchError(f"{series_id}: HTTP {response.status_code} {detail}")
         try:
             body = response.json()

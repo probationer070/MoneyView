@@ -108,3 +108,13 @@ def test_manual_put_is_stored_under_the_kst_week(monkeypatch):
     data = client.post("/api/v1/signals/run").json()["data"]
     assert data["iso_week"] == "2026-W42"
     assert next(r for r in data["results"] if r["rule_id"] == "m_breadth")["state"] == "triggered"
+
+
+def test_latest_names_the_week_the_previous_probabilities_come_from():
+    store.save_snapshot(iso_week="2026-W38", run_at="2026-09-19T00:00:00+00:00", rules_version="x",
+                        probs={"a": 0.30, "b": 0.50, "c": 0.20}, results=[])
+    store.save_snapshot(iso_week="2026-W41", run_at="2026-10-10T00:00:00+00:00", rules_version="x",
+                        probs={"a": 0.25, "b": 0.55, "c": 0.20}, results=[])
+    data = client.get("/api/v1/signals/latest").json()["data"]
+    assert data["iso_week"] == "2026-W41"
+    assert data["previous_iso_week"] == "2026-W38"

@@ -29,6 +29,7 @@ class SignalSnapshot(BaseModel):
     rules_version: str
     probs: ScenarioProbs
     previous_probs: ScenarioProbs | None
+    previous_iso_week: str | None
     results: list[SignalResultOut]
     failures: list[str] = Field(default_factory=list)
 

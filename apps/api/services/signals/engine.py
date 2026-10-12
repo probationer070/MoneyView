@@ -99,29 +99,40 @@ def _save(loaded: LoadedRules, week: str, run_at: str, evaluations: dict[str, r.
 
 def run(as_of: date | None = None, *, source=DEFAULT) -> RunOutcome:
     with _RUN_LOCK:
-        loaded = get_rules()
-        as_of = as_of or kst_today()
-        fetcher = SeriesFetcher(default_source() if source is DEFAULT else source, now=utc_now)
-        start = as_of - timedelta(days=_LOOKBACK_DAYS)
-        auto = [rule for rule in loaded.file.rules if rule.kind != "manual"]
-        series_ids = sorted({s for rule in auto for s in rule.series})
-        fetched = {sid: fetcher.get_series(sid, start) for sid in series_ids}
-        week = store.iso_week(as_of)
-        evaluations = {rule.id: evaluate_rule(rule, fetched, as_of) for rule in auto}
-        evaluations.update(_manual(loaded, week))
-        snapshot = _save(loaded, week, utc_now().isoformat(timespec="seconds"), evaluations)
-        return RunOutcome(snapshot, [f.error for f in fetched.values() if f.error])
+        return _run(as_of, source)
+
+
+def _run(as_of: date | None, source) -> RunOutcome:
+    """The body of run(). The caller holds _RUN_LOCK."""
+    loaded = get_rules()
+    as_of = as_of or kst_today()
+    fetcher = SeriesFetcher(default_source() if source is DEFAULT else source, now=utc_now)
+    start = as_of - timedelta(days=_LOOKBACK_DAYS)
+    auto = [rule for rule in loaded.file.rules if rule.kind != "manual"]
+    series_ids = sorted({s for rule in auto for s in rule.series})
+    fetched = {sid: fetcher.get_series(sid, start) for sid in series_ids}
+    week = store.iso_week(as_of)
+    evaluations = {rule.id: evaluate_rule(rule, fetched, as_of) for rule in auto}
+    evaluations.update(_manual(loaded, week))
+    snapshot = _save(loaded, week, utc_now().isoformat(timespec="seconds"), evaluations)
+    return RunOutcome(snapshot, [f.error for f in fetched.values() if f.error])
 
 
 def rescore(week: str) -> store.StoredSnapshot | None:
     """Recompute a stored week after a manual input, without touching FRED. run_at is kept:
     it records when the data was fetched, which a manual edit does not change, and the
-    Saturday schedule compares against it."""
+    Saturday schedule compares against it.
+
+    If the stored week was judged under other rules, its automatic verdicts cannot be carried
+    over, so the week is evaluated in full (a run for the current KST week; the API only
+    calls this for that week)."""
     with _RUN_LOCK:
         snapshot = store.load_snapshot(week)
         if snapshot is None:
             return None
         loaded = get_rules()
+        if snapshot.rules_version != loaded.version:
+            return _run(None, DEFAULT).snapshot
         manual_ids = {rule.id for rule in loaded.file.rules if rule.kind == "manual"}
         evaluations = {
             row.rule_id: r.Evaluation(row.state, row.value,

@@ -1,10 +1,12 @@
 # Macro signal rules. Thresholds and likelihood ratios live ONLY here.
-# rules_version is the sha256 of this file's bytes, so any edit shows up as a
+# rules_version is the sha256 of this file's LF-normalised bytes, so any edit shows up as a
 # dashed line on the probability trend chart.
 # max_age_days: daily 7, Brent 14 (EIA publishes weekly), monthly 80 (FRED dates a
 # monthly value on the 1st and it is published about six weeks later).
 scenario:
   prior: {a: 0.35, b: 0.45, c: 0.20}
+  # bounded_normalize refuses some feasible bounds at run time: tight bounds such as 0.3/0.5
+  # can be refused. The shipped 0.05/0.85 is safe.
   floor: 0.05
   cap: 0.85
   weights: {triggered: 1.0, near: 0.5}

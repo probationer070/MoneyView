@@ -126,3 +126,16 @@ def test_non_finite_values_are_skipped_like_missing_dots():
 
 def test_empty_observations_list_is_no_data_not_malformed():
     assert parse_observations({"observations": []}) == []
+
+
+def test_a_key_straddling_the_200_character_cut_leaks_no_prefix(monkeypatch):
+    # The key starts at character 190 and ends past 200, so truncating before redacting would
+    # keep its first ten characters and the full-key replace would miss them.
+    body = "a" * 190 + KEY + "b" * 50
+    monkeypatch.setattr(fred_module.requests, "get",
+                        lambda url, params, timeout: FakeResponse(500, text=body))
+    with pytest.raises(FredFetchError) as info:
+        FREDCollector(KEY).fetch_observations("DGS10", "2026-01-01")
+    message = str(info.value)
+    assert message.startswith("DGS10: HTTP 500 ")
+    assert all(KEY[:n] not in message for n in range(4, len(KEY) + 1))

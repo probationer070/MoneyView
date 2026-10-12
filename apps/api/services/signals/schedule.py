@@ -11,6 +11,7 @@ import logging
 from datetime import datetime, time, timedelta
 
 from apps.api.services.signals import engine, store
+from apps.api.services.signals.models import get_rules
 
 logger = logging.getLogger(__name__)
 _SATURDAY = 5
@@ -30,11 +31,21 @@ def is_due(now_utc: datetime, week_run_at: datetime | None) -> bool:
     return now_utc >= cutoff > week_run_at
 
 
+def _every_auto_rule_stale(snapshot) -> bool:
+    auto_ids = {rule.id for rule in get_rules().file.rules if rule.kind != "manual"}
+    stale_ids = {row.rule_id for row in snapshot.results if row.state == "stale"}
+    return auto_ids <= stale_ids
+
+
 async def signal_cycle(interval_seconds: float = 3600.0) -> None:
     """Hourly check. A run that reports FRED errors is retried on each later check in the
     same week once the cutoff has passed. A restart after a failed run does not retry (the
-    snapshot exists); POST /run repairs it."""
+    snapshot exists); POST /run repairs it.
+
+    The first check also runs when this week's snapshot has every automatic rule stale, so
+    a key added after a keyless start takes effect without waiting for Saturday."""
     retry_week: str | None = None
+    first_check = True
     while True:
         try:
             now = engine.utc_now()
@@ -43,7 +54,8 @@ async def signal_cycle(interval_seconds: float = 3600.0) -> None:
                 retry_week = None
             snapshot = store.load_snapshot(week)
             retry = retry_week == week and now >= weekly_cutoff(now)
-            if retry or is_due(now, datetime.fromisoformat(snapshot.run_at) if snapshot else None):
+            if retry or is_due(now, datetime.fromisoformat(snapshot.run_at) if snapshot else None) or (
+                    first_check and snapshot is not None and _every_auto_rule_stale(snapshot)):
                 outcome = await asyncio.to_thread(engine.run)
                 if outcome.failures:
                     retry_week = week
@@ -53,4 +65,5 @@ async def signal_cycle(interval_seconds: float = 3600.0) -> None:
                     retry_week = None
         except Exception:
             logger.exception("Signal cycle failed; retrying next interval.")
+        first_check = False
         await asyncio.sleep(interval_seconds)

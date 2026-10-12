@@ -291,3 +291,76 @@ def test_a_pre_cutoff_run_with_fred_errors_is_not_retried_before_the_cutoff(monk
     times = [kst(2026, 10, 12, 9), kst(2026, 10, 12, 10)]
     runs = _drive_fred_retry(monkeypatch, times, [["x"], []], {})
     assert runs == [kst(2026, 10, 12, 9)]
+
+
+def _week_snapshot(auto_states, run_at):
+    """A stored week whose automatic rules carry the given states (rule id -> state)."""
+    results = [SimpleNamespace(rule_id=rule_id, state=state) for rule_id, state in auto_states.items()]
+    return SimpleNamespace(run_at=run_at.isoformat(), results=results)
+
+
+def _all_auto_stale(run_at):
+    from apps.api.services.signals.models import get_rules
+
+    return _week_snapshot({r.id: "stale" for r in get_rules().file.rules if r.kind != "manual"}, run_at)
+
+
+def test_startup_reruns_a_week_whose_auto_rules_are_all_stale(monkeypatch):
+    # Wednesday, before the cutoff: is_due is False, but every automatic rule is stale
+    # (typically because FRED_API_KEY was missing), so a restart with the key set must refresh.
+    now = kst(2026, 10, 7, 12)
+    monkeypatch.setattr(engine, "utc_now", lambda: now)
+    monkeypatch.setattr(store, "load_snapshot", lambda week: _all_auto_stale(kst(2026, 10, 5, 0, 30)))
+    calls = []
+
+    def fake_run(*args, **kwargs):
+        calls.append(1)
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(engine, "run", fake_run)
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(asyncio.wait_for(schedule.signal_cycle(interval_seconds=0), timeout=2))
+    assert calls == [1]
+
+
+def test_startup_does_not_rerun_a_week_with_one_auto_rule_judged(monkeypatch):
+    from apps.api.services.signals.models import get_rules
+
+    now = kst(2026, 10, 7, 12)
+    monkeypatch.setattr(engine, "utc_now", lambda: now)
+    auto_ids = [r.id for r in get_rules().file.rules if r.kind != "manual"]
+    states = {rule_id: "stale" for rule_id in auto_ids}
+    states[auto_ids[0]] = "not_triggered"
+    monkeypatch.setattr(store, "load_snapshot", lambda week: _week_snapshot(states, kst(2026, 10, 5, 0, 30)))
+    calls = []
+
+    async def stop_after_one_pass():
+        task = asyncio.create_task(schedule.signal_cycle(interval_seconds=0))
+        await asyncio.sleep(0.05)
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+    monkeypatch.setattr(engine, "run", lambda *a, **k: calls.append(1))
+    asyncio.run(stop_after_one_pass())
+    assert calls == []
+
+
+def test_the_all_stale_rerun_applies_only_to_the_first_check(monkeypatch):
+    now = kst(2026, 10, 7, 12)
+    monkeypatch.setattr(engine, "utc_now", lambda: now)
+    monkeypatch.setattr(store, "load_snapshot", lambda week: _all_auto_stale(kst(2026, 10, 5, 0, 30)))
+    calls = []
+
+    def fake_run(*args, **kwargs):
+        calls.append(1)   # the snapshot stays all-stale and no retry is pending
+        return SimpleNamespace(failures=[])
+
+    async def stop_after_several_passes():
+        task = asyncio.create_task(schedule.signal_cycle(interval_seconds=0))
+        await asyncio.sleep(0.05)
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+    monkeypatch.setattr(engine, "run", fake_run)
+    asyncio.run(stop_after_several_passes())
+    assert calls == [1]

@@ -32,6 +32,7 @@ def _out(snapshot: store.StoredSnapshot, failures: list[str] | None = None) -> S
         iso_week=snapshot.iso_week, run_at=snapshot.run_at, rules_version=snapshot.rules_version,
         probs=ScenarioProbs(**snapshot.probs),
         previous_probs=ScenarioProbs(**previous.probs) if previous else None,
+        previous_iso_week=previous.iso_week if previous else None,
         results=results, failures=failures or [])
 
 
