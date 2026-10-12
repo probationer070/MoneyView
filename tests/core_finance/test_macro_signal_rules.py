@@ -5,8 +5,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from packages.core_finance.macro_signals.rules import (
-    Condition, Observation, compound_all, is_stale, level_change, level_streak, mom_pct,
-    rolling_mean,
+    Condition, Observation, compound_all, is_stale, level_change, level_streak, mom_diff_value,
+    mom_pct, rolling_mean,
 )
 
 AS_OF = date(2026, 10, 9)
@@ -122,3 +122,50 @@ def test_staleness_uses_the_latest_observation_date():
 def test_observations_after_as_of_are_ignored():
     obs = daily([5.0] * 12) + [Observation(AS_OF + timedelta(days=3), 6.0)]
     assert level_streak(obs, AS_OF, **STICKY).value == 5.0
+
+
+def test_level_streak_run_counts_only_the_trailing_consecutive_days():
+    # A 5.0 breaks the run: only the trailing 3 days count, so ten-day trigger is not met.
+    ev = level_streak(daily([5.51] * 10 + [5.0] + [5.51] * 3), AS_OF, **STICKY)
+    assert ev.state == "near"
+
+
+def test_level_streak_near_days_alone_flags_near_without_a_near_threshold():
+    ev = level_streak(daily([5.0] * 4 + [5.51] * 6), AS_OF,
+                      op=">=", threshold=5.50, days=10, near_threshold=None, near_days=5)
+    assert ev.state == "near"
+
+
+def test_is_stale_at_exactly_max_age_is_fresh_and_one_day_over_is_stale():
+    obs = [Observation(date(2026, 8, 1), 1.0)]
+    boundary = date(2026, 8, 1) + timedelta(days=80)
+    assert is_stale(obs, boundary, 80) is False
+    assert is_stale(obs, boundary + timedelta(days=1), 80) is True
+
+
+def test_level_change_baseline_is_latest_observation_on_or_before_cutoff():
+    # Cutoff is 2026-10-02. The 2026-10-02 observation (4.0) is the baseline,
+    # not the earlier 3.0 and not the 4.2 between cutoff and as_of.
+    obs = [
+        Observation(AS_OF - timedelta(days=10), 3.0),
+        Observation(AS_OF - timedelta(days=7), 4.0),
+        Observation(AS_OF - timedelta(days=3), 4.2),
+        Observation(AS_OF, 4.5),
+    ]
+    ev = level_change(obs, AS_OF, lookback_days=7, op=">", threshold=0.0)
+    assert ev.value == 0.5
+    assert ev.note == "change since 2026-10-02"
+
+
+def test_mom_diff_value_rounds_the_float_difference():
+    # 100.3 - 100.1 is 0.20000000000000284 unrounded; the rounded value is exactly 0.2.
+    point = mom_diff_value(monthly([("2026-07-01", 100.1), ("2026-08-01", 100.3)]))
+    assert point == (0.2, date(2026, 8, 1))
+
+
+def test_mom_diff_value_refuses_a_gap_between_months():
+    assert mom_diff_value(monthly([("2026-06-01", 100.0), ("2026-08-01", 101.0)])) is None
+
+
+def test_mom_diff_value_decrease_is_negative():
+    assert mom_diff_value(monthly([("2026-07-01", 100.0), ("2026-08-01", 99.5)])) == (-0.5, date(2026, 8, 1))
