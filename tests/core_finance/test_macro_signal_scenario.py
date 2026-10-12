@@ -66,3 +66,18 @@ def test_contribution_is_the_change_from_removing_that_signal():
 def test_infeasible_bounds_are_refused():
     with pytest.raises(ValueError):
         bounded_normalize({"a": 1, "b": 1, "c": 1}, 0.4, 0.85)
+
+
+def test_pinning_cascades_until_every_value_is_in_bounds():
+    """Pinning the cap leaves b above the floor-pinned c, so c's pin needs a later pass."""
+    assert bounded_normalize({"a": 0.9, "b": 0.09, "c": 0.01}, FLOOR, CAP) == pytest.approx(
+        {"a": 0.85, "b": 0.10, "c": 0.05})
+
+
+def test_bounds_exactly_at_feasibility_are_accepted():
+    assert bounded_normalize({"a": 1, "b": 3}, 0.5, 0.5) == pytest.approx({"a": 0.5, "b": 0.5})
+
+
+def test_cap_too_low_for_the_scenario_count_is_refused():
+    with pytest.raises(ValueError):
+        bounded_normalize({"a": 1, "b": 1, "c": 1}, FLOOR, 0.3)
