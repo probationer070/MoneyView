@@ -173,6 +173,7 @@ def test_the_engine_run_does_not_block_the_event_loop(monkeypatch):
         task = asyncio.create_task(schedule.signal_cycle(interval_seconds=0))
         await asyncio.sleep(0.05)
         release.set()
+        task.cancel()
         await asyncio.gather(task, return_exceptions=True)
 
     asyncio.run(main())
