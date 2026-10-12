@@ -57,3 +57,15 @@ def test_http_error_body_is_redacted(monkeypatch):
     with pytest.raises(FredFetchError) as info:
         FREDCollector(KEY).fetch_observations("DGS10", "2026-01-01")
     assert KEY not in str(info.value) and "HTTP 400" in str(info.value)
+
+
+def test_timeout_is_forwarded_as_fifteen_seconds_by_default(monkeypatch):
+    seen = {}
+
+    def fake_get(url, params=None, **kwargs):
+        seen["timeout"] = kwargs.get("timeout")
+        return FakeResponse(200, {"observations": []})
+
+    monkeypatch.setattr(fred_module.requests, "get", fake_get)
+    assert FREDCollector(KEY).fetch_observations("DGS10", "2026-01-01") == []
+    assert seen["timeout"] == 15.0
