@@ -2,6 +2,7 @@ export * from "./generated/portfolio";
 export * from "./corporate";
 export * from "./market";
 export * from "./portfolio";
+export * from "./signals";
 
 // Explicit re-export, and it must stay explicit.
 //
