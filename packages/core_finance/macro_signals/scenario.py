@@ -26,6 +26,10 @@ def bounded_normalize(raw: Mapping[str, float], floor: float, cap: float) -> dic
     proportion to `raw`. Overshoots are pinned first: pinning a cap frees mass that can lift
     a would-be floor violator, while pinning a floor only shrinks the free values, so no new
     overshoot can appear afterwards.
+
+    Raises ValueError when the bounds cannot be met: infeasible for the scenario count,
+    or pinning leaves a result that does not sum to 1. Also raises ValueError when the free
+    raw weights have no positive total. Never returns an out-of-sum result silently.
     """
     n = len(raw)
     if not (n * floor <= 1.0 <= n * cap):
@@ -34,9 +38,11 @@ def bounded_normalize(raw: Mapping[str, float], floor: float, cap: float) -> dic
     while True:
         free = [k for k in raw if k not in fixed]
         if not free:
-            return {k: fixed[k] for k in raw}
+            return _checked({k: fixed[k] for k in raw}, floor, cap)
         mass = 1.0 - sum(fixed.values())
         total = sum(raw[k] for k in free)
+        if total <= 0:
+            raise ValueError("raw scenario weights must have positive total")
         probs = {k: mass * raw[k] / total for k in free}
         over = [k for k in free if probs[k] > cap]
         if over:
@@ -46,7 +52,13 @@ def bounded_normalize(raw: Mapping[str, float], floor: float, cap: float) -> dic
         if under:
             fixed.update({k: floor for k in under})
             continue
-        return {k: fixed[k] if k in fixed else probs[k] for k in raw}
+        return _checked({k: fixed[k] if k in fixed else probs[k] for k in raw}, floor, cap)
+
+
+def _checked(result: dict[str, float], floor: float, cap: float) -> dict[str, float]:
+    if abs(sum(result.values()) - 1.0) > 1e-9:
+        raise ValueError(f"bounds [{floor}, {cap}] cannot be met for these inputs: {result}")
+    return result
 
 
 def posterior(prior: Mapping[str, float], signals: Sequence[ActiveSignal],

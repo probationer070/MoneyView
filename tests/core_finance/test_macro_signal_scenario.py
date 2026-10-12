@@ -81,3 +81,14 @@ def test_bounds_exactly_at_feasibility_are_accepted():
 def test_cap_too_low_for_the_scenario_count_is_refused():
     with pytest.raises(ValueError):
         bounded_normalize({"a": 1, "b": 1, "c": 1}, FLOOR, 0.3)
+
+
+def test_bounds_that_cannot_sum_to_one_are_refused():
+    """Feasible by count, but pinning a=0.5, b=c=0.3 sums to 1.1; must not return it."""
+    with pytest.raises(ValueError):
+        bounded_normalize({"a": 1e9, "b": 1, "c": 1}, 0.3, 0.5)
+
+
+def test_all_zero_raw_weights_are_refused():
+    with pytest.raises(ValueError):
+        bounded_normalize({"a": 0, "b": 0, "c": 0}, FLOOR, CAP)
