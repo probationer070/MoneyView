@@ -38,6 +38,12 @@ is deferred on data (see its entry).
 
 ## Open work
 
+### Track S: Macro signal engine
+Plan: `docs/superpowers/plans/2026-10-12-macro-signal-engine.md`. Spec + corrections:
+`docs/superpowers/specs/2026-10-10-macro-signal-engine-spec.md`. Baseline 1883 pytest passed.
+- [ ] S2 pure rules  - [ ] S3 scenario  - [ ] S4 FRED fetch  - [ ] S5 rules.yaml
+- [ ] S6 store/fetcher  - [ ] S7 engine+API  - [ ] S8 schedule  - [ ] S9 page  - [ ] S10 docs
+
 - [ ] **Deferred from the snapshot overhaul (Track E):** readable snapshot identity and
       charts over snapshot history. **Still blocked on data (re-checked 2026-09-29):**
       `corporate_comparison_snapshots_v3` holds 0 rows, because snapshots are saved only
