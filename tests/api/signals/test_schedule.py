@@ -283,3 +283,11 @@ def test_the_fred_error_strings_are_logged_as_a_warning(monkeypatch, caplog):
     _drive_fred_retry(monkeypatch, times, [["DGS10: HTTP 503 upstream"], []], snapshots)
     assert "DGS10: HTTP 503 upstream" in caplog.text
     assert "WARNING" in caplog.text
+
+
+def test_a_pre_cutoff_run_with_fred_errors_is_not_retried_before_the_cutoff(monkeypatch):
+    # Monday 09:00 KST: the first run of W42 fails, and the 10:00 check is still before the
+    # Saturday cutoff, so only the normal is_due rule may decide, and it does not fire.
+    times = [kst(2026, 10, 12, 9), kst(2026, 10, 12, 10)]
+    runs = _drive_fred_retry(monkeypatch, times, [["x"], []], {})
+    assert runs == [kst(2026, 10, 12, 9)]
