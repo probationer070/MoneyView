@@ -1,0 +1,123 @@
+# Macro signal rules. Thresholds and likelihood ratios live ONLY here.
+# rules_version is the sha256 of this file's bytes, so any edit shows up as a
+# dashed line on the probability trend chart.
+# max_age_days: daily 7, Brent 14 (EIA publishes weekly), monthly 80 (FRED dates a
+# monthly value on the 1st and it is published about six weeks later).
+scenario:
+  prior: {a: 0.35, b: 0.45, c: 0.20}
+  floor: 0.05
+  cap: 0.85
+  weights: {triggered: 1.0, near: 0.5}
+
+rules:
+  - id: b_tnx_sticky
+    label: {ko: "10년물 고착", en: "10Y yield sticky"}
+    direction: B
+    kind: level_streak
+    series: [DGS10]
+    max_age_days: 7
+    op: ">="
+    threshold: 5.50
+    days: 10
+    near_threshold: 5.35
+    near_days: 5
+    lr: {a: 0.7, b: 1.2, c: 1.5}
+
+  - id: b_core_cpi_hot
+    label: {ko: "근원 CPI 과열", en: "Core CPI hot"}
+    direction: B
+    kind: mom_pct
+    series: [CPILFESL]
+    max_age_days: 80
+    op: ">="
+    threshold: 0.25
+    near_threshold: 0.20
+    lr: {a: 0.8, b: 1.2, c: 1.2}
+
+  - id: b_hy_wide
+    label: {ko: "하이일드 스프레드 확대", en: "High-yield spread wide"}
+    direction: B
+    kind: level_streak          # days: 1 = the latest value alone
+    series: [BAMLH0A0HYM2]
+    max_age_days: 7
+    op: ">="
+    threshold: 3.50
+    days: 1
+    near_threshold: 3.20
+    lr: {a: 0.6, b: 1.1, c: 1.8}
+
+  - id: b_brent_spike
+    label: {ko: "유가 급등", en: "Oil price spike"}
+    direction: B
+    kind: rolling_mean
+    series: [DCOILBRENTEU]
+    max_age_days: 14
+    window: 5
+    op: ">="
+    threshold: 110
+    near_threshold: 105
+    lr: {a: 0.7, b: 1.2, c: 1.4}
+
+  - id: b_fed_hike
+    label: {ko: "연준 추가 인상", en: "Fed hikes again"}
+    direction: B
+    kind: level_change
+    series: [DFEDTARU]
+    max_age_days: 7
+    lookback_days: 7
+    op: ">"
+    threshold: 0.0
+    lr: {a: 0.8, b: 1.2, c: 1.2}
+
+  - id: a_tnx_relief
+    label: {ko: "10년물 안정", en: "10Y yield relief"}
+    direction: A
+    kind: level_streak
+    series: [DGS10]
+    max_age_days: 7
+    op: "<"
+    threshold: 5.00
+    days: 5
+    near_threshold: 5.15
+    lr: {a: 1.5, b: 0.9, c: 0.6}
+
+  - id: a_brent_relief
+    label: {ko: "유가 안정", en: "Oil price relief"}
+    direction: A
+    kind: rolling_mean
+    series: [DCOILBRENTEU]
+    max_age_days: 14
+    window: 5
+    op: "<"
+    threshold: 90
+    near_threshold: 95
+    lr: {a: 1.4, b: 0.9, c: 0.7}
+
+  - id: a_labor_core
+    label: {ko: "고용 반등 + 근원 둔화", en: "Jobs rebound + core cooling"}
+    direction: A
+    kind: compound
+    series: [PAYEMS, CPILFESL]
+    max_age_days: 80
+    conditions:
+      - {label: payrolls_change_k, series: PAYEMS, transform: mom_diff, op: ">=", threshold: 100}
+      - {label: core_cpi_mom_pct, series: CPILFESL, transform: mom_pct, op: "<", threshold: 0.25}
+    lr: {a: 1.3, b: 0.9, c: 0.7}
+
+  - id: m_capex_reaction
+    label: {ko: "capex 상향인데 주가 하락", en: "Capex raised, stock fell"}
+    direction: B
+    kind: manual
+    lr: {a: 0.7, b: 1.2, c: 1.5}
+
+  - id: m_iran_strike
+    label: {ko: "이란 공습 재개", en: "Iran strikes resume"}
+    direction: B
+    kind: manual
+    lr: {a: 0.7, b: 1.3, c: 1.3}
+
+  - id: m_breadth
+    label: {ko: "시장 폭 개선", en: "Market breadth improving"}
+    direction: A
+    kind: manual
+    lr: {a: 1.4, b: 0.9, c: 0.7}
