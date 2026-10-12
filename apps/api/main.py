@@ -155,6 +155,9 @@ async def lifespan(app: FastAPI):
     background = [task_wal]
     if not startup_jobs_disabled:
         background.append(asyncio.create_task(stock_prewarm_cycle()))
+        from apps.api.services.signals.schedule import signal_cycle
+
+        background.append(asyncio.create_task(signal_cycle()))
     # After the startup syncs above, so peer removals are already recorded as pending.
     background.append(asyncio.create_task(watchlist_cleanup_cycle(run_at_start=not startup_jobs_disabled)))
 
