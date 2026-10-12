@@ -62,3 +62,59 @@ def test_app_start_fails_on_an_invalid_rules_file(tmp_path, monkeypatch):
     with pytest.raises(ValidationError):
         with TestClient(app):
             pass
+
+
+def test_near_weight_must_be_below_triggered(tmp_path):
+    path = write_variant(tmp_path, lambda d: d["scenario"]["weights"].update(near=1.0))
+    with pytest.raises(ValidationError, match="near weight"):
+        load_rules(path)
+
+
+def test_floor_and_cap_must_be_feasible_for_three_scenarios(tmp_path):
+    path = write_variant(tmp_path, lambda d: d["scenario"].update(floor=0.4))
+    with pytest.raises(ValidationError, match="infeasible"):
+        load_rules(path)
+
+
+def test_compound_condition_series_must_be_listed_in_series(tmp_path):
+    def mutate(d):
+        rule = next(r for r in d["rules"] if r["id"] == "a_labor_core")
+        rule["conditions"][0]["series"] = "DGS10"
+
+    path = write_variant(tmp_path, mutate)
+    with pytest.raises(ValidationError, match="not listed in series"):
+        load_rules(path)
+
+
+def test_single_series_kinds_take_exactly_one_series(tmp_path):
+    path = write_variant(tmp_path, lambda d: d["rules"][0].update(series=["DGS10", "PAYEMS"]))
+    with pytest.raises(ValidationError, match="exactly one series"):
+        load_rules(path)
+
+
+def test_compound_rule_needs_at_least_two_conditions(tmp_path):
+    def mutate(d):
+        rule = next(r for r in d["rules"] if r["id"] == "a_labor_core")
+        rule["conditions"] = rule["conditions"][:1]
+
+    path = write_variant(tmp_path, mutate)
+    with pytest.raises(ValidationError, match="conditions"):
+        load_rules(path)
+
+
+def test_rule_series_cannot_be_empty(tmp_path):
+    path = write_variant(tmp_path, lambda d: d["rules"][0].update(series=[]))
+    with pytest.raises(ValidationError, match="at least 1"):
+        load_rules(path)
+
+
+def test_likelihood_ratios_must_be_positive(tmp_path):
+    path = write_variant(tmp_path, lambda d: d["rules"][0]["lr"].update(a=0))
+    with pytest.raises(ValidationError):
+        load_rules(path)
+
+
+def test_prior_probabilities_must_be_positive(tmp_path):
+    path = write_variant(tmp_path, lambda d: d["scenario"]["prior"].update(a=0.0, c=0.55))
+    with pytest.raises(ValidationError):
+        load_rules(path)
