@@ -57,7 +57,7 @@ def test_cycle_runs_the_engine_when_due(monkeypatch):
 
     monkeypatch.setattr(engine, "run", fake_run)
     with pytest.raises(asyncio.CancelledError):
-        asyncio.run(schedule.signal_cycle(interval_seconds=0))
+        asyncio.run(asyncio.wait_for(schedule.signal_cycle(interval_seconds=0), timeout=2))
     assert calls == [1]
 
 
@@ -90,7 +90,7 @@ def test_a_failed_run_is_logged_without_the_key_and_the_loop_continues(monkeypat
     monkeypatch.setenv("FRED_API_KEY", "SECRET-KEY-123")
     caplog.set_level(logging.ERROR, logger=schedule.logger.name)
     with pytest.raises(asyncio.CancelledError):
-        asyncio.run(schedule.signal_cycle(interval_seconds=0))
+        asyncio.run(asyncio.wait_for(schedule.signal_cycle(interval_seconds=0), timeout=2))
     assert calls == [1, 1]
     assert "Signal cycle failed" in caplog.text
     assert "SECRET-KEY-123" not in caplog.text
@@ -107,3 +107,101 @@ def test_cancelling_the_cycle_stops_it_cleanly(monkeypatch):
 
     with pytest.raises(asyncio.CancelledError):
         asyncio.run(run_and_cancel())
+
+
+def test_exactly_at_the_cutoff_a_pre_cutoff_run_is_redone():
+    assert is_due(kst(2026, 10, 10, 8, 51), kst(2026, 10, 9, 20)) is True
+
+
+def test_a_run_stamped_exactly_at_the_cutoff_is_not_redone():
+    assert is_due(kst(2026, 10, 10, 9, 0), kst(2026, 10, 10, 8, 51)) is False
+
+
+def test_a_missing_snapshot_after_the_cutoff_is_due_at_startup():
+    # The app starts on Sunday after the Saturday run was missed (machine was off).
+    assert is_due(kst(2026, 10, 11, 12), None) is True
+
+
+def test_the_cycle_looks_up_the_kst_week_not_the_utc_week(monkeypatch):
+    # Monday 00:30 KST is Sunday 15:30 UTC; the snapshot to check is the new week's.
+    monkeypatch.setattr(engine, "utc_now", lambda: kst(2026, 10, 12, 0, 30))
+    weeks = []
+
+    def load(week):
+        weeks.append(week)
+        return None
+
+    monkeypatch.setattr(store, "load_snapshot", load)
+    monkeypatch.setattr(engine, "run", lambda *a, **k: (_ for _ in ()).throw(asyncio.CancelledError()))
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(asyncio.wait_for(schedule.signal_cycle(interval_seconds=0), timeout=2))
+    assert weeks == ["2026-W42"]
+
+
+def test_the_cycle_waits_the_interval_between_checks(monkeypatch):
+    _cycle_env(monkeypatch, kst(2026, 10, 11, 12), kst(2026, 10, 10, 9, 0))
+    checks = []
+    not_due = SimpleNamespace(run_at=kst(2026, 10, 10, 9, 0).isoformat())
+    monkeypatch.setattr(store, "load_snapshot", lambda week: checks.append(week) or not_due)
+
+    async def one_interval():
+        task = asyncio.create_task(schedule.signal_cycle(interval_seconds=3600))
+        await asyncio.sleep(0.1)
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+    asyncio.run(one_interval())
+    assert len(checks) == 1
+
+
+def test_the_engine_run_does_not_block_the_event_loop(monkeypatch):
+    import threading
+
+    _cycle_env(monkeypatch, kst(2026, 10, 10, 9, 0), None)
+    released_in_time = []
+
+    def slow_run(*args, **kwargs):
+        # Blocks like the real run (FRED fetch under _RUN_LOCK). The loop-side coroutine
+        # below must be able to set `release` while this is still running.
+        released_in_time.append(release.wait(timeout=2))
+        raise asyncio.CancelledError
+
+    release = threading.Event()
+    monkeypatch.setattr(engine, "run", slow_run)
+
+    async def main():
+        task = asyncio.create_task(schedule.signal_cycle(interval_seconds=0))
+        await asyncio.sleep(0.05)
+        release.set()
+        await asyncio.gather(task, return_exceptions=True)
+
+    asyncio.run(main())
+    assert released_in_time == [True]
+
+
+def test_lifespan_starts_the_signal_cycle_only_when_startup_jobs_are_enabled(monkeypatch):
+    from apps.api import main as api_main
+
+    started = []
+
+    async def fake_cycle(*args, **kwargs):
+        started.append(1)
+        await asyncio.Event().wait()
+
+    async def fake_prewarm():
+        return None
+
+    async def drive(env_value):
+        started.clear()
+        monkeypatch.setattr(schedule, "signal_cycle", fake_cycle)
+        monkeypatch.setattr(api_main, "stock_prewarm_cycle", fake_prewarm)
+        if env_value is None:
+            monkeypatch.delenv("MONEYVIEW_DISABLE_STARTUP_JOBS", raising=False)
+        else:
+            monkeypatch.setenv("MONEYVIEW_DISABLE_STARTUP_JOBS", env_value)
+        async with api_main.lifespan(api_main.app):
+            await asyncio.sleep(0.05)
+        return list(started)
+
+    assert asyncio.run(drive(None)) == [1]
+    assert asyncio.run(drive("1")) == []
