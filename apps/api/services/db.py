@@ -210,6 +210,49 @@ def get_db() -> Generator[sqlite3.Connection, None, None]:
         conn.close()
 
 
+# Macro signal engine (docs/superpowers/plans/2026-10-12-macro-signal-engine.md).
+# One snapshot per ISO week, overwritten on re-run. contrib_* hold each signal's
+# contribution as computed at run time, so a later rules.yaml edit cannot rewrite history.
+_SIGNAL_SCHEMA_SQL = """
+CREATE TABLE IF NOT EXISTS signal_snapshots (
+    id            INTEGER PRIMARY KEY,
+    iso_week      TEXT NOT NULL UNIQUE,
+    run_at        TEXT NOT NULL,
+    rules_version TEXT NOT NULL,
+    prob_a        REAL NOT NULL,
+    prob_b        REAL NOT NULL,
+    prob_c        REAL NOT NULL
+);
+CREATE TABLE IF NOT EXISTS signal_results (
+    snapshot_id   INTEGER NOT NULL REFERENCES signal_snapshots(id) ON DELETE CASCADE,
+    rule_id       TEXT NOT NULL,
+    state         TEXT NOT NULL CHECK (state IN ('triggered','near','not_triggered','stale')),
+    value         REAL,
+    observed_at   TEXT,
+    threshold     REAL,
+    note          TEXT,
+    contrib_a     REAL,
+    contrib_b     REAL,
+    contrib_c     REAL,
+    PRIMARY KEY (snapshot_id, rule_id)
+);
+CREATE TABLE IF NOT EXISTS signal_manual_inputs (
+    rule_id       TEXT NOT NULL,
+    iso_week      TEXT NOT NULL,
+    state         TEXT NOT NULL CHECK (state IN ('triggered','near','not_triggered')),
+    note          TEXT,
+    updated_at    TEXT NOT NULL,
+    PRIMARY KEY (rule_id, iso_week)
+);
+CREATE TABLE IF NOT EXISTS fred_cache (
+    series_id     TEXT NOT NULL,
+    obs_date      TEXT NOT NULL,
+    value         REAL NOT NULL,
+    fetched_at    TEXT NOT NULL,
+    PRIMARY KEY (series_id, obs_date)
+);
+"""
+
 _CREATE_SCHEMA_SQL = """
 -- ============================================================
 -- Schema B: Financial Asset OHLCV
@@ -667,7 +710,7 @@ CREATE TABLE IF NOT EXISTS cleanup_pending (
     ticker     TEXT PRIMARY KEY,
     removed_at TEXT NOT NULL   -- datetime.isoformat() of an aware UTC moment
 );
-"""
+""" + _SIGNAL_SCHEMA_SQL
 
 
 def init_db() -> None:
@@ -1014,6 +1057,11 @@ def _ensure_schema_compatibility(conn: sqlite3.Connection) -> None:
             removed_at TEXT NOT NULL
         )"""
     )
+    # Additive: the create script can abort early on a legacy database (see init_db), so
+    # the signal tables are created here too. Nothing to backfill.
+    for statement in _SIGNAL_SCHEMA_SQL.split(";"):
+        if statement.strip():
+            conn.execute(statement)
 
 
 def get_db_path() -> Path:
