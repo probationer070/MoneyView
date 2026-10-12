@@ -69,3 +69,60 @@ def test_timeout_is_forwarded_as_fifteen_seconds_by_default(monkeypatch):
     monkeypatch.setattr(fred_module.requests, "get", fake_get)
     assert FREDCollector(KEY).fetch_observations("DGS10", "2026-01-01") == []
     assert seen["timeout"] == 15.0
+
+
+class NonJsonResponse:
+    status_code = 200
+    text = "<html>maintenance</html>"
+
+    def json(self):
+        raise ValueError("Expecting value: line 1 column 1 (char 0)")
+
+
+def test_connection_failure_raises_with_no_context_holding_the_key(monkeypatch):
+    def boom(url, params, timeout):
+        raise requests.ConnectionError(f"Max retries exceeded with url: /x?api_key={KEY}")
+
+    monkeypatch.setattr(fred_module.requests, "get", boom)
+    with pytest.raises(FredFetchError) as info:
+        FREDCollector(KEY).fetch_observations("DGS10", "2026-01-01")
+    assert info.value.__context__ is None
+
+
+def test_non_json_200_body_raises_malformed_without_key_or_cause(monkeypatch):
+    monkeypatch.setattr(fred_module.requests, "get", lambda url, params, timeout: NonJsonResponse())
+    with pytest.raises(FredFetchError) as info:
+        FREDCollector(KEY).fetch_observations("DGS10", "2026-01-01")
+    assert str(info.value) == "DGS10: malformed response"
+    assert info.value.__cause__ is None and info.value.__context__ is None
+
+
+def test_payload_without_observations_key_raises_not_empty(monkeypatch):
+    monkeypatch.setattr(fred_module.requests, "get",
+                        lambda url, params, timeout: FakeResponse(200, {"error_code": 400}))
+    with pytest.raises(FredFetchError) as info:
+        FREDCollector(KEY).fetch_observations("DGS10", "2026-01-01")
+    assert str(info.value) == "DGS10: malformed response"
+
+
+@pytest.mark.parametrize("payload", [
+    [],
+    {"observations": {}},
+    {"observations": [{"date": "2026-01-01"}]},
+    {"observations": [{"date": "2026-01-01", "value": "n/a"}]},
+    {"observations": [{"value": "1.0"}]},
+])
+def test_malformed_payloads_raise_instead_of_returning_rows_or_raw_errors(payload):
+    with pytest.raises(FredFetchError, match="malformed response"):
+        parse_observations(payload)
+
+
+def test_non_finite_values_are_skipped_like_missing_dots():
+    payload = {"observations": [
+        {"date": "2026-01-01", "value": "nan"}, {"date": "2026-01-02", "value": "2.0"},
+        {"date": "2026-01-03", "value": "inf"}, {"date": "2026-01-04", "value": "-inf"}]}
+    assert parse_observations(payload) == [("2026-01-02", 2.0)]
+
+
+def test_empty_observations_list_is_no_data_not_malformed():
+    assert parse_observations({"observations": []}) == []
