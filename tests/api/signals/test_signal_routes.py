@@ -89,3 +89,22 @@ def test_manual_put_for_an_unknown_rule_is_404_not_a_saved_row():
     assert client.put("/api/v1/signals/manual/m_nope", json={"state": "near"}).status_code == 404
     with get_db() as conn:
         assert conn.execute("SELECT COUNT(*) FROM signal_manual_inputs").fetchone()[0] == 0
+
+
+KST_MONDAY_NOW = datetime(2026, 10, 11, 16, 0, tzinfo=timezone.utc)   # 2026-10-12 01:00 KST, W42
+
+
+def test_run_stamps_the_kst_week_not_the_utc_week(monkeypatch):
+    monkeypatch.setattr(engine, "utc_now", lambda: KST_MONDAY_NOW)
+    data = client.post("/api/v1/signals/run").json()["data"]
+    assert data["iso_week"] == "2026-W42"
+
+
+def test_manual_put_is_stored_under_the_kst_week(monkeypatch):
+    monkeypatch.setattr(engine, "utc_now", lambda: KST_MONDAY_NOW)
+    client.put("/api/v1/signals/manual/m_breadth", json={"state": "triggered", "note": ""})
+    assert "m_breadth" in store.get_manual_inputs("2026-W42")
+    assert "m_breadth" not in store.get_manual_inputs("2026-W41")
+    data = client.post("/api/v1/signals/run").json()["data"]
+    assert data["iso_week"] == "2026-W42"
+    assert next(r for r in data["results"] if r["rule_id"] == "m_breadth")["state"] == "triggered"
