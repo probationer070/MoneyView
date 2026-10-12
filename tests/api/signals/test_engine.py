@@ -1,7 +1,12 @@
+from datetime import UTC, date, datetime
+
 import pytest
 
 from apps.api.services.db import get_db
 from apps.api.services.signals import engine, store
+from apps.api.services.signals.models import get_rules
+from packages.core_finance.macro_signals.rules import Evaluation
+from packages.core_finance.macro_signals.scenario import ActiveSignal, posterior
 
 from .conftest import AS_OF
 
@@ -79,3 +84,52 @@ def test_contributions_are_stored_for_active_signals_only(fixture_source):
     by_id = {r.rule_id: r for r in snapshot.results}
     assert by_id["b_hy_wide"].contribution["c"] > 0
     assert by_id["b_fed_hike"].contribution is None
+
+
+def test_an_old_latest_observation_stales_its_rule(fixture_source):
+    base = fixture_source()
+
+    def source(series_id, start):
+        obs = base(series_id, start)
+        return [o for o in obs if o.date <= date(2026, 9, 1)] if series_id == "DGS10" else obs
+
+    got = states(engine.run(AS_OF, source=source).snapshot)
+    assert got["b_tnx_sticky"] == "stale" and got["a_tnx_relief"] == "stale"
+
+
+def test_near_counts_half_of_triggered_and_triggered_counts_full(fixture_source):
+    loaded = get_rules()
+    cfg = loaded.file.scenario
+    lr = next(rule.lr.model_dump() for rule in loaded.file.rules if rule.id == "b_hy_wide")
+    prior = cfg.prior.model_dump()
+    near, _ = engine.score(loaded, {"b_hy_wide": Evaluation("near", None, None, None, "")})
+    full, _ = engine.score(loaded, {"b_hy_wide": Evaluation("triggered", None, None, None, "")})
+    expected_near = posterior(prior, [ActiveSignal("b_hy_wide", lr, cfg.weights.near)], cfg.floor, cfg.cap)
+    expected_full = posterior(prior, [ActiveSignal("b_hy_wide", lr, cfg.weights.triggered)], cfg.floor, cfg.cap)
+    assert near == pytest.approx(expected_near) and full == pytest.approx(expected_full)
+    assert near["b"] != pytest.approx(full["b"])
+
+
+def test_rescore_keeps_the_run_time_when_the_clock_moves(fixture_source, monkeypatch):
+    monkeypatch.setattr(engine, "utc_now", lambda: datetime(2026, 10, 10, tzinfo=UTC))
+    engine.run(AS_OF, source=fixture_source())
+    monkeypatch.setattr(engine, "utc_now", lambda: datetime(2026, 10, 11, 12, tzinfo=UTC))
+    store.put_manual_input("m_iran_strike", "2026-W41", "triggered", "", "t")
+    assert engine.rescore("2026-W41").run_at == "2026-10-10T00:00:00+00:00"
+
+
+def test_rescore_never_touches_fred(fixture_source, monkeypatch):
+    engine.run(AS_OF, source=fixture_source())
+
+    def no_fetch():
+        raise AssertionError("rescore must not fetch")
+
+    monkeypatch.setattr(engine, "default_source", no_fetch)
+    store.put_manual_input("m_iran_strike", "2026-W41", "triggered", "", "t")
+    assert engine.rescore("2026-W41") is not None
+
+
+def test_kst_date_rolls_over_before_utc(monkeypatch):
+    monkeypatch.setattr(engine, "utc_now", lambda: datetime(2026, 10, 11, 16, tzinfo=UTC))
+    assert engine.kst_today() == date(2026, 10, 12)
+    assert store.iso_week(engine.kst_today()) == "2026-W42"

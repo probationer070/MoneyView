@@ -4,7 +4,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from apps.api.main import app
-from apps.api.services.signals import engine
+from apps.api.services.db import get_db
+from apps.api.services.signals import engine, store
 
 client = TestClient(app)
 FIXED_NOW = datetime(2026, 10, 10, 0, 0, tzinfo=timezone.utc)   # 09:00 KST Saturday
@@ -74,3 +75,17 @@ def test_manual_put_refuses_unknown_rules_states_and_extra_fields():
     assert client.put("/api/v1/signals/manual/m_breadth", json={"state": "stale"}).status_code == 422
     assert client.put("/api/v1/signals/manual/m_breadth",
                       json={"state": "near", "prob_a": 1}).status_code == 422
+
+
+def test_latest_reports_the_previous_week_probabilities():
+    store.save_snapshot(iso_week="2026-W40", run_at="2026-10-03T00:00:00+00:00", rules_version="x",
+                        probs={"a": 0.30, "b": 0.50, "c": 0.20}, results=[])
+    client.post("/api/v1/signals/run")
+    previous = client.get("/api/v1/signals/latest").json()["data"]["previous_probs"]
+    assert previous == pytest.approx({"a": 0.30, "b": 0.50, "c": 0.20})
+
+
+def test_manual_put_for_an_unknown_rule_is_404_not_a_saved_row():
+    assert client.put("/api/v1/signals/manual/m_nope", json={"state": "near"}).status_code == 404
+    with get_db() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM signal_manual_inputs").fetchone()[0] == 0
