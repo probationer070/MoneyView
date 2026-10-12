@@ -123,3 +123,47 @@ test("the trend chart mounts without a zero-size warning", async ({ page }) => {
   await expect(page.getByTestId("trend-chart").locator(".recharts-line").first()).toBeAttached();
   expect(warnings).toEqual([]);
 });
+
+test("an all-stale snapshot says no signal was judged and that the probabilities equal the prior", async ({ page }) => {
+  await mockSignalsApi(page, { allStale: true });
+  await page.goto("/signals", { waitUntil: "domcontentloaded" });
+  await expect(page.getByTestId("evidence")).toContainText("0 of 2 signals judged, 2 stale");
+  await expect(page.getByText("No signal was judged this week, so these probabilities equal the prior.")).toBeVisible();
+});
+
+test("a snapshot with some judged signals counts them against the stale ones and shows no empty-evidence message", async ({ page }) => {
+  await mockSignalsApi(page);
+  await page.goto("/signals", { waitUntil: "domcontentloaded" });
+  await expect(page.getByTestId("evidence")).toContainText("1 of 2 signals judged, 1 stale");
+  await expect(page.getByText("No signal was judged this week")).toHaveCount(0);
+});
+
+test("the probability delta names the week it is measured against", async ({ page }) => {
+  await mockSignalsApi(page);
+  await page.goto("/signals", { waitUntil: "domcontentloaded" });
+  await expect(page.getByTestId("prob-b")).toContainText("▲ 5.0%p vs 2026-W40");
+});
+
+test("the manual panel names the ISO week its states belong to", async ({ page }) => {
+  await mockSignalsApi(page);
+  await page.goto("/signals", { waitUntil: "domcontentloaded" });
+  await expect(page.getByRole("region", { name: "manual" }).getByTestId("manual-week")).toHaveText("2026-W41");
+});
+
+test("a save for a week with no snapshot says it applies at the next run", async ({ page }) => {
+  await mockSignalsApi(page, { manualNullSnapshot: true });
+  await page.goto("/signals", { waitUntil: "domcontentloaded" });
+  const iran = page.getByTestId("manual-m_iran_strike");
+  await iran.getByRole("combobox").selectOption("triggered");
+  await iran.getByRole("button", { name: "Save" }).click();
+  await expect(iran).toContainText("Saved for this week; it will apply at the next run.");
+});
+
+test("a manual row re-reads its state when a new run changes the snapshot", async ({ page }) => {
+  await mockSignalsApi(page, { runAddsIranNear: true });
+  await page.goto("/signals", { waitUntil: "domcontentloaded" });
+  const iran = page.getByTestId("manual-m_iran_strike").getByRole("combobox");
+  await expect(iran).toHaveValue("");
+  await page.getByRole("button", { name: "Run now" }).click();
+  await expect(iran).toHaveValue("near");
+});

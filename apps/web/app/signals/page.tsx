@@ -22,12 +22,12 @@ export default function SignalsPage() {
           {lastRunFailures.length ? (
             <div role="status" className="text-xs text-[var(--text-secondary)]">
               {T.failures}:
-              <ul>{lastRunFailures.map((f) => <li key={f}>{f}</li>)}</ul>
+              <ul>{lastRunFailures.map((f, i) => <li key={`${i}:${f}`}>{f}</li>)}</ul>
             </div>
           ) : null}
           {latest ? <SignalTable results={latest.results} /> : null}
           <ProbabilityTrendChart history={history} />
-          <ManualInputPanel rules={manualRules} results={latest?.results ?? []} onSave={saveManual} />
+          <ManualInputPanel rules={manualRules} snapshot={latest} onSave={saveManual} />
         </>
       ) : null}
       <footer className="border-t border-[var(--border-soft)] pt-3 text-xs text-[var(--text-secondary)]" data-testid="disclaimer">

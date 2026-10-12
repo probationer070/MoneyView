@@ -10,6 +10,10 @@ export const SIGNALS_COPY = {
   states: { triggered: "Triggered", near: "Near", not_triggered: "Not triggered", stale: "Data stale" },
   table: { signal: "Signal", direction: "Dir.", state: "State", value: "Value", threshold: "Threshold", observed: "Observed", contribution: "Contribution (pp)" },
   trend: "Scenario probabilities, last 26 weeks", trendRulesChanged: "rules changed",
-  manual: "Manual signals (this week)", note: "Note", save: "Save", notSet: "Not set this week",
+  judged: (judged: number, total: number, stale: number) => `${judged} of ${total} signals judged, ${stale} stale`,
+  noEvidence: "No signal was judged this week, so these probabilities equal the prior.",
+  vsWeek: (week: string) => `vs ${week}`,
+  manual: "Manual signals", note: "Note", save: "Save", notSet: "Not set this week",
+  savedNotApplied: "Saved for this week; it will apply at the next run.",
   disclaimer: "These probabilities are a heuristic built from subjective likelihood ratios, not a statistical model estimate, and are not investment advice.",
 } as const;

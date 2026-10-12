@@ -9,7 +9,8 @@ export interface SignalResult {
 }
 export interface SignalSnapshot {
   iso_week: string; run_at: string; rules_version: string; probs: ScenarioProbs;
-  previous_probs: ScenarioProbs | null; results: SignalResult[]; failures: string[];
+  previous_probs: ScenarioProbs | null; previous_iso_week: string | null;
+  results: SignalResult[]; failures: string[];
 }
 export interface SignalHistoryPoint { iso_week: string; run_at: string; rules_version: string; a: number; b: number; c: number }
 export interface SignalRule { id: string; kind: string; direction: "A" | "B"; label: { ko: string; en: string } }
