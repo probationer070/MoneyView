@@ -105,3 +105,11 @@ def test_database_rejects_states_outside_the_allowed_set():
         store.put_manual_input("m_breadth", "2026-W41", "stale", "", "t1")
     with pytest.raises(sqlite3.IntegrityError):
         save("2026-W41", results=[row(state="bogus")])
+
+
+def test_a_failed_rerun_leaves_the_previous_snapshot_intact():
+    save("2026-W41", results=[row("a"), row("b")], run_at="t1")
+    before = store.load_snapshot("2026-W41")
+    with pytest.raises(sqlite3.IntegrityError):
+        save("2026-W41", probs=(0.2, 0.6, 0.2), results=[row("c", state="bogus")], run_at="t2")
+    assert store.load_snapshot("2026-W41") == before

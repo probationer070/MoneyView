@@ -27,8 +27,11 @@ def fred_source_from_env() -> SeriesSource | None:
     collector = FREDCollector(key)
 
     def source(series_id: str, start: date) -> list[Observation]:
-        return [Observation(date.fromisoformat(d), v)
-                for d, v in collector.fetch_observations(series_id, start.isoformat())]
+        rows = collector.fetch_observations(series_id, start.isoformat())
+        try:
+            return [Observation(date.fromisoformat(d), v) for d, v in rows]
+        except ValueError:
+            raise FredFetchError(f"{series_id}: malformed date") from None
     return source
 
 

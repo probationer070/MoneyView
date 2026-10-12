@@ -71,3 +71,13 @@ def test_key_from_env_fetches_through_the_collector(monkeypatch):
     source = fred_source_from_env()
     assert source("DGS10", date(2026, 1, 1)) == [Observation(date(2026, 10, 9), 5.5)]
     assert seen == {"series_id": "DGS10", "start": "2026-01-01"}
+
+
+def test_malformed_fred_date_falls_back_to_cache(fixture_source, monkeypatch):
+    SeriesFetcher(fixture_source(), now=NOW).get_series("PAYEMS", START)
+    monkeypatch.setenv("FRED_API_KEY", "k" * 32)
+    monkeypatch.setattr(FREDCollector, "fetch_observations",
+                        lambda self, series_id, start_date, timeout=15.0: [("2026-13-45", 5.5)])
+    result = SeriesFetcher(fred_source_from_env(), now=NOW).get_series("PAYEMS", START)
+    assert result.from_cache and result.error == "PAYEMS: malformed date"
+    assert result.observations[-1].value == 160150.0
