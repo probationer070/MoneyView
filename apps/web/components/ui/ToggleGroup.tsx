@@ -20,7 +20,7 @@ interface ToggleGroupProps {
 
 const sizeStyles: Record<ToggleGroupSize, string> = {
   sm: "min-h-8 px-[var(--space-3)] text-[length:var(--type-helper)]",
-  md: "min-h-9 px-[var(--space-4)] text-[length:var(--type-label)]",
+  md: "min-h-9 px-[var(--space-4)] text-[length:var(--type-small)]",
 };
 
 export function ToggleGroup({

@@ -55,7 +55,7 @@ export function TabButton({
       className={clsx(
         "rounded-[var(--radius)] border px-4 py-3 text-left transition",
         active
-          ? "border-[var(--accent)] bg-[var(--surface)] text-white"
+          ? "border-[var(--accent)] bg-[var(--brand)] text-white"
           : "border-[var(--border)] bg-[var(--bg-surface)] text-[var(--text-primary)] hover:border-[var(--accent)]",
       )}
     >

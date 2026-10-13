@@ -943,7 +943,7 @@ export default function CorporateAnalysisPage() {
               <button
                 type="button"
                 onClick={() => setActiveCalculation("backendDcf")}
-                className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-4 py-3 text-left text-sm transition hover:border-[var(--surface)]"
+                className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-4 py-3 text-left text-sm transition hover:border-[var(--brand)]"
               >
                 <div className="text-xs text-[var(--text-muted)]">
                   <InfoTooltip
@@ -1027,7 +1027,7 @@ export default function CorporateAnalysisPage() {
               />
               <button
                 type="submit"
-                className="rounded-[var(--radius)] bg-[var(--surface)] px-3 py-2 text-sm font-bold text-white disabled:opacity-50 sm:col-span-2"
+                className="rounded-[var(--radius)] bg-[var(--brand)] px-3 py-2 text-sm font-bold text-white disabled:opacity-50 sm:col-span-2"
                 disabled={!newCompanyName.trim() || !newCompanySymbol.trim()}
               >
                 Add for Analysis
@@ -1074,7 +1074,7 @@ export default function CorporateAnalysisPage() {
             <button
               type="button"
               onClick={() => setActiveCalculation("spread")}
-              className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4 text-left transition hover:border-[var(--surface)]"
+              className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4 text-left transition hover:border-[var(--brand)]"
             >
               <div className="text-xs font-semibold text-[var(--text-muted)]">
                 <InfoTooltip
@@ -1092,7 +1092,7 @@ export default function CorporateAnalysisPage() {
             <button
               type="button"
               onClick={() => setActiveCalculation("bottomUpKe")}
-              className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4 text-left transition hover:border-[var(--surface)]"
+              className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4 text-left transition hover:border-[var(--brand)]"
             >
               <div className="text-xs font-semibold text-[var(--text-muted)]">
                 <InfoTooltip
@@ -1106,7 +1106,7 @@ export default function CorporateAnalysisPage() {
             <button
               type="button"
               onClick={() => setActiveCalculation("leveredBeta")}
-              className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4 text-left transition hover:border-[var(--surface)]"
+              className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4 text-left transition hover:border-[var(--brand)]"
             >
               <div className="text-xs font-semibold text-[var(--text-muted)]">
                 <InfoTooltip

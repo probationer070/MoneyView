@@ -252,6 +252,7 @@ No dark mode implementation is needed now. The token structure supports it witho
 | `bg.elevated` | `--bg-elevated` | `#FFFFFF` |  |
 | `bg.sidebar` | `--bg-sidebar` | `#E0E4D6` |  |
 | `accent` | `--accent` | `#a7c7af` |  |
+| `brand` | `--brand` | `#60caad` |  |
 | `text.primary` | `--text-primary` | `#444444` |  |
 | `text.muted` | `--text-muted` | `#9DA5A2` |  |
 | `text.secondary` | `--text-secondary` | `#6B7370` |  |
@@ -262,15 +263,8 @@ No dark mode implementation is needed now. The token structure supports it witho
 | `border.soft` | `--border-soft` | `#E0E4D6` |  |
 | `border.strong` | `--border-strong` | `#9DA5A2` |  |
 | `border.accent` | `--border-accent` | `#60CAAD` |  |
-| `surface` | `--surface` | `#60caad` |  |
 | `surface.panel` | `--surface-panel` | `#FFFFFF` |  |
 | `surface.muted` | `--surface-muted` | `#F3F5EF` |  |
-| `chart.1` | `--chart-1` | `#39f1c0` |  |
-| `chart.2` | `--chart-2` | `#60CAAD` |  |
-| `chart.3` | `--chart-3` | `#B6CCBB` |  |
-| `chart.4` | `--chart-4` | `#E0E4D6` |  |
-| `chart.5` | `--chart-5` | `#9DA5A2` |  |
-| `chart.6` | `--chart-6` | `#444444` |  |
 | `chart.primary` | `--chart-primary` | `#39F1C0` |  |
 | `chart.secondary` | `--chart-secondary` | `#60CAAD` |  |
 | `chart.tertiary` | `--chart-tertiary` | `#B6CCBB` |  |
@@ -322,7 +316,7 @@ No dark mode implementation is needed now. The token structure supports it witho
 | `type.card-title` | `--type-card-title` | `15px` |  |
 | `type.metric-lg` | `--type-metric-lg` | `28px` |  |
 | `type.metric-md` | `--type-metric-md` | `20px` |  |
-| `type.label` | `--type-label` | `13px` |  |
+| `type.small` | `--type-small` | `13px` |  |
 | `type.body` | `--type-body` | `14px` |  |
 | `type.table-header` | `--type-table-header` | `12px` |  |
 | `type.table-body` | `--type-table-body` | `13px` |  |

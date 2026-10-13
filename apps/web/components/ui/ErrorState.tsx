@@ -24,7 +24,7 @@ export function ErrorState({
         <button
           type="button"
           onClick={retryAction}
-          className="mt-1 text-[length:var(--type-label)] font-medium text-[var(--state-info)] underline decoration-dotted underline-offset-4 hover:opacity-80 transition-opacity duration-[var(--duration-fast)]"
+          className="mt-1 text-[length:var(--type-small)] font-medium text-[var(--state-info)] underline decoration-dotted underline-offset-4 hover:opacity-80 transition-opacity duration-[var(--duration-fast)]"
         >
           Try again
         </button>

@@ -33,8 +33,8 @@ export const Sliders: React.FC<SlidersProps> = ({
         {/* WACC Control */}
         <div>
           <div className="flex justify-between items-center mb-2">
-            <span className="text-[length:var(--type-label)] font-semibold text-[var(--text-muted)]">Discount Rate (WACC)</span>
-            <span className="text-[length:var(--type-label)] font-black text-[var(--text-primary)]">{wacc.toFixed(1)}%</span>
+            <span className="text-[length:var(--type-small)] font-semibold text-[var(--text-muted)]">Discount Rate (WACC)</span>
+            <span className="text-[length:var(--type-small)] font-black text-[var(--text-primary)]">{wacc.toFixed(1)}%</span>
           </div>
           <input
             type="range"
@@ -43,15 +43,15 @@ export const Sliders: React.FC<SlidersProps> = ({
             step="0.5"
             value={wacc}
             onChange={(e) => setWacc(parseFloat(e.target.value))}
-            className="w-full accent-[var(--surface)] h-2 bg-[var(--surface-muted)] rounded-lg appearance-none cursor-pointer"
+            className="w-full accent-[var(--brand)] h-2 bg-[var(--surface-muted)] rounded-lg appearance-none cursor-pointer"
           />
         </div>
 
         {/* Operating Margin */}
         <div>
           <div className="flex justify-between items-center mb-2">
-            <span className="text-[length:var(--type-label)] font-semibold text-[var(--text-muted)]">Target Operating Margin</span>
-            <span className="text-[length:var(--type-label)] font-black text-[var(--text-primary)]">{margin.toFixed(1)}%</span>
+            <span className="text-[length:var(--type-small)] font-semibold text-[var(--text-muted)]">Target Operating Margin</span>
+            <span className="text-[length:var(--type-small)] font-black text-[var(--text-primary)]">{margin.toFixed(1)}%</span>
           </div>
           <input
             type="range"
@@ -60,15 +60,15 @@ export const Sliders: React.FC<SlidersProps> = ({
             step="1"
             value={margin}
             onChange={(e) => setMargin(parseFloat(e.target.value))}
-            className="w-full accent-[var(--surface)] h-2 bg-[var(--surface-muted)] rounded-lg appearance-none cursor-pointer"
+            className="w-full accent-[var(--brand)] h-2 bg-[var(--surface-muted)] rounded-lg appearance-none cursor-pointer"
           />
         </div>
 
         {/* Target Growth */}
         <div>
           <div className="flex justify-between items-center mb-2">
-            <span className="text-[length:var(--type-label)] font-semibold text-[var(--text-muted)]">Terminal Rev Growth</span>
-            <span className="text-[length:var(--type-label)] font-black text-[var(--text-primary)]">{growth.toFixed(1)}%</span>
+            <span className="text-[length:var(--type-small)] font-semibold text-[var(--text-muted)]">Terminal Rev Growth</span>
+            <span className="text-[length:var(--type-small)] font-black text-[var(--text-primary)]">{growth.toFixed(1)}%</span>
           </div>
           <input
             type="range"
@@ -77,7 +77,7 @@ export const Sliders: React.FC<SlidersProps> = ({
             step="1"
             value={growth}
             onChange={(e) => setGrowth(parseFloat(e.target.value))}
-            className="w-full accent-[var(--surface)] h-2 bg-[var(--surface-muted)] rounded-lg appearance-none cursor-pointer"
+            className="w-full accent-[var(--brand)] h-2 bg-[var(--surface-muted)] rounded-lg appearance-none cursor-pointer"
           />
         </div>
 

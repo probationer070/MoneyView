@@ -84,7 +84,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   if (!isBackendReady) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-[var(--bg-primary)] text-[var(--text-primary)]">
-        <Activity className="h-12 w-12 text-[var(--surface)] animate-bounce mb-4" />
+        <Activity className="h-12 w-12 text-[var(--brand)] animate-bounce mb-4" />
         <h2 className="text-xl font-bold tracking-tight">Starting Core Analytics...</h2>
         <p className="text-sm text-[var(--text-muted)] mt-2">Discovering dynamic port mapping & initiating connection.</p>
       </div>

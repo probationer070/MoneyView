@@ -101,7 +101,7 @@ export function AttributionWaterfall({ data, sectorBreakdowns = [] }: Attributio
           <button
             type="button"
             onClick={() => setIsDetailOpen(true)}
-            className="rounded-[var(--radius)] border border-[var(--border)] px-2 py-1 text-xs font-semibold text-[var(--text-muted)] transition hover:border-[var(--surface)] hover:text-[var(--text-primary)]"
+            className="rounded-[var(--radius)] border border-[var(--border)] px-2 py-1 text-xs font-semibold text-[var(--text-muted)] transition hover:border-[var(--brand)] hover:text-[var(--text-primary)]"
           >
             Details
           </button>

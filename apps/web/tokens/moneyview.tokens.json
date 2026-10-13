@@ -34,6 +34,10 @@
     "$type": "color",
     "$value": "#a7c7af"
   },
+  "brand": {
+    "$type": "color",
+    "$value": "#60caad"
+  },
   "text": {
     "primary": {
       "$type": "color",
@@ -79,10 +83,6 @@
     }
   },
   "surface": {
-    "_": {
-      "$type": "color",
-      "$value": "#60caad"
-    },
     "panel": {
       "$type": "color",
       "$value": "#FFFFFF"
@@ -93,30 +93,6 @@
     }
   },
   "chart": {
-    "1": {
-      "$type": "color",
-      "$value": "#39f1c0"
-    },
-    "2": {
-      "$type": "color",
-      "$value": "#60CAAD"
-    },
-    "3": {
-      "$type": "color",
-      "$value": "#B6CCBB"
-    },
-    "4": {
-      "$type": "color",
-      "$value": "#E0E4D6"
-    },
-    "5": {
-      "$type": "color",
-      "$value": "#9DA5A2"
-    },
-    "6": {
-      "$type": "color",
-      "$value": "#444444"
-    },
     "primary": {
       "$type": "color",
       "$value": "#39F1C0"
@@ -330,7 +306,7 @@
       "$type": "dimension",
       "$value": "20px"
     },
-    "label": {
+    "small": {
       "$type": "dimension",
       "$value": "13px"
     },

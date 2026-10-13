@@ -56,7 +56,7 @@ export function DcfSensitivityTable({
       </div>
       <div className="overflow-x-auto rounded-[var(--radius)] border border-[var(--border)]">
         <table className="w-full min-w-[42rem] table-fixed text-left text-sm">
-          <thead className="bg-[var(--surface)] text-[length:var(--type-table-header)] font-bold uppercase tracking-wide text-[var(--text-primary)]">
+          <thead className="bg-[var(--brand)] text-[length:var(--type-table-header)] font-bold uppercase tracking-wide text-[var(--text-primary)]">
             <tr>
               <th className="px-3 py-2">WACC \ Terminal g</th>
               {sensitivity.terminal_growth_values.map((growth) => (

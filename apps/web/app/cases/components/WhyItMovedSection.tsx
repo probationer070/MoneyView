@@ -44,7 +44,7 @@ export function WhyItMovedSection({ caseId }: { caseId: number }) {
                     <span className="tabular-nums">{fmtSigned(c.contribution)}</span>
                   </div>
                   {/* Diverging from the centre: left of centre is a negative contribution. */}
-                  <div className="relative mt-1 h-2 rounded bg-[var(--surface)]">
+                  <div className="relative mt-1 h-2 rounded bg-[var(--brand)]">
                     <div
                       className="absolute top-0 h-2 rounded"
                       style={{

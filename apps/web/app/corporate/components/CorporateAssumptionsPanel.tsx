@@ -80,14 +80,14 @@ export function CorporateAssumptionsPanel({
       <button
         type="button"
         onClick={() => setActiveCalculation("realtime")}
-        className="mb-4 text-left text-sm font-bold text-[var(--text-primary)] underline decoration-dotted underline-offset-4 hover:text-[var(--surface)]"
+        className="mb-4 text-left text-sm font-bold text-[var(--text-primary)] underline decoration-dotted underline-offset-4 hover:text-[var(--brand)]"
       >
         <InfoTooltip
           label="Realtime Assumptions"
           description="Yahoo Finance annual statements from fiscal years 2021+ are the primary source where available. WACC and debt ratio use the most recent statement data."
         />
       </button>
-      <div className="mb-4 grid grid-cols-1 gap-3 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface)] p-3 text-xs md:grid-cols-2 xl:grid-cols-1">
+      <div className="mb-4 grid grid-cols-1 gap-3 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--brand)] p-3 text-xs md:grid-cols-2 xl:grid-cols-1">
         <div className="flex flex-wrap items-center gap-2 md:col-span-2 xl:col-span-1">
           <button
             type="button"
@@ -167,7 +167,7 @@ export function CorporateAssumptionsPanel({
         <button
           type="button"
           onClick={() => setActiveCalculation("crp")}
-          className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface)] p-3 text-left transition hover:border-[var(--surface)]"
+          className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--brand)] p-3 text-left transition hover:border-[var(--brand)]"
         >
           <div className="text-xs font-bold text-[var(--text-primary)]">Country Risk Premium</div>
           <div className="mt-1 text-xl font-black text-[var(--text-primary)]">{pct(KOREA_COUNTRY_RISK_PREMIUM)}</div>

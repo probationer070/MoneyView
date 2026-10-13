@@ -126,7 +126,7 @@ export function ExportButton({
   if (!canExport) {
     return (
       <button
-        className="px-3 py-2 text-sm rounded-md border border-[var(--border)] text-[var(--text-muted)] bg-[var(--surface)]"
+        className="px-3 py-2 text-sm rounded-md border border-[var(--border)] text-[var(--text-muted)] bg-[var(--brand)]"
         disabled
       >
         Export Disabled
@@ -160,7 +160,7 @@ export function ExportButton({
       <button
         onClick={exportPdf}
         disabled={isLoading}
-        className="px-3 py-2 text-sm rounded-md border border-[var(--border)] bg-[var(--surface)] text-white hover:opacity-90"
+        className="px-3 py-2 text-sm rounded-md border border-[var(--border)] bg-[var(--brand)] text-white hover:opacity-90"
       >
         Print PDF
       </button>

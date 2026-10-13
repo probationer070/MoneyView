@@ -39,7 +39,7 @@ export function MonteCarloRunPanel({
   children,
 }: Props) {
   const progressBarClassName =
-    progressTone === "surface" ? "bg-[var(--surface)]" : "bg-[var(--accent)]";
+    progressTone === "surface" ? "bg-[var(--brand)]" : "bg-[var(--accent)]";
 
   return (
     <div className="space-y-6">

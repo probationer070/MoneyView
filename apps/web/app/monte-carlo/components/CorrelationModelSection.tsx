@@ -123,7 +123,7 @@ export function CorrelationModelSection({
               <div className="mt-3 overflow-hidden rounded-[var(--radius)] border border-[var(--border)]">
                 <table className="w-full table-fixed text-sm">
                   <thead>
-                    <tr className="bg-[var(--surface)] text-center">
+                    <tr className="bg-[var(--brand)] text-center">
                       <th className="p-3" />
                       {correlationInput.assets.map((asset) => (
                         <th key={`matrix-head-${asset.name}`} className="p-3 font-black text-[var(--text-primary)]">

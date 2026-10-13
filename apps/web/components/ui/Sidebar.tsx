@@ -61,7 +61,7 @@ export function Sidebar({
                 onClick={onClose}
                 className={clsx(
                   "flex items-center gap-3 rounded-[var(--radius)] px-3 py-2 font-bold text-black transition-colors",
-                  isActive ? "bg-[var(--surface)]" : "hover:bg-[var(--surface)]"
+                  isActive ? "bg-[var(--brand)]" : "hover:bg-[var(--brand)]"
                 )}
               >
                 <Icon className="h-5 w-5" />

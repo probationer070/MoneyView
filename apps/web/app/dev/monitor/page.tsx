@@ -107,7 +107,7 @@ function KpiCard({
   return (
     <Card className="min-h-[132px] bg-[linear-gradient(180deg,var(--bg-surface),var(--surface-muted))]">
       <div className="flex h-full flex-col justify-between gap-4">
-        <div className="text-[length:var(--type-label)] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
+        <div className="text-[length:var(--type-small)] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
           {label}
         </div>
         <div>

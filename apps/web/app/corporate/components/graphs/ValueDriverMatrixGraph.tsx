@@ -22,7 +22,7 @@ export function ValueDriverMatrixGraph({
         <button
           type="button"
           onClick={() => onOpenDetail("valueDriverMatrix")}
-          className="mt-1 text-left text-xs text-[var(--text-muted)] underline decoration-dotted underline-offset-4 hover:text-[var(--surface)]"
+          className="mt-1 text-left text-xs text-[var(--text-muted)] underline decoration-dotted underline-offset-4 hover:text-[var(--brand)]"
         >
           <InfoTooltip
             label="Open matrix interpretation details"

@@ -63,7 +63,7 @@ export function CorporateValuationSection({
   return (
     <MonteCarloRunPanel
       controls={(
-        <section className="grid grid-cols-1 gap-4 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface)] p-4 lg:grid-cols-5">
+        <section className="grid grid-cols-1 gap-4 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--brand)] p-4 lg:grid-cols-5">
           <label className="grid gap-1 text-xs font-bold text-[var(--text-primary)]">
             Ticker
             <input

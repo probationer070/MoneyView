@@ -431,7 +431,7 @@ function MarketDetailModal({ item, onClose }: { item: MarketIndexQuote; onClose:
             </div>
             <Link
               href={`/detail/${encodeURIComponent(item.ticker)}`}
-              className="inline-flex min-h-9 items-center justify-center rounded-[var(--radius-md)] border border-[var(--border-default)] px-[var(--space-4)] text-[length:var(--type-label)] font-medium text-[var(--text-primary)] transition-colors duration-[var(--duration-fast)] hover:bg-[var(--bg-subtle)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--state-info)] focus-visible:ring-offset-1"
+              className="inline-flex min-h-9 items-center justify-center rounded-[var(--radius-md)] border border-[var(--border-default)] px-[var(--space-4)] text-[length:var(--type-small)] font-medium text-[var(--text-primary)] transition-colors duration-[var(--duration-fast)] hover:bg-[var(--bg-subtle)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--state-info)] focus-visible:ring-offset-1"
             >
               View Full Detail
             </Link>

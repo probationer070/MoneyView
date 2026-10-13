@@ -22,7 +22,7 @@ export function BetaWaccCurveGraph({
       <button
         type="button"
         onClick={() => onOpenDetail("betaWaccCurve")}
-        className="text-left text-sm font-bold text-[var(--text-primary)] underline decoration-dotted underline-offset-4 hover:text-[var(--surface)]"
+        className="text-left text-sm font-bold text-[var(--text-primary)] underline decoration-dotted underline-offset-4 hover:text-[var(--brand)]"
       >
         <InfoTooltip
           label="Bottom-up Beta + WACC U-Curve"

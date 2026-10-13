@@ -22,7 +22,7 @@ export function HurdleRateDecompositionGraph({
         <button
           type="button"
           onClick={() => onOpenDetail("hurdleDecomposition")}
-          className="mt-1 text-left text-xs text-[var(--text-muted)] underline decoration-dotted underline-offset-4 hover:text-[var(--surface)]"
+          className="mt-1 text-left text-xs text-[var(--text-muted)] underline decoration-dotted underline-offset-4 hover:text-[var(--brand)]"
         >
           <InfoTooltip
             label="Open formula and regional breakdown details"
@@ -53,7 +53,7 @@ export function HurdleRateDecompositionGraph({
               else if (item.name === "Beta x Implied ERP") onOpenDetail("erp");
               else onOpenDetail("bottomUpKe");
             }}
-            className="flex items-center gap-2 text-left transition hover:text-[var(--surface)]"
+            className="flex items-center gap-2 text-left transition hover:text-[var(--brand)]"
           >
             <span className="h-2 w-2 rounded-full" style={{ backgroundColor: item.fill }} />
             {item.name}: {pct(item.value)}

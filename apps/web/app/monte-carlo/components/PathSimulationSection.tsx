@@ -95,7 +95,7 @@ export function PathSimulationSection({
       cancelledMessage="Simulation cancelled."
       controls={(
         <div className="flex flex-col gap-2 lg:flex-row">
-          <section className="grid grid-cols-2 gap-4 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface)] p-4 lg:grid-cols-4">
+          <section className="grid grid-cols-2 gap-4 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--brand)] p-4 lg:grid-cols-4">
             <NumericField label="Initial investment" value={input.initialInvestment} onChange={(value) => update("initialInvestment", value)} suffix="KRW" min={1_000_000} step={100_000} />
             <NumericField label="Expected annual return" value={input.expectedAnnualReturn} onChange={(value) => update("expectedAnnualReturn", value)} suffix="%" step={0.5} />
             <NumericField label="Annual volatility (sigma)" value={input.annualVolatility} onChange={(value) => update("annualVolatility", value)} suffix="%" step={0.5} />
@@ -120,7 +120,7 @@ export function PathSimulationSection({
                 type="button"
                 onClick={() => void runPathSimulation()}
                 disabled={status === "loading"}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-[var(--radius)] bg-[var(--surface)] px-5 py-3 text-sm font-black text-white disabled:opacity-60"
+                className="inline-flex w-full items-center justify-center gap-2 rounded-[var(--radius)] bg-[var(--brand)] px-5 py-3 text-sm font-black text-white disabled:opacity-60"
               >
                 {status === "loading" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
                 Run Path Simulation

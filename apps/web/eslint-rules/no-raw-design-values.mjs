@@ -1,3 +1,7 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
 /**
  * Design values must come from tokens (apps/web/tokens/moneyview.tokens.json).
  *
@@ -5,6 +9,27 @@
  * raw as one in className. Shadow and radius checks run only in class contexts, because
  * "rounded" and "shadow" are ordinary English words in UI copy.
  */
+const DEFAULT_TOKENS_CSS = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../app/tokens.generated.css");
+// Custom properties that legitimately live outside the token file: next/font families,
+// Tailwind internals, and AppShell's locally scoped padding.
+const LOCAL_VAR = /^--(?:font-|tw-|main-pad-)/;
+const VAR_REF = /var\((--[\w-]+)/g;
+const tokenCache = new Map();
+
+/** Names defined in the generated token CSS. An undefined var() renders as nothing, silently. */
+function tokenVars(file) {
+  if (!tokenCache.has(file)) {
+    const known = new Set();
+    const deprecated = new Set();
+    for (const m of readFileSync(file, "utf8").matchAll(/^\s*(--[\w-]+)\s*:[^;]*;(\s*\/\* deprecated)?/gm)) {
+      known.add(m[1]);
+      if (m[2]) deprecated.add(m[1]);
+    }
+    tokenCache.set(file, { known, deprecated });
+  }
+  return tokenCache.get(file);
+}
+
 const PALETTE = "slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose|black|white";
 const START = String.raw`(?:^|[\s"'\x60:])`;
 const END = String.raw`(?=$|[\s"'\x60])`;
@@ -51,13 +76,19 @@ const rule = {
       rawShadow: "Tailwind shadow. MoneyView has no shadows: use border border-[var(--line)].",
       rawRadius: "Tailwind radius. Use rounded-[var(--radius-1|2)], no class for square, or rounded-full for dots.",
       numericFontSize: "Numeric font size. Use tokens.type.<style>._ from lib/tokens.generated.ts.",
+      unknownVar: "{{name}} is not defined in app/tokens.generated.css; an undefined var() renders as nothing.",
     },
   },
   create(context) {
+    const vars = tokenVars(context.settings?.moneyview?.tokensCss ?? DEFAULT_TOKENS_CSS);
     const check = (node, text) => {
       for (const [messageId, re] of EVERYWHERE) if (re.test(text)) context.report({ node, messageId });
       if (inClassContext(node)) {
         for (const [messageId, re] of CLASS_ONLY) if (re.test(text)) context.report({ node, messageId });
+      }
+      for (const [, name] of text.matchAll(VAR_REF)) {
+        if (LOCAL_VAR.test(name)) continue;
+        if (!vars.known.has(name)) context.report({ node, messageId: "unknownVar", data: { name } });
       }
     };
     return {

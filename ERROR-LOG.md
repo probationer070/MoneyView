@@ -26,6 +26,20 @@ reveal that; only checking the code did.
 
 An entry states what was true when it was written. Nothing updates it on its own.
 
+## 2026-10-13: chart hover cursor filled with an undefined variable
+
+Date: 2026-10-13
+Command: `npm run design:baseline` (unknownVar check, Task 3 of the design-system plan)
+Failure: `lib/chartConfig.ts` gave the Recharts tooltip cursor `fill: "var(--bg-muted)"`. No
+`--bg-muted` was ever defined, so the fill was invalid at computed-value time and the cursor
+fell back to whatever the SVG inherited. No error, no warning.
+Root cause: a token name typed from memory; nothing compared `var(--x)` references with the
+defined set.
+Fix: `var(--surface-muted)`, the muted ground the cursor was meant to use.
+Files changed: apps/web/lib/chartConfig.ts, apps/web/eslint-rules/no-raw-design-values.mjs
+Prevention: the lint rule's `unknownVar` check reports any `var(--x)` that
+app/tokens.generated.css does not define (Task 14 makes it an error).
+
 ## 2026-09-29: a 404 on the backend-port lookup failed the whole boot
 
 Date: 2026-09-29

@@ -8,6 +8,7 @@
   --bg-elevated: #FFFFFF;
   --bg-sidebar: #E0E4D6;
   --accent: #a7c7af;
+  --brand: #60caad;
   --text-primary: #444444;
   --text-muted: #9DA5A2;
   --text-secondary: #6B7370;
@@ -18,15 +19,8 @@
   --border-soft: #E0E4D6;
   --border-strong: #9DA5A2;
   --border-accent: #60CAAD;
-  --surface: #60caad;
   --surface-panel: #FFFFFF;
   --surface-muted: #F3F5EF;
-  --chart-1: #39f1c0;
-  --chart-2: #60CAAD;
-  --chart-3: #B6CCBB;
-  --chart-4: #E0E4D6;
-  --chart-5: #9DA5A2;
-  --chart-6: #444444;
   --chart-primary: #39F1C0;
   --chart-secondary: #60CAAD;
   --chart-tertiary: #B6CCBB;
@@ -78,7 +72,7 @@
   --type-card-title: 15px;
   --type-metric-lg: 28px;
   --type-metric-md: 20px;
-  --type-label: 13px;
+  --type-small: 13px;
   --type-body: 14px;
   --type-table-header: 12px;
   --type-table-body: 13px;

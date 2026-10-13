@@ -6,7 +6,7 @@ export function CaseTable({ cases, all }: { cases: CaseSummary[]; all: CaseSumma
   return (
     <div className="overflow-x-auto rounded-[var(--radius)] border border-[var(--border)]">
       <table className="w-full min-w-[40rem] text-left text-sm">
-        <thead className="bg-[var(--surface)] text-xs font-bold uppercase tracking-wide text-[var(--text-primary)]">
+        <thead className="bg-[var(--brand)] text-xs font-bold uppercase tracking-wide text-[var(--text-primary)]">
           <tr>
             <th className="px-3 py-2">Case</th>
             <th className="px-3 py-2">Ticker</th>

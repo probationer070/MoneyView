@@ -10,6 +10,7 @@ export const tokens = {
     "sidebar": "#E0E4D6"
   },
   "accent": "#a7c7af",
+  "brand": "#60caad",
   "text": {
     "primary": "#444444",
     "muted": "#9DA5A2",
@@ -25,17 +26,10 @@ export const tokens = {
     "accent": "#60CAAD"
   },
   "surface": {
-    "_": "#60caad",
     "panel": "#FFFFFF",
     "muted": "#F3F5EF"
   },
   "chart": {
-    "1": "#39f1c0",
-    "2": "#60CAAD",
-    "3": "#B6CCBB",
-    "4": "#E0E4D6",
-    "5": "#9DA5A2",
-    "6": "#444444",
     "primary": "#39F1C0",
     "secondary": "#60CAAD",
     "tertiary": "#B6CCBB",
@@ -103,7 +97,7 @@ export const tokens = {
     "card-title": "15px",
     "metric-lg": "28px",
     "metric-md": "20px",
-    "label": "13px",
+    "small": "13px",
     "body": "14px",
     "table-header": "12px",
     "table-body": "13px",

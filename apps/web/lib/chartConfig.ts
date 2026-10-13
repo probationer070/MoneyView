@@ -60,7 +60,7 @@ export const TOOLTIP_ITEM_STYLE = {
 } as const;
 
 export const TOOLTIP_CURSOR_STYLE = {
-  fill: "var(--bg-muted)",
+  fill: "var(--surface-muted)",
   opacity: 0.5,
 } as const;
 

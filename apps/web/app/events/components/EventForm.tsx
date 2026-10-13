@@ -84,7 +84,7 @@ export function EventForm({ categories, editing, onDone }: { categories: EventCa
         </label>
         <div className="flex items-center gap-2 sm:col-span-2">
           <button type="submit" disabled={create.isPending || update.isPending}
-            className="rounded-[var(--radius-sm)] bg-[var(--surface)] px-3 py-1 text-sm font-bold text-black disabled:opacity-50">
+            className="rounded-[var(--radius-sm)] bg-[var(--brand)] px-3 py-1 text-sm font-bold text-black disabled:opacity-50">
             {editing ? "Save changes" : "Add event"}
           </button>
           {editing ? (

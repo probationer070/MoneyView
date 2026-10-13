@@ -47,7 +47,7 @@ is deferred on data (see its entry).
 
 ### Track D: Design system (paper redesign)
 Plan: `docs/superpowers/plans/2026-10-12-design-system-formalization.md`.
-- [x] D1 drift rule + baseline + redesign copy  - [ ] D2 token source (1:1)  - [ ] D3 rename collisions
+- [x] D1 drift rule + baseline + redesign copy  - [ ] D2 token source (1:1)  - [x] D3 rename collisions (`unknownVar` check; chart cursor fixed, ERROR-LOG 2026-10-13)
 - [ ] D4 fonts  - [ ] D5 paper switch  - [ ] D6 formatNumber  - [ ] D7 i18n + bilingual labels
 - [ ] D8 component layer  - [ ] D9 shared UI/charts  - [ ] D10 portfolio  - [ ] D11 corporate/valuation/cases/decisions
 - [ ] D12 monte-carlo  - [ ] D13 market/detail/news/events/dev/signals  - [ ] D14 lock-down

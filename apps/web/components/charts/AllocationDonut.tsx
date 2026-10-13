@@ -11,12 +11,12 @@ interface AllocationDonutProps {
 }
 
 const COLORS = [
-  "var(--chart-1)",
-  "var(--chart-2)",
-  "var(--chart-3)",
-  "var(--chart-4)",
-  "var(--chart-5)",
-  "var(--chart-6)",
+  "var(--chart-primary)",
+  "var(--chart-secondary)",
+  "var(--chart-tertiary)",
+  "var(--chart-muted)",
+  "var(--chart-label)",
+  "var(--chart-ink)",
 ];
 export function AllocationDonut({ data }: AllocationDonutProps) {
   const safeData = data.filter((d) => Number.isFinite(d.value) && d.value > 0);

@@ -1,0 +1,8 @@
+:root {
+  --bg-surface: #ffffff;
+  --chart-grid: #f0f2ec;
+  --radius-sm: 4px;
+  --shadow-modal: 0 4px 24px rgba(0, 0, 0, 0.08);
+  --type-caption: 11px;
+  --fixture-only: #000000;
+}

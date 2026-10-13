@@ -1,4 +1,5 @@
 import { describe, it } from "node:test";
+import { fileURLToPath } from "node:url";
 import { RuleTester } from "eslint";
 import rule from "./no-raw-design-values.mjs";
 
@@ -8,6 +9,7 @@ RuleTester.itOnly = it.only;
 
 const tester = new RuleTester({
   languageOptions: { ecmaVersion: 2022, sourceType: "module", parserOptions: { ecmaFeatures: { jsx: true } } },
+  settings: { moneyview: { tokensCss: fileURLToPath(new URL("./__fixtures__/tokens.css", import.meta.url)) } },
 });
 
 tester.run("no-raw-design-values", rule, {
@@ -20,8 +22,18 @@ tester.run("no-raw-design-values", rule, {
     'const a = "Issue #123";',
     'const a = "/x#add-form";',
     'const a = "see #bad idea";',
+    'const a = <main className="pt-[var(--main-pad-top)] [--main-pad-top:5rem]" />;',
+    'const f = "var(--font-pretendard)";',
+    'const s = { stroke: "var(--fixture-only)" };',
+    'const t = "var(--tw-ring-offset-width)";',
+    'const s = { fill: "var(--bg-surface, var(--fixture-only))" };',
   ],
   invalid: [
+    { code: 'const s = { fill: "var(--bg-muted)" };', errors: [{ messageId: "unknownVar" }] },
+    { code: 'const a = <div className="bg-[var(--surface)]" />;', errors: [{ messageId: "unknownVar" }] },
+    { code: 'const s = { fill: "var(--bg-muted, 4px)" };', errors: [{ messageId: "unknownVar" }] },
+    { code: 'const s = { fill: "var(--fixture-only, var(--chart-old))" };', errors: [{ messageId: "unknownVar" }] },
+    { code: 'const s = { fill: "var(--bg-muted, var(--chart-old))" };', errors: [{ messageId: "unknownVar" }, { messageId: "unknownVar" }] },
     { code: 'const a = <div className="bg-amber-50" />;', errors: [{ messageId: "paletteClass" }] },
     { code: 'const TONE = { error: "text-red-600" };', errors: [{ messageId: "paletteClass" }] },
     { code: 'const a = <div className="hover:text-white/85" />;', errors: [{ messageId: "paletteClass" }] },
@@ -41,4 +53,14 @@ tester.run("no-raw-design-values", rule, {
     { code: 'const c = `rgba(0, 0, 0, ${a})`;', errors: [{ messageId: "colorFn" }] },
     { code: 'const s = { fontSize: 11 };', errors: [{ messageId: "numericFontSize" }] },
   ],
+});
+
+// Without the setting, the rule reads the generated token CSS: the real names pass and the real bug is caught.
+const liveTester = new RuleTester({
+  languageOptions: { ecmaVersion: 2022, sourceType: "module", parserOptions: { ecmaFeatures: { jsx: true } } },
+});
+
+liveTester.run("no-raw-design-values (default token file)", rule, {
+  valid: ['const s = { fill: "var(--bg-surface)" };'],
+  invalid: [{ code: 'const s = { fill: "var(--bg-muted)" };', errors: [{ messageId: "unknownVar" }] }],
 });

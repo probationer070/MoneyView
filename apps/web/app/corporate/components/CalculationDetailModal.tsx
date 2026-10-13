@@ -122,7 +122,7 @@ function DenseRowsTable({ columns, rows, emptyTitle, emptyDescription }: Omit<Da
   return (
     <div className="overflow-x-auto rounded-[var(--radius)] border border-[var(--border)]">
       <table className="w-full min-w-[42rem] table-fixed text-left text-sm">
-        <thead className="bg-[var(--surface)] text-[length:var(--type-table-header)] font-bold uppercase tracking-wide text-[var(--text-primary)]">
+        <thead className="bg-[var(--brand)] text-[length:var(--type-table-header)] font-bold uppercase tracking-wide text-[var(--text-primary)]">
           <tr>
             {columns.map((column) => (
               <th key={column} className="px-3 py-2">
@@ -438,7 +438,7 @@ export function CalculationDetailModal({
                 <>
                   <div className="overflow-x-auto rounded-[var(--radius)] border border-[var(--border)]">
                     <table className="w-full min-w-[42rem] table-fixed text-left text-sm">
-                      <thead className="bg-[var(--surface)] text-[length:var(--type-table-header)] font-bold uppercase tracking-wide text-[var(--text-primary)]">
+                      <thead className="bg-[var(--brand)] text-[length:var(--type-table-header)] font-bold uppercase tracking-wide text-[var(--text-primary)]">
                         <tr>
                           <th className="px-3 py-2">Year</th>
                           <th className="px-3 py-2">Projected FCFF</th>
@@ -460,7 +460,7 @@ export function CalculationDetailModal({
                   </div>
                   <div className="overflow-x-auto rounded-[var(--radius)] border border-[var(--border)]">
                     <table className="w-full min-w-[42rem] table-fixed text-left text-sm">
-                      <thead className="bg-[var(--surface)] text-[length:var(--type-table-header)] font-bold uppercase tracking-wide text-[var(--text-primary)]">
+                      <thead className="bg-[var(--brand)] text-[length:var(--type-table-header)] font-bold uppercase tracking-wide text-[var(--text-primary)]">
                         <tr>
                           <th className="px-3 py-2">Breakdown</th>
                           <th className="px-3 py-2">Value</th>
@@ -520,7 +520,7 @@ export function CalculationDetailModal({
           {rawDatasetRows.length > 0 ? (
             <div className="max-h-80 overflow-auto rounded-[var(--radius)] border border-[var(--border)]">
               <table className="w-full min-w-[52rem] table-fixed text-left text-sm">
-                <thead className="sticky top-0 bg-[var(--surface)] text-[length:var(--type-table-header)] font-bold uppercase tracking-wide text-[var(--text-primary)]">
+                <thead className="sticky top-0 bg-[var(--brand)] text-[length:var(--type-table-header)] font-bold uppercase tracking-wide text-[var(--text-primary)]">
                   <tr>
                     <th className="px-3 py-2">Dataset</th>
                     <th className="px-3 py-2">Field</th>
@@ -568,7 +568,7 @@ export function CalculationDetailModal({
           ) : historicalPrices.length > 0 ? (
             <div className="max-h-80 overflow-auto rounded-[var(--radius)] border border-[var(--border)]">
               <table className="w-full min-w-[48rem] table-fixed text-left text-sm">
-                <thead className="sticky top-0 bg-[var(--surface)] text-[length:var(--type-table-header)] font-bold uppercase tracking-wide text-[var(--text-primary)]">
+                <thead className="sticky top-0 bg-[var(--brand)] text-[length:var(--type-table-header)] font-bold uppercase tracking-wide text-[var(--text-primary)]">
                   <tr>
                     <th className="px-3 py-2">Date</th>
                     <th className="px-3 py-2">Open</th>
@@ -620,7 +620,7 @@ export function CalculationDetailModal({
           ) : quarterlyStatementRows.length > 0 ? (
             <div className="max-h-96 overflow-auto rounded-[var(--radius)] border border-[var(--border)]">
               <table className="w-full min-w-[56rem] table-fixed text-left text-sm">
-                <thead className="sticky top-0 bg-[var(--surface)] text-[length:var(--type-table-header)] font-bold uppercase tracking-wide text-[var(--text-primary)]">
+                <thead className="sticky top-0 bg-[var(--brand)] text-[length:var(--type-table-header)] font-bold uppercase tracking-wide text-[var(--text-primary)]">
                   <tr>
                     <th className="px-3 py-2">Statement</th>
                     <th className="px-3 py-2">Quarter</th>

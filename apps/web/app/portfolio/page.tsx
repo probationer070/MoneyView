@@ -2277,7 +2277,7 @@ export default function PortfolioPage() {
                 <button
                   type="button"
                   onClick={handleRefreshPortfolioAnalysis}
-                  className="inline-flex items-center justify-center gap-2 rounded-[var(--radius)] border border-[var(--border)] px-3 py-2 text-xs font-semibold text-[var(--text-primary)] hover:border-[var(--surface)]"
+                  className="inline-flex items-center justify-center gap-2 rounded-[var(--radius)] border border-[var(--border)] px-3 py-2 text-xs font-semibold text-[var(--text-primary)] hover:border-[var(--brand)]"
                 >
                   <RefreshCw className={`h-3.5 w-3.5 ${portfolioComparisonCalculating ? "animate-spin" : ""}`} />
                   Refresh Analysis
@@ -2285,7 +2285,7 @@ export default function PortfolioPage() {
                 <button
                   type="button"
                   onClick={() => void handleRefreshPortfolioSnapshot()}
-                  className="inline-flex items-center justify-center rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs font-semibold text-[var(--text-primary)] hover:border-[var(--surface)]"
+                  className="inline-flex items-center justify-center rounded-[var(--radius)] border border-[var(--border)] bg-[var(--brand)] px-3 py-2 text-xs font-semibold text-[var(--text-primary)] hover:border-[var(--brand)]"
                 >
                   Save Current As Snapshot
                 </button>

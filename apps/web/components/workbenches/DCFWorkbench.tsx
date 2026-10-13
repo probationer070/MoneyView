@@ -164,7 +164,7 @@ export const DCFWorkbench: React.FC<DCFWorkbenchProps> = ({ ticker }) => {
         {isFetching && (
           <div className="absolute inset-0 bg-[var(--bg-surface)]/90 backdrop-blur-sm z-10 p-6 flex flex-col justify-center rounded-[var(--radius)]">
             <div className="flex space-x-3 mb-6 items-center">
-              <div className="h-4 w-4 bg-[var(--surface)] rounded-full animate-bounce"></div>
+              <div className="h-4 w-4 bg-[var(--brand)] rounded-full animate-bounce"></div>
               <div className="h-4 w-48 bg-gray-200 rounded animate-pulse"></div>
             </div>
             <div className="grid grid-cols-2 gap-4 flex-1">
@@ -206,7 +206,7 @@ export const DCFWorkbench: React.FC<DCFWorkbenchProps> = ({ ticker }) => {
               </div>
               <div className="bg-[var(--bg-subtle)] border border-gray-100 rounded-lg p-4">
                 <span className="text-xs text-[var(--text-muted)] font-semibold uppercase tracking-wider">Market Dislocation</span>
-                <div className={`text-3xl font-black mt-1 tabular-nums ${bridgedUpsidePct(displayData) === null ? "text-[var(--text-muted)]" : displayData.upside_pct >= 0 ? "text-[var(--surface)]" : "text-[var(--delta-down)]"}`}>
+                <div className={`text-3xl font-black mt-1 tabular-nums ${bridgedUpsidePct(displayData) === null ? "text-[var(--text-muted)]" : displayData.upside_pct >= 0 ? "text-[var(--brand)]" : "text-[var(--delta-down)]"}`}>
                   {bridgedUpsidePct(displayData) === null
                     ? UNBRIDGED_PLACEHOLDER
                     : `${displayData.upside_pct > 0 ? "+" : ""}${Number.isFinite(displayData.upside_pct) ? displayData.upside_pct.toFixed(1) : "0.0"}%`}

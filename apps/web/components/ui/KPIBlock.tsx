@@ -42,7 +42,7 @@ export function KPIBlock({
       tabIndex={onClick ? 0 : undefined}
       onKeyDown={onClick ? (e) => { if (e.key === "Enter" || e.key === " ") onClick(); } : undefined}
     >
-      <span className="text-[length:var(--type-label)] font-medium text-[var(--text-muted)] leading-tight tracking-wide">
+      <span className="text-[length:var(--type-small)] font-medium text-[var(--text-muted)] leading-tight tracking-wide">
         {label}
       </span>
 

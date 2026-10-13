@@ -148,9 +148,9 @@ export function TickerSearch({
               role="option"
               aria-selected={item.ticker === selectedTicker}
               onClick={() => commit(item.ticker)}
-              className={`block w-full rounded px-3 py-2 text-left text-sm transition hover:bg-[var(--surface)] ${
+              className={`block w-full rounded px-3 py-2 text-left text-sm transition hover:bg-[var(--brand)] ${
                 item.ticker === selectedTicker
-                  ? "bg-[var(--surface)] font-bold text-[var(--text-primary)]"
+                  ? "bg-[var(--brand)] font-bold text-[var(--text-primary)]"
                   : "text-[var(--text-muted)]"
               }`}
             >
