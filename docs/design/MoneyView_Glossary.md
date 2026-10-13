@@ -51,3 +51,16 @@ capitals: "종목 NAME". Both come from `apps/web/lib/i18n/labels.ts`; add the r
 | Input | 입력 | label (audit table header) |
 | Value | 값 | label (audit table header) |
 | Source | 출처 | label (audit table header) |
+| Ticker | 종목 코드 | label (portfolio table header) |
+| Sector | 섹터 | label (portfolio table header) |
+| Current Price | 현재가 | label (portfolio table header; the price label is Price) |
+| Trend | 추세 | label (portfolio table header) |
+| Volatility | 변동성 | label (portfolio table header) |
+| Weight | 비중 | label (portfolio table header) |
+| Action | 작업 | label (portfolio table header) |
+| ROIC - WACC | 투하자본이익률 - WACC | label (table header; ROIC expanded as in the ROIC row, Korean half needs Hangul) |
+| Allocation | 배분 | label (allocation table header) |
+| Adjust | 조정 | label (allocation table header) |
+| Invested Amount | 투자 금액 | label (allocation table header) |
+| Projected Net Value | 예상 순가치 | label (allocation table header) |
+| Final Profit | 최종 손익 | label (allocation table header) |

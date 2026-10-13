@@ -1,5 +1,8 @@
 "use client";
 
+import { BilingualLabel } from "@/components/ui/BilingualLabel";
+import { formatNumber } from "@/lib/format";
+import { useT } from "@/lib/i18n/locale";
 import { type FormEvent, type KeyboardEvent as ReactKeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Camera, ChevronDown, ChevronRight, PieChart, RefreshCw, SlidersHorizontal, Table as TableIcon, Trash2 } from "lucide-react";
@@ -56,10 +59,10 @@ import { MetricQualityBadge } from "@/components/ui/MetricQualityBadge";
 
 function ModalLoadingOverlay({ label }: { label: string }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="status" aria-live="polite">
-      <div className="w-full max-w-xl rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-5 shadow-2xl">
-        <div className="text-sm font-semibold text-[var(--text-primary)]">{label}</div>
-        <div className="mt-4 h-24 animate-pulse rounded bg-[var(--surface-muted)]" />
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--overlay-scrim)] p-4" role="status" aria-live="polite">
+      <div className="w-full max-w-xl border border-[var(--line)] bg-[var(--surface-raised)] p-5">
+        <div className="type-body text-[var(--ink)]">{label}</div>
+        <div className="mt-4 h-24 animate-pulse bg-[var(--surface)]" />
       </div>
     </div>
   );
@@ -349,10 +352,10 @@ const UNFOLLOWED_GROUP = "total";
 const WEIGHT_SUM_TOLERANCE = 1e-6;
 export const MOVING_AVERAGE_WINDOWS = [5, 20, 60, 120] as const;
 export const MOVING_AVERAGE_COLORS: Record<(typeof MOVING_AVERAGE_WINDOWS)[number], string> = {
-  5: "#F97316",
-  20: "#10B981",
-  60: "#3B82F6",
-  120: "#111827",
+  5: tokens.chart["1"],
+  20: tokens.chart["2"],
+  60: tokens.chart["3"],
+  120: tokens.chart["4"],
 };
 
 // Loading placeholders keep the attribution dashboard stable while API requests resolve.
@@ -375,19 +378,19 @@ function WatchlistSkeletonGrid() {
       {Array.from({ length: 4 }).map((_, idx) => (
         <div
           key={`watchlist-skeleton-${idx}`}
-          className="bg-[var(--bg-surface)] rounded-[var(--radius)] border border-[var(--border)] p-4 animate-pulse"
+          className="bg-[var(--surface-raised)] border border-[var(--line)] p-4 animate-pulse"
         >
           <div className="flex justify-between items-start mb-3">
             <div className="space-y-2">
-              <div className="h-4 w-24 bg-gray-200 rounded" />
-              <div className="h-3 w-14 bg-gray-200 rounded" />
+              <div className="h-4 w-24 bg-[var(--surface)]" />
+              <div className="h-3 w-14 bg-[var(--surface)]" />
             </div>
             <div className="space-y-2">
-              <div className="h-4 w-14 bg-gray-200 rounded" />
-              <div className="h-5 w-12 bg-gray-200 rounded" />
+              <div className="h-4 w-14 bg-[var(--surface)]" />
+              <div className="h-5 w-12 bg-[var(--surface)]" />
             </div>
           </div>
-          <div className="h-8 w-full bg-[var(--bg-subtle)] rounded" />
+          <div className="h-8 w-full bg-[var(--surface)]" />
         </div>
       ))}
     </section>
@@ -404,10 +407,10 @@ export function StatusPanel({ title, message, tone = "neutral" }: { title: strin
 function StockIdentity({ stock }: { stock: PortfolioStock }) {
   return (
     <div>
-      <h3 className="font-bold text-[var(--text-primary)] group-hover:text-[var(--accent)] transition-colors">
+      <h3 className="type-panel-title text-[var(--ink)] group-hover:text-[var(--brand-text)] transition-colors">
         {stock.name || stock.ticker}
       </h3>
-      <p className="text-xs font-light tracking-wide text-[var(--text-muted)]">{stock.ticker}</p>
+      <p className="type-small text-[var(--ink-muted)]">{stock.ticker}</p>
     </div>
   );
 }
@@ -423,7 +426,7 @@ function MetricCell({ metric, toneClass }: { metric: PortfolioTickerMetrics["roi
         <MetricQualityBadge quality={metric.quality} />
       </div>
       {subtitle ? (
-        <div className="max-w-[12rem] text-right text-[11px] leading-tight text-[var(--text-muted)]">
+        <div className="max-w-[12rem] text-right type-caption text-[var(--ink-muted)]">
           {subtitle}
         </div>
       ) : null}
@@ -485,49 +488,49 @@ function HoldingsTable({
   deletingTicker?: string | null;
 }) {
   return (
-    <section className="overflow-x-auto rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-panel)]">
-      <div className="border-b border-[var(--border)] bg-[var(--surface-muted)] px-4 py-2 text-xs text-[var(--text-muted)] sm:hidden">
+    <section className="overflow-x-auto border border-[var(--line)] bg-[var(--surface-raised)]">
+      <div className="border-b border-[var(--line)] bg-[var(--surface)] px-4 py-2 type-small text-[var(--ink-muted)] sm:hidden">
         Mobile view keeps the core comparison columns visible first. Open a stock row for the full detail workflow.
       </div>
-      <table className="min-w-[760px] w-full text-sm lg:min-w-[1120px]">
-        <thead className="sticky top-0 z-10 bg-[var(--surface-muted)] text-left text-[var(--text-muted)]">
+      <table className="min-w-[760px] w-full type-body lg:min-w-[1120px]">
+        <thead className="sticky top-0 z-10 bg-[var(--surface)] text-left text-[var(--ink-muted)]">
           <tr>
-            <th className="px-4 py-3 font-semibold">Ticker</th>
-            <th className="hidden px-4 py-3 font-semibold lg:table-cell">Sector</th>
-            <th className="px-4 py-3 text-right font-semibold">Current Price</th>
-            <th className="hidden px-4 py-3 text-right font-semibold md:table-cell">Trend</th>
-            <th className="px-4 py-3 text-right font-semibold">ROIC - WACC</th>
-            <th className="px-4 py-3 text-right font-semibold">DCF value vs price (one-off gap)</th>
-            <th className="px-4 py-3 text-right font-semibold">Implied return vs WACC (pts per year)</th>
-            <th className="hidden px-4 py-3 text-right font-semibold md:table-cell">Volatility</th>
-            <th className="hidden px-4 py-3 text-right font-semibold lg:table-cell">Weight</th>
-            <th className="hidden px-4 py-3 text-right font-semibold xl:table-cell">Change</th>
-            <th className="hidden px-4 py-3 text-right font-semibold xl:table-cell">Action</th>
+            <th className="px-4 py-3 type-caption"><BilingualLabel k="ticker" /></th>
+            <th className="hidden px-4 py-3 lg:table-cell type-caption"><BilingualLabel k="sector" /></th>
+            <th className="px-4 py-3 text-right type-caption"><BilingualLabel k="currentPrice" /></th>
+            <th className="hidden px-4 py-3 text-right md:table-cell type-caption"><BilingualLabel k="trend" /></th>
+            <th className="px-4 py-3 text-right type-caption"><BilingualLabel k="roicWacc" /></th>
+            <th className="px-4 py-3 text-right type-caption">DCF value vs price (one-off gap)</th>
+            <th className="px-4 py-3 text-right type-caption">Implied return vs WACC (pts per year)</th>
+            <th className="hidden px-4 py-3 text-right md:table-cell type-caption"><BilingualLabel k="volatility" /></th>
+            <th className="hidden px-4 py-3 text-right lg:table-cell type-caption"><BilingualLabel k="weight" /></th>
+            <th className="hidden px-4 py-3 text-right xl:table-cell type-caption"><BilingualLabel k="change" /></th>
+            <th className="hidden px-4 py-3 text-right xl:table-cell type-caption"><BilingualLabel k="action" /></th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-[var(--border)]/60">
+        <tbody className="divide-y divide-[var(--grid)]">
           {watchlist.map((stock) => {
             const deltaPct = stock.delta?.delta_pct ?? 0;
             const metrics = comparisonMetricsByTicker[stock.ticker] ?? EMPTY_COMPARISON_METRICS;
             return (
               <tr
                 key={stock.ticker}
-                className="cursor-pointer hover:bg-[var(--surface-muted)]/50"
+                className="cursor-pointer hover:bg-[var(--surface)]"
                 onClick={() => onSelect(stock)}
               >
                 <td className="px-4 py-3">
-                  <div className="font-bold text-[var(--text-primary)]">{stock.ticker}</div>
-                  <div className="text-xs font-light tracking-wide text-[var(--text-muted)]">{stock.name || stock.ticker}</div>
-                  <div className="mt-1 text-[length:var(--type-caption)] text-[var(--text-muted)] lg:hidden">{sectorLabel(stock.sector)}</div>
+                  <div className="font-bold text-[var(--ink)]">{stock.ticker}</div>
+                  <div className="type-small text-[var(--ink-muted)]">{stock.name || stock.ticker}</div>
+                  <div className="mt-1 type-caption text-[var(--ink-muted)] lg:hidden">{sectorLabel(stock.sector)}</div>
                 </td>
-                <td className="hidden px-4 py-3 text-[var(--text-muted)] lg:table-cell">{sectorLabel(stock.sector)}</td>
+                <td className="hidden px-4 py-3 text-[var(--ink-muted)] lg:table-cell">{sectorLabel(stock.sector)}</td>
                 <td className="px-4 py-3 text-right tabular-nums">{formatCurrencyCompact(metrics.currentPrice ?? stock.last_close)}</td>
                 <td className="hidden px-4 py-3 md:table-cell">
                   <div className="ml-auto w-24">
                     <Sparkline
                       data={stock.sparkline}
                       height={24}
-                      color={deltaPct >= 0 ? "var(--delta-up)" : "var(--delta-down)"}
+                      color={deltaPct >= 0 ? "var(--up)" : "var(--down)"}
                     />
                   </div>
                 </td>
@@ -557,7 +560,7 @@ function HoldingsTable({
                       onDelete(stock);
                     }}
                     disabled={deletingTicker === stock.ticker}
-                    className="inline-flex items-center gap-1 rounded-[var(--radius)] border border-[var(--border)] px-3 py-1 text-xs font-semibold text-[var(--text-muted)] hover:text-[var(--delta-down)] disabled:opacity-50"
+                    className="inline-flex items-center gap-1 rounded-[var(--radius-1)] border border-[var(--line)] px-3 py-1 type-small text-[var(--ink-muted)] hover:text-[var(--down)] disabled:opacity-50"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                     {deletingTicker === stock.ticker ? "Removing" : "Remove"}
@@ -587,7 +590,7 @@ function portfolioStatus(label: string, value: number) {
 }
 
 function formatWeightPercent(weight: number) {
-  return `${(weight * 100).toFixed(1)}%`;
+  return formatNumber(weight, "percent", { digits: 1 });
 }
 
 export function isMetricOutlier(value: number | null | undefined) {
@@ -596,12 +599,12 @@ export function isMetricOutlier(value: number | null | undefined) {
 
 export function formatMetricPercent(value: number | null | undefined) {
   if (isMetricOutlier(value)) return "N/A";
-  return `${Number(value).toFixed(2)}%`;
+  return formatNumber(Number(value) / 100, "percent", { digits: 2 });
 }
 
 export function formatCurrencyCompact(value: number | null | undefined) {
   if (value == null || !Number.isFinite(value)) return "N/A";
-  return `$${Number(value).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}`;
+  return `$${formatNumber(Number(value), "price", { digits: 1 })}`;
 }
 
 function formatCurrencyInput(value: number) {
@@ -621,9 +624,9 @@ function parseAllocationPercent(value: string, fallbackPercent: number) {
 }
 
 export function metricToneClass(value: number | null | undefined) {
-  if (isMetricOutlier(value)) return "text-amber-700";
-  if (value === 0) return "text-[var(--text-muted)]";
-  return Number(value) > 0 ? "text-[var(--delta-up)]" : "text-[var(--delta-down)]";
+  if (isMetricOutlier(value)) return "text-[var(--status-warning-ink)]";
+  if (value === 0) return "text-[var(--ink-muted)]";
+  return Number(value) > 0 ? "text-[var(--up)]" : "text-[var(--down)]";
 }
 
 function estimateVolatilityFromSparkline(sparkline: number[]) {
@@ -892,6 +895,7 @@ export function buildMovingAverageSeries(prices: RawOHLCV[], windowSize: (typeof
 // StockDetailModal extracted to components/StockDetailModal.tsx
 
 export default function PortfolioPage() {
+  const t = useT();
   useDevMonitorPageLoad({ component: "portfolio" });
   // Page state tracks the holdings presentation mode and the currently opened detail modal.
   const queryClient = useQueryClient();
@@ -2140,23 +2144,23 @@ export default function PortfolioPage() {
           body rendered nothing at all and the panel opened as a titled slide-over over
           blank space -- indistinguishable from a panel that failed to load. */}
       {!hasHoldings && (
-        <p data-testid="panel-empty-state" className="text-sm text-[var(--text-muted)]">
+        <p data-testid="panel-empty-state" className="type-body text-[var(--ink-muted)]">
           No snapshot yet. Add at least one stock to the watchlist, then press Save Current As Snapshot to start a daily record.
         </p>
       )}
       {hasHoldings && (
-        <section className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4">
+        <section className="border border-[var(--line)] bg-[var(--surface-raised)] p-4">
           <div className="flex flex-col gap-4 min-[1450px]:flex-row lg:items-start lg:justify-between">
             <div>
               {/* No heading here: SidePanel renders the panel title, and its tooltip
                   carries the description this block used to duplicate. */}
-              <p className="text-sm text-[var(--text-muted)]">
+              <p className="type-body text-[var(--ink-muted)]">
                 Snapshot mode is the default daily record. Live mode lets you inspect the current portfolio-side comparison without replacing the saved daily snapshot.
               </p>
             </div>
             <div className="flex flex-col gap-2">
               <div className="flex flex-col gap-2 sm:flex-row">
-                <label className="flex items-center gap-2 text-xs font-semibold text-[var(--text-muted)]">
+                <label className="flex items-center gap-2 type-small text-[var(--ink-muted)]">
                   <InfoTooltip
                     label="Universe"
                     description="Portfolio + Benchmark uses the tracked holdings already on this page. Custom Universe keeps the same benchmark but lets you compare only the manual ticker list you provide, without rewriting the watchlist."
@@ -2168,13 +2172,13 @@ export default function PortfolioPage() {
                       setSelectedHistoryPoint(null);
                       setPortfolioComparisonUniverse(event.target.value as PortfolioComparisonUniverse);
                     }}
-                    className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-xs text-[var(--text-primary)]"
+                    className="rounded-[var(--radius-1)] border border-[var(--line)] bg-[var(--surface-raised)] px-3 py-2 type-small text-[var(--ink)]"
                   >
                     <option value="portfolio_plus_benchmark">Portfolio + Benchmark</option>
                     <option value="custom">Custom Universe</option>
                   </select>
                 </label>
-                <label className="flex items-center gap-2 text-xs font-semibold text-[var(--text-muted)]">
+                <label className="flex items-center gap-2 type-small text-[var(--ink-muted)]">
                   <InfoTooltip
                     label="Benchmark"
                     description="Manual benchmark ticker input always wins. Presets are just fast selectors for common baselines. Whatever benchmark is active when you save a snapshot is stored with that snapshot for historical consistency."
@@ -2186,10 +2190,10 @@ export default function PortfolioPage() {
                       setSelectedHistoryPoint(null);
                       setPortfolioComparisonBenchmarkTicker(event.target.value.toUpperCase());
                     }}
-                    className="w-24 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-xs text-[var(--text-primary)]"
+                    className="w-24 rounded-[var(--radius-1)] border border-[var(--line)] bg-[var(--surface-raised)] px-3 py-2 type-small text-[var(--ink)]"
                   />
                 </label>
-                <label className="flex items-center gap-2 text-xs font-semibold text-[var(--text-muted)]">
+                <label className="flex items-center gap-2 type-small text-[var(--ink-muted)]">
                   <InfoTooltip
                     label="Benchmark preset"
                     description="Use presets for the common S&P 500 or Korea-market baselines. Selecting Manual ticker means the current benchmark symbol does not match one of the preset shortcuts."
@@ -2204,7 +2208,7 @@ export default function PortfolioPage() {
                         setPortfolioComparisonBenchmarkTicker(selectedPreset.ticker);
                       }
                     }}
-                    className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-xs text-[var(--text-primary)]"
+                    className="rounded-[var(--radius-1)] border border-[var(--line)] bg-[var(--surface-raised)] px-3 py-2 type-small text-[var(--ink)]"
                   >
                     {PORTFOLIO_BENCHMARK_PRESETS.map((preset) => (
                       <option key={preset.id} value={preset.id}>
@@ -2215,7 +2219,7 @@ export default function PortfolioPage() {
                   </select>
                 </label>
                 {portfolioComparisonUniverse === "custom" && (
-                  <label className="flex items-center gap-2 text-xs font-semibold text-[var(--text-muted)]">
+                  <label className="flex items-center gap-2 type-small text-[var(--ink-muted)]">
                     <InfoTooltip
                       label="Custom tickers"
                       description="Comma-separated tickers for the temporary comparison universe. These affect the comparison rows and saved snapshot payload only; they do not add holdings to the tracked watchlist."
@@ -2228,12 +2232,12 @@ export default function PortfolioPage() {
                         setPortfolioComparisonCustomTickersInput(event.target.value.toUpperCase());
                       }}
                       placeholder="NVDA, TSLA"
-                      className="w-48 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-xs text-[var(--text-primary)]"
+                      className="w-48 rounded-[var(--radius-1)] border border-[var(--line)] bg-[var(--surface-raised)] px-3 py-2 type-small text-[var(--ink)]"
                     />
                   </label>
                 )}
               </div>
-              <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--text-muted)]">
+              <div className="flex flex-wrap items-center gap-2 type-small text-[var(--ink-muted)]">
                 <span className="font-semibold">Quick change</span>
                 {benchmarkQuickActions.map((preset) => (
                   <button
@@ -2243,19 +2247,19 @@ export default function PortfolioPage() {
                       setSelectedHistoryPoint(null);
                       setPortfolioComparisonBenchmarkTicker(preset.ticker);
                     }}
-                    className={`rounded-full border px-3 py-1 font-semibold ${normalizedBenchmarkTicker === preset.ticker ? "border-[var(--accent)] bg-[var(--surface-muted)] text-[var(--text-primary)]" : "border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text-primary)]"}`}
+                    className={`rounded-full border px-3 py-1 font-semibold ${normalizedBenchmarkTicker === preset.ticker ? "border-[var(--brand)] bg-[var(--surface)] text-[var(--ink)]" : "border-[var(--line)] text-[var(--ink-muted)] hover:text-[var(--ink)]"}`}
                   >
                     {preset.label}
                   </button>
                 ))}
                 {portfolioComparisonCalculating && (
-                  <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 font-semibold text-amber-800">
+                  <span className="rounded-full border border-[var(--status-warning-border)] bg-[var(--status-warning-surface)] px-3 py-1 font-semibold text-[var(--status-warning-ink)]">
                     Calculating
                   </span>
                 )}
               </div>
               <div className="flex flex-col gap-2 sm:flex-row">
-                <label className="flex items-center gap-2 text-xs font-semibold text-[var(--text-muted)]">
+                <label className="flex items-center gap-2 type-small text-[var(--ink-muted)]">
                   <InfoTooltip
                     label="Source"
                     description="Persisted snapshot shows the latest saved daily record. Live calculation recomputes the comparison with the current controls and holdings but does not replace saved history until you explicitly use Save Current As Snapshot."
@@ -2270,7 +2274,7 @@ export default function PortfolioPage() {
                       }
                       setPortfolioComparisonMode(nextMode);
                     }}
-                    className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-xs text-[var(--text-primary)]"
+                    className="rounded-[var(--radius-1)] border border-[var(--line)] bg-[var(--surface-raised)] px-3 py-2 type-small text-[var(--ink)]"
                   >
                     <option value="snapshot">Persisted snapshot</option>
                     <option value="live">Live calculation</option>
@@ -2279,7 +2283,7 @@ export default function PortfolioPage() {
                 <button
                   type="button"
                   onClick={handleRefreshPortfolioAnalysis}
-                  className="inline-flex items-center justify-center gap-2 rounded-[var(--radius)] border border-[var(--border)] px-3 py-2 text-xs font-semibold text-[var(--text-primary)] hover:border-[var(--brand)]"
+                  className="inline-flex items-center justify-center gap-2 rounded-[var(--radius-1)] border border-[var(--line)] px-3 py-2 type-small text-[var(--ink)] hover:border-[var(--brand)]"
                 >
                   <RefreshCw className={`h-3.5 w-3.5 ${portfolioComparisonCalculating ? "animate-spin" : ""}`} />
                   Refresh Analysis
@@ -2287,14 +2291,14 @@ export default function PortfolioPage() {
                 <button
                   type="button"
                   onClick={() => void handleRefreshPortfolioSnapshot()}
-                  className="inline-flex items-center justify-center rounded-[var(--radius)] border border-[var(--border)] bg-[var(--brand)] px-3 py-2 text-xs font-semibold text-[var(--text-primary)] hover:border-[var(--brand)]"
+                  className="inline-flex items-center justify-center rounded-[var(--radius-1)] border border-[var(--line)] bg-[var(--brand)] px-3 py-2 type-small text-[var(--on-brand)] hover:border-[var(--brand)]"
                 >
                   Save Current As Snapshot
                 </button>
                 <button
                   type="button"
                   onClick={() => router.push("/corporate")}
-                  className="inline-flex items-center justify-center rounded-[var(--radius)] border border-[var(--border)] px-3 py-2 text-xs font-semibold text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                  className="inline-flex items-center justify-center rounded-[var(--radius-1)] border border-[var(--line)] px-3 py-2 type-small text-[var(--ink-muted)] hover:text-[var(--ink)]"
                 >
                   View Full Comparison
                 </button>
@@ -2302,47 +2306,47 @@ export default function PortfolioPage() {
             </div>
           </div>
 
-          <div className="mt-3 flex flex-col gap-2 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-panel)] p-4 text-sm text-[var(--text-muted)] sm:flex-row sm:items-center sm:justify-between">
+          <div className="mt-3 flex flex-col gap-2 border border-[var(--line)] bg-[var(--surface-raised)] p-4 type-body text-[var(--ink-muted)] sm:flex-row sm:items-center sm:justify-between">
             <div className="flex flex-col gap-1">
               <span>{portfolioAnalysisDisplayLastUpdatedAt ? `Last updated ${formatSyncTimestamp(portfolioAnalysisDisplayLastUpdatedAt)}` : "Latest saved comparison snapshot loads automatically when holdings exist."}</span>
               {portfolioAnalysisMessage && <span>{portfolioAnalysisMessage}</span>}
             </div>
             {portfolioAnalysisIsStale && (
-              <span className="inline-flex items-center rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-900">
+              <span className="inline-flex items-center rounded-full bg-[var(--status-warning-surface)] px-3 py-1 type-small text-[var(--status-warning-ink)]">
                 Showing stale analysis for prior inputs
               </span>
             )}
           </div>
 
           <div className="mt-3 grid grid-cols-1 gap-2 lg:grid-cols-3">
-            <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-muted)] p-3 text-sm text-[var(--text-muted)]">
-              <span className="font-semibold text-[var(--text-primary)]">Universe:</span> {portfolioComparisonUniverseHelpText(portfolioComparisonUniverse)}
+            <div className="border border-[var(--line)] bg-[var(--surface)] p-3 type-body text-[var(--ink-muted)]">
+              <span className="font-semibold text-[var(--ink)]">Universe:</span> {portfolioComparisonUniverseHelpText(portfolioComparisonUniverse)}
             </div>
-            <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-muted)] p-3 text-sm text-[var(--text-muted)]">
-              <span className="font-semibold text-[var(--text-primary)]">Benchmark workflow:</span> Preset is currently {benchmarkPresetLabelForTicker(normalizedBenchmarkTicker)}. Manual ticker input stays available for index symbols or ETFs outside the preset list.
+            <div className="border border-[var(--line)] bg-[var(--surface)] p-3 type-body text-[var(--ink-muted)]">
+              <span className="font-semibold text-[var(--ink)]">Benchmark workflow:</span> Preset is currently {benchmarkPresetLabelForTicker(normalizedBenchmarkTicker)}. Manual ticker input stays available for index symbols or ETFs outside the preset list.
             </div>
-            <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-muted)] p-3 text-sm text-[var(--text-muted)]">
-              <span className="font-semibold text-[var(--text-primary)]">Snapshot workflow:</span> Live mode is review-only. Saved history updates only when you press <span className="font-semibold text-[var(--text-primary)]">Save Current As Snapshot</span> or opt in from the allocation panel.
+            <div className="border border-[var(--line)] bg-[var(--surface)] p-3 type-body text-[var(--ink-muted)]">
+              <span className="font-semibold text-[var(--ink)]">Snapshot workflow:</span> Live mode is review-only. Saved history updates only when you press <span className="font-semibold text-[var(--ink)]">Save Current As Snapshot</span> or opt in from the allocation panel.
             </div>
           </div>
-          <div className="mt-3 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-panel)] p-4">
+          <div className="mt-3 border border-[var(--line)] bg-[var(--surface-raised)] p-4">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
               <div>
-                <h3 className="text-sm font-bold text-[var(--text-primary)]">Saved Snapshot List</h3>
-                <p className="mt-1 text-xs text-[var(--text-muted)]">
+                <h3 className="type-panel-title text-[var(--ink)]">Saved Snapshot List</h3>
+                <p className="mt-1 type-small text-[var(--ink-muted)]">
                   Review the most recent persisted portfolio comparison snapshots directly from the page, then open the full history modal when you need the full timeline.
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => setSnapshotHistoryOpen(true)}
-                className="inline-flex items-center justify-center rounded-[var(--radius)] border border-[var(--border)] px-3 py-2 text-xs font-semibold text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                className="inline-flex items-center justify-center rounded-[var(--radius-1)] border border-[var(--line)] px-3 py-2 type-small text-[var(--ink-muted)] hover:text-[var(--ink)]"
               >
                 View All Saved Snapshots
               </button>
             </div>
             {snapshotHistoryView.showLoading && (
-              <div className="mt-3 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)]">
+              <div className="mt-3 border border-[var(--line)] bg-[var(--surface-raised)]">
                 <LoadingState variant="spinner" label="Loading saved snapshots..." />
               </div>
             )}
@@ -2356,7 +2360,7 @@ export default function PortfolioPage() {
               </div>
             )}
             {snapshotHistoryView.showIdle && (
-              <div className="mt-3 rounded-[var(--radius)] border border-dashed border-[var(--border)] bg-[var(--surface-muted)]">
+              <div className="mt-3 border border-dashed border-[var(--line)] bg-[var(--surface)]">
                 <EmptyState
                   title="Saved snapshot history stays idle until you refresh portfolio analysis."
                   description="Refresh portfolio analysis to load the latest persisted snapshot versions for this review context."
@@ -2364,7 +2368,7 @@ export default function PortfolioPage() {
               </div>
             )}
             {snapshotHistoryView.showEmpty && (
-              <div className="mt-3 rounded-[var(--radius)] border border-dashed border-[var(--border)] bg-[var(--surface-muted)]">
+              <div className="mt-3 border border-dashed border-[var(--line)] bg-[var(--surface)]">
                 <EmptyState
                   title="No saved snapshots are available yet"
                   description="No saved snapshots are available yet for the current review context."
@@ -2378,15 +2382,15 @@ export default function PortfolioPage() {
                   return (
                     <div
                       key={`snapshot-list-${point.snapshot_version}`}
-                      className={`flex flex-col gap-2 rounded-[var(--radius)] border p-3 text-sm sm:flex-row sm:items-center sm:justify-between ${
-                        isActive ? "border-[var(--accent)]/50 bg-[var(--surface-muted)]" : "border-[var(--border)] bg-[var(--bg-surface)]"
+                      className={`flex flex-col gap-2 border p-3 type-body sm:flex-row sm:items-center sm:justify-between ${
+                        isActive ? "border-[var(--brand-soft)] bg-[var(--surface)]" : "border-[var(--line)] bg-[var(--surface-raised)]"
                       }`}
                     >
                       <div className="space-y-1">
-                        <p className="font-semibold text-[var(--text-primary)]">
+                        <p className="font-semibold text-[var(--ink)]">
                           {formatDateLabel(point.as_of_date)} - {point.snapshot_source}
                         </p>
-                        <p className="text-xs text-[var(--text-muted)]">
+                        <p className="type-small text-[var(--ink-muted)]">
                           Benchmark {point.benchmark_ticker}. Stocks summarized: {point.stock_count}.
                         </p>
                       </div>
@@ -2397,10 +2401,10 @@ export default function PortfolioPage() {
                             setSelectedHistoryPoint(point);
                             setPortfolioComparisonMode("snapshot");
                           }}
-                          className={`inline-flex items-center justify-center rounded-[var(--radius)] border px-3 py-2 text-xs font-semibold ${
+                          className={`inline-flex items-center justify-center rounded-[var(--radius-1)] border px-3 py-2 type-small ${
                             isActive
-                              ? "border-[var(--accent)] bg-[var(--surface-muted)] text-[var(--text-primary)]"
-                              : "border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                              ? "border-[var(--brand)] bg-[var(--surface)] text-[var(--ink)]"
+                              : "border-[var(--line)] text-[var(--ink-muted)] hover:text-[var(--ink)]"
                           }`}
                         >
                           {isActive ? "Selected Snapshot" : "Review Snapshot"}
@@ -2409,7 +2413,7 @@ export default function PortfolioPage() {
                           type="button"
                           onClick={() => void handleDeleteSnapshotVersion(point.snapshot_version)}
                           disabled={deleteSnapshotMutation.isPending && deleteSnapshotMutation.variables === point.snapshot_version}
-                          className="inline-flex items-center justify-center rounded-[var(--radius)] border border-[var(--border)] px-3 py-2 text-xs font-semibold text-[var(--text-muted)] hover:text-[var(--delta-down)] disabled:opacity-50"
+                          className="inline-flex items-center justify-center rounded-[var(--radius-1)] border border-[var(--line)] px-3 py-2 type-small text-[var(--ink-muted)] hover:text-[var(--down)] disabled:opacity-50"
                         >
                           {deleteSnapshotMutation.isPending && deleteSnapshotMutation.variables === point.snapshot_version ? "Removing..." : "Remove Snapshot"}
                         </button>
@@ -2422,7 +2426,7 @@ export default function PortfolioPage() {
           </div>
 
           {comparisonView.showSelectedSnapshotLoading && selectedHistoryPoint && (
-            <div className="mt-3 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)]">
+            <div className="mt-3 border border-[var(--line)] bg-[var(--surface-raised)]">
               <LoadingState
                 variant="spinner"
                 label={`Loading selected snapshot for ${formatDateLabel(selectedHistoryPoint.as_of_date)}...`}
@@ -2440,7 +2444,7 @@ export default function PortfolioPage() {
           )}
 
           {comparisonView.showLoading && (
-            <div className="mt-4 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)]">
+            <div className="mt-4 border border-[var(--line)] bg-[var(--surface-raised)]">
               <LoadingState variant="spinner" label="Loading portfolio snapshot summary..." />
             </div>
           )}
@@ -2456,7 +2460,7 @@ export default function PortfolioPage() {
           )}
 
           {comparisonView.showEmpty && (
-            <div className="mt-4 rounded-[var(--radius)] border border-dashed border-[var(--border)] bg-[var(--surface-muted)]">
+            <div className="mt-4 border border-dashed border-[var(--line)] bg-[var(--surface)]">
               <EmptyState
                 title="Portfolio comparison is unavailable."
                 description="No latest saved snapshot or cached comparison result is available for the current holdings yet. Use `Refresh Analysis` to request a fresh comparison run."
@@ -2531,7 +2535,7 @@ export default function PortfolioPage() {
       {weightsOverflow && (
         <StatusPanel
           title="Allocation Weights Exceed 100%"
-          message={`Saved watchlist allocations currently sum to ${(totalStoredWeight * 100).toFixed(1)}%. Reduce total assigned weight to 100% or below before attribution can run.`}
+          message={`Saved watchlist allocations currently sum to ${formatNumber(totalStoredWeight, "percent", { digits: 1 })}. Reduce total assigned weight to 100% or below before attribution can run.`}
           tone="warning"
         />
       )}
@@ -2548,46 +2552,46 @@ export default function PortfolioPage() {
 
   const allocationPanelBody = (
     <>
-      <section ref={allocationSectionRef} className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4">
+      <section ref={allocationSectionRef} className="border border-[var(--line)] bg-[var(--surface-raised)] p-4">
         <div className="flex flex-col gap-2">
           {/* Title and its description live on the panel header; repeating them here
               showed the same words twice. The copy also described a full-width
               two-column section -- there is no left or right inside a 480px panel. */}
-          <p className="text-sm text-[var(--text-muted)]">
+          <p className="type-body text-[var(--ink-muted)]">
             Weights save as you change them. Totals update in this panel.
           </p>
         </div>
 
         <div className="mt-4 grid min-w-72 grid-cols-1 gap-2 sm:grid-cols-5">
-          <div className="rounded-[var(--radius)] bg-[var(--surface-muted)] p-3 text-xs">
-            <div className="text-[var(--text-muted)]">Tracked Names</div>
-            <div className="mt-1 font-bold text-[var(--text-primary)]">{watchlist.length}</div>
+          <div className="bg-[var(--surface)] p-3 type-small">
+            <div className="text-[var(--ink-muted)]">Tracked Names</div>
+            <div className="mt-1 font-bold text-[var(--ink)]">{watchlist.length}</div>
           </div>
-          <div className="rounded-[var(--radius)] bg-[var(--surface-muted)] p-3 text-xs">
-            <div className="text-[var(--text-muted)]">Allocated Names</div>
-            <div className="mt-1 font-bold text-[var(--text-primary)]">{allocatedHoldingsCount}</div>
+          <div className="bg-[var(--surface)] p-3 type-small">
+            <div className="text-[var(--ink-muted)]">Allocated Names</div>
+            <div className="mt-1 font-bold text-[var(--ink)]">{allocatedHoldingsCount}</div>
           </div>
-          <div className="rounded-[var(--radius)] bg-[var(--surface-muted)] p-3 text-xs">
-            <div className="text-[var(--text-muted)]">Total Investment</div>
-            <div className="mt-1 font-bold text-[var(--text-primary)]">{formatCurrencyCompact(totalInvestmentAmount)}</div>
+          <div className="bg-[var(--surface)] p-3 type-small">
+            <div className="text-[var(--ink-muted)]">Total Investment</div>
+            <div className="mt-1 font-bold text-[var(--ink)]">{formatCurrencyCompact(totalInvestmentAmount)}</div>
           </div>
-          <div className="rounded-[var(--radius)] bg-[var(--surface-muted)] p-3 text-xs">
-            <div className="text-[var(--text-muted)]">Invested Capital</div>
-            <div className="mt-1 font-bold text-[var(--text-primary)]">{formatCurrencyCompact(allocationSummary.allocatedAmount)}</div>
-            <div className="mt-1 text-[length:var(--type-caption)] text-[var(--text-muted)]">{formatWeightPercent(investedWeight)} allocated</div>
+          <div className="bg-[var(--surface)] p-3 type-small">
+            <div className="text-[var(--ink-muted)]">Invested Capital</div>
+            <div className="mt-1 font-bold text-[var(--ink)]">{formatCurrencyCompact(allocationSummary.allocatedAmount)}</div>
+            <div className="mt-1 type-caption text-[var(--ink-muted)]">{formatWeightPercent(investedWeight)} allocated</div>
           </div>
-          <div className="rounded-[var(--radius)] bg-[var(--surface-muted)] p-3 text-xs">
-            <div className="text-[var(--text-muted)]">Implied Cash</div>
-            <div className="mt-1 font-bold text-[var(--text-primary)]">{formatCurrencyCompact(totalInvestmentAmount * impliedCashWeight)}</div>
-            <div className="mt-1 text-[length:var(--type-caption)] text-[var(--text-muted)]">{formatWeightPercent(impliedCashWeight)} unallocated</div>
+          <div className="bg-[var(--surface)] p-3 type-small">
+            <div className="text-[var(--ink-muted)]">Implied Cash</div>
+            <div className="mt-1 font-bold text-[var(--ink)]">{formatCurrencyCompact(totalInvestmentAmount * impliedCashWeight)}</div>
+            <div className="mt-1 type-caption text-[var(--ink-muted)]">{formatWeightPercent(impliedCashWeight)} unallocated</div>
           </div>
-          <div className="rounded-[var(--radius)] bg-[var(--surface-muted)] p-3 text-xs">
-            <div className="text-[var(--text-muted)]">Final Profit</div>
+          <div className="bg-[var(--surface)] p-3 type-small">
+            <div className="text-[var(--ink-muted)]">Final Profit</div>
             <div className={`mt-1 font-bold ${metricToneClass(allocationSummary.finalProfit)}`}>
               {formatCurrencyCompact(allocationSummary.finalProfit)}
             </div>
-            <div className="mt-1 text-[length:var(--type-caption)] text-[var(--text-muted)]">
-              Fee-aware using {(portfolioPreferences.transaction_fee_rate * 100).toFixed(1)}% exit fee
+            <div className="mt-1 type-caption text-[var(--ink-muted)]">
+              Fee-aware using {formatNumber(portfolioPreferences.transaction_fee_rate, "percent", { digits: 1 })} exit fee
             </div>
           </div>
         </div>
@@ -2628,7 +2632,7 @@ export default function PortfolioPage() {
             formatSectorLabel={sectorLabel}
           />
 
-          <section className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-panel)] p-4">
+          <section className="border border-[var(--line)] bg-[var(--surface-raised)] p-4">
             <PortfolioAllocationEditor
               totalInvestmentInput={totalInvestmentInput}
               setTotalInvestmentInput={setTotalInvestmentInput}
@@ -2680,7 +2684,7 @@ export default function PortfolioPage() {
       <section className="flex items-center justify-between gap-4">
         <div>
           {/* Heading and tooltip are the panel header's, not this body's. */}
-          <p className="text-sm text-[var(--text-muted)]">
+          <p className="type-body text-[var(--ink-muted)]">
             Tracking list for holdings and price or news drill-down. Weighting, implied cash, snapshots, and attribution each have their own panel on the rail.
           </p>
         </div>
@@ -2703,10 +2707,10 @@ export default function PortfolioPage() {
         </div>
       </section>
       {watchlistView.showSectorFilter && (
-        <section className="flex flex-col gap-3 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4">
+        <section className="flex flex-col gap-3 border border-[var(--line)] bg-[var(--surface-raised)] p-4">
           <div className="flex flex-col gap-1">
-            <h3 className="text-sm font-bold text-[var(--text-primary)]">Sector Filter</h3>
-            <p className="text-sm text-[var(--text-muted)]">
+            <h3 className="type-panel-title text-[var(--ink)]">Sector Filter</h3>
+            <p className="type-body text-[var(--ink-muted)]">
               Group holdings by sector in both views. Use this to isolate volatility clusters quickly, then reset to all sectors when you want the full holdings surface back.
             </p>
           </div>
@@ -2714,7 +2718,7 @@ export default function PortfolioPage() {
             <button
               type="button"
               onClick={() => setSectorFilter("All Sectors")}
-              className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${activeSectorFilter === "All Sectors" ? "border-[var(--accent)] bg-[var(--surface-muted)] text-[var(--text-primary)]" : "border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text-primary)]"}`}
+              className={`rounded-full border px-3 py-1.5 type-small ${activeSectorFilter === "All Sectors" ? "border-[var(--brand)] bg-[var(--surface)] text-[var(--ink)]" : "border-[var(--line)] text-[var(--ink-muted)] hover:text-[var(--ink)]"}`}
             >
               All Sectors
             </button>
@@ -2723,7 +2727,7 @@ export default function PortfolioPage() {
                 key={sector}
                 type="button"
                 onClick={() => setSectorFilter(sector)}
-                className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${activeSectorFilter === sector ? "border-[var(--accent)] bg-[var(--surface-muted)] text-[var(--text-primary)]" : "border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text-primary)]"}`}
+                className={`rounded-full border px-3 py-1.5 type-small ${activeSectorFilter === sector ? "border-[var(--brand)] bg-[var(--surface)] text-[var(--ink)]" : "border-[var(--line)] text-[var(--ink-muted)] hover:text-[var(--ink)]"}`}
               >
                 {sector}
               </button>
@@ -2737,10 +2741,10 @@ export default function PortfolioPage() {
       ) : watchlistView.showChartCards ? (
         <section className="space-y-4">
           {watchlistSectorGroups.map((group) => (
-            <div key={group.sector} className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4">
+            <div key={group.sector} className="border border-[var(--line)] bg-[var(--surface-raised)] p-4">
               <div className="mb-4">
-                <h3 className="text-sm font-bold text-[var(--text-primary)]">{group.sector}</h3>
-                <p className="text-xs text-[var(--text-muted)]">{group.holdings.length} holding{group.holdings.length === 1 ? "" : "s"}</p>
+                <h3 className="type-panel-title text-[var(--ink)]">{group.sector}</h3>
+                <p className="type-small text-[var(--ink-muted)]">{group.holdings.length} holding{group.holdings.length === 1 ? "" : "s"}</p>
               </div>
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-6">
                 {group.holdings.map((stock) => {
@@ -2757,7 +2761,7 @@ export default function PortfolioPage() {
                         }
                       }}
                       key={stock.ticker}
-                      className="group relative block bg-[var(--surface-panel)] rounded-[var(--radius)] border border-[var(--border)] p-4 text-left transition-all hover:border-[var(--accent)] hover:shadow-[var(--shadow-card-hover)]"
+                      className="group relative block bg-[var(--surface-raised)] border border-[var(--line)] p-4 text-left transition-all hover:border-[var(--brand)]"
                     >
                       <button
                         type="button"
@@ -2766,7 +2770,7 @@ export default function PortfolioPage() {
                           void handleDeleteHolding(stock);
                         }}
                         disabled={deleteWatchlistMutation.isPending && deleteWatchlistMutation.variables === stock.ticker}
-                        className="absolute right-3 top-3 z-10 inline-flex items-center gap-1 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-2 py-1 text-xs font-semibold text-[var(--text-muted)] opacity-0 transition-opacity hover:text-[var(--delta-down)] group-hover:opacity-100 group-focus-within:opacity-100 disabled:opacity-50"
+                        className="absolute right-3 top-3 z-10 inline-flex items-center gap-1 rounded-[var(--radius-1)] border border-[var(--line)] bg-[var(--surface-raised)] px-2 py-1 type-small text-[var(--ink-muted)] opacity-0 transition-opacity hover:text-[var(--down)] group-hover:opacity-100 group-focus-within:opacity-100 disabled:opacity-50"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                         {deleteWatchlistMutation.isPending && deleteWatchlistMutation.variables === stock.ticker ? "Removing" : "Remove"}
@@ -2780,21 +2784,18 @@ export default function PortfolioPage() {
                                 which throws once the API reports an absent price as null. */}
                             {stock.last_close === null
                               ? "—"
-                              : `${stock.last_close.toLocaleString(undefined, {
-                                  minimumFractionDigits: 1,
-                                  maximumFractionDigits: 1,
-                                })}$`}
+                              : `${formatNumber(stock.last_close, "price", { digits: 1 })}$`}
                           </div>
                           <DeltaBadge value={deltaPct} className="mt-1" />
                           <p className="sr-only">{portfolioStatus("change", deltaPct)}</p>
                         </div>
                       </div>
 
-                      <div className="mt-4 pt-2 border-t border-[var(--border)]/40">
+                      <div className="mt-4 pt-2 border-t border-[var(--grid)]">
                         <Sparkline
                           data={stock.sparkline}
                           height={30}
-                          color={deltaPct >= 0 ? "var(--delta-up)" : "var(--delta-down)"}
+                          color={deltaPct >= 0 ? "var(--up)" : "var(--down)"}
                         />
                       </div>
                     </div>
@@ -2809,17 +2810,17 @@ export default function PortfolioPage() {
           {watchlistSectorGroups.map((group) => {
             const isCollapsed = collapsedSectors[group.sector] ?? false;
             return (
-              <div key={group.sector} className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4">
+              <div key={group.sector} className="border border-[var(--line)] bg-[var(--surface-raised)] p-4">
                 <button
                   type="button"
                   onClick={() => setCollapsedSectors((current) => ({ ...current, [group.sector]: !isCollapsed }))}
                   className="flex w-full items-center justify-between gap-3 text-left"
                 >
                   <div>
-                    <h3 className="text-sm font-bold text-[var(--text-primary)]">{group.sector}</h3>
-                    <p className="text-xs text-[var(--text-muted)]">{group.holdings.length} holding{group.holdings.length === 1 ? "" : "s"}</p>
+                    <h3 className="type-panel-title text-[var(--ink)]">{group.sector}</h3>
+                    <p className="type-small text-[var(--ink-muted)]">{group.holdings.length} holding{group.holdings.length === 1 ? "" : "s"}</p>
                   </div>
-                  {isCollapsed ? <ChevronRight className="h-4 w-4 text-[var(--text-muted)]" /> : <ChevronDown className="h-4 w-4 text-[var(--text-muted)]" />}
+                  {isCollapsed ? <ChevronRight className="h-4 w-4 text-[var(--ink-muted)]" /> : <ChevronDown className="h-4 w-4 text-[var(--ink-muted)]" />}
                 </button>
                 {!isCollapsed && (
                   <div className="mt-4">
@@ -2895,14 +2896,14 @@ export default function PortfolioPage() {
           {/* Header: page identity plus attribution date range and export controls. */}
           <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div className="flex flex-col self-start">
-              <h1 className="text-3xl font-bold tracking-tight text-[var(--text-primary)]">Portfolio</h1>
-              <p className="text-[var(--text-muted)] mt-1">
+              <h1 className="type-heading-5 text-[var(--ink)]">{t("portfolio.title")}</h1>
+              <p className="text-[var(--ink-muted)] mt-1">
                 Volatility-first portfolio command center for expected return comparison and investment testing
               </p>
             </div>
             <div className="flex flex-col gap-3 lg:items-end">
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                <label className="flex flex-col gap-1 text-xs font-semibold text-[var(--text-muted)]">
+                <label className="flex flex-col gap-1 type-small text-[var(--ink-muted)]">
                   <InfoTooltip
                     label="Holding Start Date"
                     description="Sets the starting point for return, attribution, and beta calculations. Use the date the stock was added or the position was first held; this prevents multi-year winners from showing inflated returns when the actual holding period is shorter."
@@ -2912,10 +2913,10 @@ export default function PortfolioPage() {
                     value={holdingStartDate}
                     onChange={(event) => setHoldingStartDate(event.target.value)}
                     max={attributionAsOfDate || new Date().toISOString().slice(0, 10)}
-                    className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-[var(--text-primary)]"
+                    className="rounded-[var(--radius-1)] border border-[var(--line)] bg-[var(--surface-raised)] px-3 py-2 type-body text-[var(--ink)]"
                   />
                 </label>
-                <label className="flex flex-col gap-1 text-xs font-semibold text-[var(--text-muted)]">
+                <label className="flex flex-col gap-1 type-small text-[var(--ink-muted)]">
                   <InfoTooltip
                     label="Return End Date"
                     description="Sets the ending date for return, attribution, and beta calculations. Leave blank to use the latest available cached market date."
@@ -2926,7 +2927,7 @@ export default function PortfolioPage() {
                     onChange={(event) => setAttributionAsOfDate(event.target.value)}
                     min={holdingStartDate || undefined}
                     max={new Date().toISOString().slice(0, 10)}
-                    className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-[var(--text-primary)]"
+                    className="rounded-[var(--radius-1)] border border-[var(--line)] bg-[var(--surface-raised)] px-3 py-2 type-body text-[var(--ink)]"
                   />
                 </label>
               </div>
@@ -2938,7 +2939,7 @@ export default function PortfolioPage() {
             across the holdings panel (Sync, delete), the stock detail modal (sector edit,
             add to portfolio) and the allocation panel, and only one panel mounts at a time. */}
         {mutationMessage ? (
-          <p data-testid="portfolio-mutation-message" className="px-4 pt-3 text-sm text-[var(--text-muted)]">
+          <p data-testid="portfolio-mutation-message" className="px-4 pt-3 type-body text-[var(--ink-muted)]">
             {mutationMessage}
           </p>
         ) : null}
@@ -2946,12 +2947,12 @@ export default function PortfolioPage() {
             allocation panel, but it used to render only inside the snapshot panel, so
             "Failed to update the snapshot after saving allocation changes." was never seen. */}
         {portfolioComparisonMessage ? (
-          <p data-testid="portfolio-comparison-message" className="px-4 pt-3 text-sm text-[var(--text-muted)]">
+          <p data-testid="portfolio-comparison-message" className="px-4 pt-3 type-body text-[var(--ink-muted)]">
             {portfolioComparisonMessage}
           </p>
         ) : null}
         {refreshSummary ? (
-          <p data-testid="news-refresh-summary" className="px-4 pt-3 text-[length:var(--type-helper)] text-[var(--text-muted)]">
+          <p data-testid="news-refresh-summary" className="px-4 pt-3 type-small text-[var(--ink-muted)]">
             {refreshSummary}
           </p>
         ) : null}
@@ -2962,7 +2963,7 @@ export default function PortfolioPage() {
             provider failure as "no news". Saying it here keeps that fix from being undone
             one layer up. */}
         {bulkNewsQuery.isError ? (
-          <p data-testid="news-load-error" className="px-4 pt-3 text-[length:var(--type-helper)] text-[var(--delta-down)]">
+          <p data-testid="news-load-error" className="px-4 pt-3 type-small text-[var(--down)]">
             Could not load news for the visible stocks. The headlines below are missing, not absent — press Refresh to try again.
           </p>
         ) : null}

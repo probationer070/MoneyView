@@ -130,12 +130,11 @@ export function SidePanel({ open, title, width = "wide", description, onClose, c
       className={clsx(
         "absolute inset-y-0 right-0 z-30 w-full max-w-full overflow-y-auto",
         PANEL_WIDTHS[width],
-        "border-l border-[var(--border)] bg-[var(--bg-surface)] shadow-lg",
-        "focus-visible:outline-none",
+        "border-l border-[var(--line)] bg-[var(--surface-raised)]",
       )}
     >
-      <div className="sticky top-0 flex items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--bg-surface)] px-4 py-3">
-        <h2 className="text-lg font-bold text-[var(--text-primary)]">
+      <div className="sticky top-0 flex items-center justify-between gap-3 border-b border-[var(--line)] bg-[var(--surface-raised)] px-4 py-3">
+        <h2 className="type-panel-title text-[var(--ink)]">
           {description ? <InfoTooltip label={title} description={description} /> : title}
         </h2>
         <IconButton icon={<X className="h-4 w-4" />} label="Close panel" onClick={onClose} />
@@ -145,7 +144,7 @@ export function SidePanel({ open, title, width = "wide", description, onClose, c
           together and the panel reads as one undifferentiated block.
 
           The control floor is here rather than in each body: these were laid out for a
-          full-width section at `px-2 py-1 text-xs`, roughly 26px tall, which is under a
+          full-width section at `px-2 py-1 type-small`, roughly 26px tall, which is under a
           comfortable click target once they are packed into a panel. Setting it once at
           the boundary keeps every panel consistent and needs no edit per component. */}
       <div

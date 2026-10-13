@@ -9,6 +9,7 @@ export const en = {
     errorTitle: "Something went wrong", tryAgain: "Try again", noData: "No data available", noDataHint: "Run an analysis or refresh the data to see results here.", renderFailureTitle: "Component Render Failure", renderFailureBody: "An unexpected error broke the layout context for this graphic. Logs have been traced locally.", exportDisabled: "Export Disabled", exportJson: "Export JSON", exportCsv: "Export CSV", exportMarkdown: "Export Markdown", printPdf: "Print PDF", tickerPlaceholder: "Ticker or company name", other: "Other", chartUnavailable: "Chart unavailable",
   },
   delta: { up: "Up", down: "Down", flat: "Unchanged" },
+  portfolio: { title: "Portfolio" },
 } as const;
 
 type Widen<T> = { [K in keyof T]: T[K] extends string ? string : Widen<T[K]> };

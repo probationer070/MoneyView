@@ -142,14 +142,14 @@ export function StockTileGrid({
       {/* The count line is a sibling of the controls, not of the grid body, so it survives
           both scrolling (it is inside the sticky header) and the empty state (EmptyState
           replaces the body only). */}
-      <div className="sticky top-0 z-10 flex flex-col gap-1 bg-[var(--bg-canvas)] pb-2">
+      <div className="sticky top-0 z-10 flex flex-col gap-1 bg-[var(--bg)] pb-2">
         <div className="flex flex-wrap items-center gap-3">
           <select
             value={effectiveFilter}
             onChange={(event) => onFilterChange(event.target.value as GridFilter)}
             aria-label="Grid filter"
             data-testid="grid-filter"
-            className="rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--bg-surface)] px-2 py-1 text-sm"
+            className="rounded-[var(--radius-1)] border border-[var(--line)] bg-[var(--surface-raised)] px-2 py-1 type-body"
           >
             {groups.map((group) => (
               <option key={group} value={group}>
@@ -164,7 +164,7 @@ export function StockTileGrid({
             placeholder="Search ticker or name"
             aria-label="Search stocks"
             data-testid="grid-search"
-            className="min-w-[12rem] flex-1 rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--bg-surface)] px-2 py-1 text-sm"
+            className="min-w-[12rem] flex-1 rounded-[var(--radius-1)] border border-[var(--line)] bg-[var(--surface-raised)] px-2 py-1 type-body"
           />
         </div>
         {/* Three separate figures, not one: how many the filter and search leave on screen,
@@ -172,7 +172,7 @@ export function StockTileGrid({
             cannot say which of the three moved. */}
         <span
           data-testid="grid-count"
-          className="text-[length:var(--type-helper)] text-[var(--text-muted)]"
+          className="type-small text-[var(--ink-muted)]"
         >
           {`${visible.length} of ${stocks.length} · ${followedCount} followed`}
         </span>

@@ -1,3 +1,4 @@
+import { formatNumber } from "@/lib/format";
 import type { MetricQuality } from "../../../../packages/shared-types";
 import { impliedReturnRefusalText } from "@/lib/impliedReturn";
 import type {
@@ -43,7 +44,7 @@ function isMetricOutlier(value: number | null | undefined) {
 
 function formatMetricPercent(value: number | null | undefined) {
   if (value == null || !Number.isFinite(value)) return "N/A";
-  return `${Number(value).toFixed(2)}%`;
+  return formatNumber(Number(value) / 100, "percent", { digits: 2 });
 }
 
 function buildUnavailableMetric(reason: string): PortfolioMetricValue {
@@ -143,18 +144,18 @@ function comparisonSourceMode(args: {
 }
 
 export function metricToneClass(metric: PortfolioMetricValue) {
-  if (metric.quality === "invalid" || metric.quality === "missing") return "text-amber-700";
-  if (metric.quality === "suspicious") return "text-amber-700";
-  if ((metric.value ?? 0) === 0) return "text-[var(--text-muted)]";
-  return (metric.value ?? 0) > 0 ? "text-[var(--delta-up)]" : "text-[var(--delta-down)]";
+  if (metric.quality === "invalid" || metric.quality === "missing") return "text-[var(--status-warning-ink)]";
+  if (metric.quality === "suspicious") return "text-[var(--status-warning-ink)]";
+  if ((metric.value ?? 0) === 0) return "text-[var(--ink-muted)]";
+  return (metric.value ?? 0) > 0 ? "text-[var(--up)]" : "text-[var(--down)]";
 }
 
 export function volatilityToneClass(metric: PortfolioMetricValue) {
-  if (metric.quality === "invalid" || metric.quality === "missing" || metric.quality === "suspicious") return "text-amber-700";
+  if (metric.quality === "invalid" || metric.quality === "missing" || metric.quality === "suspicious") return "text-[var(--status-warning-ink)]";
   const value = metric.value ?? 0;
-  if (value >= 35) return "text-[var(--delta-down)]";
-  if (value >= 20) return "text-amber-700";
-  return "text-[var(--state-success)]";
+  if (value >= 35) return "text-[var(--down)]";
+  if (value >= 20) return "text-[var(--status-warning-ink)]";
+  return "text-[var(--status-success-ink)]";
 }
 
 export function metricDisplayTitle(metric: PortfolioMetricValue) {

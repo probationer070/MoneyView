@@ -14,6 +14,19 @@ export const LABELS = {
   input: ["입력", "Input"],
   value: ["값", "Value"],
   source: ["출처", "Source"],
+  ticker: ["종목 코드", "Ticker"],
+  sector: ["섹터", "Sector"],
+  currentPrice: ["현재가", "Current Price"],
+  trend: ["추세", "Trend"],
+  volatility: ["변동성", "Volatility"],
+  weight: ["비중", "Weight"],
+  action: ["작업", "Action"],
+  roicWacc: ["투하자본이익률 - WACC", "ROIC - WACC"],
+  allocation: ["배분", "Allocation"],
+  adjust: ["조정", "Adjust"],
+  investedAmount: ["투자 금액", "Invested Amount"],
+  projectedNetValue: ["예상 순가치", "Projected Net Value"],
+  finalProfit: ["최종 손익", "Final Profit"],
 } as const satisfies Record<string, readonly [string, string]>;
 
 export type LabelKey = keyof typeof LABELS;
