@@ -33,7 +33,7 @@
   --brand: #fa3600;
   --brand-text: #c42b00;
   --brand-soft: #ffe6dc;
-  --accent: #ffe6dc; /* deprecated: use --brand-soft (ground) or --brand-text (text, icon) */
+  --accent: #fa3600; /* deprecated: use --brand (fill, stroke) or --brand-text (text) */
   --on-brand: #101010;
   --focus-ring: #fa3600;
   --link: #c42b00;

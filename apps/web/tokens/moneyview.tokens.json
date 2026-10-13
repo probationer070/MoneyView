@@ -77,7 +77,7 @@
     "text": { "$value": "{palette.orange.700}", "$description": "Brand as text: links, eyebrow index." },
     "soft": { "$value": "{palette.orange.100}", "$description": "Tinted ground behind brand-text: selected rows, active chips." }
   },
-  "accent": { "$value": "{brand.soft}", "$deprecated": "use --brand-soft (ground) or --brand-text (text, icon)" },
+  "accent": { "$value": "{brand._}", "$deprecated": "use --brand (fill, stroke) or --brand-text (text)" },
   "on": { "brand": { "$value": "{palette.paper.950}", "$description": "Text and icons on a brand fill (white on brand is only 3.8:1)." } },
   "focus": { "ring": { "$value": "{brand._}", "$description": "2px solid, 2px offset (globals.css :focus-visible)." } },
   "link": { "$value": "{brand.text}" },

@@ -221,3 +221,16 @@ test("the real token file maps the font families into @theme inline", () => {
   assert.match(css, /@theme inline \{[^}]*\n {2}--font-sans: var\(--font-family-sans\);/);
   assert.match(css, /@theme inline \{[^}]*\n {2}--font-mono: var\(--font-family-mono\);/);
 });
+
+test("deprecated strokes and marks (accent, chart, delta, state) keep 3:1 on the page ground", () => {
+  const resolved = resolve(flatten(source()));
+  const ground = hex(resolved.get("bg._").value);
+  const aliases = [...resolved.values()].filter((t) => t.deprecated
+    && (["accent", "delta", "state"].includes(t.path[0]) || (t.path[0] === "chart" && t.path[1] !== "grid")));
+  assert.ok(aliases.length > 0);
+  for (const t of aliases) {
+    const value = t.value;
+    assert.ok(/^#[0-9a-f]{6}$/i.test(value), `${t.path.join(".")} resolves to ${value}`);
+    assert.ok(contrast(hex(value), ground) >= 3, `${t.path.join(".")} ${value} is ${contrast(hex(value), ground).toFixed(2)}:1 on the ground`);
+  }
+});

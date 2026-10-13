@@ -47,7 +47,7 @@ export const tokens = {
     "text": "#c42b00",
     "soft": "#ffe6dc"
   },
-  "accent": "#ffe6dc",
+  "accent": "#fa3600",
   "on": {
     "brand": "#101010"
   },

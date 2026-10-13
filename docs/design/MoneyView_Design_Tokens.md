@@ -277,7 +277,7 @@ No dark mode implementation is needed now. The token structure supports it witho
 | `brand` | `--brand` | `#fa3600` | Signal orange. Fills only: primary button, selection, focus ring, the subject chart series, the active nav marker. Never on price changes. |
 | `brand.text` | `--brand-text` | `#c42b00` | Brand as text: links, eyebrow index. |
 | `brand.soft` | `--brand-soft` | `#ffe6dc` | Tinted ground behind brand-text: selected rows, active chips. |
-| `accent` | `--accent` | `#ffe6dc` | deprecated: use --brand-soft (ground) or --brand-text (text, icon) |
+| `accent` | `--accent` | `#fa3600` | deprecated: use --brand (fill, stroke) or --brand-text (text) |
 | `on.brand` | `--on-brand` | `#101010` | Text and icons on a brand fill (white on brand is only 3.8:1). |
 | `focus.ring` | `--focus-ring` | `#fa3600` | 2px solid, 2px offset (globals.css :focus-visible). |
 | `link` | `--link` | `#c42b00` |  |
