@@ -1,4 +1,5 @@
 import { AppShell } from "@/components/ui/AppShell";
+import { HtmlLang } from "@/components/ui/HtmlLang";
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
@@ -45,6 +46,8 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${hostGrotesk.variable} ${pretendard.variable} ${geistMono.variable}`}>
       <body className="font-sans flex min-h-screen justify-center">
+        {/* Above the backend gate, so <html lang> follows the stored locale on the splash too. */}
+        <HtmlLang />
         <AppProvider>
           <AppShell>{children}</AppShell>
         </AppProvider>

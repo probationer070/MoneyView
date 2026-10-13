@@ -67,6 +67,9 @@ test.describe("ko browser hydration", () => {
   });
 });
 
+// This probe is the only guard for the `.type-caption:lang(ko)` selector: the caption test above
+// does not catch its removal (the gallery never puts lang="ko" on the .type-caption element itself).
+// Do not delete it as redundant.
 test("Latin inside a Korean caption is still 11px, and the Hangul caption is 12px", async ({ page }) => {
   await page.goto("/dev/design", { waitUntil: "domcontentloaded" });
   const sizes = await page.evaluate(() => {
@@ -82,4 +85,12 @@ test("Latin inside a Korean caption is still 11px, and the Hangul caption is 12p
     };
   });
   expect(sizes).toEqual({ ko: "12px", en: "11px" });
+});
+
+test("html lang follows the stored locale while the backend is still starting", async ({ page }) => {
+  await page.addInitScript(() => window.localStorage.setItem("moneyview.locale", "ko"));
+  await page.route("**/api/v1/health", (route) => route.abort());
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await expect(page.getByRole("heading", { name: "Starting Core Analytics..." })).toBeVisible();
+  await expect(page.locator("html")).toHaveAttribute("lang", "ko");
 });
