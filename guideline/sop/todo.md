@@ -48,7 +48,7 @@ is deferred on data (see its entry).
 ### Track D: Design system (paper redesign)
 Plan: `docs/superpowers/plans/2026-10-12-design-system-formalization.md`.
 - [x] D1 drift rule + baseline + redesign copy  - [x] D2 token source (1:1)  - [x] D3 rename collisions (`unknownVar` check; chart cursor fixed, ERROR-LOG 2026-10-13)
-- [x] D4 fonts (Host Grotesk, Pretendard, Geist Mono; OFL, vendored)  - [ ] D5 paper switch  - [ ] D6 formatNumber  - [ ] D7 i18n + bilingual labels
+- [x] D4 fonts (Host Grotesk, Pretendard, Geist Mono; OFL, vendored)  - [x] D5 paper switch (deprecatedVar 2311 warnings; Sidebar text-black → ink; full Playwright 309 passed, 7 skipped)  - [ ] D6 formatNumber  - [ ] D7 i18n + bilingual labels
 - [ ] D8 component layer  - [ ] D9 shared UI/charts  - [ ] D10 portfolio  - [ ] D11 corporate/valuation/cases/decisions
 - [ ] D12 monte-carlo  - [ ] D13 market/detail/news/events/dev/signals  - [ ] D14 lock-down
 Baseline counts (D1, 2026-10-13, `npm run design:baseline` over app/components/lib/hooks): typeScale 650, paletteClass 92 (142 class occurrences; the rule reports per string), rawRadius 47, rawShadow 13, lengthTypeVar 115, arbitraryPx 13, hex 53, colorFn 10, numericFontSize 2. Total 995.

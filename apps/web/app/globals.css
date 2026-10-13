@@ -3,11 +3,19 @@
 
 @layer base {
   body {
-    background-color: var(--bg-canvas);
-    color: var(--text-primary);
+    background-color: var(--bg);
+    color: var(--ink);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     font-family: var(--font-family-sans);
+    /* Hangul breaks between words, not syllables (the redesign's page root). */
+    word-break: keep-all;
+  }
+
+  /* One focus ring for every control (redesign: 2px brand, 2px offset). */
+  :focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
   }
 
   /* Numeric display alignment */
@@ -17,6 +25,20 @@
 }
 
 @layer utilities {
+  /* Hangul captions run at 12px, Latin at 11px, whatever the page language (tokens.json:
+     "Korean captions at 12px"). In the utilities layer because a base-layer rule would lose
+     to the type-caption utility regardless of specificity. */
+  .type-caption:lang(ko), .type-caption :lang(ko) {
+    font-size: var(--type-caption-ko);
+    line-height: var(--type-caption-ko-line-height);
+    letter-spacing: var(--type-caption-ko-tracking);
+  }
+  .type-caption :lang(en) {
+    font-size: var(--type-caption);
+    line-height: var(--type-caption-line-height);
+    letter-spacing: var(--type-caption-tracking);
+  }
+
   .text-balance {
     text-wrap: balance;
   }

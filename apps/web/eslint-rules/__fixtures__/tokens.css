@@ -5,4 +5,5 @@
   --shadow-modal: 0 4px 24px rgba(0, 0, 0, 0.08);
   --type-caption: 11px;
   --fixture-only: #000000;
+  --old-alias: #ffffff; /* deprecated: use --bg-surface */
 }

@@ -3,13 +3,16 @@
 import { type ReactNode, useEffect, useState } from "react";
 import { Menu, X } from "lucide-react";
 import { Sidebar } from "@/components/ui/Sidebar";
+import { tokens } from "@/lib/tokens.generated";
+
+const DESKTOP_MIN = Number.parseFloat(tokens.bp.desktop); // Tailwind lg
 
 export function AppShell({ children }: { children: ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
     const onResize = () => {
-      if (window.innerWidth >= 1024) {
+      if (window.innerWidth >= DESKTOP_MIN) {
         setSidebarOpen(false);
       }
     };

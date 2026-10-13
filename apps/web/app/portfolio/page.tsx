@@ -37,6 +37,7 @@ import { PortfolioShell } from "./components/PortfolioShell";
 import { resolveGroupFilter, selectVisibleStocks, StockTileGrid, type GridFilter } from "./components/StockTileGrid";
 import { WatchlistPeerSyncStatus, type WatchlistPeerSyncStatusData } from "./components/WatchlistPeerSyncStatus";
 import { tabStateKey, useTabState } from "@/lib/tabState";
+import { tokens } from "@/lib/tokens.generated";
 import { acquireNews, fetchBulkNews, summarizeAcquisition } from "@/lib/portfolioNews";
 import type {
   CorporateComparisonHistoryPoint,
@@ -244,6 +245,7 @@ interface SectorGroup {
   holdings: PortfolioStock[];
 }
 
+const DESKTOP_MIN = Number.parseFloat(tokens.bp.desktop); // Tailwind lg
 const PORTFOLIO_DATE_FILTERS_STORAGE_KEY = "moneyview.portfolio.dateFilters.v1";
 const PORTFOLIO_COMPARISON_CACHE_KEY = "moneyview.portfolio.comparison-cache.v1";
 const PORTFOLIO_COMPARISON_HISTORY_CACHE_KEY = "moneyview.portfolio.comparison-history-cache.v1";
@@ -1016,7 +1018,7 @@ export default function PortfolioPage() {
     if (typeof window === "undefined") return;
 
     const syncHoldingsViewForViewport = () => {
-      setHoldingsView((current) => (window.innerWidth < 1024 ? "table" : current));
+      setHoldingsView((current) => (window.innerWidth < DESKTOP_MIN ? "table" : current));
     };
 
     syncHoldingsViewForViewport();

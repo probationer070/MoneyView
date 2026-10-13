@@ -55,6 +55,7 @@ tester.run("no-raw-design-values", rule, {
     { code: 'const f = "var(--font-pretendrad)";', errors: [{ messageId: "unknownVar" }] },
     { code: 'const f = "var(--font-inter)";', errors: [{ messageId: "unknownVar" }] },
     { code: 'const f = "var(--font-pretendard-old)";', errors: [{ messageId: "unknownVar" }] },
+    { code: 'const a = <div className="bg-[var(--old-alias)]" />;', errors: [{ messageId: "deprecatedVar" }] },
   ],
 });
 
@@ -64,6 +65,6 @@ const liveTester = new RuleTester({
 });
 
 liveTester.run("no-raw-design-values (default token file)", rule, {
-  valid: ['const s = { fill: "var(--bg-surface)" };'],
+  valid: ['const s = { fill: "var(--surface-raised)" };'],
   invalid: [{ code: 'const s = { fill: "var(--bg-muted)" };', errors: [{ messageId: "unknownVar" }] }],
 });

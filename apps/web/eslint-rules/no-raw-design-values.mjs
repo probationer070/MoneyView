@@ -78,6 +78,7 @@ const rule = {
       rawRadius: "Tailwind radius. Use rounded-[var(--radius-1|2)], no class for square, or rounded-full for dots.",
       numericFontSize: "Numeric font size. Use tokens.type.<style>._ from lib/tokens.generated.ts.",
       unknownVar: "{{name}} is not defined in app/tokens.generated.css; an undefined var() renders as nothing.",
+      deprecatedVar: "{{name}} is a deprecated alias; app/tokens.generated.css names its replacement.",
     },
   },
   create(context) {
@@ -90,6 +91,7 @@ const rule = {
       for (const [, name] of text.matchAll(VAR_REF)) {
         if (LOCAL_VAR.test(name)) continue;
         if (!vars.known.has(name)) context.report({ node, messageId: "unknownVar", data: { name } });
+        else if (vars.deprecated.has(name)) context.report({ node, messageId: "deprecatedVar", data: { name } });
       }
     };
     return {
