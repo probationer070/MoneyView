@@ -112,12 +112,12 @@ export function OHLCVChartCard({
           is their legend and the only textual record of what is drawn -- the tooltip gives each
           event's detail. */}
       {categoryLegend.length > 0 ? (
-        <div data-testid="chart-events-legend" className="mt-3 flex flex-wrap gap-2 text-xs text-[var(--text-muted)]">
+        <div data-testid="chart-events-legend" className="mt-3 flex flex-wrap gap-2 type-small text-[var(--ink-muted)]">
           {categoryLegend.map((entry) => (
             <span
               key={entry.key}
               data-testid="chart-events-legend-item"
-              className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] px-2 py-1"
+              className="inline-flex items-center gap-2 rounded-full border border-[var(--line)] px-2 py-1"
               title={`${entry.count} event(s) in this category`}
             >
               <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: entry.color }} />
@@ -126,9 +126,9 @@ export function OHLCVChartCard({
           ))}
         </div>
       ) : null}
-      {legend ? <div className="mt-3 flex flex-wrap gap-2 text-xs text-[var(--text-muted)]">{legend}</div> : null}
+      {legend ? <div className="mt-3 flex flex-wrap gap-2 type-small text-[var(--ink-muted)]">{legend}</div> : null}
 
-      <div className="mt-4 rounded-[var(--radius)] border border-[var(--border)]/60 bg-[var(--surface-muted)] p-2">
+      <div className="mt-4 border border-[var(--grid)] bg-[var(--surface)] p-2">
         <TVChart
           data={data}
           events={lines}

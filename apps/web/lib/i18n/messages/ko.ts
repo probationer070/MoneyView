@@ -9,6 +9,7 @@ export const ko: Messages = {
   common: {
     loading: "불러오는 중…", retry: "다시 시도", unavailable: "불러오지 못했습니다.",
     updatedAgo: "{minutes}분 전 갱신", language: "언어",
+    errorTitle: "문제가 발생했습니다", tryAgain: "다시 시도", noData: "데이터가 없습니다", noDataHint: "분석을 실행하거나 데이터를 새로 고치면 결과가 여기에 표시됩니다.", renderFailureTitle: "화면 구성 요소 오류", renderFailureBody: "예기치 않은 오류로 이 그래프를 표시하지 못했습니다. 로그는 로컬에 기록되었습니다.", exportDisabled: "내보내기 사용 불가", exportJson: "JSON 내보내기", exportCsv: "CSV 내보내기", exportMarkdown: "Markdown 내보내기", printPdf: "PDF 인쇄", tickerPlaceholder: "종목 코드 또는 기업명",
   },
   delta: { up: "상승", down: "하락", flat: "보합" },
 };

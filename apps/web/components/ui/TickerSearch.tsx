@@ -1,6 +1,7 @@
 "use client";
 
 import { useId, useMemo, useState } from "react";
+import { useT } from "@/lib/i18n/locale";
 
 /**
  * One ticker search, used everywhere a ticker or company is looked up.
@@ -73,12 +74,13 @@ export function TickerSearch({
   onChange,
   onSelect,
   items,
-  placeholder = "Ticker or company name",
+  placeholder,
   selectedTicker,
   id,
   className = "",
   maxSuggestions = 8,
 }: TickerSearchProps) {
+  const t = useT();
   const generatedId = useId();
   const inputId = id ?? `ticker-search-${generatedId}`;
   const [open, setOpen] = useState(false);
@@ -97,7 +99,7 @@ export function TickerSearch({
 
   return (
     <div className={`relative flex flex-col gap-1 ${className}`}>
-      <label htmlFor={inputId} className="text-xs text-[var(--text-secondary)]">
+      <label htmlFor={inputId} className="type-small text-[var(--ink-secondary)]">
         {label}
       </label>
       <input
@@ -122,7 +124,7 @@ export function TickerSearch({
           }
           if (event.key === "Escape") setOpen(false);
         }}
-        placeholder={placeholder}
+        placeholder={placeholder ?? t("common.tickerPlaceholder")}
         autoComplete="off"
         autoCorrect="off"
         autoCapitalize="none"
@@ -132,14 +134,14 @@ export function TickerSearch({
         aria-controls={`${inputId}-listbox`}
         aria-autocomplete="list"
         data-testid={`${inputId}-input`}
-        className="rounded-[var(--radius-sm)] border border-[var(--border-default)] bg-transparent px-2 py-1 text-[var(--text-primary)]"
+        className="rounded-[var(--radius-1)] border border-[var(--line)] bg-transparent px-2 py-1 text-[var(--ink)]"
       />
       {open && matches.length > 0 ? (
         <div
           id={`${inputId}-listbox`}
           role="listbox"
           // Absolutely positioned so opening the list never pushes the layout below it.
-          className="absolute left-0 right-0 top-full z-30 mt-1 max-h-56 overflow-auto rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-1 shadow-lg"
+          className="absolute left-0 right-0 top-full z-30 mt-1 max-h-56 overflow-auto rounded-[var(--radius-2)] border border-[var(--line)] bg-[var(--surface-raised)] p-1"
         >
           {matches.map((item) => (
             <button
@@ -148,16 +150,16 @@ export function TickerSearch({
               role="option"
               aria-selected={item.ticker === selectedTicker}
               onClick={() => commit(item.ticker)}
-              className={`block w-full rounded px-3 py-2 text-left text-sm transition hover:bg-[var(--brand)] ${
+              className={`block w-full rounded-[var(--radius-1)] px-3 py-2 text-left type-body transition hover:bg-[var(--brand)] ${
                 item.ticker === selectedTicker
-                  ? "bg-[var(--brand)] font-bold text-[var(--text-primary)]"
-                  : "text-[var(--text-muted)]"
+                  ? "bg-[var(--brand)] text-[var(--on-brand)]"
+                  : "text-[var(--ink-muted)]"
               }`}
             >
               {/* The space is load-bearing: without it the accessible name reads
                   "MicrosoftMSFT", which no reasonable selector or screen reader expects. */}
               {item.name ? `${item.name} ` : ""}
-              <span className={item.name ? "text-xs text-[var(--text-muted)]" : ""}>
+              <span className={item.name ? "type-small text-[var(--ink-muted)]" : ""}>
                 {item.ticker}
               </span>
             </button>

@@ -4,27 +4,30 @@
  * tooltip chrome, formatters, or palette rules locally.
  */
 
+import { tokens } from "@/lib/tokens.generated";
+
 export const CHART_MARGIN = { top: 8, right: 16, bottom: 8, left: 16 } as const;
 
 export const CHART_MARGIN_LABELED = { top: 8, right: 24, bottom: 24, left: 24 } as const;
 
 export const AXIS_TICK_STYLE = {
-  fontSize: 11,
-  fill: "var(--chart-label)",
+  fontSize: Number.parseFloat(tokens.type.caption._),
+  fontFamily: "var(--font-family-mono)",
+  fill: "var(--ink-muted)",
 } as const;
 
 export const AXIS_CATEGORY_TICK_STYLE = {
   ...AXIS_TICK_STYLE,
-  fill: "var(--text-primary)",
+  fill: "var(--ink)",
   fontWeight: 600,
 } as const;
 
 export const AXIS_LINE_STYLE = {
-  stroke: "var(--chart-grid)",
+  stroke: "var(--grid)",
 } as const;
 
 export const GRID_STYLE = {
-  stroke: "var(--chart-grid)",
+  stroke: "var(--grid)",
   strokeDasharray: "3 3",
 } as const;
 
@@ -41,26 +44,25 @@ export const DEFAULT_CATEGORY_AXIS_PROPS = {
 } as const;
 
 export const TOOLTIP_CONTENT_STYLE = {
-  backgroundColor: "var(--bg-surface)",
-  border: "1px solid var(--border-default)",
-  borderRadius: "var(--radius-sm)",
-  fontSize: 12,
+  backgroundColor: "var(--surface-raised)",
+  border: "1px solid var(--line)",
+  borderRadius: "var(--radius-2)",
+  fontSize: Number.parseFloat(tokens.type.small._),
   padding: "8px 12px",
-  boxShadow: "var(--shadow-popover)",
 } as const;
 
 export const TOOLTIP_LABEL_STYLE = {
   fontWeight: 600,
   marginBottom: 4,
-  color: "var(--text-primary)",
+  color: "var(--ink)",
 } as const;
 
 export const TOOLTIP_ITEM_STYLE = {
-  color: "var(--text-secondary)",
+  color: "var(--ink-secondary)",
 } as const;
 
 export const TOOLTIP_CURSOR_STYLE = {
-  fill: "var(--surface-muted)",
+  fill: "var(--surface)",
   opacity: 0.5,
 } as const;
 
@@ -93,30 +95,30 @@ export function withCategoryAxisProps<T extends Record<string, unknown>>(overrid
 }
 
 export const CHART_COLORS = {
-  primary: "var(--chart-primary)",
-  secondary: "var(--chart-secondary)",
-  tertiary: "var(--chart-tertiary)",
-  muted: "var(--chart-muted)",
-  label: "var(--chart-label)",
-  ink: "var(--chart-ink)",
-  positive: "var(--chart-positive)",
-  negative: "var(--chart-negative)",
+  primary: "var(--chart-1)",
+  secondary: "var(--chart-2)",
+  tertiary: "var(--chart-3)",
+  muted: "var(--chart-4)",
+  label: "var(--ink-muted)",
+  ink: "var(--ink)",
+  positive: "var(--up)",
+  negative: "var(--down)",
 } as const;
 
+/** Five series (redesign chart-1..5). A sixth category folds into "Other" in chart-4 (M4). */
 export const CHART_COLOR_SEQUENCE = [
-  CHART_COLORS.primary,
-  CHART_COLORS.secondary,
-  CHART_COLORS.tertiary,
-  CHART_COLORS.ink,
-  CHART_COLORS.muted,
-  CHART_COLORS.label,
+  "var(--chart-1)",
+  "var(--chart-2)",
+  "var(--chart-3)",
+  "var(--chart-4)",
+  "var(--chart-5)",
 ] as const;
 
 export const CHART_REFERENCE_COLORS = {
   baseline: CHART_COLORS.ink,
-  highlight: "#f59e0b",
-  warning: "#f97316",
-  success: "#16a34a",
+  highlight: "var(--brand)",
+  warning: "var(--status-warning-ink)",
+  success: "var(--status-success-ink)",
   danger: CHART_COLORS.negative,
 } as const;
 
@@ -162,8 +164,9 @@ export function heatColor(value: number): string {
   return HEAT_SCALE[index];
 }
 
+/** Series past the fifth share chart-4, the "Other" colour (M4). */
 export function seriesColor(index: number): string {
-  return CHART_COLOR_SEQUENCE[index % CHART_COLOR_SEQUENCE.length];
+  return CHART_COLOR_SEQUENCE[index] ?? CHART_COLOR_SEQUENCE[3];
 }
 
 export function fmtPct(value: number, decimals = 1): string {

@@ -17,21 +17,21 @@ export function EventTooltip({ x, width, events }: { x: number; width: number; e
     <div
       role="tooltip"
       data-testid="event-tooltip"
-      className="pointer-events-none absolute top-2 z-10 flex flex-col gap-2 rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--bg-surface)] p-2 text-xs text-[var(--text-primary)] shadow-lg"
+      className="pointer-events-none absolute top-2 z-10 flex flex-col gap-2 rounded-[var(--radius-2)] border border-[var(--line)] bg-[var(--surface-raised)] p-2 type-small text-[var(--ink)]"
       style={{ width: TOOLTIP_WIDTH, left }}
     >
       {events.map((event) => (
         <div key={event.id} data-testid={`event-tooltip-item-${event.id}`}>
-          <div className="flex items-center gap-2 font-bold">
+          <div className="flex items-center gap-2">
             <span aria-hidden className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: event.color }} />
             {event.label}
           </div>
-          <div className="text-[var(--text-secondary)]">
+          <div className="text-[var(--ink-secondary)]">
             {event.endDate ? `${event.date} – ${event.endDate}` : event.date}
             {event.categoryLabel ? ` · ${event.categoryLabel}` : ""}
           </div>
           {event.note ? <p className="mt-1">{event.note}</p> : null}
-          <p className="mt-1 text-[var(--text-secondary)]">{eventProvenance(event)}</p>
+          <p className="mt-1 text-[var(--ink-secondary)]">{eventProvenance(event)}</p>
         </div>
       ))}
     </div>

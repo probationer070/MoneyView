@@ -36,3 +36,16 @@ capitals: "종목 NAME". Both come from `apps/web/lib/i18n/labels.ts`; add the r
 | Up / Down / Unchanged | 상승 / 하락 / 보합 | delta, screen-reader text |
 | Language | 언어 | language toggle group label |
 | Could not be loaded. | 불러오지 못했습니다. | error state body |
+| Something went wrong | 문제가 발생했습니다 | error state title (default) |
+| Try again | 다시 시도 | error state action |
+| No data available | 데이터가 없습니다 | empty state, empty table |
+| Run an analysis or refresh the data to see results here. | 분석을 실행하거나 데이터를 새로 고치면 결과가 여기에 표시됩니다. | empty state hint |
+| Component Render Failure | 화면 구성 요소 오류 | error boundary title (default) |
+| An unexpected error broke the layout context for this graphic. Logs have been traced locally. | 예기치 않은 오류로 이 그래프를 표시하지 못했습니다. 로그는 로컬에 기록되었습니다. | error boundary body (default) |
+| Export Disabled | 내보내기 사용 불가 | export button, no data |
+| Export JSON / CSV / Markdown | JSON / CSV / Markdown 내보내기 | export buttons |
+| Print PDF | PDF 인쇄 | export button |
+| Ticker or company name | 종목 코드 또는 기업명 | ticker search placeholder |
+| Input | 입력 | label (audit table header) |
+| Value | 값 | label (audit table header) |
+| Source | 출처 | label (audit table header) |

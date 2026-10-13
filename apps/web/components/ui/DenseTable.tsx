@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import clsx from "clsx";
 import { BilingualLabel } from "@/components/ui/BilingualLabel";
+import { useT } from "@/lib/i18n/locale";
 import { MISSING } from "@/lib/format";
 import type { LabelKey } from "@/lib/i18n/labels";
 
@@ -35,10 +36,11 @@ export function DenseTable<T extends Record<string, unknown>>({
   columns,
   data,
   onRowClick,
-  emptyMessage = "No data available",
+  emptyMessage,
   stickyHeader = false,
   className,
 }: DenseTableProps<T>) {
+  const t = useT();
   return (
     <div className={clsx("w-full overflow-x-auto", className)}>
       <table className="type-body w-full min-w-max border-collapse text-[var(--ink-secondary)]">
@@ -59,7 +61,7 @@ export function DenseTable<T extends Record<string, unknown>>({
         <tbody>
           {data.length === 0 ? (
             <tr>
-              <td colSpan={columns.length} className="px-4 py-8 text-center text-[var(--ink-muted)]">{emptyMessage}</td>
+              <td colSpan={columns.length} className="px-4 py-8 text-center text-[var(--ink-muted)]">{emptyMessage ?? t("common.noData")}</td>
             </tr>
           ) : (
             data.map((row, rowIdx) => (

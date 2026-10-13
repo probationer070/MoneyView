@@ -94,3 +94,13 @@ test("html lang follows the stored locale while the backend is still starting", 
   await expect(page.getByRole("heading", { name: "Starting Core Analytics..." })).toBeVisible();
   await expect(page.locator("html")).toHaveAttribute("lang", "ko");
 });
+
+test.describe("ko shared error state", () => {
+  test.use({ locale: "ko-KR" });
+  test("the shared ErrorState title and retry label are Korean on a failed dev performance load", async ({ page }) => {
+    await page.route("**/performance/requests*", (route) => route.fulfill({ status: 500, body: "{}" }));
+    await page.goto("/dev/performance", { waitUntil: "domcontentloaded" });
+    await expect(page.getByText("문제가 발생했습니다", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "다시 시도", exact: true })).toBeVisible();
+  });
+});

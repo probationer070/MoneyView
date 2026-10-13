@@ -11,6 +11,9 @@ export const LABELS = {
   case: ["케이스", "Case"],
   devRuntime: ["개발 런타임", "Developer runtime"],
   monteCarlo: ["몬테카를로 시뮬레이션", "Monte Carlo"],
+  input: ["입력", "Input"],
+  value: ["값", "Value"],
+  source: ["출처", "Source"],
 } as const satisfies Record<string, readonly [string, string]>;
 
 export type LabelKey = keyof typeof LABELS;

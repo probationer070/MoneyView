@@ -104,19 +104,19 @@ export const DiagnosticWorkbench: React.FC<{ ticker: string }> = ({ ticker }) =>
 
     return (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
-            <div className="md:col-span-2 flex flex-col gap-3 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4 shadow-sm sm:flex-row sm:items-start sm:justify-between">
+            <div className="md:col-span-2 flex flex-col gap-3 border border-[var(--line)] bg-[var(--surface-raised)] p-4 sm:flex-row sm:items-start sm:justify-between">
                 <div>
-                    <h2 className="text-lg font-bold text-[var(--text-primary)]">Corporate Diagnostics</h2>
-                    <p className="mt-1 text-sm text-[var(--text-muted)]">
+                    <h2 className="type-panel-title text-[var(--ink)]">Corporate Diagnostics</h2>
+                    <p className="mt-1 type-body text-[var(--ink-muted)]">
                         Radar and tornado diagnostics now stay idle on first load and refresh only when you request them.
                     </p>
                 </div>
-                <div className="flex flex-col items-start gap-2 text-xs text-[var(--text-muted)] sm:items-end">
+                <div className="flex flex-col items-start gap-2 type-small text-[var(--ink-muted)] sm:items-end">
                     <button
                         type="button"
                         onClick={handleRefresh}
                         disabled={isRefreshing}
-                        className="inline-flex items-center gap-2 rounded-[var(--radius)] border border-[var(--border)] px-3 py-2 font-semibold text-[var(--text-primary)] disabled:opacity-60"
+                        className="inline-flex items-center gap-2 rounded-[var(--radius-1)] border border-[var(--line)] px-3 py-2 text-[var(--ink)] disabled:opacity-60"
                     >
                         <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? "animate-spin" : ""}`} />
                         Refresh Diagnostics
@@ -126,19 +126,19 @@ export const DiagnosticWorkbench: React.FC<{ ticker: string }> = ({ ticker }) =>
             </div>
 
             {!displayRadarData && !displayTornadoData && !isRefreshing ? (
-                <div className="md:col-span-2 rounded-[var(--radius)] border border-dashed border-[var(--border)] bg-[var(--surface-muted)] px-4 py-6 text-sm text-[var(--text-muted)]">
+                <div className="md:col-span-2 border border-dashed border-[var(--line)] bg-[var(--surface)] px-4 py-6 type-body text-[var(--ink-muted)]">
                     Diagnostics stay idle on first load. Click `Refresh Diagnostics` when you want the latest radar and tornado views.
                 </div>
             ) : null}
 
             <div className="relative">
                 {radarLoading && (
-                    <div className="absolute inset-0 z-10 rounded-[var(--radius)] bg-[var(--bg-surface)]">
+                    <div className="absolute inset-0 z-10 bg-[var(--surface-raised)]">
                         <LoadingState variant="skeleton" label="Loading radar diagnostics..." />
                     </div>
                 )}
                 {radarError && !displayRadarData ? (
-                    <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-5">
+                    <div className="border border-[var(--line)] bg-[var(--surface-raised)] p-5">
                         <ErrorState title="Radar Diagnostics Unavailable" message="Refresh diagnostics to retry the strategic positioning radar." />
                     </div>
                 ) : (
@@ -148,12 +148,12 @@ export const DiagnosticWorkbench: React.FC<{ ticker: string }> = ({ ticker }) =>
 
             <div className="relative">
                 {tornadoLoading && (
-                    <div className="absolute inset-0 z-10 rounded-[var(--radius)] bg-[var(--bg-surface)]">
+                    <div className="absolute inset-0 z-10 bg-[var(--surface-raised)]">
                         <LoadingState variant="skeleton" label="Loading tornado diagnostics..." />
                     </div>
                 )}
                 {tornadoError && !displayTornadoData ? (
-                    <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-5">
+                    <div className="border border-[var(--line)] bg-[var(--surface-raised)] p-5">
                         <ErrorState title="Tornado Diagnostics Unavailable" message="Refresh diagnostics to retry the sensitivity bounds chart." />
                     </div>
                 ) : (

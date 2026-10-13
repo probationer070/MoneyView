@@ -1,4 +1,5 @@
 import { AlertCircle } from "lucide-react";
+import { useT } from "@/lib/i18n/locale";
 
 interface ErrorStateProps {
   title?: string;
@@ -7,26 +8,27 @@ interface ErrorStateProps {
 }
 
 export function ErrorState({
-  title = "Something went wrong",
+  title,
   message,
   retryAction,
 }: ErrorStateProps) {
+  const t = useT();
   return (
     <div className="flex flex-col items-center justify-center gap-3 py-12 px-6 text-center">
-      <div className="flex items-center justify-center w-12 h-12 rounded-[var(--radius-md)] bg-[var(--state-error)]/10 text-[var(--state-error)]">
+      <div className="flex items-center justify-center w-12 h-12 bg-[var(--status-error-surface)] text-[var(--status-error-ink)]">
         <AlertCircle className="h-6 w-6" />
       </div>
       <div className="flex flex-col gap-1">
-        <p className="text-[length:var(--type-body)] font-medium text-[var(--text-primary)]">{title}</p>
-        <p className="text-[length:var(--type-helper)] text-[var(--text-muted)] max-w-[320px]">{message}</p>
+        <p className="type-body text-[var(--ink)]">{title ?? t("common.errorTitle")}</p>
+        <p className="type-small text-[var(--ink-muted)] max-w-[320px]">{message}</p>
       </div>
       {retryAction && (
         <button
           type="button"
           onClick={retryAction}
-          className="mt-1 text-[length:var(--type-small)] font-medium text-[var(--state-info)] underline decoration-dotted underline-offset-4 hover:opacity-80 transition-opacity duration-[var(--duration-fast)]"
+          className="mt-1 type-small text-[var(--brand-text)] underline decoration-dotted underline-offset-4 hover:opacity-80 transition-opacity duration-[var(--duration-fast)]"
         >
-          Try again
+          {t("common.tryAgain")}
         </button>
       )}
     </div>

@@ -6,6 +6,7 @@ export const en = {
   common: {
     loading: "Loading…", retry: "Retry", unavailable: "Could not be loaded.",
     updatedAgo: "Updated {minutes} min ago", language: "Language",
+    errorTitle: "Something went wrong", tryAgain: "Try again", noData: "No data available", noDataHint: "Run an analysis or refresh the data to see results here.", renderFailureTitle: "Component Render Failure", renderFailureBody: "An unexpected error broke the layout context for this graphic. Logs have been traced locally.", exportDisabled: "Export Disabled", exportJson: "Export JSON", exportCsv: "Export CSV", exportMarkdown: "Export Markdown", printPdf: "Print PDF", tickerPlaceholder: "Ticker or company name",
   },
   delta: { up: "Up", down: "Down", flat: "Unchanged" },
 } as const;

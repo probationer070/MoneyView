@@ -31,10 +31,10 @@ export function EventFilter({ testId }: { testId: string }) {
         aria-expanded={open}
         aria-haspopup="true"
         onClick={() => setOpen((isOpen) => !isOpen)}
-        className={`rounded-[var(--radius-sm)] border px-3 py-1 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--state-info)] ${
+        className={`rounded-[var(--radius-1)] border px-3 py-1 type-small transition-colors focus-visible:ring-[var(--brand)] ${
           status === "unavailable"
-            ? "border-[var(--state-warning)] text-[var(--state-warning)]"
-            : "border-[var(--border)] text-[var(--text-primary)] hover:bg-[var(--surface-muted)]"
+            ? "border-[var(--status-warning-ink)] text-[var(--status-warning-ink)]"
+            : "border-[var(--line)] text-[var(--ink)] hover:bg-[var(--surface)]"
         }`}
       >
         {status === "loading" ? <span aria-hidden className="mr-1 inline-block h-2 w-2 animate-pulse rounded-full bg-current" /> : null}
@@ -48,23 +48,23 @@ export function EventFilter({ testId }: { testId: string }) {
           role="group"
           aria-label="Event categories"
           data-testid={`${testId}-popover`}
-          className="absolute right-0 z-20 mt-1 w-64 rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--bg-surface)] p-3 text-xs text-[var(--text-primary)] shadow-lg"
+          className="absolute right-0 z-20 mt-1 w-64 rounded-[var(--radius-2)] border border-[var(--line)] bg-[var(--surface-raised)] p-3 type-small text-[var(--ink)]"
         >
           {status === "unavailable" ? (
             <div className="flex flex-col gap-2">
               <p>Event lines could not be loaded, so none are drawn. The price chart is unaffected.</p>
-              <button type="button" data-testid={`${testId}-retry`} onClick={refetch} className="self-start rounded border border-[var(--border)] px-2 py-1 font-semibold">
+              <button type="button" data-testid={`${testId}-retry`} onClick={refetch} className="self-start rounded-[var(--radius-1)] border border-[var(--line)] px-2 py-1">
                 Retry
               </button>
             </div>
           ) : (
             <div className="flex flex-col gap-2">
               <div className="flex gap-2">
-                <button type="button" data-testid={`${testId}-all`} className="rounded border border-[var(--border)] px-2 py-1 font-semibold"
+                <button type="button" data-testid={`${testId}-all`} className="rounded-[var(--radius-1)] border border-[var(--line)] px-2 py-1"
                   onClick={() => change(categories.filter((c) => !c.visible).map((c) => ({ id: c.id, visible: true })))}>
                   All
                 </button>
-                <button type="button" data-testid={`${testId}-none`} className="rounded border border-[var(--border)] px-2 py-1 font-semibold"
+                <button type="button" data-testid={`${testId}-none`} className="rounded-[var(--radius-1)] border border-[var(--line)] px-2 py-1"
                   onClick={() => change(categories.filter((c) => c.visible).map((c) => ({ id: c.id, visible: false })))}>
                   None
                 </button>
@@ -86,7 +86,7 @@ export function EventFilter({ testId }: { testId: string }) {
                 ))}
               </ul>
               {setVisible.isError ? (
-                <p role="alert" data-testid={`${testId}-error`} className="text-[var(--state-warning)]">
+                <p role="alert" data-testid={`${testId}-error`} className="text-[var(--status-warning-ink)]">
                   Some changes could not be saved; the filter shows what was saved.
                 </p>
               ) : null}

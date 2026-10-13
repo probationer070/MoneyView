@@ -23,7 +23,7 @@ export function InlineField({
   return (
     <label
       className={clsx(
-        "grid gap-[var(--space-2)] rounded-[var(--radius-md)] border border-[var(--border-soft)] bg-[var(--bg-surface)] px-[var(--space-3)] py-[var(--space-3)]",
+        "grid gap-[var(--space-2)] border border-[var(--line)] bg-[var(--surface-raised)] px-[var(--space-3)] py-[var(--space-3)]",
         className
       )}
     >
