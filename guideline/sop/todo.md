@@ -52,7 +52,7 @@ Plan: `docs/superpowers/plans/2026-10-12-design-system-formalization.md`.
 - [ ] D8 component layer  - [ ] D9 shared UI/charts  - [ ] D10 portfolio  - [ ] D11 corporate/valuation/cases/decisions
 - [ ] D12 monte-carlo  - [ ] D13 market/detail/news/events/dev/signals  - [ ] D14 lock-down
 Baseline counts (D1, 2026-10-13, `npm run design:baseline` over app/components/lib/hooks): typeScale 650, paletteClass 92 (142 class occurrences; the rule reports per string), rawRadius 47, rawShadow 13, lengthTypeVar 115, arbitraryPx 13, hex 53, colorFn 10, numericFontSize 2. Total 995.
-Captures and review verdicts: D1 `before` vs `before-again`: 7 of 7 byte-identical. Mask: `article` on `/` (market cards are server-rendered from the live API, so they move between runs).
+Captures and review verdicts: D1 `before` vs `before-again`: 7 of 7 byte-identical. Mask: SparklineCard `article` on `/` (market cards are server-rendered from the live API, so they move between runs).
 
 ---
 

@@ -10,7 +10,8 @@ const START = String.raw`(?:^|[\s"'\x60:])`;
 const END = String.raw`(?=$|[\s"'\x60])`;
 
 const EVERYWHERE = [
-  ["hex", /#[0-9a-fA-F]{3,8}\b/],
+  // 6 and 8 digits only: 3- and 4-digit forms collide with prose ("#bad", "#123").
+  ["hex", /(?<![A-Za-z/])#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6})\b/],
   ["colorFn", /\b(?:rgba?|hsla?|oklch|oklab|lab|lch)\(/],
   ["paletteClass", new RegExp(`${START}(?:bg|text|border|ring|fill|stroke|from|via|to|divide|outline|decoration|placeholder|accent|caret)-(?:${PALETTE})(?:-\\d{2,3})?(?:\\/\\d+)?${END}`)],
   ["typeScale", new RegExp(`${START}text-(?:xs|sm|base|lg|xl|[2-9]xl)${END}`)],

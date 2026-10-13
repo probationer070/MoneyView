@@ -17,9 +17,9 @@ for (const [route, mock] of DESIGN_SCREENS) {
       animations: "disabled",
       // "/" server-renders its index cards from the live API (app/page.tsx fetches
       // /market/indices on the server, where page.route cannot intercept), so the card
-      // prices and sparklines move between runs. Mask the cards; the rest of the page is
-      // still compared.
-      mask: route === "/" ? [page.locator("article")] : [],
+      // prices and sparklines move between runs. SparklineCard is the only article with an
+      // "Open detail for" button; mask those cards and compare the rest of the page.
+      mask: route === "/" ? [page.locator('article:has(button[aria-label^="Open detail for"])')] : [],
     });
   });
 }
