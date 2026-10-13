@@ -26,6 +26,16 @@ reveal that; only checking the code did.
 
 An entry states what was true when it was written. Nothing updates it on its own.
 
+## 2026-10-14: market overview candles took the day's direction colour for every up candle
+
+Date: 2026-10-14
+Command: `npx playwright test tests/e2e/candle-direction.spec.ts` (new test, DS Task 9 fix round 1)
+Failure: in the S&P 500 detail dialog on `/`, up candles were painted in the colour of that day's index change. On a down day every up candle was blue, so up and down candles could not be told apart. The new two-sided test counted 0 up-coloured pixels.
+Root cause: `components/market/MarketOverviewClient.tsx` passed `colorAccent={chartColor}` (the day-change sign colour, meant for line series) and no `upColor`; `TVChart` falls back to `colorAccent` for the up-candle colour. Present since 5fdd826 (2026-04-17). `candle-colour.spec.ts` only asserted `up + down > 50` and its fixture has no down bars, so neither a swap nor this could fail it.
+Fix: `upColor="var(--up)"` passed explicitly (efec33b). New `tests/e2e/candle-direction.spec.ts` with a mixed up/down series asserts up > 50 and down > 50 separately; reverting the fix makes it fail (up received 0), checked by the controller.
+Files changed: apps/web/components/market/MarketOverviewClient.tsx, apps/web/tests/e2e/candle-direction.spec.ts
+Prevention: a colour test must use data that exercises every colour it claims to check, and count each colour separately; a sum of two colours cannot detect one replacing the other.
+
 ## 2026-10-13: chart hover cursor filled with an undefined variable
 
 Date: 2026-10-13
