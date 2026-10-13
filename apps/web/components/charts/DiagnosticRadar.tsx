@@ -5,6 +5,7 @@ import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Tooltip 
 import { ChartPanelFrame } from "@/components/charts/ChartPanelFrame";
 import { ResponsiveChart } from "@/components/ui/ResponsiveChart";
 import { AXIS_TICK_STYLE, withTooltipProps } from "@/lib/chartConfig";
+import { tokens } from "@/lib/tokens.generated";
 
 interface RadarEntry {
     subject: string;
@@ -35,7 +36,7 @@ export const DiagnosticRadar: React.FC<{ data: RadarEntry[] }> = ({ data }) => {
                         dataKey="score" 
                         stroke="var(--brand)"
                         fill="var(--brand)"
-                        fillOpacity={0.5} 
+                        fillOpacity={Number(tokens.chart["area-opacity"])} 
                     />
                     
                     {/* Peer Overlay */}
@@ -44,7 +45,7 @@ export const DiagnosticRadar: React.FC<{ data: RadarEntry[] }> = ({ data }) => {
                         dataKey="peer" 
                         stroke="var(--ink-muted)"
                         fill="var(--ink-muted)"
-                        fillOpacity={0.2} 
+                        fillOpacity={Number(tokens.chart["area-opacity"])} 
                     />
                     
                     <Tooltip {...withTooltipProps()} />

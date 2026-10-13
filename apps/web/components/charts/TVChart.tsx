@@ -310,7 +310,7 @@ const TVChart: React.FC<TVChartProps> = ({
         <div
             data-testid="tv-chart"
             aria-label={`${safeTickerName} price chart`}
-            className="w-full relative border border-[var(--line)] bg-[var(--ink)]"
+            className="w-full relative border border-[var(--line)] bg-transparent"
         >
             <div ref={chartContainerRef} className="w-full" style={{ minHeight: height }} />
             {hover ? <EventTooltip x={hover.x} width={hover.width} events={hover.events} /> : null}

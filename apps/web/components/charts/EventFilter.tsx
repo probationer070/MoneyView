@@ -31,7 +31,7 @@ export function EventFilter({ testId }: { testId: string }) {
         aria-expanded={open}
         aria-haspopup="true"
         onClick={() => setOpen((isOpen) => !isOpen)}
-        className={`rounded-[var(--radius-1)] border px-3 py-1 type-small transition-colors focus-visible:ring-[var(--brand)] ${
+        className={`rounded-[var(--radius-1)] border px-3 py-1 type-small transition-colors ${
           status === "unavailable"
             ? "border-[var(--status-warning-ink)] text-[var(--status-warning-ink)]"
             : "border-[var(--line)] text-[var(--ink)] hover:bg-[var(--surface)]"

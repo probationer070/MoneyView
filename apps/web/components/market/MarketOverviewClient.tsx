@@ -539,6 +539,7 @@ function MarketDetailModal({ item, onClose }: { item: MarketIndexQuote; onClose:
                       height={420}
                       tickerName={`${item.name} ${chartTimeframe}`}
                       colorAccent={chartColor}
+                      upColor="var(--up)"
                       events={eventLines}
                       eventGranularity={chartTimeframe === "monthly" ? "month" : "day"}
                     />

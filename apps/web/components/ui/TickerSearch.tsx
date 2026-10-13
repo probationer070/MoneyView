@@ -2,6 +2,7 @@
 
 import { useId, useMemo, useState } from "react";
 import { useT } from "@/lib/i18n/locale";
+import { fieldInputClass } from "@/components/ui/InlineField";
 
 /**
  * One ticker search, used everywhere a ticker or company is looked up.
@@ -134,7 +135,7 @@ export function TickerSearch({
         aria-controls={`${inputId}-listbox`}
         aria-autocomplete="list"
         data-testid={`${inputId}-input`}
-        className="rounded-[var(--radius-1)] border border-[var(--line)] bg-transparent px-2 py-1 text-[var(--ink)]"
+        className={fieldInputClass}
       />
       {open && matches.length > 0 ? (
         <div

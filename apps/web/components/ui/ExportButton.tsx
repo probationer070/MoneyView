@@ -128,7 +128,7 @@ export function ExportButton({
   if (!canExport) {
     return (
       <button
-        className="px-3 py-2 type-body rounded-[var(--radius-1)] border border-[var(--line)] text-[var(--on-brand)] bg-[var(--brand)]"
+        className="whitespace-nowrap px-3 py-2 type-body rounded-[var(--radius-1)] border border-[var(--line)] text-[var(--on-brand)] bg-[var(--brand)]"
         disabled
       >
         {t("common.exportDisabled")}
@@ -137,32 +137,32 @@ export function ExportButton({
   }
 
   return (
-    <div className="flex gap-2">
+    <div className="flex flex-wrap gap-2">
       <button
         onClick={exportJson}
         disabled={isLoading}
-        className="px-3 py-2 type-body rounded-[var(--radius-1)] border border-[var(--line)] bg-[var(--surface-raised)] hover:bg-[var(--surface)]"
+        className="whitespace-nowrap px-3 py-2 type-body rounded-[var(--radius-1)] border border-[var(--line)] bg-[var(--surface-raised)] hover:bg-[var(--surface)]"
       >
         {t("common.exportJson")}
       </button>
       <button
         onClick={exportCsv}
         disabled={isLoading}
-        className="px-3 py-2 type-body rounded-[var(--radius-1)] border border-[var(--line)] bg-[var(--surface-raised)] hover:bg-[var(--surface)]"
+        className="whitespace-nowrap px-3 py-2 type-body rounded-[var(--radius-1)] border border-[var(--line)] bg-[var(--surface-raised)] hover:bg-[var(--surface)]"
       >
         {t("common.exportCsv")}
       </button>
       <button
         onClick={exportMarkdown}
         disabled={isLoading}
-        className="px-3 py-2 type-body rounded-[var(--radius-1)] border border-[var(--line)] bg-[var(--surface-raised)] hover:bg-[var(--surface)]"
+        className="whitespace-nowrap px-3 py-2 type-body rounded-[var(--radius-1)] border border-[var(--line)] bg-[var(--surface-raised)] hover:bg-[var(--surface)]"
       >
         {t("common.exportMarkdown")}
       </button>
       <button
         onClick={exportPdf}
         disabled={isLoading}
-        className="px-3 py-2 type-body rounded-[var(--radius-1)] border border-[var(--line)] bg-[var(--brand)] text-[var(--on-brand)] hover:opacity-90"
+        className="whitespace-nowrap px-3 py-2 type-body rounded-[var(--radius-1)] border border-[var(--line)] bg-[var(--brand)] text-[var(--on-brand)] hover:opacity-90"
       >
         {t("common.printPdf")}
       </button>

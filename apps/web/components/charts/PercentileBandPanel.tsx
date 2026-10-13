@@ -109,7 +109,7 @@ export function PercentileBandPanel({
                   );
                 }}
               />
-              <Bar dataKey="value" radius={[6, 6, 0, 0]}>
+              <Bar dataKey="value">
                 {data.map((entry, index) => (
                   <Cell
                     key={`cell-${index}`}

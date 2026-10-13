@@ -1,3 +1,5 @@
+"use client";
+
 import type { ReactNode } from "react";
 import { BarChart3, Inbox } from "lucide-react";
 import { useT } from "@/lib/i18n/locale";

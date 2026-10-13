@@ -40,7 +40,7 @@ export const TornadoChart: React.FC<{ data: TornadoEntry[] }> = ({ data }) => {
                         {...withTooltipProps({ cursor: { fill: "var(--surface)" } })}
                         formatter={(value) => [`$${formatNumber(Number(value ?? 0), "price", { digits: 1, locale })}`, "Implied Target"]}
                     />
-                    <Bar dataKey="target" radius={[0, 4, 4, 0]} barSize={40}>
+                    <Bar dataKey="target" barSize={40}>
                         {data.map((entry, index) => (
                             <Cell key={`cell-${index}`} fill={getColor(entry.name)} />
                         ))}

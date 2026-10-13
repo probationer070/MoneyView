@@ -121,7 +121,6 @@ export function AttributionWaterfall({ data, sectorBreakdowns = [] }: Attributio
               />
               <Bar
                 dataKey="percentage"
-                radius={[6, 6, 0, 0]}
                 fill="var(--brand)"
               />
             </BarChart>

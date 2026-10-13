@@ -5,6 +5,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { useT } from "@/lib/i18n/locale";
 
 interface ChartPanelFrameProps {
   title?: string;
@@ -26,15 +27,16 @@ export function ChartPanelFrame({
   loading = false,
   errorMessage,
   empty = false,
-  emptyTitle = "No data available",
-  emptyDescription = "Run an analysis or refresh the data to see results here.",
+  emptyTitle,
+  emptyDescription,
   staleLabel,
   lastUpdatedLabel,
   className = "",
   children,
 }: ChartPanelFrameProps) {
+  const t = useT();
   return (
-    <section className={` border border-[var(--line)] bg-[var(--surface-raised)] p-5 ${className}`}>
+    <section className={`border border-[var(--line)] bg-[var(--surface-raised)] p-5 ${className}`}>
       {title ? (
         <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
           <div>
@@ -55,11 +57,11 @@ export function ChartPanelFrame({
         </div>
       ) : errorMessage ? (
         <div className="mt-4">
-          <ErrorState title="Chart Unavailable" message={errorMessage} />
+          <ErrorState title={t("common.chartUnavailable")} message={errorMessage} />
         </div>
       ) : empty ? (
         <div className="mt-4 flex min-h-[220px] items-center justify-center border border-dashed border-[var(--line)] bg-[var(--surface)]">
-          <EmptyState title={emptyTitle} description={emptyDescription} />
+          <EmptyState title={emptyTitle ?? t("common.noData")} description={emptyDescription ?? t("common.noDataHint")} />
         </div>
       ) : (
         children

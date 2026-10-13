@@ -47,7 +47,7 @@ export function TimelineList({ groups, empty }: TimelineListProps) {
                       <span className="absolute top-5 bottom-[-1rem] w-px bg-[var(--line)]" />
                     ) : null}
                   </div>
-                  <article className={` border px-4 py-4 ${item.active ? "border-[var(--brand)] bg-[var(--brand-soft)]" : "border-[var(--line)] bg-[var(--surface-raised)]"}`}>
+                  <article className={`border px-4 py-4 ${item.active ? "border-[var(--brand)] bg-[var(--brand-soft)]" : "border-[var(--line)] bg-[var(--surface-raised)]"}`}>
                     <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                       <div className="min-w-0 space-y-1">
                         <h3 className="type-body text-[var(--ink)]">{item.title}</h3>

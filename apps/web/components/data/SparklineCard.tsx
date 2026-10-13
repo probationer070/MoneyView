@@ -30,7 +30,7 @@ export function SparklineCard({
       <button
         type="button"
         onClick={onOpen}
-        className="flex h-full w-full flex-col rounded-[var(--radius-1)] text-left focus-visible:ring-[var(--brand)]"
+        className="flex h-full w-full flex-col rounded-[var(--radius-1)] text-left"
         aria-label={`Open detail for ${title}`}
       >
         <div className="mb-[var(--space-4)] flex items-start justify-between gap-[var(--space-4)]">

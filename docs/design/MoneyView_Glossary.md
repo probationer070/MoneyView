@@ -46,6 +46,8 @@ capitals: "종목 NAME". Both come from `apps/web/lib/i18n/labels.ts`; add the r
 | Export JSON / CSV / Markdown | JSON / CSV / Markdown 내보내기 | export buttons |
 | Print PDF | PDF 인쇄 | export button |
 | Ticker or company name | 종목 코드 또는 기업명 | ticker search placeholder |
+| Other | 기타 | folded tail of a chart or donut (chart-4) |
+| Chart unavailable | 차트를 표시할 수 없습니다 | chart panel error title (default) |
 | Input | 입력 | label (audit table header) |
 | Value | 값 | label (audit table header) |
 | Source | 출처 | label (audit table header) |
