@@ -10,8 +10,11 @@ const START = String.raw`(?:^|[\s"'\x60:])`;
 const END = String.raw`(?=$|[\s"'\x60])`;
 
 const EVERYWHERE = [
-  // 6 and 8 digits only: 3- and 4-digit forms collide with prose ("#bad", "#123").
+  // 6- and 8-digit hex is always a colour. 3- and 4-digit hex is a colour only in a colour context:
+  // the whole string, a Tailwind arbitrary value, or after a CSS colour property. Elsewhere it
+  // reads as prose ("Issue #123", "see #bad idea").
   ["hex", /(?<![A-Za-z/])#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6})\b/],
+  ["hex", /^#[0-9a-fA-F]{3,4}$|\[#[0-9a-fA-F]{3,4}\]|(?<![A-Za-z-])(?:color|fill|stroke|background(?:-color)?|border(?:-color)?|outline(?:-color)?|caret-color|accent-color|stop-color)\s*[:=]\s*["'\x60]?#[0-9a-fA-F]{3,4}\b/],
   ["colorFn", /\b(?:rgba?|hsla?|oklch|oklab|lab|lch)\(/],
   ["paletteClass", new RegExp(`${START}(?:bg|text|border|ring|fill|stroke|from|via|to|divide|outline|decoration|placeholder|accent|caret)-(?:${PALETTE})(?:-\\d{2,3})?(?:\\/\\d+)?${END}`)],
   ["typeScale", new RegExp(`${START}text-(?:xs|sm|base|lg|xl|[2-9]xl)${END}`)],
