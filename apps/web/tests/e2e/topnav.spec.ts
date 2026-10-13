@@ -96,9 +96,34 @@ test.describe("the top bar at 1280x720", () => {
   test("the language toggle does not open the menu", async ({ page }) => {
     await gotoValuation(page);
     await page.getByRole("button", { name: "한국어" }).click();
-    await expect(page.getByRole("link", { name: "가치평가" })).toBeVisible();
+    // Scoped to the bar's primary nav: once Korean is on, that nav is named 주 메뉴, not "Primary".
+    await expect(page.getByRole("navigation", { name: "주 메뉴" }).getByRole("link", { name: "가치평가" })).toBeVisible();
     await page.waitForTimeout(200);
     await expect(panel(page)).toBeHidden();
+  });
+
+  test("a pinned menu does not reopen when history returns to its page", async ({ page }) => {
+    await gotoValuation(page);
+    await primary(page).getByRole("link", { name: "Cases" }).click();
+    await expect(page).toHaveURL(/\/cases$/, { timeout: 60_000 });
+    await menuButton(page).click();
+    await expect(panel(page)).toBeVisible();
+    // Browser back is not a panel link, so the pinned state survives it unless it is cleared.
+    await page.goBack();
+    await expect(page).toHaveURL(/\/valuation$/, { timeout: 60_000 });
+    await expect(panel(page)).toBeHidden();
+    await page.goForward();
+    await expect(page).toHaveURL(/\/cases$/, { timeout: 60_000 });
+    await expect(panel(page)).toBeHidden();
+  });
+
+  test("Escape with focus on a panel link returns focus to ☰", async ({ page }) => {
+    await gotoValuation(page);
+    await menuButton(page).click();
+    await panel(page).getByRole("link", { name: "Portfolio" }).focus();
+    await page.keyboard.press("Escape");
+    await expect(panel(page)).toBeHidden();
+    await expect(menuButton(page)).toBeFocused();
   });
 });
 

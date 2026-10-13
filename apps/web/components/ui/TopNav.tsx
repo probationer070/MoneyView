@@ -27,7 +27,12 @@ export function TopNav() {
   const t = useT();
   const [menu, setMenu] = useState<MenuState>(null);
   const zoneRef = useRef<HTMLDivElement | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
   const closeTimer = useRef<number | null>(null);
+  // Browser back and forward move the page without a panel link's onClick, so a menu left open
+  // on the old page would reopen when the user returns to it. Clear it during render.
+  if (menu !== null && menu.path !== pathname) setMenu(null);
   const open = menu !== null && menu.path === pathname;
   const pinned = open && menu.pinned;
   const current = activeNavItem(pathname);
@@ -64,7 +69,10 @@ export function TopNav() {
   useEffect(() => {
     if (!open) return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setMenu(null);
+      if (event.key !== "Escape") return;
+      // Hiding the panel would drop a focused panel link to <body>; hand focus back to ☰ first.
+      if (panelRef.current?.contains(document.activeElement)) buttonRef.current?.focus();
+      setMenu(null);
     };
     const onPointer = (event: PointerEvent) => {
       if (zoneRef.current && !zoneRef.current.contains(event.target as Node)) setMenu(null);
@@ -129,6 +137,7 @@ export function TopNav() {
             {current ? t(current.shortKey) : ""}
           </span>
           <button
+            ref={buttonRef}
             type="button"
             aria-label={t("topnav.menu")}
             aria-expanded={open}
@@ -142,6 +151,7 @@ export function TopNav() {
           {/* Overlay, no scrim. `hidden` when closed keeps it out of the a11y tree and out of the
               pointer's way (spec §9). The links keep the old sidebar's look (DS Task 8). */}
           <div
+            ref={panelRef}
             id="app-nav-panel"
             hidden={!open}
             className="absolute left-0 top-full z-40 w-64 border border-[var(--line)] bg-[var(--surface)] p-4"
