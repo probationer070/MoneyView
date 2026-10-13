@@ -10,4 +10,5 @@ export const ko: Messages = {
     loading: "불러오는 중…", retry: "다시 시도", unavailable: "불러오지 못했습니다.",
     updatedAgo: "{minutes}분 전 갱신", language: "언어",
   },
+  delta: { up: "상승", down: "하락", flat: "보합" },
 };

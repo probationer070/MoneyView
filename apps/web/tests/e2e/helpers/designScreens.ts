@@ -16,6 +16,7 @@ export const DESIGN_SCREENS: [string, (page: Page) => Promise<unknown>][] = [
   ["/decisions", (p) => mockDecisionsApi(p)],
   ["/cases", (p) => mockCasesApi(p)],
   ["/events", async (p) => { await mockMarketPageApi(p); await mockEventsApi(p); }],
+  ["/dev/design", async () => {}],
 ];
 
 export const screenName = (route: string) => (route === "/" ? "market" : route.slice(1).replaceAll("/", "-"));

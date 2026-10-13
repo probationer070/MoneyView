@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, PieChart, Newspaper, Activity, Building2, Orbit, NotebookPen, Scale, CalendarDays, GitFork } from "lucide-react";
+import { LayoutDashboard, PieChart, Newspaper, Building2, Orbit, NotebookPen, Scale, CalendarDays, GitFork } from "lucide-react";
 import clsx from "clsx";
 import { LanguageToggle } from "@/components/ui/LanguageToggle";
 import { useT } from "@/lib/i18n/locale";
@@ -33,7 +33,7 @@ export function Sidebar({
     <>
       <div
         className={clsx(
-          "fixed inset-0 z-30 bg-black/40 transition-opacity lg:hidden",
+          "fixed inset-0 z-30 bg-[var(--overlay-scrim)] transition-opacity lg:hidden",
           isOpen ? "opacity-100" : "pointer-events-none opacity-0",
         )}
         onClick={onClose}
@@ -43,13 +43,13 @@ export function Sidebar({
       <aside
         id="app-sidebar"
         className={clsx(
-          "fixed left-0 top-0 z-40 flex h-screen w-64 flex-col border-r border-[var(--border)] bg-[var(--bg-secondary)] p-4 transition-transform lg:translate-x-0",
+          "fixed left-0 top-0 z-40 flex h-screen w-64 flex-col border-r border-[var(--line)] bg-[var(--surface)] p-4 transition-transform lg:translate-x-0",
           isOpen ? "translate-x-0" : "-translate-x-full",
         )}
       >
         <div className="mb-8 flex items-center gap-2 px-2">
-          <Activity className="h-6 w-6 text-[var(--accent)]" />
-          <h1 className="font-bold text-xl text-[var(--text-primary)]">MoneyView</h1>
+          <span aria-hidden="true" className="inline-block h-2.5 w-2.5 bg-[var(--brand)]" />
+          <h1 className="type-panel-title text-[var(--ink)]">MoneyView</h1>
         </div>
 
         <nav className="flex flex-col gap-2">
@@ -63,10 +63,11 @@ export function Sidebar({
                 href={item.href}
                 onClick={onClose}
                 className={clsx(
-                  "flex items-center gap-3 rounded-[var(--radius)] px-3 py-2 font-bold text-[var(--ink)] transition-colors",
-                  isActive ? "bg-[var(--brand)]" : "hover:bg-[var(--brand)]"
+                  "flex items-center gap-3 rounded-[var(--radius-1)] px-3 py-2 type-body font-bold text-[var(--ink)] hover:bg-[var(--surface-raised)]",
+                  isActive && "bg-[var(--surface-raised)]"
                 )}
               >
+                {isActive && <span aria-hidden="true" className="h-4 w-0.5 bg-[var(--brand)]" />}
                 <Icon className="h-5 w-5" />
                 {t(item.key)}
               </Link>
@@ -76,7 +77,7 @@ export function Sidebar({
 
         <div className="mt-auto flex flex-col gap-4 px-2 pb-4">
           <LanguageToggle />
-          <div className="text-center text-xs text-[var(--text-muted)]">
+          <div className="type-caption text-center text-[var(--ink-muted)]">
             Powered by FastAPI & Next.js
           </div>
         </div>

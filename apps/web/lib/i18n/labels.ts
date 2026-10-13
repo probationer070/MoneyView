@@ -7,6 +7,10 @@ export const LABELS = {
   market: ["시장", "Market"],
   name: ["종목", "Name"],
   price: ["현재가", "Price"],
+  change: ["등락률", "Change"],
+  case: ["케이스", "Case"],
+  devRuntime: ["개발 런타임", "Developer runtime"],
+  monteCarlo: ["몬테카를로 시뮬레이션", "Monte Carlo"],
 } as const satisfies Record<string, readonly [string, string]>;
 
 export type LabelKey = keyof typeof LABELS;

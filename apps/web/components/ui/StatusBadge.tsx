@@ -17,16 +17,23 @@ interface StatusBadgeProps {
   className?: string;
 }
 
-const variantStyles: Record<StatusVariant, { dot: string; text: string; bg: string }> = {
-  live:        { dot: "bg-[var(--state-success)]", text: "text-[var(--state-success)]",  bg: "bg-[var(--state-success)]/10" },
-  stale:       { dot: "bg-[var(--state-warning)]", text: "text-[var(--state-warning)]",  bg: "bg-[var(--state-warning)]/10" },
-  idle:        { dot: "bg-[var(--text-muted)]",    text: "text-[var(--text-muted)]",      bg: "bg-[var(--bg-subtle)]" },
-  loading:     { dot: "bg-[var(--state-info)]",    text: "text-[var(--state-info)]",      bg: "bg-[var(--state-info)]/10" },
-  error:       { dot: "bg-[var(--state-error)]",   text: "text-[var(--state-error)]",     bg: "bg-[var(--state-error)]/10" },
-  unavailable: { dot: "bg-[var(--text-disabled)]", text: "text-[var(--text-disabled)]",   bg: "bg-[var(--bg-subtle)]" },
-  saved:       { dot: "bg-[var(--state-info)]",    text: "text-[var(--state-info)]",      bg: "bg-[var(--state-info)]/10" },
-  canceled:    { dot: "bg-[var(--state-warning)]", text: "text-[var(--text-muted)]",      bg: "bg-[var(--state-warning)]/10" },
-  "in-progress": { dot: "bg-[var(--state-info)] animate-pulse", text: "text-[var(--state-info)]", bg: "bg-[var(--state-info)]/10" },
+const SUCCESS = { dot: "bg-[var(--status-success-ink)]", box: "bg-[var(--status-success-surface)] text-[var(--status-success-ink)] border-[var(--status-success-border)]" };
+const WARNING = { dot: "bg-[var(--status-warning-ink)]", box: "bg-[var(--status-warning-surface)] text-[var(--status-warning-ink)] border-[var(--status-warning-border)]" };
+const ERROR = { dot: "bg-[var(--status-error-ink)]", box: "bg-[var(--status-error-surface)] text-[var(--status-error-ink)] border-[var(--status-error-border)]" };
+const NEUTRAL = { dot: "bg-[var(--ink-muted)]", box: "bg-[var(--surface)] text-[var(--ink-secondary)] border-[var(--line)]" };
+// Work in progress is the brand, not a status tone: brand dot, brand text on a soft ground.
+const INFO = { dot: "bg-[var(--brand)]", box: "bg-[var(--brand-soft)] text-[var(--brand-text)] border-[var(--brand)]" };
+
+const variantStyles: Record<StatusVariant, { dot: string; box: string }> = {
+  live: SUCCESS,
+  stale: WARNING,
+  idle: NEUTRAL,
+  loading: INFO,
+  error: ERROR,
+  unavailable: NEUTRAL,
+  saved: INFO,
+  canceled: NEUTRAL,
+  "in-progress": { ...INFO, dot: "bg-[var(--brand)] animate-pulse" },
 };
 
 const defaultLabels: Record<StatusVariant, string> = {
@@ -48,9 +55,8 @@ export function StatusBadge({ status, label, className }: StatusBadgeProps) {
   return (
     <span
       className={clsx(
-        "inline-flex items-center gap-1.5 rounded-[var(--radius-sm)] px-2 py-0.5 text-[length:var(--type-caption)] font-medium leading-tight",
-        styles.bg,
-        styles.text,
+        "inline-flex items-center gap-1.5 rounded-[var(--radius-2)] border px-2 py-0.5 type-small",
+        styles.box,
         className
       )}
     >

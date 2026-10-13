@@ -7,6 +7,7 @@ export const en = {
     loading: "Loading…", retry: "Retry", unavailable: "Could not be loaded.",
     updatedAgo: "Updated {minutes} min ago", language: "Language",
   },
+  delta: { up: "Up", down: "Down", flat: "Unchanged" },
 } as const;
 
 type Widen<T> = { [K in keyof T]: T[K] extends string ? string : Widen<T[K]> };

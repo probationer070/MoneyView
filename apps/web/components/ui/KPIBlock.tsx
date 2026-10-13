@@ -16,9 +16,9 @@ interface KPIBlockProps {
 }
 
 const valueSizeMap: Record<KPISize, string> = {
-  sm: "text-[length:var(--type-metric-md)] font-semibold",
-  md: "text-[length:var(--type-metric-md)] font-semibold",
-  lg: "text-[length:var(--type-metric-lg)] font-bold",
+  sm: "type-figure-md",
+  md: "type-figure-md",
+  lg: "type-figure",
 };
 
 export function KPIBlock({
@@ -42,19 +42,18 @@ export function KPIBlock({
       tabIndex={onClick ? 0 : undefined}
       onKeyDown={onClick ? (e) => { if (e.key === "Enter" || e.key === " ") onClick(); } : undefined}
     >
-      <span className="text-[length:var(--type-small)] font-medium text-[var(--text-muted)] leading-tight tracking-wide">
+      <span className="type-label text-[var(--ink-secondary)]">
         {label}
       </span>
 
       {loading ? (
-        <div className="h-8 w-24 rounded-[var(--radius-sm)] bg-[var(--bg-subtle)] animate-pulse" />
+        <div className="h-8 w-24 bg-[var(--surface)] animate-pulse" />
       ) : (
         <span
           className={clsx(
-            "text-[var(--text-primary)] leading-none tabular-nums",
+            "text-[var(--ink)]",
             valueSizeMap[size],
           )}
-          style={{ letterSpacing: size === "lg" ? "-0.015em" : "-0.01em" }}
         >
           {value}
         </span>

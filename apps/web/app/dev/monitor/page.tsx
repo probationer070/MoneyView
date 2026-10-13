@@ -363,7 +363,7 @@ export default function DevMonitorPage() {
     return (
       <div className="mx-auto max-w-7xl space-y-8 animate-in fade-in duration-500">
         <PageHeader
-          eyebrow="Developer Runtime"
+          eyebrow={{ label: "devRuntime" }}
           title="Dev Monitor"
           subtitle="Local event stream, performance counters, and backend activity for MoneyView development."
         />
@@ -376,7 +376,7 @@ export default function DevMonitorPage() {
     return (
       <div className="mx-auto max-w-5xl space-y-8 animate-in fade-in duration-500">
         <PageHeader
-          eyebrow="Developer Runtime"
+          eyebrow={{ label: "devRuntime" }}
           title="Dev Monitor"
           subtitle="This page is local-only and appears when backend monitor mode is enabled."
         />
@@ -393,7 +393,7 @@ export default function DevMonitorPage() {
     return (
       <div className="mx-auto max-w-5xl space-y-8 animate-in fade-in duration-500">
         <PageHeader
-          eyebrow="Developer Runtime"
+          eyebrow={{ label: "devRuntime" }}
           title="Dev Monitor"
           subtitle="Local event stream, performance counters, and backend activity for MoneyView development."
         />
@@ -412,7 +412,7 @@ export default function DevMonitorPage() {
   return (
     <div className="mx-auto max-w-7xl space-y-8 animate-in fade-in duration-500">
       <PageHeader
-        eyebrow="Developer Runtime"
+        eyebrow={{ label: "devRuntime" }}
         title="Dev Monitor"
         subtitle="Local-only event observability for API requests, cache decisions, provider timing, and calculation flow."
         actions={(

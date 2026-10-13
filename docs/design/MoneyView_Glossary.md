@@ -30,6 +30,9 @@ capitals: "종목 NAME". Both come from `apps/web/lib/i18n/labels.ts`; add the r
 | Market | 시장 | label |
 | Name | 종목 | label (table header for a security) |
 | Price | 현재가 | label |
+| Change | 등락률 | label (table header for a delta) |
+| Case | 케이스 | label (eyebrow on a case) |
+| Developer runtime | 개발 런타임 | label (eyebrow on the dev monitor) |
 | Up / Down / Unchanged | 상승 / 하락 / 보합 | delta, screen-reader text |
 | Language | 언어 | language toggle group label |
 | Could not be loaded. | 불러오지 못했습니다. | error state body |

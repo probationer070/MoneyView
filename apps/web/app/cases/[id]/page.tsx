@@ -46,7 +46,7 @@ export default function CaseDetailPage({ params }: { params: Promise<{ id: strin
     <div className="p-6">
       {record ? (
         <PageHeader
-          eyebrow={`Case ${record.id}`}
+          eyebrow={{ label: "case", suffix: String(record.id) }}
           title={record.case_name}
           subtitle={`${record.ticker ?? "No ticker"} · as of ${record.as_of_date} · ${record.base_year} → ${record.target_year}`}
         />

@@ -1,6 +1,7 @@
 "use client";
 
 import clsx from "clsx";
+import { SEGMENT_BUTTON, SEGMENT_CONTAINER, SEGMENT_SELECTED, SEGMENT_UNSELECTED } from "@/components/ui/ToggleGroup";
 
 export type ViewMode = "chart" | "table";
 
@@ -19,7 +20,7 @@ export function ViewToggle({ value, onChange, className }: ViewToggleProps) {
   return (
     <div
       className={clsx(
-        "inline-flex rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-muted)] p-1",
+        SEGMENT_CONTAINER,
         className
       )}
       role="group"
@@ -33,10 +34,8 @@ export function ViewToggle({ value, onChange, className }: ViewToggleProps) {
             type="button"
             onClick={() => onChange(option.value)}
             className={clsx(
-              "rounded-md px-3 py-1.5 text-[length:var(--type-small)] font-medium transition-colors",
-              selected
-                ? "bg-[var(--brand)] text-white"
-                : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+              SEGMENT_BUTTON,
+              selected ? SEGMENT_SELECTED : SEGMENT_UNSELECTED
             )}
             aria-pressed={selected}
           >

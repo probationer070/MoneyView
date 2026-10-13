@@ -674,7 +674,7 @@ export default function MonteCarloPage() {
   return (
     <div className="space-y-6 max-w-7xl mx-auto px-4 py-6">
       <PageHeader
-        eyebrow="Monte Carlo investment analysis"
+        eyebrow={{ label: "monteCarlo" }}
         title="Simulation Lab"
         subtitle="Five-tab workflow for path simulation, risk analysis, return distribution, valuation uncertainty, and correlation structure."
       />
