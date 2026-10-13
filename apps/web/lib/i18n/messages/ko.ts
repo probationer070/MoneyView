@@ -6,6 +6,11 @@ export const ko: Messages = {
     market: "시장 개요", portfolio: "포트폴리오", news: "뉴스", corporate: "기업 분석",
     monteCarlo: "몬테카를로 시뮬레이션", decisions: "의사결정 기록", valuation: "가치평가", cases: "케이스", events: "이벤트",
   },
+  navShort: {
+    market: "시장", portfolio: "포트폴리오", news: "뉴스", corporate: "기업 분석", monteCarlo: "몬테카를로",
+    decisions: "의사결정", valuation: "가치평가", cases: "케이스", events: "이벤트",
+  },
+  topnav: { primary: "주 메뉴", full: "전체 페이지", menu: "메뉴", poweredBy: "Powered by FastAPI & Next.js" },
   common: {
     loading: "불러오는 중…", retry: "다시 시도", unavailable: "불러오지 못했습니다.",
     updatedAgo: "{minutes}분 전 갱신", language: "언어",

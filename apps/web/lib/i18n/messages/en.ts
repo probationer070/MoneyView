@@ -3,6 +3,11 @@ export const en = {
     market: "Market Overview", portfolio: "Portfolio", news: "News Feed", corporate: "Corporate Analysis",
     monteCarlo: "Monte Carlo", decisions: "Decision Log", valuation: "Valuation", cases: "Cases", events: "Events",
   },
+  navShort: {
+    market: "Market", portfolio: "Portfolio", news: "News", corporate: "Corporate", monteCarlo: "Monte Carlo",
+    decisions: "Decisions", valuation: "Valuation", cases: "Cases", events: "Events",
+  },
+  topnav: { primary: "Primary", full: "All pages", menu: "Menu", poweredBy: "Powered by FastAPI & Next.js" },
   common: {
     loading: "Loading…", retry: "Retry", unavailable: "Could not be loaded.",
     updatedAgo: "Updated {minutes} min ago", language: "Language",

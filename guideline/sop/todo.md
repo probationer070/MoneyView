@@ -56,7 +56,7 @@ Plan: `docs/superpowers/plans/2026-10-12-design-system-formalization.md`.
 - Follow-up (owner, 2026-10-14, option A): move workbench and chart English copy (DCFWorkbench, DiagnosticWorkbench, AttributionWaterfall, ChartPanelFrame, AppProvider, MetricAuditPanel Source/Method/Confidence) into the en/ko catalogs as its own task after D9.
 - [x] D8 component layer  - [x] D9 shared UI/charts  - [x] D10 portfolio  - [ ] D11 valuation/cases/decisions (corporate moved to the one-screen plan)
 - Corporate one-screen (part A): plan `docs/superpowers/plans/2026-10-14-corporate-one-screen.md`, branch `feat/corporate-one-screen` (merges back before D11).
-  - [x] C1 notes  - [x] C2 owner approval of the test inventory  - [ ] C3 top bar  - [ ] C4 pure models  - [ ] C5 first screen  - [ ] C6 lower tabs
+  - [x] C1 notes  - [x] C2 owner approval of the test inventory  - [x] C3 top bar  - [ ] C4 pure models  - [ ] C5 first screen  - [ ] C6 lower tabs
   - [ ] C7 header  - [ ] C8 modal tabs  - [ ] C9 trend  - [ ] C10 peers  - [ ] C11 sensitivity  - [ ] C12 corporate on paper tokens  - [ ] C13 final gate
 - [ ] D12 monte-carlo  - [ ] D13 market/detail/news/events/dev/signals  - [ ] D14 lock-down
 Baseline counts (D1, 2026-10-13, `npm run design:baseline` over app/components/lib/hooks): typeScale 650, paletteClass 92 (142 class occurrences; the rule reports per string), rawRadius 47, rawShadow 13, lengthTypeVar 115, arbitraryPx 13, hex 53, colorFn 10, numericFontSize 2. Total 995.

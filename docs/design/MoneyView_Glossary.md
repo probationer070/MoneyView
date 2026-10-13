@@ -25,6 +25,10 @@ capitals: "종목 NAME". Both come from `apps/web/lib/i18n/labels.ts`; add the r
 | Valuation | 가치평가 | nav |
 | Cases | 케이스 | nav |
 | Events | 이벤트 | nav |
+| Menu | 메뉴 | top bar ☰ button |
+| Primary | 주 메뉴 | top bar icon-link landmark |
+| All pages | 전체 페이지 | top bar panel landmark |
+| Market / Corporate / Decisions (short) | 시장 / 기업 분석 / 의사결정 | top bar current-page label |
 | Retry | 다시 시도 | |
 | Loading… | 불러오는 중… | |
 | Market | 시장 | label |
