@@ -27,3 +27,17 @@ test("rounded negative zero has no sign", () => {
 test("missing and non-finite values render the missing glyph", () => {
   for (const v of [null, undefined, Number.NaN, Number.POSITIVE_INFINITY]) expect(formatNumber(v, "price")).toBe(MISSING);
 });
+
+test("an explicit digits option overrides the kind default", () => {
+  expect(formatNumber(0.1234, "percent", { digits: 2 })).toBe("12.34%");
+  expect(formatNumber(1234.5, "price", { digits: 0 })).toBe("1,235");
+});
+
+test("the missing glyph is the em dash", () => {
+  expect(MISSING).toBe("—");
+});
+
+test("korean compact climbs to 조 and keeps the minus", () => {
+  expect(formatNumber(1_234_000_000_000, "compact", { locale: "ko" })).toBe("1.2조");
+  expect(formatNumber(-123_400_000, "compact", { locale: "ko" })).toBe("-1.2억");
+});
