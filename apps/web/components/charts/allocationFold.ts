@@ -10,13 +10,18 @@ export interface AllocationSlice {
 }
 
 /**
- * Keep the first four sectors as given; with more than five entries, sum the rest into one
- * slice named `otherLabel`. Five or fewer entries pass through unchanged.
+ * Slices are ordered largest first (a copy; the input is not mutated). Ties keep their input
+ * order. With more than five entries, the four largest stay named and the rest sum into one
+ * slice named `otherLabel`. Five or fewer entries are returned sorted and unfolded.
+ *
+ * The sort is required: backend `sector_breakdowns` arrive in backend order, not by weight, so
+ * a slice-by-position fold could fold the largest sector into "Other".
  */
 export function foldAllocation(data: AllocationSlice[], otherLabel: string): AllocationSlice[] {
-  if (data.length <= ALLOCATION_MAX_SLICES) return data;
-  const kept = data.slice(0, ALLOCATION_NAMED_KEPT);
-  const rest = data.slice(ALLOCATION_NAMED_KEPT);
+  const sorted = [...data].sort((a, b) => b.value - a.value);
+  if (sorted.length <= ALLOCATION_MAX_SLICES) return sorted;
+  const kept = sorted.slice(0, ALLOCATION_NAMED_KEPT);
+  const rest = sorted.slice(ALLOCATION_NAMED_KEPT);
   const value = rest.reduce((sum, slice) => sum + slice.value, 0);
   return [...kept, { name: otherLabel, value, folded: true }];
 }
