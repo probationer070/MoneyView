@@ -419,7 +419,7 @@ function MetricCell({ metric, toneClass }: { metric: PortfolioTickerMetrics["roi
   const subtitle = metricSubtitle(metric);
   return (
     <div className="flex flex-col items-end gap-1">
-      <div className={`font-semibold tabular-nums ${toneClass}`} title={metricDisplayTitle(metric)}>
+      <div className={`type-mono  ${toneClass}`} title={metricDisplayTitle(metric)}>
         {metric.displayValue}
       </div>
       <div className="flex flex-wrap justify-end gap-1">
@@ -519,7 +519,7 @@ function HoldingsTable({
                 onClick={() => onSelect(stock)}
               >
                 <td className="px-4 py-3">
-                  <div className="font-bold text-[var(--ink)]">{stock.ticker}</div>
+                  <div className="type-mono  text-[var(--ink)]">{stock.ticker}</div>
                   <div className="type-small text-[var(--ink-muted)]">{stock.name || stock.ticker}</div>
                   <div className="mt-1 type-caption text-[var(--ink-muted)] lg:hidden">{sectorLabel(stock.sector)}</div>
                 </td>
@@ -2238,7 +2238,7 @@ export default function PortfolioPage() {
                 )}
               </div>
               <div className="flex flex-wrap items-center gap-2 type-small text-[var(--ink-muted)]">
-                <span className="font-semibold">Quick change</span>
+                {/* M2: inline emphasis inside a sentence; the weight separates the label from the text */}<span className="font-semibold">Quick change</span>
                 {benchmarkQuickActions.map((preset) => (
                   <button
                     key={preset.id}
@@ -2247,13 +2247,13 @@ export default function PortfolioPage() {
                       setSelectedHistoryPoint(null);
                       setPortfolioComparisonBenchmarkTicker(preset.ticker);
                     }}
-                    className={`rounded-full border px-3 py-1 font-semibold ${normalizedBenchmarkTicker === preset.ticker ? "border-[var(--brand)] bg-[var(--surface)] text-[var(--ink)]" : "border-[var(--line)] text-[var(--ink-muted)] hover:text-[var(--ink)]"}`}
+                    className={`rounded-[var(--radius-1)] type-small border px-3 py-1 ${normalizedBenchmarkTicker === preset.ticker ? "border-[var(--brand)] bg-[var(--surface)] text-[var(--ink)]" : "border-[var(--line)] text-[var(--ink-muted)] hover:text-[var(--ink)]"}`}
                   >
                     {preset.label}
                   </button>
                 ))}
                 {portfolioComparisonCalculating && (
-                  <span className="rounded-full border border-[var(--status-warning-border)] bg-[var(--status-warning-surface)] px-3 py-1 font-semibold text-[var(--status-warning-ink)]">
+                  <span className="rounded-[var(--radius-2)] type-small border border-[var(--status-warning-border)] bg-[var(--status-warning-surface)] px-3 py-1 text-[var(--status-warning-ink)]">
                     Calculating
                   </span>
                 )}
@@ -2312,7 +2312,7 @@ export default function PortfolioPage() {
               {portfolioAnalysisMessage && <span>{portfolioAnalysisMessage}</span>}
             </div>
             {portfolioAnalysisIsStale && (
-              <span className="inline-flex items-center rounded-full bg-[var(--status-warning-surface)] px-3 py-1 type-small text-[var(--status-warning-ink)]">
+              <span className="inline-flex items-center rounded-[var(--radius-2)] bg-[var(--status-warning-surface)] px-3 py-1 type-small text-[var(--status-warning-ink)]">
                 Showing stale analysis for prior inputs
               </span>
             )}
@@ -2320,13 +2320,13 @@ export default function PortfolioPage() {
 
           <div className="mt-3 grid grid-cols-1 gap-2 lg:grid-cols-3">
             <div className="border border-[var(--line)] bg-[var(--surface)] p-3 type-body text-[var(--ink-muted)]">
-              <span className="font-semibold text-[var(--ink)]">Universe:</span> {portfolioComparisonUniverseHelpText(portfolioComparisonUniverse)}
+              {/* M2: inline emphasis inside a sentence; the weight separates the label from the text */}<span className="font-semibold text-[var(--ink)]">Universe:</span> {portfolioComparisonUniverseHelpText(portfolioComparisonUniverse)}
             </div>
             <div className="border border-[var(--line)] bg-[var(--surface)] p-3 type-body text-[var(--ink-muted)]">
-              <span className="font-semibold text-[var(--ink)]">Benchmark workflow:</span> Preset is currently {benchmarkPresetLabelForTicker(normalizedBenchmarkTicker)}. Manual ticker input stays available for index symbols or ETFs outside the preset list.
+              {/* M2: inline emphasis inside a sentence; the weight separates the label from the text */}<span className="font-semibold text-[var(--ink)]">Benchmark workflow:</span> Preset is currently {benchmarkPresetLabelForTicker(normalizedBenchmarkTicker)}. Manual ticker input stays available for index symbols or ETFs outside the preset list.
             </div>
             <div className="border border-[var(--line)] bg-[var(--surface)] p-3 type-body text-[var(--ink-muted)]">
-              <span className="font-semibold text-[var(--ink)]">Snapshot workflow:</span> Live mode is review-only. Saved history updates only when you press <span className="font-semibold text-[var(--ink)]">Save Current As Snapshot</span> or opt in from the allocation panel.
+              {/* M2: inline emphasis inside a sentence; the weight separates the label from the text */}<span className="font-semibold text-[var(--ink)]">Snapshot workflow:</span> Live mode is review-only. Saved history updates only when you press {/* M2: inline emphasis inside a sentence; the weight separates the label from the text */}<span className="font-semibold text-[var(--ink)]">Save Current As Snapshot</span> or opt in from the allocation panel.
             </div>
           </div>
           <div className="mt-3 border border-[var(--line)] bg-[var(--surface-raised)] p-4">
@@ -2383,11 +2383,11 @@ export default function PortfolioPage() {
                     <div
                       key={`snapshot-list-${point.snapshot_version}`}
                       className={`flex flex-col gap-2 border p-3 type-body sm:flex-row sm:items-center sm:justify-between ${
-                        isActive ? "border-[var(--brand-soft)] bg-[var(--surface)]" : "border-[var(--line)] bg-[var(--surface-raised)]"
+                        isActive ? "border-[var(--brand)] bg-[var(--surface)]" : "border-[var(--line)] bg-[var(--surface-raised)]"
                       }`}
                     >
                       <div className="space-y-1">
-                        <p className="font-semibold text-[var(--ink)]">
+                        {/* M2: snapshot title; the weight separates the title from its details */}<p className="type-body font-semibold text-[var(--ink)]">
                           {formatDateLabel(point.as_of_date)} - {point.snapshot_source}
                         </p>
                         <p className="type-small text-[var(--ink-muted)]">
@@ -2565,29 +2565,29 @@ export default function PortfolioPage() {
         <div className="mt-4 grid min-w-72 grid-cols-1 gap-2 sm:grid-cols-5">
           <div className="bg-[var(--surface)] p-3 type-small">
             <div className="text-[var(--ink-muted)]">Tracked Names</div>
-            <div className="mt-1 font-bold text-[var(--ink)]">{watchlist.length}</div>
+            <div className="type-figure-md mt-1 text-[var(--ink)]">{watchlist.length}</div>
           </div>
           <div className="bg-[var(--surface)] p-3 type-small">
             <div className="text-[var(--ink-muted)]">Allocated Names</div>
-            <div className="mt-1 font-bold text-[var(--ink)]">{allocatedHoldingsCount}</div>
+            <div className="type-figure-md mt-1 text-[var(--ink)]">{allocatedHoldingsCount}</div>
           </div>
           <div className="bg-[var(--surface)] p-3 type-small">
             <div className="text-[var(--ink-muted)]">Total Investment</div>
-            <div className="mt-1 font-bold text-[var(--ink)]">{formatCurrencyCompact(totalInvestmentAmount)}</div>
+            <div className="type-figure-md mt-1 text-[var(--ink)]">{formatCurrencyCompact(totalInvestmentAmount)}</div>
           </div>
           <div className="bg-[var(--surface)] p-3 type-small">
             <div className="text-[var(--ink-muted)]">Invested Capital</div>
-            <div className="mt-1 font-bold text-[var(--ink)]">{formatCurrencyCompact(allocationSummary.allocatedAmount)}</div>
+            <div className="type-figure-md mt-1 text-[var(--ink)]">{formatCurrencyCompact(allocationSummary.allocatedAmount)}</div>
             <div className="mt-1 type-caption text-[var(--ink-muted)]">{formatWeightPercent(investedWeight)} allocated</div>
           </div>
           <div className="bg-[var(--surface)] p-3 type-small">
             <div className="text-[var(--ink-muted)]">Implied Cash</div>
-            <div className="mt-1 font-bold text-[var(--ink)]">{formatCurrencyCompact(totalInvestmentAmount * impliedCashWeight)}</div>
+            <div className="type-figure-md mt-1 text-[var(--ink)]">{formatCurrencyCompact(totalInvestmentAmount * impliedCashWeight)}</div>
             <div className="mt-1 type-caption text-[var(--ink-muted)]">{formatWeightPercent(impliedCashWeight)} unallocated</div>
           </div>
           <div className="bg-[var(--surface)] p-3 type-small">
             <div className="text-[var(--ink-muted)]">Final Profit</div>
-            <div className={`mt-1 font-bold ${metricToneClass(allocationSummary.finalProfit)}`}>
+            <div className={`type-figure-md mt-1 ${metricToneClass(allocationSummary.finalProfit)}`}>
               {formatCurrencyCompact(allocationSummary.finalProfit)}
             </div>
             <div className="mt-1 type-caption text-[var(--ink-muted)]">
@@ -2718,7 +2718,7 @@ export default function PortfolioPage() {
             <button
               type="button"
               onClick={() => setSectorFilter("All Sectors")}
-              className={`rounded-full border px-3 py-1.5 type-small ${activeSectorFilter === "All Sectors" ? "border-[var(--brand)] bg-[var(--surface)] text-[var(--ink)]" : "border-[var(--line)] text-[var(--ink-muted)] hover:text-[var(--ink)]"}`}
+              className={`rounded-[var(--radius-1)] border px-3 py-1.5 type-small ${activeSectorFilter === "All Sectors" ? "border-[var(--brand)] bg-[var(--surface)] text-[var(--ink)]" : "border-[var(--line)] text-[var(--ink-muted)] hover:text-[var(--ink)]"}`}
             >
               All Sectors
             </button>
@@ -2727,7 +2727,7 @@ export default function PortfolioPage() {
                 key={sector}
                 type="button"
                 onClick={() => setSectorFilter(sector)}
-                className={`rounded-full border px-3 py-1.5 type-small ${activeSectorFilter === sector ? "border-[var(--brand)] bg-[var(--surface)] text-[var(--ink)]" : "border-[var(--line)] text-[var(--ink-muted)] hover:text-[var(--ink)]"}`}
+                className={`rounded-[var(--radius-1)] border px-3 py-1.5 type-small ${activeSectorFilter === sector ? "border-[var(--brand)] bg-[var(--surface)] text-[var(--ink)]" : "border-[var(--line)] text-[var(--ink-muted)] hover:text-[var(--ink)]"}`}
               >
                 {sector}
               </button>
@@ -2778,7 +2778,7 @@ export default function PortfolioPage() {
                       <div className="flex flex-col justify-between items-start mb-2">
                         <StockIdentity stock={stock} />
                         <div className="text-right flex flex-row justify-between items-end gap-4">
-                          <div className="font-semibold tabular-nums">
+                          <div className="type-mono ">
                             {/* A dash, never a stand-in 0 -- the same convention the tile
                                 uses. This called .toLocaleString() on the value directly,
                                 which throws once the API reports an absent price as null. */}

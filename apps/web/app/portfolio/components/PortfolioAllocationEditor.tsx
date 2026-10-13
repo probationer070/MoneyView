@@ -117,16 +117,16 @@ export function PortfolioAllocationEditor({
 
       <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-4">
         <div className="border border-[var(--line)] bg-[var(--surface-raised)] p-3 type-body text-[var(--ink-muted)]">
-          Draft total: <span className="font-semibold text-[var(--ink)]">{formatNumber(totalDraftWeightPercent / 100, "percent", { digits: 1 })}</span>
+          Draft total: {/* M2: inline emphasis inside a sentence; the weight separates the label from the text */}<span className="font-semibold text-[var(--ink)]">{formatNumber(totalDraftWeightPercent / 100, "percent", { digits: 1 })}</span>
         </div>
         <div className="border border-[var(--line)] bg-[var(--surface-raised)] p-3 type-body text-[var(--ink-muted)]">
-          Projected net value: <span className="font-semibold text-[var(--ink)]">{formatCurrencyCompact(allocationSummary.netProjectedValue)}</span>
+          Projected net value: {/* M2: inline emphasis inside a sentence; the weight separates the label from the text */}<span className="font-semibold text-[var(--ink)]">{formatCurrencyCompact(allocationSummary.netProjectedValue)}</span>
         </div>
         <div className="border border-[var(--line)] bg-[var(--surface-raised)] p-3 type-body text-[var(--ink-muted)]">
-          Transaction fee reserve: <span className="font-semibold text-[var(--ink)]">{formatCurrencyCompact(allocationSummary.transactionFeeAmount)}</span>
+          Transaction fee reserve: {/* M2: inline emphasis inside a sentence; the weight separates the label from the text */}<span className="font-semibold text-[var(--ink)]">{formatCurrencyCompact(allocationSummary.transactionFeeAmount)}</span>
         </div>
         <div className="border border-[var(--line)] bg-[var(--surface-raised)] p-3 type-body text-[var(--ink-muted)]">
-          Auto-save status: <span className="font-semibold text-[var(--ink)]">{savingAllocationTickers.length > 0 || savingTotalInvestment ? "Saving..." : "Synced"}</span>
+          Auto-save status: {/* M2: inline emphasis inside a sentence; the weight separates the label from the text */}<span className="font-semibold text-[var(--ink)]">{savingAllocationTickers.length > 0 || savingTotalInvestment ? "Saving..." : "Synced"}</span>
         </div>
       </div>
 
@@ -159,7 +159,7 @@ export function PortfolioAllocationEditor({
           <tbody className="divide-y divide-[var(--grid)]">
             {allocationRows.map((row) => (
               <tr key={`weight-${row.stock.ticker}`}>
-                <td className="px-4 py-3 font-bold text-[var(--ink)]">{row.stock.ticker}</td>
+                <td className="type-mono px-4 py-3 text-[var(--ink)]">{row.stock.ticker}</td>
                 <td className="px-4 py-3 text-[var(--ink-muted)]">{row.stock.name || row.stock.ticker}</td>
                 <td className="px-4 py-3 text-right tabular-nums">
                   {editingAllocationTicker === row.stock.ticker ? (
@@ -181,7 +181,7 @@ export function PortfolioAllocationEditor({
                     <button
                       type="button"
                       onDoubleClick={() => handleAllocationValueDoubleClick(row.stock)}
-                      className="ml-auto inline-flex rounded-[var(--radius-1)] border border-transparent px-2 py-1 font-semibold text-[var(--ink)] hover:border-[var(--line)]"
+                      className="type-mono ml-auto inline-flex rounded-[var(--radius-1)] border border-transparent px-2 py-1 text-[var(--ink)] hover:border-[var(--line)]"
                     >
                       {formatNumber(row.allocationPercent / 100, "percent", { digits: 1 })}
                     </button>
@@ -202,7 +202,7 @@ export function PortfolioAllocationEditor({
                 </td>
                 <td className="px-4 py-3 text-right tabular-nums">{formatCurrencyCompact(row.allocatedAmount)}</td>
                 <td className="px-4 py-3 text-right tabular-nums">{formatCurrencyCompact(row.netProjectedValue)}</td>
-                <td className={`px-4 py-3 text-right font-semibold tabular-nums ${metricToneClass(row.finalProfit)}`}>
+                <td className={`type-mono px-4 py-3 text-right ${metricToneClass(row.finalProfit)}`}>
                   {formatCurrencyCompact(row.finalProfit)}
                 </td>
               </tr>

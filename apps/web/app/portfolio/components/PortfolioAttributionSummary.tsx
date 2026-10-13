@@ -127,13 +127,13 @@ export function PortfolioAttributionSummary({
           <div className="grid min-w-56 grid-cols-2 gap-2 type-small">
             <div className="bg-[var(--surface)] p-3">
               <div className="text-[var(--ink-muted)]">Weight Source</div>
-              <div className="mt-1 font-bold text-[var(--ink)]">
+              <div className="type-mono mt-1 text-[var(--ink)]">
                 {attributionData.metadata.benchmark_weights_source.replace("_", " ")}
               </div>
             </div>
             <div className="bg-[var(--surface)] p-3">
               <div className="text-[var(--ink-muted)]">Proxy Method</div>
-              <div className="mt-1 font-bold text-[var(--ink)]">
+              <div className="type-figure-md mt-1 text-[var(--ink)]">
                 {benchmarkMethodLabel(attributionData.metadata.data_quality?.benchmark_proxy_method)}
               </div>
             </div>

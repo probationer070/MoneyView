@@ -138,44 +138,44 @@ export function SnapshotHistoryModal({
                 <div className="text-[var(--ink-muted)]">Avg implied return vs WACC</div>
                 {point.average_implied_return_spread == null && point.metric_schema_version < 3 ? (
                   // Before metric v3 no implied return was recorded; that is not "no rows".
-                  <div className="mt-1 font-bold text-[var(--ink-muted)]">{IMPLIED_RETURN_NOT_RECORDED}</div>
+                  <div className="type-small mt-1 text-[var(--ink-muted)]">{IMPLIED_RETURN_NOT_RECORDED}</div>
                 ) : point.average_implied_return_spread == null ? (
-                  <div className="mt-1 font-bold text-[var(--ink-muted)]" title={NO_IMPLIED_RETURN_TITLE}>
+                  <div className="type-small mt-1 text-[var(--ink-muted)]" title={NO_IMPLIED_RETURN_TITLE}>
                     Not available
                   </div>
                 ) : (
-                  <div className={`mt-1 font-bold tabular-nums ${point.average_implied_return_spread >= 0 ? "text-[var(--up)]" : "text-[var(--down)]"}`}>
+                  <div className={`type-figure-md mt-1 ${point.average_implied_return_spread >= 0 ? "text-[var(--up)]" : "text-[var(--down)]"}`}>
                     {formatNumber(point.average_implied_return_spread / 100, "percent", { digits: 2 })}
                   </div>
                 )}
               </div>
               <div className="border border-[var(--line)] bg-[var(--surface)] px-3 py-2">
                 <div className="text-[var(--ink-muted)]">Avg ROIC - WACC</div>
-                <div className={`mt-1 font-bold tabular-nums ${point.average_roic_minus_wacc >= 0 ? "text-[var(--up)]" : "text-[var(--down)]"}`}>
+                <div className={`type-figure-md mt-1 ${point.average_roic_minus_wacc >= 0 ? "text-[var(--up)]" : "text-[var(--down)]"}`}>
                   {formatNumber(point.average_roic_minus_wacc / 100, "percent", { digits: 2 })}
                 </div>
               </div>
               <div className="border border-[var(--line)] bg-[var(--surface)] px-3 py-2">
                 <div className="text-[var(--ink-muted)]">Avg DCF</div>
                 {point.average_dcf_value == null ? (
-                  <div className="mt-1 font-bold text-[var(--ink-muted)]" title={NO_BRIDGED_ROWS_TITLE}>
+                  <div className="type-small mt-1 text-[var(--ink-muted)]" title={NO_BRIDGED_ROWS_TITLE}>
                     Not available
                   </div>
                 ) : (
-                  <div className="mt-1 font-bold tabular-nums text-[var(--ink)]">
+                  <div className="type-figure-md mt-1 text-[var(--ink)]">
                     ${formatNumber(point.average_dcf_value, "price", { digits: 1 })}
                   </div>
                 )}
               </div>
               <div className="border border-[var(--line)] bg-[var(--surface)] px-3 py-2">
                 <div className="text-[var(--ink-muted)]">Market Return</div>
-                <div className="mt-1 font-bold tabular-nums text-[var(--ink)]">
+                <div className="type-figure-md mt-1 text-[var(--ink)]">
                   {formatNumber(point.market_expected_return / 100, "percent", { digits: 2 })}
                 </div>
               </div>
               <div className="border border-[var(--line)] bg-[var(--surface)] px-3 py-2">
                 <div className="text-[var(--ink-muted)]">Holdings</div>
-                <div className="mt-1 font-bold tabular-nums text-[var(--ink)]">{point.stock_count}</div>
+                <div className="type-figure-md mt-1 text-[var(--ink)]">{point.stock_count}</div>
               </div>
             </div>
           ),
@@ -230,13 +230,13 @@ export function SnapshotHistoryModal({
             <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <div className="border border-[var(--line)] bg-[var(--surface)] p-3 type-small">
                 <div className="text-[var(--ink-muted)]">Universe</div>
-                <div className="mt-1 overflow-inline-ellipsis font-bold capitalize text-[var(--ink)]" title={effectiveComparisonUniverse}>
+                <div className="type-mono mt-1 overflow-inline-ellipsis capitalize text-[var(--ink)]" title={effectiveComparisonUniverse}>
                   {effectiveComparisonUniverse}
                 </div>
               </div>
               <div className="border border-[var(--line)] bg-[var(--surface)] p-3 type-small">
                 <div className="text-[var(--ink-muted)]">Benchmark</div>
-                <div className="mt-1 overflow-inline-ellipsis font-bold text-[var(--ink)]" title={effectiveBenchmarkTicker}>
+                <div className="type-mono mt-1 overflow-inline-ellipsis text-[var(--ink)]" title={effectiveBenchmarkTicker}>
                   {effectiveBenchmarkTicker}
                 </div>
               </div>
@@ -246,7 +246,7 @@ export function SnapshotHistoryModal({
               </div>
               <div className="border border-[var(--line)] bg-[var(--surface)] p-3 type-small">
                 <div className="text-[var(--ink-muted)]">Saved Versions</div>
-                <div className="mt-1 font-bold text-[var(--ink)]">{history.points.length}</div>
+                <div className="type-figure-md mt-1 text-[var(--ink)]">{history.points.length}</div>
               </div>
             </div>
           </section>

@@ -315,22 +315,22 @@ export function StockDetailModal({
                 <div className="grid grid-cols-2 gap-3 type-small md:grid-cols-4">
                   <div className="border border-[var(--line)] bg-[var(--surface)] px-3 py-2">
                     <div className="text-[var(--ink-muted)]">ROIC - WACC</div>
-                    <div className={`mt-1 font-bold tabular-nums ${metricToneClass(metrics.roicMinusWacc)}`} title={metricDisplayTitle(metrics.roicMinusWacc)}>{metrics.roicMinusWacc.displayValue}</div>
+                    <div className={`type-figure-md mt-1 ${metricToneClass(metrics.roicMinusWacc)}`} title={metricDisplayTitle(metrics.roicMinusWacc)}>{metrics.roicMinusWacc.displayValue}</div>
                     {metricSubtitle(metrics.roicMinusWacc) ? <div className="mt-1 type-caption text-[var(--ink-muted)]">{metricSubtitle(metrics.roicMinusWacc)}</div> : null}
                   </div>
                   <div className="border border-[var(--line)] bg-[var(--surface)] px-3 py-2">
                     <div className="text-[var(--ink-muted)]">DCF value vs price (one-off gap)</div>
-                    <div className={`mt-1 font-bold tabular-nums ${metricToneClass(metrics.dcfUpside)}`} title={metricDisplayTitle(metrics.dcfUpside)}>{metrics.dcfUpside.displayValue}</div>
+                    <div className={`type-figure-md mt-1 ${metricToneClass(metrics.dcfUpside)}`} title={metricDisplayTitle(metrics.dcfUpside)}>{metrics.dcfUpside.displayValue}</div>
                     {metricSubtitle(metrics.dcfUpside) ? <div className="mt-1 type-caption text-[var(--ink-muted)]">{metricSubtitle(metrics.dcfUpside)}</div> : null}
                   </div>
                   <div className="border border-[var(--line)] bg-[var(--surface)] px-3 py-2">
                     <div className="text-[var(--ink-muted)]">Implied return vs WACC (pts per year)</div>
-                    <div className={`mt-1 font-bold tabular-nums ${metricToneClass(metrics.impliedVsWacc)}`} title={metricDisplayTitle(metrics.impliedVsWacc)}>{metrics.impliedVsWacc.displayValue}</div>
+                    <div className={`type-figure-md mt-1 ${metricToneClass(metrics.impliedVsWacc)}`} title={metricDisplayTitle(metrics.impliedVsWacc)}>{metrics.impliedVsWacc.displayValue}</div>
                     {metricSubtitle(metrics.impliedVsWacc) ? <div className="mt-1 type-caption text-[var(--ink-muted)]">{metricSubtitle(metrics.impliedVsWacc)}</div> : null}
                   </div>
                   <div className="border border-[var(--line)] bg-[var(--surface)] px-3 py-2">
                     <div className="text-[var(--ink-muted)]">Market Return</div>
-                    <div className="mt-1 font-bold tabular-nums text-[var(--ink)]">{formatMetricPercent(point.market_expected_return)}</div>
+                    <div className="type-figure-md mt-1 text-[var(--ink)]">{formatMetricPercent(point.market_expected_return)}</div>
                   </div>
                 </div>
               ),
@@ -404,7 +404,7 @@ export function StockDetailModal({
 
       <div className="flex flex-col mb-4">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="rounded-full border border-[var(--line)] bg-[var(--surface)] px-3 py-1 type-small text-[var(--ink-muted)]">
+          <span className="rounded-[var(--radius-2)] border border-[var(--line)] bg-[var(--surface)] px-3 py-1 type-small text-[var(--ink-muted)]">
             Sector
           </span>
           <input
@@ -463,9 +463,9 @@ export function StockDetailModal({
                 {movingAverageSeries.map((series) => (
                   <span
                     key={series.title}
-                    className="inline-flex items-center gap-2 rounded-full border border-[var(--line)] px-2 py-1"
+                    className="inline-flex items-center gap-2 rounded-[var(--radius-2)] border border-[var(--line)] px-2 py-1"
                   >
-                    <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: series.color }} />
+                    {/* M3: a colour dot, not a control; the round shape is the marker */}<span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: series.color }} />
                     {series.title}
                   </span>
                 ))}
@@ -519,9 +519,9 @@ export function StockDetailModal({
             legend={movingAverageSeries.map((series) => (
               <span
                 key={series.title}
-                className="inline-flex items-center gap-2 rounded-full border border-[var(--line)] px-2 py-1"
+                className="inline-flex items-center gap-2 rounded-[var(--radius-2)] border border-[var(--line)] px-2 py-1"
               >
-                <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: series.color }} />
+                {/* M3: a colour dot, not a control; the round shape is the marker */}<span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: series.color }} />
                 {series.title}
               </span>
             ))}
@@ -594,25 +594,25 @@ export function StockDetailModal({
                 <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
                   <div className="border border-[var(--line)] bg-[var(--surface)] p-3 type-small">
                     <div className="text-[var(--ink-muted)]">As Of</div>
-                    <div className="mt-1 font-bold text-[var(--ink)]">
+                    <div className="type-mono mt-1 text-[var(--ink)]">
                       {snapshotMeta ? formatDateLabel(snapshotMeta.as_of_date) : "Live"}
                     </div>
                   </div>
                   <div className="border border-[var(--line)] bg-[var(--surface)] p-3 type-small">
                     <div className="text-[var(--ink-muted)]">Source</div>
-                    <div className="mt-1 overflow-inline-ellipsis font-bold capitalize text-[var(--ink)]" title={snapshotMeta?.snapshot_source ?? snapshotMeta?.mode ?? "live"}>
+                    <div className="type-mono mt-1 overflow-inline-ellipsis capitalize text-[var(--ink)]" title={snapshotMeta?.snapshot_source ?? snapshotMeta?.mode ?? "live"}>
                       {snapshotMeta?.snapshot_source ?? snapshotMeta?.mode ?? "live"}
                     </div>
                   </div>
                   <div className="border border-[var(--line)] bg-[var(--surface)] p-3 type-small">
                     <div className="text-[var(--ink-muted)]">Universe</div>
-                    <div className="mt-1 overflow-inline-ellipsis font-bold text-[var(--ink)]" title={portfolioComparisonUniverseLabel(effectiveComparisonUniverse)}>
+                    <div className="type-mono mt-1 overflow-inline-ellipsis text-[var(--ink)]" title={portfolioComparisonUniverseLabel(effectiveComparisonUniverse)}>
                       {portfolioComparisonUniverseLabel(effectiveComparisonUniverse)}
                     </div>
                   </div>
                   <div className="border border-[var(--line)] bg-[var(--surface)] p-3 type-small">
                     <div className="text-[var(--ink-muted)]">Benchmark</div>
-                    <div className="mt-1 overflow-inline-ellipsis font-bold text-[var(--ink)]" title={effectiveComparisonBenchmarkTicker}>{effectiveComparisonBenchmarkTicker}</div>
+                    <div className="type-mono mt-1 overflow-inline-ellipsis text-[var(--ink)]" title={effectiveComparisonBenchmarkTicker}>{effectiveComparisonBenchmarkTicker}</div>
                   </div>
                   <div className="border border-[var(--line)] bg-[var(--surface)] p-3 type-small">
                     <div className="text-[var(--ink-muted)]">Version</div>
@@ -627,7 +627,7 @@ export function StockDetailModal({
               </div>
               {flaggedComparisonMetricCount > 0 && (
                 <div className="mt-3 border border-[var(--status-warning-border)] bg-[var(--status-warning-surface)] p-3 type-body text-[var(--status-warning-ink)]">
-                  {flaggedComparisonMetricCount} stock metric value{flaggedComparisonMetricCount === 1 ? "" : "s"} for {stock.ticker} {flaggedComparisonMetricCount === 1 ? "is" : "are"} currently flagged as outlier data and rendered as <span className="font-semibold">N/A</span>. Treat the price chart and saved snapshot history as the primary review context until fresher fundamentals are available.
+                  {flaggedComparisonMetricCount} stock metric value{flaggedComparisonMetricCount === 1 ? "" : "s"} for {stock.ticker} {flaggedComparisonMetricCount === 1 ? "is" : "are"} currently flagged as outlier data and rendered as {/* M2: inline emphasis inside a sentence; the weight separates the label from the text */}{/* M2: inline emphasis inside a sentence; the weight separates the label from the text */}<span className="font-semibold">N/A</span>. Treat the price chart and saved snapshot history as the primary review context until fresher fundamentals are available.
                 </div>
               )}
               <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-2">

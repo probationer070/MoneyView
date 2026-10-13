@@ -91,7 +91,7 @@ export function PortfolioCommandCenter({
             Search the saved company registry and watchlist-backed company set. You can open stock detail from here even when a ticker is not currently in the Portfolio Table.
           </p>
         </div>
-        <span className="rounded-full border border-[var(--line)] bg-[var(--surface-raised)] px-3 py-1 type-small text-[var(--ink-muted)]">
+        <span className="rounded-[var(--radius-2)] border border-[var(--line)] bg-[var(--surface-raised)] px-3 py-1 type-small text-[var(--ink-muted)]">
           {browserSearchResults.length} result{browserSearchResults.length === 1 ? "" : "s"}
         </span>
       </div>
@@ -121,7 +121,7 @@ export function PortfolioCommandCenter({
               }`}
             >
               <div className="min-w-0">
-                <div className="font-bold text-[var(--ink)]">{company.ticker}</div>
+                <div className="type-mono  text-[var(--ink)]">{company.ticker}</div>
                 <div className="truncate type-body text-[var(--ink-muted)]">{company.name}</div>
                 <div className="type-small text-[var(--ink-muted)]">{formatSectorLabel(company.sector ?? "")}</div>
               </div>
@@ -160,7 +160,7 @@ export function PortfolioCommandCenter({
         <div className="flex flex-col gap-2">
           <h4 className="type-panel-title text-[var(--ink)]">Manual Add</h4>
           <p className="type-body text-[var(--ink-muted)]">
-            Use manual add when the stock browser does not include the ticker you want. Saving preserves any existing weight when <span className="font-semibold text-[var(--ink)]">Add to Watchlist only</span> stays on.
+            Use manual add when the stock browser does not include the ticker you want. Saving preserves any existing weight when {/* M2: inline emphasis inside a sentence; the weight separates the label from the text */}<span className="font-semibold text-[var(--ink)]">Add to Watchlist only</span> stays on.
           </p>
         </div>
         <form onSubmit={onAddHolding} className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -236,7 +236,7 @@ export function PortfolioCommandCenter({
           </div>
         </form>
         {existingTicker && (
-          <div className="mt-3 inline-flex items-center rounded-full border border-[var(--status-success-border)] bg-[var(--status-success-surface)] px-3 py-1 type-small text-[var(--status-success-ink)]">
+          <div className="mt-3 inline-flex items-center rounded-[var(--radius-2)] border border-[var(--status-success-border)] bg-[var(--status-success-surface)] px-3 py-1 type-small text-[var(--status-success-ink)]">
             Already in Watchlist
           </div>
         )}

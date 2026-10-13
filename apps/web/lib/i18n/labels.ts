@@ -20,12 +20,12 @@ export const LABELS = {
   trend: ["추세", "Trend"],
   volatility: ["변동성", "Volatility"],
   weight: ["비중", "Weight"],
-  action: ["작업", "Action"],
+  action: ["관리", "Action"],
   roicWacc: ["투하자본이익률 - WACC", "ROIC - WACC"],
   allocation: ["배분", "Allocation"],
   adjust: ["조정", "Adjust"],
   investedAmount: ["투자 금액", "Invested Amount"],
-  projectedNetValue: ["예상 순가치", "Projected Net Value"],
+  projectedNetValue: ["예상 순자산가치", "Projected Net Value"],
   finalProfit: ["최종 손익", "Final Profit"],
 } as const satisfies Record<string, readonly [string, string]>;
 

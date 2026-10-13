@@ -95,7 +95,7 @@ export function StockTile({ stock, news, lastCheckedAt, followed, onToggleFollow
             12px in (`p-3`), so 24px of padding clears it. Without this the DeltaBadge --
             right-aligned by `justify-between` -- renders underneath the button. */}
         <span className="flex items-baseline justify-between gap-2 pr-6">
-          <span className="font-bold text-[var(--ink)]">{stock.ticker}</span>
+          <span className="type-mono  text-[var(--ink)]">{stock.ticker}</span>
           <DeltaBadge value={stock.delta?.delta_pct} />
         </span>
         <span className="type-mono tabular-nums text-[var(--ink)]">

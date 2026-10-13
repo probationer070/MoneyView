@@ -63,7 +63,7 @@ export function PortfolioSnapshotSummary({
       {selectedHistoryPoint && (
         <div className="mt-4 flex flex-col gap-2 border border-[var(--brand-soft)] bg-[var(--surface)] p-3 type-body text-[var(--ink-muted)] lg:flex-row lg:items-center lg:justify-between">
           <p>
-            Reviewing saved snapshot from <span className="font-semibold text-[var(--ink)]">{formatDateLabel(selectedHistoryPoint.as_of_date)}</span>.
+            Reviewing saved snapshot from {/* M2: inline emphasis inside a sentence; the weight separates the label from the text */}<span className="font-semibold text-[var(--ink)]">{formatDateLabel(selectedHistoryPoint.as_of_date)}</span>.
             Stock modal metrics and table values now follow that selected snapshot until you clear it. The saved benchmark and universe from that snapshot stay locked for review even if you change the current controls.
           </p>
           <button
@@ -78,31 +78,31 @@ export function PortfolioSnapshotSummary({
       <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-7">
         <div className="bg-[var(--surface)] p-3 type-small">
           <div className="text-[var(--ink-muted)]">As Of</div>
-          <div className="mt-1 font-bold text-[var(--ink)]">
+          <div className="type-mono mt-1 text-[var(--ink)]">
             {formatDateLabel(activeComparisonData.snapshot.as_of_date)}
           </div>
         </div>
         <div className="bg-[var(--surface)] p-3 type-small">
           <div className="text-[var(--ink-muted)]">Source</div>
-          <div className="mt-1 overflow-inline-ellipsis font-bold capitalize text-[var(--ink)]" title={activeComparisonData.snapshot.mode}>
+          <div className="type-mono mt-1 overflow-inline-ellipsis capitalize text-[var(--ink)]" title={activeComparisonData.snapshot.mode}>
             {activeComparisonData.snapshot.mode}
           </div>
         </div>
         <div className="bg-[var(--surface)] p-3 type-small">
           <div className="text-[var(--ink-muted)]">Universe</div>
-          <div className="mt-1 overflow-inline-ellipsis font-bold text-[var(--ink)]" title={portfolioComparisonUniverseLabel(activeComparisonData.snapshot.comparison_universe)}>
+          <div className="type-mono mt-1 overflow-inline-ellipsis text-[var(--ink)]" title={portfolioComparisonUniverseLabel(activeComparisonData.snapshot.comparison_universe)}>
             {portfolioComparisonUniverseLabel(activeComparisonData.snapshot.comparison_universe)}
           </div>
         </div>
         <div className="bg-[var(--surface)] p-3 type-small">
           <div className="text-[var(--ink-muted)]">Benchmark</div>
-          <div className="mt-1 overflow-inline-ellipsis font-bold text-[var(--ink)]" title={activeComparisonData.snapshot.benchmark_ticker}>
+          <div className="type-mono mt-1 overflow-inline-ellipsis text-[var(--ink)]" title={activeComparisonData.snapshot.benchmark_ticker}>
             {activeComparisonData.snapshot.benchmark_ticker}
           </div>
         </div>
         <div data-testid="summary-beats-wacc" className="bg-[var(--surface)] p-3 type-small">
           <div className="text-[var(--ink-muted)]">Beats WACC (implied return)</div>
-          <div className="mt-1 font-bold text-[var(--ink)]">
+          <div className="type-mono mt-1 text-[var(--ink)]">
             {portfolioSnapshotSummary.impliedSpreadCount === 0
               ? "None recorded"
               : `${portfolioSnapshotSummary.positiveSpreadCount} / ${portfolioSnapshotSummary.impliedSpreadCount}`}
@@ -110,13 +110,13 @@ export function PortfolioSnapshotSummary({
         </div>
         <div className="bg-[var(--surface)] p-3 type-small">
           <div className="text-[var(--ink-muted)]">Positive ROIC - WACC</div>
-          <div className="mt-1 font-bold text-[var(--ink)]">
+          <div className="type-figure-md mt-1 text-[var(--ink)]">
             {portfolioSnapshotSummary.positiveEconomicSpreadCount} / {portfolioSnapshotSummary.stockCount}
           </div>
         </div>
         <div className="bg-[var(--surface)] p-3 type-small">
           <div className="text-[var(--ink-muted)]">Top implied return vs WACC</div>
-          <div className={`mt-1 font-bold ${metricToneClass(portfolioSnapshotSummary.highestSpreadValue)}`}>
+          <div className={`type-mono mt-1 ${metricToneClass(portfolioSnapshotSummary.highestSpreadValue)}`}>
             {portfolioSnapshotSummary.highestSpreadTicker} {portfolioSnapshotSummary.highestSpreadValue == null ? "" : `(${formatMetricPercent(portfolioSnapshotSummary.highestSpreadValue)})`}
           </div>
         </div>
@@ -135,12 +135,12 @@ export function PortfolioSnapshotSummary({
       </div>
       <div className="mt-3 border border-[var(--line)] bg-[var(--surface)] p-3 type-body text-[var(--ink-muted)]">
         <p>
-          <span className="font-semibold text-[var(--ink)]">Benchmark context:</span> `S&P 500` is the default portfolio reference because it is the clearest broad-market baseline for cross-market comparison. Korea presets remain available when you want local-market benchmarking.
+          {/* M2: inline emphasis inside a sentence; the weight separates the label from the text */}<span className="font-semibold text-[var(--ink)]">Benchmark context:</span> `S&P 500` is the default portfolio reference because it is the clearest broad-market baseline for cross-market comparison. Korea presets remain available when you want local-market benchmarking.
         </p>
       </div>
       {activeComparisonData.snapshot.comparison_universe === "custom" && (
         <p className="mt-2 type-body text-[var(--ink-muted)]">
-          <span className="font-semibold text-[var(--ink)]">Custom tickers:</span>{" "}
+          {/* M2: inline emphasis inside a sentence; the weight separates the label from the text */}<span className="font-semibold text-[var(--ink)]">Custom tickers:</span>{" "}
           <span className="overflow-mono-block rounded-[var(--radius-2)] bg-[var(--surface)] px-2 py-1 type-small text-[var(--ink)]" title={activeComparisonData.snapshot.custom_tickers.join(", ") || "None"}>
             {activeComparisonData.snapshot.custom_tickers.join(", ") || "None"}
           </span>

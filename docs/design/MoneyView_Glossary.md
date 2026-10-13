@@ -57,10 +57,10 @@ capitals: "종목 NAME". Both come from `apps/web/lib/i18n/labels.ts`; add the r
 | Trend | 추세 | label (portfolio table header) |
 | Volatility | 변동성 | label (portfolio table header) |
 | Weight | 비중 | label (portfolio table header) |
-| Action | 작업 | label (portfolio table header) |
+| Action | 관리 | label (portfolio table header) |
 | ROIC - WACC | 투하자본이익률 - WACC | label (table header; ROIC expanded as in the ROIC row, Korean half needs Hangul) |
 | Allocation | 배분 | label (allocation table header) |
 | Adjust | 조정 | label (allocation table header) |
 | Invested Amount | 투자 금액 | label (allocation table header) |
-| Projected Net Value | 예상 순가치 | label (allocation table header) |
+| Projected Net Value | 예상 순자산가치 | label (allocation table header) |
 | Final Profit | 최종 손익 | label (allocation table header) |
