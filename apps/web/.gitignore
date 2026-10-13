@@ -22,6 +22,9 @@
 # playwright-report/ and blob-report/ are never produced here.
 /test-results/
 
+# DESIGN_CAPTURE screenshots; test-results/ is wiped by every Playwright run
+/design-capture/
+
 # next.js
 /.next/
 /out/

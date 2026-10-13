@@ -45,6 +45,15 @@ is deferred on data (see its entry).
       validated against nothing") still holds. Build the charts once history spans several
       days and metric versions. Readable identity stays cosmetic (spec §9).
 
+### Track D: Design system (paper redesign)
+Plan: `docs/superpowers/plans/2026-10-12-design-system-formalization.md`.
+- [x] D1 drift rule + baseline + redesign copy  - [ ] D2 token source (1:1)  - [ ] D3 rename collisions
+- [ ] D4 fonts  - [ ] D5 paper switch  - [ ] D6 formatNumber  - [ ] D7 i18n + bilingual labels
+- [ ] D8 component layer  - [ ] D9 shared UI/charts  - [ ] D10 portfolio  - [ ] D11 corporate/valuation/cases/decisions
+- [ ] D12 monte-carlo  - [ ] D13 market/detail/news/events/dev/signals  - [ ] D14 lock-down
+Baseline counts (D1, 2026-10-13, `npm run design:baseline` over app/components/lib/hooks): typeScale 650, paletteClass 92 (142 class occurrences; the rule reports per string), rawRadius 47, rawShadow 13, lengthTypeVar 115, arbitraryPx 13, hex 53, colorFn 10, numericFontSize 2. Total 995.
+Captures and review verdicts: D1 `before` vs `before-again`: 7 of 7 byte-identical. Mask: `article` on `/` (market cards are server-rendered from the live API, so they move between runs).
+
 ---
 
 ## Known limits, accepted deliberately

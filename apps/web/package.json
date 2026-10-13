@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "test:unit": "node --test \"eslint-rules/**/*.test.mjs\" \"scripts/**/*.test.mjs\"",
+    "design:baseline": "node scripts/design-baseline.mjs"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.96.2",
