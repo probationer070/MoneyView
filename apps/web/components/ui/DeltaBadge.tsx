@@ -25,8 +25,10 @@ export function DeltaBadge({ value, className }: DeltaBadgeProps) {
   const t = useT();
   const numeric = typeof value === "number" && Number.isFinite(value) ? value : null;
   const text = numeric === null ? MISSING : formatNumber(numeric / 100, "percent", { signed: true, locale });
-  // Direction follows the printed figure (1 decimal), so -0.04 prints "0.0%" and reads as flat.
-  const dir = numeric === null || Math.round(numeric * 10) === 0 ? "flat" : numeric > 0 ? "up" : "down";
+  // Direction follows the printed figure (1 decimal). Intl rounds half away from zero, so -0.05 prints
+  // "-0.1%" and must read as down; Math.round(-0.5) is -0, so the test uses the magnitude. -0.04 prints
+  // "0.0%" and reads as flat.
+  const dir = numeric === null || Math.round(Math.abs(numeric) * 10) === 0 ? "flat" : numeric > 0 ? "up" : "down";
   return (
     <span
       data-testid="delta-badge"

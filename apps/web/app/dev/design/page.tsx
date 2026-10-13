@@ -36,6 +36,8 @@ export default function DesignGalleryPage() {
         <DeltaBadge value={-3.4} />
         <DeltaBadge value={-0.04} />
         <DeltaBadge value={null} />
+        <DeltaBadge value={-0.05} />
+        <DeltaBadge value={0.05} />
       </section>
       <Card>
         <div data-testid="gallery-card-body"><KPIBlock label="KOSPI" value="2,847.31" delta={1.24} size="lg" /></div>

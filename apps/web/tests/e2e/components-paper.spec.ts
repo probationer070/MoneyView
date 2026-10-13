@@ -29,6 +29,16 @@ test("deltas pair colour with glyph and sign; rounded zero and missing read as f
   expect(await read(3)).toEqual({ dir: "flat", glyph: "■", value: "—", color: rgb("#626260") });
 });
 
+test("a half-step delta reads by its printed figure: -0.05 is down, 0.05 is up", async ({ page }) => {
+  const deltas = page.getByTestId("gallery-deltas").getByTestId("delta-badge");
+  const read = (i: number) => deltas.nth(i).evaluate((el) => ({
+    dir: el.getAttribute("data-dir"),
+    value: el.querySelector('[data-part="value"]')?.textContent,
+  }));
+  expect(await read(4)).toEqual({ dir: "down", value: "-0.1%" });
+  expect(await read(5)).toEqual({ dir: "up", value: "+0.1%" });
+});
+
 test("card is a square hairline panel with four corner ticks and no shadow", async ({ page }) => {
   const card = page.getByTestId("gallery-card-body").locator("..");
   expect(await style(card, "border-top-width", "border-top-color", "background-color", "border-top-left-radius", "box-shadow")).toEqual({
