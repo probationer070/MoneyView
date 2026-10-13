@@ -4,17 +4,19 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LayoutDashboard, PieChart, Newspaper, Activity, Building2, Orbit, NotebookPen, Scale, CalendarDays, GitFork } from "lucide-react";
 import clsx from "clsx";
+import { LanguageToggle } from "@/components/ui/LanguageToggle";
+import { useT } from "@/lib/i18n/locale";
 
 const navItems = [
-  { href: "/", label: "Market Overview", icon: LayoutDashboard },
-  { href: "/portfolio", label: "Portfolio", icon: PieChart },
-  { href: "/news", label: "News Feed", icon: Newspaper },
-  { href: "/corporate", label: "Corporate Analysis", icon: Building2 },
-  { href: "/monte-carlo", label: "Monte Carlo", icon: Orbit },
-  { href: "/decisions", label: "Decision Log", icon: NotebookPen },
-  { href: "/valuation", label: "Valuation", icon: Scale },
-  { href: "/cases", label: "Cases", icon: GitFork },
-  { href: "/events", label: "Events", icon: CalendarDays },
+  { href: "/", key: "nav.market" as const, icon: LayoutDashboard },
+  { href: "/portfolio", key: "nav.portfolio" as const, icon: PieChart },
+  { href: "/news", key: "nav.news" as const, icon: Newspaper },
+  { href: "/corporate", key: "nav.corporate" as const, icon: Building2 },
+  { href: "/monte-carlo", key: "nav.monteCarlo" as const, icon: Orbit },
+  { href: "/decisions", key: "nav.decisions" as const, icon: NotebookPen },
+  { href: "/valuation", key: "nav.valuation" as const, icon: Scale },
+  { href: "/cases", key: "nav.cases" as const, icon: GitFork },
+  { href: "/events", key: "nav.events" as const, icon: CalendarDays },
 ];
 
 export function Sidebar({
@@ -25,6 +27,7 @@ export function Sidebar({
   onClose: () => void;
 }) {
   const pathname = usePathname();
+  const t = useT();
 
   return (
     <>
@@ -65,14 +68,17 @@ export function Sidebar({
                 )}
               >
                 <Icon className="h-5 w-5" />
-                {item.label}
+                {t(item.key)}
               </Link>
             );
           })}
         </nav>
 
-        <div className="mt-auto px-2 pb-4 text-center text-xs text-[var(--text-muted)]">
-          Powered by FastAPI & Next.js
+        <div className="mt-auto flex flex-col gap-4 px-2 pb-4">
+          <LanguageToggle />
+          <div className="text-center text-xs text-[var(--text-muted)]">
+            Powered by FastAPI & Next.js
+          </div>
         </div>
       </aside>
     </>

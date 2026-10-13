@@ -2,6 +2,7 @@
 
 import { type ReactNode, useEffect, useState } from "react";
 import { Menu, X } from "lucide-react";
+import { HtmlLang } from "@/components/ui/HtmlLang";
 import { Sidebar } from "@/components/ui/Sidebar";
 import { tokens } from "@/lib/tokens.generated";
 
@@ -35,6 +36,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         Menu
       </button>
 
+      <HtmlLang />
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
       {/* The vertical padding is published as custom properties because a page that wants
