@@ -79,6 +79,8 @@ The five inputs the spec implies but no feature test naturally reaches, most lik
 
 ## Existing-test change inventory (owner approval required before any edit)
 
+**Approved by the owner on 2026-10-14** (rows as listed; changes: none).
+
 **Totals: 15 spec files edited, 57 rows.** "Insert" means a new line before the cited line; the cited line itself is unchanged.
 
 **Line numbers are those at plan time** (`feat/design-system-paper` @ `fefc0c1`). A later row in the same file shifts by the lines an earlier task inserted, so always locate a row by the quoted code, never by the number alone. If the quoted code is not where the row says, or reads differently, stop and report it: DS Tasks 9–10 may have touched the file. Helpers are new files in `tests/e2e/helpers/corporateDcf.ts`, defined in the task that first needs them:
