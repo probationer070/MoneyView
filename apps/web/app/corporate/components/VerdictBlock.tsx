@@ -39,10 +39,13 @@ export function VerdictBlock({ dcf, streaming, refusalText, onOpenDetail }: Verd
   const enterpriseValue = dcf && typeof dcf.enterprise_value === "number" ? dcf.enterprise_value : null;
 
   return (
-    <section data-testid="corporate-verdict" data-state={state}>
+    <section data-testid="corporate-verdict" data-state={state} data-busy={streaming ? "true" : undefined}>
       <Card padding="sm" className="flex flex-col gap-2">
         <div className="flex items-center justify-between gap-2">
           <Eyebrow label="verdict" />
+          {streaming && dcf ? (
+            <span data-part="busy" className="type-caption mr-auto text-[var(--ink-muted)]">{t("corporate.verdict.streaming")}</span>
+          ) : null}
           <button
             type="button"
             onClick={onOpenDetail}

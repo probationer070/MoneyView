@@ -21,7 +21,7 @@ export const ko: Messages = {
   corporate: {
     verdict: {
       detail: "판정 상세", intrinsic: "내재가치", vs: "대비", current: "현재가",
-      idle: "DCF 미계산 · 위의 DCF 새로고침을 누르세요", streaming: "계산 중…",
+      idle: "DCF 미계산 · 위의 DCF 새로고침을 누르십시오", streaming: "계산 중…",
       refused: "평가하지 않음: {reason}", ev: "기업가치(EV) {value}",
     },
     kpi: {
@@ -37,7 +37,7 @@ export const ko: Messages = {
       growthDefault: "성장률은 안정 CAGR 기준을 씁니다. 연도별 성장률은 상세 보기에서 볼 수 있습니다.",
       updated: "갱신 {time}", notLoaded: "아직 불러오지 않았습니다",
       sourceIdle: "원천 데이터는 새로고침할 때까지 불러오지 않습니다.",
-      staleSource: "저장된 원천 데이터는 {cached} 기준입니다. {ticker}로 새로고침하세요.",
+      staleSource: "저장된 원천 데이터는 {cached} 기준입니다. {ticker}로 새로고침하십시오.",
       fixed: "고정",
     },
     assumption: {

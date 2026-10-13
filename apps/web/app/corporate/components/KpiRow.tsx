@@ -29,7 +29,7 @@ export function KpiRow({ spread, bottomUpKe, wacc, leveredBeta, onOpenDetail }: 
       {tiles.map((tile) => (
         <Card key={tile.key} padding="sm" hoverable>
           <KPIBlock label={tile.label} value={tile.value} size="sm" onClick={() => onOpenDetail(tile.key)} />
-          <p className="type-small mt-1 truncate text-[var(--ink-muted)]">{tile.caption}</p>
+          <p title={tile.caption} className="type-small mt-1 truncate text-[var(--ink-muted)]">{tile.caption}</p>
         </Card>
       ))}
     </div>

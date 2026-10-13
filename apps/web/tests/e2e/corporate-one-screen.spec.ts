@@ -163,3 +163,49 @@ test.describe("the assumption table", () => {
     await expect(page.getByTestId("source-data-status")).toContainText("Source data stays idle on first load until refreshed.");
   });
 });
+
+test.describe("the ⋯ menu and the busy verdict", () => {
+  test("Escape closes the ⋯ menu and returns focus to its toggle", async ({ page }) => {
+    await mockCorporatePageApi(page);
+    await gotoCorporate(page);
+    const toggle = page.getByRole("button", { name: "Assumption options" });
+    await toggle.click();
+    await expect(page.getByTestId("assumption-menu")).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(page.getByTestId("assumption-menu")).toHaveCount(0);
+    await expect(toggle).toBeFocused();
+  });
+
+  test("a press outside the ⋯ menu closes it", async ({ page }) => {
+    await mockCorporatePageApi(page);
+    await gotoCorporate(page);
+    await page.getByRole("button", { name: "Assumption options" }).click();
+    await expect(page.getByTestId("assumption-menu")).toBeVisible();
+    await verdict(page).click({ position: { x: 20, y: 20 } });
+    await expect(page.getByTestId("assumption-menu")).toHaveCount(0);
+  });
+
+  test("a refresh over a cached DCF keeps the cached verdict and shows it is calculating", async ({ page }) => {
+    // The shared mock's stream writes the session cache (phase 2); a phase-1-only body would not.
+    await mockCorporatePageApi(page);
+    await gotoCorporate(page);
+    await page.getByRole("button", { name: "Refresh DCF" }).click();
+    await expect(verdict(page)).toHaveAttribute("data-state", "valued", { timeout: 30_000 });
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await expect(verdict(page)).toHaveAttribute("data-state", "valued", { timeout: 30_000 });
+
+    // Hold the next stream until the test releases it, so the cached verdict is on screen while it runs.
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    await page.route("**/api/v1/corporate/dcf/AAPL/stream", async (route) => {
+      await gate;
+      await route.fulfill({ status: 200, contentType: "text/event-stream", body: dcfStream({}) });
+    });
+    await page.getByRole("button", { name: "Refresh DCF" }).click();
+    await expect(verdict(page)).toHaveAttribute("data-busy", "true");
+    await expect(verdict(page).locator('[data-part="busy"]')).toHaveText("Calculating…");
+    await expect(verdict(page).locator('[data-part="intrinsic"]')).toHaveText("$240.5");
+    release();
+    await expect(verdict(page)).not.toHaveAttribute("data-busy", "true", { timeout: 30_000 });
+  });
+});

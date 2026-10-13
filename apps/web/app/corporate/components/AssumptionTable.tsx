@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { Info, MoreHorizontal, Pencil } from "lucide-react";
 import clsx from "clsx";
 import type { CorporateDerivedMetricMeta, CorporateMetricAuditEntry, MetricQuality } from "../../../../../packages/shared-types";
@@ -61,6 +61,29 @@ export function AssumptionTable(props: AssumptionTableProps) {
   const t = useT();
   const [expanded, setExpanded] = useState<AssumptionKey | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const headerRef = useRef<HTMLDivElement | null>(null);
+  const menuToggleRef = useRef<HTMLButtonElement | null>(null);
+
+  // The ⋯ menu closes on Escape (focus returns to its toggle) and on a press outside its header.
+  // The listeners exist only while it is open.
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setMenuOpen(false);
+      menuToggleRef.current?.focus();
+    };
+    const onPress = (event: PointerEvent) => {
+      if (headerRef.current?.contains(event.target as Node)) return;
+      setMenuOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    document.addEventListener("pointerdown", onPress);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("pointerdown", onPress);
+    };
+  }, [menuOpen]);
 
   const display = (row: AssumptionRowDef) => {
     if (row.field === null) return pct(KOREA_COUNTRY_RISK_PREMIUM);
@@ -77,7 +100,7 @@ export function AssumptionTable(props: AssumptionTableProps) {
 
   return (
     <section data-testid="assumption-table" className={clsx("flex min-w-0 flex-col border border-[var(--line)] bg-[var(--surface-raised)]", className)}>
-      <div className="relative flex items-center justify-between gap-2 border-b border-[var(--line)] px-3 py-2">
+      <div ref={headerRef} className="relative flex items-center justify-between gap-2 border-b border-[var(--line)] px-3 py-2">
         <Eyebrow label="assumptions" />
         <div className="flex items-center gap-1">
           <button type="button" aria-label={t("corporate.assumptions.detail")} title={t("corporate.assumptions.detail")} onClick={() => onOpenDetail("realtime")} className={ICON_BUTTON}>
@@ -89,6 +112,7 @@ export function AssumptionTable(props: AssumptionTableProps) {
             title={t("corporate.assumptions.menu")}
             aria-expanded={menuOpen}
             aria-controls="assumption-menu"
+            ref={menuToggleRef}
             onClick={() => setMenuOpen((open) => !open)}
             className={ICON_BUTTON}
           >
