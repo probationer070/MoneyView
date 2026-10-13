@@ -6,11 +6,13 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint",
+    "lint": "npm run tokens:check && eslint",
     "typecheck": "tsc --noEmit",
     "test:e2e": "playwright test",
     "test:unit": "node --test \"eslint-rules/**/*.test.mjs\" \"scripts/**/*.test.mjs\"",
-    "design:baseline": "node scripts/design-baseline.mjs"
+    "design:baseline": "node scripts/design-baseline.mjs",
+    "tokens": "node scripts/build-tokens.mjs",
+    "tokens:check": "node scripts/build-tokens.mjs --check"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.96.2",
