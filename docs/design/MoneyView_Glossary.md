@@ -35,6 +35,9 @@ capitals: "종목 NAME". Both come from `apps/web/lib/i18n/labels.ts`; add the r
 | Name | 종목 | label (table header for a security) |
 | Price | 현재가 | label |
 | Change | 등락률 | label (table header for a delta) |
+| Undervalued | 저평가 | label (DCF status "Undervalued"; translated, never re-thresholded) |
+| Overvalued | 고평가 | label (DCF status "Overvalued") |
+| Per-share value unavailable | 주당가치 산출 불가 | label (DCF status "Bridge Incomplete") |
 | Case | 케이스 | label (eyebrow on a case) |
 | Developer runtime | 개발 런타임 | label (eyebrow on the dev monitor) |
 | Up / Down / Unchanged | 상승 / 하락 / 보합 | delta, screen-reader text |
