@@ -15,6 +15,34 @@ export const en = {
   },
   delta: { up: "Up", down: "Down", flat: "Unchanged" },
   portfolio: { title: "Portfolio" },
+  corporate: {
+    verdict: {
+      detail: "Verdict detail", intrinsic: "Intrinsic value", vs: "vs", current: "Current price",
+      idle: "DCF not calculated · use Refresh DCF above", streaming: "Calculating…",
+      refused: "Not valued: {reason}", ev: "EV {value}",
+    },
+    kpi: {
+      spread: "ROIC - WACC", ke: "Bottom-up Ke", wacc: "WACC", beta: "Levered Beta",
+      spreadUp: "Value creation", spreadDown: "Value destruction",
+      keCaption: "rf + beta x implied ERP + CRP", waccCaption: "Discount rate in the DCF", betaCaption: "Hamada adjusted",
+    },
+    assumptions: {
+      detail: "Assumptions detail", menu: "Assumption options", edit: "Edit {label}", info: "{label} detail", actions: "Actions",
+      refreshSource: "Refresh source data", roicBasis: "ROIC Basis", roicYear: "ROIC Year",
+      basisRecent: "Recent multi-year average", basisAll: "All available years average", basisAnnual: "Select annual value",
+      yearUnavailable: "Unavailable", growthBasis: "Growth Basis",
+      growthDefault: "Growth Rate now stays on the stable CAGR path. Annual growth rates remain available in View Details for context.",
+      updated: "Last updated {time}", notLoaded: "Not loaded yet",
+      sourceIdle: "Source data stays idle on first load until refreshed.",
+      staleSource: "Cached source data is for {cached}. Refresh for {ticker}.",
+      fixed: "Fixed",
+    },
+    assumption: {
+      growth: "Growth Rate", roic: "ROIC", wacc: "WACC", debtRatio: "Debt Ratio", unleveredBeta: "Unlevered Beta",
+      crp: "Country Risk Premium", reinvestment: "Reinvestment Rate", innovation: "Innovation Index",
+      governance: "Governance Quality", esgPenalty: "ESG / Agency Penalty",
+    },
+  },
 } as const;
 
 type Widen<T> = { [K in keyof T]: T[K] extends string ? string : Widen<T[K]> };

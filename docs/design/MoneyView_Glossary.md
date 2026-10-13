@@ -71,3 +71,13 @@ capitals: "종목 NAME". Both come from `apps/web/lib/i18n/labels.ts`; add the r
 | Invested Amount | 투자 금액 | label (allocation table header) |
 | Projected Net Value | 예상 순자산가치 | label (allocation table header) |
 | Final Profit | 최종 손익 | label (allocation table header) |
+| Verdict | 판정 | label (corporate verdict block) |
+| Assumptions | 가정 | label (corporate assumption table) |
+| Item / Value / Status | 항목 / 값 / 상태 | label (table headers) |
+| Intrinsic value per share unavailable | 주당가치 산출 불가 | verdict, Bridge Incomplete |
+| DCF not calculated | DCF 미계산 | verdict idle state |
+| Value creation / Value destruction | 가치 창출 / 가치 훼손 | ROIC - WACC caption |
+| Levered beta / Unlevered beta | 레버리지 베타 / 비레버리지 베타 | |
+| Country risk premium | 국가위험프리미엄 | |
+| Reinvestment rate | 재투자율 | |
+| Source data | 원천 데이터 | |

@@ -207,6 +207,7 @@ test("corporate renders cached calculation results without auto-fetch and refres
   await expect.poll(() => stats.dcfRequests).toBe(1);
   await expect(page.getByRole("button", { name: /^Intrinsic DCF(?! Value)/i })).toContainText("$240.5");
 
+  await page.getByRole("button", { name: "Assumption options" }).click();
   await page.getByRole("button", { name: "Refresh source data" }).click();
   await expect.poll(() => stats.metricHistoryRequests).toBe(1);
   await expect.poll(() => stats.quarterlyRequests).toBe(1);
@@ -312,6 +313,7 @@ test("corporate page refresh labels stale source-data cache for a different sele
   await expect(page.getByRole("button", { name: /^Intrinsic DCF(?! Value)/i })).toContainText("Refresh to calculate");
   await expect(page.getByRole("button", { name: /^Intrinsic DCF(?! Value)/i })).not.toContainText("$199.9");
   await expect(page.getByText("Cached source data is for AAPL. Refresh for MSFT.")).toBeVisible();
+  await page.getByRole("button", { name: "Assumption options" }).click();
   await expect(page.getByText("Growth Rate now stays on the stable CAGR path. Annual growth rates remain available in View Details for context.")).toBeVisible();
   await page.waitForTimeout(300);
   expect(stats.dcfRequests).toBe(0);

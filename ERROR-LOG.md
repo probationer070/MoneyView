@@ -26,6 +26,16 @@ reveal that; only checking the code did.
 
 An entry states what was true when it was written. Nothing updates it on its own.
 
+## 2026-10-14: corporate first screen overflowed a 390 px viewport after the dense state
+
+Date: 2026-10-14 (Task 5 of the corporate one-screen plan, before commit).
+Command: `npx playwright test --workers=2` (full suite), first run with the new first screen.
+Failure: `high-risk-render-regression.spec.ts:118` ("corporate diagnostics and comparison chart panels stay rendered after dense state changes") failed. At 390 px after Refresh DCF and a custom comparison, `document.documentElement.scrollWidth` was 740 px and the page was about 1089 px wide. The change had moved the diagnostics and comparison sections out of their grid into a block stack. A second attempt, a single-column grid wrapper, made `corporate-viewport.spec.ts:23` and `responsive-accessibility.spec.ts:79` fail (diagnostics panels 34 px wide).
+Root cause: `body` is a flex row with `justify-center`, so the app shell takes its min-content width. A block child contributes its full min-content width (the comparison table and the 983 px recharts wrapper), while a grid whose tracks are `minmax(0, 1fr)` does not. The lower stack had lost the grid that protected it. A single-column grid wrapper was not enough: `TargetStockComparisonSection` carries `col-span-6`, which created implicit columns.
+Fix: restored the HEAD arrangement of the lower stack, `<section className="grid grid-cols-1 gap-4 xl:grid-cols-6">` with a `div.space-y-4 xl:col-span-4` around `CorporateDiagnosticsSection` and `TargetStockComparisonSection` as the direct child. The three affected specs and the full suite then passed (396 passed, 8 skipped).
+Files changed: apps/web/app/corporate/page.tsx.
+Prevention: moving a section out of a grid into a block stack changes min-content propagation, and fixed-width charts or wide tables then widen the whole page. After any layout move on a page with charts, check the 390 px spec (`high-risk-render-regression.spec.ts`) after a dense state, not only the initial render.
+
 ## 2026-10-14: market overview candles took the day's direction colour for every up candle
 
 Date: 2026-10-14

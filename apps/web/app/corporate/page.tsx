@@ -29,7 +29,9 @@ import {
 } from "./components/CorporateGraphs";
 import { CorporateDiagnosticsSection } from "./components/CorporateDiagnosticsSection";
 import { TargetStockComparisonSection } from "./components/TargetStockComparisonSection";
-import { CorporateAssumptionsPanel } from "./components/CorporateAssumptionsPanel";
+import { AssumptionTable } from "./components/AssumptionTable";
+import { KpiRow } from "./components/KpiRow";
+import { VerdictBlock } from "./components/VerdictBlock";
 import { buildCalculationDetails } from "./buildCalculationDetails";
 import type { CalculationDetailKey } from "./components/calculationDetailTypes";
 import {
@@ -585,10 +587,7 @@ export default function CorporateAnalysisPage() {
     rawQuarterlyStatementsData && quarterlyStatementsSnapshot !== sourceDataTicker ? quarterlyStatementsSnapshot : null,
     rawHistoricalPricesData.length > 0 && historicalPricesSnapshot !== sourceDataTicker ? historicalPricesSnapshot : null,
   ].filter((ticker): ticker is string => Boolean(ticker));
-  const sourceDataIsStale = staleSourceDataTickers.length > 0;
-  const sourceDataStaleMessage = sourceDataIsStale
-    ? `Cached source data is for ${Array.from(new Set(staleSourceDataTickers)).join(", ")}. Refresh for ${sourceDataTicker}.`
-    : "";
+  const staleSourceTickers = Array.from(new Set(staleSourceDataTickers));
 
   useEffect(() => {
     if (!dcfRequestedSnapshot || !dcfRefreshToken) return;
@@ -998,11 +997,6 @@ export default function CorporateAnalysisPage() {
                 {!dcfData && dcfStreamStatus !== "streaming" && (
                   <span>DCF stays idle on first load until you refresh it.</span>
                 )}
-                {dcfRefusal && (
-                  <span data-testid="dcf-refusal" className="rounded-full bg-[var(--surface-muted)] px-2 py-1 text-[length:var(--type-caption)] font-bold text-[var(--text-secondary)]">
-                    Not valued: {dcfRefusal.readerText}
-                  </span>
-                )}
                 {dcfStreamError && (
                   <span className="rounded-full bg-red-100 px-2 py-1 text-[length:var(--type-caption)] font-bold text-red-800">
                     {dcfStreamError}
@@ -1037,88 +1031,55 @@ export default function CorporateAnalysisPage() {
         </div>
       </header>
 
-      {/* Main analysis grid: assumption controls on the left, valuation cards and charts on the right. */}
-      <section className="grid grid-cols-1 gap-4 xl:grid-cols-6">
-        <CorporateAssumptionsPanel
-          setActiveCalculation={setActiveCalculation}
-          handleRefreshSourceData={handleRefreshSourceData}
-          metricsHistoryQueryIsFetching={metricsHistoryQuery.isFetching}
-          quarterlyStatementsQueryIsFetching={quarterlyStatementsQuery.isFetching}
-          historicalPricesQueryIsFetching={historicalPricesQuery.isFetching}
-          sourceDataDisplayLastUpdatedAt={sourceDataDisplayLastUpdatedAt}
-          sourceDataIsStale={sourceDataIsStale}
-          sourceDataStaleMessage={sourceDataStaleMessage}
-          hasMetricsHistoryData={Boolean(metricsHistoryData)}
-          hasQuarterlyStatementsData={Boolean(quarterlyStatementsData)}
-          hasHistoricalPricesData={historicalPricesData.length > 0}
-          applyMetricHistorySelection={applyMetricHistorySelection}
-          growthBasisLabel={growthBasisLabel}
+      {/* First screen (spec §2): verdict and KPIs on the left 2/3, the assumption table on the right 1/3. */}
+      <section className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <div className="flex min-w-0 flex-col gap-3 lg:col-span-2">
+          <VerdictBlock
+            dcf={dcfData}
+            streaming={dcfStreamStatus === "streaming"}
+            refusalText={dcfRefusal?.readerText ?? null}
+            onOpenDetail={() => setActiveCalculation("backendDcf")}
+          />
+          <KpiRow
+            spread={derived.spread}
+            bottomUpKe={derived.bottomUpKe}
+            wacc={assumptions.wacc}
+            leveredBeta={derived.leveredBeta}
+            onOpenDetail={setActiveCalculation}
+          />
+        </div>
+        <AssumptionTable
+          assumptions={assumptions}
+          onChange={update}
+          onOpenDetail={setActiveCalculation}
           growthMeta={growthMeta}
-          roicBasis={roicBasis}
-          setRoicBasis={setRoicBasis}
-          roicYear={roicYear}
-          setRoicYear={setRoicYear}
-          annualRoicValues={annualRoicValues}
-          roicBasisLabel={roicBasisLabel}
           roicMeta={roicMeta}
-          roicYearUnavailableMessage={roicYearUnavailableMessage}
           roicAudit={metricAuditQuery.data?.roic ?? null}
           waccAudit={metricAuditQuery.data?.wacc ?? null}
-          assumptions={assumptions}
-          update={update}
+          sourceTicker={sourceDataTicker}
+          sourceUpdatedAt={sourceDataDisplayLastUpdatedAt}
+          staleSourceTickers={staleSourceTickers}
+          sourceIsFetching={metricsHistoryQuery.isFetching || quarterlyStatementsQuery.isFetching || historicalPricesQuery.isFetching}
+          hasSourceData={Boolean(metricsHistoryData) || Boolean(quarterlyStatementsData) || historicalPricesData.length > 0}
+          roicYearUnavailableMessage={roicYearUnavailableMessage}
+          onRefreshSourceData={handleRefreshSourceData}
+          roicBasis={roicBasis}
+          roicYear={roicYear}
+          annualRoicValues={annualRoicValues}
+          onRoicBasisChange={(next) => {
+            setRoicBasis(next);
+            applyMetricHistorySelection({ nextRoicBasis: next, nextRoicYear: roicYear });
+          }}
+          onRoicYearChange={(next) => {
+            setRoicYear(next);
+            applyMetricHistorySelection({ nextRoicYear: next });
+          }}
+          growthBasisLabel={growthBasisLabel}
         />
+      </section>
 
-        {/* Dashboard surface: KPI cards first, then the diagnostic chart suite as a clearly visible section. */}
+      <section className="grid grid-cols-1 gap-4 xl:grid-cols-6">
         <div className="space-y-4 xl:col-span-4">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            <button
-              type="button"
-              onClick={() => setActiveCalculation("spread")}
-              className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4 text-left transition hover:border-[var(--brand)]"
-            >
-              <div className="text-xs font-semibold text-[var(--text-muted)]">
-                <InfoTooltip
-                  label="ROIC - WACC"
-                  description={`Spread between return on invested capital and WACC. Basis: ${pct(assumptions.roic)} ROIC - ${pct(assumptions.wacc)} WACC = ${pct(derived.spread)}. Positive is good because returns exceed the hurdle rate; current status is ${derived.spread >= 0 ? "Good, value creation" : "Bad, value destruction"}.`}
-                />
-              </div>
-              <div className={`mt-1 text-3xl font-black ${derived.spread >= 0 ? "text-[var(--delta-up)]" : "text-[var(--delta-down)]"}`}>
-                {pct(derived.spread)}
-              </div>
-              <div className="mt-2 text-xs text-[var(--text-muted)]">
-                {derived.spread >= 0 ? "Value creation" : "Value destruction"}
-              </div>
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveCalculation("bottomUpKe")}
-              className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4 text-left transition hover:border-[var(--brand)]"
-            >
-              <div className="text-xs font-semibold text-[var(--text-muted)]">
-                <InfoTooltip
-                  label="Bottom-up Ke"
-                  description={`Cost of equity estimate. Basis: risk-free rate ${pct(RISK_FREE_RATE)} + levered beta ${numberText2(derived.leveredBeta)} x implied ERP ${pct(impliedErp)} + South Korea CRP ${pct(KOREA_COUNTRY_RISK_PREMIUM)} = ${pct(derived.bottomUpKe)}. Lower is generally better, but it must still reflect real risk.`}
-                />
-              </div>
-              <div className="mt-1 text-3xl font-black text-[var(--text-primary)]">{pct(derived.bottomUpKe)}</div>
-              <div className="mt-2 text-xs text-[var(--text-muted)]">rf + beta x implied ERP + CRP</div>
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveCalculation("leveredBeta")}
-              className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4 text-left transition hover:border-[var(--brand)]"
-            >
-              <div className="text-xs font-semibold text-[var(--text-muted)]">
-                <InfoTooltip
-                  label="Levered Beta"
-                  description={`Equity risk after financial leverage. Basis: betaU ${numberText(assumptions.unleveredBeta)} x [1 + (1 - ${pct(TAX_RATE * 100)}) x D/E ${numberText(derived.debtToEquity)}] = ${numberText2(derived.leveredBeta)}. Beta 1.0 is average market risk; beta above 1.0 is more volatile than the market, so beta 1.5 means 50.0% higher risk; beta below 1.0 is less volatile, so beta 0.7 means 30.0% lower risk.`}
-                />
-              </div>
-              <div className="mt-1 text-3xl font-black text-[var(--text-primary)]">{numberText2(derived.leveredBeta)}</div>
-              <div className="mt-2 text-xs text-[var(--text-muted)]">Hamada adjusted</div>
-            </button>
-          </div>
-
           <CorporateDiagnosticsSection
             companyName={companyName}
             hurdleBars={hurdleBars}
@@ -1133,7 +1094,6 @@ export default function CorporateAnalysisPage() {
             onOpenDetail={setActiveCalculation}
           />
         </div>
-
         <TargetStockComparisonSection
           comparisonData={comparisonData}
           comparisonDisplayLastUpdatedAt={comparisonDisplayLastUpdatedAt}

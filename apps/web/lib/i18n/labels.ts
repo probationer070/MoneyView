@@ -30,6 +30,10 @@ export const LABELS = {
   investedAmount: ["투자 금액", "Invested Amount"],
   projectedNetValue: ["예상 순자산가치", "Projected Net Value"],
   finalProfit: ["최종 손익", "Final Profit"],
+  verdict: ["판정", "Verdict"],
+  assumptions: ["가정", "Assumptions"],
+  item: ["항목", "Item"],
+  status: ["상태", "Status"],
 } as const satisfies Record<string, readonly [string, string]>;
 
 export type LabelKey = keyof typeof LABELS;

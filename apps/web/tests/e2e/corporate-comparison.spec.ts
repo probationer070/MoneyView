@@ -99,6 +99,7 @@ test("calculation detail modal shows explicit source-data and full-report errors
   await page.goto("/corporate", { waitUntil: "domcontentloaded" });
 
   await expect(page.getByRole("heading", { name: /Corporate Analysis/i })).toBeVisible({ timeout: 60_000 });
+  await page.getByRole("button", { name: "Assumption options" }).click();
   await page.getByRole("button", { name: "Refresh source data" }).click();
   await page.getByRole("button", { name: /ROIC - WACC/i }).first().click();
 
