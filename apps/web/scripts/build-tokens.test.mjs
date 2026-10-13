@@ -107,3 +107,10 @@ test("check fails and names a hand-edited generated file", () => sandbox(({ web,
   assert.equal(stale.status, 1);
   assert.match(stale.stderr, /app[\\/]tokens\.generated\.css/);
 }));
+
+test("globals.css imports tailwind first, then the generated tokens", () => {
+  const css = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
+  const tailwind = css.indexOf('@import "tailwindcss";');
+  const tokens = css.indexOf('@import "./tokens.generated.css";');
+  assert.ok(tailwind >= 0 && tokens > tailwind, "tokens import must follow the tailwind import");
+});
