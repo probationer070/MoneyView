@@ -26,7 +26,12 @@ export interface FormulaContext {
 const p = (value: number) => `${value.toFixed(1)}%`;
 const n2 = (value: number) => value.toFixed(2);
 const money = (value: number) => `$${value.toLocaleString("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}`;
-const signed = (value: number) => `${value > 0 ? "+" : ""}${value.toFixed(1)}%`;
+const signed = (value: number) => {
+  const text = value.toFixed(1);
+  // A tiny negative upside rounds to "-0.0"; print it as the zero it is.
+  if (Number(text) === 0) return "0.0%";
+  return `${value > 0 ? "+" : ""}${text}%`;
+};
 
 function auditInput(entry: CorporateMetricAuditEntry | null, field: string): number | null {
   const value = entry?.inputs_used.find((input) => input.field === field)?.value;

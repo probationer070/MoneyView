@@ -16,7 +16,8 @@ function peerValue(row: CorporateComparisonRowApi, field: PeerField): number | n
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
-/** Where `ticker` sits among the non-benchmark rows of the current comparison, high to low. */
+/** Where `ticker` sits among the non-benchmark rows of the current comparison, high to low.
+ *  Rank 1 = highest value, not necessarily best (e.g. WACC). */
 export function peerRank(rows: readonly CorporateComparisonRowApi[], field: PeerField, ticker: string): PeerRank {
   const peers = rows.filter((row) => row.group_name !== "benchmark");
   const self = peers.find((row) => row.ticker.toUpperCase() === ticker.toUpperCase());
