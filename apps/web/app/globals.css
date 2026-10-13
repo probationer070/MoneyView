@@ -7,11 +7,11 @@
     color: var(--text-primary);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    font-family: var(--font-inter), sans-serif;
+    font-family: var(--font-family-sans);
   }
 
   /* Numeric display alignment */
-  .tabular-nums {
+  table, .tabular-nums {
     font-variant-numeric: tabular-nums;
   }
 }

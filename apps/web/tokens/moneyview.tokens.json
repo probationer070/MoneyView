@@ -330,5 +330,21 @@
       "$type": "dimension",
       "$value": "11px"
     }
+  },
+  "font": {
+    "family": {
+      "sans": {
+        "$value": "var(--font-host-grotesk), var(--font-pretendard), system-ui, \"Malgun Gothic\", sans-serif",
+        "$extensions": {
+          "moneyview.theme": "--font-sans"
+        }
+      },
+      "mono": {
+        "$value": "var(--font-geist-mono), var(--font-pretendard), ui-monospace, monospace",
+        "$extensions": {
+          "moneyview.theme": "--font-mono"
+        }
+      }
+    }
   }
 }

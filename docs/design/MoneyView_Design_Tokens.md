@@ -92,7 +92,7 @@ The existing `globals.css` establishes a muted green-white palette with red-up /
 
 ## 3. Typography Tokens
 
-Font family: **Inter** (loaded via `next/font/google`, assigned to `--font-inter`).
+Font families (SIL OFL 1.1, vendored in `apps/web/app/fonts/`, loaded via `next/font/local`): **Host Grotesk** for Latin (`--font-host-grotesk`), **Pretendard** for Hangul (`--font-pretendard`), **Geist Mono** for figures (`--font-geist-mono`). `--font-family-sans` and `--font-family-mono` stack them; see the generated token table at the end of this file.
 
 ### 3.1 Type Scale
 
@@ -322,4 +322,6 @@ No dark mode implementation is needed now. The token structure supports it witho
 | `type.table-body` | `--type-table-body` | `13px` |  |
 | `type.helper` | `--type-helper` | `12px` |  |
 | `type.caption` | `--type-caption` | `11px` |  |
+| `font.family.sans` | `--font-family-sans` | `var(--font-host-grotesk), var(--font-pretendard), system-ui, "Malgun Gothic", sans-serif` |  |
+| `font.family.mono` | `--font-family-mono` | `var(--font-geist-mono), var(--font-pretendard), ui-monospace, monospace` |  |
 <!-- tokens:generated:end -->

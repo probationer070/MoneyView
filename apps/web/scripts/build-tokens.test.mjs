@@ -114,3 +114,10 @@ test("globals.css imports tailwind first, then the generated tokens", () => {
   const tokens = css.indexOf('@import "./tokens.generated.css";');
   assert.ok(tailwind >= 0 && tokens > tailwind, "tokens import must follow the tailwind import");
 });
+
+test("the real token file maps the font families into @theme inline", () => {
+  const tokens = JSON.parse(readFileSync(PATHS.source, "utf8"));
+  const css = renderCss(resolve(flatten(tokens)), []);
+  assert.match(css, /@theme inline \{[^}]*\n {2}--font-sans: var\(--font-family-sans\);/);
+  assert.match(css, /@theme inline \{[^}]*\n {2}--font-mono: var\(--font-family-mono\);/);
+});

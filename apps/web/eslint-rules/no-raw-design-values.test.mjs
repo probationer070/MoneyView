@@ -52,6 +52,9 @@ tester.run("no-raw-design-values", rule, {
     { code: 'const css = "fill: #fff;";', errors: [{ messageId: "hex" }] },
     { code: 'const c = `rgba(0, 0, 0, ${a})`;', errors: [{ messageId: "colorFn" }] },
     { code: 'const s = { fontSize: 11 };', errors: [{ messageId: "numericFontSize" }] },
+    { code: 'const f = "var(--font-pretendrad)";', errors: [{ messageId: "unknownVar" }] },
+    { code: 'const f = "var(--font-inter)";', errors: [{ messageId: "unknownVar" }] },
+    { code: 'const f = "var(--font-pretendard-old)";', errors: [{ messageId: "unknownVar" }] },
   ],
 });
 

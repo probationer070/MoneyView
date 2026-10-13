@@ -103,6 +103,12 @@ export const tokens = {
     "table-body": "13px",
     "helper": "12px",
     "caption": "11px"
+  },
+  "font": {
+    "family": {
+      "sans": "var(--font-host-grotesk), var(--font-pretendard), system-ui, \"Malgun Gothic\", sans-serif",
+      "mono": "var(--font-geist-mono), var(--font-pretendard), ui-monospace, monospace"
+    }
   }
 } as const;
 

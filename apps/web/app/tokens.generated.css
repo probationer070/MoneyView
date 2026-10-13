@@ -78,4 +78,11 @@
   --type-table-body: 13px;
   --type-helper: 12px;
   --type-caption: 11px;
+  --font-family-sans: var(--font-host-grotesk), var(--font-pretendard), system-ui, "Malgun Gothic", sans-serif;
+  --font-family-mono: var(--font-geist-mono), var(--font-pretendard), ui-monospace, monospace;
+}
+
+@theme inline {
+  --font-sans: var(--font-family-sans);
+  --font-mono: var(--font-family-mono);
 }

@@ -10,9 +10,10 @@ import { fileURLToPath } from "node:url";
  * "rounded" and "shadow" are ordinary English words in UI copy.
  */
 const DEFAULT_TOKENS_CSS = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../app/tokens.generated.css");
-// Custom properties that legitimately live outside the token file: next/font families,
-// Tailwind internals, and AppShell's locally scoped padding.
-const LOCAL_VAR = /^--(?:font-|tw-|main-pad-)/;
+// Custom properties that legitimately live outside the token file: the three next/font families
+// (layout.tsx), Tailwind internals, and AppShell's locally scoped padding. Any other --font-* name
+// is a typo or a removed family and is reported.
+const LOCAL_VAR = /^--(?:font-(?:host-grotesk|pretendard|geist-mono)$|tw-|main-pad-)/;
 const VAR_REF = /var\((--[\w-]+)/g;
 const tokenCache = new Map();
 
