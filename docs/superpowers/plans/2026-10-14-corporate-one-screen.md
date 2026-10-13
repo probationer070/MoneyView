@@ -24,6 +24,9 @@
 
 ## Narrowed or interpreted (owner-visible)
 
+**Owner confirmed 2026-10-14:** N5 and N6 (hover zone is the menu cluster; ☰ pins), N8 (comparison charts and batch reports stay below the table), N9 (deferred migration items become a follow-up with its own test-change approval).
+
+
 | # | Spec says | This plan does | Why |
 |---|---|---|---|
 | N1 | §4 trend tab for growth, ROIC, debt ratio, reinvestment, beta, innovation | **Growth and ROIC only.** The tab is hidden for every other key. | `GET /corporate/metrics/{t}/history` (`CorporateMetricHistoryApi`, `corporateTypes.ts:98`; built by `yahoo_metric_history`, `apps/api/services/corporate_statement_metrics.py:1660`) returns annual series for exactly two metrics: `annual_growth_rates` and `annual_roic`. The other four have no annual values in the response, and A changes no backend. |
