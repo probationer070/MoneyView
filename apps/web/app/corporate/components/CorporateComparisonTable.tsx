@@ -43,51 +43,51 @@ export function CorporateComparisonTable({
 }: CorporateComparisonTableProps) {
   return (
     <div data-testid="comparison-table-scroll" className="max-h-80 overflow-auto [contain:inline-size]">
-      <table className="w-full text-sm">
-        <thead className="sticky top-0 z-10 bg-[var(--surface-muted)] text-left text-[var(--text-muted)]">
+      <table className="type-small w-full">
+        <thead className="sticky top-0 z-10 bg-[var(--surface)] text-left text-[var(--ink-muted)]">
           <tr>
-            <th className="px-4 py-3 font-semibold">Ticker</th>
-            <th className="px-4 py-3 font-semibold">Company</th>
-            <th className="px-4 py-3 font-semibold">Sector</th>
-            <th className="px-4 py-3 text-right font-semibold">Weight</th>
-            <th className="px-4 py-3 text-right font-semibold">ROIC - WACC</th>
-            <th className="px-4 py-3 text-right font-semibold">DCF Value</th>
-            <th className="px-4 py-3 text-right font-semibold">Current Price</th>
-            <th className="px-4 py-3 text-right font-semibold">DCF value vs price (one-off gap)</th>
-            <th className="px-4 py-3 text-right font-semibold">CAPM Return</th>
-            <th className="px-4 py-3 text-right font-semibold">Market Return</th>
-            <th className="px-4 py-3 text-right font-semibold">Market-implied return (per year)</th>
-            <th className="px-4 py-3 text-right font-semibold">Implied return vs WACC (pts per year)</th>
+            <th className="type-caption px-4 py-3">Ticker</th>
+            <th className="type-caption px-4 py-3">Company</th>
+            <th className="type-caption px-4 py-3">Sector</th>
+            <th className="type-caption px-4 py-3 text-right">Weight</th>
+            <th className="type-caption px-4 py-3 text-right">ROIC - WACC</th>
+            <th className="type-caption px-4 py-3 text-right">DCF Value</th>
+            <th className="type-caption px-4 py-3 text-right">Current Price</th>
+            <th className="type-caption px-4 py-3 text-right">DCF value vs price (one-off gap)</th>
+            <th className="type-caption px-4 py-3 text-right">CAPM Return</th>
+            <th className="type-caption px-4 py-3 text-right">Market Return</th>
+            <th className="type-caption px-4 py-3 text-right">Market-implied return (per year)</th>
+            <th className="type-caption px-4 py-3 text-right">Implied return vs WACC (pts per year)</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-[var(--border)]/60">
+        <tbody className="divide-y divide-[var(--grid)]">
           {rows.map((row) => {
             // The presented number is the helper's return, not the raw field: the value that
             // reaches the cell has passed through the one place that decides whether a DCF
             // value may be presented at all.
             const bridged = bridgedDcfValue(row);
             return (
-              <tr key={`comparison-${row.ticker}`} className={row.ticker === currentTicker ? "bg-[var(--surface-muted)]/50" : ""}>
-                <td className="px-4 py-3 font-bold text-[var(--text-primary)]">
+              <tr key={`comparison-${row.ticker}`} className={row.ticker === currentTicker ? "bg-[var(--surface)]" : ""}>
+                <td className="type-mono px-4 py-3 text-[var(--ink)]">
                   {row.group_name !== "benchmark" ? (
                     <button
                       type="button"
                       onClick={() => onSelectTicker(row.ticker)}
-                      className="rounded underline decoration-dotted underline-offset-4"
+                      className="rounded-[var(--radius-1)] underline decoration-dotted underline-offset-4"
                     >
                       {row.ticker}
                     </button>
                   ) : row.ticker}
                 </td>
-                <td className="px-4 py-3 text-[var(--text-muted)]">{row.name || row.ticker}</td>
-                <td className="px-4 py-3 text-[var(--text-muted)]">{row.sector || "N/A"}</td>
-                <td className="px-4 py-3 text-right tabular-nums">{formatPct2(row.weight * 100)}</td>
+                <td className="px-4 py-3 text-[var(--ink-muted)]">{row.name || row.ticker}</td>
+                <td className="px-4 py-3 text-[var(--ink-muted)]">{row.sector || "N/A"}</td>
+                <td className="type-mono px-4 py-3 text-right tabular-nums">{formatPct2(row.weight * 100)}</td>
                 <td className="px-4 py-3 text-right">
                   <button
                     type="button"
                     onClick={() => onOpenCalculationForTicker(row.ticker, "spread")}
                     disabled={row.group_name === "benchmark"}
-                    className={`font-bold tabular-nums ${row.roic_minus_wacc >= 0 ? "text-[var(--delta-up)]" : "text-[var(--delta-down)]"} ${row.group_name === "benchmark" ? "cursor-default" : "underline decoration-dotted underline-offset-4 hover:opacity-80"}`}
+                    className={`type-mono tabular-nums ${row.roic_minus_wacc >= 0 ? "text-[var(--up)]" : "text-[var(--down)]"} ${row.group_name === "benchmark" ? "cursor-default" : "underline decoration-dotted underline-offset-4 hover:opacity-80"}`}
                   >
                     {formatPct2(row.roic_minus_wacc)}
                   </button>
@@ -100,35 +100,35 @@ export function CorporateComparisonTable({
                     title={row.dcf_refusal
                       ? impliedReturnRefusalText(row.dcf_refusal)
                       : bridged === null ? "The equity bridge did not resolve for this ticker, so no intrinsic value per share is available." : undefined}
-                    className={`font-bold tabular-nums text-[var(--text-primary)] ${row.group_name === "benchmark" ? "cursor-default" : "underline decoration-dotted underline-offset-4 hover:opacity-80"}`}
+                    className={`type-mono tabular-nums text-[var(--ink)] ${row.group_name === "benchmark" ? "cursor-default" : "underline decoration-dotted underline-offset-4 hover:opacity-80"}`}
                   >
                     {bridged === null ? "—" : formatMoney(bridged)}
                   </button>
                 </td>
-                <td className="px-4 py-3 text-right tabular-nums">{row.has_price_data ? formatMoney(row.current_price) : "N/A"}</td>
+                <td className="type-mono px-4 py-3 text-right tabular-nums">{row.has_price_data ? formatMoney(row.current_price) : "N/A"}</td>
                 <td className="px-4 py-3 text-right">
                   <button
                     type="button"
                     onClick={() => onOpenCalculationForTicker(row.ticker, "backendDcf")}
                     disabled={row.group_name === "benchmark"}
                     title={row.dcf_refusal ? impliedReturnRefusalText(row.dcf_refusal) : undefined}
-                    className={`tabular-nums text-[var(--text-primary)] ${row.group_name === "benchmark" ? "cursor-default" : "underline decoration-dotted underline-offset-4 hover:opacity-80"}`}
+                    className={`type-mono tabular-nums text-[var(--ink)] ${row.group_name === "benchmark" ? "cursor-default" : "underline decoration-dotted underline-offset-4 hover:opacity-80"}`}
                   >
                     {row.dcf_implied_return === null ? "—" : formatPct2(row.dcf_implied_return)}
                   </button>
                 </td>
-                <td className="px-4 py-3 text-right tabular-nums">{formatPct2(row.capm_expected_return)}</td>
-                <td className="px-4 py-3 text-right tabular-nums">{formatPct2(row.market_expected_return)}</td>
+                <td className="type-mono px-4 py-3 text-right tabular-nums">{formatPct2(row.capm_expected_return)}</td>
+                <td className="type-mono px-4 py-3 text-right tabular-nums">{formatPct2(row.market_expected_return)}</td>
                 {/* Annual rates on the same capital as WACC (spec 2026-09-26-implied-return-spread).
                     A null is a refusal or a pre-v3 snapshot; the title says which. Plain text:
                     there is no calculation detail of its own to link to. */}
-                <td className="px-4 py-3 text-right tabular-nums" title={row.market_implied_return === null ? impliedReturnRefusalText(row.implied_return_refusal) : undefined}>
+                <td className="type-mono px-4 py-3 text-right tabular-nums" title={row.market_implied_return === null ? impliedReturnRefusalText(row.implied_return_refusal) : undefined}>
                   {row.market_implied_return === null ? "—" : formatPct2(row.market_implied_return)}
                 </td>
                 <td
                   data-testid={`implied-return-spread-${row.ticker}`}
                   title={row.implied_return_spread === null ? impliedReturnRefusalText(row.implied_return_refusal) : undefined}
-                  className={`px-4 py-3 text-right font-bold tabular-nums ${row.implied_return_spread === null ? "text-[var(--text-muted)]" : row.implied_return_spread >= 0 ? "text-[var(--delta-up)]" : "text-[var(--delta-down)]"}`}
+                  className={`type-mono px-4 py-3 text-right tabular-nums ${row.implied_return_spread === null ? "text-[var(--ink-muted)]" : row.implied_return_spread >= 0 ? "text-[var(--up)]" : "text-[var(--down)]"}`}
                 >
                   {row.implied_return_spread === null ? "—" : formatPct2(row.implied_return_spread)}
                 </td>

@@ -18,11 +18,11 @@ export function BetaWaccCurveGraph({
   onOpenDetail: (key: DetailKey) => void;
 }) {
   return (
-    <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-5">
+    <div className="border border-[var(--line)] bg-[var(--surface-raised)] p-5">
       <button
         type="button"
         onClick={() => onOpenDetail("betaWaccCurve")}
-        className="text-left text-sm font-bold text-[var(--text-primary)] underline decoration-dotted underline-offset-4 hover:text-[var(--brand)]"
+        className="type-panel-title text-left text-[var(--ink)] underline decoration-dotted underline-offset-4 hover:text-[var(--brand)]"
       >
         <InfoTooltip
           label="Bottom-up Beta + WACC U-Curve"
@@ -36,9 +36,9 @@ export function BetaWaccCurveGraph({
             <XAxis dataKey="name" {...withCategoryAxisProps()} />
             <YAxis {...withAxisProps({ tickFormatter: (value: number | string) => fmtRatioTick(Number(value), 2) })} />
             <Tooltip {...withTooltipProps()} />
-            <Bar dataKey="beta" name="Beta" radius={[4, 4, 0, 0]}>
+            <Bar dataKey="beta" name="Beta">
               {betaTreemapProxy.map((entry) => (
-                <Cell key={entry.name} fill={entry.beta > 1.3 ? "#444444" : "#60CAAD"} />
+                <Cell key={entry.name} fill={entry.beta > 1.3 ? "var(--ink)" : "var(--chart-1)"} />
               ))}
             </Bar>
           </BarChart>
@@ -49,8 +49,8 @@ export function BetaWaccCurveGraph({
             <XAxis dataKey="debt" {...withAxisProps({ tickFormatter: (value: number | string) => fmtPctTick(Number(value), 0) })} />
             <YAxis {...withAxisProps({ tickFormatter: (value: number | string) => fmtPctTick(Number(value), 0) })} />
             <Tooltip {...withTooltipProps()} formatter={(value) => pct(Number(value))} />
-            <Line type="monotone" dataKey="wacc" stroke="var(--accent)" strokeWidth={3} dot={false} />
-            <ReferenceLine x={assumptionsDebtRatio} stroke="#444444" strokeDasharray="4 4" />
+            <Line type="monotone" dataKey="wacc" stroke="var(--brand)" strokeWidth={3} dot={false} />
+            <ReferenceLine x={assumptionsDebtRatio} stroke="var(--ink)" strokeDasharray="4 4" />
           </LineChart>
         </ResponsiveChart>
       </div>

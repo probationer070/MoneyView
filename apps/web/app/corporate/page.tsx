@@ -113,10 +113,10 @@ import {
 
 function CalculationModalLoadingOverlay() {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="status" aria-live="polite">
-      <div className="w-full max-w-2xl rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-5 shadow-2xl">
-        <div className="text-sm font-semibold text-[var(--text-primary)]">Loading calculation detail</div>
-        <div className="mt-4 h-28 animate-pulse rounded bg-[var(--surface-muted)]" />
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--overlay-scrim)] p-4" role="status" aria-live="polite">
+      <div className="w-full max-w-2xl border border-[var(--line)] bg-[var(--surface-raised)] p-5">
+        <div className="type-label text-[var(--ink)]">Loading calculation detail</div>
+        <div className="mt-4 h-28 animate-pulse bg-[var(--surface)]" />
       </div>
     </div>
   );
@@ -780,9 +780,9 @@ export default function CorporateAnalysisPage() {
 
   // Chart datasets keep each visualization declarative and reuse the same derived model.
   const hurdleBars = [
-    { name: "Risk-free", value: RISK_FREE_RATE, fill: "#9DA5A2" },
-    { name: "Beta x Implied ERP", value: derived.leveredBeta * impliedErp, fill: "#60CAAD" },
-    { name: "CRP", value: KOREA_COUNTRY_RISK_PREMIUM, fill: "#444444" },
+    { name: "Risk-free", value: RISK_FREE_RATE, fill: "var(--chart-4)" },
+    { name: "Beta x Implied ERP", value: derived.leveredBeta * impliedErp, fill: "var(--chart-1)" },
+    { name: "CRP", value: KOREA_COUNTRY_RISK_PREMIUM, fill: "var(--ink)" },
   ];
 
   const regionalHurdle = [

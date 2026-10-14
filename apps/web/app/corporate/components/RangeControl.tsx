@@ -30,8 +30,8 @@ export function RangeControl({
 }) {
   return (
     <label className="group/range block space-y-2">
-      <div className="flex items-center justify-between text-xs font-semibold">
-        <span className="text-[var(--text-muted)] transition-colors group-hover/range:text-[var(--text-primary)]">
+      <div className="type-label flex items-center justify-between">
+        <span className="text-[var(--ink-muted)] transition-colors group-hover/range:text-[var(--ink)]">
           {onDetailClick ? (
             <button
               type="button"
@@ -49,9 +49,9 @@ export function RangeControl({
             label
           )}
         </span>
-        <span className="flex items-center gap-2 text-[var(--text-primary)] transition-colors group-hover/range:text-[var(--brand)]">
+        <span className="flex items-center gap-2 text-[var(--ink)] transition-colors group-hover/range:text-[var(--brand)]">
           {statusBadge}
-          <span>
+          <span className="type-mono">
             {valueDisplay ?? `${value.toFixed(1)}${suffix}`}
           </span>
         </span>

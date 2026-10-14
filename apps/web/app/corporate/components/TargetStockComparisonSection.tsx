@@ -315,10 +315,10 @@ export function TargetStockComparisonSection({
           />
 
           <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-            <section className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-panel)] p-4">
+            <section className="border border-[var(--line)] bg-[var(--surface-raised)] p-4">
               <div className="flex flex-col gap-1">
-                <h3 className="text-sm font-bold text-[var(--text-primary)]">Similar Stocks Spread View</h3>
-                <p className="text-sm text-[var(--text-muted)]">
+                <h3 className="type-panel-title text-[var(--ink)]">Similar Stocks Spread View</h3>
+                <p className="type-body text-[var(--ink-muted)]">
                   Compares {selectedComparisonTicker || currentTicker} with {selectedComparisonSector || "the current comparison universe"}. When there are not enough same-sector names, the chart falls back to the active comparison rows.
                 </p>
               </div>
@@ -337,29 +337,29 @@ export function TargetStockComparisonSection({
                       return [`${numericValue.toFixed(2)}%`, label];
                     }}
                   />
-                  <Bar dataKey="roic_minus_wacc" name="roic_minus_wacc" radius={[6, 6, 0, 0]}>
+                  <Bar dataKey="roic_minus_wacc" name="roic_minus_wacc">
                     {similarComparisonBarData.map((row) => (
-                      <Cell key={`${row.ticker}-roic`} fill={row.isSelected ? "#0F766E" : "#60CAAD"} />
+                      <Cell key={`${row.ticker}-roic`} fill={row.isSelected ? "var(--chart-1)" : "var(--chart-4)"} />
                     ))}
                   </Bar>
-                  <Bar dataKey="implied_return_spread" name="implied_return_spread" radius={[6, 6, 0, 0]}>
+                  <Bar dataKey="implied_return_spread" name="implied_return_spread">
                     {similarComparisonBarData.map((row) => (
-                      <Cell key={`${row.ticker}-spread`} fill={row.isSelected ? "#1D4ED8" : "#94A3B8"} />
+                      <Cell key={`${row.ticker}-spread`} fill={row.isSelected ? "var(--chart-2)" : "var(--chart-3)"} />
                     ))}
                   </Bar>
                 </BarChart>
               </ResponsiveChart>
               {similarComparisonBarData.some((row) => row.implied_return_spread === null) ? (
-                <p data-testid="similar-spread-refused-note" className="mt-2 text-xs text-[var(--text-muted)]">
+                <p data-testid="similar-spread-refused-note" className="type-small mt-2 text-[var(--ink-muted)]">
                   No implied return for {similarComparisonBarData.filter((row) => row.implied_return_spread === null).map((row) => row.ticker).join(", ")}; shown without a spread bar, and at the base bubble size in the price-vs-value map.
                 </p>
               ) : null}
             </section>
 
-            <section className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-panel)] p-4">
+            <section className="border border-[var(--line)] bg-[var(--surface-raised)] p-4">
               <div className="flex flex-col gap-1">
-                <h3 className="text-sm font-bold text-[var(--text-primary)]">Price Vs Fair Value Map</h3>
-                <p className="text-sm text-[var(--text-muted)]">
+                <h3 className="type-panel-title text-[var(--ink)]">Price Vs Fair Value Map</h3>
+                <p className="type-body text-[var(--ink-muted)]">
                   DCF fair value sits on the vertical axis and current price sits on the horizontal axis. Bubble size expands with the implied return vs WACC so outliers stand out quickly.
                 </p>
               </div>
@@ -390,26 +390,26 @@ export function TargetStockComparisonSection({
                       return [formatMoney(numericValue), name === "current_price" ? "Current price" : "DCF value"];
                     }}
                   />
-                  <Scatter data={similarComparisonScatterPeers} fill="#94A3B8" name="Peer set" />
-                  <Scatter data={similarComparisonScatterSelected} fill="#0F766E" name="Selected ticker" />
+                  <Scatter data={similarComparisonScatterPeers} fill="var(--chart-4)" name="Peer set" />
+                  <Scatter data={similarComparisonScatterSelected} fill="var(--chart-1)" name="Selected ticker" />
                 </ScatterChart>
               </ResponsiveChart>
             </section>
           </div>
 
           {(bulkDcfReportsLoading || bulkDcfReportsError || bulkDcfReports.length > 0) && (
-            <section className="mt-4 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-panel)] p-4">
+            <section className="mt-4 border border-[var(--line)] bg-[var(--surface-raised)] p-4">
               <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
                 <div>
-                  <h3 className="text-sm font-bold text-[var(--text-primary)]">Batch DCF Reports</h3>
-                  <p className="mt-1 text-sm text-[var(--text-muted)]">
+                  <h3 className="type-panel-title text-[var(--ink)]">Batch DCF Reports</h3>
+                  <p className="type-body mt-1 text-[var(--ink-muted)]">
                     Calculates backend full reports for every non-benchmark stock currently shown in Target Stock Comparison.
                   </p>
                 </div>
-                <div className="text-xs text-[var(--text-muted)]">
+                <div className="type-small text-[var(--ink-muted)]">
                   {bulkDcfReportsLastUpdatedAt ? `Last calculated ${formatDateTime(bulkDcfReportsLastUpdatedAt)}` : "No batch reports calculated yet"}
                   {bulkDcfSkipped.length > 0 ? (
-                    <span className="ml-2 text-[var(--text-muted)]">
+                    <span className="ml-2 text-[var(--ink-muted)]">
                       · {bulkDcfSkipped.length} skipped:{" "}
                       <span title={bulkDcfSkipped.map((skip) => `${skip.ticker}: ${skip.reason}`).join(SKIP_TOOLTIP_SEPARATOR)}>
                         {bulkDcfSkipped.map((skip) => skip.ticker).join(", ")}
@@ -419,27 +419,27 @@ export function TargetStockComparisonSection({
                 </div>
               </div>
               {bulkDcfReportsLoading && (
-                <div className="mt-4 text-sm text-[var(--text-muted)]">Calculating full reports for the current comparison universe...</div>
+                <div className="type-body mt-4 text-[var(--ink-muted)]">Calculating full reports for the current comparison universe...</div>
               )}
               {bulkDcfReportsError && (
-                <div className="mt-4 rounded-[var(--radius)] border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+                <div className="type-body mt-4 border border-[var(--status-error-border)] bg-[var(--status-error-surface)] px-4 py-3 text-[var(--status-error-ink)]">
                   {bulkDcfReportsError}
                 </div>
               )}
               {!bulkDcfReportsLoading && bulkDcfReports.length > 0 && (
                 <div className="mt-4 overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead className="bg-[var(--surface-muted)] text-left text-[var(--text-muted)]">
+                  <table className="type-small w-full">
+                    <thead className="bg-[var(--surface)] text-left text-[var(--ink-muted)]">
                       <tr>
-                        <th className="px-4 py-3 font-semibold">Ticker</th>
-                        <th className="px-4 py-3 font-semibold">Report ID</th>
-                        <th className="px-4 py-3 text-right font-semibold">Fair Value</th>
-                        <th className="px-4 py-3 text-right font-semibold">Current Price</th>
-                        <th className="px-4 py-3 text-right font-semibold">Upside</th>
-                        <th className="px-4 py-3 font-semibold">Status</th>
+                        <th className="type-caption px-4 py-3">Ticker</th>
+                        <th className="type-caption px-4 py-3">Report ID</th>
+                        <th className="type-caption px-4 py-3 text-right">Fair Value</th>
+                        <th className="type-caption px-4 py-3 text-right">Current Price</th>
+                        <th className="type-caption px-4 py-3 text-right">Upside</th>
+                        <th className="type-caption px-4 py-3">Status</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-[var(--border)]/60">
+                    <tbody className="divide-y divide-[var(--grid)]">
                       {bulkDcfReports.map((report) => {
                         // Both numbers come from the helpers, not the raw fields: an
                         // unresolved bridge leaves estimated_value an enterprise value and
@@ -448,24 +448,24 @@ export function TargetStockComparisonSection({
                         const upside = bridgedUpsidePct(report.summary);
                         return (
                         <tr key={report.summary.report_id}>
-                          <td className="px-4 py-3 font-bold text-[var(--text-primary)]">
+                          <td className="type-mono px-4 py-3 text-[var(--ink)]">
                             <button
                               type="button"
                               onClick={() => onSelectTicker(report.summary.ticker)}
-                              className="rounded underline decoration-dotted underline-offset-4"
+                              className="rounded-[var(--radius-1)] underline decoration-dotted underline-offset-4"
                             >
                               {report.summary.ticker}
                             </button>
                           </td>
-                          <td className="px-4 py-3 text-[var(--text-muted)]">{report.summary.report_id}</td>
-                          <td className="px-4 py-3 text-right font-semibold tabular-nums" title={fairValue === null ? UNBRIDGED_REASON : undefined}>
+                          <td className="px-4 py-3 text-[var(--ink-muted)]">{report.summary.report_id}</td>
+                          <td className="type-mono px-4 py-3 text-right tabular-nums" title={fairValue === null ? UNBRIDGED_REASON : undefined}>
                             {fairValue === null ? UNBRIDGED_PLACEHOLDER : formatMoney(fairValue)}
                           </td>
-                          <td className="px-4 py-3 text-right tabular-nums">{formatMoney(report.summary.current_price)}</td>
-                          <td className={`px-4 py-3 text-right font-semibold tabular-nums ${upside === null ? "text-[var(--text-muted)]" : upside >= 0 ? "text-[var(--delta-up)]" : "text-[var(--delta-down)]"}`} title={upside === null ? UNBRIDGED_REASON : undefined}>
+                          <td className="type-mono px-4 py-3 text-right tabular-nums">{formatMoney(report.summary.current_price)}</td>
+                          <td className={`type-mono px-4 py-3 text-right tabular-nums ${upside === null ? "text-[var(--ink-muted)]" : upside >= 0 ? "text-[var(--up)]" : "text-[var(--down)]"}`} title={upside === null ? UNBRIDGED_REASON : undefined}>
                             {upside === null ? UNBRIDGED_PLACEHOLDER : formatPct2(upside)}
                           </td>
-                          <td className="px-4 py-3 text-[var(--text-muted)]">{report.summary.status}</td>
+                          <td className="px-4 py-3 text-[var(--ink-muted)]">{report.summary.status}</td>
                         </tr>
                         );
                       })}
