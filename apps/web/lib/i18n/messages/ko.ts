@@ -95,7 +95,7 @@ export const ko: Messages = {
         idle: "연도별 값은 원천 데이터와 함께 불러옵니다. 요청하기 전에는 불러오지 않습니다.",
         load: "원천 데이터 불러오기", loading: "원천 데이터를 불러오는 중…",
         empty: "이 지표의 연도별 값이 없습니다.", error: "원천 데이터를 불러오지 못했습니다",
-        errorBody: "연도별 이력을 불러오지 못했습니다.", title: "연도별 {label}",
+        errorBody: "연도별 이력을 불러오지 못했습니다.", title: "연도별 {label}", chart: "{label} 추이",
       },
       meaning: {
         realtime: "이 화면의 모든 수치를 계산하는 가정 묶음입니다.",

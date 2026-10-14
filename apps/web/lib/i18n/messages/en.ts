@@ -92,7 +92,7 @@ export const en = {
         idle: "Annual values load with the source data. Nothing is requested until you ask.",
         load: "Load source data", loading: "Loading source data…",
         empty: "No annual values for this metric.", error: "Source data unavailable",
-        errorBody: "The annual history could not be loaded.", title: "{label} by year",
+        errorBody: "The annual history could not be loaded.", title: "{label} by year", chart: "{label} trend",
       },
       meaning: {
         realtime: "The assumption set every figure on this page is computed from.",

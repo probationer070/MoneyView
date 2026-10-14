@@ -12,7 +12,7 @@ import { useT } from "@/lib/i18n/locale";
 import type { AnnualMetricPoint } from "../../corporateTypes";
 import { TREND_FIELDS } from "../../detailTabs";
 import type { CalculationDetailKey } from "../calculationDetailTypes";
-import { TABLE, TD, TD_FIGURE, THEAD, TR } from "./detailParts";
+import { TD_FIGURE, THEAD, TR } from "./detailParts";
 
 export interface TrendHistory {
   annual_growth_rates: AnnualMetricPoint[];
@@ -56,7 +56,7 @@ export function TrendTab({
   }
 
   const rows = [...history[field]].sort((a, b) => a.year - b.year);
-  if (rows.length === 0) return <EmptyState title={t("corporate.detail.trend.empty")} />;
+  if (rows.every((row) => row.value == null)) return <EmptyState title={t("corporate.detail.trend.empty")} />;
 
   // The history carries percent units (6.0 = 6.0%); formatNumber takes fractions.
   const asPercent = (value: number | null | undefined) => formatNumber(value == null ? null : value / 100, "percent");
@@ -64,28 +64,30 @@ export function TrendTab({
   return (
     <div className="flex flex-col gap-4">
       <h3 className="type-panel-title text-[var(--ink)]">{t("corporate.detail.trend.title", { label })}</h3>
-      <ResponsiveChart className="h-56" minWidth={1} minHeight={1}>
-        <LineChart data={rows} margin={{ top: 8, right: 16, bottom: 8, left: 0 }}>
-          <CartesianGrid {...GRID_STYLE} />
-          <XAxis dataKey="year" {...withCategoryAxisProps()} />
-          <YAxis {...withAxisProps({ tickFormatter: (value: number | string) => fmtPctTick(Number(value), 0), width: 48 })} />
-          <Tooltip {...withTooltipProps()} formatter={(value) => [asPercent(value == null ? null : Number(value)), label]} />
-          <Line type="monotone" dataKey="value" stroke={CHART_COLORS.primary} strokeWidth={1.5} connectNulls={false} />
-        </LineChart>
-      </ResponsiveChart>
+      <div role="img" aria-label={t("corporate.detail.trend.chart", { label })}>
+        <ResponsiveChart className="h-56" minWidth={1} minHeight={1}>
+          <LineChart data={rows} margin={{ top: 8, right: 16, bottom: 8, left: 0 }}>
+            <CartesianGrid {...GRID_STYLE} />
+            <XAxis dataKey="year" {...withCategoryAxisProps()} />
+            <YAxis {...withAxisProps({ tickFormatter: (value: number | string) => fmtPctTick(Number(value), 0), width: 48 })} />
+            <Tooltip {...withTooltipProps()} formatter={(value) => [asPercent(value == null ? null : Number(value)), label]} />
+            <Line type="monotone" dataKey="value" stroke={CHART_COLORS.primary} strokeWidth={1.5} connectNulls={false} />
+          </LineChart>
+        </ResponsiveChart>
+      </div>
       <div className="overflow-x-auto border border-[var(--line)]">
-        <table data-testid="trend-table" className={TABLE}>
+        <table data-testid="trend-table" className="w-auto text-left">
           <thead className={THEAD}>
             <tr>
               <th scope="col" className="px-3 py-2"><BilingualLabel k="year" /></th>
-              <th scope="col" className="px-3 py-2"><BilingualLabel k="value" /></th>
+              <th scope="col" className="px-3 py-2 text-right"><BilingualLabel k="value" /></th>
             </tr>
           </thead>
           <tbody>
             {rows.map((row) => (
               <tr key={row.year} className={TR}>
-                <td className={TD}>{row.year}</td>
-                <td className={TD_FIGURE}>{row.value == null ? MISSING : asPercent(row.value)}</td>
+                <td className={`${TD_FIGURE} text-left`}>{row.year}</td>
+                <td className={`${TD_FIGURE} text-right`}>{row.value == null ? MISSING : asPercent(row.value)}</td>
               </tr>
             ))}
           </tbody>

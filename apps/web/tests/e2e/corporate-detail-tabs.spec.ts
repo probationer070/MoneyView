@@ -145,8 +145,8 @@ test("the trend asks for nothing until Load source data, then shows the annual v
   await gotoCorporate(page);
   await openAssumptionDetail(page, "Growth Rate");
   await openDetailTab(dialog(page), "Trend");
-  await expect(dialog(page).getByRole("button", { name: "Load source data" })).toBeVisible();
-  await page.waitForLoadState("networkidle");
+  await expect(dialog(page).getByText("Annual values load with the source data. Nothing is requested until you ask.")).toBeVisible();
+  await expect(dialog(page).getByRole("button", { name: "Load source data" })).toBeEnabled();
   expect(historyRequests).toEqual([]);
   expect(stats.metricHistoryRequests).toBe(0);
   await dialog(page).getByRole("button", { name: "Load source data" }).click();
@@ -167,4 +167,24 @@ test("a metric without the remembered tab opens Summary and keeps the memory", a
   await closeDetail(page);
   await openAssumptionDetail(page, "ROIC");
   await expect(detailTabs(page).getByRole("tab", { name: "Trend" })).toHaveAttribute("aria-selected", "true");
+});
+
+test("a series with no annual values shows the empty state, not a table of dashes", async ({ page }) => {
+  await mockCorporatePageApi(page);
+  await page.route((url) => url.pathname.endsWith("/corporate/metrics/AAPL/history"), (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        ticker: "AAPL", start_year: 2021, country_risk_premium: 0.8, growth_cagr: null, growth_recent_average: null,
+        roic_recent_average: null, roic_all_year_average: null,
+        annual_growth_rates: [{ year: 2024, value: null }, { year: 2025, value: null }], annual_roic: [],
+      }),
+    }));
+  await gotoCorporate(page);
+  await openAssumptionDetail(page, "Growth Rate");
+  await openDetailTab(dialog(page), "Trend");
+  await dialog(page).getByRole("button", { name: "Load source data" }).click();
+  await expect(dialog(page).getByText("No annual values for this metric.")).toBeVisible({ timeout: 30_000 });
+  await expect(dialog(page).getByTestId("trend-table")).toHaveCount(0);
 });
