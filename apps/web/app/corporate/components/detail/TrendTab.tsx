@@ -8,7 +8,7 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { ResponsiveChart } from "@/components/ui/ResponsiveChart";
 import { CHART_COLORS, GRID_STYLE, fmtPctTick, withAxisProps, withCategoryAxisProps, withTooltipProps } from "@/lib/chartConfig";
 import { MISSING, formatNumber } from "@/lib/format";
-import { useT } from "@/lib/i18n/locale";
+import { useLocale, useT } from "@/lib/i18n/locale";
 import type { AnnualMetricPoint } from "../../corporateTypes";
 import { TREND_FIELDS } from "../../detailTabs";
 import type { CalculationDetailKey } from "../calculationDetailTypes";
@@ -35,6 +35,7 @@ export function TrendTab({
   onLoad: () => void;
 }) {
   const t = useT();
+  const { locale } = useLocale();
   const field = TREND_FIELDS[detailKey];
   if (!field) return null;
   const label = t(detailKey === "growth" ? "corporate.assumption.growth" : "corporate.assumption.roic");
@@ -59,7 +60,7 @@ export function TrendTab({
   if (rows.every((row) => row.value == null)) return <EmptyState title={t("corporate.detail.trend.empty")} />;
 
   // The history carries percent units (6.0 = 6.0%); formatNumber takes fractions.
-  const asPercent = (value: number | null | undefined) => formatNumber(value == null ? null : value / 100, "percent");
+  const asPercent = (value: number | null | undefined) => formatNumber(value == null ? null : value / 100, "percent", { locale });
 
   return (
     <div className="flex flex-col gap-4">
