@@ -663,4 +663,21 @@ test.describe("the DCF uses the inputs on screen", () => {
     }
   });
 
+  test("the sensitivity Current row shows a dash while the page's DCF is stale", async ({ page }) => {
+    await mockCorporatePageApi(page);
+    await gotoCorporate(page);
+    await refreshDcf(page);
+    await page.getByTestId("assumption-table").getByRole("button", { name: "WACC detail" }).click();
+    const dialog = page.getByRole("dialog");
+    await openDetailTab(dialog, "Sensitivity");
+    await expect(dialog.getByTestId("sensitivity-row-current").getByRole("cell").nth(2)).toHaveText("$240.50");
+
+    await dialog.getByRole("button", { name: "Close modal" }).click();
+    await page.getByTestId("assumption-table").getByRole("button", { name: "Edit WACC" }).click();
+    await page.getByTestId("assumption-slider-wacc").getByRole("slider").press("Home");
+    await expect(page.getByText("Stale", { exact: true }).first()).toBeVisible();
+    await page.getByTestId("assumption-table").getByRole("button", { name: "WACC detail" }).click();
+    await openDetailTab(dialog, "Sensitivity");
+    await expect(dialog.getByTestId("sensitivity-row-current").getByRole("cell").nth(2)).toHaveText("—");
+  });
 });

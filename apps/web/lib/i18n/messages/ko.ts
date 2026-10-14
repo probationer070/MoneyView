@@ -110,7 +110,7 @@ export const ko: Messages = {
         notDcf: "DCF에 직접 쓰이지 않는 가정입니다.",
         intro: "{label}만 ±{delta} 바꿔 DCF를 두 번 계산합니다. 나머지 입력은 지금 값 그대로입니다.",
         run: "계산", running: "계산 중…", current: "현재", minus: "−{delta}", plus: "+{delta}",
-        clamped: "슬라이더 범위에 맞춰 조정됨", failed: "이 계산은 실패했습니다: {message}",
+        clamped: "슬라이더 범위에 맞춰 조정되었습니다", failed: "이 계산은 실패했습니다: {message}",
       },
       meaning: {
         realtime: "이 화면의 모든 수치를 계산하는 가정 묶음입니다.",

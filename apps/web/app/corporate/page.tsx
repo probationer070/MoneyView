@@ -1039,7 +1039,7 @@ export default function CorporateAnalysisPage() {
           dcfStatus={dcfData?.status ?? null}
           dcfGeneratedAt={dcfData?.generated_at ?? null}
           dcfSnapshot={activeDcfSnapshot}
-          baseDcf={dcfData ? { intrinsic: bridgedEstimatedValue(dcfData), upside: bridgedUpsidePct(dcfData) } : null}
+          baseDcf={dcfData && !dcfIsStale ? { intrinsic: bridgedEstimatedValue(dcfData), upside: bridgedUpsidePct(dcfData) } : null}
           ticker={assumptions.ticker}
           metricAudit={metricAuditQuery.data ?? null}
           metricAuditIsLoading={metricAuditQuery.isLoading}

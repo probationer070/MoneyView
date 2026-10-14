@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useSyncExternalStore } from "react";
 import type { DcfSummaryResponse } from "../../../../../../packages/shared-types";
 import { ActionButton } from "@/components/ui/ActionButton";
 import { BilingualLabel } from "@/components/ui/BilingualLabel";
@@ -26,8 +26,22 @@ interface Runs {
 
 // One entry per (ticker, metric): the last pair of runs and the snapshot they were made for. A
 // changed assumption changes the snapshot, so the entry stops applying and Calculate asks again.
-// It is module-level so that closing and reopening the modal keeps the results (spec §4.1).
-const runCache = new Map<string, { snapshot: string; runs: Runs }>();
+// It is module-level so that closing and reopening the modal keeps the results (spec §4.1). A run in
+// flight is an entry with `runs: null`; listeners re-read the entry when it starts and when it settles,
+// so a tab closed and reopened mid-run still shows it as running.
+type RunEntry = { snapshot: string; runs: Runs | null };
+const runCache = new Map<string, RunEntry>();
+const listeners = new Set<() => void>();
+function subscribe(listener: () => void) {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+function publish(key: string, entry: RunEntry) {
+  runCache.set(key, entry);
+  listeners.forEach((listener) => listener());
+}
 
 // Each run settles on its own, so one failure leaves the other result on screen (spec §6). A refusal
 // is the backend's reason, shown as content; anything else is a failed run.
@@ -54,21 +68,24 @@ export function SensitivityTab({
 }) {
   const t = useT();
   const { locale } = useLocale();
-  const [loading, setLoading] = useState(false);
+  const cacheKey = `${ticker}|${detailKey}`;
+  const snapshotKey = JSON.stringify(snapshot);
+  const entry = useSyncExternalStore(subscribe, () => runCache.get(cacheKey));
   const row = assumptionRow(detailKey);
   const plan = sensitivityPlan(snapshot, detailKey);
   if (!row || !plan) return <EmptyState title={t("corporate.detail.sensitivity.notDcf")} />;
 
-  const cacheKey = `${ticker}|${detailKey}`;
-  const snapshotKey = JSON.stringify(snapshot);
-  const cached = runCache.get(cacheKey);
-  const runs = cached && cached.snapshot === snapshotKey ? cached.runs : null;
+  const current = entry && entry.snapshot === snapshotKey ? entry : null;
+  const runs = current?.runs ?? null;
+  const loading = current !== null && runs === null;
 
-  const run = async () => {
-    setLoading(true);
-    const [down, up] = await Promise.all([settle(ticker, plan.down.body), settle(ticker, plan.up.body)]);
-    runCache.set(cacheKey, { snapshot: snapshotKey, runs: { down, up } });
-    setLoading(false);
+  const run = () => {
+    const pending: RunEntry = { snapshot: snapshotKey, runs: null };
+    publish(cacheKey, pending);
+    void Promise.all([settle(ticker, plan.down.body), settle(ticker, plan.up.body)]).then(([down, up]) => {
+      // A run superseded by a newer one (another snapshot) does not overwrite it.
+      if (runCache.get(cacheKey) === pending) publish(cacheKey, { snapshot: snapshotKey, runs: { down, up } });
+    });
   };
 
   const label = t(`corporate.assumption.${row.key}`);
@@ -106,7 +123,7 @@ export function SensitivityTab({
         size="sm"
         variant="secondary"
         disabled={loading}
-        onClick={() => void run()}
+        onClick={run}
         className="self-start"
       />
       <div className="overflow-x-auto border border-[var(--line)]">

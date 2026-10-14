@@ -324,11 +324,13 @@ test("Calculate sends exactly two DCF requests that move only WACC by ±1.0%p", 
   await mockCorporatePageApi(page);
   const bodies = recordSingleDcfBodies(page);
   await gotoCorporate(page);
+  // The inputs are the hydrated ones once the table shows them.
+  await expect(page.getByTestId("assumption-row-esgPenalty")).toContainText("22.0");
   await openAssumptionDetail(page, "WACC");
   await openDetailTab(dialog(page), "Sensitivity");
   const calculate = dialog(page).getByRole("button", { name: "Calculate", exact: true });
   await expect(calculate).toBeEnabled();
-  await page.waitForLoadState("networkidle");
+  await expect(dialog(page).getByTestId("sensitivity-row-current")).toBeVisible();
   expect(bodies, "nothing is sent before Calculate").toHaveLength(0);
   await calculate.click();
   await expect(dialog(page).getByTestId("sensitivity-row-up")).toContainText("$240.5", { timeout: 30_000 });
@@ -347,6 +349,27 @@ test("Calculate sends exactly two DCF requests that move only WACC by ±1.0%p", 
   expect(up.wacc).toBeCloseTo(base.wacc + 0.01, 10);
   expect({ ...down, wacc: base.wacc }).toEqual(base);
   expect({ ...up, wacc: base.wacc }).toEqual(base);
+});
+
+test("a run still in flight survives a tab switch and settles into the tab", async ({ page }) => {
+  await mockCorporatePageApi(page);
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => { release = resolve; });
+  await page.route((url) => isSingleDcf(url), async (route) => {
+    await held;
+    return route.fallback();
+  });
+  await gotoCorporate(page);
+  await openAssumptionDetail(page, "WACC");
+  await openDetailTab(dialog(page), "Sensitivity");
+  await dialog(page).getByRole("button", { name: "Calculate", exact: true }).click();
+  await expect(dialog(page).getByTestId("sensitivity-row-up")).toContainText("Calculating…");
+  await openDetailTab(dialog(page), "Summary");
+  await openDetailTab(dialog(page), "Sensitivity");
+  await expect(dialog(page).getByTestId("sensitivity-row-up")).toContainText("Calculating…");
+  release();
+  await expect(dialog(page).getByTestId("sensitivity-row-up")).toContainText("$240.5", { timeout: 30_000 });
+  await expect(dialog(page).getByTestId("sensitivity-row-down")).toContainText("$240.5");
 });
 
 test("when one of the two runs fails, the other still shows and the failed one says so", async ({ page }) => {
