@@ -101,7 +101,7 @@ export const en = {
         rank: "Rank {rank} of {count}, high to low", low: "Low", high: "High",
         single: "Only {ticker} has a value in this comparison, so there is no range to draw.",
         band: "{ticker} at {value}, range {low} to {high}",
-        note: "Position within the current comparison universe. A sector peer table replaces this in part B.",
+        stale: "Calculated for an earlier universe. Recalculate in the Target Stock Comparison tab.",
       },
       meaning: {
         realtime: "The assumption set every figure on this page is computed from.",

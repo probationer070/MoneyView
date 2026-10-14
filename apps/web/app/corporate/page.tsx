@@ -1054,6 +1054,7 @@ export default function CorporateAnalysisPage() {
           historyIsError={metricsHistoryQuery.isError}
           onLoadHistory={handleRefreshSourceData}
           comparisonRows={comparisonData?.rows ?? null}
+          comparisonIsStale={comparisonIsStale}
           rawDatasetRows={rawDatasetRows}
           historicalPrices={historicalPricesData}
           historicalStatus={historicalPriceStatus(historicalPricesQuery, historicalPricesData.length)}

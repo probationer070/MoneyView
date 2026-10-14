@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { formatNumber } from "@/lib/format";
 import { useLocale, useT } from "@/lib/i18n/locale";
@@ -11,26 +12,37 @@ import type { CalculationDetailKey } from "../calculationDetailTypes";
 // Spec §4 "동종업 비교", part A: rank and spread band inside the comparison already computed.
 // Nothing is requested here. Rank 1 is the highest value, not the best one (WACC, for example),
 // so the copy states the order instead of judging it. Values are percent units (8 = 8.0%).
+// Part B replaces this with a sector peer table.
 export function PeersTab({
   detailKey,
   ticker,
   rows,
+  stale,
 }: {
   detailKey: CalculationDetailKey;
   ticker: string;
   rows: readonly CorporateComparisonRowApi[] | null;
+  /** True when the comparison on screen was calculated for another universe than the one selected. */
+  stale: boolean;
 }) {
   const t = useT();
   const { locale } = useLocale();
   const field = PEER_FIELDS[detailKey];
   if (!field) return null;
   if (!rows) return <EmptyState title={t("corporate.detail.peers.idle")} />;
-  const result = peerRank(rows, field, ticker);
-  if (result.state === "absent") return <EmptyState title={t("corporate.detail.peers.absent", { ticker })} />;
-  if (result.state === "noValue") return <EmptyState title={t("corporate.detail.peers.noValue", { ticker })} />;
 
-  const figure = (percent: number) => formatNumber(percent / 100, "percent", { locale });
-  return (
+  const frame = (children: ReactNode) => (
+    <div className="flex flex-col gap-3">
+      {stale ? <p className="type-small text-[var(--status-warning-ink)]">{t("corporate.detail.peers.stale")}</p> : null}
+      {children}
+    </div>
+  );
+  const result = peerRank(rows, field, ticker);
+  if (result.state === "absent") return frame(<EmptyState title={t("corporate.detail.peers.absent", { ticker })} />);
+  if (result.state === "noValue") return frame(<EmptyState title={t("corporate.detail.peers.noValue", { ticker })} />);
+
+  const figure = (percent: number) => formatNumber(percent / 100, "percent", { digits: 2, locale });
+  return frame(
     <div data-testid="peer-position" className="flex flex-col gap-3">
       <p className="type-body text-[var(--ink)]">{t("corporate.detail.peers.rank", { rank: result.rank, count: result.count })}</p>
       <span className="type-mono text-[var(--ink)]">{figure(result.value)}</span>
@@ -61,7 +73,6 @@ export function PeersTab({
           </div>
         </>
       )}
-      <p className="type-small text-[var(--ink-muted)]">{t("corporate.detail.peers.note")}</p>
-    </div>
+    </div>,
   );
 }

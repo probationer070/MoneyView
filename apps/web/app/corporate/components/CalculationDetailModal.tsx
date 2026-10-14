@@ -38,6 +38,8 @@ interface CalculationDetailModalProps {
   onLoadHistory: () => void;
   /** The current comparison rows; null until the comparison is calculated. */
   comparisonRows: CorporateComparisonRowApi[] | null;
+  /** True when the comparison on screen was calculated for another universe. */
+  comparisonIsStale: boolean;
   rawDatasetRows: RawDatasetRow[];
   historicalPrices: StockPriceRow[];
   historicalStatus: string;
@@ -102,7 +104,7 @@ export function CalculationDetailModal(props: CalculationDetailModalProps) {
           {active === "trend" ? (
             <TrendTab detailKey={detailKey} history={props.history} isFetching={props.historyIsFetching} isError={props.historyIsError} onLoad={props.onLoadHistory} />
           ) : null}
-          {active === "peers" ? <PeersTab detailKey={detailKey} ticker={ticker} rows={props.comparisonRows} /> : null}
+          {active === "peers" ? <PeersTab detailKey={detailKey} ticker={ticker} rows={props.comparisonRows} stale={props.comparisonIsStale} /> : null}
           {active === "raw" ? <RawDataTab {...props} /> : null}
         </div>
       </div>

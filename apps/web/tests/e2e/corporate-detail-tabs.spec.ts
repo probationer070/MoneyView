@@ -209,10 +209,10 @@ test("Peers waits for the comparison, then ranks this ticker inside the universe
   await openKpi(page, /^ROIC - WACC/);
   const position = dialog(page).getByTestId("peer-position");
   await expect(position).toContainText("Rank 3 of 6, high to low");
-  await expect(position).toContainText("Low -15.0%");
-  await expect(position).toContainText("High 13.0%");
+  await expect(position).toContainText("Low -15.00%");
+  await expect(position).toContainText("High 13.00%");
   await expect(position.getByTestId("peer-marker")).toHaveAttribute("style", /left: 82\.1%/);
-  await expect(position.getByRole("img", { name: "AAPL at 8.0%, range -15.0% to 13.0%" })).toHaveCount(1);
+  await expect(position.getByRole("img", { name: "AAPL at 8.00%, range -15.00% to 13.00%" })).toHaveCount(1);
 });
 
 test("the upside position leaves out the unbridged row and the refused one", async ({ page }) => {
@@ -249,4 +249,62 @@ test("a ticker outside the comparison says so, and a lone ticker has no range to
   await expect(position).toContainText("Rank 1 of 1, high to low");
   await expect(position.getByTestId("peer-marker")).toHaveCount(0);
   await expect(position).toContainText("Only AAPL has a value in this comparison, so there is no range to draw.");
+});
+
+test("Peers flags a comparison calculated for an earlier universe", async ({ page }) => {
+  await mockCorporatePageApi(page);
+  await gotoCorporate(page);
+  await refreshComparison(page);
+  await openLowerTab(page, "Target Stock Comparison");
+  await page.getByLabel("Comparison universe").selectOption("custom");
+  await openLowerTab(page, "Summary");
+  await page.getByRole("button", { name: "Verdict detail" }).click();
+  await openDetailTab(dialog(page), "Peers");
+  await expect(dialog(page).getByText("Calculated for an earlier universe. Recalculate in the Target Stock Comparison tab.")).toBeVisible();
+});
+
+test("a ticker with no value in the comparison says so, and shows no position", async ({ page }) => {
+  await mockCorporatePageApi(page);
+  // AAPL's only row, with no upside: the Peers tab must not rank it.
+  await page.route((url) => url.pathname.endsWith("/corporate/comparison"), async (route) => {
+    if (route.request().method() !== "GET") return route.fallback();
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        status: "ok",
+        data: {
+          market_expected_return: 9.7,
+          risk_free_rate: 4.2,
+          equity_risk_premium: 5.5,
+          stock_expected_return_method: "dcf_implied_upside",
+          comparison_reference_return_method: "capm_beta_reference",
+          snapshot: {
+            mode: "live", as_of_date: "2026-04-11", generated_at: "2026-04-11T12:00:00Z", snapshot_version: "live",
+            snapshot_available: false, snapshot_source: "live", comparison_universe: "portfolio_plus_benchmark",
+            benchmark_ticker: "^GSPC", custom_tickers: [], snapshot_cadence: "daily_kst_0000",
+            snapshot_retention_days: 365, snapshot_is_stale: false,
+          },
+          rows: [
+            {
+              ticker: "AAPL", name: "Apple", sector: "Technology", group_name: "core", weight: 0.35, roic: 18, wacc: 10,
+              roic_minus_wacc: 8, dcf_value: 240.5, bridge_quality: "ok", current_price: 220, dcf_implied_return: null,
+              capm_expected_return: 11.26, stock_expected_return: null, market_expected_return: 9.7,
+              market_implied_return: 14.31, implied_return_spread: null, implied_return_refusal: "no_value", dcf_refusal: null,
+              stock_expected_return_source: "dcf_implied_upside", has_price_data: true,
+            },
+          ],
+        },
+      }),
+    });
+  });
+  await gotoCorporate(page);
+  await openLowerTab(page, "Target Stock Comparison");
+  await page.getByRole("button", { name: "Refresh comparison" }).click();
+  await expect(page.getByRole("cell", { name: "AAPL", exact: true }).first()).toBeVisible({ timeout: 30_000 });
+  await openLowerTab(page, "Summary");
+  await page.getByRole("button", { name: "Verdict detail" }).click();
+  await openDetailTab(dialog(page), "Peers");
+  await expect(dialog(page)).toContainText("No value for AAPL in this comparison.");
+  await expect(dialog(page).getByTestId("peer-position")).toHaveCount(0);
 });

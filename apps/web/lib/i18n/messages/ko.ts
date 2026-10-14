@@ -104,7 +104,7 @@ export const ko: Messages = {
         rank: "{count}개 중 {rank}위, 높은 값순", low: "최저", high: "최고",
         single: "이 비교에서 {ticker}만 값이 있어 범위를 그릴 수 없습니다.",
         band: "{ticker} {value}, 범위 {low}~{high}",
-        note: "현재 비교 유니버스 안의 위치입니다. 이후 동종업 비교표(B)로 바뀝니다.",
+        stale: "이전 유니버스로 계산한 값입니다. 종목 비교 탭에서 다시 계산하십시오.",
       },
       meaning: {
         realtime: "이 화면의 모든 수치를 계산하는 가정 묶음입니다.",
