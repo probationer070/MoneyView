@@ -1,15 +1,12 @@
 "use client";
 
-import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
-import { RefreshCw } from "lucide-react";
 import { fetchApi } from "@/lib/api";
 import { DcfRefusalError, postDcf } from "@/lib/dcfRefusal";
-import { TickerSearch } from "@/components/ui/TickerSearch";
 import { tabStateKey, useTabState } from "@/lib/tabState";
-import { bridgedEstimatedValue, UNBRIDGED_PLACEHOLDER, UNBRIDGED_REASON } from "@/lib/bridgeQuality";
 import { useDevMonitorPageLoad } from "@/hooks/useDevMonitorPageLoad";
 import type {
   CorporateDcfBatchRequest,
@@ -23,13 +20,12 @@ import {
   PORTFOLIO_BENCHMARK_PRESETS,
 } from "@/lib/benchmarkPresets";
 import { useDebounce } from "@/hooks/useDebounce";
-import { InfoTooltip } from "@/components/ui/InfoTooltip";
-import { PageHeader } from "@/components/ui/PageHeader";
 import {
 } from "./components/CorporateGraphs";
 import { CorporateDiagnosticsSection } from "./components/CorporateDiagnosticsSection";
 import { TargetStockComparisonSection } from "./components/TargetStockComparisonSection";
 import { CorporateLowerTabs } from "./components/CorporateLowerTabs";
+import { CorporateHeader } from "./components/CorporateHeader";
 import { DcfTab } from "./components/DcfTab";
 import { AssumptionTable } from "./components/AssumptionTable";
 import { KpiRow } from "./components/KpiRow";
@@ -154,9 +150,6 @@ export default function CorporateAnalysisPage() {
       return defaultAssumptionsFor(initialAssumptions.ticker);
     }
   });
-  const [companySearch, setCompanySearch] = useState("");
-  const [newCompanyName, setNewCompanyName] = useState("");
-  const [newCompanySymbol, setNewCompanySymbol] = useState("");
   const [activeCalculation, setActiveCalculation] = useState<CalculationDetailKey | null>(null);
   const [latestLoadedMetrics, setLatestLoadedMetrics] = useState<CorporateMetricsApi | null>(null);
   const [roicBasis, setRoicBasis] = useState<RoicBasis>("recent_average");
@@ -416,7 +409,6 @@ export default function CorporateAnalysisPage() {
 
   const selectTicker = (ticker: string) => {
     const normalizedTicker = ticker.trim().toUpperCase();
-    setCompanySearch("");
     setLatestLoadedMetrics(null);
     writeSessionCache(ACTIVE_TICKER_SESSION_KEY, normalizedTicker);
     try {
@@ -433,12 +425,7 @@ export default function CorporateAnalysisPage() {
     setActiveCalculation(key);
   };
 
-  const addCompany = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const ticker = newCompanySymbol.trim().toUpperCase();
-    const name = newCompanyName.trim();
-    if (!ticker || !name) return;
-
+  const addCompany = async ({ ticker, name }: { ticker: string; name: string }) => {
     const saved = await fetchApi<CorporateCompany>("/corporate/companies", {
       method: "POST",
       body: JSON.stringify({ ticker, name, source: "manual" }),
@@ -447,8 +434,6 @@ export default function CorporateAnalysisPage() {
       const next = current.filter((company) => company.ticker.toUpperCase() !== saved.ticker.toUpperCase());
       return [...next, saved];
     });
-    setNewCompanyName("");
-    setNewCompanySymbol("");
     selectTicker(saved.ticker.toUpperCase());
   };
 
@@ -706,11 +691,6 @@ export default function CorporateAnalysisPage() {
     }
   };
 
-  const handleViewFullDcfReport = async () => {
-    setActiveCalculation("backendDcf");
-    await loadFullDcfReport();
-  };
-
   const handleCalculateAllDcfReports = async () => {
     const tickers = Array.from(new Set((comparisonData?.rows ?? [])
       .filter((row) => row.group_name !== "benchmark")
@@ -882,10 +862,6 @@ export default function CorporateAnalysisPage() {
     "Current slider/browser values and saved presets remain manual override layers.",
   ].join(" ");
 
-  // null when the equity bridge did not resolve, in which case estimated_value is an
-  // enterprise value and must not be shown under the "Intrinsic DCF" label.
-  const bridgedFairValue = dcfData ? bridgedEstimatedValue(dcfData) : null;
-
   const calculationDetails = buildCalculationDetails({
     companyName,
     assumptions,
@@ -916,119 +892,21 @@ export default function CorporateAnalysisPage() {
   const canLoadFullReport = dcfRefusal === null && !(!dcfData && dcfStreamStatus === "idle");
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto px-4 py-6">
-      {/* Page header: title plus ticker navigation, backend DCF shortcut, and add-company form. */}
-      <header className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-        <PageHeader
-          title="Corporate Analysis"
-          subtitle={`${companyName}: hurdle rate, bottom-up beta, DCF, and value drivers`}
-        />
-
-        <div className="flex w-full flex-col gap-2 min-[1300px]:items-end">
-          <div id="company-search-container" className="flex w-full flex-col gap-2 min-[1300px]:flex-row min-[1300px]:justify-end">
-            <div className="flex w-full min-w-0 flex-col gap-2 text-sm font-semibold text-[var(--text-primary)] min-[1300px]:max-w-2xl">
-              {/* The shared search. Corporate's overlay was the richest of the three
-                  implementations, so the shared component was modelled on it rather than on
-                  Valuation's datalist: unifying downward would have cost the click-to-select
-                  list, which is the only way to find a company whose ticker you do not know. */}
-              <TickerSearch
-                id="company-search"
-                label="Company Search"
-                value={companySearch}
-                onChange={setCompanySearch}
-                onSelect={(ticker) => {
-                  selectTicker(ticker);
-                  setCompanySearch("");
-                }}
-                items={companies}
-                selectedTicker={assumptions.ticker}
-                placeholder="Type a company name"
-                className="w-full"
-              />
-              {/* Backend DCF: quick link into the intrinsic valuation detail modal. */}
-              <button
-                type="button"
-                onClick={() => setActiveCalculation("backendDcf")}
-                className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-4 py-3 text-left text-sm transition hover:border-[var(--brand)]"
-              >
-                <div className="text-xs text-[var(--text-muted)]">
-                  <InfoTooltip
-                    label="Intrinsic DCF"
-                    description="Backend intrinsic value from projected FCFF, WACC, terminal growth, and the enterprise-to-equity bridge. Current market price is used only for upside comparison."
-                  />
-                </div>
-                <div
-                  className="font-bold text-[var(--text-primary)]"
-                  title={dcfData && bridgedFairValue === null ? UNBRIDGED_REASON : undefined}
-                >
-                  {!dcfData
-                    ? "Refresh to calculate"
-                    : bridgedFairValue === null
-                      ? UNBRIDGED_PLACEHOLDER
-                      : moneyText(bridgedFairValue)}
-                  {dcfStreamStatus === "streaming" ? " ..." : ""}
-                </div>
-              </button>
-              <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--text-muted)]">
-                <button
-                  type="button"
-                  onClick={handleRefreshDcf}
-                  disabled={dcfStreamStatus === "streaming"}
-                  className="inline-flex items-center gap-2 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 font-bold text-[var(--text-primary)] disabled:opacity-60"
-                >
-                  <RefreshCw className={`h-3.5 w-3.5 ${dcfStreamStatus === "streaming" ? "animate-spin" : ""}`} />
-                  Refresh DCF
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void handleViewFullDcfReport()}
-                  disabled={dcfFullReportLoading || !canLoadFullReport}
-                  className="inline-flex items-center gap-2 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 font-bold text-[var(--text-primary)] disabled:opacity-60"
-                >
-                  {dcfFullReportLoading ? "Loading report..." : "View Full Report"}
-                </button>
-                <span>{dcfDisplayLastUpdatedAt ? `Last updated ${dateTimeText(dcfDisplayLastUpdatedAt)}` : "Not calculated yet"}</span>
-                {dcfIsStale && (
-                  <span className="rounded-full bg-amber-100 px-2 py-1 text-[length:var(--type-caption)] font-bold text-amber-800">
-                    Stale
-                  </span>
-                )}
-                {!dcfData && dcfStreamStatus !== "streaming" && (
-                  <span>DCF stays idle on first load until you refresh it.</span>
-                )}
-                {dcfStreamError && (
-                  <span className="rounded-full bg-red-100 px-2 py-1 text-[length:var(--type-caption)] font-bold text-red-800">
-                    {dcfStreamError}
-                  </span>
-                )}
-              </div>
-            </div>
-            {/* Add Company: persists a manual ticker and immediately selects it for analysis. */}
-            <form onSubmit={addCompany} className="grid w-full min-w-0 grid-cols-1 gap-2 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-3 text-sm sm:grid-cols-2 min-[1300px]:max-w-sm">
-              <div className="text-xs font-semibold text-[var(--text-muted)] sm:col-span-2">Add Company</div>
-              <input
-                value={newCompanyName}
-                onChange={(event) => setNewCompanyName(event.target.value)}
-                placeholder="Company name"
-                className="rounded-[var(--radius)] border border-[var(--border)] px-3 py-2"
-              />
-              <input
-                value={newCompanySymbol}
-                onChange={(event) => setNewCompanySymbol(event.target.value)}
-                placeholder="Symbol"
-                className="rounded-[var(--radius)] border border-[var(--border)] px-3 py-2"
-              />
-              <button
-                type="submit"
-                className="rounded-[var(--radius)] bg-[var(--brand)] px-3 py-2 text-sm font-bold text-white disabled:opacity-50 sm:col-span-2"
-                disabled={!newCompanyName.trim() || !newCompanySymbol.trim()}
-              >
-                Add for Analysis
-              </button>
-            </form>
-          </div>
-        </div>
-      </header>
+    <div className="mx-auto max-w-7xl space-y-4">
+      <CorporateHeader
+        companies={companies}
+        selectedTicker={assumptions.ticker}
+        onSelectTicker={selectTicker}
+        onAddCompany={addCompany}
+        companyName={companyName}
+        sector={activeCompany.sector ?? null}
+        priceText={dcfData ? moneyText(dcfData.current_price) : null}
+        dcfUpdatedText={dcfDisplayLastUpdatedAt ? dateTimeText(dcfDisplayLastUpdatedAt) : null}
+        dcfStreaming={dcfStreamStatus === "streaming"}
+        dcfIsStale={dcfIsStale}
+        dcfStreamError={dcfStreamError}
+        onRefreshDcf={handleRefreshDcf}
+      />
 
       {/* First screen (spec §2): verdict and KPIs on the left 2/3, the assumption table on the right 1/3. */}
       <section className="grid grid-cols-1 gap-4 lg:grid-cols-3">

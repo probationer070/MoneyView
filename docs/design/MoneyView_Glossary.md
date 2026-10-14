@@ -32,6 +32,10 @@ capitals: "종목 NAME". Both come from `apps/web/lib/i18n/labels.ts`; add the r
 | Retry | 다시 시도 | |
 | Loading… | 불러오는 중… | |
 | Market | 시장 | label |
+| Corporate | 기업 분석 | label (corporate eyebrow) |
+| Not in the list → add | 목록에 없음 → 추가 | search entry |
+| Add for Analysis | 분석에 추가 | button |
+| Refresh DCF | DCF 새로고침 | button |
 | Name | 종목 | label (table header for a security) |
 | Price | 현재가 | label |
 | Change | 등락률 | label (table header for a delta) |

@@ -16,6 +16,10 @@ export const en = {
   delta: { up: "Up", down: "Down", flat: "Unchanged" },
   portfolio: { title: "Portfolio" },
   corporate: {
+    title: "Corporate Analysis",
+    search: { label: "Company Search", placeholder: "Type a company name", notListed: "Not in the list → add" },
+    add: { name: "Company name", symbol: "Symbol", submit: "Add for Analysis", cancel: "Cancel", failed: "Could not add {ticker}." },
+    header: { refreshDcf: "Refresh DCF", notCalculated: "Not calculated yet" },
     verdict: {
       detail: "Verdict detail", intrinsic: "Intrinsic value", vs: "vs", current: "Current price",
       idle: "DCF not calculated · use Refresh DCF above", streaming: "Calculating…",

@@ -19,6 +19,10 @@ export const ko: Messages = {
   delta: { up: "상승", down: "하락", flat: "보합" },
   portfolio: { title: "포트폴리오" },
   corporate: {
+    title: "기업 분석",
+    search: { label: "기업 검색", placeholder: "회사명을 입력하세요", notListed: "목록에 없음 → 추가" },
+    add: { name: "회사명", symbol: "심볼", submit: "분석에 추가", cancel: "취소", failed: "{ticker}을(를) 추가하지 못했습니다." },
+    header: { refreshDcf: "DCF 새로고침", notCalculated: "아직 계산하지 않았습니다" },
     verdict: {
       detail: "판정 상세", intrinsic: "내재가치", vs: "대비", current: "현재가",
       idle: "DCF 미계산 · 위의 DCF 새로고침을 누르십시오", streaming: "계산 중…",

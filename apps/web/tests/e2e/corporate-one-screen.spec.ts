@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import { mockCorporatePageApi, type CorporatePageMockStats } from "./helpers/corporatePageMock";
 import { lowerPanel, openLowerTab } from "./helpers/corporateDcf";
 
@@ -296,5 +296,101 @@ test.describe("the lower tabs", () => {
     expect(await box.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
     expect(Math.abs((await box.locator("thead").boundingBox())!.y - boxTop)).toBeLessThan(1);
     expect((await box.locator("tbody tr").first().boundingBox())!.y).toBeLessThan(rowBefore);
+  });
+});
+test.describe("at 1280x720", () => {
+  test.use({ viewport: { width: 1280, height: 720 } });
+
+  // Spec §7 test 1: element positions, not scrollHeight. Budget: plan "First-screen height budget".
+  async function expectAboveTheFold(page: Page) {
+    const blocks: [string, Locator][] = [
+      // The eyebrow sits above the title and is the header's top edge: the title alone can clear
+      // the bar on a lower top padding, because the eyebrow pushes it down.
+      ["header eyebrow", page.getByRole("heading", { name: /Corporate Analysis/i }).locator("xpath=preceding-sibling::div[1]")],
+      ["title", page.getByRole("heading", { name: /Corporate Analysis/i })],
+      ["company line", page.getByTestId("corporate-company-line")],
+      ["verdict", page.getByTestId("corporate-verdict")],
+      ["KPI row", page.getByTestId("corporate-kpis")],
+      ["assumption table", page.getByTestId("assumption-table")],
+      ["tab bar", page.getByRole("tablist", { name: "Corporate analysis sections" })],
+    ];
+    for (const [name, locator] of blocks) {
+      const box = await locator.boundingBox();
+      expect(box, `${name} is rendered`).not.toBeNull();
+      expect(box!.y, `${name} starts below the 48px bar`).toBeGreaterThanOrEqual(48);
+      expect(box!.y + box!.height, `${name} ends inside 720px`).toBeLessThanOrEqual(720);
+    }
+    await expect(page.getByTestId("corporate-kpis").getByRole("button")).toHaveCount(4);
+    const scroll = await page.getByTestId("assumption-scroll").boundingBox();
+    expect(scroll!.height, "the assumption table scrolls inside its 288px budget").toBeLessThanOrEqual(288);
+    expect(await page.evaluate(() => window.scrollY)).toBe(0);
+  }
+
+  test("header, verdict, four KPIs, the assumption table and the tab bar fit without scrolling", async ({ page }) => {
+    await mockCorporatePageApi(page);
+    await gotoCorporate(page);
+    await expectAboveTheFold(page);
+    await page.getByRole("button", { name: "Refresh DCF" }).click();
+    await expect(verdict(page)).toHaveAttribute("data-state", "valued", { timeout: 30_000 });
+    await expectAboveTheFold(page);
+    await page.getByTestId("assumption-table").getByRole("button", { name: "Edit WACC" }).click();
+    await expect(page.getByTestId("assumption-slider-wacc")).toBeVisible();
+    await expectAboveTheFold(page);
+  });
+});
+
+test.describe("the header row", () => {
+  test("a company not in the list is added from the search's last entry", async ({ page }) => {
+    await mockCorporatePageApi(page);
+    let posted: unknown = null;
+    page.on("request", (request) => {
+      if (request.method() === "POST" && new URL(request.url()).pathname.endsWith("/corporate/companies")) posted = request.postDataJSON();
+    });
+    await gotoCorporate(page);
+    await expect(page.getByTestId("add-company-form")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Add for Analysis" })).toHaveCount(0);
+    await page.getByLabel("Company Search").fill("zzzq");
+    await page.getByRole("option", { name: "Not in the list → add" }).click();
+    const form = page.getByTestId("add-company-form");
+    await expect(form.getByLabel("Symbol")).toHaveValue("ZZZQ");
+    await form.getByLabel("Company name").fill("Zed Quartz");
+    await form.getByRole("button", { name: "Add for Analysis" }).click();
+    await expect.poll(() => posted).toEqual({ ticker: "ZZZQ", name: "Zed Quartz", source: "manual" });
+    await expect(page.getByTestId("corporate-company-line")).toContainText("Zed Quartz");
+    await expect(form).toHaveCount(0);
+  });
+
+  test("a listed match never offers the add entry", async ({ page }) => {
+    await mockCorporatePageApi(page);
+    await gotoCorporate(page);
+    await page.getByLabel("Company Search").fill("Micro");
+    await expect(page.getByRole("option", { name: /Microsoft/ })).toBeVisible();
+    await expect(page.getByRole("option", { name: "Not in the list → add" })).toHaveCount(0);
+  });
+
+  test("the page has one way to the full report and no idle sentence", async ({ page }) => {
+    await mockCorporatePageApi(page);
+    await gotoCorporate(page);
+    await page.getByRole("button", { name: "Refresh DCF" }).click();
+    await expect(verdict(page)).toHaveAttribute("data-state", "valued", { timeout: 30_000 });
+    await expect(page.getByRole("button", { name: "View Full Report" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /^Intrinsic DCF/ })).toHaveCount(0);
+    await expect(page.getByText("DCF stays idle on first load until you refresh it.")).toHaveCount(0);
+    await expect(page.getByTestId("dcf-updated")).toContainText("Last updated");
+    await expect(page.getByTestId("corporate-company-line")).toHaveText(/^Apple · .+ · \$210\.4$/);
+  });
+});
+
+test.describe("in Korean", () => {
+  test.use({ locale: "ko-KR" });
+
+  test("title, verdict, a figure and a bilingual header read in Korean", async ({ page }) => {
+    await mockCorporatePageApi(page);
+    await page.goto("/corporate", { waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("heading", { name: "기업 분석" })).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByTestId("corporate-verdict")).toContainText("DCF 미계산");
+    await expect(page.getByTestId("corporate-kpis")).toContainText("10.0%");
+    await expect(page.getByRole("columnheader", { name: "항목", exact: true })).toBeVisible();
+    await expect(page.getByTestId("corporate-lower-tabs").getByRole("tab", { name: "종목 비교" })).toBeVisible();
   });
 });

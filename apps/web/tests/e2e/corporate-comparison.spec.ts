@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { mockCorporatePageApi } from "./helpers/corporatePageMock";
-import { openLowerTab } from "./helpers/corporateDcf";
+import { openFullDcfReportInModal, openLowerTab } from "./helpers/corporateDcf";
 
 async function tickerY(page: Page, ticker: string) {
   const box = await page.getByRole("button", { name: ticker, exact: true }).first().boundingBox();
@@ -117,12 +117,6 @@ test("calculation detail modal shows explicit source-data and full-report errors
 
   await calculationDialog.getByRole("button", { name: "Close modal" }).click();
   await page.getByRole("button", { name: "Refresh DCF" }).click();
-  const viewFullReportButton = page.getByRole("button", { name: "View Full Report" });
-  await expect(viewFullReportButton).toBeEnabled();
-  await viewFullReportButton.click();
-
-  const dcfDialog = page.getByRole("dialog");
-  await expect(dcfDialog).toBeVisible();
-  await dcfDialog.locator("summary").filter({ hasText: "Full DCF Report" }).click();
+  const dcfDialog = await openFullDcfReportInModal(page);
   await expect(dcfDialog.getByText("Full DCF Report Unavailable")).toBeVisible();
 });

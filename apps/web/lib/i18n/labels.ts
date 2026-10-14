@@ -34,6 +34,7 @@ export const LABELS = {
   assumptions: ["가정", "Assumptions"],
   item: ["항목", "Item"],
   status: ["상태", "Status"],
+  corporate: ["기업 분석", "Corporate"],
 } as const satisfies Record<string, readonly [string, string]>;
 
 export type LabelKey = keyof typeof LABELS;
