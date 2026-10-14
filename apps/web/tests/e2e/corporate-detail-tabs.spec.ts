@@ -308,3 +308,121 @@ test("a ticker with no value in the comparison says so, and shows no position", 
   await expect(dialog(page)).toContainText("No value for AAPL in this comparison.");
   await expect(dialog(page).getByTestId("peer-position")).toHaveCount(0);
 });
+
+// Spec 2026-10-14 §4.1 and §6, plan Task 11. The sensitivity tab posts to the non-stream summary route.
+const isSingleDcf = (url: URL) => url.pathname.endsWith("/corporate/dcf/AAPL");
+
+function recordSingleDcfBodies(page: Page): Record<string, number>[] {
+  const bodies: Record<string, number>[] = [];
+  page.on("request", (request) => {
+    if (request.method() === "POST" && isSingleDcf(new URL(request.url()))) bodies.push(request.postDataJSON());
+  });
+  return bodies;
+}
+
+test("Calculate sends exactly two DCF requests that move only WACC by ±1.0%p", async ({ page }) => {
+  await mockCorporatePageApi(page);
+  const bodies = recordSingleDcfBodies(page);
+  await gotoCorporate(page);
+  await openAssumptionDetail(page, "WACC");
+  await openDetailTab(dialog(page), "Sensitivity");
+  const calculate = dialog(page).getByRole("button", { name: "Calculate", exact: true });
+  await expect(calculate).toBeEnabled();
+  await page.waitForLoadState("networkidle");
+  expect(bodies, "nothing is sent before Calculate").toHaveLength(0);
+  await calculate.click();
+  await expect(dialog(page).getByTestId("sensitivity-row-up")).toContainText("$240.5", { timeout: 30_000 });
+  await expect(dialog(page).getByTestId("sensitivity-row-down")).toContainText("$240.5");
+  expect(bodies).toHaveLength(2);
+  const [down, up] = [...bodies].sort((a, b) => a.wacc - b.wacc);
+  await expect(dialog(page).getByTestId("sensitivity-row-down")).toContainText("9.0%");
+  await expect(dialog(page).getByTestId("sensitivity-row-up")).toContainText("11.0%");
+
+  // The page's own request with the inputs as they are now is the reference for the other fields.
+  await closeDetail(page);
+  const stream = page.waitForRequest((request) => request.method() === "POST" && new URL(request.url()).pathname.endsWith("/corporate/dcf/AAPL/stream"));
+  await refreshDcf(page);
+  const base = (await stream).postDataJSON() as Record<string, number>;
+  expect(down.wacc).toBeCloseTo(base.wacc - 0.01, 10);
+  expect(up.wacc).toBeCloseTo(base.wacc + 0.01, 10);
+  expect({ ...down, wacc: base.wacc }).toEqual(base);
+  expect({ ...up, wacc: base.wacc }).toEqual(base);
+});
+
+test("when one of the two runs fails, the other still shows and the failed one says so", async ({ page }) => {
+  await mockCorporatePageApi(page);
+  await page.route((url) => isSingleDcf(url), async (route) => {
+    const body = route.request().postDataJSON() as { wacc: number };
+    if (body.wacc < 0.1) {
+      return route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ detail: "Mock DCF failure" }) });
+    }
+    return route.fallback();
+  });
+  await gotoCorporate(page);
+  await openAssumptionDetail(page, "WACC");
+  await openDetailTab(dialog(page), "Sensitivity");
+  await dialog(page).getByRole("button", { name: "Calculate", exact: true }).click();
+  await expect(dialog(page).getByTestId("sensitivity-row-up")).toContainText("$240.5", { timeout: 30_000 });
+  await expect(dialog(page).getByTestId("sensitivity-row-down").getByRole("alert")).toContainText("This run failed");
+});
+
+test("a refused run shows the refusal as content, not as a failure", async ({ page }) => {
+  await mockCorporatePageApi(page);
+  await page.route((url) => isSingleDcf(url), async (route) => {
+    const body = route.request().postDataJSON() as { wacc: number };
+    if (body.wacc < 0.1) {
+      return route.fulfill({
+        status: 422,
+        contentType: "application/json",
+        body: JSON.stringify({ detail: { code: "mock_refusal", message: "Mock refusal sentence" } }),
+      });
+    }
+    return route.fallback();
+  });
+  await gotoCorporate(page);
+  await openAssumptionDetail(page, "WACC");
+  await openDetailTab(dialog(page), "Sensitivity");
+  await dialog(page).getByRole("button", { name: "Calculate", exact: true }).click();
+  await expect(dialog(page).getByTestId("sensitivity-row-up")).toContainText("$240.5", { timeout: 30_000 });
+  await expect(dialog(page).getByTestId("sensitivity-row-down")).toContainText("Mock refusal sentence");
+  await expect(dialog(page).getByTestId("sensitivity-row-down").getByRole("alert")).toHaveCount(0);
+});
+
+test("results stay until an assumption changes, and a step past the slider floor is clamped and flagged", async ({ page }) => {
+  await mockCorporatePageApi(page);
+  const bodies = recordSingleDcfBodies(page);
+  await gotoCorporate(page);
+  await openAssumptionDetail(page, "WACC");
+  await openDetailTab(dialog(page), "Sensitivity");
+  await dialog(page).getByRole("button", { name: "Calculate", exact: true }).click();
+  await expect(dialog(page).getByTestId("sensitivity-row-up")).toContainText("$240.5", { timeout: 30_000 });
+  expect(bodies).toHaveLength(2);
+
+  await closeDetail(page);
+  await openAssumptionDetail(page, "WACC");
+  await expect(dialog(page).getByTestId("sensitivity-row-up")).toContainText("$240.5");
+  expect(bodies, "reopening the tab does not refetch").toHaveLength(2);
+
+  await closeDetail(page);
+  await page.getByTestId("assumption-table").getByRole("button", { name: "Edit WACC" }).click();
+  await page.getByTestId("assumption-slider-wacc").getByRole("slider").press("Home");
+  await openAssumptionDetail(page, "WACC");
+  await expect(dialog(page).getByTestId("sensitivity-row-up")).not.toContainText("$240.5");
+  await dialog(page).getByRole("button", { name: "Calculate", exact: true }).click();
+  await expect(dialog(page).getByTestId("sensitivity-row-up")).toContainText("$240.5", { timeout: 30_000 });
+  expect(bodies).toHaveLength(4);
+  const [floorDown, floorUp] = bodies.slice(2).sort((a, b) => a.wacc - b.wacc);
+  expect(floorDown.wacc).toBeCloseTo(0.02, 10);
+  expect(floorUp.wacc).toBeCloseTo(0.03, 10);
+  await expect(dialog(page).getByTestId("sensitivity-row-down")).toContainText("clamped to the slider range");
+  await expect(dialog(page).getByTestId("sensitivity-row-up")).not.toContainText("clamped to the slider range");
+});
+
+test("an assumption the DCF does not use says so and offers nothing to run", async ({ page }) => {
+  await mockCorporatePageApi(page);
+  await gotoCorporate(page);
+  await openAssumptionDetail(page, "Innovation Index");
+  await openDetailTab(dialog(page), "Sensitivity");
+  await expect(dialog(page)).toContainText("An assumption the DCF does not use directly.");
+  await expect(dialog(page).getByRole("button", { name: "Calculate", exact: true })).toHaveCount(0);
+});

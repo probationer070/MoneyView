@@ -106,6 +106,12 @@ export const ko: Messages = {
         band: "{ticker} {value}, 범위 {low}~{high}",
         stale: "이전 유니버스로 계산한 값입니다. 종목 비교 탭에서 다시 계산하십시오.",
       },
+      sensitivity: {
+        notDcf: "DCF에 직접 쓰이지 않는 가정입니다.",
+        intro: "{label}만 ±{delta} 바꿔 DCF를 두 번 계산합니다. 나머지 입력은 지금 값 그대로입니다.",
+        run: "계산", running: "계산 중…", current: "현재", minus: "−{delta}", plus: "+{delta}",
+        clamped: "슬라이더 범위에 맞춰 조정됨", failed: "이 계산은 실패했습니다: {message}",
+      },
       meaning: {
         realtime: "이 화면의 모든 수치를 계산하는 가정 묶음입니다.",
         growth: "예측이 매년 가정하는 매출 성장률입니다.",

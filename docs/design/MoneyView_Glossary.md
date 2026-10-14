@@ -102,6 +102,9 @@ capitals: "종목 NAME". Both come from `apps/web/lib/i18n/labels.ts`; add the r
 | Low | 최저 | Peers tab; band minimum |
 | High | 최고 | Peers tab; band maximum |
 | Sensitivity | 민감도 | detail tab |
+| Scenario | 시나리오 | Sensitivity tab; the row a run belongs to |
+| Upside | 상승여력 | Sensitivity tab column; shown as a DeltaBadge percent |
+| Calculate | 계산 | Sensitivity tab button; runs the two DCF requests |
 | Data Lineage | 데이터 리니지 | detail section title |
 | Supporting Rows | 근거 행 | detail section title |
 | Supporting row / Basis | 근거 행 / 근거 | label (detail table headers) |

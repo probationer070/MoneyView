@@ -6,19 +6,20 @@ import { ModalShell } from "@/components/ui/ModalShell";
 import { Tabs } from "@/components/ui/Tabs";
 import { useT } from "@/lib/i18n/locale";
 import { tabStateKey, useTabState } from "@/lib/tabState";
-import type { CorporateComparisonRowApi } from "../corporateTypes";
+import type { CorporateComparisonRowApi, DcfRequestSnapshot } from "../corporateTypes";
 import { availableDetailTabs, resolveDetailTab, type DetailTabKey } from "../detailTabs";
 import { waccInputIfDivergent } from "../formulaContext";
 import type { CalculationDetail, CalculationDetailKey, RawDatasetRow } from "./calculationDetailTypes";
 import { RawDataTab, type QuarterlyStatementRow, type StockPriceRow } from "./detail/RawDataTab";
 import { PeersTab } from "./detail/PeersTab";
+import { SensitivityTab } from "./detail/SensitivityTab";
 import { StepsTab } from "./detail/StepsTab";
 import { SummaryTab } from "./detail/SummaryTab";
 import { TrendTab, type TrendHistory } from "./detail/TrendTab";
 import { VerdictStatusLabel } from "./VerdictBlock";
 
-/** Tabs built so far. Task 11 adds "sensitivity". */
-const BUILT_TABS: readonly DetailTabKey[] = ["summary", "steps", "trend", "peers", "raw"];
+/** Every detail tab is built. */
+const BUILT_TABS: readonly DetailTabKey[] = ["summary", "steps", "trend", "peers", "sensitivity", "raw"];
 
 interface CalculationDetailModalProps {
   detail: CalculationDetail;
@@ -40,6 +41,10 @@ interface CalculationDetailModalProps {
   comparisonRows: CorporateComparisonRowApi[] | null;
   /** True when the comparison on screen was calculated for another universe. */
   comparisonIsStale: boolean;
+  /** The DCF inputs on screen; the sensitivity tab moves one of them. */
+  dcfSnapshot: DcfRequestSnapshot;
+  /** The page's own DCF, when calculated: the "current" row of the sensitivity table. */
+  baseDcf: { intrinsic: number | null; upside: number | null } | null;
   rawDatasetRows: RawDatasetRow[];
   historicalPrices: StockPriceRow[];
   historicalStatus: string;
@@ -105,6 +110,7 @@ export function CalculationDetailModal(props: CalculationDetailModalProps) {
             <TrendTab detailKey={detailKey} history={props.history} isFetching={props.historyIsFetching} isError={props.historyIsError} onLoad={props.onLoadHistory} />
           ) : null}
           {active === "peers" ? <PeersTab detailKey={detailKey} ticker={ticker} rows={props.comparisonRows} stale={props.comparisonIsStale} /> : null}
+          {active === "sensitivity" ? <SensitivityTab detailKey={detailKey} ticker={ticker} snapshot={props.dcfSnapshot} base={props.baseDcf} /> : null}
           {active === "raw" ? <RawDataTab {...props} /> : null}
         </div>
       </div>

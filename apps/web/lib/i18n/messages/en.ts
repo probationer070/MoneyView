@@ -103,6 +103,12 @@ export const en = {
         band: "{ticker} at {value}, range {low} to {high}",
         stale: "Calculated for an earlier universe. Recalculate in the Target Stock Comparison tab.",
       },
+      sensitivity: {
+        notDcf: "An assumption the DCF does not use directly.",
+        intro: "Runs the DCF twice with {label} moved by ±{delta}; every other input stays as it is now.",
+        run: "Calculate", running: "Calculating…", current: "Current", minus: "−{delta}", plus: "+{delta}",
+        clamped: "clamped to the slider range", failed: "This run failed: {message}",
+      },
       meaning: {
         realtime: "The assumption set every figure on this page is computed from.",
         growth: "Revenue growth the forecast assumes each year.",

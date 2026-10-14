@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { fetchApi } from "@/lib/api";
+import { bridgedEstimatedValue, bridgedUpsidePct } from "@/lib/bridgeQuality";
 import { DcfRefusalError, postDcf } from "@/lib/dcfRefusal";
 import { tabStateKey, useTabState } from "@/lib/tabState";
 import { useDevMonitorPageLoad } from "@/hooks/useDevMonitorPageLoad";
@@ -1045,6 +1046,8 @@ export default function CorporateAnalysisPage() {
           sliderWacc={assumptions.wacc}
           dcfStatus={dcfData?.status ?? null}
           dcfGeneratedAt={dcfData?.generated_at ?? null}
+          dcfSnapshot={activeDcfSnapshot}
+          baseDcf={dcfData ? { intrinsic: bridgedEstimatedValue(dcfData), upside: bridgedUpsidePct(dcfData) } : null}
           ticker={assumptions.ticker}
           metricAudit={metricAuditQuery.data ?? null}
           metricAuditIsLoading={metricAuditQuery.isLoading}
