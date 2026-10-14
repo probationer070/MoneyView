@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { mockCorporatePageApi } from "./helpers/corporatePageMock";
+import { openLowerTab } from "./helpers/corporateDcf";
 
 // The WACC x terminal-growth grid, and the terminal-value share it is built to put a range
 // around.
@@ -133,6 +134,7 @@ test.describe("the WACC x terminal-growth sensitivity grid", () => {
     await mockCorporatePageApi(page);
     await gotoCorporate(page);
 
+    await openLowerTab(page, "DCF");
     const tile = page.getByRole("button", { name: /Terminal Value Share/ }).first();
     // No DCF has run yet, so there is no valuation to take a share of. The sliders alone
     // cannot produce one, which is exactly what the old formula pretended.

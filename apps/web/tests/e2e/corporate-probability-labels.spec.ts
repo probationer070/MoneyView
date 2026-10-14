@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { mockCorporatePageApi } from "./helpers/corporatePageMock";
+import { openLowerTab } from "./helpers/corporateDcf";
 
 // The corporate dashboard has no probability model, so it must not put a number under a
 // probability label.
@@ -29,6 +30,7 @@ test.describe("the corporate dashboard's scenario labels", () => {
     // below are absences from a rendered page.
     await expect(page.getByRole("button", { name: /ROIC - WACC/ })).toBeVisible();
     await expect(page.getByText("Hurdle Rate Decomposition").first()).toBeVisible({ timeout: 60_000 });
+    await openLowerTab(page, "DCF");
     await expect(page.getByText("DCF Core Modules").first()).toBeVisible({ timeout: 60_000 });
 
     for (const label of FORBIDDEN_LABELS) {

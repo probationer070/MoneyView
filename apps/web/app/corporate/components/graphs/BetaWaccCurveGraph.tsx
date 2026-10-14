@@ -18,7 +18,7 @@ export function BetaWaccCurveGraph({
   onOpenDetail: (key: DetailKey) => void;
 }) {
   return (
-    <div className="lg:col-span-2 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-5">
+    <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-5">
       <button
         type="button"
         onClick={() => onOpenDetail("betaWaccCurve")}
@@ -29,7 +29,7 @@ export function BetaWaccCurveGraph({
           description="Industry Beta is pure sector business risk. Operating Beta (Unlevered) is asset risk excluding financial structure. Financial Beta adds leverage risk from debt through the Hamada formula."
         />
       </button>
-      <div className="grid h-72 min-h-72 min-w-0 grid-cols-1 gap-4 md:grid-cols-2">
+      <div className="grid h-56 min-h-56 min-w-0 grid-cols-1 gap-4 md:grid-cols-2">
         <ResponsiveChart minWidth={1} minHeight={1}>
           <BarChart data={betaTreemapProxy}>
             <CartesianGrid {...GRID_STYLE} />

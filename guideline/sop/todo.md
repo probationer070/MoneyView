@@ -56,7 +56,7 @@ Plan: `docs/superpowers/plans/2026-10-12-design-system-formalization.md`.
 - Follow-up (owner, 2026-10-14, option A): move workbench and chart English copy (DCFWorkbench, DiagnosticWorkbench, AttributionWaterfall, ChartPanelFrame, AppProvider, MetricAuditPanel Source/Method/Confidence) into the en/ko catalogs as its own task after D9.
 - [x] D8 component layer  - [x] D9 shared UI/charts  - [x] D10 portfolio  - [ ] D11 valuation/cases/decisions (corporate moved to the one-screen plan)
 - Corporate one-screen (part A): plan `docs/superpowers/plans/2026-10-14-corporate-one-screen.md`, branch `feat/corporate-one-screen` (merges back before D11).
-  - [x] C1 notes  - [x] C2 owner approval of the test inventory  - [x] C3 top bar  - [x] C4 pure models  - [x] C5 first screen  - [ ] C6 lower tabs
+  - [x] C1 notes  - [x] C2 owner approval of the test inventory  - [x] C3 top bar  - [x] C4 pure models  - [x] C5 first screen  - [x] C6 lower tabs
   - [ ] C7 header  - [ ] C8 modal tabs  - [ ] C9 trend  - [ ] C10 peers  - [ ] C11 sensitivity  - [ ] C12 corporate on paper tokens  - [ ] C13 final gate
 - One-screen principle for every page (owner, 2026-10-14): no page scroll at 1280×720. After corporate, one page at a time with its own short spec and plan: market → monte carlo → detail → signals → list pages (news, events, decisions, cases: fixed header and filters, list scrolls inside its panel). Add a shared rule and an automated "no page scroll at 1280×720" check (DS Task 14 or a follow-up). Heights 2026-10-14: corporate 2836, market 1520, decisions 1530, events 1012.
 - [ ] D12 monte-carlo  - [ ] D13 market/detail/news/events/dev/signals  - [ ] D14 lock-down

@@ -42,6 +42,32 @@ export const en = {
       crp: "Country Risk Premium", reinvestment: "Reinvestment Rate", innovation: "Innovation Index",
       governance: "Governance Quality", esgPenalty: "ESG / Agency Penalty",
     },
+    tabs: {
+      aria: "Corporate analysis sections", diagnostics: "Core Diagnostics", dcf: "DCF", comparison: "Target Stock Comparison",
+      about: "About this tab",
+      diagnosticsAbout: "Hurdle Rate Decomposition, Bottom-up Beta + WACC U-Curve and the 4-Quadrant Value Driver Matrix. Tap any chart title or bar to open its detailed formula view.",
+      dcfAbout: "Left: the four DCF core values. Right: the WACC x terminal growth grid from the full DCF report. The projection rows and CSV exports stay in the calculation detail, Raw data tab.",
+    },
+    dcfTab: {
+      loadReport: "Load Full Report", loading: "Loading full DCF report...", unavailable: "Full DCF Report Unavailable",
+      empty: "The grid appears after the full report loads.",
+    },
+    comparison: {
+      universe: "Universe", universeAria: "Comparison universe", benchmarkLabel: "Benchmark", benchmarkAria: "Comparison benchmark",
+      customLabel: "Custom tickers", customAria: "Custom tickers", sortLabel: "Sort by", sortAria: "Sort by",
+      directionLabel: "Direction", directionAria: "Direction",
+      sortImplied: "Implied return vs WACC", sortSpread: "ROIC - WACC", sortDcf: "DCF value", desc: "High to low", asc: "Low to high",
+      universeLabel: { portfolio_plus_benchmark: "Portfolio + Benchmark", watchlist_plus_benchmark: "Watchlist + Benchmark", custom: "Custom Universe" },
+      refresh: "Refresh comparison", calculateAll: "Calculate All DCF Reports", calculatingAll: "Calculating all DCF reports...",
+      verifySync: "Verify Watchlist Sync", verifying: "Verifying the watchlist…",
+      synced: "Watchlist {n}/{m} synced", missing: "Missing from Corporate Analysis: {tickers}.",
+      benchmark: "Benchmark: {ticker}.", preset: "Selected benchmark preset: {label} ({ticker}).",
+      custom: "Custom tickers: {tickers}.", none: "None", notCalculated: "Not calculated yet", stale: "Stale",
+      openPortfolio: "Open Portfolio Testing", loading: "Loading comparison rows...",
+      errorTitle: "Target Stock Comparison Unavailable", errorBody: "Target stock comparison is currently unavailable.",
+      idleTitle: "Comparison stays idle on first load.", idleBody: "Choose the universe, then click Refresh comparison.",
+      about: "Lightweight watchlist comparison for tracked names and ad-hoc custom universes. Live watchlist comparison: this tab stays in live mode. Market expected return = risk-free rate {riskFree} + equity risk premium {erp} = {marketReturn}. Stock return method: {stockMethod}. Reference method: {referenceMethod}. Generated live at {generatedAt}. Corporate Analysis checks the live Watchlist Holdings feed against the company registry on each refresh, so mismatches show before you compare names. Weighted portfolio testing, implied cash, snapshots and saved history live on the Portfolio page. Portfolio snapshots and saved history are managed from the Portfolio page only.",
+    },
   },
 } as const;
 

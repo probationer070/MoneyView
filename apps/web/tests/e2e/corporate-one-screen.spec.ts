@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { mockCorporatePageApi, type CorporatePageMockStats } from "./helpers/corporatePageMock";
+import { lowerPanel, openLowerTab } from "./helpers/corporateDcf";
 
 // Spec 2026-10-14 §2 and §7 tests 1-5.
 const SUMMARY = {
@@ -207,5 +208,65 @@ test.describe("the ⋯ menu and the busy verdict", () => {
     await expect(verdict(page).locator('[data-part="intrinsic"]')).toHaveText("$240.5");
     release();
     await expect(verdict(page)).not.toHaveAttribute("data-busy", "true", { timeout: 30_000 });
+  });
+});
+
+test.describe("the lower tabs", () => {
+  test("diagnostics is the default, each tab mounts only its own content, and the choice survives leaving the page", async ({ page }) => {
+    await mockCorporatePageApi(page);
+    await gotoCorporate(page);
+    const tabs = page.getByTestId("corporate-lower-tabs");
+    await expect(tabs.getByRole("tab", { name: "Core Diagnostics" })).toHaveAttribute("aria-selected", "true");
+    await expect(lowerPanel(page).getByText("Hurdle Rate Decomposition", { exact: true })).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText("DCF Core Modules")).toHaveCount(0);
+    await openLowerTab(page, "DCF");
+    await expect(lowerPanel(page).getByText("DCF Core Modules").first()).toBeVisible();
+    await expect(page.getByText("Hurdle Rate Decomposition", { exact: true })).toHaveCount(0);
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await gotoCorporate(page);
+    await expect(tabs.getByRole("tab", { name: "DCF" })).toHaveAttribute("aria-selected", "true");
+    await expect(lowerPanel(page).getByText("DCF Core Modules").first()).toBeVisible();
+  });
+
+  test("an unknown stored tab falls back to diagnostics", async ({ page }) => {
+    await page.addInitScript(() => window.sessionStorage.setItem("moneyview.tab.corporate.lowerTab", JSON.stringify("bogus")));
+    await mockCorporatePageApi(page);
+    await gotoCorporate(page);
+    await expect(page.getByTestId("corporate-lower-tabs").getByRole("tab", { name: "Core Diagnostics" })).toHaveAttribute("aria-selected", "true");
+  });
+
+  test("the DCF tab loads the full report only on request, in place, and shows the sensitivity grid", async ({ page }) => {
+    const stats = newStats();
+    await mockCorporatePageApi(page, stats);
+    await gotoCorporate(page);
+    await page.getByRole("button", { name: "Refresh DCF" }).click();
+    await expect(verdict(page)).toHaveAttribute("data-state", "valued", { timeout: 30_000 });
+    await openLowerTab(page, "DCF");
+    await page.waitForTimeout(300);
+    expect(stats.dcfFullReportRequests).toBe(0);
+    await lowerPanel(page).getByRole("button", { name: "Load Full Report" }).click();
+    await expect(lowerPanel(page).getByText("WACC x Terminal Growth Sensitivity")).toBeVisible({ timeout: 30_000 });
+    expect(stats.dcfFullReportRequests).toBe(1);
+    // A modal opened by the click mounts after a short delay (measured ~3 s), so let it settle before asserting none.
+    await page.waitForTimeout(3000);
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+  });
+
+  test("the comparison tab is a toolbar, one status line and a scrolling table", async ({ page }) => {
+    await mockCorporatePageApi(page);
+    await gotoCorporate(page);
+    await openLowerTab(page, "Target Stock Comparison");
+    await expect(lowerPanel(page).getByText("Comparison stays idle on first load.")).toBeVisible();
+    const toolbar = page.getByTestId("comparison-toolbar");
+    await expect(toolbar.getByRole("button", { name: "Calculate All DCF Reports" })).toBeDisabled();
+    await toolbar.getByRole("button", { name: "Refresh comparison" }).click();
+    const status = page.getByTestId("comparison-status");
+    await expect(status).toContainText(/Watchlist \d+\/\d+ synced/);
+    await expect(status).toContainText("Benchmark: ^GSPC.");
+    const scroll = page.getByTestId("comparison-table-scroll");
+    await expect(scroll.getByRole("cell", { name: "GOOGL" }).first()).toBeVisible({ timeout: 30_000 });
+    expect(await scroll.evaluate((element) => getComputedStyle(element).overflowY)).toBe("auto");
+    await expect(toolbar.getByRole("button", { name: "Calculate All DCF Reports" })).toBeEnabled();
+    await expect(page.getByRole("button", { name: /Calculate All/ })).toHaveCount(1);
   });
 });

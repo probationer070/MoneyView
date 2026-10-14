@@ -81,3 +81,9 @@ capitals: "종목 NAME". Both come from `apps/web/lib/i18n/labels.ts`; add the r
 | Country risk premium | 국가위험프리미엄 | |
 | Reinvestment rate | 재투자율 | |
 | Source data | 원천 데이터 | |
+| Core Diagnostics | 진단 차트 | corporate lower tab |
+| Target Stock Comparison | 종목 비교 | corporate lower tab |
+| Universe | 유니버스 | comparison universe |
+| Watchlist | 관심종목 | |
+| Benchmark | 벤치마크 | |
+| Load Full Report | 리포트 불러오기 | button |

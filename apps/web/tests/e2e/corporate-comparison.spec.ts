@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { mockCorporatePageApi } from "./helpers/corporatePageMock";
+import { openLowerTab } from "./helpers/corporateDcf";
 
 async function tickerY(page: Page, ticker: string) {
   const box = await page.getByRole("button", { name: ticker, exact: true }).first().boundingBox();
@@ -15,26 +16,27 @@ test("corporate comparison table renders and exposes sorting controls", async ({
 
   await expect(page.getByRole("heading", { name: /Corporate Analysis/i })).toBeVisible({ timeout: 60_000 });
   await expect(page.getByText("Target Stock Comparison")).toBeVisible();
+  await openLowerTab(page, "Target Stock Comparison");
   await expect(page.getByLabel("Comparison universe")).toBeVisible({ timeout: 60_000 });
   await expect(page.getByText("S&P 500 (^GSPC)")).toBeVisible({ timeout: 60_000 });
   await expect(page.getByLabel("Sort by")).toBeVisible({ timeout: 60_000 });
   await expect(page.getByLabel("Direction")).toBeVisible();
-  await expect(page.getByText(/Portfolio snapshots and saved history are managed from the Portfolio page only\./)).toBeVisible();
-  await expect(page.getByText("Live watchlist comparison")).toBeVisible();
+  await page.getByTestId("comparison-about").hover();
+  await expect(page.getByRole("tooltip")).toContainText("Portfolio snapshots and saved history are managed from the Portfolio page only.");
+  await expect(page.getByRole("tooltip")).toContainText("Live watchlist comparison");
   await expect(page.getByRole("button", { name: "Open Portfolio Testing" })).toBeVisible();
-  await expect(page.getByText("Watchlist Holdings Sync")).toBeVisible();
-  await expect(page.getByText(/All live watchlist tickers are available inside Corporate Analysis\./)).toBeVisible();
+  await expect(page.getByTestId("comparison-status")).toContainText(/Watchlist \d+\/\d+ synced/);
 
   await page.getByLabel("Comparison universe").selectOption("watchlist_plus_benchmark");
   await page.getByRole("button", { name: "Refresh comparison" }).click();
-  await expect(page.locator("div").filter({ hasText: /^Watchlist \+ Benchmark$/ }).first()).toBeVisible();
+  await expect(page.getByTestId("comparison-status")).toContainText("Watchlist + Benchmark");
   await expect(page.getByText("GOOGL")).toBeVisible();
 
   await page.getByLabel("Comparison universe").selectOption("custom");
   await expect(page.getByLabel("Custom tickers")).toBeVisible();
   await page.getByLabel("Custom tickers").fill("NVDA, TSLA");
   await page.getByRole("button", { name: "Refresh comparison" }).click();
-  await expect(page.locator("div").filter({ hasText: /^Custom Universe$/ }).first()).toBeVisible();
+  await expect(page.getByTestId("comparison-status")).toContainText("Custom Universe");
   await expect(page.getByText(/Benchmark: \^GSPC\./)).toBeVisible();
   await expect(page.getByRole("cell", { name: "^GSPC" }).first()).toBeVisible();
   await expect(page.getByRole("cell", { name: "NVDA" }).first()).toBeVisible();
@@ -44,8 +46,8 @@ test("corporate comparison table renders and exposes sorting controls", async ({
   await expect(page.getByText("Custom tickers: NVDA, TSLA.")).toBeVisible();
   await expect(page.getByText("Similar Stocks Spread View")).toBeVisible();
   await expect(page.getByText("Price Vs Fair Value Map")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Calculate All Reports" })).toBeVisible();
-  await page.getByRole("button", { name: "Calculate All Reports" }).click();
+  await expect(page.getByRole("button", { name: "Calculate All DCF Reports" })).toBeVisible();
+  await page.getByRole("button", { name: "Calculate All DCF Reports" }).click();
   await expect(page.getByText("Batch DCF Reports")).toBeVisible();
   await expect(page.getByRole("cell", { name: "mockdcf-bulk-1" })).toBeVisible();
   await expect(page.getByRole("button", { name: "NVDA" }).first()).toBeVisible();
@@ -60,6 +62,7 @@ test("corporate comparison sorting reorders non-benchmark rows and metric clicks
   await page.goto("/corporate", { waitUntil: "domcontentloaded" });
 
   await expect(page.getByRole("heading", { name: /Corporate Analysis/i })).toBeVisible({ timeout: 60_000 });
+  await openLowerTab(page, "Target Stock Comparison");
   await page.getByLabel("Comparison universe").selectOption("watchlist_plus_benchmark");
   await page.getByRole("button", { name: "Refresh comparison" }).click();
   await expect(page.getByRole("cell", { name: "GOOGL" }).first()).toBeVisible();

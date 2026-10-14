@@ -5,7 +5,7 @@ import dynamic from "next/dynamic";
 function GraphLoadingCard({
   className,
   title,
-  chartHeightClassName = "h-72",
+  chartHeightClassName = "h-56",
 }: {
   className: string;
   title: string;
@@ -23,27 +23,27 @@ function GraphLoadingCard({
 export const BetaWaccCurveGraph = dynamic(
   () => import("./graphs/BetaWaccCurveGraph").then((mod) => mod.BetaWaccCurveGraph),
   {
-    loading: () => <GraphLoadingCard className="lg:col-span-2" title="Bottom-up Beta + WACC U-Curve" />,
+    loading: () => <GraphLoadingCard className="" title="Bottom-up Beta + WACC U-Curve" />,
   },
 );
 
 export const DcfCoreModulesGraph = dynamic(
   () => import("./graphs/DcfCoreModulesGraph").then((mod) => mod.DcfCoreModulesGraph),
   {
-    loading: () => <GraphLoadingCard className="lg:col-span-4" title="DCF Core Modules" chartHeightClassName="h-44" />,
+    loading: () => <GraphLoadingCard className="" title="DCF Core Modules" chartHeightClassName="h-44" />,
   },
 );
 
 export const HurdleRateDecompositionGraph = dynamic(
   () => import("./graphs/HurdleRateDecompositionGraph").then((mod) => mod.HurdleRateDecompositionGraph),
   {
-    loading: () => <GraphLoadingCard className="lg:col-span-2" title="Hurdle Rate Decomposition" />,
+    loading: () => <GraphLoadingCard className="" title="Hurdle Rate Decomposition" />,
   },
 );
 
 export const ValueDriverMatrixGraph = dynamic(
   () => import("./graphs/ValueDriverMatrixGraph").then((mod) => mod.ValueDriverMatrixGraph),
   {
-    loading: () => <GraphLoadingCard className="lg:col-span-2" title="4-Quadrant Value Driver Matrix" />,
+    loading: () => <GraphLoadingCard className="" title="4-Quadrant Value Driver Matrix" />,
   },
 );

@@ -29,6 +29,8 @@ import {
 } from "./components/CorporateGraphs";
 import { CorporateDiagnosticsSection } from "./components/CorporateDiagnosticsSection";
 import { TargetStockComparisonSection } from "./components/TargetStockComparisonSection";
+import { CorporateLowerTabs } from "./components/CorporateLowerTabs";
+import { DcfTab } from "./components/DcfTab";
 import { AssumptionTable } from "./components/AssumptionTable";
 import { KpiRow } from "./components/KpiRow";
 import { VerdictBlock } from "./components/VerdictBlock";
@@ -75,7 +77,6 @@ import {
   annualMetricRows,
   clamp,
   companyForTicker,
-  comparisonUniverseLabel,
   dateTimeText,
   dcfRequestBody,
   defaultAssumptionsFor,
@@ -685,9 +686,8 @@ export default function CorporateAnalysisPage() {
     setDcfRefreshToken(`${Date.now()}`);
   };
 
-  const handleViewFullDcfReport = async () => {
+  const loadFullDcfReport = async () => {
     const snapshot = dcfRequestedSnapshot ?? activeDcfSnapshot;
-    setActiveCalculation("backendDcf");
     setDcfFullReportLoading(true);
     setDcfFullReportError(null);
     try {
@@ -704,6 +704,11 @@ export default function CorporateAnalysisPage() {
     } finally {
       setDcfFullReportLoading(false);
     }
+  };
+
+  const handleViewFullDcfReport = async () => {
+    setActiveCalculation("backendDcf");
+    await loadFullDcfReport();
   };
 
   const handleCalculateAllDcfReports = async () => {
@@ -980,14 +985,6 @@ export default function CorporateAnalysisPage() {
                 >
                   {dcfFullReportLoading ? "Loading report..." : "View Full Report"}
                 </button>
-                <button
-                  type="button"
-                  onClick={() => void handleCalculateAllDcfReports()}
-                  disabled={bulkDcfReportsLoading || nonBenchmarkComparisonRows.length === 0}
-                  className="inline-flex items-center gap-2 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 font-bold text-[var(--text-primary)] disabled:opacity-60"
-                >
-                  {bulkDcfReportsLoading ? "Calculating all DCF reports..." : "Calculate All DCF Reports"}
-                </button>
                 <span>{dcfDisplayLastUpdatedAt ? `Last updated ${dateTimeText(dcfDisplayLastUpdatedAt)}` : "Not calculated yet"}</span>
                 {dcfIsStale && (
                   <span className="rounded-full bg-amber-100 px-2 py-1 text-[length:var(--type-caption)] font-bold text-amber-800">
@@ -1078,69 +1075,82 @@ export default function CorporateAnalysisPage() {
         />
       </section>
 
-      <section className="grid grid-cols-1 gap-4 xl:grid-cols-6">
-        <div className="space-y-4 xl:col-span-4">
-          <CorporateDiagnosticsSection
-            companyName={companyName}
-            hurdleBars={hurdleBars}
-            regionalHurdle={regionalHurdle}
-            assumptionsDebtRatio={assumptions.debtRatio}
-            betaTreemapProxy={betaTreemapProxy}
-            waccCurve={waccCurve}
-            valueMatrix={valueMatrix}
-            sustainableGrowth={derived.sustainableGrowth}
-            fcff={assumptions.fcff}
-            dcfResult={dcfData ?? undefined}
-            onOpenDetail={setActiveCalculation}
-          />
-        </div>
-        <TargetStockComparisonSection
-          comparisonData={comparisonData}
-          comparisonDisplayLastUpdatedAt={comparisonDisplayLastUpdatedAt}
-          comparisonIsStale={comparisonIsStale}
-          comparisonUniverse={comparisonUniverse}
-          comparisonBenchmarkTicker={comparisonBenchmarkTicker}
-          comparisonBenchmarkOptions={PORTFOLIO_BENCHMARK_PRESETS}
-          comparisonCustomTickersInput={comparisonCustomTickersInput}
-          comparisonSortKey={comparisonSortKey}
-          comparisonSortDirection={comparisonSortDirection}
-          onComparisonUniverseChange={setComparisonUniverse}
-          onComparisonBenchmarkTickerChange={setComparisonBenchmarkTicker}
-          onComparisonCustomTickersInputChange={setComparisonCustomTickersInput}
-          onComparisonSortKeyChange={setComparisonSortKey}
-          onComparisonSortDirectionChange={setComparisonSortDirection}
-          onRefreshComparison={handleRefreshComparison}
-          onVerifyWatchlistSync={() => {
-            void companiesQuery.refetch();
-            void watchlistQuery.refetch();
-          }}
-          onOpenPortfolio={() => router.push("/portfolio")}
-          watchlistCoverage={watchlistCoverage}
-          watchlistSyncLoading={watchlistQuery.isFetching || companiesQuery.isFetching}
-          comparisonIsLoading={comparisonQuery.isLoading}
-          comparisonIsFetching={comparisonQuery.isFetching}
-          comparisonIsError={comparisonQuery.isError}
-          sortedComparisonRows={sortedComparisonRows}
-          selectedComparisonTicker={selectedComparisonRow?.ticker ?? ""}
-          selectedComparisonSector={selectedComparisonSector}
-          similarComparisonBarData={similarComparisonBarData}
-          similarComparisonScatterPeers={similarComparisonScatterPeers}
-          similarComparisonScatterSelected={similarComparisonScatterSelected}
-          currentTicker={assumptions.ticker}
-          onSelectTicker={selectTicker}
-          onOpenCalculationForTicker={selectTickerAndOpenCalculation}
-          bulkDcfReportsLoading={bulkDcfReportsLoading}
-          bulkDcfReportsError={bulkDcfReportsError}
-          bulkDcfReports={bulkDcfReports}
-          bulkDcfReportsLastUpdatedAt={bulkDcfReportsLastUpdatedAt}
-          bulkDcfSkipped={bulkDcfSkipped}
-          onCalculateAllDcfReports={() => void handleCalculateAllDcfReports()}
-          formatPct2={pct2}
-          formatMoney={moneyText}
-          formatDateTime={dateTimeText}
-          formatComparisonUniverseLabel={comparisonUniverseLabel}
-        />
-      </section>
+      <CorporateLowerTabs
+        panels={{
+          diagnostics: (
+            <CorporateDiagnosticsSection
+              companyName={companyName}
+              hurdleBars={hurdleBars}
+              regionalHurdle={regionalHurdle}
+              assumptionsDebtRatio={assumptions.debtRatio}
+              betaTreemapProxy={betaTreemapProxy}
+              waccCurve={waccCurve}
+              valueMatrix={valueMatrix}
+              onOpenDetail={setActiveCalculation}
+            />
+          ),
+          dcf: (
+            <DcfTab
+              sustainableGrowth={derived.sustainableGrowth}
+              fcff={assumptions.fcff}
+              dcfResult={dcfData ?? undefined}
+              onOpenDetail={setActiveCalculation}
+              report={dcfFullReport}
+              reportLoading={dcfFullReportLoading}
+              reportError={dcfFullReportError}
+              canLoadReport={dcfRefusal === null && !(!dcfData && dcfStreamStatus === "idle")}
+              onLoadReport={() => void loadFullDcfReport()}
+            />
+          ),
+          comparison: (
+            <TargetStockComparisonSection
+              comparisonData={comparisonData}
+              comparisonDisplayLastUpdatedAt={comparisonDisplayLastUpdatedAt}
+              comparisonIsStale={comparisonIsStale}
+              comparisonUniverse={comparisonUniverse}
+              comparisonBenchmarkTicker={comparisonBenchmarkTicker}
+              comparisonBenchmarkOptions={PORTFOLIO_BENCHMARK_PRESETS}
+              comparisonCustomTickersInput={comparisonCustomTickersInput}
+              comparisonSortKey={comparisonSortKey}
+              comparisonSortDirection={comparisonSortDirection}
+              onComparisonUniverseChange={setComparisonUniverse}
+              onComparisonBenchmarkTickerChange={setComparisonBenchmarkTicker}
+              onComparisonCustomTickersInputChange={setComparisonCustomTickersInput}
+              onComparisonSortKeyChange={setComparisonSortKey}
+              onComparisonSortDirectionChange={setComparisonSortDirection}
+              onRefreshComparison={handleRefreshComparison}
+              onVerifyWatchlistSync={() => {
+                void companiesQuery.refetch();
+                void watchlistQuery.refetch();
+              }}
+              onOpenPortfolio={() => router.push("/portfolio")}
+              watchlistCoverage={watchlistCoverage}
+              watchlistSyncLoading={watchlistQuery.isFetching || companiesQuery.isFetching}
+              comparisonIsLoading={comparisonQuery.isLoading}
+              comparisonIsFetching={comparisonQuery.isFetching}
+              comparisonIsError={comparisonQuery.isError}
+              sortedComparisonRows={sortedComparisonRows}
+              selectedComparisonTicker={selectedComparisonRow?.ticker ?? ""}
+              selectedComparisonSector={selectedComparisonSector}
+              similarComparisonBarData={similarComparisonBarData}
+              similarComparisonScatterPeers={similarComparisonScatterPeers}
+              similarComparisonScatterSelected={similarComparisonScatterSelected}
+              currentTicker={assumptions.ticker}
+              onSelectTicker={selectTicker}
+              onOpenCalculationForTicker={selectTickerAndOpenCalculation}
+              bulkDcfReportsLoading={bulkDcfReportsLoading}
+              bulkDcfReportsError={bulkDcfReportsError}
+              bulkDcfReports={bulkDcfReports}
+              bulkDcfReportsLastUpdatedAt={bulkDcfReportsLastUpdatedAt}
+              bulkDcfSkipped={bulkDcfSkipped}
+              onCalculateAllDcfReports={() => void handleCalculateAllDcfReports()}
+              formatPct2={pct2}
+              formatMoney={moneyText}
+              formatDateTime={dateTimeText}
+            />
+          ),
+        }}
+      />
       {/* Calculation detail modal is mounted only when a metric or chart title is selected. */}
       {activeCalculationDetail && (
         <CalculationDetailModal
@@ -1186,7 +1196,7 @@ export default function CorporateAnalysisPage() {
           }
           dcfFullReportIsLoading={dcfFullReportLoading}
           dcfFullReportIsError={Boolean(dcfFullReportError)}
-          onRequestDcfFullReport={() => void handleViewFullDcfReport()}
+          onRequestDcfFullReport={() => void loadFullDcfReport()}
           onDownloadRawDatasetCsv={() => downloadRawDatasetCsv(assumptions.ticker, rawDatasetRows)}
           onDownloadHistoricalPriceCsv={() => downloadHistoricalPriceCsv(assumptions.ticker, historicalPricesData)}
           onDownloadQuarterlyStatementsCsv={() => downloadQuarterlyStatementsCsv(assumptions.ticker, quarterlyStatementsData?.rows ?? [])}

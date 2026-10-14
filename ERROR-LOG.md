@@ -26,6 +26,16 @@ reveal that; only checking the code did.
 
 An entry states what was true when it was written. Nothing updates it on its own.
 
+## 2026-10-14: lower tab bar widened the corporate page to 456 px at 375-390 px
+
+Date: 2026-10-14 (Task 6 of the corporate one-screen plan, before commit).
+Command: `cd apps/web && npx playwright test tests/e2e/corporate-viewport.spec.ts tests/e2e/high-risk-render-regression.spec.ts tests/e2e/responsive-accessibility.spec.ts --workers=2`
+Failure: three overflow checks failed at 375 and 390 px (`scrollWidth` 416 to 423 against a 375 or 390 viewport). The page's `main` was 456 px wide on every lower tab, including Core Diagnostics, which was the first tab to fail.
+Root cause: the tab strip (`Tabs`, a `flex` row with `overflow-x-auto`) has a min-content width equal to its three labels laid out in one row, about 392 px. A block's intrinsic width includes its children's min-content contribution, and `overflow-x-auto` does not remove that contribution, so the strip widened `main`. Task 5's grid arrangement had hidden this. The comparison table inside the `max-h-80 overflow-y-auto` wrapper had the same effect once a table was loaded.
+Fix: `[contain:inline-size]` on the tab strip (`CorporateLowerTabs.tsx`) and on the comparison scroll wrapper (`TargetStockComparisonSection.tsx`). Containment makes the strip's intrinsic inline size zero, so it takes the container width and scrolls its labels inside itself. With the fix, `main` is 390 px wide and the strip has `scrollWidth` 392 with `clientWidth` 326.
+Files changed: `apps/web/app/corporate/components/CorporateLowerTabs.tsx`, `apps/web/app/corporate/components/TargetStockComparisonSection.tsx`.
+Prevention: the 375 and 390 px overflow specs run on every lower tab (`corporate-viewport`, `high-risk-render-regression`, `responsive-accessibility`). Any new block that contains a `flex` row with `overflow-x-auto`, or a table in a scroll wrapper, needs `[contain:inline-size]` or `min-w-0` plus a width constraint above it, and a 390 px check on the tab it sits in.
+
 ## 2026-10-14: corporate first screen overflowed a 390 px viewport after the dense state
 
 Date: 2026-10-14 (Task 5 of the corporate one-screen plan, before commit).

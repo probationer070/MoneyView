@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { mockCorporatePageApi } from "./helpers/corporatePageMock";
+import { openLowerTab } from "./helpers/corporateDcf";
 
 // The invariant under test, stated as a quantity rather than a field name:
 //
@@ -34,6 +35,7 @@ async function refreshDcf(page: Page) {
 // The comparison query stays disabled until the user asks for it (comparisonQuery's `enabled`
 // guard in app/corporate/page.tsx), and the bulk report button stays disabled until rows land.
 async function loadBulkReports(page: Page) {
+  await openLowerTab(page, "Target Stock Comparison");
   await page.getByRole("button", { name: "Refresh comparison" }).click();
   await expect(page.getByRole("cell", { name: "MISS" }).first()).toBeVisible({ timeout: 60_000 });
   const bulkButton = page.getByRole("button", { name: /Calculate All DCF Reports/i });

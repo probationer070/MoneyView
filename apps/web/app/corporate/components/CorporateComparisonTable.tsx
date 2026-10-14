@@ -44,7 +44,7 @@ export function CorporateComparisonTable({
   return (
     <div className="mt-4 overflow-x-auto">
       <table className="w-full text-sm">
-        <thead className="bg-[var(--surface-muted)] text-left text-[var(--text-muted)]">
+        <thead className="sticky top-0 z-10 bg-[var(--surface-muted)] text-left text-[var(--text-muted)]">
           <tr>
             <th className="px-4 py-3 font-semibold">Ticker</th>
             <th className="px-4 py-3 font-semibold">Company</th>

@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { mockCorporatePageApi, type CorporatePageMockStats } from "./helpers/corporatePageMock";
 import { mockPortfolioPageApi, type PortfolioPageMockStats } from "./helpers/portfolioPageMock";
 import { openPortfolioPanel, portfolioModal } from "./helpers/portfolioPanels";
+import { openLowerTab } from "./helpers/corporateDcf";
 
 const CORPORATE_DCF_CACHE_KEY = "moneyview:corporate-dcf-cache:v1";
 const CORPORATE_COMPARISON_CACHE_KEY = "moneyview:corporate-comparison-cache:v1";
@@ -44,6 +45,7 @@ test("corporate first load keeps heavy calculation zones idle until refresh", as
   await expect(page.getByRole("heading", { name: /Corporate Analysis/i })).toBeVisible({ timeout: 60_000 });
   await expect(page.getByText("DCF stays idle on first load until you refresh it.")).toBeVisible();
   await expect(page.getByText("Source data stays idle on first load until refreshed.")).toBeVisible();
+  await openLowerTab(page, "Target Stock Comparison");
   await expect(page.getByText(/Comparison stays idle on first load\./)).toBeVisible();
   await page.waitForTimeout(300);
   expect(stats.dcfRequests).toBe(0);
@@ -194,6 +196,7 @@ test("corporate renders cached calculation results without auto-fetch and refres
 
   await expect(page.getByRole("heading", { name: /Corporate Analysis/i })).toBeVisible({ timeout: 60_000 });
   await expect(page.getByRole("button", { name: /^Intrinsic DCF(?! Value)/i })).toContainText("$199.9");
+  await openLowerTab(page, "Target Stock Comparison");
   await expect(page.getByText("Last updated")).toHaveCount(3);
   await expect(page.getByRole("cell", { name: "AAPL" }).first()).toBeVisible();
   await page.waitForTimeout(300);

@@ -2,6 +2,7 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 import { mockCorporatePageApi, type CorporatePageMockStats } from "./helpers/corporatePageMock";
 import { mockPortfolioPageApi, type PortfolioPageMockStats } from "./helpers/portfolioPageMock";
 import { openPortfolioPanel } from "./helpers/portfolioPanels";
+import { openLowerTab } from "./helpers/corporateDcf";
 
 function corporateStats(): CorporatePageMockStats {
   return {
@@ -126,13 +127,14 @@ test("corporate diagnostics and comparison chart panels stay rendered after dens
   await expectChartPanelRendered(page, "Hurdle Rate Decomposition");
   await page.getByRole("button", { name: "Refresh DCF" }).click();
   await expect.poll(() => stats.dcfRequests).toBe(1);
+  await openLowerTab(page, "Target Stock Comparison");
   await page.getByLabel("Comparison universe").selectOption("custom");
   await page.getByLabel("Custom tickers").fill("NVDA, TSLA");
   await page.getByLabel("Sort by").selectOption("roic_minus_wacc");
   await page.getByLabel("Direction").selectOption("asc");
   await page.getByRole("button", { name: "Refresh comparison" }).click();
   await expect.poll(() => stats.comparisonRequests).toBe(1);
-  await expect(page.locator("div").filter({ hasText: /^Custom Universe$/ }).first()).toBeVisible();
+  await expect(page.getByTestId("comparison-status")).toContainText("Custom Universe");
   await expectChartPanelRendered(page, "Similar Stocks Spread View");
   await expectChartPanelRendered(page, "Price Vs Fair Value Map");
   await expect(page.getByRole("cell", { name: "NVDA" }).first()).toBeVisible();

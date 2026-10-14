@@ -12,7 +12,6 @@ import {
 } from "./corporateConstants";
 import type {
   AnnualMetricPoint,
-  ComparisonUniverse,
   CorporateAssumptions,
   CorporateCompany,
   CorporateMetricsApi,
@@ -204,19 +203,6 @@ export function dateTimeText(value: string) {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return value;
   return parsed.toLocaleString();
-}
-
-export function comparisonUniverseLabel(value: ComparisonUniverse | "portfolio_plus_benchmark") {
-  switch (value) {
-    case "portfolio_plus_benchmark":
-      return "Portfolio + Benchmark";
-    case "watchlist_plus_benchmark":
-      return "Watchlist + Benchmark";
-    case "custom":
-      return "Custom Universe";
-    default:
-      return value;
-  }
 }
 
 export function readSessionCache<T>(key: string): T | null {

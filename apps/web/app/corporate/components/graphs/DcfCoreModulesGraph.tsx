@@ -34,7 +34,7 @@ export function DcfCoreModulesGraph({
   const bridgedFairValue = dcfResult ? bridgedEstimatedValue(dcfResult) : null;
 
   return (
-    <div className="lg:col-span-4 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-5">
+    <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-5">
       <button
         type="button"
         onClick={() => onOpenDetail("dcfCoreModules")}

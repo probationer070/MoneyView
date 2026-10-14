@@ -1,21 +1,12 @@
 "use client";
 
-import {
-  BetaWaccCurveGraph,
-  DcfCoreModulesGraph,
-  HurdleRateDecompositionGraph,
-  ValueDriverMatrixGraph,
-} from "./CorporateGraphs";
-import type {
-  BetaPoint,
-  DetailKey,
-  DcfResult,
-  HurdleBarPoint,
-  RegionalHurdlePoint,
-  ValueMatrixPoint,
-  WaccCurvePoint,
-} from "./graphs/shared";
+import { InfoTooltip } from "@/components/ui/InfoTooltip";
+import { useT } from "@/lib/i18n/locale";
+import { BetaWaccCurveGraph, HurdleRateDecompositionGraph, ValueDriverMatrixGraph } from "./CorporateGraphs";
+import type { BetaPoint, DetailKey, HurdleBarPoint, RegionalHurdlePoint, ValueMatrixPoint, WaccCurvePoint } from "./graphs/shared";
 
+// Spec §3.1: three charts in one row (2 below 992px, 1 below 768px). DCF Core Modules moved to
+// the DCF tab; the explanatory box became this tab's ⓘ.
 export function CorporateDiagnosticsSection({
   companyName,
   hurdleBars,
@@ -24,9 +15,6 @@ export function CorporateDiagnosticsSection({
   betaTreemapProxy,
   waccCurve,
   valueMatrix,
-  sustainableGrowth,
-  fcff,
-  dcfResult,
   onOpenDetail,
 }: {
   companyName: string;
@@ -36,54 +24,19 @@ export function CorporateDiagnosticsSection({
   betaTreemapProxy: BetaPoint[];
   waccCurve: WaccCurvePoint[];
   valueMatrix: ValueMatrixPoint[];
-  sustainableGrowth: number;
-  fcff: number;
-  dcfResult?: DcfResult;
   onOpenDetail: (key: DetailKey) => void;
 }) {
+  const t = useT();
   return (
-    <>
-      <section className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-muted)] p-4">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <h2 className="text-sm font-bold text-[var(--text-primary)]">Core Diagnostics</h2>
-            <p className="mt-1 text-sm text-[var(--text-muted)]">
-              Hurdle Rate Decomposition, Bottom-up Beta + WACC U-Curve, 4-Quadrant Value Driver Matrix, and DCF Core Modules are part of the main Corporate Analysis dashboard and should remain visible in the chart section below.
-            </p>
-          </div>
-          <div className="text-xs text-[var(--text-muted)]">
-            Tap any chart title to open its detailed formula view.
-          </div>
-        </div>
-      </section>
-
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">
-        <HurdleRateDecompositionGraph
-          hurdleBars={hurdleBars}
-          regionalHurdle={regionalHurdle}
-          onOpenDetail={onOpenDetail}
-        />
-
-        <BetaWaccCurveGraph
-          assumptionsDebtRatio={assumptionsDebtRatio}
-          betaTreemapProxy={betaTreemapProxy}
-          waccCurve={waccCurve}
-          onOpenDetail={onOpenDetail}
-        />
-
-        <ValueDriverMatrixGraph
-          companyName={companyName}
-          valueMatrix={valueMatrix}
-          onOpenDetail={onOpenDetail}
-        />
-
-        <DcfCoreModulesGraph
-          sustainableGrowth={sustainableGrowth}
-          fcff={fcff}
-          dcfResult={dcfResult}
-          onOpenDetail={onOpenDetail}
-        />
+    <div className="flex flex-col gap-3">
+      <span data-testid="diagnostics-about" className="type-small self-start text-[var(--ink-muted)]">
+        <InfoTooltip label={t("corporate.tabs.about")} description={t("corporate.tabs.diagnosticsAbout")} />
+      </span>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <HurdleRateDecompositionGraph hurdleBars={hurdleBars} regionalHurdle={regionalHurdle} onOpenDetail={onOpenDetail} />
+        <BetaWaccCurveGraph assumptionsDebtRatio={assumptionsDebtRatio} betaTreemapProxy={betaTreemapProxy} waccCurve={waccCurve} onOpenDetail={onOpenDetail} />
+        <ValueDriverMatrixGraph companyName={companyName} valueMatrix={valueMatrix} onOpenDetail={onOpenDetail} />
       </div>
-    </>
+    </div>
   );
 }

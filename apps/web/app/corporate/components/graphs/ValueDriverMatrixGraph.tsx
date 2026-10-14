@@ -16,7 +16,7 @@ export function ValueDriverMatrixGraph({
   onOpenDetail: (key: DetailKey) => void;
 }) {
   return (
-    <div className="lg:col-span-2 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-5">
+    <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-5">
       <div className="min-w-0">
         <h3 className="text-sm font-bold text-[var(--text-primary)]">4-Quadrant Value Driver Matrix</h3>
         <button
@@ -30,7 +30,7 @@ export function ValueDriverMatrixGraph({
           />
         </button>
       </div>
-      <div className="h-72 min-h-72 min-w-0">
+      <div className="h-56 min-h-56 min-w-0">
         <ResponsiveChart className="h-full w-full" minWidth={1} minHeight={1}>
           <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 0 }}>
             <CartesianGrid {...GRID_STYLE} />
