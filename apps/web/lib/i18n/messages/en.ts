@@ -94,6 +94,15 @@ export const en = {
         empty: "No annual values for this metric.", error: "Source data unavailable",
         errorBody: "The annual history could not be loaded.", title: "{label} by year", chart: "{label} trend",
       },
+      peers: {
+        idle: "Shown after the comparison is calculated in the Target Stock Comparison tab.",
+        absent: "{ticker} is not in the current comparison universe.",
+        noValue: "No value for {ticker} in this comparison.",
+        rank: "Rank {rank} of {count}, high to low", low: "Low", high: "High",
+        single: "Only {ticker} has a value in this comparison, so there is no range to draw.",
+        band: "{ticker} at {value}, range {low} to {high}",
+        note: "Position within the current comparison universe. A sector peer table replaces this in part B.",
+      },
       meaning: {
         realtime: "The assumption set every figure on this page is computed from.",
         growth: "Revenue growth the forecast assumes each year.",

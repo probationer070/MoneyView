@@ -6,17 +6,19 @@ import { ModalShell } from "@/components/ui/ModalShell";
 import { Tabs } from "@/components/ui/Tabs";
 import { useT } from "@/lib/i18n/locale";
 import { tabStateKey, useTabState } from "@/lib/tabState";
+import type { CorporateComparisonRowApi } from "../corporateTypes";
 import { availableDetailTabs, resolveDetailTab, type DetailTabKey } from "../detailTabs";
 import { waccInputIfDivergent } from "../formulaContext";
 import type { CalculationDetail, CalculationDetailKey, RawDatasetRow } from "./calculationDetailTypes";
 import { RawDataTab, type QuarterlyStatementRow, type StockPriceRow } from "./detail/RawDataTab";
+import { PeersTab } from "./detail/PeersTab";
 import { StepsTab } from "./detail/StepsTab";
 import { SummaryTab } from "./detail/SummaryTab";
 import { TrendTab, type TrendHistory } from "./detail/TrendTab";
 import { VerdictStatusLabel } from "./VerdictBlock";
 
-/** Tabs built so far. Task 10 adds "peers", Task 11 "sensitivity". */
-const BUILT_TABS: readonly DetailTabKey[] = ["summary", "steps", "trend", "raw"];
+/** Tabs built so far. Task 11 adds "sensitivity". */
+const BUILT_TABS: readonly DetailTabKey[] = ["summary", "steps", "trend", "peers", "raw"];
 
 interface CalculationDetailModalProps {
   detail: CalculationDetail;
@@ -34,6 +36,8 @@ interface CalculationDetailModalProps {
   historyIsFetching: boolean;
   historyIsError: boolean;
   onLoadHistory: () => void;
+  /** The current comparison rows; null until the comparison is calculated. */
+  comparisonRows: CorporateComparisonRowApi[] | null;
   rawDatasetRows: RawDatasetRow[];
   historicalPrices: StockPriceRow[];
   historicalStatus: string;
@@ -98,6 +102,7 @@ export function CalculationDetailModal(props: CalculationDetailModalProps) {
           {active === "trend" ? (
             <TrendTab detailKey={detailKey} history={props.history} isFetching={props.historyIsFetching} isError={props.historyIsError} onLoad={props.onLoadHistory} />
           ) : null}
+          {active === "peers" ? <PeersTab detailKey={detailKey} ticker={ticker} rows={props.comparisonRows} /> : null}
           {active === "raw" ? <RawDataTab {...props} /> : null}
         </div>
       </div>

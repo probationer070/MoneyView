@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import type { CorporateMetricAudit, CorporateMetricAuditEntry } from "../../../../packages/shared-types";
 import { mockCorporatePageApi, type CorporatePageMockStats } from "./helpers/corporatePageMock";
-import { openDetailTab, refreshDcf } from "./helpers/corporateDcf";
+import { openDetailTab, openLowerTab, refreshDcf } from "./helpers/corporateDcf";
 
 // Spec 2026-10-14 §4 and §7 test 7.
 async function gotoCorporate(page: Page) {
@@ -187,4 +187,66 @@ test("a series with no annual values shows the empty state, not a table of dashe
   await dialog(page).getByRole("button", { name: "Load source data" }).click();
   await expect(dialog(page).getByText("No annual values for this metric.")).toBeVisible({ timeout: 30_000 });
   await expect(dialog(page).getByTestId("trend-table")).toHaveCount(0);
+});
+
+// Spec 2026-10-14 §4 "동종업 비교" (part A) and §7 test 10; plan Task 10.
+async function refreshComparison(page: Page) {
+  await openLowerTab(page, "Target Stock Comparison");
+  await page.getByRole("button", { name: "Refresh comparison" }).click();
+  await expect(page.getByRole("cell", { name: "GOOGL" }).first()).toBeVisible({ timeout: 30_000 });
+  // Task 7b: the KPIs and Verdict detail live on the Summary page tab; go back before opening them.
+  await openLowerTab(page, "Summary");
+}
+
+test("Peers waits for the comparison, then ranks this ticker inside the universe", async ({ page }) => {
+  await mockCorporatePageApi(page);
+  await gotoCorporate(page);
+  await openKpi(page, /^ROIC - WACC/);
+  await openDetailTab(dialog(page), "Peers");
+  await expect(dialog(page)).toContainText("Shown after the comparison is calculated in the Target Stock Comparison tab.");
+  await closeDetail(page);
+  await refreshComparison(page);
+  await openKpi(page, /^ROIC - WACC/);
+  const position = dialog(page).getByTestId("peer-position");
+  await expect(position).toContainText("Rank 3 of 6, high to low");
+  await expect(position).toContainText("Low -15.0%");
+  await expect(position).toContainText("High 13.0%");
+  await expect(position.getByTestId("peer-marker")).toHaveAttribute("style", /left: 82\.1%/);
+  await expect(position.getByRole("img", { name: "AAPL at 8.0%, range -15.0% to 13.0%" })).toHaveCount(1);
+});
+
+test("the upside position leaves out the unbridged row and the refused one", async ({ page }) => {
+  await mockCorporatePageApi(page);
+  await gotoCorporate(page);
+  await refreshComparison(page);
+  await page.getByRole("button", { name: "Verdict detail" }).click();
+  await openDetailTab(dialog(page), "Peers");
+  await expect(dialog(page).getByTestId("peer-position")).toContainText("Rank 2 of 4, high to low");
+});
+
+async function refreshCustomComparison(page: Page, tickers: string) {
+  await openLowerTab(page, "Target Stock Comparison");
+  await page.getByLabel("Comparison universe").selectOption("custom");
+  await page.getByLabel("Custom tickers").fill(tickers);
+  await page.getByRole("button", { name: "Refresh comparison" }).click();
+  await expect(page.getByRole("cell", { name: tickers.split(",")[0].trim(), exact: true }).first()).toBeVisible({ timeout: 30_000 });
+  await openLowerTab(page, "Summary");
+}
+
+test("a ticker outside the comparison says so, and a lone ticker has no range to draw", async ({ page }) => {
+  await mockCorporatePageApi(page);
+  await gotoCorporate(page);
+  await refreshCustomComparison(page, "NVDA, TSLA");
+  await openKpi(page, /^ROIC - WACC/);
+  await openDetailTab(dialog(page), "Peers");
+  await expect(dialog(page).getByTestId("peer-position")).toHaveCount(0);
+  await expect(dialog(page)).toContainText("AAPL is not in the current comparison universe.");
+  await closeDetail(page);
+  await refreshCustomComparison(page, "AAPL");
+  await openKpi(page, /^ROIC - WACC/);
+  await openDetailTab(dialog(page), "Peers");
+  const position = dialog(page).getByTestId("peer-position");
+  await expect(position).toContainText("Rank 1 of 1, high to low");
+  await expect(position.getByTestId("peer-marker")).toHaveCount(0);
+  await expect(position).toContainText("Only AAPL has a value in this comparison, so there is no range to draw.");
 });

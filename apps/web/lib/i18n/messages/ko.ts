@@ -97,6 +97,15 @@ export const ko: Messages = {
         empty: "이 지표의 연도별 값이 없습니다.", error: "원천 데이터를 불러오지 못했습니다",
         errorBody: "연도별 이력을 불러오지 못했습니다.", title: "연도별 {label}", chart: "{label} 추이",
       },
+      peers: {
+        idle: "종목 비교 탭에서 비교를 계산하면 보입니다.",
+        absent: "{ticker}은(는) 현재 비교 유니버스에 없습니다.",
+        noValue: "이 비교에서 {ticker}의 값이 없습니다.",
+        rank: "{count}개 중 {rank}위, 높은 값순", low: "최저", high: "최고",
+        single: "이 비교에서 {ticker}만 값이 있어 범위를 그릴 수 없습니다.",
+        band: "{ticker} {value}, 범위 {low}~{high}",
+        note: "현재 비교 유니버스 안의 위치입니다. 이후 동종업 비교표(B)로 바뀝니다.",
+      },
       meaning: {
         realtime: "이 화면의 모든 수치를 계산하는 가정 묶음입니다.",
         growth: "예측이 매년 가정하는 매출 성장률입니다.",

@@ -98,6 +98,9 @@ capitals: "종목 NAME". Both come from `apps/web/lib/i18n/labels.ts`; add the r
 | Raw data | 원시 데이터 | detail tab (Source data stays 원천 데이터) |
 | Trend (detail tab) | 추이 | detail tab; Trend in the portfolio table stays 추세 |
 | Peers | 동종업 비교 | detail tab |
+| Rank | 순위 | Peers tab; position high to low, not best to worst |
+| Low | 최저 | Peers tab; band minimum |
+| High | 최고 | Peers tab; band maximum |
 | Sensitivity | 민감도 | detail tab |
 | Data Lineage | 데이터 리니지 | detail section title |
 | Supporting Rows | 근거 행 | detail section title |
