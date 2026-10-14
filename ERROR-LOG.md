@@ -26,6 +26,16 @@ reveal that; only checking the code did.
 
 An entry states what was true when it was written. Nothing updates it on its own.
 
+## 2026-10-15: DCF and sensitivity sent inputs up to 250 ms old after hydration, a slider move or a ticker switch
+
+Date: 2026-10-15 (Task 11 fix round 1 of the corporate one-screen plan, before commit).
+Command: `cd apps/web && npx playwright test tests/e2e/corporate-one-screen.spec.ts -g "uses the inputs on screen" --workers=2`
+Failure: with the AAPL metrics response held and then released with esg_penalty 41, fcff 150 and reinvestment 60 (the seed was 32, 109 and 44), the assumption table showed 41.0 and 60.0%, but Refresh DCF sent esg_penalty 32, fcff 109 and reinvestment 44 in its stream request, and the sensitivity tab's Calculate sent the same old values. The test freezes the clock after boot, so only a read of the inputs at click time can reach a request; the old values came from the debounced copy. A Refresh made within 250 ms of a hydration, a slider edit or a ticker switch sent the previous inputs, and after a ticker switch the previous ticker.
+Root cause: `activeDcfSnapshot` was built from `useDebounce(assumptions, 250)`. The debounce is from 25e9e33 (2026-04-08). Since 114231f (2026-04-21) that snapshot is the one Refresh DCF sends and the sensitivity tab receives. `assumptions` changes at once when metrics hydrate (`fromApiMetrics`), when a slider moves and when the ticker changes, but the snapshot kept the old values for up to 250 ms. The stale-DCF check compared against the same debounced copy, so it did not flag the gap either. The debounced copy is still right for the metrics save; only the DCF snapshot used it wrongly.
+Fix: `snapshotOf(assumptions)` in `corporateUtils.ts` is the one mapping from assumptions to DCF inputs. The page's snapshot memo, Refresh DCF and the stale check read `assumptions` through it, and the modal receives the same snapshot. The debounce stays for the metrics save. The sensitivity tab's Current row shows a dash while the page's DCF is stale (second commit of the round).
+Files changed: `apps/web/app/corporate/corporateUtils.ts`, `apps/web/app/corporate/page.tsx`, `apps/web/tests/e2e/helpers/corporatePageMock.ts` (`holdAaplMetrics`, `aaplMetricsPatch` options), `apps/web/tests/e2e/corporate-one-screen.spec.ts` (two hydration tests), `apps/web/tests/e2e/corporate-model.spec.ts` (`snapshotOf` unit test).
+Prevention: the hydration tests hold the metrics response, release it with values that differ from the seed, and pause the clock before the release, so any read through the debounce fails them. The sensitivity twin covers the other consumer of the snapshot. The `snapshotOf` unit test pins the mapping field by field, so a dropped field fails it. Any new consumer of the DCF inputs must read `snapshotOf(assumptions)`, not a debounced or cached copy.
+
 ## 2026-10-14: lower tab bar widened the corporate page to 456 px at 375-390 px
 
 Date: 2026-10-14 (Task 6 of the corporate one-screen plan, before commit).

@@ -47,6 +47,22 @@ export function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
 }
 
+/** The DCF inputs of an assumption set. Refresh, the stale check and the sensitivity tab all read it, so they cannot disagree. */
+export function snapshotOf(assumptions: CorporateAssumptions): DcfRequestSnapshot {
+  return {
+    ticker: assumptions.ticker,
+    growth: assumptions.growth,
+    roic: assumptions.roic,
+    wacc: assumptions.wacc,
+    debtRatio: assumptions.debtRatio,
+    unleveredBeta: assumptions.unleveredBeta,
+    crp: assumptions.crp,
+    reinvestment: assumptions.reinvestment,
+    fcff: assumptions.fcff,
+    esgPenalty: assumptions.esgPenalty,
+  };
+}
+
 export function dcfRequestBody(snapshot: DcfRequestSnapshot) {
   return {
     revenue_growth_rate: snapshot.growth / 100,

@@ -81,6 +81,7 @@ import {
   dateTimeText,
   dcfRequestBody,
   defaultAssumptionsFor,
+  snapshotOf,
   downloadHistoricalPriceCsv,
   downloadQuarterlyStatementsCsv,
   downloadRawDatasetCsv,
@@ -233,18 +234,9 @@ export default function CorporateAnalysisPage() {
     () => metricBasisParams(roicBasis, roicYear),
     [roicBasis, roicYear],
   );
-  const activeDcfSnapshot = useMemo<DcfRequestSnapshot>(() => ({
-    ticker: debounced.ticker,
-    growth: debounced.growth,
-    roic: debounced.roic,
-    wacc: debounced.wacc,
-    debtRatio: debounced.debtRatio,
-    unleveredBeta: debounced.unleveredBeta,
-    crp: debounced.crp,
-    reinvestment: debounced.reinvestment,
-    fcff: debounced.fcff,
-    esgPenalty: debounced.esgPenalty,
-  }), [debounced]);
+  // The inputs on screen, not the debounced copy: a Refresh or a sensitivity run made within 250 ms of a
+  // hydration, slider move or ticker switch must send what the reader sees (ERROR-LOG 2026-10-15).
+  const activeDcfSnapshot = useMemo<DcfRequestSnapshot>(() => snapshotOf(assumptions), [assumptions]);
   const activeComparisonSnapshot = useMemo<ComparisonRequestSnapshot>(() => ({
     comparisonUniverse,
     comparisonBenchmarkTicker,
@@ -672,7 +664,7 @@ export default function CorporateAnalysisPage() {
   }, [historicalPricesQuery.data, historicalPricesQuery.dataUpdatedAt, sourceDataRequestedTicker]);
 
   const handleRefreshDcf = () => {
-    setDcfRequestedSnapshot(activeDcfSnapshot);
+    setDcfRequestedSnapshot(snapshotOf(assumptions));
     setDcfRefreshToken(`${Date.now()}`);
   };
 

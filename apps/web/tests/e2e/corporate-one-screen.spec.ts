@@ -1,7 +1,7 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { mockCorporatePageApi, type CorporatePageMockStats } from "./helpers/corporatePageMock";
 import { mockPortfolioPageApi } from "./helpers/portfolioPageMock";
-import { loadFullDcfReportInTab, lowerPanel, openLowerTab, refreshDcf } from "./helpers/corporateDcf";
+import { loadFullDcfReportInTab, lowerPanel, openDetailTab, openLowerTab, refreshDcf } from "./helpers/corporateDcf";
 
 // Spec 2026-10-14 §2 and §7 tests 1-5.
 const SUMMARY = {
@@ -611,4 +611,56 @@ test.describe("the verdict strip cues", () => {
     release();
     await expect(strip).not.toHaveAttribute("data-busy", "true", { timeout: 30_000 });
   });
+});
+
+test.describe("the DCF uses the inputs on screen", () => {
+  // The hydrated values the held metrics response carries. They differ from the seed.
+  const HYDRATED = { esg_penalty: 41, fcff: 150, reinvestment: 60 };
+
+  // The page boots on a running clock; the clock is paused once it is up and before the held metrics are
+  // released. The 250 ms debounce in page.tsx then cannot fire, so only a read of the assumptions made at
+  // click time can reach a request. The hydration lands inside the debounce window.
+  async function openWithHydrationHeld(page: Page) {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    await mockCorporatePageApi(page, undefined, { holdAaplMetrics: held, aaplMetricsPatch: HYDRATED });
+    await page.clock.install({ time: new Date("2026-10-15T00:00:00Z") });
+    await gotoCorporate(page);
+    // The first open of the detail modal loads its chunk, which a paused clock stalls. Open and close it now.
+    await page.getByTestId("assumption-table").getByRole("button", { name: "WACC detail" }).click();
+    await expect(page.getByRole("dialog")).toBeVisible();
+    await page.getByRole("dialog").getByRole("button", { name: "Close modal" }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    const pageNow = await page.evaluate(() => Date.now());
+    await page.clock.pauseAt(pageNow + 1000);
+    release();
+    await expect(page.getByTestId("assumption-row-esgPenalty")).toContainText("41.0");
+    await expect(page.getByTestId("assumption-row-reinvestment")).toContainText("60.0%");
+  }
+
+  test("Refresh DCF sends the hydrated inputs on screen, not a copy from before hydration", async ({ page }) => {
+    await openWithHydrationHeld(page);
+    const stream = page.waitForRequest((request) => request.method() === "POST" && new URL(request.url()).pathname.endsWith("/corporate/dcf/AAPL/stream"));
+    await page.getByRole("button", { name: "Refresh DCF" }).click();
+    const body = (await stream).postDataJSON() as Record<string, number>;
+    expect({ esg_penalty: body.esg_penalty, fcff: body.fcff, reinvestment: body.reinvestment }).toEqual(HYDRATED);
+  });
+
+  test("Sensitivity Calculate sends the hydrated inputs on screen too", async ({ page }) => {
+    const bodies: Record<string, number>[] = [];
+    page.on("request", (request) => {
+      if (request.method() === "POST" && new URL(request.url()).pathname.endsWith("/corporate/dcf/AAPL")) bodies.push(request.postDataJSON());
+    });
+    await openWithHydrationHeld(page);
+    await page.getByTestId("assumption-table").getByRole("button", { name: "WACC detail" }).click();
+    const dialog = page.getByRole("dialog");
+    await openDetailTab(dialog, "Sensitivity");
+    await dialog.getByRole("button", { name: "Calculate", exact: true }).click();
+    await expect(dialog.getByTestId("sensitivity-row-up")).toContainText("$240.5");
+    expect(bodies).toHaveLength(2);
+    for (const body of bodies) {
+      expect({ esg_penalty: body.esg_penalty, fcff: body.fcff, reinvestment: body.reinvestment }).toEqual(HYDRATED);
+    }
+  });
+
 });

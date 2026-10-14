@@ -9,7 +9,8 @@ import { substitutedFormula, type FormulaContext } from "../../app/corporate/sub
 import { buildFormulaContext, waccInputIfDivergent } from "../../app/corporate/formulaContext";
 import { peerRank } from "../../app/corporate/peerRank";
 import { availableDetailTabs, resolveDetailTab } from "../../app/corporate/detailTabs";
-import { dcfRequestBody } from "../../app/corporate/corporateUtils";
+import { dcfRequestBody, snapshotOf } from "../../app/corporate/corporateUtils";
+import { initialAssumptions } from "../../app/corporate/corporateConstants";
 import type { CorporateComparisonRowApi, DcfRequestSnapshot } from "../../app/corporate/corporateTypes";
 
 test.describe("verdictLabelKey", () => {
@@ -371,5 +372,18 @@ test.describe("isOneScreenRoute", () => {
     expect(isOneScreenRoute("/corporate/x")).toBe(true);
     expect(isOneScreenRoute("/corporate-xyz")).toBe(false);
     expect(isOneScreenRoute("/")).toBe(false);
+  });
+});
+
+test.describe("snapshotOf", () => {
+  test("takes the DCF inputs of the assumptions on screen and nothing else", () => {
+    const onScreen = {
+      ...initialAssumptions, ticker: "MSFT", growth: 7, roic: 19, wacc: 9.5, debtRatio: 12, unleveredBeta: 0.9,
+      crp: 0.8, reinvestment: 40, fcff: 120, esgPenalty: 15,
+    };
+    expect(snapshotOf(onScreen)).toEqual({
+      ticker: "MSFT", growth: 7, roic: 19, wacc: 9.5, debtRatio: 12, unleveredBeta: 0.9,
+      crp: 0.8, reinvestment: 40, fcff: 120, esgPenalty: 15,
+    });
   });
 });
