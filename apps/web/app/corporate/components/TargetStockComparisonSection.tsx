@@ -305,16 +305,14 @@ export function TargetStockComparisonSection({
 
       {comparisonData && sortedComparisonRows.length > 0 && (
         <>
-          <div data-testid="comparison-table-scroll" className="max-h-80 overflow-y-auto [contain:inline-size]">
-            <CorporateComparisonTable
-              rows={sortedComparisonRows}
-              currentTicker={currentTicker}
-              onSelectTicker={onSelectTicker}
-              onOpenCalculationForTicker={onOpenCalculationForTicker}
-              formatPct2={formatPct2}
-              formatMoney={formatMoney}
-            />
-          </div>
+          <CorporateComparisonTable
+            rows={sortedComparisonRows}
+            currentTicker={currentTicker}
+            onSelectTicker={onSelectTicker}
+            onOpenCalculationForTicker={onOpenCalculationForTicker}
+            formatPct2={formatPct2}
+            formatMoney={formatMoney}
+          />
 
           <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
             <section className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-panel)] p-4">

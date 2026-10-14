@@ -42,7 +42,7 @@ export function CorporateComparisonTable({
   formatMoney,
 }: CorporateComparisonTableProps) {
   return (
-    <div className="mt-4 overflow-x-auto">
+    <div data-testid="comparison-table-scroll" className="max-h-80 overflow-auto [contain:inline-size]">
       <table className="w-full text-sm">
         <thead className="sticky top-0 z-10 bg-[var(--surface-muted)] text-left text-[var(--text-muted)]">
           <tr>

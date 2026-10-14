@@ -78,7 +78,7 @@ test.describe("the verdict block", () => {
     await expect(verdict(page)).toContainText("DCF not calculated");
     await expect(verdict(page)).not.toContainText("N/A");
     await expect(page.getByTestId("corporate-kpis")).not.toContainText("N/A");
-    await page.waitForTimeout(300);
+    await page.waitForLoadState("networkidle");
     expect(stats.dcfRequests).toBe(0);
   });
 
@@ -239,16 +239,20 @@ test.describe("the lower tabs", () => {
     const stats = newStats();
     await mockCorporatePageApi(page, stats);
     await gotoCorporate(page);
+    // CalculationDetailModal is a next/dynamic chunk: open and close one detail first so that a
+    // modal opened below mounts at once, and the no-dialog check does not race its compile.
+    const kpis = page.getByTestId("corporate-kpis");
+    await kpis.getByRole("button", { name: /^ROIC - WACC/ }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "Close modal" }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
     await page.getByRole("button", { name: "Refresh DCF" }).click();
     await expect(verdict(page)).toHaveAttribute("data-state", "valued", { timeout: 30_000 });
     await openLowerTab(page, "DCF");
-    await page.waitForTimeout(300);
+    await page.waitForLoadState("networkidle");
     expect(stats.dcfFullReportRequests).toBe(0);
     await lowerPanel(page).getByRole("button", { name: "Load Full Report" }).click();
     await expect(lowerPanel(page).getByText("WACC x Terminal Growth Sensitivity")).toBeVisible({ timeout: 30_000 });
     expect(stats.dcfFullReportRequests).toBe(1);
-    // A modal opened by the click mounts after a short delay (measured ~3 s), so let it settle before asserting none.
-    await page.waitForTimeout(3000);
     await expect(page.getByRole("dialog")).toHaveCount(0);
   });
 
@@ -268,5 +272,29 @@ test.describe("the lower tabs", () => {
     expect(await scroll.evaluate((element) => getComputedStyle(element).overflowY)).toBe("auto");
     await expect(toolbar.getByRole("button", { name: "Calculate All DCF Reports" })).toBeEnabled();
     await expect(page.getByRole("button", { name: /Calculate All/ })).toHaveCount(1);
+  });
+
+  test("the comparison table header stays at the top of its own scroll box", async ({ page }) => {
+    await mockCorporatePageApi(page);
+    // The mock's watchlist has only a few rows; add enough that the table box must scroll.
+    await page.route((url) => url.pathname === "/api/v1/corporate/comparison", async (route) => {
+      const response = await route.fetch();
+      const body = await response.json();
+      const rows = body.data.rows;
+      const filler = Array.from({ length: 14 }, (_, i) => ({ ...rows[0], ticker: `FILL${i}`, group_name: "stock" }));
+      await route.fulfill({ response, json: { ...body, data: { ...body.data, rows: [...rows, ...filler] } } });
+    });
+    await gotoCorporate(page);
+    await openLowerTab(page, "Target Stock Comparison");
+    await page.getByTestId("comparison-toolbar").getByRole("button", { name: "Refresh comparison" }).click();
+    const box = page.getByTestId("comparison-table-scroll");
+    await expect(box.getByRole("cell", { name: "FILL13" })).toBeAttached({ timeout: 30_000 });
+    expect(await box.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
+    const boxTop = (await box.boundingBox())!.y;
+    const rowBefore = (await box.locator("tbody tr").first().boundingBox())!.y;
+    await box.evaluate((element) => { element.scrollTop = 200; });
+    expect(await box.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+    expect(Math.abs((await box.locator("thead").boundingBox())!.y - boxTop)).toBeLessThan(1);
+    expect((await box.locator("tbody tr").first().boundingBox())!.y).toBeLessThan(rowBefore);
   });
 });

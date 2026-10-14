@@ -912,6 +912,8 @@ export default function CorporateAnalysisPage() {
   });
 
   const activeCalculationDetail = activeCalculation ? calculationDetails[activeCalculation] : null;
+  // The full report needs a DCF result to be on screen, and a refusal blocks it.
+  const canLoadFullReport = dcfRefusal === null && !(!dcfData && dcfStreamStatus === "idle");
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto px-4 py-6">
@@ -980,7 +982,7 @@ export default function CorporateAnalysisPage() {
                 <button
                   type="button"
                   onClick={() => void handleViewFullDcfReport()}
-                  disabled={dcfFullReportLoading || dcfRefusal !== null || (!dcfData && dcfStreamStatus === "idle")}
+                  disabled={dcfFullReportLoading || !canLoadFullReport}
                   className="inline-flex items-center gap-2 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 font-bold text-[var(--text-primary)] disabled:opacity-60"
                 >
                   {dcfFullReportLoading ? "Loading report..." : "View Full Report"}
@@ -1098,7 +1100,7 @@ export default function CorporateAnalysisPage() {
               report={dcfFullReport}
               reportLoading={dcfFullReportLoading}
               reportError={dcfFullReportError}
-              canLoadReport={dcfRefusal === null && !(!dcfData && dcfStreamStatus === "idle")}
+              canLoadReport={canLoadFullReport}
               onLoadReport={() => void loadFullDcfReport()}
             />
           ),
