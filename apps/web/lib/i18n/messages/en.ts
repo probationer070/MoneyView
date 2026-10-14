@@ -25,6 +25,7 @@ export const en = {
       idle: "DCF not calculated · use Refresh DCF above", streaming: "Calculating…",
       refused: "Not valued: {reason}", ev: "EV {value}",
     },
+    verdictStrip: { idle: "DCF not calculated", refused: "Not valued" },
     kpi: {
       spread: "ROIC - WACC", ke: "Bottom-up Ke", wacc: "WACC", beta: "Levered Beta",
       spreadUp: "Value creation", spreadDown: "Value destruction",
@@ -47,7 +48,7 @@ export const en = {
       governance: "Governance Quality", esgPenalty: "ESG / Agency Penalty",
     },
     tabs: {
-      aria: "Corporate analysis sections", diagnostics: "Core Diagnostics", dcf: "DCF", comparison: "Target Stock Comparison",
+      aria: "Corporate analysis sections", summary: "Summary", diagnostics: "Core Diagnostics", dcf: "DCF", comparison: "Target Stock Comparison",
       about: "About this tab",
       diagnosticsAbout: "Hurdle Rate Decomposition, Bottom-up Beta + WACC U-Curve and the 4-Quadrant Value Driver Matrix. Tap any chart title or bar to open its detailed formula view.",
       dcfAbout: "Left: the four DCF core values. Right: the WACC x terminal growth grid from the full DCF report. The projection rows and CSV exports stay in the calculation detail, Raw data tab.",

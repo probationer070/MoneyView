@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
-import { verdictLabelKey } from "../../app/corporate/verdict";
+import { verdictLabelKey, verdictView } from "../../app/corporate/verdict";
+import { LEGACY_LOWER_TAB_KEY, migrateLowerTab, PAGE_TAB_KEY } from "../../app/corporate/pageTabs";
+import type { DcfSummary } from "../../../../packages/shared-types";
 import { ASSUMPTION_ROWS, assumptionRow, formatAssumption, formatDelta, sensitivityPlan } from "../../app/corporate/assumptionRows";
 import { substitutedFormula, type FormulaContext } from "../../app/corporate/substitutedFormula";
 import { peerRank } from "../../app/corporate/peerRank";
@@ -218,5 +220,82 @@ test.describe("detail tabs", () => {
     for (const junk of [null, 42, "bogus", "constructor"]) {
       expect(resolveDetailTab(junk, availableDetailTabs("roic"))).toBe("summary");
     }
+  });
+});
+
+const DCF: DcfSummary = {
+  report_id: "m-1", ticker: "AAPL", estimated_value: 240.5, intrinsic_value_per_share: 240.5,
+  enterprise_value: 1462.4, equity_value: 1300.2, valuation_method: "fcff_equity_bridge", bridge_quality: "ok",
+  current_price: 210.4, upside_pct: 14.31, terminal_value_share_pct: 70.71, wacc_minus_terminal_growth: null,
+  terminal_growth_binding_constraint: null, status: "Undervalued", generated_at: "2026-10-14T00:00:00Z",
+};
+
+test.describe("verdictView", () => {
+  test("a bridged valuation carries its per-share value, upside, price and status", () => {
+    expect(verdictView(DCF, false, null)).toMatchObject({
+      state: "valued", intrinsic: 240.5, upside: 14.31, currentPrice: 210.4, status: "Undervalued",
+    });
+  });
+
+  test("an unbridged valuation withholds value and upside, and keeps the EV aside", () => {
+    const view = verdictView({ ...DCF, bridge_quality: "missing", estimated_value: 1462.4, upside_pct: 0 }, false, null);
+    expect(view).toMatchObject({ state: "valued", intrinsic: null, upside: null, enterpriseValue: 1462.4 });
+  });
+
+  test("a refusal wins over a value and over a running stream", () => {
+    expect(verdictView(DCF, true, "reason").state).toBe("refused");
+    expect(verdictView(null, false, "reason")).toMatchObject({ state: "refused", refusalText: "reason", intrinsic: null });
+  });
+
+  test("streaming without a value is streaming; with a cached value it stays valued", () => {
+    expect(verdictView(null, true, null).state).toBe("streaming");
+    expect(verdictView(DCF, true, null)).toMatchObject({ state: "valued", streaming: true });
+    expect(verdictView(null, false, null).state).toBe("idle");
+  });
+});
+
+/** A sessionStorage stand-in that records what was written. */
+function memoryStorage(entries: Record<string, string>) {
+  const map = new Map(Object.entries(entries));
+  return {
+    map,
+    getItem: (key: string) => map.get(key) ?? null,
+    setItem: (key: string, value: string) => void map.set(key, value),
+    removeItem: (key: string) => void map.delete(key),
+  };
+}
+
+test.describe("migrateLowerTab", () => {
+  test("a chosen DCF or comparison tab moves to the page-tab key, and the old key is dropped", () => {
+    for (const tab of ["dcf", "comparison"]) {
+      const storage = memoryStorage({ [LEGACY_LOWER_TAB_KEY]: JSON.stringify(tab) });
+      migrateLowerTab(storage);
+      expect(storage.map.get(PAGE_TAB_KEY)).toBe(JSON.stringify(tab));
+      expect(storage.map.has(LEGACY_LOWER_TAB_KEY)).toBe(false);
+    }
+  });
+
+  test("diagnostics, the old default that useTabState wrote back on every visit, is not carried", () => {
+    const storage = memoryStorage({ [LEGACY_LOWER_TAB_KEY]: JSON.stringify("diagnostics") });
+    migrateLowerTab(storage);
+    expect(storage.map.has(PAGE_TAB_KEY)).toBe(false);
+    expect(storage.map.has(LEGACY_LOWER_TAB_KEY)).toBe(false);
+  });
+
+  test("a stored page tab wins, and junk is dropped without a throw", () => {
+    const chosen = memoryStorage({ [LEGACY_LOWER_TAB_KEY]: JSON.stringify("dcf"), [PAGE_TAB_KEY]: JSON.stringify("summary") });
+    migrateLowerTab(chosen);
+    expect(chosen.map.get(PAGE_TAB_KEY)).toBe(JSON.stringify("summary"));
+    const junk = memoryStorage({ [LEGACY_LOWER_TAB_KEY]: "{not json" });
+    expect(() => migrateLowerTab(junk)).not.toThrow();
+    expect([...junk.map.keys()]).toEqual([]);
+  });
+
+  test("it runs once: a second call finds nothing to move", () => {
+    const storage = memoryStorage({ [LEGACY_LOWER_TAB_KEY]: JSON.stringify("comparison") });
+    migrateLowerTab(storage);
+    storage.map.set(PAGE_TAB_KEY, JSON.stringify("summary"));
+    migrateLowerTab(storage);
+    expect(storage.map.get(PAGE_TAB_KEY)).toBe(JSON.stringify("summary"));
   });
 });

@@ -91,3 +91,5 @@ capitals: "종목 NAME". Both come from `apps/web/lib/i18n/labels.ts`; add the r
 | Watchlist | 관심종목 | |
 | Benchmark | 벤치마크 | |
 | Load Full Report | 리포트 불러오기 | button |
+| Summary | 요약 | corporate page tab |
+| Not valued | 평가하지 않음 | verdict strip, refused DCF |

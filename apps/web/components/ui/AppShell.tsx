@@ -1,9 +1,19 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { usePathname } from "next/navigation";
 import { TopNav } from "@/components/ui/TopNav";
 
+// Pages that must not scroll (spec §2A, D10). They keep a 24px bottom pad at lg and up instead of 80px,
+// so the tab panel reaches the viewport edge. A later one-screen page joins by adding its route here.
+export const ONE_SCREEN_ROUTES = ["/corporate"];
+
+const PAD_BOTTOM_LG = "lg:[--main-pad-bottom:5rem]";
+const PAD_BOTTOM_LG_ONE_SCREEN = "lg:[--main-pad-bottom:1.5rem]";
+
 export function AppShell({ children }: { children: ReactNode }) {
+  const pathname = usePathname() ?? "";
+  const oneScreen = ONE_SCREEN_ROUTES.some((route) => pathname.startsWith(route));
   return (
     // w-full min-w-0: body is a centred flex row, so without these the shell is content-sized and
     // any child's min-content width (e.g. a tab strip) widens the whole page past the viewport.
@@ -12,7 +22,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       {/* The vertical padding is published as custom properties because a page that wants
           to fill the viewport has to subtract it, and a descendant cannot measure this box
           in CSS. PortfolioShell reads both. Top = the 48px bar + 16px (spec §1: pt-16). */}
-      <main className="w-full min-w-0 px-4 pt-[var(--main-pad-top)] pb-[var(--main-pad-bottom)] [--main-pad-bottom:1rem] [--main-pad-top:4rem] lg:px-8 lg:[--main-pad-bottom:5rem]">
+      <main className={`w-full min-w-0 px-4 pt-[var(--main-pad-top)] pb-[var(--main-pad-bottom)] [--main-pad-bottom:1rem] [--main-pad-top:4rem] lg:px-8 ${oneScreen ? PAD_BOTTOM_LG_ONE_SCREEN : PAD_BOTTOM_LG}`}>
         {children}
       </main>
     </div>

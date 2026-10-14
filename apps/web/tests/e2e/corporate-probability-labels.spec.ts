@@ -29,6 +29,7 @@ test.describe("the corporate dashboard's scenario labels", () => {
     // Positive control: the KPI row and the chart suite are both on screen, so the absences
     // below are absences from a rendered page.
     await expect(page.getByRole("button", { name: /ROIC - WACC/ })).toBeVisible();
+    await openLowerTab(page, "Core Diagnostics");
     await expect(page.getByText("Hurdle Rate Decomposition").first()).toBeVisible({ timeout: 60_000 });
     await openLowerTab(page, "DCF");
     await expect(page.getByText("DCF Core Modules").first()).toBeVisible({ timeout: 60_000 });

@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, useEffect, useRef, useState } from "react";
+import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { ActionButton } from "@/components/ui/ActionButton";
 import { fieldInputClass } from "@/components/ui/InlineField";
@@ -26,13 +26,15 @@ export interface CorporateHeaderProps {
   dcfIsStale: boolean;
   dcfStreamError: string | null;
   onRefreshDcf: () => void;
+  /** The one-line verdict beside the company line (spec §2A). */
+  verdictStrip?: ReactNode;
 }
 
 // Spec §2.1: title, search, DCF time and Refresh DCF; below them "name · sector · price". The old
 // Add Company form became the search's "not in the list → add" entry and this inline form.
 export function CorporateHeader({
   companies, selectedTicker, onSelectTicker, onAddCompany, companyName, sector, priceText,
-  dcfUpdatedText, dcfStreaming, dcfIsStale, dcfStreamError, onRefreshDcf,
+  dcfUpdatedText, dcfStreaming, dcfIsStale, dcfStreamError, onRefreshDcf, verdictStrip,
 }: CorporateHeaderProps) {
   const t = useT();
   const [search, setSearch] = useState("");
@@ -76,6 +78,7 @@ export function CorporateHeader({
         </>
       )}
       subtitleTestId="corporate-company-line"
+      subtitleAside={verdictStrip}
       actions={
         <div className="flex w-full flex-col gap-2 sm:w-auto sm:items-end">
           <div className="flex w-full flex-wrap items-end gap-2 sm:justify-end">

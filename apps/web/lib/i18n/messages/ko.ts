@@ -28,6 +28,7 @@ export const ko: Messages = {
       idle: "DCF 미계산 · 위의 DCF 새로고침을 누르십시오", streaming: "계산 중…",
       refused: "평가하지 않음: {reason}", ev: "기업가치(EV) {value}",
     },
+    verdictStrip: { idle: "DCF 미계산", refused: "평가하지 않음" },
     kpi: {
       spread: "ROIC - WACC", ke: "상향식 Ke", wacc: "WACC", beta: "레버리지 베타",
       spreadUp: "가치 창출", spreadDown: "가치 훼손",
@@ -50,7 +51,7 @@ export const ko: Messages = {
       governance: "지배구조 품질", esgPenalty: "ESG/대리인 페널티",
     },
     tabs: {
-      aria: "기업 분석 구역", diagnostics: "진단 차트", dcf: "DCF", comparison: "종목 비교",
+      aria: "기업 분석 구역", summary: "요약", diagnostics: "진단 차트", dcf: "DCF", comparison: "종목 비교",
       about: "이 탭 설명",
       diagnosticsAbout: "허들레이트 분해, 상향식 베타와 WACC U-커브, 4분면 가치동인 매트릭스입니다. 차트 제목이나 막대를 누르면 계산 상세가 열립니다.",
       dcfAbout: "왼쪽은 DCF 핵심값 네 가지, 오른쪽은 전체 DCF 리포트의 WACC × 영구성장률 민감도표입니다. 예측 행과 CSV 내보내기는 계산 상세의 원천 데이터 탭에 있습니다.",

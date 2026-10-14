@@ -24,12 +24,13 @@ import {
 } from "./components/CorporateGraphs";
 import { CorporateDiagnosticsSection } from "./components/CorporateDiagnosticsSection";
 import { TargetStockComparisonSection } from "./components/TargetStockComparisonSection";
-import { CorporateLowerTabs } from "./components/CorporateLowerTabs";
+import { CorporatePageTabs } from "./components/CorporatePageTabs";
 import { CorporateHeader } from "./components/CorporateHeader";
 import { DcfTab } from "./components/DcfTab";
 import { AssumptionTable } from "./components/AssumptionTable";
 import { KpiRow } from "./components/KpiRow";
-import { VerdictBlock } from "./components/VerdictBlock";
+import { VerdictBlock, VerdictStrip } from "./components/VerdictBlock";
+import { verdictView } from "./verdict";
 import { buildCalculationDetails } from "./buildCalculationDetails";
 import type { CalculationDetailKey } from "./components/calculationDetailTypes";
 import {
@@ -890,9 +891,10 @@ export default function CorporateAnalysisPage() {
   const activeCalculationDetail = activeCalculation ? calculationDetails[activeCalculation] : null;
   // The full report needs a DCF result to be on screen, and a refusal blocks it.
   const canLoadFullReport = dcfRefusal === null && !(!dcfData && dcfStreamStatus === "idle");
+  const verdict = verdictView(dcfData, dcfStreamStatus === "streaming", dcfRefusal?.readerText ?? null); // block + strip, spec §2A
 
   return (
-    <div className="mx-auto max-w-7xl space-y-4">
+    <div className="mx-auto flex h-[calc(100dvh_-_var(--main-pad-top,0px)_-_var(--main-pad-bottom,0px))] max-w-7xl flex-col">
       <CorporateHeader
         companies={companies}
         selectedTicker={assumptions.ticker}
@@ -906,57 +908,54 @@ export default function CorporateAnalysisPage() {
         dcfIsStale={dcfIsStale}
         dcfStreamError={dcfStreamError}
         onRefreshDcf={handleRefreshDcf}
+        verdictStrip={<VerdictStrip view={verdict} onOpenDetail={() => setActiveCalculation("backendDcf")} />}
       />
 
-      {/* First screen (spec §2): verdict and KPIs on the left 2/3, the assumption table on the right 1/3. */}
-      <section className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <div className="flex min-w-0 flex-col gap-3 lg:col-span-2">
-          <VerdictBlock
-            dcf={dcfData}
-            streaming={dcfStreamStatus === "streaming"}
-            refusalText={dcfRefusal?.readerText ?? null}
-            onOpenDetail={() => setActiveCalculation("backendDcf")}
-          />
-          <KpiRow
-            spread={derived.spread}
-            bottomUpKe={derived.bottomUpKe}
-            wacc={assumptions.wacc}
-            leveredBeta={derived.leveredBeta}
-            onOpenDetail={setActiveCalculation}
-          />
-        </div>
-        <AssumptionTable
-          assumptions={assumptions}
-          onChange={update}
-          onOpenDetail={setActiveCalculation}
-          growthMeta={growthMeta}
-          roicMeta={roicMeta}
-          roicAudit={metricAuditQuery.data?.roic ?? null}
-          waccAudit={metricAuditQuery.data?.wacc ?? null}
-          sourceTicker={sourceDataTicker}
-          sourceUpdatedAt={sourceDataDisplayLastUpdatedAt}
-          staleSourceTickers={staleSourceTickers}
-          sourceIsFetching={metricsHistoryQuery.isFetching || quarterlyStatementsQuery.isFetching || historicalPricesQuery.isFetching}
-          hasSourceData={Boolean(metricsHistoryData) || Boolean(quarterlyStatementsData) || historicalPricesData.length > 0}
-          roicYearUnavailableMessage={roicYearUnavailableMessage}
-          onRefreshSourceData={handleRefreshSourceData}
-          roicBasis={roicBasis}
-          roicYear={roicYear}
-          annualRoicValues={annualRoicValues}
-          onRoicBasisChange={(next) => {
-            setRoicBasis(next);
-            applyMetricHistorySelection({ nextRoicBasis: next, nextRoicYear: roicYear });
-          }}
-          onRoicYearChange={(next) => {
-            setRoicYear(next);
-            applyMetricHistorySelection({ nextRoicYear: next });
-          }}
-          growthBasisLabel={growthBasisLabel}
-        />
-      </section>
-
-      <CorporateLowerTabs
+      <CorporatePageTabs
         panels={{
+          // Summary (spec §2A): verdict and KPIs on the left 2/3, the assumption table on the right 1/3.
+          summary: (
+            <section className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+              <div className="flex min-w-0 flex-col gap-3 lg:col-span-2">
+                <VerdictBlock view={verdict} onOpenDetail={() => setActiveCalculation("backendDcf")} />
+                <KpiRow
+                  spread={derived.spread}
+                  bottomUpKe={derived.bottomUpKe}
+                  wacc={assumptions.wacc}
+                  leveredBeta={derived.leveredBeta}
+                  onOpenDetail={setActiveCalculation}
+                />
+              </div>
+              <AssumptionTable
+                assumptions={assumptions}
+                onChange={update}
+                onOpenDetail={setActiveCalculation}
+                growthMeta={growthMeta}
+                roicMeta={roicMeta}
+                roicAudit={metricAuditQuery.data?.roic ?? null}
+                waccAudit={metricAuditQuery.data?.wacc ?? null}
+                sourceTicker={sourceDataTicker}
+                sourceUpdatedAt={sourceDataDisplayLastUpdatedAt}
+                staleSourceTickers={staleSourceTickers}
+                sourceIsFetching={metricsHistoryQuery.isFetching || quarterlyStatementsQuery.isFetching || historicalPricesQuery.isFetching}
+                hasSourceData={Boolean(metricsHistoryData) || Boolean(quarterlyStatementsData) || historicalPricesData.length > 0}
+                roicYearUnavailableMessage={roicYearUnavailableMessage}
+                onRefreshSourceData={handleRefreshSourceData}
+                roicBasis={roicBasis}
+                roicYear={roicYear}
+                annualRoicValues={annualRoicValues}
+                onRoicBasisChange={(next) => {
+                  setRoicBasis(next);
+                  applyMetricHistorySelection({ nextRoicBasis: next, nextRoicYear: roicYear });
+                }}
+                onRoicYearChange={(next) => {
+                  setRoicYear(next);
+                  applyMetricHistorySelection({ nextRoicYear: next });
+                }}
+                growthBasisLabel={growthBasisLabel}
+              />
+            </section>
+          ),
           diagnostics: (
             <CorporateDiagnosticsSection
               companyName={companyName}

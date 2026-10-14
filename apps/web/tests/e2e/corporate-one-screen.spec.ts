@@ -1,6 +1,7 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { mockCorporatePageApi, type CorporatePageMockStats } from "./helpers/corporatePageMock";
-import { lowerPanel, openLowerTab } from "./helpers/corporateDcf";
+import { mockPortfolioPageApi } from "./helpers/portfolioPageMock";
+import { loadFullDcfReportInTab, lowerPanel, openLowerTab, refreshDcf } from "./helpers/corporateDcf";
 
 // Spec 2026-10-14 §2 and §7 tests 1-5.
 const SUMMARY = {
@@ -211,28 +212,49 @@ test.describe("the ⋯ menu and the busy verdict", () => {
   });
 });
 
-test.describe("the lower tabs", () => {
-  test("diagnostics is the default, each tab mounts only its own content, and the choice survives leaving the page", async ({ page }) => {
+test.describe("the page tabs", () => {
+  test("Summary is the default, each tab mounts only its own content, and the choice survives leaving the page", async ({ page }) => {
     await mockCorporatePageApi(page);
     await gotoCorporate(page);
-    const tabs = page.getByTestId("corporate-lower-tabs");
-    await expect(tabs.getByRole("tab", { name: "Core Diagnostics" })).toHaveAttribute("aria-selected", "true");
-    await expect(lowerPanel(page).getByText("Hurdle Rate Decomposition", { exact: true })).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByText("DCF Core Modules")).toHaveCount(0);
+    const tabs = page.getByTestId("corporate-page-tabs");
+    await expect(tabs.getByRole("tab", { name: "Summary" })).toHaveAttribute("aria-selected", "true");
+    // Prefixed ids: the detail modal's own Summary tab (Task 8) must not share an id with this one.
+    await expect(page.locator("#corporate-tab-summary")).toHaveAttribute("aria-selected", "true");
+    await expect(lowerPanel(page)).toHaveAttribute("aria-labelledby", "corporate-tab-summary");
+    await expect(lowerPanel(page).getByTestId("corporate-verdict")).toBeVisible();
+    await expect(page.getByText("Hurdle Rate Decomposition", { exact: true })).toHaveCount(0);
     await openLowerTab(page, "DCF");
     await expect(lowerPanel(page).getByText("DCF Core Modules").first()).toBeVisible();
-    await expect(page.getByText("Hurdle Rate Decomposition", { exact: true })).toHaveCount(0);
+    await expect(page.getByTestId("corporate-verdict")).toHaveCount(0);
     await page.goto("/", { waitUntil: "domcontentloaded" });
     await gotoCorporate(page);
     await expect(tabs.getByRole("tab", { name: "DCF" })).toHaveAttribute("aria-selected", "true");
     await expect(lowerPanel(page).getByText("DCF Core Modules").first()).toBeVisible();
   });
 
-  test("an unknown stored tab falls back to diagnostics", async ({ page }) => {
-    await page.addInitScript(() => window.sessionStorage.setItem("moneyview.tab.corporate.lowerTab", JSON.stringify("bogus")));
+  test("an unknown stored tab falls back to Summary", async ({ page }) => {
+    await page.addInitScript(() => window.sessionStorage.setItem("moneyview.tab.corporate.pageTab", JSON.stringify("bogus")));
     await mockCorporatePageApi(page);
     await gotoCorporate(page);
-    await expect(page.getByTestId("corporate-lower-tabs").getByRole("tab", { name: "Core Diagnostics" })).toHaveAttribute("aria-selected", "true");
+    // The restore runs in an effect after hydration; let it run before reading the selection.
+    await page.waitForLoadState("networkidle");
+    await expect(page.getByTestId("corporate-page-tabs").getByRole("tab", { name: "Summary" })).toHaveAttribute("aria-selected", "true");
+    await expect(lowerPanel(page).getByTestId("corporate-verdict")).toBeVisible();
+  });
+
+  test("a pre-D10 lower-tab choice is carried over, and the old key is dropped", async ({ page }) => {
+    await mockCorporatePageApi(page);
+    await gotoCorporate(page);
+    // An older session: only the lower-tab key, written before the page had page tabs. Seeded once,
+    // not via addInitScript, which would re-seed on the reload.
+    await page.evaluate(() => {
+      window.sessionStorage.removeItem("moneyview.tab.corporate.pageTab");
+      window.sessionStorage.setItem("moneyview.tab.corporate.lowerTab", JSON.stringify("comparison"));
+    });
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await expect(page.getByTestId("corporate-page-tabs").getByRole("tab", { name: "Target Stock Comparison" }))
+      .toHaveAttribute("aria-selected", "true", { timeout: 30_000 });
+    await expect.poll(() => page.evaluate(() => window.sessionStorage.getItem("moneyview.tab.corporate.lowerTab"))).toBeNull();
   });
 
   test("the DCF tab loads the full report only on request, in place, and shows the sensitivity grid", async ({ page }) => {
@@ -298,44 +320,62 @@ test.describe("the lower tabs", () => {
     expect((await box.locator("tbody tr").first().boundingBox())!.y).toBeLessThan(rowBefore);
   });
 });
+// Spec §2A: the document never scrolls; overflow belongs to the tab panel. Sideways is checked too,
+// because both 390 px regressions (ERROR-LOG 2026-10-14) widened the page rather than lengthening it.
+async function expectNoPageScroll(page: Page, where: string) {
+  const size = await page.evaluate(() => ({
+    height: document.scrollingElement!.scrollHeight,
+    innerHeight: window.innerHeight,
+    width: document.documentElement.scrollWidth,
+    clientWidth: document.documentElement.clientWidth,
+  }));
+  expect(size.height, `${where}: the page does not scroll`).toBeLessThanOrEqual(size.innerHeight);
+  expect(size.width, `${where}: the page is not wider than the viewport`).toBeLessThanOrEqual(size.clientWidth + 1);
+}
+
 test.describe("at 1280x720", () => {
   test.use({ viewport: { width: 1280, height: 720 } });
 
-  // Spec §7 test 1: element positions, not scrollHeight. Budget: plan "First-screen height budget".
-  async function expectAboveTheFold(page: Page) {
-    const blocks: [string, Locator][] = [
+  // Spec §2A and §7 test 1. The header, the verdict strip and the tab bar end inside 720px. The Summary
+  // blocks end inside the Summary panel, so the answer needs neither a page scroll nor a panel scroll.
+  async function expectSummaryFits(page: Page) {
+    const panel = await lowerPanel(page).boundingBox();
+    expect(panel, "the Summary panel is rendered").not.toBeNull();
+    const panelBottom = panel!.y + panel!.height;
+    const blocks: [string, Locator, number][] = [
       // The eyebrow sits above the title and is the header's top edge: the title alone can clear
       // the bar on a lower top padding, because the eyebrow pushes it down.
-      ["header eyebrow", page.getByRole("heading", { name: /Corporate Analysis/i }).locator("xpath=preceding-sibling::div[1]")],
-      ["title", page.getByRole("heading", { name: /Corporate Analysis/i })],
-      ["company line", page.getByTestId("corporate-company-line")],
-      ["verdict", page.getByTestId("corporate-verdict")],
-      ["KPI row", page.getByTestId("corporate-kpis")],
-      ["assumption table", page.getByTestId("assumption-table")],
-      ["tab bar", page.getByRole("tablist", { name: "Corporate analysis sections" })],
+      ["header eyebrow", page.getByRole("heading", { name: /Corporate Analysis/i }).locator("xpath=preceding-sibling::div[1]"), 720],
+      ["title", page.getByRole("heading", { name: /Corporate Analysis/i }), 720],
+      ["company line", page.getByTestId("corporate-company-line"), 720],
+      ["verdict strip", page.getByTestId("corporate-verdict-strip"), 720],
+      ["tab bar", page.getByRole("tablist", { name: "Corporate analysis sections" }), 720],
+      ["verdict", page.getByTestId("corporate-verdict"), panelBottom],
+      ["KPI row", page.getByTestId("corporate-kpis"), panelBottom],
+      ["assumption table", page.getByTestId("assumption-table"), panelBottom],
     ];
-    for (const [name, locator] of blocks) {
+    for (const [name, locator, bottom] of blocks) {
       const box = await locator.boundingBox();
       expect(box, `${name} is rendered`).not.toBeNull();
       expect(box!.y, `${name} starts below the 48px bar`).toBeGreaterThanOrEqual(48);
-      expect(box!.y + box!.height, `${name} ends inside 720px`).toBeLessThanOrEqual(720);
+      expect(box!.y + box!.height, `${name} ends by ${Math.round(bottom)}px`).toBeLessThanOrEqual(bottom);
     }
     await expect(page.getByTestId("corporate-kpis").getByRole("button")).toHaveCount(4);
     const scroll = await page.getByTestId("assumption-scroll").boundingBox();
     expect(scroll!.height, "the assumption table scrolls inside its 288px budget").toBeLessThanOrEqual(288);
-    expect(await page.evaluate(() => window.scrollY)).toBe(0);
+    await expectNoPageScroll(page, "Summary");
   }
 
-  test("header, verdict, four KPIs, the assumption table and the tab bar fit without scrolling", async ({ page }) => {
+  test("header, strip, tab bar and the whole Summary tab fit with no scroll of any kind", async ({ page }) => {
     await mockCorporatePageApi(page);
     await gotoCorporate(page);
-    await expectAboveTheFold(page);
+    await expectSummaryFits(page);
     await page.getByRole("button", { name: "Refresh DCF" }).click();
     await expect(verdict(page)).toHaveAttribute("data-state", "valued", { timeout: 30_000 });
-    await expectAboveTheFold(page);
+    await expectSummaryFits(page);
     await page.getByTestId("assumption-table").getByRole("button", { name: "Edit WACC" }).click();
     await expect(page.getByTestId("assumption-slider-wacc")).toBeVisible();
-    await expectAboveTheFold(page);
+    await expectSummaryFits(page);
   });
 });
 
@@ -414,6 +454,116 @@ test.describe("in Korean", () => {
     await expect(page.getByTestId("corporate-verdict")).toContainText("DCF 미계산");
     await expect(page.getByTestId("corporate-kpis")).toContainText("10.0%");
     await expect(page.getByRole("columnheader", { name: "항목", exact: true })).toBeVisible();
-    await expect(page.getByTestId("corporate-lower-tabs").getByRole("tab", { name: "종목 비교" })).toBeVisible();
+    await expect(page.getByTestId("corporate-page-tabs").getByRole("tab", { name: "종목 비교" })).toBeVisible();
+  });
+});
+
+for (const viewport of [{ width: 1280, height: 720 }, { width: 390, height: 844 }]) {
+  test.describe(`at ${viewport.width}x${viewport.height}, on every page tab`, () => {
+    test.use({ viewport });
+
+    test("the page never scrolls; the panel takes the overflow", async ({ page }) => {
+      await mockCorporatePageApi(page);
+      await gotoCorporate(page);
+      await refreshDcf(page);
+      await expectNoPageScroll(page, "Summary");
+      await openLowerTab(page, "Core Diagnostics");
+      await expect(lowerPanel(page).getByText("Hurdle Rate Decomposition", { exact: true })).toBeVisible({ timeout: 30_000 });
+      await expectNoPageScroll(page, "Core Diagnostics");
+      const report = await loadFullDcfReportInTab(page);
+      await expect(report.getByText("WACC x Terminal Growth Sensitivity")).toBeVisible({ timeout: 30_000 });
+      await expectNoPageScroll(page, "DCF");
+      await openLowerTab(page, "Target Stock Comparison");
+      await lowerPanel(page).getByRole("button", { name: "Refresh comparison" }).click();
+      await expect(lowerPanel(page).getByText("Price Vs Fair Value Map")).toBeVisible({ timeout: 30_000 });
+      await expectNoPageScroll(page, "Target Stock Comparison");
+      // The comparison tab is taller than its panel at both sizes: the panel, not the page, scrolls.
+      const panel = await lowerPanel(page).evaluate((element) => ({
+        overflows: element.scrollHeight > element.clientHeight,
+        overflowY: getComputedStyle(element).overflowY,
+      }));
+      expect(panel).toEqual({ overflows: true, overflowY: "auto" });
+    });
+  });
+}
+
+test.describe("the verdict strip", () => {
+  const strip = (page: Page) => page.getByTestId("corporate-verdict-strip");
+
+  const valuedCases = [
+    { name: "a bridged valuation", overrides: {}, intrinsic: "$240.5", dir: "up", value: "+14.3%", label: "Undervalued" },
+    {
+      name: "an unbridged valuation",
+      overrides: { status: "Bridge Incomplete", bridge_quality: "missing", intrinsic_value_per_share: null, estimated_value: 1462.4, upside_pct: 0 },
+      intrinsic: "—", dir: "flat", value: "—", label: "Per-share value unavailable",
+    },
+  ] as const;
+
+  for (const c of valuedCases) {
+    test(`${c.name}: the strip shows what the Summary block shows`, async ({ page }) => {
+      await mockCorporatePageApi(page);
+      await page.route("**/api/v1/corporate/dcf/AAPL/stream", (route) =>
+        route.fulfill({ status: 200, contentType: "text/event-stream", body: dcfStream(c.overrides) }));
+      await gotoCorporate(page);
+      await page.getByRole("button", { name: "Refresh DCF" }).click();
+      for (const target of [verdict(page), strip(page)]) {
+        await expect(target).toHaveAttribute("data-state", "valued", { timeout: 30_000 });
+        await expect(target.locator('[data-part="intrinsic"]')).toHaveText(c.intrinsic);
+        await expect(target.getByTestId("delta-badge")).toHaveAttribute("data-dir", c.dir);
+        await expect(target.getByTestId("delta-badge").locator('[data-part="value"]')).toHaveText(c.value);
+        await expect(target.locator('[data-part="label"]')).toContainText(c.label);
+      }
+      await expect(strip(page)).not.toContainText("1,462.4");
+    });
+  }
+
+  test("idle and refused: the strip carries the block's state and never a number", async ({ page }) => {
+    await mockCorporatePageApi(page);
+    await page.route("**/api/v1/corporate/dcf/AAPL/stream", (route) => route.fulfill({
+      status: 422, contentType: "application/json",
+      body: JSON.stringify({ detail: { code: "non_positive_fcff", message: "Free cash flow is zero or negative over the forecast, so the model cannot value it." } }),
+    }));
+    await gotoCorporate(page);
+    await expect(verdict(page)).toHaveAttribute("data-state", "idle");
+    await expect(strip(page)).toHaveAttribute("data-state", "idle");
+    await expect(strip(page)).toHaveText("DCF not calculated");
+    await page.getByRole("button", { name: "Refresh DCF" }).click();
+    await expect(verdict(page)).toHaveAttribute("data-state", "refused");
+    await expect(strip(page)).toHaveAttribute("data-state", "refused");
+    await expect(strip(page)).toContainText("Not valued");
+    await expect(strip(page)).toHaveAttribute("title", /zero or negative over the forecast/);
+    await expect(strip(page)).not.toContainText("$");
+  });
+
+  test("every page tab shows the strip, and it opens the Intrinsic DCF detail", async ({ page }) => {
+    await mockCorporatePageApi(page);
+    await gotoCorporate(page);
+    await refreshDcf(page);
+    for (const tab of ["Core Diagnostics", "DCF", "Target Stock Comparison", "Summary"] as const) {
+      await openLowerTab(page, tab);
+      await expect(strip(page), tab).toBeVisible();
+      await expect(strip(page).locator('[data-part="intrinsic"]'), tab).toHaveText("$240.5");
+      await expect(strip(page).locator('[data-part="label"]'), tab).toContainText("Undervalued");
+    }
+    await openLowerTab(page, "DCF");
+    await strip(page).click();
+    await expect(page.getByRole("dialog").getByRole("heading", { name: /Apple Intrinsic DCF$/ })).toBeVisible();
+  });
+});
+
+// Spec §2A (D10): a one-screen page leaves 24px under its panel, and every other page keeps the 80px pad.
+test.describe("the bottom pad", () => {
+  test.use({ viewport: { width: 1280, height: 720 } });
+
+  test("corporate leaves 24px under the panel, and portfolio keeps 80px", async ({ page }) => {
+    await mockCorporatePageApi(page);
+    await gotoCorporate(page);
+    const panel = await lowerPanel(page).boundingBox();
+    expect(panel, "the tab panel is rendered").not.toBeNull();
+    expect(720 - (panel!.y + panel!.height), "the gap under the panel").toBeLessThanOrEqual(24 + 1);
+    await mockPortfolioPageApi(page);
+    await page.goto("/portfolio", { waitUntil: "domcontentloaded" });
+    await expect(page.locator("main")).toBeAttached({ timeout: 60_000 });
+    expect(await page.locator("main").evaluate((element) => getComputedStyle(element).paddingBottom)).toBe("80px");
   });
 });

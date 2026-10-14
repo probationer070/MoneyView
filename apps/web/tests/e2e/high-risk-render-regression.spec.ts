@@ -124,6 +124,7 @@ test("corporate diagnostics and comparison chart panels stay rendered after dens
   await page.goto("/corporate", { waitUntil: "domcontentloaded" });
 
   await expect(page.getByRole("heading", { name: /Corporate Analysis/i })).toBeVisible({ timeout: 60_000 });
+  await openLowerTab(page, "Core Diagnostics");
   await expectChartPanelRendered(page, "Hurdle Rate Decomposition");
   await page.getByRole("button", { name: "Refresh DCF" }).click();
   await expect.poll(() => stats.dcfRequests).toBe(1);

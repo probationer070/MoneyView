@@ -196,8 +196,9 @@ test("corporate renders cached calculation results without auto-fetch and refres
 
   await expect(page.getByRole("heading", { name: /Corporate Analysis/i })).toBeVisible({ timeout: 60_000 });
   await expect(page.getByTestId("corporate-verdict").locator('[data-part="intrinsic"]')).toContainText("$199.9");
+  await expect(page.getByTestId("source-data-status")).toContainText("Last updated");
   await openLowerTab(page, "Target Stock Comparison");
-  await expect(page.getByText("Last updated")).toHaveCount(3);
+  await expect(page.getByText("Last updated")).toHaveCount(2); // the header's DCF time and the comparison status
   await expect(page.getByRole("cell", { name: "AAPL" }).first()).toBeVisible();
   await page.waitForTimeout(300);
   expect(stats.dcfRequests).toBe(0);
@@ -208,6 +209,7 @@ test("corporate renders cached calculation results without auto-fetch and refres
 
   await page.getByRole("button", { name: "Refresh DCF" }).click();
   await expect.poll(() => stats.dcfRequests).toBe(1);
+  await openLowerTab(page, "Summary");
   await expect(page.getByTestId("corporate-verdict").locator('[data-part="intrinsic"]')).toContainText("$240.5");
 
   await page.getByRole("button", { name: "Assumption options" }).click();
@@ -216,6 +218,7 @@ test("corporate renders cached calculation results without auto-fetch and refres
   await expect.poll(() => stats.quarterlyRequests).toBe(1);
   await expect.poll(() => stats.ohlcvRequests).toBe(1);
 
+  await openLowerTab(page, "Target Stock Comparison");
   await page.getByRole("button", { name: "Refresh comparison" }).click();
   await expect.poll(() => stats.comparisonRequests).toBe(1);
   await expect(page.getByRole("cell", { name: "GOOGL" }).first()).toBeVisible();
@@ -633,6 +636,7 @@ test("the full report shows a refusal as content, not a generic API error", asyn
   await openCorporateWithCachedDcf(page);
   await openLowerTab(page, "DCF");
   await lowerPanel(page).getByRole("button", { name: "Load Full Report" }).click();
+  await openLowerTab(page, "Summary");
   await expect(page.getByTestId("dcf-refusal")).toContainText("zero or negative over the forecast");
   await expect(page.getByText(/API error: 422/)).toHaveCount(0);
 });
