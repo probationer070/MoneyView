@@ -215,7 +215,7 @@ Rows 56–57 are the helper-file imports, counted so that nothing is edited unli
 
 ### Addendum: Task 7b (page tabs and verdict strip, D10, 2026-10-15)
 
-**Not yet approved.** Task 7b Step 1 presents this addendum, and Step 2 records the answer.
+**Approved by the owner on 2026-10-15** (rows as listed; changes: none).
 
 **Line numbers** are at `21362c1`. None of the specs below changed after `a8dba14`. Locate each row by the quoted code, as above.
 
@@ -3256,6 +3256,8 @@ git commit -m "feat(corporate): header row with inline add; the outer View Full 
 ---
 
 ### Task 7b: Page tabs and verdict strip (spec §2A, D10)
+
+> **Owner decisions 2026-10-15 (Steps 1-2 done by the controller):** rows #58-#65 approved unchanged; N12 (b) approved (a stored "diagnostics" is dropped, only dcf/comparison carry over). **Bottom padding:** pages that must not scroll get a 24px bottom pad at >= 992px instead of 80px. Implement it in `AppShell.tsx` with one exported list `ONE_SCREEN_ROUTES = ["/corporate"]` matched by `usePathname()` prefix, which sets `lg:[--main-pad-bottom:1.5rem]` on `<main>`; the page height formula keeps reading `--main-pad-bottom`, so the panel gains about 56px. Add a test: at 1280x720 on /corporate the gap between the panel bottom and the viewport bottom is <= 24px + 1, and on /portfolio main keeps an 80px bottom padding (mutation: drop the route from the list -> the corporate gap test fails). Later one-screen pages join by adding their route to the list.
 
 > **Owner decision D10, 2026-10-15.** The page never scrolls, at 1280×720 or at 390×844. Before this task, Tasks 5–7 built a first screen with three lower tabs under it, and at 1280×720 the document was 1106 px tall (Task 7 report). This task changes that:
 > - Four page tabs sit directly under the header: Summary | Core Diagnostics | DCF | Target Stock Comparison.
