@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { mockCorporatePageApi } from "./helpers/corporatePageMock";
-import { openFullDcfReportInModal, openLowerTab } from "./helpers/corporateDcf";
+import { openDetailTab, openFullDcfReportInModal, openLowerTab } from "./helpers/corporateDcf";
 
 async function tickerY(page: Page, ticker: string) {
   const box = await page.getByRole("button", { name: ticker, exact: true }).first().boundingBox();
@@ -89,7 +89,8 @@ test("corporate comparison sorting reorders non-benchmark rows and metric clicks
     await expect(calculationDialog.getByRole("heading", { name: /Apple Intrinsic DCF Value/i })).toBeVisible();
   await expect(calculationDialog.getByText("Calculation Formula")).toBeVisible();
   await expect(calculationDialog.getByText("Result Summary: value, inputs used")).toBeVisible();
-  await expect(calculationDialog.getByText("Calculation transparency and data lineage")).toBeVisible();
+  await expect(calculationDialog).toContainText("AAPL · ");
+  await openDetailTab(calculationDialog, "Raw data");
   await expect(calculationDialog.getByRole("button", { name: "Download CSV: Analysis" }).first()).toBeVisible();
 });
 
@@ -108,8 +109,10 @@ test("calculation detail modal shows explicit source-data and full-report errors
 
   const calculationDialog = page.getByRole("dialog");
   await expect(calculationDialog).toBeVisible();
+  await openDetailTab(calculationDialog, "Calculation steps");
   await expect(calculationDialog.getByRole("heading", { name: "ROIC - WACC Audit" })).toBeVisible();
   await expect(calculationDialog.getByText("ROIC - WACC inherits the lower-confidence state").first()).toBeVisible();
+  await openDetailTab(calculationDialog, "Raw data");
   await calculationDialog.locator("summary").filter({ hasText: "Historical OHLCV Dataset" }).click();
   await calculationDialog.locator("summary").filter({ hasText: "Quarterly Financial Statements" }).click();
   await expect(calculationDialog.getByText("Historical OHLCV Unavailable")).toBeVisible();

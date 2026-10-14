@@ -91,6 +91,11 @@ capitals: "종목 NAME". Both come from `apps/web/lib/i18n/labels.ts`; add the r
 | Watchlist | 관심종목 | |
 | Benchmark | 벤치마크 | |
 | Load Full Report | 리포트 불러오기 | button |
-| Summary | 요약 | corporate page tab |
+| Summary | 요약 | corporate page tab; calculation detail tab |
+| Data point / Source / As of | 데이터 / 출처 / 기준일 | label (detail tables) |
+| Calculation steps | 계산 과정 | detail tab |
+| Raw data | 원천 데이터 | detail tab |
+| Calculation Formula | 계산 공식 | |
+| With current values | 현재 값 대입 | substituted formula |
 | Not valued | 평가하지 않음 | verdict strip, refused DCF |
 | Stale source | 원천 자료 오래됨 | verdict strip warning |

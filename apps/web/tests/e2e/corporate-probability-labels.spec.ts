@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { mockCorporatePageApi } from "./helpers/corporatePageMock";
-import { openLowerTab } from "./helpers/corporateDcf";
+import { openDetailTab, openLowerTab } from "./helpers/corporateDcf";
 
 // The corporate dashboard has no probability model, so it must not put a number under a
 // probability label.
@@ -50,6 +50,7 @@ test.describe("the corporate dashboard's scenario labels", () => {
     await expect(modal).toBeVisible({ timeout: 30_000 });
     // The heading, not the text: the Export Affordances blurb further down the modal ends
     // "...after reviewing raw datasets", and getByText matches case-insensitively.
+    await openDetailTab(modal, "Raw data");
     await modal.getByRole("heading", { name: "Raw Datasets" }).click();
 
     const datasetRows = modal.locator("table tbody tr");

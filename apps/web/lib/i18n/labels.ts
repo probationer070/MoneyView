@@ -17,6 +17,8 @@ export const LABELS = {
   input: ["입력", "Input"],
   value: ["값", "Value"],
   source: ["출처", "Source"],
+  dataPoint: ["데이터", "Data point"],
+  asOf: ["기준일", "As of"],
   ticker: ["종목 코드", "Ticker"],
   sector: ["섹터", "Sector"],
   currentPrice: ["현재가", "Current Price"],

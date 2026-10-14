@@ -12,6 +12,13 @@ export async function openLowerTab(page: Page, name: LowerTabName): Promise<void
   await expect(tab).toHaveAttribute("aria-selected", "true");
 }
 
+/** A tab inside the calculation detail modal (plan Task 8). */
+export async function openDetailTab(dialog: Locator, name: string): Promise<void> {
+  const tab = dialog.getByRole("tablist", { name: "Calculation detail sections" }).getByRole("tab", { name, exact: true });
+  await tab.click();
+  await expect(tab).toHaveAttribute("aria-selected", "true");
+}
+
 /** The selected page tab's panel (never the modal's). */
 export function lowerPanel(page: Page): Locator {
   return page.getByTestId("corporate-page-tabs").getByRole("tabpanel");
@@ -36,6 +43,7 @@ export async function openFullDcfReportInModal(page: Page): Promise<Locator> {
   await page.getByRole("button", { name: "Verdict detail" }).click();
   const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();
+  await openDetailTab(dialog, "Raw data");
   await dialog.locator("summary").filter({ hasText: "Full DCF Report" }).click();
   await dialog.getByRole("button", { name: "Load Full Report" }).click();
   return dialog;

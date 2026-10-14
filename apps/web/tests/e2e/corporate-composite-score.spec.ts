@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { mockCorporatePageApi } from "./helpers/corporatePageMock";
-import { openLowerTab } from "./helpers/corporateDcf";
+import { openDetailTab, openLowerTab } from "./helpers/corporateDcf";
 
 // The corporate dashboard has no company-quality model, so it must not present a composite
 // quality score, and it must not draw a peer baseline it never measured.
@@ -54,6 +54,7 @@ test.describe("the corporate dashboard's quality scoring", () => {
     await page.getByRole("button", { name: /ROIC - WACC/ }).click();
     const modal = page.getByRole("dialog").first();
     await expect(modal).toBeVisible({ timeout: 30_000 });
+    await openDetailTab(modal, "Raw data");
     await modal.getByRole("heading", { name: "Raw Datasets" }).click();
 
     const datasetRows = modal.locator("table tbody tr");

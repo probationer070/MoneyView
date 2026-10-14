@@ -32,6 +32,8 @@ import { KpiRow } from "./components/KpiRow";
 import { VerdictBlock, VerdictStrip } from "./components/VerdictBlock";
 import { verdictView } from "./verdict";
 import { buildCalculationDetails } from "./buildCalculationDetails";
+import { substitutedFormula } from "./substitutedFormula";
+import { bridgedEstimatedValue, bridgedUpsidePct } from "@/lib/bridgeQuality";
 import type { CalculationDetailKey } from "./components/calculationDetailTypes";
 import {
   ACTIVE_TICKER_SESSION_KEY,
@@ -889,6 +891,15 @@ export default function CorporateAnalysisPage() {
   });
 
   const activeCalculationDetail = activeCalculation ? calculationDetails[activeCalculation] : null;
+  const activeSubstitutedFormula = activeCalculation
+    ? substitutedFormula(activeCalculation, {
+      roic: assumptions.roic, wacc: assumptions.wacc, reinvestment: assumptions.reinvestment, unleveredBeta: assumptions.unleveredBeta,
+      spread: derived.spread, bottomUpKe: derived.bottomUpKe, leveredBeta: derived.leveredBeta, sustainableGrowth: derived.sustainableGrowth, debtToEquity: derived.debtToEquity,
+      riskFreeRate: RISK_FREE_RATE, impliedErp, impliedMarketReturn, countryRiskPremium: KOREA_COUNTRY_RISK_PREMIUM, taxRate: TAX_RATE,
+      waccAudit: metricAuditQuery.data?.wacc ?? null,
+      dcf: dcfData ? { intrinsic: bridgedEstimatedValue(dcfData), price: dcfData.current_price, upside: bridgedUpsidePct(dcfData) } : null,
+    })
+    : null;
   // The full report needs a DCF result to be on screen, and a refusal blocks it.
   const canLoadFullReport = dcfRefusal === null && !(!dcfData && dcfStreamStatus === "idle");
   const verdict = verdictView(dcfData, dcfStreamStatus === "streaming", dcfRefusal?.readerText ?? null); // block + strip, spec §2A
@@ -1031,9 +1042,13 @@ export default function CorporateAnalysisPage() {
         }}
       />
       {/* Calculation detail modal is mounted only when a metric or chart title is selected. */}
-      {activeCalculationDetail && (
+      {activeCalculation && activeCalculationDetail && (
         <CalculationDetailModal
           detail={activeCalculationDetail}
+          detailKey={activeCalculation}
+          substitutedFormula={activeSubstitutedFormula}
+          dcfStatus={dcfData?.status ?? null}
+          dcfGeneratedAt={dcfData?.generated_at ?? null}
           ticker={assumptions.ticker}
           metricAudit={metricAuditQuery.data ?? null}
           metricAuditIsLoading={metricAuditQuery.isLoading}
