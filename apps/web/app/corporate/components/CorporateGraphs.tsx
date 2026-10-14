@@ -11,11 +11,12 @@ function GraphLoadingCard({
   title: string;
   chartHeightClassName?: string;
 }) {
+  // No title text: the real chart draws the same heading and a test may wait for it. The name is
+  // the aria-label instead, so getByText matches only the chart, never this placeholder.
   return (
-    <div className={`${className} rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-5`}>
-      <h3 className="text-sm font-bold text-[var(--text-primary)]">{title}</h3>
-      <div className="mt-1 h-3 w-44 animate-pulse rounded bg-[var(--surface-muted)]" />
-      <div className={`mt-4 animate-pulse rounded bg-[var(--surface-muted)] ${chartHeightClassName}`} />
+    <div role="status" aria-label={title} className={`${className} rounded-[var(--radius-2)] border border-[var(--line)] bg-[var(--surface)] p-5`}>
+      <div className="h-3 w-44 animate-pulse rounded-[var(--radius-2)] bg-[var(--surface-raised)]" />
+      <div className={`mt-4 animate-pulse rounded-[var(--radius-2)] bg-[var(--surface-raised)] ${chartHeightClassName}`} />
     </div>
   );
 }

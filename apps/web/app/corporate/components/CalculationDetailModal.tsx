@@ -7,6 +7,7 @@ import { Tabs } from "@/components/ui/Tabs";
 import { useT } from "@/lib/i18n/locale";
 import { tabStateKey, useTabState } from "@/lib/tabState";
 import { availableDetailTabs, resolveDetailTab, type DetailTabKey } from "../detailTabs";
+import { waccInputIfDivergent } from "../formulaContext";
 import type { CalculationDetail, CalculationDetailKey, RawDatasetRow } from "./calculationDetailTypes";
 import { RawDataTab, type QuarterlyStatementRow, type StockPriceRow } from "./detail/RawDataTab";
 import { StepsTab } from "./detail/StepsTab";
@@ -21,6 +22,8 @@ interface CalculationDetailModalProps {
   detailKey: CalculationDetailKey;
   ticker: string;
   substitutedFormula: string | null;
+  /** The page's WACC input (the slider value), compared with the audit's final WACC. */
+  sliderWacc: number;
   dcfStatus: string | null;
   dcfGeneratedAt: string | null;
   metricAudit: CorporateMetricAudit | null;
@@ -53,7 +56,7 @@ interface CalculationDetailModalProps {
 // Spec §4: still a ModalShell modal (U9), its sections split into tabs. The last tab chosen is
 // remembered; a metric without it opens Summary and the memory is left as it was.
 export function CalculationDetailModal(props: CalculationDetailModalProps) {
-  const { detail, detailKey, ticker, substitutedFormula, dcfStatus, dcfGeneratedAt, metricAudit, metricAuditIsLoading, metricAuditIsError, onClose } = props;
+  const { detail, detailKey, ticker, substitutedFormula, sliderWacc, dcfStatus, dcfGeneratedAt, metricAudit, metricAuditIsLoading, metricAuditIsError, onClose } = props;
   const t = useT();
   const [storedTab, setStoredTab] = useTabState<string>(tabStateKey("corporate", "detailTab"), "summary");
   const available = availableDetailTabs(detailKey).filter((tab) => BUILT_TABS.includes(tab));
@@ -69,6 +72,7 @@ export function CalculationDetailModal(props: CalculationDetailModalProps) {
     <VerdictStatusLabel status={dcfStatus} />
   ) : null;
   const asOf = auditEntry?.as_of ?? (isDcfKey ? dcfGeneratedAt : null);
+  const waccInput = detailKey === "wacc" ? waccInputIfDivergent(metricAudit?.wacc ?? null, sliderWacc) : null;
 
   return (
     <ModalShell open onClose={onClose} title={detail.title} subtitle={`${ticker} · ${detail.result}`} size="xl">
@@ -81,7 +85,7 @@ export function CalculationDetailModal(props: CalculationDetailModalProps) {
         />
         <div role="tabpanel" id={`panel-${active}`} aria-labelledby={`tab-${active}`}>
           {active === "summary" ? (
-            <SummaryTab detail={detail} detailKey={detailKey} status={status} substituted={substitutedFormula} asOf={asOf} />
+            <SummaryTab detail={detail} detailKey={detailKey} status={status} substituted={substitutedFormula} waccInput={waccInput} asOf={asOf} />
           ) : null}
           {active === "steps" ? (
             <StepsTab detail={detail} ticker={ticker} metricAudit={metricAudit} metricAuditIsLoading={metricAuditIsLoading} metricAuditIsError={metricAuditIsError} />

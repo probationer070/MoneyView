@@ -164,9 +164,9 @@ export function RawDataTab(props: RawDataTabProps) {
               <tbody>
                 {rawDatasetRows.map((row, index) => (
                   <tr key={`${row.dataset}-${row.field}-${index}`} className={TR}>
-                    <td className={`${TD} max-w-64`}>{row.dataset}</td>
-                    <td className={`${TD} max-w-48`}>{row.field}</td>
-                    <td className={TD_FIGURE}>{row.value}</td>
+                    <td className="break-words max-w-64 px-3 py-2 type-small text-[var(--ink)]">{row.dataset}</td>
+                    <td className="break-words max-w-48 px-3 py-2 type-small text-[var(--ink)]">{row.field}</td>
+                    <td className="break-words max-w-64 px-3 py-2 type-mono text-[var(--ink)]">{row.value}</td>
                     <td className={TD}>{row.source}</td>
                   </tr>
                 ))}

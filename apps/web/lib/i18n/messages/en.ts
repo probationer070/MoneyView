@@ -87,6 +87,7 @@ export const en = {
       auditTitle: "Calculation Audit", auditLoading: "Loading calculation audit...",
       auditUnavailable: "Calculation Audit Unavailable", auditError: "Could not load the metric audit for {ticker}.",
       exportAnalysis: "Download CSV: Analysis", exportOhlcv: "Download CSV: OHLCV", exportStatements: "Download CSV: Statements", print: "Print",
+      waccInputNote: "From the latest audit; your WACC input is {input}.",
       meaning: {
         realtime: "The assumption set every figure on this page is computed from.",
         growth: "Revenue growth the forecast assumes each year.",

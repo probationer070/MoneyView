@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import type { CorporateMetricAudit, CorporateMetricAuditEntry } from "../../../../packages/shared-types";
 import { mockCorporatePageApi } from "./helpers/corporatePageMock";
-import { openDetailTab } from "./helpers/corporateDcf";
+import { openDetailTab, refreshDcf } from "./helpers/corporateDcf";
 
 // Spec 2026-10-14 §4 and §7 test 7.
 async function gotoCorporate(page: Page) {
@@ -51,15 +51,15 @@ test("the header pins ticker and value; Summary, Calculation steps and Raw data 
   await expect(dialog(page).getByRole("heading", { name: "Raw Datasets" })).toBeVisible();
 });
 
-test("WACC substitutes the audit's weights and costs when all six inputs are present", async ({ page }) => {
-  await mockCorporatePageApi(page);
-  const wacc = auditEntry(8.8, [
+// The audit's WACC inputs; the final value is the argument, so a test controls the divergence from the input.
+async function routeWaccAudit(page: Page, finalWacc: number) {
+  const wacc = auditEntry(finalWacc, [
     { field: "equity_weight", label: "Equity weight", value: 0.82, display_value: "82.0%", source: "t" },
     { field: "cost_of_equity", label: "Cost of equity", value: 0.1, display_value: "10.0%", source: "t" },
     { field: "debt_weight", label: "Debt weight", value: 0.18, display_value: "18.0%", source: "t" },
     { field: "cost_of_debt", label: "Cost of debt", value: 0.041, display_value: "4.1%", source: "t" },
     { field: "tax_rate", label: "Tax rate", value: 0.21, display_value: "21.0%", source: "t" },
-    { field: "final_wacc_value", label: "Final WACC value", value: 8.8, display_value: "8.8%", source: "t" },
+    { field: "final_wacc_value", label: "Final WACC value", value: finalWacc, display_value: `${finalWacc.toFixed(1)}%`, source: "t" },
   ]);
   const audit: CorporateMetricAudit = {
     ticker: "AAPL", source_mode: "yahoo_finance", generated_at: "2026-10-14T00:00:00Z", growth: null,
@@ -67,10 +67,36 @@ test("WACC substitutes the audit's weights and costs when all six inputs are pre
   };
   await page.route((url) => url.pathname.endsWith("/corporate/metrics/AAPL/audit"), (route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(audit) }));
+}
+
+test("WACC substitutes the audit's weights and costs when all six inputs are present", async ({ page }) => {
+  await mockCorporatePageApi(page);
+  await routeWaccAudit(page, 8.8);
   await gotoCorporate(page);
   await openKpi(page, /^WACC/);
   await expect(dialog(page).getByTestId("substituted-formula"))
     .toHaveText("WACC = E/V × Ke + D/V × Kd × (1 − t) = 82.0% × 10.0% + 18.0% × 4.1% × (1 − 21.0%) = 8.8%");
+  // The slider holds 10.0%, the audit 8.8%: the summary says which WACC the formula uses.
+  await expect(dialog(page).getByTestId("wacc-input-note")).toHaveText("From the latest audit; your WACC input is 10.0%.");
+});
+
+test("an audit WACC equal to the input has no caption", async ({ page }) => {
+  await mockCorporatePageApi(page);
+  await routeWaccAudit(page, 10.0);
+  await gotoCorporate(page);
+  await openKpi(page, /^WACC/);
+  await expect(dialog(page).getByTestId("substituted-formula")).toHaveText("WACC = E/V × Ke + D/V × Kd × (1 − t) = 82.0% × 10.0% + 18.0% × 4.1% × (1 − 21.0%) = 10.0%");
+  await expect(dialog(page).getByTestId("wacc-input-note")).toHaveCount(0);
+});
+
+test("a DCF summary's as-of is the full DCF's generated_at", async ({ page }) => {
+  await mockCorporatePageApi(page);
+  await gotoCorporate(page);
+  await refreshDcf(page);
+  await page.getByRole("button", { name: "Verdict detail" }).click();
+  await expect(dialog(page)).toBeVisible();
+  await expect(dialog(page).getByRole("columnheader", { name: "As of" })).toBeVisible();
+  await expect(dialog(page).getByRole("cell", { name: "2026-04-11T12:00:00Z" }).first()).toBeVisible();
 });
 
 test("without the audit's inputs WACC shows only the symbolic formula", async ({ page }) => {

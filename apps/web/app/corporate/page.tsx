@@ -33,7 +33,8 @@ import { VerdictBlock, VerdictStrip } from "./components/VerdictBlock";
 import { verdictView } from "./verdict";
 import { buildCalculationDetails } from "./buildCalculationDetails";
 import { substitutedFormula } from "./substitutedFormula";
-import { bridgedEstimatedValue, bridgedUpsidePct } from "@/lib/bridgeQuality";
+import { buildFormulaContext } from "./formulaContext";
+import { historicalPriceStatus, quarterlyStatementsStatus } from "./detailStatus";
 import type { CalculationDetailKey } from "./components/calculationDetailTypes";
 import {
   ACTIVE_TICKER_SESSION_KEY,
@@ -892,13 +893,7 @@ export default function CorporateAnalysisPage() {
 
   const activeCalculationDetail = activeCalculation ? calculationDetails[activeCalculation] : null;
   const activeSubstitutedFormula = activeCalculation
-    ? substitutedFormula(activeCalculation, {
-      roic: assumptions.roic, wacc: assumptions.wacc, reinvestment: assumptions.reinvestment, unleveredBeta: assumptions.unleveredBeta,
-      spread: derived.spread, bottomUpKe: derived.bottomUpKe, leveredBeta: derived.leveredBeta, sustainableGrowth: derived.sustainableGrowth, debtToEquity: derived.debtToEquity,
-      riskFreeRate: RISK_FREE_RATE, impliedErp, impliedMarketReturn, countryRiskPremium: KOREA_COUNTRY_RISK_PREMIUM, taxRate: TAX_RATE,
-      waccAudit: metricAuditQuery.data?.wacc ?? null,
-      dcf: dcfData ? { intrinsic: bridgedEstimatedValue(dcfData), price: dcfData.current_price, upside: bridgedUpsidePct(dcfData) } : null,
-    })
+    ? substitutedFormula(activeCalculation, buildFormulaContext({ assumptions, derived, impliedErp, impliedMarketReturn, waccAudit: metricAuditQuery.data?.wacc ?? null, dcfData }))
     : null;
   // The full report needs a DCF result to be on screen, and a refusal blocks it.
   const canLoadFullReport = dcfRefusal === null && !(!dcfData && dcfStreamStatus === "idle");
@@ -1047,6 +1042,7 @@ export default function CorporateAnalysisPage() {
           detail={activeCalculationDetail}
           detailKey={activeCalculation}
           substitutedFormula={activeSubstitutedFormula}
+          sliderWacc={assumptions.wacc}
           dcfStatus={dcfData?.status ?? null}
           dcfGeneratedAt={dcfData?.generated_at ?? null}
           ticker={assumptions.ticker}
@@ -1055,27 +1051,11 @@ export default function CorporateAnalysisPage() {
           metricAuditIsError={metricAuditQuery.isError}
           rawDatasetRows={rawDatasetRows}
           historicalPrices={historicalPricesData}
-          historicalStatus={
-            historicalPricesQuery.isLoading && historicalPricesData.length === 0
-              ? "Loading 5-year historical price data"
-              : historicalPricesQuery.isError && historicalPricesData.length === 0
-                ? "5-year historical price data unavailable"
-                : historicalPricesData.length === 0
-                  ? "Refresh source data to load 5-year historical price data"
-                  : `${historicalPricesData.length} daily rows from the 5-year OHLCV endpoint`
-          }
+          historicalStatus={historicalPriceStatus(historicalPricesQuery, historicalPricesData.length)}
           historicalIsLoading={historicalPricesQuery.isLoading && historicalPricesData.length === 0}
           historicalIsError={historicalPricesQuery.isError && historicalPricesData.length === 0}
           quarterlyStatementRows={quarterlyStatementsData?.rows ?? []}
-          quarterlyStatementStatus={
-            quarterlyStatementsQuery.isLoading && !quarterlyStatementsData
-              ? "Loading Yahoo quarterly financial statements"
-              : quarterlyStatementsQuery.isError && !quarterlyStatementsData
-                ? "Yahoo quarterly financial statements unavailable"
-                : !quarterlyStatementsData
-                  ? "Refresh source data to load Yahoo quarterly financial statements"
-                  : `${quarterlyStatementsData.rows.length} rows from ${quarterlyStatementsData.source ?? "Yahoo quarterly financial statements"}`
-          }
+          quarterlyStatementStatus={quarterlyStatementsStatus(quarterlyStatementsQuery, quarterlyStatementsData)}
           quarterlyStatementsIsLoading={quarterlyStatementsQuery.isLoading && !quarterlyStatementsData}
           quarterlyStatementsIsError={quarterlyStatementsQuery.isError && !quarterlyStatementsData}
           dcfFullReport={dcfFullReport}

@@ -11,12 +11,15 @@ export function SummaryTab({
   detailKey,
   status,
   substituted,
+  waccInput,
   asOf,
 }: {
   detail: CalculationDetail;
   detailKey: CalculationDetailKey;
   status: ReactNode;
   substituted: string | null;
+  /** The slider WACC when the audit's WACC differs from it (spec §4); null otherwise. */
+  waccInput: number | null;
   asOf: string | null;
 }) {
   const t = useT();
@@ -34,6 +37,11 @@ export function SummaryTab({
           <>
             <div className="type-caption mt-3 uppercase text-[var(--ink-muted)]">{t("corporate.detail.substituted")}</div>
             <p data-testid="substituted-formula" className="type-mono mt-2 text-[var(--ink)]">{substituted}</p>
+            {waccInput !== null ? (
+              <p data-testid="wacc-input-note" className="type-small mt-2 text-[var(--ink-muted)]">
+                {t("corporate.detail.waccInputNote", { input: `${waccInput.toFixed(1)}%` })}
+              </p>
+            ) : null}
           </>
         ) : null}
       </div>

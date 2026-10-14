@@ -6,6 +6,7 @@ import { isOneScreenRoute, ONE_SCREEN_ROUTES } from "../../components/ui/oneScre
 import type { DcfSummary } from "../../../../packages/shared-types";
 import { ASSUMPTION_ROWS, assumptionRow, formatAssumption, formatDelta, sensitivityPlan } from "../../app/corporate/assumptionRows";
 import { substitutedFormula, type FormulaContext } from "../../app/corporate/substitutedFormula";
+import { buildFormulaContext, waccInputIfDivergent } from "../../app/corporate/formulaContext";
 import { peerRank } from "../../app/corporate/peerRank";
 import { availableDetailTabs, resolveDetailTab } from "../../app/corporate/detailTabs";
 import { dcfRequestBody } from "../../app/corporate/corporateUtils";
@@ -184,6 +185,55 @@ function row(ticker: string, over: Partial<CorporateComparisonRowApi> = {}): Cor
     stock_expected_return_source: "test", has_price_data: true, bridge_quality: "ok", ...over,
   };
 }
+
+test.describe("buildFormulaContext (plan N2: one module feeds the page)", () => {
+  // Every input has its own sentinel, so two swapped fields print a different sentence.
+  const INPUTS = {
+    assumptions: { roic: 21.1, wacc: 7.3, reinvestment: 33.3, unleveredBeta: 0.61 },
+    derived: { spread: 13.8, bottomUpKe: 9.9, leveredBeta: 0.87, sustainableGrowth: 7.7, debtToEquity: 0.45 },
+    impliedErp: 4.6,
+    impliedMarketReturn: 8.8,
+    waccAudit: {
+      value: 6.9, display_value: "6.9%", method: "test", quality: "ok" as const, reason: null, warnings: [], confidence: 0.9,
+      inputs_used: [
+        { field: "equity_weight", label: "Equity weight", value: 0.71, display_value: "71.0%", source: "t" },
+        { field: "cost_of_equity", label: "Cost of equity", value: 0.112, display_value: "11.2%", source: "t" },
+        { field: "debt_weight", label: "Debt weight", value: 0.29, display_value: "29.0%", source: "t" },
+        { field: "cost_of_debt", label: "Cost of debt", value: 0.043, display_value: "4.3%", source: "t" },
+        { field: "tax_rate", label: "Tax rate", value: 0.25, display_value: "25.0%", source: "t" },
+        { field: "final_wacc_value", label: "Final WACC value", value: 6.9, display_value: "6.9%", source: "t" },
+      ],
+      source: "test audit", as_of: "2026-04-11", calculation_version: "test",
+    },
+    dcfData: { estimated_value: 152.3, upside_pct: 15.5, bridge_quality: "ok", current_price: 131.9 } as unknown as DcfSummary,
+  };
+
+  test("every operand reaches its own slot, for all eight N2 keys", () => {
+    const ctx = buildFormulaContext(INPUTS);
+    expect(substitutedFormula("spread", ctx)).toBe("ROIC − WACC = 21.1% − 7.3% = 13.8%");
+    expect(substitutedFormula("bottomUpKe", ctx)).toBe("Ke = rf + βL × ERP + CRP = 4.2% + 0.87 × 4.6% + 0.8% = 9.9%");
+    expect(substitutedFormula("leveredBeta", ctx)).toBe("βL = βU × [1 + (1 − t) × D/E] = 0.61 × [1 + (1 − 25.0%) × 0.45] = 0.87");
+    expect(substitutedFormula("sustainableGrowth", ctx)).toBe("g = reinvestment × ROIC = 33.3% × 21.1% = 7.7%");
+    expect(substitutedFormula("erp", ctx)).toBe("ERP = IRR − rf = 8.8% − 4.2% = 4.6%");
+    expect(substitutedFormula("wacc", ctx)).toBe("WACC = E/V × Ke + D/V × Kd × (1 − t) = 71.0% × 11.2% + 29.0% × 4.3% × (1 − 25.0%) = 6.9%");
+    expect(substitutedFormula("backendDcf", ctx)).toBe("Upside = intrinsic ÷ price − 1 = $152.3 ÷ $131.9 − 1 = +15.5%");
+    expect(substitutedFormula("backendFairValue", ctx)).toBe("Upside = intrinsic ÷ price − 1 = $152.3 ÷ $131.9 − 1 = +15.5%");
+  });
+
+  test("a suppressed bridge leaves the DCF formulas without operands", () => {
+    const ctx = buildFormulaContext({ ...INPUTS, dcfData: { estimated_value: 152.3, upside_pct: 0.0, bridge_quality: "missing", current_price: 131.9 } as unknown as DcfSummary });
+    expect(ctx.dcf).toEqual({ intrinsic: null, price: 131.9, upside: null });
+    expect(substitutedFormula("backendDcf", ctx)).toBeNull();
+  });
+
+  test("the caption appears only when the audit's WACC differs from the input by more than 0.05 points", () => {
+    const audit = INPUTS.waccAudit;
+    expect(waccInputIfDivergent(audit, 7.3)).toBe(7.3);
+    expect(waccInputIfDivergent(audit, 6.9)).toBeNull();
+    expect(waccInputIfDivergent({ ...audit, inputs_used: [{ ...audit.inputs_used[0], field: "final_wacc_value", value: 7.34 }] }, 7.3)).toBeNull();
+    expect(waccInputIfDivergent(null, 7.3)).toBeNull();
+  });
+});
 
 test.describe("peerRank", () => {
   test("ranks high to low among non-benchmark rows, with the band and position", () => {

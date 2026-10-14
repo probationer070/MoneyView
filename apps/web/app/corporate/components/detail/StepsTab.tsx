@@ -5,6 +5,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { MetricAuditPanel } from "@/components/ui/MetricAuditPanel";
 import { useT } from "@/lib/i18n/locale";
+import type { LabelKey } from "@/lib/i18n/labels";
 import type { CalculationDetail, CalculationRow } from "../calculationDetailTypes";
 import { DenseRowsTable, SectionCard } from "./detailParts";
 
@@ -28,10 +29,10 @@ export function StepsTab({
     ...detail.simulation.map((row) => ({ label: `Step ${row.label}`, value: row.value, source: `Output: ${row.source}; Data Period: ${detail.timeHorizon}` })),
     ...detail.sourcing.map((row) => ({ label: row.label, value: row.value, source: `${row.source}; Data Period: ${detail.timeHorizon}` })),
   ];
-  const tables: { title: string; description: string; rows: CalculationRow[] }[] = [
-    { title: t("corporate.detail.lineage"), description: t("corporate.detail.lineageBody"), rows: lineageRows },
-    { title: t("corporate.detail.supporting"), description: t("corporate.detail.supportingBody"), rows: [...detail.components, ...detail.simulation] },
-    { title: t("corporate.detail.rawAccess"), description: t("corporate.detail.rawAccessBody"), rows: rawAccessRows },
+  const tables: { title: string; description: string; rows: CalculationRow[]; columns: [LabelKey, LabelKey, LabelKey] }[] = [
+    { title: t("corporate.detail.lineage"), description: t("corporate.detail.lineageBody"), rows: lineageRows, columns: ["dataPoint", "value", "source"] },
+    { title: t("corporate.detail.supporting"), description: t("corporate.detail.supportingBody"), rows: [...detail.components, ...detail.simulation], columns: ["supportingRow", "value", "basis"] },
+    { title: t("corporate.detail.rawAccess"), description: t("corporate.detail.rawAccessBody"), rows: rawAccessRows, columns: ["step", "input", "source"] },
   ];
   return (
     <div className="flex flex-col gap-4">
@@ -64,7 +65,7 @@ export function StepsTab({
       </div>
       {tables.map((table) => (
         <SectionCard key={table.title} title={table.title} description={table.description}>
-          <DenseRowsTable rows={table.rows} columns={["dataPoint", "value", "source"]} emptyTitle={t("corporate.detail.noRows")} emptyDescription={t("corporate.detail.noRowsBody")} />
+          <DenseRowsTable rows={table.rows} columns={table.columns} emptyTitle={t("corporate.detail.noRows")} emptyDescription={t("corporate.detail.noRowsBody")} />
         </SectionCard>
       ))}
     </div>

@@ -94,7 +94,21 @@ capitals: "종목 NAME". Both come from `apps/web/lib/i18n/labels.ts`; add the r
 | Summary | 요약 | corporate page tab; calculation detail tab |
 | Data point / Source / As of | 데이터 / 출처 / 기준일 | label (detail tables) |
 | Calculation steps | 계산 과정 | detail tab |
-| Raw data | 원천 데이터 | detail tab |
+| Raw data | 원시 데이터 | detail tab (Source data stays 원천 데이터) |
+| Trend (detail tab) | 추이 | detail tab; Trend in the portfolio table stays 추세 |
+| Peers | 동종업 비교 | detail tab |
+| Sensitivity | 민감도 | detail tab |
+| Data Lineage | 데이터 리니지 | detail section title |
+| Supporting Rows | 근거 행 | detail section title |
+| Supporting row / Basis | 근거 행 / 근거 | label (detail table headers) |
+| Raw Data Access | 원시 데이터 연결 | detail section title |
+| Step | 단계 | label (detail table header) |
+| Calculation Audit | 계산 감사 | detail section title |
+| Time Horizon | 기간 | detail label |
+| Result | 결과 | detail label |
+| Download CSV | CSV 받기 | button (detail export) |
+| Print | 인쇄 | button (detail export) |
+| From the latest audit | 최근 감사 값을 사용했습니다 | WACC caption under the substituted formula |
 | Calculation Formula | 계산 공식 | |
 | With current values | 현재 값 대입 | substituted formula |
 | Not valued | 평가하지 않음 | verdict strip, refused DCF |
