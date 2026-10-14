@@ -18,6 +18,7 @@ export function PageHeader({ title, subtitle, eyebrow, actions, subtitleTestId, 
       <div className="min-w-0">
         {eyebrow && <div className="mb-2"><Eyebrow label={eyebrow.label} suffix={eyebrow.suffix} /></div>}
         <h1 className="type-heading-5 text-[var(--ink)]">{title}</h1>
+        {/* The plain subtitle is kept as it was, so pages without a subtitleAside render the same DOM. */}
         {subtitle && !subtitleAside && <p data-testid={subtitleTestId} className="type-body mt-1 text-[var(--ink-secondary)]">{subtitle}</p>}
         {subtitleAside && (
           <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1">

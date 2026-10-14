@@ -1,6 +1,8 @@
 import { expect, test } from "@playwright/test";
 import { verdictLabelKey, verdictView } from "../../app/corporate/verdict";
 import { LEGACY_LOWER_TAB_KEY, migrateLowerTab, PAGE_TAB_KEY } from "../../app/corporate/pageTabs";
+import { restoreTabState } from "../../lib/tabState";
+import { isOneScreenRoute, ONE_SCREEN_ROUTES } from "../../components/ui/oneScreenRoutes";
 import type { DcfSummary } from "../../../../packages/shared-types";
 import { ASSUMPTION_ROWS, assumptionRow, formatAssumption, formatDelta, sensitivityPlan } from "../../app/corporate/assumptionRows";
 import { substitutedFormula, type FormulaContext } from "../../app/corporate/substitutedFormula";
@@ -297,5 +299,27 @@ test.describe("migrateLowerTab", () => {
     storage.map.set(PAGE_TAB_KEY, JSON.stringify("summary"));
     migrateLowerTab(storage);
     expect(storage.map.get(PAGE_TAB_KEY)).toBe(JSON.stringify("summary"));
+  });
+});
+
+test.describe("restoreTabState", () => {
+  test("a migration that runs first is read in the same pass", () => {
+    const storage = memoryStorage({ [LEGACY_LOWER_TAB_KEY]: JSON.stringify("comparison") });
+    expect(restoreTabState<string>(storage, PAGE_TAB_KEY, () => migrateLowerTab(storage))).toBe("comparison");
+  });
+
+  test("with nothing stored and no migration, the read gives null", () => {
+    expect(restoreTabState<string>(memoryStorage({}), PAGE_TAB_KEY)).toBeNull();
+  });
+});
+
+test.describe("isOneScreenRoute", () => {
+  test("the listed route and the paths under it are one-screen; a longer name is not", () => {
+    expect(ONE_SCREEN_ROUTES).toContain("/corporate");
+    expect(ONE_SCREEN_ROUTES).not.toContain("/");
+    expect(isOneScreenRoute("/corporate")).toBe(true);
+    expect(isOneScreenRoute("/corporate/x")).toBe(true);
+    expect(isOneScreenRoute("/corporate-xyz")).toBe(false);
+    expect(isOneScreenRoute("/")).toBe(false);
   });
 });

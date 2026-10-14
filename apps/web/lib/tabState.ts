@@ -24,11 +24,20 @@ export function tabStateKey(tab: string, concern: string): string {
   return `${NAMESPACE}.${tab}.${concern}`;
 }
 
-function readTabState<T>(key: string): T | null {
+/**
+ * Reads a stored value. `beforeRead` runs first, so a migration that moves a legacy key is read in the
+ * same pass: the order is pinned here, not by the order of two effects (corporate page tabs, plan N12).
+ */
+export function restoreTabState<T>(storage: Pick<Storage, "getItem">, key: string, beforeRead?: () => void): T | null {
+  beforeRead?.();
+  const raw = storage.getItem(key);
+  return raw === null ? null : (JSON.parse(raw) as T);
+}
+
+function readTabState<T>(key: string, beforeRead?: () => void): T | null {
   if (typeof window === "undefined") return null;
   try {
-    const raw = window.sessionStorage.getItem(key);
-    return raw === null ? null : (JSON.parse(raw) as T);
+    return restoreTabState<T>(window.sessionStorage, key, beforeRead);
   } catch {
     // A private window, cleared storage, or a value written by an older shape. Falling
     // back to the initial value is always safe; throwing here would blank the tab.
@@ -57,7 +66,7 @@ function writeTabState<T>(key: string, value: T): void {
  * A cleared value is restored as cleared: an empty search is a deliberate act, and
  * "restore the last non-empty value" would make clearing impossible to keep.
  */
-export function useTabState<T>(key: string, initial: T): [T, (value: T) => void] {
+export function useTabState<T>(key: string, initial: T, beforeRestore?: () => void): [T, (value: T) => void] {
   const [value, setValue] = useState<T>(initial);
   const [restored, setRestored] = useState(false);
 
@@ -69,7 +78,7 @@ export function useTabState<T>(key: string, initial: T): [T, (value: T) => void]
     // client's answer. The state would appear to restore and then silently revert.
     //
     // The cascade is bounded: one extra render on mount, once per key.
-    const stored = readTabState<T>(key);
+    const stored = readTabState<T>(key, beforeRestore);
     setValue(stored === null ? initial : stored);
     setRestored(true);
     // `initial` is deliberately not a dependency: callers pass literals and fresh objects,

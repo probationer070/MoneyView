@@ -45,7 +45,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${hostGrotesk.variable} ${pretendard.variable} ${geistMono.variable}`}>
-      <body className="font-sans flex min-h-screen justify-center">
+      <body className="font-sans flex min-h-dvh justify-center">
         {/* Above the backend gate, so <html lang> follows the stored locale on the splash too. */}
         <HtmlLang />
         <AppProvider>

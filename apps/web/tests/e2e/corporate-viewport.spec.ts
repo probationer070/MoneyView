@@ -35,6 +35,7 @@ test("corporate graphs stay visible across mobile and desktop viewports without 
   await expect(page.getByText("4-Quadrant Value Driver Matrix").first()).toBeVisible({ timeout: 60_000 });
   // Last chart in the diagnostics grid, so reaching it proves the whole grid laid out.
   await openLowerTab(page, "DCF");
+  await expect(page.getByText("DCF Core Modules").first()).toBeVisible({ timeout: 60_000 });
   await page.getByText("DCF Core Modules").first().scrollIntoViewIfNeeded();
   await expect(page.getByText("DCF Core Modules").first()).toBeVisible({ timeout: 60_000 });
   await expectNoHorizontalOverflow(page);

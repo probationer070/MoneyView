@@ -908,7 +908,7 @@ export default function CorporateAnalysisPage() {
         dcfIsStale={dcfIsStale}
         dcfStreamError={dcfStreamError}
         onRefreshDcf={handleRefreshDcf}
-        verdictStrip={<VerdictStrip view={verdict} onOpenDetail={() => setActiveCalculation("backendDcf")} />}
+        verdictStrip={<VerdictStrip view={verdict} onOpenDetail={() => setActiveCalculation("backendDcf")} staleSource={staleSourceTickers.length > 0 ? { cached: staleSourceTickers.join(", "), ticker: sourceDataTicker } : null} />}
       />
 
       <CorporatePageTabs

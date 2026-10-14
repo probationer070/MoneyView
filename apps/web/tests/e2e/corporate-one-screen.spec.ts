@@ -567,3 +567,48 @@ test.describe("the bottom pad", () => {
     expect(await page.locator("main").evaluate((element) => getComputedStyle(element).paddingBottom)).toBe("80px");
   });
 });
+
+test.describe("the verdict strip cues", () => {
+  test("a strip over other tickers' cached source data says so, and its title gives the full message", async ({ page }) => {
+    await mockCorporatePageApi(page);
+    await page.addInitScript(() => {
+      window.sessionStorage.setItem("moneyview:corporate-active-ticker:v1", JSON.stringify("MSFT"));
+      window.sessionStorage.setItem("moneyview:corporate-metric-history-cache:v1", JSON.stringify({
+        snapshot: "AAPL",
+        result: {
+          ticker: "AAPL", start_year: 2021, country_risk_premium: 0.8, growth_cagr: 5.5, growth_recent_average: 5.2,
+          annual_growth_rates: [{ year: 2025, value: 5.3 }], roic_recent_average: 17.8, roic_all_year_average: 17.1,
+          annual_roic: [{ year: 2025, value: 17.5 }],
+        },
+        lastUpdatedAt: "2026-04-10T10:00:00Z",
+      }));
+    });
+    await gotoCorporate(page);
+    const stale = page.getByTestId("corporate-verdict-strip").locator('[data-part="stale"]');
+    await expect(stale).toContainText("Stale source");
+    await expect(stale).toHaveAttribute("title", "Cached source data is for AAPL. Refresh for MSFT.");
+  });
+
+  test("a strip over a cached value carries data-busy while a refresh runs", async ({ page }) => {
+    await mockCorporatePageApi(page);
+    await gotoCorporate(page);
+    await page.getByRole("button", { name: "Refresh DCF" }).click();
+    await expect(verdict(page)).toHaveAttribute("data-state", "valued", { timeout: 30_000 });
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await expect(verdict(page)).toHaveAttribute("data-state", "valued", { timeout: 30_000 });
+
+    // Hold the next stream until the test releases it, so the cached value is on the strip while it runs.
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    await page.route("**/api/v1/corporate/dcf/AAPL/stream", async (route) => {
+      await gate;
+      await route.fulfill({ status: 200, contentType: "text/event-stream", body: dcfStream({}) });
+    });
+    await page.getByRole("button", { name: "Refresh DCF" }).click();
+    const strip = page.getByTestId("corporate-verdict-strip");
+    await expect(strip).toHaveAttribute("data-busy", "true");
+    await expect(strip).toHaveAttribute("data-state", "valued");
+    release();
+    await expect(strip).not.toHaveAttribute("data-busy", "true", { timeout: 30_000 });
+  });
+});

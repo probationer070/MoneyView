@@ -28,7 +28,7 @@ export const ko: Messages = {
       idle: "DCF 미계산 · 위의 DCF 새로고침을 누르십시오", streaming: "계산 중…",
       refused: "평가하지 않음: {reason}", ev: "기업가치(EV) {value}",
     },
-    verdictStrip: { idle: "DCF 미계산", refused: "평가하지 않음" },
+    verdictStrip: { idle: "DCF 미계산", refused: "평가하지 않음", staleSource: "원천 자료 오래됨" },
     kpi: {
       spread: "ROIC - WACC", ke: "상향식 Ke", wacc: "WACC", beta: "레버리지 베타",
       spreadUp: "가치 창출", spreadDown: "가치 훼손",

@@ -25,7 +25,7 @@ export const en = {
       idle: "DCF not calculated · use Refresh DCF above", streaming: "Calculating…",
       refused: "Not valued: {reason}", ev: "EV {value}",
     },
-    verdictStrip: { idle: "DCF not calculated", refused: "Not valued" },
+    verdictStrip: { idle: "DCF not calculated", refused: "Not valued", staleSource: "Stale source" },
     kpi: {
       spread: "ROIC - WACC", ke: "Bottom-up Ke", wacc: "WACC", beta: "Levered Beta",
       spreadUp: "Value creation", spreadDown: "Value destruction",

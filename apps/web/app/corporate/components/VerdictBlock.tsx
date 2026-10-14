@@ -1,6 +1,6 @@
 "use client";
 
-import { Info } from "lucide-react";
+import { Info, TriangleAlert } from "lucide-react";
 import { BilingualLabel } from "@/components/ui/BilingualLabel";
 import { Card } from "@/components/ui/Card";
 import { DeltaBadge } from "@/components/ui/DeltaBadge";
@@ -83,6 +83,12 @@ export function VerdictBlock({ view, onOpenDetail }: VerdictProps) {
   );
 }
 
+/** Cached source data for other tickers: the strip's warning names them and the ticker on screen. */
+export interface StaleSource {
+  cached: string;
+  ticker: string;
+}
+
 const STRIP_TEXT = {
   idle: "corporate.verdictStrip.idle",
   streaming: "corporate.verdict.streaming",
@@ -95,13 +101,14 @@ const STRIP_TEXT = {
  * contain "Verdict detail" (the block's ⓘ, clicked by name in four specs); it reuses none of the
  * block's testids.
  */
-export function VerdictStrip({ view, onOpenDetail }: VerdictProps) {
+export function VerdictStrip({ view, onOpenDetail, staleSource }: VerdictProps & { staleSource: StaleSource | null }) {
   const t = useT();
   return (
     <button
       type="button"
       data-testid="corporate-verdict-strip"
       data-state={view.state}
+      data-busy={view.streaming && view.state === "valued" ? "true" : undefined}
       onClick={onOpenDetail}
       title={view.state === "refused" ? t("corporate.verdict.refused", { reason: view.refusalText ?? "" }) : undefined}
       className="type-small inline-flex min-w-0 flex-wrap items-center gap-2 rounded-[var(--radius-1)] text-left text-[var(--ink-secondary)] hover:text-[var(--ink)]"
@@ -116,6 +123,13 @@ export function VerdictStrip({ view, onOpenDetail }: VerdictProps) {
       ) : (
         <span>{t(STRIP_TEXT[view.state])}</span>
       )}
+      {staleSource ? (
+        // The cached source data is for other tickers (the Summary's source-data line says the same); the title gives it in full.
+        <span data-part="stale" title={t("corporate.assumptions.staleSource", { cached: staleSource.cached, ticker: staleSource.ticker })} className="inline-flex items-center gap-1 text-[var(--status-warning-ink)]">
+          <TriangleAlert aria-hidden="true" className="h-3.5 w-3.5" />
+          <span>{t("corporate.verdictStrip.staleSource")}</span>
+        </span>
+      ) : null}
     </button>
   );
 }
