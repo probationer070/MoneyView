@@ -217,6 +217,8 @@ Rows 56–57 are the helper-file imports, counted so that nothing is edited unli
 
 **Approved by the owner on 2026-10-15** (rows as listed; changes: none).
 
+| 66 | `corporate-viewport.spec.ts:37-38` | `getByText("DCF Core Modules").first()` then `scrollIntoViewIfNeeded()` | The `next/dynamic` loading card renders the same `<h3>DCF Core Modules</h3>` and detaches when the chunk swaps in, so `scrollIntoViewIfNeeded` can throw "not attached" (flake seen in Task 7b full run 1; cause found by the Task 7b review). | Insert `await expect(<same locator>).toBeVisible({ timeout: 60_000 });` before the `scrollIntoViewIfNeeded` line. **Approved by the owner on 2026-10-15** (Task 7b fix round 1). |
+
 **Line numbers** are at `21362c1`. None of the specs below changed after `a8dba14`. Locate each row by the quoted code, as above.
 
 **What breaks, and why.** Task 7b makes Summary the default page tab and mounts only the active panel. Two kinds of assertion break:
