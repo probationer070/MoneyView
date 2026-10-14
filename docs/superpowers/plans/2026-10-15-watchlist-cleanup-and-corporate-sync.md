@@ -15,6 +15,9 @@
 
 ---
 
+
+**Owner answers 2026-10-15:** (1) clean every unreferenced cache ticker, including ones only viewed and never on the watchlist; (2) both PCs are updated the same day, no separate "ignore unknown kinds" release first; (3) no read-time sync on GET /corporate/metrics, startup and writes only.
+
 ## Verified facts this plan rests on (file:line on `renewal` @ `0d32d33`; `apps/api` is identical on `feat/corporate-one-screen`)
 
 **Cleanup tables (spec §2.1), pinned:**
