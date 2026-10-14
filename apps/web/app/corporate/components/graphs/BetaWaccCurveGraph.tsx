@@ -22,7 +22,7 @@ export function BetaWaccCurveGraph({
       <button
         type="button"
         onClick={() => onOpenDetail("betaWaccCurve")}
-        className="type-panel-title text-left text-[var(--ink)] underline decoration-dotted underline-offset-4 hover:text-[var(--brand)]"
+        className="type-panel-title text-left text-[var(--ink)] underline decoration-dotted underline-offset-4 hover:text-[var(--brand-text)]"
       >
         <InfoTooltip
           label="Bottom-up Beta + WACC U-Curve"
@@ -49,7 +49,7 @@ export function BetaWaccCurveGraph({
             <XAxis dataKey="debt" {...withAxisProps({ tickFormatter: (value: number | string) => fmtPctTick(Number(value), 0) })} />
             <YAxis {...withAxisProps({ tickFormatter: (value: number | string) => fmtPctTick(Number(value), 0) })} />
             <Tooltip {...withTooltipProps()} formatter={(value) => pct(Number(value))} />
-            <Line type="monotone" dataKey="wacc" stroke="var(--brand)" strokeWidth={3} dot={false} />
+            <Line type="monotone" dataKey="wacc" stroke="var(--chart-1)" strokeWidth={3} dot={false} />
             <ReferenceLine x={assumptionsDebtRatio} stroke="var(--ink)" strokeDasharray="4 4" />
           </LineChart>
         </ResponsiveChart>

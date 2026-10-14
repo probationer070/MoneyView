@@ -38,7 +38,7 @@ export function DcfCoreModulesGraph({
       <button
         type="button"
         onClick={() => onOpenDetail("dcfCoreModules")}
-        className="type-panel-title text-left text-[var(--ink)] underline decoration-dotted underline-offset-4 hover:text-[var(--brand)]"
+        className="type-panel-title text-left text-[var(--ink)] underline decoration-dotted underline-offset-4 hover:text-[var(--brand-text)]"
       >
         <InfoTooltip
           label="DCF Core Modules"
@@ -49,7 +49,7 @@ export function DcfCoreModulesGraph({
         <button
           type="button"
           onClick={() => onOpenDetail("sustainableGrowth")}
-          className="rounded-[var(--radius-1)] p-2 text-left transition hover:bg-[var(--brand)]"
+          className="rounded-[var(--radius-1)] p-2 text-left transition hover:bg-[var(--brand-soft)]"
         >
           <div className="type-caption uppercase text-[var(--ink-muted)]">
             <InfoTooltip
@@ -62,7 +62,7 @@ export function DcfCoreModulesGraph({
         <button
           type="button"
           onClick={() => onOpenDetail("terminalValueShare")}
-          className="rounded-[var(--radius-1)] p-2 text-left transition hover:bg-[var(--brand)]"
+          className="rounded-[var(--radius-1)] p-2 text-left transition hover:bg-[var(--brand-soft)]"
         >
           <div className="type-caption uppercase text-[var(--ink-muted)]">Terminal Value Share</div>
           {/* Measured by the backend as PV(terminal) / enterprise value. It is a property
@@ -104,7 +104,7 @@ export function DcfCoreModulesGraph({
         <button
           type="button"
           onClick={() => onOpenDetail("fcffMagnitude")}
-          className="rounded-[var(--radius-1)] p-2 text-left transition hover:bg-[var(--brand)]"
+          className="rounded-[var(--radius-1)] p-2 text-left transition hover:bg-[var(--brand-soft)]"
         >
           <div className="type-caption uppercase text-[var(--ink-muted)]">FCFF Magnitude</div>
           <div className="type-figure-md">{moneyText(fcff)}B</div>
@@ -112,7 +112,7 @@ export function DcfCoreModulesGraph({
         <button
           type="button"
           onClick={() => onOpenDetail("backendFairValue")}
-          className="rounded-[var(--radius-1)] p-2 text-left transition hover:bg-[var(--brand)]"
+          className="rounded-[var(--radius-1)] p-2 text-left transition hover:bg-[var(--brand-soft)]"
         >
           <div className="type-caption uppercase text-[var(--ink-muted)]">Intrinsic DCF Value</div>
           <div

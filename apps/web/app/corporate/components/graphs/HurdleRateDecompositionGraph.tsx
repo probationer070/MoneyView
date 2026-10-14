@@ -22,7 +22,7 @@ export function HurdleRateDecompositionGraph({
         <button
           type="button"
           onClick={() => onOpenDetail("hurdleDecomposition")}
-          className="type-small mt-1 text-left text-[var(--ink-muted)] underline decoration-dotted underline-offset-4 hover:text-[var(--brand)]"
+          className="type-small mt-1 text-left text-[var(--ink-muted)] underline decoration-dotted underline-offset-4 hover:text-[var(--brand-text)]"
         >
           <InfoTooltip
             label="Open formula and regional breakdown details"
@@ -39,7 +39,7 @@ export function HurdleRateDecompositionGraph({
             <ZAxis dataKey="revenue" range={[80, 520]} />
             <Tooltip {...withTooltipProps()} formatter={(value, name) => (name === "Implied ERP" ? pct2(Number(value)) : pct(Number(value)))} />
             <Bar dataKey="crp" name="CRP" fill="var(--ink)" />
-            <Line dataKey="erp" name="Implied ERP" stroke="var(--brand)" strokeWidth={3} dot={{ r: 4 }} />
+            <Line dataKey="erp" name="Implied ERP" stroke="var(--chart-1)" strokeWidth={3} dot={{ r: 4 }} />
           </ComposedChart>
         </ResponsiveChart>
       </div>
@@ -53,7 +53,7 @@ export function HurdleRateDecompositionGraph({
               else if (item.name === "Beta x Implied ERP") onOpenDetail("erp");
               else onOpenDetail("bottomUpKe");
             }}
-            className="flex items-center gap-2 text-left transition hover:text-[var(--brand)]"
+            className="flex items-center gap-2 text-left transition hover:text-[var(--brand-text)]"
           >
             {/* rounded-full: a colour-key dot in the legend, not a panel. */}
             <span className="h-2 w-2 rounded-full" style={{ backgroundColor: item.fill }} />

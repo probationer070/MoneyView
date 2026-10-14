@@ -681,3 +681,42 @@ test.describe("the DCF uses the inputs on screen", () => {
     await expect(dialog.getByTestId("sensitivity-row-current").getByRole("cell").nth(2)).toHaveText("—");
   });
 });
+
+test.describe("a hovered DCF tile keeps its caption readable", () => {
+  test("the caption keeps at least 4.5:1 on the hover ground", async ({ page }) => {
+    await mockCorporatePageApi(page);
+    await gotoCorporate(page);
+    await refreshDcf(page);
+    await openLowerTab(page, "DCF");
+    const caption = lowerPanel(page).getByText("FCFF Magnitude", { exact: true });
+    await expect(caption).toBeVisible();
+    const tile = caption.locator("xpath=ancestor::button[1]");
+    await tile.hover();
+    // The tile transitions its ground in on hover; read the colours only once the transition has ended.
+    await tile.evaluate(async (element) => {
+      await Promise.all(element.getAnimations({ subtree: true }).map((animation) => animation.finished));
+    });
+    const ratio = await caption.evaluate((element) => {
+      const luminance = (css: string) => {
+        const [r, g, b] = (css.match(/[\d.]+/g) ?? ["255", "255", "255"]).slice(0, 3).map((value) => {
+          const channel = Number(value) / 255;
+          return channel <= 0.03928 ? channel / 12.92 : Math.pow((channel + 0.055) / 1.055, 2.4);
+        });
+        return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      };
+      const transparent = /^rgba\(\s*0,\s*0,\s*0,\s*0\s*\)$/;
+      let ground = "rgb(255, 255, 255)";
+      for (let node: Element | null = element; node; node = node.parentElement) {
+        const background = getComputedStyle(node).backgroundColor;
+        if (!transparent.test(background)) {
+          ground = background;
+          break;
+        }
+      }
+      const ink = luminance(getComputedStyle(element).color);
+      const paper = luminance(ground);
+      return (Math.max(ink, paper) + 0.05) / (Math.min(ink, paper) + 0.05);
+    });
+    expect(ratio, "contrast of the FCFF Magnitude caption on its hover ground").toBeGreaterThanOrEqual(4.5);
+  });
+});

@@ -39,7 +39,7 @@ export function RangeControl({
                 event.preventDefault();
                 onDetailClick();
               }}
-              className="text-left underline decoration-dotted underline-offset-4 hover:text-[var(--brand)]"
+              className="text-left underline decoration-dotted underline-offset-4 hover:text-[var(--brand-text)]"
             >
               {description ? <InfoTooltip label={label} description={description} /> : label}
             </button>
@@ -49,7 +49,7 @@ export function RangeControl({
             label
           )}
         </span>
-        <span className="flex items-center gap-2 text-[var(--ink)] transition-colors group-hover/range:text-[var(--brand)]">
+        <span className="flex items-center gap-2 text-[var(--ink)] transition-colors group-hover/range:text-[var(--brand-text)]">
           {statusBadge}
           <span className="type-mono">
             {valueDisplay ?? `${value.toFixed(1)}${suffix}`}
