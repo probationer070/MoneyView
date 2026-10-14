@@ -20,7 +20,7 @@ export const ko: Messages = {
   portfolio: { title: "포트폴리오" },
   corporate: {
     title: "기업 분석",
-    search: { label: "기업 검색", placeholder: "회사명을 입력하세요", notListed: "목록에 없음 → 추가" },
+    search: { label: "기업 검색", placeholder: "회사명을 입력하십시오", notListed: "목록에 없음 → 추가" },
     add: { name: "회사명", symbol: "심볼", submit: "분석에 추가", cancel: "취소", failed: "{ticker}을(를) 추가하지 못했습니다." },
     header: { refreshDcf: "DCF 새로고침", notCalculated: "아직 계산하지 않았습니다" },
     verdict: {

@@ -4,7 +4,7 @@ import type { LabelKey } from "@/lib/i18n/labels";
 
 interface PageHeaderProps {
   title: string;
-  subtitle?: string;
+  subtitle?: ReactNode;
   eyebrow?: { label: LabelKey; suffix?: string };
   actions?: ReactNode;
   subtitleTestId?: string;

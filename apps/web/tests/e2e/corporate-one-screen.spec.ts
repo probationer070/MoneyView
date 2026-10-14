@@ -360,6 +360,27 @@ test.describe("the header row", () => {
     await expect(form).toHaveCount(0);
   });
 
+  test("the keyboard reaches the add form from the search, with focus in its first field", async ({ page }) => {
+    await mockCorporatePageApi(page);
+    let posted: unknown = null;
+    page.on("request", (request) => {
+      if (request.method() === "POST" && new URL(request.url()).pathname.endsWith("/corporate/companies")) posted = request.postDataJSON();
+    });
+    await gotoCorporate(page);
+    const search = page.getByLabel("Company Search");
+    await search.fill("zzzq");
+    await search.press("Enter");
+    const form = page.getByTestId("add-company-form");
+    await expect(form).toBeVisible();
+    await expect(form.getByLabel("Symbol")).toHaveValue("ZZZQ");
+    await expect(form.getByLabel("Company name")).toBeFocused();
+    await page.keyboard.type("Zed Quartz");
+    await page.keyboard.press("Enter");
+    await expect.poll(() => posted).toEqual({ ticker: "ZZZQ", name: "Zed Quartz", source: "manual" });
+    await expect(page.getByTestId("corporate-company-line")).toContainText("Zed Quartz");
+    await expect(form).toHaveCount(0);
+  });
+
   test("a listed match never offers the add entry", async ({ page }) => {
     await mockCorporatePageApi(page);
     await gotoCorporate(page);
@@ -378,6 +399,8 @@ test.describe("the header row", () => {
     await expect(page.getByText("DCF stays idle on first load until you refresh it.")).toHaveCount(0);
     await expect(page.getByTestId("dcf-updated")).toContainText("Last updated");
     await expect(page.getByTestId("corporate-company-line")).toHaveText(/^Apple · .+ · \$210\.4$/);
+    await expect(page.getByTestId("corporate-company-line").locator("span.type-mono")).toHaveText("$210.4");
+    await expect(page.getByTestId("dcf-updated")).toHaveClass(/type-mono/);
   });
 });
 

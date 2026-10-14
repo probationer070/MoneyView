@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { ActionButton } from "@/components/ui/ActionButton";
 import { fieldInputClass } from "@/components/ui/InlineField";
@@ -39,6 +39,13 @@ export function CorporateHeader({
   const [draft, setDraft] = useState<{ name: string; symbol: string } | null>(null);
   const [adding, setAdding] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
+  const nameInputRef = useRef<HTMLInputElement>(null);
+  const formOpen = draft !== null;
+
+  // Keyboard users reach the add form from the search (Enter), so focus lands on its first field.
+  useEffect(() => {
+    if (formOpen) nameInputRef.current?.focus();
+  }, [formOpen]);
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -63,7 +70,11 @@ export function CorporateHeader({
     <PageHeader
       title={t("corporate.title")}
       eyebrow={{ label: "corporate" }}
-      subtitle={[companyName, sector || MISSING, priceText ?? MISSING].join(" · ")}
+      subtitle={(
+        <>
+          {companyName} · {sector || MISSING} · <span className="type-mono">{priceText ?? MISSING}</span>
+        </>
+      )}
       subtitleTestId="corporate-company-line"
       actions={
         <div className="flex w-full flex-col gap-2 sm:w-auto sm:items-end">
@@ -100,7 +111,7 @@ export function CorporateHeader({
             />
           </div>
           <div className="type-small flex flex-wrap items-center gap-2 text-[var(--ink-muted)] sm:justify-end">
-            <span data-testid="dcf-updated">
+            <span data-testid="dcf-updated" className="type-mono">
               {dcfUpdatedText ? t("corporate.assumptions.updated", { time: dcfUpdatedText }) : t("corporate.header.notCalculated")}
             </span>
             {dcfIsStale ? (
@@ -114,6 +125,7 @@ export function CorporateHeader({
             <form data-testid="add-company-form" onSubmit={(event) => void submit(event)} className="flex w-full flex-wrap items-end gap-2 sm:justify-end">
               <div className="w-48">
                 <input
+                  ref={nameInputRef}
                   aria-label={t("corporate.add.name")}
                   placeholder={t("corporate.add.name")}
                   value={draft.name}

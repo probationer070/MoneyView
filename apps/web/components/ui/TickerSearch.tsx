@@ -133,7 +133,12 @@ export function TickerSearch({
         onKeyDown={(event) => {
           if (event.key === "Enter") {
             event.preventDefault();
-            commit(matches.length === 1 ? matches[0].ticker : value);
+            if (showNoMatch && noMatchAction) {
+              setOpen(false);
+              noMatchAction.onSelect(value.trim());
+            } else {
+              commit(matches.length === 1 ? matches[0].ticker : value);
+            }
           }
           if (event.key === "Escape") setOpen(false);
         }}
