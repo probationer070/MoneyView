@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import type { CorporateMetricAudit, CorporateMetricAuditEntry } from "../../../../packages/shared-types";
-import { mockCorporatePageApi } from "./helpers/corporatePageMock";
+import { mockCorporatePageApi, type CorporatePageMockStats } from "./helpers/corporatePageMock";
 import { openDetailTab, refreshDcf } from "./helpers/corporateDcf";
 
 // Spec 2026-10-14 §4 and §7 test 7.
@@ -115,4 +115,56 @@ test("the last tab is remembered across metrics", async ({ page }) => {
   await closeDetail(page);
   await openKpi(page, /^Levered Beta/);
   await expect(detailTabs(page).getByRole("tab", { name: "Raw data" })).toHaveAttribute("aria-selected", "true");
+});
+
+function newStats(): CorporatePageMockStats {
+  return {
+    dcfRequests: 0, dcfFullReportRequests: 0, dcfBulkReportRequests: 0, comparisonRequests: 0,
+    metricSaveRequests: 0, metricHistoryRequests: 0, quarterlyRequests: 0, ohlcvRequests: 0,
+  };
+}
+
+// Spec 2026-10-14 §4 "Trend" and §7 test 9; plan N1 (only growth and ROIC have annual series).
+test("growth and ROIC have a Trend tab; CRP and debt ratio do not", async ({ page }) => {
+  await mockCorporatePageApi(page);
+  await gotoCorporate(page);
+  for (const [label, count] of [["Growth Rate", 1], ["ROIC", 1], ["Country Risk Premium", 0], ["Debt Ratio", 0]] as const) {
+    await openAssumptionDetail(page, label);
+    await expect(detailTabs(page).getByRole("tab", { name: "Trend" }), label).toHaveCount(count);
+    await closeDetail(page);
+  }
+});
+
+test("the trend asks for nothing until Load source data, then shows the annual values", async ({ page }) => {
+  const stats = newStats();
+  await mockCorporatePageApi(page, stats);
+  const historyRequests: string[] = [];
+  page.on("request", (request) => {
+    if (new URL(request.url()).pathname.endsWith("/corporate/metrics/AAPL/history")) historyRequests.push(request.url());
+  });
+  await gotoCorporate(page);
+  await openAssumptionDetail(page, "Growth Rate");
+  await openDetailTab(dialog(page), "Trend");
+  await expect(dialog(page).getByRole("button", { name: "Load source data" })).toBeVisible();
+  await page.waitForLoadState("networkidle");
+  expect(historyRequests).toEqual([]);
+  expect(stats.metricHistoryRequests).toBe(0);
+  await dialog(page).getByRole("button", { name: "Load source data" }).click();
+  const table = dialog(page).getByTestId("trend-table");
+  await expect(table).toContainText("2025", { timeout: 30_000 });
+  await expect(table).toContainText("6.0%");
+  expect(historyRequests).toHaveLength(1);
+});
+
+test("a metric without the remembered tab opens Summary and keeps the memory", async ({ page }) => {
+  await mockCorporatePageApi(page);
+  await gotoCorporate(page);
+  await openAssumptionDetail(page, "Growth Rate");
+  await openDetailTab(dialog(page), "Trend");
+  await closeDetail(page);
+  await openAssumptionDetail(page, "Country Risk Premium");
+  await expect(detailTabs(page).getByRole("tab", { name: "Summary", exact: true })).toHaveAttribute("aria-selected", "true");
+  await closeDetail(page);
+  await openAssumptionDetail(page, "ROIC");
+  await expect(detailTabs(page).getByRole("tab", { name: "Trend" })).toHaveAttribute("aria-selected", "true");
 });

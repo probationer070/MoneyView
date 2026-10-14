@@ -88,6 +88,12 @@ export const en = {
       auditUnavailable: "Calculation Audit Unavailable", auditError: "Could not load the metric audit for {ticker}.",
       exportAnalysis: "Download CSV: Analysis", exportOhlcv: "Download CSV: OHLCV", exportStatements: "Download CSV: Statements", print: "Print",
       waccInputNote: "From the latest audit; your WACC input is {input}.",
+      trend: {
+        idle: "Annual values load with the source data. Nothing is requested until you ask.",
+        load: "Load source data", loading: "Loading source data…",
+        empty: "No annual values for this metric.", error: "Source data unavailable",
+        errorBody: "The annual history could not be loaded.", title: "{label} by year",
+      },
       meaning: {
         realtime: "The assumption set every figure on this page is computed from.",
         growth: "Revenue growth the forecast assumes each year.",

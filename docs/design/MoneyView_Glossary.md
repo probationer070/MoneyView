@@ -61,6 +61,7 @@ capitals: "종목 NAME". Both come from `apps/web/lib/i18n/labels.ts`; add the r
 | Chart unavailable | 차트를 표시할 수 없습니다 | chart panel error title (default) |
 | Input | 입력 | label (audit table header) |
 | Value | 값 | label (audit table header) |
+| Year | 연도 | label (trend table header) |
 | Source | 출처 | label (audit table header) |
 | Ticker | 종목 코드 | label (portfolio table header) |
 | Sector | 섹터 | label (portfolio table header) |

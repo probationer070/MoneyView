@@ -1049,6 +1049,10 @@ export default function CorporateAnalysisPage() {
           metricAudit={metricAuditQuery.data ?? null}
           metricAuditIsLoading={metricAuditQuery.isLoading}
           metricAuditIsError={metricAuditQuery.isError}
+          history={metricsHistoryData}
+          historyIsFetching={metricsHistoryQuery.isFetching}
+          historyIsError={metricsHistoryQuery.isError}
+          onLoadHistory={handleRefreshSourceData}
           rawDatasetRows={rawDatasetRows}
           historicalPrices={historicalPricesData}
           historicalStatus={historicalPriceStatus(historicalPricesQuery, historicalPricesData.length)}

@@ -16,6 +16,7 @@ export const LABELS = {
   monteCarlo: ["몬테카를로 시뮬레이션", "Monte Carlo"],
   input: ["입력", "Input"],
   value: ["값", "Value"],
+  year: ["연도", "Year"],
   source: ["출처", "Source"],
   dataPoint: ["데이터", "Data point"],
   asOf: ["기준일", "As of"],

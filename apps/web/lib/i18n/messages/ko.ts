@@ -91,6 +91,12 @@ export const ko: Messages = {
       auditUnavailable: "계산 감사를 불러오지 못했습니다", auditError: "{ticker}의 지표 감사를 불러오지 못했습니다.",
       exportAnalysis: "CSV 받기: 분석", exportOhlcv: "CSV 받기: OHLCV", exportStatements: "CSV 받기: 재무제표", print: "인쇄",
       waccInputNote: "최근 감사 값을 사용했습니다. 입력된 WACC는 {input}입니다.",
+      trend: {
+        idle: "연도별 값은 원천 데이터와 함께 불러옵니다. 요청하기 전에는 불러오지 않습니다.",
+        load: "원천 데이터 불러오기", loading: "원천 데이터를 불러오는 중…",
+        empty: "이 지표의 연도별 값이 없습니다.", error: "원천 데이터를 불러오지 못했습니다",
+        errorBody: "연도별 이력을 불러오지 못했습니다.", title: "연도별 {label}",
+      },
       meaning: {
         realtime: "이 화면의 모든 수치를 계산하는 가정 묶음입니다.",
         growth: "예측이 매년 가정하는 매출 성장률입니다.",

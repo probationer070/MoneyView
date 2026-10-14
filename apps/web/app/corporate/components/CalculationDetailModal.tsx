@@ -12,10 +12,11 @@ import type { CalculationDetail, CalculationDetailKey, RawDatasetRow } from "./c
 import { RawDataTab, type QuarterlyStatementRow, type StockPriceRow } from "./detail/RawDataTab";
 import { StepsTab } from "./detail/StepsTab";
 import { SummaryTab } from "./detail/SummaryTab";
+import { TrendTab, type TrendHistory } from "./detail/TrendTab";
 import { VerdictStatusLabel } from "./VerdictBlock";
 
-/** Tabs built so far. Task 9 adds "trend", Task 10 "peers", Task 11 "sensitivity". */
-const BUILT_TABS: readonly DetailTabKey[] = ["summary", "steps", "raw"];
+/** Tabs built so far. Task 10 adds "peers", Task 11 "sensitivity". */
+const BUILT_TABS: readonly DetailTabKey[] = ["summary", "steps", "trend", "raw"];
 
 interface CalculationDetailModalProps {
   detail: CalculationDetail;
@@ -29,6 +30,10 @@ interface CalculationDetailModalProps {
   metricAudit: CorporateMetricAudit | null;
   metricAuditIsLoading: boolean;
   metricAuditIsError: boolean;
+  history: TrendHistory | null;
+  historyIsFetching: boolean;
+  historyIsError: boolean;
+  onLoadHistory: () => void;
   rawDatasetRows: RawDatasetRow[];
   historicalPrices: StockPriceRow[];
   historicalStatus: string;
@@ -89,6 +94,9 @@ export function CalculationDetailModal(props: CalculationDetailModalProps) {
           ) : null}
           {active === "steps" ? (
             <StepsTab detail={detail} ticker={ticker} metricAudit={metricAudit} metricAuditIsLoading={metricAuditIsLoading} metricAuditIsError={metricAuditIsError} />
+          ) : null}
+          {active === "trend" ? (
+            <TrendTab detailKey={detailKey} history={props.history} isFetching={props.historyIsFetching} isError={props.historyIsError} onLoad={props.onLoadHistory} />
           ) : null}
           {active === "raw" ? <RawDataTab {...props} /> : null}
         </div>
