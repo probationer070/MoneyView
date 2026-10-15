@@ -195,7 +195,7 @@ capitals: "종목 NAME". Both come from `apps/web/lib/i18n/labels.ts`; add the r
 | Cache Hit Rate | 캐시 적중률 | dev monitor KPI |
 | Pause / Resume / Clear | 일시 정지 / 재개 / 지우기 | dev monitor buttons |
 | Export JSONL | JSONL 내보내기 | dev monitor button |
-| Route / total_ms / self_ms / db_ms | 라우트 / 총 소요 시간 / 자체 소요 시간 / DB 소요 시간 | dev performance table headers; the English half keeps the field name |
+| Route / Total ms / Self ms / DB ms | 라우트 / 총 소요 시간 / 자체 소요 시간 / DB 소요 시간 | dev performance table headers; the field names (`total_ms`, `self_ms`, `db_ms`) stay in the data, not in the header |
 | Per-stock cost | 종목별 비용 | dev performance section title |
 | Cache effectiveness | 캐시 효율 | dev performance section title |
 | Technicals | 기술적 지표 | detail card title |

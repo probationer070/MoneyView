@@ -1,7 +1,9 @@
 # MoneyView Design Tokens
 
 > Canonical token reference for the MoneyView frontend design system.
-> All tokens map to CSS custom properties defined in `apps/web/app/globals.css`.
+> Source of truth: `apps/web/tokens/moneyview.tokens.json`. `npm run tokens` (in apps/web) generates
+> `apps/web/app/tokens.generated.css` (CSS custom properties) and `apps/web/lib/tokens.generated.ts` (typed values for canvas and SVG).
+> The usage rules and lint messages are in `DESIGN.md` at the repo root.
 
 ---
 

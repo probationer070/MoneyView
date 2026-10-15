@@ -68,19 +68,19 @@ export const LABELS = {
   duration: ["소요 시간", "Duration"],
   threshold: ["기준 시간", "Threshold"],
   route: ["라우트", "route"],
-  totalMs: ["총 소요 시간", "total_ms"],
+  totalMs: ["총 소요 시간", "Total ms"],
   spans: ["구간 수", "spans"],
   tickers: ["종목 수", "tickers"],
   state: ["상태", "state"],
-  selfMs: ["자체 소요 시간", "self_ms"],
-  dbMs: ["DB 소요 시간", "db_ms"],
+  selfMs: ["자체 소요 시간", "Self ms"],
+  dbMs: ["DB 소요 시간", "DB ms"],
   rows: ["행 수", "rows"],
   component: ["컴포넌트", "component"],
   hits: ["적중", "hits"],
   misses: ["미스", "misses"],
   rate: ["비율", "rate"],
   avgMiss: ["평균 미스 비용", "avg miss"],
-  saved: ["절감 추정", "saved (est)"],
+  saved: ["절감 추정", "Est. saved"],
 } as const satisfies Record<string, readonly [string, string]>;
 
 export type LabelKey = keyof typeof LABELS;
