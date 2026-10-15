@@ -57,11 +57,19 @@ Plan: `docs/superpowers/plans/2026-10-12-design-system-formalization.md`.
 - [x] D8 component layer  - [x] D9 shared UI/charts  - [x] D10 portfolio  - [ ] D11 valuation/cases/decisions (corporate moved to the one-screen plan)
 - Corporate one-screen (part A): plan `docs/superpowers/plans/2026-10-14-corporate-one-screen.md`, branch `feat/corporate-one-screen` (merges back before D11).
   - [x] C1 notes  - [x] C2 owner approval of the test inventory  - [x] C3 top bar  - [x] C4 pure models  - [x] C5 first screen  - [x] C6 lower tabs
-  - [x] C7 header  - [x] C7b page tabs + verdict strip (D10)  - [x] C8 modal tabs  - [x] C9 trend  - [x] C10 peers  - [x] C11 sensitivity  - [x] C12 corporate on paper tokens  - [ ] C13 final gate
+  - [x] C7 header  - [x] C7b page tabs + verdict strip (D10)  - [x] C8 modal tabs  - [x] C9 trend  - [x] C10 peers  - [x] C11 sensitivity  - [x] C12 corporate on paper tokens  - [x] C13 final gate
+  - Follow-up B: sector peer data (spec D7/D8), which replaces the Peers tab's universe position.
+  - Follow-up N9 residue: M5 numbers, `buildCalculationDetails` prose, bilingual headers on the pre-existing tables.
+  - Follow-up N1 input: annual history for debt ratio, reinvestment, beta and innovation, which the backend must supply.
+  - Owner decision pending: the WACC tile shows the slider value while the assumption table shows the audit's "N/A" when the audit is invalid.
+  - DS Task 14 lint/test rules: `rounded-full` on chips (no check today; Task 12 mutant uncaught), `font-*` without a reason, figures without mono, and no page scroll at 1280×720.
+  - The dvh fix (Task 7b, `min-h-dvh`) has not been tested on a real phone; only Chromium at 390×844 is covered.
+  - Uppercase table-header consistency, for DS Task 11.
 - One-screen principle for every page (owner, 2026-10-14): no page scroll at 1280×720. After corporate, one page at a time with its own short spec and plan: market → monte carlo → detail → signals → list pages (news, events, decisions, cases: fixed header and filters, list scrolls inside its panel). Add a shared rule and an automated "no page scroll at 1280×720" check (DS Task 14 or a follow-up). Heights 2026-10-14: corporate 2836, market 1520, decisions 1530, events 1012.
 - [ ] D12 monte-carlo  - [ ] D13 market/detail/news/events/dev/signals  - [ ] D14 lock-down
 Baseline counts (D1, 2026-10-13, `npm run design:baseline` over app/components/lib/hooks): typeScale 650, paletteClass 92 (142 class occurrences; the rule reports per string), rawRadius 47, rawShadow 13, lengthTypeVar 115, arbitraryPx 13, hex 53, colorFn 10, numericFontSize 2. Total 995.
 Captures and review verdicts: D1 `before` vs `before-again`: 7 of 7 byte-identical. Mask: SparklineCard `article` on `/` (market cards are server-rendered from the live API, so they move between runs). D4 `after-rename` vs `after-font`: glyph change only, no new truncation; Corporate "Reference Method" / "Comparison Type" tiles clip at the edge in both captures (pre-existing, not a font effect).
+Corporate one-screen capture review (C13, 2026-10-15): `apps/web/design-capture/corporate-one-screen/`, review page `apps/web/design-capture/review-after-corporate-vs-corporate-one-screen.html` (gitignored). corporate.png is 1280x720, so the page does not scroll. Verdicts: corporate = pass for the shell and the §2A Summary layout (header verdict strip shows the not-calculated state; Country Risk Premium label and Bottom-up Ke caption truncate; WACC tile vs table N/A is the open owner decision). market = stretch, 1472 px tall; the magenta cards are Playwright's mask on live-data cards by design. portfolio = 720, list pane scrolls inside, cards clip at the pane edge (list-page rule, later). valuation and cases = pass at 720. decisions = 1498 px and events = 972 px, both scroll (width-driven stretch, noted, DS Tasks 11-13). dev-design = 821 px (noted).
 
 ---
 
