@@ -23,7 +23,8 @@ def _iso(moment: datetime) -> str:
 
 
 def record_pending(conn: sqlite3.Connection, ticker: str, now: datetime | None = None) -> None:
-    """Record that `ticker` left the watchlist at `now`. A later removal restarts the clock."""
+    """Record that `ticker` left the watchlist at `now`. A later removal restarts the clock.
+    `now` must be timezone-aware; a naive datetime would be read as local time."""
     conn.execute(
         """INSERT INTO cleanup_pending (ticker, removed_at) VALUES (?, ?)
            ON CONFLICT(ticker) DO UPDATE SET removed_at = excluded.removed_at""",

@@ -25,13 +25,34 @@ def test_init_db_creates_the_pending_table():
     assert columns["removed_at"]["notnull"] == 1
 
 
-def test_an_existing_database_without_the_table_gains_it_on_init():
+def test_rerunning_init_db_on_a_database_without_the_table_restores_it():
+    """Regression guard, not a test of either schema block. Re-running init_db on a database that
+    lacks the table must restore it. With both blocks present, the primary CREATE in
+    _CREATE_SCHEMA_SQL does the work, so this test alone cannot tell the two blocks apart; the
+    compatibility-path test below pins the fallback on its own.
+    """
     with get_db() as conn:
+        present = {r["name"] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        assert "cleanup_pending" in present, "setup: cleanup_pending must exist before the DROP"
         conn.execute("DROP TABLE cleanup_pending")
     db_service.init_db()
     with get_db() as conn:
         tables = {r["name"] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     assert "cleanup_pending" in tables, "init_db did not add cleanup_pending to an existing database"
+
+
+def test_the_compatibility_path_alone_creates_the_pending_table():
+    """Calls _ensure_schema_compatibility directly on a database without the table (the fixture has
+    already run init_db). This does NOT reproduce the legacy init_db path, the one where the create
+    script stops at the universe_key error: that path crashes earlier, at db.py:897
+    (corporate_quote_facts), a pre-existing defect outside this task. This test pins the fallback
+    block by itself.
+    """
+    with get_db() as conn:
+        conn.execute("DROP TABLE cleanup_pending")
+        db_service._ensure_schema_compatibility(conn)
+        tables = {r["name"] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    assert "cleanup_pending" in tables, "_ensure_schema_compatibility did not create cleanup_pending"
 
 
 def test_a_second_removal_restarts_the_clock_and_the_ticker_is_normalised():
