@@ -36,10 +36,9 @@ test("up bars are painted in the up colour and down bars in the down colour", as
   const canvas = page.locator('[role="dialog"] canvas').first();
   await expect(canvas).toBeVisible();
 
-  // Sampling before the series animates in reads an undrawn buffer (see candle-colour.spec.ts).
-  await page.waitForTimeout(1200);
-
-  const counts = await canvas.evaluate((element, near) => {
+  // Sampling before the series is drawn reads an undrawn, transparent buffer (see candle-colour.spec.ts).
+  // Wait on the condition the assertions check: both directions painted.
+  const countBars = () => canvas.evaluate((element, near) => {
     const source = element as HTMLCanvasElement;
     const context = source.getContext("2d");
     if (!context) return null;
@@ -56,6 +55,14 @@ test("up bars are painted in the up colour and down bars in the down colour", as
     }
     return result;
   }, NEAR);
+
+  await expect
+    .poll(async () => {
+      const current = await countBars();
+      return current ? Math.min(current.up, current.down) : 0;
+    }, { message: "both candle directions should be painted" })
+    .toBeGreaterThan(50);
+  const counts = await countBars();
 
   expect(counts, "the chart canvas should be readable").not.toBeNull();
   expect(counts!.up, `up bars should paint ${JSON.stringify(DELTA_UP)}`).toBeGreaterThan(50);
