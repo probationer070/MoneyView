@@ -5,6 +5,7 @@ import { createChart, IChartApi, ISeriesApi, ColorType, CrosshairMode, Candlesti
 import { TVCandle, TVVolume, sanitizeTooltip } from "@/lib/transformers";
 import { emitClientPerformanceEvent } from "@/lib/api";
 import { resolveCssColor } from "@/lib/cssColor";
+import { candleUpColour } from "@/lib/candleColours";
 import { tokens } from "@/lib/tokens.generated";
 import { EventLinesPrimitive, eventsNearX, type EventGranularity, type EventHit, type EventLineSpec } from "@/components/charts/primitives/EventLinesPrimitive";
 import { EventTooltip } from "@/components/charts/EventTooltip";
@@ -69,7 +70,7 @@ const TVChart: React.FC<TVChartProps> = ({
     // convention the rest of the app states in copy.
     // Memoised: each call is a getComputedStyle, which is a style read, and these ran on
     // every render of a chart that re-renders on every data tick.
-    const resolvedUp = useMemo(() => resolveCssColor(upColor ?? colorAccent, tokens.up._), [upColor, colorAccent]);
+    const resolvedUp = useMemo(() => resolveCssColor(candleUpColour({ colorAccent, upColor }), tokens.up._), [upColor, colorAccent]);
     const resolvedDown = useMemo(() => resolveCssColor(downColor, tokens.down._), [downColor]);
     const resolvedAccent = useMemo(() => resolveCssColor(colorAccent, tokens.up._), [colorAccent]);
 

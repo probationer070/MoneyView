@@ -26,6 +26,16 @@ reveal that; only checking the code did.
 
 An entry states what was true when it was written. Nothing updates it on its own.
 
+## 2026-10-15: detail-page down-day candles (Task 13 recurrence of the 2026-10-14 market defect); prevention: TVChart's up colour no longer falls back to the accent
+
+Date: 2026-10-15 (final review of the design-system branch, I1 of the final-fix round).
+Command: `cd apps/web && npx playwright test tests/e2e/tvchart-up-colour.spec.ts --workers=1` (run with `candleUpColour` mutated back to `upColor ?? colorAccent`: the first test fails with `"var(--down)"` received for `"var(--up)"`).
+Failure: a chart that passed `colorAccent="var(--down)"` and no `upColor` painted its up candles and wicks in `--down`. The detail chart hit this on a down day (Task 13) before `detailChartColours` began passing `upColor`; the market chart had the same defect on 2026-10-14. No test caught it, and the mismatch was only visible on screen.
+Root cause: `TVChart` computed the up colour as `upColor ?? colorAccent`. The accent is the day's line colour, so on a down day it became the up candle colour too.
+Fix: the up colour is its own value, `candleUpColour` in `apps/web/lib/candleColours.ts`, which returns `upColor ?? "var(--up)"`. `colorAccent` now colours the line and the volume fallback only. Callers that pass `upColor` (market, detail, portfolio StockDetailModal) render as before. `SpreadsSection` and `OHLCVChartCard` callers that pass no `upColor` now get `--up` where they used to get `colorAccent`, which was `--up` on every path they take.
+Files changed: `apps/web/lib/candleColours.ts` (new), `apps/web/components/charts/TVChart.tsx`, `apps/web/tests/e2e/tvchart-up-colour.spec.ts` (new).
+Prevention: `tvchart-up-colour.spec.ts` pins the up colour under an accent of `--down`. The colour choice lives in a pure function so the test does not need a page. Any new chart prop that sets a series colour needs its own default, not a fallback to the accent.
+
 ## 2026-10-15: after a ticker switch the verdict, strip, company-line price and full report showed the previous ticker's DCF
 
 Date: 2026-10-15 (final review of the corporate one-screen plan). The defect predates this branch: the old tile at a3ec630 read the same page state.
