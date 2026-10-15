@@ -149,3 +149,13 @@ Every coding task follows `guideline/HARNESS.md`: stages from intake to records,
 routing, owner gates, and the fixed rules. Start a task by copying
 `guideline/templates/work-card.md`. The SOPs in §5 give the detail for each stage.
 Small bounded fixes may take the light path described there.
+
+## 10. Design Tokens
+
+**Colours, type, radius and component sizes come only from `apps/web/tokens/moneyview.tokens.json`.**
+Read `DESIGN.md` before writing UI. If a screen needs a value with no token, propose the token
+first; do not write the value into code. `npm run lint` rejects raw values, undefined and deprecated
+`var()` references, `rounded-full` outside dots, tracks and fills, unjustified bold weights, brand
+fills without on-brand ink, and figures without a mono style. Every page in `ONE_SCREEN_ROUTES` fits
+1280x720 with no page scroll. How a task is run (stages, owner gates, test scope) is
+`guideline/HARNESS.md`; do not restate it here.

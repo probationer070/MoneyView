@@ -1,5 +1,7 @@
 # MoneyView Component System
 
+> Values and component looks are superseded by DESIGN.md and /dev/design (2026-10 paper redesign).
+
 > Complete component inventory and specification for the MoneyView design system.
 > Components are organized by layer: global primitives, data display, and page-specific composites.
 

@@ -41,6 +41,8 @@ styling, or interaction behavior.
 | `MoneyView_Interaction_Rules.md` | Interaction and behavior conventions |
 | `MoneyView_Page_Wireframes.md` | Page-level layout wireframes |
 | `MoneyView_Spec_Addendum.md` | Addenda and clarifications to the above |
+| `MoneyView_Glossary.md` | Terms and Korean wording for UI copy |
+| `redesign-2026-10/` | The 2026-10 paper redesign the tokens are built from |
 
 ## Tabs (`docs/tabs/`)
 
@@ -106,6 +108,7 @@ sub-project and feeding an implementation plan.
 | `plans/2026-09-18-watchlist-peer-sync.md` | Task-by-task plan for watchlist peer sync: pure merge model, defensive peer files, run_sync under one lock, status line; the neutral seed ships as a second PR merged only after both PCs sync |
 | `2026-09-24-cases-ui-design.md` | Track C2 UI: the Cases tab -- fork a stored case with stated reasons, see why it moved by Shapley, and simulate it over stated distributions, entirely on existing endpoints |
 | `plans/2026-09-24-cases-ui.md` | Task-by-task plan for the Cases tab: caseFields' one percent<->fraction conversion, the case list and detail routes, the fork form, the Shapley why-it-moved section, and the simulate section |
+| `plans/2026-10-12-design-system-formalization.md` | Task-by-task plan for the design-system formalization: tokens, paper migration, lint rules and the lock-down |
 
 ## Process SOPs (`guideline/sop/`)
 
@@ -154,6 +157,7 @@ not project conventions.
 | `apps/api/AGENTS.md`, `apps/web/AGENTS.md` | Per-app agent rules (extend root `AGENTS.md`) |
 | `.claude/CLAUDE.md` | Claude-specific operating guidelines and SOP decision matrix |
 | `ERROR-LOG.md` | Confirmed-bug record (see `guideline/sop/build-error-resolver.md`) |
+| `DESIGN.md` | Design rules: token references, lint messages, what review checks |
 
 ## Out Of Scope For This Index
 

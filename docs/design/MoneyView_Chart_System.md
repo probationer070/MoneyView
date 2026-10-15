@@ -1,5 +1,7 @@
 # MoneyView Chart System
 
+> Values and component looks are superseded by DESIGN.md and /dev/design (2026-10 paper redesign).
+
 > Chart families, rendering standards, and visual rules for all data visualizations in MoneyView.
 
 ---
