@@ -47,6 +47,16 @@ is deferred on data (see its entry).
 
 ---
 
+### Track W: Watchlist cleanup and corporate sync (G1, G2)
+Plan: `docs/superpowers/plans/2026-10-15-watchlist-cleanup-and-corporate-sync.md`.
+Spec: `docs/superpowers/specs/2026-10-15-watchlist-cleanup-and-corporate-sync-design.md`.
+- [x] W1 `cleanup_pending` + run (30-day grace, references, savepoint per table)
+- [x] W2 hooks on every watchlist add/remove path, incl. peer sync
+- [x] W3 startup (gated) + daily run  - [x] W4 company list hides a deleted ticker
+- [x] W5 `corporate_metrics` / `corporate_companies` records-sync kinds + write-path stamps
+- [ ] W6 **Rollout:** update BOTH PCs in one session before either runs with sync on (an older
+      PC skips the updated PC's whole records file; see the plan's Rollout notes).
+
 ## Known limits, accepted deliberately
 
 Recorded so nobody rediscovers them as bugs.
