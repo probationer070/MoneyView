@@ -218,6 +218,7 @@ Rows 56–57 are the helper-file imports, counted so that nothing is edited unli
 **Approved by the owner on 2026-10-15** (rows as listed; changes: none).
 
 | 66 | `corporate-viewport.spec.ts:37-38` | `getByText("DCF Core Modules").first()` then `scrollIntoViewIfNeeded()` | The `next/dynamic` loading card renders the same `<h3>DCF Core Modules</h3>` and detaches when the chunk swaps in, so `scrollIntoViewIfNeeded` can throw "not attached" (flake seen in Task 7b full run 1; cause found by the Task 7b review). | Insert `await expect(<same locator>).toBeVisible({ timeout: 60_000 });` before the `scrollIntoViewIfNeeded` line. **Approved by the owner on 2026-10-15** (Task 7b fix round 1). |
+| 67 | `tests/e2e/helpers/corporatePageMock.ts:57-60, 226, 674-716` | (helper; plan said "unchanged") | Task 11 added `holdAaplMetrics` / `aaplMetricsPatch` options; the WACC display fix exported `mockMetricAudit`. Additive only; with options unset behaviour is identical. | Keep as committed. **Approved by the owner on 2026-10-15** (found by the final review, C1). |
 
 **Line numbers** are at `21362c1`. None of the specs below changed after `a8dba14`. Locate each row by the quoted code, as above.
 
