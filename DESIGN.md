@@ -33,6 +33,8 @@ file does not repeat it.
 - Charts: `--chart-1` is the subject series; at most five series (`--chart-1…5`), a sixth
   category folds into "Other" in `--chart-4`; fills at `--chart-area-opacity`; heatmaps use
   `--chart-heat-1…7` (down → neutral → up).
+- Sparklines: a multi-day path is coloured by its own first→last direction; the day's delta colours
+  only day figures. Callers pass no sparkline colour (`lib/sparklineTone.ts`, `windowTone`).
 - Landing-only type styles (`display`, `heading-1…4`, `body-lg`) exist as tokens without
   utilities until a landing page is built.
 - Every page in `ONE_SCREEN_ROUTES` (`apps/web/components/ui/oneScreenRoutes.ts`) fits 1280x720 and

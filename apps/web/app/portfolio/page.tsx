@@ -530,7 +530,6 @@ function HoldingsTable({
                     <Sparkline
                       data={stock.sparkline}
                       height={24}
-                      color={deltaPct >= 0 ? "var(--up)" : "var(--down)"}
                     />
                   </div>
                 </td>
@@ -2795,7 +2794,6 @@ export default function PortfolioPage() {
                         <Sparkline
                           data={stock.sparkline}
                           height={30}
-                          color={deltaPct >= 0 ? "var(--up)" : "var(--down)"}
                         />
                       </div>
                     </div>

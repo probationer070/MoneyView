@@ -689,7 +689,6 @@ export function StockDetailModal({
                           <Sparkline
                             data={stock.sparkline}
                             height={40}
-                            color={priceChangePct >= 0 ? "var(--up)" : "var(--down)"}
                           />
                         </div>
                         <p className="mt-1 type-small text-[var(--ink-muted)]">Recent price path alongside the saved comparison timeline.</p>

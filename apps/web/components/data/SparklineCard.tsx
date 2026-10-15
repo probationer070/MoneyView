@@ -23,8 +23,6 @@ export function SparklineCard({
   periodLabel,
   onOpen,
 }: SparklineCardProps) {
-  const sparklineColor = deltaPct >= 0 ? "var(--up)" : "var(--down)";
-
   return (
     <Card padding="lg" hoverable as="article" className="h-full">
       <button
@@ -45,7 +43,7 @@ export function SparklineCard({
         </div>
 
         <div className="mt-auto border-t border-[var(--grid)] pt-[var(--space-4)]">
-          <Sparkline data={sparkline} color={sparklineColor} />
+          <Sparkline data={sparkline} />
         </div>
 
         <div className="mt-[var(--space-4)] flex items-center justify-between type-small text-[var(--ink-muted)]">
