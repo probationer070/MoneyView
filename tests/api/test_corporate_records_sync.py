@@ -209,3 +209,24 @@ def company_name_local(ticker):
     with get_db() as conn:
         row = conn.execute("SELECT name FROM corporate_companies WHERE ticker = ?", (ticker,)).fetchone()
     return None if row is None else row["name"]
+
+
+def test_re_adding_a_company_never_seeds_an_unstamped_saved_row():
+    # A metrics row saved before this version (or before the first sync): real updated_at, no record_sync.
+    with get_db() as conn:
+        conn.execute(
+            "INSERT INTO corporate_metrics (ticker, growth, updated_at) VALUES ('LEU', 20.0, '2026-10-05T00:00:00+00:00')"
+        )
+    add_company_result = corporate_metrics_service.add_company(CorporateCompany(ticker="LEU", name="Centrus Energy"))
+    assert add_company_result.ticker == "LEU"
+    with get_db() as conn:
+        after_add = record_sync_row(conn, KIND_CORPORATE_METRICS, "LEU")
+    assert after_add is None, \
+        f"re-adding a company seeded a stamp onto an unstamped saved row: {dict(after_add) if after_add else None}"
+
+    # The first sync stamps the row from its own updated_at, not from SEED_TS.
+    with get_db() as conn:
+        store.ensure_first_sync(conn, watchlist_store.get_or_create_pc_id(conn))
+        stamped = record_sync_row(conn, KIND_CORPORATE_METRICS, "LEU")
+    assert stamped["updated_at"] == "2026-10-05T00:00:00.000Z", \
+        f"the first sync did not stamp the saved row from its own updated_at: {stamped['updated_at']}"
