@@ -6,11 +6,15 @@ import { Activity, AlertTriangle, Download, Pause, Play, RefreshCw, RotateCw, Sh
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Card } from "@/components/ui/Card";
 import { ActionButton } from "@/components/ui/ActionButton";
+import { BilingualLabel } from "@/components/ui/BilingualLabel";
+import { fieldInputClass } from "@/components/ui/InlineField";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { FilterBar } from "@/components/ui/FilterBar";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { LoadingState } from "@/components/ui/LoadingState";
+import { formatNumber, type FormatLocale } from "@/lib/format";
+import { useLocale, useT } from "@/lib/i18n/locale";
 import {
   fetchPerformanceRecent,
   fetchPerformanceSlow,
@@ -24,15 +28,15 @@ import { usePerformanceStream } from "@/hooks/usePerformanceStream";
 const INITIAL_RECENT_LIMIT = 200;
 const SLOW_EVENT_LIMIT = 100;
 
-function formatDuration(value: number | null | undefined) {
-  if (value == null) return "n/a";
-  return `${value.toFixed(1)} ms`;
+function formatDuration(value: number | null | undefined, locale: FormatLocale) {
+  if (value == null) return "—";
+  return `${formatNumber(value, "price", { digits: 1, locale })} ms`;
 }
 
-function formatTimestamp(value: string) {
+function formatTimestamp(value: string, locale: FormatLocale) {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleTimeString();
+  return parsed.toLocaleTimeString(locale === "ko" ? "ko-KR" : "en-US");
 }
 
 function isNotFoundError(error: unknown) {
@@ -47,10 +51,10 @@ function connectionBadgeState(connectionState: string) {
 }
 
 function levelTone(level: PerformanceEvent["level"]) {
-  if (level === "error") return "text-[var(--state-error)]";
-  if (level === "warn") return "text-[var(--state-warning)]";
-  if (level === "debug") return "text-[var(--text-muted)]";
-  return "text-[var(--text-primary)]";
+  if (level === "error") return "text-[var(--status-error-ink)]";
+  if (level === "warn") return "text-[var(--status-warning-ink)]";
+  if (level === "debug") return "text-[var(--ink-muted)]";
+  return "text-[var(--ink)]";
 }
 
 function statusBadgeVariant(event: PerformanceEvent): "live" | "loading" | "error" | "stale" | "idle" {
@@ -105,16 +109,16 @@ function KpiCard({
   detail: string;
 }) {
   return (
-    <Card className="min-h-[132px] bg-[linear-gradient(180deg,var(--bg-surface),var(--surface-muted))]">
+    <Card className="min-h-[132px]">
       <div className="flex h-full flex-col justify-between gap-4">
-        <div className="text-[length:var(--type-small)] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
+        <div className="type-caption uppercase text-[var(--ink-muted)]">
           {label}
         </div>
         <div>
-          <div className="text-[length:var(--type-metric-lg)] font-bold tracking-tight text-[var(--text-primary)]">
+          <div className="type-figure-md text-[var(--ink)]">
             {value}
           </div>
-          <div className="mt-2 text-[length:var(--type-helper)] text-[var(--text-secondary)]">
+          <div className="mt-2 type-small text-[var(--ink-secondary)]">
             {detail}
           </div>
         </div>
@@ -155,8 +159,8 @@ function SectionTitle({
   return (
     <div className="mb-4 flex items-start justify-between gap-3">
       <div>
-        <h2 className="text-[length:var(--type-section-title)] font-bold text-[var(--text-primary)]">{title}</h2>
-        <p className="mt-1 text-sm text-[var(--text-secondary)]">{description}</p>
+        <h2 className="type-panel-title text-[var(--ink)]">{title}</h2>
+        <p className="mt-1 type-body text-[var(--ink-secondary)]">{description}</p>
       </div>
     </div>
   );
@@ -175,21 +179,23 @@ function LatencyBarRow({
   status: React.ReactNode;
   width: string;
 }) {
+  const { locale } = useLocale();
   return (
-    <div className="grid gap-2 rounded-[var(--radius-md)] border border-[var(--border-soft)] bg-[var(--bg-surface)] p-3">
+    <div className="grid gap-2 border border-[var(--line)] bg-[var(--surface-raised)] p-3">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="overflow-inline-ellipsis text-sm font-semibold text-[var(--text-primary)]">{label}</div>
-          <div className="mt-1 overflow-inline-ellipsis text-[length:var(--type-helper)] text-[var(--text-muted)]">{sublabel}</div>
+          <div className="overflow-inline-ellipsis type-label text-[var(--ink)]">{label}</div>
+          <div className="mt-1 overflow-inline-ellipsis type-small text-[var(--ink-muted)]">{sublabel}</div>
         </div>
         <div className="shrink-0 text-right">
-          <div className="text-sm font-semibold tabular-nums text-[var(--text-primary)]">{formatDuration(durationMs)}</div>
+          <div className="type-mono text-[var(--ink)]">{formatDuration(durationMs, locale)}</div>
           <div className="mt-1">{status}</div>
         </div>
       </div>
-      <div className="h-2 overflow-hidden rounded-full bg-[var(--bg-subtle)]">
+      {/* A progress track and its fill: the only bars drawn with rounded-full (M3). */}
+      <div className="h-2 overflow-hidden rounded-full bg-[var(--surface)]">
         <div
-          className="h-full rounded-full bg-[linear-gradient(90deg,var(--state-info),var(--state-warning))]"
+          className="h-full rounded-full bg-[var(--brand)]"
           style={{ width }}
         />
       </div>
@@ -198,6 +204,9 @@ function LatencyBarRow({
 }
 
 export default function DevMonitorPage() {
+  const t = useT();
+  const { locale } = useLocale();
+  const count = (value: number) => formatNumber(value, "integer", { locale });
   const [scopeFilter, setScopeFilter] = useState("all");
   const [tickerFilter, setTickerFilter] = useState("");
   const [routeFilter, setRouteFilter] = useState("");
@@ -305,10 +314,10 @@ export default function DevMonitorPage() {
 
   const metricPanelGroups = useMemo(() => {
     const definitions = [
-      { key: "roic", label: "ROIC", matches: ["roic"] },
-      { key: "wacc", label: "WACC", matches: ["wacc"] },
-      { key: "dcf", label: "DCF", matches: ["dcf"] },
-      { key: "attribution", label: "Attribution", matches: ["attribution"] },
+      { key: "roic", label: t("devMonitor.metricTiming.groups.roic"), matches: ["roic"] },
+      { key: "wacc", label: t("devMonitor.metricTiming.groups.wacc"), matches: ["wacc"] },
+      { key: "dcf", label: t("devMonitor.metricTiming.groups.dcf"), matches: ["dcf"] },
+      { key: "attribution", label: t("devMonitor.metricTiming.groups.attribution"), matches: ["attribution"] },
     ] as const;
 
     return definitions.map((definition) => {
@@ -329,7 +338,7 @@ export default function DevMonitorPage() {
         warnings,
       };
     });
-  }, [durationEvents, visibleEvents]);
+  }, [durationEvents, visibleEvents, t]);
 
   const dataQualityWarnings = useMemo(() => {
     return visibleEvents
@@ -364,8 +373,8 @@ export default function DevMonitorPage() {
       <div className="mx-auto max-w-7xl space-y-8 animate-in fade-in duration-500">
         <PageHeader
           eyebrow={{ label: "devRuntime" }}
-          title="Dev Monitor"
-          subtitle="Local event stream, performance counters, and backend activity for MoneyView development."
+          title={t("devMonitor.title")}
+          subtitle={t("devMonitor.subtitleShell")}
         />
         <LoadingState variant="skeleton" />
       </div>
@@ -377,13 +386,13 @@ export default function DevMonitorPage() {
       <div className="mx-auto max-w-5xl space-y-8 animate-in fade-in duration-500">
         <PageHeader
           eyebrow={{ label: "devRuntime" }}
-          title="Dev Monitor"
-          subtitle="This page is local-only and appears when backend monitor mode is enabled."
+          title={t("devMonitor.title")}
+          subtitle={t("devMonitor.subtitleLocal")}
         />
         <EmptyState
           icon={<ShieldAlert className="h-6 w-6" />}
-          title="Dev monitor is disabled"
-          description="Set MONEYVIEW_DEV_MONITOR=true for the backend, then refresh this page to load the local performance stream."
+          title={t("devMonitor.disabledTitle")}
+          description={t("devMonitor.disabledDescription")}
         />
       </div>
     );
@@ -394,12 +403,12 @@ export default function DevMonitorPage() {
       <div className="mx-auto max-w-5xl space-y-8 animate-in fade-in duration-500">
         <PageHeader
           eyebrow={{ label: "devRuntime" }}
-          title="Dev Monitor"
-          subtitle="Local event stream, performance counters, and backend activity for MoneyView development."
+          title={t("devMonitor.title")}
+          subtitle={t("devMonitor.subtitleShell")}
         />
         <ErrorState
-          title="Monitor shell unavailable"
-          message={recentQuery.error instanceof Error ? recentQuery.error.message : "Could not load the recent dev-monitor events."}
+          title={t("devMonitor.shellErrorTitle")}
+          message={recentQuery.error instanceof Error ? recentQuery.error.message : t("devMonitor.shellErrorFallback")}
           retryAction={() => {
             void recentQuery.refetch();
             void summaryQuery.refetch();
@@ -413,13 +422,13 @@ export default function DevMonitorPage() {
     <div className="mx-auto max-w-7xl space-y-8 animate-in fade-in duration-500">
       <PageHeader
         eyebrow={{ label: "devRuntime" }}
-        title="Dev Monitor"
-        subtitle="Local-only event observability for API requests, cache decisions, provider timing, and calculation flow."
+        title={t("devMonitor.title")}
+        subtitle={t("devMonitor.subtitleLive")}
         actions={(
           <>
             <StatusBadge status={connectionBadgeState(connectionState)} label={connectionState} />
             <ActionButton
-              label={isPaused ? "Resume" : "Pause"}
+              label={isPaused ? t("devMonitor.resume") : t("devMonitor.pause")}
               size="sm"
               icon={isPaused ? <Play className="h-3.5 w-3.5" /> : <Pause className="h-3.5 w-3.5" />}
               onClick={() => {
@@ -431,20 +440,20 @@ export default function DevMonitorPage() {
               }}
             />
             <ActionButton
-              label="Clear"
+              label={t("devMonitor.clear")}
               size="sm"
               icon={<Trash2 className="h-3.5 w-3.5" />}
               onClick={clear}
             />
             <ActionButton
-              label="Export JSONL"
+              label={t("devMonitor.exportJsonl")}
               size="sm"
               icon={<Download className="h-3.5 w-3.5" />}
               disabled={visibleEvents.length === 0}
               onClick={() => exportEventsAsJsonl(visibleEvents)}
             />
             <ActionButton
-              label="Refresh Summary"
+              label={t("devMonitor.refreshSummary")}
               size="sm"
               loading={summaryQuery.isFetching}
               icon={<RefreshCw className="h-3.5 w-3.5" />}
@@ -459,23 +468,23 @@ export default function DevMonitorPage() {
       />
 
       <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-        <KpiCard label="Active Requests" value={`${summary.active_requests}`} detail="Open API request count observed in the local monitor buffer." />
-        <KpiCard label="Avg API Latency" value={formatDuration(summary.avg_api_latency_ms)} detail="Average completion time for recent API request-complete events." />
-        <KpiCard label="P95 API Latency" value={formatDuration(summary.p95_api_latency_ms)} detail="High-percentile request latency derived from the recent event window." />
-        <KpiCard label="Slow Operations" value={`${summary.slow_operations}`} detail="Monitor events currently classified as slow using backend thresholds." />
-        <KpiCard label="Errors" value={`${summary.errors}`} detail="Recent monitor events with error level or error status." />
-        <KpiCard label="Cache Hit Rate" value={`${(summary.cache_hit_rate * 100).toFixed(1)}%`} detail="Hit ratio across recent cache hit and miss events in the active buffer." />
+        <KpiCard label={t("devMonitor.kpi.activeRequests")} value={count(summary.active_requests)} detail={t("devMonitor.kpi.activeRequestsDetail")} />
+        <KpiCard label={t("devMonitor.kpi.avgLatency")} value={formatDuration(summary.avg_api_latency_ms, locale)} detail={t("devMonitor.kpi.avgLatencyDetail")} />
+        <KpiCard label={t("devMonitor.kpi.p95Latency")} value={formatDuration(summary.p95_api_latency_ms, locale)} detail={t("devMonitor.kpi.p95LatencyDetail")} />
+        <KpiCard label={t("devMonitor.kpi.slowOperations")} value={count(summary.slow_operations)} detail={t("devMonitor.kpi.slowOperationsDetail")} />
+        <KpiCard label={t("devMonitor.kpi.errors")} value={count(summary.errors)} detail={t("devMonitor.kpi.errorsDetail")} />
+        <KpiCard label={t("devMonitor.kpi.cacheHitRate")} value={formatNumber(summary.cache_hit_rate, "percent", { digits: 1, locale })} detail={t("devMonitor.kpi.cacheHitRateDetail")} />
       </section>
 
       <FilterBar className="items-end">
-        <label className="flex min-w-[11rem] flex-1 flex-col gap-2 text-[length:var(--type-helper)] text-[var(--text-muted)]">
-          Scope
+        <label className="flex min-w-[11rem] flex-1 flex-col gap-2 type-small text-[var(--ink-muted)]">
+          {t("devMonitor.filters.scope")}
           <select
             value={scopeFilter}
             onChange={(event) => setScopeFilter(event.target.value)}
-            className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-[var(--text-primary)]"
+            className={fieldInputClass}
           >
-            <option value="all">All scopes</option>
+            <option value="all">{t("devMonitor.filters.allScopes")}</option>
             {availableScopes.map((scope) => (
               <option key={scope} value={scope}>
                 {scope}
@@ -483,63 +492,63 @@ export default function DevMonitorPage() {
             ))}
           </select>
         </label>
-        <label className="flex min-w-[10rem] flex-1 flex-col gap-2 text-[length:var(--type-helper)] text-[var(--text-muted)]">
-          Ticker
+        <label className="flex min-w-[10rem] flex-1 flex-col gap-2 type-small text-[var(--ink-muted)]">
+          {t("devMonitor.filters.ticker")}
           <input
             value={tickerFilter}
             onChange={(event) => setTickerFilter(event.target.value)}
             placeholder="AAPL"
-            className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-[var(--text-primary)]"
+            className={fieldInputClass}
           />
         </label>
-        <label className="flex min-w-[14rem] flex-[1.2] flex-col gap-2 text-[length:var(--type-helper)] text-[var(--text-muted)]">
-          Route
+        <label className="flex min-w-[14rem] flex-[1.2] flex-col gap-2 type-small text-[var(--ink-muted)]">
+          {t("devMonitor.filters.route")}
           <input
             value={routeFilter}
             onChange={(event) => setRouteFilter(event.target.value)}
             placeholder="/api/v1/portfolio"
-            className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-[var(--text-primary)]"
+            className={fieldInputClass}
           />
         </label>
-        <label className="flex min-w-[16rem] flex-[1.4] flex-col gap-2 text-[length:var(--type-helper)] text-[var(--text-muted)]">
-          Operation Search
+        <label className="flex min-w-[16rem] flex-[1.4] flex-col gap-2 type-small text-[var(--ink-muted)]">
+          {t("devMonitor.filters.operation")}
           <input
             value={operationSearch}
             onChange={(event) => setOperationSearch(event.target.value)}
             placeholder="request_complete"
-            className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-[var(--text-primary)]"
+            className={fieldInputClass}
           />
         </label>
-        <label className="flex items-center gap-2 text-sm text-[var(--text-primary)]">
+        <label className="flex items-center gap-2 type-body text-[var(--ink)]">
           <input type="checkbox" checked={slowOnly} onChange={(event) => setSlowOnly(event.target.checked)} />
-          Slow only
+          {t("devMonitor.filters.slowOnly")}
         </label>
-        <label className="flex items-center gap-2 text-sm text-[var(--text-primary)]">
+        <label className="flex items-center gap-2 type-body text-[var(--ink)]">
           <input type="checkbox" checked={errorOnly} onChange={(event) => setErrorOnly(event.target.checked)} />
-          Error only
+          {t("devMonitor.filters.errorOnly")}
         </label>
       </FilterBar>
 
       {errorMessage ? (
-        <Card className="border-[var(--state-warning)]/30 bg-[var(--state-warning)]/5">
+        <Card className="border-[var(--status-warning-border)] bg-[var(--status-warning-surface)]">
           <div className="flex items-start gap-3">
-            <Activity className="mt-0.5 h-4 w-4 text-[var(--state-warning)]" />
+            <Activity className="mt-0.5 h-4 w-4 text-[var(--status-warning-ink)]" />
             <div>
-              <div className="text-sm font-semibold text-[var(--text-primary)]">Stream status</div>
-              <div className="mt-1 text-sm text-[var(--text-secondary)]">{errorMessage}</div>
+              <div className="type-label text-[var(--ink)]">{t("devMonitor.streamStatus")}</div>
+              <div className="mt-1 type-body text-[var(--ink-secondary)]">{errorMessage}</div>
             </div>
           </div>
         </Card>
       ) : null}
 
       {connectionState === "reconnecting" ? (
-        <Card className="border-[var(--state-info)]/30 bg-[var(--state-info)]/5">
+        <Card className="border-[var(--brand)] bg-[var(--brand-soft)]">
           <div className="flex items-start gap-3">
-            <RotateCw className="mt-0.5 h-4 w-4 animate-spin text-[var(--state-info)]" />
+            <RotateCw className="mt-0.5 h-4 w-4 animate-spin text-[var(--brand-text)]" />
             <div>
-              <div className="text-sm font-semibold text-[var(--text-primary)]">Reconnecting live stream</div>
-              <div className="mt-1 text-sm text-[var(--text-secondary)]">
-                The local SSE stream dropped and the monitor is retrying automatically. Recent buffered events stay visible while it reconnects.
+              <div className="type-label text-[var(--ink)]">{t("devMonitor.reconnectingTitle")}</div>
+              <div className="mt-1 type-body text-[var(--ink-secondary)]">
+                {t("devMonitor.reconnectingBody")}
               </div>
             </div>
           </div>
@@ -547,16 +556,16 @@ export default function DevMonitorPage() {
       ) : null}
 
       {isPaused ? (
-        <Card className="border-[var(--border-default)] bg-[var(--surface-muted)]/60">
+        <Card className="border-[var(--line)] bg-[var(--surface)]">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <div className="text-sm font-semibold text-[var(--text-primary)]">Live updates are paused</div>
-              <div className="mt-1 text-sm text-[var(--text-secondary)]">
-                Stream reconnects and summary polling are paused until you resume. The current local buffer remains available for filtering and export.
+              <div className="type-label text-[var(--ink)]">{t("devMonitor.pausedTitle")}</div>
+              <div className="mt-1 type-body text-[var(--ink-secondary)]">
+                {t("devMonitor.pausedBody")}
               </div>
             </div>
             <ActionButton
-              label="Resume live stream"
+              label={t("devMonitor.resumeLiveStream")}
               size="sm"
               icon={<Play className="h-3.5 w-3.5" />}
               onClick={resume}
@@ -568,14 +577,14 @@ export default function DevMonitorPage() {
       <section className="grid grid-cols-1 gap-6 xl:grid-cols-2">
         <Card padding="lg">
           <SectionTitle
-            title="Operation Latency"
-            description="Recent instrumented operations with scope, status, and measured duration."
+            title={t("devMonitor.operationLatency.title")}
+            description={t("devMonitor.operationLatency.description")}
           />
           {recentLatencyEvents.length === 0 ? (
             <EmptyState
               icon={<Timer className="h-6 w-6" />}
-              title="No timed operations yet"
-              description="Run backend routes with the monitor enabled to populate recent operation duration rows."
+              title={t("devMonitor.operationLatency.emptyTitle")}
+              description={t("devMonitor.operationLatency.emptyDescription")}
             />
           ) : (
             <div className="space-y-3">
@@ -595,14 +604,14 @@ export default function DevMonitorPage() {
 
         <Card padding="lg">
           <SectionTitle
-            title="Ticker Fetch Latency"
-            description="Recent ticker-scoped cache and provider fetch timings with cache outcome and provider context."
+            title={t("devMonitor.tickerLatency.title")}
+            description={t("devMonitor.tickerLatency.description")}
           />
           {fetchLatencyEvents.length === 0 ? (
             <EmptyState
               icon={<Activity className="h-6 w-6" />}
-              title="No ticker fetches in the current window"
-              description="Market and portfolio requests will add cache and provider timing rows here when they carry ticker context."
+              title={t("devMonitor.tickerLatency.emptyTitle")}
+              description={t("devMonitor.tickerLatency.emptyDescription")}
             />
           ) : (
             <div className="space-y-3">
@@ -628,36 +637,36 @@ export default function DevMonitorPage() {
       <section className="grid grid-cols-1 gap-6">
         <Card padding="lg">
           <SectionTitle
-            title="Metric Timing"
-            description="Latest measured calculation timings for core corporate and portfolio analysis paths."
+            title={t("devMonitor.metricTiming.title")}
+            description={t("devMonitor.metricTiming.description")}
           />
           <div className="grid gap-3">
             {metricPanelGroups.map((group) => (
-              <div key={group.key} className="rounded-[var(--radius-md)] border border-[var(--border-soft)] bg-[var(--bg-surface)] p-4">
+              <div key={group.key} className="border border-[var(--line)] bg-[var(--surface-raised)] p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <div className="text-sm font-semibold text-[var(--text-primary)]">{group.label}</div>
-                    <div className="mt-1 text-[length:var(--type-helper)] text-[var(--text-muted)]">
-                      {group.latestEvent ? `${group.latestEvent.operation} · ${group.latestEvent.component ?? group.latestEvent.scope}` : "No recent timing event"}
+                    <div className="type-label text-[var(--ink)]">{group.label}</div>
+                    <div className="mt-1 type-small text-[var(--ink-muted)]">
+                      {group.latestEvent ? `${group.latestEvent.operation} · ${group.latestEvent.component ?? group.latestEvent.scope}` : t("devMonitor.metricTiming.noEvent")}
                     </div>
                   </div>
                   {group.latestEvent ? (
                     <StatusBadge status={statusBadgeVariant(group.latestEvent)} label={group.latestEvent.status} />
                   ) : (
-                    <StatusBadge status="idle" label="idle" />
+                    <StatusBadge status="idle" label={t("devMonitor.metricTiming.idle")} />
                   )}
                 </div>
-                <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
-                  <div className="rounded-[var(--radius-sm)] bg-[var(--surface-muted)] px-3 py-2">
-                    <div className="text-[length:var(--type-helper)] text-[var(--text-muted)]">Latest Duration</div>
-                    <div className="mt-1 font-semibold tabular-nums text-[var(--text-primary)]">
-                      {formatDuration(group.latestEvent?.duration_ms)}
+                <div className="mt-4 grid grid-cols-2 gap-3 type-body">
+                  <div className="bg-[var(--surface)] px-3 py-2">
+                    <div className="type-small text-[var(--ink-muted)]">{t("devMonitor.metricTiming.latestDuration")}</div>
+                    <div className="mt-1 type-mono text-[var(--ink)]">
+                      {formatDuration(group.latestEvent?.duration_ms, locale)}
                     </div>
                   </div>
-                  <div className="rounded-[var(--radius-sm)] bg-[var(--surface-muted)] px-3 py-2">
-                    <div className="text-[length:var(--type-helper)] text-[var(--text-muted)]">Related Warnings</div>
-                    <div className="mt-1 font-semibold text-[var(--text-primary)]">
-                      {group.warnings.length}
+                  <div className="bg-[var(--surface)] px-3 py-2">
+                    <div className="type-small text-[var(--ink-muted)]">{t("devMonitor.metricTiming.relatedWarnings")}</div>
+                    <div className="mt-1 type-mono text-[var(--ink)]">
+                      {count(group.warnings.length)}
                     </div>
                   </div>
                 </div>
@@ -666,7 +675,7 @@ export default function DevMonitorPage() {
                     {group.warnings.slice(0, 3).map((warning) => (
                       <span
                         key={warning.id}
-                        className="inline-flex items-center gap-1 rounded-full bg-[var(--state-warning)]/10 px-2.5 py-1 text-[length:var(--type-helper)] text-[var(--state-warning)]"
+                        className="inline-flex items-center gap-1 rounded-[var(--radius-2)] bg-[var(--status-warning-surface)] px-2.5 py-1 type-small text-[var(--status-warning-ink)]"
                       >
                         <AlertTriangle className="h-3.5 w-3.5" />
                         {warning.warning_code ?? metricLabel(warning)}
@@ -683,52 +692,52 @@ export default function DevMonitorPage() {
       <section className="grid grid-cols-1 gap-6 xl:grid-cols-[0.95fr_1.05fr]">
         <Card padding="lg">
           <SectionTitle
-            title="Data-Quality Warnings"
-            description="Recent warning events for metric and source-quality issues, including audit-link metadata when present."
+            title={t("devMonitor.dataQuality.title")}
+            description={t("devMonitor.dataQuality.description")}
           />
           {dataQualityWarnings.length === 0 ? (
             <EmptyState
               icon={<AlertTriangle className="h-6 w-6" />}
-              title="No recent data-quality warnings"
-              description="When metric audits or source fallbacks raise warnings, they will appear here with request and metric context."
+              title={t("devMonitor.dataQuality.emptyTitle")}
+              description={t("devMonitor.dataQuality.emptyDescription")}
             />
           ) : (
             <div className="space-y-3">
               {dataQualityWarnings.map((event) => {
                 const auditLink = stringMetadata(event, "audit_link");
                 return (
-                  <div key={event.id} className="rounded-[var(--radius-md)] border border-[var(--border-soft)] bg-[var(--bg-surface)] p-4">
+                  <div key={event.id} className="border border-[var(--line)] bg-[var(--surface-raised)] p-4">
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <div className="text-sm font-semibold text-[var(--text-primary)]">
+                        <div className="type-label text-[var(--ink)]">
                           {event.ticker ?? "-"} · {metricLabel(event)}
                         </div>
-                        <div className="mt-1 text-[length:var(--type-helper)] text-[var(--text-muted)]">
-                          {event.warning_code ?? "warning"} · {formatSource(event)}
+                        <div className="mt-1 type-small text-[var(--ink-muted)]">
+                          {event.warning_code ?? t("devMonitor.dataQuality.warning")} · {formatSource(event)}
                         </div>
                       </div>
                       <StatusBadge status="stale" label={event.status} />
                     </div>
-                    <p className="mt-3 text-sm text-[var(--text-secondary)]">{event.message ?? "No warning message was provided."}</p>
-                    <div className="mt-3 grid grid-cols-2 gap-3 text-[length:var(--type-helper)] text-[var(--text-muted)] md:grid-cols-4">
+                    <p className="mt-3 type-body text-[var(--ink-secondary)]">{event.message ?? t("devMonitor.dataQuality.noMessage")}</p>
+                    <div className="mt-3 grid grid-cols-2 gap-3 type-small text-[var(--ink-muted)] md:grid-cols-4">
                       <div>
-                        <div>Timestamp</div>
-                        <div className="mt-1 text-[var(--text-primary)]">{formatTimestamp(event.timestamp)}</div>
+                        <div>{t("devMonitor.dataQuality.timestamp")}</div>
+                        <div className="mt-1 type-mono text-[var(--ink)]">{formatTimestamp(event.timestamp, locale)}</div>
                       </div>
                       <div>
-                        <div>Request ID</div>
-                        <div className="mt-1 overflow-inline-ellipsis text-[var(--text-primary)]">{event.request_id ?? "-"}</div>
+                        <div>{t("devMonitor.dataQuality.requestId")}</div>
+                        <div className="mt-1 type-mono overflow-inline-ellipsis text-[var(--ink)]">{event.request_id ?? "-"}</div>
                       </div>
                       <div>
-                        <div>Source</div>
-                        <div className="mt-1 text-[var(--text-primary)]">{formatSource(event)}</div>
+                        <div>{t("devMonitor.dataQuality.source")}</div>
+                        <div className="mt-1 text-[var(--ink)]">{formatSource(event)}</div>
                       </div>
                       <div>
-                        <div>Audit Link</div>
-                        <div className="mt-1 text-[var(--text-primary)]">
+                        <div>{t("devMonitor.dataQuality.auditLink")}</div>
+                        <div className="mt-1 text-[var(--ink)]">
                           {auditLink ? (
-                            <a href={auditLink} className="text-[var(--state-info)] underline decoration-dotted underline-offset-4">
-                              open
+                            <a href={auditLink} className="text-[var(--brand-text)] underline decoration-dotted underline-offset-4">
+                              {t("devMonitor.dataQuality.open")}
                             </a>
                           ) : (
                             "-"
@@ -745,41 +754,44 @@ export default function DevMonitorPage() {
 
         <Card padding="lg">
           <SectionTitle
-            title="Slow Operations"
-            description="Rows from the backend slow-event endpoint, using the same thresholds as the server classification path."
+            title={t("devMonitor.slowOperations.title")}
+            description={t("devMonitor.slowOperations.description")}
           />
-          <div className="mb-4 rounded-[var(--radius-md)] border border-[var(--border-soft)] bg-[var(--surface-muted)] px-4 py-3 text-[length:var(--type-helper)] text-[var(--text-secondary)]">
-            API events are slow at {slowThresholdMsForScope("api")} ms or higher. All other scopes are slow at {slowThresholdMsForScope("db")} ms or higher.
+          <div className="mb-4 border border-[var(--line)] bg-[var(--surface)] px-4 py-3 type-small text-[var(--ink-secondary)]">
+            {t("devMonitor.slowOperations.threshold", {
+              apiMs: count(slowThresholdMsForScope("api")),
+              dbMs: count(slowThresholdMsForScope("db")),
+            })}
           </div>
           {slowQuery.isFetching && !slowQuery.data ? (
-            <LoadingState variant="spinner" label="Loading slow operations..." />
+            <LoadingState variant="spinner" label={t("devMonitor.slowOperations.loading")} />
           ) : visibleSlowEvents.length === 0 ? (
             <EmptyState
               icon={<Timer className="h-6 w-6" />}
-              title="No slow operations in the current result set"
-              description="This table reads from the backend slow-event endpoint, so only server-classified slow rows appear here."
+              title={t("devMonitor.slowOperations.emptyTitle")}
+              description={t("devMonitor.slowOperations.emptyDescription")}
             />
           ) : (
-            <div className="overflow-hidden rounded-[var(--radius-md)] border border-[var(--border-soft)]">
-              <div className="grid grid-cols-[6rem_6rem_minmax(0,1.4fr)_7rem_6rem_6rem] gap-3 bg-[var(--surface-muted)] px-4 py-3 text-[length:var(--type-table-header)] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
-                <span>Scope</span>
-                <span>Threshold</span>
-                <span>Operation</span>
-                <span>Ticker</span>
-                <span>Duration</span>
-                <span>Status</span>
+            <div className="overflow-hidden border border-[var(--line)]">
+              <div className="grid grid-cols-[6rem_6rem_minmax(0,1.4fr)_7rem_6rem_6rem] gap-3 bg-[var(--surface)] px-4 py-3 type-caption uppercase text-[var(--ink-muted)]">
+                <span><BilingualLabel k="scope" /></span>
+                <span><BilingualLabel k="threshold" /></span>
+                <span><BilingualLabel k="operation" /></span>
+                <span><BilingualLabel k="ticker" /></span>
+                <span><BilingualLabel k="duration" /></span>
+                <span><BilingualLabel k="status" /></span>
               </div>
-              <div className="max-h-[28rem] overflow-y-auto bg-[var(--bg-surface)]">
+              <div className="max-h-[28rem] overflow-y-auto bg-[var(--surface-raised)]">
                 {visibleSlowEvents.map((event) => (
                   <div
                     key={event.id}
-                    className="grid grid-cols-[6rem_6rem_minmax(0,1.4fr)_7rem_6rem_6rem] gap-3 border-t border-[var(--border-soft)] px-4 py-3 text-[12px] leading-5 text-[var(--text-primary)]"
+                    className="grid grid-cols-[6rem_6rem_minmax(0,1.4fr)_7rem_6rem_6rem] gap-3 border-t border-[var(--grid)] px-4 py-3 type-mono text-[var(--ink)]"
                   >
                     <span>{event.scope}</span>
-                    <span className="tabular-nums text-[var(--text-secondary)]">{slowThresholdMsForScope(event.scope)} ms</span>
+                    <span className="tabular-nums text-[var(--ink-secondary)]">{count(slowThresholdMsForScope(event.scope))} ms</span>
                     <span className="overflow-inline-ellipsis">{event.operation}</span>
-                    <span className="overflow-inline-ellipsis text-[var(--text-secondary)]">{event.ticker ?? "-"}</span>
-                    <span className="tabular-nums text-[var(--text-secondary)]">{formatDuration(event.duration_ms)}</span>
+                    <span className="overflow-inline-ellipsis text-[var(--ink-secondary)]">{event.ticker ?? "-"}</span>
+                    <span className="tabular-nums text-[var(--ink-secondary)]">{formatDuration(event.duration_ms, locale)}</span>
                     <span><StatusBadge status={statusBadgeVariant(event)} label={event.status} /></span>
                   </div>
                 ))}
@@ -792,51 +804,51 @@ export default function DevMonitorPage() {
       <Card padding="lg" className="overflow-hidden">
         <div className="mb-4 flex items-start justify-between gap-4">
           <div>
-            <h2 className="text-[length:var(--type-section-title)] font-bold text-[var(--text-primary)]">
-              Live Log Stream
+            <h2 className="type-panel-title text-[var(--ink)]">
+              {t("devMonitor.liveLog.title")}
             </h2>
-            <p className="mt-1 text-sm text-[var(--text-secondary)]">
-              Monospace local event rows for request, cache, provider, and calculation activity. No remote telemetry assumptions.
+            <p className="mt-1 type-body text-[var(--ink-secondary)]">
+              {t("devMonitor.liveLog.description")}
             </p>
           </div>
-          <div className="text-right text-[length:var(--type-helper)] text-[var(--text-muted)]">
-            <div>{visibleEvents.length} visible</div>
-            <div>{streamedEvents.length} buffered</div>
+          <div className="text-right type-small text-[var(--ink-muted)]">
+            <div>{t("devMonitor.liveLog.visible", { count: count(visibleEvents.length) })}</div>
+            <div>{t("devMonitor.liveLog.buffered", { count: count(streamedEvents.length) })}</div>
           </div>
         </div>
 
         {recentQuery.isFetching && streamedEvents.length === 0 ? (
-          <LoadingState variant="spinner" label="Loading recent monitor events..." />
+          <LoadingState variant="spinner" label={t("devMonitor.liveLog.loading")} />
         ) : visibleEvents.length === 0 ? (
           <EmptyState
-            title="No monitor events match the current filters"
-            description="Adjust the scope or search controls, or wait for new local backend events to arrive."
+            title={t("devMonitor.liveLog.emptyTitle")}
+            description={t("devMonitor.liveLog.emptyDescription")}
           />
         ) : (
-          <div className="overflow-hidden rounded-[var(--radius-md)] border border-[var(--border-soft)]">
-            <div className="grid grid-cols-[7rem_5rem_7rem_minmax(0,1.4fr)_6rem_6rem_6rem] gap-3 bg-[var(--surface-muted)] px-4 py-3 text-[length:var(--type-table-header)] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
-              <span>Time</span>
-              <span>Level</span>
-              <span>Scope</span>
-              <span>Operation</span>
-              <span>Ticker</span>
-              <span>Duration</span>
-              <span>Status</span>
+          <div className="overflow-hidden border border-[var(--line)]">
+            <div className="grid grid-cols-[7rem_5rem_7rem_minmax(0,1.4fr)_6rem_6rem_6rem] gap-3 bg-[var(--surface)] px-4 py-3 type-caption uppercase text-[var(--ink-muted)]">
+              <span><BilingualLabel k="time" /></span>
+              <span><BilingualLabel k="level" /></span>
+              <span><BilingualLabel k="scope" /></span>
+              <span><BilingualLabel k="operation" /></span>
+              <span><BilingualLabel k="ticker" /></span>
+              <span><BilingualLabel k="duration" /></span>
+              <span><BilingualLabel k="status" /></span>
             </div>
-            <div className="max-h-[40rem] overflow-y-auto bg-[var(--bg-surface)]">
+            <div className="max-h-[40rem] overflow-y-auto bg-[var(--surface-raised)]">
               {visibleEvents.slice().reverse().map((event) => (
                 <div
                   key={event.id}
-                  className="grid grid-cols-[7rem_5rem_7rem_minmax(0,1.4fr)_6rem_6rem_6rem] gap-3 border-t border-[var(--border-soft)] px-4 py-3 font-mono text-[12px] leading-5 text-[var(--text-primary)]"
+                  className="grid grid-cols-[7rem_5rem_7rem_minmax(0,1.4fr)_6rem_6rem_6rem] gap-3 border-t border-[var(--grid)] px-4 py-3 type-mono text-[var(--ink)]"
                   title={event.message ?? event.operation}
                 >
-                  <span className="text-[var(--text-muted)]">{formatTimestamp(event.timestamp)}</span>
+                  <span className="text-[var(--ink-muted)]">{formatTimestamp(event.timestamp, locale)}</span>
                   <span className={levelTone(event.level)}>{event.level}</span>
-                  <span className="text-[var(--text-secondary)]">{event.scope}</span>
+                  <span className="text-[var(--ink-secondary)]">{event.scope}</span>
                   <span className="overflow-mono-block">{event.operation}</span>
-                  <span className="overflow-inline-ellipsis text-[var(--text-secondary)]">{event.ticker ?? "-"}</span>
-                  <span className="tabular-nums text-[var(--text-secondary)]">{formatDuration(event.duration_ms)}</span>
-                  <span className="text-[var(--text-secondary)]">{event.status}</span>
+                  <span className="overflow-inline-ellipsis text-[var(--ink-secondary)]">{event.ticker ?? "-"}</span>
+                  <span className="tabular-nums text-[var(--ink-secondary)]">{formatDuration(event.duration_ms, locale)}</span>
+                  <span className="text-[var(--ink-secondary)]">{event.status}</span>
                 </div>
               ))}
             </div>

@@ -146,3 +146,62 @@ capitals: "종목 NAME". Both come from `apps/web/lib/i18n/labels.ts`; add the r
 | Show panel | 패널 보기 | valuation ticker button |
 | Stored cases for {ticker} | {ticker} 저장된 케이스 | valuation link; the ticker is a parameter |
 | Refusal reasons | 거절 사유 | valuation.refusal.*; the sentence is translated, the backend code is never shown |
+| Date | 날짜 | label (events table header; form label; dev-monitor timestamp column is Time) |
+| Event | 이벤트 | label (events table header) |
+| Category | 카테고리 | label (events table header; form label) |
+| Origin | 구분 | label (events table header: built-in, rule, user, computed) |
+| Label (event) | 표시 문구 | events form; the text drawn on the chart |
+| Note | 메모 | events form label |
+| Source URL | 출처 URL | events form label |
+| End date | 종료일 | events form label |
+| Optional | 선택 사항 | events form placeholder |
+| Built-in | 내장 | event origin, and category origin |
+| Added by you | 직접 추가 | event origin |
+| Computed from prices | 가격에서 계산 | event origin |
+| Needs category | 카테고리 필요 | events origin filter |
+| All events | 전체 이벤트 | events section title |
+| Filter by category / origin | 카테고리별 보기 / 구분별 보기 | events filter labels |
+| All categories / All origins | 모든 카테고리 / 모든 구분 | events filter defaults |
+| Save changes | 변경 저장 | events form button |
+| Add event | 이벤트 추가 | events form button |
+| Add category | 카테고리 추가 | events categories button |
+| Reset to default | 기본값으로 되돌리기 | events categories button |
+| Confirm delete | 삭제 확인 | events confirm button |
+| Market Intelligence | 시장 인텔리전스 | news page title |
+| Today | 오늘 | news badge, article published today |
+| Unknown date / Unknown source | 날짜 미상 / 출처 미상 | news article fallbacks |
+| Load more articles | 기사 더 보기 | news button |
+| Dev Monitor | 개발 모니터 | dev page title (eyebrow is Developer runtime) |
+| Performance Analysis | 성능 분석 | dev page title |
+| Latency | 지연 시간 | dev section titles |
+| Waterfall | 워터폴 | dev performance section |
+| Span | 구간 | dev performance; one timed operation in a request |
+| Scope (dev) | 범위 | dev monitor and performance label; the subsystem a monitor event belongs to |
+| Operation | 작업 | dev monitor label |
+| Duration | 소요 시간 | dev monitor label |
+| Threshold | 기준 시간 | dev monitor label (slow-event threshold) |
+| Time | 시각 | dev monitor label (event time) |
+| Level | 수준 | dev monitor label (event level) |
+| Route | 라우트 | dev monitor filter and performance label |
+| Timestamp | 타임스탬프 | dev monitor detail label |
+| Request ID | 요청 ID | dev monitor detail label |
+| Audit Link | 감사 링크 | dev monitor detail label |
+| Slow Operations | 느린 작업 | dev monitor section title |
+| Live Log Stream | 실시간 로그 스트림 | dev monitor section title |
+| Data-Quality Warnings | 데이터 품질 경고 | dev monitor section title |
+| Metric Timing | 지표 계산 시간 | dev monitor section title |
+| Operation Latency | 작업 지연 시간 | dev monitor section title |
+| Ticker Fetch Latency | 종목 데이터 조회 지연 시간 | dev monitor section title |
+| Cache Hit Rate | 캐시 적중률 | dev monitor KPI |
+| Pause / Resume / Clear | 일시 정지 / 재개 / 지우기 | dev monitor buttons |
+| Export JSONL | JSONL 내보내기 | dev monitor button |
+| Route / total_ms / self_ms / db_ms | 라우트 / 총 소요 시간 / 자체 소요 시간 / DB 소요 시간 | dev performance table headers; the English half keeps the field name |
+| Per-stock cost | 종목별 비용 | dev performance section title |
+| Cache effectiveness | 캐시 효율 | dev performance section title |
+| Technicals | 기술적 지표 | detail card title |
+| Price Trend & Matrix | 가격 추세 | detail chart title |
+| Price Matrix Offline | 가격 차트 오프라인 | detail chart error title |
+| Signal (MACD) | 시그널 | detail technicals row |
+| MA 20 / MA 50 | 20일 이동평균 / 50일 이동평균 | detail technicals rows |
+| As of {date} | {date} 기준 | detail page subtitle |
+| Stock detail page: No data available for {ticker} | {ticker} 데이터가 없습니다. | detail empty state |
