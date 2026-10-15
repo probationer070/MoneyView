@@ -60,12 +60,11 @@ export function RecordsSyncStatus({ status }: { status: RecordsSyncStatusData | 
       : `Synced with ${count} other PCs · latest ${localTime(latest)}`;
     text += skipped + renamed;
   }
-  // The warning tone stays on --state-warning until records-sync-status.spec.ts:87 (toHaveClass(/state-warning/)) is approved to change.
   return (
     <span
       data-testid="records-sync-status"
       title={status.last_error ?? (status.skipped_files.map((file) => `${file.name}: ${file.reason}`).join("\n") || undefined)}
-      className={`type-small ${warn ? "text-[var(--state-warning)]" : "text-[var(--ink-muted)]"}`}
+      className={`type-small ${warn ? "text-[var(--status-warning-ink)]" : "text-[var(--ink-muted)]"}`}
     >
       {text}
     </span>

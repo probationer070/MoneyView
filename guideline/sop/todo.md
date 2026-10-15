@@ -78,7 +78,7 @@ Plan: `docs/superpowers/plans/2026-10-12-design-system-formalization.md`.
   - Copy changes with the colour change, for owner review: the Efficient Frontier description now reads "The highest-Sharpe portfolio is drawn apart from the sampled set" (was purple/green), and the Spearman description now says positive exposures are red and negative are blue (was green/red).
 - D13 follow-ups (Task 13, detail/news/events/dev):
   - Market (`app/page.tsx` is already 0; `components/market/**` has 233 hits: typeScale 59, deprecatedVar 162, hex 3, paletteClass 6, lengthTypeVar 3) stays for its own one-screen plan.
-  - `app/components/RecordsSyncStatus.tsx` (events page and decision log): the two unpinned hits are migrated. One hit stays: the warning tone `text-[var(--state-warning)]`, which `tests/e2e/records-sync-status.spec.ts:87` pins with `toHaveClass(/state-warning/)`. Owner decision: approve changing that assertion to `status-warning-ink`, then migrate the one class.
+  - `app/components/RecordsSyncStatus.tsx` (events page and decision log): migrated on the paper tokens, with `records-sync-status.spec.ts:87` changed to `/status-warning-ink/` on owner approval (2026-10-15).
   - `lib/metricAudit.ts` English copy and `N/A` need a locale-aware path (option A / M5). `N/A` also conflicts with the `—` missing-value glyph.
   - Optional: precompute the volume colours in `tokens.generated.ts`, which would drop the `eslint-disable-next-line` in `lib/transformers.ts`.
   - Metric audit copy in `lib/metricAudit.ts` stays English (`formatAuditMetricValue`, `metricAuditReason`); its callers need a locale first.
