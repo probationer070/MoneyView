@@ -25,7 +25,7 @@ from apps.api.services.corporate_statement_metrics import (
 )
 from apps.api.services.db import get_db
 from apps.api.services.market_data import MarketDataService
-from apps.api.services.watchlist_seed import ensure_watchlist_bootstrapped, load_watchlist_seed
+from apps.api.services.watchlist_seed import ensure_watchlist_bootstrapped
 from packages.core_finance.terminal_growth import (
     TERMINAL_GROWTH_CEILING,
     derive_terminal_growth,
@@ -311,16 +311,8 @@ def list_companies(watchlist_json: Path = WATCHLIST_JSON) -> list[CorporateCompa
         )
         for ticker, payload in DEFAULT_COMPANIES.items()
     }
-    seeded_items, _ = load_watchlist_seed(watchlist_json)
-    for item in seeded_items:
-        ticker = item.ticker.upper()
-        companies[ticker] = CorporateCompany(
-            ticker=ticker,
-            name=item.name or ticker,
-            sector=item.sector,
-            source="portfolio",
-        )
-
+    # Seed tickers arrive through the watchlist they were bootstrapped into, one line above.
+    # Listing the seed file itself kept a deleted ticker comparable (spec 2026-10-15 §1).
     with get_db() as conn:
         watchlist_rows = conn.execute(
             """SELECT ticker, name, sector FROM watchlist ORDER BY name, ticker"""
