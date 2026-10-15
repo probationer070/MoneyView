@@ -57,10 +57,6 @@ export function transformToTVCandles(data: RawOHLCV[]): TVCandle[] {
     })).sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime()); 
 }
 
-/**
- * Transforms generic API OHLCV arrays into TradingView Histogram metrics, logically
- * colorizing Red/Green volume bars based on close-open deltas.
- */
 const VOLUME_ALPHA = 0.4;
 
 /** A canvas cannot resolve var(), so the token's hex is turned into rgba with the bar alpha here. */
@@ -72,6 +68,10 @@ function withAlpha(hex: string, alpha: number): string {
     return `rgba(${(value >> 16) & 255}, ${(value >> 8) & 255}, ${value & 255}, ${alpha})`;
 }
 
+/**
+ * Transforms generic API OHLCV arrays into TradingView Histogram metrics, logically
+ * colorizing Red/Green volume bars based on close-open deltas.
+ */
 export function transformToTVVolume(data: RawOHLCV[]): TVVolume[] {
     if (!data || data.length === 0) return [];
     

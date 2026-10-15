@@ -5,6 +5,7 @@ import { DeltaBadge } from "@/components/ui/DeltaBadge";
 import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
 import { DCFWorkbench } from "@/components/workbenches/DCFWorkbench";
 import { DiagnosticWorkbench } from "@/components/workbenches/DiagnosticWorkbench";
+import { detailChartColours } from "@/lib/detailChartColours";
 import { formatNumber } from "@/lib/format";
 import { useLocale, useT } from "@/lib/i18n/locale";
 import type { TVCandle, TVVolume } from "@/lib/transformers";
@@ -67,7 +68,7 @@ export function DetailView({ ticker, data, technicals }: { ticker: string; data:
               volumeData={data.volume}
               height={400}
               tickerName={ticker}
-              colorAccent={data.deltaPct >= 0 ? "var(--up)" : "var(--down)"}
+              {...detailChartColours(data.deltaPct)}
               emptyDescription={t("detail.chartEmpty", { ticker })}
             />
           </div>
