@@ -7,7 +7,7 @@ import { Tabs } from "@/components/ui/Tabs";
 import { useT } from "@/lib/i18n/locale";
 import { tabStateKey, useTabState } from "@/lib/tabState";
 import type { CorporateComparisonRowApi, DcfRequestSnapshot } from "../corporateTypes";
-import { availableDetailTabs, resolveDetailTab, type DetailTabKey } from "../detailTabs";
+import { availableDetailTabs, resolveDetailTab } from "../detailTabs";
 import { waccInputIfDivergent } from "../formulaContext";
 import type { CalculationDetail, CalculationDetailKey, RawDatasetRow } from "./calculationDetailTypes";
 import { RawDataTab, type QuarterlyStatementRow, type StockPriceRow } from "./detail/RawDataTab";
@@ -17,9 +17,6 @@ import { StepsTab } from "./detail/StepsTab";
 import { SummaryTab } from "./detail/SummaryTab";
 import { TrendTab, type TrendHistory } from "./detail/TrendTab";
 import { VerdictStatusLabel } from "./VerdictBlock";
-
-/** Every detail tab is built. */
-const BUILT_TABS: readonly DetailTabKey[] = ["summary", "steps", "trend", "peers", "sensitivity", "raw"];
 
 interface CalculationDetailModalProps {
   detail: CalculationDetail;
@@ -75,7 +72,7 @@ export function CalculationDetailModal(props: CalculationDetailModalProps) {
   const { detail, detailKey, ticker, substitutedFormula, sliderWacc, dcfStatus, dcfGeneratedAt, metricAudit, metricAuditIsLoading, metricAuditIsError, onClose } = props;
   const t = useT();
   const [storedTab, setStoredTab] = useTabState<string>(tabStateKey("corporate", "detailTab"), "summary");
-  const available = availableDetailTabs(detailKey).filter((tab) => BUILT_TABS.includes(tab));
+  const available = availableDetailTabs(detailKey);
   const active = resolveDetailTab(storedTab, available);
   const auditEntry = detail.auditMetric && metricAudit ? metricAudit[detail.auditMetric] : null;
   const isDcfKey = detailKey === "backendDcf" || detailKey === "backendFairValue";

@@ -102,6 +102,7 @@ export const en = {
         single: "Only {ticker} has a value in this comparison, so there is no range to draw.",
         band: "{ticker} at {value}, range {low} to {high}",
         stale: "Calculated for an earlier universe. Recalculate in the Target Stock Comparison tab.",
+        source: "Value from the comparison run; the rank uses that run's inputs.",
       },
       sensitivity: {
         notDcf: "An assumption the DCF does not use directly.",

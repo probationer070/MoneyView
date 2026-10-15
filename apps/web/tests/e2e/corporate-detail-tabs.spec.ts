@@ -215,6 +215,15 @@ test("Peers waits for the comparison, then ranks this ticker inside the universe
   await expect(position.getByRole("img", { name: "AAPL at 8.00%, range -15.00% to 13.00%" })).toHaveCount(1);
 });
 
+test("Peers says its value comes from the comparison run", async ({ page }) => {
+  await mockCorporatePageApi(page);
+  await gotoCorporate(page);
+  await refreshComparison(page);
+  await openKpi(page, /^ROIC - WACC/);
+  await openDetailTab(dialog(page), "Peers");
+  await expect(dialog(page).getByTestId("peer-position")).toContainText("Value from the comparison run; the rank uses that run's inputs.");
+});
+
 test("the upside position leaves out the unbridged row and the refused one", async ({ page }) => {
   await mockCorporatePageApi(page);
   await gotoCorporate(page);

@@ -28,7 +28,7 @@ export const ko: Messages = {
       idle: "DCF 미계산 · 위의 DCF 새로고침을 누르십시오", streaming: "계산 중…",
       refused: "평가하지 않음: {reason}", ev: "기업가치(EV) {value}",
     },
-    verdictStrip: { idle: "DCF 미계산", refused: "평가하지 않음", staleSource: "원천 자료 오래됨" },
+    verdictStrip: { idle: "DCF 미계산", refused: "평가하지 않음", staleSource: "원천 데이터 오래됨" },
     kpi: {
       spread: "ROIC - WACC", ke: "상향식 Ke", wacc: "WACC", beta: "레버리지 베타",
       spreadUp: "가치 창출", spreadDown: "가치 훼손",
@@ -54,7 +54,7 @@ export const ko: Messages = {
       aria: "기업 분석 구역", summary: "요약", diagnostics: "진단 차트", dcf: "DCF", comparison: "종목 비교",
       about: "이 탭 설명",
       diagnosticsAbout: "허들레이트 분해, 상향식 베타와 WACC U-커브, 4분면 가치동인 매트릭스입니다. 차트 제목이나 막대를 누르면 계산 상세가 열립니다.",
-      dcfAbout: "왼쪽은 DCF 핵심값 네 가지, 오른쪽은 전체 DCF 리포트의 WACC × 영구성장률 민감도표입니다. 예측 행과 CSV 내보내기는 계산 상세의 원천 데이터 탭에 있습니다.",
+      dcfAbout: "왼쪽은 DCF 핵심값 네 가지, 오른쪽은 전체 DCF 리포트의 WACC × 영구성장률 민감도표입니다. 예측 행과 CSV 내보내기는 계산 상세의 원시 데이터 탭에 있습니다.",
     },
     dcfTab: {
       loadReport: "리포트 불러오기", loading: "전체 DCF 리포트를 불러오는 중…", unavailable: "전체 DCF 리포트를 불러오지 못했습니다",
@@ -105,6 +105,7 @@ export const ko: Messages = {
         single: "이 비교에서 {ticker}만 값이 있어 범위를 그릴 수 없습니다.",
         band: "{ticker} {value}, 범위 {low}~{high}",
         stale: "이전 유니버스로 계산한 값입니다. 종목 비교 탭에서 다시 계산하십시오.",
+        source: "종목 비교 계산 값입니다. 순위도 그 계산의 입력을 씁니다.",
       },
       sensitivity: {
         notDcf: "DCF에 직접 쓰이지 않는 가정입니다.",

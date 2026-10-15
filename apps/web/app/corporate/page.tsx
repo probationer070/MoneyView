@@ -889,7 +889,9 @@ export default function CorporateAnalysisPage() {
   });
 
   const activeCalculationDetail = activeCalculation ? calculationDetails[activeCalculation] : null;
-  const activeSubstitutedFormula = activeCalculation
+  // A stale DCF's formula would mix the DCF's values with the inputs now on screen, so it is not shown.
+  const dcfFormulaIsStale = dcfIsStale && (activeCalculation === "backendDcf" || activeCalculation === "backendFairValue");
+  const activeSubstitutedFormula = activeCalculation && !dcfFormulaIsStale
     ? substitutedFormula(activeCalculation, buildFormulaContext({ assumptions, derived, impliedErp, impliedMarketReturn, waccAudit: metricAuditQuery.data?.wacc ?? null, dcfData }))
     : null;
   // The full report needs a DCF result to be on screen, and a refusal blocks it.

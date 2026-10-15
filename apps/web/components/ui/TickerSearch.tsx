@@ -72,7 +72,7 @@ function matchTickerItems(
 }
 
 function optionClass(selected: boolean) {
-  return `block w-full rounded-[var(--radius-1)] px-3 py-2 text-left type-body transition hover:bg-[var(--brand)] ${
+  return `block w-full rounded-[var(--radius-1)] px-3 py-2 text-left type-body transition hover:bg-[var(--brand-soft)] ${
     selected
       ? "bg-[var(--brand)] text-[var(--on-brand)]"
       : "text-[var(--ink-muted)]"

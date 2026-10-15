@@ -46,6 +46,7 @@ export function PeersTab({
     <div data-testid="peer-position" className="flex flex-col gap-3">
       <p className="type-body text-[var(--ink)]">{t("corporate.detail.peers.rank", { rank: result.rank, count: result.count })}</p>
       <span className="type-mono text-[var(--ink)]">{figure(result.value)}</span>
+      <p className="type-small text-[var(--ink-muted)]">{t("corporate.detail.peers.source")}</p>
       {result.count < 2 ? (
         <p className="type-small text-[var(--ink-muted)]">{t("corporate.detail.peers.single", { ticker })}</p>
       ) : (

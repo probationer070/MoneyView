@@ -788,3 +788,22 @@ test.describe("a ticker switch", () => {
     await expectNoPreviousDcf(page);
   });
 });
+
+test.describe("a stale DCF's detail", () => {
+  test("the substituted formula is not shown once the inputs move past the DCF", async ({ page }) => {
+    await mockCorporatePageApi(page);
+    await gotoCorporate(page);
+    await refreshDcf(page);
+    await page.getByRole("button", { name: "Verdict detail" }).click();
+    await expect(page.getByTestId("substituted-formula")).toBeVisible();
+    await page.getByRole("dialog").getByRole("button", { name: "Close modal" }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+
+    await page.getByTestId("assumption-table").getByRole("button", { name: "Edit Growth Rate" }).click();
+    await page.getByTestId("assumption-slider-growth").getByRole("slider").fill("8");
+    await expect(page.getByText("Stale", { exact: true }).first()).toBeVisible();
+    await page.getByRole("button", { name: "Verdict detail" }).click();
+    await expect(page.getByRole("dialog")).toBeVisible();
+    await expect(page.getByTestId("substituted-formula")).toHaveCount(0);
+  });
+});
