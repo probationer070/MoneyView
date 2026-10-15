@@ -15,6 +15,8 @@ interface TabsProps {
   onChange: (key: string) => void;
   ariaLabel?: string;
   className?: string;
+  /** Prefixes tab and panel ids, so two tab sets on one page (page tabs and a modal's) never share an id. */
+  idPrefix?: string;
 }
 
 export function Tabs({
@@ -23,6 +25,7 @@ export function Tabs({
   onChange,
   ariaLabel = "Tabs",
   className,
+  idPrefix = "",
 }: TabsProps) {
   return (
     <div
@@ -39,11 +42,11 @@ export function Tabs({
         return (
           <button
             key={item.key}
-            id={`tab-${item.key}`}
+            id={`${idPrefix}tab-${item.key}`}
             type="button"
             role="tab"
             aria-selected={selected}
-            aria-controls={`panel-${item.key}`}
+            aria-controls={`${idPrefix}panel-${item.key}`}
             tabIndex={selected ? 0 : -1}
             onClick={() => onChange(item.key)}
             className={clsx(

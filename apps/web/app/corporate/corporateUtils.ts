@@ -12,7 +12,6 @@ import {
 } from "./corporateConstants";
 import type {
   AnnualMetricPoint,
-  ComparisonUniverse,
   CorporateAssumptions,
   CorporateCompany,
   CorporateMetricsApi,
@@ -46,6 +45,22 @@ export function companyForTicker(ticker: string, companies: CorporateCompany[] =
 
 export function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
+}
+
+/** The DCF inputs of an assumption set. Refresh, the stale check and the sensitivity tab all read it, so they cannot disagree. */
+export function snapshotOf(assumptions: CorporateAssumptions): DcfRequestSnapshot {
+  return {
+    ticker: assumptions.ticker,
+    growth: assumptions.growth,
+    roic: assumptions.roic,
+    wacc: assumptions.wacc,
+    debtRatio: assumptions.debtRatio,
+    unleveredBeta: assumptions.unleveredBeta,
+    crp: assumptions.crp,
+    reinvestment: assumptions.reinvestment,
+    fcff: assumptions.fcff,
+    esgPenalty: assumptions.esgPenalty,
+  };
 }
 
 export function dcfRequestBody(snapshot: DcfRequestSnapshot) {
@@ -204,19 +219,6 @@ export function dateTimeText(value: string) {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return value;
   return parsed.toLocaleString();
-}
-
-export function comparisonUniverseLabel(value: ComparisonUniverse | "portfolio_plus_benchmark") {
-  switch (value) {
-    case "portfolio_plus_benchmark":
-      return "Portfolio + Benchmark";
-    case "watchlist_plus_benchmark":
-      return "Watchlist + Benchmark";
-    case "custom":
-      return "Custom Universe";
-    default:
-      return value;
-  }
 }
 
 export function readSessionCache<T>(key: string): T | null {

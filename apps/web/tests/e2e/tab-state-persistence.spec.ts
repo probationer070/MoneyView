@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { mockPortfolioPageApi } from "./helpers/portfolioPageMock";
 import { mockCorporatePageApi } from "./helpers/corporatePageMock";
+import { openLowerTab } from "./helpers/corporateDcf";
 
 /**
  * Leaving a tab and coming back should not throw away what you were doing.
@@ -72,6 +73,7 @@ test("the corporate comparison universe survives leaving the tab", async ({ page
   await page.goto("/corporate", { waitUntil: "domcontentloaded" });
   await expect(page.getByRole("heading", { name: /Corporate Analysis/i })).toBeVisible({ timeout: 60_000 });
 
+  await openLowerTab(page, "Target Stock Comparison");
   await page.getByLabel("Comparison universe").selectOption("custom");
   await page.getByLabel("Custom tickers").fill("NVDA, TSLA");
   await expect(page.getByLabel("Custom tickers")).toHaveValue("NVDA, TSLA");
@@ -97,6 +99,7 @@ test("each tab keeps its own state under its own key", async ({ page }) => {
   await mockCorporatePageApi(page);
   await page.goto("/corporate", { waitUntil: "domcontentloaded" });
   await expect(page.getByRole("heading", { name: /Corporate Analysis/i })).toBeVisible({ timeout: 60_000 });
+  await openLowerTab(page, "Target Stock Comparison");
   await page.getByLabel("Comparison universe").selectOption("custom");
 
   const stored = await page.evaluate(() => {

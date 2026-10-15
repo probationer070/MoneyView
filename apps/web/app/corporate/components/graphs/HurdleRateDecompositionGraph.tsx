@@ -16,13 +16,13 @@ export function HurdleRateDecompositionGraph({
   onOpenDetail: (key: DetailKey) => void;
 }) {
   return (
-    <div className="lg:col-span-2 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-5">
+    <div className="border border-[var(--line)] bg-[var(--surface-raised)] p-5">
       <div className="min-w-0">
-        <h3 className="text-sm font-bold text-[var(--text-primary)]">Hurdle Rate Decomposition</h3>
+        <h3 className="type-panel-title text-[var(--ink)]">Hurdle Rate Decomposition</h3>
         <button
           type="button"
           onClick={() => onOpenDetail("hurdleDecomposition")}
-          className="mt-1 text-left text-xs text-[var(--text-muted)] underline decoration-dotted underline-offset-4 hover:text-[var(--brand)]"
+          className="type-small mt-1 text-left text-[var(--ink-muted)] underline decoration-dotted underline-offset-4 hover:text-[var(--brand-text)]"
         >
           <InfoTooltip
             label="Open formula and regional breakdown details"
@@ -30,7 +30,7 @@ export function HurdleRateDecompositionGraph({
           />
         </button>
       </div>
-      <div className="h-72 min-h-72 min-w-0">
+      <div className="h-56 min-h-56 min-w-0">
         <ResponsiveChart className="h-full w-full" minWidth={1} minHeight={1}>
           <ComposedChart data={regionalHurdle} margin={{ top: 20, right: 20, left: 0, bottom: 0 }}>
             <CartesianGrid {...GRID_STYLE} />
@@ -38,12 +38,12 @@ export function HurdleRateDecompositionGraph({
             <YAxis {...withAxisProps({ tickFormatter: (value: number | string) => fmtPctTick(Number(value), 0) })} />
             <ZAxis dataKey="revenue" range={[80, 520]} />
             <Tooltip {...withTooltipProps()} formatter={(value, name) => (name === "Implied ERP" ? pct2(Number(value)) : pct(Number(value)))} />
-            <Bar dataKey="crp" name="CRP" fill="#444444" radius={[4, 4, 0, 0]} />
-            <Line dataKey="erp" name="Implied ERP" stroke="var(--accent)" strokeWidth={3} dot={{ r: 4 }} />
+            <Bar dataKey="crp" name="CRP" fill="var(--ink)" />
+            <Line dataKey="erp" name="Implied ERP" stroke="var(--chart-1)" strokeWidth={3} dot={{ r: 4 }} />
           </ComposedChart>
         </ResponsiveChart>
       </div>
-      <div className="mt-2 grid grid-cols-1 gap-2 text-xs text-[var(--text-muted)] sm:grid-cols-2 lg:grid-cols-3">
+      <div className="type-small mt-2 grid grid-cols-1 gap-2 text-[var(--ink-muted)] sm:grid-cols-2 lg:grid-cols-3">
         {hurdleBars.map((item) => (
           <button
             key={item.name}
@@ -53,8 +53,9 @@ export function HurdleRateDecompositionGraph({
               else if (item.name === "Beta x Implied ERP") onOpenDetail("erp");
               else onOpenDetail("bottomUpKe");
             }}
-            className="flex items-center gap-2 text-left transition hover:text-[var(--brand)]"
+            className="flex items-center gap-2 text-left transition hover:text-[var(--brand-text)]"
           >
+            {/* rounded-full: a colour-key dot in the legend, not a panel. */}
             <span className="h-2 w-2 rounded-full" style={{ backgroundColor: item.fill }} />
             {item.name}: {pct(item.value)}
           </button>

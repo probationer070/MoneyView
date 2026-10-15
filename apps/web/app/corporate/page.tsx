@@ -1,15 +1,13 @@
 "use client";
 
-import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
-import { RefreshCw } from "lucide-react";
 import { fetchApi } from "@/lib/api";
+import { bridgedEstimatedValue, bridgedUpsidePct } from "@/lib/bridgeQuality";
 import { DcfRefusalError, postDcf } from "@/lib/dcfRefusal";
-import { TickerSearch } from "@/components/ui/TickerSearch";
 import { tabStateKey, useTabState } from "@/lib/tabState";
-import { bridgedEstimatedValue, UNBRIDGED_PLACEHOLDER, UNBRIDGED_REASON } from "@/lib/bridgeQuality";
 import { useDevMonitorPageLoad } from "@/hooks/useDevMonitorPageLoad";
 import type {
   CorporateDcfBatchRequest,
@@ -23,14 +21,21 @@ import {
   PORTFOLIO_BENCHMARK_PRESETS,
 } from "@/lib/benchmarkPresets";
 import { useDebounce } from "@/hooks/useDebounce";
-import { InfoTooltip } from "@/components/ui/InfoTooltip";
-import { PageHeader } from "@/components/ui/PageHeader";
 import {
 } from "./components/CorporateGraphs";
 import { CorporateDiagnosticsSection } from "./components/CorporateDiagnosticsSection";
 import { TargetStockComparisonSection } from "./components/TargetStockComparisonSection";
-import { CorporateAssumptionsPanel } from "./components/CorporateAssumptionsPanel";
+import { CorporatePageTabs } from "./components/CorporatePageTabs";
+import { CorporateHeader } from "./components/CorporateHeader";
+import { DcfTab } from "./components/DcfTab";
+import { AssumptionTable } from "./components/AssumptionTable";
+import { KpiRow } from "./components/KpiRow";
+import { VerdictBlock, VerdictStrip } from "./components/VerdictBlock";
+import { verdictView } from "./verdict";
 import { buildCalculationDetails } from "./buildCalculationDetails";
+import { substitutedFormula } from "./substitutedFormula";
+import { buildFormulaContext } from "./formulaContext";
+import { historicalPriceStatus, quarterlyStatementsStatus } from "./detailStatus";
 import type { CalculationDetailKey } from "./components/calculationDetailTypes";
 import {
   ACTIVE_TICKER_SESSION_KEY,
@@ -73,10 +78,10 @@ import {
   annualMetricRows,
   clamp,
   companyForTicker,
-  comparisonUniverseLabel,
   dateTimeText,
   dcfRequestBody,
   defaultAssumptionsFor,
+  snapshotOf,
   downloadHistoricalPriceCsv,
   downloadQuarterlyStatementsCsv,
   downloadRawDatasetCsv,
@@ -108,10 +113,10 @@ import {
 
 function CalculationModalLoadingOverlay() {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="status" aria-live="polite">
-      <div className="w-full max-w-2xl rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-5 shadow-2xl">
-        <div className="text-sm font-semibold text-[var(--text-primary)]">Loading calculation detail</div>
-        <div className="mt-4 h-28 animate-pulse rounded bg-[var(--surface-muted)]" />
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--overlay-scrim)] p-4" role="status" aria-live="polite">
+      <div className="w-full max-w-2xl border border-[var(--line)] bg-[var(--surface-raised)] p-5">
+        <div className="type-label text-[var(--ink)]">Loading calculation detail</div>
+        <div className="mt-4 h-28 animate-pulse bg-[var(--surface)]" />
       </div>
     </div>
   );
@@ -151,9 +156,6 @@ export default function CorporateAnalysisPage() {
       return defaultAssumptionsFor(initialAssumptions.ticker);
     }
   });
-  const [companySearch, setCompanySearch] = useState("");
-  const [newCompanyName, setNewCompanyName] = useState("");
-  const [newCompanySymbol, setNewCompanySymbol] = useState("");
   const [activeCalculation, setActiveCalculation] = useState<CalculationDetailKey | null>(null);
   const [latestLoadedMetrics, setLatestLoadedMetrics] = useState<CorporateMetricsApi | null>(null);
   const [roicBasis, setRoicBasis] = useState<RoicBasis>("recent_average");
@@ -232,18 +234,9 @@ export default function CorporateAnalysisPage() {
     () => metricBasisParams(roicBasis, roicYear),
     [roicBasis, roicYear],
   );
-  const activeDcfSnapshot = useMemo<DcfRequestSnapshot>(() => ({
-    ticker: debounced.ticker,
-    growth: debounced.growth,
-    roic: debounced.roic,
-    wacc: debounced.wacc,
-    debtRatio: debounced.debtRatio,
-    unleveredBeta: debounced.unleveredBeta,
-    crp: debounced.crp,
-    reinvestment: debounced.reinvestment,
-    fcff: debounced.fcff,
-    esgPenalty: debounced.esgPenalty,
-  }), [debounced]);
+  // The inputs on screen, not the debounced copy: a Refresh or a sensitivity run made within 250 ms of a
+  // hydration, slider move or ticker switch must send what the reader sees (ERROR-LOG 2026-10-15).
+  const activeDcfSnapshot = useMemo<DcfRequestSnapshot>(() => snapshotOf(assumptions), [assumptions]);
   const activeComparisonSnapshot = useMemo<ComparisonRequestSnapshot>(() => ({
     comparisonUniverse,
     comparisonBenchmarkTicker,
@@ -413,7 +406,6 @@ export default function CorporateAnalysisPage() {
 
   const selectTicker = (ticker: string) => {
     const normalizedTicker = ticker.trim().toUpperCase();
-    setCompanySearch("");
     setLatestLoadedMetrics(null);
     writeSessionCache(ACTIVE_TICKER_SESSION_KEY, normalizedTicker);
     try {
@@ -430,12 +422,7 @@ export default function CorporateAnalysisPage() {
     setActiveCalculation(key);
   };
 
-  const addCompany = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const ticker = newCompanySymbol.trim().toUpperCase();
-    const name = newCompanyName.trim();
-    if (!ticker || !name) return;
-
+  const addCompany = async ({ ticker, name }: { ticker: string; name: string }) => {
     const saved = await fetchApi<CorporateCompany>("/corporate/companies", {
       method: "POST",
       body: JSON.stringify({ ticker, name, source: "manual" }),
@@ -444,8 +431,6 @@ export default function CorporateAnalysisPage() {
       const next = current.filter((company) => company.ticker.toUpperCase() !== saved.ticker.toUpperCase());
       return [...next, saved];
     });
-    setNewCompanyName("");
-    setNewCompanySymbol("");
     selectTicker(saved.ticker.toUpperCase());
   };
 
@@ -585,10 +570,7 @@ export default function CorporateAnalysisPage() {
     rawQuarterlyStatementsData && quarterlyStatementsSnapshot !== sourceDataTicker ? quarterlyStatementsSnapshot : null,
     rawHistoricalPricesData.length > 0 && historicalPricesSnapshot !== sourceDataTicker ? historicalPricesSnapshot : null,
   ].filter((ticker): ticker is string => Boolean(ticker));
-  const sourceDataIsStale = staleSourceDataTickers.length > 0;
-  const sourceDataStaleMessage = sourceDataIsStale
-    ? `Cached source data is for ${Array.from(new Set(staleSourceDataTickers)).join(", ")}. Refresh for ${sourceDataTicker}.`
-    : "";
+  const staleSourceTickers = Array.from(new Set(staleSourceDataTickers));
 
   useEffect(() => {
     if (!dcfRequestedSnapshot || !dcfRefreshToken) return;
@@ -682,13 +664,12 @@ export default function CorporateAnalysisPage() {
   }, [historicalPricesQuery.data, historicalPricesQuery.dataUpdatedAt, sourceDataRequestedTicker]);
 
   const handleRefreshDcf = () => {
-    setDcfRequestedSnapshot(activeDcfSnapshot);
+    setDcfRequestedSnapshot(snapshotOf(assumptions));
     setDcfRefreshToken(`${Date.now()}`);
   };
 
-  const handleViewFullDcfReport = async () => {
+  const loadFullDcfReport = async () => {
     const snapshot = dcfRequestedSnapshot ?? activeDcfSnapshot;
-    setActiveCalculation("backendDcf");
     setDcfFullReportLoading(true);
     setDcfFullReportError(null);
     try {
@@ -799,9 +780,9 @@ export default function CorporateAnalysisPage() {
 
   // Chart datasets keep each visualization declarative and reuse the same derived model.
   const hurdleBars = [
-    { name: "Risk-free", value: RISK_FREE_RATE, fill: "#9DA5A2" },
-    { name: "Beta x Implied ERP", value: derived.leveredBeta * impliedErp, fill: "#60CAAD" },
-    { name: "CRP", value: KOREA_COUNTRY_RISK_PREMIUM, fill: "#444444" },
+    { name: "Risk-free", value: RISK_FREE_RATE, fill: "var(--chart-4)" },
+    { name: "Beta x Implied ERP", value: derived.leveredBeta * impliedErp, fill: "var(--chart-1)" },
+    { name: "CRP", value: KOREA_COUNTRY_RISK_PREMIUM, fill: "var(--ink)" },
   ];
 
   const regionalHurdle = [
@@ -878,10 +859,6 @@ export default function CorporateAnalysisPage() {
     "Current slider/browser values and saved presets remain manual override layers.",
   ].join(" ");
 
-  // null when the equity bridge did not resolve, in which case estimated_value is an
-  // enterprise value and must not be shown under the "Intrinsic DCF" label.
-  const bridgedFairValue = dcfData ? bridgedEstimatedValue(dcfData) : null;
-
   const calculationDetails = buildCalculationDetails({
     companyName,
     assumptions,
@@ -908,310 +885,178 @@ export default function CorporateAnalysisPage() {
   });
 
   const activeCalculationDetail = activeCalculation ? calculationDetails[activeCalculation] : null;
+  const activeSubstitutedFormula = activeCalculation
+    ? substitutedFormula(activeCalculation, buildFormulaContext({ assumptions, derived, impliedErp, impliedMarketReturn, waccAudit: metricAuditQuery.data?.wacc ?? null, dcfData }))
+    : null;
+  // The full report needs a DCF result to be on screen, and a refusal blocks it.
+  const canLoadFullReport = dcfRefusal === null && !(!dcfData && dcfStreamStatus === "idle");
+  const verdict = verdictView(dcfData, dcfStreamStatus === "streaming", dcfRefusal?.readerText ?? null); // block + strip, spec §2A
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto px-4 py-6">
-      {/* Page header: title plus ticker navigation, backend DCF shortcut, and add-company form. */}
-      <header className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-        <PageHeader
-          title="Corporate Analysis"
-          subtitle={`${companyName}: hurdle rate, bottom-up beta, DCF, and value drivers`}
-        />
+    <div className="mx-auto flex h-[calc(100dvh_-_var(--main-pad-top,0px)_-_var(--main-pad-bottom,0px))] max-w-7xl flex-col">
+      <CorporateHeader
+        companies={companies}
+        selectedTicker={assumptions.ticker}
+        onSelectTicker={selectTicker}
+        onAddCompany={addCompany}
+        companyName={companyName}
+        sector={activeCompany.sector ?? null}
+        priceText={dcfData ? moneyText(dcfData.current_price) : null}
+        dcfUpdatedText={dcfDisplayLastUpdatedAt ? dateTimeText(dcfDisplayLastUpdatedAt) : null}
+        dcfStreaming={dcfStreamStatus === "streaming"}
+        dcfIsStale={dcfIsStale}
+        dcfStreamError={dcfStreamError}
+        onRefreshDcf={handleRefreshDcf}
+        verdictStrip={<VerdictStrip view={verdict} onOpenDetail={() => setActiveCalculation("backendDcf")} staleSource={staleSourceTickers.length > 0 ? { cached: staleSourceTickers.join(", "), ticker: sourceDataTicker } : null} />}
+      />
 
-        <div className="flex w-full flex-col gap-2 min-[1300px]:items-end">
-          <div id="company-search-container" className="flex w-full flex-col gap-2 min-[1300px]:flex-row min-[1300px]:justify-end">
-            <div className="flex w-full min-w-0 flex-col gap-2 text-sm font-semibold text-[var(--text-primary)] min-[1300px]:max-w-2xl">
-              {/* The shared search. Corporate's overlay was the richest of the three
-                  implementations, so the shared component was modelled on it rather than on
-                  Valuation's datalist: unifying downward would have cost the click-to-select
-                  list, which is the only way to find a company whose ticker you do not know. */}
-              <TickerSearch
-                id="company-search"
-                label="Company Search"
-                value={companySearch}
-                onChange={setCompanySearch}
-                onSelect={(ticker) => {
-                  selectTicker(ticker);
-                  setCompanySearch("");
+      <CorporatePageTabs
+        panels={{
+          // Summary (spec §2A): verdict and KPIs on the left 2/3, the assumption table on the right 1/3.
+          summary: (
+            <section className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+              <div className="flex min-w-0 flex-col gap-3 lg:col-span-2">
+                <VerdictBlock view={verdict} onOpenDetail={() => setActiveCalculation("backendDcf")} />
+                <KpiRow
+                  spread={derived.spread}
+                  bottomUpKe={derived.bottomUpKe}
+                  wacc={assumptions.wacc}
+                  leveredBeta={derived.leveredBeta}
+                  onOpenDetail={setActiveCalculation}
+                />
+              </div>
+              <AssumptionTable
+                assumptions={assumptions}
+                onChange={update}
+                onOpenDetail={setActiveCalculation}
+                growthMeta={growthMeta}
+                roicMeta={roicMeta}
+                roicAudit={metricAuditQuery.data?.roic ?? null}
+                waccAudit={metricAuditQuery.data?.wacc ?? null}
+                sourceTicker={sourceDataTicker}
+                sourceUpdatedAt={sourceDataDisplayLastUpdatedAt}
+                staleSourceTickers={staleSourceTickers}
+                sourceIsFetching={metricsHistoryQuery.isFetching || quarterlyStatementsQuery.isFetching || historicalPricesQuery.isFetching}
+                hasSourceData={Boolean(metricsHistoryData) || Boolean(quarterlyStatementsData) || historicalPricesData.length > 0}
+                roicYearUnavailableMessage={roicYearUnavailableMessage}
+                onRefreshSourceData={handleRefreshSourceData}
+                roicBasis={roicBasis}
+                roicYear={roicYear}
+                annualRoicValues={annualRoicValues}
+                onRoicBasisChange={(next) => {
+                  setRoicBasis(next);
+                  applyMetricHistorySelection({ nextRoicBasis: next, nextRoicYear: roicYear });
                 }}
-                items={companies}
-                selectedTicker={assumptions.ticker}
-                placeholder="Type a company name"
-                className="w-full"
+                onRoicYearChange={(next) => {
+                  setRoicYear(next);
+                  applyMetricHistorySelection({ nextRoicYear: next });
+                }}
+                growthBasisLabel={growthBasisLabel}
               />
-              {/* Backend DCF: quick link into the intrinsic valuation detail modal. */}
-              <button
-                type="button"
-                onClick={() => setActiveCalculation("backendDcf")}
-                className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-4 py-3 text-left text-sm transition hover:border-[var(--brand)]"
-              >
-                <div className="text-xs text-[var(--text-muted)]">
-                  <InfoTooltip
-                    label="Intrinsic DCF"
-                    description="Backend intrinsic value from projected FCFF, WACC, terminal growth, and the enterprise-to-equity bridge. Current market price is used only for upside comparison."
-                  />
-                </div>
-                <div
-                  className="font-bold text-[var(--text-primary)]"
-                  title={dcfData && bridgedFairValue === null ? UNBRIDGED_REASON : undefined}
-                >
-                  {!dcfData
-                    ? "Refresh to calculate"
-                    : bridgedFairValue === null
-                      ? UNBRIDGED_PLACEHOLDER
-                      : moneyText(bridgedFairValue)}
-                  {dcfStreamStatus === "streaming" ? " ..." : ""}
-                </div>
-              </button>
-              <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--text-muted)]">
-                <button
-                  type="button"
-                  onClick={handleRefreshDcf}
-                  disabled={dcfStreamStatus === "streaming"}
-                  className="inline-flex items-center gap-2 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 font-bold text-[var(--text-primary)] disabled:opacity-60"
-                >
-                  <RefreshCw className={`h-3.5 w-3.5 ${dcfStreamStatus === "streaming" ? "animate-spin" : ""}`} />
-                  Refresh DCF
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void handleViewFullDcfReport()}
-                  disabled={dcfFullReportLoading || dcfRefusal !== null || (!dcfData && dcfStreamStatus === "idle")}
-                  className="inline-flex items-center gap-2 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 font-bold text-[var(--text-primary)] disabled:opacity-60"
-                >
-                  {dcfFullReportLoading ? "Loading report..." : "View Full Report"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void handleCalculateAllDcfReports()}
-                  disabled={bulkDcfReportsLoading || nonBenchmarkComparisonRows.length === 0}
-                  className="inline-flex items-center gap-2 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 font-bold text-[var(--text-primary)] disabled:opacity-60"
-                >
-                  {bulkDcfReportsLoading ? "Calculating all DCF reports..." : "Calculate All DCF Reports"}
-                </button>
-                <span>{dcfDisplayLastUpdatedAt ? `Last updated ${dateTimeText(dcfDisplayLastUpdatedAt)}` : "Not calculated yet"}</span>
-                {dcfIsStale && (
-                  <span className="rounded-full bg-amber-100 px-2 py-1 text-[length:var(--type-caption)] font-bold text-amber-800">
-                    Stale
-                  </span>
-                )}
-                {!dcfData && dcfStreamStatus !== "streaming" && (
-                  <span>DCF stays idle on first load until you refresh it.</span>
-                )}
-                {dcfRefusal && (
-                  <span data-testid="dcf-refusal" className="rounded-full bg-[var(--surface-muted)] px-2 py-1 text-[length:var(--type-caption)] font-bold text-[var(--text-secondary)]">
-                    Not valued: {dcfRefusal.readerText}
-                  </span>
-                )}
-                {dcfStreamError && (
-                  <span className="rounded-full bg-red-100 px-2 py-1 text-[length:var(--type-caption)] font-bold text-red-800">
-                    {dcfStreamError}
-                  </span>
-                )}
-              </div>
-            </div>
-            {/* Add Company: persists a manual ticker and immediately selects it for analysis. */}
-            <form onSubmit={addCompany} className="grid w-full min-w-0 grid-cols-1 gap-2 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-3 text-sm sm:grid-cols-2 min-[1300px]:max-w-sm">
-              <div className="text-xs font-semibold text-[var(--text-muted)] sm:col-span-2">Add Company</div>
-              <input
-                value={newCompanyName}
-                onChange={(event) => setNewCompanyName(event.target.value)}
-                placeholder="Company name"
-                className="rounded-[var(--radius)] border border-[var(--border)] px-3 py-2"
-              />
-              <input
-                value={newCompanySymbol}
-                onChange={(event) => setNewCompanySymbol(event.target.value)}
-                placeholder="Symbol"
-                className="rounded-[var(--radius)] border border-[var(--border)] px-3 py-2"
-              />
-              <button
-                type="submit"
-                className="rounded-[var(--radius)] bg-[var(--brand)] px-3 py-2 text-sm font-bold text-white disabled:opacity-50 sm:col-span-2"
-                disabled={!newCompanyName.trim() || !newCompanySymbol.trim()}
-              >
-                Add for Analysis
-              </button>
-            </form>
-          </div>
-        </div>
-      </header>
-
-      {/* Main analysis grid: assumption controls on the left, valuation cards and charts on the right. */}
-      <section className="grid grid-cols-1 gap-4 xl:grid-cols-6">
-        <CorporateAssumptionsPanel
-          setActiveCalculation={setActiveCalculation}
-          handleRefreshSourceData={handleRefreshSourceData}
-          metricsHistoryQueryIsFetching={metricsHistoryQuery.isFetching}
-          quarterlyStatementsQueryIsFetching={quarterlyStatementsQuery.isFetching}
-          historicalPricesQueryIsFetching={historicalPricesQuery.isFetching}
-          sourceDataDisplayLastUpdatedAt={sourceDataDisplayLastUpdatedAt}
-          sourceDataIsStale={sourceDataIsStale}
-          sourceDataStaleMessage={sourceDataStaleMessage}
-          hasMetricsHistoryData={Boolean(metricsHistoryData)}
-          hasQuarterlyStatementsData={Boolean(quarterlyStatementsData)}
-          hasHistoricalPricesData={historicalPricesData.length > 0}
-          applyMetricHistorySelection={applyMetricHistorySelection}
-          growthBasisLabel={growthBasisLabel}
-          growthMeta={growthMeta}
-          roicBasis={roicBasis}
-          setRoicBasis={setRoicBasis}
-          roicYear={roicYear}
-          setRoicYear={setRoicYear}
-          annualRoicValues={annualRoicValues}
-          roicBasisLabel={roicBasisLabel}
-          roicMeta={roicMeta}
-          roicYearUnavailableMessage={roicYearUnavailableMessage}
-          roicAudit={metricAuditQuery.data?.roic ?? null}
-          waccAudit={metricAuditQuery.data?.wacc ?? null}
-          assumptions={assumptions}
-          update={update}
-        />
-
-        {/* Dashboard surface: KPI cards first, then the diagnostic chart suite as a clearly visible section. */}
-        <div className="space-y-4 xl:col-span-4">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            <button
-              type="button"
-              onClick={() => setActiveCalculation("spread")}
-              className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4 text-left transition hover:border-[var(--brand)]"
-            >
-              <div className="text-xs font-semibold text-[var(--text-muted)]">
-                <InfoTooltip
-                  label="ROIC - WACC"
-                  description={`Spread between return on invested capital and WACC. Basis: ${pct(assumptions.roic)} ROIC - ${pct(assumptions.wacc)} WACC = ${pct(derived.spread)}. Positive is good because returns exceed the hurdle rate; current status is ${derived.spread >= 0 ? "Good, value creation" : "Bad, value destruction"}.`}
-                />
-              </div>
-              <div className={`mt-1 text-3xl font-black ${derived.spread >= 0 ? "text-[var(--delta-up)]" : "text-[var(--delta-down)]"}`}>
-                {pct(derived.spread)}
-              </div>
-              <div className="mt-2 text-xs text-[var(--text-muted)]">
-                {derived.spread >= 0 ? "Value creation" : "Value destruction"}
-              </div>
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveCalculation("bottomUpKe")}
-              className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4 text-left transition hover:border-[var(--brand)]"
-            >
-              <div className="text-xs font-semibold text-[var(--text-muted)]">
-                <InfoTooltip
-                  label="Bottom-up Ke"
-                  description={`Cost of equity estimate. Basis: risk-free rate ${pct(RISK_FREE_RATE)} + levered beta ${numberText2(derived.leveredBeta)} x implied ERP ${pct(impliedErp)} + South Korea CRP ${pct(KOREA_COUNTRY_RISK_PREMIUM)} = ${pct(derived.bottomUpKe)}. Lower is generally better, but it must still reflect real risk.`}
-                />
-              </div>
-              <div className="mt-1 text-3xl font-black text-[var(--text-primary)]">{pct(derived.bottomUpKe)}</div>
-              <div className="mt-2 text-xs text-[var(--text-muted)]">rf + beta x implied ERP + CRP</div>
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveCalculation("leveredBeta")}
-              className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4 text-left transition hover:border-[var(--brand)]"
-            >
-              <div className="text-xs font-semibold text-[var(--text-muted)]">
-                <InfoTooltip
-                  label="Levered Beta"
-                  description={`Equity risk after financial leverage. Basis: betaU ${numberText(assumptions.unleveredBeta)} x [1 + (1 - ${pct(TAX_RATE * 100)}) x D/E ${numberText(derived.debtToEquity)}] = ${numberText2(derived.leveredBeta)}. Beta 1.0 is average market risk; beta above 1.0 is more volatile than the market, so beta 1.5 means 50.0% higher risk; beta below 1.0 is less volatile, so beta 0.7 means 30.0% lower risk.`}
-                />
-              </div>
-              <div className="mt-1 text-3xl font-black text-[var(--text-primary)]">{numberText2(derived.leveredBeta)}</div>
-              <div className="mt-2 text-xs text-[var(--text-muted)]">Hamada adjusted</div>
-            </button>
-          </div>
-
-          <CorporateDiagnosticsSection
-            companyName={companyName}
-            hurdleBars={hurdleBars}
-            regionalHurdle={regionalHurdle}
-            assumptionsDebtRatio={assumptions.debtRatio}
-            betaTreemapProxy={betaTreemapProxy}
-            waccCurve={waccCurve}
-            valueMatrix={valueMatrix}
-            sustainableGrowth={derived.sustainableGrowth}
-            fcff={assumptions.fcff}
-            dcfResult={dcfData ?? undefined}
-            onOpenDetail={setActiveCalculation}
-          />
-        </div>
-
-        <TargetStockComparisonSection
-          comparisonData={comparisonData}
-          comparisonDisplayLastUpdatedAt={comparisonDisplayLastUpdatedAt}
-          comparisonIsStale={comparisonIsStale}
-          comparisonUniverse={comparisonUniverse}
-          comparisonBenchmarkTicker={comparisonBenchmarkTicker}
-          comparisonBenchmarkOptions={PORTFOLIO_BENCHMARK_PRESETS}
-          comparisonCustomTickersInput={comparisonCustomTickersInput}
-          comparisonSortKey={comparisonSortKey}
-          comparisonSortDirection={comparisonSortDirection}
-          onComparisonUniverseChange={setComparisonUniverse}
-          onComparisonBenchmarkTickerChange={setComparisonBenchmarkTicker}
-          onComparisonCustomTickersInputChange={setComparisonCustomTickersInput}
-          onComparisonSortKeyChange={setComparisonSortKey}
-          onComparisonSortDirectionChange={setComparisonSortDirection}
-          onRefreshComparison={handleRefreshComparison}
-          onVerifyWatchlistSync={() => {
-            void companiesQuery.refetch();
-            void watchlistQuery.refetch();
-          }}
-          onOpenPortfolio={() => router.push("/portfolio")}
-          watchlistCoverage={watchlistCoverage}
-          watchlistSyncLoading={watchlistQuery.isFetching || companiesQuery.isFetching}
-          comparisonIsLoading={comparisonQuery.isLoading}
-          comparisonIsFetching={comparisonQuery.isFetching}
-          comparisonIsError={comparisonQuery.isError}
-          sortedComparisonRows={sortedComparisonRows}
-          selectedComparisonTicker={selectedComparisonRow?.ticker ?? ""}
-          selectedComparisonSector={selectedComparisonSector}
-          similarComparisonBarData={similarComparisonBarData}
-          similarComparisonScatterPeers={similarComparisonScatterPeers}
-          similarComparisonScatterSelected={similarComparisonScatterSelected}
-          currentTicker={assumptions.ticker}
-          onSelectTicker={selectTicker}
-          onOpenCalculationForTicker={selectTickerAndOpenCalculation}
-          bulkDcfReportsLoading={bulkDcfReportsLoading}
-          bulkDcfReportsError={bulkDcfReportsError}
-          bulkDcfReports={bulkDcfReports}
-          bulkDcfReportsLastUpdatedAt={bulkDcfReportsLastUpdatedAt}
-          bulkDcfSkipped={bulkDcfSkipped}
-          onCalculateAllDcfReports={() => void handleCalculateAllDcfReports()}
-          formatPct2={pct2}
-          formatMoney={moneyText}
-          formatDateTime={dateTimeText}
-          formatComparisonUniverseLabel={comparisonUniverseLabel}
-        />
-      </section>
+            </section>
+          ),
+          diagnostics: (
+            <CorporateDiagnosticsSection
+              companyName={companyName}
+              hurdleBars={hurdleBars}
+              regionalHurdle={regionalHurdle}
+              assumptionsDebtRatio={assumptions.debtRatio}
+              betaTreemapProxy={betaTreemapProxy}
+              waccCurve={waccCurve}
+              valueMatrix={valueMatrix}
+              onOpenDetail={setActiveCalculation}
+            />
+          ),
+          dcf: (
+            <DcfTab
+              sustainableGrowth={derived.sustainableGrowth}
+              fcff={assumptions.fcff}
+              dcfResult={dcfData ?? undefined}
+              onOpenDetail={setActiveCalculation}
+              report={dcfFullReport}
+              reportLoading={dcfFullReportLoading}
+              reportError={dcfFullReportError}
+              canLoadReport={canLoadFullReport}
+              onLoadReport={() => void loadFullDcfReport()}
+            />
+          ),
+          comparison: (
+            <TargetStockComparisonSection
+              comparisonData={comparisonData}
+              comparisonDisplayLastUpdatedAt={comparisonDisplayLastUpdatedAt}
+              comparisonIsStale={comparisonIsStale}
+              comparisonUniverse={comparisonUniverse}
+              comparisonBenchmarkTicker={comparisonBenchmarkTicker}
+              comparisonBenchmarkOptions={PORTFOLIO_BENCHMARK_PRESETS}
+              comparisonCustomTickersInput={comparisonCustomTickersInput}
+              comparisonSortKey={comparisonSortKey}
+              comparisonSortDirection={comparisonSortDirection}
+              onComparisonUniverseChange={setComparisonUniverse}
+              onComparisonBenchmarkTickerChange={setComparisonBenchmarkTicker}
+              onComparisonCustomTickersInputChange={setComparisonCustomTickersInput}
+              onComparisonSortKeyChange={setComparisonSortKey}
+              onComparisonSortDirectionChange={setComparisonSortDirection}
+              onRefreshComparison={handleRefreshComparison}
+              onVerifyWatchlistSync={() => {
+                void companiesQuery.refetch();
+                void watchlistQuery.refetch();
+              }}
+              onOpenPortfolio={() => router.push("/portfolio")}
+              watchlistCoverage={watchlistCoverage}
+              watchlistSyncLoading={watchlistQuery.isFetching || companiesQuery.isFetching}
+              comparisonIsLoading={comparisonQuery.isLoading}
+              comparisonIsFetching={comparisonQuery.isFetching}
+              comparisonIsError={comparisonQuery.isError}
+              sortedComparisonRows={sortedComparisonRows}
+              selectedComparisonTicker={selectedComparisonRow?.ticker ?? ""}
+              selectedComparisonSector={selectedComparisonSector}
+              similarComparisonBarData={similarComparisonBarData}
+              similarComparisonScatterPeers={similarComparisonScatterPeers}
+              similarComparisonScatterSelected={similarComparisonScatterSelected}
+              currentTicker={assumptions.ticker}
+              onSelectTicker={selectTicker}
+              onOpenCalculationForTicker={selectTickerAndOpenCalculation}
+              bulkDcfReportsLoading={bulkDcfReportsLoading}
+              bulkDcfReportsError={bulkDcfReportsError}
+              bulkDcfReports={bulkDcfReports}
+              bulkDcfReportsLastUpdatedAt={bulkDcfReportsLastUpdatedAt}
+              bulkDcfSkipped={bulkDcfSkipped}
+              onCalculateAllDcfReports={() => void handleCalculateAllDcfReports()}
+              formatPct2={pct2}
+              formatMoney={moneyText}
+              formatDateTime={dateTimeText}
+            />
+          ),
+        }}
+      />
       {/* Calculation detail modal is mounted only when a metric or chart title is selected. */}
-      {activeCalculationDetail && (
+      {activeCalculation && activeCalculationDetail && (
         <CalculationDetailModal
           detail={activeCalculationDetail}
+          detailKey={activeCalculation}
+          substitutedFormula={activeSubstitutedFormula}
+          sliderWacc={assumptions.wacc}
+          dcfStatus={dcfData?.status ?? null}
+          dcfGeneratedAt={dcfData?.generated_at ?? null}
+          dcfSnapshot={activeDcfSnapshot}
+          baseDcf={dcfData && !dcfIsStale ? { intrinsic: bridgedEstimatedValue(dcfData), upside: bridgedUpsidePct(dcfData) } : null}
           ticker={assumptions.ticker}
           metricAudit={metricAuditQuery.data ?? null}
           metricAuditIsLoading={metricAuditQuery.isLoading}
           metricAuditIsError={metricAuditQuery.isError}
+          history={metricsHistoryData}
+          historyIsFetching={metricsHistoryQuery.isFetching}
+          historyIsError={metricsHistoryQuery.isError}
+          onLoadHistory={handleRefreshSourceData}
+          comparisonRows={comparisonData?.rows ?? null}
+          comparisonIsStale={comparisonIsStale}
           rawDatasetRows={rawDatasetRows}
           historicalPrices={historicalPricesData}
-          historicalStatus={
-            historicalPricesQuery.isLoading && historicalPricesData.length === 0
-              ? "Loading 5-year historical price data"
-              : historicalPricesQuery.isError && historicalPricesData.length === 0
-                ? "5-year historical price data unavailable"
-                : historicalPricesData.length === 0
-                  ? "Refresh source data to load 5-year historical price data"
-                  : `${historicalPricesData.length} daily rows from the 5-year OHLCV endpoint`
-          }
+          historicalStatus={historicalPriceStatus(historicalPricesQuery, historicalPricesData.length)}
           historicalIsLoading={historicalPricesQuery.isLoading && historicalPricesData.length === 0}
           historicalIsError={historicalPricesQuery.isError && historicalPricesData.length === 0}
           quarterlyStatementRows={quarterlyStatementsData?.rows ?? []}
-          quarterlyStatementStatus={
-            quarterlyStatementsQuery.isLoading && !quarterlyStatementsData
-              ? "Loading Yahoo quarterly financial statements"
-              : quarterlyStatementsQuery.isError && !quarterlyStatementsData
-                ? "Yahoo quarterly financial statements unavailable"
-                : !quarterlyStatementsData
-                  ? "Refresh source data to load Yahoo quarterly financial statements"
-                  : `${quarterlyStatementsData.rows.length} rows from ${quarterlyStatementsData.source ?? "Yahoo quarterly financial statements"}`
-          }
+          quarterlyStatementStatus={quarterlyStatementsStatus(quarterlyStatementsQuery, quarterlyStatementsData)}
           quarterlyStatementsIsLoading={quarterlyStatementsQuery.isLoading && !quarterlyStatementsData}
           quarterlyStatementsIsError={quarterlyStatementsQuery.isError && !quarterlyStatementsData}
           dcfFullReport={dcfFullReport}
@@ -1226,7 +1071,7 @@ export default function CorporateAnalysisPage() {
           }
           dcfFullReportIsLoading={dcfFullReportLoading}
           dcfFullReportIsError={Boolean(dcfFullReportError)}
-          onRequestDcfFullReport={() => void handleViewFullDcfReport()}
+          onRequestDcfFullReport={() => void loadFullDcfReport()}
           onDownloadRawDatasetCsv={() => downloadRawDatasetCsv(assumptions.ticker, rawDatasetRows)}
           onDownloadHistoricalPriceCsv={() => downloadHistoricalPriceCsv(assumptions.ticker, historicalPricesData)}
           onDownloadQuarterlyStatementsCsv={() => downloadQuarterlyStatementsCsv(assumptions.ticker, quarterlyStatementsData?.rows ?? [])}

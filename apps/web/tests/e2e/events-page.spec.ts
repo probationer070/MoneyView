@@ -34,7 +34,7 @@ async function openEventsPage(page: Page, events: MockEvent[], categories: MockC
 
 test("the sidebar links to the events page", async ({ page }) => {
   await openEventsPage(page, [], [UNCATEGORIZED]);
-  await expect(page.locator("#app-sidebar").getByRole("link", { name: "Events" })).toHaveAttribute("href", "/events");
+  await expect(page.locator("#app-topnav").getByRole("link", { name: "Events" })).toHaveAttribute("href", "/events");
 });
 
 test("built-in rows are read-only, and a user's own event can be edited and deleted", async ({ page }) => {

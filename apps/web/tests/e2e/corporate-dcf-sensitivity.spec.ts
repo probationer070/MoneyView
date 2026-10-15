@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { mockCorporatePageApi } from "./helpers/corporatePageMock";
+import { loadFullDcfReportInTab, openLowerTab, refreshDcf as refreshDcfHelper } from "./helpers/corporateDcf";
 
 // The WACC x terminal-growth grid, and the terminal-value share it is built to put a range
 // around.
@@ -23,18 +24,14 @@ async function gotoCorporate(page: Page) {
 }
 
 async function refreshDcf(page: Page) {
-  await page.getByRole("button", { name: "Refresh DCF" }).click();
-  await expect(page.getByRole("button", { name: /Intrinsic DCF/ }).first())
-    .not.toContainText("Refresh to calculate", { timeout: 60_000 });
+  await refreshDcfHelper(page);
 }
 
-/** Loads the full report, which is what carries the grid, and opens the modal that shows it. */
+/** Loads the full report in the DCF tab, which is what carries the grid, and returns that tab. */
 async function openFullReport(page: Page) {
-  await page.getByRole("button", { name: "View Full Report" }).click();
-  const modal = page.getByRole("dialog").first();
-  await expect(modal).toBeVisible({ timeout: 30_000 });
-  await expect(modal.getByText("WACC x Terminal Growth Sensitivity")).toBeVisible({ timeout: 30_000 });
-  return modal;
+  const panel = await loadFullDcfReportInTab(page);
+  await expect(panel.getByText("WACC x Terminal Growth Sensitivity")).toBeVisible({ timeout: 30_000 });
+  return panel;
 }
 
 /**
@@ -133,6 +130,7 @@ test.describe("the WACC x terminal-growth sensitivity grid", () => {
     await mockCorporatePageApi(page);
     await gotoCorporate(page);
 
+    await openLowerTab(page, "DCF");
     const tile = page.getByRole("button", { name: /Terminal Value Share/ }).first();
     // No DCF has run yet, so there is no valuation to take a share of. The sliders alone
     // cannot produce one, which is exactly what the old formula pretended.

@@ -12,10 +12,11 @@ const styles: Record<MetricQuality, { dot: string; text: string; bg: string; lab
   missing: { dot: "bg-[var(--ink-disabled)]", text: "text-[var(--ink-muted)]", bg: "bg-[var(--surface)]", label: "Missing" },
 };
 
-export function MetricQualityBadge({ quality, className }: { quality: MetricQuality; className?: string }) {
+export function MetricQualityBadge({ quality, className, title }: { quality: MetricQuality; className?: string; title?: string }) {
   const style = styles[quality];
   return (
     <span
+      title={title}
       className={clsx(
         "inline-flex items-center gap-1.5 rounded-[var(--radius-2)] px-2 py-0.5 type-caption",
         style.bg,

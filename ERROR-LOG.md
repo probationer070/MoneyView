@@ -26,6 +26,36 @@ reveal that; only checking the code did.
 
 An entry states what was true when it was written. Nothing updates it on its own.
 
+## 2026-10-15: DCF and sensitivity sent inputs up to 250 ms old after hydration, a slider move or a ticker switch
+
+Date: 2026-10-15 (Task 11 fix round 1 of the corporate one-screen plan, before commit).
+Command: `cd apps/web && npx playwright test tests/e2e/corporate-one-screen.spec.ts -g "uses the inputs on screen" --workers=2`
+Failure: with the AAPL metrics response held and then released with esg_penalty 41, fcff 150 and reinvestment 60 (the seed was 32, 109 and 44), the assumption table showed 41.0 and 60.0%, but Refresh DCF sent esg_penalty 32, fcff 109 and reinvestment 44 in its stream request, and the sensitivity tab's Calculate sent the same old values. The test freezes the clock after boot, so only a read of the inputs at click time can reach a request; the old values came from the debounced copy. A Refresh made within 250 ms of a hydration, a slider edit or a ticker switch sent the previous inputs, and after a ticker switch the previous ticker.
+Root cause: `activeDcfSnapshot` was built from `useDebounce(assumptions, 250)`. The debounce is from 25e9e33 (2026-04-08). Since 114231f (2026-04-21) that snapshot is the one Refresh DCF sends and the sensitivity tab receives. `assumptions` changes at once when metrics hydrate (`fromApiMetrics`), when a slider moves and when the ticker changes, but the snapshot kept the old values for up to 250 ms. The stale-DCF check compared against the same debounced copy, so it did not flag the gap either. The debounced copy is still right for the metrics save; only the DCF snapshot used it wrongly.
+Fix: `snapshotOf(assumptions)` in `corporateUtils.ts` is the one mapping from assumptions to DCF inputs. The page's snapshot memo, Refresh DCF and the stale check read `assumptions` through it, and the modal receives the same snapshot. The debounce stays for the metrics save. The sensitivity tab's Current row shows a dash while the page's DCF is stale (second commit of the round).
+Files changed: `apps/web/app/corporate/corporateUtils.ts`, `apps/web/app/corporate/page.tsx`, `apps/web/tests/e2e/helpers/corporatePageMock.ts` (`holdAaplMetrics`, `aaplMetricsPatch` options), `apps/web/tests/e2e/corporate-one-screen.spec.ts` (two hydration tests), `apps/web/tests/e2e/corporate-model.spec.ts` (`snapshotOf` unit test).
+Prevention: the hydration tests hold the metrics response, release it with values that differ from the seed, and pause the clock before the release, so any read through the debounce fails them. The sensitivity twin covers the other consumer of the snapshot. The `snapshotOf` unit test pins the mapping field by field, so a dropped field fails it. Any new consumer of the DCF inputs must read `snapshotOf(assumptions)`, not a debounced or cached copy.
+
+## 2026-10-14: lower tab bar widened the corporate page to 456 px at 375-390 px
+
+Date: 2026-10-14 (Task 6 of the corporate one-screen plan, before commit).
+Command: `cd apps/web && npx playwright test tests/e2e/corporate-viewport.spec.ts tests/e2e/high-risk-render-regression.spec.ts tests/e2e/responsive-accessibility.spec.ts --workers=2`
+Failure: three overflow checks failed at 375 and 390 px (`scrollWidth` 416 to 423 against a 375 or 390 viewport). The page's `main` was 456 px wide on every lower tab, including Core Diagnostics, which was the first tab to fail.
+Root cause: the tab strip (`Tabs`, a `flex` row with `overflow-x-auto`) has a min-content width equal to its three labels laid out in one row, about 392 px. A block's intrinsic width includes its children's min-content contribution, and `overflow-x-auto` does not remove that contribution, so the strip widened `main`. Task 5's grid arrangement had hidden this. The comparison table inside the `max-h-80 overflow-y-auto` wrapper had the same effect once a table was loaded.
+Fix: `[contain:inline-size]` on the tab strip (`CorporateLowerTabs.tsx`) and on the comparison scroll wrapper (`TargetStockComparisonSection.tsx`). Containment makes the strip's intrinsic inline size zero, so it takes the container width and scrolls its labels inside itself. With the fix, `main` is 390 px wide and the strip has `scrollWidth` 392 with `clientWidth` 326.
+Files changed: `apps/web/app/corporate/components/CorporateLowerTabs.tsx`, `apps/web/app/corporate/components/TargetStockComparisonSection.tsx`.
+Prevention: the 375 and 390 px overflow specs run on every lower tab (`corporate-viewport`, `high-risk-render-regression`, `responsive-accessibility`). Root fix for the shell: `components/ui/AppShell.tsx` gives the shell root and `main` `w-full min-w-0`, because `body` is a centred flex row and a content-sized shell let any child's min-content widen the whole page. Any new block that contains a `flex` row with `overflow-x-auto`, or a table in a scroll wrapper, needs `[contain:inline-size]` or `min-w-0` plus a width constraint above it, and a 390 px check on the tab it sits in.
+
+## 2026-10-14: corporate first screen overflowed a 390 px viewport after the dense state
+
+Date: 2026-10-14 (Task 5 of the corporate one-screen plan, before commit).
+Command: `npx playwright test --workers=2` (full suite), first run with the new first screen.
+Failure: `high-risk-render-regression.spec.ts:118` ("corporate diagnostics and comparison chart panels stay rendered after dense state changes") failed. At 390 px after Refresh DCF and a custom comparison, `document.documentElement.scrollWidth` was 740 px and the page was about 1089 px wide. The change had moved the diagnostics and comparison sections out of their grid into a block stack. A second attempt, a single-column grid wrapper, made `corporate-viewport.spec.ts:23` and `responsive-accessibility.spec.ts:79` fail (diagnostics panels 34 px wide).
+Root cause: `body` is a flex row with `justify-center`, so the app shell takes its min-content width. A block child contributes its full min-content width (the comparison table and the 983 px recharts wrapper), while a grid whose tracks are `minmax(0, 1fr)` does not. The lower stack had lost the grid that protected it. A single-column grid wrapper was not enough: `TargetStockComparisonSection` carries `col-span-6`, which created implicit columns.
+Fix: restored the HEAD arrangement of the lower stack, `<section className="grid grid-cols-1 gap-4 xl:grid-cols-6">` with a `div.space-y-4 xl:col-span-4` around `CorporateDiagnosticsSection` and `TargetStockComparisonSection` as the direct child. The three affected specs and the full suite then passed (396 passed, 8 skipped).
+Files changed: apps/web/app/corporate/page.tsx.
+Prevention: moving a section out of a grid into a block stack changes min-content propagation, and fixed-width charts or wide tables then widen the whole page. After any layout move on a page with charts, check the 390 px spec (`high-risk-render-regression.spec.ts`) after a dense state, not only the initial render.
+
 ## 2026-10-14: market overview candles took the day's direction colour for every up candle
 
 Date: 2026-10-14

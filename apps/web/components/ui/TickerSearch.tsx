@@ -44,6 +44,8 @@ interface TickerSearchProps {
   id?: string;
   className?: string;
   maxSuggestions?: number;
+  /** Offered as the list's only entry when the typed text matches nothing ("not in the list → add"). */
+  noMatchAction?: { label: string; onSelect: (query: string) => void };
 }
 
 /**
@@ -69,6 +71,14 @@ function matchTickerItems(
     .slice(0, limit);
 }
 
+function optionClass(selected: boolean) {
+  return `block w-full rounded-[var(--radius-1)] px-3 py-2 text-left type-body transition hover:bg-[var(--brand)] ${
+    selected
+      ? "bg-[var(--brand)] text-[var(--on-brand)]"
+      : "text-[var(--ink-muted)]"
+  }`;
+}
+
 export function TickerSearch({
   label,
   value,
@@ -80,6 +90,7 @@ export function TickerSearch({
   id,
   className = "",
   maxSuggestions = 8,
+  noMatchAction,
 }: TickerSearchProps) {
   const t = useT();
   const generatedId = useId();
@@ -90,6 +101,7 @@ export function TickerSearch({
     () => matchTickerItems(items, value, maxSuggestions),
     [items, value, maxSuggestions],
   );
+  const showNoMatch = Boolean(noMatchAction) && value.trim() !== "" && matches.length === 0;
 
   const commit = (ticker: string) => {
     const normalized = ticker.trim().toUpperCase();
@@ -121,7 +133,12 @@ export function TickerSearch({
         onKeyDown={(event) => {
           if (event.key === "Enter") {
             event.preventDefault();
-            commit(matches.length === 1 ? matches[0].ticker : value);
+            if (showNoMatch && noMatchAction) {
+              setOpen(false);
+              noMatchAction.onSelect(value.trim());
+            } else {
+              commit(matches.length === 1 ? matches[0].ticker : value);
+            }
           }
           if (event.key === "Escape") setOpen(false);
         }}
@@ -131,13 +148,13 @@ export function TickerSearch({
         autoCapitalize="none"
         spellCheck={false}
         role="combobox"
-        aria-expanded={open && matches.length > 0}
+        aria-expanded={open && (matches.length > 0 || showNoMatch)}
         aria-controls={`${inputId}-listbox`}
         aria-autocomplete="list"
         data-testid={`${inputId}-input`}
         className={fieldInputClass}
       />
-      {open && matches.length > 0 ? (
+      {open && (matches.length > 0 || showNoMatch) ? (
         <div
           id={`${inputId}-listbox`}
           role="listbox"
@@ -151,11 +168,7 @@ export function TickerSearch({
               role="option"
               aria-selected={item.ticker === selectedTicker}
               onClick={() => commit(item.ticker)}
-              className={`block w-full rounded-[var(--radius-1)] px-3 py-2 text-left type-body transition hover:bg-[var(--brand)] ${
-                item.ticker === selectedTicker
-                  ? "bg-[var(--brand)] text-[var(--on-brand)]"
-                  : "text-[var(--ink-muted)]"
-              }`}
+              className={optionClass(item.ticker === selectedTicker)}
             >
               {/* The space is load-bearing: without it the accessible name reads
                   "MicrosoftMSFT", which no reasonable selector or screen reader expects. */}
@@ -165,6 +178,20 @@ export function TickerSearch({
               </span>
             </button>
           ))}
+          {showNoMatch && noMatchAction ? (
+            <button
+              type="button"
+              role="option"
+              aria-selected={false}
+              onClick={() => {
+                setOpen(false);
+                noMatchAction.onSelect(value.trim());
+              }}
+              className={optionClass(false)}
+            >
+              {noMatchAction.label}
+            </button>
+          ) : null}
         </div>
       ) : null}
     </div>

@@ -54,6 +54,10 @@ export type CorporatePageMockOptions = {
   dcfWaccMinusTerminalGrowth?: number;
   /** Overrides terminal_growth_binding_constraint on the full report's summary (H11). */
   dcfBindingConstraint?: string;
+  /** Holds the AAPL metrics response until this resolves, so a test can act while the page's inputs are still the seed. */
+  holdAaplMetrics?: Promise<void>;
+  /** Replaces fields of the AAPL metrics response (snake_case API names), for tests of hydrated inputs. */
+  aaplMetricsPatch?: Record<string, number>;
 };
 
 export type BridgeQuality = "ok" | "estimated" | "missing";
@@ -219,7 +223,7 @@ const mockDcfCompleteEvent: DcfCompleteEvent = {
   generated_at: mockDcfSummary.generated_at,
 };
 
-const mockMetricAudit = (ticker: string): CorporateMetricAudit => ({
+export const mockMetricAudit = (ticker: string): CorporateMetricAudit => ({
   ticker,
   source_mode: "yahoo_finance",
   generated_at: nowIso(),
@@ -667,7 +671,8 @@ export async function mockCorporatePageApi(page: Page, stats?: CorporatePageMock
     }
 
     if (pathname === `${API_PREFIX}/corporate/metrics/AAPL` && method === "GET") {
-      return json(route, {
+      if (options?.holdAaplMetrics) await options.holdAaplMetrics;
+      const aaplMetrics = {
         ticker: "AAPL",
         growth: 6,
         growth_avg_legacy: 5.8,
@@ -707,7 +712,8 @@ export async function mockCorporatePageApi(page: Page, stats?: CorporatePageMock
           metric_role: "primary",
           as_of: "2025-12-31",
         },
-      });
+      };
+      return json(route, { ...aaplMetrics, ...options?.aaplMetricsPatch });
     }
 
     if (pathname === `${API_PREFIX}/corporate/metrics/MSFT` && method === "GET") {

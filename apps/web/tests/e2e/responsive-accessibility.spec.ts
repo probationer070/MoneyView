@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { mockCorporatePageApi } from "./helpers/corporatePageMock";
 import { mockMarketPageApi } from "./helpers/marketPageMock";
 import { API_PREFIX, json } from "./helpers/mockUtils";
+import { openLowerTab } from "./helpers/corporateDcf";
 
 async function expectNoHorizontalOverflow(page: Page) {
   await expect
@@ -83,11 +84,13 @@ test("corporate and simulation lab remain usable on narrower widths", async ({ p
 
   await expect(page.getByRole("heading", { name: /Corporate Analysis/i })).toBeVisible({ timeout: 60_000 });
   await expect(page.getByText("Core Diagnostics")).toBeVisible();
+  await openLowerTab(page, "DCF");
   await page.getByText("DCF Core Modules").first().scrollIntoViewIfNeeded();
   await expect(page.getByText("DCF Core Modules").first()).toBeVisible();
   await expectNoHorizontalOverflow(page);
 
   await page.setViewportSize({ width: 375, height: 812 });
+  await openLowerTab(page, "Core Diagnostics");
   await expect(page.getByText("Hurdle Rate Decomposition").first()).toBeVisible();
   await expectNoHorizontalOverflow(page);
 

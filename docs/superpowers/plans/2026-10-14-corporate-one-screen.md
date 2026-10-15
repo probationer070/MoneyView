@@ -15,6 +15,8 @@
 
 **Spec:** `docs/superpowers/specs/2026-10-14-corporate-one-screen-design.md`. The owner approved §1–§4; §1 was replaced on 2026-10-14 by D9, the top bar (commit `fefc0c1`). Read it together with this plan. Where they differ, the "Narrowed or interpreted" table below names the difference and the reason.
 
+**D10 (2026-10-15):** spec §2A replaces the first screen plus three lower tabs with four page tabs (Summary | Core Diagnostics | DCF | Target Stock Comparison), a header verdict strip, and a page that never scrolls at 1280×720 or 390×844. Task 7b implements it, after Task 7 and before Task 8. Where earlier text in this plan says "first screen" or "lower tabs", read "the Summary tab" or "the page tabs".
+
 **Sequencing:**
 - This plan runs on `feat/corporate-one-screen`, cut from `feat/design-system-paper` **after design-system Task 10 (Portfolio) is complete**. It merges back into `feat/design-system-paper` **before design-system Task 11**.
 - It builds on that plan's Tasks 5–9: tokens, `formatNumber`/`MISSING`, `useT`/`useLocale`, `LABELS`/`BilingualLabel`/`Eyebrow`, and the restyled `Card`, `KPIBlock`, `DeltaBadge`, `Tabs`, `ActionButton`, `ModalShell`, `PageHeader`, `fieldInputClass`, `TickerSearch` and `EmptyState`/`ErrorState`. It also uses that plan's "Screen migration procedure" (M1–M7).
@@ -36,10 +38,11 @@
 | N5 | §1 hover "on the bar" opens the panel | The hover and focus zone is the **menu cluster** (icon links, ☰ and the panel), not the logo or the language toggle. | Otherwise clicking the language toggle opens the panel, and every nav link then exists twice (`i18n.spec.ts:7–12` would hit a strict-mode violation). |
 | N6 | §1 ☰ toggles | **☰ pins the panel open.** A pinned panel closes on ☰, Escape, an outside click or navigation, but not on pointer leave. A hover- or focus-opened panel closes 150 ms after leave. | The pointer reaches ☰ by hovering, which already opens the panel. A plain toggle would close it on the first click. |
 | N7 | — | The active nav item matches by prefix (`/cases/2` → Cases). The sidebar matched exactly. | The narrow bar shows "the current page name", which would be blank on every detail route. |
-| N8 | §3.3 table "fills the remaining height" | The comparison tab is toolbar + status + table (internal scroll, 320 px). **The two comparison charts and the batch-report table stay in that tab, below the table.** Reaching them scrolls the page. | The spec does not place them, and "no information is removed" (§ goals). Four specs read them. |
+| N8 | §3.3 table "fills the remaining height" | The comparison tab is toolbar + status + table (internal scroll, 320 px). **The two comparison charts and the batch-report table stay in that tab, below the table.** Reaching them scrolls the page (after Task 7b, the tab panel; the page never scrolls). | The spec does not place them, and "no information is removed" (§ goals). Four specs read them. |
 | N9 | DS M5/M6/M7 for corporate (formerly DS Task 11) | M1–M4 apply to all of `app/corporate/**` (Task 12). **M6/M7 apply to the strings, headers and labels this plan writes.** These are **not migrated here** and are listed as Follow-ups: M5 (number formatting); the English prose of `buildCalculationDetails.ts`; the titles, descriptions and headers of the modal's moved audit sections (Full DCF Report, Raw Datasets, OHLCV, Quarterly); and the headers of the pre-existing tables (comparison, batch reports, sensitivity grid, DCF report tables). | Their header text and `$x.x` figures are pinned by XPath and `columnheader` assertions in `corporate-comparison-bridge`, `corporate-estimated-value-bridge`, `corporate-dcf-sensitivity` and `corporate-comparison`. A bilingual `th` breaks `normalize-space(th)="DCF Value"`. That is a separate test-change approval. |
 | N10 | §4.1 sensitivity Δ table | Implemented as written. The innovation, governance and CRP rows show "An assumption the DCF does not use directly". | `dcfRequestBody` (`corporateUtils.ts:51`) sends no innovation, governance or CRP field. |
 | N11 | — | The assumption table shows innovation, governance and ESG penalty as plain scores (`82.0`), not `82.0%`. | `RangeControl` defaulted `suffix="%"` for these 0–100 scores (`CorporateAssumptionsPanel.tsx:176–178`). |
+| N12 | §2A strip: "same values and rules as §2.2, including the not-calculated, calculating, refused and Bridge Incomplete states"; §2A tabs: "carry over a stored `corporate.lowerTab` value (diagnostics/dcf/comparison) once" | (a) The strip shows the bridged per-share value, the upside badge and the label when valued. Otherwise it shows one phrase: "DCF not calculated", "Calculating…" or "Not valued". A refusal's reason is in the strip's `title`, and the EV of a Bridge Incomplete valuation is not repeated; both stay in the Summary block. (b) Only `dcf` and `comparison` are carried over. A stored `diagnostics` is dropped, and the tab opens on Summary. | (a) The strip is one line, and at 390 px a refusal reason (100+ characters) or an extra EV figure would wrap it to three. The values come from the same `verdictView` as the block. (b) `useTabState` writes its value back on every mount, so every session that ever opened `/corporate` holds `diagnostics`, the old default, whether or not the reader chose it. Carrying it over would make Summary the default for no existing session. |
 
 ---
 
@@ -78,6 +81,8 @@ The five inputs the spec implies but no feature test naturally reaches, most lik
 ---
 
 ## Existing-test change inventory (owner approval required before any edit)
+
+**Approved by the owner on 2026-10-14** (rows as listed; changes: none).
 
 **Totals: 15 spec files edited, 57 rows.** "Insert" means a new line before the cited line; the cited line itself is unchanged.
 
@@ -208,6 +213,79 @@ Rows 56–57 are the helper-file imports, counted so that nothing is edited unli
 - **`corporate-estimated-value-bridge.spec.ts:72–74, 88–89`** (modal `—`, no `1,462.4`; the Upside / Downside row read by XPath) holds: the summary tab is the default and renders `detail.summary` as label/value `td` pairs.
 - **`corporatePageMock.ts` and `designScreens.ts`** are unchanged.
 
+### Addendum: Task 7b (page tabs and verdict strip, D10, 2026-10-15)
+
+**Approved by the owner on 2026-10-15** (rows as listed; changes: none).
+
+| 66 | `corporate-viewport.spec.ts:37-38` | `getByText("DCF Core Modules").first()` then `scrollIntoViewIfNeeded()` | The `next/dynamic` loading card renders the same `<h3>DCF Core Modules</h3>` and detaches when the chunk swaps in, so `scrollIntoViewIfNeeded` can throw "not attached" (flake seen in Task 7b full run 1; cause found by the Task 7b review). | Insert `await expect(<same locator>).toBeVisible({ timeout: 60_000 });` before the `scrollIntoViewIfNeeded` line. **Approved by the owner on 2026-10-15** (Task 7b fix round 1). |
+
+**Line numbers** are at `21362c1`. None of the specs below changed after `a8dba14`. Locate each row by the quoted code, as above.
+
+**What breaks, and why.** Task 7b makes Summary the default page tab and mounts only the active panel. Two kinds of assertion break:
+- assertions that expect the diagnostics charts on first load, because diagnostics was the old default;
+- assertions that read the verdict, the KPIs, the assumption table or the source-data status after another tab was opened. Before 7b, those blocks were always on screen above the tabs.
+
+Every file below already imports `openLowerTab` (and `refresh-idle-state.spec.ts` also imports `lowerPanel`), so there is no import row.
+
+| # | File:line | Current | Why it breaks | Replacement |
+|---|---|---|---|---|
+| 58 | `corporate-composite-score.spec.ts:38` | `await expect(page.getByText("Hurdle Rate Decomposition").first()).toBeVisible({ timeout: 60_000 });` | The positive control expects the diagnostics charts on first load. Summary is the default now, and the diagnostics panel is not mounted. | Insert `await openLowerTab(page, "Core Diagnostics");` |
+| 59 | `corporate-probability-labels.spec.ts:32` | same line | same | Insert `await openLowerTab(page, "Core Diagnostics");` |
+| 60 | `corporate-viewport.spec.ts:32` | same line, at 390×844 (:33–34 read the other two charts) | same | Insert `await openLowerTab(page, "Core Diagnostics");`. Lines 36–46 then pass: line 37's `scrollIntoViewIfNeeded` scrolls the panel, and after the reload the DCF tab is remembered. |
+| 61 | `high-risk-render-regression.spec.ts:127` | `await expectChartPanelRendered(page, "Hurdle Rate Decomposition");` | same | Insert `await openLowerTab(page, "Core Diagnostics");` |
+| 62 | `refresh-idle-state.spec.ts:199–200` | `await openLowerTab(page, "Target Stock Comparison");` then `await expect(page.getByText("Last updated")).toHaveCount(3);` | The three timestamps were the header's DCF time, the source-data status and the comparison status. The source-data status is in the assumption table, on the Summary tab, so it is unmounted once the comparison tab opens. The count becomes 2. | Insert before :199 `await expect(page.getByTestId("source-data-status")).toContainText("Last updated");`. Change :200 to `await expect(page.getByText("Last updated")).toHaveCount(2); // the header's DCF time and the comparison status`. All three cached timestamps are still asserted. |
+| 63 | `refresh-idle-state.spec.ts:211` | `await expect(page.getByTestId("corporate-verdict").locator('[data-part="intrinsic"]')).toContainText("$240.5");` | The comparison tab is still open from :199, so the verdict block is unmounted. :213–214 ("Assumption options", "Refresh source data") break for the same reason. | Insert `await openLowerTab(page, "Summary");` (this covers :211–214) |
+| 64 | `refresh-idle-state.spec.ts:219` | `await page.getByRole("button", { name: "Refresh comparison" }).click();` | After #63, the Summary tab is open, and the button is in the comparison tab | Insert `await openLowerTab(page, "Target Stock Comparison");` |
+| 65 | `refresh-idle-state.spec.ts:636` | `await expect(page.getByTestId("dcf-refusal")).toContainText("zero or negative over the forecast");` | A full-report refusal sets the page's refusal, which the verdict block shows (`dcf-refusal`). The block is on the Summary tab, and :634 opened the DCF tab. The strip shows only "Not valued", with the reason in `title` (N12). | Insert `await openLowerTab(page, "Summary");` |
+
+**Per-file count (addendum):**
+
+| Spec | Rows |
+|---|---|
+| `refresh-idle-state.spec.ts` | 4 (#62–#65) |
+| `corporate-composite-score.spec.ts` | 1 (#58) |
+| `corporate-probability-labels.spec.ts` | 1 (#59) |
+| `corporate-viewport.spec.ts` | 1 (#60) |
+| `high-risk-render-regression.spec.ts` | 1 (#61) |
+
+**Total: 8 rows in 5 spec files.**
+
+**Plan-owned test files changed by Task 7b** (written by this plan, so outside the approval rule; listed so that nothing is edited unlisted):
+
+| # | File | Change |
+|---|---|---|
+| P1 | `helpers/corporateDcf.ts` | The testid becomes `corporate-page-tabs`. `LowerTabName` gains `"Summary"`. `refreshDcf` waits on `corporate-verdict-strip` instead of the block, so it works on any tab. |
+| P2 | `corporate-one-screen.spec.ts:214–236` | The "the lower tabs" describe becomes "the page tabs". The first two tests change from "diagnostics is the default" to "Summary is the default" and from the `lowerTab` "bogus" fallback to the `pageTab` one. A migration test is added. |
+| P3 | `corporate-one-screen.spec.ts:301–340` | The Task 7 fit test changes. Its box assertions now refer to the Summary tab: the Summary blocks must end inside the panel, and the header, strip and tab bar inside 720 px. `window.scrollY` is replaced by the no-page-scroll check. |
+| P4 | `corporate-one-screen.spec.ts:417` | `corporate-lower-tabs` → `corporate-page-tabs` |
+| P5 | `corporate-model.spec.ts` | appends `verdictView` and `migrateLowerTab` tests |
+| P6 | `corporate-one-screen.spec.ts` | appends the no-page-scroll tests (both sizes, four tabs) and the verdict strip tests |
+
+**Checked and unaffected by Task 7b (19 specs):**
+- **`corporate-comparison.spec.ts`.**
+  - :18 still finds one "Target Stock Comparison" (the tab label).
+  - :19–94 open the comparison tab first. :86's `getByRole("button", { name: "240.5" })` runs with no DCF, so the strip reads "DCF not calculated".
+  - :105–107 run on the default Summary tab.
+  - :119–120 refresh on Summary, and `openFullDcfReportInModal` clicks the block's "Verdict detail".
+- **`corporate-comparison-bridge.spec.ts`.** `gotoComparison` opens the comparison tab. The XPath tables, `plottedTickers` (attribute reads) and `selectSimilarComparison` do not depend on page scroll.
+- **`corporate-dcf-sensitivity.spec.ts`.** :139 refreshes on the DCF tab, and it passes **only because** P1's `refreshDcf` reads the strip (Task 7b mutation 19). `gridCell`'s page-wide XPath finds no other table with a "WACC" header, because the assumption table is unmounted.
+- **`corporate-estimated-value-bridge.spec.ts`.** The block reads at :62–101 run on Summary, the default. "Verdict detail" stays unique, because the strip's name does not contain it.
+- **`terminal-diagnostics.spec.ts`.** It reads only DCF-tab testids, after `openLowerTab(page, "DCF")`.
+- **`responsive-accessibility.spec.ts`.** :86 finds the tab label "Core Diagnostics". :87–95 open tabs explicitly.
+- **`tab-state-persistence.spec.ts`.** At :86–87 the comparison tab is remembered under `pageTab`. At :119 the corporate keys still exist (`pageTab` is written).
+- **`corporate-model.spec.ts`.** Its existing tests are unchanged; P5 only appends.
+- **`design-capture.spec.ts`.** It asserts nothing. The `/corporate` capture becomes exactly 1280×720 (Task 13 checks that).
+- **Not this page's layout:**
+  - `dev-monitor.spec.ts` (a link only);
+  - `dcf-workbench-refusal.spec.ts` (`/detail`);
+  - `portfolio-watchlist.spec.ts` and `snapshot-history-metric-version.spec.ts` (corporate API paths only);
+  - `topnav.spec.ts` (`/valuation`; its scroll test pads `body` itself).
+- **`PageHeader`'s new prop and `Tabs`' new prop are optional, and without them the DOM is byte-identical:** `valuation.spec.ts`, `decisions.spec.ts`, `i18n.spec.ts`, `paper-identity.spec.ts` and `components-paper.spec.ts`.
+- **Strict-mode collisions searched for, none found.**
+  - No spec reads `delta-badge`, "Undervalued", "DCF not calculated", "Not valued", a verdict figure or `[data-part=…]` page-wide. Every such read is scoped to `corporate-verdict`, a gallery or a tile.
+  - No spec queries `getByRole("tab")` unscoped on `/corporate`. The modal's "Summary" tab (Task 8) is always reached through `detailTabs`/`openDetailTab`.
+  - No other spec reads `document`/`window` scroll on `/corporate`. `scrollIntoViewIfNeeded` (viewport :37, responsive :88, high-risk :147) scrolls the panel.
+
 ---
 
 ## File structure
@@ -218,7 +296,7 @@ Rows 56–57 are the helper-file imports, counted so that nothing is edited unli
 | `apps/web/components/ui/TopNav.tsx` | create | fixed 48 px bar, hover/focus/☰ panel, narrow layout |
 | `apps/web/components/ui/Sidebar.tsx` | delete | replaced by TopNav |
 | `apps/web/components/ui/AppShell.tsx` | modify | TopNav, no left margin, `pt` 4rem, `lg:px-8` |
-| `apps/web/components/ui/PageHeader.tsx` | modify | optional `subtitleTestId` |
+| `apps/web/components/ui/PageHeader.tsx` | modify | optional `subtitleTestId`; optional `subtitleAside` (Task 7b) |
 | `apps/web/components/ui/TickerSearch.tsx` | modify | optional `noMatchAction` (the "not in list → add" entry) |
 | `apps/web/app/corporate/verdict.ts` | create | `verdictLabelKey(status)` |
 | `apps/web/app/corporate/assumptionRows.ts` | create | `ASSUMPTION_ROWS`, `assumptionRow`, `formatAssumption`, `formatDelta`, `sensitivityPlan` |
@@ -231,6 +309,10 @@ Rows 56–57 are the helper-file imports, counted so that nothing is edited unli
 | `apps/web/app/corporate/components/CorporateAssumptionsPanel.tsx` | delete | replaced |
 | `apps/web/app/corporate/components/CorporateHeader.tsx` | create | title, search with the inline add form, DCF time, Refresh DCF, company line |
 | `apps/web/app/corporate/components/CorporateLowerTabs.tsx` | create | three lower tabs, remembered |
+| `apps/web/app/corporate/components/CorporatePageTabs.tsx` | rename of the above (Task 7b) | four page tabs, remembered; the panel scrolls inside itself |
+| `apps/web/app/corporate/pageTabs.ts` | create (Task 7b) | `PAGE_TABS`, `PAGE_TAB_KEY`, `isPageTab`, `migrateLowerTab` |
+| `apps/web/app/corporate/verdict.ts` | modify (Task 7b) | `verdictView`, shared by `VerdictBlock` and `VerdictStrip` |
+| `apps/web/components/ui/Tabs.tsx` | modify (Task 7b) | optional `idPrefix` |
 | `apps/web/app/corporate/components/DcfTab.tsx` | create | DCF core values plus the grid or Load Full Report |
 | `apps/web/app/corporate/components/CorporateDiagnosticsSection.tsx` | modify (crlf) | three charts in one row, ⓘ |
 | `apps/web/app/corporate/components/CorporateGraphs.tsx` | modify (crlf) | loading cards without the 4-column spans |
@@ -246,9 +328,9 @@ Rows 56–57 are the helper-file imports, counted so that nothing is edited unli
 | `docs/superpowers/plans/2026-10-12-design-system-formalization.md`, `docs/superpowers/plans/2026-10-13-ui-consolidation-tabs.md` | modify | Task 11 trimmed; Task 8 superseded; Sidebar → TopNav note |
 | `docs/USER-GUIDE.md`, `docs/design/MoneyView_{Component_System,Interaction_Rules}.md`, `guideline/sop/todo.md` | modify | sidebar → top bar wording; tracking |
 
-**Expected `page.tsx` line counts:** 1,242 now, ~1,215 after Task 5, ~1,225 after Task 6, ~1,100 after Task 7, ~1,135 after Task 11. Every task ends at < 1,242 (`wc -l`), and Task 13 gates ≤ 1,150. Task 7 is where it shrinks: about 125 lines of header JSX and the add-company state move out.
+**Expected `page.tsx` line counts:** 1,242 now, ~1,215 after Task 5, ~1,225 after Task 6, ~1,100 after Task 7 (measured 1,092), ~1,091 after Task 7b (gate ≤ 1,092), ~1,135 after Task 11. Every task ends at < 1,242 (`wc -l`), and Task 13 gates ≤ 1,150. Task 7 is where it shrinks: about 125 lines of header JSX and the add-company state move out.
 
-**First-screen height budget at 1280×720** (Task 5 and Task 7 tests measure each block's bounding box; nothing uses `scrollHeight`):
+**First-screen height budget at 1280×720** (Task 5 and Task 7 tests measure each block's bounding box; nothing uses `scrollHeight`). **Superseded by Task 7b:** the tab bar moves under the header, the Summary blocks sit in a panel of about 403 px (y ≈ 237–640), and the page is checked with `scrollHeight <= innerHeight`; see Task 7b Step 14.
 
 | Block | Top (px) | Height budget | Bottom |
 |---|---|---|---|
@@ -3175,6 +3257,783 @@ git commit -m "feat(corporate): header row with inline add; the outer View Full 
 
 ---
 
+### Task 7b: Page tabs and verdict strip (spec §2A, D10)
+
+> **Owner decisions 2026-10-15 (Steps 1-2 done by the controller):** rows #58-#65 approved unchanged; N12 (b) approved (a stored "diagnostics" is dropped, only dcf/comparison carry over). **Bottom padding:** pages that must not scroll get a 24px bottom pad at >= 992px instead of 80px. Implement it in `AppShell.tsx` with one exported list `ONE_SCREEN_ROUTES = ["/corporate"]` matched by `usePathname()` prefix, which sets `lg:[--main-pad-bottom:1.5rem]` on `<main>`; the page height formula keeps reading `--main-pad-bottom`, so the panel gains about 56px. Add a test: at 1280x720 on /corporate the gap between the panel bottom and the viewport bottom is <= 24px + 1, and on /portfolio main keeps an 80px bottom padding (mutation: drop the route from the list -> the corporate gap test fails). Later one-screen pages join by adding their route to the list.
+
+> **Owner decision D10, 2026-10-15.** The page never scrolls, at 1280×720 or at 390×844. Before this task, Tasks 5–7 built a first screen with three lower tabs under it, and at 1280×720 the document was 1106 px tall (Task 7 report). This task changes that:
+> - Four page tabs sit directly under the header: Summary | Core Diagnostics | DCF | Target Stock Comparison.
+> - The Summary tab holds the verdict block, the KPIs and the assumption table.
+> - A one-line verdict strip sits beside the company line, so the verdict shows on every tab.
+> - The tab panel fills the rest of the viewport and scrolls inside itself.
+>
+> Start from the commit that closed Task 7 (`21362c1` or later). The anchors below quote the files as they are at that commit.
+
+**Files:**
+- Create: `apps/web/app/corporate/pageTabs.ts` (LF)
+- Rename and rewrite: `apps/web/app/corporate/components/CorporateLowerTabs.tsx` → `CorporatePageTabs.tsx` (`git mv`, LF)
+- Modify:
+  - `apps/web/app/corporate/verdict.ts` (crlf; adds `verdictView`)
+  - `apps/web/app/corporate/components/VerdictBlock.tsx` (block takes a `VerdictView`; adds `VerdictStrip`)
+  - `apps/web/components/ui/Tabs.tsx` (optional `idPrefix`)
+  - `apps/web/components/ui/PageHeader.tsx` (optional `subtitleAside`)
+  - `apps/web/app/corporate/components/CorporateHeader.tsx` (`verdictStrip` prop)
+  - `apps/web/app/corporate/page.tsx`
+  - `apps/web/lib/i18n/messages/{en,ko}.ts`, `docs/design/MoneyView_Glossary.md`, `guideline/sop/todo.md`
+- Tests:
+  - `apps/web/tests/e2e/helpers/corporateDcf.ts` (plan-owned, P1)
+  - `apps/web/tests/e2e/corporate-one-screen.spec.ts` (crlf; plan-owned, P2–P4 and P6)
+  - `apps/web/tests/e2e/corporate-model.spec.ts` (crlf; plan-owned, P5)
+- Approved test edits: inventory addendum #58–#65, only after Step 2 records the approval. No import row is needed: every file they touch already imports the helpers it uses.
+
+**Interfaces:**
+- Consumes:
+  - `bridgedEstimatedValue`, `bridgedUpsidePct` (`@/lib/bridgeQuality`)
+  - `useTabState`, `tabStateKey` (`@/lib/tabState`, keys `moneyview.tab.<tab>.<concern>`, JSON values in `sessionStorage`)
+  - `Tabs`, `DeltaBadge`, `VerdictStatusLabel`, `PageHeader`
+  - AppShell's `--main-pad-top` / `--main-pad-bottom`, which PortfolioShell already subtracts
+- Produces:
+  - `verdict.ts`: `type VerdictState = "idle" | "streaming" | "valued" | "refused"`, `interface VerdictView`, and `verdictView(dcf: DcfSummary | null, streaming: boolean, refusalText: string | null): VerdictView`. It is the one place that decides the verdict's state, bridged value, upside, EV, price, status and refusal. Both the block and the strip render what it returns.
+  - `pageTabs.ts`: `PAGE_TABS`, `type PageTabKey`, `PAGE_TAB_KEY` (`moneyview.tab.corporate.pageTab`), `LEGACY_LOWER_TAB_KEY` (`moneyview.tab.corporate.lowerTab`), `isPageTab`, and `migrateLowerTab(storage)`.
+  - `CorporatePageTabs({ panels: Record<PageTabKey, ReactNode> })`. DOM:
+    - `[data-testid="corporate-page-tabs"]`, the tablist "Corporate analysis sections", and tab ids `corporate-tab-<key>`;
+    - one `role="tabpanel"` with id `corporate-panel-<key>` and `flex-1 min-h-0 overflow-auto`;
+    - only the active panel is mounted.
+  - `VerdictBlock({ view, onOpenDetail })`, with the same DOM as before, and `VerdictStrip({ view, onOpenDetail })`. The strip's DOM:
+    - a `<button data-testid="corporate-verdict-strip" data-state=…>`;
+    - when valued: `[data-part="intrinsic"]`, a `DeltaBadge` and `[data-part="label"]`;
+    - otherwise one text: "DCF not calculated", "Calculating…" or "Not valued". When refused, the reason is in `title`.
+  - `Tabs` prop `idPrefix?: string` (default `""`). `PageHeader` prop `subtitleAside?: ReactNode`. `CorporateHeader` prop `verdictStrip?: ReactNode`.
+  - Catalog keys: `corporate.tabs.summary` and `corporate.verdictStrip.{idle,refused}`.
+
+**Decisions this task makes (owner-visible in the addendum and N12):**
+1. **Restructure without duplicating logic.**
+   - `CorporateLowerTabs` is renamed to `CorporatePageTabs` and gains the `summary` key. Its testid becomes `corporate-page-tabs`, because the tabs are no longer "lower". Only plan-owned files read the old testid: the helper and `corporate-one-screen.spec.ts` lines 218, 235 and 417. So the rename costs no approval row.
+   - The helper names `openLowerTab`, `lowerPanel` and `LowerTabName` **stay**, with a doc comment that says why. 11 approved spec files call them about 35 times, and a rename would add 11 import rows and edit every call for a name alone. The tablist name "Corporate analysis sections" and the tab labels stay.
+2. **One verdict computation.** `page.tsx` computes `const verdict = verdictView(…)` once and passes it to both `VerdictBlock` and `VerdictStrip`. The block keeps its testids and `data-part`s, so Task 5's tests pin the shared helper through the block.
+3. **Height model.**
+   - The page root becomes `mx-auto flex h-[calc(100dvh_-_var(--main-pad-top,0px)_-_var(--main-pad-bottom,0px))] max-w-7xl flex-col`. This is the PortfolioShell formula, with `dvh` in place of `vh`.
+   - The document height is then pad-top + root + pad-bottom = `100dvh`, and the `fixed` TopNav and modals add nothing.
+   - `CorporatePageTabs` is `flex min-h-0 flex-1 flex-col gap-3`, its tab strip is `shrink-0 [contain:inline-size]`, and the panel is `min-h-0 min-w-0 flex-1 overflow-auto`.
+   - AppShell keeps `w-full min-w-0` (ERROR-LOG 2026-10-14, both 390 px entries). No new flex row with `overflow-x-auto` is added outside the contained tab strip.
+4. **Tab state.**
+   - The state is `useTabState(PAGE_TAB_KEY, "summary")`. An unknown stored value falls back to Summary.
+   - `migrateLowerTab` runs in an effect declared **before** `useTabState` in the same component. Effects run in declaration order, so it has moved the old value before `useTabState`'s restore effect reads the new key.
+   - It removes the old key, so it runs once. A page tab that is already stored wins.
+   - It carries `dcf` and `comparison` only (N12). `useTabState` writes its value back on every mount, so every session that ever opened `/corporate` holds `"diagnostics"` whether or not the reader chose it.
+5. **Tab ids.** Task 8's modal `Tabs` also has a `summary` key. Without a prefix, the page and an open modal would both render `id="tab-summary"` and `id="panel-summary"`, and `aria-labelledby` would resolve to the wrong tab. So the page tabs pass `idPrefix="corporate-"`.
+6. **Strip accessible name.** The strip's name comes from its content ("Intrinsic value $240.5 …"). It must not contain "Verdict detail", which 4 specs click by name (Playwright matches names as substrings). It must not start with "Intrinsic DCF", which one test asserts has count 0. It must not reuse `dcf-refusal`, `corporate-verdict` or any other testid the block has.
+
+- [ ] **Step 1: Approval gate.** The controller shows the owner the addendum to the existing-test inventory verbatim:
+  - rows #58–#65, with the per-file count;
+  - the plan-owned table P1–P6;
+  - the "Checked and unaffected" list;
+  - row N12.
+
+  **STOP.** Do not edit any existing spec, and do not dispatch this task, until the owner answers. If the owner changes a row, edit the row and this task's step that applies it, then present the changed rows again.
+
+- [ ] **Step 2: Record the approval.** Directly under the heading `### Addendum: Task 7b`, replace `**Not yet approved.**` with `**Approved by the owner on <YYYY-MM-DD>** (rows as listed; changes: <none | list>).`. Commit:
+
+```bash
+git add docs/superpowers/plans/2026-10-14-corporate-one-screen.md
+git commit -m "docs(plan): owner approved the Task 7b test-change addendum" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+- [ ] **Step 3: Helpers (P1).** In `tests/e2e/helpers/corporateDcf.ts`, replace the block from `/** The three lower tabs of /corporate` through the end of `lowerPanel` with:
+
+```ts
+/**
+ * The four page tabs of /corporate (spec §2A, plan Task 7b). They were three lower tabs until D10.
+ * The helper names stayed "lower" so the approved specs that call them need no rename.
+ */
+export type LowerTabName = "Summary" | "Core Diagnostics" | "DCF" | "Target Stock Comparison";
+
+export async function openLowerTab(page: Page, name: LowerTabName): Promise<void> {
+  const tab = page.getByTestId("corporate-page-tabs").getByRole("tab", { name });
+  await tab.click();
+  await expect(tab).toHaveAttribute("aria-selected", "true");
+}
+
+/** The selected page tab's panel (never the modal's). */
+export function lowerPanel(page: Page): Locator {
+  return page.getByTestId("corporate-page-tabs").getByRole("tabpanel");
+}
+```
+
+Replace `refreshDcf` with the version below. It now reads the strip, so a spec that refreshes while another tab is open still works (`corporate-dcf-sensitivity.spec.ts:139` does this on the DCF tab):
+
+```ts
+/** Refresh DCF, then wait until the verdict holds a valuation. Reads the header strip, which every page tab shows. */
+export async function refreshDcf(page: Page): Promise<void> {
+  await page.getByRole("button", { name: "Refresh DCF" }).click();
+  await expect(page.getByTestId("corporate-verdict-strip")).toHaveAttribute("data-state", "valued", { timeout: 60_000 });
+}
+```
+
+- [ ] **Step 4: Write the failing tests.**
+
+  **P5, `corporate-model.spec.ts`.**
+  - Change the import `import { verdictLabelKey } from "../../app/corporate/verdict";` to `import { verdictLabelKey, verdictView } from "../../app/corporate/verdict";`.
+  - Add `import { LEGACY_LOWER_TAB_KEY, migrateLowerTab, PAGE_TAB_KEY } from "../../app/corporate/pageTabs";` and `import type { DcfSummary } from "../../../../packages/shared-types";`.
+  - Append:
+
+```ts
+const DCF: DcfSummary = {
+  report_id: "m-1", ticker: "AAPL", estimated_value: 240.5, intrinsic_value_per_share: 240.5,
+  enterprise_value: 1462.4, equity_value: 1300.2, valuation_method: "fcff_equity_bridge", bridge_quality: "ok",
+  current_price: 210.4, upside_pct: 14.31, terminal_value_share_pct: 70.71, wacc_minus_terminal_growth: null,
+  terminal_growth_binding_constraint: null, status: "Undervalued", generated_at: "2026-10-14T00:00:00Z",
+};
+
+test.describe("verdictView", () => {
+  test("a bridged valuation carries its per-share value, upside, price and status", () => {
+    expect(verdictView(DCF, false, null)).toMatchObject({
+      state: "valued", intrinsic: 240.5, upside: 14.31, currentPrice: 210.4, status: "Undervalued",
+    });
+  });
+
+  test("an unbridged valuation withholds value and upside, and keeps the EV aside", () => {
+    const view = verdictView({ ...DCF, bridge_quality: "missing", estimated_value: 1462.4, upside_pct: 0 }, false, null);
+    expect(view).toMatchObject({ state: "valued", intrinsic: null, upside: null, enterpriseValue: 1462.4 });
+  });
+
+  test("a refusal wins over a value and over a running stream", () => {
+    expect(verdictView(DCF, true, "reason").state).toBe("refused");
+    expect(verdictView(null, false, "reason")).toMatchObject({ state: "refused", refusalText: "reason", intrinsic: null });
+  });
+
+  test("streaming without a value is streaming; with a cached value it stays valued", () => {
+    expect(verdictView(null, true, null).state).toBe("streaming");
+    expect(verdictView(DCF, true, null)).toMatchObject({ state: "valued", streaming: true });
+    expect(verdictView(null, false, null).state).toBe("idle");
+  });
+});
+
+/** A sessionStorage stand-in that records what was written. */
+function memoryStorage(entries: Record<string, string>) {
+  const map = new Map(Object.entries(entries));
+  return {
+    map,
+    getItem: (key: string) => map.get(key) ?? null,
+    setItem: (key: string, value: string) => void map.set(key, value),
+    removeItem: (key: string) => void map.delete(key),
+  };
+}
+
+test.describe("migrateLowerTab", () => {
+  test("a chosen DCF or comparison tab moves to the page-tab key, and the old key is dropped", () => {
+    for (const tab of ["dcf", "comparison"]) {
+      const storage = memoryStorage({ [LEGACY_LOWER_TAB_KEY]: JSON.stringify(tab) });
+      migrateLowerTab(storage);
+      expect(storage.map.get(PAGE_TAB_KEY)).toBe(JSON.stringify(tab));
+      expect(storage.map.has(LEGACY_LOWER_TAB_KEY)).toBe(false);
+    }
+  });
+
+  test("diagnostics, the old default that useTabState wrote back on every visit, is not carried", () => {
+    const storage = memoryStorage({ [LEGACY_LOWER_TAB_KEY]: JSON.stringify("diagnostics") });
+    migrateLowerTab(storage);
+    expect(storage.map.has(PAGE_TAB_KEY)).toBe(false);
+    expect(storage.map.has(LEGACY_LOWER_TAB_KEY)).toBe(false);
+  });
+
+  test("a stored page tab wins, and junk is dropped without a throw", () => {
+    const chosen = memoryStorage({ [LEGACY_LOWER_TAB_KEY]: JSON.stringify("dcf"), [PAGE_TAB_KEY]: JSON.stringify("summary") });
+    migrateLowerTab(chosen);
+    expect(chosen.map.get(PAGE_TAB_KEY)).toBe(JSON.stringify("summary"));
+    const junk = memoryStorage({ [LEGACY_LOWER_TAB_KEY]: "{not json" });
+    expect(() => migrateLowerTab(junk)).not.toThrow();
+    expect([...junk.map.keys()]).toEqual([]);
+  });
+
+  test("it runs once: a second call finds nothing to move", () => {
+    const storage = memoryStorage({ [LEGACY_LOWER_TAB_KEY]: JSON.stringify("comparison") });
+    migrateLowerTab(storage);
+    storage.map.set(PAGE_TAB_KEY, JSON.stringify("summary"));
+    migrateLowerTab(storage);
+    expect(storage.map.get(PAGE_TAB_KEY)).toBe(JSON.stringify("summary"));
+  });
+});
+```
+
+  **P2, `corporate-one-screen.spec.ts`, "the lower tabs".**
+  - Change the import `import { lowerPanel, openLowerTab } from "./helpers/corporateDcf";` to `import { loadFullDcfReportInTab, lowerPanel, openLowerTab, refreshDcf } from "./helpers/corporateDcf";`.
+  - Replace the line `test.describe("the lower tabs", () => {` and its first two tests, from `test("diagnostics is the default` through the end of `test("an unknown stored tab falls back to diagnostics"`, with the code below. The DCF and comparison tests that follow stay unchanged.
+
+```ts
+test.describe("the page tabs", () => {
+  test("Summary is the default, each tab mounts only its own content, and the choice survives leaving the page", async ({ page }) => {
+    await mockCorporatePageApi(page);
+    await gotoCorporate(page);
+    const tabs = page.getByTestId("corporate-page-tabs");
+    await expect(tabs.getByRole("tab", { name: "Summary" })).toHaveAttribute("aria-selected", "true");
+    // Prefixed ids: the detail modal's own Summary tab (Task 8) must not share an id with this one.
+    await expect(page.locator("#corporate-tab-summary")).toHaveAttribute("aria-selected", "true");
+    await expect(lowerPanel(page)).toHaveAttribute("aria-labelledby", "corporate-tab-summary");
+    await expect(lowerPanel(page).getByTestId("corporate-verdict")).toBeVisible();
+    await expect(page.getByText("Hurdle Rate Decomposition", { exact: true })).toHaveCount(0);
+    await openLowerTab(page, "DCF");
+    await expect(lowerPanel(page).getByText("DCF Core Modules").first()).toBeVisible();
+    await expect(page.getByTestId("corporate-verdict")).toHaveCount(0);
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await gotoCorporate(page);
+    await expect(tabs.getByRole("tab", { name: "DCF" })).toHaveAttribute("aria-selected", "true");
+    await expect(lowerPanel(page).getByText("DCF Core Modules").first()).toBeVisible();
+  });
+
+  test("an unknown stored tab falls back to Summary", async ({ page }) => {
+    await page.addInitScript(() => window.sessionStorage.setItem("moneyview.tab.corporate.pageTab", JSON.stringify("bogus")));
+    await mockCorporatePageApi(page);
+    await gotoCorporate(page);
+    // The restore runs in an effect after hydration; let it run before reading the selection.
+    await page.waitForLoadState("networkidle");
+    await expect(page.getByTestId("corporate-page-tabs").getByRole("tab", { name: "Summary" })).toHaveAttribute("aria-selected", "true");
+    await expect(lowerPanel(page).getByTestId("corporate-verdict")).toBeVisible();
+  });
+
+  test("a pre-D10 lower-tab choice is carried over, and the old key is dropped", async ({ page }) => {
+    await mockCorporatePageApi(page);
+    await gotoCorporate(page);
+    // An older session: only the lower-tab key, written before the page had page tabs. Seeded once,
+    // not via addInitScript, which would re-seed on the reload.
+    await page.evaluate(() => {
+      window.sessionStorage.removeItem("moneyview.tab.corporate.pageTab");
+      window.sessionStorage.setItem("moneyview.tab.corporate.lowerTab", JSON.stringify("comparison"));
+    });
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await expect(page.getByTestId("corporate-page-tabs").getByRole("tab", { name: "Target Stock Comparison" }))
+      .toHaveAttribute("aria-selected", "true", { timeout: 30_000 });
+    await expect.poll(() => page.evaluate(() => window.sessionStorage.getItem("moneyview.tab.corporate.lowerTab"))).toBeNull();
+  });
+```
+
+  **P3, the fit test.**
+  - Add the function below at module level, directly above `test.describe("at 1280x720", () => {`.
+  - Replace that describe's `expectAboveTheFold` function and the test that calls it with the code that follows.
+
+```ts
+// Spec §2A: the document never scrolls; overflow belongs to the tab panel. Sideways is checked too,
+// because both 390 px regressions (ERROR-LOG 2026-10-14) widened the page rather than lengthening it.
+async function expectNoPageScroll(page: Page, where: string) {
+  const size = await page.evaluate(() => ({
+    height: document.scrollingElement!.scrollHeight,
+    innerHeight: window.innerHeight,
+    width: document.documentElement.scrollWidth,
+    clientWidth: document.documentElement.clientWidth,
+  }));
+  expect(size.height, `${where}: the page does not scroll`).toBeLessThanOrEqual(size.innerHeight);
+  expect(size.width, `${where}: the page is not wider than the viewport`).toBeLessThanOrEqual(size.clientWidth + 1);
+}
+```
+
+```ts
+  // Spec §2A and §7 test 1. The header, the verdict strip and the tab bar end inside 720px. The Summary
+  // blocks end inside the Summary panel, so the answer needs neither a page scroll nor a panel scroll.
+  async function expectSummaryFits(page: Page) {
+    const panel = await lowerPanel(page).boundingBox();
+    expect(panel, "the Summary panel is rendered").not.toBeNull();
+    const panelBottom = panel!.y + panel!.height;
+    const blocks: [string, Locator, number][] = [
+      // The eyebrow sits above the title and is the header's top edge: the title alone can clear
+      // the bar on a lower top padding, because the eyebrow pushes it down.
+      ["header eyebrow", page.getByRole("heading", { name: /Corporate Analysis/i }).locator("xpath=preceding-sibling::div[1]"), 720],
+      ["title", page.getByRole("heading", { name: /Corporate Analysis/i }), 720],
+      ["company line", page.getByTestId("corporate-company-line"), 720],
+      ["verdict strip", page.getByTestId("corporate-verdict-strip"), 720],
+      ["tab bar", page.getByRole("tablist", { name: "Corporate analysis sections" }), 720],
+      ["verdict", page.getByTestId("corporate-verdict"), panelBottom],
+      ["KPI row", page.getByTestId("corporate-kpis"), panelBottom],
+      ["assumption table", page.getByTestId("assumption-table"), panelBottom],
+    ];
+    for (const [name, locator, bottom] of blocks) {
+      const box = await locator.boundingBox();
+      expect(box, `${name} is rendered`).not.toBeNull();
+      expect(box!.y, `${name} starts below the 48px bar`).toBeGreaterThanOrEqual(48);
+      expect(box!.y + box!.height, `${name} ends by ${Math.round(bottom)}px`).toBeLessThanOrEqual(bottom);
+    }
+    await expect(page.getByTestId("corporate-kpis").getByRole("button")).toHaveCount(4);
+    const scroll = await page.getByTestId("assumption-scroll").boundingBox();
+    expect(scroll!.height, "the assumption table scrolls inside its 288px budget").toBeLessThanOrEqual(288);
+    await expectNoPageScroll(page, "Summary");
+  }
+
+  test("header, strip, tab bar and the whole Summary tab fit with no scroll of any kind", async ({ page }) => {
+    await mockCorporatePageApi(page);
+    await gotoCorporate(page);
+    await expectSummaryFits(page);
+    await page.getByRole("button", { name: "Refresh DCF" }).click();
+    await expect(verdict(page)).toHaveAttribute("data-state", "valued", { timeout: 30_000 });
+    await expectSummaryFits(page);
+    await page.getByTestId("assumption-table").getByRole("button", { name: "Edit WACC" }).click();
+    await expect(page.getByTestId("assumption-slider-wacc")).toBeVisible();
+    await expectSummaryFits(page);
+  });
+```
+
+  **P4, Korean.** In "title, verdict, a figure and a bilingual header read in Korean", change `page.getByTestId("corporate-lower-tabs")` to `page.getByTestId("corporate-page-tabs")`.
+
+  **P6, new tests.** Append to `corporate-one-screen.spec.ts`:
+
+```ts
+for (const viewport of [{ width: 1280, height: 720 }, { width: 390, height: 844 }]) {
+  test.describe(`at ${viewport.width}x${viewport.height}, on every page tab`, () => {
+    test.use({ viewport });
+
+    test("the page never scrolls; the panel takes the overflow", async ({ page }) => {
+      await mockCorporatePageApi(page);
+      await gotoCorporate(page);
+      await refreshDcf(page);
+      await expectNoPageScroll(page, "Summary");
+      await openLowerTab(page, "Core Diagnostics");
+      await expect(lowerPanel(page).getByText("Hurdle Rate Decomposition", { exact: true })).toBeVisible({ timeout: 30_000 });
+      await expectNoPageScroll(page, "Core Diagnostics");
+      const report = await loadFullDcfReportInTab(page);
+      await expect(report.getByText("WACC x Terminal Growth Sensitivity")).toBeVisible({ timeout: 30_000 });
+      await expectNoPageScroll(page, "DCF");
+      await openLowerTab(page, "Target Stock Comparison");
+      await lowerPanel(page).getByRole("button", { name: "Refresh comparison" }).click();
+      await expect(lowerPanel(page).getByText("Price Vs Fair Value Map")).toBeVisible({ timeout: 30_000 });
+      await expectNoPageScroll(page, "Target Stock Comparison");
+      // The comparison tab is taller than its panel at both sizes: the panel, not the page, scrolls.
+      const panel = await lowerPanel(page).evaluate((element) => ({
+        overflows: element.scrollHeight > element.clientHeight,
+        overflowY: getComputedStyle(element).overflowY,
+      }));
+      expect(panel).toEqual({ overflows: true, overflowY: "auto" });
+    });
+  });
+}
+
+test.describe("the verdict strip", () => {
+  const strip = (page: Page) => page.getByTestId("corporate-verdict-strip");
+
+  const valuedCases = [
+    { name: "a bridged valuation", overrides: {}, intrinsic: "$240.5", dir: "up", value: "+14.3%", label: "Undervalued" },
+    {
+      name: "an unbridged valuation",
+      overrides: { status: "Bridge Incomplete", bridge_quality: "missing", intrinsic_value_per_share: null, estimated_value: 1462.4, upside_pct: 0 },
+      intrinsic: "—", dir: "flat", value: "—", label: "Per-share value unavailable",
+    },
+  ] as const;
+
+  for (const c of valuedCases) {
+    test(`${c.name}: the strip shows what the Summary block shows`, async ({ page }) => {
+      await mockCorporatePageApi(page);
+      await page.route("**/api/v1/corporate/dcf/AAPL/stream", (route) =>
+        route.fulfill({ status: 200, contentType: "text/event-stream", body: dcfStream(c.overrides) }));
+      await gotoCorporate(page);
+      await page.getByRole("button", { name: "Refresh DCF" }).click();
+      for (const target of [verdict(page), strip(page)]) {
+        await expect(target).toHaveAttribute("data-state", "valued", { timeout: 30_000 });
+        await expect(target.locator('[data-part="intrinsic"]')).toHaveText(c.intrinsic);
+        await expect(target.getByTestId("delta-badge")).toHaveAttribute("data-dir", c.dir);
+        await expect(target.getByTestId("delta-badge").locator('[data-part="value"]')).toHaveText(c.value);
+        await expect(target.locator('[data-part="label"]')).toContainText(c.label);
+      }
+      await expect(strip(page)).not.toContainText("1,462.4");
+    });
+  }
+
+  test("idle and refused: the strip carries the block's state and never a number", async ({ page }) => {
+    await mockCorporatePageApi(page);
+    await page.route("**/api/v1/corporate/dcf/AAPL/stream", (route) => route.fulfill({
+      status: 422, contentType: "application/json",
+      body: JSON.stringify({ detail: { code: "non_positive_fcff", message: "Free cash flow is zero or negative over the forecast, so the model cannot value it." } }),
+    }));
+    await gotoCorporate(page);
+    await expect(verdict(page)).toHaveAttribute("data-state", "idle");
+    await expect(strip(page)).toHaveAttribute("data-state", "idle");
+    await expect(strip(page)).toHaveText("DCF not calculated");
+    await page.getByRole("button", { name: "Refresh DCF" }).click();
+    await expect(verdict(page)).toHaveAttribute("data-state", "refused");
+    await expect(strip(page)).toHaveAttribute("data-state", "refused");
+    await expect(strip(page)).toContainText("Not valued");
+    await expect(strip(page)).toHaveAttribute("title", /zero or negative over the forecast/);
+    await expect(strip(page)).not.toContainText("$");
+  });
+
+  test("every page tab shows the strip, and it opens the Intrinsic DCF detail", async ({ page }) => {
+    await mockCorporatePageApi(page);
+    await gotoCorporate(page);
+    await refreshDcf(page);
+    for (const tab of ["Core Diagnostics", "DCF", "Target Stock Comparison", "Summary"] as const) {
+      await openLowerTab(page, tab);
+      await expect(strip(page), tab).toBeVisible();
+      await expect(strip(page).locator('[data-part="intrinsic"]'), tab).toHaveText("$240.5");
+      await expect(strip(page).locator('[data-part="label"]'), tab).toContainText("Undervalued");
+    }
+    await openLowerTab(page, "DCF");
+    await strip(page).click();
+    await expect(page.getByRole("dialog").getByRole("heading", { name: /Apple Intrinsic DCF$/ })).toBeVisible();
+  });
+});
+```
+
+- [ ] **Step 5: Run to see them fail.** From `apps/web`, run the two specs separately, because the model spec cannot load until the modules exist:
+  - `npx playwright test tests/e2e/corporate-model.spec.ts --workers=2`. Expected: FAIL to load; `../../app/corporate/pageTabs` is not found and `verdictView` is not exported.
+  - `npx playwright test tests/e2e/corporate-one-screen.spec.ts --workers=2`. Expected: FAIL:
+    - `corporate-page-tabs` and `corporate-verdict-strip` are not found, so every test that opens a tab or reads the strip times out;
+    - the no-page-scroll checks report a document height of about 1106 at 1280×720.
+  - Record each failing test and its reason in the task report. If a run is stopped, kill :8110/:3101 (Global Constraints) before the next one.
+
+- [ ] **Step 6: `apps/web/app/corporate/pageTabs.ts`** (new, LF)
+
+```ts
+import { tabStateKey } from "@/lib/tabState";
+
+// Spec §2A (D10): the corporate page's four tabs, in order.
+export const PAGE_TABS = ["summary", "diagnostics", "dcf", "comparison"] as const;
+export type PageTabKey = (typeof PAGE_TABS)[number];
+
+export const PAGE_TAB_KEY = tabStateKey("corporate", "pageTab");
+/** Where the three lower tabs kept their choice before D10 (plan Task 6). */
+export const LEGACY_LOWER_TAB_KEY = tabStateKey("corporate", "lowerTab");
+
+export const isPageTab = (value: unknown): value is PageTabKey =>
+  typeof value === "string" && (PAGE_TABS as readonly string[]).includes(value);
+
+/**
+ * Moves a pre-D10 lower-tab choice to the page-tab key, once: the old key is always removed.
+ * Only "dcf" and "comparison" move. "diagnostics" was the old default, and useTabState writes its
+ * value back on every mount, so a stored "diagnostics" does not mean the reader chose it (plan N12).
+ * A page tab that is already stored wins.
+ */
+export function migrateLowerTab(storage: Pick<Storage, "getItem" | "setItem" | "removeItem">): void {
+  const legacy = storage.getItem(LEGACY_LOWER_TAB_KEY);
+  if (legacy === null) return;
+  storage.removeItem(LEGACY_LOWER_TAB_KEY);
+  if (storage.getItem(PAGE_TAB_KEY) !== null) return;
+  let value: unknown;
+  try {
+    value = JSON.parse(legacy);
+  } catch {
+    return; // written by an older shape; Summary is the honest default
+  }
+  if (value === "dcf" || value === "comparison") storage.setItem(PAGE_TAB_KEY, legacy);
+}
+```
+
+- [ ] **Step 7: `verdictView` in `apps/web/app/corporate/verdict.ts`** (keep CRLF). Add at the top: `import type { DcfSummary } from "../../../../packages/shared-types";` and `import { bridgedEstimatedValue, bridgedUpsidePct } from "@/lib/bridgeQuality";`. Append:
+
+```ts
+export type VerdictState = "idle" | "streaming" | "valued" | "refused";
+
+/** Everything the verdict block and the header strip show, decided once (spec §2.2, §2A). */
+export interface VerdictView {
+  state: VerdictState;
+  streaming: boolean;
+  /** Intrinsic value per share; null when the bridge did not resolve or nothing is valued. */
+  intrinsic: number | null;
+  /** Upside in percent against that per-share value; null on the same conditions. */
+  upside: number | null;
+  /** Enterprise value, shown only beside an empty per-share slot. A value restored from an older session cache can lack it. */
+  enterpriseValue: number | null;
+  currentPrice: number | null;
+  /** The backend's status, translated by VerdictStatusLabel; "" unless valued. */
+  status: string;
+  refusalText: string | null;
+}
+
+export function verdictView(dcf: DcfSummary | null, streaming: boolean, refusalText: string | null): VerdictView {
+  const state: VerdictState = refusalText !== null ? "refused" : dcf ? "valued" : streaming ? "streaming" : "idle";
+  const shown = state === "valued" ? dcf : null; // a refusal hides any value still held
+  return {
+    state,
+    streaming,
+    intrinsic: shown ? bridgedEstimatedValue(shown) : null,
+    upside: shown ? bridgedUpsidePct(shown) : null,
+    enterpriseValue: shown && typeof shown.enterprise_value === "number" ? shown.enterprise_value : null,
+    currentPrice: shown ? shown.current_price : null,
+    status: shown ? shown.status : "",
+    refusalText,
+  };
+}
+```
+
+- [ ] **Step 8: `Tabs` id prefix** (`components/ui/Tabs.tsx`):
+  - Add `idPrefix?: string;` to `TabsProps`, with the comment `/** Prefixes tab and panel ids, so two tab sets on one page (page tabs and a modal's) never share an id. */`.
+  - Destructure `idPrefix = "",`.
+  - Change `id={\`tab-${item.key}\`}` to `id={\`${idPrefix}tab-${item.key}\`}`, and change `aria-controls={\`panel-${item.key}\`}` to `aria-controls={\`${idPrefix}panel-${item.key}\`}`.
+
+  No other caller passes the prop, so every other tab set renders unchanged.
+
+- [ ] **Step 9: `CorporatePageTabs`.** From the repo root, run `git mv apps/web/app/corporate/components/CorporateLowerTabs.tsx apps/web/app/corporate/components/CorporatePageTabs.tsx`, then write the file as:
+
+```tsx
+"use client";
+
+import { type ReactNode, useEffect } from "react";
+import { Tabs } from "@/components/ui/Tabs";
+import { useT } from "@/lib/i18n/locale";
+import { useTabState } from "@/lib/tabState";
+import { isPageTab, migrateLowerTab, PAGE_TAB_KEY, PAGE_TABS, type PageTabKey } from "../pageTabs";
+
+// Spec §2A (D10): four tabs directly under the header. The panel fills what the page column leaves
+// and scrolls inside itself, so the page never scrolls. Only the active panel is mounted, so a hidden
+// tab's charts and requests do not run.
+export function CorporatePageTabs({ panels }: { panels: Record<PageTabKey, ReactNode> }) {
+  const t = useT();
+  // Declared before useTabState on purpose: effects run in declaration order, so the old lower-tab
+  // value has moved before useTabState's restore effect reads the page-tab key.
+  useEffect(() => {
+    try {
+      migrateLowerTab(window.sessionStorage);
+    } catch {
+      // Blocked storage: the default tab is the honest answer.
+    }
+  }, []);
+  const [stored, setStored] = useTabState<string>(PAGE_TAB_KEY, "summary");
+  const active: PageTabKey = isPageTab(stored) ? stored : "summary";
+  return (
+    <section data-testid="corporate-page-tabs" className="flex min-h-0 flex-1 flex-col gap-3">
+      <Tabs
+        ariaLabel={t("corporate.tabs.aria")}
+        activeKey={active}
+        onChange={setStored}
+        idPrefix="corporate-"
+        className="shrink-0 [contain:inline-size]"
+        items={PAGE_TABS.map((key) => ({ key, label: t(`corporate.tabs.${key}`) }))}
+      />
+      <div
+        role="tabpanel"
+        id={`corporate-panel-${active}`}
+        aria-labelledby={`corporate-tab-${active}`}
+        className="min-h-0 min-w-0 flex-1 overflow-auto"
+      >
+        {panels[active]}
+      </div>
+    </section>
+  );
+}
+```
+
+- [ ] **Step 10: The block and the strip** (`VerdictBlock.tsx`).
+  - Imports: delete `import type { DcfSummary } …`. Change the `@/lib/bridgeQuality` import to `import { UNBRIDGED_REASON } from "@/lib/bridgeQuality";`, and the `../verdict` import to `import { verdictLabelKey, type VerdictView } from "../verdict";`.
+  - Replace everything from `interface VerdictBlockProps {` to the end of the file with:
+
+```tsx
+interface VerdictProps {
+  view: VerdictView;
+  onOpenDetail: () => void;
+}
+
+// Spec §2.2: intrinsic value vs price and the upside, under the backend's own status label.
+export function VerdictBlock({ view, onOpenDetail }: VerdictProps) {
+  const t = useT();
+  const { state, streaming, intrinsic, upside, enterpriseValue, currentPrice, status, refusalText } = view;
+
+  return (
+    <section data-testid="corporate-verdict" data-state={state} data-busy={streaming ? "true" : undefined}>
+      <Card padding="sm" className="flex flex-col gap-2">
+        <div className="flex items-center justify-between gap-2">
+          <Eyebrow label="verdict" />
+          {streaming && state === "valued" ? (
+            <span data-part="busy" className="type-caption mr-auto text-[var(--ink-muted)]">{t("corporate.verdict.streaming")}</span>
+          ) : null}
+          <button
+            type="button"
+            onClick={onOpenDetail}
+            aria-label={t("corporate.verdict.detail")}
+            title={t("corporate.verdict.detail")}
+            className="inline-flex h-6 w-6 items-center justify-center rounded-[var(--radius-1)] text-[var(--ink-muted)] hover:text-[var(--ink)]"
+          >
+            <Info aria-hidden="true" className="h-4 w-4" />
+          </button>
+        </div>
+        {state === "refused" ? (
+          <p data-testid="dcf-refusal" className="type-body text-[var(--ink-secondary)]">
+            {t("corporate.verdict.refused", { reason: refusalText ?? "" })}
+          </p>
+        ) : state === "idle" ? (
+          <p className="type-body text-[var(--ink-muted)]">{t("corporate.verdict.idle")}</p>
+        ) : state === "streaming" ? (
+          <p className="type-body text-[var(--ink-muted)]">{t("corporate.verdict.streaming")}</p>
+        ) : (
+          <>
+            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+              <span className="type-small text-[var(--ink-muted)]">{t("corporate.verdict.intrinsic")}</span>
+              <span data-part="intrinsic" className="type-figure-md text-[var(--ink)]" title={intrinsic === null ? UNBRIDGED_REASON : undefined}>
+                {intrinsic === null ? MISSING : moneyText(intrinsic)}
+              </span>
+              <span className="type-small text-[var(--ink-muted)]">{t("corporate.verdict.vs")} {t("corporate.verdict.current")}</span>
+              <span data-part="price" className="type-mono text-[var(--ink)]">{currentPrice === null ? MISSING : moneyText(currentPrice)}</span>
+            </div>
+            {intrinsic === null && enterpriseValue !== null ? (
+              <span data-part="ev" className="type-small text-[var(--ink-muted)]">
+                {t("corporate.verdict.ev", { value: moneyText(enterpriseValue) })}
+              </span>
+            ) : null}
+            <div className="flex flex-wrap items-center gap-2">
+              <DeltaBadge value={upside} />
+              <VerdictStatusLabel status={status} />
+            </div>
+          </>
+        )}
+      </Card>
+    </section>
+  );
+}
+
+const STRIP_TEXT = {
+  idle: "corporate.verdictStrip.idle",
+  streaming: "corporate.verdict.streaming",
+  refused: "corporate.verdictStrip.refused",
+} as const;
+
+/**
+ * Spec §2A: the verdict in one line beside the company line, so every page tab shows the answer.
+ * It renders the same VerdictView as the block. Its accessible name comes from its content and must not
+ * contain "Verdict detail" (the block's ⓘ, clicked by name in four specs); it reuses none of the
+ * block's testids.
+ */
+export function VerdictStrip({ view, onOpenDetail }: VerdictProps) {
+  const t = useT();
+  return (
+    <button
+      type="button"
+      data-testid="corporate-verdict-strip"
+      data-state={view.state}
+      onClick={onOpenDetail}
+      title={view.state === "refused" ? t("corporate.verdict.refused", { reason: view.refusalText ?? "" }) : undefined}
+      className="type-small inline-flex min-w-0 flex-wrap items-center gap-2 rounded-[var(--radius-1)] text-left text-[var(--ink-secondary)] hover:text-[var(--ink)]"
+    >
+      {view.state === "valued" ? (
+        <>
+          <span>{t("corporate.verdict.intrinsic")}</span>
+          <span data-part="intrinsic" className="type-mono text-[var(--ink)]">{view.intrinsic === null ? MISSING : moneyText(view.intrinsic)}</span>
+          <DeltaBadge value={view.upside} />
+          <VerdictStatusLabel status={view.status} />
+        </>
+      ) : (
+        <span>{t(STRIP_TEXT[view.state])}</span>
+      )}
+    </button>
+  );
+}
+```
+
+  `VerdictStatusLabel` above it is unchanged. The block keeps its old `streaming && dcf` busy rule as `streaming && state === "valued"`: a refusal clears `dcf` (`setDcfStreamResult(null)`), so the two rules agree.
+
+- [ ] **Step 11: Header slot.**
+  - In `components/ui/PageHeader.tsx`:
+    - Add `subtitleAside?: ReactNode;` to the props interface, with the comment `/** Beside the subtitle on wide screens, under it on narrow ones (the corporate verdict strip). */`, and add `subtitleAside` to the destructuring.
+    - Replace the line `{subtitle && <p data-testid={subtitleTestId} className="type-body mt-1 text-[var(--ink-secondary)]">{subtitle}</p>}` with the block below. Pages that do not pass the prop render the same DOM as before.
+
+```tsx
+        {subtitle && !subtitleAside && <p data-testid={subtitleTestId} className="type-body mt-1 text-[var(--ink-secondary)]">{subtitle}</p>}
+        {subtitleAside && (
+          <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1">
+            {subtitle && <p data-testid={subtitleTestId} className="type-body text-[var(--ink-secondary)]">{subtitle}</p>}
+            {subtitleAside}
+          </div>
+        )}
+```
+
+  - In `CorporateHeader.tsx`:
+    - Change the React import to `import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";`.
+    - Add `/** The one-line verdict beside the company line (spec §2A). */ verdictStrip?: ReactNode;` to `CorporateHeaderProps`, and `verdictStrip` to the destructuring.
+    - Add `subtitleAside={verdictStrip}` directly after `subtitleTestId="corporate-company-line"`.
+
+    The company line `<p>` keeps its text exactly, so `toHaveText(/^Apple · .+ · \$210\.4$/)` still holds.
+
+- [ ] **Step 12: Catalog and glossary.**
+  - In `en.ts`, inside `corporate.tabs`, add `summary: "Summary",` after `aria: …,`. After the `verdict: { … },` block, add `verdictStrip: { idle: "DCF not calculated", refused: "Not valued" },`.
+  - In `ko.ts`, add `summary: "요약",` and `verdictStrip: { idle: "DCF 미계산", refused: "평가하지 않음" },`.
+  - Add these glossary rows:
+
+```markdown
+| Summary | 요약 | corporate page tab |
+| Not valued | 평가하지 않음 | verdict strip, refused DCF |
+```
+
+- [ ] **Step 13: Wire `page.tsx`.** Anchors are quoted from the file at `21362c1`, 1,092 lines.
+  1. Imports:
+     - `import { CorporateLowerTabs } from "./components/CorporateLowerTabs";` → `import { CorporatePageTabs } from "./components/CorporatePageTabs";`
+     - `import { VerdictBlock } from "./components/VerdictBlock";` → `import { VerdictBlock, VerdictStrip } from "./components/VerdictBlock";`
+     - add `import { verdictView } from "./verdict";`
+  2. After the line `const canLoadFullReport = dcfRefusal === null && !(!dcfData && dcfStreamStatus === "idle");`, add:
+     ```ts
+       const verdict = verdictView(dcfData, dcfStreamStatus === "streaming", dcfRefusal?.readerText ?? null); // block + strip, spec §2A
+     ```
+  3. The root: `<div className="mx-auto max-w-7xl space-y-4">` → `<div className="mx-auto flex h-[calc(100dvh_-_var(--main-pad-top,0px)_-_var(--main-pad-bottom,0px))] max-w-7xl flex-col">`.
+  4. In `<CorporateHeader …>`, after `onRefreshDcf={handleRefreshDcf}`, add `verdictStrip={<VerdictStrip view={verdict} onOpenDetail={() => setActiveCalculation("backendDcf")} />}`.
+  5. Move the first-screen section into the tabs.
+     - Delete the JSX comment `{/* First screen (spec §2): … */}`.
+     - Cut the `<section className="grid grid-cols-1 gap-4 lg:grid-cols-3">…</section>` that follows it, delete the blank line after it, and change `<CorporateLowerTabs` to `<CorporatePageTabs`.
+     - Make the first entry of `panels={{` the block below. Inside it, the `<section>` is the cut element, unchanged except that its six-line `<VerdictBlock … />` becomes the one line shown:
+
+```tsx
+          // Summary (spec §2A): verdict and KPIs on the left 2/3, the assumption table on the right 1/3.
+          summary: (
+            <section className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+              <div className="flex min-w-0 flex-col gap-3 lg:col-span-2">
+                <VerdictBlock view={verdict} onOpenDetail={() => setActiveCalculation("backendDcf")} />
+                <KpiRow … unchanged … />
+              </div>
+              <AssumptionTable … unchanged … />
+            </section>
+          ),
+```
+
+  6. Run `npm run lint`. Remove only the imports this made unused; none are expected, because `dcfRefusal` and `dcfStreamStatus` are still read.
+  7. Run `wc -l app/corporate/page.tsx`. Expected: **about 1,091**. The changes are: imports +1 net, the `verdict` line +1, the strip prop +1, `summary: (` and `),` +2, the block call −5 and the deleted blank line −1, for −1 in all. Gate: **≤ 1,092**. The page must not grow.
+
+- [ ] **Step 14: Run.** `npx playwright test tests/e2e/corporate-model.spec.ts tests/e2e/corporate-one-screen.spec.ts tests/e2e/corporate-detail-tabs.spec.ts --workers=2` (the last only if Task 8 has created it). Expected: PASS.
+  - If the fit test fails, read the failing block and box from the message. Fix the layout; do not loosen the test.
+  - The measured budget at 1280×720 is tight:
+    - The root runs from y=64 to y=640.
+    - The header ends at about 160, plus `mb-6` → 184.
+    - The tab bar is 41 px → 225, plus `gap-3` → the panel starts at about 237.
+    - That leaves a panel of about 403 px for the 388 px assumption table.
+  - Levers, in order: the tabs' `gap-3` → `gap-2`; the strip's `gap-2` → `gap-1.5`. Do not touch AppShell or the 288 px cap.
+  - Record the measured boxes in the task report.
+
+- [ ] **Step 15: Approved edits #58–#65.**
+  - First run the five affected specs unedited against the new code. Each row's line must fail for the reason the row gives. Record each one.
+  - Then apply the rows, and run `npx playwright test tests/e2e/corporate-*.spec.ts tests/e2e/refresh-idle-state.spec.ts tests/e2e/terminal-diagnostics.spec.ts tests/e2e/high-risk-render-regression.spec.ts tests/e2e/responsive-accessibility.spec.ts tests/e2e/tab-state-persistence.spec.ts --workers=2`. Expected: PASS.
+  - If any other existing assertion fails, stop and report it.
+
+- [ ] **Step 16: Gates.**
+  - `npm run typecheck && npm run lint && npm run test:unit`.
+  - `npm run design:baseline -- app/corporate/pageTabs.ts app/corporate/components/CorporatePageTabs.tsx app/corporate/components/VerdictBlock.tsx components/ui/Tabs.tsx components/ui/PageHeader.tsx app/corporate/components/CorporateHeader.tsx` must report 0 in every category.
+  - `wc -l app/corporate/page.tsx` must print ≤ 1092.
+  - `git ls-files --eol` must show the new `pageTabs.ts` as `w/lf`, and each edited file must keep its working-tree ending.
+
+- [ ] **Step 17: Mutation matrix** (Global Constraints procedure: `mktemp -d` backup, one Edit, the named test FAILS for the named reason, restore with `cp -p`, `cmp` prints nothing)
+
+| # | Mutation | Must fail |
+|---|---|---|
+| 1 | `CorporatePageTabs`: `useTabState(PAGE_TAB_KEY, "diagnostics")` and fallback `"diagnostics"` | `Summary is the default…` (Summary not selected) |
+| 2 | `idPrefix="corporate-"` removed | same test (`#corporate-tab-summary` not found) |
+| 3 | `active` without the `isPageTab` guard (`stored as PageTabKey`) | `an unknown stored tab falls back to Summary` (no tab selected, no verdict) |
+| 4 | migration `useEffect` moved below `useTabState` | `a pre-D10 lower-tab choice is carried over…` (Summary stays selected: the write-back overwrites the migrated value) |
+| 5 | `migrateLowerTab` without `storage.removeItem(LEGACY_LOWER_TAB_KEY)` | model `a chosen DCF or comparison tab moves…` and e2e `…the old key is dropped` (poll never null) |
+| 6 | `migrateLowerTab` carries any page tab (`if (isPageTab(value))`) | model `diagnostics … is not carried` |
+| 7 | the "page tab already stored wins" line removed | model `a stored page tab wins…` and `it runs once…` |
+| 8 | `verdictView` intrinsic `valued ? dcf.estimated_value : null` | model `an unbridged valuation withholds…`; e2e `an unbridged valuation: the strip shows…` (`$1,462.4`) |
+| 9 | `verdictView` state ignores `refusalText` | model `a refusal wins…`; e2e `idle and refused…` |
+| 10 | `VerdictStrip` renders `{view.status}` instead of `VerdictStatusLabel` | `an unbridged valuation: the strip shows…` (label "Bridge Incomplete") |
+| 11 | `VerdictStrip` `onClick={() => {}}` | `every page tab shows the strip, and it opens…` (no dialog) |
+| 12 | `page.tsx`: the strip moved from `verdictStrip=` into the summary panel | `every page tab shows the strip…` (count 0 on Core Diagnostics) |
+| 13 | tabpanel without `overflow-auto` | `the page never scrolls; the panel takes the overflow` at both sizes |
+| 14 | root height without `_-_var(--main-pad-bottom,0px)` | same test at 1280×720 (scrollHeight 800 > 720) |
+| 15 | root `h-[calc(…)]` removed | same test, and the fit test (`assumption table ends by …`) |
+| 16 | `AssumptionTable` `max-h-72` removed | fit test (`assumption table ends by <panel bottom>` or the 288 check) |
+| 17 | `AppShell` `[--main-pad-top:4rem]` → `2rem` | fit test (`header eyebrow starts below the 48px bar`) |
+| 18 | `PageHeader` ignores `subtitleAside` | fit test (`verdict strip is rendered`) and every strip test |
+| 19 | helper `refreshDcf` waits on `corporate-verdict` again | `corporate-dcf-sensitivity.spec.ts` "the Terminal Value Share tile reports the backend measurement" (block unmounted on the DCF tab). This shows P1 is what keeps that spec unedited. |
+
+  A mutation that does not make its test fail is reported as a survivor, with the reason, and is not reported as passing (CLAUDE.md §8).
+
+- [ ] **Step 18: Commit.** In `todo.md` Track D, change `- [x] C7 header  - [ ] C8 modal tabs` to `- [x] C7 header  - [x] C7b page tabs + verdict strip (D10)  - [ ] C8 modal tabs`.
+
+```bash
+git add apps/web/app/corporate apps/web/components/ui/Tabs.tsx apps/web/components/ui/PageHeader.tsx apps/web/lib/i18n apps/web/tests/e2e docs/design/MoneyView_Glossary.md guideline/sop/todo.md
+git commit -m "feat(corporate): four page tabs and a header verdict strip; the page never scrolls (D10)" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+---
+
 ### Task 8: Calculation detail modal in six tabs: shell, Summary, Calculation steps, Raw data (spec §4)
 
 **Files:**
@@ -3182,6 +4041,8 @@ git commit -m "feat(corporate): header row with inline add; the outer View Full 
 - Rewrite: `apps/web/app/corporate/components/CalculationDetailModal.tsx` (682 → about 110 lines)
 - Modify: `apps/web/app/corporate/page.tsx`, `apps/web/lib/i18n/messages/{en,ko}.ts`, `apps/web/lib/i18n/labels.ts`, `docs/design/MoneyView_Glossary.md`, `apps/web/tests/e2e/helpers/corporateDcf.ts`, `guideline/sop/todo.md`
 - Approved test edits: inventory #50–#55, plus import row #56
+
+> **After Task 7b:** the KPIs, the assumption table and the "Verdict detail" button are on the Summary page tab, which is the default; this task's tests open them from a fresh load, so none changes. The modal's `Tabs` keeps the default `idPrefix` (`tab-summary`); the page tabs carry `corporate-`, so the two never share an id. A test here that opens another page tab first must call `openLowerTab(page, "Summary")` before using them.
 
 The old modal had 13 sections. This task places them as follows:
 
@@ -4356,6 +5217,8 @@ async function refreshComparison(page: Page) {
   await openLowerTab(page, "Target Stock Comparison");
   await page.getByRole("button", { name: "Refresh comparison" }).click();
   await expect(page.getByRole("cell", { name: "GOOGL" }).first()).toBeVisible({ timeout: 30_000 });
+  // Task 7b: the KPIs and Verdict detail live on the Summary page tab; go back before opening them.
+  await openLowerTab(page, "Summary");
 }
 
 test("Peers waits for the comparison, then ranks this ticker inside the universe", async ({ page }) => {
@@ -4809,13 +5672,14 @@ node -e "const s=require('fs').readFileSync('lib/i18n/messages/ko.ts','utf8'); f
 - [ ] **Step 2: New-file literal sweep.** Run the command below. Every hit must be an aria-hidden glyph or an English-by-design string listed in N9 (the modal's moved audit titles). Move anything else to the catalog.
 
 ```bash
-git grep -n -E '>[A-Z][a-z]+( [a-z]+){1,}<' -- app/corporate/components/{VerdictBlock,KpiRow,AssumptionTable,CorporateHeader,CorporateLowerTabs,DcfTab}.tsx app/corporate/components/detail/{SummaryTab,StepsTab,TrendTab,PeersTab,SensitivityTab}.tsx components/ui/TopNav.tsx
+git grep -n -E '>[A-Z][a-z]+( [a-z]+){1,}<' -- app/corporate/components/{VerdictBlock,KpiRow,AssumptionTable,CorporateHeader,CorporatePageTabs,DcfTab}.tsx app/corporate/components/detail/{SummaryTab,StepsTab,TrendTab,PeersTab,SensitivityTab}.tsx components/ui/TopNav.tsx
 ```
 
 - [ ] **Step 3: Docs.** Run `git grep -n -i "sidebar\|left nav\|View Full Report\|Add Company" -- docs/USER-GUIDE.md docs/design/MoneyView_Component_System.md docs/design/MoneyView_Interaction_Rules.md`. Rewrite each hit that describes the current UI:
   - navigation is "the top bar (icons; hover, focus or ☰ opens the full menu)"
   - the full DCF report is reached from the DCF tab's Load Full Report or the calculation detail's Raw data tab
   - a company not in the list is added from the search's "Not in the list → add" entry
+  - the corporate page is four tabs (Summary, Core Diagnostics, DCF, Target Stock Comparison) under a one-line verdict, and it never scrolls; a long tab scrolls inside itself
 
   Do not edit `docs/archive/` or other plans.
 
@@ -4826,9 +5690,9 @@ DESIGN_CAPTURE=corporate-one-screen npx playwright test tests/e2e/design-capture
 node scripts/capture-review.mjs <the label DS Task 10 captured, from Track D> corporate-one-screen
 ```
 
-  The owner reviews every screen: the top bar replaces the sidebar and the body is about 350 px wider (spec §9). For `/corporate`, also check the first screen against spec §2's diagram. Record the review page path and one verdict line per screen in Track D. Width-driven stretch on other screens is noted, not fixed here; DS Tasks 11–13 adjust it.
+  The owner reviews every screen: the top bar replaces the sidebar and the body is about 350 px wider (spec §9). For `/corporate`, check the Summary tab against spec §2A's diagram. The full-page capture must be exactly the viewport, because the page does not scroll: `python -c "import struct; f=open('design-capture/corporate-one-screen/corporate.png','rb'); f.read(16); print(struct.unpack('>II', f.read(8)))"` must print `(1280, 720)`. Any other height means the page scrolls: stop and report it. The other three tabs are not in the capture; the owner opens them in the running app or reads Task 7b's no-page-scroll test. Record the review page path and one verdict line per screen in Track D. Width-driven stretch on other screens is noted, not fixed here; DS Tasks 11–13 adjust it.
 
-- [ ] **Step 5: Full gates.** `npm run typecheck && npm run lint && npm run test:unit && npx playwright test --workers=2`, then from the repo root `python -m pytest -q` (unchanged count; a frontend-only branch must not move it). `wc -l apps/web/app/corporate/page.tsx` ≤ 1150. If a Playwright run is interrupted, kill :8110/:3101 (Global Constraints) before rerunning.
+- [ ] **Step 5: Full gates.** `npm run typecheck && npm run lint && npm run test:unit && npx playwright test --workers=2`, then from the repo root `python -m pytest -q` (unchanged count; a frontend-only branch must not move it). `wc -l apps/web/app/corporate/page.tsx` ≤ 1150. The full run includes Task 7b's `the page never scrolls; the panel takes the overflow` at 1280×720 and 390×844; it must pass, not be skipped. If a Playwright run is interrupted, kill :8110/:3101 (Global Constraints) before rerunning.
 
 - [ ] **Step 6: Review.** Run the `code-reviewer.md` checklist over `git diff feat/design-system-paper...HEAD`. Every new test must have its matrix row executed. A test whose mutation did not make it fail is reported as unverified, not as passing (CLAUDE.md §8).
 
@@ -4866,6 +5730,7 @@ git merge --no-ff feat/corporate-one-screen -m "merge: corporate one-screen (par
   | §2.2 verdict | 5 (label rule in 4) |
   | §2.3 KPIs | 5 |
   | §2.4 assumption table | 5 |
+  | §2A page tabs, verdict strip, no page scroll (D10) | 7b |
   | §2.5 move/remove list | 5 (refusal chip), 6 (Calculate All DCF, diagnostics box, comparison paragraphs, sync box, idle box), 7 (View Full Report, Add Company, Intrinsic DCF tile, idle sentence) |
   | §3.1 diagnostics tab | 6 |
   | §3.2 DCF tab | 6 |
@@ -4883,5 +5748,5 @@ git merge --no-ff feat/corporate-one-screen -m "merge: corporate one-screen (par
   | §9 risks | the budget table, Task 7's fit test, Task 13's capture review, and the page.tsx line gates |
 
 - **Placeholders.** No "TBD" or "similar to Task N". The verbatim moves are written out in full in Tasks 5, 6 and 8.
-- **Type consistency.** These names are used identically in every task: `AssumptionField`, `AssumptionKey`, `DcfRequestBody`, `DetailTabKey`, `PeerField`, `TrendHistory`, `BUILT_TABS`, `loadFullDcfReport`, `openLowerTab`, `lowerPanel`, `openDetailTab`, `refreshDcf`, `loadFullDcfReportInTab` and `openFullDcfReportInModal`. Each catalog key a component reads is added in the same task, in both `en` and `ko`.
+- **Type consistency.** These names are used identically in every task: `AssumptionField`, `AssumptionKey`, `DcfRequestBody`, `DetailTabKey`, `PeerField`, `TrendHistory`, `BUILT_TABS`, `loadFullDcfReport`, `openLowerTab`, `lowerPanel`, `openDetailTab`, `refreshDcf`, `loadFullDcfReportInTab`, `openFullDcfReportInModal`, and (Task 7b) `verdictView`, `VerdictView`, `PageTabKey`, `PAGE_TAB_KEY` and `migrateLowerTab`. Each catalog key a component reads is added in the same task, in both `en` and `ko`.
 - **Review Focus.** All five items have tests: Task 4 (1, 2, 3), Task 3 (4) and Task 9 (5).

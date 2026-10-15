@@ -16,11 +16,13 @@ async function styleOf(link: Locator) {
   });
 }
 
-test("every sidebar nav label is bold ink, active or not, and the active one is still marked", async ({ page }) => {
+test("every menu panel label is bold ink, active or not, and the active one is still marked", async ({ page }) => {
   await mockValuationApi(page);
   await page.goto("/valuation", { waitUntil: "domcontentloaded" });
 
-  const sidebar = page.locator("#app-sidebar");
+  await page.getByTestId("topnav-menu").hover();
+  const sidebar = page.locator("#app-nav-panel");
+  await expect(sidebar).toBeVisible();
   const active = sidebar.getByRole("link", { name: "Valuation" });
   const inactive = sidebar.getByRole("link", { name: "Portfolio" });
   await expect(active).toBeVisible({ timeout: 60_000 });

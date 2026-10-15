@@ -34,11 +34,11 @@ export function DcfCoreModulesGraph({
   const bridgedFairValue = dcfResult ? bridgedEstimatedValue(dcfResult) : null;
 
   return (
-    <div className="lg:col-span-4 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-5">
+    <div className="border border-[var(--line)] bg-[var(--surface-raised)] p-5">
       <button
         type="button"
         onClick={() => onOpenDetail("dcfCoreModules")}
-        className="text-left text-sm font-bold text-[var(--text-primary)] underline decoration-dotted underline-offset-4 hover:text-[var(--brand)]"
+        className="type-panel-title text-left text-[var(--ink)] underline decoration-dotted underline-offset-4 hover:text-[var(--brand-text)]"
       >
         <InfoTooltip
           label="DCF Core Modules"
@@ -49,27 +49,27 @@ export function DcfCoreModulesGraph({
         <button
           type="button"
           onClick={() => onOpenDetail("sustainableGrowth")}
-          className="rounded-[var(--radius)] p-2 text-left transition hover:bg-[var(--brand)]"
+          className="rounded-[var(--radius-1)] p-2 text-left transition hover:bg-[var(--brand-soft)]"
         >
-          <div className="text-xs text-[var(--text-muted)]">
+          <div className="type-caption uppercase text-[var(--ink-muted)]">
             <InfoTooltip
               label="Sustainable Growth"
               description="Reinvestment rate multiplied by ROIC. This estimates the internally supportable growth rate before requiring extra capital or margin improvement."
             />
           </div>
-          <div className="text-2xl font-black">{pct(sustainableGrowth)}</div>
+          <div className="type-figure-md">{pct(sustainableGrowth)}</div>
         </button>
         <button
           type="button"
           onClick={() => onOpenDetail("terminalValueShare")}
-          className="rounded-[var(--radius)] p-2 text-left transition hover:bg-[var(--brand)]"
+          className="rounded-[var(--radius-1)] p-2 text-left transition hover:bg-[var(--brand-soft)]"
         >
-          <div className="text-xs text-[var(--text-muted)]">Terminal Value Share</div>
+          <div className="type-caption uppercase text-[var(--ink-muted)]">Terminal Value Share</div>
           {/* Measured by the backend as PV(terminal) / enterprise value. It is a property
               of a valuation that ran, so without a DCF result there is no share to show --
               the assumption sliders alone cannot produce one. The nullish check also covers
               a result restored from a sessionStorage cache written before this field. */}
-          <div className="text-2xl font-black">
+          <div className="type-figure-md">
             {dcfResult?.terminal_value_share_pct == null
               ? "N/A"
               : pct(dcfResult.terminal_value_share_pct)}
@@ -82,7 +82,7 @@ export function DcfCoreModulesGraph({
           && dcfResult.terminal_value_share_pct >= TERMINAL_SHARE_WARNING_PCT ? (
             <div
               data-testid="terminal-share-warning"
-              className="mt-1 text-[length:var(--type-helper)] text-[var(--delta-down)]"
+              className="type-small mt-1 text-[var(--down)]"
             >
               Mostly terminal value
               {dcfResult.wacc_minus_terminal_growth != null
@@ -93,7 +93,7 @@ export function DcfCoreModulesGraph({
           {dcfResult?.terminal_growth_binding_constraint ? (
             <div
               data-testid="terminal-growth-bound"
-              className="mt-1 text-[length:var(--type-helper)] text-[var(--text-muted)]"
+              className="type-small mt-1 text-[var(--ink-muted)]"
             >
               Terminal growth set by{" "}
               {BINDING_CONSTRAINT_LABELS[dcfResult.terminal_growth_binding_constraint]
@@ -104,19 +104,19 @@ export function DcfCoreModulesGraph({
         <button
           type="button"
           onClick={() => onOpenDetail("fcffMagnitude")}
-          className="rounded-[var(--radius)] p-2 text-left transition hover:bg-[var(--brand)]"
+          className="rounded-[var(--radius-1)] p-2 text-left transition hover:bg-[var(--brand-soft)]"
         >
-          <div className="text-xs text-[var(--text-muted)]">FCFF Magnitude</div>
-          <div className="text-2xl font-black">{moneyText(fcff)}B</div>
+          <div className="type-caption uppercase text-[var(--ink-muted)]">FCFF Magnitude</div>
+          <div className="type-figure-md">{moneyText(fcff)}B</div>
         </button>
         <button
           type="button"
           onClick={() => onOpenDetail("backendFairValue")}
-          className="rounded-[var(--radius)] p-2 text-left transition hover:bg-[var(--brand)]"
+          className="rounded-[var(--radius-1)] p-2 text-left transition hover:bg-[var(--brand-soft)]"
         >
-          <div className="text-xs text-[var(--text-muted)]">Intrinsic DCF Value</div>
+          <div className="type-caption uppercase text-[var(--ink-muted)]">Intrinsic DCF Value</div>
           <div
-            className="text-2xl font-black"
+            className="type-figure-md"
             title={dcfResult && bridgedFairValue === null ? UNBRIDGED_REASON : undefined}
           >
             {!dcfResult

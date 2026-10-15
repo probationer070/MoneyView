@@ -6,7 +6,7 @@ const rgb = (hex: string) => `rgb(${[1, 3, 5].map((i) => parseInt(hex.slice(i, i
 test("ground, ink and Hangul line breaking are the paper base", async ({ page }) => {
   await mockValuationApi(page);
   await page.goto("/valuation", { waitUntil: "domcontentloaded" });
-  await expect(page.locator("#app-sidebar")).toBeVisible({ timeout: 60_000 });
+  await expect(page.locator("#app-topnav")).toBeVisible({ timeout: 60_000 });
   const body = await page.evaluate(() => {
     const s = getComputedStyle(document.body);
     return { bg: s.backgroundColor, color: s.color, wordBreak: s.wordBreak };
@@ -36,7 +36,7 @@ test.describe("at 1000px wide", () => {
   test("the desktop layout applies (lg = 992px)", async ({ page }) => {
     await mockValuationApi(page);
     await page.goto("/valuation", { waitUntil: "domcontentloaded" });
-    await expect(page.locator("#app-sidebar")).toBeVisible({ timeout: 60_000 });
-    await expect(page.getByRole("button", { name: "Open navigation sidebar" })).toBeHidden();
+    await expect(page.locator("#app-topnav")).toBeVisible({ timeout: 60_000 });
+    await expect(page.locator("main")).toHaveCSS("padding-left", "32px");
   });
 });

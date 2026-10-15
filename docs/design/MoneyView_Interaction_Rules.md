@@ -190,7 +190,7 @@ For dense analytical control surfaces such as Corporate assumptions, Monte Carlo
 ### 5.3 Cross-Tab Navigation
 - Corporate -> Portfolio: `Open Portfolio Testing` button in comparison zone
 - Portfolio -> Corporate: no direct link, because the pages serve separate analysis contexts
-- All tabs are accessible via sidebar; no sequential tab flow is enforced
+- All tabs are accessible via the top bar; no sequential tab flow is enforced
 
 ---
 
@@ -221,7 +221,6 @@ For dense analytical control surfaces such as Corporate assumptions, Monte Carlo
 ### 6.4 Transition Timing
 - Modal open/close: `350ms` (`duration.slow`)
 - View toggle such as chart/table: `200ms` (`duration.normal`)
-- Sidebar slide: `200ms` (`duration.normal`)
 - Button state change: `100ms` (`duration.fast`)
 
 ---
@@ -232,9 +231,9 @@ For dense analytical control surfaces such as Corporate assumptions, Monte Carlo
 
 | Name | Width | Layout Change |
 |---|---|---|
-| Mobile | `< 768px` | Single column, hamburger sidebar |
-| Tablet | `768px - 1023px` | Single column, collapsible sidebar |
-| Desktop | `>= 1024px` | Fixed sidebar, multi-column layouts |
+| Mobile | `< 768px` | Single column, top bar with ☰ opening the full menu |
+| Tablet | `768px - 1023px` | Single column, top bar with ☰ opening the full menu |
+| Desktop | `>= 1024px` | Top bar with icons (hover or focus opens the full menu), full-width body, multi-column layouts |
 
 ### 7.2 Per-Tab Responsive Rules
 
@@ -242,7 +241,7 @@ For dense analytical control surfaces such as Corporate assumptions, Monte Carlo
 |---|---|---|
 | Market Overview | Single-column card stack | 3-4 column card grid |
 | Portfolio | Stacked zones | Stacked zones, because the page is already vertically organized |
-| Corporate | Stacked left/right panels | Side-by-side 35/65 split |
+| Corporate | One screen: verdict line, four tabs, no page scroll; a long tab scrolls inside itself | Same; the body is about 350 px wider without the sidebar |
 | Monte Carlo | Stacked input/result | Side-by-side or stacked per sub-tab |
 | News | Single column | Centered max-width column |
 
@@ -257,7 +256,7 @@ For dense analytical control surfaces such as Corporate assumptions, Monte Carlo
 
 - All interactive elements have unique `id` attributes when required for labeling and focus management
 - All icon-only buttons have `aria-label`
-- Sidebar toggle uses `aria-expanded` and `aria-controls`
+- The top bar's ☰ toggle uses `aria-expanded` and `aria-controls`
 - Color is never the only means of conveying state; pair with icons or text
 - Focus order follows visual reading order
 - Modal traps focus within its content area

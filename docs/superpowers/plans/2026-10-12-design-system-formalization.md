@@ -2706,6 +2706,8 @@ Then apply this mapping table:
 | `Sidebar` footer (74) | `text-xs text-[var(--text-muted)]` | `type-caption text-[var(--ink-muted)]` |
 | `StatusBadge` styles map | success/warning/error/neutral tone classes | `bg-[var(--status-<tone>-surface)] text-[var(--status-<tone>-ink)] border-[var(--status-<tone>-border)]` for success, warning, error; neutral `bg-[var(--surface)] text-[var(--ink-secondary)] border-[var(--line)]`; badge `rounded-[var(--radius-2)] type-small`; dot keeps `rounded-full` |
 
+> **2026-10-14:** `Sidebar.tsx` was replaced by `components/ui/TopNav.tsx` (corporate-one-screen plan, Task 3), which carries this paper look over. Later tasks that name `Sidebar` apply to `TopNav`.
+
 The `Sidebar` keeps `font-bold`, because `sidebar-contrast.spec.ts` asserts 700. That spec also requires the hover background to equal the active background, which both rows above give: `--surface-raised`.
 
 - [ ] **Step 4: Review the containing-block change.** Run `git grep -n "absolute" -- app components`. For each hit inside a `<Card>`, check that it still positions against the box it meant to. It now positions against the card, which became `relative`. Note each one checked in Track D. Fix any that moved by adding `relative` to the box it intended.
@@ -2893,13 +2895,15 @@ export const CHART_REFERENCE_COLORS = {
 
 - [ ] Run the procedure, steps 1–8. `portfolioMetrics.ts` (4 palette classes in a lookup table) maps through M1, and its number helpers fold into `formatNumber` (M5). `StockTile`'s former mint selected fill (`--state-info`, `--bg-surface` text) becomes `bg-[var(--brand)] text-[var(--on-brand)]` (M1). Its focus ring classes are deleted (M3).
 
-### Task 11: Corporate, valuation, cases, decisions
+### Task 11: Valuation, cases, decisions
 
-**Globs:** `app/corporate/**/*.{ts,tsx}`, `app/valuation/**/*.{ts,tsx}`, `app/cases/**/*.{ts,tsx}`, `app/decisions/**/*.{ts,tsx}`, `lib/dcfRefusal.ts`, `lib/bridgeQuality.ts`, `lib/impliedReturn.ts`.
-**Specs:** `tests/e2e/corporate-*.spec.ts`, `valuation*.spec.ts`, `cases*.spec.ts`, `decisions.spec.ts`, `dcf-workbench-refusal.spec.ts`.
+> **2026-10-14:** corporate moved out of this task. `docs/superpowers/plans/2026-10-14-corporate-one-screen.md`, run between Tasks 10 and 11 and merged back here, rebuilds `app/corporate/**` on the paper tokens. Its Task 12 applies M1–M4 to every corporate file and M6/M7 to what it wrote. Still open from the corporate side, listed under Follow-ups: M5 numbers in corporate, the English prose of `buildCalculationDetails.ts`, and the bilingual headers of the pre-existing corporate tables (pinned by XPath/columnheader assertions). `LABELS.verdict = ["판정", "Verdict"]` already exists (added there): reuse it.
+
+**Globs:** `app/valuation/**/*.{ts,tsx}`, `app/cases/**/*.{ts,tsx}`, `app/decisions/**/*.{ts,tsx}`, `lib/dcfRefusal.ts`, `lib/bridgeQuality.ts`, `lib/impliedReturn.ts`.
+**Specs:** `valuation*.spec.ts`, `cases*.spec.ts`, `decisions.spec.ts`, `dcf-workbench-refusal.spec.ts`.
 **Korean assertion:** in `tests/e2e/cases.spec.ts`.
 
-- [ ] Run the procedure, steps 1–8. Refusal and verdict texts move to `valuation.*` / `corporate.*` and keep their evidence figures through `{param}` interpolation, as the glossary's verdict rule requires. The verdict column header becomes `LABELS.verdict = ["판정", "Verdict"]`, added to the glossary.
+- [ ] Run the procedure, steps 1–8. Refusal and verdict texts move to `valuation.*` and keep their evidence figures through `{param}` interpolation, as the glossary's verdict rule requires. The verdict column header uses the existing `LABELS.verdict`.
 
 ### Task 12: Monte Carlo
 
@@ -3137,6 +3141,8 @@ git commit -m "chore(design): lock tokens and translations; remove legacy aliase
 - A sequential palette (spec), when a chart needs one.
 - A Dembrandt URL-based drift check (old D10).
 - A density (compact) mode: the spec asked, and it is undecided. The `component.*` tokens make it a token switch.
+- Corporate residue of the paper migration (from `2026-10-14-corporate-one-screen.md`, N9): M5 (`moneyText`/`pct`/`numberText` → `formatNumber`) across `app/corporate/**`; the English prose in `buildCalculationDetails.ts` → `corporate.*` catalog keys; bilingual headers for the comparison, batch-report, sensitivity-grid and DCF-report tables, which need their own approved test-change list (they are pinned by XPath/`columnheader` assertions).
+
 
 ## Self-review (2026-10-13)
 

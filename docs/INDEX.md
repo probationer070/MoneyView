@@ -21,6 +21,7 @@ file before adding or moving any architecture doc.
 | `moneyview-quant-engine.md` | Canonical finance-engine specification and formulas |
 | `data-flow.md` | End-to-end workflows and calculation pipelines |
 | `storage-model.md` | SQLite, file cache, seed artifacts, retention rules |
+| `database-relationships.md` | Table inventory, declared and logical references, write/refresh order, lifecycle, known gaps |
 | `cqrs-read-write-separation.md` | Command/query ownership and projection boundaries |
 | `visualization-metrics.md` | KPI and chart semantics, ownership of metric meaning |
 | `documentation-roadmap.md` | Documentation structure, writing order, maintenance rules |
