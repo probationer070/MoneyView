@@ -83,6 +83,15 @@ tester.run("no-raw-design-values (14a: radius, weight, brand, figures)", rule, {
     'const a = (\n  <div>\n    {/* M2: snapshot title differs from the body style */}\n    <p className="font-bold">x</p>\n  </div>\n);',
     'const a = <p className="type-body font-mono font-normal">x</p>;',
     'const s = "font-bold is not allowed here";',
+    // Constants: a UPPER_SNAKE string or a variant-table value is judged as classes, so prose with no utility-shaped token is not.
+    'const NOTE_TEXT = "No shadow data, values are rounded";',
+    '// M2: the link label is the bold style of the nav panel\nconst PANEL_LINK = "type-body font-bold text-[var(--ink)]";',
+    'const TONE_MAP = { up: "text-[var(--ink)]" };',
+    'const variantStyles = { primary: "bg-[var(--brand)] text-[var(--on-brand)]" };',
+    'const sizeStyles = { sm: "min-h-6", md: "min-h-8" };',
+    'const SUCCESS = { dot: "bg-[var(--ink)]" };',
+    'const INFO = { dot: "bg-[var(--brand)]", box: "bg-[var(--brand-soft)] text-[var(--brand-text)]" };',
+    '// rounded-full: dot\nconst TONE_MAP = { dot: "h-2 w-2 rounded-full" };',
     // brand ground: with on-brand ink, with no children, in a pseudo-element, with a soft hover, in a tone table.
     'const a = <button className="bg-[var(--brand)] text-[var(--on-brand)]">Go</button>;',
     'const a = <button className={clsx("bg-[var(--brand)]", disabled && "opacity-50", "text-[var(--on-brand)]")}>Go</button>;',
@@ -128,6 +137,12 @@ tester.run("no-raw-design-values (14a: radius, weight, brand, figures)", rule, {
     { code: 'const c = "text-[var(--brand)]";', errors: [{ messageId: "brandText" }] },
     { code: 'const a = <td className="type-body tabular-nums">{formatNumber(v, "integer")}</td>;', errors: [{ messageId: "figureMono" }] },
     { code: 'const a = <span>{formatNumber(v)}</span>;', errors: [{ messageId: "figureMono" }] },
+    // Class constants: an UPPER_SNAKE string, a template in one, a value of a variant table, and a tone table's rounded-full.
+    { code: 'const PANEL_LINK = "type-body font-bold text-[var(--ink)]";', errors: [{ messageId: "fontWeight" }] },
+    { code: 'const SEGMENT = `type-caption rounded-md`;', errors: [{ messageId: "rawRadius" }] },
+    { code: 'const variantStyles = { primary: "text-[var(--ink)] font-semibold" };', errors: [{ messageId: "fontWeight" }] },
+    { code: 'const TONE_MAP = { dot: "h-2 w-2 rounded-full" };', errors: [{ messageId: "roundedFull" }] },
+    { code: 'const SEGMENT_BUTTON = { on: "hover:bg-[var(--brand)] text-[var(--ink)]" };', errors: [{ messageId: "brandHover" }] },
     { code: 'const a = <p className="type-body">{v >= 0 ? "+" : ""}{formatNumber(v)}</p>;', errors: [{ messageId: "figureMono" }] },
     { code: 'const a = <span className="type-small">{v == null ? "—" : formatNumber(v)}</span>;', errors: [{ messageId: "figureMono" }] },
   ],

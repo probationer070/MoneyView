@@ -64,17 +64,40 @@ const HOVER_VARIANTS = new Set(["hover", "focus", "focus-visible", "active", "gr
 const PSEUDO_VARIANTS = new Set(["before", "after"]);
 const MONO_CLASS = /\btype-(?:mono|figure)/;
 
+// Constant names that hold class strings. A name ending in Class(es) holds classes in full ("attr").
+// An UPPER_SNAKE name holds a class string, or a table of them, and a name ending in Variants, Styles
+// or Tones holds a table in its object values; both are "table", judged only when they read as classes.
+const CLASS_NAME = /class(?:es)?$/i;
+const UPPER_SNAKE = /^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*$/;
+const TABLE_NAME = /(?:variants?|styles|tones?)$/i;
+
+/** "attr", "table" or null: the first class context above the literal decides. */
 function inClassContext(node) {
   for (let p = node.parent; p; p = p.parent) {
-    if (p.type === "JSXAttribute") return p.name.name === "className";
-    if (p.type === "CallExpression" && p.callee.type === "Identifier" && CLASS_HELPERS.has(p.callee.name)) return true;
-    if (p.type === "Property" && (p.key.name === "className" || p.key.value === "className")) return true;
-    if (p.type === "VariableDeclarator") return /class(es)?$/i.test(p.id?.name ?? "");
+    if (p.type === "JSXAttribute") return p.name.name === "className" ? "attr" : null;
+    if (p.type === "CallExpression" && p.callee.type === "Identifier" && CLASS_HELPERS.has(p.callee.name)) return "attr";
+    if (p.type === "Property" && (p.key.name === "className" || p.key.value === "className")) return "attr";
+    if (p.type === "VariableDeclarator") {
+      const name = p.id?.name ?? "";
+      if (CLASS_NAME.test(name)) return "attr";
+      if (UPPER_SNAKE.test(name)) return "table";
+      if (TABLE_NAME.test(name) && propertyBetween(node, p)) return "table";
+      return null;
+    }
   }
+  return null;
+}
+
+/** True when an object property sits between the literal and its declarator: a table value, not a bare string. */
+function propertyBetween(node, declarator) {
+  for (let q = node.parent; q && q !== declarator; q = q.parent) if (q.type === "Property") return true;
   return false;
 }
 
 const classTokens = (text) => text.split(/[\s"'\x60]+/).filter(Boolean);
+
+/** A table string counts as classes only if a token has a utility shape (font-bold, bg-[..], hover:x). "No shadow data" is prose. */
+const looksLikeClasses = (text) => classTokens(text).some((t) => /[-:[]/.test(t));
 
 /** "md:hover:bg-x" -> { variants: ["md", "hover"], base: "bg-x" }. A colon inside [...] is not a separator. */
 function splitVariants(token) {
@@ -146,8 +169,7 @@ const rule = {
       return element?.type === "JSXElement" && element.children.every((c) =>
         (c.type === "JSXText" && c.value.trim() === "") || (c.type === "JSXExpressionContainer" && c.expression.type === "JSXEmptyExpression"));
     };
-    const checkClasses = (node, text) => {
-      const scope = classScope(node);
+    const checkClasses = (node, text, scope, kind) => {
       let rounded = false, weight = false, ground = false;
       for (const token of classTokens(text)) {
         const { variants, base } = splitVariants(token);
@@ -160,15 +182,17 @@ const rule = {
       }
       if (rounded && !hasComment(node, scope, ROUNDED_FULL_OK)) context.report({ node, messageId: "roundedFull" });
       if (weight && !hasComment(node, scope, WEIGHT_OK)) context.report({ node, messageId: "fontWeight" });
-      if (ground && !hasNoChildren(scope) && !(scope && sourceCode.getText(scope).includes("text-[var(--on-brand)]"))) {
+      // A table value is not an element, so a brand fill there (a dot, a box) cannot be told from a button label.
+      if (ground && kind === "attr" && !hasNoChildren(scope) && !sourceCode.getText(scope).includes("text-[var(--on-brand)]")) {
         context.report({ node, messageId: "brandGround" });
       }
     };
     const check = (node, text) => {
       for (const [messageId, re] of EVERYWHERE) if (re.test(text)) context.report({ node, messageId });
-      if (inClassContext(node)) {
+      const kind = inClassContext(node);
+      if (kind && (kind === "attr" || looksLikeClasses(text))) {
         for (const [messageId, re] of CLASS_ONLY) if (re.test(text)) context.report({ node, messageId });
-        checkClasses(node, text);
+        checkClasses(node, text, kind === "attr" ? classScope(node) : node, kind);
       }
       for (const [, name] of text.matchAll(VAR_REF)) {
         if (LOCAL_VAR.test(name)) continue;

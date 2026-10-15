@@ -58,6 +58,17 @@ file does not repeat it.
 | `brandText` | `text-[var(--brand)]` | `text-[var(--brand-text)]` |
 | `figureMono` | an element whose only content is `{formatNumber(…)}` with no `type-mono` / `type-figure*` on it or an ancestor | add the mono style |
 
+Where the class checks run: a string in a `className`, a class helper (`clsx`, `cn`, `twMerge`, `cva`),
+a `*Class`/`*Classes` constant, or a `className` key. A constant named in UPPER_SNAKE, or an object
+value of a `*Variants`, `*Styles` or `*Tones` constant, is also checked, but only when it reads as
+classes (a token with a utility shape such as `font-bold`, `bg-[…]` or `hover:…`), so prose stays out.
+`brandGround` does not run on those constant values, because a dot or box value has no element to
+hold its label.
+
+Exemptions in a constant are the same comments as in JSX, on the same line as the string or the line
+above it: `// M2: <why>` for a weight, `// rounded-full: dot` (or track, fill, spinner) for a round shape.
+A one-line constant takes its comment on the line above the `const`.
+
 ## What review checks (lint cannot)
 - A figure inside a sentence (`Total {formatNumber(v)} draws`) is wrapped in `<span className="type-mono">`.
 - Figures from a local `format*` helper that M5 has not replaced are set in mono too.
