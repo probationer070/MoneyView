@@ -2930,20 +2930,505 @@ export const CHART_REFERENCE_COLORS = {
 
 ---
 
-### Task 14: Lock-down, aliases removed, DESIGN.md, CLAUDE.md, final gate
+### Task 14a: Lock-down outside the market overview, DESIGN.md, CLAUDE.md, gate
+
+> **2026-10-15 (owner): Task 14 is split in two.** `components/market/**` and `app/page.tsx` still hold 233 baseline hits (162 of them deprecated variables) and get their own one-screen plan, which also applies the paper migration. So:
+> - **14a (this task, now):** the stricter lint rules, a shared no-page-scroll test, the design rule at `error` for everything except the market files, `DESIGN.md`, `CLAUDE.md` and a gate over the non-market app.
+> - **14b (after the market plan merges):** the deprecated aliases, Tailwind's theme reset, the market override and every market exception go away, and the gate runs again over everything.
+>
+> Wherever this plan says "Task 14" (Task 1 step 4, Task 13, the self-review), read: error level, `DESIGN.md` and the gate = 14a; alias removal and the market override = 14b.
+
+**Where the old Task 14 content went**
+
+| Old Task 14 content | Now | Why |
+|---|---|---|
+| Step 1, `paper-sweep.spec.ts` | 14a, market route excluded; 14b removes the exclusion | the market page still renders pre-paper classes and aliases, so its computed colours are not all tokens |
+| Step 2, `no-raw-design-values` to `error` | 14a, with a `warn` override for the market files | the owner's split |
+| Step 2, `react/jsx-no-literals` and the attribute-text rule | 14b, step 7, only when its count is 0 | measured 2026-10-15 over the repo outside market: **416** `jsx-no-literals` and **118** attribute hits in 59 files (the M6 leftovers of Tasks 9–12, option A). Switching it on at `error` would break lint. |
+| Step 3, alias removal, `DenseTable` `label` required, fixture delete | 14b | market still uses aliases and `DenseTable` `header` |
+| Step 4, Tailwind theme reset | 14b | with the reset in place the market's `text-xs`, `rounded-md` and `bg-amber-50` classes would render unstyled |
+| Steps 5–8, `DESIGN.md`, `CLAUDE.md`, docs, Claude Design System | 14a | the rules are what they document |
+| Step 9, final gate | 14a over the non-market app; 14b over the whole app | |
+| Step 10, mutation matrix | split by what each mutation tests | |
 
 **Files:**
-- Modify: `eslint.config.mjs`; `tokens/moneyview.tokens.json` (deprecated tokens removed, root `moneyview.themeReset`); regenerate
-- Modify: `components/ui/DenseTable.tsx` (`label` required, `header` removed), `scripts/build-tokens.test.mjs` (legacy test removed); Delete: `scripts/__fixtures__/globals-root-vars.baseline.json`
-- Create: `DESIGN.md` (repo root), `tests/e2e/theme-reset.spec.ts`, `tests/e2e/paper-sweep.spec.ts`
-- Modify: `.claude/CLAUDE.md` (new §9), `docs/INDEX.md`, `docs/design/MoneyView_Design_Tokens.md`, `docs/design/MoneyView_Component_System.md`, `docs/design/MoneyView_Chart_System.md`, `guideline/sop/todo.md`
+- Modify: `eslint-rules/no-raw-design-values.mjs`, `eslint-rules/no-raw-design-values.test.mjs`, `eslint-rules/__fixtures__/tokens.css`, `eslint.config.mjs`, `scripts/design-baseline.mjs`
+- Create: `tests/e2e/helpers/noPageScroll.ts`, `tests/e2e/one-screen-no-scroll.spec.ts`, `tests/e2e/paper-sweep.spec.ts`, `DESIGN.md` (repo root)
+- Modify (the 40 existing hits, table in step 6): `components/ui/{TopNav,ActionButton,ErrorBoundary,LoadingState,MetricQualityBadge,StatusBadge}.tsx`, `components/providers/AppProvider.tsx`, `components/charts/{EventFilter,EventTooltip,HistogramPanel,OHLCVChartCard,PercentileBandPanel}.tsx`, `components/data/TimelineList.tsx`, `components/workbenches/DCFWorkbench.tsx`, `app/corporate/components/graphs/HurdleRateDecompositionGraph.tsx`, `app/dev/monitor/page.tsx`, `app/events/components/EventsTable.tsx`, `app/monte-carlo/components/{MonteCarloRunPanel,shared}.tsx`, `app/portfolio/components/{StockDetailModal,PortfolioAllocationEditor,PortfolioAttributionSummary}.tsx`, `app/cases/components/SimulateResults.tsx`, `components/ui/Sliders.tsx`
+- Modify: `.claude/CLAUDE.md` (new §10; §9 is the Work Harness), `docs/INDEX.md`, `docs/design/MoneyView_Design_Tokens.md`, `docs/design/MoneyView_Component_System.md`, `docs/design/MoneyView_Chart_System.md`, `guideline/sop/todo.md`
+- Not touched: `components/market/**`, `app/page.tsx`, `tokens/**`, `tests/e2e/corporate-one-screen.spec.ts` (it keeps its private `expectNoPageScroll`; the shared helper is a copy of the same 8 lines, and moving the corporate spec onto it is a follow-up that needs no assertion change)
 
-- [ ] **Step 1: Write the failing sweep test** (`tests/e2e/paper-sweep.spec.ts`). On every captured screen, every computed colour of every HTML element must be a token value, and radii and shadows must follow the redesign.
+**Existing-test change inventory (HARNESS stage 3). Owner approval is required before step 2.**
+
+| File:line | Old | New | Why |
+|---|---|---|---|
+| `eslint-rules/no-raw-design-values.test.mjs:17` (valid case 1, written in Task 1) | the class string contains `rounded-full` with no marker | `rounded-full` removed from that string (the new valid cases cover `rounded-full` with its marker) | under the new rule an unmarked `rounded-full` is an error, so the old string is no longer valid |
+| `eslint-rules/__fixtures__/tokens.css` | 8 variables | + `--brand`, `--brand-soft`, `--brand-text`, `--on-brand`, `--ink`, `--radius-2` | the new test strings use these names, and `unknownVar` would otherwise fire. No assertion changes. |
+
+Steps 6 and 10 can change class strings that e2e specs assert (a chip losing `rounded-full`, the `TopNav` weight). If a spec fails because it encodes an old value, **stop and list it for the owner** (`.claude/CLAUDE.md`). Do not edit the assertion.
+
+**Interfaces:**
+- Produces, in rule `moneyview/no-raw-design-values` (same rule id, so `design-baseline.mjs` and every `eslint-disable` keep working): messageIds `roundedFull`, `fontWeight`, `brandGround`, `brandHover`, `brandText`, `figureMono`.
+- Produces: exemption syntax `{/* rounded-full: dot|track|fill|spinner */}` and `{/* M2: <reason> */}`.
+- Produces: `design:baseline` output with `bySeverity`; `pageScrollProblems`, `measurePage`, `expectNoPageScroll` in `tests/e2e/helpers/noPageScroll.ts`.
+- Consumes: `ONE_SCREEN_ROUTES` (`components/ui/oneScreenRoutes.ts`), `DESIGN_SCREENS` (`tests/e2e/helpers/designScreens.ts`), `tokens` (`lib/tokens.generated.ts`).
+
+**Output contracts (HARNESS plan rule).** Line numbers are as of commit `370d254`.
+
+*A. The six new checks.* All run inside `create(context)` of the existing rule. A "class literal" is a string `Literal` or `TemplateElement` for which the existing `inClassContext(node)` is true. A token is one whitespace-separated item of the literal's text; its *variants* are the `:`-separated prefixes (`md:hover:bg-x` has variants `md`, `hover`); its *base* is the rest.
+
+| messageId | Visits | Flags (node reported) | Does not flag | Message (exact) |
+|---|---|---|---|---|
+| `roundedFull` | class literals | the literal, once, when a token's base is `rounded-full` (any variants) and no comment in the window (below) matches `/\brounded-full:\s*(?:dot\|track\|fill\|spinner)\b/` | prose outside class context (`"a rounded-full pill"`); `rounded-[var(--radius-2)]`; a literal whose window holds `rounded-full: dot` | `rounded-full is for dots, tracks, fills and spinners. Mark one with a comment on the same or previous line, {/* rounded-full: dot */} (or track, fill, spinner), or use rounded-[var(--radius-2)] for a chip.` |
+| `fontWeight` | class literals | the literal, once, when a token's base is `font-medium`, `font-semibold`, `font-bold`, `font-extrabold` or `font-black` and no comment in the window matches `/\bM2:\s*\S/` | `font-mono`, `font-normal`; prose outside class context; `M2:` with no reason | `A bold, semibold, medium or black weight overrides the type style. Delete it, or justify it in a comment on the same or previous line: {/* M2: <why> */}.` |
+| `brandGround` | class literals | the literal, once, when a token's base is `bg-[var(--brand)]` and its variants contain neither a hover-like nor a pseudo-element variant, unless (a) the scope's source text contains `text-[var(--on-brand)]` or (b) the scope is a `className` attribute on an element with no children | `after:bg-[var(--brand)]`; `bg-[var(--brand-soft)]`; tone tables such as `{ dot: "bg-[var(--brand)]" }` (not class context); a fill element without children (dot, bar, marker) | `bg-[var(--brand)] behind text needs text-[var(--on-brand)] in the same className. A fill with no text is fine as an element without children.` |
+| `brandHover` | class literals | once per token whose variants include `hover`, `focus`, `focus-visible`, `active`, `group-hover` or `peer-hover` and whose base is `bg-[var(--brand)]` | `hover:bg-[var(--brand-soft)]` | `A hover, focus or active ground is bg-[var(--brand-soft)], not the solid brand fill.` |
+| `brandText` | every string literal and template element (the `EVERYWHERE` group) | the literal, once, when it holds a token `text-[var(--brand)]` (any variants, optional `/NN` suffix) | `text-[var(--brand-text)]`; `border-[var(--brand)]`; `accent-[var(--brand)]` | `Brand as text is --brand-text: text-[var(--brand-text)].` |
+| `figureMono` | `JSXExpressionContainer` | the container (`{formatNumber(...)}`), once, when (1) its parent is a `JSXElement` with a lowercase tag, (2) its expression is a `formatNumber(...)` call or contains one under `?:`, `&&`, `+` or a template literal, (3) every child of that element is whitespace text or an expression container (no prose around the figure), and (4) neither the element nor any `JSXElement` ancestor has a `className` whose source matches `/\btype-(?:mono\|figure)/` | prose around the figure (`Total {formatNumber(v)} draws`); component tags (`<Cell>`); an element or ancestor whose `className` is an identifier, member expression or non-helper call (cannot be read); `formatNumber` passed as an attribute (`<Delta value={formatNumber(v)} />`); other formatters (`formatDate`) | `A figure needs type-mono (cell, row, inline) or type-figure-md / type-figure (KPI), on this element or an ancestor.` |
+
+*The comment window.* For a literal inside a `className` attribute: from the line before the element's opening tag to the last line of the literal. Otherwise: from the line before the literal to its last line. A comment counts when it overlaps the window. So `{/* rounded-full: dot */}` on the line above `<span className="rounded-full" />` counts, a trailing `// rounded-full: track` on the same line counts, and one blank line in between does not. One comment covers one element: a track and its fill each need their own.
+
+*B. Helpers added to the rule file.*
+
+| Function | Returns | Cases | Example |
+|---|---|---|---|
+| `classTokens(text)` | `string[]` | splits on whitespace, `"`, `'` and the backtick; drops empty items; `[]` for `""` | `classTokens('md:hover:bg-x "y"')` → `["md:hover:bg-x", "y"]` |
+| `splitVariants(token)` | `{ variants: string[], base: string }` | a `:` inside `[...]` is not a separator; no variants → `[]` | `splitVariants("md:hover:bg-[var(--brand)]")` → `{ variants: ["md","hover"], base: "bg-[var(--brand)]" }`; `splitVariants("[--main-pad-top:4rem]")` → `{ variants: [], base: "[--main-pad-top:4rem]" }` |
+| `classScope(node)` | the `className` `JSXAttribute`, else the outermost `clsx`/`cn`/`twMerge`/`cva` `CallExpression`, `className` `Property` or class-named `VariableDeclarator` that contains `node`; `null` when none | a literal inside `clsx(...)` inside `className={...}` returns the attribute | for `<b className={clsx("a", "b")}/>`, both literals return the same attribute |
+| `formatsNumber(expr)` | `boolean` | `true` for `formatNumber(...)`, and for a conditional branch, the right side of `&&`, either side of a binary `+`, or a template-literal expression that is one; `false` for any other node and for `undefined` | `v == null ? "—" : formatNumber(v)` → `true`; `formatDate(v)` → `false` |
+| `hasComment(node, scope, re)` (closure in `create`) | `boolean` | window as above | see A |
+| `hasNoChildren(scope)` (closure in `create`) | `boolean` | `true` only for a `className` attribute whose element has no children, or only whitespace text and comment-only containers (`{/* x */}`); `false` for any other scope, including `null` | `<div className="h-1 bg-[var(--brand)]" />` → `true`; `<button className="...">Go</button>` → `false` |
+
+*C. `design-baseline.mjs` output.* JSON on stdout: `{ <messageId>: number, …, "total": number, "bySeverity": { "error": number, "warn": number } }`. A messageId with 0 hits is absent. `total` = `error` + `warn`. `error` counts hits the config reports at level 2, `warn` those at level 1; today `warn` is exactly the market exception. Expected after step 6, with the number from step 5 filled in: `{ "typeScale": 59, "deprecatedVar": 162, "hex": 3, "paletteClass": 6, "lengthTypeVar": 3, "fontWeight": 57, "figureMono": 3, "roundedFull": 2, "total": 295, "bySeverity": { "error": 0, "warn": 295 } }`. Arguments are globs (unchanged). It writes nothing.
+
+*D. `tests/e2e/helpers/noPageScroll.ts`.*
+
+| Function | Returns | Cases |
+|---|---|---|
+| `pageScrollProblems(size: PageSize)` | `string[]`, `[]` when the page fits | vertical when `scrollHeight > innerHeight` (no slack): `vertical: scrollHeight 721 > innerHeight 720`. Horizontal when `scrollWidth > clientWidth + 1` (1 px of sub-pixel slack): `horizontal: scrollWidth 1282 > clientWidth 1280`. Both → vertical first. Pure; no I/O. |
+| `measurePage(page)` | `Promise<PageSize>` = `{ scrollHeight, innerHeight, scrollWidth, clientWidth }`, all CSS pixels | `scrollHeight` from `document.scrollingElement`, `scrollWidth`/`clientWidth` from `document.documentElement`; reads only |
+| `expectNoPageScroll(page, where)` | `Promise<void>` | fails with message `<where>: the page must not scroll` and the problems array as the received value; passes when `[]` |
+
+*E. `one-screen-no-scroll.spec.ts`.* Produces 1 guard test + 4 `pageScrollProblems` tests + one test per (viewport, route) = 2 × `ONE_SCREEN_ROUTES.length` (today 2 × 1). Side effects: opens each route in a Chromium page with its `DESIGN_SCREENS` mock; no writes. A route in `ONE_SCREEN_ROUTES` without a `DESIGN_SCREENS` entry fails the guard with `["<route>"]`.
+
+*F. `paper-sweep.spec.ts`.* One test per `DESIGN_SCREENS` entry except `/`. `violations` is a sorted-by-first-seen, de-duplicated `string[]`; each item is `<tag>#<id>.<up to 3 classes> <property>: <computed value>`, e.g. `div.bg-red-50 background-color: rgb(254, 242, 242)`. The test passes only when the array is `[]`. HTML elements only: SVG and `.tv-lightweight-charts` are skipped (their colours go through attributes and `resolveCssColor`, which lint covers).
+
+*G. `eslint.config.mjs`.* After the change, `moneyview/no-raw-design-values` is `error` for `app/`, `components/`, `lib/`, `hooks/` except `lib/tokens.generated.ts` (ignored), and `warn` for `components/market/**/*.{ts,tsx}` and `app/page.tsx`. The later block wins.
+
+---
+
+- [ ] **Step 1: Baseline and approval.** On `feat/design-system-paper` with `npm install` already done:
+  1. `git status --short` shows no tracked change. Record the current `npm run design:baseline` output (expected total 233, all in `components/market/**`, `app/page.tsx` at 0) and `C:/Users/eajwa/anaconda3/envs/moneyview/python.exe -m pytest -q` (the plan expected 1883) in Track D.
+  2. Get the owner's approval of the inventory above.
+
+- [ ] **Step 2: RED. Write the rule tests.** In `eslint-rules/__fixtures__/tokens.css` add, before `--old-alias`:
+
+```css
+  --brand: #fa3600;
+  --brand-soft: #ffe6dc;
+  --brand-text: #c42b00;
+  --on-brand: #101010;
+  --ink: #282828;
+  --radius-2: 4px;
+```
+
+In `no-raw-design-values.test.mjs` line 17, delete ` rounded-full` from the first valid string, so it ends `rounded-[var(--radius-sm)] shadow-[var(--shadow-modal)]" />',`. Append to the end of the file:
+
+```js
+// Task 14a: radius, weight, brand and figure rules.
+tester.run("no-raw-design-values (14a: radius, weight, brand, figures)", rule, {
+  valid: [
+    // rounded-full: an exemption comment on the previous line, or on the same line.
+    'const a = (\n  <div>\n    {/* rounded-full: dot */}\n    <span className="h-2 w-2 rounded-full" />\n  </div>\n);',
+    'const a = <span className="h-2 w-2 rounded-full" />; // rounded-full: track',
+    'const a = (\n  <div>\n    {/* rounded-full: spinner */}\n    <span\n      aria-hidden\n      className="h-3 w-3 rounded-full"\n    />\n  </div>\n);',
+    'const a = <div className="rounded-[var(--radius-2)] border" />;',
+    'const note = "a rounded-full pill";',
+    // font weight: a justification comment, or no weight class at all.
+    'const a = <p>Total {/* M2: inline emphasis; the weight separates the label from the text */}<span className="font-semibold">x</span></p>;',
+    'const a = (\n  <div>\n    {/* M2: snapshot title differs from the body style */}\n    <p className="font-bold">x</p>\n  </div>\n);',
+    'const a = <p className="type-body font-mono font-normal">x</p>;',
+    'const s = "font-bold is not allowed here";',
+    // brand ground: with on-brand ink, with no children, in a pseudo-element, with a soft hover, in a tone table.
+    'const a = <button className="bg-[var(--brand)] text-[var(--on-brand)]">Go</button>;',
+    'const a = <button className={clsx("bg-[var(--brand)]", disabled && "opacity-50", "text-[var(--on-brand)]")}>Go</button>;',
+    'const a = <div className="h-1 bg-[var(--brand)]" />;',
+    'const a = <span className="w-1 bg-[var(--brand)]"></span>;',
+    'const a = <a className="after:bg-[var(--brand)]">Tab</a>;',
+    'const a = <a className="hover:bg-[var(--brand-soft)] text-[var(--ink)]">Go</a>;',
+    'const TONE = { dot: "bg-[var(--brand)]" };',
+    'const a = <Icon className="text-[var(--brand-text)]" />;',
+    // figures: mono on the element or an ancestor; prose; components; an unreadable className; other attributes and formatters.
+    'const a = <td className="type-mono">{formatNumber(v, "integer")}</td>;',
+    'const a = <p className="type-figure-md">{formatNumber(v, "percent")}</p>;',
+    'const a = <td className="type-mono"><span>{formatNumber(v)}</span></td>;',
+    'const a = <p className="type-body">Total {formatNumber(v)} draws</p>;',
+    'const a = <Cell>{formatNumber(v)}</Cell>;',
+    'const a = <td className={cellClass}>{formatNumber(v)}</td>;',
+    'const a = <td className="type-body">{formatDate(v)}</td>;',
+    'const a = <Delta value={formatNumber(v)} />;',
+  ],
+  invalid: [
+    { code: 'const a = <span className="h-2 w-2 rounded-full" />;', errors: [{ messageId: "roundedFull" }] },
+    { code: 'const a = <span className="md:rounded-full" />;', errors: [{ messageId: "roundedFull" }] },
+    { code: 'const a = clsx("p-2", ok && "rounded-full");', errors: [{ messageId: "roundedFull" }] },
+    // The comment must name dot, track, fill or spinner, and sit within one line of the opening tag.
+    { code: 'const a = (\n  <div>\n    {/* rounded-full: chip */}\n    <span className="rounded-full" />\n  </div>\n);', errors: [{ messageId: "roundedFull" }] },
+    { code: 'const a = (\n  <div>\n    {/* rounded-full: a colour-key dot */}\n    <span className="rounded-full" />\n  </div>\n);', errors: [{ messageId: "roundedFull" }] },
+    { code: 'const a = (\n  <div>\n    {/* rounded-full: dot */}\n\n    <span className="rounded-full" />\n  </div>\n);', errors: [{ messageId: "roundedFull" }] },
+    { code: 'const a = <p className="font-bold">x</p>;', errors: [{ messageId: "fontWeight" }] },
+    { code: 'const a = <p className="md:font-medium">x</p>;', errors: [{ messageId: "fontWeight" }] },
+    { code: 'const a = clsx("p-2", ok && "font-black");', errors: [{ messageId: "fontWeight" }] },
+    { code: 'const a = <p className="font-extrabold">x</p>;', errors: [{ messageId: "fontWeight" }] },
+    { code: 'const a = (\n  <div>\n    {/* bold on purpose */}\n    <p className="font-bold">x</p>\n  </div>\n);', errors: [{ messageId: "fontWeight" }] },
+    { code: 'const a = (\n  <div>\n    {/* M2: */}\n    <p className="font-bold">x</p>\n  </div>\n);', errors: [{ messageId: "fontWeight" }] },
+    { code: 'const a = <button className="bg-[var(--brand)] text-[var(--ink)]">Go</button>;', errors: [{ messageId: "brandGround" }] },
+    { code: 'const a = <button className="bg-[var(--brand)]">Go</button>;', errors: [{ messageId: "brandGround" }] },
+    { code: 'const a = clsx("bg-[var(--brand)]", "px-2");', errors: [{ messageId: "brandGround" }] },
+    { code: 'const a = { className: "bg-[var(--brand)] px-2" };', errors: [{ messageId: "brandGround" }] },
+    { code: 'const a = <button className="hover:bg-[var(--brand)]">Go</button>;', errors: [{ messageId: "brandHover" }] },
+    { code: 'const a = <button className="bg-[var(--brand-soft)] hover:bg-[var(--brand)] text-[var(--ink)]">Go</button>;', errors: [{ messageId: "brandHover" }] },
+    { code: 'const a = <button className="focus-visible:bg-[var(--brand)] text-[var(--on-brand)]">Go</button>;', errors: [{ messageId: "brandHover" }] },
+    { code: 'const a = <Icon className="text-[var(--brand)]" />;', errors: [{ messageId: "brandText" }] },
+    { code: 'const a = <a className="hover:text-[var(--brand)]">Go</a>;', errors: [{ messageId: "brandText" }] },
+    { code: 'const c = "text-[var(--brand)]";', errors: [{ messageId: "brandText" }] },
+    { code: 'const a = <td className="type-body tabular-nums">{formatNumber(v, "integer")}</td>;', errors: [{ messageId: "figureMono" }] },
+    { code: 'const a = <span>{formatNumber(v)}</span>;', errors: [{ messageId: "figureMono" }] },
+    { code: 'const a = <p className="type-body">{v >= 0 ? "+" : ""}{formatNumber(v)}</p>;', errors: [{ messageId: "figureMono" }] },
+    { code: 'const a = <span className="type-small">{v == null ? "—" : formatNumber(v)}</span>;', errors: [{ messageId: "figureMono" }] },
+  ],
+});
+```
+
+Run `npm run test:unit`. Expected RED: the 26 `invalid` cases fail (`Should have 1 error but had 0`; the figure and `brandHover` ones too). The `valid` cases pass already, because nothing is flagged yet. They are guarded by the mutation matrix, not by this run.
+
+- [ ] **Step 3: GREEN. Extend the rule** (`eslint-rules/no-raw-design-values.mjs`). Seven edits, each anchored on existing text.
+
+(1) In `EVERYWHERE`, after the `lengthTypeVar` entry, add:
+
+```js
+  ["brandText", new RegExp(`${START}text-\\[var\\(--brand\\)\\](?:\\/\\d+)?${END}`)],
+```
+
+(2) After `const CLASS_HELPERS = …;` add:
+
+```js
+// Exemptions are comments on the same line as the element's opening tag, or the line before it.
+//   rounded-full:  {/* rounded-full: dot */}   (dot, track, fill or spinner)
+//   font weight:   {/* M2: why the weight differs from the type style */}
+const ROUNDED_FULL_OK = /\brounded-full:\s*(?:dot|track|fill|spinner)\b/;
+const WEIGHT_OK = /\bM2:\s*\S/;
+const WEIGHT_CLASS = /^font-(?:medium|semibold|bold|extrabold|black)$/;
+const HOVER_VARIANTS = new Set(["hover", "focus", "focus-visible", "active", "group-hover", "peer-hover"]);
+const PSEUDO_VARIANTS = new Set(["before", "after"]);
+const MONO_CLASS = /\btype-(?:mono|figure)/;
+```
+
+(3) Before `const rule = {` add the three helpers:
+
+```js
+const classTokens = (text) => text.split(/[\s"'\x60]+/).filter(Boolean);
+
+/** "md:hover:bg-x" -> { variants: ["md", "hover"], base: "bg-x" }. A colon inside [...] is not a separator. */
+function splitVariants(token) {
+  const parts = token.split(/:(?![^[]*\])/);
+  return { variants: parts.slice(0, -1), base: parts[parts.length - 1] };
+}
+
+/** The node whose source holds a literal's whole class list: the className attribute, else the outermost class helper call, className property or class-named declarator. */
+function classScope(node) {
+  let scope = null;
+  for (let p = node.parent; p; p = p.parent) {
+    if (p.type === "JSXAttribute") return p.name.name === "className" ? p : scope;
+    if (p.type === "CallExpression" && p.callee.type === "Identifier" && CLASS_HELPERS.has(p.callee.name)) scope = p;
+    else if (p.type === "Property" && (p.key.name === "className" || p.key.value === "className")) scope = p;
+    else if (p.type === "VariableDeclarator") return /class(es)?$/i.test(p.id?.name ?? "") ? p : scope;
+  }
+  return scope;
+}
+
+/** True for a formatNumber(...) call, also inside ?:, &&, + and template literals. */
+function formatsNumber(e) {
+  switch (e?.type) {
+    case "CallExpression": return e.callee.type === "Identifier" && e.callee.name === "formatNumber";
+    case "ConditionalExpression": return formatsNumber(e.consequent) || formatsNumber(e.alternate);
+    case "LogicalExpression": return formatsNumber(e.right);
+    case "BinaryExpression": return formatsNumber(e.left) || formatsNumber(e.right);
+    case "TemplateLiteral": return e.expressions.some(formatsNumber);
+    default: return false;
+  }
+}
+```
+
+(4) In `meta.messages`, after `deprecatedVar`, add the six messages with the exact texts of contract A:
+
+```js
+      roundedFull: "rounded-full is for dots, tracks, fills and spinners. Mark one with a comment on the same or previous line, {/* rounded-full: dot */} (or track, fill, spinner), or use rounded-[var(--radius-2)] for a chip.",
+      fontWeight: "A bold, semibold, medium or black weight overrides the type style. Delete it, or justify it in a comment on the same or previous line: {/* M2: <why> */}.",
+      brandGround: "bg-[var(--brand)] behind text needs text-[var(--on-brand)] in the same className. A fill with no text is fine as an element without children.",
+      brandHover: "A hover, focus or active ground is bg-[var(--brand-soft)], not the solid brand fill.",
+      brandText: "Brand as text is --brand-text: text-[var(--brand-text)].",
+      figureMono: "A figure needs type-mono (cell, row, inline) or type-figure-md / type-figure (KPI), on this element or an ancestor.",
+```
+
+(5) In `create`, after `const vars = tokenVars(…);` add:
+
+```js
+    const sourceCode = context.sourceCode;
+    const comments = sourceCode.getAllComments();
+    const hasComment = (node, scope, re) => {
+      const opening = scope?.type === "JSXAttribute" && scope.parent?.type === "JSXOpeningElement" ? scope.parent : node;
+      const from = opening.loc.start.line - 1;
+      const to = node.loc.end.line;
+      return comments.some((c) => c.loc.end.line >= from && c.loc.start.line <= to && re.test(c.value));
+    };
+    // An element with no children cannot hold text, so a brand fill on it (dot, bar, marker) needs no on-brand ink.
+    const hasNoChildren = (scope) => {
+      const element = scope?.type === "JSXAttribute" ? scope.parent?.parent : null;
+      return element?.type === "JSXElement" && element.children.every((c) =>
+        (c.type === "JSXText" && c.value.trim() === "") || (c.type === "JSXExpressionContainer" && c.expression.type === "JSXEmptyExpression"));
+    };
+    const checkClasses = (node, text) => {
+      const scope = classScope(node);
+      let rounded = false, weight = false, ground = false;
+      for (const token of classTokens(text)) {
+        const { variants, base } = splitVariants(token);
+        if (base === "rounded-full") rounded = true;
+        if (WEIGHT_CLASS.test(base)) weight = true;
+        if (base === "bg-[var(--brand)]") {
+          if (variants.some((v) => HOVER_VARIANTS.has(v))) context.report({ node, messageId: "brandHover" });
+          else if (!variants.some((v) => PSEUDO_VARIANTS.has(v))) ground = true;
+        }
+      }
+      if (rounded && !hasComment(node, scope, ROUNDED_FULL_OK)) context.report({ node, messageId: "roundedFull" });
+      if (weight && !hasComment(node, scope, WEIGHT_OK)) context.report({ node, messageId: "fontWeight" });
+      if (ground && !hasNoChildren(scope) && !(scope && sourceCode.getText(scope).includes("text-[var(--on-brand)]"))) {
+        context.report({ node, messageId: "brandGround" });
+      }
+    };
+```
+
+(6) In `check`, inside the `if (inClassContext(node)) { … }` block, after the `CLASS_ONLY` loop, add `checkClasses(node, text);`.
+
+(7) In the returned visitor, before the `'Property[key.name="fontSize"] > Literal'` entry, add:
+
+```js
+      // <td>{formatNumber(...)}</td>: an element whose only content is a figure must set it in mono.
+      JSXExpressionContainer(node) {
+        const element = node.parent;
+        if (element.type !== "JSXElement" || !formatsNumber(node.expression)) return;
+        const tag = element.openingElement.name;
+        if (tag.type !== "JSXIdentifier" || !/^[a-z]/.test(tag.name)) return;
+        const onlyExpressions = element.children.every((c) => (c.type === "JSXText" && c.value.trim() === "") || c.type === "JSXExpressionContainer");
+        if (!onlyExpressions) return;
+        for (let el = element; el; el = el.parent) {
+          if (el.type !== "JSXElement") continue;
+          const attr = el.openingElement.attributes.find((a) => a.type === "JSXAttribute" && a.name.name === "className");
+          if (!attr) continue;
+          if (MONO_CLASS.test(sourceCode.getText(attr))) return;
+          const e = attr.value?.type === "JSXExpressionContainer" ? attr.value.expression : null;
+          const opaque = e && (e.type === "Identifier" || e.type === "MemberExpression" || (e.type === "CallExpression" && !(e.callee.type === "Identifier" && CLASS_HELPERS.has(e.callee.name))));
+          if (opaque) return;
+        }
+        context.report({ node, messageId: "figureMono" });
+      },
+```
+
+Run `npm run test:unit`. Expected: all pass.
+
+**Why `figureMono` is a rule and not only a checklist item.** Measured 2026-10-15 over the app: 13 hits for the "element whose only content is a figure" form, 10 outside market, **none a false positive** (each is a cell, headline or slider value set without a mono style). Two forms stay out of reach of lint and are reviewer checklist items in `DESIGN.md` (step 9): a figure inside a sentence (`Total {formatNumber(v)} draws` needs its own `<span className="type-mono">`), and figures produced by the local `format*` helpers that M5 has not yet replaced (`formatCurrencyCompact`, `fmtMoney`, the `chartConfig` `fmt*`). So the rule narrows the gap and does not close it, and the checklist says so.
+
+- [ ] **Step 4: Baseline script reports severity** (`scripts/design-baseline.mjs`). Replace the counting loop and the last line so the file reads:
+
+```js
+// Drift counts per category, from the lint rule itself so the baseline and the gate agree.
+// bySeverity splits the same hits by the level eslint.config.mjs gives their file: "error" is
+// everything the lock covers, "warn" is the market exception (DS Task 14b removes it).
+import { ESLint } from "eslint";
+
+const DEFAULT = ["app/**/*.{ts,tsx}", "components/**/*.{ts,tsx}", "lib/**/*.{ts,tsx}", "hooks/**/*.{ts,tsx}"];
+const patterns = process.argv.slice(2).length ? process.argv.slice(2) : DEFAULT;
+const results = await new ESLint().lintFiles(patterns);
+const counts = {};
+const bySeverity = { error: 0, warn: 0 };
+for (const result of results) {
+  for (const message of result.messages) {
+    if (message.ruleId !== "moneyview/no-raw-design-values") continue;
+    counts[message.messageId] = (counts[message.messageId] ?? 0) + 1;
+    bySeverity[message.severity === 2 ? "error" : "warn"] += 1;
+  }
+}
+const total = Object.values(counts).reduce((a, b) => a + b, 0);
+console.log(JSON.stringify({ ...counts, total, bySeverity }, null, 2));
+```
+
+Run `npm run design:baseline`. Expected now (config still `warn`): the old 233 plus the new categories, every hit under `warn`. Write the output in the commit message later.
+
+- [ ] **Step 5: Error level, with the market exception.** In `eslint.config.mjs` replace the Task 1 block's comment and level, and add the override after it:
+
+```js
+  {
+    files: ["app/**/*.{ts,tsx}", "components/**/*.{ts,tsx}", "lib/**/*.{ts,tsx}", "hooks/**/*.{ts,tsx}"],
+    ignores: ["lib/tokens.generated.ts"],
+    plugins: { moneyview: { rules: { "no-raw-design-values": noRawDesignValues } } },
+    rules: { "moneyview/no-raw-design-values": "error" },
+  },
+  // The market overview still renders the pre-paper classes and deprecated aliases. It is migrated by
+  // its own one-screen plan, and DS Task 14b (docs/superpowers/plans/2026-10-12-design-system-formalization.md)
+  // deletes this block so the rule is an error everywhere.
+  {
+    files: ["components/market/**/*.{ts,tsx}", "app/page.tsx"],
+    rules: { "moneyview/no-raw-design-values": "warn" },
+  },
+```
+
+Run `npm run lint`. Expected: **exactly 40 errors**, all `moneyview/no-raw-design-values`: `roundedFull` 27, `figureMono` 10, `fontWeight` 2, `brandText` 1. The warnings are the market's. If the error count differs, the repo moved since `370d254`: re-derive the table in step 6 before fixing anything. Run `npm run design:baseline` and **write the market count into Track D** (expected total 295 = the old 233 + `fontWeight` 57 + `figureMono` 3 + `roundedFull` 2, `bySeverity.warn` 295).
+
+- [ ] **Step 6: Fix the 40 hits at their source.** Never silence one with `eslint-disable`. Line numbers are as of `370d254`.
+
+*`roundedFull`, 27 hits.* 23 elements are dots, tracks, fills or spinners. Put `{/* rounded-full: <kind> */}` on the line directly above each (a comment covers one element, so a track and its fill get one each). Nine of them already have a free-text comment that the new syntax does not match; rewrite those:
+
+| File:line | Kind | Note |
+|---|---|---|
+| `app/corporate/components/graphs/HurdleRateDecompositionGraph.tsx:59` | dot | rewrite comment at :58 to `{/* rounded-full: dot, a colour key in the legend. */}` |
+| `app/dev/monitor/page.tsx:196` / `:198` | track / fill | rewrite the comment at :195 for the track; add one above the fill |
+| `app/events/components/EventsTable.tsx:99` | dot | rewrite comment at :98 |
+| `app/monte-carlo/components/MonteCarloRunPanel.tsx:58` / `:59` | track / fill | rewrite comment at :57 for the track; add one above the fill |
+| `app/monte-carlo/components/shared.tsx:162` | dot | rewrite comment at :161 |
+| `app/portfolio/components/StockDetailModal.tsx:468` / `:524` | dot | rewrite the inline `M3:` comments |
+| `components/charts/EventFilter.tsx:40` / `:82` | dot / dot | :40 is the loading pulse |
+| `components/charts/EventTooltip.tsx:26`, `HistogramPanel.tsx:107`, `OHLCVChartCard.tsx:123`, `PercentileBandPanel.tsx:104` | dot | |
+| `components/data/TimelineList.tsx:45` | dot | |
+| `components/ui/ActionButton.tsx:52` | spinner | |
+| `components/ui/LoadingState.tsx:21` / `:37` / `:39` | spinner / track / fill | |
+| `components/ui/MetricQualityBadge.tsx:27`, `components/ui/StatusBadge.tsx:63` | dot | |
+| `components/workbenches/DCFWorkbench.tsx:170` | dot | the bouncing loader |
+
+Four are not dots and change shape (M3):
+
+| File:line | Element | Change |
+|---|---|---|
+| `components/charts/OHLCVChartCard.tsx:120` | legend chip | `rounded-full` → `rounded-[var(--radius-2)]` |
+| `components/data/TimelineList.tsx:35` | date pill | `rounded-full` → `rounded-[var(--radius-2)]` |
+| `components/workbenches/DCFWorkbench.tsx:159` | stale badge | `rounded-full` → `rounded-[var(--radius-2)]` |
+| `components/ui/ErrorBoundary.tsx:60` | icon disc | delete `rounded-full` (square; it is not a dot, track or fill) |
+
+*`figureMono`, 10 hits.* Add `type-mono` to the element (`type-figure-md` for the four headline figures in `PortfolioAttributionSummary.tsx`, which sit in `type-panel-title` today; check the capture): `app/cases/components/SimulateResults.tsx:54`, `app/portfolio/components/PortfolioAllocationEditor.tsx:120` (this span also has `font-semibold`, already justified), `PortfolioAttributionSummary.tsx:73,84,95,106`, `StockDetailModal.tsx:376`, `components/ui/Sliders.tsx:40,57,74`. Where the element had `tabular-nums`, delete it: the mono style carries it.
+
+*`fontWeight`, 2 hits.* `components/ui/TopNav.tsx:131` and `:136`. `tests/e2e/sidebar-contrast.spec.ts` pins bold ink on the menu labels, so keep the weight and justify it with `{/* M2: menu labels are bold ink in every state; sidebar-contrast.spec.ts pins it. */}`. Confirm which of the two lines the spec reads and say so in each comment; if one is not pinned, delete its weight.
+
+*`brandText`, 1 hit.* `components/providers/AppProvider.tsx:87`: `text-[var(--brand)]` → `text-[var(--brand-text)]`.
+
+Then: `npm run lint` shows 0 errors, and `npm run design:baseline` shows `bySeverity.error` 0 and `bySeverity.warn` equal to the number written in step 5. Run the specs the edits can break (HARNESS test scope; `components/ui/**` is a shared surface, so step 14's full run is the check for it): `grep -l` the changed components and testids in `tests/e2e`, plus at least `components-paper.spec.ts`, `sidebar-contrast.spec.ts`, `responsive-accessibility.spec.ts`, `i18n.spec.ts`, `event*.spec.ts`, `candle-colour.spec.ts`, `portfolio-*.spec.ts`, `cases.spec.ts`, `monte-carlo-*.spec.ts`, `dev-monitor.spec.ts`, `decisions.spec.ts`, `corporate-*.spec.ts`, with `--workers=2`. List the specs run in the report.
+
+- [ ] **Step 7: Commit the rules and their fixes.**
+
+```bash
+git add apps/web/eslint-rules apps/web/eslint.config.mjs apps/web/scripts/design-baseline.mjs apps/web/components apps/web/app
+git commit -m "chore(design): rounded-full, font weight, brand ground, brand text and figure rules; error level outside market" -m "Market overview stays at warn (<N> hits recorded in Track D) until DS Task 14b." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+Replace `<N>` with the recorded number before running.
+
+- [ ] **Step 8: RED. The shared no-page-scroll test.** Create `tests/e2e/one-screen-no-scroll.spec.ts` first:
+
+```ts
+import { expect, test } from "@playwright/test";
+import { ONE_SCREEN_ROUTES } from "../../components/ui/oneScreenRoutes";
+import { DESIGN_SCREENS } from "./helpers/designScreens";
+import { expectNoPageScroll, pageScrollProblems } from "./helpers/noPageScroll";
+
+// HARNESS fixed rule: every page in ONE_SCREEN_ROUTES fits 1280x720 with no page scroll. Sideways is
+// checked too, because both 390 px regressions of the corporate page (ERROR-LOG 2026-10-14) widened
+// the page instead of lengthening it. A later one-screen page joins by adding its route to the list;
+// its mock comes from DESIGN_SCREENS.
+const SCREENS = new Map(DESIGN_SCREENS);
+const VIEWPORTS = [{ width: 1280, height: 720 }, { width: 390, height: 844 }] as const;
+
+test("every one-screen route has a mock in DESIGN_SCREENS", () => {
+  expect(ONE_SCREEN_ROUTES.filter((route) => !SCREENS.has(route))).toEqual([]);
+});
+
+test.describe("pageScrollProblems", () => {
+  const fits = { scrollHeight: 720, innerHeight: 720, scrollWidth: 1280, clientWidth: 1280 };
+
+  test("a page that fits has no problems", () => {
+    expect(pageScrollProblems(fits)).toEqual([]);
+  });
+  test("one pixel too tall is a vertical problem", () => {
+    expect(pageScrollProblems({ ...fits, scrollHeight: 721 })).toEqual(["vertical: scrollHeight 721 > innerHeight 720"]);
+  });
+  test("one pixel of sideways slack is allowed, two is not", () => {
+    expect(pageScrollProblems({ ...fits, scrollWidth: 1281 })).toEqual([]);
+    expect(pageScrollProblems({ ...fits, scrollWidth: 1282 })).toEqual(["horizontal: scrollWidth 1282 > clientWidth 1280"]);
+  });
+  test("both axes are reported, vertical first", () => {
+    expect(pageScrollProblems({ ...fits, scrollHeight: 900, scrollWidth: 1500 })).toEqual([
+      "vertical: scrollHeight 900 > innerHeight 720",
+      "horizontal: scrollWidth 1500 > clientWidth 1280",
+    ]);
+  });
+});
+
+for (const viewport of VIEWPORTS) {
+  test.describe(`at ${viewport.width}x${viewport.height}`, () => {
+    test.use({ viewport });
+
+    for (const route of ONE_SCREEN_ROUTES) {
+      test(`${route} does not scroll the page`, async ({ page }) => {
+        await SCREENS.get(route)!(page);
+        await page.goto(route, { waitUntil: "networkidle" });
+        await expect(page.getByRole("heading", { level: 1 })).toBeVisible({ timeout: 60_000 });
+        await page.evaluate(() => document.fonts.ready);
+        await expectNoPageScroll(page, route);
+      });
+    }
+  });
+}
+```
+
+Run `npx playwright test tests/e2e/one-screen-no-scroll.spec.ts --workers=2`. Expected RED: the file fails to load, `Cannot find module './helpers/noPageScroll'`.
+
+- [ ] **Step 9: GREEN. The helper** (`tests/e2e/helpers/noPageScroll.ts`):
+
+```ts
+import { expect, type Page } from "@playwright/test";
+
+export type PageSize = { scrollHeight: number; innerHeight: number; scrollWidth: number; clientWidth: number };
+
+/** Why a page counts as scrolling, one string per axis; [] when it fits. Sideways gets 1 px of sub-pixel slack. */
+export function pageScrollProblems(size: PageSize): string[] {
+  const problems: string[] = [];
+  if (size.scrollHeight > size.innerHeight) problems.push(`vertical: scrollHeight ${size.scrollHeight} > innerHeight ${size.innerHeight}`);
+  if (size.scrollWidth > size.clientWidth + 1) problems.push(`horizontal: scrollWidth ${size.scrollWidth} > clientWidth ${size.clientWidth}`);
+  return problems;
+}
+
+export function measurePage(page: Page): Promise<PageSize> {
+  return page.evaluate(() => ({
+    scrollHeight: document.scrollingElement!.scrollHeight,
+    innerHeight: window.innerHeight,
+    scrollWidth: document.documentElement.scrollWidth,
+    clientWidth: document.documentElement.clientWidth,
+  }));
+}
+
+export async function expectNoPageScroll(page: Page, where: string): Promise<void> {
+  expect(await measurePage(page).then(pageScrollProblems), `${where}: the page must not scroll`).toEqual([]);
+}
+```
+
+Run the spec again. Expected: 7 passed (1 guard, 4 unit, 2 corporate).
+
+- [ ] **Step 10: The token-colour sweep, market excluded** (`tests/e2e/paper-sweep.spec.ts`). On every captured screen except the market overview, every computed colour of every HTML element must be a token value, and radii and shadows must follow the redesign.
 
 ```ts
 import { expect, test } from "@playwright/test";
 import { tokens } from "../../lib/tokens.generated";
 import { DESIGN_SCREENS } from "./helpers/designScreens";
+
+// The market overview still renders pre-paper classes. DS Task 14b deletes this exclusion.
+const MARKET_ROUTE = "/";
 
 /** Every colour token as the computed-style string Chrome reports. */
 function allowedColours(): Set<string> {
@@ -2962,11 +3447,12 @@ function allowedColours(): Set<string> {
   return out;
 }
 
-for (const [route, mock] of DESIGN_SCREENS) {
+for (const [route, mock] of DESIGN_SCREENS.filter(([r]) => r !== MARKET_ROUTE)) {
   test(`${route}: only token colours, redesign radii, no shadows`, async ({ page }) => {
     await mock(page);
     await page.goto(route, { waitUntil: "networkidle" });
-    await page.waitForTimeout(600);
+    await expect(page.locator("main")).toBeVisible({ timeout: 60_000 });
+    await page.evaluate(() => document.fonts.ready);
     const allowed = [...allowedColours()];
     const violations = await page.evaluate((ok) => {
       const allowedSet = new Set(ok);
@@ -2996,22 +3482,215 @@ for (const [route, mock] of DESIGN_SCREENS) {
 }
 ```
 
-Run `npx playwright test tests/e2e/paper-sweep.spec.ts`. Each violation names an element and a value. Fix it at its source by M1–M3, not in the test. Expected after fixing: all screens pass. (`rgba(0, 0, 0, 0)` is `transparent`. Tailwind's resting ring and shadow variables compose transparent shadows, which the shadow check ignores.)
+The old plan's fixed 600 ms sleep is gone: the wait is `networkidle`, a visible `main` and `document.fonts.ready`. (Colours in SVG are skipped, so recharts' 400 ms animation does not matter here.)
 
-- [ ] **Step 2: Turn the rules into errors.** In `eslint.config.mjs`, set `"moneyview/no-raw-design-values": "error"` and add to the same block:
+Run `npx playwright test tests/e2e/paper-sweep.spec.ts --workers=2`. Each violation names an element and a value. Fix it at its source by M1–M3, not in the test. (`rgba(0, 0, 0, 0)` is `transparent`. Tailwind's resting ring and shadow variables compose transparent shadows, which the shadow check ignores.) Expected after fixing: 7 screens pass.
 
-```js
-      "react/jsx-no-literals": ["error", { noStrings: true, ignoreProps: true,
-        allowedStrings: ["—", "·", "/", "%", "(", ")", ":", "×", "▲", "▼", "■", "→", "…", "|", "+", "-"] }],
-      "no-restricted-syntax": ["error", {
-        selector: "JSXAttribute[name.name=/^(aria-label|title|placeholder|alt)$/] > Literal[value=/[A-Za-z가-힣]/]",
-        message: "User-visible attribute text belongs in lib/i18n/messages.",
-      }],
+**Escape hatch.** This sweep has not been run against the non-market app. If the first run lists more than 15 distinct violation strings, stop: write the list into Track D and ask the owner whether the sweep moves to 14b as a whole. Do not loosen the test and do not exempt a screen.
+
+- [ ] **Step 11: Commit the tests.**
+
+```bash
+git add apps/web/tests/e2e/one-screen-no-scroll.spec.ts apps/web/tests/e2e/helpers/noPageScroll.ts apps/web/tests/e2e/paper-sweep.spec.ts
+git commit -m "test(design): shared no-page-scroll check for one-screen routes; token-colour sweep outside market" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
-`LanguageToggle` reads its labels from a constant, and `BilingualLabel` from `LABELS`, so `jsx-no-literals` does not flag them.
+If step 10 needed source fixes, add those files to this commit.
 
-- [ ] **Step 3: Remove the deprecated aliases.** `design:baseline` must report `deprecatedVar` 0 before this step.
+- [ ] **Step 12: `DESIGN.md`** (repo root)
+
+```markdown
+# MoneyView design rules
+
+Source of truth: `apps/web/tokens/moneyview.tokens.json` (the paper theme of the 2026-10 redesign,
+`docs/design/redesign-2026-10/`). Everything else is generated by `npm run tokens` (in apps/web)
+and checked by `npm run lint`. Look at `/dev/design` in the running app for every component.
+How work is done (stages, owner gates, test scope, model routing) is `guideline/HARNESS.md`; this
+file does not repeat it.
+
+## How to reference a value
+| Kind | Write | Never |
+|---|---|---|
+| Colour | `bg-[var(--surface-raised)]`, `text-[var(--ink-muted)]`, `border-[var(--line)]` | hex, rgb(), `bg-red-50`, `text-white`, `/NN` opacity |
+| Type | `type-heading-5`, `type-panel-title`, `type-body`, `type-label`, `type-small`, `type-figure`, `type-figure-md`, `type-mono`, `type-mono-link`, `type-caption` | `text-xs`, `text-[11px]`, extra `leading-*`/`tracking-*` |
+| Weight | none: the `type-*` utility carries it. A different weight needs `{/* M2: why */}` on the same or previous line | `font-bold`, `font-semibold`, `font-medium`, `font-black` without that comment |
+| Radius | none (square) for panels, tables, charts, modals; `rounded-[var(--radius-1)]` controls; `rounded-[var(--radius-2)]` tooltips, menus, chips, badges | `rounded`, `rounded-md` |
+| Round shapes | `rounded-full` only on a dot, track, fill or spinner, marked `{/* rounded-full: dot */}` (or `track`, `fill`, `spinner`) on the same or previous line, one comment per element | `rounded-full` on a chip, badge, pill or avatar |
+| Shadow | none; elevation is `border border-[var(--line)]` | any `shadow-*` |
+| Focus | nothing: globals.css draws a 2px brand ring | `focus-visible:ring-*`, `outline-none` |
+| Spacing | Tailwind's numeric scale (`p-6` = `--space-6` = 24px) | `p-[13px]` |
+| Canvas / SVG attribute | `tokens.<path>` from `lib/tokens.generated.ts`; canvas colours via `resolveCssColor` | literals |
+| Numbers | `formatNumber(value, kind, { locale })`, set in a mono style (`type-mono`, or `type-figure-md` / `type-figure` for headline figures) | `toFixed`, `toLocaleString` |
+| Text | `t("namespace.key")`; Korean follows `docs/design/MoneyView_Glossary.md` | JSX string literals |
+| Small labels | `<Eyebrow label>`, `<BilingualLabel k>`, `DenseTable` column `label` ("종목 NAME") | single-language headers |
+
+## Fixed decisions
+- Paper (light) theme only. There is no dark mode; the redesign's `void` theme is not carried.
+- Korean market convention: up = `--up` red with ▲ and +, down = `--down` blue with ▼ and -,
+  unchanged = `--flat` with ■. Never colour alone.
+- Brand orange `--brand` is for fills (primary button, selection, focus ring, the subject chart
+  series, the active nav marker), never for price changes. Text on a brand fill is `--on-brand`;
+  brand as text is `--brand-text`; a hover, focus or active ground is `--brand-soft`.
+- Fonts: Host Grotesk (Latin), Pretendard (Hangul), Geist Mono (figures); all SIL OFL 1.1.
+- Charts: `--chart-1` is the subject series; at most five series (`--chart-1…5`), a sixth
+  category folds into "Other" in `--chart-4`; fills at `--chart-area-opacity`; heatmaps use
+  `--chart-heat-1…7` (down → neutral → up).
+- Landing-only type styles (`display`, `heading-1…4`, `body-lg`) exist as tokens without
+  utilities until a landing page is built.
+- Every page in `ONE_SCREEN_ROUTES` (`apps/web/components/ui/oneScreenRoutes.ts`) fits 1280x720 and
+  390x844 with no page scroll, vertical or sideways; overflow belongs to a panel. A page joins by
+  adding its route to the list, which `tests/e2e/one-screen-no-scroll.spec.ts` then covers.
+- Known exception, until the market one-screen plan lands: `components/market/**` and `app/page.tsx`
+  still hold pre-paper classes and deprecated aliases. The lint rule is `warn` there and `error`
+  everywhere else, and `tests/e2e/paper-sweep.spec.ts` skips the `/` route.
+
+## What `npm run lint` checks (rule `moneyview/no-raw-design-values`)
+| Message | Means | Fix |
+|---|---|---|
+| `hex`, `colorFn`, `paletteClass` | a raw colour | a colour token |
+| `typeScale`, `arbitraryPx`, `lengthTypeVar`, `numericFontSize` | a raw type size | a `type-*` utility, or `tokens.type.<style>._` |
+| `rawShadow`, `rawRadius` | a Tailwind shadow or radius | see the table above |
+| `unknownVar`, `deprecatedVar` | a `var(--x)` that is undefined or an alias | the token the message names |
+| `roundedFull` | `rounded-full` with no `rounded-full: dot\|track\|fill\|spinner` comment | mark it, or use `rounded-[var(--radius-2)]` |
+| `fontWeight` | a bold, semibold, medium, extrabold or black class with no `M2: reason` comment | delete it, or justify it |
+| `brandGround` | `bg-[var(--brand)]` behind text without `text-[var(--on-brand)]` in the same className (an element with no children is a fill and passes) | add the ink, or use a soft ground |
+| `brandHover` | `hover:` / `focus:` / `active:` on `bg-[var(--brand)]` | `bg-[var(--brand-soft)]` |
+| `brandText` | `text-[var(--brand)]` | `text-[var(--brand-text)]` |
+| `figureMono` | an element whose only content is `{formatNumber(…)}` with no `type-mono` / `type-figure*` on it or an ancestor | add the mono style |
+
+## What review checks (lint cannot)
+- A figure inside a sentence (`Total {formatNumber(v)} draws`) is wrapped in `<span className="type-mono">`.
+- Figures from a local `format*` helper that M5 has not replaced are set in mono too.
+- An exemption comment tells the truth: the element really is a dot, track, fill or spinner, and the weight really differs from the style.
+- A brand fill with no children is really a marker, not a button whose label sits in a sibling.
+- The `hasNoChildren` and "ink anywhere in the className" leniencies of `brandGround` are not used to hide ink that is not on the ground (a `hover:text-[var(--on-brand)]` does not count as ink).
+
+## Adding a value
+If no token fits, add one to the token file first: a primitive under `palette`, the meaning in a
+semantic group. Run `npm run tokens`, then use it. Do not add a synonym for an existing meaning.
+```
+
+- [ ] **Step 13: `.claude/CLAUDE.md`.** Append (§9 is the Work Harness, so this is §10):
+
+```markdown
+## 10. Design Tokens
+
+**Colours, type, radius and component sizes come only from `apps/web/tokens/moneyview.tokens.json`.**
+Read `DESIGN.md` before writing UI. If a screen needs a value with no token, propose the token
+first; do not write the value into code. `npm run lint` rejects raw values, undefined and deprecated
+`var()` references, `rounded-full` outside dots, tracks and fills, unjustified bold weights, brand
+fills without on-brand ink, and figures without a mono style. Every page in `ONE_SCREEN_ROUTES` fits
+1280x720 with no page scroll. How a task is run (stages, owner gates, test scope) is
+`guideline/HARNESS.md`; do not restate it here.
+```
+
+- [ ] **Step 14: Docs.**
+- `docs/INDEX.md`: add rows, if missing, for this plan, the spec, `docs/design/redesign-2026-10/`, `docs/design/MoneyView_Glossary.md` and `DESIGN.md`.
+- `docs/design/MoneyView_Design_Tokens.md`: replace the prose above the generated table with two sentences. The values are the paper redesign and are generated from the token file. There is no dark mode.
+- `MoneyView_Component_System.md` and `MoneyView_Chart_System.md`: add a first line after the title: `> Values and component looks are superseded by DESIGN.md and /dev/design (2026-10 paper redesign).`
+- `guideline/sop/todo.md`, Track D: replace `- [ ] D14 lock-down` with `- [ ] D14a lock-down outside market  - [ ] D14b aliases and market override removed (after the market one-screen plan)`. Tick the two "DS Task 14 lint/test rules" and "shared rule and automated no page scroll check" follow-ups, and record the market count from step 5 and the review verdicts from step 16.
+
+- [ ] **Step 15: Claude Design System (owner, in claude.ai).** The redesign was made in Claude Design. Update that project's design system from `DESIGN.md` and the generated token table: paper only, with the 10 app type styles. Record the date in Track D.
+
+- [ ] **Step 16: Mutation matrix.** For every row: back the file up outside the repo, apply the mutation, run the named command, confirm it fails for the stated reason, restore the original bytes and prove it with `cmp` (HARNESS fixed rule: no git restore, no stash).
+
+```bash
+MUT=$(mktemp -d)                    # outside the repo
+cp <file> "$MUT/orig"               # before the mutation
+# ... mutate <file> ...
+cp "$MUT/orig" <file> && cmp "$MUT/orig" <file> && echo restored
+```
+
+*Rule mutations* (edit `eslint-rules/no-raw-design-values.mjs`; run `npm run test:unit`; all 18 were run on 2026-10-15 against a scratch copy and each failed the case named):
+
+| Mutation | Must fail |
+|---|---|
+| remove `track` from `ROUNDED_FULL_OK` | valid `… rounded-full" />; // rounded-full: track` |
+| remove `spinner` from `ROUNDED_FULL_OK` | valid `{/* rounded-full: spinner */}` |
+| `const from = opening.loc.start.line - 1` → `- 2` | invalid "`rounded-full: dot` then a blank line" (comment now reaches too far) |
+| same line → `const from = opening.loc.start.line` | valid previous-line `rounded-full: dot` |
+| `WEIGHT_OK` → `/\bM2:/` | invalid `{/* M2: */}` (empty reason accepted) |
+| remove `black` from `WEIGHT_CLASS` | invalid `clsx("p-2", ok && "font-black")` |
+| remove `medium` from `WEIGHT_CLASS` | invalid `md:font-medium` |
+| `hasNoChildren` returns `false` | valid `<div className="h-1 bg-[var(--brand)]" />` and the `<span …></span>` case |
+| the `HOVER_VARIANTS` branch never reports | invalid `hover:bg-[var(--brand)]` (three cases) |
+| remove `focus-visible` from `HOVER_VARIANTS` | invalid `focus-visible:bg-[var(--brand)] …` |
+| `!variants.some((v) => PSEUDO_VARIANTS.has(v))` → `true` | valid `after:bg-[var(--brand)]` |
+| `sourceCode.getText(scope).includes(` → `text.includes(` | valid `clsx("bg-[var(--brand)]", …, "text-[var(--on-brand)]")` (ink in a sibling literal) |
+| change `text-` to `texx-` in the `brandText` regex | invalid `text-[var(--brand)]` (three cases) |
+| remove `if (!onlyExpressions) return;` | valid `Total {formatNumber(v)} draws` |
+| the ancestor loop stops at the element itself | valid `<td className="type-mono"><span>{formatNumber(v)}</span></td>` |
+| remove `if (opaque) return;` | valid `<td className={cellClass}>{formatNumber(v)}</td>` |
+| remove the lowercase-tag check | valid `<Cell>{formatNumber(v)}</Cell>` |
+| remove the `ConditionalExpression` case of `formatsNumber` | invalid `v == null ? "—" : formatNumber(v)` |
+
+*Repo mutations* (one at a time; revert before the next):
+
+| Mutation | Must fail |
+|---|---|
+| add `rounded-full` to the badge at `app/news/components/NewsFeedList.tsx:95` | `npm run lint`: `roundedFull` error |
+| add `font-bold` to the primary class in `components/ui/ActionButton.tsx` | `npm run lint`: `fontWeight` error |
+| in `NewsFeedList.tsx:95` change `bg-[var(--brand-soft)]` to `bg-[var(--brand)]` (its text is `--brand-text`) | `npm run lint`: `brandGround` error |
+| in the same badge change `text-[var(--brand-text)]` to `text-[var(--brand)]` | `npm run lint`: `brandText` error |
+| delete `type-mono` from `app/cases/components/SimulateResults.tsx:54` | `npm run lint`: `figureMono` error |
+| delete the market override block in `eslint.config.mjs` | `npm run lint`: errors in `components/market/MarketOverviewClient.tsx` |
+| add `font-bold` to `NewsFeedList.tsx:95` **and** change the main block to `"warn"` | `npm run lint` passes, but `npm run design:baseline` shows `bySeverity.warn` one above the recorded market count: the exact-count gate catches it |
+| in `app/corporate/page.tsx:902` replace `h-[calc(100dvh_-_var(--main-pad-top,0px)_-_var(--main-pad-bottom,0px))]` with `h-[1400px]` | `one-screen-no-scroll.spec.ts`: `/corporate does not scroll the page` at both viewports, with a `vertical:` problem |
+| on the same element add `min-w-[1500px]` | the same test, with a `horizontal:` problem |
+| `ONE_SCREEN_ROUTES = ["/corporate", "/news"]` | the guard test, received `["/news"]` |
+| in `pageScrollProblems` change `>` to `>=` on the vertical check | `a page that fits has no problems` |
+| in `pageScrollProblems` change `+ 1` to `+ 2` | `one pixel of sideways slack is allowed, two is not` |
+| add `shadow-[0_1px_2px_black]` to `Card` | `paper-sweep.spec.ts` on every screen with a card (`box-shadow`); lint is silent here, which is why the sweep exists |
+| `Card` gets `rounded-[6px]` | `paper-sweep.spec.ts` (`border-radius: 6px`) |
+| add `className="bg-red-50"` to any non-market component | `npm run lint` with `paletteClass` as an error |
+
+- [ ] **Step 17: Final gate for 14a** (HARNESS: full suite at the end of a plan stage). One Playwright run at a time: first check `netstat -ano | grep -E ":(3101|8110) "` shows nothing listening; if it does, `taskkill //PID <pid> //T //F` that process tree.
+
+```bash
+cd apps/web && npm run tokens:check && npm run test:unit && npm run typecheck && npm run lint && npm run design:baseline && npx playwright test --workers=2
+cd ../.. && C:/Users/eajwa/anaconda3/envs/moneyview/python.exe -m pytest -q
+```
+
+Expected:
+- `npm run lint`: 0 errors (warnings are the market's)
+- `design:baseline`: `bySeverity.error` 0, and `bySeverity.warn` exactly the market count recorded in step 5 (expected 295). Cross-check: `npm run design:baseline -- "components/market/**/*.{ts,tsx}" "app/page.tsx"` prints the same `total`.
+- Playwright: all passing, at the last full count plus 14 new tests (7 in `one-screen-no-scroll`, 7 in `paper-sweep`); the last recorded full run was 469 passed, 8 skipped (Task 11)
+- pytest: the number recorded in step 1
+
+Then run the `guideline/sop/code-reviewer.md` checklist over the 14a diff. Run `DESIGN_CAPTURE=after-14a npx playwright test tests/e2e/design-capture.spec.ts`, then `node scripts/capture-review.mjs <Task 13 label from Track D> after-14a`, and give the owner the review page. The four changed shapes (chip, pill, badge, icon disc) are what to look at. Record verdicts in Track D.
+
+- [ ] **Step 18: Commit the documents.**
+
+```bash
+git add DESIGN.md .claude/CLAUDE.md docs guideline/sop/todo.md
+git commit -m "docs(design): DESIGN.md, CLAUDE.md section 10 and Track D for the 14a lock-down" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+---
+
+### Task 14b: Aliases removed, market override removed, final gate
+
+> **Start only after the market one-screen plan has merged into `feat/design-system-paper`** (owner, 2026-10-15). 14b changes nothing the market plan does not already allow: its first step proves that.
+
+**Files:**
+- Modify: `eslint.config.mjs`; `tokens/moneyview.tokens.json` (deprecated tokens removed, root `moneyview.themeReset`); regenerate
+- Modify: `components/ui/DenseTable.tsx` (`label` required, `header` removed), `scripts/build-tokens.test.mjs` (legacy test removed), `tests/e2e/paper-sweep.spec.ts` (market exclusion removed), `DESIGN.md`, `guideline/sop/todo.md`; Delete: `scripts/__fixtures__/globals-root-vars.baseline.json`
+- Create: `tests/e2e/theme-reset.spec.ts`
+- Modify, conditional (step 7): `eslint.config.mjs`, `lib/i18n/messages/*`
+
+**Output contracts:**
+- `theme-reset.spec.ts`: one test per utility kept outside the theme. Each returns pass when the element's computed style equals the stated value (`rounded-full` → `border-top-left-radius` parsed ≥ 999 px; `bg-transparent` → `rgba(0, 0, 0, 0)`; any other utility found by step 4's grep, with the value the grep shows it needs). Side effects: none; the pages open with their existing mock helpers.
+- The alias prune script (step 3) rewrites `tokens/moneyview.tokens.json` in place: every token with `$deprecated` is deleted, and any group left with no token is deleted. Exit code 0 always; `npm run tokens:check` is the real check.
+- `ColumnDef` in `DenseTable.tsx`: `{ label: LabelKey; … }` with no `header`. A caller that still passes `header` is a `typecheck` error.
+
+- [ ] **Step 1: Preconditions.** All must hold, or stop:
+  1. `git log --oneline` on the branch contains the market plan's final commit, and `ONE_SCREEN_ROUTES` contains `"/"` if that plan made the market a one-screen page.
+  2. With the override still in place, `npm run design:baseline -- "components/market/**/*.{ts,tsx}" "app/page.tsx"` prints `total` 0. (If not, the market plan is not finished: removing the override would turn those hits into lint errors.)
+  3. `npm run design:baseline` prints `bySeverity.warn` 0 and `bySeverity.error` 0, with `deprecatedVar` absent.
+
+- [ ] **Step 2: Remove the market override.** In `eslint.config.mjs`, delete the whole second block (the `// The market overview still renders …` comment and the `components/market/**` / `app/page.tsx` block). Run `npm run lint`. Expected: 0 errors. Any error is a real hit the market plan missed: fix it in the market files, do not restore the block.
+
+- [ ] **Step 3: Remove the deprecated aliases.** `design:baseline` must report `deprecatedVar` 0 before this step (step 1 proves it).
 
 ```bash
 node -e '
@@ -3029,7 +3708,7 @@ fs.writeFileSync(f, JSON.stringify(tree, null, 2) + "\n");'
 git rm apps/web/scripts/__fixtures__/globals-root-vars.baseline.json
 ```
 
-In `scripts/build-tokens.test.mjs`, delete the test `every pre-migration variable still resolves until Task 14 removes the aliases`; its fixture is gone. In `DenseTable.tsx`'s `ColumnDef`, delete `header` and make `label: LabelKey` required. Change the header cell to `<BilingualLabel k={col.label} />`. `typecheck` must pass: every caller migrated in Tasks 9–13 (M7).
+In `scripts/build-tokens.test.mjs`, delete the test `every pre-migration variable still resolves until Task 14 removes the aliases`; its fixture is gone. In `DenseTable.tsx`'s `ColumnDef`, delete `header` and make `label: LabelKey` required. Change the header cell to `<BilingualLabel k={col.label} />`. `typecheck` must pass: every caller migrated in Tasks 9–13 and the market plan (M7). Run `npm run tokens`, then `npm run tokens:check`.
 
 - [ ] **Step 4: Remove Tailwind's defaults**, so a raw class has no effect even if lint is skipped. Add to the token file root:
 
@@ -3042,98 +3721,69 @@ Run `npm run tokens`. Then prove that the utilities kept outside the theme still
 2. In `tests/e2e/theme-reset.spec.ts`, open `/dev/design` plus one page per utility found (with its existing mock helper). Assert with `page.evaluate` the computed style of one element using each utility: `rounded-full` gives a border radius of at least 999 px, and `bg-transparent` gives `rgba(0, 0, 0, 0)`.
 3. If an assertion fails, map that utility's theme variable back through a token with `moneyview.theme`.
 
-- [ ] **Step 5: `DESIGN.md`** (repo root)
+- [ ] **Step 5: Sweep the market too.** In `tests/e2e/paper-sweep.spec.ts` delete `const MARKET_ROUTE = "/";` and its comment, and change the loop to `for (const [route, mock] of DESIGN_SCREENS) {`. Run `npx playwright test tests/e2e/paper-sweep.spec.ts --workers=2`: 8 screens. Fix each violation at its source (M1–M3), in the market files.
 
-```markdown
-# MoneyView design rules
-
-Source of truth: `apps/web/tokens/moneyview.tokens.json` (the paper theme of the 2026-10 redesign,
-`docs/design/redesign-2026-10/`). Everything else is generated by `npm run tokens` (in apps/web)
-and checked by `npm run lint`. Look at `/dev/design` in the running app for every component.
-
-## How to reference a value
-| Kind | Write | Never |
-|---|---|---|
-| Colour | `bg-[var(--surface-raised)]`, `text-[var(--ink-muted)]`, `border-[var(--line)]` | hex, rgb(), `bg-red-50`, `text-white`, `/NN` opacity |
-| Type | `type-heading-5`, `type-panel-title`, `type-body`, `type-label`, `type-small`, `type-figure`, `type-figure-md`, `type-mono`, `type-mono-link`, `type-caption` | `text-xs`, `text-[11px]`, extra `leading-*`/`tracking-*` |
-| Radius | none (square) for panels, tables, charts, modals; `rounded-[var(--radius-1)]` controls; `rounded-[var(--radius-2)]` tooltips, menus, chips; `rounded-full` dots | `rounded`, `rounded-md` |
-| Shadow | none; elevation is `border border-[var(--line)]` | any `shadow-*` |
-| Focus | nothing: globals.css draws a 2px brand ring | `focus-visible:ring-*`, `outline-none` |
-| Spacing | Tailwind's numeric scale (`p-6` = `--space-6` = 24px) | `p-[13px]` |
-| Canvas / SVG attribute | `tokens.<path>` from `lib/tokens.generated.ts`; canvas colours via `resolveCssColor` | literals |
-| Numbers | `formatNumber(value, kind, { locale })`, set in a mono style | `toFixed`, `toLocaleString` |
-| Text | `t("namespace.key")`; Korean follows `docs/design/MoneyView_Glossary.md` | JSX string literals |
-| Small labels | `<Eyebrow label>`, `<BilingualLabel k>`, `DenseTable` column `label` ("종목 NAME") | single-language headers |
-
-## Fixed decisions
-- Paper (light) theme only. There is no dark mode; the redesign's `void` theme is not carried.
-- Korean market convention: up = `--up` red with ▲ and +, down = `--down` blue with ▼ and -,
-  unchanged = `--flat` with ■. Never colour alone.
-- Brand orange `--brand` is for fills (primary button, selection, focus ring, the subject chart
-  series, the active nav marker), never for price changes. Text on it is `--on-brand`; brand as
-  text is `--brand-text`.
-- Fonts: Host Grotesk (Latin), Pretendard (Hangul), Geist Mono (figures); all SIL OFL 1.1.
-- Charts: `--chart-1` is the subject series; at most five series (`--chart-1…5`), a sixth
-  category folds into "Other" in `--chart-4`; fills at `--chart-area-opacity`; heatmaps use
-  `--chart-heat-1…7` (down → neutral → up).
-- Landing-only type styles (`display`, `heading-1…4`, `body-lg`) exist as tokens without
-  utilities until a landing page is built.
-
-## Adding a value
-If no token fits, add one to the token file first: a primitive under `palette`, the meaning in a
-semantic group. Run `npm run tokens`, then use it. Do not add a synonym for an existing meaning.
-```
-
-- [ ] **Step 6: `.claude/CLAUDE.md`.** Append:
-
-```markdown
-## 9. Design Tokens
-
-**Colours, type, radius and component sizes come only from `apps/web/tokens/moneyview.tokens.json`.**
-Read `DESIGN.md` before writing UI. If a screen needs a value with no token, propose the token
-first; do not write the value into code. `npm run lint` rejects raw values, undefined `var()`
-references and untranslated text.
-```
-
-- [ ] **Step 7: Docs.**
-- `docs/INDEX.md`: add rows for this plan, the spec, `docs/design/redesign-2026-10/`, the glossary and `DESIGN.md`.
-- `docs/design/MoneyView_Design_Tokens.md`: replace the prose above the generated table with two sentences. The values are the paper redesign and are generated from the token file. There is no dark mode.
-- `MoneyView_Component_System.md` and `MoneyView_Chart_System.md`: add a first line after the title: `> Values and component looks are superseded by DESIGN.md and /dev/design (2026-10 paper redesign).`
-
-- [ ] **Step 8: Claude Design System (owner, in claude.ai).** The redesign was made in Claude Design. Update that project's design system from `DESIGN.md` and the generated token table: paper only, with the 10 app type styles. Record the date in Track D.
-
-- [ ] **Step 9: Final gate**
+- [ ] **Step 6: Remove every market exception.** Each of these must be gone, and the grep must show nothing:
 
 ```bash
-cd apps/web && npm run tokens:check && npm run test:unit && npm run typecheck && npm run lint && npm run design:baseline && npx playwright test
+git grep -n -i "market" -- apps/web/eslint.config.mjs apps/web/tests/e2e/paper-sweep.spec.ts DESIGN.md
+```
+
+Edit `DESIGN.md` to delete the "Known exception" bullet, and Track D to close the market notes. `design-baseline.mjs` keeps its `bySeverity` output; from now on `warn` is always 0.
+
+- [ ] **Step 7: i18n lock, conditional.** Run the check below. If the count is 0, add the rules to the same `eslint.config.mjs` block as `error`. If it is not 0, do not add them: leave this step open in Track D and list the count by file. The M6 leftovers of Tasks 9–12 (option A) are separate work and must not block 14b. Measured 2026-10-15 outside market: 416 and 118 hits in 59 files.
+
+```bash
+npx eslint --rule '{"react/jsx-no-literals":["error",{"noStrings":true,"ignoreProps":true,"allowedStrings":["—","·","/","%","(",")",":","×","▲","▼","■","→","…","|","+","-"]}]}' app components lib hooks
+```
+
+When it is 0, add to the block:
+
+```js
+      "react/jsx-no-literals": ["error", { noStrings: true, ignoreProps: true,
+        allowedStrings: ["—", "·", "/", "%", "(", ")", ":", "×", "▲", "▼", "■", "→", "…", "|", "+", "-"] }],
+      "no-restricted-syntax": ["error", {
+        selector: "JSXAttribute[name.name=/^(aria-label|title|placeholder|alt)$/] > Literal[value=/[A-Za-z가-힣]/]",
+        message: "User-visible attribute text belongs in lib/i18n/messages.",
+      }],
+```
+
+`LanguageToggle` reads its labels from a constant, and `BilingualLabel` from `LABELS`, so `jsx-no-literals` does not flag them.
+
+- [ ] **Step 8: Docs.** In `DESIGN.md` the `unknownVar, deprecatedVar` row now reads `unknownVar` only (the aliases are gone), and "Adding a value" stays. In `guideline/sop/todo.md` tick D14b.
+
+- [ ] **Step 9: Mutation matrix of the lock** (same backup-and-`cmp` protocol as 14a step 16):
+
+| Mutation | Must fail |
+|---|---|
+| add `className="bg-red-50"` to `components/market/MarketOverviewClient.tsx` | `npm run lint` with `paletteClass` (proves the override is gone) |
+| add `className="bg-[var(--text-primary)]"` to any component (alias now deleted) | `npm run lint` with `unknownVar` |
+| add `<p>Hello</p>` to any component (only if step 7 added the rule) | `npm run lint` with `react/jsx-no-literals` |
+| add `shadow-[0_1px_2px_black]` to a market card | `paper-sweep.spec.ts` on `/` (`box-shadow`) |
+| `Card` gets `rounded-[6px]` | `paper-sweep.spec.ts` (`border-radius: 6px`) |
+| remove `"--radius-*"` from `themeReset` and add `rounded-md` to a card | `paper-sweep.spec.ts` (with the reset in place, `rounded-md` has no effect) |
+| in `theme-reset.spec.ts` change the `rounded-full` bound from `999` to `100000`, and the `bg-transparent` expectation to `rgb(0, 0, 0)` | `theme-reset.spec.ts` fails on both (the assertions read the computed style; a test that stays green here proves nothing) |
+Remove each mutation.
+
+- [ ] **Step 10: Final gate** over the whole app:
+
+```bash
+cd apps/web && npm run tokens:check && npm run test:unit && npm run typecheck && npm run lint && npm run design:baseline && npx playwright test --workers=2
 cd ../.. && C:/Users/eajwa/anaconda3/envs/moneyview/python.exe -m pytest -q
 ```
 
 Expected:
-- `design:baseline` total 0 and lint 0 errors
-- Playwright at the 2026-09-27 count plus the new specs, all passing
-- pytest 1883
+- `design:baseline`: `total` 0, `bySeverity` `{ "error": 0, "warn": 0 }`; lint 0 errors and no `moneyview/no-raw-design-values` warning anywhere
+- Playwright: all passing, at the 14a count plus the new specs (`theme-reset`, the extra sweep screen, and any no-scroll test the market route adds)
+- pytest: unchanged from 14a step 1
 
-Then run the `guideline/sop/code-reviewer.md` checklist over the branch. Run `DESIGN_CAPTURE=final` and `node scripts/capture-review.mjs before final`, and give the owner the review page. Fill the baseline table's "after" column in the spec appendix.
-
-- [ ] **Step 10: Mutation matrix of the lock**
-
-| Mutation | Must fail |
-|---|---|
-| add `className="bg-red-50"` to any component | `npm run lint` with `paletteClass` |
-| add `<p>Hello</p>` | `npm run lint` with `react/jsx-no-literals` |
-| add `className="bg-[var(--text-primary)]"` (alias now deleted) | `npm run lint` with `unknownVar` |
-| add `shadow-[0_1px_2px_black]` to `Card` | `paper-sweep.spec.ts` on every screen with a card (`box-shadow`); also `colorFn`/`hex` lint is silent here, which is why the sweep exists |
-| `Card` gets `rounded-[6px]` | `paper-sweep.spec.ts` (`border-radius: 6px`) |
-| remove `"--radius-*"` from `themeReset` and add `rounded-md` to a card | `paper-sweep.spec.ts` (with the reset in place, `rounded-md` has no effect) |
-
-Remove each mutation.
+Then run the `guideline/sop/code-reviewer.md` checklist over the whole branch. Run `DESIGN_CAPTURE=final npx playwright test tests/e2e/design-capture.spec.ts` and `node scripts/capture-review.mjs before final`, and give the owner the review page. Fill the baseline table's "after" column in the spec appendix.
 
 - [ ] **Step 11: Commit**
 
 ```bash
-git add apps/web/eslint.config.mjs apps/web/tokens apps/web/app/tokens.generated.css apps/web/lib/tokens.generated.ts apps/web/components/ui/DenseTable.tsx apps/web/scripts apps/web/tests/e2e/theme-reset.spec.ts apps/web/tests/e2e/paper-sweep.spec.ts DESIGN.md .claude/CLAUDE.md docs guideline/sop/todo.md
-git commit -m "chore(design): lock tokens and translations; remove legacy aliases; sweep every screen for token colours"
+git add apps/web/eslint.config.mjs apps/web/tokens apps/web/app/tokens.generated.css apps/web/lib/tokens.generated.ts apps/web/components/ui/DenseTable.tsx apps/web/scripts apps/web/tests/e2e/theme-reset.spec.ts apps/web/tests/e2e/paper-sweep.spec.ts DESIGN.md docs guideline/sop/todo.md
+git commit -m "chore(design): remove legacy aliases and the market exception; theme reset; sweep every screen for token colours" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
 ## Follow-ups (not in this plan)
