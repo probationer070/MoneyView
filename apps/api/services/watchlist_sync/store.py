@@ -7,6 +7,7 @@ import re
 import secrets
 import sqlite3
 
+from apps.api.services import watchlist_cleanup
 from apps.api.services.peer_sync.model import BASELINE_TS, SyncRow, SyncState, Tombstone, next_stamp
 
 PC_ID_DATASET = "watchlist_sync_pc_id"
@@ -75,9 +76,13 @@ def apply_state(conn: sqlite3.Connection, state: SyncState) -> None:
     current = read_local_state(conn)
     for ticker in current.rows.keys() - state.rows.keys():
         conn.execute("DELETE FROM watchlist WHERE ticker = ?", (ticker,))
+        # A peer's tombstone removed it here: this PC starts its own grace period (spec §2.3).
+        watchlist_cleanup.record_pending(conn, ticker)
     for row in state.rows.values():
         if current.rows.get(row.ticker) == row:
             continue
+        if row.ticker not in current.rows:
+            watchlist_cleanup.clear_pending(conn, row.ticker)
         conn.execute(
             """INSERT INTO watchlist (ticker, name, sector, group_name, weight, updated_at, updated_by)
                VALUES (?, ?, ?, ?, ?, ?, ?)

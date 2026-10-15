@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Dict, List, Tuple
 
 from apps.api.models.schemas import WatchlistItem, WatchlistResyncResult, WatchlistSyncResult
+from apps.api.services import watchlist_cleanup
 from apps.api.services.db import get_db
 
 logger = logging.getLogger(__name__)
@@ -73,11 +74,13 @@ def bootstrap_from_seed(json_path: Path) -> None:
         pc_id = sync_store.get_or_create_pc_id(conn)
         items, source = load_watchlist_seed(json_path)
         for item in items:
-            conn.execute(
+            cursor = conn.execute(
                 """INSERT OR IGNORE INTO watchlist (ticker, name, sector, group_name, weight, updated_at, updated_by)
                    VALUES (?, ?, ?, ?, ?, ?, ?)""",
                 (item.ticker.upper(), item.name, item.sector, item.group_name, item.weight, SEED_TS, pc_id),
             )
+            if cursor.rowcount:
+                watchlist_cleanup.clear_pending(conn, item.ticker)
         _mark_watchlist_state(conn, source)
 
 
@@ -114,6 +117,7 @@ def merge_missing_watchlist_items(json_path: Path) -> list[str]:
             )
             if cursor.rowcount:
                 added.append(item.ticker)
+                watchlist_cleanup.clear_pending(conn, item.ticker)
 
     if added:
         logger.info(
@@ -144,6 +148,7 @@ def resync_watchlist_from_json(json_path: Path) -> WatchlistResyncResult:
     synced_at = datetime.now(timezone.utc).isoformat()
     with get_db() as conn:
         pc_id = sync_store.get_or_create_pc_id(conn)
+        before = {row["ticker"] for row in conn.execute("SELECT ticker FROM watchlist")}
         conn.execute("DELETE FROM watchlist")
         for item in normalized_items:
             conn.execute(
@@ -151,6 +156,9 @@ def resync_watchlist_from_json(json_path: Path) -> WatchlistResyncResult:
                    VALUES (?, ?, ?, ?, ?, ?, ?)""",
                 (item.ticker, item.name, item.sector, item.group_name, item.weight, BASELINE_TS, pc_id),
             )
+            watchlist_cleanup.clear_pending(conn, item.ticker)
+        for ticker in before - {item.ticker for item in normalized_items}:
+            watchlist_cleanup.record_pending(conn, ticker)
         _mark_watchlist_state(conn, "manual_json_resync")
         _mark_watchlist_sync_status(conn, "manual_json_resync", synced_at)
 
