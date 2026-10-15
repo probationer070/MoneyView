@@ -2960,6 +2960,8 @@ export const CHART_REFERENCE_COLORS = {
 
 **Existing-test change inventory (HARNESS stage 3). Owner approval is required before step 2.**
 
+**Approved by the owner on 2026-10-15** (rows as listed; changes: none). Owner also confirmed: 14b step 7 (jsx-no-literals) stays conditional on a zero count; the paper-sweep escape hatch (>15 distinct violations -> stop and ask) stays.
+
 | File:line | Old | New | Why |
 |---|---|---|---|
 | `eslint-rules/no-raw-design-values.test.mjs:17` (valid case 1, written in Task 1) | the class string contains `rounded-full` with no marker | `rounded-full` removed from that string (the new valid cases cover `rounded-full` with its marker) | under the new rule an unmarked `rounded-full` is an error, so the old string is no longer valid |
