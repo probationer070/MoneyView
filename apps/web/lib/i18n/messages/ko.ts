@@ -43,7 +43,7 @@ export const ko: Messages = {
       updated: "갱신 {time}", notLoaded: "아직 불러오지 않았습니다",
       sourceIdle: "원천 데이터는 새로고침할 때까지 불러오지 않습니다.",
       staleSource: "저장된 원천 데이터는 {cached} 기준입니다. {ticker}로 새로고침하십시오.",
-      fixed: "고정",
+      fixed: "고정", auditUncertain: "감사 불확실",
     },
     assumption: {
       growth: "성장률", roic: "ROIC", wacc: "WACC", debtRatio: "부채비율", unleveredBeta: "비레버리지 베타",

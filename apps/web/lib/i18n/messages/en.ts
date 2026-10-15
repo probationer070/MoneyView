@@ -40,7 +40,7 @@ export const en = {
       updated: "Last updated {time}", notLoaded: "Not loaded yet",
       sourceIdle: "Source data stays idle on first load until refreshed.",
       staleSource: "Cached source data is for {cached}. Refresh for {ticker}.",
-      fixed: "Fixed",
+      fixed: "Fixed", auditUncertain: "Audit uncertain",
     },
     assumption: {
       growth: "Growth Rate", roic: "ROIC", wacc: "WACC", debtRatio: "Debt Ratio", unleveredBeta: "Unlevered Beta",

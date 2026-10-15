@@ -120,3 +120,4 @@ capitals: "종목 NAME". Both come from `apps/web/lib/i18n/labels.ts`; add the r
 | With current values | 현재 값 대입 | substituted formula |
 | Not valued | 평가하지 않음 | verdict strip, refused DCF |
 | Stale source | 원천 자료 오래됨 | verdict strip warning |
+| Audit uncertain | 감사 불확실 | assumption table badge title; the audit is invalid, missing or estimated |

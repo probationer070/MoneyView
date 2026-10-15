@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { mockCorporatePageApi, type CorporatePageMockStats } from "./helpers/corporatePageMock";
+import { mockCorporatePageApi, mockMetricAudit, type CorporatePageMockStats } from "./helpers/corporatePageMock";
 import { mockPortfolioPageApi } from "./helpers/portfolioPageMock";
 import { loadFullDcfReportInTab, lowerPanel, openDetailTab, openLowerTab, refreshDcf } from "./helpers/corporateDcf";
 
@@ -164,6 +164,28 @@ test.describe("the assumption table", () => {
     await expect(menu.getByText("Growth Basis")).toBeVisible();
     await expect(page.getByTestId("source-data-status")).toContainText("Source data stays idle on first load until refreshed.");
   });
+});
+
+test.describe("a weak audit keeps the value the DCF uses and marks a badge, not N/A", () => {
+  for (const metric of ["wacc", "roic"] as const) {
+    test(`${metric} with an invalid audit shows its used value, no N/A, and the audit-uncertain badge`, async ({ page }) => {
+      const audit = mockMetricAudit("AAPL");
+      await mockCorporatePageApi(page);
+      await page.route((url) => url.pathname.endsWith("/corporate/metrics/AAPL/audit"), (route) => route.fulfill({
+        status: 200, contentType: "application/json",
+        body: JSON.stringify({ ...audit, [metric]: { ...audit[metric], quality: "invalid" } }),
+      }));
+      await gotoCorporate(page);
+      const row = page.getByTestId(`assumption-row-${metric}`);
+      await expect(row.getByRole("cell").first()).toHaveText(/^\d+\.\d%$/);
+      await expect(row).not.toContainText("N/A");
+      await expect(row.getByTitle("Audit uncertain")).toBeVisible();
+      await expect(row.getByText("Invalid")).toBeVisible();
+      if (metric === "wacc") {
+        await expect(page.getByTestId("corporate-kpis").getByRole("button", { name: /^WACC/ })).toContainText(await row.getByRole("cell").first().innerText());
+      }
+    });
+  }
 });
 
 test.describe("the ⋯ menu and the busy verdict", () => {

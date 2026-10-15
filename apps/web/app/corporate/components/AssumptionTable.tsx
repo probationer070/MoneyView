@@ -85,10 +85,9 @@ export function AssumptionTable(props: AssumptionTableProps) {
     };
   }, [menuOpen]);
 
+  // The value shown is the assumption the DCF uses; a weak audit is marked by the badge, never by N/A.
   const display = (row: AssumptionRowDef) => {
     if (row.field === null) return pct(KOREA_COUNTRY_RISK_PREMIUM);
-    if (row.key === "roic" && roicAudit) return formatAuditMetricValue(roicAudit);
-    if (row.key === "wacc" && waccAudit) return formatAuditMetricValue(waccAudit);
     return formatAssumption(row, assumptions[row.field]);
   };
   const quality = (row: AssumptionRowDef): MetricQuality | null => {
@@ -96,6 +95,12 @@ export function AssumptionTable(props: AssumptionTableProps) {
     if (row.key === "roic") return roicAudit?.quality ?? roicMeta?.quality ?? null;
     if (row.key === "wacc") return waccAudit?.quality ?? null;
     return null;
+  };
+  // The badge's title says the audit behind the value is uncertain (invalid, missing or estimated).
+  const auditUncertainTitle = (row: AssumptionRowDef) => {
+    const audit = row.key === "roic" ? roicAudit : row.key === "wacc" ? waccAudit : null;
+    const uncertain = audit?.quality === "invalid" || audit?.quality === "missing" || audit?.quality === "estimated";
+    return uncertain ? t("corporate.assumptions.auditUncertain") : undefined;
   };
 
   return (
@@ -177,7 +182,7 @@ export function AssumptionTable(props: AssumptionTableProps) {
                     <th scope="row" className="type-small truncate px-3 py-1.5 text-left font-normal text-[var(--ink)]">{label}</th>
                     <td className="type-mono px-2 py-1.5 text-right text-[var(--ink)]">{display(row)}</td>
                     <td className="px-2 py-1.5">
-                      {rowQuality ? <MetricQualityBadge quality={rowQuality} /> : field === null ? <span className="type-small text-[var(--ink-muted)]">{t("corporate.assumptions.fixed")}</span> : null}
+                      {rowQuality ? <MetricQualityBadge quality={rowQuality} title={auditUncertainTitle(row)} /> : field === null ? <span className="type-small text-[var(--ink-muted)]">{t("corporate.assumptions.fixed")}</span> : null}
                     </td>
                     <td className="px-2 py-1.5">
                       <div className="flex justify-end gap-1">

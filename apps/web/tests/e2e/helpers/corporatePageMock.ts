@@ -223,7 +223,7 @@ const mockDcfCompleteEvent: DcfCompleteEvent = {
   generated_at: mockDcfSummary.generated_at,
 };
 
-const mockMetricAudit = (ticker: string): CorporateMetricAudit => ({
+export const mockMetricAudit = (ticker: string): CorporateMetricAudit => ({
   ticker,
   source_mode: "yahoo_finance",
   generated_at: nowIso(),
