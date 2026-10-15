@@ -117,9 +117,10 @@ export function OHLCVChartCard({
             <span
               key={entry.key}
               data-testid="chart-events-legend-item"
-              className="inline-flex items-center gap-2 rounded-full border border-[var(--line)] px-2 py-1"
+              className="inline-flex items-center gap-2 rounded-[var(--radius-2)] border border-[var(--line)] px-2 py-1"
               title={`${entry.count} event(s) in this category`}
             >
+              {/* rounded-full: dot */}
               <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: entry.color }} />
               {entry.label}
             </span>

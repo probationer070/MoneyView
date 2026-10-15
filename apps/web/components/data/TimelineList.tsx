@@ -32,7 +32,7 @@ export function TimelineList({ groups, empty }: TimelineListProps) {
     <div className="space-y-6">
       {groups.map((group) => (
         <section key={group.id} className="space-y-3">
-          <div className="sticky top-0 z-10 inline-flex rounded-full border border-[var(--line)] bg-[var(--surface-raised)] px-3 py-1 type-small text-[var(--ink-muted)]">
+          <div className="sticky top-0 z-10 inline-flex rounded-[var(--radius-2)] border border-[var(--line)] bg-[var(--surface-raised)] px-3 py-1 type-small text-[var(--ink-muted)]">
             {group.label}
           </div>
           <div className="space-y-4">
@@ -42,6 +42,7 @@ export function TimelineList({ groups, empty }: TimelineListProps) {
               return (
                 <div key={item.id} className="grid grid-cols-[1.25rem_minmax(0,1fr)] gap-3">
                   <div className="relative flex justify-center">
+                    {/* rounded-full: dot */}
                     <span className={`mt-1 h-3 w-3 rounded-full border-2 border-[var(--surface-raised)] ${item.active ? "bg-[var(--brand)]" : "bg-[var(--line)]"}`} />
                     {!isLast ? (
                       <span className="absolute top-5 bottom-[-1rem] w-px bg-[var(--line)]" />

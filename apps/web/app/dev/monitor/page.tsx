@@ -192,8 +192,9 @@ function LatencyBarRow({
           <div className="mt-1">{status}</div>
         </div>
       </div>
-      {/* A progress track and its fill: the only bars drawn with rounded-full (M3). */}
+      {/* rounded-full: track */}
       <div className="h-2 overflow-hidden rounded-full bg-[var(--surface)]">
+        {/* rounded-full: fill */}
         <div
           className="h-full rounded-full bg-[var(--brand)]"
           style={{ width }}

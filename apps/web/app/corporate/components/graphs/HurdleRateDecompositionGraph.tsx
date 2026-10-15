@@ -55,7 +55,7 @@ export function HurdleRateDecompositionGraph({
             }}
             className="flex items-center gap-2 text-left transition hover:text-[var(--brand-text)]"
           >
-            {/* rounded-full: a colour-key dot in the legend, not a panel. */}
+            {/* rounded-full: dot, a colour key in the legend. */}
             <span className="h-2 w-2 rounded-full" style={{ backgroundColor: item.fill }} />
             {item.name}: {pct(item.value)}
           </button>

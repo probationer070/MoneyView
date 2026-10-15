@@ -158,7 +158,7 @@ export function PercentileIndicator({
   return (
     <div className="border border-[var(--line)] bg-[var(--surface-raised)] p-3">
       <div className="flex items-center gap-2 type-caption uppercase text-[var(--ink-muted)]">
-        {/* Dot marker: rounded-full is allowed here because the element is a dot, not a panel. */}
+        {/* rounded-full: dot */}
         <span className={clsx("inline-block h-2.5 w-2.5 rounded-full", colorClass)} style={swatchOpacity === undefined ? undefined : { opacity: swatchOpacity }} />
         <InfoTooltip label={label} description={description} />
       </div>

@@ -23,6 +23,7 @@ export function EventTooltip({ x, width, events }: { x: number; width: number; e
       {events.map((event) => (
         <div key={event.id} data-testid={`event-tooltip-item-${event.id}`}>
           <div className="flex items-center gap-2">
+            {/* rounded-full: dot */}
             <span aria-hidden className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: event.color }} />
             {event.label}
           </div>

@@ -95,7 +95,7 @@ export function EventsTable({ events, categories, onEdit }: { events: MarketEven
                   </td>
                   <td className="pr-3">
                     <span className="inline-flex items-center gap-2">
-                      {/* A colour dot is the one round shape here (M3). */}
+                      {/* rounded-full: dot */}
                       <span aria-hidden className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: category?.color }} />
                       {category?.label ?? event.category}
                     </span>

@@ -37,7 +37,7 @@ export function EventFilter({ testId }: { testId: string }) {
             : "border-[var(--line)] text-[var(--ink)] hover:bg-[var(--surface)]"
         }`}
       >
-        {status === "loading" ? <span aria-hidden className="mr-1 inline-block h-2 w-2 animate-pulse rounded-full bg-current" /> : null}
+        {status === "loading" ? /* rounded-full: dot */ <span aria-hidden className="mr-1 inline-block h-2 w-2 animate-pulse rounded-full bg-current" /> : null}
         {label}
       </button>
 
@@ -79,6 +79,7 @@ export function EventFilter({ testId }: { testId: string }) {
                         checked={category.visible}
                         onChange={(event) => change([{ id: category.id, visible: event.target.checked }])}
                       />
+                      {/* rounded-full: dot */}
                       <span aria-hidden className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: category.color }} />
                       {category.label}
                     </label>

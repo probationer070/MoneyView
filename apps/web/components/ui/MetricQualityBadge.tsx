@@ -24,6 +24,7 @@ export function MetricQualityBadge({ quality, className, title }: { quality: Met
         className,
       )}
     >
+      {/* rounded-full: dot */}
       <span className={clsx("h-1.5 w-1.5 shrink-0 rounded-full", style.dot)} />
       {style.label}
     </span>

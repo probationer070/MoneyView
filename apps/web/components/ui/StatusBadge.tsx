@@ -60,6 +60,7 @@ export function StatusBadge({ status, label, className }: StatusBadgeProps) {
         className
       )}
     >
+      {/* rounded-full: dot */}
       <span className={clsx("h-1.5 w-1.5 rounded-full shrink-0", styles.dot)} />
       {displayLabel}
     </span>

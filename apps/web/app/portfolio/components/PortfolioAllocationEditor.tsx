@@ -117,7 +117,7 @@ export function PortfolioAllocationEditor({
 
       <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-4">
         <div className="border border-[var(--line)] bg-[var(--surface-raised)] p-3 type-body text-[var(--ink-muted)]">
-          Draft total: {/* M2: inline emphasis inside a sentence; the weight separates the label from the text */}<span className="font-semibold text-[var(--ink)]">{formatNumber(totalDraftWeightPercent / 100, "percent", { digits: 1 })}</span>
+          Draft total: {/* M2: inline emphasis inside a sentence; the weight separates the label from the text */}<span className="type-mono font-semibold text-[var(--ink)]">{formatNumber(totalDraftWeightPercent / 100, "percent", { digits: 1 })}</span>
         </div>
         <div className="border border-[var(--line)] bg-[var(--surface-raised)] p-3 type-body text-[var(--ink-muted)]">
           Projected net value: {/* M2: inline emphasis inside a sentence; the weight separates the label from the text */}<span className="font-semibold text-[var(--ink)]">{formatCurrencyCompact(allocationSummary.netProjectedValue)}</span>

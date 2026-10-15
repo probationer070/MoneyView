@@ -69,7 +69,7 @@ export function PortfolioAttributionSummary({
               description={`Definition: total weighted return earned by the selected holdings over the attribution period. Formula: Portfolio Return = sum(weight_i x holding return_i). Step 1: calculate each holding's period return from its start and end prices. Step 2: multiply each holding return by its portfolio weight. Step 3: sum the weighted holding returns. Current status: ${portfolioStatus("return", attributionData.totals.portfolio_return)}.`}
             />
           </p>
-          <p className="type-panel-title mt-1">
+          <p className="type-figure-md mt-1">
             {formatNumber(attributionData.totals.portfolio_return, "percent", { digits: 1 })}
           </p>
         </div>
@@ -80,7 +80,7 @@ export function PortfolioAttributionSummary({
               description="Definition: return of the benchmark used as the comparison hurdle for the portfolio. Formula: Benchmark Return = sum(benchmark weight_i x benchmark/sector return_i), or direct benchmark index return when constituent weights are available. Step 1: identify the benchmark and period. Step 2: use direct benchmark returns or mapped proxy sector returns. Step 3: aggregate benchmark-weighted returns into one comparison return."
             />
           </p>
-          <p className="type-panel-title mt-1">
+          <p className="type-figure-md mt-1">
             {formatNumber(attributionData.totals.benchmark_return, "percent", { digits: 1 })}
           </p>
         </div>
@@ -91,7 +91,7 @@ export function PortfolioAttributionSummary({
               description={`Definition: excess return produced by the portfolio versus the benchmark. Formula: Active Return = Portfolio Return - Benchmark Return. Step 1: compute the portfolio weighted return. Step 2: compute the benchmark return over the same period and currency. Step 3: subtract benchmark return from portfolio return; positive means outperformance and negative means underperformance. Current status: ${portfolioStatus("active", attributionData.active_return)}.`}
             />
           </p>
-          <p className="type-panel-title mt-1">
+          <p className="type-figure-md mt-1">
             {formatNumber(attributionData.active_return, "percent", { digits: 1 })}
           </p>
         </div>
@@ -102,7 +102,7 @@ export function PortfolioAttributionSummary({
               description={`Definition: sensitivity of portfolio returns to benchmark returns. Formula: Beta = covariance(portfolio returns, benchmark returns) / variance(benchmark returns). Step 1: align portfolio and benchmark return observations over the same dates. Step 2: measure how the portfolio co-moves with the benchmark. Step 3: divide that co-movement by benchmark variance. Around 1.0 is market-like; above 1.2 is higher benchmark sensitivity. Current status: ${portfolioStatus("beta", attributionData.risk_metrics.beta)}.`}
             />
           </p>
-          <p className="type-panel-title mt-1">
+          <p className="type-figure-md mt-1">
             {formatNumber(attributionData.risk_metrics.beta, "ratio", { digits: 1 })}
           </p>
         </div>

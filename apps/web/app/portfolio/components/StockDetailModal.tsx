@@ -372,7 +372,7 @@ export function StockDetailModal({
       <p className={`type-figure-md tabular-nums ${priceTone}`}>
         {currentPriceLabel}
       </p>
-      <p className={`type-body ${priceTone}`}>
+      <p className={`type-mono ${priceTone}`}>
         {priceChangePct >= 0 ? "+" : ""}{formatNumber(priceChangePct / 100, "percent", { digits: 1 })}
       </p>
     </>
@@ -465,7 +465,7 @@ export function StockDetailModal({
                     key={series.title}
                     className="inline-flex items-center gap-2 rounded-[var(--radius-2)] border border-[var(--line)] px-2 py-1"
                   >
-                    {/* M3: a colour dot, not a control; the round shape is the marker */}<span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: series.color }} />
+                    {/* rounded-full: dot */}<span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: series.color }} />
                     {series.title}
                   </span>
                 ))}
@@ -521,7 +521,7 @@ export function StockDetailModal({
                 key={series.title}
                 className="inline-flex items-center gap-2 rounded-[var(--radius-2)] border border-[var(--line)] px-2 py-1"
               >
-                {/* M3: a colour dot, not a control; the round shape is the marker */}<span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: series.color }} />
+                {/* rounded-full: dot */}<span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: series.color }} />
                 {series.title}
               </span>
             ))}

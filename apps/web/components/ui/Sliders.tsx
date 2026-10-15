@@ -37,7 +37,7 @@ export const Sliders: React.FC<SlidersProps> = ({
         <div>
           <div className="flex justify-between items-center mb-2">
             <span className="type-small text-[var(--ink-muted)]">Discount Rate (WACC)</span>
-            <span className="type-small text-[var(--ink)]">{formatNumber(wacc / 100, "percent", { locale })}</span>
+            <span className="type-mono text-[var(--ink)]">{formatNumber(wacc / 100, "percent", { locale })}</span>
           </div>
           <input
             type="range"
@@ -54,7 +54,7 @@ export const Sliders: React.FC<SlidersProps> = ({
         <div>
           <div className="flex justify-between items-center mb-2">
             <span className="type-small text-[var(--ink-muted)]">Target Operating Margin</span>
-            <span className="type-small text-[var(--ink)]">{formatNumber(margin / 100, "percent", { locale })}</span>
+            <span className="type-mono text-[var(--ink)]">{formatNumber(margin / 100, "percent", { locale })}</span>
           </div>
           <input
             type="range"
@@ -71,7 +71,7 @@ export const Sliders: React.FC<SlidersProps> = ({
         <div>
           <div className="flex justify-between items-center mb-2">
             <span className="type-small text-[var(--ink-muted)]">Terminal Rev Growth</span>
-            <span className="type-small text-[var(--ink)]">{formatNumber(growth / 100, "percent", { locale })}</span>
+            <span className="type-mono text-[var(--ink)]">{formatNumber(growth / 100, "percent", { locale })}</span>
           </div>
           <input
             type="range"

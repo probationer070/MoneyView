@@ -18,6 +18,7 @@ export function LoadingState({
   if (variant === "spinner") {
     return (
       <div className={clsx("flex flex-col items-center justify-center gap-3 py-12", className)}>
+        {/* rounded-full: spinner */}
         <div className="h-8 w-8 rounded-full border-2 border-[var(--grid)] border-t-[var(--brand)] animate-spin" />
         {label && <p className="type-small text-[var(--ink-muted)]">{label}</p>}
       </div>
@@ -34,7 +35,9 @@ export function LoadingState({
             <p className="type-small text-[var(--ink)] tabular-nums">{pct}%</p>
           </div>
         )}
+        {/* rounded-full: track */}
         <div className="h-1.5 w-full rounded-full bg-[var(--surface)] overflow-hidden">
+          {/* rounded-full: fill */}
           <div
             className="h-full bg-[var(--brand)] rounded-full transition-all duration-[var(--duration-normal)]"
             style={{ width: `${pct}%` }}

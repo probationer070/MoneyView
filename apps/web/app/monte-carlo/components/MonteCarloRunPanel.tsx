@@ -54,8 +54,9 @@ export function MonteCarloRunPanel({
             <span>{progressLabel}</span>
             <span className="type-mono">{formatNumber(progress, "integer", { locale })}%</span>
           </div>
-          {/* Progress track and fill: rounded-full is allowed here because both are tracks, not panels. */}
+          {/* rounded-full: track */}
           <div className="mt-3 h-3 rounded-full bg-[var(--surface)]">
+            {/* rounded-full: fill */}
             <div className="h-3 rounded-full bg-[var(--brand)] transition-all" style={{ width: `${progress}%` }} />
           </div>
         </div>

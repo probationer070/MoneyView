@@ -156,7 +156,7 @@ export const DCFWorkbench: React.FC<DCFWorkbenchProps> = ({ ticker }) => {
             </button>
             <span>{formatDateTime(displayLastUpdatedAt)}</span>
             {isStale ? (
-              <span className="rounded-full bg-[var(--status-warning-surface)] px-2 py-1 type-caption text-[var(--status-warning-ink)]">
+              <span className="rounded-[var(--radius-2)] bg-[var(--status-warning-surface)] px-2 py-1 type-caption text-[var(--status-warning-ink)]">
                 Showing stale diagnostics
               </span>
             ) : null}
@@ -167,6 +167,7 @@ export const DCFWorkbench: React.FC<DCFWorkbenchProps> = ({ ticker }) => {
         {isFetching && (
           <div className="absolute inset-0 bg-[var(--surface-raised)] backdrop-blur-sm z-10 p-6 flex flex-col justify-center">
             <div className="flex space-x-3 mb-6 items-center">
+              {/* rounded-full: dot */}
               <div className="h-4 w-4 bg-[var(--brand)] rounded-full animate-bounce"></div>
               <div className="h-4 w-48 bg-[var(--surface)] animate-pulse"></div>
             </div>

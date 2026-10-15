@@ -101,6 +101,7 @@ export function PercentileBandPanel({
                       {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                       {payload.map((entry: any, index: number) => (
                         <div key={`item-${index}`} style={DEFAULT_TOOLTIP_PROPS.itemStyle}>
+                          {/* rounded-full: dot */}
                           <span className="inline-block w-2 h-2 rounded-full mr-2" style={{ backgroundColor: entry.color }} />
                           {valueLabel}: {valueFormatter(Number(entry.value))}
                         </div>

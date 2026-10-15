@@ -51,7 +51,7 @@ export function SimulateResults({
             {result.refusals.map((r) => (
               <tr key={r.code} className="border-t border-[var(--line)]">
                 <td className="py-1 pr-3 type-mono">{r.code}</td>
-                <td className="py-1 pr-3 tabular-nums">{formatNumber(r.count, "integer", { locale })}</td>
+                <td className="py-1 pr-3 type-mono">{formatNumber(r.count, "integer", { locale })}</td>
                 <td className="py-1 text-[var(--ink-secondary)]">{r.message}</td>
               </tr>
             ))}

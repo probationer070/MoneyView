@@ -128,11 +128,13 @@ export function TopNav() {
                   )}
                 >
                   <Icon aria-hidden="true" className="h-4 w-4" />
+                  {/* M2: bold ink to match the sidebar labels in PANEL_LINK (sidebar-contrast.spec.ts). */}
                   {isActive && <span className="type-caption font-bold uppercase">{t(item.shortKey)}</span>}
                 </Link>
               );
             })}
           </nav>
+          {/* M2: bold ink to match the sidebar labels in PANEL_LINK (sidebar-contrast.spec.ts). */}
           <span data-testid="topnav-current" className="type-body font-bold text-[var(--ink)] md:hidden">
             {current ? t(current.shortKey) : ""}
           </span>

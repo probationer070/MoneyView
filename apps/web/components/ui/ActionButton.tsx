@@ -49,7 +49,7 @@ export function ActionButton({
       )}
     >
       {loading
-        ? <span className="h-3.5 w-3.5 rounded-full border-2 border-current border-t-transparent animate-spin" />
+        ? /* rounded-full: spinner */ <span className="h-3.5 w-3.5 rounded-full border-2 border-current border-t-transparent animate-spin" />
         : icon && <span className="shrink-0">{icon}</span>}
       {label}
     </button>
