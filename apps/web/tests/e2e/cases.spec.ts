@@ -559,7 +559,7 @@ test.describe("market cross-check (EV/Sales)", () => {
 
 test.describe("the cases screen in Korean", () => {
   test.use({ locale: "ko-KR" });
-  test("the title, a formatted figure and a bilingual header follow the Korean locale", async ({ page }) => {
+  test("the title and a bilingual header follow the Korean locale; a figure renders", async ({ page }) => {
     await mockCasesApi(page);
     await page.goto("/cases", { waitUntil: "domcontentloaded" });
     await expect(page.getByRole("heading", { name: "케이스", exact: true })).toBeVisible({ timeout: 60_000 });
