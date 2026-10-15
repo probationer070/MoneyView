@@ -101,7 +101,7 @@ test("simulation lab surfaces invalid-data states and preserved warnings for deg
 test.describe("the simulation lab in Korean", () => {
   test.use({ locale: "ko-KR" });
 
-  test("the title, a formatted figure and a bilingual header follow the Korean locale", async ({ page }) => {
+  test("the title and a bilingual header render in Korean; a figure renders", async ({ page }) => {
     await page.goto("/monte-carlo", { waitUntil: "domcontentloaded" });
     await expect(page.getByRole("heading", { name: "시뮬레이션 랩", exact: true })).toBeVisible({ timeout: 60_000 });
     // Default principal 10,000,000 KRW is shown in 10,000 KRW units.

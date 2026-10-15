@@ -146,18 +146,20 @@ export function PercentileIndicator({
   label,
   value,
   colorClass,
+  swatchOpacity,
   description,
 }: {
   label: string;
   value: string;
   colorClass: string;
+  swatchOpacity?: number;
   description: string;
 }) {
   return (
     <div className="border border-[var(--line)] bg-[var(--surface-raised)] p-3">
       <div className="flex items-center gap-2 type-caption uppercase text-[var(--ink-muted)]">
         {/* Dot marker: rounded-full is allowed here because the element is a dot, not a panel. */}
-        <span className={clsx("inline-block h-2.5 w-2.5 rounded-full", colorClass)} />
+        <span className={clsx("inline-block h-2.5 w-2.5 rounded-full", colorClass)} style={swatchOpacity === undefined ? undefined : { opacity: swatchOpacity }} />
         <InfoTooltip label={label} description={description} />
       </div>
       <div className="mt-2 type-mono text-[var(--ink)]">{value}</div>
@@ -169,14 +171,16 @@ export function LegendItem({
   label,
   colorClass,
   lineClass = "",
+  swatchOpacity,
 }: {
   label: string;
   colorClass?: string;
   lineClass?: string;
+  swatchOpacity?: number;
 }) {
   return (
     <div className="flex items-center gap-2 type-small text-[var(--ink-muted)]">
-      <span className={clsx("inline-block h-2.5 w-6", colorClass, lineClass)} />
+      <span className={clsx("inline-block h-2.5 w-6", colorClass, lineClass)} style={swatchOpacity === undefined ? undefined : { opacity: swatchOpacity }} />
       <span>{label}</span>
     </div>
   );

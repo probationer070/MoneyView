@@ -78,6 +78,8 @@ export function PathSimulationSection({
     floor75: row.p25,
     width75: row.p75 - row.p25,
   })), [sharedSimulation]);
+  // Opacity of a swatch that shows n stacked bands, as the chart composites them over the panel.
+  const bandOpacity = (layers: number) => 1 - (1 - Number(tokens.chart["area-opacity"])) ** layers;
   const summaryStatus = status === "loading"
     ? "in-progress"
     : status === "error"
@@ -192,9 +194,9 @@ export function PathSimulationSection({
       </section>
 
       <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <PercentileIndicator label="5%-95%" value={`${krwTenThousands(sharedSimulation?.terminalP05 ?? input.initialInvestment, locale)} - ${krwTenThousands(sharedSimulation?.terminalP95 ?? input.initialInvestment, locale)}`} colorClass="bg-[var(--chart-1)] opacity-40" description="The widest displayed confidence interval. About 90% of simulated terminal outcomes fall between the 5th and 95th percentiles." />
-        <PercentileIndicator label="10%-90%" value={`${krwTenThousands(sharedSimulation?.terminalP10 ?? input.initialInvestment, locale)} - ${krwTenThousands(sharedSimulation?.terminalP90 ?? input.initialInvestment, locale)}`} colorClass="bg-[var(--chart-1)] opacity-70" description="A slightly tighter confidence interval. About 80% of simulated terminal outcomes fall between the 10th and 90th percentiles." />
-        <PercentileIndicator label="25%-75%" value={`${krwTenThousands(sharedSimulation?.terminalP25 ?? input.initialInvestment, locale)} - ${krwTenThousands(sharedSimulation?.terminalP75 ?? input.initialInvestment, locale)}`} colorClass="bg-[var(--chart-1)]" description="The interquartile range. It captures the middle 50% of simulated outcomes and shows the most typical dispersion." />
+        <PercentileIndicator label="5%-95%" value={`${krwTenThousands(sharedSimulation?.terminalP05 ?? input.initialInvestment, locale)} - ${krwTenThousands(sharedSimulation?.terminalP95 ?? input.initialInvestment, locale)}`} colorClass="bg-[var(--chart-1)]" swatchOpacity={bandOpacity(1)} description="The widest displayed confidence interval. About 90% of simulated terminal outcomes fall between the 5th and 95th percentiles." />
+        <PercentileIndicator label="10%-90%" value={`${krwTenThousands(sharedSimulation?.terminalP10 ?? input.initialInvestment, locale)} - ${krwTenThousands(sharedSimulation?.terminalP90 ?? input.initialInvestment, locale)}`} colorClass="bg-[var(--chart-1)]" swatchOpacity={bandOpacity(2)} description="A slightly tighter confidence interval. About 80% of simulated terminal outcomes fall between the 10th and 90th percentiles." />
+        <PercentileIndicator label="25%-75%" value={`${krwTenThousands(sharedSimulation?.terminalP25 ?? input.initialInvestment, locale)} - ${krwTenThousands(sharedSimulation?.terminalP75 ?? input.initialInvestment, locale)}`} colorClass="bg-[var(--chart-1)]" swatchOpacity={bandOpacity(3)} description="The interquartile range. It captures the middle 50% of simulated outcomes and shows the most typical dispersion." />
         <PercentileIndicator label="Median" value={krwTenThousands(sharedSimulation?.terminalMedian ?? input.initialInvestment, locale)} colorClass="bg-[var(--ink)]" description="The 50th percentile terminal value. Half of simulations finish above this value and half finish below it." />
       </section>
 
@@ -242,9 +244,9 @@ export function PathSimulationSection({
           chartHeight={320}
           legend={(
             <div className="flex flex-wrap gap-3">
-              <LegendItem label="5%-95%" lineClass="bg-[var(--chart-1)] opacity-40" />
-              <LegendItem label="10%-90%" lineClass="bg-[var(--chart-1)] opacity-70" />
-              <LegendItem label="25%-75%" lineClass="bg-[var(--chart-1)]" />
+              <LegendItem label="5%-95%" lineClass="bg-[var(--chart-1)]" swatchOpacity={bandOpacity(1)} />
+              <LegendItem label="10%-90%" lineClass="bg-[var(--chart-1)]" swatchOpacity={bandOpacity(2)} />
+              <LegendItem label="25%-75%" lineClass="bg-[var(--chart-1)]" swatchOpacity={bandOpacity(3)} />
               <LegendItem label="Median" lineClass="bg-[var(--ink)]" />
             </div>
           )}
