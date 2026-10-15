@@ -15,6 +15,8 @@ KIND_USER_EVENT = "user_event"
 KIND_CATEGORY = "event_category"
 KIND_VISIBILITY = "event_category_visibility"
 KIND_PREFERENCES = "portfolio_preferences"
+KIND_CORPORATE_METRICS = "corporate_metrics"
+KIND_CORPORATE_COMPANIES = "corporate_companies"
 
 # The payload key carrying a fork's lineage: the sync_uid of the case its parent_case_id points at.
 PARENT_UID_KEY = "parent_uid"
@@ -166,5 +168,26 @@ KINDS: dict[str, Kind] = {
         columns=("total_investment_amount", "transaction_fee_rate", "updated_at"),
         singleton_uid="portfolio_preferences",
         not_null=("total_investment_amount", "transaction_fee_rate", "updated_at"),
+    ),
+    # The owner's slider assumptions per ticker. Natural identity, like event_category_visibility's
+    # category_id: the ticker IS the record on every PC, so it travels in the payload too. Never
+    # deleted (spec 2026-10-15 D4), so no tombstone is ever written for it.
+    KIND_CORPORATE_METRICS: Kind(
+        name=KIND_CORPORATE_METRICS,
+        table="corporate_metrics",
+        uid_column="ticker",
+        columns=("ticker", "growth", "roic", "wacc", "debt_ratio", "unlevered_beta", "crp",
+                 "reinvestment", "fcff", "innovation", "market_share", "governance", "esg_penalty",
+                 "updated_at"),
+        not_null=("growth", "roic", "wacc", "debt_ratio", "unlevered_beta", "crp", "reinvestment",
+                  "fcff", "innovation", "market_share", "governance", "esg_penalty", "updated_at"),
+    ),
+    # Companies the owner added by hand. Same identity rule; never deleted either.
+    KIND_CORPORATE_COMPANIES: Kind(
+        name=KIND_CORPORATE_COMPANIES,
+        table="corporate_companies",
+        uid_column="ticker",
+        columns=("ticker", "name", "sector", "source", "updated_at"),
+        not_null=("name", "updated_at"),
     ),
 }
