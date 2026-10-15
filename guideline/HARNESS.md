@@ -105,8 +105,8 @@ schema or sync changes go through every stage.
 | Never read `config/.env` or apikey files. Tests never write to `data/processed/moneyview.db`. | [`sop/security-reviewer.md`](sop/security-reviewer.md) |
 | Shown value = used value: the UI never displays a number different from what the computation used. | [`sop/finance-logic.md`](sop/finance-logic.md) |
 | Korean UI copy uses the formal register (합니다체/십시오체). Glossary rows go in the glossary. | [`docs/design/MoneyView_Glossary.md`](../docs/design/MoneyView_Glossary.md) |
-| Design tokens only. `rounded-full` only on dots. Figures use `type-mono` and `formatNumber`. No `waitForTimeout`; wait on conditions. | [`docs/design/MoneyView_Design_Tokens.md`](../docs/design/MoneyView_Design_Tokens.md) |
-| Every page fits 1280x720 with no page scroll (`ONE_SCREEN_ROUTES`). | [`sop/todo.md`](sop/todo.md) (Track D) |
+| Design tokens only. `rounded-full` only on a dot, track, fill or spinner, marked with its comment (see [`DESIGN.md`](../DESIGN.md)). Figures use `type-mono` and `formatNumber`. No `waitForTimeout`; wait on conditions. | [`docs/design/MoneyView_Design_Tokens.md`](../docs/design/MoneyView_Design_Tokens.md) |
+| Every page in `ONE_SCREEN_ROUTES` fits 1280x720 with no page scroll. The goal is every page, rolled out page by page. | [`sop/todo.md`](sop/todo.md) (Track D) |
 
 ## How to start a task
 
