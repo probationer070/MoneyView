@@ -29,7 +29,7 @@ An entry states what was true when it was written. Nothing updates it on its own
 ## 2026-10-15: dev performance headers and the saved label read data keys in English (i18n-model, f1ce93e)
 
 Date: 2026-10-15 (final review of the design-system branch, M9). The defect is in f1ce93e; d35a1f4 fixed it.
-Command: none recorded. Found by reading the English column of `LABELS` against the screen on `/dev/performance`. No test covered those labels.
+Command: not recorded (reported in the final review of the design-system branch). No test covered those labels.
 Failure: the English headers of the dev performance tables read `total_ms`, `self_ms`, `db_ms`, and the saved-estimate label read `saved (est)`. The Korean side was correct, so a Korean reader saw nothing wrong.
 Root cause: f1ce93e's `LABELS` entries (`totalMs`, `selfMs`, `dbMs`, `saved`) used the API's data keys as their English text. The i18n catalog's second column is the English label, and the model passed the key through.
 Fix: d35a1f4 sets the English labels to "Total ms", "Self ms", "DB ms" and "Est. saved". The data keys are unchanged, so the figures and their sources are the same.
