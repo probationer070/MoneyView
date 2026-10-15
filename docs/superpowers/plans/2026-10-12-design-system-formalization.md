@@ -2913,7 +2913,10 @@ export const CHART_REFERENCE_COLORS = {
 
 - [ ] Run the procedure, steps 1–8. `PathSimulationSection` (9 palette classes, 3 hex), `RiskAnalysisSection` and `ReturnDistributionSection` go through M1/M4. Percentile bands use `var(--chart-1)` at `tokens.chart["area-opacity"]` (spec `chart.band`, R20). The median line is `var(--ink)` and the tails are `var(--down)` / `var(--up)`. No new colour.
 
-### Task 13: Market overview, detail, news, events, dev, signals
+### Task 13: Detail, news, events, dev (market and signals moved out)
+
+> **2026-10-15 (owner):** the market overview (`app/page.tsx`, `components/market/**`) moves to its own one-screen plan, which also applies the paper migration. This follows the corporate precedent; see the proposal in `scratchpad/proposals/market-one-screen.md`, to be turned into a spec. `app/signals/**` is not on this branch until PR #67 merges, and gets its own migration task after that. For this task, ignore the market and signals globs below. The Korean assertion moves to `tests/e2e/news-*.spec.ts`, or to `detail-*` if news has no page heading. The final baseline is 0 for every glob except `app/page.tsx` and `components/market/**`; report the market count as the input to the market plan.
+
 
 **Globs:** `app/page.tsx`, `components/market/**/*.tsx`, `app/detail/**/*.{ts,tsx}`, `app/news/**/*.{ts,tsx}`, `app/events/**/*.{ts,tsx}`, `app/dev/**/*.{ts,tsx}`, `app/signals/**/*.{ts,tsx}` (if present), and the remaining `lib/**/*.ts` and `hooks/**/*.ts`.
 **Specs:** `market-*.spec.ts`, `detail-*.spec.ts`, `news-*.spec.ts`, `event*.spec.ts`, `perf-dashboard.spec.ts`, `dev-monitor.spec.ts`, `terminal-diagnostics.spec.ts`, `signals-*.spec.ts` (if present).
