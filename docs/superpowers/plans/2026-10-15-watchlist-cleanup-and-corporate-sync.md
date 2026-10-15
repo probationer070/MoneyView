@@ -18,6 +18,9 @@
 
 **Owner answers 2026-10-15:** (1) clean every unreferenced cache ticker, including ones only viewed and never on the watchlist; (2) both PCs are updated the same day, no separate "ignore unknown kinds" release first; (3) no read-time sync on GET /corporate/metrics, startup and writes only.
 
+
+**Owner decision 2026-10-15 (after the final review):** `corporate_statements` and its `statements` acquisition state are NOT cleaned (quarters accumulate beyond what Yahoo returns). The cleanup touches four tables: stocks, news, corporate_quote_facts, acquisition_state (minus statements). Where this plan says five tables, read four; the code and tests on the branch (dff1202) are authoritative.
+
 ## Verified facts this plan rests on (file:line on `renewal` @ `0d32d33`; `apps/api` is identical on `feat/corporate-one-screen`)
 
 **Cleanup tables (spec §2.1), pinned:**
