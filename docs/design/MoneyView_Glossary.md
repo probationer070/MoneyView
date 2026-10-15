@@ -121,3 +121,19 @@ capitals: "종목 NAME". Both come from `apps/web/lib/i18n/labels.ts`; add the r
 | Not valued | 평가하지 않음 | verdict strip, refused DCF |
 | Stale source | 원천 데이터 오래됨 | verdict strip warning |
 | Audit uncertain | 감사 불확실 | assumption table badge title; the audit is invalid, missing or estimated |
+| Years | 기간 | table header (case years, base to target) |
+| Forked from | 파생 원본 | table header (the case this one was forked from) |
+| Revenue | 매출 | table header (case valuation, per year and per segment) |
+| EBIT | 영업이익 | table header (case valuation) |
+| Tax | 세금 | table header (case valuation, per year) |
+| Reinvestment | 재투자 | table header (case valuation) |
+| FCFF | 잉여현금흐름 | table header (case valuation, per year) |
+| Margin | 마진율 | table header (segment in the target year) |
+| Segment | 세그먼트 | table header (segment in the target year) |
+| Drawdown from peak | 고점 대비 낙폭 | valuation panel row label; the basis is the 252-bar peak |
+| Volume vs baseline | 기준 대비 거래량 | valuation panel row label; a multiple, never a percent |
+| Trailing PE | 후행 PER | valuation panel row label; a multiple |
+| Gap to fair value | 적정가치 대비 괴리 | valuation panel row label; a fraction of price, no horizon |
+| Show panel | 패널 보기 | valuation ticker button |
+| Stored cases for {ticker} | {ticker} 저장된 케이스 | valuation link; the ticker is a parameter |
+| Refusal reasons | 거절 사유 | valuation.refusal.*; the sentence is translated, the backend code is never shown |

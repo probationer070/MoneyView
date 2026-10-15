@@ -62,7 +62,7 @@ export function SimulateSection({ record, pointValue }: { record: CaseRecord; po
 
   return (
     <Section title="Uncertainty (simulate this case)" testId="case-simulate">
-      <p className="mb-3 text-xs text-[var(--text-muted)]">
+      <p className="mb-3 type-small text-[var(--ink-muted)]">
         State a range for a few inputs; each draw values the case once. Nothing is stored — the seed reproduces a result.
       </p>
       <form onSubmit={(e) => { e.preventDefault(); send(built.request); }} className="flex flex-col gap-3">
@@ -72,11 +72,11 @@ export function SimulateSection({ record, pointValue }: { record: CaseRecord; po
           const problem = submitted ? built.problems[row.id] : undefined;
           const problemId = `simulate-row-${row.id}-problem`;
           return (
-            <div key={row.id} data-testid={`simulate-row-${index}`} className="flex flex-col gap-2 rounded-[var(--radius-sm)] border border-[var(--border)] p-3">
+            <div key={row.id} data-testid={`simulate-row-${index}`} className="flex flex-col gap-2 border border-[var(--line)] p-3">
               <div className="flex flex-wrap items-end gap-3">
                 <FieldPicker targets={targets} value={row.targetKey} onChange={(key) => update(row.id, { targetKey: key })} />
-                {target && <span className="pb-1 text-xs text-[var(--text-muted)]">Current: {formatWire(target.meta, wireValue(record, target))}</span>}
-                <label className="flex flex-col gap-1 text-xs text-[var(--text-secondary)]">
+                {target && <span className="pb-1 type-small text-[var(--ink-muted)]">Current: {formatWire(target.meta, wireValue(record, target))}</span>}
+                <label className="flex flex-col gap-1 type-small text-[var(--ink-secondary)]">
                   Shape
                   <select value={row.shape} onChange={(e) => update(row.id, { shape: e.target.value as Shape, params: {} })} className={controlClass}>
                     <option value="triangular">triangular</option>
@@ -85,7 +85,7 @@ export function SimulateSection({ record, pointValue }: { record: CaseRecord; po
                   </select>
                 </label>
                 {SHAPE_PARAMS[row.shape].map((param) => (
-                  <label key={param.name} className="flex flex-col gap-1 text-xs text-[var(--text-secondary)]">
+                  <label key={param.name} className="flex flex-col gap-1 type-small text-[var(--ink-secondary)]">
                     <span>{param.label}{suffix ? ` (${suffix})` : ""}</span>
                     <input
                       aria-label={param.label}
@@ -102,7 +102,7 @@ export function SimulateSection({ record, pointValue }: { record: CaseRecord; po
                   type="button"
                   onClick={() => setRows((all) => all.filter((r) => r.id !== row.id))}
                   aria-label={`Remove input ${index + 1}`}
-                  className="pb-1 text-xs text-[var(--text-muted)] underline"
+                  className="pb-1 type-small text-[var(--ink-muted)] underline"
                 >
                   Remove
                 </button>
@@ -110,7 +110,7 @@ export function SimulateSection({ record, pointValue }: { record: CaseRecord; po
               {target?.meta.narrated && (
                 <NarrativeInputs value={row.narrative} onChange={(narrative) => update(row.id, { narrative })} withEvidence={false} />
               )}
-              {problem && <p id={problemId} data-testid="row-problem" aria-live="polite" className="text-xs text-[var(--text-secondary)]">{problem}</p>}
+              {problem && <p id={problemId} data-testid="row-problem" aria-live="polite" className="type-small text-[var(--ink-secondary)]">{problem}</p>}
             </div>
           );
         })}
@@ -121,11 +121,11 @@ export function SimulateSection({ record, pointValue }: { record: CaseRecord; po
               setRows((all) => [...all, { id: nextId, targetKey: "", shape: "triangular", params: {}, narrative: EMPTY_NARRATIVE }]);
               setNextId((n) => n + 1);
             }}
-            className="rounded-[var(--radius-sm)] border border-[var(--border-default)] px-3 py-1.5 text-sm"
+            className="rounded-[var(--radius-1)] border border-[var(--line)] px-3 py-1.5 type-body"
           >
             Add an input
           </button>
-          <label className="flex flex-col gap-1 text-xs text-[var(--text-secondary)]">
+          <label className="flex flex-col gap-1 type-small text-[var(--ink-secondary)]">
             Runs ({MIN_RUNS.toLocaleString("en-US")}–{MAX_RUNS.toLocaleString("en-US")})
             <input
               value={runs}
@@ -136,7 +136,7 @@ export function SimulateSection({ record, pointValue }: { record: CaseRecord; po
               className={`${controlClass} w-28`}
             />
           </label>
-          <label className="flex flex-col gap-1 text-xs text-[var(--text-secondary)]">
+          <label className="flex flex-col gap-1 type-small text-[var(--ink-secondary)]">
             Seed (optional)
             <input
               value={seed}
@@ -147,21 +147,21 @@ export function SimulateSection({ record, pointValue }: { record: CaseRecord; po
               className={`${controlClass} w-28`}
             />
           </label>
-          <button type="submit" disabled={mutation.isPending} aria-busy={mutation.isPending} className="rounded-[var(--radius-sm)] border border-[var(--border-default)] px-3 py-1.5 text-sm font-medium disabled:opacity-50">
+          <button type="submit" disabled={mutation.isPending} aria-busy={mutation.isPending} className="rounded-[var(--radius-1)] border border-[var(--line)] px-3 py-1.5 type-body disabled:opacity-50">
             {mutation.isPending ? "Simulating…" : "Simulate"}
           </button>
         </div>
-        {submitted && rows.length === 0 && <p aria-live="polite" className="text-xs text-[var(--text-secondary)]">Add at least one input to simulate.</p>}
-        {submitted && built.runsProblem && <p id="simulate-runs-problem" aria-live="polite" className="text-xs text-[var(--text-secondary)]">{built.runsProblem}</p>}
-        {submitted && built.seedProblem && <p id="simulate-seed-problem" aria-live="polite" className="text-xs text-[var(--text-secondary)]">{built.seedProblem}</p>}
+        {submitted && rows.length === 0 && <p aria-live="polite" className="type-small text-[var(--ink-secondary)]">Add at least one input to simulate.</p>}
+        {submitted && built.runsProblem && <p id="simulate-runs-problem" aria-live="polite" className="type-small text-[var(--ink-secondary)]">{built.runsProblem}</p>}
+        {submitted && built.seedProblem && <p id="simulate-seed-problem" aria-live="polite" className="type-small text-[var(--ink-secondary)]">{built.seedProblem}</p>}
       </form>
       {refusal && (
-        <p data-testid="simulate-refusal" role="status" aria-live="polite" className="mt-3 text-sm text-[var(--text-secondary)]">
+        <p data-testid="simulate-refusal" role="status" aria-live="polite" className="mt-3 type-body text-[var(--ink-secondary)]">
           {refusal}
         </p>
       )}
       {failed && (
-        <p role="alert" data-testid="simulate-error" className="mt-3 text-sm text-[var(--chart-negative)]">
+        <p role="alert" data-testid="simulate-error" className="mt-3 type-body text-[var(--status-error-ink)]">
           Could not run the simulation.
         </p>
       )}

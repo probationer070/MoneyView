@@ -44,6 +44,16 @@ export const LABELS = {
   item: ["항목", "Item"],
   status: ["상태", "Status"],
   corporate: ["기업 분석", "Corporate"],
+  years: ["기간", "Years"],
+  forkedFrom: ["파생 원본", "Forked from"],
+  revenue: ["매출", "Revenue"],
+  ebit: ["영업이익", "EBIT"],
+  tax: ["세금", "Tax"],
+  reinvestment: ["재투자", "Reinvestment"],
+  fcff: ["잉여현금흐름", "FCFF"],
+  wacc: ["가중평균자본비용", "WACC"],
+  margin: ["마진율", "Margin"],
+  segment: ["세그먼트", "Segment"],
 } as const satisfies Record<string, readonly [string, string]>;
 
 export type LabelKey = keyof typeof LABELS;

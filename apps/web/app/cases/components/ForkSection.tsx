@@ -69,7 +69,7 @@ export function ForkSection({ record }: { record: CaseRecord }) {
   return (
     <Section title="Fork this case" testId="case-fork">
       <form onSubmit={submit} className="flex flex-col gap-3">
-        <label className="flex max-w-sm flex-col gap-1 text-xs text-[var(--text-secondary)]">
+        <label className="flex max-w-sm flex-col gap-1 type-small text-[var(--ink-secondary)]">
           New case name
           <input
             value={caseName}
@@ -77,15 +77,15 @@ export function ForkSection({ record }: { record: CaseRecord }) {
             data-highlighted={refusal?.name ? "true" : "false"}
             aria-invalid={refusal?.name || nameProblem ? true : undefined}
             aria-describedby={nameProblem ? "fork-name-problem" : undefined}
-            className={`${controlClass} ${refusal?.name ? "border-[var(--chart-negative)]" : ""}`}
+            className={`${controlClass} ${refusal?.name ? "border-[var(--status-error-border)]" : ""}`}
           />
         </label>
-        {nameProblem && <p id="fork-name-problem" className="text-xs text-[var(--text-secondary)]">A fork needs a name.</p>}
-        <p data-testid="fork-counter" className="text-xs text-[var(--text-secondary)]">
+        {nameProblem && <p id="fork-name-problem" className="type-small text-[var(--ink-secondary)]">A fork needs a name.</p>}
+        <p data-testid="fork-counter" className="type-small text-[var(--ink-secondary)]">
           {built.changedCount} of {SHAPLEY_INPUT_CAP} changed inputs
         </p>
         {built.changedCount > SHAPLEY_INPUT_CAP && (
-          <p className="text-xs text-[var(--text-secondary)]">
+          <p className="type-small text-[var(--ink-secondary)]">
             More than {SHAPLEY_INPUT_CAP} changed inputs: the fork is still valid, but “Why it moved” will not be able to explain it.
           </p>
         )}
@@ -99,14 +99,14 @@ export function ForkSection({ record }: { record: CaseRecord }) {
               key={row.id}
               data-testid={`fork-row-${index}`}
               data-highlighted={highlighted ? "true" : "false"}
-              className={`flex flex-col gap-2 rounded-[var(--radius-sm)] border p-3 ${highlighted ? "border-[var(--chart-negative)]" : "border-[var(--border)]"}`}
+              className={`flex flex-col gap-2 border p-3 ${highlighted ? "border-[var(--status-error-border)]" : "border-[var(--line)]"}`}
             >
               <div className="flex flex-wrap items-end gap-3">
                 <FieldPicker targets={targets} value={row.targetKey} onChange={(key) => update(row.id, { targetKey: key })} />
                 {target && (
-                  <span className="pb-1 text-xs text-[var(--text-muted)]">Current: {formatWire(target.meta, wireValue(record, target))}</span>
+                  <span className="pb-1 type-small text-[var(--ink-muted)]">Current: {formatWire(target.meta, wireValue(record, target))}</span>
                 )}
-                <label className="flex flex-col gap-1 text-xs text-[var(--text-secondary)]">
+                <label className="flex flex-col gap-1 type-small text-[var(--ink-secondary)]">
                   New value{target && unitSuffix(target.meta) ? ` (${unitSuffix(target.meta)})` : ""}
                   <input
                     value={row.value}
@@ -121,7 +121,7 @@ export function ForkSection({ record }: { record: CaseRecord }) {
                   type="button"
                   onClick={() => setRows((all) => all.filter((r) => r.id !== row.id))}
                   aria-label={`Remove change ${index + 1}`}
-                  className="pb-1 text-xs text-[var(--text-muted)] underline"
+                  className="pb-1 type-small text-[var(--ink-muted)] underline"
                 >
                   Remove
                 </button>
@@ -129,8 +129,8 @@ export function ForkSection({ record }: { record: CaseRecord }) {
               {target?.meta.narrated && (
                 <NarrativeInputs value={row.narrative} onChange={(narrative) => update(row.id, { narrative })} withEvidence />
               )}
-              {built.unchanged.includes(row.id) && <p className="text-xs text-[var(--text-muted)]">unchanged, will be ignored</p>}
-              {problem && <p id={problemId} data-testid="row-problem" aria-live="polite" className="text-xs text-[var(--text-secondary)]">{problem}</p>}
+              {built.unchanged.includes(row.id) && <p className="type-small text-[var(--ink-muted)]">unchanged, will be ignored</p>}
+              {problem && <p id={problemId} data-testid="row-problem" aria-live="polite" className="type-small text-[var(--ink-secondary)]">{problem}</p>}
             </div>
           );
         })}
@@ -141,7 +141,7 @@ export function ForkSection({ record }: { record: CaseRecord }) {
               setRows((all) => [...all, { id: nextId, targetKey: "", value: "", narrative: EMPTY_NARRATIVE }]);
               setNextId((n) => n + 1);
             }}
-            className="rounded-[var(--radius-sm)] border border-[var(--border-default)] px-3 py-1.5 text-sm"
+            className="rounded-[var(--radius-1)] border border-[var(--line)] px-3 py-1.5 type-body"
           >
             Add a change
           </button>
@@ -149,23 +149,23 @@ export function ForkSection({ record }: { record: CaseRecord }) {
             type="submit"
             disabled={mutation.isPending}
             aria-busy={mutation.isPending}
-            className="rounded-[var(--radius-sm)] border border-[var(--border-default)] px-3 py-1.5 text-sm font-medium disabled:opacity-50"
+            className="rounded-[var(--radius-1)] border border-[var(--line)] px-3 py-1.5 type-body disabled:opacity-50"
           >
             {mutation.isPending ? "Creating…" : "Create fork"}
           </button>
         </div>
         {submitted && built.changedCount === 0 && !nameProblem && Object.keys(built.problems).length === 0 && (
-          <p data-testid="fork-nothing-changed" aria-live="polite" className="text-xs text-[var(--text-secondary)]">
+          <p data-testid="fork-nothing-changed" aria-live="polite" className="type-small text-[var(--ink-secondary)]">
             Change at least one value to fork.
           </p>
         )}
         {refusal && (
-          <p data-testid="fork-refusal" role="status" aria-live="polite" className="text-sm text-[var(--text-secondary)]">
+          <p data-testid="fork-refusal" role="status" aria-live="polite" className="type-body text-[var(--ink-secondary)]">
             {refusal.detail}
           </p>
         )}
         {failed && (
-          <p role="alert" data-testid="fork-error" className="text-sm text-[var(--chart-negative)]">
+          <p role="alert" data-testid="fork-error" className="type-body text-[var(--status-error-ink)]">
             Could not create the fork.
           </p>
         )}

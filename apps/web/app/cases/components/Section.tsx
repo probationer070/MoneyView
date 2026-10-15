@@ -7,9 +7,9 @@ export function Section({ title, testId, children }: { title: string; testId: st
     <section
       data-testid={testId}
       aria-labelledby={`${testId}-title`}
-      className="mb-6 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-5"
+      className="mb-6 border border-[var(--line)] bg-[var(--surface-raised)] p-5"
     >
-      <h2 id={`${testId}-title`} className="text-sm font-bold text-[var(--text-primary)]">{title}</h2>
+      <h2 id={`${testId}-title`} className="type-panel-title text-[var(--ink)]">{title}</h2>
       <div className="mt-3">{children}</div>
     </section>
   );
@@ -23,14 +23,14 @@ export function Section({ title, testId, children }: { title: string; testId: st
  */
 export function QueryStatus<T>({ query, what, testId }: { query: UseQueryResult<T, unknown>; what: string; testId: string }) {
   if (query.isPending) {
-    return <p role="status" className="text-sm text-[var(--text-secondary)]">Loading {what}…</p>;
+    return <p role="status" className="type-body text-[var(--ink-secondary)]">Loading {what}…</p>;
   }
   if (query.isError) {
     const error = query.error;
     if (error instanceof CaseApiError && error.isRefusal) {
-      return <p data-testid={`${testId}-refusal`} className="text-sm text-[var(--text-secondary)]">{error.detail}</p>;
+      return <p data-testid={`${testId}-refusal`} className="type-body text-[var(--ink-secondary)]">{error.detail}</p>;
     }
-    return <p role="alert" className="text-sm text-[var(--chart-negative)]">Could not load {what}.</p>;
+    return <p role="alert" className="type-body text-[var(--status-error-ink)]">Could not load {what}.</p>;
   }
   return null;
 }

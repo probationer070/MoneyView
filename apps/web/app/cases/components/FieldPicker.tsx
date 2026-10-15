@@ -1,12 +1,12 @@
 import type { FieldTarget } from "../caseFields";
 
 const control =
-  "rounded-[var(--radius-sm)] border border-[var(--border-default)] bg-transparent px-2 py-1 text-[var(--text-primary)]";
+  "rounded-[var(--radius-1)] border border-[var(--line)] bg-transparent px-2 py-1 text-[var(--ink)]";
 
 export function FieldPicker({ targets, value, onChange }: { targets: FieldTarget[]; value: string; onChange: (key: string) => void }) {
   const segments = [...new Set(targets.filter((t) => t.scope === "segment").map((t) => t.segment as string))];
   return (
-    <label className="flex flex-col gap-1 text-xs text-[var(--text-secondary)]">
+    <label className="flex flex-col gap-1 type-small text-[var(--ink-secondary)]">
       Field
       <select value={value} onChange={(event) => onChange(event.target.value)} className={control}>
         <option value="">Choose…</option>
