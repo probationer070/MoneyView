@@ -97,6 +97,26 @@ async def stock_prewarm_cycle() -> None:
         logger.warning("Non-fatal stock prewarm startup error: %s", exc)
 
 
+async def watchlist_cleanup_cycle(run_at_start: bool) -> None:
+    """Deferred watchlist cache cleanup (spec 2026-10-15 §2.4): once at startup unless the startup
+    gate is set, then once per CLEANUP_INTERVAL_SECONDS. Each run happens in a worker thread and
+    never raises. Both names are read from the module on every pass, so tests can patch them."""
+    from apps.api.services import watchlist_cleanup
+
+    async def run_once() -> None:
+        # run_cleanup_logged should never raise; guard anyway so one crash cannot end the schedule.
+        try:
+            await asyncio.to_thread(watchlist_cleanup.run_cleanup_logged)
+        except Exception as exc:
+            logger.warning("Non-fatal watchlist cleanup error: %s", exc)
+
+    if run_at_start:
+        await run_once()
+    while True:
+        await asyncio.sleep(watchlist_cleanup.CLEANUP_INTERVAL_SECONDS)
+        await run_once()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup and shutdown lifecycle."""
@@ -128,6 +148,8 @@ async def lifespan(app: FastAPI):
     background = [task_wal]
     if not startup_jobs_disabled:
         background.append(asyncio.create_task(stock_prewarm_cycle()))
+    # After the startup syncs above, so peer removals are already recorded as pending.
+    background.append(asyncio.create_task(watchlist_cleanup_cycle(run_at_start=not startup_jobs_disabled)))
 
     yield
 
