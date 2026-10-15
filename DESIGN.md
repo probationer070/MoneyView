@@ -42,7 +42,8 @@ file does not repeat it.
   adding its route to the list, which `tests/e2e/one-screen-no-scroll.spec.ts` then covers.
 - Known exception, until the market one-screen plan lands: `components/market/**` and `app/page.tsx`
   still hold pre-paper classes and deprecated aliases. The lint rule is `warn` there and `error`
-  everywhere else, and `tests/e2e/paper-sweep.spec.ts` skips the `/` route.
+  everywhere else, and `tests/e2e/paper-sweep.spec.ts` skips the `/` route. `npm run design:baseline`
+  exits non-zero when the warnings exceed the cap in `apps/web/scripts/design-baseline-cap.mjs` (295).
 
 ## What `npm run lint` checks (rule `moneyview/no-raw-design-values`)
 | Message | Means | Fix |
