@@ -10,7 +10,6 @@ import { Eyebrow } from "@/components/ui/Eyebrow";
 import { fieldInputClass } from "@/components/ui/InlineField";
 import { MetricQualityBadge } from "@/components/ui/MetricQualityBadge";
 import { useT } from "@/lib/i18n/locale";
-import { formatAuditMetricValue } from "@/lib/metricAudit";
 import { ASSUMPTION_ROWS, formatAssumption, type AssumptionField, type AssumptionKey, type AssumptionRowDef } from "../assumptionRows";
 import { KOREA_COUNTRY_RISK_PREMIUM } from "../corporateConstants";
 import type { CorporateAssumptions, RoicBasis } from "../corporateTypes";
