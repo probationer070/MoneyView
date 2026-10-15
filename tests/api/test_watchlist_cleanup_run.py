@@ -298,3 +298,46 @@ def test_a_failing_reference_query_deletes_nothing(monkeypatch):
         watchlist_cleanup.run_cleanup(T0 + GRACE + DAY)
     assert cache_counts("ZZA") == FULL, "a run that could not read every reference deleted caches"
     watchlist_cleanup.run_cleanup_logged()  # must not raise
+
+
+# --- Fix round 1: a malformed removal time, a naive one, and normalised backfill keys ----------------
+
+def test_a_malformed_removal_time_skips_only_that_ticker_and_restarts_its_clock(caplog):
+    caplog.set_level(logging.WARNING, logger=watchlist_cleanup.__name__)
+    seed_caches("ZZA")
+    seed_caches("ZZB")
+    with get_db() as conn:
+        conn.execute("INSERT INTO cleanup_pending (ticker, removed_at) VALUES ('ZZA', 'garbage')")
+    pend("ZZB", T0)
+    now = T0 + GRACE + DAY
+
+    watchlist_cleanup.run_cleanup(now)  # must not raise
+
+    assert cache_counts("ZZB") == GONE, "a malformed row stopped the other tickers"
+    assert cache_counts("ZZA") == FULL, "a malformed removal time deleted caches"
+    assert datetime.fromisoformat(pending()["ZZA"]) == now, "the malformed row's clock was not restarted"
+    assert "cleanup.bad_pending ticker=ZZA" in caplog.text
+    assert "garbage" not in caplog.text, "the raw malformed value was logged"
+    watchlist_cleanup.run_cleanup(now + GRACE - DAY)
+    assert cache_counts("ZZA") == FULL, "the restarted clock deleted caches early"
+    watchlist_cleanup.run_cleanup(now + GRACE)
+    assert cache_counts("ZZA") == GONE, "the restarted clock never came due"
+
+
+def test_a_removal_time_without_an_offset_is_read_as_utc():
+    seed_caches("ZZN")
+    with get_db() as conn:
+        conn.execute("INSERT INTO cleanup_pending (ticker, removed_at) VALUES ('ZZN', '2026-09-01T00:00:00')")
+    boundary = datetime(2026, 9, 1, tzinfo=timezone.utc) + GRACE
+
+    watchlist_cleanup.run_cleanup(boundary - timedelta(hours=1))
+    assert cache_counts("ZZN") == FULL, "a naive removal time was due before 30 UTC days"
+    watchlist_cleanup.run_cleanup(boundary)
+    assert cache_counts("ZZN") == GONE, "a naive removal time was not due at 30 UTC days"
+
+
+def test_the_backfill_records_one_normalised_key_per_ticker():
+    seed_caches("zza")
+    seed_caches("ZZA")
+    watchlist_cleanup.run_cleanup(T0)
+    assert pending() == {"ZZA": T0.isoformat()}, "the backfill recorded two pending rows for one ticker"

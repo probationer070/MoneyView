@@ -128,8 +128,18 @@ def delete_ticker_caches(ticker: str) -> dict[str, int]:
     return counts
 
 
+def _parse_removed_at(value: str) -> datetime:
+    """A stored removal time as an aware UTC moment. A value without an offset is read as UTC."""
+    moment = datetime.fromisoformat(value)
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=timezone.utc)
+    return moment
+
+
 def run_cleanup(now: datetime) -> dict[str, dict[str, int]]:
-    """One cleanup pass at `now` (an aware UTC datetime). Returns {ticker: {table: rows deleted}}."""
+    """One cleanup pass at `now` (an aware UTC datetime). Returns {ticker: {table: rows deleted}}.
+    A malformed removal time skips that ticker for this run and restarts its clock at `now`."""
+    grace = timedelta(days=CLEANUP_GRACE_DAYS)
     with get_db() as conn:
         referenced = referenced_tickers(conn)
         pending = {row["ticker"]: row["removed_at"]
@@ -139,12 +149,21 @@ def run_cleanup(now: datetime) -> dict[str, dict[str, int]]:
             del pending[ticker]
         # Any unreferenced cache ticker with no record (removed before this shipped, or by a path
         # that is not hooked) starts its grace period now, so nothing is deleted on first sight.
-        for ticker in sorted(_cache_tickers(conn)):
-            if _normalize(ticker) not in referenced and ticker not in pending:
+        known = {_normalize(ticker) for ticker in pending}
+        for ticker in sorted({_normalize(ticker) for ticker in _cache_tickers(conn)}):
+            if ticker not in referenced and ticker not in known:
                 conn.execute("INSERT OR IGNORE INTO cleanup_pending (ticker, removed_at) VALUES (?, ?)",
                              (ticker, _iso(now)))
-    grace = timedelta(days=CLEANUP_GRACE_DAYS)
-    due = sorted(t for t, at in pending.items() if now - datetime.fromisoformat(at) >= grace)
+        due = []
+        for ticker, removed_at in sorted(pending.items()):
+            try:
+                removed = _parse_removed_at(removed_at)
+            except (ValueError, TypeError):
+                logger.warning("cleanup.bad_pending ticker=%s", ticker)
+                conn.execute("UPDATE cleanup_pending SET removed_at = ? WHERE ticker = ?", (_iso(now), ticker))
+                continue
+            if now - removed >= grace:
+                due.append(ticker)
     deleted: dict[str, dict[str, int]] = {}
     for ticker in due:
         try:
