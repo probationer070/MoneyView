@@ -2,8 +2,12 @@
 (spec docs/superpowers/specs/2026-10-15-watchlist-cleanup-and-corporate-sync-design.md §2).
 
 A ticker leaving the watchlist is recorded in cleanup_pending with the moment it left. Once it has
-been pending for CLEANUP_GRACE_DAYS and nothing refers to it any more, its rows in the rebuildable
-cache tables are deleted. User-authored tables and snapshot history are references, never targets.
+been pending for CLEANUP_GRACE_DAYS and nothing refers to it any more, its rows in the CLEANUP_TABLES
+caches are deleted. User-authored tables and snapshot history are references, never targets.
+
+corporate_statements and their acquisition_state rows (data class 'statements') are KEPT, never
+deleted. Yahoo returns only a recent window of quarters, and the store accumulates older quarters, so
+deleting them would lose that history permanently (owner decision, 2026-10-15).
 """
 from __future__ import annotations
 
@@ -19,26 +23,32 @@ logger = logging.getLogger(__name__)
 CLEANUP_GRACE_DAYS = 30
 CLEANUP_INTERVAL_SECONDS = 24 * 60 * 60
 
+# Per-ticker data classes whose state and rows are never cleaned. 'statements' is kept: quarters
+# accumulate beyond Yahoo's window, so a deletion would lose history permanently (owner, 2026-10-15).
+# The acquisition layer keeps its freshness state for them too.
+KEPT_DATA_CLASSES = frozenset({"statements"})
+
 # acquisition_state rows keyed by a ticker. index_bars is GLOBAL: its subjects are index symbols
 # whose bars live in `indices`, a reference table.
-PER_TICKER_DATA_CLASSES = tuple(sorted(name for name, dc in REGISTRY.items() if dc.scope is Scope.PER_TICKER))
+PER_TICKER_DATA_CLASSES = tuple(sorted(
+    name for name, dc in REGISTRY.items() if dc.scope is Scope.PER_TICKER and name not in KEPT_DATA_CLASSES))
 _CLASS_LIST = ", ".join(f"'{name}'" for name in PER_TICKER_DATA_CLASSES)
 
-# (table, WHERE clause binding the ticker once). Only caches Yahoo can rebuild on demand belong here.
+# (table, WHERE clause binding the ticker once). Only caches re-fetched on demand belong here.
+# corporate_statements is deliberately absent (see KEPT_DATA_CLASSES).
 CLEANUP_TABLES: tuple[tuple[str, str], ...] = (
     ("stocks", "ticker = ?"),
     ("news", "ticker = ?"),
-    ("corporate_statements", "ticker = ?"),
     ("corporate_quote_facts", "ticker = ?"),
     ("acquisition_state", f"subject = ? AND data_class IN ({_CLASS_LIST})"),
 )
 
 # Tickers present in a cache table. A NULL or '' news ticker is market-wide news, not attributed
-# to any ticker, so it is never a candidate.
+# to any ticker, so it is never a candidate. corporate_statements is not a candidate source: a
+# statements-only ticker would be re-recorded as "now" on every run and never come due.
 _CANDIDATE_QUERIES: tuple[str, ...] = (
     "SELECT DISTINCT ticker FROM stocks",
     "SELECT DISTINCT ticker FROM news WHERE ticker IS NOT NULL AND ticker <> ''",
-    "SELECT DISTINCT ticker FROM corporate_statements",
     "SELECT ticker FROM corporate_quote_facts",
     f"SELECT DISTINCT subject FROM acquisition_state WHERE data_class IN ({_CLASS_LIST})",
 )

@@ -19,7 +19,8 @@ DAY = timedelta(days=1)
 CLASSES = watchlist_cleanup.PER_TICKER_DATA_CLASSES
 FULL = {"stocks": 2, "news": 1, "corporate_statements": 1, "corporate_quote_facts": 1,
         "acquisition_state": len(CLASSES)}
-GONE = {table: 0 for table in FULL}
+# What a cleanup leaves behind: corporate_statements is kept (owner decision, 2026-10-15).
+GONE = {"stocks": 0, "news": 0, "corporate_statements": 1, "corporate_quote_facts": 0, "acquisition_state": 0}
 
 
 def seed_caches(ticker: str) -> None:
@@ -171,19 +172,50 @@ def test_a_reference_in_another_case_still_protects_the_ticker():
 # --- §4.4: cleanup never touches user records or snapshots ---------------------------------------
 
 def _row_counts_outside_the_cleanup_tables() -> dict[str, int]:
-    # The five pinned cache tables are written out, not read from CLEANUP_TABLES: deriving the skip set
+    # The four pinned cache tables are written out, not read from CLEANUP_TABLES: deriving the skip set
     # from the module under test would let a mutation of that tuple hide the table it adds.
-    skip = {"stocks", "news", "corporate_statements", "corporate_quote_facts", "acquisition_state",
-            "cleanup_pending", "sqlite_sequence"}
+    # corporate_statements is NOT skipped: it is a protected table that a cleanup must never change.
+    skip = {"stocks", "news", "corporate_quote_facts", "acquisition_state", "cleanup_pending", "sqlite_sequence"}
     with get_db() as conn:
         tables = [r["name"] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")]
         return {t: conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0] for t in tables if t not in skip}
 
 
-def test_the_cleanup_tables_are_exactly_the_five_rebuildable_caches():
+def test_the_cleanup_tables_are_exactly_the_four_refetchable_caches():
     assert {table for table, _ in watchlist_cleanup.CLEANUP_TABLES} == {
-        "stocks", "news", "corporate_statements", "corporate_quote_facts", "acquisition_state",
-    }, "CLEANUP_TABLES must list only rebuildable upstream caches"
+        "stocks", "news", "corporate_quote_facts", "acquisition_state",
+    }, "CLEANUP_TABLES must list only caches that are re-fetched on demand"
+    assert "statements" not in CLASSES, "the statements data class must never be cleaned"
+
+
+def test_corporate_statements_and_their_state_survive_a_cleanup():
+    seed_caches("ZZS")
+    with get_db() as conn:
+        # OR IGNORE: a mutation that puts 'statements' back into CLASSES makes seed_caches write this row
+        # first, and the failure must then come from the cleanup deleting it, not from this insert.
+        conn.execute("INSERT OR IGNORE INTO acquisition_state (data_class, subject, status) "
+                     "VALUES ('statements', 'ZZS', 'ok')")
+    pend("ZZS", T0)
+
+    watchlist_cleanup.run_cleanup(T0 + GRACE + DAY)
+
+    assert cache_counts("ZZS") == GONE, "a due ticker's stocks, news, quote facts or acquisition classes survived"
+    with get_db() as conn:
+        statement_rows = conn.execute("SELECT COUNT(*) FROM corporate_statements WHERE ticker = 'ZZS'").fetchone()[0]
+        statement_state = conn.execute(
+            "SELECT COUNT(*) FROM acquisition_state WHERE data_class = 'statements' AND subject = 'ZZS'").fetchone()[0]
+    assert statement_rows == 1, "the corporate_statements history was deleted"
+    assert statement_state == 1, "the statements acquisition state was deleted"
+    assert "ZZS" not in pending(), "a fully cleaned ticker kept its pending record"
+
+
+def test_a_ticker_with_only_statements_is_never_a_candidate():
+    with get_db() as conn:
+        conn.execute("INSERT INTO corporate_statements (ticker, statement_type, frequency, period_end, line_item, "
+                     "value, fetched_at) VALUES ('ZZO', 'income', 'annual', '2025-12-31', 'revenue', 1.0, "
+                     "'2026-09-01T00:00:00+00:00')")
+    watchlist_cleanup.run_cleanup(T0)
+    assert pending() == {}, "a statements-only ticker was recorded as a cleanup candidate"
 
 
 def test_a_cleanup_run_never_changes_any_other_table():

@@ -32,14 +32,15 @@ Oct 15, 2026. The source is `docs/architecture/database-relationships.md` §6, g
 
 ### 2.1 What is cleaned
 
-The cleanup deletes the ticker's rows in the upstream-cache tables. The exact table list comes from `database-relationships.md` §2.2–2.3 at implementation time, and the plan pins it. It covers:
+The cleanup deletes the ticker's rows in four cache tables (`CLEANUP_TABLES`):
 - market bars (`stocks`);
 - `news` rows attributed to the ticker;
-- `corporate_statements`;
 - `corporate_quote_facts`;
-- `acquisition_state` rows whose subject is the ticker.
+- `acquisition_state` rows whose subject is the ticker, for the per-ticker data classes other than `statements`.
 
-Each of these is rebuildable from Yahoo on demand.
+`corporate_statements` and the `statements` acquisition state are kept and never deleted (owner decision, 2026-10-15). Yahoo returns only a recent window of quarters and the store accumulates older ones, so a deletion would lose that history permanently.
+
+Correction to the earlier premise that every cleaned table can be rebuilt. Bars and quote facts are re-fetched from Yahoo on demand. News for a cleaned ticker cannot be re-fetched beyond Google News' recent window, so older news for that ticker is lost once cleaned. The owner accepts this (2026-10-15).
 
 ### 2.2 When a ticker is unreferenced
 

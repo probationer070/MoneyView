@@ -25,6 +25,7 @@ file before adding or moving any architecture doc.
 | `visualization-metrics.md` | KPI and chart semantics, ownership of metric meaning |
 | `documentation-roadmap.md` | Documentation structure, writing order, maintenance rules |
 | `app-blueprint.md`, `system-overview.md`, `local-first-runtime.md`, `dcf-streaming.md`, `dev-monitor-backend-foundation.md`, `schema-evolution.md`, `api-transport-observability.md`, `cache-ownership-invalidation.md` | Supporting design notes for specific subsystems and past planning tracks |
+| `watchlist-cleanup-and-corporate-sync.md` | Addendum: deferred cleanup of a removed ticker's caches (30-day grace; `corporate_statements` kept), corporate records-sync kinds, two-PC rollout and PR #67 merge conflicts |
 
 ## Design (`docs/design/`)
 

@@ -54,8 +54,10 @@ Spec: `docs/superpowers/specs/2026-10-15-watchlist-cleanup-and-corporate-sync-de
 - [x] W2 hooks on every watchlist add/remove path, incl. peer sync
 - [x] W3 startup (gated) + daily run  - [x] W4 company list hides a deleted ticker
 - [x] W5 `corporate_metrics` / `corporate_companies` records-sync kinds + write-path stamps
-- [ ] W6 **Rollout:** update BOTH PCs in one session before either runs with sync on (an older
-      PC skips the updated PC's whole records file; see the plan's Rollout notes).
+- [ ] W6 **Rollout:** close MoneyView on both PCs; update PC 1, start it, check Corporate; update PC 2
+      the same day; confirm neither sync status shows a skipped peer file with "unknown kind". Until
+      both are updated, use only the updated PC (a record changed on both keeps the later change).
+      Nothing is deleted for 30 days. See `docs/architecture/watchlist-cleanup-and-corporate-sync.md`.
 
 ## Known limits, accepted deliberately
 
