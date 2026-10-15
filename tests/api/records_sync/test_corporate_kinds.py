@@ -139,7 +139,7 @@ def test_an_older_peer_file_without_the_new_kinds_still_loads_and_merges(tmp_pat
 
 
 def test_an_older_reader_skips_a_whole_file_that_carries_the_new_kinds(tmp_path, monkeypatch, cloud):
-    # Characterises today's reader (files.py:283-285) for the rollout notes: an older PC drops the
+    # Characterises today's reader (files._parse, the `unknown kind` raise (files.py:131-133)) for the rollout notes: an older PC drops the
     # updated PC's WHOLE file, other kinds included, until it is updated too.
     a = PC(tmp_path, "PC-A", monkeypatch)
     put_metrics(a, "AAPL", 9.5)

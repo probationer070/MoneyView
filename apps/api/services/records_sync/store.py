@@ -128,7 +128,9 @@ def ensure_first_sync(conn: sqlite3.Connection, pc_id: str) -> None:
     save is stamped from that time, so two PCs that both saved settings before sync existed are
     decided by recency rather than by the pc_id tiebreak; the never-saved default ('', init_db's
     row on every fresh database) is stamped SEED_TS, below BASELINE_TS, so it never outranks a
-    real save. See _first_preferences_stamp.
+    real save. See _first_preferences_stamp. corporate_metrics and corporate_companies rows are
+    likewise stamped from their own updated_at; an untouched add_company default is stamped SEED_TS.
+    See _first_stamp.
     """
     for kind in KINDS.values():
         for uid, row in _local_rows(conn, kind):
