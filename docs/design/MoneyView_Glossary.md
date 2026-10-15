@@ -17,6 +17,15 @@ capitals: "종목 NAME". Both come from `apps/web/lib/i18n/labels.ts`; add the r
 | Intrinsic value | 내재가치 | Always shown next to the market price |
 | Terminal value | 잔존가치 | Never 영구가치 |
 | Monte Carlo | 몬테카를로 시뮬레이션 | |
+| Simulation Lab | 시뮬레이션 랩 | page title (monte-carlo) |
+| Path Simulation | 경로 시뮬레이션 | Monte Carlo tab |
+| Risk Analysis | 위험 분석 | Monte Carlo tab |
+| Return Distribution | 수익률 분포 | Monte Carlo tab |
+| Corporate Valuation | 기업가치 평가 | Monte Carlo tab |
+| Correlation Model | 상관관계 모형 | Monte Carlo tab |
+| Asset | 자산 | label (correlation setup header) |
+| Mu | 기대수익률 | label (correlation setup header); symbol kept as Mu |
+| Sigma | 변동성 | label (correlation setup header); symbol kept as Sigma |
 | Market Overview | 시장 개요 | nav |
 | Portfolio | 포트폴리오 | nav |
 | News Feed | 뉴스 | nav |

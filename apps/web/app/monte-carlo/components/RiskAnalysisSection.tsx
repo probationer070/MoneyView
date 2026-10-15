@@ -4,6 +4,9 @@ import type { SharedSimulationResult } from "../lib/types";
 import { Download } from "lucide-react";
 import { ReferenceLine } from "recharts";
 import { ActionButton } from "@/components/ui/ActionButton";
+import { CHART_COLORS } from "@/lib/chartConfig";
+import { formatNumber } from "@/lib/format";
+import { useLocale } from "@/lib/i18n/locale";
 import { MonteCarloTabSummary } from "./MonteCarloTabSummary";
 import { LegendItem, MetricCard, SummaryRow, TEN_THOUSAND_KRW, WarningNotice, krwLossFromPercent, numberText, pct } from "./shared";
 import { HistogramPanel, type HistogramBin } from "@/components/charts/HistogramPanel";
@@ -18,6 +21,8 @@ type Props = {
 };
 
 export function RiskAnalysisSection({ sharedSimulation, initialInvestment, warnings, exportRiskSummaryCsv, exportRiskHistogramCsv }: Props) {
+  const { locale } = useLocale();
+
   if (!sharedSimulation) {
     return (
       <div className="space-y-6">
@@ -33,7 +38,7 @@ export function RiskAnalysisSection({ sharedSimulation, initialInvestment, warni
             { label: "Exports", value: "Unavailable until path run" },
           ]}
         />
-        <div className="rounded-[var(--radius)] border border-dashed border-[var(--border)] bg-[var(--bg-surface)] p-10 text-center text-sm text-[var(--text-muted)]">
+        <div className="border border-dashed border-[var(--line)] bg-[var(--surface-raised)] p-10 text-center type-body text-[var(--ink-muted)]">
           Run the Path Simulation tab first. Risk Analysis is calculated automatically from the same simulation results.
         </div>
       </div>
@@ -51,9 +56,9 @@ export function RiskAnalysisSection({ sharedSimulation, initialInvestment, warni
         statusLabel="Using shared path results"
         items={[
           { label: "Execution mode", value: sharedSimulation.raw.execution_mode },
-          { label: "Loss probability", value: pct(sharedSimulation.raw.risk_metrics.loss_probability) },
-          { label: "Max drawdown", value: pct(sharedSimulation.medianMaxDrawdown) },
-          { label: "CVaR 95%", value: krwLossFromPercent(initialInvestment, sharedSimulation.raw.risk_metrics.cvar95) },
+          { label: "Loss probability", value: pct(sharedSimulation.raw.risk_metrics.loss_probability, locale) },
+          { label: "Max drawdown", value: pct(sharedSimulation.medianMaxDrawdown, locale) },
+          { label: "CVaR 95%", value: krwLossFromPercent(initialInvestment, sharedSimulation.raw.risk_metrics.cvar95, locale) },
         ]}
         actions={(
           <>
@@ -65,12 +70,12 @@ export function RiskAnalysisSection({ sharedSimulation, initialInvestment, warni
 
       {/* Top-line downside and distribution-shape metrics */}
       <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-        <MetricCard label="VaR 95%" value={krwLossFromPercent(initialInvestment, sharedSimulation.raw.risk_metrics.var95)} detail={`Loss threshold at ${pct(sharedSimulation.raw.risk_metrics.var95)}`} />
-        <MetricCard label="VaR 99%" value={krwLossFromPercent(initialInvestment, sharedSimulation.raw.risk_metrics.var99)} detail={`Loss threshold at ${pct(sharedSimulation.raw.risk_metrics.var99)} in 10,000 KRW`} />
-        <MetricCard label="CVaR 95%" value={krwLossFromPercent(initialInvestment, sharedSimulation.raw.risk_metrics.cvar95)} detail="Expected tail loss beyond VaR 95%" />
-        <MetricCard label="Maximum drawdown" value={pct(sharedSimulation.medianMaxDrawdown)} detail="Largest peak-to-trough decline of the median path" />
-        <MetricCard label="Sortino ratio" value={numberText(sharedSimulation.raw.risk_metrics.sortino_ratio)} detail="Downside-risk-adjusted return" />
-        <MetricCard label="Skewness" value={numberText(sharedSimulation.raw.risk_metrics.skewness)} detail="Terminal return asymmetry" />
+        <MetricCard label="VaR 95%" value={krwLossFromPercent(initialInvestment, sharedSimulation.raw.risk_metrics.var95, locale)} detail={`Loss threshold at ${pct(sharedSimulation.raw.risk_metrics.var95, locale)}`} />
+        <MetricCard label="VaR 99%" value={krwLossFromPercent(initialInvestment, sharedSimulation.raw.risk_metrics.var99, locale)} detail={`Loss threshold at ${pct(sharedSimulation.raw.risk_metrics.var99, locale)} in 10,000 KRW`} />
+        <MetricCard label="CVaR 95%" value={krwLossFromPercent(initialInvestment, sharedSimulation.raw.risk_metrics.cvar95, locale)} detail="Expected tail loss beyond VaR 95%" />
+        <MetricCard label="Maximum drawdown" value={pct(sharedSimulation.medianMaxDrawdown, locale)} detail="Largest peak-to-trough decline of the median path" />
+        <MetricCard label="Sortino ratio" value={numberText(sharedSimulation.raw.risk_metrics.sortino_ratio, locale)} detail="Downside-risk-adjusted return" />
+        <MetricCard label="Skewness" value={numberText(sharedSimulation.raw.risk_metrics.skewness, locale)} detail="Terminal return asymmetry" />
       </section>
 
       {/* Loss distribution view with VaR / CVaR markers */}
@@ -81,18 +86,18 @@ export function RiskAnalysisSection({ sharedSimulation, initialInvestment, warni
         emptyTitle="Risk distribution data is invalid"
         emptyDescription="The shared simulation result did not contain a chart-safe histogram, so the risk distribution panel was withheld instead of rendering blank."
         legend={
-          <div className="flex flex-wrap gap-3 text-xs font-bold text-[var(--text-muted)]">
-            <LegendItem label="Loss buckets" lineClass="bg-red-500" />
-            <LegendItem label="Gain buckets" lineClass="bg-emerald-500" />
-            <LegendItem label="VaR 95" lineClass="bg-amber-500" />
-            <LegendItem label="VaR 99" lineClass="bg-orange-600" />
-            <LegendItem label="CVaR 95" lineClass="bg-black" />
+          <div className="flex flex-wrap gap-3">
+            <LegendItem label="Loss buckets" lineClass="bg-[var(--down)]" />
+            <LegendItem label="Gain buckets" lineClass="bg-[var(--up)]" />
+            <LegendItem label="VaR 95" lineClass="bg-[var(--status-warning-ink)]" />
+            <LegendItem label="VaR 99" lineClass="bg-[var(--brand)]" />
+            <LegendItem label="CVaR 95" lineClass="bg-[var(--ink)]" />
           </div>
         }
       >
-        <ReferenceLine x={-sharedSimulation.raw.risk_metrics.var95} stroke="#f59e0b" label="VaR 95" />
-        <ReferenceLine x={-sharedSimulation.raw.risk_metrics.var99} stroke="#ea580c" label="VaR 99" />
-        <ReferenceLine x={-sharedSimulation.raw.risk_metrics.cvar95} stroke="#111827" strokeDasharray="6 4" label="CVaR 95" />
+        <ReferenceLine x={-sharedSimulation.raw.risk_metrics.var95} stroke="var(--status-warning-ink)" label="VaR 95" />
+        <ReferenceLine x={-sharedSimulation.raw.risk_metrics.var99} stroke="var(--brand)" label="VaR 99" />
+        <ReferenceLine x={-sharedSimulation.raw.risk_metrics.cvar95} stroke={CHART_COLORS.ink} strokeDasharray="6 4" label="CVaR 95" />
       </HistogramPanel>
 
       {/* Terminal percentile chart and summary table */}
@@ -110,29 +115,38 @@ export function RiskAnalysisSection({ sharedSimulation, initialInvestment, warni
             { percentile: "P95", value: Number((sharedSimulation.terminalP95 / TEN_THOUSAND_KRW).toFixed(2)) },
           ].map((d, i) => ({
             ...d,
-            color: ["#ef4444", "#f97316", "#64748b", "#111827", "#64748b", "#14b8a6", "#16a34a"][i],
+            // Tails in down (lower) and up (upper), the median in ink, the interior in chart-1.
+            color: [
+              CHART_COLORS.negative,
+              CHART_COLORS.negative,
+              CHART_COLORS.primary,
+              CHART_COLORS.ink,
+              CHART_COLORS.primary,
+              CHART_COLORS.positive,
+              CHART_COLORS.positive,
+            ][i],
           }))}
           valueLabel="M KRW"
-          valueFormatter={(val) => `${val.toLocaleString(undefined, { maximumFractionDigits: 2 })}`}
+          valueFormatter={(val) => formatNumber(val, "price", { locale })}
           emptyTitle="Terminal percentile data is invalid"
           emptyDescription="The shared simulation result did not contain chart-safe terminal percentile values."
         />
 
-        <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-5">
-          <h2 className="text-lg font-black text-[var(--text-primary)]">Statistical Summary</h2>
-          <div className="mt-4 overflow-hidden rounded-[var(--radius)] border border-[var(--border)]">
-            <table className="w-full text-sm">
+        <div className="border border-[var(--line)] bg-[var(--surface-raised)] p-5">
+          <h2 className="type-panel-title text-[var(--ink)]">Statistical Summary</h2>
+          <div className="mt-4 overflow-hidden border border-[var(--line)]">
+            <table className="w-full">
               <tbody>
-                <SummaryRow label="Mean" value={pct(sharedSimulation.raw.risk_metrics.mean_return)} />
-                <SummaryRow label="Median" value={pct(sharedSimulation.raw.risk_metrics.median_return)} />
-                <SummaryRow label="Standard deviation" value={pct(sharedSimulation.raw.risk_metrics.volatility)} />
-                <SummaryRow label="Sharpe ratio" value={numberText(sharedSimulation.raw.risk_metrics.sharpe_ratio)} />
-                <SummaryRow label="Sortino ratio" value={numberText(sharedSimulation.raw.risk_metrics.sortino_ratio)} />
-                <SummaryRow label="Skewness" value={numberText(sharedSimulation.raw.risk_metrics.skewness)} />
-                <SummaryRow label="Excess kurtosis" value={numberText(sharedSimulation.raw.risk_metrics.excess_kurtosis)} />
-                <SummaryRow label="VaR 95%" value={krwLossFromPercent(initialInvestment, sharedSimulation.raw.risk_metrics.var95)} />
-                <SummaryRow label="VaR 99%" value={krwLossFromPercent(initialInvestment, sharedSimulation.raw.risk_metrics.var99)} />
-                <SummaryRow label="CVaR 95%" value={krwLossFromPercent(initialInvestment, sharedSimulation.raw.risk_metrics.cvar95)} />
+                <SummaryRow label="Mean" value={pct(sharedSimulation.raw.risk_metrics.mean_return, locale)} />
+                <SummaryRow label="Median" value={pct(sharedSimulation.raw.risk_metrics.median_return, locale)} />
+                <SummaryRow label="Standard deviation" value={pct(sharedSimulation.raw.risk_metrics.volatility, locale)} />
+                <SummaryRow label="Sharpe ratio" value={numberText(sharedSimulation.raw.risk_metrics.sharpe_ratio, locale)} />
+                <SummaryRow label="Sortino ratio" value={numberText(sharedSimulation.raw.risk_metrics.sortino_ratio, locale)} />
+                <SummaryRow label="Skewness" value={numberText(sharedSimulation.raw.risk_metrics.skewness, locale)} />
+                <SummaryRow label="Excess kurtosis" value={numberText(sharedSimulation.raw.risk_metrics.excess_kurtosis, locale)} />
+                <SummaryRow label="VaR 95%" value={krwLossFromPercent(initialInvestment, sharedSimulation.raw.risk_metrics.var95, locale)} />
+                <SummaryRow label="VaR 99%" value={krwLossFromPercent(initialInvestment, sharedSimulation.raw.risk_metrics.var99, locale)} />
+                <SummaryRow label="CVaR 95%" value={krwLossFromPercent(initialInvestment, sharedSimulation.raw.risk_metrics.cvar95, locale)} />
               </tbody>
             </table>
           </div>

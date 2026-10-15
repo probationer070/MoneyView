@@ -47,6 +47,22 @@ export const en = {
     title: "Decision Log",
     subtitle: "What was believed about a ticker, when, and why. Figures are captured by the server at record time and never edited.",
   },
+  monteCarlo: {
+    title: "Simulation Lab",
+    subtitle: "Five-tab workflow for path simulation, risk analysis, return distribution, valuation uncertainty, and correlation structure.",
+    tabs: {
+      path: "Path Simulation",
+      pathDescription: "GBM + jump-diffusion path engine and percentile cone.",
+      risk: "Risk Analysis",
+      riskDescription: "VaR, CVaR, downside metrics, and loss diagnostics.",
+      distribution: "Return Distribution",
+      distributionDescription: "Histogram, normal fit, and fat-tail inspection.",
+      valuation: "Corporate Valuation",
+      valuationDescription: "DCF fair-value uncertainty and undervaluation probability.",
+      correlation: "Correlation Model",
+      correlationDescription: "Multi-asset correlation structure and sensitivity.",
+    },
+  },
   corporate: {
     title: "Corporate Analysis",
     search: { label: "Company Search", placeholder: "Type a company name", notListed: "Not in the list → add" },

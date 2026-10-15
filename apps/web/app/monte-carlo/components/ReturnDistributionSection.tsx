@@ -6,7 +6,9 @@ import { CartesianGrid, Line, LineChart, Tooltip, XAxis, YAxis } from "recharts"
 import { ActionButton } from "@/components/ui/ActionButton";
 import { MonteCarloTabSummary } from "./MonteCarloTabSummary";
 import { ChartGuard } from "./ChartGuard";
-import { GRID_STYLE, fmtPctTick, withAxisProps, withTooltipProps } from "@/lib/chartConfig";
+import { CHART_COLORS, GRID_STYLE, fmtPctTick, withAxisProps, withTooltipProps } from "@/lib/chartConfig";
+import { formatNumber } from "@/lib/format";
+import { useLocale } from "@/lib/i18n/locale";
 import { MetricCard, WarningNotice, numberText, pct } from "./shared";
 import { HistogramPanel, type HistogramBin } from "@/components/charts/HistogramPanel";
 
@@ -18,6 +20,8 @@ type Props = {
 };
 
 export function ReturnDistributionSection({ sharedSimulation, warnings, exportReturnHistogramCsv, exportReturnCdfCsv }: Props) {
+  const { locale } = useLocale();
+
   if (!sharedSimulation) {
     return (
       <div className="space-y-6">
@@ -33,7 +37,7 @@ export function ReturnDistributionSection({ sharedSimulation, warnings, exportRe
             { label: "Exports", value: "Unavailable until path run" },
           ]}
         />
-        <div className="rounded-[var(--radius)] border border-dashed border-[var(--border)] bg-[var(--bg-surface)] p-10 text-center text-sm text-[var(--text-muted)]">
+        <div className="border border-dashed border-[var(--line)] bg-[var(--surface-raised)] p-10 text-center type-body text-[var(--ink-muted)]">
           Run the shared simulation first. Return Distribution uses the same terminal distribution and moments as the Path and Risk tabs.
         </div>
       </div>
@@ -50,10 +54,10 @@ export function ReturnDistributionSection({ sharedSimulation, warnings, exportRe
         status="live"
         statusLabel="Using shared path results"
         items={[
-          { label: "Mean return", value: pct(sharedSimulation.raw.risk_metrics.mean_return) },
-          { label: "Volatility", value: pct(sharedSimulation.raw.risk_metrics.volatility) },
-          { label: "Kurtosis", value: numberText(sharedSimulation.raw.risk_metrics.kurtosis) },
-          { label: "Samples", value: sharedSimulation.raw.histogram.length.toLocaleString() },
+          { label: "Mean return", value: pct(sharedSimulation.raw.risk_metrics.mean_return, locale) },
+          { label: "Volatility", value: pct(sharedSimulation.raw.risk_metrics.volatility, locale) },
+          { label: "Kurtosis", value: numberText(sharedSimulation.raw.risk_metrics.kurtosis, locale) },
+          { label: "Samples", value: formatNumber(sharedSimulation.raw.histogram.length, "integer", { locale }) },
         ]}
         actions={(
           <>
@@ -65,11 +69,11 @@ export function ReturnDistributionSection({ sharedSimulation, warnings, exportRe
 
       {/* Distribution moment summary */}
       <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
-        <MetricCard label="Mean return" value={pct(sharedSimulation.raw.risk_metrics.mean_return)} detail="Average terminal return across all simulations" />
-        <MetricCard label="Std. deviation" value={pct(sharedSimulation.raw.risk_metrics.volatility)} detail="Dispersion of terminal returns" />
-        <MetricCard label="Kurtosis" value={numberText(sharedSimulation.raw.risk_metrics.kurtosis)} detail="Fourth-moment tail heaviness of the terminal return distribution" />
-        <MetricCard label="Maximum return" value={pct(sharedSimulation.raw.risk_metrics.max_return)} detail="Best simulated terminal return" />
-        <MetricCard label="Minimum return" value={pct(sharedSimulation.raw.risk_metrics.min_return)} detail="Worst simulated terminal return" />
+        <MetricCard label="Mean return" value={pct(sharedSimulation.raw.risk_metrics.mean_return, locale)} detail="Average terminal return across all simulations" />
+        <MetricCard label="Std. deviation" value={pct(sharedSimulation.raw.risk_metrics.volatility, locale)} detail="Dispersion of terminal returns" />
+        <MetricCard label="Kurtosis" value={numberText(sharedSimulation.raw.risk_metrics.kurtosis, locale)} detail="Fourth-moment tail heaviness of the terminal return distribution" />
+        <MetricCard label="Maximum return" value={pct(sharedSimulation.raw.risk_metrics.max_return, locale)} detail="Best simulated terminal return" />
+        <MetricCard label="Minimum return" value={pct(sharedSimulation.raw.risk_metrics.min_return, locale)} detail="Worst simulated terminal return" />
       </section>
 
       {/* Histogram plus fitted normal overlay */}
@@ -97,8 +101,8 @@ export function ReturnDistributionSection({ sharedSimulation, warnings, exportRe
           <XAxis dataKey="return" {...withAxisProps({ tickFormatter: (value: number | string) => fmtPctTick(Number(value), 0) })} />
           <YAxis domain={[0, 1]} {...withAxisProps()} />
           <Tooltip {...withTooltipProps()} />
-          <Line type="monotone" dataKey="simulated_cdf" stroke="#60caad" strokeWidth={2} dot={false} />
-          <Line type="monotone" dataKey="normal_cdf" stroke="#111827" strokeDasharray="6 4" dot={false} />
+          <Line type="monotone" dataKey="simulated_cdf" stroke={CHART_COLORS.primary} strokeWidth={2} dot={false} />
+          <Line type="monotone" dataKey="normal_cdf" stroke={CHART_COLORS.ink} strokeDasharray="6 4" dot={false} />
         </LineChart>
       </ChartGuard>
     </div>

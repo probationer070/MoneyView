@@ -50,6 +50,22 @@ export const ko: Messages = {
     title: "의사결정 기록",
     subtitle: "종목에 대해 무엇을, 언제, 왜 믿었는지 기록합니다. 수치는 기록 시점에 서버가 캡처하며 수정되지 않습니다.",
   },
+  monteCarlo: {
+    title: "시뮬레이션 랩",
+    subtitle: "경로 시뮬레이션, 위험 분석, 수익률 분포, 기업가치 불확실성, 상관관계 구조를 다루는 다섯 탭 작업 흐름입니다.",
+    tabs: {
+      path: "경로 시뮬레이션",
+      pathDescription: "GBM과 점프 확산 경로 엔진, 백분위 원뿔",
+      risk: "위험 분석",
+      riskDescription: "VaR, CVaR, 하방 지표, 손실 진단",
+      distribution: "수익률 분포",
+      distributionDescription: "히스토그램, 정규분포 적합, 꼬리 두께 점검",
+      valuation: "기업가치 평가",
+      valuationDescription: "DCF 적정가치 불확실성과 저평가 확률",
+      correlation: "상관관계 모형",
+      correlationDescription: "다종목 상관 구조와 민감도",
+    },
+  },
   corporate: {
     title: "기업 분석",
     search: { label: "기업 검색", placeholder: "회사명을 입력하십시오", notListed: "목록에 없음 → 추가" },

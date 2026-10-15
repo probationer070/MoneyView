@@ -1,21 +1,23 @@
 "use client";
 
 import type { PathSimulationInput, SharedSimulationResult } from "../lib/types";
+import { useMemo } from "react";
 import { Download, Loader2, Play, Square } from "lucide-react";
 import { Area, AreaChart, CartesianGrid, Line, LineChart, Tooltip, XAxis, YAxis } from "recharts";
 import { ActionButton } from "@/components/ui/ActionButton";
 import {
   AXIS_LINE_STYLE,
   AXIS_TICK_STYLE,
+  CHART_COLORS,
   CHART_MARGIN,
   CHART_REFERENCE_COLORS,
   DEFAULT_TOOLTIP_PROPS,
   GRID_STYLE,
-  PERCENTILE_FILL_SEQUENCE,
-  PERCENTILE_SERIES_COLORS,
   fmtYearsTick,
-  seriesColor,
 } from "@/lib/chartConfig";
+import { formatNumber } from "@/lib/format";
+import { useLocale } from "@/lib/i18n/locale";
+import { tokens } from "@/lib/tokens.generated";
 import { MonteCarloRunPanel } from "./MonteCarloRunPanel";
 import { MonteCarloTabSummary } from "./MonteCarloTabSummary";
 import { ChartGuard } from "./ChartGuard";
@@ -65,6 +67,17 @@ export function PathSimulationSection({
   exportSamplePathsCsv,
   exportTerminalDistributionCsv,
 }: Props) {
+  const { locale } = useLocale();
+  // Each band is a stacked area: an invisible floor (the lower percentile) plus the band's width.
+  const coneData = useMemo(() => (sharedSimulation?.pathSummary ?? []).map((row) => ({
+    ...row,
+    floor95: row.p05,
+    width95: row.p95 - row.p05,
+    floor90: row.p10,
+    width90: row.p90 - row.p10,
+    floor75: row.p25,
+    width75: row.p75 - row.p25,
+  })), [sharedSimulation]);
   const summaryStatus = status === "loading"
     ? "in-progress"
     : status === "error"
@@ -89,13 +102,12 @@ export function PathSimulationSection({
       status={status}
       progress={progress}
       progressLabel="Worker progress"
-      progressTone="surface"
       errorMessage={errorMessage}
       errorFallbackMessage="Worker simulation failed."
       cancelledMessage="Simulation cancelled."
       controls={(
         <div className="flex flex-col gap-2 lg:flex-row">
-          <section className="grid grid-cols-2 gap-4 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--brand)] p-4 lg:grid-cols-4">
+          <section className="grid grid-cols-2 gap-4 border border-[var(--line)] bg-[var(--surface)] p-4 lg:grid-cols-4">
             <NumericField label="Initial investment" value={input.initialInvestment} onChange={(value) => update("initialInvestment", value)} suffix="KRW" min={1_000_000} step={100_000} />
             <NumericField label="Expected annual return" value={input.expectedAnnualReturn} onChange={(value) => update("expectedAnnualReturn", value)} suffix="%" step={0.5} />
             <NumericField label="Annual volatility (sigma)" value={input.annualVolatility} onChange={(value) => update("annualVolatility", value)} suffix="%" step={0.5} />
@@ -120,7 +132,7 @@ export function PathSimulationSection({
                 type="button"
                 onClick={() => void runPathSimulation()}
                 disabled={status === "loading"}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-[var(--radius)] bg-[var(--brand)] px-5 py-3 text-sm font-black text-white disabled:opacity-60"
+                className="inline-flex w-full items-center justify-center gap-2 rounded-[var(--radius-1)] bg-[var(--brand)] px-5 py-3 type-label text-[var(--on-brand)] disabled:opacity-60"
               >
                 {status === "loading" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
                 Run Path Simulation
@@ -129,7 +141,7 @@ export function PathSimulationSection({
                 type="button"
                 onClick={cancelPathSimulation}
                 disabled={status !== "loading"}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-5 py-3 text-sm font-black text-[var(--text-primary)] disabled:opacity-50"
+                className="inline-flex w-full items-center justify-center gap-2 rounded-[var(--radius-1)] border border-[var(--line)] bg-[var(--surface-raised)] px-5 py-3 type-label text-[var(--ink)] disabled:opacity-50"
               >
                 <Square className="h-4 w-4" />
                 Cancel
@@ -139,8 +151,8 @@ export function PathSimulationSection({
         </div>
       )}
       helper={(
-        <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4 text-sm text-[var(--text-muted)]">
-          <span className="font-bold text-[var(--text-primary)]">Execution mode:</span>{" "}
+        <div className="border border-[var(--line)] bg-[var(--surface-raised)] p-4 type-body text-[var(--ink-muted)]">
+          <span className="type-label text-[var(--ink)]">Execution mode:</span>{" "}
           {(sharedSimulation?.raw.execution_mode ?? input.executionMode) === "interactive"
             ? "Interactive keeps a richer path sample for the path chart."
             : "Large Summary keeps percentile summaries, terminal distribution, and a small path sample to avoid storing large path matrices."}
@@ -156,8 +168,8 @@ export function PathSimulationSection({
           items={[
             { label: "Execution mode", value: sharedSimulation?.raw.execution_mode ?? input.executionMode },
             { label: "Horizon", value: `${input.investmentHorizonYears} years` },
-            { label: "Simulations", value: input.simulationCount.toLocaleString() },
-            { label: "Median terminal", value: krwTenThousands(sharedSimulation?.terminalMedian ?? input.initialInvestment) },
+            { label: "Simulations", value: formatNumber(input.simulationCount, "integer", { locale }) },
+            { label: "Median terminal", value: krwTenThousands(sharedSimulation?.terminalMedian ?? input.initialInvestment, locale) },
           ]}
           actions={sharedSimulation ? (
             <>
@@ -173,17 +185,17 @@ export function PathSimulationSection({
       <WarningNotice warnings={warnings} title="Path output normalization warnings" />
 
       <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard label="Median terminal value" value={krwTenThousands(sharedSimulation?.terminalMedian ?? input.initialInvestment)} detail="50th percentile ending value in 10,000 KRW units" />
-        <MetricCard label="Expected return" value={pct(sharedSimulation?.medianExpectedReturn ?? 0)} detail="Computed from the median terminal value relative to principal" />
-        <MetricCard label="Loss probability" value={pct(sharedSimulation?.raw.risk_metrics.loss_probability ?? 0)} detail="Probability terminal value ends below principal" />
-        <MetricCard label="Sharpe ratio" value={numberText(sharedSimulation?.raw.risk_metrics.sharpe_ratio ?? 0)} detail={`Annualized Sharpe with rf = ${pct(input.riskFreeRate)}`} />
+        <MetricCard label="Median terminal value" value={krwTenThousands(sharedSimulation?.terminalMedian ?? input.initialInvestment, locale)} detail="50th percentile ending value in 10,000 KRW units" />
+        <MetricCard label="Expected return" value={pct(sharedSimulation?.medianExpectedReturn ?? 0, locale)} detail="Computed from the median terminal value relative to principal" />
+        <MetricCard label="Loss probability" value={pct(sharedSimulation?.raw.risk_metrics.loss_probability ?? 0, locale)} detail="Probability terminal value ends below principal" />
+        <MetricCard label="Sharpe ratio" value={numberText(sharedSimulation?.raw.risk_metrics.sharpe_ratio ?? 0, locale)} detail={`Annualized Sharpe with rf = ${pct(input.riskFreeRate, locale)}`} />
       </section>
 
       <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <PercentileIndicator label="5%-95%" value={`${krwTenThousands(sharedSimulation?.terminalP05 ?? input.initialInvestment)} - ${krwTenThousands(sharedSimulation?.terminalP95 ?? input.initialInvestment)}`} colorClass="bg-emerald-500" description="The widest displayed confidence interval. About 90% of simulated terminal outcomes fall between the 5th and 95th percentiles." />
-        <PercentileIndicator label="10%-90%" value={`${krwTenThousands(sharedSimulation?.terminalP10 ?? input.initialInvestment)} - ${krwTenThousands(sharedSimulation?.terminalP90 ?? input.initialInvestment)}`} colorClass="bg-teal-500" description="A slightly tighter confidence interval. About 80% of simulated terminal outcomes fall between the 10th and 90th percentiles." />
-        <PercentileIndicator label="25%-75%" value={`${krwTenThousands(sharedSimulation?.terminalP25 ?? input.initialInvestment)} - ${krwTenThousands(sharedSimulation?.terminalP75 ?? input.initialInvestment)}`} colorClass="bg-slate-500" description="The interquartile range. It captures the middle 50% of simulated outcomes and shows the most typical dispersion." />
-        <PercentileIndicator label="Median" value={krwTenThousands(sharedSimulation?.terminalMedian ?? input.initialInvestment)} colorClass="bg-black" description="The 50th percentile terminal value. Half of simulations finish above this value and half finish below it." />
+        <PercentileIndicator label="5%-95%" value={`${krwTenThousands(sharedSimulation?.terminalP05 ?? input.initialInvestment, locale)} - ${krwTenThousands(sharedSimulation?.terminalP95 ?? input.initialInvestment, locale)}`} colorClass="bg-[var(--chart-1)] opacity-40" description="The widest displayed confidence interval. About 90% of simulated terminal outcomes fall between the 5th and 95th percentiles." />
+        <PercentileIndicator label="10%-90%" value={`${krwTenThousands(sharedSimulation?.terminalP10 ?? input.initialInvestment, locale)} - ${krwTenThousands(sharedSimulation?.terminalP90 ?? input.initialInvestment, locale)}`} colorClass="bg-[var(--chart-1)] opacity-70" description="A slightly tighter confidence interval. About 80% of simulated terminal outcomes fall between the 10th and 90th percentiles." />
+        <PercentileIndicator label="25%-75%" value={`${krwTenThousands(sharedSimulation?.terminalP25 ?? input.initialInvestment, locale)} - ${krwTenThousands(sharedSimulation?.terminalP75 ?? input.initialInvestment, locale)}`} colorClass="bg-[var(--chart-1)]" description="The interquartile range. It captures the middle 50% of simulated outcomes and shows the most typical dispersion." />
+        <PercentileIndicator label="Median" value={krwTenThousands(sharedSimulation?.terminalMedian ?? input.initialInvestment, locale)} colorClass="bg-[var(--ink)]" description="The 50th percentile terminal value. Half of simulations finish above this value and half finish below it." />
       </section>
 
       {/* Primary visual outputs: sampled paths and percentile cone */}
@@ -199,22 +211,22 @@ export function PathSimulationSection({
           chartHeight={320}
           legend={(
             <div className="flex flex-wrap gap-3">
-              <LegendItem label="Profit Paths" lineClass="bg-emerald-500" />
-              <LegendItem label="Loss Paths" lineClass="bg-slate-500" />
-              <LegendItem label="Average Path" lineClass="bg-black" />
-              <LegendItem label="Principal Line" lineClass="bg-amber-500" />
+              <LegendItem label="Sampled Paths" lineClass="bg-[var(--chart-1)] opacity-50" />
+              <LegendItem label="Average Path" lineClass="bg-[var(--ink)]" />
+              <LegendItem label="Principal Line" lineClass="bg-[var(--brand)]" />
             </div>
           )}
         >
           <LineChart data={sharedSimulation?.pathChartData ?? []} margin={CHART_MARGIN}>
             <CartesianGrid {...GRID_STYLE} />
             <XAxis dataKey="time" type="number" domain={[0, input.investmentHorizonYears]} ticks={yearlyTicks} tickFormatter={fmtYearsTick} tick={AXIS_TICK_STYLE} axisLine={AXIS_LINE_STYLE} tickLine={false} />
-            <YAxis tickFormatter={(value) => `${Math.round(value / TEN_THOUSAND_KRW)}`} tick={AXIS_TICK_STYLE} axisLine={AXIS_LINE_STYLE} tickLine={false} />
-            <Tooltip {...DEFAULT_TOOLTIP_PROPS} formatter={(value) => krwTenThousands(Number(value ?? 0))} labelFormatter={(label) => `${label} years`} />
-            {sharedSimulation?.pathKeys.map((key, index) => (
-              <Line key={key} dataKey={key} stroke={seriesColor(index)} strokeOpacity={0.5} dot={false} />
+            <YAxis tickFormatter={(value) => formatNumber(Math.round(value / TEN_THOUSAND_KRW), "integer", { locale })} tick={AXIS_TICK_STYLE} axisLine={AXIS_LINE_STYLE} tickLine={false} />
+            <Tooltip {...DEFAULT_TOOLTIP_PROPS} formatter={(value) => krwTenThousands(Number(value ?? 0), locale)} labelFormatter={(label) => `${label} years`} />
+            {/* One colour for every sampled path: a per-index palette would make the paths look like categories. */}
+            {sharedSimulation?.pathKeys.map((key) => (
+              <Line key={key} dataKey={key} stroke={CHART_COLORS.primary} strokeOpacity={0.5} dot={false} />
             ))}
-            <Line type="monotone" dataKey="average_path" stroke={CHART_REFERENCE_COLORS.baseline} strokeWidth={2} dot={false} />
+            <Line type="monotone" dataKey="average_path" stroke={CHART_COLORS.ink} strokeWidth={2} dot={false} />
             <Line type="monotone" dataKey="principal_line" stroke={CHART_REFERENCE_COLORS.highlight} strokeDasharray="6 4" dot={false} />
           </LineChart>
         </ChartGuard>
@@ -230,47 +242,49 @@ export function PathSimulationSection({
           chartHeight={320}
           legend={(
             <div className="flex flex-wrap gap-3">
-              <LegendItem label="5%-95%" lineClass="bg-emerald-500" />
-              <LegendItem label="10%-90%" lineClass="bg-teal-500" />
-              <LegendItem label="25%-75%" lineClass="bg-slate-500" />
-              <LegendItem label="Median" lineClass="bg-black" />
+              <LegendItem label="5%-95%" lineClass="bg-[var(--chart-1)] opacity-40" />
+              <LegendItem label="10%-90%" lineClass="bg-[var(--chart-1)] opacity-70" />
+              <LegendItem label="25%-75%" lineClass="bg-[var(--chart-1)]" />
+              <LegendItem label="Median" lineClass="bg-[var(--ink)]" />
             </div>
           )}
         >
-          <AreaChart data={sharedSimulation?.pathSummary ?? []} margin={CHART_MARGIN}>
+          <AreaChart data={coneData} margin={CHART_MARGIN}>
             <CartesianGrid {...GRID_STYLE} />
             <XAxis dataKey="time" type="number" domain={[0, input.investmentHorizonYears]} ticks={yearlyTicks} tickFormatter={fmtYearsTick} tick={AXIS_TICK_STYLE} axisLine={AXIS_LINE_STYLE} tickLine={false} />
-            <YAxis tickFormatter={(value) => `${Math.round(value / TEN_THOUSAND_KRW)}`} tick={AXIS_TICK_STYLE} axisLine={AXIS_LINE_STYLE} tickLine={false} />
-            <Tooltip {...DEFAULT_TOOLTIP_PROPS} formatter={(value) => krwTenThousands(Number(value ?? 0))} labelFormatter={(label) => `${label} years`} />
-            <Area type="monotone" dataKey="p95" stroke={PERCENTILE_FILL_SEQUENCE[0]} fill={PERCENTILE_FILL_SEQUENCE[0]} fillOpacity={0.2} />
-            <Area type="monotone" dataKey="p90" stroke={PERCENTILE_FILL_SEQUENCE[1]} fill={PERCENTILE_FILL_SEQUENCE[1]} fillOpacity={0.16} />
-            <Area type="monotone" dataKey="p75" stroke={PERCENTILE_FILL_SEQUENCE[2]} fill={PERCENTILE_FILL_SEQUENCE[2]} fillOpacity={0.14} />
-            <Area type="monotone" dataKey="p05" stroke="#ffffff" fill="#ffffff" fillOpacity={1} />
-            <Area type="monotone" dataKey="p10" stroke="#ffffff" fill="#ffffff" fillOpacity={1} />
-            <Area type="monotone" dataKey="p25" stroke="#ffffff" fill="#ffffff" fillOpacity={1} />
-            <Line type="monotone" dataKey="p50" stroke={PERCENTILE_SERIES_COLORS.p50} strokeWidth={2} dot={false} />
-            <Line type="monotone" dataKey="p05" stroke={PERCENTILE_SERIES_COLORS.p05} dot={false} />
-            <Line type="monotone" dataKey="p10" stroke={PERCENTILE_SERIES_COLORS.p10} dot={false} />
-            <Line type="monotone" dataKey="p25" stroke={PERCENTILE_SERIES_COLORS.p25} dot={false} />
-            <Line type="monotone" dataKey="p75" stroke={PERCENTILE_SERIES_COLORS.p75} dot={false} />
-            <Line type="monotone" dataKey="p90" stroke={PERCENTILE_SERIES_COLORS.p90} dot={false} />
-            <Line type="monotone" dataKey="p95" stroke={PERCENTILE_SERIES_COLORS.p95} dot={false} />
+            <YAxis tickFormatter={(value) => formatNumber(Math.round(value / TEN_THOUSAND_KRW), "integer", { locale })} tick={AXIS_TICK_STYLE} axisLine={AXIS_LINE_STYLE} tickLine={false} />
+            <Tooltip {...DEFAULT_TOOLTIP_PROPS} formatter={(value) => krwTenThousands(Number(value ?? 0), locale)} labelFormatter={(label) => `${label} years`} />
+            {/* Bands: chart-1 at the chart area opacity, nested 5-95, 10-90 and 25-75. The floors are invisible. */}
+            <Area type="monotone" dataKey="floor95" stackId="band95" stroke="none" fill="none" tooltipType="none" legendType="none" />
+            <Area type="monotone" dataKey="width95" stackId="band95" stroke="none" fill={CHART_COLORS.primary} fillOpacity={Number(tokens.chart["area-opacity"])} tooltipType="none" legendType="none" />
+            <Area type="monotone" dataKey="floor90" stackId="band90" stroke="none" fill="none" tooltipType="none" legendType="none" />
+            <Area type="monotone" dataKey="width90" stackId="band90" stroke="none" fill={CHART_COLORS.primary} fillOpacity={Number(tokens.chart["area-opacity"])} tooltipType="none" legendType="none" />
+            <Area type="monotone" dataKey="floor75" stackId="band75" stroke="none" fill="none" tooltipType="none" legendType="none" />
+            <Area type="monotone" dataKey="width75" stackId="band75" stroke="none" fill={CHART_COLORS.primary} fillOpacity={Number(tokens.chart["area-opacity"])} tooltipType="none" legendType="none" />
+            {/* Tails in down (lower) and up (upper); the median in ink; the quartile edges in muted ink. */}
+            <Line type="monotone" dataKey="p50" stroke={CHART_COLORS.ink} strokeWidth={2} dot={false} />
+            <Line type="monotone" dataKey="p05" stroke={CHART_COLORS.negative} dot={false} />
+            <Line type="monotone" dataKey="p10" stroke={CHART_COLORS.negative} dot={false} />
+            <Line type="monotone" dataKey="p25" stroke={CHART_COLORS.label} dot={false} />
+            <Line type="monotone" dataKey="p75" stroke={CHART_COLORS.label} dot={false} />
+            <Line type="monotone" dataKey="p90" stroke={CHART_COLORS.positive} dot={false} />
+            <Line type="monotone" dataKey="p95" stroke={CHART_COLORS.positive} dot={false} />
           </AreaChart>
         </ChartGuard>
       </section>
 
       {/* Compact echo of the active simulation assumptions */}
-      <section className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-5">
-        <h2 className="text-lg font-black text-[var(--text-primary)]">Simulation Setup</h2>
-        <div className="mt-3 grid grid-cols-1 gap-2 text-sm text-[var(--text-muted)] md:grid-cols-2 xl:grid-cols-4">
-          <div>Principal: {krwTenThousands(input.initialInvestment)}</div>
-          <div>Annual return: {pct(input.expectedAnnualReturn)}</div>
-          <div>Annual volatility: {pct(input.annualVolatility)}</div>
+      <section className="border border-[var(--line)] bg-[var(--surface-raised)] p-5">
+        <h2 className="type-panel-title text-[var(--ink)]">Simulation Setup</h2>
+        <div className="mt-3 grid grid-cols-1 gap-2 type-body text-[var(--ink-muted)] md:grid-cols-2 xl:grid-cols-4">
+          <div>Principal: {krwTenThousands(input.initialInvestment, locale)}</div>
+          <div>Annual return: {pct(input.expectedAnnualReturn, locale)}</div>
+          <div>Annual volatility: {pct(input.annualVolatility, locale)}</div>
           <div>Horizon: {input.investmentHorizonYears} years</div>
-          <div>Simulations: {input.simulationCount.toLocaleString()}</div>
-          <div>Jump probability: {pct(input.jumpProbabilityMonthly)} per month</div>
-          <div>Jump intensity: {numberText(input.jumpIntensityMultiplier)}x volatility shock</div>
-          <div>Risk-free rate: {pct(input.riskFreeRate)}</div>
+          <div>Simulations: {formatNumber(input.simulationCount, "integer", { locale })}</div>
+          <div>Jump probability: {pct(input.jumpProbabilityMonthly, locale)} per month</div>
+          <div>Jump intensity: {numberText(input.jumpIntensityMultiplier, locale)}x volatility shock</div>
+          <div>Risk-free rate: {pct(input.riskFreeRate, locale)}</div>
         </div>
       </section>
     </MonteCarloRunPanel>
