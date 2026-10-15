@@ -73,6 +73,19 @@ dispatches one task at a time. Verify by execution, not by an agent's report
 | Doc map | [`../docs/INDEX.md`](../docs/INDEX.md) |
 | Memory | `MEMORY.md` index in the Claude project memory folder |
 
+## Test scope (owner, 2026-10-15)
+
+Run what the change can break, and run everything at the gates.
+
+| When | Run |
+|---|---|
+| Each task (default) | New and changed tests; the specs for the area touched (e.g. `app/corporate/**` → `corporate-*.spec.ts`, `refresh-idle-state`, `terminal-diagnostics`, `high-risk-render-regression`, `tab-state-persistence`, `responsive-accessibility`); `typecheck`; `lint`. Backend: that module's `pytest` files. |
+| Each task, if a shared surface changed | The full suite. Shared surfaces: `components/ui/**` (AppShell, TopNav, Tabs, PageHeader, TickerSearch), `lib/format.ts`, `lib/chartConfig.ts`, `lib/tabState.ts`, `app/layout.tsx`, `tokens/**`, `apps/api/services/db.py`, `records_sync/**`. |
+| Fix rounds | The tests the fix touches and that area's specs. |
+| End of plan, before merge, before PR | The full suite, always (Playwright and `pytest`). |
+
+Pick area specs by grepping `tests/e2e` for the route and the component names you changed. List the specs you ran in the report.
+
 ## Light path
 
 A small, bounded fix (one file, no interface change) may skip stages 1-3. It still
