@@ -82,6 +82,7 @@ documentation file in the repo — architecture, design, tabs, SOPs, and more.
 
 | Change Type | SOPs to Consult |
 |-------------|-----------------|
+| Any coding task (start here) | `guideline/HARNESS.md` |
 | New design or implementation plan | `guideline/sop/architect.md`, `guideline/sop/planner.md` |
 | Finance formula or engine module change | `guideline/sop/finance-logic.md` |
 | File moves, new modules, ownership changes | `guideline/sop/file-structure.md` |
@@ -141,3 +142,10 @@ Two rules follow from it and are not negotiable:
 **This is working if:** no test in this repo is trusted on the basis of having
 been observed passing, and every attribution-asserting test can name the broken
 implementation it was shown to reject.
+
+## 9. Work Harness
+
+Every coding task follows `guideline/HARNESS.md`: stages from intake to records, model
+routing, owner gates, and the fixed rules. Start a task by copying
+`guideline/templates/work-card.md`. The SOPs in §5 give the detail for each stage.
+Small bounded fixes may take the light path described there.

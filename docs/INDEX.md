@@ -129,6 +129,9 @@ change type.
 | `harness-optimizer.md` | Keep agent sessions focused and token-efficient |
 | `suggestion.md` | DCF valuation critique and remediation source |
 | `todo.md` | Active development-track tracking |
+| `HARNESS.md` | Work harness: stages, model routing, owner gates, plan output-contract rule and fixed rules for every coding task (in `guideline/`) |
+| `templates/work-card.md` | Fill-in work card: purpose, scope, data definition, interfaces with output contract, test plan, risks, approvals (in `guideline/`) |
+| `templates/data-definition.md` | Data definition for one table or API payload: fields, units, keys, lifecycle, sync class, consumers (in `guideline/`) |
 
 ## Generic References (`guideline/reference/`)
 
