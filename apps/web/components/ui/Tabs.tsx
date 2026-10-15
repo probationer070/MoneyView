@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import type { KeyboardEvent, ReactNode } from "react";
 import clsx from "clsx";
 
 interface TabsItem {
@@ -27,6 +27,34 @@ export function Tabs({
   className,
   idPrefix = "",
 }: TabsProps) {
+  function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    const current = items.findIndex((item) => item.key === activeKey);
+    const last = items.length - 1;
+    let next: number;
+    switch (event.key) {
+      case "ArrowRight":
+        next = current >= last ? 0 : current + 1;
+        break;
+      case "ArrowLeft":
+        next = current <= 0 ? last : current - 1;
+        break;
+      case "Home":
+        next = 0;
+        break;
+      case "End":
+        next = last;
+        break;
+      default:
+        return;
+    }
+    event.preventDefault();
+    const buttons = event.currentTarget.querySelectorAll<HTMLButtonElement>(
+      '[role="tab"]'
+    );
+    buttons[next]?.focus();
+    onChange(items[next].key);
+  }
+
   return (
     <div
       className={clsx(
@@ -35,6 +63,7 @@ export function Tabs({
       )}
       role="tablist"
       aria-label={ariaLabel}
+      onKeyDown={handleKeyDown}
     >
       {items.map((item) => {
         const selected = item.key === activeKey;
