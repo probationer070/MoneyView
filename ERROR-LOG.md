@@ -26,6 +26,16 @@ reveal that; only checking the code did.
 
 An entry states what was true when it was written. Nothing updates it on its own.
 
+## 2026-10-15: after a ticker switch the verdict, strip, company-line price and full report showed the previous ticker's DCF
+
+Date: 2026-10-15 (final review of the corporate one-screen plan). The defect predates this branch: the old tile at a3ec630 read the same page state.
+Command: `cd apps/web && npx playwright test tests/e2e/corporate-one-screen.spec.ts -g "a ticker switch" --workers=2`
+Failure: after Refresh DCF on AAPL, a switch to MSFT through Company Search left the verdict block on `data-state="valued"` with AAPL's intrinsic value, the strip showed AAPL's DCF, and the company line read "Microsoft · ... · $210.4". Selecting MSFT from a comparison row opened the Intrinsic DCF modal headed "MSFT" with AAPL's $240.5, and its Raw data tab reported "Full report loaded for AAPL (mockdcf001)".
+Root cause: `dcfStreamResult` is page state with no ticker scope. `selectTicker` changes `assumptions` but does not clear the stream result, so `dcfDisplayData` (`dcfStreamResult ?? cache for the ticker`) kept AAPL's result. The verdict, the strip, the company-line price and the modal all read `dcfData`. `dcfFullReport` had the same gap, and Load Full Report posted the previously requested snapshot, which was AAPL's.
+Fix: the stream result and the full report are used only when their own `ticker` equals the current ticker (`sourceDataTicker`). Otherwise the page falls back to the cache for the current ticker, or to null. Load Full Report posts the current ticker's snapshot.
+Files changed: `apps/web/app/corporate/page.tsx`, `apps/web/tests/e2e/corporate-one-screen.spec.ts` (`a ticker switch`).
+Prevention: every per-ticker DCF value shown on the page must carry its ticker and be gated by the current one. The `a ticker switch` tests read the verdict, the strip, the company line and the Raw data full-report status after both a search switch and a comparison-row switch. A new page state that holds a per-ticker result needs the same gate.
+
 ## 2026-10-15: DCF and sensitivity sent inputs up to 250 ms old after hydration, a slider move or a ticker switch
 
 Date: 2026-10-15 (Task 11 fix round 1 of the corporate one-screen plan, before commit).

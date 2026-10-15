@@ -527,8 +527,11 @@ export default function CorporateAnalysisPage() {
   const dcfCachedForTicker = dcfCachedCalculation?.snapshot.ticker?.trim().toUpperCase() === sourceDataTicker
     ? dcfCachedCalculation
     : null;
+  // A DCF belongs to one ticker: the stream result survives a ticker switch, so only one for the current ticker is used.
+  const dcfStreamForTicker = normalizeSourceTicker(dcfStreamResult?.ticker) === sourceDataTicker ? dcfStreamResult : null;
+  const dcfFullReportForTicker = normalizeSourceTicker(dcfFullReport?.summary.ticker) === sourceDataTicker ? dcfFullReport : null;
   // A refusal supersedes any cached value, including one computed under the old FCFF floor.
-  const dcfDisplayData = dcfRefusal ? null : dcfStreamResult ?? dcfCachedForTicker?.result ?? null;
+  const dcfDisplayData = dcfRefusal ? null : dcfStreamForTicker ?? dcfCachedForTicker?.result ?? null;
   const comparisonDisplayData = comparisonQuery.data ?? comparisonCachedResult;
   const rawMetricsHistoryData = metricsHistoryQuery.data ?? cachedMetricsHistory;
   const rawQuarterlyStatementsData = quarterlyStatementsQuery.data ?? cachedQuarterlyStatements;
@@ -546,7 +549,7 @@ export default function CorporateAnalysisPage() {
     : null;
   const growthMeta = activeMetricsMeta?.growth_meta ?? null;
   const roicMeta = activeMetricsMeta?.roic_meta ?? null;
-  const dcfDisplayLastUpdatedAt = dcfStreamResult?.generated_at ?? dcfCachedForTicker?.lastUpdatedAt ?? null;
+  const dcfDisplayLastUpdatedAt = dcfStreamForTicker?.generated_at ?? dcfCachedForTicker?.lastUpdatedAt ?? null;
   const comparisonDisplayLastUpdatedAt = comparisonQuery.data ? new Date(comparisonQuery.dataUpdatedAt).toISOString() : comparisonLastUpdatedAt;
   const sourceDataDisplayLastUpdatedAt = metricsHistoryQuery.data
     ? new Date(metricsHistoryQuery.dataUpdatedAt).toISOString()
@@ -669,7 +672,8 @@ export default function CorporateAnalysisPage() {
   };
 
   const loadFullDcfReport = async () => {
-    const snapshot = dcfRequestedSnapshot ?? activeDcfSnapshot;
+    // The report is for the ticker on screen; a DCF requested for an earlier ticker is not reused.
+    const snapshot = dcfRequestedSnapshot && normalizeSourceTicker(dcfRequestedSnapshot.ticker) === sourceDataTicker ? dcfRequestedSnapshot : activeDcfSnapshot;
     setDcfFullReportLoading(true);
     setDcfFullReportError(null);
     try {
@@ -973,7 +977,7 @@ export default function CorporateAnalysisPage() {
               fcff={assumptions.fcff}
               dcfResult={dcfData ?? undefined}
               onOpenDetail={setActiveCalculation}
-              report={dcfFullReport}
+              report={dcfFullReportForTicker}
               reportLoading={dcfFullReportLoading}
               reportError={dcfFullReportError}
               canLoadReport={canLoadFullReport}
@@ -1059,14 +1063,14 @@ export default function CorporateAnalysisPage() {
           quarterlyStatementStatus={quarterlyStatementsStatus(quarterlyStatementsQuery, quarterlyStatementsData)}
           quarterlyStatementsIsLoading={quarterlyStatementsQuery.isLoading && !quarterlyStatementsData}
           quarterlyStatementsIsError={quarterlyStatementsQuery.isError && !quarterlyStatementsData}
-          dcfFullReport={dcfFullReport}
+          dcfFullReport={dcfFullReportForTicker}
           dcfFullReportStatus={
             dcfFullReportLoading
               ? "Loading full DCF report..."
               : dcfFullReportError
                 ? dcfFullReportError
-              : dcfFullReport
-                ? `Full report loaded for ${dcfFullReport.summary.ticker} (${dcfFullReport.summary.report_id}).`
+              : dcfFullReportForTicker
+                ? `Full report loaded for ${dcfFullReportForTicker.summary.ticker} (${dcfFullReportForTicker.summary.report_id}).`
                 : "Full report not loaded yet."
           }
           dcfFullReportIsLoading={dcfFullReportLoading}

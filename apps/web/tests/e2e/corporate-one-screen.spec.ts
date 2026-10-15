@@ -1,7 +1,7 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { mockCorporatePageApi, mockMetricAudit, type CorporatePageMockStats } from "./helpers/corporatePageMock";
 import { mockPortfolioPageApi } from "./helpers/portfolioPageMock";
-import { loadFullDcfReportInTab, lowerPanel, openDetailTab, openLowerTab, refreshDcf } from "./helpers/corporateDcf";
+import { loadFullDcfReportInTab, lowerPanel, openDetailTab, openFullDcfReportInModal, openLowerTab, refreshDcf } from "./helpers/corporateDcf";
 
 // Spec 2026-10-14 §2 and §7 tests 1-5.
 const SUMMARY = {
@@ -740,5 +740,51 @@ test.describe("a hovered DCF tile keeps its caption readable", () => {
       return (Math.max(ink, paper) + 0.05) / (Math.min(ink, paper) + 0.05);
     });
     expect(ratio, "contrast of the FCFF Magnitude caption on its hover ground").toBeGreaterThanOrEqual(4.5);
+  });
+});
+
+// The DCF, the full report and the company-line price on screen belong to one ticker. Before the
+// fix a switch kept the previous company's values, so these run the switch and then read them.
+test.describe("a ticker switch", () => {
+  async function expectNoPreviousDcf(page: Page) {
+    await expect(verdict(page)).toHaveAttribute("data-state", "idle");
+    await expect(verdict(page)).toContainText("DCF not calculated");
+    await expect(page.getByTestId("corporate-verdict-strip")).toContainText("DCF not calculated");
+    await expect(page.getByTestId("corporate-company-line")).toContainText("Microsoft");
+    await expect(page.getByTestId("corporate-company-line")).not.toContainText("$210.4");
+  }
+
+  test("switching through the search keeps no previous DCF, price or full report", async ({ page }) => {
+    await mockCorporatePageApi(page);
+    await gotoCorporate(page);
+    await refreshDcf(page);
+    await openFullDcfReportInModal(page);
+    await page.getByRole("dialog").getByRole("button", { name: "Close modal" }).click();
+    await page.getByLabel("Company Search").fill("Microsoft");
+    await page.getByRole("option", { name: "Microsoft" }).click();
+    await expectNoPreviousDcf(page);
+    await page.getByRole("button", { name: "Verdict detail" }).click();
+    await openDetailTab(page.getByRole("dialog"), "Raw data");
+    await expect(page.getByRole("dialog")).toContainText("Full report not loaded yet.");
+    await expect(page.getByRole("dialog")).not.toContainText("Full report loaded for AAPL");
+  });
+
+  test("selecting a comparison row keeps no previous DCF, price or full report", async ({ page }) => {
+    await mockCorporatePageApi(page);
+    await gotoCorporate(page);
+    await refreshDcf(page);
+    await openFullDcfReportInModal(page);
+    await page.getByRole("dialog").getByRole("button", { name: "Close modal" }).click();
+    await openLowerTab(page, "Target Stock Comparison");
+    await page.getByRole("button", { name: "Refresh comparison" }).click();
+    const msftRow = page.getByRole("row").filter({ hasText: "MSFT" });
+    await expect(msftRow).toBeVisible({ timeout: 30_000 });
+    await msftRow.getByRole("button").last().click();
+    await openDetailTab(page.getByRole("dialog"), "Raw data");
+    await expect(page.getByRole("dialog")).toContainText("Full report not loaded yet.");
+    await expect(page.getByRole("dialog")).not.toContainText("Full report loaded for AAPL");
+    await page.getByRole("dialog").getByRole("button", { name: "Close modal" }).click();
+    await openLowerTab(page, "Summary");
+    await expectNoPreviousDcf(page);
   });
 });
