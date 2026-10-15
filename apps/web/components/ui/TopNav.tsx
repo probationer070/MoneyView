@@ -20,6 +20,7 @@ const WIDE_QUERY = `(min-width: ${tokens.bp.tablet})`;
  *  effect. `pinned` = opened with ☰ (plan N6): pointer leave does not close it. */
 type MenuState = { path: string; pinned: boolean } | null;
 
+// M2: menu labels are bold ink in every state so they clear 4.5:1 on paper; sidebar-contrast.spec.ts pins weight 700.
 const PANEL_LINK = "flex items-center gap-3 rounded-[var(--radius-1)] px-3 py-2 type-body font-bold text-[var(--ink)] hover:bg-[var(--surface-raised)]";
 
 export function TopNav() {
