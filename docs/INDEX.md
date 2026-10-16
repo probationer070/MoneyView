@@ -66,6 +66,7 @@ but check `docs/architecture/` first for the authoritative system description.
 | Document | Topic |
 | --- | --- |
 | `USER-GUIDE.md` | End-user guide: double-click shortcuts, what each screen is for, reading the valuation figures and refusals, data and backup, troubleshooting |
+| `desktop-shortcuts.md` | How the MoneyView / Stop MoneyView shortcuts are built: the `.lnk` targets, the launch flow, how Stop matches only this repo's servers, reinstall/uninstall |
 | `api-usage.md` | Backend API usage walkthrough and examples |
 | `local-run-resources.md` | Measured RAM/CPU cost of `run MoneyView`, the `/dev/*` tool URLs and the flag they need, and operational hazards |
 | `git-worktrees.md` | Using git worktrees here: creating and removing them, the editable-install import trap, e2e port collisions, per-worktree data, Windows path length |
