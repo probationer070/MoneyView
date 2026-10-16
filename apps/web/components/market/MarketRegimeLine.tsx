@@ -6,7 +6,7 @@ import { useMarketRegime } from "@/lib/useMarketRegime";
 import { FigureText } from "./FigureText";
 import { regimeView, withFigures, type RegimeTone } from "./marketModel";
 
-const TONE_CLASS: Record<RegimeTone, string> = {
+export const TONE_CLASS: Record<RegimeTone, string> = {
   up: "text-[var(--up)]",
   down: "text-[var(--down)]",
   neutral: "text-[var(--ink)]",
@@ -15,7 +15,7 @@ const TONE_CLASS: Record<RegimeTone, string> = {
 /**
  * Spec §2.5: the regime in one line beside the title. The label, the equity breadth and the
  * cross-asset signal counts come from GET /api/v1/market/regime as sent; nothing is counted here.
- * regime_summary is English prose and is never rendered, not even as a title. The line keeps its
+ * The backend's English summary sentence is never rendered, not even as a title. The line keeps its
  * height while loading (min-h-6), so the tab bar does not move when the regime arrives.
  */
 export function MarketRegimeLine() {

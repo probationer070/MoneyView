@@ -216,3 +216,21 @@ capitals: "종목 NAME". Both come from `apps/web/lib/i18n/labels.ts`; add the r
 | Unavailable | 이용 불가 | a refused spread pair |
 | Snapshot | 스냅샷 | market card period fallback |
 | Themes vs benchmark | 테마 대비 기준 지수 | market spread-figure row caption |
+| Quick market detail | 빠른 시장 상세 | market modal, top section title |
+| View Full Detail | 전체 상세 보기 | market modal link to the detail route |
+| Current Value | 현재 값 | market modal tile |
+| Absolute Change | 등락폭 | market modal tile; same term as Abs change |
+| Percent Change | 등락률 | market modal tile; same term as Change |
+| Observed Trend | 관측된 추세 | market modal tile; Uptrend / Downtrend / Flat trend are 상승 추세 / 하락 추세 / 보합 추세 |
+| Detail Warnings | 상세 경고 | market modal section title |
+| Daily Volume | 일별 거래량 | market modal section title |
+| Data Quality | 데이터 품질 | market modal section title |
+| Daily / Monthly | 일별 / 월별 | market modal timeframe toggle and titles; bars are 일봉 / 월봉 |
+| Regime | 국면 | market modal tile; the label values are Risk-on / Mixed / Risk-off |
+| Breadth | 시장 폭 | market modal tile; the share of equity indices that rose |
+| Cross-Asset Signals | 교차 자산 신호 | market modal tile |
+| Moving average window (20D / 50M) | 20일 / 50개월 | market modal chart legend and indicator rows; the suffix is a catalog key |
+| MA 20 / MA 50 / MA 200 (market indicators) | 이동평균 20 / 이동평균 50 / 이동평균 200 | market modal index indicators; the timeframe is the section's, so no 일 |
+| Bollinger Upper / Mid / Lower | 볼린저 상단 / 중단 / 하단 | market modal index indicators |
+| Themes and policy spreads | 테마 및 정책 스프레드 | market spreads section title |
+| Reason (refused spread) | 거절 사유 | market spreads, refused pair |

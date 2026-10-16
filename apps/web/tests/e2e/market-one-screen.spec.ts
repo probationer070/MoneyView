@@ -334,3 +334,34 @@ test("the Market Dashboard card, Detail available and the Source column are gone
   await expect(table.getByRole("columnheader", { name: "Source" })).toHaveCount(0);
   await expect(page.getByText("Market snapshot API")).toHaveCount(0);
 });
+
+test("the detail modal states the regime from the catalog, never the backend sentence (N7)", async ({ page }) => {
+  await mockMarketPageApi(page, {
+    detailOverrides: {
+      "^GSPC": { market_regime: { ...REGIME, regime_summary: "BACKEND SENTENCE THAT MUST NOT RENDER" } },
+    },
+  });
+  await gotoMarket(page);
+  await page.getByRole("button", { name: "Open detail for S&P 500" }).click();
+  const dialog = page.getByRole("dialog", { name: "S&P 500" });
+  await expect(dialog.getByText(REGIME.regime_summary)).toBeVisible();
+  await expect(page.getByText("BACKEND SENTENCE THAT MUST NOT RENDER")).toHaveCount(0);
+});
+
+test.describe("in Korean", () => {
+  test.use({ locale: "ko-KR" });
+
+  test("title, a figure, a bilingual header and the detail modal read in Korean", async ({ page }) => {
+    await mockMarketPageApi(page);
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("heading", { name: "시장 개요", exact: true })).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByTestId("market-regime").locator('[data-part="breadth"] .type-mono')).toHaveText("3/4");
+    await page.getByRole("button", { name: "Table" }).click();
+    await expect(page.getByRole("columnheader", { name: "종목", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "표에서 S&P 500 상세 열기" }).click();
+    const dialog = page.getByRole("dialog", { name: "S&P 500" });
+    await expect(dialog.getByRole("heading", { name: "일별 거래량" })).toBeVisible();
+    await expect(dialog.getByText("1,340,000,000")).toBeVisible();
+    await expect(dialog.getByRole("link", { name: "전체 상세 보기" })).toBeVisible();
+  });
+});
