@@ -163,7 +163,7 @@ These are the five inputs the spec implies but no feature test naturally reaches
 
 ## Existing-test change inventory (owner approval required before any edit)
 
-**Not yet approved.** Task 1 Step 2 presents this section verbatim, with the "Narrowed or interpreted" table.
+**Approved by the owner on 2026-10-16** (rows as listed, and N1–N15 as written; changes: none).
 
 **Totals: 25 rows in 8 files.** "Insert" means a new line directly after (or before, where stated) the cited line. The cited line itself is unchanged.
 

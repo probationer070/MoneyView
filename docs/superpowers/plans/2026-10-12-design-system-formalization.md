@@ -2917,10 +2917,12 @@ export const CHART_REFERENCE_COLORS = {
 
 > **2026-10-15 (owner):** the market overview (`app/page.tsx`, `components/market/**`) moves to its own one-screen plan, which also applies the paper migration. This follows the corporate precedent; see the proposal in `scratchpad/proposals/market-one-screen.md`, to be turned into a spec. `app/signals/**` is not on this branch until PR #67 merges, and gets its own migration task after that. For this task, ignore the market and signals globs below. The Korean assertion moves to `tests/e2e/news-*.spec.ts`, or to `detail-*` if news has no page heading. The final baseline is 0 for every glob except `app/page.tsx` and `components/market/**`; report the market count as the input to the market plan.
 
+> **2026-10-16:** the market part is `docs/superpowers/plans/2026-10-16-market-one-screen.md` (spec `docs/superpowers/specs/2026-10-16-market-one-screen-design.md`). It applies M1–M7 to `app/page.tsx`, `components/market/**` and `components/data/SparklineCard.tsx`, adds the market Korean assertion to `tests/e2e/market-one-screen.spec.ts`, and lowers the `design:baseline` market cap from 295 to 0 (`scripts/design-baseline-cap.mjs`). The market globs, specs and Korean assertion are struck from this task below.
 
-**Globs:** `app/page.tsx`, `components/market/**/*.tsx`, `app/detail/**/*.{ts,tsx}`, `app/news/**/*.{ts,tsx}`, `app/events/**/*.{ts,tsx}`, `app/dev/**/*.{ts,tsx}`, `app/signals/**/*.{ts,tsx}` (if present), and the remaining `lib/**/*.ts` and `hooks/**/*.ts`.
-**Specs:** `market-*.spec.ts`, `detail-*.spec.ts`, `news-*.spec.ts`, `event*.spec.ts`, `perf-dashboard.spec.ts`, `dev-monitor.spec.ts`, `terminal-diagnostics.spec.ts`, `signals-*.spec.ts` (if present).
-**Korean assertion:** in `tests/e2e/market-overview.spec.ts`.
+
+**Globs:** `app/detail/**/*.{ts,tsx}`, `app/news/**/*.{ts,tsx}`, `app/events/**/*.{ts,tsx}`, `app/dev/**/*.{ts,tsx}`, `app/signals/**/*.{ts,tsx}` (if present), and the remaining `lib/**/*.ts` and `hooks/**/*.ts`.
+**Specs:** `detail-*.spec.ts`, `news-*.spec.ts`, `event*.spec.ts`, `perf-dashboard.spec.ts`, `dev-monitor.spec.ts`, `terminal-diagnostics.spec.ts`, `signals-*.spec.ts` (if present).
+**Korean assertion:** in `tests/e2e/news-*.spec.ts` (or `detail-*`), per the 2026-10-15 note; the market's is in the market one-screen plan.
 
 - [ ] Run the procedure, steps 1–8.
   - `app/page.tsx` is a server component (`force-dynamic`), so it cannot call `useT()`. Pass message **keys**, not strings, to `PageHeader`, and translate inside it. Make `PageHeader` a client component if it is not one already.
@@ -3673,6 +3675,8 @@ git commit -m "docs(design): DESIGN.md, CLAUDE.md section 10 and Track D for the
 ### Task 14b: Aliases removed, market override removed, final gate
 
 > **Start only after the market one-screen plan has merged into `feat/design-system-paper`** (owner, 2026-10-15). 14b changes nothing the market plan does not already allow: its first step proves that.
+
+> **2026-10-16:** that plan is `docs/superpowers/plans/2026-10-16-market-one-screen.md`. Its Task 7 records `design:baseline` warn 0 and `ONE_SCREEN_ROUTES` containing `"/"`, which are this task's preconditions 1–3. It does not touch `paper-sweep.spec.ts`; step 5 here still removes the `/` exclusion and fixes any computed-style violation it finds in the market files.
 
 **Files:**
 - Modify: `eslint.config.mjs`; `tokens/moneyview.tokens.json` (deprecated tokens removed, root `moneyview.themeReset`); regenerate
