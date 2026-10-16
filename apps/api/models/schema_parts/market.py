@@ -78,6 +78,7 @@ class IndexQuote(BaseModel):
     instrument_type: str = "index"
     last_close: Optional[float] = None
     delta: DeltaBadge
+    month_delta: Optional[DeltaBadge] = None
     sparkline: List[float] = Field(default_factory=list)
     period: str = "5y"
 

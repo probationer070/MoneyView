@@ -7,6 +7,7 @@ when the newest stored bar is older than the previous trading day.
 
 from __future__ import annotations
 
+import calendar
 import logging
 import math
 import os
@@ -118,6 +119,31 @@ INDEX_DB_ALIASES = {
 # page load during a slow live fetch does not start another one.
 _BACKGROUND_REFRESHES: set[tuple[str, str, str]] = set()
 _BACKGROUND_LOCK = threading.Lock()
+
+
+def _one_calendar_month_before(day: date) -> date:
+    year, month = (day.year, day.month - 1) if day.month > 1 else (day.year - 1, 12)
+    last_day = calendar.monthrange(year, month)[1]
+    return date(year, month, min(day.day, last_day))
+
+
+def month_delta(bars: list[StockOHLCV]) -> DeltaBadge | None:
+    """1-month change: last close against the close on or before the same day one month earlier.
+
+    `bars` are ascending by date. Bars with no close are skipped. None when no bar exists
+    on or before the anchor, i.e. less than a month of history.
+    """
+    if not bars:
+        return None
+    last_close = bars[-1].close
+    if last_close is None:
+        return None
+    anchor = _one_calendar_month_before(date.fromisoformat(bars[-1].date[:10]))
+    for bar in reversed(bars):
+        if bar.close is None or date.fromisoformat(bar.date[:10]) > anchor:
+            continue
+        return DeltaBadge.compute(last_close, bar.close)
+    return None
 
 
 class MarketDataService:
@@ -1256,6 +1282,7 @@ class MarketDataService:
                     instrument_type=self._instrument_metadata_for_ticker(ticker)["instrument_type"],
                     last_close=last,
                     delta=delta,
+                    month_delta=month_delta(bars),
                     sparkline=sparkline,
                 )
             )
