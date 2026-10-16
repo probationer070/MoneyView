@@ -91,3 +91,15 @@ def test_vix_bars_are_not_counted_as_an_equity_index(monkeypatch):
 
     assert body["equity_index_count"] == 1, f"equity_index_count {body['equity_index_count']}: ^VIX was counted"
     assert (body["equity_advancers"], body["equity_decliners"]) == (1, 0), body
+
+
+def test_unknown_query_parameters_are_ignored(monkeypatch):
+    _stub_bars(monkeypatch, RISK_ON)
+    client = TestClient(app)
+
+    plain = client.get(URL)
+    with_unknown = client.get(URL + "?foo=1")
+
+    assert plain.status_code == 200, f"status {plain.status_code}: {plain.text}"
+    assert with_unknown.status_code == 200, f"status {with_unknown.status_code}: {with_unknown.text}"
+    assert with_unknown.json() == plain.json(), with_unknown.json()

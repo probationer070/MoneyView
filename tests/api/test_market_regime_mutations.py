@@ -10,6 +10,8 @@ import inspect
 import textwrap
 
 import pytest
+from fastapi import HTTPException, Request
+from fastapi.routing import APIRoute
 
 from apps.api.main import app
 from apps.api.models.schemas import MarketRegimeContext
@@ -53,3 +55,16 @@ def test_counting_vix_as_an_equity_index_fails_the_vix_test(monkeypatch):
     monkeypatch.setattr(market_data, "EQUITY_INDEX_TICKERS", (*market_data.EQUITY_INDEX_TICKERS, "^VIX"))
     with pytest.raises(AssertionError, match="equity_index_count 2"):
         route_tests.test_vix_bars_are_not_counted_as_an_equity_index(monkeypatch)
+
+
+def test_a_route_that_rejects_unknown_query_parameters_fails_the_unknown_parameter_test(monkeypatch):
+    def strict(request: Request):
+        if request.query_params:
+            raise HTTPException(status_code=422, detail="unknown query parameter")
+        return MarketRegimeContext()
+
+    strict_route = APIRoute(route_tests.URL, strict, methods=["GET"], response_model=MarketRegimeContext)
+    swapped = [strict_route if getattr(route, "path", None) == route_tests.URL else route for route in app.router.routes]
+    monkeypatch.setattr(app.router, "routes", swapped)
+    with pytest.raises(AssertionError, match="status 422"):
+        route_tests.test_unknown_query_parameters_are_ignored(monkeypatch)

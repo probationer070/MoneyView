@@ -152,29 +152,32 @@ test.describe("the regime line", () => {
     await expect(regime(page)).toHaveText("Regime could not be loaded.");
   });
 
-  test("while loading, the regime line keeps its height and the tab bar does not move", async ({ page }) => {
-    await page.setViewportSize({ width: 1280, height: 720 });
-    let release: () => void = () => {};
-    const held = new Promise<void>((resolve) => { release = resolve; });
-    await mockMarketPageApi(page);
-    await page.route("**/api/v1/market/regime", async (route) => {
-      await held;
-      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(REGIME) });
+  // The header is a row at 1280 and a column at 390: only the column moves the tab bar if the line collapses.
+  for (const viewport of [{ width: 1280, height: 720 }, { width: 390, height: 844 }]) {
+    test(`while loading, the regime line keeps its height and the tab bar does not move at ${viewport.width}x${viewport.height}`, async ({ page }) => {
+      await page.setViewportSize(viewport);
+      let release: () => void = () => {};
+      const held = new Promise<void>((resolve) => { release = resolve; });
+      await mockMarketPageApi(page);
+      await page.route("**/api/v1/market/regime", async (route) => {
+        await held;
+        await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(REGIME) });
+      });
+      await gotoMarket(page);
+      await expect(regime(page)).toHaveAttribute("data-state", "loading");
+      const tabBar = page.getByRole("tablist", { name: "Market sections" });
+      const loading = await regime(page).boundingBox();
+      const barLoading = await tabBar.boundingBox();
+      release();
+      await expect(regime(page)).toHaveAttribute("data-state", "ready");
+      const ready = await regime(page).boundingBox();
+      const barReady = await tabBar.boundingBox();
+      expect(loading, "the line is rendered while loading").not.toBeNull();
+      expect(loading!.height, "the loading line has height").toBeGreaterThan(0);
+      expect(loading!.height, "same height loading and ready").toBe(ready!.height);
+      expect(barLoading!.y, "the tab bar does not move").toBe(barReady!.y);
     });
-    await gotoMarket(page);
-    await expect(regime(page)).toHaveAttribute("data-state", "loading");
-    const tabBar = page.getByRole("tablist", { name: "Market sections" });
-    const loading = await regime(page).boundingBox();
-    const barLoading = await tabBar.boundingBox();
-    release();
-    await expect(regime(page)).toHaveAttribute("data-state", "ready");
-    const ready = await regime(page).boundingBox();
-    const barReady = await tabBar.boundingBox();
-    expect(loading, "the line is rendered while loading").not.toBeNull();
-    expect(loading!.height, "the loading line has height").toBeGreaterThan(0);
-    expect(loading!.height, "same height loading and ready").toBe(ready!.height);
-    expect(barLoading!.y, "the tab bar does not move").toBe(barReady!.y);
-  });
+  }
 });
 
 test("switching to Korean relabels the title, the subtitle, the regime and the tabs", async ({ page }) => {
@@ -192,13 +195,13 @@ test("switching to Korean relabels the title, the subtitle, the regime and the t
   await expect(page.getByTestId("market-page-tabs").getByRole("tab", { name: "스프레드" })).toBeVisible();
 });
 
-function spread(id: string, label: string, numerator: string, latest: number | null, refused_reason: string | null = null) {
+function spread(id: string, label: string, numerator: string, latest: number | null, refused_reason: string | null = null, denominator = "^GSPC") {
   const refused = refused_reason !== null;
   return {
-    id, label, numerator, denominator: "^GSPC", requested_window_days: 90,
+    id, label, numerator, denominator, requested_window_days: 90,
     actual_window_start: refused ? null : "2026-06-15", actual_window_end: refused ? null : "2026-09-11",
     actual_window_days: refused ? null : 88, observations: refused ? 0 : 62,
-    basis: `(${numerator}_t / ${numerator}_0) / (^GSPC_t / ^GSPC_0) x 100, indexed to 100 at 2026-06-15`,
+    basis: `(${numerator}_t / ${numerator}_0) / (${denominator}_t / ${denominator}_0) x 100, indexed to 100 at 2026-06-15`,
     series: refused ? [] : [{ date: "2026-06-15", value: 100 }, { date: "2026-09-11", value: latest }],
     latest, refused_reason,
   };
@@ -207,6 +210,8 @@ const SPREADS = [
   spread("ai", "AI", "BOTZ", 103.4),
   spread("cyber", "Cybersecurity", "CIBR", 98.1),
   spread("defence", "Defence", "ITA", null, "insufficient overlapping history"),
+  spread("cloud", "Cloud", "SKYY", 101.2),
+  spread("energy_policy", "Energy policy", "ICLN", 96.7, null, "XLE"),
 ];
 
 async function mockSpreads(page: Page, body: unknown, status = 200) {
