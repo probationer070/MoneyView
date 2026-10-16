@@ -2013,7 +2013,7 @@ Before running, read `AttributionWaterfall.tsx`'s `effectDetails` and use its fi
 
 > **2026-10-16 (market one-screen plan):** `/` is now a one-screen page with two page tabs (Instruments | Spreads). Read this task with these changes:
 > - `DetailDrawerLayout` wraps the tab area (`MarketPageTabs`: the tab bar and its panel), not the whole page and not only the card grid. `MarketHeader` stays outside it. The aside uses the one-screen classes from the Task 5 note.
-> - The card grid is `InstrumentsPanel`'s `grid-cols-1 sm:grid-cols-2 lg:grid-cols-5`. Recompute the container-query columns for it. With the drawer closed, keep 1 / 2 / 5 columns at 375 / 768 / 1280. With the drawer open at 1280, pick the count that keeps each card at least 220 px wide.
+> - The card grid is `InstrumentsPanel`'s `grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7` (market overview expansion, 2026-10-16: 14 cards, two rows of seven). Recompute the container-query columns for it. With the drawer closed, keep 1 / 2 / 7 columns at 375 / 768 / 1280. With the drawer open at 1280, pick the count that keeps each card at least 150 px wide (a closed-drawer card is about 163 px).
 > - Switching page tabs closes the drawer (`MarketPageTabs`' `onChange` also clears `selectedIndex`).
 > - The copy edits in Step 2 (items 3 and 6) are catalog edits now: `market.detail.*` in `lib/i18n/messages/en.ts`, with the `ko.ts` entry. They are not JSX literals.
 > - The line numbers in Step 3 have moved. Locate each `Close modal` line by its code and re-verify the list against HEAD before editing.

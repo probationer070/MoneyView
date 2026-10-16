@@ -62,7 +62,7 @@ Important exceptions:
 
 - `GET /api/v1/portfolio/watchlist` returns `List[PortfolioStock]`
 - `GET /api/v1/portfolio/stock/{ticker}` returns a plain `dict`
-- `GET /api/v1/market/indices` returns `List[IndexQuote]`
+- `GET /api/v1/market/indices` returns `List[IndexQuote]`: 14 instruments in display order (`MARKET_INDICES`). Each carries `delta` (vs the previous bar) and `month_delta` (vs the latest bar on or before one calendar month earlier; `null` with less than a month of history). `instrument_type` is `index`, `sector` (SOXX, SKYY, BOTZ), `rate` (^TNX, a yield in percent), `commodity`, `fx` or `crypto`.
 - `GET /api/v1/market/index/{ticker}` returns `List[StockOHLCV]`
 - `GET /api/v1/market/regime` returns `MarketRegimeContext` (always 200; `regime_label` "unknown" when there is too little data)
 - `GET /api/v1/detail/{ticker}/ohlcv` returns `List[StockOHLCV]`
