@@ -47,6 +47,18 @@ is deferred on data (see its entry).
 
 ---
 
+### Track W: Watchlist cleanup and corporate sync (G1, G2)
+Plan: `docs/superpowers/plans/2026-10-15-watchlist-cleanup-and-corporate-sync.md`.
+Spec: `docs/superpowers/specs/2026-10-15-watchlist-cleanup-and-corporate-sync-design.md`.
+- [x] W1 `cleanup_pending` + run (30-day grace, references, savepoint per table)
+- [x] W2 hooks on every watchlist add/remove path, incl. peer sync
+- [x] W3 startup (gated) + daily run  - [x] W4 company list hides a deleted ticker
+- [x] W5 `corporate_metrics` / `corporate_companies` records-sync kinds + write-path stamps
+- [ ] W6 **Rollout:** close MoneyView on both PCs; update PC 1, start it, check Corporate; update PC 2
+      the same day; confirm neither sync status shows a skipped peer file with "unknown kind". Until
+      both are updated, use only the updated PC (a record changed on both keeps the later change).
+      Nothing is deleted for 30 days. See `docs/architecture/watchlist-cleanup-and-corporate-sync.md`.
+
 ## Known limits, accepted deliberately
 
 Recorded so nobody rediscovers them as bugs.

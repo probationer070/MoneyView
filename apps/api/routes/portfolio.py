@@ -29,7 +29,7 @@ from apps.api.services.db import get_db
 from apps.api.services.market_data import MarketDataService
 from apps.api.services.news_service import NewsService
 from apps.api.services.portfolio_service import PortfolioAnalyticsService
-from apps.api.services import watchlist_seed
+from apps.api.services import watchlist_cleanup, watchlist_seed
 from apps.api.services.records_sync import service as records_sync
 from apps.api.services.records_sync import store as records_sync_store
 from apps.api.services.records_sync.kinds import KIND_PREFERENCES
@@ -201,6 +201,8 @@ def upsert_watchlist_item(item: WatchlistItem = Body(...)):
             (normalized.ticker, normalized.name, normalized.sector, normalized.group_name,
              normalized.weight, stamp, author),
         )
+        # On the watchlist again: its caches are no longer heading for cleanup (spec 2026-10-15 §2.3).
+        watchlist_cleanup.clear_pending(conn, normalized.ticker)
     mark_watchlist_state("user_mutation")
     watchlist_sync.run_sync("mutation")
     # Adding a stock is the natural moment to acquire its history: one 10-year backfill,
@@ -319,6 +321,8 @@ def delete_watchlist_item(ticker: str):
             # the tombstone outranks the row being deleted (causal stamp).
             watchlist_sync_store.record_removal(conn, normalized_ticker, watchlist_sync.local_pc_id(conn))
         conn.execute("DELETE FROM watchlist WHERE ticker = ?", (normalized_ticker,))
+        # Hidden at once; its caches are deleted after the grace period (spec 2026-10-15 §2.3).
+        watchlist_cleanup.record_pending(conn, normalized_ticker)
     mark_watchlist_state("user_mutation")
     watchlist_sync.run_sync("mutation")
     try:

@@ -25,7 +25,10 @@ from apps.api.services.corporate_statement_metrics import (
 )
 from apps.api.services.db import get_db
 from apps.api.services.market_data import MarketDataService
-from apps.api.services.watchlist_seed import ensure_watchlist_bootstrapped, load_watchlist_seed
+from apps.api.services.records_sync import store as records_sync_store
+from apps.api.services.records_sync.kinds import KIND_CORPORATE_COMPANIES, KIND_CORPORATE_METRICS
+from apps.api.services.watchlist_sync.store import get_or_create_pc_id
+from apps.api.services.watchlist_seed import ensure_watchlist_bootstrapped
 from packages.core_finance.terminal_growth import (
     TERMINAL_GROWTH_CEILING,
     derive_terminal_growth,
@@ -311,16 +314,8 @@ def list_companies(watchlist_json: Path = WATCHLIST_JSON) -> list[CorporateCompa
         )
         for ticker, payload in DEFAULT_COMPANIES.items()
     }
-    seeded_items, _ = load_watchlist_seed(watchlist_json)
-    for item in seeded_items:
-        ticker = item.ticker.upper()
-        companies[ticker] = CorporateCompany(
-            ticker=ticker,
-            name=item.name or ticker,
-            sector=item.sector,
-            source="portfolio",
-        )
-
+    # Seed tickers arrive through the watchlist they were bootstrapped into, one line above.
+    # Listing the seed file itself kept a deleted ticker comparable (spec 2026-10-15 §1).
     with get_db() as conn:
         watchlist_rows = conn.execute(
             """SELECT ticker, name, sector FROM watchlist ORDER BY name, ticker"""
@@ -368,8 +363,10 @@ def add_company(company: CorporateCompany) -> CorporateCompany:
                VALUES (?, ?, ?, ?, ?)""",
             (payload.ticker, payload.name or payload.ticker, payload.sector, payload.source, now),
         )
+        pc_id = get_or_create_pc_id(conn)
+        records_sync_store.stamp(conn, KIND_CORPORATE_COMPANIES, payload.ticker, pc_id)
         fallback = default_metrics(payload.ticker)
-        conn.execute(
+        inserted = conn.execute(
             """INSERT OR IGNORE INTO corporate_metrics
                (ticker, growth, roic, wacc, debt_ratio, unlevered_beta, crp,
                 reinvestment, fcff, innovation, market_share, governance,
@@ -391,7 +388,10 @@ def add_company(company: CorporateCompany) -> CorporateCompany:
                 fallback.esg_penalty,
                 now,
             ),
-        )
+        ).rowcount
+        if inserted:
+            # Defaults the app filled in, not the owner's assumption: any real edit on any PC wins.
+            records_sync_store.stamp_seed(conn, KIND_CORPORATE_METRICS, payload.ticker, pc_id)
     return payload
 
 
@@ -445,7 +445,7 @@ def quarterly_statement_payload(
 
 
 def save_metrics(ticker: str, metrics: CorporateMetrics) -> CorporateMetrics:
-    ticker = ticker.upper()
+    ticker = ticker.strip().upper()
     payload = metrics.model_copy(update={"ticker": ticker})
     with get_db() as conn:
         conn.execute(
@@ -471,6 +471,7 @@ def save_metrics(ticker: str, metrics: CorporateMetrics) -> CorporateMetrics:
                 datetime.now(timezone.utc).isoformat(),
             ),
         )
+        records_sync_store.stamp(conn, KIND_CORPORATE_METRICS, ticker, get_or_create_pc_id(conn))
     return payload
 
 

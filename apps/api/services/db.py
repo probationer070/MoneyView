@@ -660,6 +660,13 @@ CREATE TABLE IF NOT EXISTS record_sync (
     removed_by TEXT,
     PRIMARY KEY (kind, uid)
 );
+
+-- Deferred watchlist cache cleanup (spec 2026-10-15 §2.3): a ticker that left the watchlist, and
+-- when. Its upstream caches are deleted CLEANUP_GRACE_DAYS later if nothing refers to it by then.
+CREATE TABLE IF NOT EXISTS cleanup_pending (
+    ticker     TEXT PRIMARY KEY,
+    removed_at TEXT NOT NULL   -- datetime.isoformat() of an aware UTC moment
+);
 """
 
 
@@ -999,6 +1006,14 @@ def _ensure_schema_compatibility(conn: sqlite3.Connection) -> None:
     for column in ("trailing_pe", "price_to_book", "ev_sales", "stdev_price"):
         if column not in benchmark_columns:
             conn.execute(f"ALTER TABLE industry_benchmark ADD COLUMN {column} REAL")
+    # Additive, as for industry_benchmark above: covers a database whose create script stopped
+    # before its last statement (init_db's legacy universe_key path).
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS cleanup_pending (
+            ticker     TEXT PRIMARY KEY,
+            removed_at TEXT NOT NULL
+        )"""
+    )
 
 
 def get_db_path() -> Path:

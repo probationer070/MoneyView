@@ -32,6 +32,7 @@ from apps.api.models.schemas import (
     ValuationAssumptions,
 )
 from apps.api.services import corporate_metrics_service
+from apps.api.services.records_sync import service as records_sync
 from apps.api.services.corporate_comparison import (
     DEFAULT_BENCHMARK_TICKER,
     DEFAULT_COMPARISON_UNIVERSE,
@@ -149,7 +150,9 @@ def get_corporate_companies():
 @router.post("/companies", response_model=CorporateCompany)
 def add_corporate_company(company: CorporateCompany = Body(...)):
     """Persist a manually added company for on-demand corporate analysis."""
-    return corporate_metrics_service.add_company(company)
+    saved = corporate_metrics_service.add_company(company)
+    records_sync.run_records_sync("mutation")
+    return saved
 
 
 @router.get("/comparison", response_model=APIResponse[CorporateComparisonResponse])
@@ -525,7 +528,9 @@ def get_corporate_quarterly_statements(ticker: str):
 
 @router.put("/metrics/{ticker}", response_model=CorporateMetrics)
 def save_corporate_metrics(ticker: str, metrics: CorporateMetrics):
-    return corporate_metrics_service.save_metrics(ticker, metrics)
+    saved = corporate_metrics_service.save_metrics(ticker, metrics)
+    records_sync.run_records_sync("mutation")
+    return saved
 
 
 @router.get("/diagnostic/{ticker}/radar")

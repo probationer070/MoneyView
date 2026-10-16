@@ -10,7 +10,15 @@ import sqlite3
 from datetime import datetime, timezone
 
 from apps.api.services.peer_sync.model import BASELINE_TS, SEED_TS, format_ts, next_stamp
-from apps.api.services.records_sync.kinds import KIND_PREFERENCES, KINDS, PARENT_UID_KEY, ChildSpec, Kind
+from apps.api.services.records_sync.kinds import (
+    KIND_CORPORATE_COMPANIES,
+    KIND_CORPORATE_METRICS,
+    KIND_PREFERENCES,
+    KINDS,
+    PARENT_UID_KEY,
+    ChildSpec,
+    Kind,
+)
 from apps.api.services.records_sync.merge import Record, RecordState, RecordTombstone
 
 
@@ -78,6 +86,39 @@ def _first_preferences_stamp(saved_at: str) -> str:
     return format_ts(moment)
 
 
+def _first_saved_at_stamp(saved_at: str) -> str:
+    """The first-sync stamp for a corporate row, from its own updated_at. The corporate write paths
+    store datetime.now(timezone.utc).isoformat(), so two PCs that saved the same ticker before sync
+    existed are decided by recency rather than by the pc_id tiebreak. BASELINE_TS for '' or
+    anything that does not parse."""
+    try:
+        moment = datetime.fromisoformat(saved_at)
+    except (TypeError, ValueError):
+        return BASELINE_TS
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=timezone.utc)
+    return max(format_ts(moment), BASELINE_TS)
+
+
+def _is_add_company_default(conn: sqlite3.Connection, row: sqlite3.Row) -> bool:
+    """A corporate_metrics row that add_company inserted and nobody has adjusted since: add_company
+    writes one `now` into both tables' updated_at, and save_metrics always writes a new one."""
+    company = conn.execute(
+        "SELECT updated_at FROM corporate_companies WHERE ticker = ?", (row["ticker"],)
+    ).fetchone()
+    return company is not None and row["updated_at"] != "" and company["updated_at"] == row["updated_at"]
+
+
+def _first_stamp(conn: sqlite3.Connection, kind: Kind, row: sqlite3.Row) -> str:
+    if kind.name == KIND_PREFERENCES:
+        return _first_preferences_stamp(row["updated_at"])
+    if kind.name == KIND_CORPORATE_METRICS and _is_add_company_default(conn, row):
+        return SEED_TS
+    if kind.name in (KIND_CORPORATE_METRICS, KIND_CORPORATE_COMPANIES):
+        return _first_saved_at_stamp(row["updated_at"])
+    return BASELINE_TS
+
+
 def ensure_first_sync(conn: sqlite3.Connection, pc_id: str) -> None:
     """Stamp every existing record that has no record_sync row yet with the baseline, on every
     call: an unstamped record must never be published with an empty author (watchlist's Ruling
@@ -87,11 +128,13 @@ def ensure_first_sync(conn: sqlite3.Connection, pc_id: str) -> None:
     save is stamped from that time, so two PCs that both saved settings before sync existed are
     decided by recency rather than by the pc_id tiebreak; the never-saved default ('', init_db's
     row on every fresh database) is stamped SEED_TS, below BASELINE_TS, so it never outranks a
-    real save. See _first_preferences_stamp.
+    real save. See _first_preferences_stamp. corporate_metrics and corporate_companies rows are
+    likewise stamped from their own updated_at; an untouched add_company default is stamped SEED_TS.
+    See _first_stamp.
     """
     for kind in KINDS.values():
         for uid, row in _local_rows(conn, kind):
-            stamp = _first_preferences_stamp(row["updated_at"]) if kind.name == KIND_PREFERENCES else BASELINE_TS
+            stamp = _first_stamp(conn, kind, row)
             conn.execute(
                 "INSERT OR IGNORE INTO record_sync (kind, uid, updated_at, updated_by) VALUES (?, ?, ?, ?)",
                 (kind.name, uid, stamp, pc_id),
@@ -368,6 +411,16 @@ def stamp(conn: sqlite3.Connection, kind: str, uid: str, pc_id: str) -> None:
     of the record's and the tombstone's current stamp), and the tombstone must survive to be
     republished (spec §5 keeps every tombstone, including ones a newer add makes ineffective)."""
     _upsert_added(conn, kind, uid, _causal_stamp(conn, kind, uid), pc_id)
+
+
+def stamp_seed(conn: sqlite3.Connection, kind: str, uid: str, pc_id: str) -> None:
+    """Record a row the app created on its own, not an owner edit (add_company's default metrics),
+    at SEED_TS, so a real edit of the same record on any PC outranks it. Leaves an existing stamp
+    alone."""
+    conn.execute(
+        "INSERT OR IGNORE INTO record_sync (kind, uid, updated_at, updated_by) VALUES (?, ?, ?, ?)",
+        (kind, uid, SEED_TS, pc_id),
+    )
 
 
 def record_removal(conn: sqlite3.Connection, kind: str, uid: str, pc_id: str) -> None:
