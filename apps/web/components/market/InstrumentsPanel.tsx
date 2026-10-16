@@ -9,7 +9,7 @@ import { formatNumber } from "@/lib/format";
 import { useLocale, useT } from "@/lib/i18n/locale";
 import { FigureText } from "./FigureText";
 import { ChangeFigureText } from "./ChangeFigureText";
-import { changeFigure, instrumentNameKey, withFigures, type MarketIndexQuote } from "./marketModel";
+import { changeFigure, instrumentNameKey, instrumentValueText, withFigures, type MarketIndexQuote } from "./marketModel";
 import { SpreadFigureRow } from "./SpreadFigureRow";
 
 interface InstrumentsPanelProps {
@@ -28,12 +28,7 @@ export function InstrumentsPanel({ indices, fetchError, viewMode, onViewModeChan
   const { locale } = useLocale();
   if (fetchError) return <ErrorState title={t("market.unavailableTitle")} message={fetchError} />;
   if (indices.length === 0) return <EmptyState title={t("market.emptyTitle")} description={t("market.emptyDescription")} />;
-  const price = (value: number | null | undefined) => formatNumber(value, "price", { digits: 1, locale });
-  // A rate's last close is a yield in percent points: 4.25 reads "4.25%" (formatNumber's percent takes a fraction).
-  const valueText = (quote: MarketIndexQuote) =>
-    quote.instrument_type === "rate" && typeof quote.last_close === "number"
-      ? formatNumber(quote.last_close / 100, "percent", { digits: 2, locale })
-      : price(quote.last_close);
+  const valueText = (quote: MarketIndexQuote) => instrumentValueText(quote, locale);
   const nameOf = (quote: MarketIndexQuote) => {
     const key = instrumentNameKey(quote.ticker);
     return key === null ? quote.name : t(key);

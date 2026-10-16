@@ -102,6 +102,15 @@ test("the rate card reads bp and never a percent change", async ({ page }) => {
   await expect(tnx.locator(".type-figure-md")).toHaveText(/%$/);
 });
 
+test("the rate's modal is titled with the catalog name and reads its current value as a percent", async ({ page }) => {
+  await gotoMarket(page);
+  await card(page, "^TNX").getByRole("button", { name: /^Open detail for/ }).click();
+  const dialog = page.getByRole("dialog", { name: "US 10Y Yield", exact: true });
+  await expect(dialog).toBeVisible();
+  const current = dialog.locator("p.type-figure-md").first();
+  await expect(current).toHaveText(/^\d+\.\d{2}%$/);
+});
+
 test.describe("at 1280x720", () => {
   test.use({ viewport: { width: 1280, height: 720 } });
 

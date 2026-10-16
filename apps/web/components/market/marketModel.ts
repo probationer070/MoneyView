@@ -1,5 +1,6 @@
 import type { MarketSpread } from "../../../../packages/shared-types";
 import type { MessageKey } from "@/lib/i18n/translate";
+import { formatNumber, type FormatLocale } from "@/lib/format";
 import { tabStateKey } from "@/lib/tabState";
 import type { MarketRegimeState } from "@/lib/useMarketRegime";
 
@@ -34,10 +35,22 @@ export function changeFigure(
   if (delta === null || delta === undefined) return { kind: "missing" };
   if (instrumentType === "rate") {
     if (typeof delta.delta_abs !== "number" || !Number.isFinite(delta.delta_abs)) return { kind: "missing" };
-    const bp = Math.round(delta.delta_abs * 100);
+    // Round half away from zero: plain Math.round sends 0.5 to +1 but -0.5 to 0, so +0.005 and -0.005 would not mirror.
+    const scaled = delta.delta_abs * 100;
+    const bp = Math.sign(scaled) * Math.round(Math.abs(scaled));
     return { kind: "bp", bp: bp === 0 ? 0 : bp };
   }
   return Number.isFinite(delta.delta_pct) ? { kind: "pct", pct: delta.delta_pct } : { kind: "missing" };
+}
+
+/** A card's headline value. A rate's last close is a yield in percent points: 4.25 reads "4.25%" (formatNumber's percent takes a fraction). */
+export function instrumentValueText(
+  quote: { instrument_type?: string; last_close: number | null },
+  locale: FormatLocale,
+): string {
+  return quote.instrument_type === "rate" && typeof quote.last_close === "number"
+    ? formatNumber(quote.last_close / 100, "percent", { digits: 2, locale })
+    : formatNumber(quote.last_close, "price", { digits: 1, locale });
 }
 
 /** "+10bp", "-3bp", "0bp". No locale grouping: a basis-point move is a small whole number. */

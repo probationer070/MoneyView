@@ -144,6 +144,11 @@ test.describe("changeFigure", () => {
     expect(Object.is((figure as { bp: number }).bp, 0)).toBe(true);
   });
 
+  test("a rate change halfway between two basis points rounds away from zero on both sides", () => {
+    expect(changeFigure({ delta_pct: 1, delta_abs: 0.005 }, "rate")).toEqual({ kind: "bp", bp: 1 });
+    expect(changeFigure({ delta_pct: -1, delta_abs: -0.005 }, "rate")).toEqual({ kind: "bp", bp: -1 });
+  });
+
   test("a rate without an absolute change is missing, not a percent", () => {
     expect(changeFigure({ delta_pct: 1, delta_abs: null }, "rate")).toEqual({ kind: "missing" });
   });

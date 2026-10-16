@@ -28,7 +28,7 @@ import { useLocale, useT } from "@/lib/i18n/locale";
 import type { MessageKey } from "@/lib/i18n/translate";
 import { tokens } from "@/lib/tokens.generated";
 import type { MarketRegimeContext } from "../../../../packages/shared-types";
-import { regimeView, withFigures, type MarketIndexQuote } from "@/components/market/marketModel";
+import { instrumentNameKey, instrumentValueText, regimeView, withFigures, type MarketIndexQuote } from "@/components/market/marketModel";
 
 export type { MarketIndexQuote };
 
@@ -437,7 +437,8 @@ function MarketDetailModal({ item, onClose }: { item: MarketIndexQuote; onClose:
   // Escape key and scroll-lock are handled by ModalShell.
 
   const modalSubtitle = `${item.ticker} · ${instrumentLabel(detail?.instrument_type ?? item.instrument_type, t)}${detail?.unit_label ? ` · ${detail.unit_label}` : ""}`;
-  const price = (value: number | null | undefined) => formatNumber(value, "price", { digits: 1, locale });
+  const nameKey = instrumentNameKey(item.ticker);
+  const displayName = nameKey === null ? item.name : t(nameKey);
   const integer = (value: number | null | undefined) => formatNumber(value, "integer", { locale });
   const volumeVsAverage = volumeSummary?.volume_vs_20d_pct;
 
@@ -445,7 +446,7 @@ function MarketDetailModal({ item, onClose }: { item: MarketIndexQuote; onClose:
     <ModalShell
       open
       onClose={onClose}
-      title={item.name}
+      title={displayName}
       subtitle={modalSubtitle}
       size="xl"
     >
@@ -468,7 +469,7 @@ function MarketDetailModal({ item, onClose }: { item: MarketIndexQuote; onClose:
           <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <div className="border border-[var(--line)] bg-[var(--surface-raised)] p-4">
               <p className="type-caption uppercase text-[var(--ink-muted)]">{t("market.detail.currentValue")}</p>
-              <p className="type-figure-md mt-2 text-[var(--ink)]">{price(item.last_close)}</p>
+              <p className="type-figure-md mt-2 text-[var(--ink)]">{instrumentValueText(item, locale)}</p>
             </div>
             <div className="border border-[var(--line)] bg-[var(--surface-raised)] p-4">
               <p className="type-caption uppercase text-[var(--ink-muted)]">{t("market.detail.absoluteChange")}</p>
@@ -568,7 +569,7 @@ function MarketDetailModal({ item, onClose }: { item: MarketIndexQuote; onClose:
                       volumeData={volume}
                       lineSeriesData={movingAverageSeries}
                       height={420}
-                      tickerName={`${item.name} ${chartTimeframe}`}
+                      tickerName={`${displayName} ${chartTimeframe}`}
                       colorAccent={chartColor}
                       upColor="var(--up)"
                       events={eventLines}
