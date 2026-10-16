@@ -161,7 +161,6 @@ def get_all_indices():
     return _svc.get_all_indices()
 
 
-
 @router.get("/regime", response_model=MarketRegimeContext)
 def get_market_regime():
     """Breadth and cross-asset regime from the tracked indices' last two closes.
