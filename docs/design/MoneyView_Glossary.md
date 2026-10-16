@@ -35,6 +35,11 @@ capitals: "종목 NAME". Both come from `apps/web/lib/i18n/labels.ts`; add the r
 | Cases | 케이스 | nav |
 | Events | 이벤트 | nav |
 | Macro Signals / Signals (short) | 거시 신호 | nav; one term for both the full and the short label |
+| Triggered / Near / Not triggered / Data stale | 발동 / 근접 / 미발동 / 데이터 오래됨 | signals table state and manual select |
+| Threshold (signal rule) | 기준값 | signals table column; not the dev monitor 기준 시간 |
+| Contribution (pp) | 기여도 (%p) | signals table column |
+| Most likely | 가장 유력 | signals summary |
+| Manual signals | 수동 신호 | signals manual panel title |
 | Menu | 메뉴 | top bar ☰ button |
 | Primary | 주 메뉴 | top bar icon-link landmark |
 | All pages | 전체 페이지 | top bar panel landmark |

@@ -167,3 +167,22 @@ test("a manual row re-reads its state when a new run changes the snapshot", asyn
   await page.getByRole("button", { name: "Run now" }).click();
   await expect(iran).toHaveValue("near");
 });
+
+test.describe("ko", () => {
+  test.use({ locale: "ko-KR" });
+
+  test("the page, states, button and manual labels follow the Korean catalog and label.ko", async ({ page }) => {
+    await mockSignalsApi(page);
+    await page.goto("/signals", { waitUntil: "domcontentloaded" });
+
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("거시 신호");
+    await expect(page.getByTestId("row-b_tnx_sticky")).toContainText("발동");
+    await expect(page.getByRole("columnheader", { name: "기준값" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "지금 실행" })).toBeVisible();
+    // The mock's label.ko is the rule id and label.en is prose, so this tells the two apart.
+    const iran = page.getByTestId("manual-m_iran_strike");
+    await expect(iran).toContainText("m_iran_strike");
+    await expect(iran).not.toContainText("Iran strikes resume");
+    await expect(page.getByTestId("disclaimer")).toContainText("투자 조언이 아닙니다");
+  });
+});
