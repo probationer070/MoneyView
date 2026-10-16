@@ -132,6 +132,7 @@ def test_the_benchmark_is_read_from_the_indices_table_not_stocks():
 
     assert ("^GSPC", "indices") in stub.requested
     assert ("BOTZ", "indices") in stub.requested
+    assert ("CIBR", "stocks") in stub.requested
 
 
 def test_the_registry_names_every_ticker_the_feature_needs():
