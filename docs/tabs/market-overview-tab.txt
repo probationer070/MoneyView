@@ -26,16 +26,17 @@ Layout Structure
 
 1. Page Header
 - Title: `Market Overview`
-- Subtitle: `Real-time snapshot of major global and domestic indices`
+- Subtitle: `Daily closes · indices, commodities, FX, crypto`
 - Visual role:
   - orient the user immediately
   - frame the page as a broad market summary rather than a stock-specific workspace
 
 2. Dashboard Control Bar
 - Contains:
-  - section heading: `Market Dashboard`
-  - helper text about scanning in graph or table view
-  - view toggle
+  - header regime line (today's market state, from the regime API)
+  - two page tabs: `Instruments` (five-column cards or table, with theme-spread figures) and `Spreads` (five spread charts with event lines)
+  - view toggle (Instruments tab)
+  - the detail modal is unchanged
 - Visual role:
   - act as the switchboard for how dense or visual the market summary should be
 

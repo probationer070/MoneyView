@@ -239,7 +239,7 @@ For dense analytical control surfaces such as Corporate assumptions, Monte Carlo
 
 | Tab | Mobile | Desktop |
 |---|---|---|
-| Market Overview | Single-column card stack | 3-4 column card grid |
+| Market Overview | Single-column card stack | 5-column card grid; two page tabs; no page scroll |
 | Portfolio | Stacked zones | Stacked zones, because the page is already vertically organized |
 | Corporate | One screen: verdict line, four tabs, no page scroll; a long tab scrolls inside itself | Same; the body is about 350 px wider without the sidebar |
 | Monte Carlo | Stacked input/result | Side-by-side or stacked per sub-tab |
