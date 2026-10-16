@@ -40,6 +40,8 @@ file does not repeat it.
 - Every page in `ONE_SCREEN_ROUTES` (`apps/web/components/ui/oneScreenRoutes.ts`) fits 1280x720 and
   390x844 with no page scroll, vertical or sideways; overflow belongs to a panel. A page joins by
   adding its route to the list, which `tests/e2e/one-screen-no-scroll.spec.ts` then covers.
+  An `sr-only` span is absolutely positioned and escapes to the nearest positioned ancestor, so a scrolling
+  one-screen panel needs `relative` (as `MarketPageTabs` has), or `DeltaBadge`'s hidden text makes the page scroll.
 - Known exception, until DS Task 14b: the lint rule is still `warn` (not `error`) in `components/market/**` and
   `app/page.tsx`, with 0 hits since the market one-screen plan, and `tests/e2e/paper-sweep.spec.ts` still skips the
   `/` route. `npm run design:baseline` exits non-zero on any warning: the cap in `apps/web/scripts/design-baseline-cap.mjs` is 0.
