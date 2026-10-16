@@ -184,11 +184,11 @@ test("switching to Korean relabels the title, the subtitle, the regime and the t
   await mockMarketPageApi(page);
   await mockRegime(page, REGIME);
   await gotoMarket(page);
-  await expect(page.getByText("Daily closes · indices, commodities, FX, crypto")).toBeVisible();
+  await expect(page.getByText("Daily closes · indices, sectors, rates, commodities, FX, crypto")).toBeVisible();
   await expect(regime(page).locator('[data-part="label"]')).toHaveText("Risk-on");
   await page.getByRole("button", { name: "한국어" }).click();
   await expect(page.getByRole("heading", { name: "시장 개요", exact: true })).toBeVisible();
-  await expect(page.getByText("일별 종가 · 지수, 원자재, 환율, 암호화폐")).toBeVisible();
+  await expect(page.getByText("일별 종가 · 지수, 섹터, 금리, 원자재, 환율, 암호화폐")).toBeVisible();
   await expect(regime(page).locator('[data-part="label"]')).toHaveText("위험선호");
   await expect(regime(page).locator('[data-part="breadth"]')).toHaveText("지수 3/4 상승");
   await expect(regime(page).locator('[data-part="signals"]')).toHaveText("선호 5 / 회피 0");

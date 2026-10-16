@@ -4,7 +4,7 @@ test("market overview loads against the real local API", async ({ page }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
 
   await expect(page.getByRole("heading", { name: "Market Overview", exact: true })).toBeVisible({ timeout: 60_000 });
-  await expect(page.getByText("Daily closes · indices, commodities, FX, crypto")).toBeVisible();
+  await expect(page.getByText("Daily closes · indices, sectors, rates, commodities, FX, crypto")).toBeVisible();
   await expect(page.getByText("S&P 500")).toBeVisible();
   await expect(page.getByText("^GSPC", { exact: true })).toBeVisible();
 });

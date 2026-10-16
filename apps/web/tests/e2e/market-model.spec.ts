@@ -2,6 +2,9 @@ import { expect, test } from "@playwright/test";
 import type { MarketRegimeContext, MarketSpread } from "../../../../packages/shared-types";
 import { isOneScreenRoute, ONE_SCREEN_ROUTES } from "../../components/ui/oneScreenRoutes";
 import {
+  changeFigure,
+  formatBp,
+  instrumentNameKey,
   isMarketPageTab,
   MARKET_PAGE_TAB_KEY,
   MARKET_PAGE_TABS,
@@ -118,5 +121,62 @@ test.describe("isOneScreenRoute with the overview listed", () => {
       expect(isOneScreenRoute(path), path).toBe(false);
     }
     expect(isOneScreenRoute("/corporate/x")).toBe(true);
+  });
+});
+
+test.describe("changeFigure", () => {
+  test("an index or other non-rate instrument shows its percent change", () => {
+    expect(changeFigure({ delta_pct: 1.24, delta_abs: 3 }, "index")).toEqual({ kind: "pct", pct: 1.24 });
+  });
+
+  test("no delta is missing, never a zero percent", () => {
+    expect(changeFigure(null, "index")).toEqual({ kind: "missing" });
+    expect(changeFigure(undefined, "index")).toEqual({ kind: "missing" });
+  });
+
+  test("a rate shows its absolute change in basis points", () => {
+    expect(changeFigure({ delta_pct: 2.5, delta_abs: 0.1 }, "rate")).toEqual({ kind: "bp", bp: 10 });
+  });
+
+  test("a rate change that rounds to zero is 0, not -0", () => {
+    const figure = changeFigure({ delta_pct: -1, delta_abs: -0.004 }, "rate");
+    expect(figure).toEqual({ kind: "bp", bp: 0 });
+    expect(Object.is((figure as { bp: number }).bp, 0)).toBe(true);
+  });
+
+  test("a rate without an absolute change is missing, not a percent", () => {
+    expect(changeFigure({ delta_pct: 1, delta_abs: null }, "rate")).toEqual({ kind: "missing" });
+  });
+
+  test("an unknown instrument type falls back to the percent change", () => {
+    expect(changeFigure({ delta_pct: 1.5 }, "future_type")).toEqual({ kind: "pct", pct: 1.5 });
+  });
+
+  test("a non-finite percent is missing", () => {
+    expect(changeFigure({ delta_pct: NaN }, "index")).toEqual({ kind: "missing" });
+  });
+});
+
+test("formatBp signs positive and negative moves and leaves zero unsigned", () => {
+  expect(formatBp(10)).toBe("+10bp");
+  expect(formatBp(-3)).toBe("-3bp");
+  expect(formatBp(0)).toBe("0bp");
+});
+
+test.describe("instrumentNameKey", () => {
+  test("maps the tickers to their catalog keys", () => {
+    expect(instrumentNameKey("SOXX")).toBe("market.names.semis");
+    expect(instrumentNameKey("^TNX")).toBe("market.names.us10y");
+    expect(instrumentNameKey("XYZ")).toBeNull();
+  });
+
+  test("every one of the 14 tickers has its own key", () => {
+    const tickers = [
+      "^GSPC", "^DJI", "^IXIC", "^KS200", "SOXX", "SKYY", "BOTZ", "^TNX",
+      "GC=F", "CL=F", "NG=F", "KRW=X", "BTC-USD", "^VIX",
+    ];
+    const keys = tickers.map((ticker) => instrumentNameKey(ticker));
+    expect(keys.every((key) => key !== null)).toBe(true);
+    expect(new Set(keys).size).toBe(14);
   });
 });

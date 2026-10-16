@@ -16,6 +16,57 @@ export interface MarketIndexQuote {
   sparkline: number[];
   /** Not sent by IndexQuote today, so cards show the "Snapshot" fallback (plan N8). */
   period?: string | null;
+  /** The one-month change, sent alongside the daily delta (spec §2.2). */
+  month_delta?: { delta_pct: number; delta_abs?: number | null } | null;
+}
+
+/** A card's change line: a percent, a basis-point move for a rate, or nothing to show. */
+export type ChangeFigure = { kind: "pct"; pct: number } | { kind: "bp"; bp: number } | { kind: "missing" };
+
+/**
+ * Spec §2.2: a rate moves in basis points (delta_abs is in percentage points, so 0.1 = 10bp); every
+ * other instrument moves in percent. A rate with no absolute change is missing, not a percent.
+ */
+export function changeFigure(
+  delta: { delta_pct: number; delta_abs?: number | null } | null | undefined,
+  instrumentType: string | undefined,
+): ChangeFigure {
+  if (delta === null || delta === undefined) return { kind: "missing" };
+  if (instrumentType === "rate") {
+    if (typeof delta.delta_abs !== "number" || !Number.isFinite(delta.delta_abs)) return { kind: "missing" };
+    const bp = Math.round(delta.delta_abs * 100);
+    return { kind: "bp", bp: bp === 0 ? 0 : bp };
+  }
+  return Number.isFinite(delta.delta_pct) ? { kind: "pct", pct: delta.delta_pct } : { kind: "missing" };
+}
+
+/** "+10bp", "-3bp", "0bp". No locale grouping: a basis-point move is a small whole number. */
+export function formatBp(bp: number): string {
+  if (bp > 0) return `+${bp}bp`;
+  return `${bp}bp`;
+}
+
+// Spec §1.1: each overview ticker's display name is a catalog key, so Korean is not the API's English name.
+const INSTRUMENT_NAME_KEYS = {
+  "^GSPC": "market.names.sp500",
+  "^DJI": "market.names.dow",
+  "^IXIC": "market.names.nasdaq",
+  "^KS200": "market.names.kospi200",
+  SOXX: "market.names.semis",
+  SKYY: "market.names.cloud",
+  BOTZ: "market.names.ai",
+  "^TNX": "market.names.us10y",
+  "GC=F": "market.names.gold",
+  "CL=F": "market.names.wti",
+  "NG=F": "market.names.natgas",
+  "KRW=X": "market.names.usdkrw",
+  "BTC-USD": "market.names.bitcoin",
+  "^VIX": "market.names.vix",
+} as const satisfies Record<string, MessageKey>;
+
+/** The catalog key for a ticker's name, or null for a ticker not in the overview (the caller shows the API name). */
+export function instrumentNameKey(ticker: string): MessageKey | null {
+  return Object.hasOwn(INSTRUMENT_NAME_KEYS, ticker) ? INSTRUMENT_NAME_KEYS[ticker as keyof typeof INSTRUMENT_NAME_KEYS] : null;
 }
 
 // Spec §2.1: the overview's two page tabs, in order.
