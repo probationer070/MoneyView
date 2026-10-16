@@ -79,6 +79,10 @@ MARKET_INDICES = {
     "Dow Jones": "^DJI",
     "Nasdaq": "^IXIC",
     "KOSPI 200": "^KS200",
+    "Semiconductors": "SOXX",
+    "Cloud": "SKYY",
+    "AI": "BOTZ",
+    "US 10Y Yield": "^TNX",
     "Gold": "GC=F",
     "Oil (WTI)": "CL=F",
     "Natural Gas": "NG=F",
@@ -93,6 +97,10 @@ INSTRUMENT_METADATA = {
     "^IXIC": {"instrument_type": "index", "unit_label": "index points"},
     "^KS200": {"instrument_type": "index", "unit_label": "index points"},
     "^VIX": {"instrument_type": "index", "unit_label": "index points"},
+    "SOXX": {"instrument_type": "sector", "unit_label": "USD per share"},
+    "SKYY": {"instrument_type": "sector", "unit_label": "USD per share"},
+    "BOTZ": {"instrument_type": "sector", "unit_label": "USD per share"},
+    "^TNX": {"instrument_type": "rate", "unit_label": "percent yield"},
     "GC=F": {"instrument_type": "commodity", "unit_label": "USD per ounce"},
     "CL=F": {"instrument_type": "commodity", "unit_label": "USD per barrel"},
     "NG=F": {"instrument_type": "commodity", "unit_label": "USD per MMBtu"},
@@ -102,11 +110,18 @@ INSTRUMENT_METADATA = {
 
 EQUITY_INDEX_TICKERS = ("^GSPC", "^DJI", "^IXIC", "^KS200")
 
+# The cross-asset tickers the regime header scores, beside the equity indices.
+CROSS_ASSET_SIGNAL_TICKERS: tuple[str, ...] = ("GC=F", "KRW=X", "BTC-USD")
+
 INDEX_DB_ALIASES = {
     "^GSPC": ["^GSPC", "S&P 500"],
     "^DJI": ["^DJI", "Dow Jones"],
     "^IXIC": ["^IXIC", "Nasdaq"],
     "^KS200": ["^KS200", "KOSPI 200"],
+    "SOXX": ["SOXX"],
+    "SKYY": ["SKYY"],
+    "BOTZ": ["BOTZ"],
+    "^TNX": ["^TNX"],
     "GC=F": ["GC=F", "Gold"],
     "CL=F": ["CL=F", "Oil (WTI)"],
     "NG=F": ["NG=F", "Natural Gas"],
@@ -1009,6 +1024,8 @@ class MarketDataService:
     def _build_market_regime_context(self) -> MarketRegimeContext:
         latest_quotes: dict[str, IndexQuote] = {}
         for name, ticker in MARKET_INDICES.items():
+            if ticker not in EQUITY_INDEX_TICKERS and ticker not in CROSS_ASSET_SIGNAL_TICKERS:
+                continue
             bars = self.get_stock_ohlcv(ticker, period="1mo", table="indices")
             if len(bars) < 2:
                 continue

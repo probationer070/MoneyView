@@ -13,7 +13,7 @@ from fastapi.testclient import TestClient
 from apps.api.main import app
 from apps.api.models.schemas import StockOHLCV
 from apps.api.routes import market as market_routes
-from apps.api.services.market_data import EQUITY_INDEX_TICKERS, MARKET_INDICES
+from apps.api.services.market_data import CROSS_ASSET_SIGNAL_TICKERS, EQUITY_INDEX_TICKERS, MARKET_INDICES
 
 URL = "/api/v1/market/regime"
 FIELDS = {
@@ -68,7 +68,8 @@ def test_the_route_returns_the_regime_context_with_every_field_typed(monkeypatch
     assert (body["regime_label"], body["equity_advancers"], body["equity_decliners"], body["equity_index_count"]) == ("risk_on", 3, 1, 4), body
     assert (body["risk_on_signals"], body["risk_off_signals"], body["signal_count"], body["breadth_ratio"]) == (5, 0, 5, 0.75), body
     # The side effect the contract names: one 1mo read of the indices table per registered instrument.
-    assert sorted(requested) == sorted((ticker, "1mo", "indices") for ticker in MARKET_INDICES.values()), requested
+    scored = set(EQUITY_INDEX_TICKERS) | set(CROSS_ASSET_SIGNAL_TICKERS)
+    assert sorted(requested) == sorted((ticker, "1mo", "indices") for ticker in scored), requested
 
 
 def test_no_bars_is_an_unknown_regime_with_200_not_an_error(monkeypatch):
