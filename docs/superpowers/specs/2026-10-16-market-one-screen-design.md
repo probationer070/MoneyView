@@ -1,6 +1,6 @@
 # 마켓 개요 한 화면 재구성 설계
 
-Oct 16, 2026 · 브레인스토밍 결과, 오너가 설계 섹션 1~5를 승인. 근거 자료는 2026-10-15 제안서(커밋 f56e706 기준)이며, 7abbf74에서 다시 확인했다. 그 사이 바뀐 것은 `SparklineCard` 색 수정 하나다. 경로는 따로 적지 않으면 `apps/web/` 아래다.
+Oct 16, 2026 · 브레인스토밍 결과(계획 작성 중 HEAD 대조로 사실 7곳 정정: 경로 `/api/v1`, 탭 키, 줄 번호, 래퍼 여백, 기간 라벨, 제목 "시장 개요", 기존 테스트 편집 목록), 오너가 설계 섹션 1~5를 승인. 근거 자료는 2026-10-15 제안서(커밋 f56e706 기준)이며, 7abbf74에서 다시 확인했다. 그 사이 바뀐 것은 `SparklineCard` 색 수정 하나다. 경로는 따로 적지 않으면 `apps/web/` 아래다.
 
 ## 배경과 목표
 
@@ -31,7 +31,7 @@ Oct 16, 2026 · 브레인스토밍 결과, 오너가 설계 섹션 1~5를 승인
 |---|---|---|
 | M-D1 | 첫 화면이 답할 질문 | 오늘 시장 어때? 종목 10개와 스프레드 수치, 국면 한 줄 |
 | M-D2 | 스프레드 위치 | 페이지 탭 2개(종목 \| 스프레드). 첫 화면에 스프레드 수치 한 줄 |
-| M-D3 | 헤더 국면 줄 | 넣는다. 백엔드에 `GET /api/market/regime`을 추가하고, 새 공식은 만들지 않는다. |
+| M-D3 | 헤더 국면 줄 | 넣는다. 백엔드에 `GET /api/v1/market/regime`을 추가하고, 새 공식은 만들지 않는다. |
 | M-D4 | 상세 | 모달 유지(서랍 전환은 UI 정리 Task 7) |
 | M-D5 | 문구 | 3개 삭제(§3), 부제 수정. 부제를 확인하는 기존 테스트 2곳은 승인 편집으로 고친다. |
 
@@ -50,12 +50,12 @@ Oct 16, 2026 · 브레인스토밍 결과, 오너가 설계 섹션 1~5를 승인
 | **탭 패널** | **503** |
 
 - 콘텐츠 폭은 1216이다.
-- `app/page.tsx`의 `py-6`은 없앤다.
+- `app/page.tsx` 래퍼의 `px-4 py-6`을 없앤다. 좌우 여백은 `main`의 `lg:px-8`이 맡는다.
 - 페이지 열은 corporate와 같은 `h-[calc(100dvh - var(--main-pad-top) - var(--main-pad-bottom))] flex flex-col`을 쓴다. 탭 패널은 `min-h-0 flex-1`이고, 넘치는 내용은 패널 안에서 스크롤한다.
 
 ```
 ┌ TopNav 48 ─────────────────────────────────────────────────── EN|한 ┐
-│ 마켓 개요 MARKET                 [위험선호 · 지수 3/4 상승 · 선호 4 / 회피 1] │ 76
+│ 시장 개요                        [위험선호 · 지수 3/4 상승 · 선호 4 / 회피 1] │ 76
 │ 일별 종가 · 지수, 원자재, 환율, 암호화폐                                    │
 ├ [종목 INSTRUMENTS] [스프레드 SPREADS] ──────────────────────────────┤ 53
 │ 종목 10개                                          [그래프|표]      │ 44
@@ -83,7 +83,7 @@ Oct 16, 2026 · 브레인스토밍 결과, 오너가 설계 섹션 1~5를 승인
   - `isOneScreenRoute("/")`는 `"/"`일 때만 true여야 한다. 이 함수는 `startsWith("${route}/")`로 비교하므로, `"/"`의 접두사는 `"//"`가 되어 다른 경로와 맞지 않는다.
   - 단위 테스트에 두 경우를 넣는다: `"/"` → true, `"/portfolio"` → false.
 - 새 `components/market/MarketPageTabs.tsx`를 만든다.
-  - `useTabState("market.pageTab", "instruments")`를 쓴다.
+  - `useTabState(tabStateKey("market", "pageTab"), "instruments")`를 쓴다(저장 키 `moneyview.tab.market.pageTab`).
   - 값은 `"instruments" | "spreads"`다. 저장된 값이 이 둘이 아니면 `"instruments"`로 돌아간다.
   - 활성 패널만 마운트한다.
   - 공용 `Tabs` 컴포넌트를 써서 화살표 키 탐색을 그대로 얻는다.
@@ -93,7 +93,7 @@ Oct 16, 2026 · 브레인스토밍 결과, 오너가 설계 섹션 1~5를 승인
 - 툴바 한 줄: 왼쪽에 "종목 10개"(실제 개수), 오른쪽에 `ViewToggle`(그래프 \| 표).
 - 그래프 보기
   - `SparklineCard`를 5열 그리드에 높이 약 150으로 둔다.
-  - 카드에서 "Detail available" 푸터를 뺀다. 기간 라벨은 남긴다.
+  - 카드에서 "Detail available" 푸터를 뺀다. 기간 라벨은 티커 옆으로 옮긴다. `IndexQuote`에 `period` 필드가 없으므로 항상 "Snapshot"/"스냅샷"으로 표시된다.
   - 카드는 `article`이고 "Open detail for …" 버튼을 유지한다. 디자인 캡처의 마스크가 이 요소를 쓴다.
 - 표 보기: "Source" 열을 뺀다. 이름, 티커, 현재가, 절대 등락, 등락%는 그대로 둔다.
 - 수치 줄(§2.3)은 두 보기 모두에서 카드나 표 아래에 있다.
@@ -126,9 +126,9 @@ Oct 16, 2026 · 브레인스토밍 결과, 오너가 설계 섹션 1~5를 승인
 
 ### 2.5 국면 줄(헤더 오른쪽)
 
-**백엔드:** `GET /api/market/regime`
+**백엔드:** `GET /api/v1/market/regime`
 
-- 응답은 기존 `MarketRegimeContext`(`apps/api/models/schema_parts/market.py:151`) 그대로다. 필드:
+- 응답은 기존 `MarketRegimeContext`(`apps/api/models/schema_parts/market.py:150`) 그대로다. 필드:
 
 | 필드 | 형식 |
 |---|---|
@@ -206,7 +206,7 @@ Oct 16, 2026 · 브레인스토밍 결과, 오너가 설계 섹션 1~5를 승인
 
 **단위 테스트:** `isOneScreenRoute`에서 `"/"`는 true, `"/portfolio"`는 false
 
-**pytest(`GET /api/market/regime`)**
+**pytest(`GET /api/v1/market/regime`)**
 - 응답 형식과 필드 타입이 맞다.
 - 지수 bar가 없으면 `regime_label="unknown"`과 200을 돌려준다.
 - `^VIX`의 bar가 있어도 `equity_index_count`에 들어가지 않는다.
@@ -222,7 +222,10 @@ Oct 16, 2026 · 브레인스토밍 결과, 오너가 설계 섹션 1~5를 승인
 | `event-filter.spec.ts` | 2곳. 헬퍼에서 스프레드 탭을 열고, 모달을 열기 전에 종목 탭으로 돌아간다. |
 | `events-page.spec.ts` | 1곳. 스프레드 탭을 연다. |
 | `market-overview.spec.ts`, `market-overview.live.spec.ts` | 부제 확인 문자열 2곳을 새 부제로 바꾼다. |
-| 그 외 "/"를 방문하는 스펙 | 편집 없음. 계획에서 HEAD 기준으로 다시 확인한다. |
+| `corporate-model.spec.ts` | 2곳. `"/"`가 한 화면 경로가 아니라는 단언을 뒤집는다. 원래 의도("/"가 모든 경로를 한 화면으로 만들지 않음)는 새 테스트로 옮긴다. |
+| `helpers/marketPageMock.ts` | 1곳. `/market/regime`의 기본 응답을 넣어, 헤더 요청이 실제 e2e API로 나가지 않게 한다. |
+| `scripts/design-baseline-cap.test.mjs` | 4곳. 경고 상한을 295에서 0으로 바꾼다. |
+| 그 외 "/"를 방문하는 스펙 | 편집 없음(계획에서 HEAD 기준으로 확인함). |
 
 삭제된 "Source" 열이나 "Detail available"을 확인하는 기존 테스트가 있으면, 그것도 승인 목록에 넣는다.
 
@@ -246,9 +249,9 @@ Oct 16, 2026 · 브레인스토밍 결과, 오너가 설계 섹션 1~5를 승인
 
 | 단위 | 계약 |
 |---|---|
-| `GET /api/market/regime` | 200, `MarketRegimeContext` JSON(§2.5). 데이터가 부족해도 200에 `"unknown"`. 부작용은 기존 상세 경로와 같다: 지수 bar 캐시가 오래됐으면 `get_stock_ohlcv`가 불러와 `indices` 캐시를 갱신한다. 새로 쓰는 테이블은 없다. |
+| `GET /api/v1/market/regime` | 200, `MarketRegimeContext` JSON(§2.5). 데이터가 부족해도 200에 `"unknown"`. 부작용은 기존 상세 경로와 같다: 지수 bar 캐시가 오래됐으면 `get_stock_ohlcv`가 불러와 `indices` 캐시를 갱신한다. 새로 쓰는 테이블은 없다. |
 | `MarketDataService.get_market_regime()` | `-> MarketRegimeContext`. `_build_market_regime_context()`를 그대로 부른다. 부작용은 위 행과 같다. |
 | `useMarketRegime()` | `{ status: "loading" \| "ready" \| "error"; regime: MarketRegimeContext \| null }`. 마운트할 때 한 번 불러온다. |
-| `MarketPageTabs` | props `{ instruments: ReactNode; spreads: ReactNode }`(계획에서 확정). `"market.pageTab"` 상태를 쓰고 활성 패널만 렌더링한다. |
+| `MarketPageTabs` | props `{ instruments: ReactNode; spreads: ReactNode }`(계획에서 확정). `moneyview.tab.market.pageTab` 상태를 쓰고 활성 패널만 렌더링한다. |
 | `SpreadFigureRow` | props `{ onOpenSpreads: () => void }`. 상태별 문구는 §2.3의 표. `data-testid="spread-figure-<id>"`. |
 | `isOneScreenRoute("/")` | `true`. `"/x"` 형태에는 `false`. |
