@@ -92,6 +92,8 @@ PR #67 touches the same two files. Expected conflicts and how to resolve them:
 
 ## Edits owed to database-relationships.md after both branches merge
 
+Done 2026-10-16 on the rebased `feat/macro-signal-engine` (PR #67), together with the four signal tables (§2.10 there) and a db.py line-number refresh.
+
 - Header: 26 -> 27 tables. Add section 2.9 "Cleanup Bookkeeping" with `cleanup_pending`.
 - Section 2.4: `corporate_metrics` and `corporate_companies` become synced (`uid_column=ticker`, never deleted).
 - Logical references: 22 -> 25 (L23, L24, L25 above).
