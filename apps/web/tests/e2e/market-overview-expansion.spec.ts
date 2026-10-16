@@ -63,11 +63,11 @@ test("every card shows a 1D and a 1M figure matching the API", async ({ page, re
   }
   // The 1M figure must come from month_delta, not the daily delta.
   const spx = all.find((q) => q.ticker === "^GSPC")!;
-  if (spx.month_delta && spx.month_delta.delta_pct !== spx.delta.delta_pct) {
-    const day = await cellText(card(page, "^GSPC").getByTestId("change-1d"));
-    const month = await cellText(card(page, "^GSPC").getByTestId("change-1m"));
-    expect(month).not.toBe(day);
-  }
+  expect(spx.month_delta, "seed has a 1M change").not.toBeNull();
+  expect(spx.month_delta!.delta_pct, "seed must make 1D and 1M differ").not.toBe(spx.delta.delta_pct);
+  const day = await cellText(card(page, "^GSPC").getByTestId("change-1d"));
+  const month = await cellText(card(page, "^GSPC").getByTestId("change-1m"));
+  expect(month).not.toBe(day);
 });
 
 test("the rate card reads bp and never a percent change", async ({ page }) => {
