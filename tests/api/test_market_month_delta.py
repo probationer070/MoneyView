@@ -98,3 +98,37 @@ def test_get_all_indices_sends_month_delta(monkeypatch):
     for quote in quotes:
         assert quote.month_delta is not None
         assert quote.month_delta.delta_pct == 10.0
+
+
+def test_a_january_last_bar_anchors_to_the_previous_december():
+    bars = [
+        _bar("2025-12-15", 100.0),
+        _bar("2025-12-16", 300.0),
+        _bar("2026-01-15", 110.0),
+    ]
+
+    result = month_delta(bars)
+
+    assert result is not None
+    assert result.prev_value == 100
+
+
+def test_a_dense_daily_series_takes_the_calendar_anchor_not_a_bar_count():
+    from datetime import date, timedelta
+
+    bars = []
+    day = date(2026, 8, 3)
+    index = 0
+    while day <= date(2026, 10, 15):
+        if day.weekday() < 5:
+            bars.append(_bar(day.isoformat(), 100.0 + index))
+            index += 1
+        day += timedelta(days=1)
+
+    expected = next(bar.close for bar in bars if bar.date == "2026-09-15")
+    assert bars[-22].close != expected
+
+    result = month_delta(bars)
+
+    assert result is not None
+    assert result.prev_value == expected
