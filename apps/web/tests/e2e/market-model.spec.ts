@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import type { MarketRegimeContext, MarketSpread } from "../../../../packages/shared-types";
+import { isOneScreenRoute, ONE_SCREEN_ROUTES } from "../../components/ui/oneScreenRoutes";
 import {
   isMarketPageTab,
   MARKET_PAGE_TAB_KEY,
@@ -106,5 +107,16 @@ test.describe("spreadFigure", () => {
   test("a refused pair has no value, even if one is sent", () => {
     expect(spreadFigure({ ...SPREAD, refused_reason: "insufficient overlapping history", latest: 100, series: [] }))
       .toEqual({ id: "ai", label: "AI", pair: "BOTZ/^GSPC", latest: null, refused: true });
+  });
+});
+
+test.describe("isOneScreenRoute with the overview listed", () => {
+  test("'/' is one-screen, and listing it does not make every path one-screen", () => {
+    expect(ONE_SCREEN_ROUTES).toContain("/");
+    expect(isOneScreenRoute("/")).toBe(true);
+    for (const path of ["/portfolio", "/news", "/detail/AAPL", "/corporate-xyz", ""]) {
+      expect(isOneScreenRoute(path), path).toBe(false);
+    }
+    expect(isOneScreenRoute("/corporate/x")).toBe(true);
   });
 });

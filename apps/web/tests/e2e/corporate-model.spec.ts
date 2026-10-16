@@ -367,11 +367,11 @@ test.describe("restoreTabState", () => {
 test.describe("isOneScreenRoute", () => {
   test("the listed route and the paths under it are one-screen; a longer name is not", () => {
     expect(ONE_SCREEN_ROUTES).toContain("/corporate");
-    expect(ONE_SCREEN_ROUTES).not.toContain("/");
+    expect(ONE_SCREEN_ROUTES).toContain("/");
     expect(isOneScreenRoute("/corporate")).toBe(true);
     expect(isOneScreenRoute("/corporate/x")).toBe(true);
     expect(isOneScreenRoute("/corporate-xyz")).toBe(false);
-    expect(isOneScreenRoute("/")).toBe(false);
+    expect(isOneScreenRoute("/")).toBe(true);
   });
 });
 

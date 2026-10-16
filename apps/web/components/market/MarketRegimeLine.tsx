@@ -1,0 +1,52 @@
+"use client";
+
+import { formatNumber } from "@/lib/format";
+import { useLocale, useT } from "@/lib/i18n/locale";
+import { useMarketRegime } from "@/lib/useMarketRegime";
+import { FigureText } from "./FigureText";
+import { regimeView, withFigures, type RegimeTone } from "./marketModel";
+
+const TONE_CLASS: Record<RegimeTone, string> = {
+  up: "text-[var(--up)]",
+  down: "text-[var(--down)]",
+  neutral: "text-[var(--ink)]",
+};
+
+/**
+ * Spec §2.5: the regime in one line beside the title. The label, the equity breadth and the
+ * cross-asset signal counts come from GET /api/v1/market/regime as sent; nothing is counted here.
+ * regime_summary is English prose and is never rendered, not even as a title. The line keeps its
+ * height while loading (min-h-6), so the tab bar does not move when the regime arrives.
+ */
+export function MarketRegimeLine() {
+  const t = useT();
+  const { locale } = useLocale();
+  const view = regimeView(useMarketRegime());
+  const integer = (value: number) => formatNumber(value, "integer", { locale });
+
+  return (
+    <p
+      data-testid="market-regime"
+      data-state={view.kind}
+      className="type-small flex min-h-6 flex-wrap items-center gap-x-2 text-[var(--ink-secondary)]"
+    >
+      {view.kind === "ready" ? (
+        <>
+          <span data-part="label" data-tone={view.tone} className={TONE_CLASS[view.tone]}>{t(view.labelKey)}</span>
+          <span aria-hidden="true">·</span>
+          <span data-part="breadth">
+            <FigureText parts={withFigures(t("market.regime.breadth"), { breadth: `${integer(view.advancers)}/${integer(view.indexCount)}` })} />
+          </span>
+          <span aria-hidden="true">·</span>
+          <span data-part="signals">
+            <FigureText parts={withFigures(t("market.regime.signals"), { on: integer(view.riskOn), off: integer(view.riskOff) })} />
+          </span>
+        </>
+      ) : view.kind === "unknown" ? (
+        <span>{t("market.regime.unknown")}</span>
+      ) : view.kind === "error" ? (
+        <span>{t("market.regime.error")}</span>
+      ) : null}
+    </p>
+  );
+}

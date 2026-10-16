@@ -62,6 +62,10 @@ export async function mockMarketPageApi(
     if (pathname === `${API_PREFIX}/market/event-categories` && method === "GET") {
       return json(route, []);
     }
+    // The header's regime line (market one-screen plan, N14).
+    if (pathname === `${API_PREFIX}/market/regime` && method === "GET") {
+      return json(route, cloneFixture(marketIndexDetailFixture["^GSPC"].market_regime));
+    }
 
     return route.continue();
   });

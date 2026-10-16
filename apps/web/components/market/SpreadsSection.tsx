@@ -109,7 +109,7 @@ export function SpreadsSection() {
           No spreads were returned.
         </p>
       ) : (
-        <div className="mt-4 grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))" }}>
+        <div className="mt-4 grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))" }}>
           {spreads.map((spread) => (
             <SpreadCard key={spread.id} spread={spread} events={lines} />
           ))}

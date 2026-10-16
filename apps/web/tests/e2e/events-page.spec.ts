@@ -3,6 +3,7 @@ import { stableInkProfile } from "./helpers/chartInk";
 import { mockMarketPageApi } from "./helpers/marketPageMock";
 import { FOMC_CATEGORY, UNCATEGORIZED, mockEventsApi, setAllEventCategories, type MockCategory, type MockEvent } from "./helpers/eventsApiMock";
 import { addedColumns } from "./helpers/lineColor";
+import { openMarketTab } from "./helpers/marketTabs";
 
 const MINE: MockCategory = { id: "user-my-trades", label: "My trades", color: "#4589E5", visible: true, origin: "user", overridden: false };
 const EMPTY: MockCategory = { id: "user-empty", label: "Empty", color: "#123456", visible: true, origin: "user", overridden: false };
@@ -68,6 +69,7 @@ test("an added event is listed and then drawn on a chart", async ({ page }) => {
   await expect(page.getByTestId("events-table")).toContainText("Bought AI basket");
 
   await page.goto("/", { waitUntil: "domcontentloaded" });
+  await openMarketTab(page, "Spreads");
   const chart = '[data-testid="spread-chart-ai"]';
   await expect(page.locator(chart)).toBeVisible({ timeout: 60_000 });
   await expect(page.getByTestId("spreads-events-filter")).toHaveText(/Events · 2 of 2/);
