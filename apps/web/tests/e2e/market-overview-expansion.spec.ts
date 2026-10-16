@@ -70,6 +70,28 @@ test("every card shows a 1D and a 1M figure matching the API", async ({ page, re
   expect(month).not.toBe(day);
 });
 
+test("the table's 1D and 1M cells match the API", async ({ page, request }) => {
+  const all = await quotes(request);
+  await gotoMarket(page);
+  await page.getByRole("button", { name: "Table" }).click();
+  const tables = page.getByTestId("market-table");
+  for (const [ticker, name] of [["^GSPC", "S&P 500"], ["SOXX", "Semiconductors"], ["^TNX", "US 10Y Yield"]]) {
+    const quote = all.find((q) => q.ticker === ticker)!;
+    const row = tables.locator("tbody tr").filter({ has: page.getByRole("button", { name: `Open detail for ${name} from table`, exact: true }) });
+    await expect(row, `${ticker} row`).toHaveCount(1);
+    const cells = row.locator("td");
+    for (const [index, delta, label] of [[2, quote.delta, "1D"], [3, quote.month_delta, "1M"]] as const) {
+      const figure = changeFigure(delta, quote.instrument_type);
+      const text = await cellText(cells.nth(index));
+      if (figure.kind === "bp") expect(text, `${ticker} ${label}`).toBe(formatBp(figure.bp));
+      else if (figure.kind === "pct") {
+        const expected = (figure.pct / 100).toLocaleString("en-US", { style: "percent", minimumFractionDigits: 1, maximumFractionDigits: 1, signDisplay: "exceptZero" });
+        expect(text, `${ticker} ${label}`).toBe(expected);
+      }
+    }
+  }
+});
+
 test("the rate card reads bp and never a percent change", async ({ page }) => {
   await gotoMarket(page);
   const tnx = card(page, "^TNX");
