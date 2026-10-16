@@ -300,6 +300,7 @@ export const en = {
         liveRefresh: "This market detail required a live refresh because the stored history did not pass freshness or coverage checks.",
         noMonthly: "Monthly history is not available for this instrument yet, so the monthly chart and indicators are incomplete.",
         fxVolume: "Daily volume is not provided for this FX pair, so volume metrics are intentionally shown as unavailable.",
+        rateVolume: "Daily volume is not provided for this yield, so volume metrics are shown as unavailable.",
       },
       chartTitle: "OHLCV Chart",
       chartDescription: "Candlesticks, volume, and moving averages use the same chart stack as the Portfolio stock modal, with daily and monthly review modes.",
@@ -344,7 +345,7 @@ export const en = {
       fallbackNote: "Fallback note",
       noDetailNote: "No detail note available.",
       asOf: "As of {date}",
-      instrument: { index: "Index", commodity: "Commodity", fx: "FX", crypto: "Crypto" },
+      instrument: { index: "Index", commodity: "Commodity", fx: "FX", crypto: "Crypto", sector: "Sector ETF", rate: "Rate" },
       context: {
         index: {
           title: "Index Context",
@@ -384,6 +385,21 @@ export const en = {
           down: "Directional move: speculative appetite is softening in the current snapshot.",
           interpretation: "Interpretation: crypto moves can overshoot macro narratives, so compare this with portfolio risk appetite rather than reading it like a broad equity index.",
           daily: "Daily first, monthly second: daily indicators help with volatility bursts while monthly indicators better frame cycle durability.",
+        },
+        sector: {
+          title: "Sector Context",
+          description: "A sector card prices one ETF that stands in for the theme. Read its move as the theme's, not as one company's.",
+          proxy: "Proxy: {ticker} is the ETF that stands in for this sector.",
+          up: "Directional move: the sector is advancing in the current snapshot.",
+          down: "Directional move: the sector is declining in the current snapshot.",
+          interpretation: "Interpretation: compare with the S&P 500 card or the Spreads tab before reading the move as sector strength.",
+        },
+        rate: {
+          title: "Rate Context",
+          description: "The value is a yield in percent. Changes read in basis points: 4.00% to 4.10% is +10bp.",
+          reference: "Benchmark: the US 10-year Treasury yield, a base rate for discounting and for borrowing costs.",
+          up: "Directional move: yields are rising, so bond prices are falling.",
+          down: "Directional move: yields are falling, so bond prices are rising.",
         },
       },
       indicators: {
