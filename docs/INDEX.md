@@ -109,6 +109,7 @@ sub-project and feeding an implementation plan.
 | `2026-09-24-cases-ui-design.md` | Track C2 UI: the Cases tab -- fork a stored case with stated reasons, see why it moved by Shapley, and simulate it over stated distributions, entirely on existing endpoints |
 | `plans/2026-09-24-cases-ui.md` | Task-by-task plan for the Cases tab: caseFields' one percent<->fraction conversion, the case list and detail routes, the fork form, the Shapley why-it-moved section, and the simulate section |
 | `plans/2026-10-12-design-system-formalization.md` | Task-by-task plan for the design-system formalization: tokens, paper migration, lint rules and the lock-down |
+| `2026-10-16-market-one-screen-design.md` | Market Overview on one screen: Instruments and Spreads page tabs, a spread-figure row and a regime line (new `GET /api/market/regime`) on the first screen, and market's paper and en/ko pass |
 
 ## Process SOPs (`guideline/sop/`)
 
