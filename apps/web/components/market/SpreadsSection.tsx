@@ -1,6 +1,8 @@
 "use client";
 
 import { useMemo } from "react";
+import { formatNumber } from "@/lib/format";
+import { useLocale, useT } from "@/lib/i18n/locale";
 import TVChart from "@/components/charts/TVChart";
 import { EventFilter } from "@/components/charts/EventFilter";
 import type { EventLineSpec } from "@/components/charts/primitives/EventLinesPrimitive";
@@ -31,34 +33,36 @@ function SpreadCard({
   spread: MarketSpread;
   events: EventLineSpec[];
 }) {
+  const t = useT();
+  const { locale } = useLocale();
   const candles = useMemo(() => toCandles(spread), [spread]);
-  const window = `${spread.requested_window_days}d`;
+  const window = t("market.spreads.window", { days: spread.requested_window_days });
 
   return (
     <div
       data-testid={`spread-card-${spread.id}`}
-      className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-3"
+      className="border border-[var(--line)] bg-[var(--surface-raised)] p-3"
     >
       <div className="flex items-baseline justify-between gap-2">
-        <span className="font-bold text-[var(--text-primary)]">{spread.label}</span>
+        <span className="type-label text-[var(--ink)]">{spread.label}</span>
         {spread.latest !== null ? (
-          <span className="tabular-nums text-[var(--text-primary)]">{spread.latest.toFixed(1)}</span>
+          <span className="type-mono text-[var(--ink)]">{formatNumber(spread.latest, "price", { digits: 1, locale })}</span>
         ) : null}
       </div>
 
       {/* The proxy is named, always. A figure labelled only "AI" asserts a fact about AI;
           naming the tickers lets a reader reject the proxy instead. */}
-      <span className="mt-0.5 block text-[length:var(--type-helper)] text-[var(--text-muted)]">
-        {spread.numerator} vs {spread.denominator} · {window}
+      <span className="type-small mt-0.5 block text-[var(--ink-muted)]">
+        {t("market.spreads.pair", { numerator: spread.numerator, denominator: spread.denominator, window })}
       </span>
 
       {spread.refused_reason ? (
         // Refusal is a stated fact, so it is rendered as one: never an empty chart, never a
         // line flat at 100 (indistinguishable from a real result showing no movement), and
         // never a hidden card.
-        <div className="mt-3 rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--surface-muted)] p-3 text-[length:var(--type-helper)]">
-          <span className="block font-semibold text-[var(--text-primary)]">Unavailable</span>
-          <span className="block text-[var(--text-muted)]">Reason: {spread.refused_reason}</span>
+        <div className="type-small mt-3 border border-[var(--line)] bg-[var(--surface)] p-3">
+          <span className="type-label block text-[var(--ink)]">{t("market.spreads.unavailable")}</span>
+          <span className="block text-[var(--ink-muted)]">{t("market.spreads.reason", { reason: spread.refused_reason })}</span>
         </div>
       ) : (
         <div data-testid={`spread-chart-${spread.id}`} className="mt-3">
@@ -77,39 +81,39 @@ function SpreadCard({
 }
 
 export function SpreadsSection() {
+  const t = useT();
   const { spreads, isLoading, isError } = useMarketSpreads();
   const { lines } = useMarketEvents();
 
   return (
     <section
       data-testid="spreads-section"
-      className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4"
+      className="border border-[var(--line)] bg-[var(--surface-raised)] p-4"
     >
       <div className="flex flex-wrap items-start justify-between gap-2">
-        <h3 className="text-lg font-bold text-[var(--text-primary)]">Themes and policy spreads</h3>
+        <h3 className="type-panel-title text-[var(--ink)]">{t("market.spreads.title")}</h3>
         <EventFilter testId="spreads-events-filter" />
       </div>
-      <p className="mt-1 text-sm text-[var(--text-muted)]">
-        Relative strength against a benchmark, indexed to 100 at the start of each window. Each
-        card names the tickers it is computed from — the theme names are proxies, not measurements.
+      <p className="type-body mt-1 text-[var(--ink-muted)]">
+        {t("market.spreads.description")}
       </p>
       {/* Loading, failed and empty are three different facts, and each is stated. They used
           to render identically -- as nothing -- so a broken endpoint or the slow first
           request of the day could not be told apart from a page with no spreads. */}
       {isLoading ? (
-        <p data-testid="spreads-loading" role="status" className="mt-4 text-sm text-[var(--text-muted)]">
-          Loading spreads…
+        <p data-testid="spreads-loading" role="status" className="type-body mt-4 text-[var(--ink-muted)]">
+          {t("market.spreads.loading")}
         </p>
       ) : isError ? (
-        <p role="alert" className="mt-4 text-sm text-[var(--chart-negative)]">
-          The spreads could not be loaded.
+        <p role="alert" className="type-body mt-4 text-[var(--status-error-ink)]">
+          {t("market.spreads.error")}
         </p>
       ) : spreads.length === 0 ? (
-        <p data-testid="spreads-empty" className="mt-4 text-sm text-[var(--text-muted)]">
-          No spreads were returned.
+        <p data-testid="spreads-empty" className="type-body mt-4 text-[var(--ink-muted)]">
+          {t("market.spreads.empty")}
         </p>
       ) : (
-        <div className="mt-4 grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))" }}>
+        <div className="mt-4 grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))" }}>
           {spreads.map((spread) => (
             <SpreadCard key={spread.id} spread={spread} events={lines} />
           ))}

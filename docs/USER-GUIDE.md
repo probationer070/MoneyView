@@ -45,7 +45,7 @@ The top bar switches between screens. Its icons are the screens: hover, focus or
 
 | Screen | Address | Use it to |
 |---|---|---|
-| **Market Overview** | `/` | See indices, commodities, FX and crypto at a glance, with event lines (Fed decisions, geopolitical dates, drawdowns, oil shocks) on the charts. |
+| **Market Overview** | `/` | See indices, commodities, FX and crypto on one screen: a regime line, the instrument cards and the theme-spread figures; the spread charts with their event lines are on the Spreads tab. |
 | **Portfolio** | `/portfolio` | Keep holdings and the watchlist, set weights, press **Refresh Analysis** for attribution, open a holding's detail and its **Snapshot History**. |
 | **News Feed** | `/news` | Read news for your tickers. |
 | **Corporate Analysis** | `/corporate` | Value one company (**Refresh DCF**) and compare your watchlist (**Refresh comparison**). |

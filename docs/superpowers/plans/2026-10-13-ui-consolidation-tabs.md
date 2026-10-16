@@ -1460,6 +1460,8 @@ git commit -m "feat(portfolio): Stocks tab adds holdings by amount and follows p
 
 ### Task 5: Shared detail drawer; portfolio stock detail in it
 
+> **2026-10-16 (market one-screen plan, Task 1):** pages in `ONE_SCREEN_ROUTES` (`/corporate`, `/`) never scroll, so the aside's `lg:sticky lg:top-0 lg:max-h-[calc(100vh_-_var(--main-pad-top,0px)_-_var(--main-pad-bottom,0px))]` in Step 3 assumes a scrolling page and is taller than a one-screen column. Where the layout's parent has a fixed height, use `lg:self-stretch lg:max-h-full` in place of `lg:self-start` and the sticky `max-h`: the aside then fills its parent and scrolls inside itself. Pages that scroll keep Step 3's classes. Re-run the Step 3 mutation row for `lg:sticky` against whichever classes are used.
+
 **Files:**
 - Create: `components/ui/focusTrap.ts`, `components/ui/DetailDrawerLayout.tsx`, `tests/e2e/detail-drawer.spec.ts`
 - Modify: `components/ui/ModalShell.tsx` (uses `focusTrap.ts`), `app/portfolio/components/PortfolioTabs.tsx`, `app/portfolio/page.tsx`
@@ -2008,6 +2010,13 @@ Before running, read `AttributionWaterfall.tsx`'s `effectDetails` and use its fi
 ---
 
 ### Task 7: Market Overview detail in the shared drawer
+
+> **2026-10-16 (market one-screen plan):** `/` is now a one-screen page with two page tabs (Instruments | Spreads). Read this task with these changes:
+> - `DetailDrawerLayout` wraps the tab area (`MarketPageTabs`: the tab bar and its panel), not the whole page and not only the card grid. `MarketHeader` stays outside it. The aside uses the one-screen classes from the Task 5 note.
+> - The card grid is `InstrumentsPanel`'s `grid-cols-1 sm:grid-cols-2 lg:grid-cols-5`. Recompute the container-query columns for it. With the drawer closed, keep 1 / 2 / 5 columns at 375 / 768 / 1280. With the drawer open at 1280, pick the count that keeps each card at least 220 px wide.
+> - Switching page tabs closes the drawer (`MarketPageTabs`' `onChange` also clears `selectedIndex`).
+> - The copy edits in Step 2 (items 3 and 6) are catalog edits now: `market.detail.*` in `lib/i18n/messages/en.ts`, with the `ko.ts` entry. They are not JSX literals.
+> - The line numbers in Step 3 have moved. Locate each `Close modal` line by its code and re-verify the list against HEAD before editing.
 
 **Files:**
 - Modify: `components/market/MarketOverviewClient.tsx`

@@ -3,6 +3,7 @@ import { stableInkProfile } from "./helpers/chartInk";
 import { mockMarketPageApi } from "./helpers/marketPageMock";
 import { FOMC_CATEGORY, mockEventsApi } from "./helpers/eventsApiMock";
 import { addedColumns } from "./helpers/lineColor";
+import { openMarketTab } from "./helpers/marketTabs";
 
 /**
  * One filter for every chart, remembered across reloads. Market Overview has several spread
@@ -26,6 +27,7 @@ async function openOverview(page: Page, options: Parameters<typeof mockEventsApi
   );
   const state = await mockEventsApi(page, options);
   await page.goto("/", { waitUntil: "domcontentloaded" });
+  await openMarketTab(page, "Spreads");
   await expect(page.getByTestId("spread-chart-ai")).toBeVisible({ timeout: 60_000 });
   await expect(page.getByTestId("spread-chart-cloud")).toBeVisible();
   return state;
@@ -64,6 +66,7 @@ test("unchecking a category removes its lines from every chart, and stays unchec
   expect(afterReload.ink.some((v) => v > 0), "the chart must have painted after reload").toBe(true);
   expect(addedColumns(withLines[0], afterReload).length, "after reload the line must still be hidden").toBeGreaterThan(0);
 
+  await openMarketTab(page, "Instruments");
   await page.getByRole("button", { name: "Open detail for S&P 500" }).click();
   await expect(page.getByRole("dialog").getByTestId("market-events-filter"), "the modal shares the filter").toHaveText(/Events · 0 of 1/);
 });

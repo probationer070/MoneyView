@@ -10,7 +10,7 @@ test("market overview renders deterministically from shared dashboard fixtures",
   await page.goto("/", { waitUntil: "domcontentloaded" });
 
   await expect(page.getByRole("heading", { name: "Market Overview", exact: true })).toBeVisible({ timeout: 60_000 });
-  await expect(page.getByText("Real-time snapshot of major global and domestic indices")).toBeVisible();
+  await expect(page.getByText("Daily closes · indices, commodities, FX, crypto")).toBeVisible();
   await expect(page.getByText("S&P 500")).toBeVisible();
   await expect(page.getByText("^GSPC", { exact: true })).toBeVisible();
   await expect(page.getByText("Nasdaq")).toBeVisible();

@@ -7,6 +7,9 @@ import type { MarketSpread } from "../../../packages/shared-types";
 
 export type { MarketSpread };
 
+/** The spreads' requested window in CALENDAR days; the route's default too (`Query(default=90)`). */
+export const DEFAULT_SPREAD_WINDOW_DAYS = 90;
+
 /**
  * Theme and policy spreads.
  *
@@ -17,7 +20,7 @@ export type { MarketSpread };
  * used to be turned into an empty list, which the section then hid, so a broken endpoint
  * looked exactly like "no spreads". `isError` lets the section say so within itself.
  */
-export function useMarketSpreads(windowDays = 90) {
+export function useMarketSpreads(windowDays = DEFAULT_SPREAD_WINDOW_DAYS) {
   const query = useQuery({
     queryKey: ["market-spreads", windowDays],
     queryFn: () => fetchApi<MarketSpread[]>(`/market/spreads?window_days=${windowDays}`),

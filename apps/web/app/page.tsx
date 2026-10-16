@@ -1,7 +1,6 @@
 import { fetchApi } from "@/lib/api";
 import { serverApiBaseUrl } from "@/lib/server/backendPort";
 import { MarketOverviewClient, type MarketIndexQuote } from "@/components/market/MarketOverviewClient";
-import { PageHeader } from "@/components/ui/PageHeader";
 
 export const dynamic = "force-dynamic";
 
@@ -17,13 +16,7 @@ export default async function MarketOverview() {
     fetchError = error instanceof Error ? error.message : "Failed to load market indices.";
   }
 
-  return (
-    <div className="max-w-7xl mx-auto px-4 py-6">
-      <PageHeader
-        title="Market Overview"
-        subtitle="Real-time snapshot of major global and domestic indices"
-      />
-      <MarketOverviewClient indices={indices} fetchError={fetchError} />
-    </div>
-  );
+  // The header, the tabs and the regime line are client components (MarketOverviewClient), so their
+  // copy comes from the en/ko catalogs (spec §3). This server component only fetches the cards.
+  return <MarketOverviewClient indices={indices} fetchError={fetchError} />;
 }

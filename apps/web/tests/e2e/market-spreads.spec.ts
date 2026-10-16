@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { stableInkProfile } from "./helpers/chartInk";
 import { mockMarketPageApi } from "./helpers/marketPageMock";
 import { GEOPOLITICAL, mockEventsApi, setAllEventCategories, type MockEvent } from "./helpers/eventsApiMock";
+import { openMarketTab } from "./helpers/marketTabs";
 
 /**
  * The section's contract is that a reader can never see a theme figure without seeing what
@@ -45,6 +46,7 @@ test("every spread card names the tickers and window that produced it", async ({
   // reject the proxy instead.
   await mockSpreads(page, [computed()]);
   await page.goto("/", { waitUntil: "domcontentloaded" });
+  await openMarketTab(page, "Spreads");
 
   const card = page.getByTestId("spread-card-ai");
   await expect(card).toBeVisible({ timeout: 60_000 });
@@ -58,6 +60,7 @@ test("a refused pair keeps its card and shows the reason", async ({ page }) => {
   // result showing no relative movement -- and never hidden.
   await mockSpreads(page, [computed(), refused()]);
   await page.goto("/", { waitUntil: "domcontentloaded" });
+  await openMarketTab(page, "Spreads");
 
   const card = page.getByTestId("spread-card-defence");
   await expect(card).toBeVisible({ timeout: 60_000 });
@@ -71,6 +74,7 @@ test("a refused pair keeps its card and shows the reason", async ({ page }) => {
 test("a computed pair renders its latest value and its chart", async ({ page }) => {
   await mockSpreads(page, [computed()]);
   await page.goto("/", { waitUntil: "domcontentloaded" });
+  await openMarketTab(page, "Spreads");
 
   const card = page.getByTestId("spread-card-ai");
   await expect(card).toContainText("103.4");
@@ -103,6 +107,7 @@ test("the spreads section's event filter changes what is painted", async ({ page
   await mockEvents(page, [{ ...IRAN_EVENT[0], start_date: "2026-06-15" }]);
   await mockSpreads(page, [computed()]);
   await page.goto("/", { waitUntil: "domcontentloaded" });
+  await openMarketTab(page, "Spreads");
 
   const filter = page.getByTestId("spreads-events-filter");
   await expect(filter).toBeVisible({ timeout: 60_000 });
@@ -124,6 +129,7 @@ test("a spread chart is not rebuilt when the event filter changes", async ({ pag
   await mockEvents(page, [{ ...IRAN_EVENT[0], start_date: "2026-06-15" }]);
   await mockSpreads(page, [computed()]);
   await page.goto("/", { waitUntil: "domcontentloaded" });
+  await openMarketTab(page, "Spreads");
 
   const filter = page.getByTestId("spreads-events-filter");
   await expect(filter).toBeVisible({ timeout: 60_000 });
@@ -228,6 +234,7 @@ test("a failed spreads request is shown as a failure, not as an empty page", asy
     await route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ detail: "boom" }) });
   });
   await page.goto("/", { waitUntil: "domcontentloaded" });
+  await openMarketTab(page, "Spreads");
 
   const section = page.getByTestId("spreads-section");
   await expect(section.getByRole("alert")).toContainText("could not be loaded", { timeout: 60_000 });
@@ -244,6 +251,7 @@ test("a slow spreads request shows it is loading instead of nothing", async ({ p
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([computed()]) });
   });
   await page.goto("/", { waitUntil: "domcontentloaded" });
+  await openMarketTab(page, "Spreads");
 
   await expect(page.getByTestId("spreads-loading")).toBeVisible({ timeout: 60_000 });
   release();
@@ -254,6 +262,7 @@ test("a slow spreads request shows it is loading instead of nothing", async ({ p
 test("an empty spreads list says so, and is not an error", async ({ page }) => {
   await mockSpreads(page, []);
   await page.goto("/", { waitUntil: "domcontentloaded" });
+  await openMarketTab(page, "Spreads");
 
   const section = page.getByTestId("spreads-section");
   await expect(section.getByTestId("spreads-empty")).toBeVisible({ timeout: 60_000 });
