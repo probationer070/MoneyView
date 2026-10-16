@@ -334,8 +334,10 @@ test("the Market Dashboard card, Detail available and the Source column are gone
   await expect(page.getByText("Detail available")).toHaveCount(0);
   await page.getByRole("button", { name: "Table" }).click();
   const table = page.getByTestId("market-table");
-  await expect(table.getByRole("columnheader")).toHaveCount(4);
-  await expect(table.getByRole("columnheader", { name: "Instrument" })).toBeVisible();
+  await expect(table.locator("table")).toHaveCount(2);
+  const first = table.locator("table").first();
+  await expect(first.getByRole("columnheader")).toHaveCount(4);
+  await expect(first.getByRole("columnheader", { name: "Instrument" })).toBeVisible();
   await expect(table.getByRole("columnheader", { name: "Source" })).toHaveCount(0);
   await expect(page.getByText("Market snapshot API")).toHaveCount(0);
 });
@@ -362,7 +364,7 @@ test.describe("in Korean", () => {
     await expect(page.getByRole("heading", { name: "시장 개요", exact: true })).toBeVisible({ timeout: 60_000 });
     await expect(page.getByTestId("market-regime").locator('[data-part="breadth"] .type-mono')).toHaveText("3/4");
     await page.getByRole("button", { name: "Table" }).click();
-    await expect(page.getByRole("columnheader", { name: "종목", exact: true })).toBeVisible();
+    await expect(page.getByRole("columnheader", { name: "종목", exact: true }).first()).toBeVisible();
     await page.getByRole("button", { name: "표에서 S&P 500 상세 열기" }).click();
     const dialog = page.getByRole("dialog", { name: "S&P 500" });
     await expect(dialog.getByRole("heading", { name: "일별 거래량" })).toBeVisible();

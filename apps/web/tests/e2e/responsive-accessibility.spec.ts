@@ -58,7 +58,7 @@ test("market overview and news remain usable at 1280px, 768px, and 375px", async
   }
 
   await page.getByRole("button", { name: "Table" }).click();
-  await expect(page.getByRole("columnheader", { name: "Instrument" })).toBeVisible();
+  await expect(page.getByRole("columnheader", { name: "Instrument" }).first()).toBeVisible();
 
   await mockNewsPageApi(page);
   await page.goto("/news", { waitUntil: "domcontentloaded" });

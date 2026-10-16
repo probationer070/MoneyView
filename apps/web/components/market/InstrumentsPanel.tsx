@@ -1,16 +1,15 @@
 "use client";
 
-import clsx from "clsx";
 import { SparklineCard } from "@/components/data/SparklineCard";
 import { BilingualLabel } from "@/components/ui/BilingualLabel";
-import { DeltaBadge } from "@/components/ui/DeltaBadge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { ViewToggle, type ViewMode } from "@/components/ui/ViewToggle";
 import { formatNumber } from "@/lib/format";
 import { useLocale, useT } from "@/lib/i18n/locale";
 import { FigureText } from "./FigureText";
-import { withFigures, type MarketIndexQuote } from "./marketModel";
+import { ChangeFigureText } from "./ChangeFigureText";
+import { changeFigure, instrumentNameKey, withFigures, type MarketIndexQuote } from "./marketModel";
 import { SpreadFigureRow } from "./SpreadFigureRow";
 
 interface InstrumentsPanelProps {
@@ -22,26 +21,24 @@ interface InstrumentsPanelProps {
   onOpenSpreads: () => void;
 }
 
-const SIGN_TONE = {
-  up: "text-[var(--up)]",
-  down: "text-[var(--down)]",
-  flat: "text-[var(--flat)]",
-} as const;
-
-/** The direction of a figure as printed at one decimal, like DeltaBadge: -0.04 prints "0.0" and is flat. */
-function printedSign(value: number | null | undefined): keyof typeof SIGN_TONE {
-  if (typeof value !== "number" || !Number.isFinite(value) || Math.round(Math.abs(value) * 10) === 0) return "flat";
-  return value > 0 ? "up" : "down";
-}
-
-// Spec §2.2: a toolbar (count + Graph|Table), the cards in five columns or a four-column table, and
-// the spread figures under either. Sized for the 1280x720 panel (plan "Height budget").
+// Expansion spec §2.2: a toolbar (count + Graph|Table), the cards in seven columns or two four-column
+// table halves, and the spread figures under either. Sized for the 1280x720 panel (plan "Height budget").
 export function InstrumentsPanel({ indices, fetchError, viewMode, onViewModeChange, onOpenDetail, onOpenSpreads }: InstrumentsPanelProps) {
   const t = useT();
   const { locale } = useLocale();
   if (fetchError) return <ErrorState title={t("market.unavailableTitle")} message={fetchError} />;
   if (indices.length === 0) return <EmptyState title={t("market.emptyTitle")} description={t("market.emptyDescription")} />;
   const price = (value: number | null | undefined) => formatNumber(value, "price", { digits: 1, locale });
+  // A rate's last close is a yield in percent points: 4.25 reads "4.25%" (formatNumber's percent takes a fraction).
+  const valueText = (quote: MarketIndexQuote) =>
+    quote.instrument_type === "rate" && typeof quote.last_close === "number"
+      ? formatNumber(quote.last_close / 100, "percent", { digits: 2, locale })
+      : price(quote.last_close);
+  const nameOf = (quote: MarketIndexQuote) => {
+    const key = instrumentNameKey(quote.ticker);
+    return key === null ? quote.name : t(key);
+  };
+  const halves = [indices.slice(0, 7), indices.slice(7)];
 
   return (
     <div data-testid="market-instruments" className="flex flex-col gap-3">
@@ -53,14 +50,15 @@ export function InstrumentsPanel({ indices, fetchError, viewMode, onViewModeChan
       </div>
 
       {viewMode === "chart" ? (
-        <div data-testid="market-cards" className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <div data-testid="market-cards" className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
           {indices.map((quote) => (
             <SparklineCard
               key={quote.ticker}
-              title={quote.name}
+              title={nameOf(quote)}
               ticker={quote.ticker}
-              value={price(quote.last_close)}
-              deltaPct={quote.delta.delta_pct}
+              value={valueText(quote)}
+              day={changeFigure(quote.delta, quote.instrument_type)}
+              month={changeFigure(quote.month_delta, quote.instrument_type)}
               sparkline={quote.sparkline}
               periodLabel={quote.period}
               onOpen={() => onOpenDetail(quote)}
@@ -68,39 +66,41 @@ export function InstrumentsPanel({ indices, fetchError, viewMode, onViewModeChan
           ))}
         </div>
       ) : (
-        <div data-testid="market-table" className="overflow-x-auto border border-[var(--line)] bg-[var(--surface-raised)]">
-          <table className="min-w-full">
-            <thead className="bg-[var(--surface)]">
-              <tr className="type-caption text-[var(--ink-muted)]">
-                <th className="h-8 px-3 text-left"><BilingualLabel k="instrument" /></th>
-                <th className="h-8 px-3 text-right"><BilingualLabel k="price" /></th>
-                <th className="h-8 px-3 text-right"><BilingualLabel k="absChange" /></th>
-                <th className="h-8 px-3 text-right"><BilingualLabel k="change" /></th>
-              </tr>
-            </thead>
-            <tbody>
-              {indices.map((quote) => (
-                <tr key={quote.ticker} className="h-8 border-t border-[var(--grid)] hover:bg-[var(--surface)]">
-                  <td className="px-3">
-                    <button
-                      type="button"
-                      onClick={() => onOpenDetail(quote)}
-                      aria-label={t("market.table.open", { name: quote.name })}
-                      className="flex items-baseline gap-2 rounded-[var(--radius-1)] text-left"
-                    >
-                      <span className="type-body text-[var(--ink)]">{quote.name}</span>
-                      <span className="type-caption uppercase text-[var(--ink-muted)]">{quote.ticker}</span>
-                    </button>
-                  </td>
-                  <td className="type-mono px-3 text-right text-[var(--ink)]">{price(quote.last_close)}</td>
-                  <td className={clsx("type-mono px-3 text-right", SIGN_TONE[printedSign(quote.delta.delta_abs)])}>
-                    {formatNumber(quote.delta.delta_abs, "price", { digits: 1, signed: true, locale })}
-                  </td>
-                  <td className="px-3 text-right"><DeltaBadge value={quote.delta.delta_pct} /></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div data-testid="market-table" className="grid gap-3 xl:grid-cols-2">
+          {halves.map((half, index) => (
+            <div key={index} className="overflow-x-auto border border-[var(--line)] bg-[var(--surface-raised)]">
+              <table className="min-w-full">
+                <thead className="bg-[var(--surface)]">
+                  <tr className="type-caption text-[var(--ink-muted)]">
+                    <th className="h-8 px-3 text-left"><BilingualLabel k="instrument" /></th>
+                    <th className="h-8 px-3 text-right"><BilingualLabel k="price" /></th>
+                    <th className="h-8 px-3 text-right"><BilingualLabel k="change1d" /></th>
+                    <th className="h-8 px-3 text-right"><BilingualLabel k="change1m" /></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {half.map((quote) => (
+                    <tr key={quote.ticker} className="h-8 border-t border-[var(--grid)] hover:bg-[var(--surface)]">
+                      <td className="px-3">
+                        <button
+                          type="button"
+                          onClick={() => onOpenDetail(quote)}
+                          aria-label={t("market.table.open", { name: nameOf(quote) })}
+                          className="flex items-baseline gap-2 rounded-[var(--radius-1)] text-left"
+                        >
+                          <span className="type-body text-[var(--ink)]">{nameOf(quote)}</span>
+                          <span className="type-caption uppercase text-[var(--ink-muted)]">{quote.ticker}</span>
+                        </button>
+                      </td>
+                      <td className="type-mono px-3 text-right text-[var(--ink)]">{valueText(quote)}</td>
+                      <td className="px-3 text-right"><ChangeFigureText figure={changeFigure(quote.delta, quote.instrument_type)} /></td>
+                      <td className="px-3 text-right"><ChangeFigureText figure={changeFigure(quote.month_delta, quote.instrument_type)} /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ))}
         </div>
       )}
 
