@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import { tokens } from "../../lib/tokens.generated";
 import { mockMarketPageApi } from "./helpers/marketPageMock";
 import { marketPanel, openMarketTab } from "./helpers/marketTabs";
@@ -190,4 +190,147 @@ test("switching to Korean relabels the title, the subtitle, the regime and the t
   await expect(regime(page).locator('[data-part="breadth"]')).toHaveText("지수 3/4 상승");
   await expect(regime(page).locator('[data-part="signals"]')).toHaveText("선호 5 / 회피 0");
   await expect(page.getByTestId("market-page-tabs").getByRole("tab", { name: "스프레드" })).toBeVisible();
+});
+
+function spread(id: string, label: string, numerator: string, latest: number | null, refused_reason: string | null = null) {
+  const refused = refused_reason !== null;
+  return {
+    id, label, numerator, denominator: "^GSPC", requested_window_days: 90,
+    actual_window_start: refused ? null : "2026-06-15", actual_window_end: refused ? null : "2026-09-11",
+    actual_window_days: refused ? null : 88, observations: refused ? 0 : 62,
+    basis: `(${numerator}_t / ${numerator}_0) / (^GSPC_t / ^GSPC_0) x 100, indexed to 100 at 2026-06-15`,
+    series: refused ? [] : [{ date: "2026-06-15", value: 100 }, { date: "2026-09-11", value: latest }],
+    latest, refused_reason,
+  };
+}
+const SPREADS = [
+  spread("ai", "AI", "BOTZ", 103.4),
+  spread("cyber", "Cybersecurity", "CIBR", 98.1),
+  spread("defence", "Defence", "ITA", null, "insufficient overlapping history"),
+];
+
+async function mockSpreads(page: Page, body: unknown, status = 200) {
+  await page.route("**/api/v1/market/spreads**", (route) =>
+    route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) }));
+}
+
+const figures = (page: Page) => page.getByTestId("spread-figures");
+
+test.describe("at 1280x720, the first screen", () => {
+  test.use({ viewport: { width: 1280, height: 720 } });
+
+  async function expectEndsBy(blocks: [string, Locator, number][]) {
+    for (const [name, locator, bottom] of blocks) {
+      const box = await locator.boundingBox();
+      expect(box, `${name} is rendered`).not.toBeNull();
+      expect(box!.y + box!.height, `${name} ends by ${Math.round(bottom)}px`).toBeLessThanOrEqual(bottom);
+    }
+  }
+
+  test("header, tab bar, every card and the spread figures fit, in both views, without scrolling the panel", async ({ page }) => {
+    await mockMarketPageApi(page);
+    await mockSpreads(page, SPREADS);
+    await gotoMarket(page);
+    await expect(figures(page)).toHaveAttribute("data-state", "ready");
+    await page.evaluate(() => document.fonts.ready);
+    // Cards are server-rendered from the e2e API, so page.route cannot set their count: find the last one.
+    expect(await cards(page).count(), "the e2e API served instrument cards").toBeGreaterThan(0);
+    const panel = await marketPanel(page).boundingBox();
+    const panelBottom = panel!.y + panel!.height;
+    expect(panelBottom, "the panel ends inside the viewport").toBeLessThanOrEqual(720);
+    await expectEndsBy([
+      ["title", page.getByRole("heading", { name: "Market Overview", exact: true }), 720],
+      ["regime line", regime(page), 720],
+      ["tab bar", page.getByRole("tablist", { name: "Market sections" }), 720],
+      ["last card", cards(page).last(), panelBottom],
+      ["spread figures", figures(page), panelBottom],
+    ]);
+    await expectNoPageScroll(page, "graph view");
+
+    await page.getByRole("button", { name: "Table" }).click();
+    const rows = page.getByTestId("market-table").locator("tbody tr");
+    await expect(rows.first()).toBeVisible();
+    await expectEndsBy([
+      ["last table row", rows.last(), panelBottom],
+      ["spread figures", figures(page), panelBottom],
+    ]);
+    await expectNoPageScroll(page, "table view");
+  });
+});
+
+test.describe("the spread figures", () => {
+  test("each pair names its tickers; a refused pair says Unavailable, never a number", async ({ page }) => {
+    await mockMarketPageApi(page);
+    await mockSpreads(page, SPREADS);
+    await gotoMarket(page);
+    await expect(figures(page)).toHaveAttribute("data-state", "ready");
+    await expect(figures(page)).toContainText("Themes vs benchmark (90d)");
+    const ai = page.getByTestId("spread-figure-ai");
+    await expect(ai.locator('[data-part="value"]')).toHaveText("103.4");
+    await expect(ai.locator('[data-part="pair"]')).toHaveText("BOTZ/^GSPC");
+    await expect(page.getByTestId("spread-figure-cyber").locator('[data-part="pair"]')).toHaveText("CIBR/^GSPC");
+    const defence = page.getByTestId("spread-figure-defence");
+    await expect(defence).toHaveAttribute("data-state", "refused");
+    await expect(defence.locator('[data-part="value"]')).toHaveText("Unavailable");
+    await expect(defence.locator('[data-part="pair"]')).toHaveText("ITA/^GSPC");
+    // The figures are not chart cards: market-spreads.spec.ts counts charts by this prefix.
+    await expect(page.getByTestId(/^spread-card-/)).toHaveCount(0);
+  });
+
+  test("loading is stated, and gives way to the figures", async ({ page }) => {
+    let release: () => void = () => {};
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    await mockMarketPageApi(page);
+    await page.route("**/api/v1/market/spreads**", async (route) => {
+      await held;
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(SPREADS) });
+    });
+    await gotoMarket(page);
+    await expect(figures(page)).toHaveAttribute("data-state", "loading");
+    await expect(figures(page).getByRole("status")).toHaveText("Loading spreads…");
+    release();
+    await expect(figures(page)).toHaveAttribute("data-state", "ready", { timeout: 30_000 });
+  });
+
+  test("a failed request is stated as a failure", async ({ page }) => {
+    await mockMarketPageApi(page);
+    await mockSpreads(page, { detail: "boom" }, 500);
+    await gotoMarket(page);
+    await expect(figures(page)).toHaveAttribute("data-state", "error", { timeout: 30_000 });
+    await expect(figures(page).getByRole("alert")).toContainText("could not be loaded");
+  });
+
+  test("an empty list is stated, and is not an error", async ({ page }) => {
+    await mockMarketPageApi(page);
+    await mockSpreads(page, []);
+    await gotoMarket(page);
+    await expect(figures(page)).toHaveAttribute("data-state", "empty");
+    await expect(figures(page)).toContainText("No spreads were returned.");
+    await expect(figures(page).getByRole("alert")).toHaveCount(0);
+  });
+
+  test("a figure opens the Spreads tab", async ({ page }) => {
+    await mockMarketPageApi(page);
+    await mockSpreads(page, SPREADS);
+    await gotoMarket(page);
+    // Client-fetched, so "ready" means hydrated: one click is enough.
+    await expect(figures(page)).toHaveAttribute("data-state", "ready");
+    await page.getByTestId("spread-figure-ai").click();
+    await expect(page.getByTestId("market-page-tabs").getByRole("tab", { name: "Spreads" })).toHaveAttribute("aria-selected", "true");
+    await expect(marketPanel(page).getByTestId("spread-card-ai")).toBeVisible();
+  });
+});
+
+test("the Market Dashboard card, Detail available and the Source column are gone", async ({ page }) => {
+  await mockMarketPageApi(page);
+  await gotoMarket(page);
+  await expect(cards(page).first()).toBeVisible();
+  await expect(page.getByText("Market Dashboard")).toHaveCount(0);
+  await expect(page.getByText("Detail available")).toHaveCount(0);
+  await page.getByRole("button", { name: "Table" }).click();
+  const table = page.getByTestId("market-table");
+  await expect(table.getByRole("columnheader")).toHaveCount(4);
+  await expect(table.getByRole("columnheader", { name: "Instrument" })).toBeVisible();
+  await expect(table.getByRole("columnheader", { name: "Source" })).toHaveCount(0);
+  await expect(page.getByText("Market snapshot API")).toHaveCount(0);
 });

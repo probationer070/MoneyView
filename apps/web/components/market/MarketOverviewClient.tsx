@@ -8,15 +8,13 @@ import { useDevMonitorPageLoad } from "@/hooks/useDevMonitorPageLoad";
 import TVChart from "@/components/charts/TVChart";
 import { EventFilter } from "@/components/charts/EventFilter";
 import { DeltaBadge } from "@/components/ui/DeltaBadge";
-import { ViewToggle, type ViewMode } from "@/components/ui/ViewToggle";
+import { type ViewMode } from "@/components/ui/ViewToggle";
 import { type RawOHLCV, transformToTVCandles, transformToTVVolume } from "@/lib/transformers";
 import { Card } from "@/components/ui/Card";
-import { SectionHeader } from "@/components/ui/SectionHeader";
-import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { ModalShell } from "@/components/ui/ModalShell";
 import { LoadingState } from "@/components/ui/LoadingState";
-import { SparklineCard } from "@/components/data/SparklineCard";
+import { InstrumentsPanel } from "@/components/market/InstrumentsPanel";
 import { SpreadsSection } from "@/components/market/SpreadsSection";
 import { MarketHeader } from "@/components/market/MarketHeader";
 import { MarketPageTabs, useMarketPageTab } from "@/components/market/MarketPageTabs";
@@ -677,79 +675,14 @@ export function MarketOverviewClient({
           active={pageTab}
           onChange={setPageTab}
           instruments={
-            fetchError ? (
-              <ErrorState title="Market Overview Unavailable" message={fetchError} />
-            ) : indices.length === 0 ? (
-              <EmptyState title="No market data available" description="Ensure the FastAPI backend is running and discoverable." />
-            ) : (
-              <section className="space-y-4">
-                <Card>
-                  <SectionHeader
-                    title="Market Dashboard"
-                    description="Scan the market in graph view, switch to table view for fast comparison, then open any item for a deeper read."
-                    actions={<ViewToggle value={viewMode} onChange={setViewMode} />}
-                  />
-                </Card>
-
-                {viewMode === "chart" ? (
-                  <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-                    {indices.map((idx) => (
-                      <SparklineCard
-                        key={idx.ticker}
-                        title={idx.name}
-                        ticker={idx.ticker}
-                        value={idx.last_close == null ? "N/A" : formatNumber(idx.last_close)}
-                        deltaPct={idx.delta.delta_pct}
-                        sparkline={idx.sparkline}
-                        periodLabel={idx.period}
-                        onOpen={() => setSelectedIndex(idx)}
-                      />
-                    ))}
-                  </div>
-                ) : (
-                  <div className="overflow-hidden rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)]">
-                    <div className="overflow-x-auto">
-                      <table className="min-w-full divide-y divide-[var(--border)] text-sm">
-                        <thead className="bg-[var(--surface-muted)]">
-                          <tr>
-                            <th className="px-4 py-3 text-left font-semibold text-[var(--text-muted)]">Instrument</th>
-                            <th className="px-4 py-3 text-right font-semibold text-[var(--text-muted)]">Current</th>
-                            <th className="px-4 py-3 text-right font-semibold text-[var(--text-muted)]">Abs Change</th>
-                            <th className="px-4 py-3 text-right font-semibold text-[var(--text-muted)]">Pct Change</th>
-                            <th className="px-4 py-3 text-left font-semibold text-[var(--text-muted)]">Source</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-[var(--border)]">
-                          {indices.map((idx) => (
-                            <tr key={idx.ticker} className="hover:bg-[var(--surface-muted)]/60">
-                              <td className="px-4 py-3">
-                                <button
-                                  type="button"
-                                  onClick={() => setSelectedIndex(idx)}
-                                  className="text-left"
-                                  aria-label={`Open detail for ${idx.name} from table`}
-                                >
-                                  <div className="font-semibold text-[var(--text-primary)]">{idx.name}</div>
-                                  <div className="text-xs uppercase tracking-wide text-[var(--text-muted)]">{idx.ticker}</div>
-                                </button>
-                              </td>
-                              <td className="px-4 py-3 text-right font-semibold tabular-nums text-[var(--text-primary)]">{formatNumber(idx.last_close)}</td>
-                              <td className={`px-4 py-3 text-right font-semibold tabular-nums ${(idx.delta.delta_abs ?? 0) >= 0 ? "text-[var(--delta-up)]" : "text-[var(--delta-down)]"}`}>
-                                {formatSignedNumber(idx.delta.delta_abs)}
-                              </td>
-                              <td className="px-4 py-3 text-right">
-                                <DeltaBadge value={idx.delta.delta_pct} className="justify-end" />
-                              </td>
-                              <td className="px-4 py-3 text-[var(--text-muted)]">Market snapshot API</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
-              </section>
-            )
+            <InstrumentsPanel
+              indices={indices}
+              fetchError={fetchError}
+              viewMode={viewMode}
+              onViewModeChange={setViewMode}
+              onOpenDetail={setSelectedIndex}
+              onOpenSpreads={() => setPageTab("spreads")}
+            />
           }
           spreads={<SpreadsSection />}
         />

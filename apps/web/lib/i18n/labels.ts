@@ -8,6 +8,8 @@ export const LABELS = {
   name: ["종목", "Name"],
   price: ["현재가", "Price"],
   change: ["등락률", "Change"],
+  instrument: ["종목", "Instrument"],
+  absChange: ["등락폭", "Abs change"],
   undervalued: ["저평가", "Undervalued"],
   overvalued: ["고평가", "Overvalued"],
   bridgeIncomplete: ["주당가치 산출 불가", "Per-share value unavailable"],

@@ -211,3 +211,8 @@ capitals: "종목 NAME". Both come from `apps/web/lib/i18n/labels.ts`; add the r
 | Regime unavailable | 국면 판단 불가 | market regime with too little data |
 | Daily closes | 일별 종가 | market subtitle |
 | Commodities / FX / Crypto | 원자재 / 환율 / 암호화폐 | market subtitle and instrument types |
+| Instrument | 종목 | label (market table header) |
+| Abs change | 등락폭 | label (market table header, change in instrument units) |
+| Unavailable | 이용 불가 | a refused spread pair |
+| Snapshot | 스냅샷 | market card period fallback |
+| Themes vs benchmark | 테마 대비 기준 지수 | market spread-figure row caption |
