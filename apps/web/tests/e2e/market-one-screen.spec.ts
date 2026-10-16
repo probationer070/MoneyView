@@ -365,3 +365,16 @@ test.describe("in Korean", () => {
     await expect(dialog.getByRole("link", { name: "전체 상세 보기" })).toBeVisible();
   });
 });
+
+test("the detail modal's risk-off regime reads the risk-off catalog sentence (N7)", async ({ page }) => {
+  await mockMarketPageApi(page, {
+    detailOverrides: {
+      "^GSPC": { market_regime: { ...REGIME, regime_label: "risk_off", regime_summary: "BACKEND SENTENCE THAT MUST NOT RENDER" } },
+    },
+  });
+  await gotoMarket(page);
+  await page.getByRole("button", { name: "Open detail for S&P 500" }).click();
+  const dialog = page.getByRole("dialog", { name: "S&P 500" });
+  await expect(dialog.getByText("Equity breadth is weak and cross-asset signals lean defensive, indicating a risk-off market regime.")).toBeVisible();
+  await expect(dialog.getByText("Risk-off", { exact: true })).toBeVisible();
+});
