@@ -19,9 +19,15 @@ interface ToggleGroupProps {
 }
 
 const sizeStyles: Record<ToggleGroupSize, string> = {
-  sm: "min-h-8 px-[var(--space-3)] text-[length:var(--type-helper)]",
-  md: "min-h-9 px-[var(--space-4)] text-[length:var(--type-label)]",
+  sm: "min-h-6",
+  md: "min-h-8",
 };
+
+// Shared with ViewToggle, the other segmented control (redesign .mv-seg).
+export const SEGMENT_CONTAINER = "inline-flex flex-wrap items-center gap-0.5 rounded-[var(--radius-1)] border border-[var(--line-strong)] p-0.5";
+export const SEGMENT_BUTTON = "type-caption inline-flex items-center justify-center rounded-[var(--radius-1)] px-3 py-1 uppercase transition-colors duration-[var(--duration-normal)]";
+export const SEGMENT_SELECTED = "bg-[var(--ink)] text-[var(--bg)]";
+export const SEGMENT_UNSELECTED = "text-[var(--ink-muted)] hover:text-[var(--ink)]";
 
 export function ToggleGroup({
   options,
@@ -34,7 +40,7 @@ export function ToggleGroup({
   return (
     <div
       className={clsx(
-        "inline-flex flex-wrap items-center gap-[var(--space-1)] rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--surface-muted)] p-[var(--space-1)]",
+        SEGMENT_CONTAINER,
         className
       )}
       role="group"
@@ -50,11 +56,9 @@ export function ToggleGroup({
             onClick={() => onChange(option.value)}
             aria-pressed={selected}
             className={clsx(
-              "inline-flex items-center justify-center rounded-[calc(var(--radius-md)-2px)] font-medium transition-colors duration-[var(--duration-fast)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--state-info)] focus-visible:ring-offset-1",
+              SEGMENT_BUTTON,
               sizeStyles[size],
-              selected
-                ? "border border-transparent bg-[var(--bg-surface)] text-[var(--text-primary)]"
-                : "border border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+              selected ? SEGMENT_SELECTED : SEGMENT_UNSELECTED
             )}
           >
             {option.label}

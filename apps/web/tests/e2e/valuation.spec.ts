@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { impliedReturnRefusalText, knownRefusalText } from "../../lib/impliedReturn";
 import { mockValuationApi, ALL_COMPUTED_FIXTURE } from "./helpers/valuationPageMock";
 
 async function gotoValuation(page: Page) {
@@ -144,5 +145,15 @@ test("all four rows are formatted in their own unit when all four compute", asyn
     }
     // The framing text itself IS shown, and says what it is testing.
     await expect(page.getByTestId("verdict-direction")).toContainText("Testing UNDERVALUATION");
+  });
+});
+
+test.describe("refusal wording follows the locale", () => {
+  test("a known code reads in the requested locale; an unknown code is returned verbatim", () => {
+    expect(knownRefusalText("no_price", "en")).toBe("No current price, so there is no market value to solve against.");
+    expect(knownRefusalText("no_price", "ko")).toBe("현재가가 없어 비교할 시장 가치가 없습니다.");
+    expect(impliedReturnRefusalText("no_price", "ko")).toBe("현재가가 없어 비교할 시장 가치가 없습니다.");
+    expect(knownRefusalText("not_a_code", "ko")).toBeNull();
+    expect(impliedReturnRefusalText("not_a_code", "ko")).toBe("not_a_code");
   });
 });

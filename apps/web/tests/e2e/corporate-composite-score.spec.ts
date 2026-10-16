@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { mockCorporatePageApi } from "./helpers/corporatePageMock";
+import { openDetailTab, openLowerTab } from "./helpers/corporateDcf";
 
 // The corporate dashboard has no company-quality model, so it must not present a composite
 // quality score, and it must not draw a peer baseline it never measured.
@@ -34,7 +35,9 @@ test.describe("the corporate dashboard's quality scoring", () => {
     // Positive control: the KPI row and the chart suite are both on screen, so the absences
     // below are absences from a rendered page.
     await expect(page.getByRole("button", { name: /ROIC - WACC/ })).toBeVisible();
+    await openLowerTab(page, "Core Diagnostics");
     await expect(page.getByText("Hurdle Rate Decomposition").first()).toBeVisible({ timeout: 60_000 });
+    await openLowerTab(page, "DCF");
     await expect(page.getByText("DCF Core Modules").first()).toBeVisible({ timeout: 60_000 });
 
     for (const label of FORBIDDEN_LABELS) {
@@ -51,6 +54,7 @@ test.describe("the corporate dashboard's quality scoring", () => {
     await page.getByRole("button", { name: /ROIC - WACC/ }).click();
     const modal = page.getByRole("dialog").first();
     await expect(modal).toBeVisible({ timeout: 30_000 });
+    await openDetailTab(modal, "Raw data");
     await modal.getByRole("heading", { name: "Raw Datasets" }).click();
 
     const datasetRows = modal.locator("table tbody tr");

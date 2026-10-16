@@ -19,14 +19,15 @@ interface ActionButtonProps {
 }
 
 const variantStyles: Record<ActionVariant, string> = {
-  primary:   "bg-[var(--state-info)] text-white hover:opacity-90 border border-transparent",
-  secondary: "bg-transparent text-[var(--text-primary)] border border-[var(--border-default)] hover:bg-[var(--bg-subtle)]",
-  danger:    "bg-[var(--state-error)] text-white hover:opacity-90 border border-transparent",
+  primary: "border-[var(--brand)] bg-[var(--brand)] text-[var(--on-brand)] hover:border-[var(--ink)] hover:bg-[var(--ink)] hover:text-[var(--bg)]",
+  secondary: "border-[var(--line-strong)] bg-transparent text-[var(--ink)] hover:border-[var(--brand)] hover:text-[var(--brand-text)]",
+  danger: "border-[var(--status-error-border)] bg-transparent text-[var(--status-error-ink)] hover:bg-[var(--status-error-surface)]",
 };
+const DISABLED = "cursor-not-allowed pointer-events-none border-[var(--grid)] bg-transparent text-[var(--ink-disabled)]";
 
 const sizeStyles: Record<ActionSize, string> = {
-  sm: "h-8 px-3 text-[length:var(--type-helper)] gap-1.5",
-  md: "h-9 px-4 text-[length:var(--type-label)] gap-2",
+  sm: "type-caption h-[var(--component-button-height-sm)] px-3 gap-1.5",
+  md: "type-mono h-[var(--component-button-height-md)] px-5 gap-2",
 };
 
 export function ActionButton({
@@ -40,16 +41,15 @@ export function ActionButton({
       onClick={onClick}
       disabled={isDisabled}
       className={clsx(
-        "inline-flex items-center justify-center font-medium rounded-[var(--radius-md)]",
-        "transition-all duration-[var(--duration-fast)]",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--state-info)] focus-visible:ring-offset-1",
-        variantStyles[variant], sizeStyles[size],
-        isDisabled && "opacity-50 cursor-not-allowed pointer-events-none",
+        "inline-flex items-center justify-center rounded-[var(--radius-1)] border uppercase",
+        "transition-colors duration-[var(--duration-normal)]",
+        isDisabled ? DISABLED : variantStyles[variant],
+        sizeStyles[size],
         className
       )}
     >
       {loading
-        ? <span className="h-3.5 w-3.5 rounded-full border-2 border-current border-t-transparent animate-spin" />
+        ? /* rounded-full: spinner */ <span className="h-3.5 w-3.5 rounded-full border-2 border-current border-t-transparent animate-spin" />
         : icon && <span className="shrink-0">{icon}</span>}
       {label}
     </button>

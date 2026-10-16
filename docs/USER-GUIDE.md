@@ -41,11 +41,11 @@ folder.
 
 ## 2. The screens
 
-The sidebar on the left switches between screens.
+The top bar switches between screens. Its icons are the screens: hover, focus or ☰ opens the full menu with every page name.
 
-| Sidebar | Address | Use it to |
+| Screen | Address | Use it to |
 |---|---|---|
-| **Market Overview** | `/` | See indices, commodities, FX and crypto at a glance, with event lines (Fed decisions, geopolitical dates, drawdowns, oil shocks) on the charts. |
+| **Market Overview** | `/` | See indices, commodities, FX and crypto on one screen: a regime line, the instrument cards and the theme-spread figures; the spread charts with their event lines are on the Spreads tab. |
 | **Portfolio** | `/portfolio` | Keep holdings and the watchlist, set weights, press **Refresh Analysis** for attribution, open a holding's detail and its **Snapshot History**. |
 | **News Feed** | `/news` | Read news for your tickers. |
 | **Corporate Analysis** | `/corporate` | Value one company (**Refresh DCF**) and compare your watchlist (**Refresh comparison**). |
@@ -54,6 +54,12 @@ The sidebar on the left switches between screens.
 | **Valuation** | `/valuation` | A ticker's verdict panel: drawdown, volume, PE and DCF signals against its sector peers. |
 | **Cases** | `/cases` | Segment-built valuation cases. Fork a case with changed assumptions and see why the value moved and how uncertain it is. |
 | **Events** | `/events` | Add your own dated events and choose which event categories are drawn on charts. |
+
+**Corporate Analysis** is one screen with four tabs: **Summary**, **Core Diagnostics**, **DCF**
+and **Target Stock Comparison**, under a one-line verdict. The page never scrolls; a long tab
+scrolls inside itself. A company that is not in the list is added from the search's
+**Not in the list → add** entry. The full DCF report is reached from the DCF tab's **Load Full
+Report** or from the Raw data tab of a calculation detail.
 
 A ticker's detail page (`/detail/<TICKER>`) shows its price chart and **Refresh DCF
 Diagnostics**.

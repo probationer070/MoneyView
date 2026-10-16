@@ -17,35 +17,35 @@ function FigurePair({ decision }: { decision: DecisionRow }) {
   const { outcome } = decision;
   return (
     <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-      <div className="rounded-[var(--radius-sm)] border border-[var(--border-default)] p-3">
-        <p className="text-xs font-medium text-[var(--text-secondary)]">
+      <div className="border border-[var(--line)] p-3">
+        <p className="type-small text-[var(--ink-secondary)]">
           Gap to fair value at decision
         </p>
-        <p className="text-lg font-bold text-[var(--text-primary)]">
+        <p className="type-mono text-[var(--ink)]">
           {decision.dcf_implied_return_pct === null
             ? "—"
             : fmtPct(decision.dcf_implied_return_pct, 1)}
         </p>
-        <p className="text-xs text-[var(--text-muted)]">no horizon</p>
+        <p className="type-small text-[var(--ink-muted)]">no horizon</p>
         {decision.figures_unavailable_reason && (
-          <p className="mt-1 text-xs text-[var(--text-secondary)]">
+          <p className="mt-1 type-small text-[var(--ink-secondary)]">
             {decision.figures_unavailable_reason}
           </p>
         )}
       </div>
 
-      <div className="rounded-[var(--radius-sm)] border border-[var(--border-default)] p-3">
-        <p className="text-xs font-medium text-[var(--text-secondary)]">Price move</p>
-        <p className="text-lg font-bold text-[var(--text-primary)]">
+      <div className="border border-[var(--line)] p-3">
+        <p className="type-small text-[var(--ink-secondary)]">Price move</p>
+        <p className="type-mono text-[var(--ink)]">
           {outcome.price_move_pct === null ? "—" : fmtPct(outcome.price_move_pct, 1)}
         </p>
-        <p className="text-xs text-[var(--text-muted)]">
+        <p className="type-small text-[var(--ink-muted)]">
           {outcome.price_date
             ? `${outcome.decided_on} → ${outcome.price_date}`
             : `from ${outcome.decided_on}`}
         </p>
         {outcome.reason && (
-          <p className="mt-1 text-xs text-[var(--text-secondary)]">{outcome.reason}</p>
+          <p className="mt-1 type-small text-[var(--ink-secondary)]">{outcome.reason}</p>
         )}
       </div>
     </div>
@@ -59,16 +59,16 @@ export function DecisionList({ decisions }: { decisions: DecisionRow[] }) {
         <article
           key={decision.id}
           data-testid={`decision-card-${decision.id}`}
-          className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-5"
+          className="border border-[var(--line)] bg-[var(--surface-raised)] p-5"
         >
           <div className="flex flex-wrap items-baseline gap-2">
-            <h3 className="text-sm font-bold text-[var(--text-primary)]">{decision.ticker}</h3>
-            <span className="rounded-full border border-[var(--border-default)] px-2 py-0.5 text-xs uppercase tracking-wide text-[var(--text-secondary)]">
+            <h3 className="type-panel-title text-[var(--ink)]">{decision.ticker}</h3>
+            <span className="rounded-[var(--radius-2)] border border-[var(--line)] px-2 py-0.5 type-caption uppercase text-[var(--ink-secondary)]">
               {decision.action}
             </span>
-            <span className="text-xs text-[var(--text-muted)]">{decision.outcome.decided_on}</span>
+            <span className="type-small text-[var(--ink-muted)]">{decision.outcome.decided_on}</span>
           </div>
-          <p className="mt-2 text-[length:var(--type-body)] text-[var(--text-primary)]">
+          <p className="mt-2 type-body text-[var(--ink)]">
             {decision.memo}
           </p>
           <FigurePair decision={decision} />

@@ -4,10 +4,13 @@ import type { ValuationInput, ValuationResult } from "../lib/types";
 import { Download, Loader2, Play, Square } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, ReferenceLine, Tooltip, XAxis, YAxis } from "recharts";
 import { ActionButton } from "@/components/ui/ActionButton";
+import { fieldInputClass } from "@/components/ui/InlineField";
 import { MonteCarloRunPanel } from "./MonteCarloRunPanel";
 import { MonteCarloTabSummary } from "./MonteCarloTabSummary";
 import { ChartGuard } from "./ChartGuard";
-import { GRID_STYLE, fmtCompactThousands, withAxisProps, withTooltipProps } from "@/lib/chartConfig";
+import { CHART_COLORS, GRID_STYLE, fmtCompactThousands, withAxisProps, withTooltipProps } from "@/lib/chartConfig";
+import { formatNumber } from "@/lib/format";
+import { useLocale } from "@/lib/i18n/locale";
 import { MetricCard, NumericField, SummaryRow, WarningNotice, krw, numberText, pct } from "./shared";
 
 type Props = {
@@ -41,6 +44,7 @@ export function CorporateValuationSection({
   exportValuationSummaryCsv,
   exportValuationDistributionCsv,
 }: Props) {
+  const { locale } = useLocale();
   const summaryStatus = valuationStatus === "loading"
     ? "in-progress"
     : valuationStatus === "error"
@@ -63,38 +67,38 @@ export function CorporateValuationSection({
   return (
     <MonteCarloRunPanel
       controls={(
-        <section className="grid grid-cols-1 gap-4 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface)] p-4 lg:grid-cols-5">
-          <label className="grid gap-1 text-xs font-bold text-[var(--text-primary)]">
+        <section className="grid grid-cols-1 gap-4 border border-[var(--line)] bg-[var(--surface)] p-4 lg:grid-cols-5">
+          <label className="type-label grid gap-1 text-[var(--ink)]">
             Ticker
             <input
               value={valuationInput.ticker}
               onChange={(event) => updateValuation("ticker", event.target.value.toUpperCase())}
               onBlur={onValuationTickerBlur}
-              className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-sm font-bold outline-none"
+              className={fieldInputClass}
             />
           </label>
-          <label className="grid gap-1 text-xs font-bold text-[var(--text-primary)]">
+          <label className="type-label grid gap-1 text-[var(--ink)]">
             Current stock price
-            <div className="flex items-center gap-2 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2">
+            <div className="flex items-center gap-2 rounded-[var(--radius-1)] border border-[var(--line-strong)] bg-[var(--surface-sunken)] px-3 py-2">
               <input
                 type="number"
                 value={valuationInput.currentPrice}
                 min={1000}
                 step={100}
                 onChange={(event) => updateValuation("currentPrice", Number(event.target.value))}
-                className="w-full bg-transparent text-sm font-bold outline-none"
+                className="type-mono w-full bg-transparent text-[var(--ink)] outline-none"
               />
-              <span className="text-[var(--text-muted)]">KRW</span>
+              <span className="type-small text-[var(--ink-muted)]">KRW</span>
               {valuationPriceLookupStatus === "loading" || valuationPriceLookupStatus === "fetching" ? (
-                <Loader2 className="h-4 w-4 animate-spin text-[var(--text-muted)]" />
+                <Loader2 className="h-4 w-4 animate-spin text-[var(--ink-muted)]" />
               ) : null}
             </div>
             {valuationPriceLookupMessage ? (
               <span
                 className={
                   valuationPriceLookupStatus === "not_found" || valuationPriceLookupStatus === "error"
-                    ? "text-[length:var(--type-caption)] text-red-600"
-                    : "text-[length:var(--type-caption)] text-[var(--text-muted)]"
+                    ? "type-caption text-[var(--status-error-ink)]"
+                    : "type-caption text-[var(--ink-muted)]"
                 }
               >
                 {valuationPriceLookupMessage}
@@ -115,7 +119,7 @@ export function CorporateValuationSection({
               type="button"
               onClick={runValuationSimulation}
               disabled={valuationStatus === "loading"}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-[var(--radius)] bg-[var(--accent)] px-5 py-3 text-sm font-black text-white disabled:opacity-60"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-[var(--radius-1)] bg-[var(--brand)] px-5 py-3 type-label text-[var(--on-brand)] disabled:opacity-60"
             >
               {valuationStatus === "loading" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
               Run Valuation
@@ -124,7 +128,7 @@ export function CorporateValuationSection({
               type="button"
               onClick={cancelValuationSimulation}
               disabled={valuationStatus !== "loading"}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-5 py-3 text-sm font-black text-[var(--text-primary)] disabled:opacity-50"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-[var(--radius-1)] border border-[var(--line)] bg-[var(--surface-raised)] px-5 py-3 type-label text-[var(--ink)] disabled:opacity-50"
             >
               <Square className="h-4 w-4" />
               Cancel
@@ -145,9 +149,9 @@ export function CorporateValuationSection({
           statusLabel={summaryLabel}
           items={[
             { label: "Ticker", value: valuationInput.ticker || "No ticker" },
-            { label: "Current price", value: krw(valuationInput.currentPrice) },
-            { label: "Simulations", value: valuationInput.simulationCount.toLocaleString() },
-            { label: "Median fair value", value: valuationResult ? krw(valuationResult.fair_value_summary.fair_value_median) : "Pending" },
+            { label: "Current price", value: krw(valuationInput.currentPrice, locale) },
+            { label: "Simulations", value: formatNumber(valuationInput.simulationCount, "integer", { locale }) },
+            { label: "Median fair value", value: valuationResult ? krw(valuationResult.fair_value_summary.fair_value_median, locale) : "Pending" },
           ]}
           actions={valuationResult ? (
             <>
@@ -159,7 +163,7 @@ export function CorporateValuationSection({
       )}
       hasResult={Boolean(valuationResult)}
       emptyState={(
-        <div className="rounded-[var(--radius)] border border-dashed border-[var(--border)] bg-[var(--bg-surface)] p-10 text-center text-sm text-[var(--text-muted)]">
+        <div className="border border-dashed border-[var(--line)] bg-[var(--surface-raised)] p-10 text-center type-body text-[var(--ink-muted)]">
           Run the valuation engine to generate fair value distribution, undervaluation probability, z-score, and DCF uncertainty summaries.
         </div>
       )}
@@ -169,10 +173,10 @@ export function CorporateValuationSection({
 
           {/* Top-line valuation outputs */}
           <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <MetricCard label="Median Fair Value" value={krw(valuationResult.fair_value_summary.fair_value_median)} detail="50th percentile fair value across valuation simulations" />
-            <MetricCard label="Undervaluation Probability" value={pct(valuationResult.fair_value_summary.undervaluation_probability)} detail="Probability fair value exceeds current market price" />
-            <MetricCard label="Upside Potential" value={pct(valuationResult.fair_value_summary.upside_potential)} detail="Median fair value relative to the current stock price" />
-            <MetricCard label="80% Confidence Interval" value={`${krw(valuationResult.fair_value_summary.fair_value_p10)} - ${krw(valuationResult.fair_value_summary.fair_value_p90)}`} detail="P10 to P90 fair value interval" />
+            <MetricCard label="Median Fair Value" value={krw(valuationResult.fair_value_summary.fair_value_median, locale)} detail="50th percentile fair value across valuation simulations" />
+            <MetricCard label="Undervaluation Probability" value={pct(valuationResult.fair_value_summary.undervaluation_probability, locale)} detail="Probability fair value exceeds current market price" />
+            <MetricCard label="Upside Potential" value={pct(valuationResult.fair_value_summary.upside_potential, locale)} detail="Median fair value relative to the current stock price" />
+            <MetricCard label="80% Confidence Interval" value={`${krw(valuationResult.fair_value_summary.fair_value_p10, locale)} - ${krw(valuationResult.fair_value_summary.fair_value_p90, locale)}`} detail="P10 to P90 fair value interval" />
           </section>
 
           {/* Distribution chart and tabular valuation summary */}
@@ -192,30 +196,30 @@ export function CorporateValuationSection({
                   <CartesianGrid {...GRID_STYLE} />
                   <XAxis dataKey="fair_value" {...withAxisProps({ tickFormatter: (value: number | string) => fmtCompactThousands(Number(value)) })} />
                   <YAxis {...withAxisProps()} />
-                  <Tooltip {...withTooltipProps()} formatter={(value) => `${(Number(value) * 100).toFixed(2)}%`} labelFormatter={(label) => krw(Number(label))} />
-                  <ReferenceLine x={valuationResult.fair_value_summary.current_price} stroke="#111827" label="Current Price" />
-                  <Bar dataKey="frequency" fill="#60caad" />
+                  <Tooltip {...withTooltipProps()} formatter={(value) => formatNumber(Number(value), "percent", { digits: 2, locale })} labelFormatter={(label) => krw(Number(label), locale)} />
+                  <ReferenceLine x={valuationResult.fair_value_summary.current_price} stroke={CHART_COLORS.ink} label="Current Price" />
+                  <Bar dataKey="frequency" fill={CHART_COLORS.primary} />
                 </BarChart>
               </ChartGuard>
             </div>
 
-            <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-5">
-              <h2 className="text-lg font-black text-[var(--text-primary)]">Valuation Statistics</h2>
-              <div className="mt-4 overflow-hidden rounded-[var(--radius)] border border-[var(--border)]">
-                <table className="w-full text-sm">
+            <div className="border border-[var(--line)] bg-[var(--surface-raised)] p-5">
+              <h2 className="type-panel-title text-[var(--ink)]">Valuation Statistics</h2>
+              <div className="mt-4 overflow-hidden border border-[var(--line)]">
+                <table className="w-full">
                   <tbody>
-                    <SummaryRow label="Current Price" value={krw(valuationResult.fair_value_summary.current_price)} />
-                    <SummaryRow label="Mean Fair Value" value={krw(valuationResult.fair_value_summary.fair_value_mean)} />
-                    <SummaryRow label="Std. deviation" value={krw(valuationResult.fair_value_summary.fair_value_std)} />
-                    <SummaryRow label="P05" value={krw(valuationResult.fair_value_summary.fair_value_p05)} />
-                    <SummaryRow label="P10" value={krw(valuationResult.fair_value_summary.fair_value_p10)} />
-                    <SummaryRow label="P25" value={krw(valuationResult.fair_value_summary.fair_value_p25)} />
-                    <SummaryRow label="Median" value={krw(valuationResult.fair_value_summary.fair_value_median)} />
-                    <SummaryRow label="P75" value={krw(valuationResult.fair_value_summary.fair_value_p75)} />
-                    <SummaryRow label="P90" value={krw(valuationResult.fair_value_summary.fair_value_p90)} />
-                    <SummaryRow label="P95" value={krw(valuationResult.fair_value_summary.fair_value_p95)} />
-                    <SummaryRow label="Undervaluation Probability" value={pct(valuationResult.fair_value_summary.undervaluation_probability)} />
-                    <SummaryRow label="Z-score" value={numberText(valuationResult.fair_value_summary.z_score)} />
+                    <SummaryRow label="Current Price" value={krw(valuationResult.fair_value_summary.current_price, locale)} />
+                    <SummaryRow label="Mean Fair Value" value={krw(valuationResult.fair_value_summary.fair_value_mean, locale)} />
+                    <SummaryRow label="Std. deviation" value={krw(valuationResult.fair_value_summary.fair_value_std, locale)} />
+                    <SummaryRow label="P05" value={krw(valuationResult.fair_value_summary.fair_value_p05, locale)} />
+                    <SummaryRow label="P10" value={krw(valuationResult.fair_value_summary.fair_value_p10, locale)} />
+                    <SummaryRow label="P25" value={krw(valuationResult.fair_value_summary.fair_value_p25, locale)} />
+                    <SummaryRow label="Median" value={krw(valuationResult.fair_value_summary.fair_value_median, locale)} />
+                    <SummaryRow label="P75" value={krw(valuationResult.fair_value_summary.fair_value_p75, locale)} />
+                    <SummaryRow label="P90" value={krw(valuationResult.fair_value_summary.fair_value_p90, locale)} />
+                    <SummaryRow label="P95" value={krw(valuationResult.fair_value_summary.fair_value_p95, locale)} />
+                    <SummaryRow label="Undervaluation Probability" value={pct(valuationResult.fair_value_summary.undervaluation_probability, locale)} />
+                    <SummaryRow label="Z-score" value={numberText(valuationResult.fair_value_summary.z_score, locale)} />
                   </tbody>
                 </table>
               </div>

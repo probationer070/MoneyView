@@ -1,5 +1,6 @@
 "use client";
 
+import { formatNumber } from "@/lib/format";
 import clsx from "clsx";
 import { DeltaBadge } from "@/components/ui/DeltaBadge";
 import { TileSparkline } from "./TileSparkline";
@@ -20,10 +21,7 @@ function formatClose(lastClose: number | null): string {
   // `Number.isFinite` is not a type guard for null, so the null arm is explicit. The
   // runtime behaviour is unchanged -- Number.isFinite(null) is already false.
   if (lastClose === null || !Number.isFinite(lastClose)) return "—";
-  return `${lastClose.toLocaleString(undefined, {
-    minimumFractionDigits: 1,
-    maximumFractionDigits: 1,
-  })}$`;
+  return `${formatNumber(lastClose, "price", { digits: 1 })}$`;
 }
 
 // The button's accessible name is its action, not its contents: ticker, price and delta
@@ -35,7 +33,7 @@ function tileLabel(stock: PortfolioStock): string {
   }
   const deltaPct = stock.delta?.delta_pct;
   if (typeof deltaPct === "number" && Number.isFinite(deltaPct)) {
-    parts.push(`${deltaPct < 0 ? "down" : "up"} ${Math.abs(deltaPct).toFixed(1)}%`);
+    parts.push(`${deltaPct < 0 ? "down" : "up"} ${formatNumber(Math.abs(deltaPct) / 100, "percent", { digits: 1 })}`);
   }
   return `Open details for ${parts.join(", ")}`;
 }
@@ -89,7 +87,7 @@ export function StockTile({ stock, news, lastCheckedAt, followed, onToggleFollow
       // cell (measured: 182px of a 382px cell) while the follow control -- positioned
       // against the CELL -- sat in the gap to the right of the card, outside it. Card width
       // must not depend on how long today's headline is.
-      className="flex w-full flex-col gap-0 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] text-left transition-colors hover:border-[var(--border-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--state-info)]"
+      className="flex w-full flex-col gap-0 rounded-[var(--radius-1)] border border-[var(--line)] bg-[var(--surface-raised)] text-left transition-colors hover:border-[var(--line-strong)]"
     >
       <span className="flex flex-col gap-1 p-3">
         {/* `pr-6` reserves the follow button's footprint. The button is `h-7 w-7` (28px) at
@@ -97,10 +95,10 @@ export function StockTile({ stock, news, lastCheckedAt, followed, onToggleFollow
             12px in (`p-3`), so 24px of padding clears it. Without this the DeltaBadge --
             right-aligned by `justify-between` -- renders underneath the button. */}
         <span className="flex items-baseline justify-between gap-2 pr-6">
-          <span className="font-bold text-[var(--text-primary)]">{stock.ticker}</span>
+          <span className="type-mono  text-[var(--ink)]">{stock.ticker}</span>
           <DeltaBadge value={stock.delta?.delta_pct} />
         </span>
-        <span className="text-lg tabular-nums text-[var(--text-primary)]">
+        <span className="type-mono tabular-nums text-[var(--ink)]">
           {formatClose(stock.last_close)}
         </span>
         <span className="flex items-center justify-between gap-2">
@@ -112,24 +110,24 @@ export function StockTile({ stock, news, lastCheckedAt, followed, onToggleFollow
               fraction -- PortfolioAllocationEditor edits it as `weight * 100` -- so
               rendering it raw published 0.25 as "wt 0.3%" rather than "wt 25.0%". */}
           {stock.weight > 0 ? (
-            <span className="shrink-0 text-[length:var(--type-helper)] text-[var(--text-muted)]">
-              wt {(stock.weight * 100).toFixed(1)}%
+            <span className="shrink-0 type-mono text-[var(--ink-muted)]">
+              wt {formatNumber(stock.weight, "percent", { digits: 1 })}
             </span>
           ) : null}
         </span>
       </span>
 
-      <span id={newsId} className="block border-t border-[var(--border)] p-3">
+      <span id={newsId} className="block border-t border-[var(--line)] p-3">
         {news.length === 0 ? (
-          <span className="block text-[length:var(--type-helper)] text-[var(--text-muted)]">
+          <span className="block type-small text-[var(--ink-muted)]">
             {emptyNewsSummary(lastCheckedAt)}
           </span>
         ) : (
           <span className="flex flex-col gap-1.5">
             {news.slice(0, 3).map((article) => (
-              <span key={article.url || article.headline} className="flex gap-2 text-[length:var(--type-helper)]">
-                <span className="line-clamp-2 flex-1 text-[var(--text-primary)]">{article.headline}</span>
-                <span className="shrink-0 text-[var(--text-muted)]">{relativeAge(article.published_date)}</span>
+              <span key={article.url || article.headline} className="flex gap-2 type-small">
+                <span className="line-clamp-2 flex-1 text-[var(--ink)]">{article.headline}</span>
+                <span className="shrink-0 text-[var(--ink-muted)]">{relativeAge(article.published_date)}</span>
               </span>
             ))}
           </span>
@@ -144,12 +142,11 @@ export function StockTile({ stock, news, lastCheckedAt, followed, onToggleFollow
         title={followed ? "Followed — click to remove" : "Follow this stock"}
         data-testid={`stock-tile-follow-${stock.ticker}`}
         className={clsx(
-          "absolute right-1 top-1 flex h-7 w-7 items-center justify-center rounded-[var(--radius-sm)]",
-          "text-sm font-bold leading-none transition-colors",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--state-info)]",
+          "absolute right-1 top-1 flex h-7 w-7 items-center justify-center rounded-[var(--radius-1)]",
+          "type-body transition-colors",
           followed
-            ? "bg-[var(--state-info)] text-[var(--bg-surface)]"
-            : "border border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text-primary)]",
+            ? "bg-[var(--brand)] text-[var(--on-brand)]"
+            : "border border-[var(--line)] text-[var(--ink-muted)] hover:text-[var(--ink)]",
         )}
       >
         {followed ? "✓" : "+"}

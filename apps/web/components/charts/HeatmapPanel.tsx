@@ -3,6 +3,7 @@
 import { heatColor } from "@/lib/chartConfig";
 import { ChartPanelFrame } from "@/components/charts/ChartPanelFrame";
 import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
+import { formatNumber } from "@/lib/format";
 
 export interface HeatmapCell {
   x: string;
@@ -40,13 +41,13 @@ export function HeatmapPanel({
   const getCellColor = (x: string, y: string) => {
     const cell = data.find((d) => d.x === x && d.y === y);
     if (!cell) return "transparent";
-    if (x === y) return "var(--chart-positive)";
+    if (x === y) return "var(--up)";
     return heatColor(cell.value);
   };
 
   const getCellValue = (x: string, y: string) => {
     const cell = data.find((d) => d.x === x && d.y === y);
-    return cell ? cell.value.toFixed(2) : "0.00";
+    return formatNumber(cell ? cell.value : 0, "ratio");
   };
 
   return (
@@ -63,13 +64,13 @@ export function HeatmapPanel({
         emptyDescription={emptyDescription}
         className="h-full flex flex-col"
       >
-        <div className="mt-4 flex-grow overflow-hidden rounded-[var(--radius)] border border-[var(--border)]">
-          <table className="w-full table-fixed text-sm">
+        <div className="mt-4 flex-grow overflow-hidden border border-[var(--line)]">
+          <table className="w-full table-fixed type-body">
             <thead>
-              <tr className="bg-[var(--surface-muted)] text-center">
+              <tr className="bg-[var(--surface)] text-center">
                 <th className="p-3"></th>
                 {xLabels.map((x) => (
-                  <th key={`head-${x}`} className="p-3 text-[var(--text-primary)]">
+                  <th key={`head-${x}`} className="p-3 text-[var(--ink)]">
                     {x.replace("Asset ", "")}
                   </th>
                 ))}
@@ -77,14 +78,14 @@ export function HeatmapPanel({
             </thead>
             <tbody>
               {yLabels.map((y) => (
-                <tr key={`row-${y}`} className="border-t border-[var(--border)]">
-                  <td className="p-3 text-center font-bold text-[var(--text-primary)] bg-[var(--surface-muted)]">
+                <tr key={`row-${y}`} className="border-t border-[var(--line)]">
+                  <td className="p-3 text-center text-[var(--ink)] bg-[var(--surface)]">
                     {y.replace("Asset ", "")}
                   </td>
                   {xLabels.map((x) => (
                     <td
                       key={`cell-${y}-${x}`}
-                      className="p-3 text-center font-bold text-[var(--text-primary)]"
+                      className="p-3 text-center text-[var(--ink)]"
                       style={{ backgroundColor: getCellColor(x, y) }}
                     >
                       {getCellValue(x, y)}

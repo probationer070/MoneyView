@@ -11,6 +11,8 @@ import { ActionButton } from "@/components/ui/ActionButton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { LoadingState } from "@/components/ui/LoadingState";
+import { formatNumber } from "@/lib/format";
+import { useLocale, useT } from "@/lib/i18n/locale";
 import {
   fetchPerformanceByTicker,
   fetchPerformanceBreakdown,
@@ -28,6 +30,8 @@ function isNotFoundError(error: unknown) {
 }
 
 export default function PerformanceAnalysisPage() {
+  const t = useT();
+  const { locale } = useLocale();
   const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
 
   // Auto-refresh is off by default: this page inspects a specific run, and
@@ -78,8 +82,8 @@ export default function PerformanceAnalysisPage() {
   if (requestsQuery.isLoading) {
     return (
       <div className="max-w-7xl mx-auto px-4 py-6">
-        <PageHeader title="Performance Analysis" subtitle="Where time is spent" />
-        <LoadingState variant="spinner" label="Loading performance data..." />
+        <PageHeader title={t("devPerformance.title")} subtitle={t("devPerformance.subtitle")} />
+        <LoadingState variant="spinner" label={t("devPerformance.loading")} />
       </div>
     );
   }
@@ -87,10 +91,10 @@ export default function PerformanceAnalysisPage() {
   if (isNotFoundError(requestsQuery.error)) {
     return (
       <div className="max-w-7xl mx-auto px-4 py-6">
-        <PageHeader title="Performance Analysis" subtitle="Where time is spent" />
+        <PageHeader title={t("devPerformance.title")} subtitle={t("devPerformance.subtitle")} />
         <EmptyState
-          title="Instrumentation disabled"
-          description="Set MONEYVIEW_DEV_MONITOR=true and restart the API server."
+          title={t("devPerformance.disabledTitle")}
+          description={t("devPerformance.disabledDescription")}
         />
       </div>
     );
@@ -99,7 +103,7 @@ export default function PerformanceAnalysisPage() {
   if (requestsQuery.error) {
     return (
       <ErrorState
-        message="Failed to load performance data."
+        message={t("devPerformance.loadFailed")}
         retryAction={() => requestsQuery.refetch()}
       />
     );
@@ -116,40 +120,43 @@ export default function PerformanceAnalysisPage() {
     void cacheQuery.refetch();
   };
 
+  const count = (value: number) => formatNumber(value, "integer", { locale });
+  const ms = (value: number | null | undefined) => formatNumber(value, "price", { digits: 1, locale });
+
   return (
     <div className="max-w-7xl mx-auto px-4 py-6 space-y-4">
-      <PageHeader title="Performance Analysis" subtitle="Where time is spent" />
+      <PageHeader title={t("devPerformance.title")} subtitle={t("devPerformance.subtitle")} />
 
       <div className="flex items-center gap-3" data-testid="buffer-status">
-        <ActionButton label="Refresh" onClick={refreshAll} />
-        <span className="text-xs text-[var(--text-muted)]">
-          buffer {index?.buffer_used ?? 0} / {index?.buffer_limit ?? 0}
+        <ActionButton label={t("devPerformance.refresh")} onClick={refreshAll} />
+        <span className="type-small text-[var(--ink-muted)]">
+          {t("devPerformance.buffer", { used: count(index?.buffer_used ?? 0), limit: count(index?.buffer_limit ?? 0) })}
         </span>
         {bufferFull ? (
-          <StatusBadge status="stale" label="buffer full — older events evicted" />
+          <StatusBadge status="stale" label={t("devPerformance.bufferFull")} />
         ) : null}
       </div>
 
       {index && index.requests.length === 0 ? (
         <EmptyState
-          title="No requests recorded yet"
-          description="Exercise the app, then refresh."
+          title={t("devPerformance.noRequestsTitle")}
+          description={t("devPerformance.noRequestsDescription")}
         />
       ) : null}
 
       <Card>
-        <SectionHeader title="Requests" />
+        <SectionHeader title={t("devPerformance.requests")} />
         <DenseTable<RequestSummaryRow>
           columns={[
-            { key: "route", header: "route", render: (_value, row) => row.route ?? "-" },
-            { key: "total_ms", header: "total_ms", render: (_value, row) => (row.total_ms ?? 0).toFixed(1) },
-            { key: "span_count", header: "spans" },
-            { key: "ticker_count", header: "tickers" },
+            { key: "route", label: "route", render: (_value, row) => row.route ?? "-" },
+            { key: "total_ms", label: "totalMs", render: (_value, row) => ms(row.total_ms ?? 0) },
+            { key: "span_count", label: "spans", render: (_value, row) => count(row.span_count) },
+            { key: "ticker_count", label: "tickers", render: (_value, row) => count(row.ticker_count) },
             {
               key: "partial",
-              header: "state",
+              label: "state",
               render: (_value, row) =>
-                row.partial ? <StatusBadge status="stale" label="partial" /> : "ok",
+                row.partial ? <StatusBadge status="stale" label={t("devPerformance.partial")} /> : t("devPerformance.ok"),
             },
           ]}
           data={index?.requests ?? []}
@@ -158,20 +165,21 @@ export default function PerformanceAnalysisPage() {
       </Card>
 
       <Card>
-        <SectionHeader title="Scope breakdown" />
+        <SectionHeader title={t("devPerformance.scopeBreakdown")} />
         {breakdownQuery.data ? (
           <div className="space-y-1" data-testid="scope-breakdown">
             {breakdownQuery.data.scopes.map((scope) => (
-              <div key={scope.scope} className="flex items-center gap-2 text-xs">
+              <div key={scope.scope} className="flex items-center gap-2 type-small">
                 <span className="w-28">{scope.scope}</span>
-                <span className="tabular-nums">{scope.self_ms.toFixed(1)} ms</span>
-                <span className="tabular-nums text-[var(--text-muted)]">{scope.pct_of_total}%</span>
+                <span className="type-mono">{ms(scope.self_ms)} ms</span>
+                {/* pct_of_total is already a percentage (42.5 = 42.5%), so it is not a fraction for "percent". */}
+                <span className="type-mono text-[var(--ink-muted)]">{formatNumber(scope.pct_of_total, "ratio", { digits: 1, locale })}%</span>
               </div>
             ))}
-            <div className="text-xs text-[var(--text-muted)]">
-              unattributed {breakdownQuery.data.unattributed_ms.toFixed(1)} ms
+            <div className="type-small text-[var(--ink-muted)]">
+              {t("devPerformance.unattributed", { ms: ms(breakdownQuery.data.unattributed_ms) })}
               {breakdownQuery.data.overlap_detected
-                ? " — spans overlapped (concurrent execution)"
+                ? t("devPerformance.overlapped")
                 : ""}
             </div>
           </div>
@@ -179,15 +187,15 @@ export default function PerformanceAnalysisPage() {
       </Card>
 
       <Card>
-        <SectionHeader title="Waterfall" />
+        <SectionHeader title={t("devPerformance.waterfall")} />
         {waterfallQuery.data ? (
           <div data-testid="waterfall-panel">
             <div className="flex gap-2 mb-2">
               {waterfallQuery.data.partial ? (
-                <StatusBadge status="stale" label="partial — some spans evicted" />
+                <StatusBadge status="stale" label={t("devPerformance.partialSpans")} />
               ) : null}
               {waterfallQuery.data.truncated ? (
-                <span className="text-xs text-[var(--text-muted)]">truncated at 2,000 spans</span>
+                <span className="type-small text-[var(--ink-muted)]">{t("devPerformance.truncated")}</span>
               ) : null}
             </div>
             <SpanWaterfall
@@ -196,30 +204,30 @@ export default function PerformanceAnalysisPage() {
             />
           </div>
         ) : (
-          <EmptyState title="Select a request" description="Pick a row above to inspect its shape." />
+          <EmptyState title={t("devPerformance.selectTitle")} description={t("devPerformance.selectDescription")} />
         )}
       </Card>
 
       <Card>
-        <SectionHeader title="Per-stock cost" />
+        <SectionHeader title={t("devPerformance.perStock")} />
         {tickerQuery.data ? (
           <div data-testid="per-stock-panel">
-            <div className="text-xs mb-1">
-              {tickerQuery.data.ticker_count} tickers · {tickerQuery.data.total_self_ms.toFixed(1)} ms total
+            <div className="type-small mb-1">
+              {t("devPerformance.tickerTotal", { count: count(tickerQuery.data.ticker_count), ms: ms(tickerQuery.data.total_self_ms) })}
               {" · "}
-              <strong>{tickerQuery.data.distribution}</strong> (cv {tickerQuery.data.cv})
+              <strong className="type-label">{tickerQuery.data.distribution}</strong> ({t("devPerformance.cv", { cv: formatNumber(tickerQuery.data.cv, "ratio", { locale }) })})
             </div>
-            <div className="text-xs text-[var(--text-muted)] mb-2">
-              p50 {tickerQuery.data.p50_ms} ms · p95 {tickerQuery.data.p95_ms} ms · max {tickerQuery.data.max_ms} ms
+            <div className="type-small text-[var(--ink-muted)] mb-2">
+              {t("devPerformance.percentiles", { p50: ms(tickerQuery.data.p50_ms), p95: ms(tickerQuery.data.p95_ms), max: ms(tickerQuery.data.max_ms) })}
             </div>
             <details>
-              <summary className="text-xs cursor-pointer">Full table</summary>
+              <summary className="type-small cursor-pointer">{t("devPerformance.fullTable")}</summary>
               <DenseTable<TickerCostRow>
                 columns={[
-                  { key: "ticker", header: "ticker" },
-                  { key: "self_ms", header: "self_ms", render: (_value, row) => row.self_ms.toFixed(1) },
-                  { key: "db_ms", header: "db_ms", render: (_value, row) => row.db_ms.toFixed(1) },
-                  { key: "rows_read", header: "rows" },
+                  { key: "ticker", label: "ticker" },
+                  { key: "self_ms", label: "selfMs", render: (_value, row) => ms(row.self_ms) },
+                  { key: "db_ms", label: "dbMs", render: (_value, row) => ms(row.db_ms) },
+                  { key: "rows_read", label: "rows", render: (_value, row) => count(row.rows_read) },
                 ]}
                 data={tickerQuery.data.rows}
               />
@@ -229,15 +237,15 @@ export default function PerformanceAnalysisPage() {
       </Card>
 
       <Card>
-        <SectionHeader title="Cache effectiveness" />
+        <SectionHeader title={t("devPerformance.cacheEffectiveness")} />
         <DenseTable<CacheRow>
           columns={[
-            { key: "component", header: "component" },
-            { key: "hits", header: "hits" },
-            { key: "misses", header: "misses" },
-            { key: "hit_rate", header: "rate", render: (_value, row) => `${(row.hit_rate * 100).toFixed(0)}%` },
-            { key: "avg_miss_cost_ms", header: "avg miss" },
-            { key: "estimated_time_saved_ms", header: "saved (est)" },
+            { key: "component", label: "component" },
+            { key: "hits", label: "hits", render: (_value, row) => count(row.hits) },
+            { key: "misses", label: "misses", render: (_value, row) => count(row.misses) },
+            { key: "hit_rate", label: "rate", render: (_value, row) => formatNumber(row.hit_rate, "percent", { digits: 0, locale }) },
+            { key: "avg_miss_cost_ms", label: "avgMiss", render: (_value, row) => ms(row.avg_miss_cost_ms) },
+            { key: "estimated_time_saved_ms", label: "saved", render: (_value, row) => ms(row.estimated_time_saved_ms) },
           ]}
           data={cacheQuery.data?.caches ?? []}
         />

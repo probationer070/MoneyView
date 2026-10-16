@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { mockCorporatePageApi } from "./helpers/corporatePageMock";
+import { openLowerTab, refreshDcf as refreshDcfHelper } from "./helpers/corporateDcf";
 
 // The invariant under test, stated as a quantity rather than a field name:
 //
@@ -26,14 +27,13 @@ async function gotoCorporate(page: Page) {
 // The DCF is not fetched on load -- the tile reads "Refresh to calculate" until asked, the
 // same way the comparison query stays disabled until "Refresh comparison" is clicked.
 async function refreshDcf(page: Page) {
-  await page.getByRole("button", { name: "Refresh DCF" }).click();
-  await expect(page.getByRole("button", { name: /Intrinsic DCF/ }).first())
-    .not.toContainText("Refresh to calculate", { timeout: 60_000 });
+  await refreshDcfHelper(page);
 }
 
 // The comparison query stays disabled until the user asks for it (comparisonQuery's `enabled`
 // guard in app/corporate/page.tsx), and the bulk report button stays disabled until rows land.
 async function loadBulkReports(page: Page) {
+  await openLowerTab(page, "Target Stock Comparison");
   await page.getByRole("button", { name: "Refresh comparison" }).click();
   await expect(page.getByRole("cell", { name: "MISS" }).first()).toBeVisible({ timeout: 60_000 });
   const bulkButton = page.getByRole("button", { name: /Calculate All DCF Reports/i });
@@ -59,14 +59,14 @@ test.describe("estimated_value is suppressed when the equity bridge does not res
 
     // The tile is a button whose body is the value; the enterprise value it would otherwise
     // show is 1462.4, which formats as $1,462.4 and reads as an ordinary share price.
-    const tile = page.getByRole("button", { name: /Intrinsic DCF/ }).first();
-    await expect(tile).toContainText(PLACEHOLDER, { timeout: 60_000 });
-    await expect(tile).not.toContainText("1,462.4");
+    const intrinsic = page.getByTestId("corporate-verdict").locator('[data-part="intrinsic"]');
+    await expect(intrinsic).toHaveText(PLACEHOLDER, { timeout: 60_000 });
+    await expect(intrinsic).not.toContainText("1,462.4");
 
     // The modal behind that tile is where a reader goes to find out why the number is absent.
     // Before this change it printed the enterprise value three times under "Intrinsic DCF
     // Value", so clicking the placeholder disclosed exactly what the placeholder withheld.
-    await tile.click();
+    await page.getByRole("button", { name: "Verdict detail" }).click();
     const modal = page.getByRole("dialog").first();
     await expect(modal).toBeVisible({ timeout: 30_000 });
     await expect(modal).not.toContainText("1,462.4");
@@ -78,9 +78,8 @@ test.describe("estimated_value is suppressed when the equity bridge does not res
     await gotoCorporate(page);
     await refreshDcf(page);
 
-    const tile = page.getByRole("button", { name: /Intrinsic DCF/ }).first();
-    await expect(tile).toContainText(PLACEHOLDER, { timeout: 60_000 });
-    await tile.click();
+    await expect(page.getByTestId("corporate-verdict").locator('[data-part="intrinsic"]')).toHaveText(PLACEHOLDER, { timeout: 60_000 });
+    await page.getByRole("button", { name: "Verdict detail" }).click();
     const modal = page.getByRole("dialog").first();
     await expect(modal).toBeVisible({ timeout: 30_000 });
 
@@ -96,9 +95,9 @@ test.describe("estimated_value is suppressed when the equity bridge does not res
     await gotoCorporate(page);
     await refreshDcf(page);
 
-    const tile = page.getByRole("button", { name: /Intrinsic DCF/ }).first();
-    await expect(tile).toContainText("240.5", { timeout: 60_000 });
-    await expect(tile).not.toContainText(PLACEHOLDER);
+    const intrinsic = page.getByTestId("corporate-verdict").locator('[data-part="intrinsic"]');
+    await expect(intrinsic).toContainText("240.5", { timeout: 60_000 });
+    await expect(intrinsic).not.toContainText(PLACEHOLDER);
   });
 
   test("the bulk report table suppresses only the unbridged row", async ({ page }) => {

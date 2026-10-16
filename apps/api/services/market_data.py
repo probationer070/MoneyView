@@ -972,6 +972,14 @@ class MarketDataService:
     def _instrument_metadata_for_ticker(ticker: str) -> dict[str, str]:
         return INSTRUMENT_METADATA.get(ticker, {"instrument_type": "index", "unit_label": "index points"})
 
+    def get_market_regime(self) -> MarketRegimeContext:
+        """Breadth and cross-asset regime for the Market Overview header (GET /api/v1/market/regime).
+
+        The same computation the index detail embeds; this only makes it public. Too little data
+        is not an error: the builder returns regime_label="unknown" with zero counts.
+        """
+        return self._build_market_regime_context()
+
     def _build_market_regime_context(self) -> MarketRegimeContext:
         latest_quotes: dict[str, IndexQuote] = {}
         for name, ticker in MARKET_INDICES.items():

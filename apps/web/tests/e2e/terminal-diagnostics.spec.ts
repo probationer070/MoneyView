@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { mockCorporatePageApi } from "./helpers/corporatePageMock";
+import { openLowerTab } from "./helpers/corporateDcf";
 
 /**
  * A terminal share of 96% and one of 60% used to render identically -- a plain
@@ -21,6 +22,7 @@ test("a terminal share above the threshold is marked", async ({ page }) => {
   await mockCorporatePageApi(page, undefined, { dcfTerminalValueSharePct: 96.2 });
   await gotoCorporate(page);
   await page.getByRole("button", { name: "Refresh DCF" }).click();
+  await openLowerTab(page, "DCF");
 
   await expect(page.getByTestId(WARNING)).toBeVisible();
 });
@@ -30,6 +32,7 @@ test("an ordinary terminal share is not marked", async ({ page }) => {
   await mockCorporatePageApi(page, undefined, { dcfTerminalValueSharePct: 62.0 });
   await gotoCorporate(page);
   await page.getByRole("button", { name: "Refresh DCF" }).click();
+  await openLowerTab(page, "DCF");
 
   await expect(page.getByTestId(WARNING)).toHaveCount(0);
 });
@@ -47,6 +50,7 @@ test("the spread renders as a percentage, not as the raw fraction", async ({ pag
   });
   await gotoCorporate(page);
   await page.getByRole("button", { name: "Refresh DCF" }).click();
+  await openLowerTab(page, "DCF");
 
   await expect(page.getByTestId(WARNING)).toContainText("8.3%");
   await expect(page.getByTestId(WARNING)).not.toContainText("0.1%");
@@ -77,6 +81,7 @@ test("the terminal value share names the bound that set terminal growth", async 
   await mockCorporatePageApi(page, undefined, { dcfBindingConstraint: "ceiling" });
   await gotoCorporate(page);
   await page.getByRole("button", { name: "Refresh DCF" }).click();
+  await openLowerTab(page, "DCF");
 
   await expect(page.getByTestId(BOUND)).toHaveText("Terminal growth set by the long-run ceiling");
 });
@@ -85,6 +90,7 @@ test("each known bound has its own wording", async ({ page }) => {
   await mockCorporatePageApi(page, undefined, { dcfBindingConstraint: "wacc_safety" });
   await gotoCorporate(page);
   await page.getByRole("button", { name: "Refresh DCF" }).click();
+  await openLowerTab(page, "DCF");
 
   await expect(page.getByTestId(BOUND)).toHaveText("Terminal growth set by the WACC safety margin");
 });
@@ -95,6 +101,7 @@ test("an unrecognised bound is shown as sent, not hidden", async ({ page }) => {
   await mockCorporatePageApi(page, undefined, { dcfBindingConstraint: "new_bound" });
   await gotoCorporate(page);
   await page.getByRole("button", { name: "Refresh DCF" }).click();
+  await openLowerTab(page, "DCF");
 
   await expect(page.getByTestId(BOUND)).toHaveText("Terminal growth set by new_bound");
 });
@@ -105,6 +112,7 @@ test("no bound line when the backend could not name one", async ({ page }) => {
   await mockCorporatePageApi(page, undefined, { dcfTerminalValueSharePct: 62.0 });
   await gotoCorporate(page);
   await page.getByRole("button", { name: "Refresh DCF" }).click();
+  await openLowerTab(page, "DCF");
 
   await expect(page.getByText("Terminal Value Share")).toBeVisible();
   await expect(page.getByTestId(BOUND)).toHaveCount(0);

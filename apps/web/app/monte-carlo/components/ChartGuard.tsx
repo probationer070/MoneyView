@@ -44,7 +44,7 @@ export function ChartGuard({
     >
       {legend ? <div className="mt-3">{legend}</div> : null}
       {warnings.length > 0 ? (
-        <div className="mt-4 rounded-[var(--radius)] border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+        <div className="mt-4 border border-[var(--status-warning-border)] bg-[var(--status-warning-surface)] px-3 py-2 type-small text-[var(--status-warning-ink)]">
           {warnings.join(" ")}
         </div>
       ) : null}

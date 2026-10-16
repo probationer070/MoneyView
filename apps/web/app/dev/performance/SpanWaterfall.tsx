@@ -1,8 +1,12 @@
 "use client";
 
+import { formatNumber } from "@/lib/format";
+import { useLocale, useT } from "@/lib/i18n/locale";
 import { isCollapsedNode, type CollapsedNode, type SpanNode } from "@/lib/devMonitor";
 
 function Row({ node, rootTotalMs, depth }: { node: SpanNode; rootTotalMs: number; depth: number }) {
+  const t = useT();
+  const { locale } = useLocale();
   const total = node.total_ms ?? 0;
   const offsetPct = rootTotalMs > 0 ? Math.min(100, Math.max(0, (node.offset_ms / rootTotalMs) * 100)) : 0;
   const rawWidthPct = rootTotalMs > 0 ? Math.max(0.5, (total / rootTotalMs) * 100) : 0;
@@ -14,32 +18,32 @@ function Row({ node, rootTotalMs, depth }: { node: SpanNode; rootTotalMs: number
 
   return (
     <div>
-      <div className="flex items-center gap-2 text-xs py-0.5">
+      <div className="type-mono flex items-center gap-2 py-0.5">
         <span
-          className="truncate text-[var(--text-primary)]"
+          className="truncate text-[var(--ink)]"
           style={{ paddingLeft: `${depth * 12}px`, width: "300px" }}
           title={node.operation}
         >
           {node.operation}
           {node.ticker ? ` ${node.ticker}` : ""}
           {node.clock_skew ? (
-            <span title="clock skew: bounds clamped to parent" className="text-[var(--text-muted)]"> ~</span>
+            <span title={t("devPerformance.clockSkew")} className="text-[var(--ink-muted)]"> ~</span>
           ) : null}
           {node.orphaned ? (
-            <span title="orphaned: parent span evicted" className="text-[var(--text-muted)]"> ?</span>
+            <span title={t("devPerformance.orphaned")} className="text-[var(--ink-muted)]"> ?</span>
           ) : null}
         </span>
-        <span className="relative flex-1 h-3 bg-[var(--bg-canvas)] overflow-hidden">
+        <span className="relative flex-1 h-3 bg-[var(--surface)] overflow-hidden">
           <span
-            className="absolute h-3 bg-[var(--text-muted)] opacity-60"
+            className="absolute h-3 bg-[var(--ink-muted)] opacity-60"
             style={{ left: `${offsetPct}%`, width: `${widthPct}%` }}
           />
         </span>
-        <span className="tabular-nums text-[var(--text-muted)] w-20 text-right">
-          {total.toFixed(1)} ms
+        <span className="text-right w-20 tabular-nums text-[var(--ink-muted)]">
+          {formatNumber(total, "price", { digits: 1, locale })} ms
         </span>
-        <span className="tabular-nums text-[var(--text-muted)] w-20 text-right">
-          self {(node.self_ms ?? 0).toFixed(1)}
+        <span className="text-right w-20 tabular-nums text-[var(--ink-muted)]">
+          {t("devPerformance.selfMs", { ms: formatNumber(node.self_ms ?? 0, "price", { digits: 1, locale }) })}
         </span>
       </div>
       {node.children.map((child, index) =>
@@ -54,16 +58,22 @@ function Row({ node, rootTotalMs, depth }: { node: SpanNode; rootTotalMs: number
 }
 
 function Collapsed({ node, depth }: { node: CollapsedNode; depth: number }) {
+  const t = useT();
+  const { locale } = useLocale();
   return (
     <div
-      className="text-xs py-0.5 text-[var(--text-muted)]"
+      className="type-mono py-0.5 text-[var(--ink-muted)]"
       style={{ paddingLeft: `${depth * 12}px` }}
     >
-      ⋯ {node.collapsed_count} spans collapsed · {node.total_ms.toFixed(1)} ms ({node.deepest_scope})
+      {t("devPerformance.collapsed", {
+        count: formatNumber(node.collapsed_count, "integer", { locale }),
+        ms: formatNumber(node.total_ms, "price", { digits: 1, locale }),
+        scope: node.deepest_scope,
+      })}
     </div>
   );
 }
 
 export function SpanWaterfall({ root, totalMs }: { root: SpanNode; totalMs: number }) {
-  return <div className="font-mono">{<Row node={root} rootTotalMs={totalMs} depth={0} />}</div>;
+  return <div>{<Row node={root} rootTotalMs={totalMs} depth={0} />}</div>;
 }

@@ -1,0 +1,655 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>MoneyView — 시장의 방향을 읽다</title>
+<script src="./vendor/react.js"></script>
+<script src="./vendor/react-dom.js"></script>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="ds/moneyview/tokens.css">
+<link rel="stylesheet" href="ds/moneyview/components/bundle.css">
+<script src="ds/moneyview/components/bundle.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:var(--link)}
+a:not(.mv-btn):hover{color:var(--brand-text) !important}
+</style>
+</helmet>
+<div data-theme="{{theme}}" style="min-height: 100vh; background: var(--bg); color: var(--ink); font-family: var(--font-sans); word-break: keep-all; -webkit-font-smoothing: antialiased;">
+
+<!-- NAV -->
+<header style="border-bottom: 1px solid var(--line); background: var(--bg);">
+<nav aria-label="주요 메뉴 Main" style="max-width: 1280px; margin: 0 auto; padding: 0 clamp(16px, 4vw, 32px); min-height: 72px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px;">
+<a href="Main.dc.html" style="display: inline-flex; align-items: center; gap: 10px; color: var(--ink); text-decoration: none; font-size: 20px; font-weight: 600; letter-spacing: -0.02em;"><span aria-hidden="true" style="width: 10px; height: 10px; background: var(--brand); display: inline-block;"></span>MoneyView</a>
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px 28px; font-family: var(--font-mono); font-size: 13px; letter-spacing: 0.04em;">
+<a href="#pulse" style="color: var(--ink-secondary); text-decoration: none;">시장 MARKET</a>
+<a href="#sectors" style="color: var(--ink-secondary); text-decoration: none;">섹터 SECTORS</a>
+<a href="#macro" style="color: var(--ink-secondary); text-decoration: none;">거시 MACRO</a>
+<a href="About.dc.html" style="color: var(--ink-secondary); text-decoration: none;">소개 ABOUT</a>
+<a href="Contact.dc.html" style="color: var(--ink-secondary); text-decoration: none;">문의 CONTACT</a>
+</div>
+<a class="mv-btn mv-btn-primary mv-btn-md" href="#pulse" style="text-decoration: none;">대시보드 열기 <span aria-hidden="true">→</span></a>
+</nav>
+</header>
+
+<!-- TICKER -->
+<x-import component-from-global-scope="MoneyView.Ticker" status="장중 LIVE" items="{{tickerItems}}" label="주요 지수 시세 Market ticker"></x-import>
+
+<!-- HERO -->
+<section style="position: relative; overflow: hidden; border-bottom: 1px solid var(--line);">
+<svg aria-hidden="true" width="100%" height="100%" style="position: absolute; inset: 0; display: block;"><defs><pattern id="mvPlus" width="24" height="24" patternUnits="userSpaceOnUse"><path d="M12 8v8M8 12h8" style="stroke: var(--grid); stroke-width: 1;"></path></pattern></defs><rect width="100%" height="100%" fill="url(#mvPlus)"></rect></svg>
+<div style="position: relative; max-width: 1280px; margin: 0 auto; padding: clamp(56px, 8vw, 112px) clamp(16px, 4vw, 32px) clamp(48px, 6vw, 80px); display: flex; flex-wrap: wrap; gap: 48px 56px; align-items: center;">
+<div style="flex: 1 1 440px; min-width: 0; display: flex; flex-direction: column; gap: 28px;">
+<x-import component-from-global-scope="MoneyView.Eyebrow" index="0" en="Market observatory">시장 관측소</x-import>
+<h1 style="margin: 0; font-size: clamp(40px, 5.4vw, 62px); line-height: 1.06; font-weight: 600; letter-spacing: -0.03em; color: var(--ink);">시장이 선호하는 방향을,<br>숫자로 읽다.</h1>
+<p style="margin: 0; font-size: 20px; line-height: 30px; letter-spacing: -0.01em; color: var(--ink-secondary);">Read where the market is leaning — stocks, sectors and macro regimes in one view.</p>
+<p style="margin: 0; max-width: 34em; font-size: 18px; line-height: 30px; color: var(--ink-muted);">MoneyView는 개별 종목의 흐름과 시장 전체의 선호를 한 화면에 모읍니다. 섹터 로테이션, 거시 국면, 밸류에이션까지 — 감이 아니라 데이터로 확인하세요.</p>
+<div style="display: flex; flex-wrap: wrap; gap: 12px;">
+<a class="mv-btn mv-btn-primary mv-btn-lg" href="#pulse" style="text-decoration: none;">대시보드 둘러보기 <span aria-hidden="true">→</span></a>
+<a class="mv-btn mv-btn-secondary mv-btn-lg" href="About.dc.html" style="text-decoration: none;">How it works</a>
+</div>
+<div style="display: flex; flex-wrap: wrap; gap: 8px 20px; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.08em; color: var(--ink-muted); text-transform: uppercase;">
+<span>갱신 UPDATED 2026-10-12 15:30 KST</span><span>·</span><span>예시 데이터 ILLUSTRATIVE</span>
+</div>
+</div>
+
+<x-import component-from-global-scope="MoneyView.Panel" title="리스크 선호도 지수" subtitle="Risk appetite index · 0–100 · 예시 데이터" style="flex: 1.25 1 520px; min-width: 0;">
+<div style="display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px; margin-bottom: 20px;">
+<div style="display: flex; align-items: baseline; gap: 14px;">
+<span style="font-family: var(--font-mono); font-size: 64px; line-height: 1; letter-spacing: -0.04em; font-weight: 500; color: var(--ink);">{{ra.value}}</span>
+<span style="font-family: var(--font-mono); font-size: 13px; letter-spacing: 0.06em; color: var(--brand-text);">{{ra.zone}}</span>
+</div>
+<div style="display: flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.08em; color: var(--ink-muted);">1주 대비 1W <x-import component-from-global-scope="MoneyView.Delta" value="{{ra.chg}}" format="abs" digits="{{one}}" chip="{{yes}}"></x-import></div>
+</div>
+<div style="position: relative; height: 300px; margin-right: 36px;">
+<div style="position: absolute; left: 0; right: 0; top: 0; height: 25%; background: var(--up-soft); opacity: 0.55;"></div>
+<div style="position: absolute; left: 0; right: 0; bottom: 0; height: 25%; background: var(--down-soft); opacity: 0.55;"></div>
+<svg viewBox="0 0 1000 320" preserveAspectRatio="none" width="100%" height="100%" role="img" aria-label="리스크 선호도 120일 추이" style="position: absolute; inset: 0; display: block; overflow: visible;">
+<path d="M0 80H1000M0 160H1000M0 240H1000" vector-effect="non-scaling-stroke" style="stroke: var(--grid); stroke-width: 1; fill: none;"></path>
+<path d="{{ra.area}}" style="fill: var(--brand); opacity: 0.12;"></path>
+<path d="{{ra.line}}" vector-effect="non-scaling-stroke" style="fill: none; stroke: var(--brand); stroke-width: 2; stroke-linejoin: round;"></path>
+</svg>
+<div style="position: absolute; right: -36px; top: 0; bottom: 0; width: 30px; font-family: var(--font-mono); font-size: 11px; color: var(--ink-muted);">
+<span style="position: absolute; top: -7px; right: 0;">100</span>
+<span style="position: absolute; top: calc(25% - 7px); right: 0;">75</span>
+<span style="position: absolute; top: calc(50% - 7px); right: 0;">50</span>
+<span style="position: absolute; top: calc(75% - 7px); right: 0;">25</span>
+<span style="position: absolute; bottom: -7px; right: 0;">0</span>
+</div>
+<div style="position: absolute; left: 8px; top: 8px; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.08em; color: var(--up);">탐욕 GREED</div>
+<div style="position: absolute; left: 8px; bottom: 8px; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.08em; color: var(--down);">공포 FEAR</div>
+<div style="position: absolute; right: -4px; top: {{ra.tagTop}}; transform: translate(0, -50%); padding: 2px 6px; border-radius: 4px; background: var(--brand); color: var(--on-brand); font-family: var(--font-mono); font-size: 11px; font-weight: 600;">{{ra.value}}</div>
+</div>
+<div style="display: flex; justify-content: space-between; margin: 10px 36px 0 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; color: var(--ink-muted);"><span>6월 JUN</span><span>7월 JUL</span><span>8월 AUG</span><span>9월 SEP</span><span>10월 OCT</span></div>
+</x-import>
+</div>
+
+<div style="position: relative; max-width: 1280px; margin: 0 auto; padding: 0 clamp(16px, 4vw, 32px) clamp(56px, 8vw, 96px); display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px;">
+<sc-for list="{{stats}}" as="s" hint-placeholder-count="4">
+<x-import component-from-global-scope="MoneyView.StatCard" label="{{s.label}}" code="{{s.code}}" value="{{s.value}}" change="{{s.change}}" spark="{{s.spark}}" note="{{s.note}}"></x-import>
+</sc-for>
+</div>
+</section>
+
+<!-- 01 MARKET PULSE -->
+<section id="pulse" style="border-bottom: 1px solid var(--line);">
+<div style="max-width: 1280px; margin: 0 auto; padding: clamp(64px, 9vw, 128px) clamp(16px, 4vw, 32px); display: flex; flex-direction: column; gap: 48px;">
+<div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 24px;">
+<div style="display: flex; flex-direction: column; gap: 16px; flex: 1 1 420px;">
+<x-import component-from-global-scope="MoneyView.Eyebrow" index="1" en="Market pulse">시장 심리</x-import>
+<h2 style="margin: 0; font-size: clamp(32px, 4vw, 44px); line-height: 1.14; font-weight: 600; letter-spacing: -0.02em;">오늘 시장은 어디로 기울었나</h2>
+<p style="margin: 0; font-size: 18px; line-height: 28px; color: var(--ink-muted);">Where is the market leaning today?</p>
+</div>
+<p style="margin: 0; flex: 0 1 440px; font-size: 16px; line-height: 27px; color: var(--ink-secondary);">가격, 거래량, 상승·하락 종목 수, 투자 심리를 함께 봅니다. 지수 하나로는 보이지 않는 시장의 폭과 온도를 확인하세요.</p>
+</div>
+
+<div style="display: flex; flex-wrap: wrap; gap: 24px; align-items: stretch;">
+<x-import component-from-global-scope="MoneyView.Panel" title="코스피 일봉" subtitle="KOSPI daily · OHLC · MA20 · 예시 데이터" style="flex: 2 1 600px; min-width: 0;">
+<div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 20px;">
+<div style="display: flex; align-items: baseline; gap: 12px;">
+<span style="font-family: var(--font-mono); font-size: 32px; line-height: 1; letter-spacing: -0.03em; font-weight: 500;">{{c.last}}</span>
+<x-import component-from-global-scope="MoneyView.Delta" value="{{c.chg}}"></x-import>
+</div>
+<div style="display: flex; align-items: center; gap: 16px;">
+<span style="display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; color: var(--ink-muted);"><span aria-hidden="true" style="width: 14px; height: 2px; background: var(--chart-2); display: inline-block;"></span>MA20</span>
+<x-import component-from-global-scope="MoneyView.Segmented" label="기간 Range" options="{{ranges}}" value="3M"></x-import>
+</div>
+</div>
+<div style="position: relative; height: 280px; margin-right: 52px;">
+<svg viewBox="0 0 1000 280" preserveAspectRatio="none" width="100%" height="100%" role="img" aria-label="코스피 일봉 캔들 차트" style="position: absolute; inset: 0; display: block; overflow: visible;">
+<path d="{{c.gridPath}}" vector-effect="non-scaling-stroke" style="stroke: var(--grid); stroke-width: 1; fill: none;"></path>
+<path d="{{c.upWick}}" vector-effect="non-scaling-stroke" style="stroke: var(--up); stroke-width: 1; fill: none;"></path>
+<path d="{{c.dnWick}}" vector-effect="non-scaling-stroke" style="stroke: var(--down); stroke-width: 1; fill: none;"></path>
+<path d="{{c.upBody}}" style="fill: var(--up);"></path>
+<path d="{{c.dnBody}}" style="fill: var(--down);"></path>
+<path d="{{c.ma}}" vector-effect="non-scaling-stroke" style="fill: none; stroke: var(--chart-2); stroke-width: 1.5;"></path>
+<path d="{{c.lastLine}}" vector-effect="non-scaling-stroke" style="fill: none; stroke: var(--ink-muted); stroke-width: 1; stroke-dasharray: 3 3;"></path>
+</svg>
+<sc-for list="{{c.ticks}}" as="t" hint-placeholder-count="4">
+<span style="position: absolute; right: -52px; top: {{t.top}}; transform: translateY(-50%); font-family: var(--font-mono); font-size: 11px; color: var(--ink-muted);">{{t.label}}</span>
+</sc-for>
+<span style="position: absolute; right: -54px; top: {{c.lastTop}}; transform: translateY(-50%); padding: 2px 5px; border-radius: 4px; background: var(--ink); color: var(--bg); font-family: var(--font-mono); font-size: 11px; font-weight: 600;">{{c.lastShort}}</span>
+</div>
+<div style="position: relative; height: 64px; margin: 12px 52px 0 0; border-top: 1px solid var(--grid);">
+<svg viewBox="0 0 1000 72" preserveAspectRatio="none" width="100%" height="100%" role="img" aria-label="거래량" style="position: absolute; inset: 0; display: block;">
+<path d="{{c.upVol}}" style="fill: var(--up); opacity: 0.55;"></path>
+<path d="{{c.dnVol}}" style="fill: var(--down); opacity: 0.55;"></path>
+</svg>
+<span style="position: absolute; right: -52px; top: 0; font-family: var(--font-mono); font-size: 11px; color: var(--ink-muted);">VOL</span>
+</div>
+<div style="display: flex; justify-content: space-between; margin: 10px 52px 0 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; color: var(--ink-muted);"><span>7월 JUL</span><span>8월 AUG</span><span>9월 SEP</span><span>10월 OCT</span></div>
+</x-import>
+
+<div style="flex: 1 1 340px; min-width: 0; display: flex; flex-direction: column; gap: 24px;">
+<x-import component-from-global-scope="MoneyView.Panel" title="공포·탐욕 게이지" subtitle="Fear &amp; greed · 예시 데이터">
+<div style="position: relative; max-width: 300px; margin: 0 auto;">
+<svg viewBox="0 0 300 168" width="100%" role="img" aria-label="공포 탐욕 게이지" style="display: block; overflow: visible;">
+<path d="{{g.s0}}" style="fill: none; stroke: var(--down); stroke-width: 18;"></path>
+<path d="{{g.s1}}" style="fill: none; stroke: var(--down); stroke-width: 18; opacity: 0.45;"></path>
+<path d="{{g.s2}}" style="fill: none; stroke: var(--chart-4); stroke-width: 18; opacity: 0.5;"></path>
+<path d="{{g.s3}}" style="fill: none; stroke: var(--up); stroke-width: 18; opacity: 0.45;"></path>
+<path d="{{g.s4}}" style="fill: none; stroke: var(--up); stroke-width: 18;"></path>
+<path d="{{g.needle}}" style="fill: none; stroke: var(--ink); stroke-width: 2.5; stroke-linecap: round;"></path>
+<circle cx="150" cy="150" r="6" style="fill: var(--ink);"></circle>
+</svg>
+</div>
+<div style="margin-top: 16px; text-align: center; font-family: var(--font-mono); font-size: 40px; line-height: 1; letter-spacing: -0.03em; font-weight: 500; color: var(--ink);">{{ra.int}}<span style="font-size: 13px; letter-spacing: 0.04em; color: var(--ink-muted);"> / 100</span></div>
+<div style="margin-top: 20px; display: flex; justify-content: space-between; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; color: var(--ink-muted);"><span>극단적 공포</span><span style="color: var(--brand-text);">{{ra.zone}}</span><span>극단적 탐욕</span></div>
+</x-import>
+
+<x-import component-from-global-scope="MoneyView.Panel" title="시장 폭" subtitle="Market breadth · 상승 / 보합 / 하락 종목 수">
+<div style="display: flex; flex-direction: column; gap: 18px;">
+<sc-for list="{{breadth}}" as="b" hint-placeholder-count="3">
+<div style="display: flex; flex-direction: column; gap: 8px;">
+<div style="display: flex; justify-content: space-between; font-family: var(--font-mono); font-size: 13px;">
+<span style="color: var(--ink); font-weight: 600;">{{b.name}}</span>
+<span style="color: var(--ink-muted);"><span style="color: var(--up);">▲ {{b.up}}</span> · {{b.flat}} · <span style="color: var(--down);">▼ {{b.down}}</span></span>
+</div>
+<div style="display: flex; height: 10px; gap: 2px;">
+<div style="width: {{b.upW}}; background: var(--up);"></div>
+<div style="width: {{b.flatW}}; background: var(--chart-4); opacity: 0.6;"></div>
+<div style="width: {{b.downW}}; background: var(--down);"></div>
+</div>
+</div>
+</sc-for>
+</div>
+</x-import>
+</div>
+</div>
+</div>
+</section>
+
+<!-- 02 SECTOR ROTATION -->
+<section id="sectors" style="border-bottom: 1px solid var(--line); background: var(--surface);">
+<div style="max-width: 1280px; margin: 0 auto; padding: clamp(64px, 9vw, 128px) clamp(16px, 4vw, 32px); display: flex; flex-direction: column; gap: 48px;">
+<div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 24px;">
+<div style="display: flex; flex-direction: column; gap: 16px; flex: 1 1 420px;">
+<x-import component-from-global-scope="MoneyView.Eyebrow" index="2" en="Sector rotation">섹터 로테이션</x-import>
+<h2 style="margin: 0; font-size: clamp(32px, 4vw, 44px); line-height: 1.14; font-weight: 600; letter-spacing: -0.02em;">돈은 지금 어느 섹터로 흐르는가</h2>
+<p style="margin: 0; font-size: 18px; line-height: 28px; color: var(--ink-muted);">Which sectors is the money moving into?</p>
+</div>
+<p style="margin: 0; flex: 0 1 440px; font-size: 16px; line-height: 27px; color: var(--ink-secondary);">주간 등락률과 외국인 순매수로 시장의 선호를 읽습니다. 크기는 시가총액 비중, 색의 진하기는 등락 폭입니다.</p>
+</div>
+
+<div style="display: flex; flex-wrap: wrap; gap: 24px; align-items: stretch;">
+<x-import component-from-global-scope="MoneyView.Panel" title="섹터 히트맵" subtitle="Sector heatmap · 1W change · 예시 데이터" style="flex: 1.4 1 560px; min-width: 0;">
+<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); grid-auto-rows: 96px; grid-auto-flow: dense; gap: 4px;">
+<sc-for list="{{heat}}" as="t" hint-placeholder-count="12">
+<div style="grid-column: span {{t.cs}}; grid-row: span {{t.rs}}; background: {{t.bg}}; color: {{t.fg}}; padding: 12px; display: flex; flex-direction: column; justify-content: space-between; min-width: 0;">
+<div style="display: flex; flex-direction: column; gap: 2px;">
+<span style="font-size: 15px; line-height: 20px; font-weight: 600;">{{t.kr}}</span>
+<span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.85;">{{t.en}}</span>
+</div>
+<span style="font-family: var(--font-mono); font-size: {{t.fs}}; line-height: 1; font-weight: 500; letter-spacing: -0.02em;">{{t.label}}</span>
+</div>
+</sc-for>
+</div>
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 16px; font-family: var(--font-mono); font-size: 11px; color: var(--ink-muted);">
+<span style="margin-right: 8px;">하락 ▼</span>
+<span style="width: 28px; height: 10px; background: var(--down);"></span><span style="width: 28px; height: 10px; background: var(--down-soft);"></span><span style="width: 28px; height: 10px; background: var(--grid);"></span><span style="width: 28px; height: 10px; background: var(--up-soft);"></span><span style="width: 28px; height: 10px; background: var(--up);"></span>
+<span style="margin-left: 8px;">▲ 상승</span>
+</div>
+</x-import>
+
+<x-import component-from-global-scope="MoneyView.Panel" title="외국인 순매수" subtitle="Foreign net buying · ₩억 · 1W · 예시 데이터" style="flex: 1 1 380px; min-width: 0;">
+<div style="display: flex; flex-direction: column; gap: 10px;">
+<sc-for list="{{flows}}" as="f" hint-placeholder-count="8">
+<div style="display: grid; grid-template-columns: 76px 1fr 1fr 64px; align-items: center; gap: 0;">
+<span style="font-size: 14px; color: var(--ink-secondary); white-space: nowrap;">{{f.kr}}</span>
+<div style="display: flex; justify-content: flex-end; height: 18px; border-right: 1px solid var(--line-strong);"><div style="width: {{f.negW}}; background: var(--down);"></div></div>
+<div style="display: flex; height: 18px;"><div style="width: {{f.posW}}; background: var(--up);"></div></div>
+<span style="font-family: var(--font-mono); font-size: 13px; text-align: right; color: {{f.color}};">{{f.label}}</span>
+</div>
+</sc-for>
+</div>
+<div style="display: flex; justify-content: space-between; margin-top: 14px; padding: 0 64px 0 76px; font-family: var(--font-mono); font-size: 11px; color: var(--ink-muted);"><span>◀ 순매도 SELL</span><span>BUY 순매수 ▶</span></div>
+</x-import>
+</div>
+
+<x-import component-from-global-scope="MoneyView.Panel" title="거래대금 상위 종목" subtitle="Top movers by turnover · 예시 데이터 · 실제 시세 아님">
+<div style="display: flex; justify-content: flex-end; gap: 8px; margin: -8px 0 12px;">
+<x-import component-from-global-scope="MoneyView.Segmented" label="시장 Market" options="{{markets}}" value="KOSPI"></x-import>
+<x-import component-from-global-scope="MoneyView.Button" size="sm">Export CSV</x-import>
+</div>
+<x-import component-from-global-scope="MoneyView.DataTable" columns="{{moverCols}}" rows="{{movers}}"></x-import>
+</x-import>
+</div>
+</section>
+
+<!-- 03 MACRO REGIME -->
+<section id="macro" style="border-bottom: 1px solid var(--line);">
+<div style="max-width: 1280px; margin: 0 auto; padding: clamp(64px, 9vw, 128px) clamp(16px, 4vw, 32px); display: flex; flex-direction: column; gap: 48px;">
+<div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 24px;">
+<div style="display: flex; flex-direction: column; gap: 16px; flex: 1 1 420px;">
+<x-import component-from-global-scope="MoneyView.Eyebrow" index="3" en="Macro regime">거시 국면</x-import>
+<h2 style="margin: 0; font-size: clamp(32px, 4vw, 44px); line-height: 1.14; font-weight: 600; letter-spacing: -0.02em;">지금은 어떤 국면인가</h2>
+<p style="margin: 0; font-size: 18px; line-height: 28px; color: var(--ink-muted);">Which macro regime are we in?</p>
+</div>
+<p style="margin: 0; flex: 0 1 440px; font-size: 16px; line-height: 27px; color: var(--ink-secondary);">S&amp;P 500 주간 거시 신호로 시나리오 확률을 추적하고, 달러·금 상관관계와 미국 제조업 지표로 국면의 전환을 감지합니다.</p>
+</div>
+
+<x-import component-from-global-scope="MoneyView.Panel" title="시나리오 확률 추이" subtitle="Scenario probabilities · S&amp;P 500 weekly macro signal · 예시 데이터">
+<div style="display: flex; flex-wrap: wrap; gap: 32px;">
+<div style="flex: 3 1 520px; min-width: 0;">
+<div style="display: flex; gap: 6px; height: 240px; align-items: stretch;">
+<sc-for list="{{weeks}}" as="w" hint-placeholder-count="12">
+<div style="flex: 1; display: flex; flex-direction: column; min-width: 0;">
+<sc-for list="{{w.segs}}" as="sg" hint-placeholder-count="4">
+<div style="height: {{sg.h}}; background: {{sg.color}}; border-top: 2px solid var(--surface-raised);"></div>
+</sc-for>
+</div>
+</sc-for>
+</div>
+<div style="display: flex; gap: 6px; margin-top: 10px;">
+<sc-for list="{{weeks}}" as="w" hint-placeholder-count="12">
+<span style="flex: 1; text-align: center; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.04em; color: var(--ink-muted);">{{w.label}}</span>
+</sc-for>
+</div>
+</div>
+<div style="flex: 1 1 240px; display: flex; flex-direction: column; gap: 14px; justify-content: center;">
+<span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.08em; color: var(--ink-muted);">이번 주 THIS WEEK</span>
+<sc-for list="{{scen}}" as="sc" hint-placeholder-count="4">
+<div style="display: flex; align-items: center; gap: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--grid);">
+<span aria-hidden="true" style="width: 12px; height: 12px; background: {{sc.color}}; flex: none;"></span>
+<span style="flex: 1; display: flex; flex-direction: column;"><span style="font-size: 15px; font-weight: 600; color: var(--ink);">{{sc.kr}}</span><span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-muted);">{{sc.en}}</span></span>
+<span style="font-family: var(--font-mono); font-size: 20px; font-weight: 500; color: var(--ink);">{{sc.p}}</span>
+<x-import component-from-global-scope="MoneyView.Delta" value="{{sc.d}}" format="abs" digits="{{zero}}"></x-import>
+</div>
+</sc-for>
+</div>
+</div>
+</x-import>
+
+<div style="display: flex; flex-wrap: wrap; gap: 24px; align-items: stretch;">
+<x-import component-from-global-scope="MoneyView.Panel" title="달러·금 롤링 상관계수" subtitle="DXY–Gold 60D rolling correlation · 예시 데이터" style="flex: 1.3 1 520px; min-width: 0;">
+<div style="display: flex; align-items: baseline; gap: 12px; margin-bottom: 16px;">
+<span style="font-family: var(--font-mono); font-size: 32px; line-height: 1; letter-spacing: -0.03em; font-weight: 500;">{{corr.last}}</span>
+<span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.08em; color: var(--ink-muted);">ρ 60D · {{corr.read}}</span>
+</div>
+<div style="position: relative; height: 220px; margin-right: 40px;">
+<svg viewBox="0 0 1000 220" preserveAspectRatio="none" width="100%" height="100%" role="img" aria-label="달러 금 상관계수 추이" style="position: absolute; inset: 0; display: block; overflow: visible;">
+<path d="M0 0H1000M0 55H1000M0 165H1000M0 220H1000" vector-effect="non-scaling-stroke" style="stroke: var(--grid); stroke-width: 1; fill: none;"></path>
+<path d="M0 110H1000" vector-effect="non-scaling-stroke" style="stroke: var(--line-strong); stroke-width: 1; stroke-dasharray: 4 4; fill: none;"></path>
+<path d="{{corr.area}}" style="fill: var(--chart-2); opacity: 0.14;"></path>
+<path d="{{corr.line}}" vector-effect="non-scaling-stroke" style="fill: none; stroke: var(--chart-2); stroke-width: 2; stroke-linejoin: round;"></path>
+</svg>
+<div style="position: absolute; right: -40px; top: 0; bottom: 0; font-family: var(--font-mono); font-size: 11px; color: var(--ink-muted);">
+<span style="position: absolute; top: -7px; right: 0;">+1.0</span><span style="position: absolute; top: calc(25% - 7px); right: 0;">+0.5</span><span style="position: absolute; top: calc(50% - 7px); right: 0;">0</span><span style="position: absolute; top: calc(75% - 7px); right: 0;">−0.5</span><span style="position: absolute; bottom: -7px; right: 0;">−1.0</span>
+</div>
+</div>
+<div style="display: flex; justify-content: space-between; margin: 10px 40px 0 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; color: var(--ink-muted);"><span>2026 Q1</span><span>Q2</span><span>Q3</span><span>Q4</span></div>
+</x-import>
+
+<x-import component-from-global-scope="MoneyView.Panel" title="미국 제조업 리쇼어링 국면" subtitle="U.S. reindustrialization regime · FRED · 예시 데이터" style="flex: 1 1 380px; min-width: 0;">
+<div style="display: flex; flex-direction: column; gap: 24px;">
+<div>
+<div style="position: relative; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 3px; height: 14px;">
+<div style="background: var(--down);"></div><div style="background: var(--chart-4); opacity: 0.55;"></div><div style="background: var(--chart-2);"></div><div style="background: var(--up);"></div>
+<div style="position: absolute; left: {{regime.pos}}; top: -8px; bottom: -8px; width: 3px; transform: translateX(-50%); background: var(--ink);"></div>
+</div>
+<div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 3px; margin-top: 12px; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.04em; color: var(--ink-muted);">
+<span>수축<br>CONTRACTION</span><span>회복<br>RECOVERY</span><span style="color: var(--ink); font-weight: 600;">확장<br>EXPANSION</span><span>과열<br>OVERHEAT</span>
+</div>
+</div>
+<div>
+<div style="display: grid; grid-template-columns: 1fr auto; padding-bottom: 8px; border-bottom: 1px solid var(--line); font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.08em; color: var(--ink-muted);"><span>입력 지표 INPUT SERIES</span><span>Z-SCORE</span></div>
+<sc-for list="{{fred}}" as="fr" hint-placeholder-count="4">
+<div style="display: grid; grid-template-columns: 1fr auto; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--grid);">
+<span style="display: flex; flex-direction: column;"><span style="font-size: 15px; color: var(--ink);">{{fr.kr}}</span><span style="font-family: var(--font-mono); font-size: 11px; color: var(--ink-muted);">{{fr.id}}</span></span>
+<span style="font-family: var(--font-mono); font-size: 15px; color: var(--ink);">{{fr.z}}</span>
+</div>
+</sc-for>
+</div>
+</div>
+</x-import>
+</div>
+</div>
+</section>
+
+<!-- 04 RISK & VALUATION -->
+<section id="risk" style="border-bottom: 1px solid var(--line); background: var(--surface);">
+<div style="max-width: 1280px; margin: 0 auto; padding: clamp(64px, 9vw, 128px) clamp(16px, 4vw, 32px); display: flex; flex-direction: column; gap: 48px;">
+<div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 24px;">
+<div style="display: flex; flex-direction: column; gap: 16px; flex: 1 1 420px;">
+<x-import component-from-global-scope="MoneyView.Eyebrow" index="4" en="Risk &amp; valuation">위험과 가치</x-import>
+<h2 style="margin: 0; font-size: clamp(32px, 4vw, 44px); line-height: 1.14; font-weight: 600; letter-spacing: -0.02em;">감수한 위험만큼 보상받고 있는가</h2>
+<p style="margin: 0; font-size: 18px; line-height: 28px; color: var(--ink-muted);">Are you being paid for the risk you take?</p>
+</div>
+<p style="margin: 0; flex: 0 1 440px; font-size: 16px; line-height: 27px; color: var(--ink-secondary);">몬테카를로 시뮬레이션으로 1년 뒤의 분포를 그리고, 업종 PER과 DCF 내재가치로 지금 가격이 비싼지 싼지 판정합니다.</p>
+</div>
+
+<div style="display: flex; flex-wrap: wrap; gap: 24px; align-items: stretch;">
+<x-import component-from-global-scope="MoneyView.Panel" title="코스피 1년 몬테카를로" subtitle="Monte Carlo · 10,000 paths · 52W · 예시 데이터" style="flex: 1.2 1 520px; min-width: 0;">
+<div style="position: relative; height: 280px; margin-right: 64px;">
+<svg viewBox="0 0 1000 280" preserveAspectRatio="none" width="100%" height="100%" role="img" aria-label="몬테카를로 분포 팬 차트" style="position: absolute; inset: 0; display: block; overflow: visible;">
+<path d="M0 70H1000M0 140H1000M0 210H1000" vector-effect="non-scaling-stroke" style="stroke: var(--grid); stroke-width: 1; fill: none;"></path>
+<path d="{{mc.b90}}" style="fill: var(--brand); opacity: 0.12;"></path>
+<path d="{{mc.b50}}" style="fill: var(--brand); opacity: 0.22;"></path>
+<path d="{{mc.paths}}" vector-effect="non-scaling-stroke" style="fill: none; stroke: var(--chart-4); stroke-width: 1; opacity: 0.45;"></path>
+<path d="{{mc.median}}" vector-effect="non-scaling-stroke" style="fill: none; stroke: var(--brand); stroke-width: 2;"></path>
+</svg>
+<sc-for list="{{mc.ends}}" as="e" hint-placeholder-count="3">
+<span style="position: absolute; right: -64px; top: {{e.top}}; transform: translateY(-50%); font-family: var(--font-mono); font-size: 11px; color: {{e.color}}; white-space: nowrap;">{{e.label}}</span>
+</sc-for>
+</div>
+<div style="display: flex; justify-content: space-between; margin: 10px 64px 0 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; color: var(--ink-muted);"><span>오늘 NOW</span><span>+3M</span><span>+6M</span><span>+9M</span><span>+12M</span></div>
+<div style="display: flex; flex-wrap: wrap; gap: 8px 20px; margin-top: 18px; font-family: var(--font-mono); font-size: 11px; color: var(--ink-muted);">
+<span style="display: inline-flex; align-items: center; gap: 6px;"><span style="width: 14px; height: 10px; background: var(--brand); opacity: 0.22;"></span>P25–P75</span>
+<span style="display: inline-flex; align-items: center; gap: 6px;"><span style="width: 14px; height: 10px; background: var(--brand); opacity: 0.12;"></span>P5–P95</span>
+<span style="display: inline-flex; align-items: center; gap: 6px;"><span style="width: 14px; height: 2px; background: var(--brand);"></span>중앙값 MEDIAN</span>
+<span>VaR 95% (1Y) <span style="color: var(--down);">{{mc.vaR}}</span></span>
+</div>
+</x-import>
+
+<x-import component-from-global-scope="MoneyView.Panel" title="섹터 위험 대비 수익" subtitle="Risk vs return · 1Y · 예시 데이터" style="flex: 1 1 420px; min-width: 0;">
+<div style="position: relative; height: 320px; margin: 0 0 24px 36px; border-left: 1px solid var(--line); border-bottom: 1px solid var(--line);">
+<div style="position: absolute; left: 0; right: 0; top: {{sc0}}; border-top: 1px dashed var(--line-strong);"></div>
+<span style="position: absolute; right: 0; top: {{sc0}}; transform: translateY(-120%); font-family: var(--font-mono); font-size: 10px; color: var(--ink-muted);">0%</span>
+<sc-for list="{{scatter}}" as="p" hint-placeholder-count="12">
+<div style="position: absolute; left: {{p.x}}; top: {{p.y}}; transform: translate(-50%, -50%); width: {{p.size}}; height: {{p.size}}; border-radius: 999px; background: {{p.color}};"></div>
+<span style="position: absolute; left: {{p.x}}; top: {{p.y}}; transform: translate(10px, -50%); font-size: 12px; line-height: 14px; white-space: nowrap; color: {{p.text}}; font-weight: {{p.weight}};">{{p.kr}}</span>
+</sc-for>
+<span style="position: absolute; left: -36px; top: -6px; font-family: var(--font-mono); font-size: 10px; color: var(--ink-muted);">+30%</span>
+<span style="position: absolute; left: -36px; bottom: -6px; font-family: var(--font-mono); font-size: 10px; color: var(--ink-muted);">−20%</span>
+<span style="position: absolute; left: 0; bottom: -22px; font-family: var(--font-mono); font-size: 10px; color: var(--ink-muted);">변동성 10%</span>
+<span style="position: absolute; right: 0; bottom: -22px; font-family: var(--font-mono); font-size: 10px; color: var(--ink-muted);">40% VOLATILITY →</span>
+</div>
+</x-import>
+</div>
+
+<x-import component-from-global-scope="MoneyView.Panel" title="밸류에이션 판정" subtitle="Valuation verdict · 업종 PER (Damodaran) · DCF · 예시 데이터">
+<div style="overflow-x: auto;">
+<div style="min-width: 720px; font-size: 15px; color: var(--ink-secondary);">
+<div style="display: grid; grid-template-columns: 1.4fr 1fr 1fr 1.2fr 1.6fr; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.08em; color: var(--ink-muted); border-bottom: 1px solid var(--line);">
+<span style="padding: 8px 16px;">섹터 SECTOR</span>
+<span style="padding: 8px 16px; text-align: right;">현재 PER</span>
+<span style="padding: 8px 16px; text-align: right;">업종 PER IND.</span>
+<span style="padding: 8px 16px; text-align: right;">내재가치 괴리 DCF GAP</span>
+<span style="padding: 8px 16px;">판정 VERDICT</span>
+</div>
+<sc-for list="{{valuation}}" as="vr" hint-placeholder-count="6">
+<div style="display: grid; grid-template-columns: 1.4fr 1fr 1fr 1.2fr 1.6fr; align-items: center; border-bottom: 1px solid var(--grid);">
+<span style="padding: 14px 16px; color: var(--ink); font-weight: 600;">{{vr.kr}}</span>
+<span style="padding: 14px 16px; text-align: right; font-family: var(--font-mono); font-size: 13px;">{{vr.pe}}</span>
+<span style="padding: 14px 16px; text-align: right; font-family: var(--font-mono); font-size: 13px;">{{vr.ind}}</span>
+<span style="padding: 14px 16px; text-align: right; font-family: var(--font-mono); font-size: 13px; color: var(--ink);">{{vr.gap}}</span>
+<span style="padding: 10px 16px;"><span style="display: inline-flex; align-items: center; gap: 8px; padding: 3px 10px; border: 1px solid var(--line-strong); border-radius: 2px; font-family: var(--font-mono); font-size: 12px; color: var(--ink);"><span aria-hidden="true" style="width: 8px; height: 8px; background: {{vr.color}};"></span>{{vr.verdict}}</span></span>
+</div>
+</sc-for>
+</div>
+</div>
+</x-import>
+</div>
+</section>
+
+<!-- 05 ENGINES -->
+<section style="border-bottom: 1px solid var(--line);">
+<div style="max-width: 1280px; margin: 0 auto; padding: clamp(64px, 9vw, 128px) clamp(16px, 4vw, 32px); display: flex; flex-direction: column; gap: 48px;">
+<div style="display: flex; flex-direction: column; gap: 16px; max-width: 760px;">
+<x-import component-from-global-scope="MoneyView.Eyebrow" index="5" en="Under the hood">분석 엔진</x-import>
+<h2 style="margin: 0; font-size: clamp(32px, 4vw, 44px); line-height: 1.14; font-weight: 600; letter-spacing: -0.02em;">검증된 금융 모델 위에서</h2>
+<p style="margin: 0; font-size: 18px; line-height: 28px; color: var(--ink-muted);">Built on tested, textbook finance — not black boxes.</p>
+</div>
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); border-top: 1px solid var(--line); border-left: 1px solid var(--line);">
+<article style="padding: 28px 24px 32px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 14px; min-height: 240px;">
+<span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.08em; color: var(--brand-text);">E.01 · DCF</span>
+<h3 style="margin: 0; font-size: 24px; line-height: 30px; font-weight: 600; letter-spacing: -0.01em;">현금흐름할인 모델</h3>
+<p style="margin: 0; font-size: 15px; line-height: 24px; color: var(--ink-secondary);">ROIC와 WACC를 비교해 가치 창출 여부를 판단하고, 시장 가격에 기대지 않은 순수 내재가치를 계산합니다.</p>
+<span style="margin-top: auto; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; color: var(--ink-muted);">FCFF · WACC · TERMINAL VALUE</span>
+</article>
+<article style="padding: 28px 24px 32px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 14px; min-height: 240px;">
+<span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.08em; color: var(--brand-text);">E.02 · MONTE CARLO</span>
+<h3 style="margin: 0; font-size: 24px; line-height: 30px; font-weight: 600; letter-spacing: -0.01em;">몬테카를로 시뮬레이션</h3>
+<p style="margin: 0; font-size: 15px; line-height: 24px; color: var(--ink-secondary);">수만 개의 가격 경로로 미래 가치의 분포를 그립니다. 점 하나의 예측 대신 범위와 확률을 봅니다.</p>
+<span style="margin-top: auto; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; color: var(--ink-muted);">GBM · PERCENTILE BANDS</span>
+</article>
+<article style="padding: 28px 24px 32px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 14px; min-height: 240px;">
+<span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.08em; color: var(--brand-text);">E.03 · ATTRIBUTION</span>
+<h3 style="margin: 0; font-size: 24px; line-height: 30px; font-weight: 600; letter-spacing: -0.01em;">브린슨-파흐러 성과 분해</h3>
+<p style="margin: 0; font-size: 15px; line-height: 24px; color: var(--ink-secondary);">수익이 자산 배분에서 왔는지, 종목 선택에서 왔는지 나눠서 보여줍니다.</p>
+<span style="margin-top: auto; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; color: var(--ink-muted);">ALLOCATION · SELECTION · INTERACTION</span>
+</article>
+<article style="padding: 28px 24px 32px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 14px; min-height: 240px;">
+<span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.08em; color: var(--brand-text);">E.04 · RISK</span>
+<h3 style="margin: 0; font-size: 24px; line-height: 30px; font-weight: 600; letter-spacing: -0.01em;">VaR · 기대손실(ES)</h3>
+<p style="margin: 0; font-size: 15px; line-height: 24px; color: var(--ink-secondary);">최악의 경우 얼마나 잃을 수 있는지, 그 꼬리 위험의 평균까지 숫자로 확인합니다.</p>
+<span style="margin-top: auto; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; color: var(--ink-muted);">VAR 95/99 · EXPECTED SHORTFALL</span>
+</article>
+</div>
+</div>
+</section>
+
+<!-- CTA -->
+<section style="border-bottom: 1px solid var(--line); background: var(--surface);">
+<div style="max-width: 1280px; margin: 0 auto; padding: clamp(56px, 8vw, 96px) clamp(16px, 4vw, 32px); display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 40px;">
+<div style="flex: 1 1 420px; display: flex; flex-direction: column; gap: 16px;">
+<span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.08em; color: var(--ink-muted);">주간 리포트 WEEKLY SIGNAL</span>
+<h2 style="margin: 0; font-size: clamp(30px, 3.6vw, 40px); line-height: 1.18; font-weight: 600; letter-spacing: -0.02em;">매주 월요일, 시장의 신호를 받아보세요.</h2>
+<p style="margin: 0; font-size: 16px; line-height: 26px; color: var(--ink-muted);">Scenario probabilities, sector flows and regime changes — every Monday.</p>
+</div>
+<div style="flex: 1 1 420px; max-width: 520px;">
+<x-import component-from-global-scope="MoneyView.TextInput" id="mv-sub" label="이메일 / Email" type="email" placeholder="you@domain.com" help="언제든 구독을 해지할 수 있습니다. Unsubscribe anytime.">
+</x-import>
+<div style="margin-top: 12px;"><x-import component-from-global-scope="MoneyView.Button" variant="primary" size="lg" arrow="{{yes}}">구독하기 Subscribe</x-import></div>
+</div>
+</div>
+</section>
+
+<!-- FOOTER -->
+<footer style="max-width: 1280px; margin: 0 auto; padding: 64px clamp(16px, 4vw, 32px) 48px; display: flex; flex-direction: column; gap: 48px;">
+<div style="display: flex; flex-wrap: wrap; justify-content: space-between; gap: 40px;">
+<div style="display: flex; flex-direction: column; gap: 14px; max-width: 360px;">
+<span style="display: inline-flex; align-items: center; gap: 10px; font-size: 20px; font-weight: 600; letter-spacing: -0.02em;"><span aria-hidden="true" style="width: 10px; height: 10px; background: var(--brand); display: inline-block;"></span>MoneyView</span>
+<p style="margin: 0; font-size: 15px; line-height: 24px; color: var(--ink-muted);">시장의 방향을 읽는 관측 도구.<br>An observatory for market direction.</p>
+</div>
+<div style="display: flex; flex-wrap: wrap; gap: 48px; font-size: 15px;">
+<div style="display: flex; flex-direction: column; gap: 10px;">
+<span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.08em; color: var(--ink-muted);">제품 PRODUCT</span>
+<a href="#pulse" style="color: var(--ink-secondary); text-decoration: none;">시장 심리</a>
+<a href="#sectors" style="color: var(--ink-secondary); text-decoration: none;">섹터 로테이션</a>
+<a href="#macro" style="color: var(--ink-secondary); text-decoration: none;">거시 국면</a>
+<a href="#risk" style="color: var(--ink-secondary); text-decoration: none;">위험과 가치</a>
+</div>
+<div style="display: flex; flex-direction: column; gap: 10px;">
+<span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.08em; color: var(--ink-muted);">회사 COMPANY</span>
+<a href="About.dc.html" style="color: var(--ink-secondary); text-decoration: none;">소개 About</a>
+<a href="Contact.dc.html" style="color: var(--ink-secondary); text-decoration: none;">문의 Contact</a>
+</div>
+</div>
+</div>
+<div style="display: flex; flex-wrap: wrap; justify-content: space-between; gap: 16px; padding-top: 24px; border-top: 1px solid var(--line); font-size: 13px; line-height: 20px; color: var(--ink-muted);">
+<p style="margin: 0; max-width: 760px;">MoneyView는 투자 자문을 제공하지 않습니다. 모든 정보는 참고용이며 투자 판단의 책임은 이용자에게 있습니다. MoneyView does not provide investment advice; all information is for reference only.</p>
+<span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em;">© 2026 MONEYVIEW</span>
+</div>
+</footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["void","paper"],"default":"void","section":"Theme"},"$preview":{"width":1440,"height":7400}}'>
+class Component extends DCLogic {
+  build() {
+    var M = '−';
+    var rng = function (seed) { var s = seed; return function () { s = (s * 16807) % 2147483647; return (s - 1) / 2147483646; }; };
+    var fx = function (n, d) { return Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }); };
+    var sg = function (n, d) { return (n > 0 ? '+' : n < 0 ? M : '') + fx(n, d); };
+    var path = function (pts) { return pts.map(function (p, i) { return (i ? 'L' : 'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1); }).join(' '); };
+    var d = {};
+
+    /* hero: risk appetite 0–100 */
+    var r = rng(46), v = 46, ra = [];
+    for (var i = 0; i < 120; i++) { v += (r() - 0.46) * 5.2; v = Math.max(16, Math.min(84, v)); ra.push(v); }
+    var raPts = ra.map(function (p, k) { return [k * 1000 / (ra.length - 1), 320 - p / 100 * 320]; });
+    var raLine = path(raPts), last = ra[ra.length - 1];
+    var zone = last < 25 ? '극단적 공포 EXTREME FEAR' : last < 45 ? '공포 FEAR' : last < 55 ? '중립 NEUTRAL' : last < 75 ? '탐욕 GREED' : '극단적 탐욕 EXTREME GREED';
+    d.ra = { value: last.toFixed(1), int: String(Math.round(last)), zone: zone, chg: +(last - ra[ra.length - 6]).toFixed(1), line: raLine, area: raLine + ' L1000 320 L0 320 Z', tagTop: (100 - last).toFixed(2) + '%' };
+
+    /* gauge */
+    var G = function (a0, a1) { var R = 120, cx = 150, cy = 150; return 'M' + (cx + R * Math.cos(a0)).toFixed(2) + ' ' + (cy - R * Math.sin(a0)).toFixed(2) + ' A' + R + ' ' + R + ' 0 0 1 ' + (cx + R * Math.cos(a1)).toFixed(2) + ' ' + (cy - R * Math.sin(a1)).toFixed(2); };
+    var seg = function (k) { var gap = 0.02; return G(Math.PI * (1 - k / 5) - gap, Math.PI * (1 - (k + 1) / 5) + gap); };
+    var na = Math.PI * (1 - last / 100);
+    d.g = { s0: seg(0), s1: seg(1), s2: seg(2), s3: seg(3), s4: seg(4), needle: 'M150 150 L' + (150 + 96 * Math.cos(na)).toFixed(2) + ' ' + (150 - 96 * Math.sin(na)).toFixed(2) };
+
+    /* candles */
+    r = rng(23); var p = 2590, cs = [];
+    for (i = 0; i < 64; i++) { var o = p, ch = (r() - 0.44) * 40, c = o + ch; cs.push({ o: o, c: c, hi: Math.max(o, c) + r() * 15, lo: Math.min(o, c) - r() * 15, vol: 260 + r() * 420 + Math.abs(ch) * 7 }); p = c; }
+    var lo = Math.min.apply(null, cs.map(function (q) { return q.lo; })), hi = Math.max.apply(null, cs.map(function (q) { return q.hi; }));
+    var pad = (hi - lo) * 0.08, y0 = lo - pad, y1 = hi + pad, CH = 280, cw = 1000 / cs.length, bw = cw * 0.56;
+    var cy = function (val) { return CH - (val - y0) / (y1 - y0) * CH; };
+    var vmax = Math.max.apply(null, cs.map(function (q) { return q.vol; }));
+    var cc = { upBody: '', dnBody: '', upWick: '', dnWick: '', upVol: '', dnVol: '' };
+    cs.forEach(function (q, k) {
+      var xc = k * cw + cw / 2, x0 = xc - bw / 2, up = q.c >= q.o;
+      var top = cy(Math.max(q.o, q.c)), h = Math.max(1, cy(Math.min(q.o, q.c)) - top);
+      var body = 'M' + x0.toFixed(1) + ' ' + top.toFixed(1) + 'h' + bw.toFixed(1) + 'v' + h.toFixed(1) + 'h' + (-bw).toFixed(1) + 'Z';
+      var wick = 'M' + xc.toFixed(1) + ' ' + cy(q.hi).toFixed(1) + 'V' + cy(q.lo).toFixed(1);
+      var vh = q.vol / vmax * 72, vb = 'M' + x0.toFixed(1) + ' ' + (72 - vh).toFixed(1) + 'h' + bw.toFixed(1) + 'V72h' + (-bw).toFixed(1) + 'Z';
+      if (up) { cc.upBody += body; cc.upWick += wick; cc.upVol += vb; } else { cc.dnBody += body; cc.dnWick += wick; cc.dnVol += vb; }
+    });
+    var ma = [];
+    for (i = 19; i < cs.length; i++) { var s = 0; for (var j = i - 19; j <= i; j++) s += cs[j].c; ma.push([i * cw + cw / 2, cy(s / 20)]); }
+    cc.ma = path(ma);
+    var step = 50, ticks = [], gp = '';
+    for (var t = Math.ceil(y0 / step) * step; t <= y1; t += step) { ticks.push({ top: (cy(t) / CH * 100).toFixed(2) + '%', label: t.toLocaleString('en-US') }); gp += 'M0 ' + cy(t).toFixed(1) + 'H1000'; }
+    var lc = cs[cs.length - 1].c, pc = cs[cs.length - 2].c;
+    cc.gridPath = gp; cc.ticks = ticks; cc.last = fx(lc, 2); cc.lastShort = fx(lc, 0); cc.chg = +((lc / pc - 1) * 100).toFixed(2);
+    cc.lastTop = (cy(lc) / CH * 100).toFixed(2) + '%'; cc.lastLine = 'M0 ' + cy(lc).toFixed(1) + 'H1000';
+    d.c = cc;
+    var closes = cs.map(function (q) { return q.c; });
+
+    /* ticker + stats */
+    d.tickerItems = [
+      { symbol: 'KOSPI', price: fx(lc, 2), change: cc.chg }, { symbol: 'KOSDAQ', price: '812.40', change: -0.42 },
+      { symbol: 'S&P 500', price: '6,412.08', change: 0.37 }, { symbol: 'NASDAQ 100', price: '21,904.15', change: -0.83 },
+      { symbol: 'USD/KRW', price: '1,362.50', change: 0.12 }, { symbol: 'US10Y', price: '4.21%', change: -0.95 },
+      { symbol: 'WTI', price: '71.84', change: -1.95 }, { symbol: 'GOLD', price: '2,418.70', change: 0.66 }, { symbol: 'VIX', price: '15.82', change: -3.41 }];
+    d.stats = [
+      { label: '코스피', code: 'KOSPI', value: fx(lc, 2), change: cc.chg, spark: closes.slice(-24) },
+      { label: 'S&P 500', code: 'SPX', value: '6,412.08', change: 0.37, spark: [6290, 6305, 6298, 6330, 6352, 6341, 6370, 6366, 6389, 6395, 6380, 6412] },
+      { label: '원/달러 환율', code: 'USD/KRW', value: '1,362.50', change: 0.12, spark: [1351, 1354, 1349, 1356, 1360, 1358, 1361, 1357, 1359, 1362] },
+      { label: '변동성 지수', code: 'VIX', value: '15.82', change: -3.41, spark: [18.2, 17.9, 18.4, 17.1, 16.8, 16.9, 16.3, 16.4, 15.82] }];
+    d.ranges = ['1M', '3M', '6M', '1Y'];
+    d.markets = ['KOSPI', 'KOSDAQ'];
+
+    /* breadth */
+    d.breadth = [['KOSPI', 512, 76, 361], ['KOSDAQ', 701, 142, 905], ['S&P 500', 318, 9, 176]].map(function (b) {
+      var tot = b[1] + b[2] + b[3];
+      return { name: b[0], up: b[1], flat: b[2], down: b[3], upW: (b[1] / tot * 100).toFixed(1) + '%', flatW: (b[2] / tot * 100).toFixed(1) + '%', downW: (b[3] / tot * 100).toFixed(1) + '%' };
+    });
+
+    /* heatmap */
+    var heat = [['반도체', 'Semis', 3.42, 2, 2], ['조선', 'Shipbuilding', 2.76, 2, 1], ['2차전지', 'Batteries', -2.15, 2, 1], ['자동차', 'Autos', 1.18, 2, 1],
+      ['방산', 'Defense', 1.93, 1, 1], ['바이오', 'Bio', 0.84, 1, 1], ['인터넷', 'Internet', -0.62, 1, 1], ['금융', 'Financials', 0.41, 1, 1],
+      ['화학', 'Chemicals', -1.48, 1, 1], ['철강', 'Steel', -0.27, 1, 1], ['통신', 'Telecom', 0.12, 1, 1], ['유틸리티', 'Utilities', -0.08, 1, 1]];
+    d.heat = heat.map(function (h) {
+      var x = h[2], a = Math.abs(x), bg, fg;
+      if (a >= 1.5) { bg = x > 0 ? 'var(--up)' : 'var(--down)'; fg = 'var(--bg)'; }
+      else if (a >= 0.5) { bg = x > 0 ? 'var(--up-soft)' : 'var(--down-soft)'; fg = x > 0 ? 'var(--up)' : 'var(--down)'; }
+      else { bg = 'var(--grid)'; fg = 'var(--ink)'; }
+      return { kr: h[0], en: h[1], label: (x > 0 ? '▲ +' : x < 0 ? '▼ ' + M : '■ ') + Math.abs(x).toFixed(2) + '%', cs: h[3], rs: h[4], bg: bg, fg: fg, fs: h[3] * h[4] >= 4 ? '28px' : '15px' };
+    });
+
+    /* flows */
+    var flows = [['반도체', 4210], ['조선', 1380], ['방산', 960], ['자동차', 620], ['금융', 310], ['바이오', -240], ['화학', -880], ['2차전지', -1880]];
+    d.flows = flows.map(function (f) {
+      var w = (Math.abs(f[1]) / 4210 * 100).toFixed(1) + '%';
+      return { kr: f[0], posW: f[1] > 0 ? w : '0%', negW: f[1] < 0 ? w : '0%', label: sg(f[1], 0), color: f[1] > 0 ? 'var(--up)' : 'var(--down)' };
+    });
+
+    /* movers */
+    var sp = function (seed, drift) { var q = rng(seed), x = 50, out = []; for (var k = 0; k < 16; k++) { x += (q() - 0.5) * 4 + drift; out.push(x); } return out; };
+    d.moverCols = [{ key: 'name', label: '종목', en: 'NAME', type: 'name' }, { key: 'price', label: '현재가', en: 'PRICE ₩', align: 'right' },
+      { key: 'chg', label: '등락률', en: 'CHG', align: 'right', type: 'delta' }, { key: 'turn', label: '거래대금', en: 'TURNOVER', align: 'right' },
+      { key: 'sect', label: '섹터', en: 'SECTOR' }, { key: 'trend', label: '20일 추세', en: '20D', type: 'spark' }];
+    d.movers = [
+      { name: 'SK하이닉스', price: '214,500', chg: 4.12, turn: '1.82조', sect: '반도체', trend: sp(3, 0.9), _selected: true },
+      { name: 'HD현대중공업', price: '312,000', chg: 3.05, turn: '6,420억', sect: '조선', trend: sp(5, 0.7) },
+      { name: '한화에어로스페이스', price: '498,500', chg: 2.21, turn: '5,110억', sect: '방산', trend: sp(8, 0.5) },
+      { name: 'LG에너지솔루션', price: '342,000', chg: -2.64, turn: '4,870억', sect: '2차전지', trend: sp(9, -0.7) },
+      { name: '에코프로비엠', price: '118,300', chg: -3.37, turn: '3,950억', sect: '2차전지', trend: sp(12, -0.9) },
+      { name: 'NAVER', price: '171,200', chg: -0.58, turn: '2,240억', sect: '인터넷', trend: sp(14, -0.2) }];
+
+    /* scenarios */
+    var sc = [['연착륙', 'Soft landing', 'var(--chart-2)', 44, 52], ['재가속', 'Reacceleration', 'var(--chart-3)', 18, 25], ['스태그플레이션', 'Stagflation', 'var(--chart-5)', 22, 13], ['경기침체', 'Recession', 'var(--chart-4)', 16, 10]];
+    r = rng(31); var weeks = [];
+    for (var w = 0; w < 12; w++) {
+      var raw = sc.map(function (s) { return Math.max(3, s[3] + (s[4] - s[3]) * w / 11 + (r() - 0.5) * 6); });
+      var tot = raw.reduce(function (a, b) { return a + b; }, 0);
+      weeks.push({ label: 'W' + (31 + w), segs: raw.map(function (x, k) { return { h: (x / tot * 100).toFixed(2) + '%', color: sc[k][2], pct: x / tot * 100 }; }) });
+    }
+    d.weeks = weeks;
+    var lw = weeks[11].segs, pw = weeks[10].segs;
+    d.scen = sc.map(function (s, k) { return { kr: s[0], en: s[1], color: s[2], p: Math.round(lw[k].pct) + '%', d: Math.round(lw[k].pct) - Math.round(pw[k].pct) }; });
+
+    /* DXY–gold correlation */
+    r = rng(41); v = -0.32; var co = [];
+    for (i = 0; i < 160; i++) { v += (r() - 0.5) * 0.09 + (i > 100 ? 0.006 : -0.002); v = Math.max(-0.88, Math.min(0.7, v)); co.push(v); }
+    var coPts = co.map(function (q, k) { return [k * 1000 / (co.length - 1), 110 - q * 110]; });
+    var coLine = path(coPts), cl = co[co.length - 1];
+    d.corr = { line: coLine, area: coLine + ' L1000 110 L0 110 Z', last: (cl >= 0 ? '+' : M) + Math.abs(cl).toFixed(2), read: cl > 0.3 ? '동조 CO-MOVING' : cl < -0.3 ? '역상관 INVERSE' : '약한 상관 WEAK' };
+
+    d.regime = { pos: '58%' };
+    d.fred = [{ kr: '제조업 고용', id: 'MANEMP', z: '+0.42' }, { kr: '제조업 생산지수', id: 'IPMAN', z: '+0.18' }, { kr: '제조업 건설지출', id: 'TLMFGCONS', z: '+1.36' }, { kr: '제조업 주당 근로시간', id: 'AWHMAN', z: M + '0.21' }];
+
+    /* Monte Carlo fan */
+    var mu = 0.06, sig = 0.19, N = 52, S0 = lc, z = { p5: -1.645, p25: -0.674, p75: 0.674, p95: 1.645 };
+    var q = function (tt, zz) { var T = tt / 52; return S0 * Math.exp((mu - 0.5 * sig * sig) * T + zz * sig * Math.sqrt(T)); };
+    var top = q(N, 1.645) * 1.03, bot = q(N, -1.645) * 0.97;
+    var my = function (val) { return 280 - (val - bot) / (top - bot) * 280; }, mx = function (tt) { return tt / N * 1000; };
+    var band = function (za, zb) { var up = [], dn = []; for (var tt = 0; tt <= N; tt++) { up.push([mx(tt), my(q(tt, zb))]); dn.unshift([mx(tt), my(q(tt, za))]); } return path(up.concat(dn)) + 'Z'; };
+    var med = []; for (var tt = 0; tt <= N; tt++) med.push([mx(tt), my(q(tt, 0))]);
+    r = rng(57); var pathsD = '';
+    for (var n = 0; n < 3; n++) { var x = S0, pts = [[0, my(S0)]]; for (tt = 1; tt <= N; tt++) { var u1 = Math.max(1e-9, r()), u2 = r(); var nz = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2); x = x * Math.exp((mu - 0.5 * sig * sig) / 52 + sig * Math.sqrt(1 / 52) * nz); x = Math.min(top, Math.max(bot, x)); pts.push([mx(tt), my(x)]); } pathsD += path(pts) + ' '; }
+    d.mc = { b90: band(z.p5, z.p95), b50: band(z.p25, z.p75), median: path(med), paths: pathsD,
+      ends: [{ label: 'P95 ' + fx(q(N, z.p95), 0), top: (my(q(N, z.p95)) / 280 * 100).toFixed(2) + '%', color: 'var(--ink-muted)' },
+        { label: 'P50 ' + fx(q(N, 0), 0), top: (my(q(N, 0)) / 280 * 100).toFixed(2) + '%', color: 'var(--brand-text)' },
+        { label: 'P5 ' + fx(q(N, z.p5), 0), top: (my(q(N, z.p5)) / 280 * 100).toFixed(2) + '%', color: 'var(--ink-muted)' }],
+      vaR: M + ((1 - q(N, z.p5) / S0) * 100).toFixed(1) + '%' };
+
+    /* scatter: x vol 10–40, y return −20–30 */
+    var pts2 = [['반도체', 28, 24, 1], ['조선', 33, 29], ['방산', 26, 21], ['자동차', 18, 9], ['금융', 14, 6], ['통신', 11, 2], ['유틸리티', 12, -1], ['바이오', 31, 4], ['인터넷', 24, -6], ['화학', 22, -12], ['2차전지', 38, -17], ['철강', 19, -5]];
+    d.scatter = pts2.map(function (s) {
+      var hl = !!s[3];
+      return { kr: s[0], x: ((s[1] - 10) / 30 * 100).toFixed(2) + '%', y: ((30 - s[2]) / 50 * 100).toFixed(2) + '%', size: hl ? '14px' : '10px',
+        color: hl ? 'var(--brand)' : (s[2] >= 0 ? 'var(--chart-3)' : 'var(--chart-4)'), text: hl ? 'var(--brand-text)' : 'var(--ink-secondary)', weight: hl ? '600' : '400' };
+    });
+    d.sc0 = ((30 - 0) / 50 * 100).toFixed(2) + '%';
+
+    /* valuation */
+    var vv = [['반도체', 14.2, 21.8, 18.4], ['자동차', 6.1, 9.7, 11.2], ['금융', 7.4, 8.1, 2.3], ['인터넷', 19.8, 20.5, -1.6], ['방산', 32.5, 24.0, -14.6], ['2차전지', 48.7, 30.2, -27.1]];
+    d.valuation = vv.map(function (x) {
+      var g = x[3], verdict = g > 10 ? '저평가 UNDERVALUED' : g < -10 ? '고평가 OVERVALUED' : '적정 FAIR';
+      return { kr: x[0], pe: x[1].toFixed(1) + '×', ind: x[2].toFixed(1) + '×', gap: sg(g, 1) + '%', verdict: verdict, color: g > 10 ? 'var(--chart-2)' : g < -10 ? 'var(--chart-5)' : 'var(--chart-4)' };
+    });
+    return d;
+  }
+  renderVals() {
+    if (!this._d) this._d = this.build();
+    return Object.assign({ theme: this.props.theme ?? 'void', yes: true, one: 1, zero: 0 }, this._d);
+  }
+}
+</script>
+</body>
+</html>

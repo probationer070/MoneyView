@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Bar, BarChart, CartesianGrid, Tooltip, XAxis, YAxis } from "recharts";
 import { ChartPanelFrame } from "@/components/charts/ChartPanelFrame";
+import { useLocale } from "@/lib/i18n/locale";
+import { formatNumber } from "@/lib/format";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { ResponsiveChart } from "@/components/ui/ResponsiveChart";
 import { GRID_STYLE, fmtPctTick, withAxisProps, withCategoryAxisProps, withTooltipProps } from "@/lib/chartConfig";
@@ -19,7 +21,7 @@ interface AttributionWaterfallProps {
 }
 
 function percentText(value: number) {
-  return `${(value * 100).toFixed(2)}%`;
+  return formatNumber(value, "percent", { digits: 2 });
 }
 
 function topSectorDriver(
@@ -34,6 +36,7 @@ function topSectorDriver(
 }
 
 export function AttributionWaterfall({ data, sectorBreakdowns = [] }: AttributionWaterfallProps) {
+  const { locale } = useLocale();
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const formatted = data.map((row) => ({
     ...row,
@@ -89,10 +92,10 @@ export function AttributionWaterfall({ data, sectorBreakdowns = [] }: Attributio
         empty={formatted.length === 0}
         emptyTitle="No attribution effects available"
         emptyDescription="Refresh attribution results to compare allocation, selection, interaction, and active return."
-        className="min-h-[320px] min-w-0 bg-[var(--surface-panel)]"
+        className="min-h-[320px] min-w-0 bg-[var(--surface-raised)]"
       >
         <div className="mb-3 flex items-center justify-between gap-3">
-          <h3 className="text-sm font-semibold text-[var(--text-primary)]">
+          <h3 className="type-body text-[var(--ink)]">
             <InfoTooltip
               label="Attribution Effects (%)"
               description="Brinson-style attribution decomposes active return into allocation, selection, and interaction effects. Positive percentages add value versus the benchmark; negative percentages detract."
@@ -101,7 +104,7 @@ export function AttributionWaterfall({ data, sectorBreakdowns = [] }: Attributio
           <button
             type="button"
             onClick={() => setIsDetailOpen(true)}
-            className="rounded-[var(--radius)] border border-[var(--border)] px-2 py-1 text-xs font-semibold text-[var(--text-muted)] transition hover:border-[var(--surface)] hover:text-[var(--text-primary)]"
+            className="rounded-[var(--radius-1)] border border-[var(--line)] px-2 py-1 type-small text-[var(--ink-muted)] transition hover:border-[var(--brand)] hover:text-[var(--ink)]"
           >
             Details
           </button>
@@ -114,12 +117,11 @@ export function AttributionWaterfall({ data, sectorBreakdowns = [] }: Attributio
               <YAxis {...withAxisProps({ tickFormatter: (value: number | string) => fmtPctTick(Number(value), 0) })} />
               <Tooltip
                 {...withTooltipProps()}
-                formatter={(value) => `${Number(value ?? 0).toFixed(2)}%`}
+                formatter={(value) => formatNumber(Number(value ?? 0) / 100, "percent", { digits: 2, locale })}
               />
               <Bar
                 dataKey="percentage"
-                radius={[6, 6, 0, 0]}
-                fill="var(--accent)"
+                fill="var(--brand)"
               />
             </BarChart>
           </ResponsiveChart>
@@ -127,27 +129,27 @@ export function AttributionWaterfall({ data, sectorBreakdowns = [] }: Attributio
       </ChartPanelFrame>
       {isDetailOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--overlay-scrim)] p-4"
           role="dialog"
           aria-modal="true"
           aria-label="Attribution effects methodology"
           onMouseDown={() => setIsDetailOpen(false)}
         >
           <div
-            className="max-h-[88vh] w-full max-w-3xl overflow-y-auto rounded-[var(--radius)] bg-[var(--bg-surface)] p-5 shadow-2xl"
+            className="max-h-[88vh] w-full max-w-3xl overflow-y-auto border border-[var(--line)] bg-[var(--surface-raised)] p-5"
             onMouseDown={(event) => event.stopPropagation()}
           >
-            <div className="flex items-start justify-between gap-4 border-b border-[var(--border)] pb-4">
+            <div className="flex items-start justify-between gap-4 border-b border-[var(--line)] pb-4">
               <div>
-                <h2 className="text-lg font-black text-[var(--text-primary)]">Attribution Effects Methodology</h2>
-                <p className="mt-1 text-sm text-[var(--text-muted)]">
+                <h2 className="type-panel-title text-[var(--ink)]">Attribution Effects Methodology</h2>
+                <p className="mt-1 type-body text-[var(--ink-muted)]">
                   X-axis values explain which source of active return added or detracted from benchmark-relative performance.
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => setIsDetailOpen(false)}
-                className="rounded-[var(--radius)] border border-[var(--border)] px-3 py-1 text-sm text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                className="rounded-[var(--radius-1)] border border-[var(--line)] px-3 py-1 type-body text-[var(--ink-muted)] hover:text-[var(--ink)]"
               >
                 Close
               </button>
@@ -155,20 +157,20 @@ export function AttributionWaterfall({ data, sectorBreakdowns = [] }: Attributio
 
             <div className="mt-4 space-y-4">
               {effectDetails.map((effect) => (
-                <section key={effect.name} className="rounded-[var(--radius)] border border-[var(--border)] p-4">
+                <section key={effect.name} className="border border-[var(--line)] p-4">
                   <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between">
-                    <h3 className="text-sm font-bold text-[var(--text-primary)]">{effect.name}</h3>
-                    <div className={`text-sm font-black tabular-nums ${effect.value >= 0 ? "text-[var(--delta-up)]" : "text-[var(--delta-down)]"}`}>
+                    <h3 className="type-body text-[var(--ink)]">{effect.name}</h3>
+                    <div className={`type-body tabular-nums ${effect.value >= 0 ? "text-[var(--up)]" : "text-[var(--down)]"}`}>
                       {percentText(effect.value)}
                     </div>
                   </div>
-                  <p className="mt-2 text-sm text-[var(--text-primary)]">{effect.represents}</p>
-                  <p className="mt-2 text-xs leading-relaxed text-[var(--text-muted)]">
-                    <span className="font-bold text-[var(--text-primary)]">Calculation: </span>
+                  <p className="mt-2 type-body text-[var(--ink)]">{effect.represents}</p>
+                  <p className="mt-2 type-small text-[var(--ink-muted)]">
+                    <span className="text-[var(--ink)]">Calculation: </span>
                     {effect.calculation}
                   </p>
-                  <p className="mt-2 text-xs leading-relaxed text-[var(--text-muted)]">
-                    <span className="font-bold text-[var(--text-primary)]">Largest observed driver: </span>
+                  <p className="mt-2 type-small text-[var(--ink-muted)]">
+                    <span className="text-[var(--ink)]">Largest observed driver: </span>
                     {effect.driver}
                   </p>
                 </section>

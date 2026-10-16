@@ -10,6 +10,10 @@ import { LoadingState } from "@/components/ui/LoadingState";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { GRID_STYLE, fmtCurrencyCompactTick, fmtPctTick, withAxisProps, withCategoryAxisProps, withTooltipProps } from "@/lib/chartConfig";
+import { ActionButton } from "@/components/ui/ActionButton";
+import { fieldInputClass } from "@/components/ui/InlineField";
+import { MISSING } from "@/lib/format";
+import { useT } from "@/lib/i18n/locale";
 import { CorporateComparisonTable } from "./CorporateComparisonTable";
 import type { CalculationDetailKey } from "./calculationDetailTypes";
 import type { ComparisonSortKey } from "../corporateTypes";
@@ -118,7 +122,6 @@ export function TargetStockComparisonSection({
   formatPct2,
   formatMoney,
   formatDateTime,
-  formatComparisonUniverseLabel,
 }: {
   comparisonData: ComparisonData | null;
   comparisonDisplayLastUpdatedAt: string | null;
@@ -160,232 +163,162 @@ export function TargetStockComparisonSection({
   formatPct2: (value: number) => string;
   formatMoney: (value: number) => string;
   formatDateTime: (value: string) => string;
-  formatComparisonUniverseLabel: (value: ComparisonUniverse | "portfolio_plus_benchmark") => string;
 }) {
   const selectedBenchmarkLabel = comparisonBenchmarkOptions.find((preset) => preset.ticker === comparisonBenchmarkTicker)?.label ?? comparisonBenchmarkTicker;
 
+  const t = useT();
+  const universeShown = comparisonData?.snapshot.comparison_universe ?? comparisonUniverse;
+  const customTickers = (comparisonData?.snapshot.custom_tickers
+    ?? comparisonCustomTickersInput.split(",").map((ticker) => ticker.trim()).filter(Boolean)).join(", ");
+  const syncedCount = watchlistCoverage.liveWatchlistCount - watchlistCoverage.missingTickers.length;
+  const hasNonBenchmarkRows = sortedComparisonRows.some((row) => row.group_name !== "benchmark");
+  // Spec §2.5: the three explanatory paragraphs and the method tiles live in this ⓘ now.
+  const about = t("corporate.comparison.about", {
+    riskFree: comparisonData ? formatPct2(comparisonData.risk_free_rate) : MISSING,
+    erp: comparisonData ? formatPct2(comparisonData.equity_risk_premium) : MISSING,
+    marketReturn: comparisonData ? formatPct2(comparisonData.market_expected_return) : MISSING,
+    stockMethod: comparisonData ? comparisonData.stock_expected_return_method.replaceAll("_", " ") : MISSING,
+    referenceMethod: comparisonData ? comparisonData.comparison_reference_return_method.replaceAll("_", " ") : MISSING,
+    generatedAt: comparisonData ? formatDateTime(comparisonData.snapshot.generated_at) : MISSING,
+  });
+  const fieldLabel = "type-label flex w-40 flex-col gap-1 text-[var(--ink-muted)]";
+
   return (
-    <section className="mt-4 col-span-6 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4">
-      <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-        <div className="min-w-0 xl:max-w-2xl">
-          <h2 className="text-sm font-bold text-[var(--text-primary)]">
-            <InfoTooltip
-              label="Target Stock Comparison"
-              description="Lightweight watchlist comparison for tracked names and ad-hoc custom universes. Weighted portfolio testing, implied cash, snapshots, and saved history live on the Portfolio page."
+    <div data-testid="comparison-tab" className="flex flex-col gap-3">
+      <span data-testid="comparison-about" className="type-small self-start text-[var(--ink-muted)]">
+        <InfoTooltip label={t("corporate.tabs.about")} description={about} />
+      </span>
+
+      {/* Spec §3.3 toolbar: universe · benchmark · sort · direction | refresh · all DCF · sync check. */}
+      <div data-testid="comparison-toolbar" className="flex flex-wrap items-end gap-2">
+        <label className={fieldLabel}>
+          {t("corporate.comparison.universe")}
+          <select
+            aria-label={t("corporate.comparison.universeAria")}
+            value={comparisonUniverse}
+            onChange={(event) => onComparisonUniverseChange(event.target.value as ComparisonUniverse)}
+            className={fieldInputClass}
+          >
+            <option value="watchlist_plus_benchmark">{t("corporate.comparison.universeLabel.watchlist_plus_benchmark")}</option>
+            <option value="custom">{t("corporate.comparison.universeLabel.custom")}</option>
+          </select>
+        </label>
+        <label className={fieldLabel}>
+          {t("corporate.comparison.benchmarkLabel")}
+          <select
+            aria-label={t("corporate.comparison.benchmarkAria")}
+            value={comparisonBenchmarkTicker}
+            onChange={(event) => onComparisonBenchmarkTickerChange(event.target.value)}
+            className={fieldInputClass}
+          >
+            {comparisonBenchmarkOptions.map((preset) => (
+              <option key={preset.id} value={preset.ticker}>{preset.label}</option>
+            ))}
+          </select>
+        </label>
+        {comparisonUniverse === "custom" ? (
+          <label className={fieldLabel}>
+            {t("corporate.comparison.customLabel")}
+            <input
+              aria-label={t("corporate.comparison.customAria")}
+              value={comparisonCustomTickersInput}
+              onChange={(event) => onComparisonCustomTickersInputChange(event.target.value.toUpperCase())}
+              placeholder="AAPL, MSFT, NVDA"
+              className={fieldInputClass}
             />
-          </h2>
-          <p className="mt-1 text-sm text-[var(--text-muted)]">
-            Market expected return formula: risk-free rate + equity risk premium = {comparisonData ? formatPct2(comparisonData.market_expected_return) : "Refresh to calculate"}.
-          </p>
-          <p className="mt-2 text-sm text-[var(--text-muted)]">
-            This screen stays in live comparison mode. If you need saved weights, implied cash, persisted snapshots, or snapshot history, continue in the Portfolio workflow.
-          </p>
-          <p className="mt-2 text-sm text-[var(--text-muted)]">
-            Corporate Analysis now checks the live Watchlist Holdings feed against the company registry on each refresh so mismatches are visible before you compare names.
-          </p>
+          </label>
+        ) : null}
+        <label className={fieldLabel}>
+          {t("corporate.comparison.sortLabel")}
+          <select
+            aria-label={t("corporate.comparison.sortAria")}
+            value={comparisonSortKey}
+            onChange={(event) => onComparisonSortKeyChange(event.target.value as ComparisonSortKey)}
+            className={fieldInputClass}
+          >
+            <option value="implied_return_spread">{t("corporate.comparison.sortImplied")}</option>
+            <option value="roic_minus_wacc">{t("corporate.comparison.sortSpread")}</option>
+            <option value="dcf_value">{t("corporate.comparison.sortDcf")}</option>
+          </select>
+        </label>
+        <label className={fieldLabel}>
+          {t("corporate.comparison.directionLabel")}
+          <select
+            aria-label={t("corporate.comparison.directionAria")}
+            value={comparisonSortDirection}
+            onChange={(event) => onComparisonSortDirectionChange(event.target.value as "desc" | "asc")}
+            className={fieldInputClass}
+          >
+            <option value="desc">{t("corporate.comparison.desc")}</option>
+            <option value="asc">{t("corporate.comparison.asc")}</option>
+          </select>
+        </label>
+        <div className="flex flex-wrap items-center gap-2">
+          <ActionButton size="sm" variant="secondary" label={t("corporate.comparison.refresh")} onClick={onRefreshComparison} disabled={comparisonIsFetching} />
+          <ActionButton
+            size="sm"
+            variant="secondary"
+            label={t(bulkDcfReportsLoading ? "corporate.comparison.calculatingAll" : "corporate.comparison.calculateAll")}
+            onClick={onCalculateAllDcfReports}
+            disabled={bulkDcfReportsLoading || !hasNonBenchmarkRows}
+          />
+          <ActionButton size="sm" variant="secondary" label={t("corporate.comparison.verifySync")} onClick={onVerifyWatchlistSync} disabled={watchlistSyncLoading} />
         </div>
-        <div className="flex flex-wrap items-center gap-2 xl:max-w-md xl:justify-end">
-          <button
-            type="button"
-            onClick={onRefreshComparison}
-            disabled={comparisonIsFetching}
-            className="inline-flex items-center gap-2 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-xs font-bold text-[var(--text-primary)] disabled:opacity-60"
-          >
-            Refresh comparison
-          </button>
-          <button
-            type="button"
-            onClick={onVerifyWatchlistSync}
-            disabled={watchlistSyncLoading}
-            className="inline-flex items-center gap-2 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-xs font-bold text-[var(--text-primary)] disabled:opacity-60"
-          >
-            Verify Watchlist Sync
-          </button>
-          <span className="text-xs text-[var(--text-muted)]">
-            {comparisonDisplayLastUpdatedAt ? `Last updated ${formatDateTime(comparisonDisplayLastUpdatedAt)}` : "Not calculated yet"}
+      </div>
+
+      {/* Spec §3.3 status line: the sync box, benchmark and timestamp in one line. */}
+      <div data-testid="comparison-status" className="type-small flex flex-wrap items-center gap-x-2 gap-y-1 text-[var(--ink-muted)]">
+        <span>{t(`corporate.comparison.universeLabel.${universeShown}`)}</span>
+        <span aria-hidden="true">·</span>
+        <span>
+          {watchlistSyncLoading
+            ? t("corporate.comparison.verifying")
+            : watchlistCoverage.isSynchronized
+              ? t("corporate.comparison.synced", { n: syncedCount, m: watchlistCoverage.liveWatchlistCount })
+              : t("corporate.comparison.missing", { tickers: watchlistCoverage.missingTickers.join(", ") })}
+        </span>
+        <span aria-hidden="true">·</span>
+        <span>{t("corporate.comparison.benchmark", { ticker: comparisonData?.snapshot.benchmark_ticker ?? comparisonBenchmarkTicker })}</span>
+        <span>{t("corporate.comparison.preset", { label: selectedBenchmarkLabel, ticker: comparisonBenchmarkTicker })}</span>
+        {universeShown === "custom" ? <span>{t("corporate.comparison.custom", { tickers: customTickers || t("corporate.comparison.none") })}</span> : null}
+        <span aria-hidden="true">·</span>
+        <span>
+          {comparisonDisplayLastUpdatedAt
+            ? t("corporate.assumptions.updated", { time: formatDateTime(comparisonDisplayLastUpdatedAt) })
+            : t("corporate.comparison.notCalculated")}
+        </span>
+        {comparisonIsStale ? (
+          <span className="type-caption rounded-[var(--radius-2)] bg-[var(--status-warning-surface)] px-2 py-0.5 uppercase text-[var(--status-warning-ink)]">
+            {t("corporate.comparison.stale")}
           </span>
-          {comparisonIsStale && (
-            <span className="rounded-full bg-amber-100 px-2 py-1 text-[length:var(--type-caption)] font-bold text-amber-800">
-              Stale
-            </span>
-          )}
-        </div>
-        <div className="min-w-0 flex flex-col gap-2 xl:items-end">
-          <div className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5">
-            <div className="rounded-[var(--radius)] bg-[var(--surface-muted)] p-3">
-              <div className="text-[var(--text-muted)]">Risk-free</div>
-              <div className="mt-1 font-bold text-[var(--text-primary)]">{comparisonData ? formatPct2(comparisonData.risk_free_rate) : "Refresh to calculate"}</div>
-            </div>
-            <div className="rounded-[var(--radius)] bg-[var(--surface-muted)] p-3">
-              <div className="text-[var(--text-muted)]">ERP</div>
-              <div className="mt-1 font-bold text-[var(--text-primary)]">{comparisonData ? formatPct2(comparisonData.equity_risk_premium) : "Refresh to calculate"}</div>
-            </div>
-            <div className="rounded-[var(--radius)] bg-[var(--surface-muted)] p-3">
-              <div className="text-[var(--text-muted)]">Stock Return Method</div>
-              <div className="mt-1 font-bold text-[var(--text-primary)]">
-                {comparisonData ? comparisonData.stock_expected_return_method.replaceAll("_", " ") : "Refresh to calculate"}
-              </div>
-            </div>
-            <div className="rounded-[var(--radius)] bg-[var(--surface-muted)] p-3">
-              <div className="text-[var(--text-muted)]">Reference Method</div>
-              <div className="mt-1 font-bold text-[var(--text-primary)]">
-                {comparisonData ? comparisonData.comparison_reference_return_method.replaceAll("_", " ") : "Refresh to calculate"}
-              </div>
-            </div>
-            <div className="rounded-[var(--radius)] bg-[var(--surface-muted)] p-3">
-              <div className="text-[var(--text-muted)]">Comparison Type</div>
-              <div className="mt-1 font-bold text-[var(--text-primary)]">Live watchlist comparison</div>
-            </div>
-            <div className="rounded-[var(--radius)] bg-[var(--surface-muted)] p-3">
-              <div className="text-[var(--text-muted)]">Portfolio Tools</div>
-              <button
-                type="button"
-                onClick={onOpenPortfolio}
-                className="mt-1 text-left font-bold text-[var(--delta-up)] underline decoration-dotted underline-offset-4"
-              >
-                Open Portfolio Testing
-              </button>
-            </div>
-            <div className="rounded-[var(--radius)] bg-[var(--surface-muted)] p-3">
-              <div className="text-[var(--text-muted)]">Universe</div>
-              <div className="mt-1 font-bold text-[var(--text-primary)]">
-                {comparisonData ? formatComparisonUniverseLabel(comparisonData.snapshot.comparison_universe) : formatComparisonUniverseLabel(comparisonUniverse)}
-              </div>
-            </div>
-          </div>
-          <div className="flex flex-col gap-2 md:flex-row md:flex-wrap md:justify-end">
-            <label className="flex w-full min-w-0 flex-col items-start gap-1 text-xs font-semibold text-[var(--text-muted)] sm:w-auto sm:flex-row sm:items-center">
-              Universe
-              <select
-                aria-label="Comparison universe"
-                value={comparisonUniverse}
-                onChange={(event) => onComparisonUniverseChange(event.target.value as ComparisonUniverse)}
-                className="w-full rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-xs text-[var(--text-primary)] sm:w-auto"
-              >
-                <option value="watchlist_plus_benchmark">Watchlist + Benchmark</option>
-                <option value="custom">Custom Universe</option>
-              </select>
-            </label>
-            <label className="flex w-full min-w-0 flex-col items-start gap-1 text-xs font-semibold text-[var(--text-muted)] sm:w-auto sm:flex-row sm:items-center">
-              Benchmark
-              <select
-                aria-label="Comparison benchmark"
-                value={comparisonBenchmarkTicker}
-                onChange={(event) => onComparisonBenchmarkTickerChange(event.target.value)}
-                className="w-full rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-xs text-[var(--text-primary)] sm:w-auto"
-              >
-                {comparisonBenchmarkOptions.map((preset) => (
-                  <option key={preset.id} value={preset.ticker}>
-                    {preset.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            {comparisonUniverse === "custom" && (
-              <label className="flex w-full min-w-0 flex-col items-start gap-1 text-xs font-semibold text-[var(--text-muted)] sm:w-auto sm:flex-row sm:items-center">
-                Custom tickers
-                <input
-                  aria-label="Custom tickers"
-                  value={comparisonCustomTickersInput}
-                  onChange={(event) => onComparisonCustomTickersInputChange(event.target.value.toUpperCase())}
-                  placeholder="AAPL, MSFT, NVDA"
-                  className="w-full rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-xs text-[var(--text-primary)] sm:w-48"
-                />
-              </label>
-            )}
-            <label className="flex w-full min-w-0 flex-col items-start gap-1 text-xs font-semibold text-[var(--text-muted)] sm:w-auto sm:flex-row sm:items-center">
-              Sort by
-              <select
-                aria-label="Sort by"
-                value={comparisonSortKey}
-                onChange={(event) => onComparisonSortKeyChange(event.target.value as ComparisonSortKey)}
-                className="w-full rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-xs text-[var(--text-primary)] sm:w-auto"
-              >
-                <option value="implied_return_spread">Implied return vs WACC</option>
-                <option value="roic_minus_wacc">ROIC - WACC</option>
-                <option value="dcf_value">DCF value</option>
-              </select>
-            </label>
-            <label className="flex w-full min-w-0 flex-col items-start gap-1 text-xs font-semibold text-[var(--text-muted)] sm:w-auto sm:flex-row sm:items-center">
-              Direction
-              <select
-                aria-label="Direction"
-                value={comparisonSortDirection}
-                onChange={(event) => onComparisonSortDirectionChange(event.target.value as "desc" | "asc")}
-                className="w-full rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-xs text-[var(--text-primary)] sm:w-auto"
-              >
-                <option value="desc">High to low</option>
-                <option value="asc">Low to high</option>
-              </select>
-            </label>
-          </div>
-          <div className="text-xs text-[var(--text-muted)]">
-            Benchmark: {comparisonData?.snapshot.benchmark_ticker ?? comparisonBenchmarkTicker}. {comparisonData ? `Generated live at ${formatDateTime(comparisonData.snapshot.generated_at)}.` : "Refresh comparison to calculate the live peer set."} Portfolio snapshots and saved history are managed from the Portfolio page only.
-          </div>
-          <div className="text-xs text-[var(--text-muted)]">
-            Selected benchmark preset: {selectedBenchmarkLabel} ({comparisonBenchmarkTicker}).
-          </div>
-          {(comparisonData?.snapshot.comparison_universe ?? comparisonUniverse) === "custom" && (
-            <div className="text-xs text-[var(--text-muted)]">
-              Custom tickers: {(comparisonData?.snapshot.custom_tickers ?? comparisonCustomTickersInput.split(",").map((ticker) => ticker.trim()).filter(Boolean)).join(", ") || "None"}.
-            </div>
-          )}
-        </div>
+        ) : null}
+        <button type="button" onClick={onOpenPortfolio} className="type-small text-[var(--brand-text)] underline decoration-dotted underline-offset-4">
+          {t("corporate.comparison.openPortfolio")}
+        </button>
       </div>
 
-      <div className={`mt-4 rounded-[var(--radius)] border px-4 py-3 text-sm ${watchlistCoverage.isSynchronized
-        ? "border-emerald-200 bg-emerald-50 text-emerald-900"
-        : "border-amber-200 bg-amber-50 text-amber-900"
-        }`}>
-        <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <div className="font-bold">Watchlist Holdings Sync</div>
-            <div className="mt-1">
-              Checked {watchlistCoverage.liveWatchlistCount} live watchlist holding{watchlistCoverage.liveWatchlistCount === 1 ? "" : "s"} against {watchlistCoverage.registryCount} corporate registry name{watchlistCoverage.registryCount === 1 ? "" : "s"}.
-            </div>
-            <div className="mt-1">
-              {watchlistCoverage.isSynchronized
-                ? "All live watchlist tickers are available inside Corporate Analysis."
-                : `Missing from Corporate Analysis: ${watchlistCoverage.missingTickers.join(", ")}.`}
-            </div>
-          </div>
-          <div className="text-xs font-semibold">
-            {watchlistSyncLoading ? "Verifying..." : watchlistCoverage.isSynchronized ? "Synchronized" : "Needs refresh"}
-          </div>
-        </div>
-      </div>
-
-      {comparisonIsLoading && !comparisonData && (
-        <div className="mt-4 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)]">
-          <LoadingState variant="spinner" label="Loading comparison rows..." />
-        </div>
-      )}
-
-      {comparisonIsError && (
-        <div className="mt-4 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)]">
-          <ErrorState
-            title="Target Stock Comparison Unavailable"
-            message="Target stock comparison is currently unavailable."
-          />
-        </div>
-      )}
-
-      {!comparisonData && !comparisonIsFetching && !comparisonIsError && (
-        <div className="mt-4 rounded-[var(--radius)] border border-dashed border-[var(--border)] bg-[var(--surface-muted)]">
-          <EmptyState
-            title="Comparison stays idle on first load. Adjust the universe if needed, then click `Refresh comparison` to calculate."
-            description="Comparison rows, spread charts, and batch DCF actions remain idle until you refresh."
-          />
-        </div>
-      )}
+      {comparisonIsLoading && !comparisonData ? <LoadingState variant="spinner" label={t("corporate.comparison.loading")} /> : null}
+      {comparisonIsError ? <ErrorState title={t("corporate.comparison.errorTitle")} message={t("corporate.comparison.errorBody")} /> : null}
+      {!comparisonData && !comparisonIsFetching && !comparisonIsError ? (
+        <EmptyState title={t("corporate.comparison.idleTitle")} description={t("corporate.comparison.idleBody")} />
+      ) : null}
 
       {comparisonData && sortedComparisonRows.length > 0 && (
         <>
+          <CorporateComparisonTable
+            rows={sortedComparisonRows}
+            currentTicker={currentTicker}
+            onSelectTicker={onSelectTicker}
+            onOpenCalculationForTicker={onOpenCalculationForTicker}
+            formatPct2={formatPct2}
+            formatMoney={formatMoney}
+          />
+
           <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-            <section className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-panel)] p-4">
+            <section className="border border-[var(--line)] bg-[var(--surface-raised)] p-4">
               <div className="flex flex-col gap-1">
-                <h3 className="text-sm font-bold text-[var(--text-primary)]">Similar Stocks Spread View</h3>
-                <p className="text-sm text-[var(--text-muted)]">
+                <h3 className="type-panel-title text-[var(--ink)]">Similar Stocks Spread View</h3>
+                <p className="type-body text-[var(--ink-muted)]">
                   Compares {selectedComparisonTicker || currentTicker} with {selectedComparisonSector || "the current comparison universe"}. When there are not enough same-sector names, the chart falls back to the active comparison rows.
                 </p>
               </div>
@@ -404,29 +337,29 @@ export function TargetStockComparisonSection({
                       return [`${numericValue.toFixed(2)}%`, label];
                     }}
                   />
-                  <Bar dataKey="roic_minus_wacc" name="roic_minus_wacc" radius={[6, 6, 0, 0]}>
+                  <Bar dataKey="roic_minus_wacc" name="roic_minus_wacc">
                     {similarComparisonBarData.map((row) => (
-                      <Cell key={`${row.ticker}-roic`} fill={row.isSelected ? "#0F766E" : "#60CAAD"} />
+                      <Cell key={`${row.ticker}-roic`} fill={row.isSelected ? "var(--chart-1)" : "var(--chart-4)"} />
                     ))}
                   </Bar>
-                  <Bar dataKey="implied_return_spread" name="implied_return_spread" radius={[6, 6, 0, 0]}>
+                  <Bar dataKey="implied_return_spread" name="implied_return_spread">
                     {similarComparisonBarData.map((row) => (
-                      <Cell key={`${row.ticker}-spread`} fill={row.isSelected ? "#1D4ED8" : "#94A3B8"} />
+                      <Cell key={`${row.ticker}-spread`} fill={row.isSelected ? "var(--chart-2)" : "var(--chart-3)"} />
                     ))}
                   </Bar>
                 </BarChart>
               </ResponsiveChart>
               {similarComparisonBarData.some((row) => row.implied_return_spread === null) ? (
-                <p data-testid="similar-spread-refused-note" className="mt-2 text-xs text-[var(--text-muted)]">
+                <p data-testid="similar-spread-refused-note" className="type-small mt-2 text-[var(--ink-muted)]">
                   No implied return for {similarComparisonBarData.filter((row) => row.implied_return_spread === null).map((row) => row.ticker).join(", ")}; shown without a spread bar, and at the base bubble size in the price-vs-value map.
                 </p>
               ) : null}
             </section>
 
-            <section className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-panel)] p-4">
+            <section className="border border-[var(--line)] bg-[var(--surface-raised)] p-4">
               <div className="flex flex-col gap-1">
-                <h3 className="text-sm font-bold text-[var(--text-primary)]">Price Vs Fair Value Map</h3>
-                <p className="text-sm text-[var(--text-muted)]">
+                <h3 className="type-panel-title text-[var(--ink)]">Price Vs Fair Value Map</h3>
+                <p className="type-body text-[var(--ink-muted)]">
                   DCF fair value sits on the vertical axis and current price sits on the horizontal axis. Bubble size expands with the implied return vs WACC so outliers stand out quickly.
                 </p>
               </div>
@@ -457,46 +390,26 @@ export function TargetStockComparisonSection({
                       return [formatMoney(numericValue), name === "current_price" ? "Current price" : "DCF value"];
                     }}
                   />
-                  <Scatter data={similarComparisonScatterPeers} fill="#94A3B8" name="Peer set" />
-                  <Scatter data={similarComparisonScatterSelected} fill="#0F766E" name="Selected ticker" />
+                  <Scatter data={similarComparisonScatterPeers} fill="var(--chart-4)" name="Peer set" />
+                  <Scatter data={similarComparisonScatterSelected} fill="var(--chart-1)" name="Selected ticker" />
                 </ScatterChart>
               </ResponsiveChart>
             </section>
           </div>
 
-          <CorporateComparisonTable
-            rows={sortedComparisonRows}
-            currentTicker={currentTicker}
-            onSelectTicker={onSelectTicker}
-            onOpenCalculationForTicker={onOpenCalculationForTicker}
-            formatPct2={formatPct2}
-            formatMoney={formatMoney}
-          />
-
-          <div className="mt-4">
-            <button
-              type="button"
-              onClick={onCalculateAllDcfReports}
-              disabled={bulkDcfReportsLoading || sortedComparisonRows.filter((row) => row.group_name !== "benchmark").length === 0}
-              className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-xs font-bold text-[var(--text-primary)] disabled:opacity-60"
-            >
-              {bulkDcfReportsLoading ? "Calculating all reports..." : "Calculate All Reports"}
-            </button>
-          </div>
-
           {(bulkDcfReportsLoading || bulkDcfReportsError || bulkDcfReports.length > 0) && (
-            <section className="mt-4 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-panel)] p-4">
+            <section className="mt-4 border border-[var(--line)] bg-[var(--surface-raised)] p-4">
               <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
                 <div>
-                  <h3 className="text-sm font-bold text-[var(--text-primary)]">Batch DCF Reports</h3>
-                  <p className="mt-1 text-sm text-[var(--text-muted)]">
+                  <h3 className="type-panel-title text-[var(--ink)]">Batch DCF Reports</h3>
+                  <p className="type-body mt-1 text-[var(--ink-muted)]">
                     Calculates backend full reports for every non-benchmark stock currently shown in Target Stock Comparison.
                   </p>
                 </div>
-                <div className="text-xs text-[var(--text-muted)]">
+                <div className="type-small text-[var(--ink-muted)]">
                   {bulkDcfReportsLastUpdatedAt ? `Last calculated ${formatDateTime(bulkDcfReportsLastUpdatedAt)}` : "No batch reports calculated yet"}
                   {bulkDcfSkipped.length > 0 ? (
-                    <span className="ml-2 text-[var(--text-muted)]">
+                    <span className="ml-2 text-[var(--ink-muted)]">
                       · {bulkDcfSkipped.length} skipped:{" "}
                       <span title={bulkDcfSkipped.map((skip) => `${skip.ticker}: ${skip.reason}`).join(SKIP_TOOLTIP_SEPARATOR)}>
                         {bulkDcfSkipped.map((skip) => skip.ticker).join(", ")}
@@ -506,27 +419,27 @@ export function TargetStockComparisonSection({
                 </div>
               </div>
               {bulkDcfReportsLoading && (
-                <div className="mt-4 text-sm text-[var(--text-muted)]">Calculating full reports for the current comparison universe...</div>
+                <div className="type-body mt-4 text-[var(--ink-muted)]">Calculating full reports for the current comparison universe...</div>
               )}
               {bulkDcfReportsError && (
-                <div className="mt-4 rounded-[var(--radius)] border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+                <div className="type-body mt-4 border border-[var(--status-error-border)] bg-[var(--status-error-surface)] px-4 py-3 text-[var(--status-error-ink)]">
                   {bulkDcfReportsError}
                 </div>
               )}
               {!bulkDcfReportsLoading && bulkDcfReports.length > 0 && (
                 <div className="mt-4 overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead className="bg-[var(--surface-muted)] text-left text-[var(--text-muted)]">
+                  <table className="type-small w-full">
+                    <thead className="bg-[var(--surface)] text-left text-[var(--ink-muted)]">
                       <tr>
-                        <th className="px-4 py-3 font-semibold">Ticker</th>
-                        <th className="px-4 py-3 font-semibold">Report ID</th>
-                        <th className="px-4 py-3 text-right font-semibold">Fair Value</th>
-                        <th className="px-4 py-3 text-right font-semibold">Current Price</th>
-                        <th className="px-4 py-3 text-right font-semibold">Upside</th>
-                        <th className="px-4 py-3 font-semibold">Status</th>
+                        <th className="type-caption px-4 py-3">Ticker</th>
+                        <th className="type-caption px-4 py-3">Report ID</th>
+                        <th className="type-caption px-4 py-3 text-right">Fair Value</th>
+                        <th className="type-caption px-4 py-3 text-right">Current Price</th>
+                        <th className="type-caption px-4 py-3 text-right">Upside</th>
+                        <th className="type-caption px-4 py-3">Status</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-[var(--border)]/60">
+                    <tbody className="divide-y divide-[var(--grid)]">
                       {bulkDcfReports.map((report) => {
                         // Both numbers come from the helpers, not the raw fields: an
                         // unresolved bridge leaves estimated_value an enterprise value and
@@ -535,24 +448,24 @@ export function TargetStockComparisonSection({
                         const upside = bridgedUpsidePct(report.summary);
                         return (
                         <tr key={report.summary.report_id}>
-                          <td className="px-4 py-3 font-bold text-[var(--text-primary)]">
+                          <td className="type-mono px-4 py-3 text-[var(--ink)]">
                             <button
                               type="button"
                               onClick={() => onSelectTicker(report.summary.ticker)}
-                              className="rounded underline decoration-dotted underline-offset-4"
+                              className="rounded-[var(--radius-1)] underline decoration-dotted underline-offset-4"
                             >
                               {report.summary.ticker}
                             </button>
                           </td>
-                          <td className="px-4 py-3 text-[var(--text-muted)]">{report.summary.report_id}</td>
-                          <td className="px-4 py-3 text-right font-semibold tabular-nums" title={fairValue === null ? UNBRIDGED_REASON : undefined}>
+                          <td className="px-4 py-3 text-[var(--ink-muted)]">{report.summary.report_id}</td>
+                          <td className="type-mono px-4 py-3 text-right tabular-nums" title={fairValue === null ? UNBRIDGED_REASON : undefined}>
                             {fairValue === null ? UNBRIDGED_PLACEHOLDER : formatMoney(fairValue)}
                           </td>
-                          <td className="px-4 py-3 text-right tabular-nums">{formatMoney(report.summary.current_price)}</td>
-                          <td className={`px-4 py-3 text-right font-semibold tabular-nums ${upside === null ? "text-[var(--text-muted)]" : upside >= 0 ? "text-[var(--delta-up)]" : "text-[var(--delta-down)]"}`} title={upside === null ? UNBRIDGED_REASON : undefined}>
+                          <td className="type-mono px-4 py-3 text-right tabular-nums">{formatMoney(report.summary.current_price)}</td>
+                          <td className={`type-mono px-4 py-3 text-right tabular-nums ${upside === null ? "text-[var(--ink-muted)]" : upside >= 0 ? "text-[var(--up)]" : "text-[var(--down)]"}`} title={upside === null ? UNBRIDGED_REASON : undefined}>
                             {upside === null ? UNBRIDGED_PLACEHOLDER : formatPct2(upside)}
                           </td>
-                          <td className="px-4 py-3 text-[var(--text-muted)]">{report.summary.status}</td>
+                          <td className="px-4 py-3 text-[var(--ink-muted)]">{report.summary.status}</td>
                         </tr>
                         );
                       })}
@@ -564,6 +477,6 @@ export function TargetStockComparisonSection({
           )}
         </>
       )}
-    </section>
+    </div>
   );
 }

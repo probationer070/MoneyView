@@ -64,7 +64,7 @@ export function RecordsSyncStatus({ status }: { status: RecordsSyncStatusData | 
     <span
       data-testid="records-sync-status"
       title={status.last_error ?? (status.skipped_files.map((file) => `${file.name}: ${file.reason}`).join("\n") || undefined)}
-      className={`text-xs ${warn ? "text-[var(--state-warning)]" : "text-[var(--text-muted)]"}`}
+      className={`type-small ${warn ? "text-[var(--status-warning-ink)]" : "text-[var(--ink-muted)]"}`}
     >
       {text}
     </span>

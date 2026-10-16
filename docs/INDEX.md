@@ -21,6 +21,7 @@ file before adding or moving any architecture doc.
 | `moneyview-quant-engine.md` | Canonical finance-engine specification and formulas |
 | `data-flow.md` | End-to-end workflows and calculation pipelines |
 | `storage-model.md` | SQLite, file cache, seed artifacts, retention rules |
+| `database-relationships.md` | Table inventory, declared and logical references, write/refresh order, lifecycle, known gaps |
 | `cqrs-read-write-separation.md` | Command/query ownership and projection boundaries |
 | `visualization-metrics.md` | KPI and chart semantics, ownership of metric meaning |
 | `documentation-roadmap.md` | Documentation structure, writing order, maintenance rules |
@@ -41,6 +42,8 @@ styling, or interaction behavior.
 | `MoneyView_Interaction_Rules.md` | Interaction and behavior conventions |
 | `MoneyView_Page_Wireframes.md` | Page-level layout wireframes |
 | `MoneyView_Spec_Addendum.md` | Addenda and clarifications to the above |
+| `MoneyView_Glossary.md` | Terms and Korean wording for UI copy |
+| `redesign-2026-10/` | The 2026-10 paper redesign the tokens are built from |
 
 ## Tabs (`docs/tabs/`)
 
@@ -107,6 +110,9 @@ sub-project and feeding an implementation plan.
 | `plans/2026-09-18-watchlist-peer-sync.md` | Task-by-task plan for watchlist peer sync: pure merge model, defensive peer files, run_sync under one lock, status line; the neutral seed ships as a second PR merged only after both PCs sync |
 | `2026-09-24-cases-ui-design.md` | Track C2 UI: the Cases tab -- fork a stored case with stated reasons, see why it moved by Shapley, and simulate it over stated distributions, entirely on existing endpoints |
 | `plans/2026-09-24-cases-ui.md` | Task-by-task plan for the Cases tab: caseFields' one percent<->fraction conversion, the case list and detail routes, the fork form, the Shapley why-it-moved section, and the simulate section |
+| `plans/2026-10-12-design-system-formalization.md` | Task-by-task plan for the design-system formalization: tokens, paper migration, lint rules and the lock-down |
+| `2026-10-16-market-one-screen-design.md` | Market Overview on one screen: Instruments and Spreads page tabs, a spread-figure row and a regime line (new `GET /api/market/regime`) on the first screen, and market's paper and en/ko pass |
+| `plans/2026-10-16-market-one-screen.md` | Task-by-task plan for the market one-screen page: owner gate for 25 existing-test rows, `GET /api/market/regime` with an in-memory mutation harness, pure market models, page tabs and the regime line, the five-column Instruments tab with spread figures, and the paper/en-ko pass that takes the market warning cap from 295 to 0 |
 
 ## Process SOPs (`guideline/sop/`)
 
@@ -130,6 +136,9 @@ change type.
 | `harness-optimizer.md` | Keep agent sessions focused and token-efficient |
 | `suggestion.md` | DCF valuation critique and remediation source |
 | `todo.md` | Active development-track tracking |
+| `HARNESS.md` | Work harness: stages, model routing, owner gates, plan output-contract rule and fixed rules for every coding task (in `guideline/`) |
+| `templates/work-card.md` | Fill-in work card: purpose, scope, data definition, interfaces with output contract, test plan, risks, approvals (in `guideline/`) |
+| `templates/data-definition.md` | Data definition for one table or API payload: fields, units, keys, lifecycle, sync class, consumers (in `guideline/`) |
 
 ## Generic References (`guideline/reference/`)
 
@@ -152,6 +161,7 @@ not project conventions.
 | `apps/api/AGENTS.md`, `apps/web/AGENTS.md` | Per-app agent rules (extend root `AGENTS.md`) |
 | `.claude/CLAUDE.md` | Claude-specific operating guidelines and SOP decision matrix |
 | `ERROR-LOG.md` | Confirmed-bug record (see `guideline/sop/build-error-resolver.md`) |
+| `DESIGN.md` | Design rules: token references, lint messages, what review checks |
 
 ## Out Of Scope For This Index
 

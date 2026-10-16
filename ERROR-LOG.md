@@ -26,6 +26,90 @@ reveal that; only checking the code did.
 
 An entry states what was true when it was written. Nothing updates it on its own.
 
+## 2026-10-15: dev performance headers and the saved label read data keys in English (i18n-model, f1ce93e)
+
+Date: 2026-10-15 (final review of the design-system branch, M9). The defect is in f1ce93e; d35a1f4 fixed it.
+Command: not recorded (reported in the final review of the design-system branch). No test covered those labels.
+Failure: the English headers of the dev performance tables read `total_ms`, `self_ms`, `db_ms`, and the saved-estimate label read `saved (est)`. The Korean side was correct, so a Korean reader saw nothing wrong.
+Root cause: f1ce93e's `LABELS` entries (`totalMs`, `selfMs`, `dbMs`, `saved`) used the API's data keys as their English text. The i18n catalog's second column is the English label, and the model passed the key through.
+Fix: d35a1f4 sets the English labels to "Total ms", "Self ms", "DB ms" and "Est. saved". The data keys are unchanged, so the figures and their sources are the same.
+Files changed: `apps/web/lib/i18n/labels.ts`.
+Prevention: none automated yet. A test that pins the English column of `LABELS` to a readable label would catch a key-style value; it is a follow-up in `guideline/sop/todo.md`.
+
+## 2026-10-15: detail-page down-day candles (Task 13 recurrence of the 2026-10-14 market defect); prevention: TVChart's up colour no longer falls back to the accent
+
+Date: 2026-10-15 (final review of the design-system branch, I1 of the final-fix round).
+Command: `cd apps/web && npx playwright test tests/e2e/tvchart-up-colour.spec.ts --workers=1` (run with `candleUpColour` mutated back to `upColor ?? colorAccent`: the first test fails with `"var(--down)"` received for `"var(--up)"`).
+Failure: a chart that passed `colorAccent="var(--down)"` and no `upColor` painted its up candles and wicks in `--down`. The detail chart hit this on a down day (Task 13) before `detailChartColours` began passing `upColor`; the market chart had the same defect on 2026-10-14. No test caught it, and the mismatch was only visible on screen.
+Root cause: `TVChart` computed the up colour as `upColor ?? colorAccent`. The accent is the day's line colour, so on a down day it became the up candle colour too.
+Fix: the up colour is its own value, `candleUpColour` in `apps/web/lib/candleColours.ts`, which returns `upColor ?? "var(--up)"`. `colorAccent` now colours the line and the volume fallback only. Callers that pass `upColor` (market, detail, portfolio StockDetailModal) render as before. `SpreadsSection` and `OHLCVChartCard` callers that pass no `upColor` now get `--up` where they used to get `colorAccent`, which was `--up` on every path they take.
+Files changed: `apps/web/lib/candleColours.ts` (new), `apps/web/components/charts/TVChart.tsx`, `apps/web/tests/e2e/tvchart-up-colour.spec.ts` (new).
+Prevention: `tvchart-up-colour.spec.ts` pins the up colour under an accent of `--down`. The colour choice lives in a pure function so the test does not need a page. Any new chart prop that sets a series colour needs its own default, not a fallback to the accent.
+
+## 2026-10-15: after a ticker switch the verdict, strip, company-line price and full report showed the previous ticker's DCF
+
+Date: 2026-10-15 (final review of the corporate one-screen plan). The defect predates this branch: the old tile at a3ec630 read the same page state.
+Command: `cd apps/web && npx playwright test tests/e2e/corporate-one-screen.spec.ts -g "a ticker switch" --workers=2`
+Failure: after Refresh DCF on AAPL, a switch to MSFT through Company Search left the verdict block on `data-state="valued"` with AAPL's intrinsic value, the strip showed AAPL's DCF, and the company line read "Microsoft · ... · $210.4". Selecting MSFT from a comparison row opened the Intrinsic DCF modal headed "MSFT" with AAPL's $240.5, and its Raw data tab reported "Full report loaded for AAPL (mockdcf001)".
+Root cause: `dcfStreamResult` is page state with no ticker scope. `selectTicker` changes `assumptions` but does not clear the stream result, so `dcfDisplayData` (`dcfStreamResult ?? cache for the ticker`) kept AAPL's result. The verdict, the strip, the company-line price and the modal all read `dcfData`. `dcfFullReport` had the same gap, and Load Full Report posted the previously requested snapshot, which was AAPL's.
+Fix: the stream result and the full report are used only when their own `ticker` equals the current ticker (`sourceDataTicker`). Otherwise the page falls back to the cache for the current ticker, or to null. Load Full Report posts the current ticker's snapshot.
+Files changed: `apps/web/app/corporate/page.tsx`, `apps/web/tests/e2e/corporate-one-screen.spec.ts` (`a ticker switch`).
+Prevention: every per-ticker DCF value shown on the page must carry its ticker and be gated by the current one. The `a ticker switch` tests read the verdict, the strip, the company line and the Raw data full-report status after both a search switch and a comparison-row switch. A new page state that holds a per-ticker result needs the same gate.
+
+## 2026-10-15: DCF and sensitivity sent inputs up to 250 ms old after hydration, a slider move or a ticker switch
+
+Date: 2026-10-15 (Task 11 fix round 1 of the corporate one-screen plan, before commit).
+Command: `cd apps/web && npx playwright test tests/e2e/corporate-one-screen.spec.ts -g "uses the inputs on screen" --workers=2`
+Failure: with the AAPL metrics response held and then released with esg_penalty 41, fcff 150 and reinvestment 60 (the seed was 32, 109 and 44), the assumption table showed 41.0 and 60.0%, but Refresh DCF sent esg_penalty 32, fcff 109 and reinvestment 44 in its stream request, and the sensitivity tab's Calculate sent the same old values. The test freezes the clock after boot, so only a read of the inputs at click time can reach a request; the old values came from the debounced copy. A Refresh made within 250 ms of a hydration, a slider edit or a ticker switch sent the previous inputs, and after a ticker switch the previous ticker.
+Root cause: `activeDcfSnapshot` was built from `useDebounce(assumptions, 250)`. The debounce is from 25e9e33 (2026-04-08). Since 114231f (2026-04-21) that snapshot is the one Refresh DCF sends and the sensitivity tab receives. `assumptions` changes at once when metrics hydrate (`fromApiMetrics`), when a slider moves and when the ticker changes, but the snapshot kept the old values for up to 250 ms. The stale-DCF check compared against the same debounced copy, so it did not flag the gap either. The debounced copy is still right for the metrics save; only the DCF snapshot used it wrongly.
+Fix: `snapshotOf(assumptions)` in `corporateUtils.ts` is the one mapping from assumptions to DCF inputs. The page's snapshot memo, Refresh DCF and the stale check read `assumptions` through it, and the modal receives the same snapshot. The debounce stays for the metrics save. The sensitivity tab's Current row shows a dash while the page's DCF is stale (second commit of the round).
+Files changed: `apps/web/app/corporate/corporateUtils.ts`, `apps/web/app/corporate/page.tsx`, `apps/web/tests/e2e/helpers/corporatePageMock.ts` (`holdAaplMetrics`, `aaplMetricsPatch` options), `apps/web/tests/e2e/corporate-one-screen.spec.ts` (two hydration tests), `apps/web/tests/e2e/corporate-model.spec.ts` (`snapshotOf` unit test).
+Prevention: the hydration tests hold the metrics response, release it with values that differ from the seed, and pause the clock before the release, so any read through the debounce fails them. The sensitivity twin covers the other consumer of the snapshot. The `snapshotOf` unit test pins the mapping field by field, so a dropped field fails it. Any new consumer of the DCF inputs must read `snapshotOf(assumptions)`, not a debounced or cached copy.
+
+## 2026-10-14: lower tab bar widened the corporate page to 456 px at 375-390 px
+
+Date: 2026-10-14 (Task 6 of the corporate one-screen plan, before commit).
+Command: `cd apps/web && npx playwright test tests/e2e/corporate-viewport.spec.ts tests/e2e/high-risk-render-regression.spec.ts tests/e2e/responsive-accessibility.spec.ts --workers=2`
+Failure: three overflow checks failed at 375 and 390 px (`scrollWidth` 416 to 423 against a 375 or 390 viewport). The page's `main` was 456 px wide on every lower tab, including Core Diagnostics, which was the first tab to fail.
+Root cause: the tab strip (`Tabs`, a `flex` row with `overflow-x-auto`) has a min-content width equal to its three labels laid out in one row, about 392 px. A block's intrinsic width includes its children's min-content contribution, and `overflow-x-auto` does not remove that contribution, so the strip widened `main`. Task 5's grid arrangement had hidden this. The comparison table inside the `max-h-80 overflow-y-auto` wrapper had the same effect once a table was loaded.
+Fix: `[contain:inline-size]` on the tab strip (`CorporateLowerTabs.tsx`) and on the comparison scroll wrapper (`TargetStockComparisonSection.tsx`). Containment makes the strip's intrinsic inline size zero, so it takes the container width and scrolls its labels inside itself. With the fix, `main` is 390 px wide and the strip has `scrollWidth` 392 with `clientWidth` 326.
+Files changed: `apps/web/app/corporate/components/CorporateLowerTabs.tsx`, `apps/web/app/corporate/components/TargetStockComparisonSection.tsx`.
+Prevention: the 375 and 390 px overflow specs run on every lower tab (`corporate-viewport`, `high-risk-render-regression`, `responsive-accessibility`). Root fix for the shell: `components/ui/AppShell.tsx` gives the shell root and `main` `w-full min-w-0`, because `body` is a centred flex row and a content-sized shell let any child's min-content widen the whole page. Any new block that contains a `flex` row with `overflow-x-auto`, or a table in a scroll wrapper, needs `[contain:inline-size]` or `min-w-0` plus a width constraint above it, and a 390 px check on the tab it sits in.
+
+## 2026-10-14: corporate first screen overflowed a 390 px viewport after the dense state
+
+Date: 2026-10-14 (Task 5 of the corporate one-screen plan, before commit).
+Command: `npx playwright test --workers=2` (full suite), first run with the new first screen.
+Failure: `high-risk-render-regression.spec.ts:118` ("corporate diagnostics and comparison chart panels stay rendered after dense state changes") failed. At 390 px after Refresh DCF and a custom comparison, `document.documentElement.scrollWidth` was 740 px and the page was about 1089 px wide. The change had moved the diagnostics and comparison sections out of their grid into a block stack. A second attempt, a single-column grid wrapper, made `corporate-viewport.spec.ts:23` and `responsive-accessibility.spec.ts:79` fail (diagnostics panels 34 px wide).
+Root cause: `body` is a flex row with `justify-center`, so the app shell takes its min-content width. A block child contributes its full min-content width (the comparison table and the 983 px recharts wrapper), while a grid whose tracks are `minmax(0, 1fr)` does not. The lower stack had lost the grid that protected it. A single-column grid wrapper was not enough: `TargetStockComparisonSection` carries `col-span-6`, which created implicit columns.
+Fix: restored the HEAD arrangement of the lower stack, `<section className="grid grid-cols-1 gap-4 xl:grid-cols-6">` with a `div.space-y-4 xl:col-span-4` around `CorporateDiagnosticsSection` and `TargetStockComparisonSection` as the direct child. The three affected specs and the full suite then passed (396 passed, 8 skipped).
+Files changed: apps/web/app/corporate/page.tsx.
+Prevention: moving a section out of a grid into a block stack changes min-content propagation, and fixed-width charts or wide tables then widen the whole page. After any layout move on a page with charts, check the 390 px spec (`high-risk-render-regression.spec.ts`) after a dense state, not only the initial render.
+
+## 2026-10-14: market overview candles took the day's direction colour for every up candle
+
+Date: 2026-10-14
+Command: `npx playwright test tests/e2e/candle-direction.spec.ts` (new test, DS Task 9 fix round 1)
+Failure: in the S&P 500 detail dialog on `/`, up candles were painted in the colour of that day's index change. On a down day every up candle was blue, so up and down candles could not be told apart. The new two-sided test counted 0 up-coloured pixels.
+Root cause: `components/market/MarketOverviewClient.tsx` passed `colorAccent={chartColor}` (the day-change sign colour, meant for line series) and no `upColor`; `TVChart` falls back to `colorAccent` for the up-candle colour. Present since 5fdd826 (2026-04-17). `candle-colour.spec.ts` only asserted `up + down > 50` and its fixture has no down bars, so neither a swap nor this could fail it.
+Fix: `upColor="var(--up)"` passed explicitly (efec33b). New `tests/e2e/candle-direction.spec.ts` with a mixed up/down series asserts up > 50 and down > 50 separately; reverting the fix makes it fail (up received 0), checked by the controller.
+Files changed: apps/web/components/market/MarketOverviewClient.tsx, apps/web/tests/e2e/candle-direction.spec.ts
+Prevention: a colour test must use data that exercises every colour it claims to check, and count each colour separately; a sum of two colours cannot detect one replacing the other.
+
+## 2026-10-13: chart hover cursor filled with an undefined variable
+
+Date: 2026-10-13
+Command: `npm run design:baseline` (unknownVar check, Task 3 of the design-system plan)
+Failure: `lib/chartConfig.ts` gave the Recharts tooltip cursor `fill: "var(--bg-muted)"`. No
+`--bg-muted` was ever defined, so the fill was invalid at computed-value time and the cursor
+fell back to whatever the SVG inherited. No error, no warning.
+Root cause: a token name typed from memory; nothing compared `var(--x)` references with the
+defined set.
+Fix: `var(--surface-muted)`, the muted ground the cursor was meant to use.
+Files changed: apps/web/lib/chartConfig.ts, apps/web/eslint-rules/no-raw-design-values.mjs
+Prevention: the lint rule's `unknownVar` check reports any `var(--x)` that
+app/tokens.generated.css does not define (Task 14 makes it an error).
+
 ## 2026-09-29: a 404 on the backend-port lookup failed the whole boot
 
 Date: 2026-09-29

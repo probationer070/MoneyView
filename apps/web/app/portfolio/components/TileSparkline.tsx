@@ -1,3 +1,5 @@
+import { windowTone } from "@/lib/sparklineTone";
+
 /**
  * A sparkline drawn as a single inline <svg>.
  *
@@ -53,7 +55,7 @@ export function TileSparkline({ data, height = 40 }: TileSparklineProps) {
       <path
         d={path}
         fill="none"
-        stroke="var(--accent)"
+        stroke={windowTone(points) === "up" ? "var(--up)" : "var(--down)"}
         strokeWidth={2}
         // The viewBox is stretched to the tile width, which would stretch the stroke with
         // it and leave every tile a different line weight.

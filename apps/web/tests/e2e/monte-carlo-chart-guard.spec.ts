@@ -97,3 +97,16 @@ test("simulation lab surfaces invalid-data states and preserved warnings for deg
   await expect(page.getByRole("heading", { name: "Return Histogram with Fitted Normal Curve" })).toBeVisible();
   await expect(page.getByText("CDF comparison data is invalid")).toBeVisible();
 });
+
+test.describe("the simulation lab in Korean", () => {
+  test.use({ locale: "ko-KR" });
+
+  test("the title and a bilingual header render in Korean; a figure renders", async ({ page }) => {
+    await page.goto("/monte-carlo", { waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("heading", { name: "시뮬레이션 랩", exact: true })).toBeVisible({ timeout: 60_000 });
+    // Default principal 10,000,000 KRW is shown in 10,000 KRW units.
+    await expect(page.getByText("1,000 M KRW").first()).toBeVisible();
+    await page.getByRole("tab", { name: /상관관계 모형/ }).click();
+    await expect(page.getByRole("columnheader", { name: "자산", exact: true })).toBeVisible();
+  });
+});

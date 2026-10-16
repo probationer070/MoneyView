@@ -18,8 +18,9 @@ export function LoadingState({
   if (variant === "spinner") {
     return (
       <div className={clsx("flex flex-col items-center justify-center gap-3 py-12", className)}>
-        <div className="h-8 w-8 rounded-full border-2 border-[var(--border-soft)] border-t-[var(--state-info)] animate-spin" />
-        {label && <p className="text-[length:var(--type-helper)] text-[var(--text-muted)]">{label}</p>}
+        {/* rounded-full: spinner */}
+        <div className="h-8 w-8 rounded-full border-2 border-[var(--grid)] border-t-[var(--brand)] animate-spin" />
+        {label && <p className="type-small text-[var(--ink-muted)]">{label}</p>}
       </div>
     );
   }
@@ -30,13 +31,15 @@ export function LoadingState({
       <div className={clsx("flex flex-col gap-2 py-4", className)}>
         {label && (
           <div className="flex items-center justify-between">
-            <p className="text-[length:var(--type-helper)] text-[var(--text-muted)]">{label}</p>
-            <p className="text-[length:var(--type-helper)] font-medium text-[var(--text-primary)] tabular-nums">{pct}%</p>
+            <p className="type-small text-[var(--ink-muted)]">{label}</p>
+            <p className="type-small text-[var(--ink)] tabular-nums">{pct}%</p>
           </div>
         )}
-        <div className="h-1.5 w-full rounded-full bg-[var(--bg-subtle)] overflow-hidden">
+        {/* rounded-full: track */}
+        <div className="h-1.5 w-full rounded-full bg-[var(--surface)] overflow-hidden">
+          {/* rounded-full: fill */}
           <div
-            className="h-full bg-[var(--state-info)] rounded-full transition-all duration-[var(--duration-normal)]"
+            className="h-full bg-[var(--brand)] rounded-full transition-all duration-[var(--duration-normal)]"
             style={{ width: `${pct}%` }}
           />
         </div>
@@ -47,10 +50,10 @@ export function LoadingState({
   // skeleton (default)
   return (
     <div className={clsx("flex flex-col gap-3", className)}>
-      <div className="h-5 w-1/3 rounded-[var(--radius-sm)] bg-[var(--bg-subtle)] animate-pulse" />
-      <div className="h-4 w-full rounded-[var(--radius-sm)] bg-[var(--bg-subtle)] animate-pulse" />
-      <div className="h-4 w-5/6 rounded-[var(--radius-sm)] bg-[var(--bg-subtle)] animate-pulse" />
-      <div className="h-4 w-4/6 rounded-[var(--radius-sm)] bg-[var(--bg-subtle)] animate-pulse" />
+      <div className="h-5 w-1/3 rounded-[var(--radius-2)] bg-[var(--surface)] animate-pulse" />
+      <div className="h-4 w-full rounded-[var(--radius-2)] bg-[var(--surface)] animate-pulse" />
+      <div className="h-4 w-5/6 rounded-[var(--radius-2)] bg-[var(--surface)] animate-pulse" />
+      <div className="h-4 w-4/6 rounded-[var(--radius-2)] bg-[var(--surface)] animate-pulse" />
     </div>
   );
 }
@@ -60,7 +63,7 @@ export function SkeletonCard({ className }: { className?: string }) {
   return (
     <div
       className={clsx(
-        "rounded-[var(--radius-md)] border border-[var(--border-soft)] bg-[var(--bg-subtle)] animate-pulse",
+        "border border-[var(--line)] bg-[var(--surface)] animate-pulse",
         className
       )}
     />

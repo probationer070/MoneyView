@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { mockCorporatePageApi } from "./helpers/corporatePageMock";
+import { openDetailTab, openLowerTab } from "./helpers/corporateDcf";
 
 // The corporate dashboard has no probability model, so it must not put a number under a
 // probability label.
@@ -28,7 +29,9 @@ test.describe("the corporate dashboard's scenario labels", () => {
     // Positive control: the KPI row and the chart suite are both on screen, so the absences
     // below are absences from a rendered page.
     await expect(page.getByRole("button", { name: /ROIC - WACC/ })).toBeVisible();
+    await openLowerTab(page, "Core Diagnostics");
     await expect(page.getByText("Hurdle Rate Decomposition").first()).toBeVisible({ timeout: 60_000 });
+    await openLowerTab(page, "DCF");
     await expect(page.getByText("DCF Core Modules").first()).toBeVisible({ timeout: 60_000 });
 
     for (const label of FORBIDDEN_LABELS) {
@@ -47,6 +50,7 @@ test.describe("the corporate dashboard's scenario labels", () => {
     await expect(modal).toBeVisible({ timeout: 30_000 });
     // The heading, not the text: the Export Affordances blurb further down the modal ends
     // "...after reviewing raw datasets", and getByText matches case-insensitively.
+    await openDetailTab(modal, "Raw data");
     await modal.getByRole("heading", { name: "Raw Datasets" }).click();
 
     const datasetRows = modal.locator("table tbody tr");

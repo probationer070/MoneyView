@@ -53,8 +53,8 @@ export function RecordDecisionForm({ watchlist = [] }: { watchlist?: TickerSearc
   };
 
   return (
-    <section className="mb-6 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-5">
-      <h2 className="text-sm font-bold text-[var(--text-primary)]">Record a decision</h2>
+    <section className="mb-6 border border-[var(--line)] bg-[var(--surface-raised)] p-5">
+      <h2 className="type-panel-title text-[var(--ink)]">Record a decision</h2>
       {/* A real <form>, not a click handler on a bare button: Enter submits,
           the controls are announced as a group, and the browser supplies the
           semantics instead of custom interaction code. */}
@@ -71,37 +71,37 @@ export function RecordDecisionForm({ watchlist = [] }: { watchlist?: TickerSearc
           items={watchlist}
           className="min-w-[14rem]"
         />
-        <label className="flex flex-col gap-1 text-xs text-[var(--text-secondary)]">
+        <label className="flex flex-col gap-1 type-small text-[var(--ink-secondary)]">
           Action
           <select
             value={action}
             onChange={(event) => setAction(event.target.value as DecisionAction)}
-            className="rounded-[var(--radius-sm)] border border-[var(--border-default)] bg-transparent px-2 py-1 text-[var(--text-primary)]"
+            className="rounded-[var(--radius-1)] border border-[var(--line)] bg-transparent px-2 py-1 text-[var(--ink)]"
           >
             {DECISION_ACTIONS.map((value) => (
               <option key={value} value={value}>{value}</option>
             ))}
           </select>
         </label>
-        <label className="flex flex-1 flex-col gap-1 text-xs text-[var(--text-secondary)]">
+        <label className="flex flex-1 flex-col gap-1 type-small text-[var(--ink-secondary)]">
           Memo
           <input
             value={memo}
             onChange={(event) => setMemo(event.target.value)}
-            className="rounded-[var(--radius-sm)] border border-[var(--border-default)] bg-transparent px-2 py-1 text-[var(--text-primary)]"
+            className="rounded-[var(--radius-1)] border border-[var(--line)] bg-transparent px-2 py-1 text-[var(--ink)]"
           />
         </label>
         <button
           type="submit"
           disabled={mutation.isPending}
           aria-busy={mutation.isPending}
-          className="rounded-[var(--radius-sm)] border border-[var(--border-default)] px-3 py-1.5 text-sm font-medium text-[var(--text-primary)] disabled:opacity-50"
+          className="rounded-[var(--radius-1)] border border-[var(--line)] px-3 py-1.5 type-body text-[var(--ink)] disabled:opacity-50"
         >
           {mutation.isPending ? "Recording…" : "Record decision"}
         </button>
       </form>
       {error && (
-        <p role="alert" className="mt-2 text-xs text-[var(--chart-negative)]">{error}</p>
+        <p role="alert" className="mt-2 type-small text-[var(--status-error-ink)]">{error}</p>
       )}
     </section>
   );

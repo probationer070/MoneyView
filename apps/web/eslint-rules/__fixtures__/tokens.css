@@ -1,0 +1,15 @@
+:root {
+  --bg-surface: #ffffff;
+  --chart-grid: #f0f2ec;
+  --radius-sm: 4px;
+  --shadow-modal: 0 4px 24px rgba(0, 0, 0, 0.08);
+  --type-caption: 11px;
+  --fixture-only: #000000;
+  --brand: #fa3600;
+  --brand-soft: #ffe6dc;
+  --brand-text: #c42b00;
+  --on-brand: #101010;
+  --ink: #282828;
+  --radius-2: 4px;
+  --old-alias: #ffffff; /* deprecated: use --bg-surface */
+}

@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { mockCorporatePageApi, type CorporatePageMockStats } from "./helpers/corporatePageMock";
 import { mockPortfolioPageApi, type PortfolioPageMockStats } from "./helpers/portfolioPageMock";
 import { openPortfolioPanel, portfolioModal } from "./helpers/portfolioPanels";
+import { lowerPanel, openLowerTab } from "./helpers/corporateDcf";
 
 const CORPORATE_DCF_CACHE_KEY = "moneyview:corporate-dcf-cache:v1";
 const CORPORATE_COMPARISON_CACHE_KEY = "moneyview:corporate-comparison-cache:v1";
@@ -42,8 +43,9 @@ test("corporate first load keeps heavy calculation zones idle until refresh", as
   await page.goto("/corporate", { waitUntil: "domcontentloaded" });
 
   await expect(page.getByRole("heading", { name: /Corporate Analysis/i })).toBeVisible({ timeout: 60_000 });
-  await expect(page.getByText("DCF stays idle on first load until you refresh it.")).toBeVisible();
+  await expect(page.getByTestId("corporate-verdict")).toContainText("DCF not calculated");
   await expect(page.getByText("Source data stays idle on first load until refreshed.")).toBeVisible();
+  await openLowerTab(page, "Target Stock Comparison");
   await expect(page.getByText(/Comparison stays idle on first load\./)).toBeVisible();
   await page.waitForTimeout(300);
   expect(stats.dcfRequests).toBe(0);
@@ -193,8 +195,10 @@ test("corporate renders cached calculation results without auto-fetch and refres
   await page.goto("/corporate", { waitUntil: "domcontentloaded" });
 
   await expect(page.getByRole("heading", { name: /Corporate Analysis/i })).toBeVisible({ timeout: 60_000 });
-  await expect(page.getByRole("button", { name: /^Intrinsic DCF(?! Value)/i })).toContainText("$199.9");
-  await expect(page.getByText("Last updated")).toHaveCount(3);
+  await expect(page.getByTestId("corporate-verdict").locator('[data-part="intrinsic"]')).toContainText("$199.9");
+  await expect(page.getByTestId("source-data-status")).toContainText("Last updated");
+  await openLowerTab(page, "Target Stock Comparison");
+  await expect(page.getByText("Last updated")).toHaveCount(2); // the header's DCF time and the comparison status
   await expect(page.getByRole("cell", { name: "AAPL" }).first()).toBeVisible();
   await page.waitForTimeout(300);
   expect(stats.dcfRequests).toBe(0);
@@ -205,13 +209,16 @@ test("corporate renders cached calculation results without auto-fetch and refres
 
   await page.getByRole("button", { name: "Refresh DCF" }).click();
   await expect.poll(() => stats.dcfRequests).toBe(1);
-  await expect(page.getByRole("button", { name: /^Intrinsic DCF(?! Value)/i })).toContainText("$240.5");
+  await openLowerTab(page, "Summary");
+  await expect(page.getByTestId("corporate-verdict").locator('[data-part="intrinsic"]')).toContainText("$240.5");
 
+  await page.getByRole("button", { name: "Assumption options" }).click();
   await page.getByRole("button", { name: "Refresh source data" }).click();
   await expect.poll(() => stats.metricHistoryRequests).toBe(1);
   await expect.poll(() => stats.quarterlyRequests).toBe(1);
   await expect.poll(() => stats.ohlcvRequests).toBe(1);
 
+  await openLowerTab(page, "Target Stock Comparison");
   await page.getByRole("button", { name: "Refresh comparison" }).click();
   await expect.poll(() => stats.comparisonRequests).toBe(1);
   await expect(page.getByRole("cell", { name: "GOOGL" }).first()).toBeVisible();
@@ -229,13 +236,13 @@ test("corporate page refresh restores the selected ticker without auto-fetching 
   // and its suggestions are a real listbox whose children carry role="option". The
   // behaviour under test -- picking a company by name selects its ticker -- is unchanged.
   await page.getByRole("option", { name: "Microsoft" }).click();
-  await expect(page.getByText(/Microsoft: hurdle rate/i)).toBeVisible();
+  await expect(page.getByTestId("corporate-company-line")).toContainText("Microsoft");
 
   await page.reload({ waitUntil: "domcontentloaded" });
 
   await expect(page.getByRole("heading", { name: /Corporate Analysis/i })).toBeVisible({ timeout: 60_000 });
-  await expect(page.getByText(/Microsoft: hurdle rate/i)).toBeVisible();
-  await expect(page.getByRole("button", { name: /^Intrinsic DCF(?! Value)/i })).toContainText("Refresh to calculate");
+  await expect(page.getByTestId("corporate-company-line")).toContainText("Microsoft");
+  await expect(page.getByTestId("corporate-verdict")).toContainText("DCF not calculated");
   await page.waitForTimeout(300);
   expect(stats.dcfRequests).toBe(0);
   expect(stats.comparisonRequests).toBe(0);
@@ -308,10 +315,12 @@ test("corporate page refresh labels stale source-data cache for a different sele
 
   await page.goto("/corporate", { waitUntil: "domcontentloaded" });
 
-  await expect(page.getByText(/Microsoft: hurdle rate/i)).toBeVisible({ timeout: 60_000 });
-  await expect(page.getByRole("button", { name: /^Intrinsic DCF(?! Value)/i })).toContainText("Refresh to calculate");
-  await expect(page.getByRole("button", { name: /^Intrinsic DCF(?! Value)/i })).not.toContainText("$199.9");
+  await expect(page.getByTestId("corporate-company-line")).toContainText("Microsoft", { timeout: 60_000 });
+  const verdict = page.getByTestId("corporate-verdict");
+  await expect(verdict).toContainText("DCF not calculated");
+  await expect(verdict).not.toContainText("$199.9");
   await expect(page.getByText("Cached source data is for AAPL. Refresh for MSFT.")).toBeVisible();
+  await page.getByRole("button", { name: "Assumption options" }).click();
   await expect(page.getByText("Growth Rate now stays on the stable CAGR path. Annual growth rates remain available in View Details for context.")).toBeVisible();
   await page.waitForTimeout(300);
   expect(stats.dcfRequests).toBe(0);
@@ -585,13 +594,13 @@ test("a refused single-ticker DCF shows the refusal as content, not an error or 
       body: JSON.stringify({ detail: { code: "non_positive_fcff", message: "Free cash flow is zero or negative over the forecast, so the model cannot value it." } }) }));
   await page.goto("/corporate", { waitUntil: "domcontentloaded" });
   await expect(page.getByRole("heading", { name: /Corporate Analysis/i })).toBeVisible({ timeout: 60_000 });
-  await expect(page.getByRole("button", { name: /^Intrinsic DCF(?! Value)/i })).toContainText("$199.9");
+  await expect(page.getByTestId("corporate-verdict").locator('[data-part="intrinsic"]')).toContainText("$199.9");
   await page.getByRole("button", { name: "Refresh DCF" }).click();
   const refusal = page.getByTestId("dcf-refusal");
   await expect(refusal).toContainText("zero or negative over the forecast");
   await expect(page.getByText(/DCF stream failed/)).toHaveCount(0);
   // No number stands in for the refused value, including a cached floored one.
-  await expect(page.getByRole("button", { name: /^Intrinsic DCF(?! Value)/i })).not.toContainText("$");
+  await expect(page.getByTestId("corporate-verdict")).not.toContainText("$");
 });
 
 const REFUSAL_BODY = JSON.stringify({ detail: { code: "non_positive_fcff", message: "Free cash flow is zero or negative over the forecast, so the model cannot value it." } });
@@ -607,7 +616,7 @@ async function openCorporateWithCachedDcf(page: Page) {
   await page.evaluate(([key, value]) => window.sessionStorage.setItem(key as string, JSON.stringify(value)), [CORPORATE_DCF_CACHE_KEY, FLOORED_CACHE]);
   await page.reload({ waitUntil: "domcontentloaded" });
   await expect(page.getByRole("heading", { name: /Corporate Analysis/i })).toBeVisible({ timeout: 60_000 });
-  await expect(page.getByRole("button", { name: /^Intrinsic DCF(?! Value)/i })).toContainText("$199.9");
+  await expect(page.getByTestId("corporate-verdict").locator('[data-part="intrinsic"]')).toContainText("$199.9");
 }
 
 test("a refusal also clears the cached value, so a reload does not bring the floored number back", async ({ page }) => {
@@ -618,14 +627,16 @@ test("a refusal also clears the cached value, so a reload does not bring the flo
   await expect(page.getByTestId("dcf-refusal")).toBeVisible();
   await page.reload({ waitUntil: "domcontentloaded" });
   await expect(page.getByRole("heading", { name: /Corporate Analysis/i })).toBeVisible({ timeout: 60_000 });
-  await expect(page.getByRole("button", { name: /^Intrinsic DCF(?! Value)/i })).not.toContainText("$199.9");
+  await expect(page.getByTestId("corporate-verdict")).not.toContainText("$199.9");
 });
 
 test("the full report shows a refusal as content, not a generic API error", async ({ page }) => {
   await mockCorporatePageApi(page);
   await page.route("**/api/v1/corporate/dcf/*/report", (route) => route.fulfill({ status: 422, contentType: "application/json", body: REFUSAL_BODY }));
   await openCorporateWithCachedDcf(page);
-  await page.getByRole("button", { name: "View Full Report" }).click();
+  await openLowerTab(page, "DCF");
+  await lowerPanel(page).getByRole("button", { name: "Load Full Report" }).click();
+  await openLowerTab(page, "Summary");
   await expect(page.getByTestId("dcf-refusal")).toContainText("zero or negative over the forecast");
   await expect(page.getByText(/API error: 422/)).toHaveCount(0);
 });

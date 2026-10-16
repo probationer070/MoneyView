@@ -5,6 +5,7 @@ import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Tooltip 
 import { ChartPanelFrame } from "@/components/charts/ChartPanelFrame";
 import { ResponsiveChart } from "@/components/ui/ResponsiveChart";
 import { AXIS_TICK_STYLE, withTooltipProps } from "@/lib/chartConfig";
+import { tokens } from "@/lib/tokens.generated";
 
 interface RadarEntry {
     subject: string;
@@ -20,12 +21,12 @@ export const DiagnosticRadar: React.FC<{ data: RadarEntry[] }> = ({ data }) => {
             empty={data.length === 0}
             emptyTitle="No diagnostic radar data available"
             emptyDescription="Refresh diagnostics to load the strategic positioning radar."
-            className="h-[400px] min-h-[400px] min-w-0 w-full bg-[var(--surface-panel)]"
+            className="h-[400px] min-h-[400px] min-w-0 w-full bg-[var(--surface-raised)]"
         >
             <div className="mt-4 h-full">
             <ResponsiveChart minWidth={1} minHeight={1}>
                 <RadarChart cx="50%" cy="50%" outerRadius="70%" data={data}>
-                    <PolarGrid stroke="var(--border)" />
+                    <PolarGrid stroke="var(--line)" />
                     <PolarAngleAxis dataKey="subject" tick={AXIS_TICK_STYLE} />
                     <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} />
                     
@@ -33,18 +34,18 @@ export const DiagnosticRadar: React.FC<{ data: RadarEntry[] }> = ({ data }) => {
                     <Radar 
                         name="Target Security" 
                         dataKey="score" 
-                        stroke="var(--accent)"
-                        fill="var(--accent)"
-                        fillOpacity={0.5} 
+                        stroke="var(--brand)"
+                        fill="var(--brand)"
+                        fillOpacity={Number(tokens.chart["area-opacity"])} 
                     />
                     
                     {/* Peer Overlay */}
                     <Radar 
                         name="Industry Average" 
                         dataKey="peer" 
-                        stroke="var(--text-muted)"
-                        fill="var(--text-muted)"
-                        fillOpacity={0.2} 
+                        stroke="var(--ink-muted)"
+                        fill="var(--ink-muted)"
+                        fillOpacity={Number(tokens.chart["area-opacity"])} 
                     />
                     
                     <Tooltip {...withTooltipProps()} />

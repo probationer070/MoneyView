@@ -1,0 +1,22 @@
+/* MoneyView — compiled from tokens.json for this canvas */
+:root, [data-theme="void"] {--bg:#101010;--surface:#171716;--surface-raised:#1f1f1d;--surface-sunken:#0a0a0a;--grid:#262624;--line:#3a3a37;--line-strong:#72726f;--ink:#f5f5ed;--ink-secondary:#c9c9c3;--ink-muted:#9a9a95;--ink-disabled:#5a5a57;--brand:#fa3600;--brand-text:#ff6a3d;--brand-soft:#2a130b;--on-brand:#101010;--focus-ring:var(--brand);--link:var(--brand-text);--up:#ff5c6c;--up-soft:#3a1418;--down:#4c9aff;--down-soft:#0f1f3a;--flat:var(--ink-muted);--chart-1:var(--brand);--chart-2:#35d0ba;--chart-3:#d8c7a0;--chart-4:#a9a9a3;--chart-5:#e8d44d;}
+[data-theme="paper"] {--bg:#ffffff;--surface:#f5f5ed;--surface-raised:#f0f0f0;--surface-sunken:#fafaf6;--grid:#e6e6e0;--line:#b3b3af;--line-strong:#72726f;--ink:#282828;--ink-secondary:#414140;--ink-muted:#626260;--ink-disabled:#b4b4b0;--brand:#fa3600;--brand-text:#c42b00;--brand-soft:#ffe6dc;--on-brand:#101010;--focus-ring:var(--brand);--link:var(--brand-text);--up:#d21f3c;--up-soft:#fdeef0;--down:#1e5bd8;--down-soft:#e3ecfd;--flat:var(--ink-muted);--chart-1:var(--brand);--chart-2:#0e8c7c;--chart-3:#8a7650;--chart-4:#626260;--chart-5:#9a8600;}
+:root {--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:20px;--space-6:24px;--space-8:32px;--space-16:64px;--space-32:128px;--radius-0:0px;--radius-1:2px;--radius-2:4px;--radius-pill:999px;--bp-desktop:992px;--bp-tablet:768px;--bp-mobile:480px;--content-max:1280px;--gutter:24px;--hairline:1px;--font-sans:"Host Grotesk", "Pretendard", system-ui, sans-serif;--font-mono:"Geist Mono", "Pretendard", ui-monospace, monospace;}
+@font-face {font-family:'Host Grotesk';src:url('fonts/HostGrotesk-Variable-latin.woff2') format('woff2');font-weight:300 800;font-style:normal;font-display:swap;}
+@font-face {font-family:'Pretendard';src:url('fonts/PretendardVariable.woff2') format('woff2');font-weight:45 920;font-style:normal;font-display:swap;}
+@font-face {font-family:'Geist Mono';src:url('fonts/GeistMono-400-latin.woff2') format('woff2');font-weight:400;font-style:normal;font-display:swap;}
+@font-face {font-family:'Geist Mono';src:url('fonts/GeistMono-500-latin.woff2') format('woff2');font-weight:500;font-style:normal;font-display:swap;}
+@font-face {font-family:'Geist Mono';src:url('fonts/GeistMono-600-latin.woff2') format('woff2');font-weight:600;font-style:normal;font-display:swap;}
+.display{font-family:var(--font-sans);font-size:62px;line-height:64px;font-weight:600;letter-spacing:-0.03em;}
+.heading-1{font-family:var(--font-sans);font-size:53px;line-height:58px;font-weight:600;letter-spacing:-0.025em;}
+.heading-2{font-family:var(--font-sans);font-size:44px;line-height:50px;font-weight:600;letter-spacing:-0.02em;}
+.heading-3{font-family:var(--font-sans);font-size:36px;line-height:42px;font-weight:500;letter-spacing:-0.015em;}
+.heading-4{font-family:var(--font-sans);font-size:31px;line-height:38px;font-weight:500;letter-spacing:-0.01em;}
+.heading-5{font-family:var(--font-sans);font-size:27px;line-height:34px;font-weight:500;letter-spacing:-0.01em;}
+.body-lg{font-family:var(--font-sans);font-size:18px;line-height:30px;font-weight:400;letter-spacing:-0.005em;}
+.body{font-family:var(--font-sans);font-size:15px;line-height:24px;font-weight:400;}
+.label{font-family:var(--font-sans);font-size:15px;line-height:20px;font-weight:600;}
+.figure{font-family:var(--font-mono);font-size:44px;line-height:44px;font-weight:500;letter-spacing:-0.03em;}
+.mono-link{font-family:var(--font-mono);font-size:16px;line-height:20px;font-weight:500;letter-spacing:0.02em;}
+.mono{font-family:var(--font-mono);font-size:13px;line-height:18px;font-weight:500;}
+.caption{font-family:var(--font-mono);font-size:11px;line-height:14px;font-weight:500;letter-spacing:0.08em;}

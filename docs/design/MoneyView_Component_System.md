@@ -1,5 +1,7 @@
 # MoneyView Component System
 
+> Values and component looks are superseded by DESIGN.md and /dev/design (2026-10 paper redesign).
+
 > Complete component inventory and specification for the MoneyView design system.
 > Components are organized by layer: global primitives, data display, and page-specific composites.
 
@@ -34,13 +36,13 @@ components/
 
 - **File**: `components/ui/AppShell.tsx`
 - **Status**: Existing
-- **Purpose**: Root layout wrapper containing sidebar and main content area
+- **Purpose**: Root layout wrapper containing the top bar and main content area
 
-### 2.2 `Sidebar`
+### 2.2 `TopNav`
 
-- **File**: `components/ui/Sidebar.tsx`
+- **File**: `components/ui/TopNav.tsx`
 - **Status**: Existing
-- **Purpose**: Primary navigation with the five tab links
+- **Purpose**: Primary navigation: icon links to each screen. Hover, focus or ☰ opens the full menu panel (below 768px only ☰ does). Replaces the former left sidebar.
 
 ### 2.3 `PageHeader`
 

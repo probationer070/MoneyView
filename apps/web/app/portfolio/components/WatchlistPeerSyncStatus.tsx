@@ -35,7 +35,7 @@ export function WatchlistPeerSyncStatus({ status }: { status: WatchlistPeerSyncS
     <span
       data-testid="watchlist-peer-sync"
       title={status.last_error ?? (status.skipped_files.map((file) => `${file.name}: ${file.reason}`).join("\n") || undefined)}
-      className={`text-xs ${warn ? "text-[var(--state-warning)]" : "text-[var(--text-muted)]"}`}
+      className={`type-small ${warn ? "text-[var(--status-warning-ink)]" : "text-[var(--ink-muted)]"}`}
     >
       {text}
     </span>

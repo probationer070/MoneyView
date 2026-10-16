@@ -2,6 +2,8 @@
 
 This document is the canonical home for MoneyView's local persistence, cache, seed, and source-of-truth rules.
 
+See also: [`database-relationships.md`](database-relationships.md) for the full table inventory, foreign keys, logical references and write order.
+
 ## 1. Storage Layers
 
 MoneyView uses a local-first storage model with three main storage classes:

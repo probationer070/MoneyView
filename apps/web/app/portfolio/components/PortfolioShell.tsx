@@ -72,7 +72,7 @@ export function PortfolioShell({
         aria-label="Portfolio sections"
         data-testid="portfolio-rail"
         className={clsx(
-          "flex shrink-0 items-center gap-2 border-[var(--border)] bg-[var(--bg-surface)]",
+          "flex shrink-0 items-center gap-2 border-[var(--line)] bg-[var(--surface-raised)]",
           "border-t p-2 lg:w-14 lg:flex-col lg:items-center lg:border-l lg:border-t-0 lg:py-4",
         )}
       >

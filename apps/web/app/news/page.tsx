@@ -7,10 +7,12 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
+import { useT } from "@/lib/i18n/locale";
 import { NewsFeedList, type NewsArticle } from "./components/NewsFeedList";
 
 export default function NewsPage() {
   useDevMonitorPageLoad({ component: "news" });
+  const t = useT();
   const pageSize = 5;
   const newsQuery = useInfiniteQuery<NewsArticle[]>({
     queryKey: ["market-news-feed"],
@@ -32,19 +34,19 @@ export default function NewsPage() {
   return (
     <div className="space-y-8 animate-in fade-in duration-500 max-w-4xl mx-auto">
       <PageHeader
-        title="Market Intelligence"
-        subtitle="Aggregated regulatory news and market updates"
+        title={t("news.title")}
+        subtitle={t("news.subtitle")}
       />
 
       {newsQuery.isLoading ? (
         <LoadingState variant="skeleton" />
       ) : newsQuery.isError ? (
         <ErrorState
-          title="News Feed Unavailable"
-          message={newsQuery.error instanceof Error ? newsQuery.error.message : "Could not load market news from the backend feed."}
+          title={t("news.unavailableTitle")}
+          message={newsQuery.error instanceof Error ? newsQuery.error.message : t("news.unavailableFallback")}
         />
       ) : visibleNews.length === 0 ? (
-        <EmptyState title="No news articles found" description="Check back later or ensure the backend feed is running." />
+        <EmptyState title={t("news.emptyTitle")} description={t("news.emptyDescription")} />
       ) : (
         <NewsFeedList
           items={visibleNews}

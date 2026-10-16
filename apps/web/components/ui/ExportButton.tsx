@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { fetchApi } from "@/lib/api";
+import { useT } from "@/lib/i18n/locale";
 import type { ReportExportFormatEnum, ReportExportResponse } from "../../../../packages/shared-types/generated/portfolio";
 
 interface ExportButtonProps {
@@ -35,6 +36,7 @@ export function ExportButton({
   asOfDate = "",
 }: ExportButtonProps) {
   const [isLoading, setIsLoading] = useState(false);
+  const t = useT();
   const canExport = useMemo(() => tickers.length > 0 && weights.length > 0, [tickers, weights]);
 
   const requestBody = useMemo(
@@ -126,43 +128,43 @@ export function ExportButton({
   if (!canExport) {
     return (
       <button
-        className="px-3 py-2 text-sm rounded-md border border-[var(--border)] text-[var(--text-muted)] bg-[var(--surface)]"
+        className="whitespace-nowrap px-3 py-2 type-body rounded-[var(--radius-1)] border border-[var(--line)] text-[var(--on-brand)] bg-[var(--brand)]"
         disabled
       >
-        Export Disabled
+        {t("common.exportDisabled")}
       </button>
     );
   }
 
   return (
-    <div className="flex gap-2">
+    <div className="flex flex-wrap gap-2">
       <button
         onClick={exportJson}
         disabled={isLoading}
-        className="px-3 py-2 text-sm rounded-md border border-[var(--border)] bg-[var(--bg-surface)] hover:bg-[var(--bg-subtle)]"
+        className="whitespace-nowrap px-3 py-2 type-body rounded-[var(--radius-1)] border border-[var(--line)] bg-[var(--surface-raised)] hover:bg-[var(--surface)]"
       >
-        Export JSON
+        {t("common.exportJson")}
       </button>
       <button
         onClick={exportCsv}
         disabled={isLoading}
-        className="px-3 py-2 text-sm rounded-md border border-[var(--border)] bg-[var(--bg-surface)] hover:bg-[var(--bg-subtle)]"
+        className="whitespace-nowrap px-3 py-2 type-body rounded-[var(--radius-1)] border border-[var(--line)] bg-[var(--surface-raised)] hover:bg-[var(--surface)]"
       >
-        Export CSV
+        {t("common.exportCsv")}
       </button>
       <button
         onClick={exportMarkdown}
         disabled={isLoading}
-        className="px-3 py-2 text-sm rounded-md border border-[var(--border)] bg-[var(--bg-surface)] hover:bg-[var(--bg-subtle)]"
+        className="whitespace-nowrap px-3 py-2 type-body rounded-[var(--radius-1)] border border-[var(--line)] bg-[var(--surface-raised)] hover:bg-[var(--surface)]"
       >
-        Export Markdown
+        {t("common.exportMarkdown")}
       </button>
       <button
         onClick={exportPdf}
         disabled={isLoading}
-        className="px-3 py-2 text-sm rounded-md border border-[var(--border)] bg-[var(--surface)] text-white hover:opacity-90"
+        className="whitespace-nowrap px-3 py-2 type-body rounded-[var(--radius-1)] border border-[var(--line)] bg-[var(--brand)] text-[var(--on-brand)] hover:opacity-90"
       >
-        Print PDF
+        {t("common.printPdf")}
       </button>
     </div>
   );

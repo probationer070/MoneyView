@@ -1,3 +1,4 @@
+import { formatNumber, type FormatLocale } from "@/lib/format";
 import type { SignalName } from "./verdictTypes";
 
 /**
@@ -14,38 +15,21 @@ import type { SignalName } from "./verdictTypes";
  * which states a proportion the number is not. The panel's whole purpose is
  * that a figure travels with its basis; formatting it in the wrong unit
  * breaks that at the last step.
+ *
+ * The labels and basis lines are in the catalogs (valuation.signal, valuation.unitNote).
  */
 
-export const SIGNAL_LABELS: Record<SignalName, string> = {
-  drawdown: "Drawdown from peak",
-  volume: "Volume vs baseline",
-  trailing_pe: "Trailing PE",
-  dcf_gap: "Gap to fair value",
-};
-
-/** The basis line under each figure. `dcf_gap` names its lack of a horizon. */
-export const SIGNAL_UNIT_NOTE: Record<SignalName, string> = {
-  drawdown: "percent below the 252-bar peak",
-  volume: "multiple of the baseline mean",
-  trailing_pe: "price ÷ earnings, a multiple",
-  dcf_gap: "total gap, no time horizon",
-};
-
-function percent(value: number, decimals = 1): string {
-  return `${value >= 0 ? "+" : ""}${(value * 100).toFixed(decimals)}%`;
-}
-
-export function formatSignalValue(signal: SignalName, value: number): string {
+export function formatSignalValue(signal: SignalName, value: number, locale: FormatLocale = "en"): string {
   switch (signal) {
     case "drawdown":
-      // A decline is already negative; percent() supplies the sign.
-      return percent(value);
+      // A decline is already negative; the signed percent supplies the sign.
+      return formatNumber(value, "percent", { signed: true, locale });
     case "dcf_gap":
-      return percent(value);
+      return formatNumber(value, "percent", { signed: true, locale });
     case "volume":
       // A ratio. "x1.20" cannot be misread as a proportion.
-      return `×${value.toFixed(2)}`;
+      return `×${formatNumber(value, "ratio", { locale })}`;
     case "trailing_pe":
-      return value.toFixed(1);
+      return formatNumber(value, "ratio", { digits: 1, locale });
   }
 }

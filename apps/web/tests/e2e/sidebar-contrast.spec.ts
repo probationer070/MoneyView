@@ -4,10 +4,10 @@ import { mockValuationApi } from "./helpers/valuationPageMock";
 /**
  * Sidebar nav labels must be readable. Before this, inactive labels were #9DA5A2 on the
  * #E0E4D6 sidebar (1.95:1) and the active label was white on #60caad (1.99:1) -- both far
- * under the 4.5:1 WCAG AA minimum. Labels are now bold black in every state.
+ * under the 4.5:1 WCAG AA minimum. Labels are now bold ink in every state.
  */
 
-const BLACK = "rgb(0, 0, 0)";
+const INK = "rgb(40, 40, 40)";
 
 async function styleOf(link: Locator) {
   return link.evaluate((element) => {
@@ -16,11 +16,13 @@ async function styleOf(link: Locator) {
   });
 }
 
-test("every sidebar nav label is bold black, active or not, and the active one is still marked", async ({ page }) => {
+test("every menu panel label is bold ink, active or not, and the active one is still marked", async ({ page }) => {
   await mockValuationApi(page);
   await page.goto("/valuation", { waitUntil: "domcontentloaded" });
 
-  const sidebar = page.locator("#app-sidebar");
+  await page.getByTestId("topnav-menu").hover();
+  const sidebar = page.locator("#app-nav-panel");
+  await expect(sidebar).toBeVisible();
   const active = sidebar.getByRole("link", { name: "Valuation" });
   const inactive = sidebar.getByRole("link", { name: "Portfolio" });
   await expect(active).toBeVisible({ timeout: 60_000 });
@@ -29,9 +31,9 @@ test("every sidebar nav label is bold black, active or not, and the active one i
   const activeStyle = await styleOf(active);
   const inactiveStyle = await styleOf(inactive);
 
-  expect(activeStyle, "active label").toMatchObject({ color: BLACK, fontWeight: "700" });
-  expect(inactiveStyle, "inactive label").toMatchObject({ color: BLACK, fontWeight: "700" });
-  // Black text everywhere must not erase which page you are on.
+  expect(activeStyle, "active label").toMatchObject({ color: INK, fontWeight: "700" });
+  expect(inactiveStyle, "inactive label").toMatchObject({ color: INK, fontWeight: "700" });
+  // Ink text everywhere must not erase which page you are on.
   expect(activeStyle.background, "the active item keeps a background the inactive one lacks").not.toBe(
     inactiveStyle.background,
   );
@@ -43,5 +45,5 @@ test("every sidebar nav label is bold black, active or not, and the active one i
   await expect
     .poll(async () => (await styleOf(inactive)).background, { message: "hover background applied" })
     .toBe(activeStyle.background);
-  expect((await styleOf(inactive)).color, "hovered label").toBe(BLACK);
+  expect((await styleOf(inactive)).color, "hovered label").toBe(INK);
 });

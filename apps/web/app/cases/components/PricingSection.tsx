@@ -1,6 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { fmtPercent } from "../caseFields";
 import { casesApi, retryUnlessRefused } from "../casesApi";
+import { useLocale } from "@/lib/i18n/locale";
+import { formatNumber } from "@/lib/format";
 import { fmtMoney } from "../format";
 import { QueryStatus, Section } from "./Section";
 
@@ -10,6 +12,7 @@ import { QueryStatus, Section } from "./Section";
  * ticker, no industry, a thin industry, no usable multiple) is content, as everywhere.
  */
 export function PricingSection({ caseId }: { caseId: number }) {
+  const { locale } = useLocale();
   const query = useQuery({
     queryKey: ["case-pricing", caseId],
     queryFn: () => casesApi.pricing(caseId),
@@ -26,31 +29,31 @@ export function PricingSection({ caseId }: { caseId: number }) {
       {pricing && (
         <>
           <dl className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <div className="rounded-[var(--radius-sm)] border border-[var(--border)] px-3 py-2">
-              <dt className="text-xs text-[var(--text-muted)]">EV at the industry&apos;s EV/Sales</dt>
-              <dd data-testid="pricing-implied-ev" className="text-lg font-bold tabular-nums">
+            <div className="border border-[var(--line)] px-3 py-2">
+              <dt className="type-small text-[var(--ink-muted)]">EV at the industry&apos;s EV/Sales</dt>
+              <dd data-testid="pricing-implied-ev" className="type-mono">
                 {fmtMoney(pricing.implied_enterprise_value)}
               </dd>
             </div>
-            <div className="rounded-[var(--radius-sm)] border border-[var(--border)] px-3 py-2">
-              <dt className="text-xs text-[var(--text-muted)]">EV from the DCF</dt>
-              <dd data-testid="pricing-dcf-ev" className="text-lg font-bold tabular-nums">
+            <div className="border border-[var(--line)] px-3 py-2">
+              <dt className="type-small text-[var(--ink-muted)]">EV from the DCF</dt>
+              <dd data-testid="pricing-dcf-ev" className="type-mono">
                 {fmtMoney(pricing.dcf_enterprise_value)}
               </dd>
             </div>
-            <div className="rounded-[var(--radius-sm)] border border-[var(--border)] px-3 py-2">
-              <dt className="text-xs text-[var(--text-muted)]">EV/Sales used</dt>
-              <dd data-testid="pricing-multiple" className="text-lg font-bold tabular-nums">
-                ×{pricing.ev_sales.toFixed(2)}
+            <div className="border border-[var(--line)] px-3 py-2">
+              <dt className="type-small text-[var(--ink-muted)]">EV/Sales used</dt>
+              <dd data-testid="pricing-multiple" className="type-mono">
+                ×{formatNumber(pricing.ev_sales, "ratio", { locale })}
               </dd>
             </div>
           </dl>
-          <p data-testid="pricing-gap" className="mt-3 text-sm text-[var(--text-primary)]">
+          <p data-testid="pricing-gap" className="mt-3 type-body text-[var(--ink)]">
             {direction === "at"
               ? "The DCF values the business at what its industry's EV/Sales implies."
               : `The DCF values the business ${fmtPercent(Math.abs(gap), 1)} ${direction} what its industry's EV/Sales implies.`}
           </p>
-          <p data-testid="pricing-source" className="mt-1 text-xs text-[var(--text-muted)]">
+          <p data-testid="pricing-source" className="mt-1 type-small text-[var(--ink-muted)]">
             {pricing.source}. Both figures are enterprise values in the case&apos;s own units; the
             comparison has no time horizon.
           </p>

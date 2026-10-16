@@ -9,6 +9,7 @@ import type {
     AttributionEffects,
     SectorAttribution as SectorBreakdown,
 } from "../../../packages/shared-types/generated/portfolio";
+import { tokens } from "@/lib/tokens.generated";
 
 export type { AttributionResult, AttributionEffects, SectorBreakdown };
 
@@ -56,6 +57,17 @@ export function transformToTVCandles(data: RawOHLCV[]): TVCandle[] {
     })).sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime()); 
 }
 
+const VOLUME_ALPHA = 0.4;
+
+/** A canvas cannot resolve var(), so the token's hex is turned into rgba with the bar alpha here. */
+function withAlpha(hex: string, alpha: number): string {
+    const value = Number.parseInt(hex.slice(1), 16);
+    // The rule reads rgba() as a raw colour. Here the channels come from a token at runtime,
+    // so the alpha is the only value this function adds.
+    // eslint-disable-next-line moneyview/no-raw-design-values -- rgba built from a token hex at runtime
+    return `rgba(${(value >> 16) & 255}, ${(value >> 8) & 255}, ${value & 255}, ${alpha})`;
+}
+
 /**
  * Transforms generic API OHLCV arrays into TradingView Histogram metrics, logically
  * colorizing Red/Green volume bars based on close-open deltas.
@@ -69,7 +81,7 @@ export function transformToTVVolume(data: RawOHLCV[]): TVVolume[] {
         return {
             time: item.date,
             value: item.volume,
-            color: isUp ? 'rgba(239, 83, 80, 0.4)' : 'rgba(69, 137, 229, 0.4)',
+            color: withAlpha(isUp ? tokens.up._ : tokens.down._, VOLUME_ALPHA),
         };
     }).sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime());
 }

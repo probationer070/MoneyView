@@ -1,6 +1,8 @@
 "use client";
 
 import { ExternalLink } from "lucide-react";
+import { formatNumber } from "@/lib/format";
+import { useLocale, useT } from "@/lib/i18n/locale";
 
 type NewsArticle = {
   id: number;
@@ -31,14 +33,16 @@ export function NewsFeedList({
   hasNextPage,
   onFetchNextPage,
 }: Props) {
+  const t = useT();
+  const { locale } = useLocale();
   return (
     <section
       className="space-y-4"
-      aria-label="News results"
+      aria-label={t("news.resultsRegion")}
     >
     <div
       className="max-h-[70vh] space-y-4 overflow-y-auto pr-2"
-      aria-label="News feed scroll region"
+      aria-label={t("news.feedRegion")}
       role="feed"
       onScroll={(event) => {
         const target = event.currentTarget;
@@ -59,39 +63,37 @@ export function NewsFeedList({
             href={item.url || "#"}
             target="_blank"
             rel="noopener noreferrer"
-            aria-label={`Open article: ${item.headline}`}
-            className={`block rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-5 transition-all hover:border-[var(--accent)] hover:shadow-[var(--shadow-card-hover)] ${
-              today
-                ? "border-l-4 border-l-transparent bg-[linear-gradient(90deg,rgba(96,202,173,0.08)_0,rgba(96,202,173,0.03)_20%,transparent_42%)] [border-image:linear-gradient(to_bottom,#60CAAD,#444444)_1]"
-                : "border-l-4 border-l-[var(--border)]"
+            aria-label={t("news.openArticle", { headline: item.headline })}
+            className={`block border border-[var(--line)] bg-[var(--surface-raised)] p-5 transition-colors hover:border-[var(--line-strong)] border-l-4 ${
+              today ? "border-l-[var(--brand)]" : "border-l-[var(--line)]"
             }`}
           >
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0 flex-1">
                 <div className="flex items-start justify-between gap-3">
-                  <h3 className="text-[length:var(--type-card-title)] font-semibold leading-6 text-[var(--text-primary)]">
+                  <h3 className="type-panel-title text-[var(--ink)]">
                     {item.headline}
                   </h3>
-                  <ExternalLink className="mt-0.5 h-4 w-4 shrink-0 text-[var(--text-muted)]" />
+                  <ExternalLink className="mt-0.5 h-4 w-4 shrink-0 text-[var(--ink-muted)]" />
                 </div>
 
-                <div className="mt-2 flex flex-wrap items-center gap-2 text-[length:var(--type-helper)] text-[var(--text-muted)]">
-                  <span>{item.published_date || "Unknown date"}</span>
+                <div className="mt-2 flex flex-wrap items-center gap-2 type-small text-[var(--ink-muted)]">
+                  <span className="type-mono">{item.published_date || t("news.unknownDate")}</span>
                   {item.ticker ? (
-                    <span className="rounded-[var(--radius-sm)] bg-[var(--bg-subtle)] px-2 py-1 text-[length:var(--type-caption)] font-semibold text-[var(--text-secondary)]">
+                    <span className="type-caption rounded-[var(--radius-2)] bg-[var(--surface)] px-2 py-1 text-[var(--ink-secondary)]">
                       {item.ticker}
                     </span>
                   ) : null}
                 </div>
 
-                <p className="mt-2 text-[length:var(--type-caption)] text-[var(--text-muted)]">
-                  {item.source || "Unknown source"}
+                <p className="mt-2 type-caption text-[var(--ink-muted)]">
+                  {item.source || t("news.unknownSource")}
                 </p>
               </div>
 
               {today ? (
-                <span className="shrink-0 rounded-[var(--radius-sm)] bg-[var(--bg-subtle)] px-2 py-1 text-[length:var(--type-caption)] font-semibold text-[var(--text-secondary)]">
-                  Today
+                <span className="type-caption shrink-0 rounded-[var(--radius-2)] bg-[var(--brand-soft)] px-2 py-1 text-[var(--brand-text)]">
+                  {t("news.today")}
                 </span>
               ) : null}
             </div>
@@ -99,7 +101,7 @@ export function NewsFeedList({
         );
       })}
       {isFetchingNextPage ? (
-        <p className="py-3 text-center text-sm text-[var(--text-muted)]">Loading 5 more articles...</p>
+        <p className="py-3 text-center type-body text-[var(--ink-muted)]">{t("news.loadingMore", { count: formatNumber(5, "integer", { locale }) })}</p>
       ) : null}
     </div>
     {hasNextPage ? (
@@ -108,9 +110,9 @@ export function NewsFeedList({
           type="button"
           onClick={onFetchNextPage}
           disabled={isFetchingNextPage}
-          className="inline-flex min-h-9 items-center justify-center rounded-[var(--radius-md)] border border-[var(--border-default)] px-4 py-2 text-sm font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-subtle)] disabled:opacity-60"
+          className="type-label inline-flex min-h-9 items-center justify-center rounded-[var(--radius-1)] border border-[var(--line-strong)] bg-[var(--bg)] px-4 py-2 text-[var(--ink)] transition-colors hover:bg-[var(--surface)] disabled:opacity-60"
         >
-          {isFetchingNextPage ? "Loading..." : "Load more articles"}
+          {isFetchingNextPage ? t("news.loading") : t("news.loadMore")}
         </button>
       </div>
     ) : null}

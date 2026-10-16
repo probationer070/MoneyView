@@ -126,7 +126,7 @@ export function ModalShell({
     <div className="fixed inset-0 z-50 flex items-end justify-center p-2 sm:items-center sm:p-4 lg:p-6">
       {/* Backdrop */}
       <div
-        className="absolute inset-0 bg-black/40 transition-opacity duration-[var(--duration-slow)]"
+        className="absolute inset-0 bg-[var(--overlay-scrim)] transition-opacity duration-[var(--duration-slow)]"
         onClick={onClose}
         aria-hidden="true"
       />
@@ -142,23 +142,22 @@ export function ModalShell({
         onKeyDown={handleDialogKeyDown}
         className={clsx(
           "relative z-10 flex w-full min-h-0 flex-col",
-          "bg-[var(--bg-elevated)] rounded-[var(--radius-lg)]",
-          "shadow-[var(--shadow-modal)]",
+          "border border-[var(--line)] bg-[var(--bg)]",
           "max-h-[calc(100dvh-48px)] sm:max-h-[calc(100dvh-96px)]",
           maxWidthMap[size],
         )}
       >
         {/* Header */}
-        <div className="flex items-start justify-between gap-3 px-5 pt-5 pb-4 border-b border-[var(--border-soft)] shrink-0">
+        <div className="flex items-start justify-between gap-3 px-5 pt-5 pb-4 border-b border-[var(--line)] shrink-0">
           <div className="min-w-0">
             <h2
               id={titleId}
-              className="text-[length:var(--type-section-title)] font-semibold text-[var(--text-primary)] leading-snug"
+              className="type-panel-title text-[var(--ink)]"
             >
               {title}
             </h2>
             {subtitle && (
-              <p id={subtitleId} className="mt-0.5 text-[length:var(--type-helper)] text-[var(--text-muted)]">{subtitle}</p>
+              <p id={subtitleId} className="type-small mt-0.5 text-[var(--ink-muted)]">{subtitle}</p>
             )}
           </div>
           {headerRightContent && (

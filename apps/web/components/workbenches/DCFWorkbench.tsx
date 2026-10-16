@@ -4,6 +4,8 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { DcfRefusalError, postDcf } from "@/lib/dcfRefusal";
 import { RefreshCw } from "lucide-react";
+import { useLocale } from "@/lib/i18n/locale";
+import { formatNumber } from "@/lib/format";
 import { Sliders } from "@/components/ui/Sliders";
 import type { DcfSummaryResponse as DCFResult } from "../../../../packages/shared-types";
 import { bridgedEstimatedValue, bridgedUpsidePct, UNBRIDGED_PLACEHOLDER, UNBRIDGED_REASON } from "@/lib/bridgeQuality";
@@ -52,6 +54,7 @@ function formatDateTime(value: string | null) {
 }
 
 export const DCFWorkbench: React.FC<DCFWorkbenchProps> = ({ ticker }) => {
+  const { locale } = useLocale();
   // Rapid 60fps local UI state
   const [uiState, setUiState] = useState({ wacc: 10, margin: 15, growth: 5 });
   const [requestedSnapshot, setRequestedSnapshot] = useState<DcfWorkbenchSnapshot | null>(
@@ -133,27 +136,27 @@ export const DCFWorkbench: React.FC<DCFWorkbenchProps> = ({ ticker }) => {
         />
       </div>
 
-      <div className="lg:col-span-2 bg-[var(--bg-surface)] rounded-[var(--radius)] border border-[var(--border)] p-6 shadow-sm relative">
+      <div className="lg:col-span-2 bg-[var(--surface-raised)] border border-[var(--line)] p-6 relative">
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <h2 className="text-lg font-bold">Discounted Cash Flow (DCF) Diagnostics</h2>
-            <p className="mt-1 text-sm text-[var(--text-muted)]">
+            <h2 className="type-panel-title">Discounted Cash Flow (DCF) Diagnostics</h2>
+            <p className="mt-1 type-body text-[var(--ink-muted)]">
               This workbench stays idle on first load and recalculates only when you explicitly refresh it.
             </p>
           </div>
-          <div className="flex flex-col items-start gap-2 text-xs text-[var(--text-muted)] sm:items-end">
+          <div className="flex flex-col items-start gap-2 type-small text-[var(--ink-muted)] sm:items-end">
             <button
               type="button"
               onClick={handleRefresh}
               disabled={isFetching}
-              className="inline-flex items-center gap-2 rounded-[var(--radius)] border border-[var(--border)] px-3 py-2 font-semibold text-[var(--text-primary)] disabled:opacity-60"
+              className="inline-flex items-center gap-2 rounded-[var(--radius-1)] border border-[var(--line)] px-3 py-2 text-[var(--ink)] disabled:opacity-60"
             >
               <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? "animate-spin" : ""}`} />
               Refresh DCF Diagnostics
             </button>
             <span>{formatDateTime(displayLastUpdatedAt)}</span>
             {isStale ? (
-              <span className="rounded-full bg-amber-100 px-2 py-1 text-[11px] font-bold text-amber-800">
+              <span className="rounded-[var(--radius-2)] bg-[var(--status-warning-surface)] px-2 py-1 type-caption text-[var(--status-warning-ink)]">
                 Showing stale diagnostics
               </span>
             ) : null}
@@ -162,25 +165,26 @@ export const DCFWorkbench: React.FC<DCFWorkbenchProps> = ({ ticker }) => {
 
         {/* Network Loader Ghost UI Mapping (Full Structural Skeleton) */}
         {isFetching && (
-          <div className="absolute inset-0 bg-[var(--bg-surface)]/90 backdrop-blur-sm z-10 p-6 flex flex-col justify-center rounded-[var(--radius)]">
+          <div className="absolute inset-0 bg-[var(--surface-raised)] backdrop-blur-sm z-10 p-6 flex flex-col justify-center">
             <div className="flex space-x-3 mb-6 items-center">
-              <div className="h-4 w-4 bg-[var(--surface)] rounded-full animate-bounce"></div>
-              <div className="h-4 w-48 bg-gray-200 rounded animate-pulse"></div>
+              {/* rounded-full: dot */}
+              <div className="h-4 w-4 bg-[var(--brand)] rounded-full animate-bounce"></div>
+              <div className="h-4 w-48 bg-[var(--surface)] animate-pulse"></div>
             </div>
             <div className="grid grid-cols-2 gap-4 flex-1">
-              <div className="bg-[var(--bg-subtle)] rounded-lg animate-pulse w-full h-24"></div>
-              <div className="bg-[var(--bg-subtle)] rounded-lg animate-pulse w-full h-24"></div>
+              <div className="bg-[var(--surface)] animate-pulse w-full h-24"></div>
+              <div className="bg-[var(--surface)] animate-pulse w-full h-24"></div>
             </div>
           </div>
         )}
 
         {isError && error instanceof DcfRefusalError && (
-          <p data-testid="dcf-workbench-refusal" className="text-sm rounded-md p-3 border border-[var(--border)] text-[var(--text-secondary)]">
+          <p data-testid="dcf-workbench-refusal" className="type-body p-3 border border-[var(--line)] text-[var(--ink-secondary)]">
             Not valued: {error.readerText}
           </p>
         )}
         {isError && !(error instanceof DcfRefusalError) && (
-          <div className="text-red-500 text-sm bg-red-50 rounded-md p-3 border border-red-100">
+          <div className="text-[var(--status-error-ink)] type-body bg-[var(--status-error-surface)] p-3 border border-[var(--status-error-border)]">
             Backend failed to compute DCF boundaries. Check Pydantic validation logs.
           </div>
         )}
@@ -188,10 +192,10 @@ export const DCFWorkbench: React.FC<DCFWorkbenchProps> = ({ ticker }) => {
         {!isError && displayData && (
           <div className="space-y-6">
             <div className="grid grid-cols-2 gap-4">
-              <div className="bg-[var(--bg-subtle)] border border-gray-100 rounded-lg p-4">
-                <span className="text-xs text-[var(--text-muted)] font-semibold uppercase tracking-wider">Implied Fair Value</span>
+              <div className="bg-[var(--surface)] border border-[var(--grid)] p-4">
+                <span className="type-small text-[var(--ink-muted)] uppercase">Implied Fair Value</span>
                 <div
-                  className="text-3xl font-black mt-1 tabular-nums text-[var(--text-primary)]"
+                  className="type-figure-md mt-1 tabular-nums text-[var(--ink)]"
                   title={bridgedEstimatedValue(displayData) === null ? UNBRIDGED_REASON : undefined}
                 >
                   {(() => {
@@ -200,28 +204,28 @@ export const DCFWorkbench: React.FC<DCFWorkbenchProps> = ({ ticker }) => {
                     // Pre-existing non-finite guard, kept as it was apart from moving the "$"
                     // inside it -- it previously rendered the string "$N/A".
                     if (!Number.isFinite(fairValue)) return "N/A";
-                    return `$${fairValue.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}`;
+                    return `$${formatNumber(fairValue, "price", { digits: 1, locale })}`;
                   })()}
                 </div>
               </div>
-              <div className="bg-[var(--bg-subtle)] border border-gray-100 rounded-lg p-4">
-                <span className="text-xs text-[var(--text-muted)] font-semibold uppercase tracking-wider">Market Dislocation</span>
-                <div className={`text-3xl font-black mt-1 tabular-nums ${bridgedUpsidePct(displayData) === null ? "text-[var(--text-muted)]" : displayData.upside_pct >= 0 ? "text-[var(--surface)]" : "text-[var(--delta-down)]"}`}>
+              <div className="bg-[var(--surface)] border border-[var(--grid)] p-4">
+                <span className="type-small text-[var(--ink-muted)] uppercase">Market Dislocation</span>
+                <div className={`type-figure-md mt-1 tabular-nums ${bridgedUpsidePct(displayData) === null ? "text-[var(--ink-muted)]" : displayData.upside_pct >= 0 ? "text-[var(--up)]" : "text-[var(--down)]"}`}>
                   {bridgedUpsidePct(displayData) === null
                     ? UNBRIDGED_PLACEHOLDER
-                    : `${displayData.upside_pct > 0 ? "+" : ""}${Number.isFinite(displayData.upside_pct) ? displayData.upside_pct.toFixed(1) : "0.0"}%`}
+                    : `${formatNumber(displayData.upside_pct / 100, "percent", { signed: true, locale })}`}
                 </div>
               </div>
             </div>
 
-            <div className="text-sm text-[var(--text-muted)] p-3 bg-blue-50/50 rounded-lg border border-blue-100/50">
-              <strong>Engine Status:</strong> The security is currently flagged as <span className="font-bold underline decoration-dotted">{displayData.status}</span> trading directly off Python array inferences mapping targeted {displayData.margin_used * 100}% margins against a {displayData.wacc_used * 100}% WACC barrier.
+            <div className="type-body text-[var(--ink-muted)] p-3 bg-[var(--surface)] border border-[var(--grid)]">
+              <strong>Engine Status:</strong> The security is currently flagged as <span className="underline decoration-dotted">{displayData.status}</span> trading directly off Python array inferences mapping targeted {displayData.margin_used * 100}% margins against a {displayData.wacc_used * 100}% WACC barrier.
             </div>
           </div>
         )}
 
         {!isError && !displayData && !isFetching && (
-          <div className="rounded-[var(--radius)] border border-dashed border-[var(--border)] bg-[var(--surface-muted)] px-4 py-6 text-sm text-[var(--text-muted)]">
+          <div className="border border-dashed border-[var(--line)] bg-[var(--surface)] px-4 py-6 type-body text-[var(--ink-muted)]">
             DCF diagnostics stay idle on first load. Adjust the sliders if needed, then click `Refresh DCF Diagnostics`.
           </div>
         )}

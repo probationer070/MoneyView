@@ -1,5 +1,6 @@
 "use client";
 
+import { formatNumber } from "@/lib/format";
 import React, { useRef, useState, useMemo, useEffect } from "react";
 import { useQuery, useInfiniteQuery } from "@tanstack/react-query";
 import Link from "next/link";
@@ -223,8 +224,8 @@ export function StockDetailModal({
   const currentPriceLabel =
     currentPrice === null
       ? "—"
-      : `$${currentPrice.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}`;
-  const priceTone = priceChangePct >= 0 ? "text-[var(--delta-up)]" : "text-[var(--delta-down)]";
+      : `$${formatNumber(currentPrice, "price", { digits: 1 })}`;
+  const priceTone = priceChangePct >= 0 ? "text-[var(--up)]" : "text-[var(--down)]";
   const sparklineTrendPct = summarizeSparklineTrend(stock.sparkline);
   
   const snapshotContextLabel = snapshotMeta?.mode === "snapshot"
@@ -301,7 +302,7 @@ export function StockDetailModal({
               meta: (
                 <div className="flex min-w-0 flex-wrap items-center gap-2">
                   <span
-                    className="overflow-inline-ellipsis max-w-full rounded-[var(--radius-sm)] bg-[var(--surface-muted)] px-2 py-1 font-mono text-[11px] text-[var(--text-primary)]"
+                    className="overflow-inline-ellipsis max-w-full rounded-[var(--radius-2)] bg-[var(--surface)] px-2 py-1 type-caption text-[var(--ink)]"
                     title={point.snapshot_version}
                   >
                     Version {point.snapshot_version}
@@ -311,25 +312,25 @@ export function StockDetailModal({
                 </div>
               ),
               content: (
-                <div className="grid grid-cols-2 gap-3 text-xs md:grid-cols-4">
-                  <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2">
-                    <div className="text-[var(--text-muted)]">ROIC - WACC</div>
-                    <div className={`mt-1 font-bold tabular-nums ${metricToneClass(metrics.roicMinusWacc)}`} title={metricDisplayTitle(metrics.roicMinusWacc)}>{metrics.roicMinusWacc.displayValue}</div>
-                    {metricSubtitle(metrics.roicMinusWacc) ? <div className="mt-1 text-[11px] leading-tight text-[var(--text-muted)]">{metricSubtitle(metrics.roicMinusWacc)}</div> : null}
+                <div className="grid grid-cols-2 gap-3 type-small md:grid-cols-4">
+                  <div className="border border-[var(--line)] bg-[var(--surface)] px-3 py-2">
+                    <div className="text-[var(--ink-muted)]">ROIC - WACC</div>
+                    <div className={`type-figure-md mt-1 ${metricToneClass(metrics.roicMinusWacc)}`} title={metricDisplayTitle(metrics.roicMinusWacc)}>{metrics.roicMinusWacc.displayValue}</div>
+                    {metricSubtitle(metrics.roicMinusWacc) ? <div className="mt-1 type-caption text-[var(--ink-muted)]">{metricSubtitle(metrics.roicMinusWacc)}</div> : null}
                   </div>
-                  <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2">
-                    <div className="text-[var(--text-muted)]">DCF value vs price (one-off gap)</div>
-                    <div className={`mt-1 font-bold tabular-nums ${metricToneClass(metrics.dcfUpside)}`} title={metricDisplayTitle(metrics.dcfUpside)}>{metrics.dcfUpside.displayValue}</div>
-                    {metricSubtitle(metrics.dcfUpside) ? <div className="mt-1 text-[11px] leading-tight text-[var(--text-muted)]">{metricSubtitle(metrics.dcfUpside)}</div> : null}
+                  <div className="border border-[var(--line)] bg-[var(--surface)] px-3 py-2">
+                    <div className="text-[var(--ink-muted)]">DCF value vs price (one-off gap)</div>
+                    <div className={`type-figure-md mt-1 ${metricToneClass(metrics.dcfUpside)}`} title={metricDisplayTitle(metrics.dcfUpside)}>{metrics.dcfUpside.displayValue}</div>
+                    {metricSubtitle(metrics.dcfUpside) ? <div className="mt-1 type-caption text-[var(--ink-muted)]">{metricSubtitle(metrics.dcfUpside)}</div> : null}
                   </div>
-                  <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2">
-                    <div className="text-[var(--text-muted)]">Implied return vs WACC (pts per year)</div>
-                    <div className={`mt-1 font-bold tabular-nums ${metricToneClass(metrics.impliedVsWacc)}`} title={metricDisplayTitle(metrics.impliedVsWacc)}>{metrics.impliedVsWacc.displayValue}</div>
-                    {metricSubtitle(metrics.impliedVsWacc) ? <div className="mt-1 text-[11px] leading-tight text-[var(--text-muted)]">{metricSubtitle(metrics.impliedVsWacc)}</div> : null}
+                  <div className="border border-[var(--line)] bg-[var(--surface)] px-3 py-2">
+                    <div className="text-[var(--ink-muted)]">Implied return vs WACC (pts per year)</div>
+                    <div className={`type-figure-md mt-1 ${metricToneClass(metrics.impliedVsWacc)}`} title={metricDisplayTitle(metrics.impliedVsWacc)}>{metrics.impliedVsWacc.displayValue}</div>
+                    {metricSubtitle(metrics.impliedVsWacc) ? <div className="mt-1 type-caption text-[var(--ink-muted)]">{metricSubtitle(metrics.impliedVsWacc)}</div> : null}
                   </div>
-                  <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2">
-                    <div className="text-[var(--text-muted)]">Market Return</div>
-                    <div className="mt-1 font-bold tabular-nums text-[var(--text-primary)]">{formatMetricPercent(point.market_expected_return)}</div>
+                  <div className="border border-[var(--line)] bg-[var(--surface)] px-3 py-2">
+                    <div className="text-[var(--ink-muted)]">Market Return</div>
+                    <div className="type-figure-md mt-1 text-[var(--ink)]">{formatMetricPercent(point.market_expected_return)}</div>
                   </div>
                 </div>
               ),
@@ -368,11 +369,11 @@ export function StockDetailModal({
 
   const headerRight = (
     <>
-      <p className={`text-2xl font-black tabular-nums ${priceTone}`}>
+      <p className={`type-figure-md tabular-nums ${priceTone}`}>
         {currentPriceLabel}
       </p>
-      <p className={`text-sm font-bold ${priceTone}`}>
-        {priceChangePct >= 0 ? "+" : ""}{priceChangePct.toFixed(1)}%
+      <p className={`type-mono ${priceTone}`}>
+        {priceChangePct >= 0 ? "+" : ""}{formatNumber(priceChangePct / 100, "percent", { digits: 1 })}
       </p>
     </>
   );
@@ -386,16 +387,16 @@ export function StockDetailModal({
       size="full"
       headerRightContent={headerRight}
     >
-      <section className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4">
+      <section className="mb-4 flex flex-wrap items-center justify-between gap-3 border border-[var(--line)] bg-[var(--surface-raised)] p-4">
         <div>
-          <h3 className="text-sm font-semibold text-[var(--text-primary)]">Quick portfolio review</h3>
-          <p className="mt-1 text-sm text-[var(--text-muted)]">
+          <h3 className="type-panel-title text-[var(--ink)]">Quick portfolio review</h3>
+          <p className="mt-1 type-body text-[var(--ink-muted)]">
             Stay in the portfolio workflow here, or open the canonical detail route for full standalone ticker analysis.
           </p>
         </div>
         <Link
           href={`/detail/${encodeURIComponent(stock.ticker)}`}
-          className="inline-flex min-h-9 items-center justify-center rounded-[var(--radius-md)] border border-[var(--border-default)] px-[var(--space-4)] text-[length:var(--type-label)] font-medium text-[var(--text-primary)] transition-colors duration-[var(--duration-fast)] hover:bg-[var(--bg-subtle)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--state-info)] focus-visible:ring-offset-1"
+          className="inline-flex min-h-9 items-center justify-center border border-[var(--line)] px-[var(--space-4)] type-small text-[var(--ink)] transition-colors duration-[var(--duration-fast)] hover:bg-[var(--surface)]"
         >
           View Full Detail
         </Link>
@@ -403,7 +404,7 @@ export function StockDetailModal({
 
       <div className="flex flex-col mb-4">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-1 text-xs font-semibold text-[var(--text-muted)]">
+          <span className="rounded-[var(--radius-2)] border border-[var(--line)] bg-[var(--surface)] px-3 py-1 type-small text-[var(--ink-muted)]">
             Sector
           </span>
           <input
@@ -411,60 +412,60 @@ export function StockDetailModal({
             value={sectorDraft}
             onChange={(event) => setSectorDraft(event.target.value)}
             aria-label="Stock sector"
-            className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-[var(--text-primary)]"
+            className="rounded-[var(--radius-1)] border border-[var(--line)] bg-[var(--surface-raised)] px-3 py-2 type-body text-[var(--ink)]"
           />
           <button
             type="button"
             onClick={() => void handleSaveSector()}
             disabled={savingSector}
-            className="inline-flex items-center justify-center rounded-[var(--radius)] border border-[var(--border)] px-3 py-2 text-xs font-semibold text-[var(--text-muted)] hover:text-[var(--text-primary)] disabled:opacity-50"
+            className="inline-flex items-center justify-center rounded-[var(--radius-1)] border border-[var(--line)] px-3 py-2 type-small text-[var(--ink-muted)] hover:text-[var(--ink)] disabled:opacity-50"
           >
             {savingSector ? "Saving sector..." : "Save Sector"}
           </button>
         </div>
-        {sectorMessage && <p className="mt-2 text-xs text-[var(--text-muted)]">{sectorMessage}</p>}
+        {sectorMessage && <p className="mt-2 type-small text-[var(--ink-muted)]">{sectorMessage}</p>}
       </div>
 
       <section className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4 mb-4">
-        <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-muted)] p-4">
-          <div className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Price</div>
-          <div className="mt-2 text-2xl font-black tabular-nums text-[var(--text-primary)]">
+        <div className="border border-[var(--line)] bg-[var(--surface)] p-4">
+          <div className="type-caption uppercase text-[var(--ink-muted)]">Price</div>
+          <div className="mt-2 type-figure-md tabular-nums text-[var(--ink)]">
             {currentPriceLabel}
           </div>
         </div>
-        <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-muted)] p-4">
-          <div className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Day Delta</div>
-          <div className={`mt-2 text-2xl font-black tabular-nums ${priceTone}`}>
-            {priceChangePct >= 0 ? "+" : ""}{priceChangePct.toFixed(1)}%
+        <div className="border border-[var(--line)] bg-[var(--surface)] p-4">
+          <div className="type-caption uppercase text-[var(--ink-muted)]">Day Delta</div>
+          <div className={`mt-2 type-figure-md tabular-nums ${priceTone}`}>
+            {priceChangePct >= 0 ? "+" : ""}{formatNumber(priceChangePct / 100, "percent", { digits: 1 })}
           </div>
         </div>
-        <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-muted)] p-4">
-          <div className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Sector</div>
-          <div className="mt-2 text-lg font-black text-[var(--text-primary)]">{stock.sector || "Unassigned"}</div>
+        <div className="border border-[var(--line)] bg-[var(--surface)] p-4">
+          <div className="type-caption uppercase text-[var(--ink-muted)]">Sector</div>
+          <div className="mt-2 type-panel-title text-[var(--ink)]">{stock.sector || "Unassigned"}</div>
         </div>
-        <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-muted)] p-4">
-          <div className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Weight</div>
-          <div className="mt-2 text-2xl font-black tabular-nums text-[var(--text-primary)]">{(stock.weight * 100).toFixed(1)}%</div>
+        <div className="border border-[var(--line)] bg-[var(--surface)] p-4">
+          <div className="type-caption uppercase text-[var(--ink-muted)]">Weight</div>
+          <div className="mt-2 type-figure-md tabular-nums text-[var(--ink)]">{formatNumber(stock.weight, "percent", { digits: 1 })}</div>
         </div>
       </section>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(22rem,1fr)]">
-        <section className="lg:col-span-1 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4">
+        <section className="lg:col-span-1 border border-[var(--line)] bg-[var(--surface-raised)] p-4">
           <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <h3 className="text-sm font-bold text-[var(--text-primary)]">
+              <h3 className="type-panel-title text-[var(--ink)]">
                 <InfoTooltip
                   label="OHLC Candlestick + Volume"
                   description="Candles encode open, high, low, and close for each selected period. Volume bars show traded activity. Moving averages use 5, 20, 60, and 120 period closes, recalculated from daily or monthly bars depending on the selected timeframe."
                 />
               </h3>
-              <div className="mt-2 flex flex-wrap gap-2 text-xs text-[var(--text-muted)]">
+              <div className="mt-2 flex flex-wrap gap-2 type-small text-[var(--ink-muted)]">
                 {movingAverageSeries.map((series) => (
                   <span
                     key={series.title}
-                    className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] px-2 py-1"
+                    className="inline-flex items-center gap-2 rounded-[var(--radius-2)] border border-[var(--line)] px-2 py-1"
                   >
-                    <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: series.color }} />
+                    {/* rounded-full: dot */}<span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: series.color }} />
                     {series.title}
                   </span>
                 ))}
@@ -474,7 +475,7 @@ export function StockDetailModal({
               <button
                 type="button"
                 onClick={() => onAddToPortfolio(stock)}
-                className="inline-flex items-center justify-center rounded-[var(--radius)] border border-[var(--border)] px-3 py-2 text-xs font-semibold text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                className="inline-flex items-center justify-center rounded-[var(--radius-1)] border border-[var(--line)] px-3 py-2 type-small text-[var(--ink-muted)] hover:text-[var(--ink)]"
               >
                 {isInWatchlist
                   ? stock.weight > 0
@@ -489,7 +490,7 @@ export function StockDetailModal({
                     onRemoveFromWatchlist(stock);
                     onClose();
                   }}
-                  className="inline-flex items-center justify-center rounded-[var(--radius)] border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-100"
+                  className="inline-flex items-center justify-center rounded-[var(--radius-1)] border border-[var(--status-error-border)] bg-[var(--status-error-surface)] px-3 py-2 type-small text-[var(--status-error-ink)] hover:bg-[var(--status-error-surface)]"
                 >
                   Remove From Watchlist
                 </button>
@@ -504,9 +505,9 @@ export function StockDetailModal({
             lineSeriesData={movingAverageSeries}
             height={520}
             tickerName={stock.ticker}
-            colorAccent="var(--delta-up)"
-            upColor="var(--delta-up)"
-            downColor="var(--delta-down)"
+            colorAccent="var(--up)"
+            upColor="var(--up)"
+            downColor="var(--down)"
             loading={detailQuery.isLoading}
             timeframe={timeframe}
             eventGranularity={timeframe === "monthly" ? "month" : "day"}
@@ -518,9 +519,9 @@ export function StockDetailModal({
             legend={movingAverageSeries.map((series) => (
               <span
                 key={series.title}
-                className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] px-2 py-1"
+                className="inline-flex items-center gap-2 rounded-[var(--radius-2)] border border-[var(--line)] px-2 py-1"
               >
-                <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: series.color }} />
+                {/* rounded-full: dot */}<span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: series.color }} />
                 {series.title}
               </span>
             ))}
@@ -534,99 +535,99 @@ export function StockDetailModal({
           ) : !detailQuery.isLoading && candles.length > 0 ? (
             <>
               <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-                <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-muted)] p-4">
-                  <div className="flex items-center justify-between gap-2 text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                <div className="border border-[var(--line)] bg-[var(--surface)] p-4">
+                  <div className="flex items-center justify-between gap-2 type-caption uppercase text-[var(--ink-muted)]">
                     <span>ROIC - WACC</span>
                     {metricAuditQuery.data ? <MetricQualityBadge quality={metricAuditQuery.data.spread.quality} /> : null}
                   </div>
-                  <div className={`mt-2 text-2xl font-black tabular-nums ${metricToneClass(comparisonMetrics.roicMinusWacc)}`} title={metricDisplayTitle(comparisonMetrics.roicMinusWacc)}>
+                  <div className={`mt-2 type-figure-md tabular-nums ${metricToneClass(comparisonMetrics.roicMinusWacc)}`} title={metricDisplayTitle(comparisonMetrics.roicMinusWacc)}>
                     {metricAuditQuery.data ? formatAuditMetricValue(metricAuditQuery.data.spread) : comparisonMetrics.roicMinusWacc.displayValue}
                   </div>
-                  <p className="mt-2 text-xs text-[var(--text-muted)]">
+                  <p className="mt-2 type-small text-[var(--ink-muted)]">
                     {metricAuditQuery.data ? metricAuditReason(metricAuditQuery.data.spread) : metricSubtitle(comparisonMetrics.roicMinusWacc) ?? "Positive values imply returns on invested capital are exceeding the current capital cost estimate."}
                   </p>
                 </div>
-                <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-muted)] p-4">
-                  <div className="flex items-center justify-between gap-2 text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                <div className="border border-[var(--line)] bg-[var(--surface)] p-4">
+                  <div className="flex items-center justify-between gap-2 type-caption uppercase text-[var(--ink-muted)]">
                     <span>DCF value vs price (one-off gap)</span>
                     <MetricQualityBadge quality={comparisonMetrics.dcfUpside.quality} />
                   </div>
-                  <div className={`mt-2 text-2xl font-black tabular-nums ${metricToneClass(comparisonMetrics.dcfUpside)}`} title={metricDisplayTitle(comparisonMetrics.dcfUpside)}>
+                  <div className={`mt-2 type-figure-md tabular-nums ${metricToneClass(comparisonMetrics.dcfUpside)}`} title={metricDisplayTitle(comparisonMetrics.dcfUpside)}>
                     {comparisonMetrics.dcfUpside.displayValue}
                   </div>
-                  <p className="mt-2 text-xs text-[var(--text-muted)]">
+                  <p className="mt-2 type-small text-[var(--ink-muted)]">
                     {metricSubtitle(comparisonMetrics.dcfUpside) ?? "Snapshot-side upside or downside versus current price."}
                   </p>
                 </div>
-                <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-muted)] p-4">
-                  <div className="flex items-center justify-between gap-2 text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                <div className="border border-[var(--line)] bg-[var(--surface)] p-4">
+                  <div className="flex items-center justify-between gap-2 type-caption uppercase text-[var(--ink-muted)]">
                     <span>Implied return vs WACC (pts per year)</span>
                     <MetricQualityBadge quality={comparisonMetrics.impliedVsWacc.quality} />
                   </div>
-                  <div className={`mt-2 text-2xl font-black tabular-nums ${metricToneClass(comparisonMetrics.impliedVsWacc)}`} title={metricDisplayTitle(comparisonMetrics.impliedVsWacc)}>
+                  <div className={`mt-2 type-figure-md tabular-nums ${metricToneClass(comparisonMetrics.impliedVsWacc)}`} title={metricDisplayTitle(comparisonMetrics.impliedVsWacc)}>
                     {comparisonMetrics.impliedVsWacc.displayValue}
                   </div>
-                  <p className="mt-2 text-xs text-[var(--text-muted)]">
+                  <p className="mt-2 type-small text-[var(--ink-muted)]">
                     {metricSubtitle(comparisonMetrics.impliedVsWacc) ?? "The annual return today's market price implies for the whole business, minus its WACC, from the saved comparison snapshot."}
                   </p>
                 </div>
-                <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-muted)] p-4">
-                  <div className="flex items-center justify-between gap-2 text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                <div className="border border-[var(--line)] bg-[var(--surface)] p-4">
+                  <div className="flex items-center justify-between gap-2 type-caption uppercase text-[var(--ink-muted)]">
                     <span>Volatility</span>
                     <MetricQualityBadge quality={comparisonMetrics.volatility.quality} />
                   </div>
-                  <div className={`mt-2 text-2xl font-black tabular-nums ${comparisonMetrics.volatility.quality === "missing" || comparisonMetrics.volatility.quality === "invalid" || comparisonMetrics.volatility.quality === "suspicious" ? "text-amber-700" : "text-[var(--text-primary)]"}`} title={metricDisplayTitle(comparisonMetrics.volatility)}>
+                  <div className={`mt-2 type-figure-md tabular-nums ${comparisonMetrics.volatility.quality === "missing" || comparisonMetrics.volatility.quality === "invalid" || comparisonMetrics.volatility.quality === "suspicious" ? "text-[var(--status-warning-ink)]" : "text-[var(--ink)]"}`} title={metricDisplayTitle(comparisonMetrics.volatility)}>
                     {comparisonMetrics.volatility.displayValue}
                   </div>
-                  <p className="mt-2 text-xs text-[var(--text-muted)]">
+                  <p className="mt-2 type-small text-[var(--ink-muted)]">
                     {metricSubtitle(comparisonMetrics.volatility) ?? "Estimated from recent local price history for quick portfolio comparison."}
                   </p>
                 </div>
               </div>
-              <div className="mt-3 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-panel)] p-4">
+              <div className="mt-3 border border-[var(--line)] bg-[var(--surface-raised)] p-4">
                 <div className="flex flex-col gap-1">
-                  <h4 className="text-sm font-bold text-[var(--text-primary)]">Snapshot Context</h4>
-                  <p className="text-sm text-[var(--text-muted)]">
+                  <h4 className="type-panel-title text-[var(--ink)]">Snapshot Context</h4>
+                  <p className="type-body text-[var(--ink-muted)]">
                     {snapshotContextLabel}. This is the review frame for the stock-level comparison metrics shown in this modal.
                   </p>
                 </div>
                 <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
-                  <div className="rounded-[var(--radius)] border border-[var(--border-soft)] bg-[var(--surface-muted)] p-3 text-xs">
-                    <div className="text-[var(--text-muted)]">As Of</div>
-                    <div className="mt-1 font-bold text-[var(--text-primary)]">
+                  <div className="border border-[var(--line)] bg-[var(--surface)] p-3 type-small">
+                    <div className="text-[var(--ink-muted)]">As Of</div>
+                    <div className="type-mono mt-1 text-[var(--ink)]">
                       {snapshotMeta ? formatDateLabel(snapshotMeta.as_of_date) : "Live"}
                     </div>
                   </div>
-                  <div className="rounded-[var(--radius)] border border-[var(--border-soft)] bg-[var(--surface-muted)] p-3 text-xs">
-                    <div className="text-[var(--text-muted)]">Source</div>
-                    <div className="mt-1 overflow-inline-ellipsis font-bold capitalize text-[var(--text-primary)]" title={snapshotMeta?.snapshot_source ?? snapshotMeta?.mode ?? "live"}>
+                  <div className="border border-[var(--line)] bg-[var(--surface)] p-3 type-small">
+                    <div className="text-[var(--ink-muted)]">Source</div>
+                    <div className="type-mono mt-1 overflow-inline-ellipsis capitalize text-[var(--ink)]" title={snapshotMeta?.snapshot_source ?? snapshotMeta?.mode ?? "live"}>
                       {snapshotMeta?.snapshot_source ?? snapshotMeta?.mode ?? "live"}
                     </div>
                   </div>
-                  <div className="rounded-[var(--radius)] border border-[var(--border-soft)] bg-[var(--surface-muted)] p-3 text-xs">
-                    <div className="text-[var(--text-muted)]">Universe</div>
-                    <div className="mt-1 overflow-inline-ellipsis font-bold text-[var(--text-primary)]" title={portfolioComparisonUniverseLabel(effectiveComparisonUniverse)}>
+                  <div className="border border-[var(--line)] bg-[var(--surface)] p-3 type-small">
+                    <div className="text-[var(--ink-muted)]">Universe</div>
+                    <div className="type-mono mt-1 overflow-inline-ellipsis text-[var(--ink)]" title={portfolioComparisonUniverseLabel(effectiveComparisonUniverse)}>
                       {portfolioComparisonUniverseLabel(effectiveComparisonUniverse)}
                     </div>
                   </div>
-                  <div className="rounded-[var(--radius)] border border-[var(--border-soft)] bg-[var(--surface-muted)] p-3 text-xs">
-                    <div className="text-[var(--text-muted)]">Benchmark</div>
-                    <div className="mt-1 overflow-inline-ellipsis font-bold text-[var(--text-primary)]" title={effectiveComparisonBenchmarkTicker}>{effectiveComparisonBenchmarkTicker}</div>
+                  <div className="border border-[var(--line)] bg-[var(--surface)] p-3 type-small">
+                    <div className="text-[var(--ink-muted)]">Benchmark</div>
+                    <div className="type-mono mt-1 overflow-inline-ellipsis text-[var(--ink)]" title={effectiveComparisonBenchmarkTicker}>{effectiveComparisonBenchmarkTicker}</div>
                   </div>
-                  <div className="rounded-[var(--radius)] border border-[var(--border-soft)] bg-[var(--surface-muted)] p-3 text-xs">
-                    <div className="text-[var(--text-muted)]">Version</div>
-                    <div className="mt-1 overflow-mono-block text-[var(--text-primary)]" title={activeSnapshotVersion || "Live"}>{activeSnapshotVersion || "Live"}</div>
+                  <div className="border border-[var(--line)] bg-[var(--surface)] p-3 type-small">
+                    <div className="text-[var(--ink-muted)]">Version</div>
+                    <div className="mt-1 overflow-mono-block text-[var(--ink)]" title={activeSnapshotVersion || "Live"}>{activeSnapshotVersion || "Live"}</div>
                   </div>
                 </div>
                 {sparklineTrendPct != null && (
-                  <p className="mt-3 text-sm text-[var(--text-muted)]">
-                    Recent price trend: {sparklineTrendPct >= 0 ? "+" : ""}{sparklineTrendPct.toFixed(2)}%.
+                  <p className="mt-3 type-body text-[var(--ink-muted)]">
+                    Recent price trend: {sparklineTrendPct >= 0 ? "+" : ""}{formatNumber(sparklineTrendPct / 100, "percent", { digits: 2 })}.
                   </p>
                 )}
               </div>
               {flaggedComparisonMetricCount > 0 && (
-                <div className="mt-3 rounded-[var(--radius)] border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-                  {flaggedComparisonMetricCount} stock metric value{flaggedComparisonMetricCount === 1 ? "" : "s"} for {stock.ticker} {flaggedComparisonMetricCount === 1 ? "is" : "are"} currently flagged as outlier data and rendered as <span className="font-semibold">N/A</span>. Treat the price chart and saved snapshot history as the primary review context until fresher fundamentals are available.
+                <div className="mt-3 border border-[var(--status-warning-border)] bg-[var(--status-warning-surface)] p-3 type-body text-[var(--status-warning-ink)]">
+                  {flaggedComparisonMetricCount} stock metric value{flaggedComparisonMetricCount === 1 ? "" : "s"} for {stock.ticker} {flaggedComparisonMetricCount === 1 ? "is" : "are"} currently flagged as outlier data and rendered as {/* M2: inline emphasis inside a sentence; the weight separates the label from the text */}{/* M2: inline emphasis inside a sentence; the weight separates the label from the text */}<span className="font-semibold">N/A</span>. Treat the price chart and saved snapshot history as the primary review context until fresher fundamentals are available.
                 </div>
               )}
               <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-2">
@@ -645,14 +646,14 @@ export function StockDetailModal({
                   </>
                 )}
               </div>
-              <div className="mt-4 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4">
+              <div className="mt-4 border border-[var(--line)] bg-[var(--surface-raised)] p-4">
                 <div className="flex flex-col gap-1">
-                  <h4 className="text-sm font-bold text-[var(--text-primary)]">Stock History Timeline</h4>
-                  <p className="text-xs text-[var(--text-muted)]">
+                  <h4 className="type-panel-title text-[var(--ink)]">Stock History Timeline</h4>
+                  <p className="type-small text-[var(--ink-muted)]">
                     Review how saved comparison metrics changed across persisted snapshots for {stock.ticker}.
                   </p>
                   {snapshotMeta?.mode === "snapshot" && (
-                    <p className="text-xs text-[var(--text-muted)]">
+                    <p className="type-small text-[var(--ink-muted)]">
                       Review context: {formatDateLabel(snapshotMeta.as_of_date)} snapshot, {portfolioComparisonUniverseLabel(effectiveComparisonUniverse)}, benchmark {effectiveComparisonBenchmarkTicker}.
                     </p>
                   )}
@@ -672,26 +673,25 @@ export function StockDetailModal({
                 ) : (
                   <div className="mt-3 space-y-3">
                     <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                      <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-muted)] p-3">
-                        <div className="text-[length:var(--type-caption)] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Saved Snapshots</div>
-                        <div className="mt-1 text-lg font-black text-[var(--text-primary)]">{snapshotTrendPoints.length}</div>
-                        <p className="mt-1 text-xs text-[var(--text-muted)]">Persisted comparison rows currently available for {stock.ticker}.</p>
+                      <div className="border border-[var(--line)] bg-[var(--surface)] p-3">
+                        <div className="type-caption uppercase text-[var(--ink-muted)]">Saved Snapshots</div>
+                        <div className="mt-1 type-panel-title text-[var(--ink)]">{snapshotTrendPoints.length}</div>
+                        <p className="mt-1 type-small text-[var(--ink-muted)]">Persisted comparison rows currently available for {stock.ticker}.</p>
                       </div>
-                      <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-muted)] p-3">
-                        <div className="text-[length:var(--type-caption)] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Implied return vs WACC trend</div>
-                        <div data-testid="implied-spread-trend-delta" className={`mt-1 text-lg font-black ${expectedSpreadTrendDelta == null ? "text-[var(--text-muted)]" : expectedSpreadTrendDelta > 0 ? "text-[var(--delta-up)]" : "text-[var(--delta-down)]"}`}>{formatMetricPercent(expectedSpreadTrendDelta)}</div>
-                        <p className="mt-1 text-xs text-[var(--text-muted)]">Latest versus oldest saved implied return vs WACC, only between snapshots that recorded it.</p>
+                      <div className="border border-[var(--line)] bg-[var(--surface)] p-3">
+                        <div className="type-caption uppercase text-[var(--ink-muted)]">Implied return vs WACC trend</div>
+                        <div data-testid="implied-spread-trend-delta" className={`mt-1 type-panel-title ${expectedSpreadTrendDelta == null ? "text-[var(--ink-muted)]" : expectedSpreadTrendDelta > 0 ? "text-[var(--up)]" : "text-[var(--down)]"}`}>{formatMetricPercent(expectedSpreadTrendDelta)}</div>
+                        <p className="mt-1 type-small text-[var(--ink-muted)]">Latest versus oldest saved implied return vs WACC, only between snapshots that recorded it.</p>
                       </div>
-                      <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-muted)] p-3">
-                        <div className="text-[length:var(--type-caption)] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Recent Price Sparkline</div>
+                      <div className="border border-[var(--line)] bg-[var(--surface)] p-3">
+                        <div className="type-caption uppercase text-[var(--ink-muted)]">Recent Price Sparkline</div>
                         <div className="mt-2 h-10">
                           <Sparkline
                             data={stock.sparkline}
                             height={40}
-                            color={priceChangePct >= 0 ? "var(--delta-up)" : "var(--delta-down)"}
                           />
                         </div>
-                        <p className="mt-1 text-xs text-[var(--text-muted)]">Recent price path alongside the saved comparison timeline.</p>
+                        <p className="mt-1 type-small text-[var(--ink-muted)]">Recent price path alongside the saved comparison timeline.</p>
                       </div>
                     </div>
                     <TimelineList groups={timelineGroups} />
@@ -704,14 +704,14 @@ export function StockDetailModal({
           ) : null}
         </section>
 
-        <section className="flex min-h-[24rem] flex-col rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4">
-          <h3 className="text-sm font-bold text-[var(--text-primary)]">
+        <section className="flex min-h-[24rem] flex-col border border-[var(--line)] bg-[var(--surface-raised)] p-4">
+          <h3 className="type-panel-title text-[var(--ink)]">
             <InfoTooltip
               label="Ticker News Feed (filtered)"
               description="Latest stock-specific headlines crawled from Google News RSS and stored locally by ticker. This section stays filtered to the selected holding."
             />
           </h3>
-          <p className="mt-1 text-xs text-[var(--text-muted)]">Filtered news for {stock.ticker}, ordered by date with today highlights preserved.</p>
+          <p className="mt-1 type-small text-[var(--ink-muted)]">Filtered news for {stock.ticker}, ordered by date with today highlights preserved.</p>
           <div className="mt-4 min-h-0 flex-1">
             {newsQuery.isLoading ? (
               <EmptyState title="Loading filtered news..." />

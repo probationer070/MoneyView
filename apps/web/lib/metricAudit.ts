@@ -3,16 +3,16 @@ import type { CorporateMetricAuditEntry, MetricQuality } from "../../../packages
 export function metricQualityTone(quality: MetricQuality) {
   switch (quality) {
     case "ok":
-      return "text-[var(--state-success)]";
+      return "text-[var(--status-success-ink)]";
     case "estimated":
     case "stale":
-      return "text-[var(--state-warning)]";
+      return "text-[var(--status-warning-ink)]";
     case "suspicious":
     case "invalid":
-      return "text-[var(--state-error)]";
+      return "text-[var(--status-error-ink)]";
     case "missing":
     default:
-      return "text-[var(--text-muted)]";
+      return "text-[var(--ink-muted)]";
   }
 }
 

@@ -3,6 +3,8 @@ import { ResponsiveChart } from "@/components/ui/ResponsiveChart";
 import { CHART_COLORS, GRID_STYLE, withAxisProps, withTooltipProps } from "@/lib/chartConfig";
 import { fmtPercent, labelForInput } from "../caseFields";
 import type { SimulateResult } from "../caseTypes";
+import { formatNumber } from "@/lib/format";
+import { useLocale } from "@/lib/i18n/locale";
 import { fmtPerShare } from "../format";
 
 const signed = (value: number) => `${value >= 0 ? "+" : "−"}${Math.abs(value).toFixed(2)}`;
@@ -10,6 +12,7 @@ const signed = (value: number) => `${value >= 0 ? "+" : "−"}${Math.abs(value).
 export function SimulateResults({
   result, pointValue, onRerun, rerunDisabled,
 }: { result: SimulateResult; pointValue: number | null; onRerun: (seed: number) => void; rerunDisabled: boolean }) {
+  const { locale } = useLocale();
   // Presence, not the fraction: the API is the one authority on suppression.
   const suppressed = "suppressed" in result;
   const conditioned = result.runs_refused > 0 ? " (among accepted draws)" : "";
@@ -27,7 +30,7 @@ export function SimulateResults({
     const isLastBin = i === histogram.length - 1;
     return {
       ...bin,
-      label: fmtPerShare((bin.lower + bin.upper) / 2),
+      label: fmtPerShare((bin.lower + bin.upper) / 2, locale),
       holdsPoint: pointValue !== null && pointValue >= bin.lower && (isLastBin ? pointValue <= bin.upper : pointValue < bin.upper),
     };
   });
@@ -38,24 +41,24 @@ export function SimulateResults({
 
   return (
     <div data-testid="simulate-results" className="mt-4 flex flex-col gap-3">
-      <p data-testid="simulate-accounting" className="text-sm font-medium tabular-nums">
-        {result.runs_valid.toLocaleString("en-US")} of {result.runs_requested.toLocaleString("en-US")} draws valued ·{" "}
-        {result.runs_refused.toLocaleString("en-US")} refused ({fmtPercent(result.refused_fraction, 1)})
+      <p data-testid="simulate-accounting" className="type-body tabular-nums">
+        {formatNumber(result.runs_valid, "integer", { locale })} of {formatNumber(result.runs_requested, "integer", { locale })} draws valued ·{" "}
+        {formatNumber(result.runs_refused, "integer", { locale })} refused ({fmtPercent(result.refused_fraction, 1)})
       </p>
       {result.refusals.length > 0 && (
-        <table className="text-left text-xs" aria-label="Refused draws">
+        <table className="text-left type-small" aria-label="Refused draws">
           <tbody>
             {result.refusals.map((r) => (
-              <tr key={r.code} className="border-t border-[var(--border)]">
-                <td className="py-1 pr-3 font-mono">{r.code}</td>
-                <td className="py-1 pr-3 tabular-nums">{r.count.toLocaleString("en-US")}</td>
-                <td className="py-1 text-[var(--text-secondary)]">{r.message}</td>
+              <tr key={r.code} className="border-t border-[var(--line)]">
+                <td className="py-1 pr-3 type-mono">{r.code}</td>
+                <td className="py-1 pr-3 type-mono">{formatNumber(r.count, "integer", { locale })}</td>
+                <td className="py-1 text-[var(--ink-secondary)]">{r.message}</td>
               </tr>
             ))}
           </tbody>
         </table>
       )}
-      <p data-testid="simulate-seed" className="text-xs text-[var(--text-muted)]">
+      <p data-testid="simulate-seed" className="type-small text-[var(--ink-muted)]">
         Seed {result.seed}.{" "}
         <button type="button" onClick={() => onRerun(result.seed)} disabled={rerunDisabled} className="underline disabled:opacity-50">
           Rerun with this seed
@@ -63,31 +66,31 @@ export function SimulateResults({
       </p>
 
       {suppressed ? (
-        <p data-testid="simulate-suppressed" className="text-sm text-[var(--text-secondary)]">
+        <p data-testid="simulate-suppressed" className="type-body text-[var(--ink-secondary)]">
           {result.suppressed}
         </p>
       ) : (
         <>
           <dl data-testid="simulate-stats" className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             {statEntries.map(({ key, value }) => (
-              <div key={key} className="rounded-[var(--radius-sm)] border border-[var(--border)] px-3 py-2">
-                <dt className="text-xs text-[var(--text-muted)]">{key === "mean" ? "Mean" : key.toUpperCase()} per share{conditioned}</dt>
-                <dd data-testid={`simulate-${key}`} className="text-lg font-bold tabular-nums">{fmtPerShare(value)}</dd>
+              <div key={key} className="border border-[var(--line)] px-3 py-2">
+                <dt className="type-small text-[var(--ink-muted)]">{key === "mean" ? "Mean" : key.toUpperCase()} per share{conditioned}</dt>
+                <dd data-testid={`simulate-${key}`} className="type-mono">{fmtPerShare(value, locale)}</dd>
               </div>
             ))}
           </dl>
           {result.not_finite && (
-            <p data-testid="simulate-not-finite" className="text-xs text-[var(--text-secondary)]">{result.not_finite}</p>
+            <p data-testid="simulate-not-finite" className="type-small text-[var(--ink-secondary)]">{result.not_finite}</p>
           )}
           <figure data-testid="simulate-histogram">
-            <figcaption className="text-xs text-[var(--text-muted)]">
-              Value per share across {result.runs_valid.toLocaleString("en-US")} accepted draws, {bins.length} bins.
+            <figcaption className="type-small text-[var(--ink-muted)]">
+              Value per share across {formatNumber(result.runs_valid, "integer", { locale })} accepted draws, {bins.length} bins.
               {pointValue !== null && (markedBin ? (
                 <span data-testid="histogram-mark">
-                  {` Marked: the bin from ${fmtPerShare(markedBin.lower)} to ${fmtPerShare(markedBin.upper)} holding this case's own value (${fmtPerShare(pointValue)}).`}
+                  {` Marked: the bin from ${fmtPerShare(markedBin.lower, locale)} to ${fmtPerShare(markedBin.upper, locale)} holding this case's own value (${fmtPerShare(pointValue, locale)}).`}
                 </span>
               ) : (
-                ` This case's own value (${fmtPerShare(pointValue)}) lies outside the simulated range, so no bin is marked.`
+                ` This case's own value (${fmtPerShare(pointValue, locale)}) lies outside the simulated range, so no bin is marked.`
               ))}
             </figcaption>
             <div className="mt-2 h-56 min-h-56 min-w-0">
@@ -107,13 +110,13 @@ export function SimulateResults({
             </div>
           </figure>
           <div data-testid="simulate-association">
-            <h3 className="text-xs font-bold text-[var(--text-primary)]">Rank association among accepted draws</h3>
-            <p className="text-xs text-[var(--text-muted)]">
+            <h3 className="type-panel-title text-[var(--ink)]">Rank association among accepted draws</h3>
+            <p className="type-small text-[var(--ink-muted)]">
               Spearman coefficient, from −1 to 1. It describes how the value moved with each input; it is not a share of the value.
             </p>
-            <ul className="mt-2 flex flex-col text-sm">
+            <ul className="mt-2 flex flex-col type-body">
               {association.map((a, i) => (
-                <li key={a.input} data-testid={`association-${i}`} className="flex justify-between border-b border-[var(--border)] py-1">
+                <li key={a.input} data-testid={`association-${i}`} className="flex justify-between border-b border-[var(--line)] py-1">
                   <span>{labelForInput(a.input)}</span>
                   <span className="tabular-nums">{a.spearman === null ? "not measurable (no variation)" : signed(a.spearman)}</span>
                 </li>

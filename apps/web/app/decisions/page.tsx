@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import { useT } from "@/lib/i18n/locale";
 import { fetchApi } from "@/lib/api";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { useDevMonitorPageLoad } from "@/hooks/useDevMonitorPageLoad";
@@ -12,6 +13,7 @@ import type { DecisionRow } from "./decisionTypes";
 
 export default function DecisionsPage() {
   useDevMonitorPageLoad({ component: "decisions_page" });
+  const t = useT();
 
   const decisionsQuery = useQuery<DecisionRow[]>({
     queryKey: ["decisions"],
@@ -42,8 +44,8 @@ export default function DecisionsPage() {
   return (
     <div className="p-6">
       <PageHeader
-        title="Decision Log"
-        subtitle="What was believed about a ticker, when, and why. Figures are captured by the server at record time and never edited."
+        title={t("decisions.title")}
+        subtitle={t("decisions.subtitle")}
       />
       <RecordsSyncStatus status={recordsSyncQuery.data} />
       <RecordDecisionForm watchlist={watchlistQuery.data ?? []} />
@@ -54,13 +56,13 @@ export default function DecisionsPage() {
           render NOTHING that implies a count: "0 decisions" or "none recorded
           yet" on a failed request states an answer the request never returned. */}
       {decisionsQuery.isLoading && (
-        <p role="status" className="text-[var(--text-secondary)]">Loading decisions…</p>
+        <p role="status" className="text-[var(--ink-secondary)]">Loading decisions…</p>
       )}
       {decisionsQuery.isError && (
-        <p role="alert" className="text-[var(--chart-negative)]">Could not load decisions.</p>
+        <p role="alert" className="type-body text-[var(--status-error-ink)]">Could not load decisions.</p>
       )}
       {!decisionsQuery.isLoading && !decisionsQuery.isError && decisions.length === 0 && (
-        <p className="text-[var(--text-secondary)]">No decisions recorded yet.</p>
+        <p className="text-[var(--ink-secondary)]">No decisions recorded yet.</p>
       )}
       {!decisionsQuery.isLoading && !decisionsQuery.isError && (
         <DecisionList decisions={decisions} />

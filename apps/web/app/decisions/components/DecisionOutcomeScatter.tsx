@@ -67,15 +67,15 @@ export function DecisionOutcomeScatter({ decisions }: { decisions: DecisionRow[]
       data-testid="decision-outcome-scatter"
       aria-labelledby="decision-scatter-title"
       aria-describedby="decision-scatter-coverage"
-      className="mb-6 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-5"
+      className="mb-6 border border-[var(--line)] bg-[var(--surface-raised)] p-5"
     >
-      <h2 id="decision-scatter-title" className="text-sm font-bold text-[var(--text-primary)]">
+      <h2 id="decision-scatter-title" className="type-panel-title text-[var(--ink)]">
         Gap at decision against price move since
       </h2>
       {/* Rendered as text, not only in a hover tooltip: the chart's meaning --
           including what it could NOT plot -- must be readable without pointing
           at anything. */}
-      <p id="decision-scatter-coverage" className="mt-1 text-xs text-[var(--text-muted)]">
+      <p id="decision-scatter-coverage" className="mt-1 type-small text-[var(--ink-muted)]">
         {coverage}
       </p>
       <div className="mt-3 h-72 min-h-72 min-w-0">
@@ -94,8 +94,8 @@ export function DecisionOutcomeScatter({ decisions }: { decisions: DecisionRow[]
               name="Price move since"
               {...withAxisProps({ tickFormatter: (value: number | string) => fmtPctTick(Number(value), 0) })}
             />
-            <ReferenceLine x={0} stroke="var(--chart-grid)" />
-            <ReferenceLine y={0} stroke="var(--chart-grid)" />
+            <ReferenceLine x={0} stroke="var(--grid)" />
+            <ReferenceLine y={0} stroke="var(--grid)" />
             <Tooltip {...withTooltipProps({ cursor: { strokeDasharray: "3 3" } })} />
             <Scatter data={points} name="Decisions" shape={DecisionDot} />
           </ScatterChart>

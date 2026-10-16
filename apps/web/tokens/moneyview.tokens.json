@@ -1,0 +1,147 @@
+{
+  "$description": "MoneyView design tokens (DTCG). Paper (light) theme of the 2026-10 redesign: docs/design/redesign-2026-10/ds/moneyview/tokens.json. The void (dark) theme is deliberately absent. palette holds primitives (referenced, never emitted). $deprecated tokens are pre-redesign names, removed in Task 14b.",
+  "$extensions": { "moneyview.themeReset": ["--color-*", "--text-*", "--shadow-*", "--radius-*"] },
+  "palette": {
+    "$type": "color",
+    "paper": {
+      "0": { "$value": "#ffffff" }, "25": { "$value": "#fafaf6" }, "50": { "$value": "#f5f5ed" }, "75": { "$value": "#f0f0f0" },
+      "100": { "$value": "#e6e6e0" }, "300": { "$value": "#b4b4b0" }, "350": { "$value": "#b3b3af" }, "600": { "$value": "#72726f" },
+      "700": { "$value": "#626260" }, "800": { "$value": "#414140" }, "900": { "$value": "#282828" }, "950": { "$value": "#101010" }
+    },
+    "orange": { "100": { "$value": "#ffe6dc" }, "500": { "$value": "#fa3600" }, "700": { "$value": "#c42b00" } },
+    "red": {
+      "50": { "$value": "#fdeef0" },
+      "300": { "$value": "#e88796", "$description": "Not in the redesign: sRGB midpoint of up and up-soft (heat step 6)." },
+      "600": { "$value": "#d21f3c" }
+    },
+    "blue": {
+      "50": { "$value": "#e3ecfd" },
+      "300": { "$value": "#81a4eb", "$description": "Not in the redesign: sRGB midpoint of down and down-soft (heat step 2)." },
+      "600": { "$value": "#1e5bd8" }
+    },
+    "teal": {
+      "50": { "$value": "#e2f3f0", "$description": "Not in the redesign: success surface." },
+      "600": { "$value": "#0e8c7c" },
+      "700": { "$value": "#0b6e62", "$description": "Not in the redesign: chart-2 darkened to >= 4.5:1 for success text." }
+    },
+    "sand": { "600": { "$value": "#8a7650" } },
+    "amber": {
+      "50": { "$value": "#fbf5d9", "$description": "Not in the redesign: warning surface." },
+      "600": { "$value": "#9a8600" },
+      "700": { "$value": "#7a6a00", "$description": "Not in the redesign: chart-5 darkened to >= 4.5:1 for warning text." }
+    }
+  },
+  "bg": {
+    "_": { "$value": "{palette.paper.0}", "$description": "Page ground." }
+  },
+  "surface": {
+    "_": { "$value": "{palette.paper.50}", "$description": "Section bands, alternating and hovered rows." },
+    "raised": { "$value": "{palette.paper.75}", "$description": "Panels, cards, menus, chart plots." },
+    "sunken": { "$value": "{palette.paper.25}", "$description": "Inputs and code wells." }
+  },
+  "grid": { "$value": "{palette.paper.100}", "$description": "Chart gridlines and table row rules; never a control border." },
+  "line": {
+    "_": { "$value": "{palette.paper.350}", "$description": "The 1px hairline: panel frames, dividers (decorative, 2.1:1)." },
+    "strong": { "$value": "{palette.paper.600}", "$description": "Control edges: inputs, outline buttons, segmented controls." }
+  },
+  "ink": {
+    "_": { "$value": "{palette.paper.900}", "$description": "Primary text and figures." },
+    "secondary": { "$value": "{palette.paper.800}", "$description": "Body copy, table text." },
+    "muted": { "$value": "{palette.paper.700}", "$description": "Captions, axis labels, metadata, the flat state." },
+    "disabled": { "$value": "{palette.paper.300}", "$description": "Disabled labels only." }
+  },
+  "brand": {
+    "_": { "$value": "{palette.orange.500}", "$description": "Signal orange. Fills only: primary button, selection, focus ring, the subject chart series, the active nav marker. Never on price changes." },
+    "text": { "$value": "{palette.orange.700}", "$description": "Brand as text: links, eyebrow index." },
+    "soft": { "$value": "{palette.orange.100}", "$description": "Tinted ground behind brand-text: selected rows, active chips." }
+  },
+  "on": { "brand": { "$value": "{palette.paper.950}", "$description": "Text and icons on a brand fill (white on brand is only 3.8:1)." } },
+  "focus": { "ring": { "$value": "{brand._}", "$description": "2px solid, 2px offset (globals.css :focus-visible)." } },
+  "link": { "$value": "{brand.text}" },
+  "up": {
+    "_": { "$value": "{palette.red.600}", "$description": "상승. Always with ▲ and +." },
+    "soft": { "$value": "{palette.red.50}" }
+  },
+  "down": {
+    "_": { "$value": "{palette.blue.600}", "$description": "하락. Always with ▼ and -." },
+    "soft": { "$value": "{palette.blue.50}" }
+  },
+  "flat": { "$value": "{ink.muted}", "$description": "보합: 0.0% and missing data." },
+  "status": {
+    "$description": "Not in the redesign. Error follows bundle.css (input errors use the up tone); warning and success derive from chart-5 and chart-2, darkened to >= 4.5:1.",
+    "error": { "ink": { "$value": "{up._}" }, "surface": { "$value": "{up.soft}" }, "border": { "$value": "{up._}" } },
+    "warning": { "ink": { "$value": "{palette.amber.700}" }, "surface": { "$value": "{palette.amber.50}" }, "border": { "$value": "{palette.amber.600}" } },
+    "success": { "ink": { "$value": "{palette.teal.700}" }, "surface": { "$value": "{palette.teal.50}" }, "border": { "$value": "{palette.teal.600}" } }
+  },
+  "overlay": { "scrim": { "$value": "rgb(16 16 16 / 0.45)", "$description": "Not in the redesign: modal backdrop, on-brand black at 45%." } },
+  "chart": {
+    "1": { "$value": "{brand._}", "$description": "The subject series (the one asset the chart is about)." },
+    "2": { "$value": "{palette.teal.600}", "$description": "Benchmark or comparison line." },
+    "3": { "$value": "{palette.sand.600}", "$description": "Secondary comparison, area fills." },
+    "4": { "$value": "{palette.paper.700}", "$description": "Everything else: the market average, the folded 'Other'." },
+    "5": { "$value": "{palette.amber.600}", "$description": "A fifth series only when unavoidable." },
+    "area-opacity": { "$value": "0.12", "$description": "Fill opacity under a line and for percentile bands (Main.dc.html)." },
+    "heat-1": { "$value": "{palette.blue.600}" },
+    "heat-2": { "$value": "{palette.blue.300}" },
+    "heat-3": { "$value": "{palette.blue.50}" },
+    "heat-4": { "$value": "{palette.paper.50}" },
+    "heat-5": { "$value": "{palette.red.50}" },
+    "heat-6": { "$value": "{palette.red.300}" },
+    "heat-7": { "$value": "{palette.red.600}" }
+  },
+  "space": {
+    "$type": "dimension",
+    "1": { "$value": "4px" }, "2": { "$value": "8px" }, "3": { "$value": "12px" }, "4": { "$value": "16px" },
+    "5": { "$value": "20px" }, "6": { "$value": "24px" }, "8": { "$value": "32px" }, "16": { "$value": "64px" }, "32": { "$value": "128px" }
+  },
+  "radius": {
+    "0": { "$value": "0px", "$description": "Panels, tables, charts, modals: the default (no rounded class)." },
+    "1": { "$value": "2px", "$description": "Buttons, inputs, segmented controls." },
+    "2": { "$value": "4px", "$description": "Tooltips, menus, delta chips." },
+    "pill": { "$value": "999px", "$description": "Status dots." }
+  },
+  "hairline": { "$value": "1px", "$description": "Every border and rule; no 2px borders except the focus ring." },
+  "duration": { "fast": { "$value": "100ms" }, "normal": { "$value": "200ms" }, "slow": { "$value": "350ms" } },
+  "easing": {
+    "default": { "$value": "cubic-bezier(0.4, 0, 0.2, 1)" },
+    "enter": { "$value": "cubic-bezier(0, 0, 0.2, 1)" },
+    "exit": { "$value": "cubic-bezier(0.4, 0, 1, 1)" }
+  },
+  "bp": {
+    "desktop": { "$value": "992px", "$extensions": { "moneyview.theme": "--breakpoint-lg" } },
+    "tablet": { "$value": "768px", "$extensions": { "moneyview.theme": "--breakpoint-md" } },
+    "mobile": { "$value": "480px", "$extensions": { "moneyview.theme": "--breakpoint-sm" } }
+  },
+  "content": { "max": { "$value": "1280px" } },
+  "gutter": { "$value": "24px", "$description": "Grid gutter (16px under 768px)." },
+  "component": {
+    "$description": "Component sizes from the redesign's bundle.css.",
+    "button": { "height-sm": { "$value": "32px" }, "height-md": { "$value": "44px" } },
+    "input": { "height": { "$value": "44px" } },
+    "tick": { "size": { "$value": "8px", "$description": "Panel corner ticks." } },
+    "delta": { "glyph": { "$value": "9px", "$description": "▲▼■ inside a delta." } }
+  },
+  "font": { "family": {
+    "sans": { "$value": "var(--font-host-grotesk), var(--font-pretendard), system-ui, \"Malgun Gothic\", sans-serif", "$extensions": { "moneyview.theme": "--font-sans" } },
+    "mono": { "$value": "var(--font-geist-mono), var(--font-pretendard), ui-monospace, monospace", "$extensions": { "moneyview.theme": "--font-mono" } }
+  } },
+  "type": {
+    "display": { "_": { "$value": "62px" }, "line-height": { "$value": "64px" }, "weight": { "$value": "600" }, "tracking": { "$value": "-0.03em" }, "family": { "$value": "{font.family.sans}" } },
+    "heading-1": { "_": { "$value": "53px" }, "line-height": { "$value": "58px" }, "weight": { "$value": "600" }, "tracking": { "$value": "-0.025em" }, "family": { "$value": "{font.family.sans}" } },
+    "heading-2": { "_": { "$value": "44px" }, "line-height": { "$value": "50px" }, "weight": { "$value": "600" }, "tracking": { "$value": "-0.02em" }, "family": { "$value": "{font.family.sans}" } },
+    "heading-3": { "_": { "$value": "36px" }, "line-height": { "$value": "42px" }, "weight": { "$value": "500" }, "tracking": { "$value": "-0.015em" }, "family": { "$value": "{font.family.sans}" } },
+    "heading-4": { "_": { "$value": "31px" }, "line-height": { "$value": "38px" }, "weight": { "$value": "500" }, "tracking": { "$value": "-0.01em" }, "family": { "$value": "{font.family.sans}" } },
+    "heading-5": { "$extensions": { "moneyview.utility": "type-heading-5" }, "_": { "$value": "27px" }, "line-height": { "$value": "34px" }, "weight": { "$value": "500" }, "tracking": { "$value": "-0.01em" }, "family": { "$value": "{font.family.sans}" } },
+    "panel-title": { "$description": "bundle.css .mv-panel-title.", "$extensions": { "moneyview.utility": "type-panel-title" }, "_": { "$value": "18px" }, "line-height": { "$value": "24px" }, "weight": { "$value": "600" }, "tracking": { "$value": "-0.01em" }, "family": { "$value": "{font.family.sans}" } },
+    "body-lg": { "_": { "$value": "18px" }, "line-height": { "$value": "30px" }, "weight": { "$value": "400" }, "tracking": { "$value": "-0.005em" }, "family": { "$value": "{font.family.sans}" } },
+    "body": { "$extensions": { "moneyview.utility": "type-body" }, "_": { "$value": "15px" }, "line-height": { "$value": "24px" }, "weight": { "$value": "400" }, "tracking": { "$value": "0" }, "family": { "$value": "{font.family.sans}" } },
+    "label": { "$extensions": { "moneyview.utility": "type-label" }, "_": { "$value": "15px" }, "line-height": { "$value": "20px" }, "weight": { "$value": "600" }, "tracking": { "$value": "0" }, "family": { "$value": "{font.family.sans}" } },
+    "small": { "$description": "bundle.css .mv-field-help: help text, dense secondary copy.", "$extensions": { "moneyview.utility": "type-small" }, "_": { "$value": "13px" }, "line-height": { "$value": "18px" }, "weight": { "$value": "400" }, "tracking": { "$value": "0" }, "family": { "$value": "{font.family.sans}" } },
+    "figure": { "$extensions": { "moneyview.utility": "type-figure" }, "_": { "$value": "44px" }, "line-height": { "$value": "44px" }, "weight": { "$value": "500" }, "tracking": { "$value": "-0.03em" }, "family": { "$value": "{font.family.mono}" } },
+    "figure-md": { "$description": "Main.dc.html panel figure (KOSPI last): figures of 20px and up outside stat cards.", "$extensions": { "moneyview.utility": "type-figure-md" }, "_": { "$value": "32px" }, "line-height": { "$value": "32px" }, "weight": { "$value": "500" }, "tracking": { "$value": "-0.03em" }, "family": { "$value": "{font.family.mono}" } },
+    "mono-link": { "$extensions": { "moneyview.utility": "type-mono-link" }, "_": { "$value": "16px" }, "line-height": { "$value": "20px" }, "weight": { "$value": "500" }, "tracking": { "$value": "0.02em" }, "family": { "$value": "{font.family.mono}" } },
+    "mono": { "$extensions": { "moneyview.utility": "type-mono" }, "_": { "$value": "13px" }, "line-height": { "$value": "18px" }, "weight": { "$value": "500" }, "tracking": { "$value": "0" }, "family": { "$value": "{font.family.mono}" } },
+    "caption": { "$extensions": { "moneyview.utility": "type-caption" }, "_": { "$value": "11px" }, "line-height": { "$value": "14px" }, "weight": { "$value": "500" }, "tracking": { "$value": "0.08em" }, "family": { "$value": "{font.family.mono}" } },
+    "caption-ko": { "$description": "tokens.json caption usage: Korean captions at 12px. Applied by globals.css to Hangul inside .type-caption.", "_": { "$value": "12px" }, "line-height": { "$value": "16px" }, "weight": { "$value": "500" }, "tracking": { "$value": "0" }, "family": { "$value": "{font.family.mono}" } }
+  }
+}

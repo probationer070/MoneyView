@@ -71,10 +71,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   if (hasFailed) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-red-50 text-red-900 border-2 border-red-200">
-        <AlertTriangle className="h-12 w-12 text-red-600 mb-4 animate-pulse" />
-        <h2 className="text-xl font-bold tracking-tight">System Boot Failure</h2>
-        <p className="text-sm mt-2 max-w-sm text-center">
+      <div className="min-h-screen flex flex-col items-center justify-center bg-[var(--status-error-surface)] text-[var(--status-error-ink)] border-2 border-[var(--status-error-border)]">
+        <AlertTriangle className="h-12 w-12 text-[var(--status-error-ink)] mb-4 animate-pulse" />
+        <h2 className="type-panel-title">System Boot Failure</h2>
+        <p className="type-body mt-2 max-w-sm text-center">
           The core Python analytics engine failed to start or coordinate properly within the 30-second initialization limit.
         </p>
       </div>
@@ -83,10 +83,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   if (!isBackendReady) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-[var(--bg-primary)] text-[var(--text-primary)]">
-        <Activity className="h-12 w-12 text-[var(--surface)] animate-bounce mb-4" />
-        <h2 className="text-xl font-bold tracking-tight">Starting Core Analytics...</h2>
-        <p className="text-sm text-[var(--text-muted)] mt-2">Discovering dynamic port mapping & initiating connection.</p>
+      <div className="min-h-screen flex flex-col items-center justify-center bg-[var(--bg)] text-[var(--ink)]">
+        <Activity className="h-12 w-12 text-[var(--brand-text)] animate-bounce mb-4" />
+        <h2 className="type-panel-title">Starting Core Analytics...</h2>
+        <p className="type-body text-[var(--ink-muted)] mt-2">Discovering dynamic port mapping & initiating connection.</p>
       </div>
     );
   }

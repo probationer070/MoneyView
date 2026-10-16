@@ -84,7 +84,7 @@ test.describe("records sync status on the decision log page", () => {
   test("an unavailable folder says changes are kept on this PC", async ({ page }) => {
     await openDecisions(page, on({ last_error: "sync folder does not exist" }));
     await expect(line(page)).toHaveText("Sync unavailable · changes are kept on this PC");
-    await expect(line(page)).toHaveClass(/state-warning/);
+    await expect(line(page)).toHaveClass(/status-warning-ink/);
   });
 
   test("a decisions refetch keeps the status line during the hold", async ({ page }) => {

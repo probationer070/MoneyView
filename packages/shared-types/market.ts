@@ -115,3 +115,24 @@ export interface MarketSpread {
   latest: number | null;
   refused_reason: string | null;
 }
+
+/**
+ * Breadth and cross-asset regime from the tracked indices' last two closes. Mirrors
+ * `MarketRegimeContext` in `apps/api/models/schema_parts/market.py`; served by GET /api/v1/market/regime.
+ *
+ * `regime_label` is "risk_on" | "mixed" | "risk_off" | "unknown" today. It is typed as a string
+ * because the backend types it so, and the UI reads any other value as unknown. `regime_summary` is
+ * English prose and is never rendered (spec §2.5). Counts are whole numbers; `breadth_ratio` is a
+ * fraction (0.75 = three of four equity indices up), null when no equity index had two closes.
+ */
+export interface MarketRegimeContext {
+  regime_label: string;
+  regime_summary: string;
+  equity_advancers: number;
+  equity_decliners: number;
+  breadth_ratio: number | null;
+  equity_index_count: number;
+  risk_on_signals: number;
+  risk_off_signals: number;
+  signal_count: number;
+}

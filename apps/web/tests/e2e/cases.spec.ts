@@ -556,3 +556,15 @@ test.describe("market cross-check (EV/Sales)", () => {
     await expect(pricing.getByTestId("pricing-implied-ev")).toHaveCount(0);
   });
 });
+
+test.describe("the cases screen in Korean", () => {
+  test.use({ locale: "ko-KR" });
+  test("the title and a bilingual header follow the Korean locale; a figure renders", async ({ page }) => {
+    await mockCasesApi(page);
+    await page.goto("/cases", { waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("heading", { name: "케이스", exact: true })).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByRole("columnheader", { name: "케이스", exact: true })).toBeVisible();
+    await gotoCase(page, 3);
+    await expect(page.getByTestId("case-valuation").getByTestId("value-per-share-diluted")).toHaveText("49.96");
+  });
+});

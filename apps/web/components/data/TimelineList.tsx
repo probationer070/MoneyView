@@ -32,7 +32,7 @@ export function TimelineList({ groups, empty }: TimelineListProps) {
     <div className="space-y-6">
       {groups.map((group) => (
         <section key={group.id} className="space-y-3">
-          <div className="sticky top-0 z-10 inline-flex rounded-full border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-1 text-xs font-semibold text-[var(--text-muted)]">
+          <div className="sticky top-0 z-10 inline-flex rounded-[var(--radius-2)] border border-[var(--line)] bg-[var(--surface-raised)] px-3 py-1 type-small text-[var(--ink-muted)]">
             {group.label}
           </div>
           <div className="space-y-4">
@@ -42,20 +42,21 @@ export function TimelineList({ groups, empty }: TimelineListProps) {
               return (
                 <div key={item.id} className="grid grid-cols-[1.25rem_minmax(0,1fr)] gap-3">
                   <div className="relative flex justify-center">
-                    <span className={`mt-1 h-3 w-3 rounded-full border-2 border-[var(--bg-surface)] ${item.active ? "bg-[var(--accent)]" : "bg-[var(--text-muted)]/40"}`} />
+                    {/* rounded-full: dot */}
+                    <span className={`mt-1 h-3 w-3 rounded-full border-2 border-[var(--surface-raised)] ${item.active ? "bg-[var(--brand)]" : "bg-[var(--line)]"}`} />
                     {!isLast ? (
-                      <span className="absolute top-5 bottom-[-1rem] w-px bg-[var(--border)]" />
+                      <span className="absolute top-5 bottom-[-1rem] w-px bg-[var(--line)]" />
                     ) : null}
                   </div>
-                  <article className={`rounded-[var(--radius)] border px-4 py-4 ${item.active ? "border-[var(--accent)] bg-[var(--surface-muted)]/40" : "border-[var(--border)] bg-[var(--bg-surface)]"}`}>
+                  <article className={`border px-4 py-4 ${item.active ? "border-[var(--brand)] bg-[var(--brand-soft)]" : "border-[var(--line)] bg-[var(--surface-raised)]"}`}>
                     <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                       <div className="min-w-0 space-y-1">
-                        <h3 className="text-sm font-bold text-[var(--text-primary)]">{item.title}</h3>
+                        <h3 className="type-body text-[var(--ink)]">{item.title}</h3>
                         {item.subtitle ? (
-                          <p className="text-xs text-[var(--text-muted)]">{item.subtitle}</p>
+                          <p className="type-small text-[var(--ink-muted)]">{item.subtitle}</p>
                         ) : null}
                         {item.meta ? (
-                          <div className="pt-1 text-xs text-[var(--text-muted)]">{item.meta}</div>
+                          <div className="pt-1 type-small text-[var(--ink-muted)]">{item.meta}</div>
                         ) : null}
                       </div>
                       {item.actions ? (

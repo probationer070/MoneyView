@@ -45,12 +45,12 @@ export function InfoTooltip({ label, description }: InfoTooltipProps) {
       aria-describedby={isVisible ? tooltipId : undefined}
     >
       <span>{label}</span>
-      <Info className="h-3.5 w-3.5 text-[var(--text-muted)]" aria-hidden="true" />
+      <Info className="h-3.5 w-3.5 text-[var(--ink-muted)]" aria-hidden="true" />
       {isVisible && (
         <span
           id={tooltipId}
           role="tooltip"
-          className="pointer-events-none fixed z-50 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-3 text-xs font-normal leading-relaxed text-[var(--text-primary)] shadow-lg"
+          className="pointer-events-none fixed z-50 rounded-[var(--radius-2)] border border-[var(--line)] bg-[var(--surface-raised)] p-3 type-small text-[var(--ink)]"
           style={{
             left: position.left,
             top: position.top,

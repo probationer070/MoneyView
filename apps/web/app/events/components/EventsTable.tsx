@@ -1,13 +1,22 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { fieldInputClass } from "@/components/ui/InlineField";
+import { BilingualLabel } from "@/components/ui/BilingualLabel";
+import { useT } from "@/lib/i18n/locale";
+import type { MessageKey } from "@/lib/i18n/translate";
 import { EventApiError } from "@/lib/marketEventsApi";
 import { useDeleteEvent } from "@/lib/useEventMutations";
 import type { EventCategory, MarketEvent } from "@/lib/useMarketEvents";
 
 type OriginFilter = "all" | "builtin" | "rule" | "user" | "computed" | "needs-category";
 
-const ORIGIN_LABEL: Record<MarketEvent["origin"], string> = { builtin: "Built-in", rule: "Rule", user: "Added by you", computed: "Computed from prices" };
+const ORIGIN_KEY: Record<MarketEvent["origin"], MessageKey> = {
+  builtin: "events.origin.builtin",
+  rule: "events.origin.rule",
+  user: "events.origin.user",
+  computed: "events.origin.computed",
+};
 
 function host(source: string): string {
   try {
@@ -18,6 +27,7 @@ function host(source: string): string {
 }
 
 export function EventsTable({ events, categories, onEdit }: { events: MarketEvent[]; categories: EventCategory[]; onEdit: (event: MarketEvent) => void }) {
+  const t = useT();
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [originFilter, setOriginFilter] = useState<OriginFilter>("all");
   const [confirming, setConfirming] = useState<string | null>(null);
@@ -34,78 +44,86 @@ export function EventsTable({ events, categories, onEdit }: { events: MarketEven
   );
 
   return (
-    <section data-testid="events-table" className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-5">
+    <section data-testid="events-table" className="border border-[var(--line)] bg-[var(--surface-raised)] p-5">
       <div className="flex flex-wrap items-end gap-3">
-        <h2 className="mr-auto text-sm font-bold text-[var(--text-primary)]">All events</h2>
-        <label className="flex flex-col gap-1 text-xs text-[var(--text-secondary)]">
-          Filter by category
-          <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className="rounded border border-[var(--border-default)] px-2 py-1">
-            <option value="all">All categories</option>
+        <h2 className="type-panel-title mr-auto text-[var(--ink)]">{t("events.eventsTitle")}</h2>
+        <label className="flex flex-col gap-1 type-small text-[var(--ink-secondary)]">
+          {t("events.filterCategory")}
+          <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className={fieldInputClass}>
+            <option value="all">{t("events.allCategories")}</option>
             {categories.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
           </select>
         </label>
-        <label className="flex flex-col gap-1 text-xs text-[var(--text-secondary)]">
-          Filter by origin
-          <select value={originFilter} onChange={(e) => setOriginFilter(e.target.value as OriginFilter)} className="rounded border border-[var(--border-default)] px-2 py-1">
-            <option value="all">All origins</option>
-            <option value="builtin">Built-in</option>
-            <option value="rule">Rule</option>
-            <option value="user">Added by you</option>
-            <option value="computed">Computed from prices</option>
-            <option value="needs-category">Needs category</option>
+        <label className="flex flex-col gap-1 type-small text-[var(--ink-secondary)]">
+          {t("events.filterOrigin")}
+          <select value={originFilter} onChange={(e) => setOriginFilter(e.target.value as OriginFilter)} className={fieldInputClass}>
+            <option value="all">{t("events.allOrigins")}</option>
+            <option value="builtin">{t("events.origin.builtin")}</option>
+            <option value="rule">{t("events.origin.rule")}</option>
+            <option value="user">{t("events.origin.user")}</option>
+            <option value="computed">{t("events.origin.computed")}</option>
+            <option value="needs-category">{t("events.origin.needsCategory")}</option>
           </select>
         </label>
       </div>
       {deleteEvent.isError ? (
-        <p role="alert" className="mt-2 text-sm text-[var(--state-warning)]">
-          {deleteEvent.error instanceof EventApiError ? deleteEvent.error.detail : "Could not delete the event."}
+        <p role="alert" className="mt-2 type-body text-[var(--status-warning-ink)]">
+          {deleteEvent.error instanceof EventApiError ? deleteEvent.error.detail : t("events.deleteFailed")}
         </p>
       ) : null}
       <div className="mt-3 overflow-x-auto">
-        <table className="w-full text-left text-sm">
-          <thead className="text-xs text-[var(--text-secondary)]">
-            <tr><th className="py-1 pr-3">Date</th><th className="pr-3">Event</th><th className="pr-3">Category</th><th className="pr-3">Origin</th><th className="pr-3">Source</th><th /></tr>
+        <table className="w-full text-left type-body">
+          <thead className="type-caption text-[var(--ink-secondary)]">
+            <tr>
+              <th className="py-1 pr-3 text-left"><BilingualLabel k="date" /></th>
+              <th className="pr-3 text-left"><BilingualLabel k="event" /></th>
+              <th className="pr-3 text-left"><BilingualLabel k="category" /></th>
+              <th className="pr-3 text-left"><BilingualLabel k="origin" /></th>
+              <th className="pr-3 text-left"><BilingualLabel k="source" /></th>
+              <th />
+            </tr>
           </thead>
           <tbody>
             {rows.map((event) => {
               const category = byId.get(event.category);
               return (
-                <tr key={event.id} data-testid={`event-row-${event.id}`} className="border-t border-[var(--border)] align-top">
-                  <td className="py-2 pr-3 tabular-nums">{event.end_date ? `${event.start_date} – ${event.end_date}` : event.start_date}</td>
+                <tr key={event.id} data-testid={`event-row-${event.id}`} className="border-t border-[var(--grid)] align-top">
+                  <td className="py-2 pr-3 type-mono">{event.end_date ? `${event.start_date} – ${event.end_date}` : event.start_date}</td>
                   <td className="pr-3">
-                    <span className="font-semibold text-[var(--text-primary)]">{event.label}</span>
-                    {event.note ? <span className="block text-xs text-[var(--text-secondary)]">{event.note}</span> : null}
+                    <span className="type-label text-[var(--ink)]">{event.label}</span>
+                    {event.note ? <span className="block type-small text-[var(--ink-muted)]">{event.note}</span> : null}
                   </td>
                   <td className="pr-3">
                     <span className="inline-flex items-center gap-2">
+                      {/* rounded-full: dot */}
                       <span aria-hidden className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: category?.color }} />
                       {category?.label ?? event.category}
                     </span>
                     {event.missing_category ? (
-                      <span data-testid={`event-missing-category-${event.id}`} className="block text-xs text-[var(--state-warning)]">
-                        category removed ({event.missing_category}), choose a new one
+                      <span data-testid={`event-missing-category-${event.id}`} className="block type-caption text-[var(--status-warning-ink)]">
+                        {t("events.missingCategory", { category: event.missing_category })}
                       </span>
                     ) : null}
                   </td>
-                  <td className="pr-3">{ORIGIN_LABEL[event.origin]}</td>
+                  <td className="pr-3">{t(ORIGIN_KEY[event.origin])}</td>
                   <td className="pr-3">
                     {event.source ? <a href={event.source} target="_blank" rel="noreferrer" className="underline">{host(event.source)}</a> : "—"}
                   </td>
                   <td className="whitespace-nowrap">
                     {event.origin === "user" ? (
                       <span className="flex gap-2">
-                        <button type="button" data-testid={`event-edit-${event.id}`} onClick={() => onEdit(event)} className="underline">Edit</button>
+                        <button type="button" data-testid={`event-edit-${event.id}`} onClick={() => onEdit(event)} className="underline">{t("events.edit")}</button>
                         {confirming === event.id ? (
-                          <button type="button" data-testid={`event-delete-confirm-${event.id}`} className="font-semibold text-[var(--state-warning)] underline"
+                          <button type="button" data-testid={`event-delete-confirm-${event.id}`} className="type-label text-[var(--status-warning-ink)] underline"
                             onClick={() => deleteEvent.mutate(event.id, { onSettled: () => setConfirming(null) })}>
-                            Confirm delete
+                            {t("events.confirmDelete")}
                           </button>
                         ) : (
-                          <button type="button" data-testid={`event-delete-${event.id}`} onClick={() => setConfirming(event.id)} className="underline">Delete</button>
+                          <button type="button" data-testid={`event-delete-${event.id}`} onClick={() => setConfirming(event.id)} className="underline">{t("events.delete")}</button>
                         )}
                       </span>
                     ) : (
-                      <span className="text-xs text-[var(--text-muted)]">{event.origin === "computed" ? "from cached prices" : "from a data file"}</span>
+                      <span className="type-caption text-[var(--ink-muted)]">{event.origin === "computed" ? t("events.fromCachedPrices") : t("events.fromDataFile")}</span>
                     )}
                   </td>
                 </tr>

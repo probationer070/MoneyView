@@ -24,16 +24,18 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { emitClientPerformanceEvent, getApiBaseUrl } from "@/lib/api";
 import { useDevMonitorPageLoad } from "@/hooks/useDevMonitorPageLoad";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { useT } from "@/lib/i18n/locale";
+import type { MessageKey } from "@/lib/i18n/translate";
 import { normalizeCorrelationResult, normalizeMonteCarloResult, normalizeValuationResult } from "./lib/resultNormalization";
 
 type SimulationTab = "path" | "risk" | "distribution" | "valuation" | "correlation";
 
-const tabs: Array<{ key: SimulationTab; label: string; description: string }> = [
-  { key: "path", label: "Path Simulation", description: "GBM + jump-diffusion path engine and percentile cone." },
-  { key: "risk", label: "Risk Analysis", description: "VaR, CVaR, downside metrics, and loss diagnostics." },
-  { key: "distribution", label: "Return Distribution", description: "Histogram, normal fit, and fat-tail inspection." },
-  { key: "valuation", label: "Corporate Valuation", description: "DCF fair-value uncertainty and undervaluation probability." },
-  { key: "correlation", label: "Correlation Model", description: "Multi-asset correlation structure and sensitivity." },
+const tabs: Array<{ key: SimulationTab; label: MessageKey; description: MessageKey }> = [
+  { key: "path", label: "monteCarlo.tabs.path", description: "monteCarlo.tabs.pathDescription" },
+  { key: "risk", label: "monteCarlo.tabs.risk", description: "monteCarlo.tabs.riskDescription" },
+  { key: "distribution", label: "monteCarlo.tabs.distribution", description: "monteCarlo.tabs.distributionDescription" },
+  { key: "valuation", label: "monteCarlo.tabs.valuation", description: "monteCarlo.tabs.valuationDescription" },
+  { key: "correlation", label: "monteCarlo.tabs.correlation", description: "monteCarlo.tabs.correlationDescription" },
 ];
 
 const defaultInput: PathSimulationInput = {
@@ -134,6 +136,7 @@ function downloadCsv(filename: string, rows: Array<Record<string, string | numbe
 }
 
 export default function MonteCarloPage() {
+  const t = useT();
   useDevMonitorPageLoad({ component: "monte_carlo" });
   // Page-level state owns worker lifecycle, tab selection, and all simulation inputs/results.
   const [activeTab, setActiveTab] = useState<SimulationTab>("path");
@@ -674,9 +677,9 @@ export default function MonteCarloPage() {
   return (
     <div className="space-y-6 max-w-7xl mx-auto px-4 py-6">
       <PageHeader
-        eyebrow="Monte Carlo investment analysis"
-        title="Simulation Lab"
-        subtitle="Five-tab workflow for path simulation, risk analysis, return distribution, valuation uncertainty, and correlation structure."
+        eyebrow={{ label: "monteCarlo" }}
+        title={t("monteCarlo.title")}
+        subtitle={t("monteCarlo.subtitle")}
       />
 
       <section className="grid grid-cols-1 gap-3 lg:grid-cols-5" role="tablist" aria-label="Simulation workflows">
@@ -686,8 +689,8 @@ export default function MonteCarloPage() {
             id={`simulation-tab-${tab.key}`}
             controls={`simulation-panel-${tab.key}`}
             active={activeTab === tab.key}
-            label={tab.label}
-            description={tab.description}
+            label={t(tab.label)}
+            description={t(tab.description)}
             onClick={() => setActiveTab(tab.key)}
           />
         ))}

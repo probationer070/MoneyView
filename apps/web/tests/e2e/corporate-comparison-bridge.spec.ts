@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { CORPORATE_COMPARISON_CURRENT_PRICES, mockCorporatePageApi } from "./helpers/corporatePageMock";
+import { openLowerTab } from "./helpers/corporateDcf";
 
 // XPath string literals: ticker and column-header values used here never contain a
 // double quote, so a plain wrap is safe.
@@ -25,6 +26,7 @@ async function gotoComparison(page: Page) {
   // navigation never fetches rows.
   await page.goto("/corporate", { waitUntil: "domcontentloaded" });
   await expect(page.getByRole("heading", { name: /Corporate Analysis/i })).toBeVisible({ timeout: 60_000 });
+  await openLowerTab(page, "Target Stock Comparison");
   await page.getByRole("button", { name: "Refresh comparison" }).click();
   await expect(page.getByRole("cell", { name: "MISS" }).first()).toBeVisible({ timeout: 60_000 });
 }

@@ -46,17 +46,17 @@ export function DcfSensitivityTable({
   return (
     <div className="space-y-2">
       <div>
-        <h4 className="text-sm font-bold text-[var(--text-primary)]">WACC x Terminal Growth Sensitivity</h4>
-        <p className="mt-1 text-xs text-[var(--text-muted)]">
+        <h4 className="type-panel-title text-[var(--ink)]">WACC x Terminal Growth Sensitivity</h4>
+        <p className="type-small mt-1 text-[var(--ink-muted)]">
           Each cell revalues the same five projected FCFF years at that discount rate and perpetuity growth.
           The upper figure is intrinsic value per share, the lower one the share of enterprise value coming
           from the terminal period. A cell reading &quot;{UNDEFINED_PLACEHOLDER}&quot; is one where WACC is not
           above terminal growth, so the model has no value there rather than a large one.
         </p>
       </div>
-      <div className="overflow-x-auto rounded-[var(--radius)] border border-[var(--border)]">
-        <table className="w-full min-w-[42rem] table-fixed text-left text-sm">
-          <thead className="bg-[var(--surface)] text-[length:var(--type-table-header)] font-bold uppercase tracking-wide text-[var(--text-primary)]">
+      <div className="overflow-x-auto border border-[var(--line)]">
+        <table className="type-small w-full min-w-[42rem] table-fixed text-left">
+          <thead className="type-caption uppercase bg-[var(--brand)] text-[var(--on-brand)]">
             <tr>
               <th className="px-3 py-2">WACC \ Terminal g</th>
               {sensitivity.terminal_growth_values.map((growth) => (
@@ -68,8 +68,8 @@ export function DcfSensitivityTable({
           </thead>
           <tbody>
             {sensitivity.wacc_values.map((wacc, row) => (
-              <tr key={`sensitivity-wacc-${wacc}`} className="border-t border-[var(--border)]">
-                <td className="px-3 py-2 font-bold tabular-nums text-[var(--text-primary)]">{formatPct(wacc * 100)}</td>
+              <tr key={`sensitivity-wacc-${wacc}`} className="border-t border-[var(--line)]">
+                <td className="type-mono px-3 py-2 tabular-nums text-[var(--ink)]">{formatPct(wacc * 100)}</td>
                 {sensitivity.terminal_growth_values.map((growth, column) => {
                   const cell = sensitivity.cells[row * width + column];
                   if (!cell) return <td key={`sensitivity-cell-${wacc}-${growth}`} className="px-3 py-2" />;
@@ -78,22 +78,22 @@ export function DcfSensitivityTable({
                     <td
                       key={`sensitivity-cell-${wacc}-${growth}`}
                       title={cellTitle(cell)}
-                      className={`px-3 py-2 ${cell.is_base ? "bg-[var(--surface-muted)] ring-1 ring-inset ring-[var(--accent)]" : ""}`}
+                      className={`px-3 py-2 ${cell.is_base ? "bg-[var(--surface)] ring-1 ring-inset ring-[var(--brand)]" : ""}`}
                     >
-                      <div className="font-bold tabular-nums text-[var(--text-primary)]">
+                      <div className="type-mono tabular-nums text-[var(--ink)]">
                         {cell.undefined_reason
                           ? UNDEFINED_PLACEHOLDER
                           : cell.intrinsic_value_per_share === null
                             ? UNBRIDGED_PLACEHOLDER
                             : formatNumber(cell.intrinsic_value_per_share)}
                       </div>
-                      <div className="text-xs tabular-nums text-[var(--text-muted)]">
+                      <div className="type-mono tabular-nums text-[var(--ink-muted)]">
                         {cell.terminal_value_share_pct === null
                           ? UNDEFINED_PLACEHOLDER
                           : `${formatPct(cell.terminal_value_share_pct)} terminal`}
                       </div>
                       {cell.is_base ? (
-                        <div className="text-[10px] font-bold uppercase tracking-wide text-[var(--accent)]">Base</div>
+                        <div className="type-caption uppercase text-[var(--brand-text)]">Base</div>
                       ) : null}
                     </td>
                   );

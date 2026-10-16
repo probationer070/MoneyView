@@ -16,9 +16,9 @@ import { mockMarketPageApi } from "./helpers/marketPageMock";
  * throughout the defect: the option was set, it was just unpaintable.
  */
 
-/** globals.css: red is a gain, blue is a loss -- the convention the app states in copy. */
-const DELTA_UP = { r: 0xe5, g: 0x45, b: 0x45 };
-const DELTA_DOWN = { r: 0x45, g: 0x89, b: 0xe5 };
+/** tokens: --up / --down. Red is a gain, blue is a loss -- the convention the app states in copy. */
+const DELTA_UP = { r: 0xd2, g: 0x1f, b: 0x3c };
+const DELTA_DOWN = { r: 0x1e, g: 0x5b, b: 0xd8 };
 
 const NEAR = 24;
 
@@ -53,8 +53,8 @@ test("candles are painted in the delta colours, not left black", async ({ page }
       if (a < 200) continue;
       counts.opaque += 1;
       if (r < 32 && g < 32 && b < 32) counts.black += 1;
-      if (Math.abs(r - 0xe5) <= 24 && Math.abs(g - 0x45) <= 24 && Math.abs(b - 0x45) <= 24) counts.up += 1;
-      if (Math.abs(r - 0x45) <= 24 && Math.abs(g - 0x89) <= 24 && Math.abs(b - 0xe5) <= 24) counts.down += 1;
+      if (Math.abs(r - 0xd2) <= 24 && Math.abs(g - 0x1f) <= 24 && Math.abs(b - 0x3c) <= 24) counts.up += 1;
+      if (Math.abs(r - 0x1e) <= 24 && Math.abs(g - 0x5b) <= 24 && Math.abs(b - 0xd8) <= 24) counts.down += 1;
     }
     return counts;
   });
@@ -78,6 +78,6 @@ test("candles are painted in the delta colours, not left black", async ({ page }
   ).toBeLessThan(0.5);
 
   // Guard the helper too, so a future refactor cannot make `close` vacuous.
-  expect(close(DELTA_UP.r, 0xe5)).toBe(true);
+  expect(close(DELTA_UP.r, 0xd2)).toBe(true);
   expect(close(DELTA_UP.r, 0x00)).toBe(false);
 });

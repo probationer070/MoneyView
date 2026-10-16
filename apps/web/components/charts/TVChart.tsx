@@ -5,6 +5,8 @@ import { createChart, IChartApi, ISeriesApi, ColorType, CrosshairMode, Candlesti
 import { TVCandle, TVVolume, sanitizeTooltip } from "@/lib/transformers";
 import { emitClientPerformanceEvent } from "@/lib/api";
 import { resolveCssColor } from "@/lib/cssColor";
+import { candleUpColour } from "@/lib/candleColours";
+import { tokens } from "@/lib/tokens.generated";
 import { EventLinesPrimitive, eventsNearX, type EventGranularity, type EventHit, type EventLineSpec } from "@/components/charts/primitives/EventLinesPrimitive";
 import { EventTooltip } from "@/components/charts/EventTooltip";
 
@@ -57,9 +59,9 @@ const TVChart: React.FC<TVChartProps> = ({
     volumeData,
     lineSeriesData = NO_LINE_SERIES,
     height = 500,
-    colorAccent = "var(--delta-up)",
+    colorAccent = "var(--up)",
     upColor,
-    downColor = "var(--delta-down)",
+    downColor = "var(--down)",
     tickerName = "Overview"
 }) => {
     // Canvas cannot resolve a CSS custom property, and silently ignores an invalid colour
@@ -68,9 +70,9 @@ const TVChart: React.FC<TVChartProps> = ({
     // convention the rest of the app states in copy.
     // Memoised: each call is a getComputedStyle, which is a style read, and these ran on
     // every render of a chart that re-renders on every data tick.
-    const resolvedUp = useMemo(() => resolveCssColor(upColor ?? colorAccent, "#E54545"), [upColor, colorAccent]);
-    const resolvedDown = useMemo(() => resolveCssColor(downColor, "#4589E5"), [downColor]);
-    const resolvedAccent = useMemo(() => resolveCssColor(colorAccent, "#E54545"), [colorAccent]);
+    const resolvedUp = useMemo(() => resolveCssColor(candleUpColour({ colorAccent, upColor }), tokens.up._), [upColor, colorAccent]);
+    const resolvedDown = useMemo(() => resolveCssColor(downColor, tokens.down._), [downColor]);
+    const resolvedAccent = useMemo(() => resolveCssColor(colorAccent, tokens.up._), [colorAccent]);
 
     const chartContainerRef = useRef<HTMLDivElement>(null);
     const chartRef = useRef<IChartApi | null>(null);
@@ -98,20 +100,20 @@ const TVChart: React.FC<TVChartProps> = ({
                 height: height,
                 layout: {
                     background: { type: ColorType.Solid, color: "transparent" },
-                    textColor: "#9DA5A2",
+                    textColor: tokens.ink.muted,
                 },
                 grid: {
-                    vertLines: { color: "rgba(100, 100, 100, 0.1)" },
-                    horzLines: { color: "rgba(100, 100, 100, 0.1)" },
+                    vertLines: { color: tokens.grid },
+                    horzLines: { color: tokens.grid },
                 },
                 crosshair: {
                     mode: CrosshairMode.Normal,
                 },
                 rightPriceScale: {
-                    borderColor: "rgba(100, 100, 100, 0.2)",
+                    borderColor: tokens.line._,
                 },
                 timeScale: {
-                    borderColor: "rgba(100, 100, 100, 0.2)",
+                    borderColor: tokens.line._,
                 },
             });
 
@@ -309,7 +311,7 @@ const TVChart: React.FC<TVChartProps> = ({
         <div
             data-testid="tv-chart"
             aria-label={`${safeTickerName} price chart`}
-            className="w-full relative rounded-lg border border-[var(--border)] bg-[var(--text-primary)]"
+            className="w-full relative border border-[var(--line)] bg-transparent"
         >
             <div ref={chartContainerRef} className="w-full" style={{ minHeight: height }} />
             {hover ? <EventTooltip x={hover.x} width={hover.width} events={hover.events} /> : null}

@@ -1,5 +1,6 @@
 "use client";
 
+import { formatNumber } from "@/lib/format";
 import { useMemo } from "react";
 import { DEFAULT_PORTFOLIO_BENCHMARK_TICKER } from "@/lib/benchmarkPresets";
 import { TimelineList } from "@/components/data/TimelineList";
@@ -115,66 +116,66 @@ export function SnapshotHistoryModal({
             <div className="min-w-0 space-y-2">
               <div className="flex min-w-0 flex-wrap items-center gap-2">
                 <span
-                  className="overflow-inline-ellipsis max-w-full rounded-[var(--radius-sm)] bg-[var(--surface-muted)] px-2 py-1 font-mono text-[11px] text-[var(--text-primary)]"
+                  className="overflow-inline-ellipsis max-w-full rounded-[var(--radius-2)] bg-[var(--surface)] px-2 py-1 type-caption text-[var(--ink)]"
                   title={point.snapshot_version}
                 >
                   Version {point.snapshot_version}
                 </span>
-                <span className="overflow-inline-ellipsis max-w-full rounded-[var(--radius-sm)] bg-[var(--surface-muted)] px-2 py-1 font-mono text-[11px] text-[var(--text-primary)]">
+                <span className="overflow-inline-ellipsis max-w-full rounded-[var(--radius-2)] bg-[var(--surface)] px-2 py-1 type-caption text-[var(--ink)]">
                   Metric schema v{point.metric_schema_version}
                 </span>
               </div>
               {versionBoundaryNotices.has(point.snapshot_version) ? (
-                <p className="text-[11px] text-[var(--text-muted)]">
+                <p className="type-caption text-[var(--ink-muted)]">
                   {versionBoundaryNotices.get(point.snapshot_version)}
                 </p>
               ) : null}
             </div>
           ),
           content: (
-            <div className="grid grid-cols-2 gap-3 text-xs md:grid-cols-4 xl:grid-cols-5">
-              <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2">
-                <div className="text-[var(--text-muted)]">Avg implied return vs WACC</div>
+            <div className="grid grid-cols-2 gap-3 type-small md:grid-cols-4 xl:grid-cols-5">
+              <div className="border border-[var(--line)] bg-[var(--surface)] px-3 py-2">
+                <div className="text-[var(--ink-muted)]">Avg implied return vs WACC</div>
                 {point.average_implied_return_spread == null && point.metric_schema_version < 3 ? (
                   // Before metric v3 no implied return was recorded; that is not "no rows".
-                  <div className="mt-1 font-bold text-[var(--text-muted)]">{IMPLIED_RETURN_NOT_RECORDED}</div>
+                  <div className="type-small mt-1 text-[var(--ink-muted)]">{IMPLIED_RETURN_NOT_RECORDED}</div>
                 ) : point.average_implied_return_spread == null ? (
-                  <div className="mt-1 font-bold text-[var(--text-muted)]" title={NO_IMPLIED_RETURN_TITLE}>
+                  <div className="type-small mt-1 text-[var(--ink-muted)]" title={NO_IMPLIED_RETURN_TITLE}>
                     Not available
                   </div>
                 ) : (
-                  <div className={`mt-1 font-bold tabular-nums ${point.average_implied_return_spread >= 0 ? "text-[var(--delta-up)]" : "text-[var(--delta-down)]"}`}>
-                    {point.average_implied_return_spread.toFixed(2)}%
+                  <div className={`type-figure-md mt-1 ${point.average_implied_return_spread >= 0 ? "text-[var(--up)]" : "text-[var(--down)]"}`}>
+                    {formatNumber(point.average_implied_return_spread / 100, "percent", { digits: 2 })}
                   </div>
                 )}
               </div>
-              <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2">
-                <div className="text-[var(--text-muted)]">Avg ROIC - WACC</div>
-                <div className={`mt-1 font-bold tabular-nums ${point.average_roic_minus_wacc >= 0 ? "text-[var(--delta-up)]" : "text-[var(--delta-down)]"}`}>
-                  {point.average_roic_minus_wacc.toFixed(2)}%
+              <div className="border border-[var(--line)] bg-[var(--surface)] px-3 py-2">
+                <div className="text-[var(--ink-muted)]">Avg ROIC - WACC</div>
+                <div className={`type-figure-md mt-1 ${point.average_roic_minus_wacc >= 0 ? "text-[var(--up)]" : "text-[var(--down)]"}`}>
+                  {formatNumber(point.average_roic_minus_wacc / 100, "percent", { digits: 2 })}
                 </div>
               </div>
-              <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2">
-                <div className="text-[var(--text-muted)]">Avg DCF</div>
+              <div className="border border-[var(--line)] bg-[var(--surface)] px-3 py-2">
+                <div className="text-[var(--ink-muted)]">Avg DCF</div>
                 {point.average_dcf_value == null ? (
-                  <div className="mt-1 font-bold text-[var(--text-muted)]" title={NO_BRIDGED_ROWS_TITLE}>
+                  <div className="type-small mt-1 text-[var(--ink-muted)]" title={NO_BRIDGED_ROWS_TITLE}>
                     Not available
                   </div>
                 ) : (
-                  <div className="mt-1 font-bold tabular-nums text-[var(--text-primary)]">
-                    ${point.average_dcf_value.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+                  <div className="type-figure-md mt-1 text-[var(--ink)]">
+                    ${formatNumber(point.average_dcf_value, "price", { digits: 1 })}
                   </div>
                 )}
               </div>
-              <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2">
-                <div className="text-[var(--text-muted)]">Market Return</div>
-                <div className="mt-1 font-bold tabular-nums text-[var(--text-primary)]">
-                  {point.market_expected_return.toFixed(2)}%
+              <div className="border border-[var(--line)] bg-[var(--surface)] px-3 py-2">
+                <div className="text-[var(--ink-muted)]">Market Return</div>
+                <div className="type-figure-md mt-1 text-[var(--ink)]">
+                  {formatNumber(point.market_expected_return / 100, "percent", { digits: 2 })}
                 </div>
               </div>
-              <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2">
-                <div className="text-[var(--text-muted)]">Holdings</div>
-                <div className="mt-1 font-bold tabular-nums text-[var(--text-primary)]">{point.stock_count}</div>
+              <div className="border border-[var(--line)] bg-[var(--surface)] px-3 py-2">
+                <div className="text-[var(--ink-muted)]">Holdings</div>
+                <div className="type-figure-md mt-1 text-[var(--ink)]">{point.stock_count}</div>
               </div>
             </div>
           ),
@@ -183,10 +184,10 @@ export function SnapshotHistoryModal({
               <button
                 type="button"
                 onClick={() => onSelectSnapshot(point)}
-                className={`inline-flex items-center justify-center rounded-[var(--radius)] border px-3 py-1 text-xs font-semibold ${
+                className={`inline-flex items-center justify-center rounded-[var(--radius-1)] border px-3 py-1 type-small ${
                   isActive
-                    ? "border-[var(--accent)] bg-[var(--surface-muted)] text-[var(--text-primary)]"
-                    : "border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                    ? "border-[var(--brand)] bg-[var(--surface)] text-[var(--ink)]"
+                    : "border-[var(--line)] text-[var(--ink-muted)] hover:text-[var(--ink)]"
                 }`}
               >
                 {isActive ? "Selected" : "Review Snapshot"}
@@ -195,7 +196,7 @@ export function SnapshotHistoryModal({
                 type="button"
                 onClick={() => onDeleteSnapshot(point)}
                 disabled={deletingSnapshotVersion === point.snapshot_version}
-                className="inline-flex items-center justify-center rounded-[var(--radius)] border border-[var(--border)] px-3 py-1 text-xs font-semibold text-[var(--text-muted)] hover:text-[var(--delta-down)] disabled:opacity-50"
+                className="inline-flex items-center justify-center rounded-[var(--radius-1)] border border-[var(--line)] px-3 py-1 type-small text-[var(--ink-muted)] hover:text-[var(--down)] disabled:opacity-50"
               >
                 {deletingSnapshotVersion === point.snapshot_version ? "Deleting..." : "Delete"}
               </button>
@@ -216,36 +217,36 @@ export function SnapshotHistoryModal({
     >
       <div className="space-y-4">
         {!loading && !error && history && (
-          <section className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-4">
+          <section className="border border-[var(--line)] bg-[var(--surface-raised)] p-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
-                <h3 className="text-sm font-bold text-[var(--text-primary)]">Locked Context</h3>
-                <p className="mt-1 text-xs text-[var(--text-muted)]">
+                <h3 className="type-panel-title text-[var(--ink)]">Locked Context</h3>
+                <p className="mt-1 type-small text-[var(--ink-muted)]">
                   Review actions preserve the saved benchmark and universe from the selected snapshot. These fields stay read-only until you clear the saved-history review mode.
                 </p>
               </div>
               <StatusBadge status="saved" label="Read-only review context" />
             </div>
             <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              <div className="rounded-[var(--radius)] border border-[var(--border-soft)] bg-[var(--surface-muted)] p-3 text-xs">
-                <div className="text-[var(--text-muted)]">Universe</div>
-                <div className="mt-1 overflow-inline-ellipsis font-bold capitalize text-[var(--text-primary)]" title={effectiveComparisonUniverse}>
+              <div className="border border-[var(--line)] bg-[var(--surface)] p-3 type-small">
+                <div className="text-[var(--ink-muted)]">Universe</div>
+                <div className="type-mono mt-1 overflow-inline-ellipsis capitalize text-[var(--ink)]" title={effectiveComparisonUniverse}>
                   {effectiveComparisonUniverse}
                 </div>
               </div>
-              <div className="rounded-[var(--radius)] border border-[var(--border-soft)] bg-[var(--surface-muted)] p-3 text-xs">
-                <div className="text-[var(--text-muted)]">Benchmark</div>
-                <div className="mt-1 overflow-inline-ellipsis font-bold text-[var(--text-primary)]" title={effectiveBenchmarkTicker}>
+              <div className="border border-[var(--line)] bg-[var(--surface)] p-3 type-small">
+                <div className="text-[var(--ink-muted)]">Benchmark</div>
+                <div className="type-mono mt-1 overflow-inline-ellipsis text-[var(--ink)]" title={effectiveBenchmarkTicker}>
                   {effectiveBenchmarkTicker}
                 </div>
               </div>
-              <div className="rounded-[var(--radius)] border border-[var(--border-soft)] bg-[var(--surface-muted)] p-3 text-xs">
-                <div className="text-[var(--text-muted)]">Custom Tickers</div>
-                <div className="mt-1 overflow-mono-block text-[var(--text-primary)]" title={customTickersLabel}>{customTickersLabel}</div>
+              <div className="border border-[var(--line)] bg-[var(--surface)] p-3 type-small">
+                <div className="text-[var(--ink-muted)]">Custom Tickers</div>
+                <div className="mt-1 overflow-mono-block text-[var(--ink)]" title={customTickersLabel}>{customTickersLabel}</div>
               </div>
-              <div className="rounded-[var(--radius)] border border-[var(--border-soft)] bg-[var(--surface-muted)] p-3 text-xs">
-                <div className="text-[var(--text-muted)]">Saved Versions</div>
-                <div className="mt-1 font-bold text-[var(--text-primary)]">{history.points.length}</div>
+              <div className="border border-[var(--line)] bg-[var(--surface)] p-3 type-small">
+                <div className="text-[var(--ink-muted)]">Saved Versions</div>
+                <div className="type-figure-md mt-1 text-[var(--ink)]">{history.points.length}</div>
               </div>
             </div>
           </section>
@@ -258,8 +259,8 @@ export function SnapshotHistoryModal({
         {!loading && !error && (history?.points.length ?? 0) > 0 && (
           <section className="space-y-3">
             <div>
-              <h3 className="text-sm font-bold text-[var(--text-primary)]">Grouped By Date</h3>
-              <p className="mt-1 text-xs text-[var(--text-muted)]">
+              <h3 className="type-panel-title text-[var(--ink)]">Grouped By Date</h3>
+              <p className="mt-1 type-small text-[var(--ink-muted)]">
                 Each date group shows every saved version from that day. Use Review Snapshot to reopen a saved portfolio comparison with its locked benchmark and universe.
               </p>
             </div>

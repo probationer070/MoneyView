@@ -38,7 +38,7 @@ export default function CaseDetailPage({ params }: { params: Promise<{ id: strin
   });
 
   if (!validId) {
-    return <p className="p-6 text-[var(--text-secondary)]">Not a case id: {rawId}</p>;
+    return <p className="p-6 text-[var(--ink-secondary)]">Not a case id: {rawId}</p>;
   }
   const record = caseQuery.data;
 
@@ -46,7 +46,7 @@ export default function CaseDetailPage({ params }: { params: Promise<{ id: strin
     <div className="p-6">
       {record ? (
         <PageHeader
-          eyebrow={`Case ${record.id}`}
+          eyebrow={{ label: "case", suffix: String(record.id) }}
           title={record.case_name}
           subtitle={`${record.ticker ?? "No ticker"} · as of ${record.as_of_date} · ${record.base_year} → ${record.target_year}`}
         />
@@ -54,7 +54,7 @@ export default function CaseDetailPage({ params }: { params: Promise<{ id: strin
         <div className="mb-6"><QueryStatus query={caseQuery} what="the case" testId="case" /></div>
       )}
       {record && record.parent_case_id !== null && (
-        <p className="mb-4 text-sm text-[var(--text-secondary)]">
+        <p className="mb-4 type-body text-[var(--ink-secondary)]">
           Forked from <Link href={`/cases/${record.parent_case_id}`} className="underline underline-offset-2">case {record.parent_case_id}</Link>
         </p>
       )}

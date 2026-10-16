@@ -3,19 +3,20 @@
 import dynamic from "next/dynamic";
 
 function GraphLoadingCard({
-  className,
+  className = "",
   title,
-  chartHeightClassName = "h-72",
+  chartHeightClassName = "h-56",
 }: {
-  className: string;
+  className?: string;
   title: string;
   chartHeightClassName?: string;
 }) {
+  // No title text: the real chart draws the same heading and a test may wait for it. The name is
+  // the aria-label instead, so getByText matches only the chart, never this placeholder.
   return (
-    <div className={`${className} rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-surface)] p-5`}>
-      <h3 className="text-sm font-bold text-[var(--text-primary)]">{title}</h3>
-      <div className="mt-1 h-3 w-44 animate-pulse rounded bg-[var(--surface-muted)]" />
-      <div className={`mt-4 animate-pulse rounded bg-[var(--surface-muted)] ${chartHeightClassName}`} />
+    <div role="status" aria-label={title} className={`${className} border border-[var(--line)] bg-[var(--surface)] p-5`}>
+      <div className="h-3 w-44 animate-pulse bg-[var(--surface-raised)]" />
+      <div className={`mt-4 animate-pulse bg-[var(--surface-raised)] ${chartHeightClassName}`} />
     </div>
   );
 }
@@ -23,27 +24,27 @@ function GraphLoadingCard({
 export const BetaWaccCurveGraph = dynamic(
   () => import("./graphs/BetaWaccCurveGraph").then((mod) => mod.BetaWaccCurveGraph),
   {
-    loading: () => <GraphLoadingCard className="lg:col-span-2" title="Bottom-up Beta + WACC U-Curve" />,
+    loading: () => <GraphLoadingCard title="Bottom-up Beta + WACC U-Curve" />,
   },
 );
 
 export const DcfCoreModulesGraph = dynamic(
   () => import("./graphs/DcfCoreModulesGraph").then((mod) => mod.DcfCoreModulesGraph),
   {
-    loading: () => <GraphLoadingCard className="lg:col-span-4" title="DCF Core Modules" chartHeightClassName="h-44" />,
+    loading: () => <GraphLoadingCard title="DCF Core Modules" chartHeightClassName="h-44" />,
   },
 );
 
 export const HurdleRateDecompositionGraph = dynamic(
   () => import("./graphs/HurdleRateDecompositionGraph").then((mod) => mod.HurdleRateDecompositionGraph),
   {
-    loading: () => <GraphLoadingCard className="lg:col-span-2" title="Hurdle Rate Decomposition" />,
+    loading: () => <GraphLoadingCard title="Hurdle Rate Decomposition" />,
   },
 );
 
 export const ValueDriverMatrixGraph = dynamic(
   () => import("./graphs/ValueDriverMatrixGraph").then((mod) => mod.ValueDriverMatrixGraph),
   {
-    loading: () => <GraphLoadingCard className="lg:col-span-2" title="4-Quadrant Value Driver Matrix" />,
+    loading: () => <GraphLoadingCard title="4-Quadrant Value Driver Matrix" />,
   },
 );

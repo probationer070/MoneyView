@@ -171,3 +171,16 @@ test("controls inside a panel are big enough to hit", async ({ page }) => {
 
   expect(tooSmall, `controls below ${CONTROL_MIN_HIT_HEIGHT}px tall: ${tooSmall.join(", ")}`).toEqual([]);
 });
+
+test.describe("ko portfolio", () => {
+  test.use({ locale: "ko-KR" });
+  test("the page title, a formatted figure and a table header follow the Korean locale", async ({ page }) => {
+    await mockPortfolioPageApi(page);
+    await page.goto("/portfolio", { waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("heading", { name: "포트폴리오", exact: true })).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByTestId("stock-tile-AAPL")).toContainText("20.0%");
+    await rail(page).getByRole("button", { name: RAIL_HOLDINGS }).click();
+    await page.getByRole("button", { name: "Table", exact: true }).click();
+    await expect(panel(page).getByRole("columnheader", { name: "현재가", exact: true }).first()).toBeVisible();
+  });
+});

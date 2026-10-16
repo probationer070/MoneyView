@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { tabStateKey, useTabState } from "@/lib/tabState";
+import { useT } from "@/lib/i18n/locale";
 import { fetchApi } from "@/lib/api";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { useDevMonitorPageLoad } from "@/hooks/useDevMonitorPageLoad";
@@ -14,6 +15,7 @@ import type { VerdictPanel, WatchlistItem } from "./verdictTypes";
 
 export default function ValuationPage() {
   useDevMonitorPageLoad({ component: "valuation_page" });
+  const t = useT();
   // Kept per tab: leaving Valuation to check something and coming back used to discard
   // the ticker under examination, which is the tab's entire subject.
   const [ticker, setTicker] = useTabState<string | null>(
@@ -64,17 +66,17 @@ export default function ValuationPage() {
   return (
     <div className="p-6">
       <PageHeader
-        title="Valuation"
-        subtitle="One evidence panel per ticker. Every row states the basis it was compared against, and a row that cannot be computed says why."
+        title={t("valuation.title")}
+        subtitle={t("valuation.subtitle")}
       />
       <RecordsSyncStatus status={recordsSyncQuery.data} />
 
       <TickerPicker items={watchlistQuery.data ?? []} onSubmit={setTicker} />
 
       {ticker !== null && hasCases && (
-        <p className="mb-4 text-sm">
-          <Link href={`/cases?ticker=${encodeURIComponent(ticker)}`} className="text-[var(--text-primary)] underline underline-offset-2">
-            Stored cases for {ticker} →
+        <p className="mb-4 type-body">
+          <Link href={`/cases?ticker=${encodeURIComponent(ticker)}`} className="text-[var(--ink)] underline underline-offset-2">
+            {t("valuation.storedCases", { ticker })}
           </Link>
         </p>
       )}
@@ -82,14 +84,14 @@ export default function ValuationPage() {
       {/* The state contract. Loading and error render NO rows and no partial
           panel: either would state an answer the request never returned. */}
       {ticker === null && (
-        <p className="text-[var(--text-secondary)]">Choose a ticker to see its evidence panel.</p>
+        <p className="text-[var(--ink-secondary)]">{t("valuation.choose")}</p>
       )}
       {ticker !== null && verdictQuery.isLoading && (
-        <p role="status" className="text-[var(--text-secondary)]">Loading the panel…</p>
+        <p role="status" className="text-[var(--ink-secondary)]">{t("valuation.loading")}</p>
       )}
       {ticker !== null && verdictQuery.isError && (
-        <p role="alert" className="text-[var(--chart-negative)]">
-          Could not load the panel for {ticker}.
+        <p role="alert" className="type-body text-[var(--status-error-ink)]">
+          {t("valuation.loadError", { ticker })}
         </p>
       )}
 

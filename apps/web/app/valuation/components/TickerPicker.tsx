@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { TickerSearch } from "@/components/ui/TickerSearch";
+import { useT } from "@/lib/i18n/locale";
 import type { WatchlistItem } from "../verdictTypes";
 
 /**
@@ -23,6 +24,7 @@ export function TickerPicker({
   items: WatchlistItem[];
   onSubmit: (ticker: string) => void;
 }) {
+  const t = useT();
   const [draft, setDraft] = useState("");
 
   const submit = (event: React.FormEvent<HTMLFormElement>) => {
@@ -35,7 +37,7 @@ export function TickerPicker({
     <form onSubmit={submit} className="mb-6 flex flex-wrap items-end gap-3">
       <TickerSearch
         id="valuation-ticker"
-        label="Ticker"
+        label={t("valuation.tickerLabel")}
         value={draft}
         onChange={setDraft}
         onSelect={(ticker) => {
@@ -47,9 +49,9 @@ export function TickerPicker({
       />
       <button
         type="submit"
-        className="rounded-[var(--radius-sm)] border border-[var(--border-default)] px-3 py-1.5 text-sm font-medium text-[var(--text-primary)]"
+        className="rounded-[var(--radius-1)] border border-[var(--line)] px-3 py-1.5 type-body text-[var(--ink)]"
       >
-        Show panel
+        {t("valuation.showPanel")}
       </button>
     </form>
   );

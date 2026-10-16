@@ -1,35 +1,43 @@
+"use client";
+
 import clsx from "clsx";
-import { ArrowDownRight, ArrowUpRight, Minus } from "lucide-react";
+import { formatNumber, MISSING } from "@/lib/format";
+import { useLocale, useT } from "@/lib/i18n/locale";
 
 interface DeltaBadgeProps {
+  /** A change in percent units: 1.24 means +1.24%. */
   value: number | null | undefined;
   className?: string;
 }
 
-export function DeltaBadge({ value, className }: DeltaBadgeProps) {
-  const numericValue = typeof value === "number" && Number.isFinite(value) ? value : null;
-  const isPositive = (numericValue ?? 0) > 0;
-  const isNegative = (numericValue ?? 0) < 0;
+const GLYPH = { up: "▲", down: "▼", flat: "■" } as const;
+const TONE = {
+  up: "text-[var(--up)] bg-[var(--up-soft)]",
+  down: "text-[var(--down)] bg-[var(--down-soft)]",
+  flat: "text-[var(--flat)] bg-[var(--surface)]",
+} as const;
 
-  // A span, not a div: this is already `inline-flex`, so the box is identical, and it lets
-  // the badge sit inside a <button> or other phrasing-only context. StockTile needs that.
+// The redesign's delta chip: glyph, sign and colour together, never colour alone. A screen
+// reader hears the direction word instead of the glyph. A span, not a div, so it can sit
+// inside a <button> (StockTile).
+export function DeltaBadge({ value, className }: DeltaBadgeProps) {
+  const { locale } = useLocale();
+  const t = useT();
+  const numeric = typeof value === "number" && Number.isFinite(value) ? value : null;
+  const text = numeric === null ? MISSING : formatNumber(numeric / 100, "percent", { signed: true, locale });
+  // Direction follows the printed figure (1 decimal). Intl rounds half away from zero, so -0.05 prints
+  // "-0.1%" and must read as down; Math.round(-0.5) is -0, so the test uses the magnitude. -0.04 prints
+  // "0.0%" and reads as flat.
+  const dir = numeric === null || Math.round(Math.abs(numeric) * 10) === 0 ? "flat" : numeric > 0 ? "up" : "down";
   return (
     <span
       data-testid="delta-badge"
-      className={clsx(
-        "inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-sm font-medium",
-        isPositive ? "text-[var(--delta-up)] bg-[var(--delta-up)]/10" : "",
-        isNegative ? "text-[var(--delta-down)] bg-[var(--delta-down)]/10" : "",
-        !isPositive && !isNegative ? "text-[var(--text-muted)] bg-[var(--surface-muted)]" : "",
-        className
-      )}
+      data-dir={dir}
+      className={clsx("type-mono inline-flex items-center gap-1 whitespace-nowrap rounded-[var(--radius-2)] px-2 py-0.5", TONE[dir], className)}
     >
-      {isPositive && <ArrowUpRight className="h-4 w-4" />}
-      {isNegative && <ArrowDownRight className="h-4 w-4" />}
-      {!isPositive && !isNegative && <Minus className="h-4 w-4" />}
-      <span>
-        {numericValue == null ? "N/A" : `${isPositive ? "+" : ""}${numericValue.toFixed(1)}%`}
-      </span>
+      <span className="sr-only">{t(`delta.${dir}`)}</span>
+      <span aria-hidden="true" className="text-[length:var(--component-delta-glyph)]">{GLYPH[dir]}</span>
+      <span data-part="value">{text}</span>
     </span>
   );
 }

@@ -25,6 +25,8 @@ export default defineConfig({
   reporter: "list",
   use: {
     baseURL: E2E_WEB_BASE_URL,
+    // First visits resolve the locale from the browser; the suite's English assertions rely on en-US.
+    locale: "en-US",
     trace: "on-first-retry",
   },
   webServer: [
