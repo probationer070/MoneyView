@@ -87,3 +87,21 @@ def test_new_instruments_do_not_move_the_regime(monkeypatch):
 
 def test_sector_etfs_are_not_equity_indices():
     assert {"SOXX", "SKYY", "BOTZ"}.isdisjoint(EQUITY_INDEX_TICKERS)
+
+
+def test_the_default_table_follows_where_rows_are_written(monkeypatch):
+    """Callers that pass no table (stock detail, portfolio) must read where the rows are written,
+    or a MARKET_INDICES ticker is refetched on every request."""
+    service = MarketDataService()
+    read_tables: list[tuple[str, str]] = []
+
+    def record(ticker, **kwargs):
+        read_tables.append((ticker, kwargs["table"]))
+        return [], None
+
+    monkeypatch.setattr(service, "_get_stock_ohlcv_with_metadata", record)
+
+    service.get_stock_ohlcv("SOXX")
+    service.get_stock_ohlcv("AAPL")
+
+    assert read_tables == [("SOXX", "indices"), ("AAPL", "stocks")]

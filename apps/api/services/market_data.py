@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from json import JSONDecodeError
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 import numpy as np
 import pandas as pd
@@ -377,10 +377,11 @@ class MarketDataService:
         self,
         ticker: str,
         period: str = DEFAULT_OHLCV_PERIOD,
-        table: str = "stocks",
+        table: Optional[str] = None,
         refresh: str = "inline",
     ) -> tuple[List[StockOHLCV], MarketDataQuality]:
         ticker = ticker.upper()
+        table = table or self._table_for_ticker(ticker)
         freshness_rule = self._freshness_rule(period)
         emit_cache_event(
             operation="cache.lookup",
@@ -1264,14 +1265,16 @@ class MarketDataService:
         self,
         ticker: str,
         period: str = DEFAULT_OHLCV_PERIOD,
-        table: str = "stocks",
+        table: Optional[str] = None,
         refresh: str = "inline",
     ) -> List[StockOHLCV]:
         """Read OHLCV from SQLite and refresh live data if locally stale.
 
+        `table=None` reads the table the ticker's rows are written to (`indices` for MARKET_INDICES).
         `refresh="background"` serves a stale cache at once and refreshes it off the request
         (used by the spreads section). A cache miss is still fetched inline either way.
         """
+        table = table or self._table_for_ticker(ticker.upper())
         bars, _ = self._get_stock_ohlcv_with_metadata(ticker, period=period, table=table, refresh=refresh)
         return bars
 
