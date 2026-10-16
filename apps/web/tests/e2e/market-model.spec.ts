@@ -155,6 +155,11 @@ test.describe("changeFigure", () => {
   test("a non-finite percent is missing", () => {
     expect(changeFigure({ delta_pct: NaN }, "index")).toEqual({ kind: "missing" });
   });
+
+  test("a non-finite basis-point change is missing, not a NaN or Infinity bp", () => {
+    expect(changeFigure({ delta_pct: 1, delta_abs: NaN }, "rate")).toEqual({ kind: "missing" });
+    expect(changeFigure({ delta_pct: 1, delta_abs: Infinity }, "rate")).toEqual({ kind: "missing" });
+  });
 });
 
 test("formatBp signs positive and negative moves and leaves zero unsigned", () => {
@@ -168,6 +173,11 @@ test.describe("instrumentNameKey", () => {
     expect(instrumentNameKey("SOXX")).toBe("market.names.semis");
     expect(instrumentNameKey("^TNX")).toBe("market.names.us10y");
     expect(instrumentNameKey("XYZ")).toBeNull();
+  });
+
+  test("inherited Object.prototype names are not instruments", () => {
+    expect(instrumentNameKey("constructor")).toBeNull();
+    expect(instrumentNameKey("toString")).toBeNull();
   });
 
   test("every one of the 14 tickers has its own key", () => {
