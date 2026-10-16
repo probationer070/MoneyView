@@ -335,13 +335,13 @@ MoneyView의 텍스트는 대부분 지표 이름, 표 헤더, 툴팁, 판정 �
 
 **Baseline (stage 0), measured 2026-10-12** over the 147 git-tracked `ts/tsx` files in `app/`, `components/`, `lib/`, `hooks/`. Task 1 re-measures it with the lint rule, and that number becomes the official baseline.
 
-| Item | Now | Target |
-|---|---|---|
-| Hex / `rgb()` literals | 60 (27 unique, 17 files) | 0 outside the token file |
-| Tailwind default-palette classes (`bg-amber-50` …) | 119, plus 22 black/white | 0 |
-| Type: Tailwind scale / `text-[Npx]` / `--type-*` | ~650 / 13 / 115 | 10 `type-*` utilities |
-| Radius outside tokens (`rounded`, `-md`, `-lg`) | 48 (token uses: ~380, mostly `--radius`) | 0; three radius roles plus `rounded-full` |
-| Shadows | 14 raw + 5 token uses | 0 of either |
-| Undefined `var(--x)` references | 1 (`--bg-muted`) | 0 |
-| Number formatting | `toFixed(` 182, `toLocaleString(` 45, 15+ `format*` helpers | one `formatNumber` |
+| Item | Now | Target | After (2026-10-16, DS 14b) |
+|---|---|---|---|
+| Hex / `rgb()` literals | 60 (27 unique, 17 files) | 0 outside the token file | 0 (lint; the generated files hold the only literals, `lib/transformers.ts` builds one `rgba()` from a token at runtime) |
+| Tailwind default-palette classes (`bg-amber-50` …) | 119, plus 22 black/white | 0 | 0 (lint `paletteClass`; the Tailwind `--color-*` theme is also reset) |
+| Type: Tailwind scale / `text-[Npx]` / `--type-*` | ~650 / 13 / 115 | 10 `type-*` utilities | 10 (lint `typeScale`, `arbitraryPx`, `lengthTypeVar` at 0) |
+| Radius outside tokens (`rounded`, `-md`, `-lg`) | 48 (token uses: ~380, mostly `--radius`) | 0; three radius roles plus `rounded-full` | 0 (lint `rawRadius`; `--radius-*` reset; paper-sweep checks computed radii) |
+| Shadows | 14 raw + 5 token uses | 0 of either | 0 (lint `rawShadow`; `--shadow-*` reset; paper-sweep checks computed shadows) |
+| Undefined `var(--x)` references | 1 (`--bg-muted`) | 0 | 0 (`unknownVar`; the deprecated aliases are deleted) |
+| Number formatting | `toFixed(` 182, `toLocaleString(` 45, 15+ `format*` helpers | one `formatNumber` | Not reached: `toFixed(` 135 and `toLocaleString(` 19 remain (calculation cores and the M5 residue), tracked as M5 |
 

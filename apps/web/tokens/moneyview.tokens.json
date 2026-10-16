@@ -1,5 +1,6 @@
 {
-  "$description": "MoneyView design tokens (DTCG). Paper (light) theme of the 2026-10 redesign: docs/design/redesign-2026-10/ds/moneyview/tokens.json. The void (dark) theme is deliberately absent. palette holds primitives (referenced, never emitted). $deprecated tokens are pre-redesign names, removed in Task 14.",
+  "$description": "MoneyView design tokens (DTCG). Paper (light) theme of the 2026-10 redesign: docs/design/redesign-2026-10/ds/moneyview/tokens.json. The void (dark) theme is deliberately absent. palette holds primitives (referenced, never emitted). $deprecated tokens are pre-redesign names, removed in Task 14b.",
+  "$extensions": { "moneyview.themeReset": ["--color-*", "--text-*", "--shadow-*", "--radius-*"] },
   "palette": {
     "$type": "color",
     "paper": {
@@ -31,21 +32,12 @@
     }
   },
   "bg": {
-    "_": { "$value": "{palette.paper.0}", "$description": "Page ground." },
-    "canvas": { "$value": "{bg._}", "$deprecated": "use --bg" },
-    "primary": { "$value": "{bg._}", "$deprecated": "use --bg" },
-    "surface": { "$value": "{surface.raised}", "$deprecated": "use --surface-raised" },
-    "elevated": { "$value": "{surface.raised}", "$deprecated": "use --surface-raised" },
-    "subtle": { "$value": "{surface._}", "$deprecated": "use --surface" },
-    "sidebar": { "$value": "{surface._}", "$deprecated": "use --surface" },
-    "secondary": { "$value": "{surface._}", "$deprecated": "use --surface" }
+    "_": { "$value": "{palette.paper.0}", "$description": "Page ground." }
   },
   "surface": {
     "_": { "$value": "{palette.paper.50}", "$description": "Section bands, alternating and hovered rows." },
     "raised": { "$value": "{palette.paper.75}", "$description": "Panels, cards, menus, chart plots." },
-    "sunken": { "$value": "{palette.paper.25}", "$description": "Inputs and code wells." },
-    "panel": { "$value": "{surface.raised}", "$deprecated": "use --surface-raised" },
-    "muted": { "$value": "{surface._}", "$deprecated": "use --surface" }
+    "sunken": { "$value": "{palette.paper.25}", "$description": "Inputs and code wells." }
   },
   "grid": { "$value": "{palette.paper.100}", "$description": "Chart gridlines and table row rules; never a control border." },
   "line": {
@@ -58,26 +50,11 @@
     "muted": { "$value": "{palette.paper.700}", "$description": "Captions, axis labels, metadata, the flat state." },
     "disabled": { "$value": "{palette.paper.300}", "$description": "Disabled labels only." }
   },
-  "text": {
-    "primary": { "$value": "{ink._}", "$deprecated": "use --ink" },
-    "secondary": { "$value": "{ink.secondary}", "$deprecated": "use --ink-secondary" },
-    "muted": { "$value": "{ink.muted}", "$deprecated": "use --ink-muted" },
-    "disabled": { "$value": "{ink.disabled}", "$deprecated": "use --ink-disabled" },
-    "inverse": { "$value": "{bg._}", "$deprecated": "use --bg on an ink fill, --on-brand on a brand fill" }
-  },
-  "border": {
-    "_": { "$value": "{line._}", "$deprecated": "use --line" },
-    "default": { "$value": "{line._}", "$deprecated": "use --line" },
-    "soft": { "$value": "{grid}", "$deprecated": "use --grid" },
-    "strong": { "$value": "{line.strong}", "$deprecated": "use --line-strong" },
-    "accent": { "$value": "{brand._}", "$deprecated": "use --brand" }
-  },
   "brand": {
     "_": { "$value": "{palette.orange.500}", "$description": "Signal orange. Fills only: primary button, selection, focus ring, the subject chart series, the active nav marker. Never on price changes." },
     "text": { "$value": "{palette.orange.700}", "$description": "Brand as text: links, eyebrow index." },
     "soft": { "$value": "{palette.orange.100}", "$description": "Tinted ground behind brand-text: selected rows, active chips." }
   },
-  "accent": { "$value": "{brand._}", "$deprecated": "use --brand (fill, stroke) or --brand-text (text)" },
   "on": { "brand": { "$value": "{palette.paper.950}", "$description": "Text and icons on a brand fill (white on brand is only 3.8:1)." } },
   "focus": { "ring": { "$value": "{brand._}", "$description": "2px solid, 2px offset (globals.css :focus-visible)." } },
   "link": { "$value": "{brand.text}" },
@@ -90,18 +67,6 @@
     "soft": { "$value": "{palette.blue.50}" }
   },
   "flat": { "$value": "{ink.muted}", "$description": "보합: 0.0% and missing data." },
-  "delta": {
-    "up": { "$value": "{up._}", "$deprecated": "use --up" },
-    "down": { "$value": "{down._}", "$deprecated": "use --down" }
-  },
-  "state": {
-    "positive": { "$value": "{up._}", "$deprecated": "use --up" },
-    "negative": { "$value": "{down._}", "$deprecated": "use --down" },
-    "warning": { "$value": "{status.warning.ink}", "$deprecated": "use --status-warning-ink" },
-    "success": { "$value": "{status.success.ink}", "$deprecated": "use --status-success-ink" },
-    "error": { "$value": "{status.error.ink}", "$deprecated": "use --status-error-ink" },
-    "info": { "$value": "{brand._}", "$deprecated": "use --brand (fill) or --brand-text (text)" }
-  },
   "status": {
     "$description": "Not in the redesign. Error follows bundle.css (input errors use the up tone); warning and success derive from chart-5 and chart-2, darkened to >= 4.5:1.",
     "error": { "ink": { "$value": "{up._}" }, "surface": { "$value": "{up.soft}" }, "border": { "$value": "{up._}" } },
@@ -122,16 +87,7 @@
     "heat-4": { "$value": "{palette.paper.50}" },
     "heat-5": { "$value": "{palette.red.50}" },
     "heat-6": { "$value": "{palette.red.300}" },
-    "heat-7": { "$value": "{palette.red.600}" },
-    "primary": { "$value": "{chart.1}", "$deprecated": "use --chart-1" },
-    "secondary": { "$value": "{chart.2}", "$deprecated": "use --chart-2" },
-    "tertiary": { "$value": "{chart.3}", "$deprecated": "use --chart-3" },
-    "muted": { "$value": "{chart.4}", "$deprecated": "use --chart-4" },
-    "label": { "$value": "{ink.muted}", "$deprecated": "use --ink-muted" },
-    "ink": { "$value": "{ink._}", "$deprecated": "use --ink" },
-    "grid": { "$value": "{grid}", "$deprecated": "use --grid" },
-    "positive": { "$value": "{up._}", "$deprecated": "use --up" },
-    "negative": { "$value": "{down._}", "$deprecated": "use --down" }
+    "heat-7": { "$value": "{palette.red.600}" }
   },
   "space": {
     "$type": "dimension",
@@ -142,17 +98,7 @@
     "0": { "$value": "0px", "$description": "Panels, tables, charts, modals: the default (no rounded class)." },
     "1": { "$value": "2px", "$description": "Buttons, inputs, segmented controls." },
     "2": { "$value": "4px", "$description": "Tooltips, menus, delta chips." },
-    "pill": { "$value": "999px", "$description": "Status dots." },
-    "_": { "$value": "{radius.0}", "$deprecated": "use no rounded class (square), or --radius-1/2 by role" },
-    "sm": { "$value": "{radius.2}", "$deprecated": "use --radius-2" },
-    "md": { "$value": "{radius.0}", "$deprecated": "use no rounded class (square), or --radius-1/2 by role" },
-    "lg": { "$value": "{radius.0}", "$deprecated": "use no rounded class (square)" }
-  },
-  "shadow": {
-    "card-hover": { "$value": "none", "$deprecated": "no shadows: use border border-[var(--line)]" },
-    "modal": { "$value": "none", "$deprecated": "no shadows: use border border-[var(--line)]" },
-    "popover": { "$value": "none", "$deprecated": "no shadows: use border border-[var(--line)]" },
-    "sidebar": { "$value": "none", "$deprecated": "no shadows: use border border-[var(--line)]" }
+    "pill": { "$value": "999px", "$description": "Status dots." }
   },
   "hairline": { "$value": "1px", "$description": "Every border and rule; no 2px borders except the focus ring." },
   "duration": { "fast": { "$value": "100ms" }, "normal": { "$value": "200ms" }, "slow": { "$value": "350ms" } },
@@ -196,14 +142,6 @@
     "mono-link": { "$extensions": { "moneyview.utility": "type-mono-link" }, "_": { "$value": "16px" }, "line-height": { "$value": "20px" }, "weight": { "$value": "500" }, "tracking": { "$value": "0.02em" }, "family": { "$value": "{font.family.mono}" } },
     "mono": { "$extensions": { "moneyview.utility": "type-mono" }, "_": { "$value": "13px" }, "line-height": { "$value": "18px" }, "weight": { "$value": "500" }, "tracking": { "$value": "0" }, "family": { "$value": "{font.family.mono}" } },
     "caption": { "$extensions": { "moneyview.utility": "type-caption" }, "_": { "$value": "11px" }, "line-height": { "$value": "14px" }, "weight": { "$value": "500" }, "tracking": { "$value": "0.08em" }, "family": { "$value": "{font.family.mono}" } },
-    "caption-ko": { "$description": "tokens.json caption usage: Korean captions at 12px. Applied by globals.css to Hangul inside .type-caption.", "_": { "$value": "12px" }, "line-height": { "$value": "16px" }, "weight": { "$value": "500" }, "tracking": { "$value": "0" }, "family": { "$value": "{font.family.mono}" } },
-    "page-title": { "$value": "{type.heading-5._}", "$deprecated": "use type-heading-5" },
-    "metric-lg": { "$value": "{type.figure-md._}", "$deprecated": "use type-figure-md" },
-    "section-title": { "$value": "{type.panel-title._}", "$deprecated": "use type-panel-title" },
-    "card-title": { "$value": "{type.panel-title._}", "$deprecated": "use type-panel-title" },
-    "metric-md": { "$value": "{type.panel-title._}", "$deprecated": "use type-panel-title (figures: type-figure-md)" },
-    "table-header": { "$value": "{type.caption._}", "$deprecated": "use type-caption" },
-    "table-body": { "$value": "{type.small._}", "$deprecated": "use type-small (figures: type-mono)" },
-    "helper": { "$value": "{type.small._}", "$deprecated": "use type-small" }
+    "caption-ko": { "$description": "tokens.json caption usage: Korean captions at 12px. Applied by globals.css to Hangul inside .type-caption.", "_": { "$value": "12px" }, "line-height": { "$value": "16px" }, "weight": { "$value": "500" }, "tracking": { "$value": "0" }, "family": { "$value": "{font.family.mono}" } }
   }
 }

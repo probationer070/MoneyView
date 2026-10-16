@@ -132,13 +132,6 @@ test("app type styles have a type-* utility, landing styles do not, every style 
   }
 });
 
-test("every pre-migration variable still resolves until Task 14 removes the aliases", () => {
-  const baseline = JSON.parse(readFileSync(new URL("./__fixtures__/globals-root-vars.baseline.json", import.meta.url)));
-  const generated = parseRootVars(renderCss(resolve(flatten(source())), []));
-  const removed = new Set(["--space-7"]); // 0 references (counted 2026-10-13)
-  assert.deepEqual(Object.keys(baseline).filter((n) => !removed.has(n) && !(n in generated)), []);
-});
-
 test("utility groups render one @utility with a declaration per leaf", () => {
   const t = {
     font: { $value: "serif" },
@@ -222,15 +215,14 @@ test("the real token file maps the font families into @theme inline", () => {
   assert.match(css, /@theme inline \{[^}]*\n {2}--font-mono: var\(--font-family-mono\);/);
 });
 
-test("deprecated strokes and marks (accent, chart, delta, state) keep 3:1 on the page ground", () => {
-  const resolved = resolve(flatten(source()));
-  const ground = hex(resolved.get("bg._").value);
-  const aliases = [...resolved.values()].filter((t) => t.deprecated
-    && (["accent", "delta", "state"].includes(t.path[0]) || (t.path[0] === "chart" && t.path[1] !== "grid")));
-  assert.ok(aliases.length > 0);
-  for (const t of aliases) {
-    const value = t.value;
-    assert.ok(/^#[0-9a-f]{6}$/i.test(value), `${t.path.join(".")} resolves to ${value}`);
-    assert.ok(contrast(hex(value), ground) >= 3, `${t.path.join(".")} ${value} is ${contrast(hex(value), ground).toFixed(2)}:1 on the ground`);
-  }
+test("no deprecated token remains after Task 14b", () => {
+  const found = [];
+  const walk = (node, trail) => {
+    for (const [k, v] of Object.entries(node)) {
+      if (k === "$deprecated") found.push(trail.join("."));
+      else if (v !== null && typeof v === "object") walk(v, [...trail, k]);
+    }
+  };
+  walk(source(), []);
+  assert.deepEqual(found, []);
 });

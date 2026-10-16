@@ -2,9 +2,6 @@ import { expect, test } from "@playwright/test";
 import { tokens } from "../../lib/tokens.generated";
 import { DESIGN_SCREENS } from "./helpers/designScreens";
 
-// The market overview still renders pre-paper classes. DS Task 14b deletes this exclusion.
-const MARKET_ROUTE = "/";
-
 /** Every colour token as the computed-style string Chrome reports. */
 function allowedColours(): Set<string> {
   const out = new Set(["rgba(0, 0, 0, 0)"]);
@@ -22,7 +19,7 @@ function allowedColours(): Set<string> {
   return out;
 }
 
-for (const [route, mock] of DESIGN_SCREENS.filter(([r]) => r !== MARKET_ROUTE)) {
+for (const [route, mock] of DESIGN_SCREENS) {
   test(`${route}: only token colours, redesign radii, no shadows`, async ({ page }) => {
     await mock(page);
     await page.goto(route, { waitUntil: "networkidle" });

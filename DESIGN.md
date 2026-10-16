@@ -42,9 +42,11 @@ file does not repeat it.
   adding its route to the list, which `tests/e2e/one-screen-no-scroll.spec.ts` then covers.
   An `sr-only` span is absolutely positioned and escapes to the nearest positioned ancestor, so a scrolling
   one-screen panel needs `relative` (as `MarketPageTabs` has), or `DeltaBadge`'s hidden text makes the page scroll.
-- Known exception, until DS Task 14b: the lint rule is still `warn` (not `error`) in `components/market/**` and
-  `app/page.tsx`, with 0 hits since the market one-screen plan, and `tests/e2e/paper-sweep.spec.ts` still skips the
-  `/` route. `npm run design:baseline` exits non-zero on any warning: the cap in `apps/web/scripts/design-baseline-cap.mjs` is 0.
+- The lint rule is `error` everywhere, and `tests/e2e/paper-sweep.spec.ts` sweeps every screen in `DESIGN_SCREENS`.
+  `npm run design:baseline` exits non-zero on any warning: the cap in `apps/web/scripts/design-baseline-cap.mjs` is 0.
+- The token build resets Tailwind's `--color-*`, `--text-*`, `--shadow-*` and `--radius-*` (`moneyview.themeReset`), so a raw
+  palette, size, shadow or radius class has no effect even if lint is skipped. `bg-transparent`, `border-transparent`,
+  `bg-current`, `border-current` and `rounded-full` are not theme entries and still work (`tests/e2e/theme-reset.spec.ts`).
 
 ## What `npm run lint` checks (rule `moneyview/no-raw-design-values`)
 | Message | Means | Fix |
@@ -52,7 +54,7 @@ file does not repeat it.
 | `hex`, `colorFn`, `paletteClass` | a raw colour | a colour token |
 | `typeScale`, `arbitraryPx`, `lengthTypeVar`, `numericFontSize` | a raw type size | a `type-*` utility, or `tokens.type.<style>._` |
 | `rawShadow`, `rawRadius` | a Tailwind shadow or radius | see the table above |
-| `unknownVar`, `deprecatedVar` | a `var(--x)` that is undefined or an alias | the token the message names |
+| `unknownVar` | a `var(--x)` that is undefined (the pre-redesign aliases are gone) | the token the message names |
 | `roundedFull` | `rounded-full` with no `rounded-full: dot\|track\|fill\|spinner` comment | mark it, or use `rounded-[var(--radius-2)]` |
 | `fontWeight` | a bold, semibold, medium, extrabold or black class with no `M2: reason` comment | delete it, or justify it |
 | `brandGround` | `bg-[var(--brand)]` behind text without `text-[var(--on-brand)]` in the same className (an element with no children is a fill and passes) | add the ink, or use a soft ground |

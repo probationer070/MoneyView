@@ -9,10 +9,8 @@ import type { LabelKey } from "@/lib/i18n/labels";
 
 export interface ColumnDef<T> {
   key: string;
-  /** Plain header text: replaced by `label` screen by screen, removed in Task 14. */
-  header?: string;
-  /** Bilingual header ("종목 NAME"); wins over `header`. */
-  label?: LabelKey;
+  /** Bilingual header ("종목 NAME"). */
+  label: LabelKey;
   /** "right" marks a figure column: Geist Mono, tabular, right-aligned (redesign .is-num). */
   align?: "left" | "right" | "center";
   width?: string;
@@ -55,7 +53,7 @@ export function DenseTable<T extends Record<string, unknown>>({
                 className={clsx("type-caption whitespace-nowrap border-b border-[var(--line)] px-4 py-2 uppercase text-[var(--ink-muted)]", alignMap[col.align ?? "left"])}
                 style={col.width ? { width: col.width } : undefined}
               >
-                {col.label ? <BilingualLabel k={col.label} /> : col.header}
+                <BilingualLabel k={col.label} />
               </th>
             ))}
           </tr>

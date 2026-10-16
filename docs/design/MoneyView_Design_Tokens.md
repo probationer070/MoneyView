@@ -19,18 +19,9 @@ The values in this file are the paper theme of the 2026-10 redesign. They are ge
 | Token | CSS variable | Value | Notes |
 |---|---|---|---|
 | `bg` | `--bg` | `#ffffff` | Page ground. |
-| `bg.canvas` | `--bg-canvas` | `#ffffff` | deprecated: use --bg |
-| `bg.primary` | `--bg-primary` | `#ffffff` | deprecated: use --bg |
-| `bg.surface` | `--bg-surface` | `#f0f0f0` | deprecated: use --surface-raised |
-| `bg.elevated` | `--bg-elevated` | `#f0f0f0` | deprecated: use --surface-raised |
-| `bg.subtle` | `--bg-subtle` | `#f5f5ed` | deprecated: use --surface |
-| `bg.sidebar` | `--bg-sidebar` | `#f5f5ed` | deprecated: use --surface |
-| `bg.secondary` | `--bg-secondary` | `#f5f5ed` | deprecated: use --surface |
 | `surface` | `--surface` | `#f5f5ed` | Section bands, alternating and hovered rows. |
 | `surface.raised` | `--surface-raised` | `#f0f0f0` | Panels, cards, menus, chart plots. |
 | `surface.sunken` | `--surface-sunken` | `#fafaf6` | Inputs and code wells. |
-| `surface.panel` | `--surface-panel` | `#f0f0f0` | deprecated: use --surface-raised |
-| `surface.muted` | `--surface-muted` | `#f5f5ed` | deprecated: use --surface |
 | `grid` | `--grid` | `#e6e6e0` | Chart gridlines and table row rules; never a control border. |
 | `line` | `--line` | `#b3b3af` | The 1px hairline: panel frames, dividers (decorative, 2.1:1). |
 | `line.strong` | `--line-strong` | `#72726f` | Control edges: inputs, outline buttons, segmented controls. |
@@ -38,20 +29,9 @@ The values in this file are the paper theme of the 2026-10 redesign. They are ge
 | `ink.secondary` | `--ink-secondary` | `#414140` | Body copy, table text. |
 | `ink.muted` | `--ink-muted` | `#626260` | Captions, axis labels, metadata, the flat state. |
 | `ink.disabled` | `--ink-disabled` | `#b4b4b0` | Disabled labels only. |
-| `text.primary` | `--text-primary` | `#282828` | deprecated: use --ink |
-| `text.secondary` | `--text-secondary` | `#414140` | deprecated: use --ink-secondary |
-| `text.muted` | `--text-muted` | `#626260` | deprecated: use --ink-muted |
-| `text.disabled` | `--text-disabled` | `#b4b4b0` | deprecated: use --ink-disabled |
-| `text.inverse` | `--text-inverse` | `#ffffff` | deprecated: use --bg on an ink fill, --on-brand on a brand fill |
-| `border` | `--border` | `#b3b3af` | deprecated: use --line |
-| `border.default` | `--border-default` | `#b3b3af` | deprecated: use --line |
-| `border.soft` | `--border-soft` | `#e6e6e0` | deprecated: use --grid |
-| `border.strong` | `--border-strong` | `#72726f` | deprecated: use --line-strong |
-| `border.accent` | `--border-accent` | `#fa3600` | deprecated: use --brand |
 | `brand` | `--brand` | `#fa3600` | Signal orange. Fills only: primary button, selection, focus ring, the subject chart series, the active nav marker. Never on price changes. |
 | `brand.text` | `--brand-text` | `#c42b00` | Brand as text: links, eyebrow index. |
 | `brand.soft` | `--brand-soft` | `#ffe6dc` | Tinted ground behind brand-text: selected rows, active chips. |
-| `accent` | `--accent` | `#fa3600` | deprecated: use --brand (fill, stroke) or --brand-text (text) |
 | `on.brand` | `--on-brand` | `#101010` | Text and icons on a brand fill (white on brand is only 3.8:1). |
 | `focus.ring` | `--focus-ring` | `#fa3600` | 2px solid, 2px offset (globals.css :focus-visible). |
 | `link` | `--link` | `#c42b00` |  |
@@ -60,14 +40,6 @@ The values in this file are the paper theme of the 2026-10 redesign. They are ge
 | `down` | `--down` | `#1e5bd8` | 하락. Always with ▼ and -. |
 | `down.soft` | `--down-soft` | `#e3ecfd` |  |
 | `flat` | `--flat` | `#626260` | 보합: 0.0% and missing data. |
-| `delta.up` | `--delta-up` | `#d21f3c` | deprecated: use --up |
-| `delta.down` | `--delta-down` | `#1e5bd8` | deprecated: use --down |
-| `state.positive` | `--state-positive` | `#d21f3c` | deprecated: use --up |
-| `state.negative` | `--state-negative` | `#1e5bd8` | deprecated: use --down |
-| `state.warning` | `--state-warning` | `#7a6a00` | deprecated: use --status-warning-ink |
-| `state.success` | `--state-success` | `#0b6e62` | deprecated: use --status-success-ink |
-| `state.error` | `--state-error` | `#d21f3c` | deprecated: use --status-error-ink |
-| `state.info` | `--state-info` | `#fa3600` | deprecated: use --brand (fill) or --brand-text (text) |
 | `status.error.ink` | `--status-error-ink` | `#d21f3c` |  |
 | `status.error.surface` | `--status-error-surface` | `#fdeef0` |  |
 | `status.error.border` | `--status-error-border` | `#d21f3c` |  |
@@ -91,15 +63,6 @@ The values in this file are the paper theme of the 2026-10 redesign. They are ge
 | `chart.heat-5` | `--chart-heat-5` | `#fdeef0` |  |
 | `chart.heat-6` | `--chart-heat-6` | `#e88796` |  |
 | `chart.heat-7` | `--chart-heat-7` | `#d21f3c` |  |
-| `chart.primary` | `--chart-primary` | `#fa3600` | deprecated: use --chart-1 |
-| `chart.secondary` | `--chart-secondary` | `#0e8c7c` | deprecated: use --chart-2 |
-| `chart.tertiary` | `--chart-tertiary` | `#8a7650` | deprecated: use --chart-3 |
-| `chart.muted` | `--chart-muted` | `#626260` | deprecated: use --chart-4 |
-| `chart.label` | `--chart-label` | `#626260` | deprecated: use --ink-muted |
-| `chart.ink` | `--chart-ink` | `#282828` | deprecated: use --ink |
-| `chart.grid` | `--chart-grid` | `#e6e6e0` | deprecated: use --grid |
-| `chart.positive` | `--chart-positive` | `#d21f3c` | deprecated: use --up |
-| `chart.negative` | `--chart-negative` | `#1e5bd8` | deprecated: use --down |
 | `space.1` | `--space-1` | `4px` |  |
 | `space.2` | `--space-2` | `8px` |  |
 | `space.3` | `--space-3` | `12px` |  |
@@ -113,14 +76,6 @@ The values in this file are the paper theme of the 2026-10 redesign. They are ge
 | `radius.1` | `--radius-1` | `2px` | Buttons, inputs, segmented controls. |
 | `radius.2` | `--radius-2` | `4px` | Tooltips, menus, delta chips. |
 | `radius.pill` | `--radius-pill` | `999px` | Status dots. |
-| `radius` | `--radius` | `0px` | deprecated: use no rounded class (square), or --radius-1/2 by role |
-| `radius.sm` | `--radius-sm` | `4px` | deprecated: use --radius-2 |
-| `radius.md` | `--radius-md` | `0px` | deprecated: use no rounded class (square), or --radius-1/2 by role |
-| `radius.lg` | `--radius-lg` | `0px` | deprecated: use no rounded class (square) |
-| `shadow.card-hover` | `--shadow-card-hover` | `none` | deprecated: no shadows: use border border-[var(--line)] |
-| `shadow.modal` | `--shadow-modal` | `none` | deprecated: no shadows: use border border-[var(--line)] |
-| `shadow.popover` | `--shadow-popover` | `none` | deprecated: no shadows: use border border-[var(--line)] |
-| `shadow.sidebar` | `--shadow-sidebar` | `none` | deprecated: no shadows: use border border-[var(--line)] |
 | `hairline` | `--hairline` | `1px` | Every border and rule; no 2px borders except the focus ring. |
 | `duration.fast` | `--duration-fast` | `100ms` |  |
 | `duration.normal` | `--duration-normal` | `200ms` |  |
@@ -225,12 +180,4 @@ The values in this file are the paper theme of the 2026-10 redesign. They are ge
 | `type.caption-ko.weight` | `--type-caption-ko-weight` | `500` |  |
 | `type.caption-ko.tracking` | `--type-caption-ko-tracking` | `0` |  |
 | `type.caption-ko.family` | `--type-caption-ko-family` | `var(--font-geist-mono), var(--font-pretendard), ui-monospace, monospace` |  |
-| `type.page-title` | `--type-page-title` | `27px` | deprecated: use type-heading-5 |
-| `type.metric-lg` | `--type-metric-lg` | `32px` | deprecated: use type-figure-md |
-| `type.section-title` | `--type-section-title` | `18px` | deprecated: use type-panel-title |
-| `type.card-title` | `--type-card-title` | `18px` | deprecated: use type-panel-title |
-| `type.metric-md` | `--type-metric-md` | `18px` | deprecated: use type-panel-title (figures: type-figure-md) |
-| `type.table-header` | `--type-table-header` | `11px` | deprecated: use type-caption |
-| `type.table-body` | `--type-table-body` | `13px` | deprecated: use type-small (figures: type-mono) |
-| `type.helper` | `--type-helper` | `13px` | deprecated: use type-small |
 <!-- tokens:generated:end -->
