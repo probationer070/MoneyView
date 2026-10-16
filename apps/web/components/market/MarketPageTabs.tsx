@@ -41,7 +41,7 @@ export function MarketPageTabs({ active, onChange, instruments, spreads }: Marke
         role="tabpanel"
         id={`market-panel-${active}`}
         aria-labelledby={`market-tab-${active}`}
-        className="relative min-h-0 min-w-0 flex-1 overflow-auto"
+        className="relative min-w-0 flex-1 overflow-auto"
       >
         {panels[active]}
       </div>

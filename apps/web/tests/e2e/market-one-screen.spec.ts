@@ -135,6 +135,15 @@ test.describe("the regime line", () => {
     await expect(regime(page)).not.toContainText("Mixed");
   });
 
+  test("an unknown label is unavailable even when the equity index count is positive", async ({ page }) => {
+    await mockMarketPageApi(page);
+    await mockRegime(page, { ...REGIME, regime_label: "unknown", equity_index_count: 4 });
+    await gotoMarket(page);
+    await expect(regime(page)).toHaveAttribute("data-state", "unknown");
+    await expect(regime(page)).toHaveText("Regime unavailable");
+    await expect(regime(page)).not.toContainText("Mixed");
+  });
+
   test("a failed request says so; the line is not left empty", async ({ page }) => {
     await mockMarketPageApi(page);
     await mockRegime(page, { detail: "boom" }, 500);
