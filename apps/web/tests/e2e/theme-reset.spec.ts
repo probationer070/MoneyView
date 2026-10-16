@@ -11,7 +11,7 @@ async function probe(page: Page, className: string, prop: string, inlineStyle = 
   return page.evaluate(
     ([cls, p, style]) => {
       const el = document.createElement("div");
-      el.className = cls;
+      el.className = `probe ${cls}`;
       el.setAttribute("style", `width:10px;height:10px;border-style:solid;border-width:2px;${style}`);
       document.body.appendChild(el);
       const value = getComputedStyle(el).getPropertyValue(p);
@@ -25,6 +25,18 @@ async function probe(page: Page, className: string, prop: string, inlineStyle = 
 test.beforeEach(async ({ page }) => {
   await page.goto("/dev/design", { waitUntil: "networkidle" });
   await expect(page.locator("main")).toBeVisible({ timeout: 60_000 });
+  // Every probe starts from a non-default colour and radius in the base layer, which a utility (layer
+  // utilities) has to override. Without it a transparent check would pass on the browser default.
+  await page.addStyleTag({
+    content: "@layer base { .probe { background-color: rgb(1, 2, 3); border-color: rgb(4, 5, 6); border-radius: 0; } }",
+  });
+});
+
+test("the Tailwind default colour, text, shadow and radius variables are reset", async ({ page }) => {
+  const values = await page.evaluate(() =>
+    ["--color-red-500", "--text-sm", "--shadow-md", "--radius-md"].map((name) => [name, getComputedStyle(document.documentElement).getPropertyValue(name).trim()]),
+  );
+  expect(values).toEqual([["--color-red-500", ""], ["--text-sm", ""], ["--shadow-md", ""], ["--radius-md", ""]]);
 });
 
 test("rounded-full gives a radius of at least 999px", async ({ page }) => {
@@ -41,7 +53,7 @@ test("border-transparent gives a transparent border", async ({ page }) => {
 
 test("border-t-transparent gives a transparent top border only", async ({ page }) => {
   expect(await probe(page, "border-t-transparent", "border-top-color")).toBe(TRANSPARENT);
-  expect(await probe(page, "border-t-transparent", "border-bottom-color")).not.toBe(TRANSPARENT);
+  expect(await probe(page, "border-t-transparent", "border-bottom-color")).toBe("rgb(4, 5, 6)");
 });
 
 test("bg-current takes the text colour", async ({ page }) => {
