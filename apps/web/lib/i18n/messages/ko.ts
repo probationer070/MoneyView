@@ -5,10 +5,11 @@ export const ko: Messages = {
   nav: {
     market: "시장 개요", portfolio: "포트폴리오", news: "뉴스", corporate: "기업 분석",
     monteCarlo: "몬테카를로 시뮬레이션", decisions: "의사결정 기록", valuation: "가치평가", cases: "케이스", events: "이벤트",
+    signals: "거시 신호",
   },
   navShort: {
     market: "시장", portfolio: "포트폴리오", news: "뉴스", corporate: "기업 분석", monteCarlo: "몬테카를로",
-    decisions: "의사결정", valuation: "가치평가", cases: "케이스", events: "이벤트",
+    decisions: "의사결정", valuation: "가치평가", cases: "케이스", events: "이벤트", signals: "거시 신호",
   },
   topnav: { primary: "주 메뉴", full: "전체 페이지", menu: "메뉴", poweredBy: "Powered by FastAPI & Next.js" },
   common: {
@@ -595,5 +596,23 @@ export const ko: Messages = {
     percentiles: "p50 {p50} ms · p95 {p95} ms · max {max} ms",
     fullTable: "전체 표",
     cacheEffectiveness: "캐시 효율",
+  },
+  signals: {
+    title: "거시 신호",
+    subtitle: "FRED 규칙의 주간 판정과 휴리스틱 S&P 500 시나리오 확률입니다.",
+    runNow: "지금 실행", running: "실행 중…", lastRun: "마지막 실행", mostLikely: "가장 유력",
+    saveFailed: "저장하지 못했습니다. 다시 시도하십시오.",
+    runFailed: "실행에 실패했습니다. 서버 로그를 확인하십시오.",
+    noSnapshot: "아직 스냅샷이 없습니다. 엔진을 실행해 이번 주 스냅샷을 만드십시오.",
+    loading: "신호를 불러오는 중…", unavailable: "신호를 불러오지 못했습니다.", failures: "지난 실행의 데이터 문제",
+    states: { triggered: "발동", near: "근접", not_triggered: "미발동", stale: "데이터 오래됨" },
+    table: { signal: "신호", direction: "방향", state: "상태", value: "값", threshold: "기준값", observed: "관측일", contribution: "기여도 (%p)" },
+    trend: "시나리오 확률, 최근 26주", trendRulesChanged: "규칙 변경",
+    judged: "신호 {total}개 중 {judged}개 판정, {stale}개 오래됨",
+    noEvidence: "이번 주 판정된 신호가 없어 확률이 사전 확률과 같습니다.",
+    vsWeek: "{week} 대비",
+    manual: "수동 신호", note: "메모", save: "저장", notSet: "이번 주 미입력", stateOf: "{label} 상태",
+    savedNotApplied: "이번 주 값으로 저장했습니다. 다음 실행에 반영됩니다.",
+    disclaimer: "이 확률은 주관적 우도비로 만든 휴리스틱이며 통계 모형의 추정치가 아니고, 투자 조언이 아닙니다.",
   },
 };

@@ -32,7 +32,7 @@ test.describe("the top bar at 1280x720", () => {
 
   test("only the current page shows a label; every item is a link named in full", async ({ page }) => {
     await gotoValuation(page);
-    await expect(primary(page).getByRole("link")).toHaveCount(9);
+    await expect(primary(page).getByRole("link")).toHaveCount(10);
     const current = primary(page).getByRole("link", { name: "Valuation" });
     await expect(current).toHaveText("Valuation");
     await expect(current).toHaveAttribute("aria-current", "page");

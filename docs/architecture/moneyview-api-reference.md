@@ -553,6 +553,50 @@ Base path: `/api/v1/stock`
   - `404` when the ticker cannot be resolved
 - **Consumers:** stock-price autofill and quick lookup UI
 
+## 10A. Macro Signal Routes
+
+Base path: `/api/v1/signals`. Tab: `docs/tabs/signals-tab.txt`. Spec: `docs/superpowers/specs/2026-10-10-macro-signal-engine-spec.md`.
+
+All five responses are `APIResponse[T]`. Times are UTC ISO 8601; the ISO week is computed in Asia/Seoul.
+
+**A FRED failure is never a 500.** A missing key, a network error, a non-200 response, or a malformed body or date makes that series fall back to the `fred_cache` table. A rule whose data is then too old becomes `stale`, and its reason is in the result's `note`. `POST /run` still returns `200` with the run's `failures` list (one message per failed series, key redacted). `failures` is not stored: `GET /latest` returns `failures: []` after a reload.
+
+### `POST /run`
+
+- **Response:** `APIResponse[SignalSnapshot]`
+- **Purpose:** Fetch the FRED series once each, evaluate every automatic rule, merge this week's manual inputs, compute the probabilities and overwrite this ISO week's snapshot.
+- **Persistence touched:** `signal_snapshots`, `signal_results`, `fred_cache` (on successful fetches)
+- **Failure behaviour:** FRED problems appear in `failures` and as `stale` results; the response is `200`.
+- **Consumers:** the Macro Signals page's "Run now" button
+
+### `GET /latest`
+
+- **Response:** `APIResponse[SignalSnapshot | null]`; `data` is `null` before the first run
+- **Purpose:** Return the most recent stored week: probabilities, the previous week's probabilities, and per-rule results with contributions.
+- **Persistence touched:** reads only
+- **Consumers:** the page's summary and signal table
+
+### `GET /history`
+
+- **Query parameters:** `weeks` (1 to 260, default 26); out of range is `422`
+- **Response:** `APIResponse[list[SignalHistoryPoint]]`, oldest first
+- **Purpose:** Probability history for the trend chart. Each point carries its `rules_version`, so a rules change is visible.
+- **Persistence touched:** reads only
+
+### `GET /rules`
+
+- **Response:** `APIResponse[SignalRules]`: the loaded `rules.yaml` version, the scenario block and every rule with its bilingual labels
+- **Purpose:** Let the page list the manual rules and show scenario parameters without hard-coding them.
+- **Persistence touched:** reads the loaded rules (validated at app start)
+
+### `PUT /manual/{rule_id}`
+
+- **Body:** `ManualInputIn`: `state` (`triggered`, `near` or `not_triggered`; `stale` is rejected with `422`), `note` (optional, up to 500 characters); unknown fields are rejected
+- **Response:** `APIResponse[ManualInputSaved]`: this ISO week and the rescored snapshot
+- **Purpose:** Set one manual signal for the current KST ISO week and rescore that week without calling FRED. The stored `run_at` is kept.
+- **Error behaviour:** `404` when `rule_id` is unknown or not a manual rule
+- **Persistence touched:** `signal_manual_inputs`, `signal_snapshots`, `signal_results`
+
 ## 11. Persistence Side-Effect Summary
 
 Routes that can mutate SQLite or durable local artifacts include:
@@ -568,6 +612,8 @@ Routes that can mutate SQLite or durable local artifacts include:
 - `PUT /api/v1/corporate/metrics/{ticker}`
 - `POST /api/v1/news/crawl`
 - `POST /api/v1/news/crawl/stock`
+- `POST /api/v1/signals/run`
+- `PUT /api/v1/signals/manual/{rule_id}`
 
 Routes that may trigger route-time bootstrap/materialization behavior include:
 

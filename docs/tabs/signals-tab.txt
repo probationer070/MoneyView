@@ -1,0 +1,112 @@
+Macro Signals Tab
+
+Tab identity
+- Sidebar label: Macro Signals
+- Route: /signals
+
+Purpose
+- Show this week's FRED-based macro rule verdicts and the heuristic scenario probabilities they
+  feed: A (upside), B (correction), C (not yet named; the page shows "A/B/C" until the owner
+  names it).
+- Let the owner enter the three manual signals for the week, and re-run the engine on demand.
+
+Design intent
+- The probabilities are a heuristic, not a model estimate. The disclaimer is shown on every
+  render, verbatim, in the page footer (data-testid="disclaimer"):
+  "These probabilities are a heuristic built from subjective likelihood ratios, not a statistical model estimate, and are not investment advice."
+- A data problem is content, not an error. A stale rule stays on the table, dimmed, with its
+  reason shown under the signal name (the API's `note`). A FRED failure never blanks the page.
+- A failed run or a failed manual save is an alert (role="alert"). The run's own failure list
+  (FRED errors that fell back to cache or to stale) is shown in a status region, but only for the
+  run just made; it is not kept across a reload.
+- Korean labels are not shown yet. The page strings sit in app/signals/copy.ts in English;
+  `label_ko` is already returned by the API for the design-system plan's i18n task.
+
+Layout structure
+- Header: title "Macro Signals" and the subtitle.
+- Summary bar: the week's most likely scenario, the three probabilities, last run time, and the
+  "Run now" button. Under the most likely scenario, "k of N signals judged, m stale" says how much
+  evidence the probabilities rest on; when k is 0 a note says they equal the prior. Each probability's
+  change is measured against the previous stored week and labelled "vs <week>".
+- Run failure alert and, when present, the list of data problems from the last run.
+- Signal table: one row per rule with direction (A/B), state, value, threshold, observed date and
+  the rule's contribution in percentage points to A, B and C. Stale rows are dimmed and carry
+  their reason.
+- Probability trend chart: the last 26 weeks of A/B/C. A dashed line marks a week whose
+  rules_version differs from the previous week ("rules changed").
+- Manual input panel: the three manual rules, each with a state (triggered / near / not triggered),
+  an optional note, and Save. The panel is titled with the ISO week of the states it shows, which can
+  be an earlier week than the current one. A save always targets the current ISO week (KST); if that
+  week has no snapshot yet, the panel says the input applies at the next run. An unset rule reads
+  "Not set this week" and is left out of the probability.
+- Footer: the disclaimer above.
+
+Key sections
+- Summary bar: GET /api/v1/signals/latest; POST /api/v1/signals/run for "Run now".
+- Signal table: the `results` of the latest snapshot, in rules.yaml order.
+- Trend chart: GET /api/v1/signals/history?weeks=26.
+- Manual panel: rules from GET /api/v1/signals/rules (kind "manual"); saves with
+  PUT /api/v1/signals/manual/{rule_id}, which rescores the current week without touching FRED.
+
+Important behavior
+- Rules, thresholds, likelihood ratios, the prior (A 0.35, B 0.45, C 0.20), the bounds [0.05, 0.85]
+  and the weights live only in apps/api/services/signals/rules.yaml. Each week is recomputed from
+  the prior; last week's result is never multiplied in.
+- Manual inputs accept only triggered, near and not_triggered. "Data stale" is never a manual value.
+- A week with no manual input leaves that manual rule out of the results and the probability. It is
+  not counted as not_triggered.
+- Bounded probabilities are computed by bounded_normalize (C1): values pinned at the bound, the rest
+  renormalised, repeated until every value is in bounds.
+- The page's copy is English only for now (C11).
+- previous_probs is the most recent earlier stored snapshot, which can be several weeks back if weeks
+  were skipped. previous_iso_week names that week, and the page shows it next to each change.
+
+Known limitations
+- Signal snapshots and manual inputs are local to each PC. They are not part of records sync, so a
+  second PC does not see them.
+- Each PC needs its own FRED_API_KEY in config/.env. Without it the engine uses only the local
+  fred_cache, and a rule goes stale once its cached data is too old. On a fresh PC with no cache,
+  every automatic rule is stale.
+
+Corrections from the implementation plan (spec appendix, "구현 계획에서 확정한 수정 사항 (2026-10-12)")
+- C1  Probabilities are bounded, not clipped and renormalised: pinned values never leave [5%, 85%].
+- C2  Staleness is per rule: daily 7 days, Brent 14, monthly 80.
+- C3  b_fed_hike compares the latest value with the value `lookback_days: 14` before as_of, not with
+      the previous snapshot, so the rule stays pure. The baseline date is the earlier of that and the
+      date of the previous stored snapshot (C3a).
+- C4  Two integration tests: with 3 manual inputs, 11 results; with none, 8 results.
+- C5  Percent changes and means are rounded to 9 places before comparison, so 0.250 triggers.
+- C6  Endpoints are under /api/v1/signals/*.
+- C7  No APScheduler: an asyncio loop checks hourly (see the schedule below).
+- C8  FRED is read through FREDCollector.fetch_observations(), which raises, uses a 15 s timeout and
+      redacts the key. fetch_indicator is untouched.
+- C9  signal_results stores contrib_a, contrib_b, contrib_c at run time, so a later rules.yaml edit
+      cannot rewrite a stored week.
+- C10 compound rules support "all conditions" only (a_labor_core). OR waits until a rule needs it.
+- C11 Labels are bilingual in rules.yaml and in the API (ko and en). The page is English for now.
+
+Schedule and failure handling
+- The engine runs at backend startup when this ISO week (KST) has no snapshot, and then by an
+  hourly check. It is due once per KST ISO week after Saturday 08:51 KST. The Saturday run sees data
+  through Thursday for DGS10 and BAMLH0A0HYM2, which FRED posts for Friday on Monday, and through Friday
+  for the other series. A desktop app is not always on, so a machine woken on Sunday still gets the
+  week's run. The first check after startup also re-runs a week whose automatic rules are all stale,
+  so a FRED key added after a keyless start takes effect without waiting for Saturday.
+- MONEYVIEW_DISABLE_STARTUP_JOBS disables both the startup run and the hourly check (the test suite sets it).
+- Any FRED problem (no key set, network error, non-200, malformed body or dates) makes that series fall
+  back to cached observations from fred_cache. A rule whose data is then too old becomes `stale`, with
+  the reason in its note. POST /run still returns 200 with a `failures` list.
+- A scheduled run that reported FRED errors is retried on each hourly check within the same ISO week
+  after the cutoff, and logs a warning. A restart after a failed run does not retry: the snapshot
+  exists, and POST /run repairs it.
+- Failures are not persisted. GET /latest returns `failures: []` after a reload. Each stale result keeps
+  its reason in `note`, which is persisted.
+- The FRED key is read from FRED_API_KEY (loaded from config/.env). It is never shown on the page and
+  never logged.
+
+Primary data sources
+- /api/v1/signals/run, /latest, /history, /rules and /manual/{rule_id}.
+- FRED series (DGS10, CPILFESL, BAMLH0A0HYM2, DCOILBRENTEU, DFEDTARU, PAYEMS), through the FRED
+  observations API, with the fred_cache table as fallback.
+- Spec: docs/superpowers/specs/2026-10-10-macro-signal-engine-spec.md
+- Plan: docs/superpowers/plans/2026-10-12-macro-signal-engine.md
