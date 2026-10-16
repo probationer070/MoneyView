@@ -6,6 +6,7 @@ GET /api/market/index/{ticker}   → single index OHLCV history
 GET /api/market/events           → dated events drawn as vertical lines on price charts
 GET /api/market/event-categories → resolved event categories (colour, visibility)
 GET /api/market/spreads            → theme and policy relative-strength spreads
+GET /api/market/regime             → breadth and cross-asset regime for the overview header
 POST   /api/market/events                        → create a user event
 PUT    /api/market/events/{id}                    → edit a user event
 DELETE /api/market/events/{id}                    → delete a user event
@@ -28,6 +29,7 @@ from apps.api.models.schemas import (
     MarketEvent,
     MarketEventInput,
     MarketIndexDetail,
+    MarketRegimeContext,
     MarketSpread,
     StockOHLCV,
 )
@@ -157,6 +159,17 @@ def get_all_indices():
     Each card includes: name, ticker, last_close, delta badge, 30-day sparkline.
     """
     return _svc.get_all_indices()
+
+
+
+@router.get("/regime", response_model=MarketRegimeContext)
+def get_market_regime():
+    """Breadth and cross-asset regime from the tracked indices' last two closes.
+
+    Always 200: with too few bars the label is "unknown". Reading may refresh a stale `indices`
+    cache through get_stock_ohlcv, the same path the index detail takes.
+    """
+    return _svc.get_market_regime()
 
 
 @router.get("/index/{ticker}", response_model=List[StockOHLCV])

@@ -64,6 +64,7 @@ Important exceptions:
 - `GET /api/v1/portfolio/stock/{ticker}` returns a plain `dict`
 - `GET /api/v1/market/indices` returns `List[IndexQuote]`
 - `GET /api/v1/market/index/{ticker}` returns `List[StockOHLCV]`
+- `GET /api/v1/market/regime` returns `MarketRegimeContext` (always 200; `regime_label` "unknown" when there is too little data)
 - `GET /api/v1/detail/{ticker}/ohlcv` returns `List[StockOHLCV]`
 - `GET /api/v1/detail/{ticker}/technicals` returns `TechnicalIndicators`
 - `GET /api/v1/detail/{ticker}/monte-carlo` returns `MonteCarloResult`
