@@ -2,10 +2,11 @@ export const en = {
   nav: {
     market: "Market Overview", portfolio: "Portfolio", news: "News Feed", corporate: "Corporate Analysis",
     monteCarlo: "Monte Carlo", decisions: "Decision Log", valuation: "Valuation", cases: "Cases", events: "Events",
+    signals: "Macro Signals",
   },
   navShort: {
     market: "Market", portfolio: "Portfolio", news: "News", corporate: "Corporate", monteCarlo: "Monte Carlo",
-    decisions: "Decisions", valuation: "Valuation", cases: "Cases", events: "Events",
+    decisions: "Decisions", valuation: "Valuation", cases: "Cases", events: "Events", signals: "Signals",
   },
   topnav: { primary: "Primary", full: "All pages", menu: "Menu", poweredBy: "Powered by FastAPI & Next.js" },
   common: {

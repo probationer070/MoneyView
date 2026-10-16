@@ -34,6 +34,7 @@ capitals: "종목 NAME". Both come from `apps/web/lib/i18n/labels.ts`; add the r
 | Valuation | 가치평가 | nav |
 | Cases | 케이스 | nav |
 | Events | 이벤트 | nav |
+| Macro Signals / Signals (short) | 거시 신호 | nav; one term for both the full and the short label |
 | Menu | 메뉴 | top bar ☰ button |
 | Primary | 주 메뉴 | top bar icon-link landmark |
 | All pages | 전체 페이지 | top bar panel landmark |

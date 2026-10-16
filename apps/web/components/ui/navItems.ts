@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { Building2, CalendarDays, GitFork, LayoutDashboard, Newspaper, NotebookPen, Orbit, PieChart, Scale } from "lucide-react";
+import { Building2, CalendarDays, GitFork, LayoutDashboard, Newspaper, NotebookPen, Orbit, PieChart, Radar, Scale } from "lucide-react";
 import type { MessageKey } from "@/lib/i18n/translate";
 
 export interface NavItem {
@@ -11,7 +11,7 @@ export interface NavItem {
   icon: LucideIcon;
 }
 
-// Same list, order, paths and icons as the old Sidebar (spec 2026-10-14 §1).
+// Same list, order, paths and icons as the old Sidebar (spec 2026-10-14 §1), plus /signals (PR #67).
 export const NAV_ITEMS: readonly NavItem[] = [
   { href: "/", key: "nav.market", shortKey: "navShort.market", icon: LayoutDashboard },
   { href: "/portfolio", key: "nav.portfolio", shortKey: "navShort.portfolio", icon: PieChart },
@@ -22,6 +22,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { href: "/valuation", key: "nav.valuation", shortKey: "navShort.valuation", icon: Scale },
   { href: "/cases", key: "nav.cases", shortKey: "navShort.cases", icon: GitFork },
   { href: "/events", key: "nav.events", shortKey: "navShort.events", icon: CalendarDays },
+  { href: "/signals", key: "nav.signals", shortKey: "navShort.signals", icon: Radar },
 ];
 
 /** Prefix match, so /cases/2 is still "Cases" (plan N7). "/" matches only itself. */
