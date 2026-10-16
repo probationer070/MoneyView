@@ -244,6 +244,20 @@ export const ko: Messages = {
       addFailed: "카테고리를 추가하지 못했습니다.",
     },
   },
+  market: {
+    title: "시장 개요",
+    subtitle: "일별 종가 · 지수, 원자재, 환율, 암호화폐",
+    tabs: { aria: "시장 화면 구분", instruments: "종목", spreads: "스프레드" },
+    regime: {
+      riskOn: "위험선호",
+      mixed: "혼조",
+      riskOff: "위험회피",
+      breadth: "지수 {breadth} 상승",
+      signals: "선호 {on} / 회피 {off}",
+      unknown: "국면 판단 불가",
+      error: "국면을 불러오지 못했습니다.",
+    },
+  },
   news: {
     title: "시장 인텔리전스",
     subtitle: "규제 뉴스와 시장 소식을 모아 보여 줍니다.",

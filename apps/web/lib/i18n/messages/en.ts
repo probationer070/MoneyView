@@ -241,6 +241,20 @@ export const en = {
       addFailed: "Could not add the category.",
     },
   },
+  market: {
+    title: "Market Overview",
+    subtitle: "Daily closes · indices, commodities, FX, crypto",
+    tabs: { aria: "Market sections", instruments: "Instruments", spreads: "Spreads" },
+    regime: {
+      riskOn: "Risk-on",
+      mixed: "Mixed",
+      riskOff: "Risk-off",
+      breadth: "Indices up {breadth}",
+      signals: "Signals on {on} / off {off}",
+      unknown: "Regime unavailable",
+      error: "Regime could not be loaded.",
+    },
+  },
   news: {
     title: "Market Intelligence",
     subtitle: "Aggregated regulatory news and market updates",

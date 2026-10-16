@@ -205,3 +205,9 @@ capitals: "종목 NAME". Both come from `apps/web/lib/i18n/labels.ts`; add the r
 | MA 20 / MA 50 | 20일 이동평균 / 50일 이동평균 | detail technicals rows |
 | As of {date} | {date} 기준 | detail page subtitle |
 | Stock detail page: No data available for {ticker} | {ticker} 데이터가 없습니다. | detail empty state |
+| Instruments | 종목 | market page tab |
+| Spreads | 스프레드 | market page tab; a theme's relative strength against a benchmark |
+| Risk-on / Mixed / Risk-off | 위험선호 / 혼조 / 위험회피 | market regime label |
+| Regime unavailable | 국면 판단 불가 | market regime with too little data |
+| Daily closes | 일별 종가 | market subtitle |
+| Commodities / FX / Crypto | 원자재 / 환율 / 암호화폐 | market subtitle and instrument types |

@@ -19,19 +19,10 @@ import { LoadingState } from "@/components/ui/LoadingState";
 import { SparklineCard } from "@/components/data/SparklineCard";
 import { SpreadsSection } from "@/components/market/SpreadsSection";
 import { useMarketEvents } from "@/lib/useMarketEvents";
+import type { MarketRegimeContext } from "../../../../packages/shared-types";
+import type { MarketIndexQuote } from "@/components/market/marketModel";
 
-export interface MarketIndexQuote {
-  name: string;
-  ticker: string;
-  instrument_type?: string;
-  last_close: number | null;
-  delta: {
-    delta_pct: number;
-    delta_abs?: number | null;
-  };
-  sparkline: number[];
-  period?: string | null;
-}
+export type { MarketIndexQuote };
 
 interface MarketHistoryBar {
   date: string;
@@ -74,18 +65,6 @@ interface MarketDataQuality {
   last_updated: string | null;
   latest_trading_date: string | null;
   detail_note: string;
-}
-
-interface MarketRegimeContext {
-  regime_label: string;
-  regime_summary: string;
-  equity_advancers: number;
-  equity_decliners: number;
-  breadth_ratio: number | null;
-  equity_index_count: number;
-  risk_on_signals: number;
-  risk_off_signals: number;
-  signal_count: number;
 }
 
 interface MarketIndexDetail {
