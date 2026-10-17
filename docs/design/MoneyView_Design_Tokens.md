@@ -80,9 +80,17 @@ The values in this file are the paper theme of the 2026-10 redesign. They are ge
 | `duration.fast` | `--duration-fast` | `100ms` |  |
 | `duration.normal` | `--duration-normal` | `200ms` |  |
 | `duration.slow` | `--duration-slow` | `350ms` |  |
+| `duration.roll` | `--duration-roll` | `600ms` |  |
+| `duration.roll-enter` | `--duration-roll-enter` | `700ms` |  |
+| `duration.draw` | `--duration-draw` | `700ms` |  |
+| `duration.scan` | `--duration-scan` | `500ms` |  |
+| `duration.flash` | `--duration-flash` | `600ms` |  |
+| `duration.stagger` | `--duration-stagger` | `40ms` |  |
+| `duration.digit-stagger` | `--duration-digit-stagger` | `45ms` |  |
 | `easing.default` | `--easing-default` | `cubic-bezier(0.4, 0, 0.2, 1)` |  |
 | `easing.enter` | `--easing-enter` | `cubic-bezier(0, 0, 0.2, 1)` |  |
 | `easing.exit` | `--easing-exit` | `cubic-bezier(0.4, 0, 1, 1)` |  |
+| `easing.emphasized` | `--easing-emphasized` | `cubic-bezier(0.2, 0, 0, 1)` |  |
 | `bp.desktop` | `--bp-desktop` | `992px` |  |
 | `bp.tablet` | `--bp-tablet` | `768px` |  |
 | `bp.mobile` | `--bp-mobile` | `480px` |  |

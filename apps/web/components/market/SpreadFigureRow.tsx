@@ -1,6 +1,7 @@
 "use client";
 
 import { formatNumber, MISSING } from "@/lib/format";
+import { RollingNumber } from "@/components/ui/RollingNumber";
 import { useLocale, useT } from "@/lib/i18n/locale";
 import { DEFAULT_SPREAD_WINDOW_DAYS, useMarketSpreads } from "@/lib/useMarketSpreads";
 import { FigureText } from "./FigureText";
@@ -42,7 +43,9 @@ export function SpreadFigureRow({ onOpenSpreads }: { onOpenSpreads: () => void }
             >
               <span className="type-label">{figure.label}</span>
               <span data-part="value" className="type-mono text-[var(--ink)]">
-                {figure.refused ? t("market.spreads.unavailable") : figure.latest === null ? MISSING : formatNumber(figure.latest, "price", { digits: 1, locale })}
+                {figure.refused ? t("market.spreads.unavailable") : figure.latest === null ? MISSING : (
+                  <RollingNumber value={figure.latest} format={(n) => formatNumber(n, "price", { digits: 1, locale })} enter />
+                )}
               </span>
               <span data-part="pair" className="type-caption text-[var(--ink-muted)]">{figure.pair}</span>
             </button>

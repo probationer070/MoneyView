@@ -80,6 +80,47 @@ A one-line constant takes its comment on the line above the `const`.
 - A brand fill with no children is really a marker, not a button whose label sits in a sibling.
 - The `hasNoChildren` and "ink anywhere in the className" leniencies of `brandGround` are not used to hide ink that is not on the ground (a `hover:text-[var(--on-brand)]` does not count as ink).
 
+## Motion
+Spec: `docs/superpowers/specs/2026-10-16-motion-system-design.md`. Use the shared pieces; do not hand-roll animation.
+
+**When things move.** Only these four occasions:
+- a component's first mount;
+- a tab switch;
+- a displayed value that actually changes (a re-render with the same text never moves);
+- a run that completes.
+
+**Reduced motion.** Under `prefers-reduced-motion: reduce`:
+- values show their final text at once;
+- nothing translates, draws, sweeps or staggers;
+- SSR and the first client render count as reduced.
+
+**Readability.** Figures are readable at every frame. While a figure rolls, assistive tech gets the final text once (`aria-hidden` cells plus an `sr-only` copy).
+
+**Pieces.**
+- **A rolling figure:** `RollingNumber` (odometer digits; `enter` rolls in from zeros on mount).
+- **A before → after figure:** `BeforeAfter`.
+- **A percent chip:** `DeltaBadge animate | animate="enter"`.
+- **A tab indicator:** shared `Tabs`. It slides on its own.
+- **A panel reveal on tab change:** `ScanReveal trigger={key}`.
+- **Staggered entry:** the class `mv-enter` with `--mv-i` set to the item's index.
+- **A sparkline draw-in:** `Sparkline draw`.
+- **A hover nudge:** CSS only, using `--duration-fast` and `--duration-normal`.
+
+**Timing tokens.**
+
+| Token | Use |
+|---|---|
+| `--duration-roll` | value change |
+| `--duration-roll-enter` | first entry |
+| `--duration-draw` | sparkline draw |
+| `--duration-scan` | scan reveal |
+| `--duration-flash` | tint fade |
+| `--duration-stagger` | per-item delay |
+| `--duration-digit-stagger` | per-digit delay |
+| `--easing-emphasized` | default easing |
+
+**Tests.** Playwright runs with reduced motion by default (`use.contextOptions.reducedMotion`). A spec that tests motion opts in at file or describe level with `test.use({ contextOptions: { reducedMotion: "no-preference" } })`.
+
 ## Adding a value
 If no token fits, add one to the token file first: a primitive under `palette`, the meaning in a
 semantic group. Run `npm run tokens`, then use it. Do not add a synonym for an existing meaning.

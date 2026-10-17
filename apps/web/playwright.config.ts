@@ -27,6 +27,8 @@ export default defineConfig({
     baseURL: E2E_WEB_BASE_URL,
     // First visits resolve the locale from the browser; the suite's English assertions rely on en-US.
     locale: "en-US",
+    // The suite runs with reduced motion so transitions do not race its assertions.
+    contextOptions: { reducedMotion: "reduce" },
     trace: "on-first-retry",
   },
   webServer: [

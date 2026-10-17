@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { ScanReveal } from "@/components/ui/ScanReveal";
 import { Tabs } from "@/components/ui/Tabs";
 import { useT } from "@/lib/i18n/locale";
 import { useTabState } from "@/lib/tabState";
@@ -43,7 +44,7 @@ export function MarketPageTabs({ active, onChange, instruments, spreads }: Marke
         aria-labelledby={`market-tab-${active}`}
         className="relative min-w-0 flex-1 overflow-auto"
       >
-        {panels[active]}
+        <ScanReveal trigger={active}>{panels[active]}</ScanReveal>
       </div>
     </section>
   );

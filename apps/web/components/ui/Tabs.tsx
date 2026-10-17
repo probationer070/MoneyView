@@ -1,7 +1,11 @@
 "use client";
 
+import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 import type { KeyboardEvent, ReactNode } from "react";
 import clsx from "clsx";
+
+const SLIDE =
+  "transition-[transform,width] duration-[var(--duration-slow)] ease-[var(--easing-emphasized)] motion-reduce:transition-none";
 
 interface TabsItem {
   key: string;
@@ -27,6 +31,35 @@ export function Tabs({
   className,
   idPrefix = "",
 }: TabsProps) {
+  const listRef = useRef<HTMLDivElement>(null);
+  const indicatorRef = useRef<HTMLSpanElement>(null);
+
+  // The indicator is moved straight on the DOM node: it follows layout, it is not render state.
+  const measure = useCallback(() => {
+    const selected = listRef.current?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]');
+    const indicator = indicatorRef.current;
+    if (!selected || !indicator) return;
+    indicator.style.width = `${selected.offsetWidth}px`;
+    indicator.style.transform = `translateX(${selected.offsetLeft}px)`;
+    indicator.style.opacity = "1";
+  }, []);
+
+  useLayoutEffect(measure, [measure, activeKey, items]);
+
+  useEffect(() => {
+    const list = listRef.current;
+    if (!list) return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(list);
+    void document.fonts?.ready.then(measure);
+    // Transition only after the first measure has painted, so the indicator appears under the tab instead of sliding in from zero.
+    const frame = requestAnimationFrame(() => indicatorRef.current?.classList.add(...SLIDE.split(" ")));
+    return () => {
+      observer.disconnect();
+      cancelAnimationFrame(frame);
+    };
+  }, [measure]);
+
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     const current = items.findIndex((item) => item.key === activeKey);
     const last = items.length - 1;
@@ -57,8 +90,9 @@ export function Tabs({
 
   return (
     <div
+      ref={listRef}
       className={clsx(
-        "flex gap-4 overflow-x-auto border-b border-[var(--line)]",
+        "relative flex gap-4 overflow-x-auto border-b border-[var(--line)]",
         className
       )}
       role="tablist"
@@ -81,7 +115,7 @@ export function Tabs({
             className={clsx(
               "type-mono relative inline-flex rounded-[var(--radius-1)] min-h-10 items-center gap-2 px-1 pb-3 pt-2 uppercase transition-colors duration-[var(--duration-normal)]",
               selected
-                ? "text-[var(--ink)] after:absolute after:inset-x-0 after:-bottom-px after:h-0.5 after:bg-[var(--brand)]"
+                ? "text-[var(--ink)]"
                 : "text-[var(--ink-muted)] hover:text-[var(--ink)]"
             )}
           >
@@ -90,6 +124,12 @@ export function Tabs({
           </button>
         );
       })}
+      <span
+        ref={indicatorRef}
+        data-testid="tabs-indicator"
+        aria-hidden
+        className="pointer-events-none absolute bottom-0 left-0 h-[var(--hairline)] w-0 bg-[var(--brand)] opacity-0"
+      />
     </div>
   );
 }
