@@ -1,6 +1,5 @@
 "use client";
 
-import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { fieldInputClass } from "@/components/ui/InlineField";
 import { formatNumber, type FormatLocale } from "@/lib/format";
 import clsx from "clsx";
@@ -34,6 +33,7 @@ export function NumericField({
   suffix,
   step = 1,
   min,
+  help,
 }: {
   label: string;
   value: number;
@@ -41,6 +41,7 @@ export function NumericField({
   suffix?: string;
   step?: number;
   min?: number;
+  help?: string;
 }) {
   return (
     <label className="type-label grid gap-1 text-[var(--ink)]">
@@ -57,6 +58,7 @@ export function NumericField({
         />
         {suffix && <span className="type-small text-[var(--ink-muted)]">{suffix}</span>}
       </div>
+      {help ? <span className="type-small text-[var(--ink-muted)]">{help}</span> : null}
     </label>
   );
 }
@@ -97,31 +99,6 @@ export function MetricCard({ label, value, detail }: { label: string; value: str
       <div className="type-caption uppercase text-[var(--ink-muted)]">{label}</div>
       <div className="mt-2 type-figure-md text-[var(--ink)]">{value}</div>
       <div className="mt-1 type-small text-[var(--ink-muted)]">{detail}</div>
-    </div>
-  );
-}
-
-export function PercentileIndicator({
-  label,
-  value,
-  colorClass,
-  swatchOpacity,
-  description,
-}: {
-  label: string;
-  value: string;
-  colorClass: string;
-  swatchOpacity?: number;
-  description: string;
-}) {
-  return (
-    <div className="border border-[var(--line)] bg-[var(--surface-raised)] p-3">
-      <div className="flex items-center gap-2 type-caption uppercase text-[var(--ink-muted)]">
-        {/* rounded-full: dot */}
-        <span className={clsx("inline-block h-2.5 w-2.5 rounded-full", colorClass)} style={swatchOpacity === undefined ? undefined : { opacity: swatchOpacity }} />
-        <InfoTooltip label={label} description={description} />
-      </div>
-      <div className="mt-2 type-mono text-[var(--ink)]">{value}</div>
     </div>
   );
 }
