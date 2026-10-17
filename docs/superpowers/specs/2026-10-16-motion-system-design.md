@@ -83,7 +83,7 @@ Oct 16, 2026 · 근거 코드는 `renewal` b833b21이다. 경로는 따로 적�
 
 | 단위 | 계약 |
 |---|---|
-| `lib/motion.ts` `usePrefersReducedMotion(): boolean` | `matchMedia("(prefers-reduced-motion: reduce)")`를 구독한다. SSR과 첫 렌더에서는 `true`를 돌려 움직이지 않는다. |
+| `lib/motion.ts` `usePrefersReducedMotion(): boolean` | `useSyncExternalStore`로 `matchMedia("(prefers-reduced-motion: reduce)")`를 구독한다. 서버와 hydration 스냅샷은 `true`이고, 클라이언트에서만 마운트된 경우 첫 렌더부터 실제 설정값이다(최종 수정 4ce6796). 서버 렌더된 `enter` 수치는 hydration 뒤 한 프레임 동안 최종값이 보일 수 있다. 지금은 앱 셸이 클라이언트 전용이라 해당 없다. |
 | `lib/motion.ts` `odometerPlan(from: string \| null, to: string): Array<{ from: string; to: string; delayIndex: number }>` | 순수 함수. 오른쪽 정렬 비교 결과를 글자 단위로 낸다. 같은 글자는 `from === to`. `from === null`이면 `to`의 숫자를 `0`으로 바꾼 문자열에서 출발한다. `delayIndex`는 오른쪽 끝이 0이다. 예: `("7,744.1", "7,760.0")` → 바뀐 자리는 `4→6`(delay 3), `4→0`(delay 2), `1→0`(delay 0). |
 | `components/ui/RollingNumber.tsx` | props `{ value: number \| null; format: (n: number) => string; direction?: "auto" \| "up" \| "down"; enter?: boolean; className?: string }`. `value`가 바뀔 때만 #1을 실행한다. `null`이면 `—`(`MISSING`)이다. 바깥 요소는 최종 문자열을 `aria-label`로 갖고, 움직이는 글자들은 `aria-hidden`이다. 움직임 줄이기에서는 최종 문자열만 렌더한다. |
 | `components/ui/BeforeAfter.tsx` | props `{ previous: string \| null; current: ReactNode }`. `previous`가 있으면 #2를 그린다. |
