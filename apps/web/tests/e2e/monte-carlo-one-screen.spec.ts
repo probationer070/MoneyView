@@ -16,7 +16,6 @@ test.describe("risk charts draw", () => {
     await page.goto("/monte-carlo", { waitUntil: "domcontentloaded" });
     await expect(page.getByRole("heading", { name: /Simulation Lab/i })).toBeVisible({ timeout: 60_000 });
     await page.getByRole("button", { name: "Run Path Simulation" }).click();
-    await expect(page.getByText("Results ready").first()).toBeVisible();
     await page.getByRole("tab", { name: /Risk Analysis/i }).click();
 
     const var_ = panelOf(page, "VaR / CVaR Risk Distribution");

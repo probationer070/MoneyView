@@ -126,7 +126,7 @@ export type MonteCarloWorkerOptions = {
   path?: PathFixture[];
   valuation?: unknown;
   correlation?: unknown;
-  /** Withhold the result until the page calls window.__mcRelease(). */
+  /** Withhold each run's result until the page calls window.__mcRelease(); every call releases the oldest held run. */
   hold?: boolean;
   /** Progress posted before the result. Default 50. */
   progress?: number;
@@ -150,11 +150,9 @@ export async function installMonteCarloWorker(page: Page, options: MonteCarloWor
     };
     w.__mcCancelled = [];
     let pathCalls = 0;
-    let release: (() => void) | null = null;
-    const released = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    w.__mcRelease = () => release?.();
+    // Held runs queue up; each __mcRelease() call releases the oldest pending run only.
+    const pending: Array<() => void> = [];
+    w.__mcRelease = () => pending.shift()?.();
 
     class MockWorker {
       onmessage: ((event: MessageEvent) => void) | null = null;
@@ -182,7 +180,7 @@ export async function installMonteCarloWorker(page: Page, options: MonteCarloWor
         }
         window.setTimeout(() => this.emit({ type: "progress", requestId: message.requestId, progress: cfg.progress }), 0);
         const send = () => this.emit({ ...reply, requestId: message.requestId });
-        if (cfg.hold) void released.then(() => window.setTimeout(send, 0));
+        if (cfg.hold) pending.push(() => window.setTimeout(send, 0));
         else window.setTimeout(send, 20);
       }
 
