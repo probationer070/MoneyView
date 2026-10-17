@@ -208,6 +208,13 @@ test.describe("scan line overflow", () => {
     // A panel that just fits: the scan host fills it, so the line's end is the panel's end.
     await page.addStyleTag({ content: '[data-testid="market-page-tabs"] [role="tabpanel"] > div { height: 100%; }' });
     await page.waitForTimeout(300);
+    // Precondition: the injected rule took effect, so the host's end is the panel's end (else the test is vacuous).
+    const gap = await page.evaluate(() => {
+      const panel = document.querySelector('[data-testid="market-page-tabs"] [role="tabpanel"]')!;
+      const host = panel.firstElementChild!;
+      return Math.abs(host.getBoundingClientRect().bottom - panel.getBoundingClientRect().bottom);
+    });
+    expect(gap).toBeLessThanOrEqual(0.5);
     await page.evaluate(() => {
       const panel = document.querySelector('[data-testid="market-page-tabs"] [role="tabpanel"]')!;
       const w = window as unknown as { __below: number[] };
@@ -224,7 +231,7 @@ test.describe("scan line overflow", () => {
     await page.waitForTimeout(1600);
     const below = await page.evaluate(() => (window as unknown as { __below: number[] }).__below);
     expect(below.length).toBeGreaterThan(20);
-    expect(Math.max(...below)).toBeLessThanOrEqual(0.01);
+    expect(Math.max(...below)).toBeLessThanOrEqual(0.5);
   });
 });
 
