@@ -2,7 +2,6 @@
 
 import type { PathSimulationInput, SharedSimulationResult } from "../lib/types";
 import { useMemo } from "react";
-import { AlertTriangle, Square } from "lucide-react";
 import { Area, AreaChart, CartesianGrid, Line, LineChart, Tooltip, XAxis, YAxis } from "recharts";
 import {
   AXIS_LINE_STYLE,
@@ -16,9 +15,11 @@ import {
 } from "@/lib/chartConfig";
 import { useLocale, useT } from "@/lib/i18n/locale";
 import { tokens } from "@/lib/tokens.generated";
+import { CancelButton } from "./CancelButton";
 import { ChartGuard } from "./ChartGuard";
 import { ResultHeader } from "./ResultHeader";
 import { RunButton } from "./RunButton";
+import { RunNotice } from "./RunNotice";
 import { SimulationRail } from "./SimulationRail";
 import { WarningBanner } from "./WarningBanner";
 import { formatKrwCompact, krwAxis } from "../lib/krwFormat";
@@ -89,16 +90,7 @@ export function PathSimulationSection({
         actions={(
           <>
             <RunButton label={t("monteCarlo.path.run")} onClick={() => void runPathSimulation()} running={running} testId="mc-run-path" />
-            <button
-              type="button"
-              data-testid="mc-cancel-path"
-              onClick={cancelPathSimulation}
-              disabled={!running}
-              className="inline-flex items-center justify-center gap-2 rounded-[var(--radius-1)] border border-[var(--line)] bg-[var(--surface-raised)] px-4 py-2 type-label text-[var(--ink)] disabled:opacity-50"
-            >
-              <Square aria-hidden="true" className="h-4 w-4" />
-              {t("monteCarlo.path.cancel")}
-            </button>
+            <CancelButton label={t("monteCarlo.path.cancel")} onClick={cancelPathSimulation} disabled={!running} testId="mc-cancel-path" />
           </>
         )}
       >
@@ -140,18 +132,8 @@ export function PathSimulationSection({
           ] : []}
         />
 
-        {status === "error" ? (
-          <div className="flex shrink-0 items-center gap-2 border border-[var(--status-error-border)] bg-[var(--status-error-surface)] px-3 py-2 type-small text-[var(--status-error-ink)]">
-            <AlertTriangle aria-hidden="true" className="h-4 w-4" />
-            {errorMessage ?? t("monteCarlo.path.runFailed")}
-          </div>
-        ) : null}
-        {status === "cancelled" ? (
-          <div className="flex shrink-0 items-center gap-2 border border-[var(--status-warning-border)] bg-[var(--status-warning-surface)] px-3 py-2 type-small text-[var(--status-warning-ink)]">
-            <AlertTriangle aria-hidden="true" className="h-4 w-4" />
-            {t("monteCarlo.path.cancelledNote")}
-          </div>
-        ) : null}
+        {status === "error" ? <RunNotice tone="error">{errorMessage ?? t("monteCarlo.path.runFailed")}</RunNotice> : null}
+        {status === "cancelled" ? <RunNotice tone="warning">{t("monteCarlo.path.cancelledNote")}</RunNotice> : null}
         <WarningBanner title={t("monteCarlo.path.warningsTitle")} warnings={warnings} />
 
         {/* Primary visual outputs: sampled paths and percentile cone, filling the rest of the panel. */}

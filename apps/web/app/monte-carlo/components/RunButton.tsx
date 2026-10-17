@@ -16,7 +16,7 @@ export function RunButton({ label, onClick, running, testId }: { label: string; 
       {label}
       <span
         aria-hidden="true"
-        className="inline-block [transition:transform_var(--duration-normal)] motion-reduce:transition-none group-hover:translate-x-1 group-focus-visible:translate-x-1"
+        className="inline-block [transition:transform_var(--duration-normal)] motion-reduce:transition-none group-hover:translate-x-1 group-focus-visible:translate-x-1 motion-reduce:group-hover:translate-x-0 motion-reduce:group-focus-visible:translate-x-0"
       >
         →
       </span>

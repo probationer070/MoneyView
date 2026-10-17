@@ -37,8 +37,8 @@ export function WarningBanner({ title, warnings }: { title: string; warnings: st
       </div>
       {open ? (
         <ul id={listId} className="mt-1 list-disc space-y-1 pl-5">
-          {warnings.map((warning) => (
-            <li key={warning}>{warning}</li>
+          {warnings.map((warning, index) => (
+            <li key={`${index}-${warning}`}>{warning}</li>
           ))}
         </ul>
       ) : null}

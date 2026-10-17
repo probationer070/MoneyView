@@ -231,12 +231,10 @@ test.describe("path", () => {
     // Until /monte-carlo joins ONE_SCREEN_ROUTES (Task 10) the shell keeps 5rem of bottom padding, 54px less than the
     // 503px panel budget. Apply the one-screen padding here so the test measures the budget this layout is built for.
     await page.addStyleTag({ content: "main { --main-pad-bottom: 1.5rem !important; }" });
-    const before = await page.getByTestId("mc-result-header").boundingBox();
     const panelBefore = (await page.getByTestId("mc-panel").boundingBox())!;
     for (const title of ["GBM + Jump-Diffusion Simulated Paths", "Percentile Cone"]) {
       const frame = (await panelOf(page, title).boundingBox())!;
       expect(frame.y + frame.height, `${title} (empty) ends inside the panel`).toBeLessThanOrEqual(panelBefore.y + panelBefore.height + 1);
-      console.log("MC path before-run frame", title, Math.round(frame.height));
     }
     await page.getByTestId("mc-run-path").click();
     await expect(page.getByTestId("mc-status")).toHaveAttribute("data-state", "ready");
@@ -244,7 +242,6 @@ test.describe("path", () => {
     const panel = (await page.getByTestId("mc-panel").boundingBox())!;
     const header = (await page.getByTestId("mc-result-header").boundingBox())!;
     expect(header.y + header.height).toBeLessThanOrEqual(panel.y + panel.height + 1);
-    const heights: Record<string, number> = { panel: panel.height, headerBefore: before!.height, header: header.height };
     for (const title of ["GBM + Jump-Diffusion Simulated Paths", "Percentile Cone"]) {
       const frame = (await panelOf(page, title).boundingBox())!;
       expect(frame.y + frame.height, `${title} ends inside the panel`).toBeLessThanOrEqual(panel.y + panel.height + 1);
@@ -255,10 +252,7 @@ test.describe("path", () => {
       const surface = rect.height;
       expect(surface, `${title} chart height`).toBeGreaterThanOrEqual(200);
       expect(rect.bottom, `${title} chart ends inside its frame`).toBeLessThanOrEqual(frame.y + frame.height + 1);
-      heights[title] = Math.round(surface);
-      heights[`${title} frame`] = Math.round(frame.height);
     }
-    console.log("MC path heights", JSON.stringify(heights));
   });
 
   test("Run and Cancel stay where they are while the inputs scroll", async ({ page }) => {
@@ -311,6 +305,52 @@ test.describe("path", () => {
       expect(download.suggestedFilename()).toBe(file);
       await expect(page.getByRole("menu")).toHaveCount(0);
     }
+  });
+
+  test("the export menu follows the menu keyboard pattern", async ({ page }) => {
+    await openPath(page);
+    await page.getByTestId("mc-run-path").click();
+    await expect(page.getByTestId("mc-status")).toHaveAttribute("data-state", "ready");
+    const trigger = page.getByTestId("mc-export");
+    await trigger.click();
+    await expect(page.getByRole("menu", { name: "Export" })).toBeVisible();
+    const item = (key: string) => page.getByTestId(`mc-export-${key}`);
+    await expect(item("summary")).toBeFocused();
+    await expect(item("cone")).toHaveAttribute("tabindex", "-1");
+    await page.keyboard.press("ArrowDown");
+    await expect(item("cone")).toBeFocused();
+    await expect(item("cone")).toHaveAttribute("tabindex", "0");
+    await expect(item("summary")).toHaveAttribute("tabindex", "-1");
+    await page.keyboard.press("End");
+    await expect(item("histogram")).toBeFocused();
+    await page.keyboard.press("ArrowDown");
+    await expect(item("summary")).toBeFocused();
+    await page.keyboard.press("ArrowUp");
+    await expect(item("histogram")).toBeFocused();
+    await page.keyboard.press("Home");
+    await expect(item("summary")).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("menu")).toHaveCount(0);
+    await expect(trigger).toBeFocused();
+    await trigger.click();
+    const [download] = await Promise.all([page.waitForEvent("download"), page.keyboard.press("Enter")]);
+    expect(download.suggestedFilename()).toBe("summary.csv");
+    await expect(page.getByRole("menu")).toHaveCount(0);
+    await expect(trigger).toBeFocused();
+  });
+
+  test("under reduced motion the run arrow does not move on hover or focus", async ({ page }) => {
+    await openPath(page);
+    const run = page.getByTestId("mc-run-path");
+    const arrow = run.locator("span[aria-hidden=true]");
+    const shift = () => arrow.evaluate((node) => getComputedStyle(node).translate);
+    await run.hover();
+    expect(["none", "0px", "0px 0px"]).toContain(await shift());
+    await page.mouse.move(0, 0);
+    await run.focus();
+    await page.keyboard.press("Shift+Tab");
+    await page.keyboard.press("Tab");
+    expect(["none", "0px", "0px 0px"]).toContain(await shift());
   });
 
   test("the cone legend carries the KRW range of each interval", async ({ page }) => {
