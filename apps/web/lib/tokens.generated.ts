@@ -96,12 +96,20 @@ export const tokens = {
   "duration": {
     "fast": "100ms",
     "normal": "200ms",
-    "slow": "350ms"
+    "slow": "350ms",
+    "roll": "600ms",
+    "roll-enter": "700ms",
+    "draw": "700ms",
+    "scan": "500ms",
+    "flash": "600ms",
+    "stagger": "40ms",
+    "digit-stagger": "45ms"
   },
   "easing": {
     "default": "cubic-bezier(0.4, 0, 0.2, 1)",
     "enter": "cubic-bezier(0, 0, 0.2, 1)",
-    "exit": "cubic-bezier(0.4, 0, 1, 1)"
+    "exit": "cubic-bezier(0.4, 0, 1, 1)",
+    "emphasized": "cubic-bezier(0.2, 0, 0, 1)"
   },
   "bp": {
     "desktop": "992px",

@@ -62,9 +62,17 @@
   --duration-fast: 100ms;
   --duration-normal: 200ms;
   --duration-slow: 350ms;
+  --duration-roll: 600ms;
+  --duration-roll-enter: 700ms;
+  --duration-draw: 700ms;
+  --duration-scan: 500ms;
+  --duration-flash: 600ms;
+  --duration-stagger: 40ms;
+  --duration-digit-stagger: 45ms;
   --easing-default: cubic-bezier(0.4, 0, 0.2, 1);
   --easing-enter: cubic-bezier(0, 0, 0.2, 1);
   --easing-exit: cubic-bezier(0.4, 0, 1, 1);
+  --easing-emphasized: cubic-bezier(0.2, 0, 0, 1);
   --bp-desktop: 992px;
   --bp-tablet: 768px;
   --bp-mobile: 480px;

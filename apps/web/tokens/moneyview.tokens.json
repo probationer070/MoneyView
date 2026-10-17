@@ -101,11 +101,17 @@
     "pill": { "$value": "999px", "$description": "Status dots." }
   },
   "hairline": { "$value": "1px", "$description": "Every border and rule; no 2px borders except the focus ring." },
-  "duration": { "fast": { "$value": "100ms" }, "normal": { "$value": "200ms" }, "slow": { "$value": "350ms" } },
+  "duration": {
+    "fast": { "$value": "100ms" }, "normal": { "$value": "200ms" }, "slow": { "$value": "350ms" },
+    "roll": { "$value": "600ms" }, "roll-enter": { "$value": "700ms" }, "draw": { "$value": "700ms" },
+    "scan": { "$value": "500ms" }, "flash": { "$value": "600ms" }, "stagger": { "$value": "40ms" },
+    "digit-stagger": { "$value": "45ms" }
+  },
   "easing": {
     "default": { "$value": "cubic-bezier(0.4, 0, 0.2, 1)" },
     "enter": { "$value": "cubic-bezier(0, 0, 0.2, 1)" },
-    "exit": { "$value": "cubic-bezier(0.4, 0, 1, 1)" }
+    "exit": { "$value": "cubic-bezier(0.4, 0, 1, 1)" },
+    "emphasized": { "$value": "cubic-bezier(0.2, 0, 0, 1)" }
   },
   "bp": {
     "desktop": { "$value": "992px", "$extensions": { "moneyview.theme": "--breakpoint-lg" } },
