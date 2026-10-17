@@ -29,8 +29,8 @@ const NBSP = " ";
 
 // A number whose changed characters roll like an odometer. The server and the first client render
 // are the final text (usePrefersReducedMotion starts true), so hydration matches; a roll only starts
-// from an effect, when motion is allowed. aria-label is always the final text, so the intermediate
-// digits are never announced. A roll ends as plain text, with the tint fading over duration.flash.
+// from an effect, when motion is allowed. Mid-roll the cells are aria-hidden and the final text is exposed once in an
+// sr-only span, so the intermediate digits are never announced. A roll ends as plain text, with the tint fading over duration.flash.
 export function RollingNumber({ value, format, direction = "auto", enter = false, className, testId }: RollingNumberProps) {
   const reduced = usePrefersReducedMotion();
   const text = value === null ? MISSING : format(value);
@@ -54,9 +54,9 @@ export function RollingNumber({ value, format, direction = "auto", enter = false
       setRoll(null);
       return;
     }
-    // Missing before, or an enter roll still owed: roll in from zeros. A first mount without `enter` shows the text as is.
-    const fromZeros = pendingEnter.current || (last !== null && last.value === null);
-    if (!fromZeros && (last === null || last.text === text)) return;
+    // Missing before, or an enter roll still owed: roll in from zeros.
+    const fromZeros = pendingEnter.current || last === null || last.value === null;
+    if (!fromZeros && last.text === text) return;
     pendingEnter.current = false;
     cancel();
     const rising = direction === "auto" ? fromZeros || value >= (last?.value ?? value) : direction === "up";
@@ -105,20 +105,27 @@ export function RollingNumber({ value, format, direction = "auto", enter = false
 
   return (
     <span ref={ref} data-testid={testId} aria-label={text} data-rolling={roll ? "true" : "false"} className={clsx(roll && "mv-odo", className)}>
-      {roll
-        ? roll.cells.map((cell, i) => {
-            if (cell.from === cell.to) return <span key={`${roll.id}-${i}`}>{cell.to}</span>;
-            const [top, bottom] = roll.rising ? [cell.from, cell.to] : [cell.to, cell.from];
-            return (
-              <span key={`${roll.id}-${i}`} className="mv-dg">
-                <span data-col data-delay={cell.delayIndex}>
-                  <span>{top || NBSP}</span>
-                  <span>{bottom || NBSP}</span>
+      {roll ? (
+        <>
+          <span aria-hidden="true">
+            {roll.cells.map((cell, i) => {
+              if (cell.from === cell.to) return <span key={`${roll.id}-${i}`}>{cell.to}</span>;
+              const [top, bottom] = roll.rising ? [cell.from, cell.to] : [cell.to, cell.from];
+              return (
+                <span key={`${roll.id}-${i}`} className="mv-dg">
+                  <span data-col data-delay={cell.delayIndex}>
+                    <span>{top || NBSP}</span>
+                    <span>{bottom || NBSP}</span>
+                  </span>
                 </span>
-              </span>
-            );
-          })
-        : text}
+              );
+            })}
+          </span>
+          <span className="sr-only">{text}</span>
+        </>
+      ) : (
+        text
+      )}
     </span>
   );
 }

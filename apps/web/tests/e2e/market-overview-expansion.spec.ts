@@ -206,15 +206,18 @@ test.describe("motion on", () => {
     await expect(marketCard(page, "^GSPC").getByTestId("change-1d").locator('[data-part="value"]')).toHaveText(expected);
   });
 
-  test("a card's accessible name is its label alone, with no figure repeated", async ({ page }) => {
+  test("mid-roll, a card value exposes only its final text to assistive technology", async ({ page, request }) => {
+    const all = await quotes(request);
+    const spx = all.find((q) => q.ticker === "^GSPC")!;
+    const expected = spx.last_close!.toLocaleString("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
     await gotoMarket(page);
-    await expect(cards(page)).toHaveCount(14);
-    const button = marketCard(page, "^GSPC").getByRole("button", { name: /^Open detail for/ });
-    await expect(button).toHaveCount(1);
-    const name = await button.evaluate((el) => el.getAttribute("aria-label"));
-    expect(name).toBe("Open detail for S&P 500");
-    // No RollingNumber inside may add its own text to the name through role=button name-from-content.
-    await expect(page.getByRole("button", { name: "Open detail for S&P 500", exact: true })).toHaveCount(1);
+    const value = marketCard(page, "^GSPC").locator(".type-figure-md");
+    // The roll is under way: the animated digit cells exist now.
+    await expect(value.locator("[data-rolling='true']")).toHaveCount(1, { timeout: 5_000 });
+    const snapshot = await value.ariaSnapshot();
+    // Exactly the final figure, once: no intermediate digit from a column of cells and no duplicate.
+    expect(snapshot.replace(expected, "")).not.toMatch(/\d/);
+    expect(snapshot.split(expected)).toHaveLength(2);
   });
 
   test("switching the page tab runs the scan line", async ({ page }) => {
