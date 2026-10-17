@@ -146,7 +146,7 @@ type BeforeAfterProps = { previous: string | null; current: ReactNode };
 ```
 - **Rendering:** a changed cell renders as a `.mv-dg` window holding a two-row column. The column is animated with WAAPI over `translateY` (0 → -50% for up, -50% → 0 for down), with `duration.roll` (or `roll-enter`), `easing.emphasized` and a delay of `delayIndex × digit-stagger`.
 - **End of a roll:** the span returns to plain text and the tint fades over `duration.flash`.
-- **Mid-roll change:** a new value cancels the running animations and the pending cleanup, then starts from the currently shown string.
+- **Mid-roll change:** a new value cancels the running animations and the pending cleanup, then rolls from the last target string to the new one. Controller ruling, 2026-10-17: this replaces "the currently shown string". Values change far slower than a roll, and the end text is exact.
 - **Motion bench in `/dev/design`:** two `RollingNumber`s (price and percent) and one `BeforeAfter`, with buttons "Next value" and "Set same value". Test ids: `motion-roll-price`, `motion-roll-pct`, `motion-before-after`, `motion-next`, `motion-same`.
 - **`mv-enter`:** `animation: <rise keyframes> var(--duration-slow) var(--easing-emphasized) both; animation-delay: calc(var(--mv-i, 0) * var(--duration-stagger))`. The keyframes go from `opacity 0; translateY(8px)` to the resting state. A `prefers-reduced-motion: reduce` block sets `animation: none`.
 
