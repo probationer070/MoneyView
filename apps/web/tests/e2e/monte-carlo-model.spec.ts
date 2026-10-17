@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { formatKrwCompact, krwAxis } from "../../app/monte-carlo/lib/krwFormat";
+import { isMonteCarloTab, MONTE_CARLO_TAB_KEY } from "../../app/monte-carlo/lib/tabs";
 
 // Pure model spec (no page): the KRW strings and the axis ticks are pinned here, in both locales.
 test.describe("formatKrwCompact", () => {
@@ -49,5 +50,17 @@ test.describe("krwAxis", () => {
   test("a non-finite tick reads as the dash", () => {
     expect(krwAxis("en").tick(Number.NaN)).toBe("—");
     expect(krwAxis("ko").tick(Number.NaN)).toBe("—");
+  });
+});
+
+test.describe("isMonteCarloTab", () => {
+  test("the five tabs are tabs; everything else is not, and nothing throws", () => {
+    for (const key of ["path", "risk", "distribution", "valuation", "correlation"]) {
+      expect(isMonteCarloTab(key)).toBe(true);
+    }
+    for (const bad of ["bogus", "constructor", "__proto__", "", 1, null, undefined]) {
+      expect(isMonteCarloTab(bad)).toBe(false);
+    }
+    expect(MONTE_CARLO_TAB_KEY).toBe("moneyview.tab.monteCarlo.tab");
   });
 });

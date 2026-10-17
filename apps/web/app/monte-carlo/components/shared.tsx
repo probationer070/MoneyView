@@ -26,44 +26,7 @@ export function krw(value: number, locale: FormatLocale) {
   return `KRW ${formatNumber(Math.round(value), "integer", { locale })}`;
 }
 
-// Shared navigation and form primitives keep styling consistent after the file split.
-export function TabButton({
-  active,
-  label,
-  description,
-  onClick,
-  id,
-  controls,
-}: {
-  active: boolean;
-  label: string;
-  description: string;
-  onClick: () => void;
-  id: string;
-  controls: string;
-}) {
-  return (
-    <button
-      type="button"
-      id={id}
-      role="tab"
-      aria-selected={active}
-      aria-controls={controls}
-      tabIndex={active ? 0 : -1}
-      onClick={onClick}
-      className={clsx(
-        "rounded-[var(--radius-1)] border px-4 py-3 text-left transition",
-        active
-          ? "border-[var(--brand)] bg-[var(--brand)] text-[var(--on-brand)]"
-          : "border-[var(--line)] bg-[var(--surface-raised)] text-[var(--ink)] hover:border-[var(--brand)]",
-      )}
-    >
-      <div className="type-label">{label}</div>
-      <div className={clsx("mt-1 type-small", active ? "text-[var(--on-brand)]" : "text-[var(--ink-muted)]")}>{description}</div>
-    </button>
-  );
-}
-
+// Shared form primitives keep styling consistent after the file split.
 export function NumericField({
   label,
   value,

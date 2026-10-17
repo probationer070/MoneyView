@@ -18,25 +18,17 @@ import {
   PathSimulationSection,
   ReturnDistributionSection,
   RiskAnalysisSection,
-  TabButton,
 } from "./components";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { emitClientPerformanceEvent, getApiBaseUrl } from "@/lib/api";
 import { useDevMonitorPageLoad } from "@/hooks/useDevMonitorPageLoad";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { ScanReveal } from "@/components/ui/ScanReveal";
+import { Tabs } from "@/components/ui/Tabs";
 import { useT } from "@/lib/i18n/locale";
-import type { MessageKey } from "@/lib/i18n/translate";
+import { useTabState } from "@/lib/tabState";
+import { isMonteCarloTab, MONTE_CARLO_TAB_KEY, MONTE_CARLO_TABS } from "./lib/tabs";
 import { normalizeCorrelationResult, normalizeMonteCarloResult, normalizeValuationResult } from "./lib/resultNormalization";
-
-type SimulationTab = "path" | "risk" | "distribution" | "valuation" | "correlation";
-
-const tabs: Array<{ key: SimulationTab; label: MessageKey; description: MessageKey }> = [
-  { key: "path", label: "monteCarlo.tabs.path", description: "monteCarlo.tabs.pathDescription" },
-  { key: "risk", label: "monteCarlo.tabs.risk", description: "monteCarlo.tabs.riskDescription" },
-  { key: "distribution", label: "monteCarlo.tabs.distribution", description: "monteCarlo.tabs.distributionDescription" },
-  { key: "valuation", label: "monteCarlo.tabs.valuation", description: "monteCarlo.tabs.valuationDescription" },
-  { key: "correlation", label: "monteCarlo.tabs.correlation", description: "monteCarlo.tabs.correlationDescription" },
-];
 
 const defaultInput: PathSimulationInput = {
   initialInvestment: 10_000_000,
@@ -139,7 +131,8 @@ export default function MonteCarloPage() {
   const t = useT();
   useDevMonitorPageLoad({ component: "monte_carlo" });
   // Page-level state owns worker lifecycle, tab selection, and all simulation inputs/results.
-  const [activeTab, setActiveTab] = useState<SimulationTab>("path");
+  const [stored, setStored] = useTabState<string>(MONTE_CARLO_TAB_KEY, "path");
+  const activeTab = isMonteCarloTab(stored) ? stored : "path";
   const [input, setInput] = useState<PathSimulationInput>(defaultInput);
   const [valuationInput, setValuationInput] = useState<ValuationInput>(defaultValuationInput);
   const [correlationInput, setCorrelationInput] = useState<CorrelationInput>(defaultCorrelationInput);
@@ -687,33 +680,32 @@ export default function MonteCarloPage() {
   };
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto px-4 py-6">
+    <div className="mx-auto flex h-[calc(100dvh_-_var(--main-pad-top,0px)_-_var(--main-pad-bottom,0px))] max-w-7xl flex-col">
       <PageHeader
-        eyebrow={{ label: "monteCarlo" }}
         title={t("monteCarlo.title")}
-        subtitle={t("monteCarlo.subtitle")}
+        subtitle={<span className="block truncate">{t("monteCarlo.subtitle")}</span>}
       />
 
-      <section className="grid grid-cols-1 gap-3 lg:grid-cols-5" role="tablist" aria-label="Simulation workflows">
-        {tabs.map((tab) => (
-          <TabButton
-            key={tab.key}
-            id={`simulation-tab-${tab.key}`}
-            controls={`simulation-panel-${tab.key}`}
-            active={activeTab === tab.key}
-            label={t(tab.label)}
-            description={t(tab.description)}
-            onClick={() => setActiveTab(tab.key)}
-          />
-        ))}
-      </section>
+      <Tabs
+        ariaLabel={t("monteCarlo.tabs.aria")}
+        idPrefix="simulation-"
+        className="shrink-0 [contain:inline-size]"
+        items={MONTE_CARLO_TABS.map((key) => ({ key, label: t(`monteCarlo.tabs.${key}`) }))}
+        activeKey={activeTab}
+        onChange={(key) => {
+          if (isMonteCarloTab(key)) setStored(key);
+        }}
+      />
 
       {/* Each tab renders through a dedicated section component. */}
       <section
         id={`simulation-panel-${activeTab}`}
         role="tabpanel"
         aria-labelledby={`simulation-tab-${activeTab}`}
+        data-testid="mc-panel"
+        className="flex min-h-0 flex-1 flex-col"
       >
+      <ScanReveal trigger={activeTab} className="flex min-h-0 flex-1 flex-col" bodyClassName="flex min-h-0 flex-1 flex-col">
       {activeTab === "path" ? (
         <PathSimulationSection
           input={input}
@@ -778,6 +770,7 @@ export default function MonteCarloPage() {
           exportCorrelationSensitivityCsv={exportCorrelationSensitivityCsv}
         />
       )}
+      </ScanReveal>
       </section>
     </div>
   );

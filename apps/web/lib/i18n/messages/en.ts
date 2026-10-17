@@ -50,22 +50,18 @@ export const en = {
   },
   monteCarlo: {
     title: "Simulation Lab",
-    subtitle: "Five-tab workflow for path simulation, risk analysis, return distribution, valuation uncertainty, and correlation structure.",
+    subtitle: "Path, risk, distribution, valuation and correlation simulations",
     units: {
       krwAxis: "KRW M",
       terminalValue: "Terminal value",
     },
     tabs: {
+      aria: "Simulation workflows",
       path: "Path Simulation",
-      pathDescription: "GBM + jump-diffusion path engine and percentile cone.",
       risk: "Risk Analysis",
-      riskDescription: "VaR, CVaR, downside metrics, and loss diagnostics.",
       distribution: "Return Distribution",
-      distributionDescription: "Histogram, normal fit, and fat-tail inspection.",
       valuation: "Corporate Valuation",
-      valuationDescription: "DCF fair-value uncertainty and undervaluation probability.",
       correlation: "Correlation Model",
-      correlationDescription: "Multi-asset correlation structure and sensitivity.",
     },
   },
   corporate: {

@@ -53,22 +53,18 @@ export const ko: Messages = {
   },
   monteCarlo: {
     title: "시뮬레이션 랩",
-    subtitle: "경로 시뮬레이션, 위험 분석, 수익률 분포, 기업가치 불확실성, 상관관계 구조를 다루는 다섯 탭 작업 흐름입니다.",
+    subtitle: "경로·위험·분포·가치평가·상관 시뮬레이션",
     units: {
       krwAxis: "만원",
       terminalValue: "만기 가치",
     },
     tabs: {
+      aria: "시뮬레이션 작업",
       path: "경로 시뮬레이션",
-      pathDescription: "GBM과 점프 확산 경로 엔진, 백분위 원뿔",
       risk: "위험 분석",
-      riskDescription: "VaR, CVaR, 하방 지표, 손실 진단",
       distribution: "수익률 분포",
-      distributionDescription: "히스토그램, 정규분포 적합, 꼬리 두께 점검",
       valuation: "기업가치 평가",
-      valuationDescription: "DCF 적정가치 불확실성과 저평가 확률",
       correlation: "상관관계 모형",
-      correlationDescription: "다종목 상관 구조와 민감도",
     },
   },
   corporate: {

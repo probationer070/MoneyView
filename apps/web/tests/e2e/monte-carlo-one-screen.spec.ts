@@ -150,3 +150,45 @@ test.describe("superseded run", () => {
     await expect.poll(() => cancelRequestCount(page)).toBe(1);
   });
 });
+
+test.describe("frame", () => {
+  const TAB_KEY = "moneyview.tab.monteCarlo.tab";
+
+  test("the chosen tab survives a reload", async ({ page }) => {
+    await installMonteCarloWorker(page);
+    await page.goto("/monte-carlo", { waitUntil: "domcontentloaded" });
+    await page.getByRole("tab", { name: /Return Distribution/i }).click();
+    await expect(page.getByRole("tab", { name: /Return Distribution/i })).toHaveAttribute("aria-selected", "true");
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("tab", { name: /Return Distribution/i })).toHaveAttribute("aria-selected", "true");
+    expect(await page.evaluate((key) => window.sessionStorage.getItem(key), TAB_KEY)).toBe('"distribution"');
+  });
+
+  for (const stored of ['"bogus"', '"constructor"', "not json"]) {
+    test(`an unknown stored tab (${stored}) opens Path`, async ({ page }) => {
+      await installMonteCarloWorker(page);
+      await page.addInitScript(([key, value]) => window.sessionStorage.setItem(key, value), [TAB_KEY, stored]);
+      await page.goto("/monte-carlo", { waitUntil: "domcontentloaded" });
+      await expect(page.getByRole("tab", { name: /Path Simulation/i })).toHaveAttribute("aria-selected", "true");
+      await expect(page.getByRole("button", { name: "Run Path Simulation" })).toBeVisible();
+    });
+  }
+
+  test("the header is one title and one subtitle line", async ({ page }) => {
+    await installMonteCarloWorker(page);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/monte-carlo", { waitUntil: "domcontentloaded" });
+    const h1 = page.getByRole("heading", { level: 1, name: "Simulation Lab" });
+    await expect(h1).toBeVisible({ timeout: 60_000 });
+    const header = h1.locator("xpath=..");
+    // Only the h1 and the subtitle: an eyebrow would be a third child.
+    await expect(header.locator(":scope > *")).toHaveCount(2);
+    const subtitle = header.getByText("Path, risk, distribution, valuation and correlation simulations");
+    await expect(subtitle).toBeVisible();
+    const box = await subtitle.evaluate((node) => ({
+      height: node.clientHeight,
+      line: Number.parseFloat(getComputedStyle(node).lineHeight),
+    }));
+    expect(box.height).toBeLessThanOrEqual(box.line + 1);
+  });
+});
