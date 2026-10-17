@@ -182,10 +182,23 @@ def load_price_bars(ticker: str, limit: int | None = None) -> list[dict]:
     n bars" means. The caller must handle `None`.
     """
     ticker = ticker.upper()
+    # MARKET_INDICES tickers (SOXX, SKYY, BOTZ, ^TNX, ...) are written to `indices`, never
+    # `stocks`; reading `stocks` alone froze their outcomes at a stale row or found nothing.
+    # Imported here: market_data is a heavy module and the store must stay importable alone.
+    from apps.api.services.market_data import MarketDataService
+
+    table = MarketDataService._table_for_ticker(ticker)
+    sql = f"SELECT date, close, volume FROM {table} WHERE ticker = ? ORDER BY date DESC" + (
+        " LIMIT ?" if limit is not None else ""
+    )
+    # Same lookup as the market reader: the ticker itself first, legacy index names only
+    # when it has no rows (never both, which would duplicate dates).
+    candidates = [ticker, *(a for a in MarketDataService._query_tickers(ticker, table) if a != ticker)]
     with get_db() as conn:
-        rows = conn.execute(
-            "SELECT date, close, volume FROM stocks WHERE ticker = ? ORDER BY date DESC"
-            + (" LIMIT ?" if limit is not None else ""),
-            (ticker, limit) if limit is not None else (ticker,),
-        ).fetchall()
+        for candidate in candidates:
+            rows = conn.execute(
+                sql, (candidate, limit) if limit is not None else (candidate,)
+            ).fetchall()
+            if rows:
+                break
     return [dict(row) for row in reversed(rows)]

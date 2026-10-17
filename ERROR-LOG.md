@@ -3435,3 +3435,13 @@ Prevention: changing an identity function that backs a UNIQUE constraint is a da
 migration, not only a code change. Rows written under the old identity must be re-keyed
 in the same change. Otherwise the constraint quietly stops recognising them, and the
 dedup that "works" in tests (which start from an empty table) does not work on real data.
+
+## 2026-10-17: SOXX, SKYY and BOTZ showed "—" on the market page (unsettled live bar, PR #70)
+
+Date: 2026-10-17 (found while checking the market overview expansion, PR #70).
+Command: `GET /api/v1/market/indices`; the market page (`/`) cards and table for SOXX, SKYY, BOTZ.
+Failure: last_close, 1D and 1M came back null for those three tickers, so the page rendered "—". The unsettled bar also reached `get_index_detail`.
+Root cause: `_fetch_live_ohlcv` built rows with `float(row.get("Close", 0) or 0)`. NaN is truthy, so the newest Yahoo bar (NaN OHLC, real volume, normal during the US session) passed through. `_save_ohlcv_rows_to_connection` dropped it before writing, but the function returned its own unfiltered rows, which went into the provider TTL cache and the stale-refresh path. `get_all_indices` guards `last is None`, which misses NaN, so last_close/delta/month_delta became NaN and the JSON boundary turned them into null. The read-side guard (`_rows_to_ohlcv`) covers SQLite reads only.
+Fix: `_fetch_live_ohlcv` drops rows whose Close fails `_is_priced` before saving and returning. The Yahoo chart fallback already skips null closes (JSON has no NaN), so it was left alone.
+Files changed: `apps/api/services/market_data.py`, `tests/api/test_priceless_bars.py`, `ERROR-LOG.md`.
+Prevention: `test_live_fetch_returns_only_priced_bars` and `test_quote_survives_an_unsettled_live_bar` feed a NaN-OHLC newest bar through the live path; both fail with the filter removed (61 bars instead of 60; last_close NaN). A guard on one side of a round trip does not cover a path that returns the unfiltered value directly.

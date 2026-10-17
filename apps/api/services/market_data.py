@@ -7,6 +7,7 @@ when the newest stored bar is older than the previous trading day.
 
 from __future__ import annotations
 
+import calendar
 import logging
 import math
 import os
@@ -17,7 +18,7 @@ from dataclasses import dataclass
 from json import JSONDecodeError
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 import numpy as np
 import pandas as pd
@@ -78,6 +79,10 @@ MARKET_INDICES = {
     "Dow Jones": "^DJI",
     "Nasdaq": "^IXIC",
     "KOSPI 200": "^KS200",
+    "Semiconductors": "SOXX",
+    "Cloud": "SKYY",
+    "AI": "BOTZ",
+    "US 10Y Yield": "^TNX",
     "Gold": "GC=F",
     "Oil (WTI)": "CL=F",
     "Natural Gas": "NG=F",
@@ -92,6 +97,10 @@ INSTRUMENT_METADATA = {
     "^IXIC": {"instrument_type": "index", "unit_label": "index points"},
     "^KS200": {"instrument_type": "index", "unit_label": "index points"},
     "^VIX": {"instrument_type": "index", "unit_label": "index points"},
+    "SOXX": {"instrument_type": "sector", "unit_label": "USD per share"},
+    "SKYY": {"instrument_type": "sector", "unit_label": "USD per share"},
+    "BOTZ": {"instrument_type": "sector", "unit_label": "USD per share"},
+    "^TNX": {"instrument_type": "rate", "unit_label": "percent yield"},
     "GC=F": {"instrument_type": "commodity", "unit_label": "USD per ounce"},
     "CL=F": {"instrument_type": "commodity", "unit_label": "USD per barrel"},
     "NG=F": {"instrument_type": "commodity", "unit_label": "USD per MMBtu"},
@@ -101,11 +110,18 @@ INSTRUMENT_METADATA = {
 
 EQUITY_INDEX_TICKERS = ("^GSPC", "^DJI", "^IXIC", "^KS200")
 
+# The cross-asset tickers the regime header scores, beside the equity indices.
+CROSS_ASSET_SIGNAL_TICKERS: tuple[str, ...] = ("GC=F", "KRW=X", "BTC-USD")
+
 INDEX_DB_ALIASES = {
     "^GSPC": ["^GSPC", "S&P 500"],
     "^DJI": ["^DJI", "Dow Jones"],
     "^IXIC": ["^IXIC", "Nasdaq"],
     "^KS200": ["^KS200", "KOSPI 200"],
+    "SOXX": ["SOXX"],
+    "SKYY": ["SKYY"],
+    "BOTZ": ["BOTZ"],
+    "^TNX": ["^TNX"],
     "GC=F": ["GC=F", "Gold"],
     "CL=F": ["CL=F", "Oil (WTI)"],
     "NG=F": ["NG=F", "Natural Gas"],
@@ -118,6 +134,31 @@ INDEX_DB_ALIASES = {
 # page load during a slow live fetch does not start another one.
 _BACKGROUND_REFRESHES: set[tuple[str, str, str]] = set()
 _BACKGROUND_LOCK = threading.Lock()
+
+
+def _one_calendar_month_before(day: date) -> date:
+    year, month = (day.year, day.month - 1) if day.month > 1 else (day.year - 1, 12)
+    last_day = calendar.monthrange(year, month)[1]
+    return date(year, month, min(day.day, last_day))
+
+
+def month_delta(bars: list[StockOHLCV]) -> DeltaBadge | None:
+    """1-month change: last close against the close on or before the same day one month earlier.
+
+    `bars` are ascending by date. Bars with no close are skipped. None when no bar exists
+    on or before the anchor, i.e. less than a month of history.
+    """
+    if not bars:
+        return None
+    last_close = bars[-1].close
+    if last_close is None:
+        return None
+    anchor = _one_calendar_month_before(date.fromisoformat(bars[-1].date[:10]))
+    for bar in reversed(bars):
+        if bar.close is None or date.fromisoformat(bar.date[:10]) > anchor:
+            continue
+        return DeltaBadge.compute(last_close, bar.close)
+    return None
 
 
 class MarketDataService:
@@ -336,10 +377,11 @@ class MarketDataService:
         self,
         ticker: str,
         period: str = DEFAULT_OHLCV_PERIOD,
-        table: str = "stocks",
+        table: Optional[str] = None,
         refresh: str = "inline",
     ) -> tuple[List[StockOHLCV], MarketDataQuality]:
         ticker = ticker.upper()
+        table = table or self._table_for_ticker(ticker)
         freshness_rule = self._freshness_rule(period)
         emit_cache_event(
             operation="cache.lookup",
@@ -983,6 +1025,8 @@ class MarketDataService:
     def _build_market_regime_context(self) -> MarketRegimeContext:
         latest_quotes: dict[str, IndexQuote] = {}
         for name, ticker in MARKET_INDICES.items():
+            if ticker not in EQUITY_INDEX_TICKERS and ticker not in CROSS_ASSET_SIGNAL_TICKERS:
+                continue
             bars = self.get_stock_ohlcv(ticker, period="1mo", table="indices")
             if len(bars) < 2:
                 continue
@@ -1203,6 +1247,7 @@ class MarketDataService:
                             stock_splits=float(row.get("Stock Splits", 0) or 0),
                         )
                         for _, row in df.iterrows()
+                        if self._is_priced(row.get("Close"))
                     ]
                     self._save_ohlcv_rows(ticker, rows)
                     logger.info("Fetched and cached %d bars for %s", len(rows), ticker)
@@ -1221,14 +1266,16 @@ class MarketDataService:
         self,
         ticker: str,
         period: str = DEFAULT_OHLCV_PERIOD,
-        table: str = "stocks",
+        table: Optional[str] = None,
         refresh: str = "inline",
     ) -> List[StockOHLCV]:
         """Read OHLCV from SQLite and refresh live data if locally stale.
 
+        `table=None` reads the table the ticker's rows are written to (`indices` for MARKET_INDICES).
         `refresh="background"` serves a stale cache at once and refreshes it off the request
         (used by the spreads section). A cache miss is still fetched inline either way.
         """
+        table = table or self._table_for_ticker(ticker.upper())
         bars, _ = self._get_stock_ohlcv_with_metadata(ticker, period=period, table=table, refresh=refresh)
         return bars
 
@@ -1256,6 +1303,7 @@ class MarketDataService:
                     instrument_type=self._instrument_metadata_for_ticker(ticker)["instrument_type"],
                     last_close=last,
                     delta=delta,
+                    month_delta=month_delta(bars),
                     sparkline=sparkline,
                 )
             )

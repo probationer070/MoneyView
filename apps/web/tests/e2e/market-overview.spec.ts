@@ -1,4 +1,6 @@
 import { expect, test } from "@playwright/test";
+import { marketIndexDetailFixture } from "./fixtures/shared";
+import { API_PREFIX } from "./helpers/mockUtils";
 import { mockMarketPageApi } from "./helpers/marketPageMock";
 
 test("market overview renders deterministically from shared dashboard fixtures", async ({ page }) => {
@@ -10,7 +12,7 @@ test("market overview renders deterministically from shared dashboard fixtures",
   await page.goto("/", { waitUntil: "domcontentloaded" });
 
   await expect(page.getByRole("heading", { name: "Market Overview", exact: true })).toBeVisible({ timeout: 60_000 });
-  await expect(page.getByText("Daily closes · indices, commodities, FX, crypto")).toBeVisible();
+  await expect(page.getByText("Daily closes · indices, sectors, rates, commodities, FX, crypto")).toBeVisible();
   await expect(page.getByText("S&P 500")).toBeVisible();
   await expect(page.getByText("^GSPC", { exact: true })).toBeVisible();
   await expect(page.getByText("Nasdaq")).toBeVisible();
@@ -144,4 +146,40 @@ test("market overview detail shows an explicit modal error state when the detail
   await page.getByRole("button", { name: "Open detail for S&P 500" }).click();
   await expect(page.getByRole("dialog", { name: "S&P 500" })).toBeVisible();
   await expect(page.getByText("Market Detail Unavailable")).toBeVisible();
+});
+
+test("market overview detail uses sector and rate copy", async ({ page }) => {
+  await mockMarketPageApi(page);
+  const detailBody = (ticker: string, instrument_type: string, unit_label: string, latestVolume?: number) => ({
+    ...marketIndexDetailFixture["^GSPC"],
+    ticker,
+    instrument_type,
+    unit_label,
+    market_regime: null,
+    ...(latestVolume === undefined
+      ? {}
+      : { volume_summary: { ...marketIndexDetailFixture["^GSPC"].volume_summary, latest_volume: latestVolume } }),
+  });
+  // Registered after mockMarketPageApi so these win (Playwright matches the newest route first).
+  // The predicate decodes the path, so the encoded %5ETNX and the raw ^TNX both match.
+  const answerDetail = (ticker: string, body: unknown) =>
+    page.route(
+      (url) => url.pathname.startsWith(`${API_PREFIX}/market/index/`) && decodeURIComponent(url.pathname) === `${API_PREFIX}/market/index/${ticker}/detail`,
+      (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) }),
+    );
+  await answerDetail("SOXX", detailBody("SOXX", "sector", "USD"));
+  await answerDetail("^TNX", detailBody("^TNX", "rate", "%", 0));
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  await page.getByRole("button", { name: "Open detail for Semiconductors" }).click();
+  await expect(page.getByRole("dialog")).toContainText("Sector ETF");
+  await expect(page.getByRole("heading", { name: "Sector Context" })).toBeVisible();
+  await expect(page.getByText("Proxy: SOXX is the ETF that stands in for this sector.")).toBeVisible();
+  await page.getByRole("button", { name: "Close modal" }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Open detail for US 10Y Yield" }).click();
+  await expect(page.getByRole("dialog")).toContainText("Rate");
+  await expect(page.getByRole("heading", { name: "Rate Context" })).toBeVisible();
+  await expect(page.getByText("Daily volume is not provided for this yield, so volume metrics are shown as unavailable.")).toBeVisible();
 });

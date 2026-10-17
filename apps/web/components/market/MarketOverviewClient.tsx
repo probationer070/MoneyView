@@ -28,7 +28,7 @@ import { useLocale, useT } from "@/lib/i18n/locale";
 import type { MessageKey } from "@/lib/i18n/translate";
 import { tokens } from "@/lib/tokens.generated";
 import type { MarketRegimeContext } from "../../../../packages/shared-types";
-import { regimeView, withFigures, type MarketIndexQuote } from "@/components/market/marketModel";
+import { instrumentNameKey, instrumentValueText, regimeView, withFigures, type MarketIndexQuote } from "@/components/market/marketModel";
 
 export type { MarketIndexQuote };
 
@@ -96,7 +96,7 @@ interface MarketIndexDetail {
   market_regime: MarketRegimeContext | null;
 }
 
-type InstrumentType = "index" | "commodity" | "fx" | "crypto";
+type InstrumentType = "index" | "commodity" | "fx" | "crypto" | "sector" | "rate";
 
 function summarizeTrend(data: number[]) {
   if (data.length < 2) {
@@ -118,17 +118,25 @@ function instrumentLabel(instrumentType: string | undefined, t: Translate) {
   if (instrumentType === "commodity") return t("market.detail.instrument.commodity");
   if (instrumentType === "fx") return t("market.detail.instrument.fx");
   if (instrumentType === "crypto") return t("market.detail.instrument.crypto");
+  if (instrumentType === "sector") return t("market.detail.instrument.sector");
+  if (instrumentType === "rate") return t("market.detail.instrument.rate");
   return t("market.detail.instrument.index");
 }
 
 function normalizeInstrumentType(instrumentType: string | undefined): InstrumentType {
-  if (instrumentType === "commodity" || instrumentType === "fx" || instrumentType === "crypto") {
+  if (
+    instrumentType === "commodity" ||
+    instrumentType === "fx" ||
+    instrumentType === "crypto" ||
+    instrumentType === "sector" ||
+    instrumentType === "rate"
+  ) {
     return instrumentType;
   }
   return "index";
 }
 
-function buildInstrumentContext(detail: MarketIndexDetail | undefined, deltaPct: number, t: Translate) {
+function buildInstrumentContext(detail: MarketIndexDetail | undefined, ticker: string, deltaPct: number, t: Translate) {
   const instrumentType = detail?.instrument_type ?? "index";
   const rising = deltaPct >= 0;
   if (instrumentType === "commodity") {
@@ -165,6 +173,30 @@ function buildInstrumentContext(detail: MarketIndexDetail | undefined, deltaPct:
         rising ? t("market.detail.context.crypto.up") : t("market.detail.context.crypto.down"),
         t("market.detail.context.crypto.interpretation"),
         t("market.detail.context.crypto.daily"),
+      ],
+    };
+  }
+  if (instrumentType === "sector") {
+    return {
+      title: t("market.detail.context.sector.title"),
+      description: t("market.detail.context.sector.description"),
+      bullets: [
+        t("market.detail.context.sector.proxy", { ticker }),
+        rising ? t("market.detail.context.sector.up") : t("market.detail.context.sector.down"),
+        t("market.detail.context.sector.interpretation"),
+        t("market.detail.context.index.daily"),
+      ],
+    };
+  }
+  if (instrumentType === "rate") {
+    // Three bullets, not four: rate.description is already the card description, and repeating it as a bullet would show the same sentence twice.
+    return {
+      title: t("market.detail.context.rate.title"),
+      description: t("market.detail.context.rate.description"),
+      bullets: [
+        t("market.detail.context.rate.reference"),
+        rising ? t("market.detail.context.rate.up") : t("market.detail.context.rate.down"),
+        t("market.detail.context.index.daily"),
       ],
     };
   }
@@ -212,19 +244,23 @@ interface IndicatorKeys {
   ma: [MessageKey, MessageKey, MessageKey];
 }
 
+const INDEX_INDICATOR_KEYS = {
+  title: "market.detail.indicators.index.title",
+  descDaily: "market.detail.indicators.index.descDaily",
+  descMonthly: "market.detail.indicators.index.descMonthly",
+  macd: "market.detail.indicators.index.macd",
+  macdSignal: "market.detail.indicators.index.macdSignal",
+  macdHist: "market.detail.indicators.index.macdHist",
+  bbUpper: "market.detail.indicators.index.bbUpper",
+  bbMid: "market.detail.indicators.index.bbMid",
+  bbLower: "market.detail.indicators.index.bbLower",
+  ma: ["market.detail.indicators.index.ma20", "market.detail.indicators.index.ma50", "market.detail.indicators.index.ma200"],
+} as const satisfies IndicatorKeys;
+
 const INDICATOR_KEYS = {
-  index: {
-    title: "market.detail.indicators.index.title",
-    descDaily: "market.detail.indicators.index.descDaily",
-    descMonthly: "market.detail.indicators.index.descMonthly",
-    macd: "market.detail.indicators.index.macd",
-    macdSignal: "market.detail.indicators.index.macdSignal",
-    macdHist: "market.detail.indicators.index.macdHist",
-    bbUpper: "market.detail.indicators.index.bbUpper",
-    bbMid: "market.detail.indicators.index.bbMid",
-    bbLower: "market.detail.indicators.index.bbLower",
-    ma: ["market.detail.indicators.index.ma20", "market.detail.indicators.index.ma50", "market.detail.indicators.index.ma200"],
-  },
+  index: INDEX_INDICATOR_KEYS,
+  sector: INDEX_INDICATOR_KEYS,
+  rate: INDEX_INDICATOR_KEYS,
   commodity: {
     title: "market.detail.indicators.commodity.title",
     descDaily: "market.detail.indicators.commodity.descDaily",
@@ -372,7 +408,7 @@ function MarketDetailModal({ item, onClose }: { item: MarketIndexQuote; onClose:
   );
   const volumeSummary = detail?.volume_summary ?? null;
   const normalizedInstrumentType = normalizeInstrumentType(detail?.instrument_type ?? item.instrument_type);
-  const contextBlock = useMemo(() => buildInstrumentContext(detail, item.delta.delta_pct ?? 0, t), [detail, item.delta.delta_pct, t]);
+  const contextBlock = useMemo(() => buildInstrumentContext(detail, item.ticker, item.delta.delta_pct ?? 0, t), [detail, item.ticker, item.delta.delta_pct, t]);
   const warningMessages = useMemo(() => {
     if (!detail) return [];
     const warnings: string[] = [];
@@ -388,6 +424,9 @@ function MarketDetailModal({ item, onClose }: { item: MarketIndexQuote; onClose:
     if (detail.instrument_type === "fx" && (volumeSummary?.latest_volume ?? 0) <= 0) {
       warnings.push(t("market.detail.warnings.fxVolume"));
     }
+    if (detail.instrument_type === "rate" && (volumeSummary?.latest_volume ?? 0) <= 0) {
+      warnings.push(t("market.detail.warnings.rateVolume"));
+    }
     return warnings;
   }, [detail, volumeSummary?.latest_volume, t]);
 
@@ -398,7 +437,8 @@ function MarketDetailModal({ item, onClose }: { item: MarketIndexQuote; onClose:
   // Escape key and scroll-lock are handled by ModalShell.
 
   const modalSubtitle = `${item.ticker} · ${instrumentLabel(detail?.instrument_type ?? item.instrument_type, t)}${detail?.unit_label ? ` · ${detail.unit_label}` : ""}`;
-  const price = (value: number | null | undefined) => formatNumber(value, "price", { digits: 1, locale });
+  const nameKey = instrumentNameKey(item.ticker);
+  const displayName = nameKey === null ? item.name : t(nameKey);
   const integer = (value: number | null | undefined) => formatNumber(value, "integer", { locale });
   const volumeVsAverage = volumeSummary?.volume_vs_20d_pct;
 
@@ -406,7 +446,7 @@ function MarketDetailModal({ item, onClose }: { item: MarketIndexQuote; onClose:
     <ModalShell
       open
       onClose={onClose}
-      title={item.name}
+      title={displayName}
       subtitle={modalSubtitle}
       size="xl"
     >
@@ -429,7 +469,7 @@ function MarketDetailModal({ item, onClose }: { item: MarketIndexQuote; onClose:
           <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <div className="border border-[var(--line)] bg-[var(--surface-raised)] p-4">
               <p className="type-caption uppercase text-[var(--ink-muted)]">{t("market.detail.currentValue")}</p>
-              <p className="type-figure-md mt-2 text-[var(--ink)]">{price(item.last_close)}</p>
+              <p className="type-figure-md mt-2 text-[var(--ink)]">{instrumentValueText(item, locale)}</p>
             </div>
             <div className="border border-[var(--line)] bg-[var(--surface-raised)] p-4">
               <p className="type-caption uppercase text-[var(--ink-muted)]">{t("market.detail.absoluteChange")}</p>
@@ -529,7 +569,7 @@ function MarketDetailModal({ item, onClose }: { item: MarketIndexQuote; onClose:
                       volumeData={volume}
                       lineSeriesData={movingAverageSeries}
                       height={420}
-                      tickerName={`${item.name} ${chartTimeframe}`}
+                      tickerName={`${displayName} ${chartTimeframe}`}
                       colorAccent={chartColor}
                       upColor="var(--up)"
                       events={eventLines}
