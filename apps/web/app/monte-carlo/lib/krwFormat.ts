@@ -48,3 +48,18 @@ export function krwAxis(locale: FormatLocale): KrwAxis {
     unitKey: "monteCarlo.units.krwAxis",
   };
 }
+
+// Per-share price (whole won). en: KRW 50,000; ko: 50,000원 (owner decision D8).
+export function krw(value: number, locale: FormatLocale): string {
+  if (!Number.isFinite(value)) return MISSING;
+  const amount = formatNumber(Math.round(value), "integer", { locale });
+  return locale === "en" ? `KRW ${amount}` : `${amount}원`;
+}
+
+// A won interval: one prefix (en) or one suffix (ko), joined by an en dash. Either side not finite reads a dash.
+export function formatKrwRange(lo: number | null, hi: number | null, locale: FormatLocale): string {
+  if (lo === null || hi === null || !Number.isFinite(lo) || !Number.isFinite(hi)) return MISSING;
+  const from = formatNumber(Math.round(lo), "integer", { locale });
+  const to = formatNumber(Math.round(hi), "integer", { locale });
+  return locale === "en" ? `KRW ${from}–${to}` : `${from}–${to}원`;
+}

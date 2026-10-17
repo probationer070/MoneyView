@@ -80,14 +80,13 @@ test.describe("superseded run", () => {
 
     await page.getByRole("tab", { name: /Corporate Valuation/i }).click();
     await page.getByRole("button", { name: "Run Valuation" }).click();
-    const valuationPanel = page.getByRole("tabpanel");
-    await expect(valuationPanel.getByText("Running valuation")).toBeVisible();
-    await expect(valuationPanel.getByText("Worker progress")).toBeVisible();
-    await expect(page.getByRole("button", { name: "Cancel", exact: true })).toBeEnabled();
+    await expect(page.getByTestId("mc-status")).toHaveAttribute("data-state", "running");
+    await expect(page.getByTestId("mc-status-progress")).toBeVisible();
+    await expect(page.getByTestId("mc-cancel-valuation")).toBeEnabled();
 
     await page.getByRole("tab", { name: /Path Simulation/i }).click();
     const pathPanel = page.getByRole("tabpanel");
-    await expect(pathPanel.getByText("Run canceled")).toBeVisible();
+    await expect(pathPanel.getByTestId("mc-status")).toHaveText("Run canceled");
     await expect(pathPanel.getByTestId("mc-status-progress")).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Run Path Simulation" })).toBeEnabled();
 
@@ -102,8 +101,8 @@ test.describe("superseded run", () => {
     await page.goto("/monte-carlo", { waitUntil: "domcontentloaded" });
     await expect(page.getByRole("heading", { name: /Simulation Lab/i })).toBeVisible({ timeout: 60_000 });
     await page.getByRole("tab", { name: /Corporate Valuation/i }).click();
-    await page.getByRole("button", { name: "Run Valuation" }).click();
-    await expect(page.getByText("Worker progress")).toBeVisible();
+    await page.getByTestId("mc-run-valuation").click();
+    await expect(page.getByTestId("mc-status-progress")).toBeVisible();
 
     await page.getByRole("tab", { name: /Correlation Model/i }).click();
     await page.getByRole("button", { name: "Run Correlation Analysis" }).click();
@@ -113,10 +112,9 @@ test.describe("superseded run", () => {
     await expect(page.getByRole("button", { name: "Run Correlation Analysis" })).toBeDisabled();
 
     await page.getByRole("tab", { name: /Corporate Valuation/i }).click();
-    const valuationPanel = page.getByRole("tabpanel");
-    await expect(valuationPanel.getByText("Run canceled")).toBeVisible();
-    await expect(valuationPanel.getByText("Worker progress")).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "Run Valuation" })).toBeEnabled();
+    await expect(page.getByTestId("mc-status")).toHaveText("Run canceled");
+    await expect(page.getByTestId("mc-status-progress")).toHaveCount(0);
+    await expect(page.getByTestId("mc-run-valuation")).toBeEnabled();
 
     await releaseHeld(page, 2);
     await page.getByRole("tab", { name: /Correlation Model/i }).click();
@@ -554,5 +552,126 @@ test.describe("risk and distribution", () => {
       const surface = (await panelOf(page, title).locator(".recharts-surface").first().boundingBox())!;
       expect(surface.height, `${title} chart height`).toBeGreaterThanOrEqual(200);
     }
+  });
+});
+
+test.describe("valuation", () => {
+  test.use({ viewport: { width: 1280, height: 720 } });
+
+  async function openValuation(page: Page, heading: RegExp, tab: RegExp): Promise<void> {
+    await installMonteCarloWorker(page);
+    await page.goto("/monte-carlo", { waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("heading", { name: heading })).toBeVisible({ timeout: 60_000 });
+    await page.getByRole("tab", { name: tab }).click();
+  }
+
+  const priceOk = (ticker: string, price: number) => JSON.stringify({
+    status: "ok",
+    data: {
+      ticker,
+      status: "ok",
+      price,
+      as_of_date: "2026-04-19",
+      source: "cache",
+      freshness_status: "fresh_cache",
+      retry_after_seconds: null,
+      detail_note: "Latest price served from local cache.",
+    },
+  });
+
+  test("after a run the 80% interval reads KRW 41,200–58,900 and the median reads KRW 50,000", async ({ page }) => {
+    await openValuation(page, /Simulation Lab/, /Corporate Valuation/);
+    await expect(page.getByTestId("mc-figure-interval80-value")).toHaveText("—");
+    await page.getByTestId("mc-run-valuation").click();
+    await expect(page.getByTestId("mc-status")).toHaveAttribute("data-state", "ready");
+    await expect(page.getByTestId("mc-figure-interval80-value")).toHaveText("KRW 41,200–58,900");
+    await expect(page.getByTestId("mc-figure-median-value")).toHaveText("KRW 50,000");
+  });
+
+  test.describe("ko", () => {
+    test.use({ locale: "ko-KR" });
+
+    test("ko: the interval reads 41,200–58,900원 and the median reads 50,000원", async ({ page }) => {
+      await openValuation(page, /시뮬레이션 랩/, /기업가치 평가/);
+      await page.getByTestId("mc-run-valuation").click();
+      await expect(page.getByTestId("mc-status")).toHaveAttribute("data-state", "ready");
+      await expect(page.getByTestId("mc-figure-interval80-value")).toHaveText("41,200–58,900원");
+      await expect(page.getByTestId("mc-figure-median-value")).toHaveText("50,000원");
+    });
+
+    test("ko: a loaded price lookup is announced in Korean under the ticker", async ({ page }) => {
+      await page.route("**/api/v1/stock/AAPL/price", (route) => route.fulfill({ status: 200, contentType: "application/json", body: priceOk("AAPL", 211400) }));
+      await openValuation(page, /시뮬레이션 랩/, /기업가치 평가/);
+      await page.getByLabel("티커").fill("AAPL");
+      await page.getByLabel("티커").press("Tab");
+      await expect(page.getByTestId("mc-price-lookup")).toHaveText("AAPL 가격을 캐시에서 불러왔습니다.");
+    });
+  });
+
+  test("the lookup message sits under the Ticker input and above the next field", async ({ page }) => {
+    await page.route("**/api/v1/stock/AAPL/price", (route) => route.fulfill({ status: 200, contentType: "application/json", body: priceOk("AAPL", 211400) }));
+    await openValuation(page, /Simulation Lab/, /Corporate Valuation/);
+    await page.getByLabel("Ticker").fill("AAPL");
+    await page.getByLabel("Ticker").press("Tab");
+    const message = page.getByTestId("mc-price-lookup");
+    await expect(message).toHaveText("AAPL price loaded from cache.");
+    await expect(message).toHaveAttribute("role", "status");
+
+    const input = (await page.getByLabel("Ticker").boundingBox())!;
+    const box = (await message.boundingBox())!;
+    const next = (await page.locator("label", { hasText: "Current stock price" }).boundingBox())!;
+    expect(box.y, "the message starts below the Ticker input").toBeGreaterThanOrEqual(input.y + input.height - 1);
+    expect(box.y + box.height, "the message ends above the next field").toBeLessThanOrEqual(next.y + 1);
+  });
+
+  test("the two valuation exports download valuation_summary.csv and valuation_distribution.csv", async ({ page }) => {
+    await openValuation(page, /Simulation Lab/, /Corporate Valuation/);
+    await page.getByTestId("mc-run-valuation").click();
+    await expect(page.getByTestId("mc-status")).toHaveAttribute("data-state", "ready");
+    const files = { "valuation-summary": "valuation_summary.csv", "valuation-distribution": "valuation_distribution.csv" };
+    for (const [key, file] of Object.entries(files)) {
+      await page.getByTestId("mc-export").click();
+      const [download] = await Promise.all([page.waitForEvent("download"), page.getByTestId(`mc-export-${key}`).click()]);
+      expect(download.suggestedFilename()).toBe(file);
+    }
+  });
+
+  test("at 1280x720 after a run, the header, the distribution chart and the statistics table end inside the panel", async ({ page }) => {
+    await openValuation(page, /Simulation Lab/, /Corporate Valuation/);
+    // Until /monte-carlo joins ONE_SCREEN_ROUTES (Task 10) the shell keeps 5rem of bottom padding. Apply the one-screen padding.
+    await page.addStyleTag({ content: "main { --main-pad-bottom: 1.5rem !important; }" });
+    await page.getByTestId("mc-run-valuation").click();
+    await expect(page.getByTestId("mc-status")).toHaveAttribute("data-state", "ready");
+
+    const panel = (await page.getByTestId("mc-panel").boundingBox())!;
+    const bottom = panel.y + panel.height + 1;
+    const header = (await page.getByTestId("mc-result-header").boundingBox())!;
+    expect(header.y + header.height, "result header ends inside the panel").toBeLessThanOrEqual(bottom);
+
+    const frame = (await panelOf(page, "Fair Value Distribution").boundingBox())!;
+    expect(frame.y + frame.height, "fair-value distribution ends inside the panel").toBeLessThanOrEqual(bottom);
+    const surface = (await panelOf(page, "Fair Value Distribution").locator(".recharts-surface").first().boundingBox())!;
+    expect(surface.height, "fair-value distribution chart height").toBeGreaterThanOrEqual(200);
+    // The chart fills the chart area: its bottom sits just above the panel bottom (measured 21px). A fixed height
+    // overflows the panel (gap < 0) or stops well short (gap > 40).
+    const gap = panel.y + panel.height - (surface.y + surface.height);
+    expect(gap, "chart bottom is not below the panel bottom").toBeGreaterThanOrEqual(0);
+    expect(gap, "chart bottom is close to the panel bottom").toBeLessThanOrEqual(40);
+
+    const stats = (await page.getByRole("heading", { name: "Valuation Statistics" }).locator("xpath=..").boundingBox())!;
+    expect(stats.y + stats.height, "valuation statistics end inside the panel").toBeLessThanOrEqual(bottom);
+  });
+
+  test("Run and Cancel stay where they are while the 11-field rail scrolls", async ({ page }) => {
+    await openValuation(page, /Simulation Lab/, /Corporate Valuation/);
+    const inputs = page.getByTestId("mc-rail-inputs");
+    // Precondition: the 11 fields do not fit, so there is something to scroll.
+    expect(await inputs.evaluate((node) => node.scrollHeight > node.clientHeight)).toBe(true);
+    const run = page.getByTestId("mc-run-valuation");
+    const before = await run.boundingBox();
+    await inputs.evaluate((node) => { node.scrollTop = node.scrollHeight; });
+    expect(await inputs.evaluate((node) => node.scrollTop)).toBeGreaterThan(0);
+    expect(await run.boundingBox()).toEqual(before);
+    expect(before!.y + before!.height).toBeLessThanOrEqual(720);
   });
 });

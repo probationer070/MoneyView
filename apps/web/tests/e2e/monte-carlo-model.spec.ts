@@ -3,7 +3,7 @@ import { runStatusView, beforeText } from "../../app/monte-carlo/lib/resultModel
 import { translate } from "../../lib/i18n/translate";
 import { en } from "../../lib/i18n/messages/en";
 import { tokens } from "../../lib/tokens.generated";
-import { formatKrwCompact, krwAxis } from "../../app/monte-carlo/lib/krwFormat";
+import { formatKrwCompact, formatKrwRange, krw, krwAxis } from "../../app/monte-carlo/lib/krwFormat";
 import { isMonteCarloTab, MONTE_CARLO_TAB_KEY } from "../../app/monte-carlo/lib/tabs";
 
 // Pure model spec (no page): the KRW strings and the axis ticks are pinned here, in both locales.
@@ -143,5 +143,29 @@ test.describe("layout tokens", () => {
   test("the rail width and chart minimum height are the approved 320px and 200px", () => {
     expect(tokens.component.rail.width).toBe("320px");
     expect(tokens.component.chart["min-height"]).toBe("200px");
+  });
+});
+
+// Per-share price and the valuation interval: en keeps the KRW prefix, ko uses the 원 suffix (owner decision D8).
+test.describe("krw and formatKrwRange", () => {
+  test("krw: en reads KRW 50,000 and ko reads 50,000원; NaN is a dash in both", () => {
+    expect(krw(50_000, "en")).toBe("KRW 50,000");
+    expect(krw(50_000, "ko")).toBe("50,000원");
+    expect(krw(Number.NaN, "en")).toBe("—");
+    expect(krw(Number.NaN, "ko")).toBe("—");
+  });
+
+  test("formatKrwRange: en keeps the prefix once; ko puts 원 once after the range, joined by an en dash", () => {
+    expect(formatKrwRange(41_200, 58_900, "en")).toBe("KRW 41,200–58,900");
+    expect(formatKrwRange(41_200, 58_900, "ko")).toBe("41,200–58,900원");
+    expect(formatKrwRange(41_200, 58_900, "ko").includes("KRW")).toBe(false);
+  });
+
+  test("formatKrwRange: either side not finite reads a dash", () => {
+    for (const locale of ["en", "ko"] as const) {
+      expect(formatKrwRange(null, 58_900, locale)).toBe("—");
+      expect(formatKrwRange(41_200, Number.NaN, locale)).toBe("—");
+      expect(formatKrwRange(Number.POSITIVE_INFINITY, 58_900, locale)).toBe("—");
+    }
   });
 });

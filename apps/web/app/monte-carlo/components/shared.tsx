@@ -21,10 +21,6 @@ export function krwLossFromPercent(principal: number, lossPercent: number, local
   return formatKrwCompact(principal * (lossPercent / 100), locale);
 }
 
-export function krw(value: number, locale: FormatLocale) {
-  return `KRW ${formatNumber(Math.round(value), "integer", { locale })}`;
-}
-
 // Shared form primitives keep styling consistent after the file split.
 export function NumericField({
   label,

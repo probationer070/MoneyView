@@ -3,6 +3,7 @@
 import type {
   CorrelationInput,
   CorrelationResult,
+  LookupMessage,
   MonteCarloResult,
   PathSimulationInput,
   SharedSimulationResult,
@@ -143,7 +144,7 @@ export default function MonteCarloPage() {
   const [valuationStatus, setValuationStatus] = useState<"idle" | "loading" | "error" | "cancelled">("idle");
   const [correlationStatus, setCorrelationStatus] = useState<"idle" | "loading" | "error" | "cancelled">("idle");
   const [valuationPriceLookupStatus, setValuationPriceLookupStatus] = useState<"idle" | "loading" | "fetching" | "success" | "not_found" | "error">("idle");
-  const [valuationPriceLookupMessage, setValuationPriceLookupMessage] = useState<string | null>(null);
+  const [valuationPriceLookupMessage, setValuationPriceLookupMessage] = useState<LookupMessage>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
   const [valuationProgress, setValuationProgress] = useState(0);
@@ -289,7 +290,7 @@ export default function MonteCarloPage() {
     if (key === "currentPrice") {
       priceLookupManualEditSeqRef.current += 1;
       if (valuationPriceLookupStatus === "success") {
-        setValuationPriceLookupMessage("Price can still be manually overridden after auto-fill.");
+        setValuationPriceLookupMessage({ key: "monteCarlo.lookup.manualOverride" });
       }
     }
     setValuationInput((current) => ({ ...current, [key]: value }));
@@ -315,7 +316,7 @@ export default function MonteCarloPage() {
     const lookupTicker = ticker;
     const lookupManualEditSeq = priceLookupManualEditSeqRef.current;
     setValuationPriceLookupStatus("loading");
-    setValuationPriceLookupMessage(`Looking up ${lookupTicker} price from the cache-first API...`);
+    setValuationPriceLookupMessage({ key: "monteCarlo.lookup.loading", vars: { ticker: lookupTicker } });
 
     for (let attempt = 1; attempt <= STOCK_PRICE_LOOKUP_MAX_ATTEMPTS; attempt += 1) {
       try {
@@ -328,7 +329,9 @@ export default function MonteCarloPage() {
 
         if (statusCode === 202 || data.status === "fetching") {
           setValuationPriceLookupStatus("fetching");
-          setValuationPriceLookupMessage(data.detail_note || `${lookupTicker} is being fetched. Waiting for cache hydration...`);
+          setValuationPriceLookupMessage(data.detail_note
+            ? { raw: data.detail_note }
+            : { key: "monteCarlo.lookup.fetching", vars: { ticker: lookupTicker } });
           const retryAfterMs = Math.max(1, data.retry_after_seconds ?? 2) * 1000;
           await new Promise<void>((resolve, reject) => {
             const timer = window.setTimeout(resolve, retryAfterMs);
@@ -343,11 +346,10 @@ export default function MonteCarloPage() {
 
         if (data.status === "ok" && data.price !== null) {
           setValuationPriceLookupStatus("success");
-          setValuationPriceLookupMessage(
-            data.source === "cache_fallback"
-              ? `${lookupTicker} price loaded from stale cache while background refresh continues.`
-              : `${lookupTicker} price loaded from cache.`,
-          );
+          setValuationPriceLookupMessage({
+            key: data.source === "cache_fallback" ? "monteCarlo.lookup.loadedStale" : "monteCarlo.lookup.loaded",
+            vars: { ticker: lookupTicker },
+          });
           if (lookupManualEditSeq === priceLookupManualEditSeqRef.current) {
             setValuationInput((current) => (current.ticker.trim().toUpperCase() === lookupTicker
               ? { ...current, currentPrice: Math.round(data.price ?? current.currentPrice) }
@@ -358,12 +360,12 @@ export default function MonteCarloPage() {
 
         if (statusCode === 404 || data.status === "not_found") {
           setValuationPriceLookupStatus("not_found");
-          setValuationPriceLookupMessage("Ticker not found.");
+          setValuationPriceLookupMessage({ key: "monteCarlo.lookup.notFound" });
           return;
         }
 
         setValuationPriceLookupStatus("error");
-        setValuationPriceLookupMessage(data.detail_note || "Stock price lookup failed.");
+        setValuationPriceLookupMessage(data.detail_note ? { raw: data.detail_note } : { key: "monteCarlo.lookup.failed" });
         return;
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") {
@@ -373,14 +375,14 @@ export default function MonteCarloPage() {
           return;
         }
         setValuationPriceLookupStatus("error");
-        setValuationPriceLookupMessage(error instanceof Error ? error.message : "Stock price lookup failed.");
+        setValuationPriceLookupMessage(error instanceof Error ? { raw: error.message } : { key: "monteCarlo.lookup.failed" });
         return;
       }
     }
 
     if (requestSeq === priceLookupRequestSeqRef.current && lookupTicker === priceLookupTickerRef.current) {
       setValuationPriceLookupStatus("error");
-      setValuationPriceLookupMessage(`Price lookup for ${lookupTicker} timed out while waiting for cache hydration.`);
+      setValuationPriceLookupMessage({ key: "monteCarlo.lookup.timedOut", vars: { ticker: lookupTicker } });
     }
   };
 
