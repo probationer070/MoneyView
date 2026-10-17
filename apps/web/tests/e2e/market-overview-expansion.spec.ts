@@ -1,7 +1,7 @@
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 import { changeFigure, formatBp, type MarketIndexQuote } from "../../components/market/marketModel";
 import { mockMarketPageApi } from "./helpers/marketPageMock";
-import { marketPanel } from "./helpers/marketTabs";
+import { marketPanel, openMarketTab } from "./helpers/marketTabs";
 
 // Spec docs/superpowers/specs/2026-10-16-market-overview-expansion-design.md §2.1-2.2.
 // The cards are server-rendered from the seeded e2e API, so the expected figures come from the same API.
@@ -156,5 +156,75 @@ test.describe("in Korean", () => {
     await expect(page.getByText("반도체").first()).toBeVisible();
     await expect(page.getByText("미 10년물 금리").first()).toBeVisible();
     await expect(page.getByText("1개월").first()).toBeVisible();
+  });
+});
+
+test.describe("motion on", () => {
+  test.use({ contextOptions: { reducedMotion: "no-preference" } });
+
+  const marketCard = (page: Page, ticker: string) => card(page, ticker);
+
+  /** Records whether `selector` ever matched inside a card, so a roll that is over by the time we look is still seen. */
+  async function watchFor(page: Page, selector: string) {
+    await page.addInitScript((sel) => {
+      const w = window as unknown as { __seen: boolean };
+      w.__seen = false;
+      const scan = () => {
+        if (document.querySelector(`article ${sel}`)) w.__seen = true;
+      };
+      new MutationObserver(scan).observe(document, { childList: true, subtree: true });
+    }, selector);
+  }
+  const seen = (page: Page) => page.evaluate(() => (window as unknown as { __seen: boolean }).__seen);
+
+  test("a card value rolls in, then reads the API value", async ({ page, request }) => {
+    const all = await quotes(request);
+    const spx = all.find((q) => q.ticker === "^GSPC")!;
+    expect(spx.last_close).not.toBeNull();
+    await watchFor(page, '.type-figure-md .mv-dg');
+    await gotoMarket(page);
+    await expect(cards(page)).toHaveCount(14);
+    await expect.poll(() => seen(page), { timeout: 3_000 }).toBe(true);
+    await page.waitForTimeout(1_500);
+    const expected = spx.last_close!.toLocaleString("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+    await expect(marketCard(page, "^GSPC").locator(".type-figure-md")).toHaveText(expected);
+    await expect(marketCard(page, "^GSPC").locator(".type-figure-md .mv-dg")).toHaveCount(0);
+  });
+
+  test("a card's 1D DeltaBadge rolls in (animate=enter), then reads the API percent", async ({ page, request }) => {
+    const all = await quotes(request);
+    const spx = all.find((q) => q.ticker === "^GSPC")!;
+    const figure = changeFigure(spx.delta, spx.instrument_type);
+    expect(figure.kind).toBe("pct");
+    if (figure.kind !== "pct") return;
+    await watchFor(page, '[data-testid="change-1d"] [data-testid="delta-badge"] .mv-dg');
+    await gotoMarket(page);
+    await expect(cards(page)).toHaveCount(14);
+    await expect.poll(() => seen(page), { timeout: 3_000 }).toBe(true);
+    await page.waitForTimeout(1_500);
+    const expected = (figure.pct / 100).toLocaleString("en-US", { style: "percent", minimumFractionDigits: 1, maximumFractionDigits: 1, signDisplay: "exceptZero" });
+    await expect(marketCard(page, "^GSPC").getByTestId("change-1d").locator('[data-part="value"]')).toHaveText(expected);
+  });
+
+  test("a card's accessible name is its label alone, with no figure repeated", async ({ page }) => {
+    await gotoMarket(page);
+    await expect(cards(page)).toHaveCount(14);
+    const button = marketCard(page, "^GSPC").getByRole("button", { name: /^Open detail for/ });
+    await expect(button).toHaveCount(1);
+    const name = await button.evaluate((el) => el.getAttribute("aria-label"));
+    expect(name).toBe("Open detail for S&P 500");
+    // No RollingNumber inside may add its own text to the name through role=button name-from-content.
+    await expect(page.getByRole("button", { name: "Open detail for S&P 500", exact: true })).toHaveCount(1);
+  });
+
+  test("switching the page tab runs the scan line", async ({ page }) => {
+    await gotoMarket(page);
+    await openMarketTab(page, "Spreads");
+    await openMarketTab(page, "Instruments");
+    await page.getByTestId("market-page-tabs").getByRole("tab", { name: "Spreads", exact: true }).click();
+    await expect.poll(
+      () => page.evaluate(() => document.querySelector('[data-testid="scan-line"]')?.getAnimations().length ?? 0),
+      { timeout: 2_000 },
+    ).toBeGreaterThan(0);
   });
 });

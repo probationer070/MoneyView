@@ -54,9 +54,9 @@ export function RollingNumber({ value, format, direction = "auto", enter = false
       setRoll(null);
       return;
     }
-    // Missing before, or an enter roll still owed: roll in from zeros.
-    const fromZeros = pendingEnter.current || last === null || last.value === null;
-    if (!fromZeros && last.text === text) return;
+    // Missing before, or an enter roll still owed: roll in from zeros. A first mount without `enter` shows the text as is.
+    const fromZeros = pendingEnter.current || (last !== null && last.value === null);
+    if (!fromZeros && (last === null || last.text === text)) return;
     pendingEnter.current = false;
     cancel();
     const rising = direction === "auto" ? fromZeros || value >= (last?.value ?? value) : direction === "up";

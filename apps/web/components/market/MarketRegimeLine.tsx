@@ -1,5 +1,6 @@
 "use client";
 
+import { RollingNumber } from "@/components/ui/RollingNumber";
 import { formatNumber } from "@/lib/format";
 import { useLocale, useT } from "@/lib/i18n/locale";
 import { useMarketRegime } from "@/lib/useMarketRegime";
@@ -35,11 +36,20 @@ export function MarketRegimeLine() {
           <span data-part="label" data-tone={view.tone} className={TONE_CLASS[view.tone]}>{t(view.labelKey)}</span>
           <span aria-hidden="true">·</span>
           <span data-part="breadth">
-            <FigureText parts={withFigures(t("market.regime.breadth"), { breadth: `${integer(view.advancers)}/${integer(view.indexCount)}` })} />
+            <FigureText
+              parts={withFigures(t("market.regime.breadth"), { breadth: "breadth" })}
+              nodes={{ breadth: <RollingNumber value={view.advancers} format={(n) => `${integer(n)}/${integer(view.indexCount)}`} enter /> }}
+            />
           </span>
           <span aria-hidden="true">·</span>
           <span data-part="signals">
-            <FigureText parts={withFigures(t("market.regime.signals"), { on: integer(view.riskOn), off: integer(view.riskOff) })} />
+            <FigureText
+              parts={withFigures(t("market.regime.signals"), { on: "on", off: "off" })}
+              nodes={{
+                on: <RollingNumber value={view.riskOn} format={integer} enter />,
+                off: <RollingNumber value={view.riskOff} format={integer} enter />,
+              }}
+            />
           </span>
         </>
       ) : view.kind === "unknown" ? (

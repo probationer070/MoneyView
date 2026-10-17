@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import clsx from "clsx";
 
 type CardPadding = "sm" | "md" | "lg";
@@ -10,6 +10,7 @@ interface CardProps {
   onClick?: () => void;
   className?: string;
   as?: "div" | "article" | "section";
+  style?: CSSProperties;
 }
 
 const paddingMap: Record<CardPadding, string> = {
@@ -29,6 +30,7 @@ export function Card({
   onClick,
   className,
   as: Tag = "div",
+  style,
 }: CardProps) {
   const isInteractive = hoverable || Boolean(onClick);
 
@@ -41,6 +43,7 @@ export function Card({
         onClick && "cursor-pointer",
         className
       )}
+      style={style}
       onClick={onClick}
     >
       {TICKS.map((position) => <i key={position} aria-hidden="true" className={clsx(TICK, position)} />)}

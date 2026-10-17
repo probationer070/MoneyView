@@ -26,6 +26,16 @@ reveal that; only checking the code did.
 
 An entry states what was true when it was written. Nothing updates it on its own.
 
+## 2026-10-17: RollingNumber rolled in from zeros on every first mount, so `enter` did nothing (motion-system Task 1, f14591b)
+
+Date: 2026-10-17 (found by the Task 5 mutation check)
+Command: `npx playwright test market-overview-expansion -g "motion on"` with DeltaBadge's `enter={animate === "enter"}` replaced by `enter={false}`; the "enter" test still passed.
+Failure: a RollingNumber without `enter` still rolled in from zeros when it first mounted, so `animate={true}` on DeltaBadge behaved like `"enter"`, and the `enter` prop had no effect.
+Root cause: the roll-in condition was `pendingEnter.current || last === null || last.value === null`; `last === null` is true on every first mount.
+Fix: `last === null` no longer starts a roll; a first mount without `enter` shows its text as is. Only a missing previous value (after the first mount) or an owed enter rolls from zeros.
+Files changed: `apps/web/components/ui/RollingNumber.tsx`, `apps/web/tests/e2e/market-overview-expansion.spec.ts`.
+Prevention: the DeltaBadge "enter" test in market-overview-expansion.spec.ts now fails when `enter` is forced false.
+
 ## 2026-10-15: dev performance headers and the saved label read data keys in English (i18n-model, f1ce93e)
 
 Date: 2026-10-15 (final review of the design-system branch, M9). The defect is in f1ce93e; d35a1f4 fixed it.

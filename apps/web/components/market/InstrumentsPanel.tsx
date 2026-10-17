@@ -4,6 +4,7 @@ import { SparklineCard } from "@/components/data/SparklineCard";
 import { BilingualLabel } from "@/components/ui/BilingualLabel";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
+import { RollingNumber } from "@/components/ui/RollingNumber";
 import { ViewToggle, type ViewMode } from "@/components/ui/ViewToggle";
 import { formatNumber } from "@/lib/format";
 import { useLocale, useT } from "@/lib/i18n/locale";
@@ -28,7 +29,13 @@ export function InstrumentsPanel({ indices, fetchError, viewMode, onViewModeChan
   const { locale } = useLocale();
   if (fetchError) return <ErrorState title={t("market.unavailableTitle")} message={fetchError} />;
   if (indices.length === 0) return <EmptyState title={t("market.emptyTitle")} description={t("market.emptyDescription")} />;
-  const valueText = (quote: MarketIndexQuote) => instrumentValueText(quote, locale);
+  const valueNode = (quote: MarketIndexQuote) => (
+    <RollingNumber
+      value={quote.last_close}
+      format={(n) => instrumentValueText({ instrument_type: quote.instrument_type, last_close: n }, locale)}
+      enter
+    />
+  );
   const nameOf = (quote: MarketIndexQuote) => {
     const key = instrumentNameKey(quote.ticker);
     return key === null ? quote.name : t(key);
@@ -46,12 +53,13 @@ export function InstrumentsPanel({ indices, fetchError, viewMode, onViewModeChan
 
       {viewMode === "chart" ? (
         <div data-testid="market-cards" className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
-          {indices.map((quote) => (
+          {indices.map((quote, index) => (
             <SparklineCard
               key={quote.ticker}
               title={nameOf(quote)}
               ticker={quote.ticker}
-              value={valueText(quote)}
+              value={valueNode(quote)}
+              index={index}
               day={changeFigure(quote.delta, quote.instrument_type)}
               month={changeFigure(quote.month_delta, quote.instrument_type)}
               sparkline={quote.sparkline}
@@ -87,7 +95,7 @@ export function InstrumentsPanel({ indices, fetchError, viewMode, onViewModeChan
                           <span className="type-caption uppercase text-[var(--ink-muted)]">{quote.ticker}</span>
                         </button>
                       </td>
-                      <td className="type-mono px-3 text-right text-[var(--ink)]">{valueText(quote)}</td>
+                      <td className="type-mono px-3 text-right text-[var(--ink)]">{valueNode(quote)}</td>
                       <td className="px-3 text-right"><ChangeFigureText figure={changeFigure(quote.delta, quote.instrument_type)} /></td>
                       <td className="px-3 text-right"><ChangeFigureText figure={changeFigure(quote.month_delta, quote.instrument_type)} /></td>
                     </tr>
