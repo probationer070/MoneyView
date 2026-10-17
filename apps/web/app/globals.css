@@ -61,3 +61,53 @@
     font-family: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
   }
 }
+
+/* Motion (motion-system plan, Task 2). Durations and easing come from the generated token variables. */
+@keyframes mv-rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes mv-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes mv-strike-draw {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+@layer utilities {
+  /* Staggered entrance: set --mv-i on each child. */
+  .mv-enter {
+    animation: mv-rise var(--duration-slow) var(--easing-emphasized) both;
+    animation-delay: calc(var(--mv-i, 0) * var(--duration-stagger));
+  }
+
+  /* Odometer: a changed character sits in a one-row window over a two-row column. */
+  .mv-odo { display: inline-block; white-space: pre; }
+  .mv-dg { display: inline-block; height: 1lh; overflow: hidden; vertical-align: bottom; }
+  .mv-dg > span { display: flex; flex-direction: column; }
+  .mv-dg > span > span { display: block; height: 1lh; }
+
+  /* Before/after: the old value fades in and its strike draws left to right. */
+  .mv-ba-old {
+    position: relative;
+    display: inline-block;
+    color: var(--ink-muted);
+    animation: mv-fade-in var(--duration-normal) var(--easing-emphasized) both;
+  }
+  .mv-ba-strike {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 50%;
+    height: var(--hairline);
+    background: currentColor;
+    transform-origin: left center;
+    animation: mv-strike-draw var(--duration-normal) var(--easing-emphasized) both;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mv-enter, .mv-ba-old, .mv-ba-strike { animation: none; }
+}
