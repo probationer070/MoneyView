@@ -49,6 +49,7 @@ test("every card shows a 1D and a 1M figure matching the API", async ({ page, re
   await expect(cards(page)).toHaveCount(14);
   for (const ticker of ["^GSPC", "SOXX", "^TNX"]) {
     const quote = all.find((q) => q.ticker === ticker)!;
+    expect(quote.last_close, `${ticker} last_close`).not.toBeNull();
     const el = card(page, ticker);
     await expect(el).toHaveCount(1);
     for (const [id, delta] of [["change-1d", quote.delta], ["change-1m", quote.month_delta]] as const) {
@@ -77,17 +78,17 @@ test("the table's 1D and 1M cells match the API", async ({ page, request }) => {
   const tables = page.getByTestId("market-table");
   for (const [ticker, name] of [["^GSPC", "S&P 500"], ["SOXX", "Semiconductors"], ["^TNX", "US 10Y Yield"]]) {
     const quote = all.find((q) => q.ticker === ticker)!;
+    expect(quote.last_close, `${ticker} last_close`).not.toBeNull();
     const row = tables.locator("tbody tr").filter({ has: page.getByRole("button", { name: `Open detail for ${name} from table`, exact: true }) });
     await expect(row, `${ticker} row`).toHaveCount(1);
     const cells = row.locator("td");
     for (const [index, delta, label] of [[2, quote.delta, "1D"], [3, quote.month_delta, "1M"]] as const) {
       const figure = changeFigure(delta, quote.instrument_type);
-      const text = await cellText(cells.nth(index));
-      if (figure.kind === "bp") expect(text, `${ticker} ${label}`).toBe(formatBp(figure.bp));
+      if (figure.kind === "bp") expect(await cellText(cells.nth(index)), `${ticker} ${label}`).toBe(formatBp(figure.bp));
       else if (figure.kind === "pct") {
         const expected = (figure.pct / 100).toLocaleString("en-US", { style: "percent", minimumFractionDigits: 1, maximumFractionDigits: 1, signDisplay: "exceptZero" });
-        expect(text, `${ticker} ${label}`).toBe(expected);
-      }
+        expect(await cellText(cells.nth(index)), `${ticker} ${label}`).toBe(expected);
+      } else expect(await cells.nth(index).innerText(), `${ticker} ${label}`).toContain("—");
     }
   }
 });
