@@ -136,7 +136,7 @@ Searched at d6dc92d: every spec for `monte-carlo`, `Monte`, `Simulation`, `M KRW
 | D5 | Normalization warnings are English strings built in `lib/resultNormalization.ts` (out of scope) | Leave English in ko for now; log a todo follow-up. |
 | D6 | Where `formatKrwCompact` lives | `app/monte-carlo/lib/krwFormat.ts`, built on `formatNumber`. `lib/format.ts` is a shared surface with no second user yet; promote it when one appears. |
 | D7 | `ScanReveal` needs a `bodyClassName` prop so a revealed panel can fill height | Approve the additive prop (default: same DOM as now). |
-| D8 | ko shows `KRW 50,000` (per-share `krw()`, spec keeps it) beside `41,200–58,900원` (spec §2 interval) | Follow the spec now; owner may ask for ko `50,000원` later. |
+| D8 | ko shows `KRW 50,000` (per-share `krw()`, spec keeps it) beside `41,200–58,900원` (spec §2 interval) | **Owner, 2026-10-17: ko per-share also `50,000원`.** en stays `KRW 50,000`. Task 8 changes `krw()` to take the locale and pins both locales in the model spec. |
 | D9 | When a warning banner counts as "long" | More than one warning: collapsed, with a "show N" toggle. |
 
 ### Task 1: Risk-tab empty charts (spec §5.3)
@@ -347,6 +347,7 @@ The pattern for Tasks 7–9. Judgment-heavy: fitting 503px.
 - Modify: `CorporateValuationSection.tsx`, `page.tsx` (price-lookup messages become `{ key: MessageKey; vars?: Record<string, string> } | { raw: string }`; `raw` only for the API `detail_note` (D2) and a thrown `Error.message`), `app/monte-carlo/lib/krwFormat.ts` (`formatKrwRange`)
 - Modify: catalogs `monteCarlo.valuation.*`, `monteCarlo.lookup.{loading, fetching, loaded, loadedStale, notFound, failed, timedOut, manualOverride}` with the current en texts as templates (`"{ticker} price loaded from cache."` etc.)
 - Test: `monte-carlo-model.spec.ts` (append), `monte-carlo-one-screen.spec.ts` (describe "valuation")
+- D8 (owner, 2026-10-17): `krw(value, locale)` gives `KRW 50,000` in en and `50,000원` in ko; `formatKrwRange` matches. Model-spec cases: en `krw(50_000)` → `KRW 50,000`; ko → `50,000원`; `NaN` → `—`. Mutation: ko keeps the `KRW` prefix.
 
 **Output contract:**
 
