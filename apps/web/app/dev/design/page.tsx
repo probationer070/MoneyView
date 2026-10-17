@@ -32,6 +32,7 @@ export default function DesignGalleryPage() {
   const [range, setRange] = useState("3M");
   const [step, setStep] = useState(0);
   const [missing, setMissing] = useState(false);
+  const [tick, setTick] = useState(0);
   const priceNow = BENCH_PRICE[step % BENCH_PRICE.length];
   const previousPrice = step > 0 ? price(BENCH_PRICE[(step - 1) % BENCH_PRICE.length]) : null;
   return (
@@ -57,10 +58,10 @@ export default function DesignGalleryPage() {
       <section data-testid="gallery-toggle">
         <ToggleGroup options={RANGES} value={range} onChange={setRange} ariaLabel="Range" />
       </section>
-      <section data-testid="gallery-motion" className="flex flex-col gap-3">
+      <section data-testid="gallery-motion" data-tick={tick} className="flex flex-col gap-3">
         <div className="flex gap-3">
           <span data-testid="motion-next"><ActionButton label="Next value" size="sm" onClick={() => { setMissing(false); setStep((s) => s + 1); }} /></span>
-          <span data-testid="motion-same"><ActionButton label="Set same value" size="sm" onClick={() => setStep((s) => s)} /></span>
+          <span data-testid="motion-same"><ActionButton label="Set same value" size="sm" onClick={() => setTick((t) => t + 1)} /></span>
           <span data-testid="motion-missing"><ActionButton label="Missing" size="sm" onClick={() => setMissing(true)} /></span>
         </div>
         <div className="type-mono flex gap-6">

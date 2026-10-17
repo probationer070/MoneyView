@@ -63,20 +63,24 @@ test.describe("motion on", () => {
     expect(rolling).toEqual(["false"]);
   });
 
-  test("an equal value does not roll", async ({ page }) => {
+  test("an equal value re-renders the bench but does not roll", async ({ page }) => {
     await open(page);
     const price = page.getByTestId("motion-roll-price");
-    // Settled after mount: hydration (reduced -> allowed) must not start a roll to the same text.
-    await page.waitForTimeout(300);
+    // Wait out any load-time roll so only the click is under test.
+    await page.waitForTimeout(1000);
     await expect(price).toHaveAttribute("data-rolling", "false");
+    const bench = page.getByTestId("gallery-motion");
+    await expect(bench).toHaveAttribute("data-tick", "0");
     await page.getByTestId("motion-same").click();
+    // The click really re-rendered the bench with the same value.
+    await expect(bench).toHaveAttribute("data-tick", "1");
     await page.waitForTimeout(300);
     await expect(price.locator(".mv-dg")).toHaveCount(0);
     await expect(price).toHaveAttribute("data-rolling", "false");
     await expect(price).toHaveText(PRICE[0]);
   });
 
-  test("a change mid-roll lands on the second value", async ({ page }) => {
+  test("a change mid-roll restarts from the last target and lands on the newest value", async ({ page }) => {
     await open(page);
     const price = page.getByTestId("motion-roll-price");
     await page.getByTestId("motion-next").click();
@@ -128,7 +132,7 @@ test.describe("reduced motion", () => {
   });
 });
 
-test("loading the gallery logs no hydration error", async ({ page }) => {
+test("loading the gallery logs no console hydration error (the shell renders page content client-only, so this cannot detect SSR zeros; the first-paint test above does)", async ({ page }) => {
   const errors: string[] = [];
   page.on("console", (msg) => {
     if (msg.type() === "error") errors.push(msg.text());
