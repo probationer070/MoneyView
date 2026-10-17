@@ -1,4 +1,8 @@
 import { expect, test } from "@playwright/test";
+import { runStatusView, beforeText } from "../../app/monte-carlo/lib/resultModel";
+import { translate } from "../../lib/i18n/translate";
+import { en } from "../../lib/i18n/messages/en";
+import { tokens } from "../../lib/tokens.generated";
 import { formatKrwCompact, krwAxis } from "../../app/monte-carlo/lib/krwFormat";
 import { isMonteCarloTab, MONTE_CARLO_TAB_KEY } from "../../app/monte-carlo/lib/tabs";
 
@@ -62,5 +66,82 @@ test.describe("isMonteCarloTab", () => {
       expect(isMonteCarloTab(bad)).toBe(false);
     }
     expect(MONTE_CARLO_TAB_KEY).toBe("moneyview.tab.monteCarlo.tab");
+  });
+});
+
+// Run-status view and before/after text: pure, no page. Labels are catalog keys, checked against en.
+test.describe("runStatusView", () => {
+  test("loading is running, with progress rounded to a whole percent", () => {
+    expect(runStatusView("loading", 45.6, false)).toEqual({ state: "running", labelKey: "monteCarlo.status.running", progress: 46 });
+  });
+
+  test("progress is clamped to 0..100 and NaN reads as 0", () => {
+    expect(runStatusView("loading", -5, false).progress).toBe(0);
+    expect(runStatusView("loading", 130, false).progress).toBe(100);
+    expect(runStatusView("loading", Number.NaN, false).progress).toBe(0);
+  });
+
+  test("a running job is running even when an older result exists", () => {
+    expect(runStatusView("loading", 10, true).state).toBe("running");
+  });
+
+  test("error is failed, with or without an older result, and has no progress", () => {
+    expect(runStatusView("error", 80, false)).toEqual({ state: "failed", labelKey: "monteCarlo.status.failed", progress: null });
+    expect(runStatusView("error", 80, true).state).toBe("failed");
+  });
+
+  test("cancelled is cancelled and has no progress", () => {
+    expect(runStatusView("cancelled", 30, true)).toEqual({ state: "cancelled", labelKey: "monteCarlo.status.cancelled", progress: null });
+  });
+
+  test("idle with a result is ready; idle without one is empty; progress is null unless running", () => {
+    expect(runStatusView("idle", 50, true)).toEqual({ state: "ready", labelKey: "monteCarlo.status.ready", progress: null });
+    expect(runStatusView("idle", 50, false)).toEqual({ state: "empty", labelKey: "monteCarlo.status.empty", progress: null });
+  });
+
+  test("every label key resolves to its English catalog text", () => {
+    const labels = [
+      runStatusView("idle", 0, false).labelKey,
+      runStatusView("loading", 0, false).labelKey,
+      runStatusView("error", 0, false).labelKey,
+      runStatusView("cancelled", 0, false).labelKey,
+      runStatusView("idle", 0, true).labelKey,
+    ];
+    expect(labels.map((key) => translate(en, key))).toEqual([
+      "No analysis run yet",
+      "Running",
+      "Run failed",
+      "Run canceled",
+      "Results ready",
+    ]);
+  });
+});
+
+test.describe("beforeText", () => {
+  const fmtEn = (n: number) => formatKrwCompact(n, "en");
+  const fmtKo = (n: number) => formatKrwCompact(n, "ko");
+
+  test("returns the previous figure's text when it differs from the current one", () => {
+    expect(beforeText(9_640_000, 9_800_000, fmtEn)).toBe("KRW 9.64M");
+    expect(beforeText(9_640_000, 9_800_000, fmtKo)).toBe("964만원");
+  });
+
+  test("returns null when both figures format to the same text", () => {
+    expect(beforeText(9_640_000, 9_640_100, fmtEn)).toBeNull();
+  });
+
+  test("returns null when either side is missing or not finite", () => {
+    expect(beforeText(null, 9_800_000, fmtEn)).toBeNull();
+    expect(beforeText(undefined, 9_800_000, fmtEn)).toBeNull();
+    expect(beforeText(9_640_000, null, fmtEn)).toBeNull();
+    expect(beforeText(Number.NaN, 9_800_000, fmtEn)).toBeNull();
+    expect(beforeText(9_640_000, Number.POSITIVE_INFINITY, fmtEn)).toBeNull();
+  });
+});
+
+test.describe("layout tokens", () => {
+  test("the rail width and chart minimum height are the approved 320px and 200px", () => {
+    expect(tokens.component.rail.width).toBe("320px");
+    expect(tokens.component.chart["min-height"]).toBe("200px");
   });
 });

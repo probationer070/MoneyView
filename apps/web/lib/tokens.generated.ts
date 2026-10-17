@@ -133,6 +133,12 @@ export const tokens = {
     },
     "delta": {
       "glyph": "9px"
+    },
+    "rail": {
+      "width": "320px"
+    },
+    "chart": {
+      "min-height": "200px"
     }
   },
   "font": {

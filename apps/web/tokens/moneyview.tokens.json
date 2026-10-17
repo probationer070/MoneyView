@@ -125,7 +125,9 @@
     "button": { "height-sm": { "$value": "32px" }, "height-md": { "$value": "44px" } },
     "input": { "height": { "$value": "44px" } },
     "tick": { "size": { "$value": "8px", "$description": "Panel corner ticks." } },
-    "delta": { "glyph": { "$value": "9px", "$description": "▲▼■ inside a delta." } }
+    "delta": { "glyph": { "$value": "9px", "$description": "▲▼■ inside a delta." } },
+    "rail": { "width": { "$value": "320px", "$description": "Monte Carlo input rail (left column of each tab, lg and up)." } },
+    "chart": { "min-height": { "$value": "200px", "$description": "Smallest a Monte Carlo chart area may shrink." } }
   },
   "font": { "family": {
     "sans": { "$value": "var(--font-host-grotesk), var(--font-pretendard), system-ui, \"Malgun Gothic\", sans-serif", "$extensions": { "moneyview.theme": "--font-sans" } },

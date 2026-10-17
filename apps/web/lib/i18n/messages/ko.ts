@@ -66,6 +66,13 @@ export const ko: Messages = {
       valuation: "기업가치 평가",
       correlation: "상관관계 모형",
     },
+    status: {
+      empty: "아직 실행하지 않았습니다",
+      running: "실행 중",
+      failed: "실행 실패",
+      cancelled: "실행 취소됨",
+      ready: "결과 있음",
+    },
   },
   corporate: {
     title: "기업 분석",

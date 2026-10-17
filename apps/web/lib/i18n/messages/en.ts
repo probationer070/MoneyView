@@ -63,6 +63,13 @@ export const en = {
       valuation: "Corporate Valuation",
       correlation: "Correlation Model",
     },
+    status: {
+      empty: "No analysis run yet",
+      running: "Running",
+      failed: "Run failed",
+      cancelled: "Run canceled",
+      ready: "Results ready",
+    },
   },
   corporate: {
     title: "Corporate Analysis",
