@@ -57,7 +57,7 @@ Playwright is one run at a time on this PC (ports 3101/8110). Kill leftover node
   - `null`, `undefined`, `NaN`, `±Infinity` → `—` (`MISSING`).
   - Pinned strings: en `9_640_000` → `KRW 9.64M`, `950_000` → `KRW 950,000`, `-9_640_000` → `-KRW 9.64M`; ko `9_640_000` → `964만원`, `123_450_000` → `1억 2,345만원`, `100_000_000` → `1억원`, `9_500` → `9,500원`, `-9_640_000` → `-964만원`; common `NaN` → `—`.
 - **KRW axes:** en ticks are millions (`9.6`), ko ticks are 만원 (`964`). The axis title carries the unit: en "KRW M", ko "만원" (`monteCarlo.units.krwAxis`). Applies to the two path charts and the risk terminal-percentile chart. Chart data stays in won; only ticks and tooltips format it (shown value = used value).
-- `krw()` (per-share price, `KRW 50,000`) is unchanged in both locales (spec §3; see D8).
+- `krw()` (per-share price): en stays `KRW 50,000`. ko becomes `50,000원`. This is owner decision D8, 2026-10-17, and replaces spec §3's "unchanged". Task 8 implements it.
 - **Run status per tab:** idle without result → "No analysis run yet"; loading → "Running" + progress `45%`; error → "Run failed"; cancelled → "Run canceled"; idle with a result → "Results ready". Risk and distribution show the **path** run's status. Correlation has a run button only, no cancel, and never shows "Run canceled".
 - **Warnings and run errors** are banners under the result header on every tab. A banner with more than one warning starts collapsed (D9).
 - **Motion:** only the #71 pieces (`Tabs`, `ScanReveal`, `RollingNumber`, `BeforeAfter`, the CSS hover nudge). No hand-rolled animation. recharts keeps its default `isAnimationActive` ("auto"). Tests run with reduced motion; only `monte-carlo-motion.spec.ts` sets `test.use({ contextOptions: { reducedMotion: "no-preference" } })`.
