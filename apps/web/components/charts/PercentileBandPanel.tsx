@@ -37,6 +37,10 @@ interface PercentileBandPanelProps {
   height?: number;
   valueLabel?: string;
   valueFormatter?: (value: number) => string;
+  /** Y tick labels; absent, the ticks keep the plain number format. */
+  yTickFormatter?: (value: number) => string;
+  /** Unit title on the Y axis; absent, the axis has no title. */
+  yAxisLabel?: string;
   loading?: boolean;
   errorMessage?: string | null;
   staleLabel?: string;
@@ -52,6 +56,8 @@ export function PercentileBandPanel({
   height = 320,
   valueLabel = "Value",
   valueFormatter = (val) => fmtNum(val, 2),
+  yTickFormatter,
+  yAxisLabel,
   loading = false,
   errorMessage,
   staleLabel,
@@ -84,7 +90,8 @@ export function PercentileBandPanel({
                 tickLine={false}
               />
               <YAxis
-                tickFormatter={(val) => fmtPlain(Number(val))}
+                tickFormatter={yTickFormatter ?? ((val) => fmtPlain(Number(val)))}
+                label={yAxisLabel ? { value: yAxisLabel, angle: -90, position: "insideLeft", style: AXIS_TICK_STYLE } : undefined}
                 tick={AXIS_TICK_STYLE}
                 axisLine={AXIS_LINE_STYLE}
                 tickLine={false}

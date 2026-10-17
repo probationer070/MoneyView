@@ -51,6 +51,10 @@ export const en = {
   monteCarlo: {
     title: "Simulation Lab",
     subtitle: "Five-tab workflow for path simulation, risk analysis, return distribution, valuation uncertainty, and correlation structure.",
+    units: {
+      krwAxis: "KRW M",
+      terminalValue: "Terminal value",
+    },
     tabs: {
       path: "Path Simulation",
       pathDescription: "GBM + jump-diffusion path engine and percentile cone.",

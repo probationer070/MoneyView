@@ -5,10 +5,10 @@ import { Download } from "lucide-react";
 import { ReferenceLine } from "recharts";
 import { ActionButton } from "@/components/ui/ActionButton";
 import { CHART_COLORS } from "@/lib/chartConfig";
-import { formatNumber } from "@/lib/format";
-import { useLocale } from "@/lib/i18n/locale";
+import { useLocale, useT } from "@/lib/i18n/locale";
 import { MonteCarloTabSummary } from "./MonteCarloTabSummary";
-import { LegendItem, MetricCard, SummaryRow, TEN_THOUSAND_KRW, WarningNotice, krwLossFromPercent, numberText, pct } from "./shared";
+import { LegendItem, MetricCard, SummaryRow, WarningNotice, krwLossFromPercent, numberText, pct } from "./shared";
+import { formatKrwCompact, krwAxis } from "../lib/krwFormat";
 import { HistogramPanel, type HistogramBin } from "@/components/charts/HistogramPanel";
 import { PercentileBandPanel } from "@/components/charts/PercentileBandPanel";
 
@@ -22,6 +22,7 @@ type Props = {
 
 export function RiskAnalysisSection({ sharedSimulation, initialInvestment, warnings, exportRiskSummaryCsv, exportRiskHistogramCsv }: Props) {
   const { locale } = useLocale();
+  const t = useT();
 
   if (!sharedSimulation) {
     return (
@@ -71,7 +72,7 @@ export function RiskAnalysisSection({ sharedSimulation, initialInvestment, warni
       {/* Top-line downside and distribution-shape metrics */}
       <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
         <MetricCard label="VaR 95%" value={krwLossFromPercent(initialInvestment, sharedSimulation.raw.risk_metrics.var95, locale)} detail={`Loss threshold at ${pct(sharedSimulation.raw.risk_metrics.var95, locale)}`} />
-        <MetricCard label="VaR 99%" value={krwLossFromPercent(initialInvestment, sharedSimulation.raw.risk_metrics.var99, locale)} detail={`Loss threshold at ${pct(sharedSimulation.raw.risk_metrics.var99, locale)} in 10,000 KRW`} />
+        <MetricCard label="VaR 99%" value={krwLossFromPercent(initialInvestment, sharedSimulation.raw.risk_metrics.var99, locale)} detail={`Loss threshold at ${pct(sharedSimulation.raw.risk_metrics.var99, locale)}`} />
         <MetricCard label="CVaR 95%" value={krwLossFromPercent(initialInvestment, sharedSimulation.raw.risk_metrics.cvar95, locale)} detail="Expected tail loss beyond VaR 95%" />
         <MetricCard label="Maximum drawdown" value={pct(sharedSimulation.medianMaxDrawdown, locale)} detail="Largest peak-to-trough decline of the median path" />
         <MetricCard label="Sortino ratio" value={numberText(sharedSimulation.raw.risk_metrics.sortino_ratio, locale)} detail="Downside-risk-adjusted return" />
@@ -104,15 +105,15 @@ export function RiskAnalysisSection({ sharedSimulation, initialInvestment, warni
       <section className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <PercentileBandPanel
           title="Terminal Value Percentiles"
-          description="Each percentile is shown as its own terminal-value bar in 10,000 KRW units."
+          description="Each percentile is shown as its own terminal-value bar."
           data={[
-            { percentile: "P5", value: Number((sharedSimulation.terminalP05 / TEN_THOUSAND_KRW).toFixed(2)) },
-            { percentile: "P10", value: Number((sharedSimulation.terminalP10 / TEN_THOUSAND_KRW).toFixed(2)) },
-            { percentile: "P25", value: Number((sharedSimulation.terminalP25 / TEN_THOUSAND_KRW).toFixed(2)) },
-            { percentile: "P50", value: Number((sharedSimulation.terminalMedian / TEN_THOUSAND_KRW).toFixed(2)) },
-            { percentile: "P75", value: Number((sharedSimulation.terminalP75 / TEN_THOUSAND_KRW).toFixed(2)) },
-            { percentile: "P90", value: Number((sharedSimulation.terminalP90 / TEN_THOUSAND_KRW).toFixed(2)) },
-            { percentile: "P95", value: Number((sharedSimulation.terminalP95 / TEN_THOUSAND_KRW).toFixed(2)) },
+            { percentile: "P5", value: sharedSimulation.terminalP05 },
+            { percentile: "P10", value: sharedSimulation.terminalP10 },
+            { percentile: "P25", value: sharedSimulation.terminalP25 },
+            { percentile: "P50", value: sharedSimulation.terminalMedian },
+            { percentile: "P75", value: sharedSimulation.terminalP75 },
+            { percentile: "P90", value: sharedSimulation.terminalP90 },
+            { percentile: "P95", value: sharedSimulation.terminalP95 },
           ].map((d, i) => ({
             ...d,
             // Tails in down (lower) and up (upper), the median in ink, the interior in chart-1.
@@ -126,8 +127,10 @@ export function RiskAnalysisSection({ sharedSimulation, initialInvestment, warni
               CHART_COLORS.positive,
             ][i],
           }))}
-          valueLabel="M KRW"
-          valueFormatter={(val) => formatNumber(val, "price", { locale })}
+          valueLabel={t("monteCarlo.units.terminalValue")}
+          valueFormatter={(val) => formatKrwCompact(val, locale)}
+          yTickFormatter={krwAxis(locale).tick}
+          yAxisLabel={t(krwAxis(locale).unitKey)}
           emptyTitle="Terminal percentile data is invalid"
           emptyDescription="The shared simulation result did not contain chart-safe terminal percentile values."
         />

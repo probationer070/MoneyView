@@ -4,18 +4,14 @@ import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { fieldInputClass } from "@/components/ui/InlineField";
 import { formatNumber, type FormatLocale } from "@/lib/format";
 import clsx from "clsx";
+import { formatKrwCompact } from "../lib/krwFormat";
 
 // Shared chart constants and formatter helpers used across all Monte Carlo sections.
 export const CHART_INITIAL_DIMENSION = { width: 720, height: 320 };
-export const TEN_THOUSAND_KRW = 10_000;
 
 // Percent arguments are in percent units (8.5 means 8.5%), so they are divided by 100 for formatNumber.
 export function pct(value: number, locale: FormatLocale) {
   return formatNumber(value / 100, "percent", { digits: 2, locale });
-}
-
-export function krwTenThousands(value: number, locale: FormatLocale) {
-  return `${formatNumber(value / TEN_THOUSAND_KRW, "integer", { locale })} M KRW`;
 }
 
 export function numberText(value: number, locale: FormatLocale) {
@@ -23,7 +19,7 @@ export function numberText(value: number, locale: FormatLocale) {
 }
 
 export function krwLossFromPercent(principal: number, lossPercent: number, locale: FormatLocale) {
-  return krwTenThousands(principal * (lossPercent / 100), locale);
+  return formatKrwCompact(principal * (lossPercent / 100), locale);
 }
 
 export function krw(value: number, locale: FormatLocale) {

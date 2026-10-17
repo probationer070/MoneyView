@@ -28,3 +28,30 @@ test.describe("risk charts draw", () => {
     await expect.poll(async () => (await barHeights(percentiles)).filter((h) => h > 0).length).toBe(7);
   });
 });
+
+test.describe("KRW amounts after a path run", () => {
+  test("en: the median reads KRW 9.64M and the path chart's Y axis is labelled KRW M", async ({ page }) => {
+    await installMonteCarloWorker(page);
+    await page.goto("/monte-carlo", { waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("heading", { name: /Simulation Lab/i })).toBeVisible({ timeout: 60_000 });
+    await page.getByRole("button", { name: "Run Path Simulation" }).click();
+
+    await expect(page.getByText("KRW 9.64M").first()).toBeVisible();
+    await expect(panelOf(page, "GBM + Jump-Diffusion Simulated Paths").getByText("KRW M", { exact: true })).toBeVisible();
+    await expect(page.getByText("964 M KRW")).toHaveCount(0);
+  });
+
+  test.describe("ko", () => {
+    test.use({ locale: "ko-KR" });
+
+    test("ko: the median reads 964만원 and the path chart's Y axis is labelled 만원", async ({ page }) => {
+      await installMonteCarloWorker(page);
+      await page.goto("/monte-carlo", { waitUntil: "domcontentloaded" });
+      await expect(page.getByRole("heading", { name: "시뮬레이션 랩", exact: true })).toBeVisible({ timeout: 60_000 });
+      await page.getByRole("button", { name: "Run Path Simulation" }).click();
+
+      await expect(page.getByText("964만원").first()).toBeVisible();
+      await expect(panelOf(page, "GBM + Jump-Diffusion Simulated Paths").getByText("만원", { exact: true })).toBeVisible();
+    });
+  });
+});

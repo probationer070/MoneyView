@@ -54,6 +54,10 @@ export const ko: Messages = {
   monteCarlo: {
     title: "시뮬레이션 랩",
     subtitle: "경로 시뮬레이션, 위험 분석, 수익률 분포, 기업가치 불확실성, 상관관계 구조를 다루는 다섯 탭 작업 흐름입니다.",
+    units: {
+      krwAxis: "만원",
+      terminalValue: "만기 가치",
+    },
     tabs: {
       path: "경로 시뮬레이션",
       pathDescription: "GBM과 점프 확산 경로 엔진, 백분위 원뿔",

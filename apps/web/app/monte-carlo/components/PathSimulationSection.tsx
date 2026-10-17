@@ -16,20 +16,19 @@ import {
   fmtYearsTick,
 } from "@/lib/chartConfig";
 import { formatNumber } from "@/lib/format";
-import { useLocale } from "@/lib/i18n/locale";
+import { useLocale, useT } from "@/lib/i18n/locale";
 import { tokens } from "@/lib/tokens.generated";
 import { MonteCarloRunPanel } from "./MonteCarloRunPanel";
 import { MonteCarloTabSummary } from "./MonteCarloTabSummary";
 import { ChartGuard } from "./ChartGuard";
+import { formatKrwCompact, krwAxis } from "../lib/krwFormat";
 import {
   LegendItem,
   MetricCard,
   NumericField,
   PercentileIndicator,
   SelectField,
-  TEN_THOUSAND_KRW,
   WarningNotice,
-  krwTenThousands,
   numberText,
   pct,
 } from "./shared";
@@ -68,6 +67,7 @@ export function PathSimulationSection({
   exportTerminalDistributionCsv,
 }: Props) {
   const { locale } = useLocale();
+  const t = useT();
   // Each band is a stacked area: an invisible floor (the lower percentile) plus the band's width.
   const coneData = useMemo(() => (sharedSimulation?.pathSummary ?? []).map((row) => ({
     ...row,
@@ -171,7 +171,7 @@ export function PathSimulationSection({
             { label: "Execution mode", value: sharedSimulation?.raw.execution_mode ?? input.executionMode },
             { label: "Horizon", value: `${input.investmentHorizonYears} years` },
             { label: "Simulations", value: formatNumber(input.simulationCount, "integer", { locale }) },
-            { label: "Median terminal", value: krwTenThousands(sharedSimulation?.terminalMedian ?? input.initialInvestment, locale) },
+            { label: "Median terminal", value: formatKrwCompact(sharedSimulation?.terminalMedian ?? input.initialInvestment, locale) },
           ]}
           actions={sharedSimulation ? (
             <>
@@ -187,17 +187,17 @@ export function PathSimulationSection({
       <WarningNotice warnings={warnings} title="Path output normalization warnings" />
 
       <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard label="Median terminal value" value={krwTenThousands(sharedSimulation?.terminalMedian ?? input.initialInvestment, locale)} detail="50th percentile ending value in 10,000 KRW units" />
+        <MetricCard label="Median terminal value" value={formatKrwCompact(sharedSimulation?.terminalMedian ?? input.initialInvestment, locale)} detail="50th percentile ending value" />
         <MetricCard label="Expected return" value={pct(sharedSimulation?.medianExpectedReturn ?? 0, locale)} detail="Computed from the median terminal value relative to principal" />
         <MetricCard label="Loss probability" value={pct(sharedSimulation?.raw.risk_metrics.loss_probability ?? 0, locale)} detail="Probability terminal value ends below principal" />
         <MetricCard label="Sharpe ratio" value={numberText(sharedSimulation?.raw.risk_metrics.sharpe_ratio ?? 0, locale)} detail={`Annualized Sharpe with rf = ${pct(input.riskFreeRate, locale)}`} />
       </section>
 
       <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <PercentileIndicator label="5%-95%" value={`${krwTenThousands(sharedSimulation?.terminalP05 ?? input.initialInvestment, locale)} - ${krwTenThousands(sharedSimulation?.terminalP95 ?? input.initialInvestment, locale)}`} colorClass="bg-[var(--chart-1)]" swatchOpacity={bandOpacity(1)} description="The widest displayed confidence interval. About 90% of simulated terminal outcomes fall between the 5th and 95th percentiles." />
-        <PercentileIndicator label="10%-90%" value={`${krwTenThousands(sharedSimulation?.terminalP10 ?? input.initialInvestment, locale)} - ${krwTenThousands(sharedSimulation?.terminalP90 ?? input.initialInvestment, locale)}`} colorClass="bg-[var(--chart-1)]" swatchOpacity={bandOpacity(2)} description="A slightly tighter confidence interval. About 80% of simulated terminal outcomes fall between the 10th and 90th percentiles." />
-        <PercentileIndicator label="25%-75%" value={`${krwTenThousands(sharedSimulation?.terminalP25 ?? input.initialInvestment, locale)} - ${krwTenThousands(sharedSimulation?.terminalP75 ?? input.initialInvestment, locale)}`} colorClass="bg-[var(--chart-1)]" swatchOpacity={bandOpacity(3)} description="The interquartile range. It captures the middle 50% of simulated outcomes and shows the most typical dispersion." />
-        <PercentileIndicator label="Median" value={krwTenThousands(sharedSimulation?.terminalMedian ?? input.initialInvestment, locale)} colorClass="bg-[var(--ink)]" description="The 50th percentile terminal value. Half of simulations finish above this value and half finish below it." />
+        <PercentileIndicator label="5%-95%" value={`${formatKrwCompact(sharedSimulation?.terminalP05 ?? input.initialInvestment, locale)} - ${formatKrwCompact(sharedSimulation?.terminalP95 ?? input.initialInvestment, locale)}`} colorClass="bg-[var(--chart-1)]" swatchOpacity={bandOpacity(1)} description="The widest displayed confidence interval. About 90% of simulated terminal outcomes fall between the 5th and 95th percentiles." />
+        <PercentileIndicator label="10%-90%" value={`${formatKrwCompact(sharedSimulation?.terminalP10 ?? input.initialInvestment, locale)} - ${formatKrwCompact(sharedSimulation?.terminalP90 ?? input.initialInvestment, locale)}`} colorClass="bg-[var(--chart-1)]" swatchOpacity={bandOpacity(2)} description="A slightly tighter confidence interval. About 80% of simulated terminal outcomes fall between the 10th and 90th percentiles." />
+        <PercentileIndicator label="25%-75%" value={`${formatKrwCompact(sharedSimulation?.terminalP25 ?? input.initialInvestment, locale)} - ${formatKrwCompact(sharedSimulation?.terminalP75 ?? input.initialInvestment, locale)}`} colorClass="bg-[var(--chart-1)]" swatchOpacity={bandOpacity(3)} description="The interquartile range. It captures the middle 50% of simulated outcomes and shows the most typical dispersion." />
+        <PercentileIndicator label="Median" value={formatKrwCompact(sharedSimulation?.terminalMedian ?? input.initialInvestment, locale)} colorClass="bg-[var(--ink)]" description="The 50th percentile terminal value. Half of simulations finish above this value and half finish below it." />
       </section>
 
       {/* Primary visual outputs: sampled paths and percentile cone */}
@@ -222,8 +222,8 @@ export function PathSimulationSection({
           <LineChart data={sharedSimulation?.pathChartData ?? []} margin={CHART_MARGIN}>
             <CartesianGrid {...GRID_STYLE} />
             <XAxis dataKey="time" type="number" domain={[0, input.investmentHorizonYears]} ticks={yearlyTicks} tickFormatter={fmtYearsTick} tick={AXIS_TICK_STYLE} axisLine={AXIS_LINE_STYLE} tickLine={false} />
-            <YAxis tickFormatter={(value) => formatNumber(Math.round(value / TEN_THOUSAND_KRW), "integer", { locale })} tick={AXIS_TICK_STYLE} axisLine={AXIS_LINE_STYLE} tickLine={false} />
-            <Tooltip {...DEFAULT_TOOLTIP_PROPS} formatter={(value) => krwTenThousands(Number(value ?? 0), locale)} labelFormatter={(label) => `${label} years`} />
+            <YAxis tickFormatter={krwAxis(locale).tick} label={{ value: t(krwAxis(locale).unitKey), angle: -90, position: "insideLeft", style: AXIS_TICK_STYLE }} tick={AXIS_TICK_STYLE} axisLine={AXIS_LINE_STYLE} tickLine={false} />
+            <Tooltip {...DEFAULT_TOOLTIP_PROPS} formatter={(value) => formatKrwCompact(Number(value ?? 0), locale)} labelFormatter={(label) => `${label} years`} />
             {/* One colour for every sampled path: a per-index palette would make the paths look like categories. */}
             {sharedSimulation?.pathKeys.map((key) => (
               <Line key={key} dataKey={key} stroke={CHART_COLORS.primary} strokeOpacity={0.5} dot={false} />
@@ -254,8 +254,8 @@ export function PathSimulationSection({
           <AreaChart data={coneData} margin={CHART_MARGIN}>
             <CartesianGrid {...GRID_STYLE} />
             <XAxis dataKey="time" type="number" domain={[0, input.investmentHorizonYears]} ticks={yearlyTicks} tickFormatter={fmtYearsTick} tick={AXIS_TICK_STYLE} axisLine={AXIS_LINE_STYLE} tickLine={false} />
-            <YAxis tickFormatter={(value) => formatNumber(Math.round(value / TEN_THOUSAND_KRW), "integer", { locale })} tick={AXIS_TICK_STYLE} axisLine={AXIS_LINE_STYLE} tickLine={false} />
-            <Tooltip {...DEFAULT_TOOLTIP_PROPS} formatter={(value) => krwTenThousands(Number(value ?? 0), locale)} labelFormatter={(label) => `${label} years`} />
+            <YAxis tickFormatter={krwAxis(locale).tick} label={{ value: t(krwAxis(locale).unitKey), angle: -90, position: "insideLeft", style: AXIS_TICK_STYLE }} tick={AXIS_TICK_STYLE} axisLine={AXIS_LINE_STYLE} tickLine={false} />
+            <Tooltip {...DEFAULT_TOOLTIP_PROPS} formatter={(value) => formatKrwCompact(Number(value ?? 0), locale)} labelFormatter={(label) => `${label} years`} />
             {/* Bands: chart-1 at the chart area opacity, nested 5-95, 10-90 and 25-75. The floors are invisible. */}
             <Area type="monotone" dataKey="floor95" stackId="band95" stroke="none" fill="none" tooltipType="none" legendType="none" />
             <Area type="monotone" dataKey="width95" stackId="band95" stroke="none" fill={CHART_COLORS.primary} fillOpacity={Number(tokens.chart["area-opacity"])} tooltipType="none" legendType="none" />
@@ -279,7 +279,7 @@ export function PathSimulationSection({
       <section className="border border-[var(--line)] bg-[var(--surface-raised)] p-5">
         <h2 className="type-panel-title text-[var(--ink)]">Simulation Setup</h2>
         <div className="mt-3 grid grid-cols-1 gap-2 type-body text-[var(--ink-muted)] md:grid-cols-2 xl:grid-cols-4">
-          <div>Principal: {krwTenThousands(input.initialInvestment, locale)}</div>
+          <div>Principal: {formatKrwCompact(input.initialInvestment, locale)}</div>
           <div>Annual return: {pct(input.expectedAnnualReturn, locale)}</div>
           <div>Annual volatility: {pct(input.annualVolatility, locale)}</div>
           <div>Horizon: {input.investmentHorizonYears} years</div>
