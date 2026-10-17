@@ -106,9 +106,8 @@ test.describe("superseded run", () => {
 
     await page.getByRole("tab", { name: /Correlation Model/i }).click();
     await page.getByRole("button", { name: "Run Correlation Analysis" }).click();
-    const correlationPanel = page.getByRole("tabpanel");
-    await expect(correlationPanel.getByText("Running correlation analysis")).toBeVisible();
-    await expect(correlationPanel.getByText("Worker progress")).toBeVisible();
+    await expect(page.getByTestId("mc-status")).toHaveAttribute("data-state", "running");
+    await expect(page.getByTestId("mc-status-progress")).toBeVisible();
     await expect(page.getByRole("button", { name: "Run Correlation Analysis" })).toBeDisabled();
 
     await page.getByRole("tab", { name: /Corporate Valuation/i }).click();
@@ -128,7 +127,7 @@ test.describe("superseded run", () => {
     await expect(page.getByRole("heading", { name: /Simulation Lab/i })).toBeVisible({ timeout: 60_000 });
     await page.getByRole("tab", { name: /Correlation Model/i }).click();
     await page.getByRole("button", { name: "Run Correlation Analysis" }).click();
-    await expect(page.getByText("Worker progress")).toBeVisible();
+    await expect(page.getByTestId("mc-status-progress")).toBeVisible();
 
     await page.getByRole("tab", { name: /Path Simulation/i }).click();
     await page.getByRole("button", { name: "Run Path Simulation" }).click();
@@ -141,7 +140,7 @@ test.describe("superseded run", () => {
     const correlationPanel = page.getByRole("tabpanel");
     await expect(correlationPanel.getByText("No analysis run yet")).toBeVisible();
     await expect(correlationPanel.getByText("Run canceled")).toHaveCount(0);
-    await expect(correlationPanel.getByText("Worker progress")).toHaveCount(0);
+    await expect(page.getByTestId("mc-status-progress")).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Run Correlation Analysis" })).toBeEnabled();
 
     await releaseHeld(page, 2);
@@ -668,6 +667,134 @@ test.describe("valuation", () => {
     // Precondition: the 11 fields do not fit, so there is something to scroll.
     expect(await inputs.evaluate((node) => node.scrollHeight > node.clientHeight)).toBe(true);
     const run = page.getByTestId("mc-run-valuation");
+    const before = await run.boundingBox();
+    await inputs.evaluate((node) => { node.scrollTop = node.scrollHeight; });
+    expect(await inputs.evaluate((node) => node.scrollTop)).toBeGreaterThan(0);
+    expect(await run.boundingBox()).toEqual(before);
+    expect(before!.y + before!.height).toBeLessThanOrEqual(720);
+  });
+});
+
+test.describe("correlation", () => {
+  test.use({ viewport: { width: 1280, height: 720 } });
+
+  async function openCorrelation(page: Page, options?: Parameters<typeof installMonteCarloWorker>[1]): Promise<void> {
+    await installMonteCarloWorker(page, options);
+    await page.goto("/monte-carlo", { waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("heading", { name: /Simulation Lab/i })).toBeVisible({ timeout: 60_000 });
+    await page.getByRole("tab", { name: /Correlation Model/i }).click();
+    await expect(page.getByRole("button", { name: "Run Correlation Analysis" })).toBeVisible();
+  }
+
+  test("the matrix fits the 320px rail: no value is clipped by its input or cell", async ({ page }) => {
+    await openCorrelation(page);
+    const matrix = page.getByTestId("mc-correlation-matrix");
+    // Upper triangle of a 4x4 matrix: six editable cells. Each value is measured as text against its own padding box.
+    const inputs = await matrix.locator("input").evaluateAll((nodes) => nodes.map((node) => {
+      const input = node as HTMLInputElement;
+      const style = getComputedStyle(input);
+      const probe = document.createElement("span");
+      probe.style.cssText = `position:absolute;visibility:hidden;white-space:pre;font-family:${style.fontFamily};font-size:${style.fontSize};font-weight:${style.fontWeight};letter-spacing:${style.letterSpacing}`;
+      probe.textContent = input.value;
+      document.body.appendChild(probe);
+      const textWidth = probe.getBoundingClientRect().width;
+      probe.remove();
+      const available = input.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+      return { value: input.value, textWidth, available };
+    }));
+    expect(inputs).toHaveLength(6);
+    for (const input of inputs) expect(input.textWidth, `input ${input.value}`).toBeLessThanOrEqual(input.available + 0.5);
+
+    // The read-only cells (diagonal and lower triangle) must not overflow either.
+    const cells = await matrix.locator("td:not(:has(input))").evaluateAll((nodes) => nodes.map((node) => ({
+      text: node.textContent ?? "",
+      scroll: node.scrollWidth,
+      client: node.clientWidth,
+    })));
+    expect(cells.length).toBeGreaterThan(0);
+    for (const cell of cells) expect(cell.scroll, `cell ${cell.text}`).toBeLessThanOrEqual(cell.client + 1);
+
+    // Last, so a narrower rail shows its clipped values first and the width is pinned after them.
+    const rail = (await page.getByTestId("mc-rail").boundingBox())!;
+    expect(rail.width).toBeCloseTo(320, 0);
+  });
+
+  test("the rail has no Cancel: its only action is Run Correlation Analysis, and the tab never shows Run canceled", async ({ page }) => {
+    await openCorrelation(page, { hold: true });
+    const rail = page.getByTestId("mc-rail");
+    await expect(rail.getByRole("button", { name: /cancel/i })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /cancel/i })).toHaveCount(0);
+    await expect(rail.getByRole("button", { name: "Run Correlation Analysis" })).toHaveCount(1);
+    await page.getByRole("button", { name: "Run Correlation Analysis" }).click();
+    await expect(page.getByTestId("mc-status")).toHaveAttribute("data-state", "running");
+    await expect(page.getByTestId("mc-status")).not.toHaveText("Run canceled");
+    await page.evaluate(() => (window as unknown as { __mcRelease: () => void }).__mcRelease());
+    await expect(page.getByTestId("mc-status")).toHaveAttribute("data-state", "ready");
+  });
+
+  test("the detail toggle switches between the Spearman chart and the heatmap", async ({ page }) => {
+    await openCorrelation(page);
+    await page.getByRole("button", { name: "Run Correlation Analysis" }).click();
+    await expect(page.getByTestId("mc-status")).toHaveAttribute("data-state", "ready");
+
+    const group = page.getByRole("group", { name: "Correlation detail" });
+    await expect(group.getByRole("button", { name: "Spearman rho" })).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByRole("heading", { name: "Spearman rho Sensitivity" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Correlation Coefficient Heatmap" })).toHaveCount(0);
+
+    await group.getByRole("button", { name: "Heatmap" }).click();
+    await expect(group.getByRole("button", { name: "Heatmap" })).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByRole("heading", { name: "Correlation Coefficient Heatmap" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Spearman rho Sensitivity" })).toHaveCount(0);
+
+    await group.getByRole("button", { name: "Spearman rho" }).click();
+    await expect(page.getByRole("heading", { name: "Spearman rho Sensitivity" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Correlation Coefficient Heatmap" })).toHaveCount(0);
+  });
+
+  test("each export item downloads its file; the menu is disabled before a run", async ({ page }) => {
+    await openCorrelation(page);
+    await expect(page.getByTestId("mc-export")).toBeDisabled();
+    await page.getByRole("button", { name: "Run Correlation Analysis" }).click();
+    await expect(page.getByTestId("mc-status")).toHaveAttribute("data-state", "ready");
+    const files = { frontier: "correlation_frontier.csv", sensitivity: "correlation_sensitivity.csv", heatmap: "correlation_heatmap.csv" };
+    for (const [key, file] of Object.entries(files)) {
+      await page.getByTestId("mc-export").click();
+      const [download] = await Promise.all([page.waitForEvent("download"), page.getByTestId(`mc-export-${key}`).click()]);
+      expect(download.suggestedFilename()).toBe(file);
+    }
+  });
+
+  test("at 1280x720 after a run, the header and both chart frames end inside the panel, and the frontier is at least 200px tall", async ({ page }) => {
+    await openCorrelation(page);
+    // Same one-screen padding as the path fit test, until /monte-carlo joins ONE_SCREEN_ROUTES (Task 10).
+    await page.addStyleTag({ content: "main { --main-pad-bottom: 1.5rem !important; }" });
+    await page.getByRole("button", { name: "Run Correlation Analysis" }).click();
+    await expect(page.getByTestId("mc-status")).toHaveAttribute("data-state", "ready");
+
+    const panel = (await page.getByTestId("mc-panel").boundingBox())!;
+    const header = (await page.getByTestId("mc-result-header").boundingBox())!;
+    expect(header.y + header.height).toBeLessThanOrEqual(panel.y + panel.height + 1);
+    for (const title of ["Efficient Frontier", "Spearman rho Sensitivity"]) {
+      const frame = (await panelOf(page, title).boundingBox())!;
+      expect(frame.y + frame.height, `${title} ends inside the panel`).toBeLessThanOrEqual(panel.y + panel.height + 1);
+    }
+    const surface = await panelOf(page, "Efficient Frontier").locator(".recharts-surface").first().boundingBox();
+    expect(surface!.height).toBeGreaterThanOrEqual(200);
+    const toggle = (await page.getByRole("group", { name: "Correlation detail" }).boundingBox())!;
+    expect(toggle.y + toggle.height).toBeLessThanOrEqual(panel.y + panel.height + 1);
+
+    await page.getByRole("group", { name: "Correlation detail" }).getByRole("button", { name: "Heatmap" }).click();
+    const heatmap = (await panelOf(page, "Correlation Coefficient Heatmap").boundingBox())!;
+    expect(heatmap.y + heatmap.height, "the heatmap ends inside the panel").toBeLessThanOrEqual(panel.y + panel.height + 1);
+  });
+
+  test("Run Correlation Analysis stays where it is while the rail scrolls", async ({ page }) => {
+    await openCorrelation(page);
+    const inputs = page.getByTestId("mc-rail-inputs");
+    // Precondition: the asset table, matrix and slider do not fit, so there is something to scroll.
+    expect(await inputs.evaluate((node) => node.scrollHeight > node.clientHeight)).toBe(true);
+    const run = page.getByTestId("mc-run-correlation");
     const before = await run.boundingBox();
     await inputs.evaluate((node) => { node.scrollTop = node.scrollHeight; });
     expect(await inputs.evaluate((node) => node.scrollTop)).toBeGreaterThan(0);

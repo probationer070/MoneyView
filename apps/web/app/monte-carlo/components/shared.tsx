@@ -89,16 +89,6 @@ export function SelectField({
   );
 }
 
-export function MetricCard({ label, value, detail }: { label: string; value: string; detail: string }) {
-  return (
-    <div className="border border-[var(--line)] bg-[var(--surface-raised)] p-4">
-      <div className="type-caption uppercase text-[var(--ink-muted)]">{label}</div>
-      <div className="mt-2 type-figure-md text-[var(--ink)]">{value}</div>
-      <div className="mt-1 type-small text-[var(--ink-muted)]">{detail}</div>
-    </div>
-  );
-}
-
 export function LegendItem({
   label,
   colorClass,
@@ -127,23 +117,3 @@ export function SummaryRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-export function WarningNotice({
-  warnings,
-  title = "Recovered data warnings",
-}: {
-  warnings: string[];
-  title?: string;
-}) {
-  if (warnings.length === 0) return null;
-
-  return (
-    <div className="border border-[var(--status-warning-border)] bg-[var(--status-warning-surface)] p-4 type-body text-[var(--status-warning-ink)]">
-      <div className="type-label">{title}</div>
-      <ul className="mt-2 list-disc space-y-1 pl-5">
-        {warnings.map((warning) => (
-          <li key={warning}>{warning}</li>
-        ))}
-      </ul>
-    </div>
-  );
-}

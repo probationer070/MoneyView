@@ -1,11 +1,12 @@
 "use client";
 
 import type { CorrelationInput, CorrelationResult } from "../lib/types";
-import { Download, Loader2, Play } from "lucide-react";
+import { useState } from "react";
 import { Bar, BarChart, CartesianGrid, Cell, Scatter, ScatterChart, Tooltip, XAxis, YAxis, ZAxis } from "recharts";
-import { ActionButton } from "@/components/ui/ActionButton";
 import { BilingualLabel } from "@/components/ui/BilingualLabel";
 import { fieldInputClass } from "@/components/ui/InlineField";
+import { ToggleGroup } from "@/components/ui/ToggleGroup";
+import { HeatmapPanel } from "@/components/charts/HeatmapPanel";
 import {
   AXIS_LINE_STYLE,
   AXIS_TICK_STYLE,
@@ -17,12 +18,15 @@ import {
   withTooltipProps,
 } from "@/lib/chartConfig";
 import { formatNumber } from "@/lib/format";
-import { useLocale } from "@/lib/i18n/locale";
-import { MetricCard, WarningNotice, numberText, pct } from "./shared";
-import { MonteCarloRunPanel } from "./MonteCarloRunPanel";
-import { MonteCarloTabSummary } from "./MonteCarloTabSummary";
-import { HeatmapPanel } from "@/components/charts/HeatmapPanel";
+import { useLocale, useT } from "@/lib/i18n/locale";
+import { runStatusView } from "../lib/resultModel";
 import { ChartGuard } from "./ChartGuard";
+import { ResultHeader, type ResultFigure } from "./ResultHeader";
+import { RunButton } from "./RunButton";
+import { RunNotice } from "./RunNotice";
+import { SimulationRail } from "./SimulationRail";
+import { WarningBanner } from "./WarningBanner";
+import { numberText, pct } from "./shared";
 
 type Props = {
   correlationInput: CorrelationInput;
@@ -39,6 +43,11 @@ type Props = {
   exportCorrelationSensitivityCsv: () => void;
 };
 
+type DetailView = "sensitivity" | "heatmap";
+
+// Narrow cell input: the 320px rail leaves about 52px per matrix cell, so the field drops the wide label padding.
+const matrixInputClass = "type-mono h-[var(--component-input-height)] w-full min-w-0 rounded-[var(--radius-1)] border border-[var(--line-strong)] bg-[var(--surface-sunken)] px-1 text-center text-[var(--ink)] focus:border-[var(--brand)]";
+
 export function CorrelationModelSection({
   correlationInput,
   correlationResult,
@@ -54,206 +63,205 @@ export function CorrelationModelSection({
   exportCorrelationSensitivityCsv,
 }: Props) {
   const { locale } = useLocale();
-  const summaryStatus = correlationStatus === "loading"
-    ? "in-progress"
-    : correlationStatus === "error"
-      ? "error"
-      : correlationStatus === "cancelled"
-        ? "canceled"
-        : correlationResult
-          ? "live"
-          : "idle";
-  const summaryLabel = correlationStatus === "loading"
-    ? "Running correlation analysis"
-    : correlationStatus === "error"
-      ? "Run failed"
-      : correlationStatus === "cancelled"
-        ? "Run canceled"
-        : correlationResult
-          ? "Results ready"
-          : "No analysis run yet";
+  const t = useT();
+  const [view, setView] = useState<DetailView>("sensitivity");
+  // Correlation has a run action and no cancel: a superseding run returns this tab to idle, never "canceled".
+  const running = correlationStatus === "loading";
+  const summary = correlationResult?.optimal_summary;
+  const frontier = correlationResult?.efficient_frontier ?? [];
+  const sensitivity = correlationResult?.spearman_sensitivity ?? [];
+  const heatmap = correlationResult?.heatmap ?? [];
+  const assetNames = correlationResult?.assets ?? [];
+
+  const figures: ResultFigure[] = [
+    { key: "optimalMu", label: t("monteCarlo.correlation.figures.optimalMu"), value: summary?.optimal_return ?? null, format: (n) => pct(n, locale), hint: t("monteCarlo.correlation.hints.optimalMu") },
+    { key: "portfolioSigma", label: t("monteCarlo.correlation.figures.portfolioSigma"), value: summary?.optimal_volatility ?? null, format: (n) => pct(n, locale), hint: t("monteCarlo.correlation.hints.portfolioSigma") },
+    { key: "diversification", label: t("monteCarlo.correlation.figures.diversification"), value: summary?.diversification_effect ?? null, format: (n) => t("monteCarlo.correlation.pctPoint", { value: formatNumber(n, "ratio", { locale }) }), hint: t("monteCarlo.correlation.hints.diversification") },
+    { key: "optimalSharpe", label: t("monteCarlo.correlation.figures.optimalSharpe"), value: summary?.optimal_sharpe ?? null, format: (n) => numberText(n, locale), hint: t("monteCarlo.correlation.hints.optimalSharpe") },
+  ];
+
+  const heatmapState = !correlationResult ? "empty" : heatmap.length > 0 ? "ready" : "invalid";
 
   return (
-    <MonteCarloRunPanel
-      status={correlationStatus}
-      progress={correlationProgress}
-      progressLabel="Correlation worker progress"
-      errorFallbackMessage="Correlation engine failed."
-      cancelledMessage="Correlation simulation cancelled."
-      summary={(
-        <MonteCarloTabSummary
-          title="Correlation Model Summary"
-          description="This tab owns the multi-asset setup and run action. Correlation exports stay at this summary boundary before the frontier, heatmap, and sensitivity surfaces."
-          status={summaryStatus}
-          statusLabel={summaryLabel}
-          items={[
-            { label: "Assets", value: correlationInput.assets.length.toString() },
-            { label: "Simulations", value: formatNumber(correlationInput.simulationCount, "integer", { locale }) },
-            { label: "Optimal return", value: correlationResult ? pct(correlationResult.optimal_summary.optimal_return, locale) : "Pending" },
-            { label: "Optimal Sharpe", value: correlationResult ? numberText(correlationResult.optimal_summary.optimal_sharpe, locale) : "Pending" },
-          ]}
-          actions={correlationResult ? (
-            <>
-              <ActionButton label="Export Frontier CSV" size="sm" onClick={exportCorrelationFrontierCsv} icon={<Download className="h-4 w-4" />} />
-              <ActionButton label="Export Sensitivity CSV" size="sm" onClick={exportCorrelationSensitivityCsv} icon={<Download className="h-4 w-4" />} />
-              <ActionButton label="Export Heatmap CSV" size="sm" onClick={exportCorrelationHeatmapCsv} icon={<Download className="h-4 w-4" />} />
-            </>
-          ) : undefined}
-        />
-      )}
-    >
-      {/* Three-column layout: inputs, analysis visuals, portfolio metrics */}
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(340px,0.95fr)_minmax(0,1.45fr)_minmax(260px,0.8fr)]">
-        <aside className="space-y-6">
-          {/* Left panel: asset assumptions, correlation matrix, and run action */}
-          <section className="border border-[var(--line)] bg-[var(--surface-raised)] p-5">
-            <h2 className="type-panel-title text-[var(--ink)]">Multi-Asset Setup</h2>
-            <table className="mt-3 w-full table-fixed">
-              <colgroup>
-                <col className="w-[88px]" />
-                <col />
-                <col />
-              </colgroup>
-              <thead>
-                <tr className="text-left">
-                  <th scope="col" className="type-caption pb-2 pr-2 text-[var(--ink-muted)]"><BilingualLabel k="asset" /></th>
-                  <th scope="col" className="type-caption pb-2 pr-2 text-[var(--ink-muted)]"><BilingualLabel k="mu" /></th>
-                  <th scope="col" className="type-caption pb-2 text-[var(--ink-muted)]"><BilingualLabel k="sigma" /></th>
-                </tr>
-              </thead>
-              <tbody>
-                {correlationInput.assets.map((asset, assetIndex) => (
-                  <tr key={`setup-${assetIndex}`}>
-                    <td className="pb-3 pr-2 type-label text-[var(--ink)]">{asset.name}</td>
-                    <td className="pb-3 pr-2">
-                      <input type="number" value={asset.expectedReturn} onChange={(event) => updateCorrelationAsset(assetIndex, "expectedReturn", Number(event.target.value))} className={fieldInputClass} aria-label={`${asset.name} mu`} />
-                    </td>
-                    <td className="pb-3">
-                      <input type="number" value={asset.volatility} onChange={(event) => updateCorrelationAsset(assetIndex, "volatility", Number(event.target.value))} className={fieldInputClass} aria-label={`${asset.name} sigma`} />
-                    </td>
-                  </tr>
+    <div className="flex min-h-0 flex-1 flex-col gap-3 lg:flex-row">
+      <SimulationRail
+        actions={(
+          <RunButton label={t("monteCarlo.correlation.run")} onClick={runCorrelationSimulation} running={running} testId="mc-run-correlation" />
+        )}
+      >
+        <table className="w-full table-fixed">
+          <colgroup>
+            <col className="w-20" />
+            <col />
+            <col />
+          </colgroup>
+          <thead>
+            <tr className="text-left">
+              <th scope="col" className="type-caption pb-2 pr-2 text-[var(--ink-muted)]"><BilingualLabel k="asset" /></th>
+              <th scope="col" className="type-caption pb-2 pr-2 text-[var(--ink-muted)]"><BilingualLabel k="mu" /></th>
+              <th scope="col" className="type-caption pb-2 text-[var(--ink-muted)]"><BilingualLabel k="sigma" /></th>
+            </tr>
+          </thead>
+          <tbody>
+            {correlationInput.assets.map((asset, assetIndex) => (
+              <tr key={`setup-${assetIndex}`}>
+                <td className="pb-3 pr-2 type-label text-[var(--ink)]">{asset.name}</td>
+                <td className="pb-3 pr-2">
+                  <input type="number" value={asset.expectedReturn} onChange={(event) => updateCorrelationAsset(assetIndex, "expectedReturn", Number(event.target.value))} className={fieldInputClass} aria-label={t("monteCarlo.correlation.assetMu", { asset: asset.name })} />
+                </td>
+                <td className="pb-3">
+                  <input type="number" value={asset.volatility} onChange={(event) => updateCorrelationAsset(assetIndex, "volatility", Number(event.target.value))} className={fieldInputClass} aria-label={t("monteCarlo.correlation.assetSigma", { asset: asset.name })} />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        <div>
+          <h3 className="type-label text-[var(--ink)]">{t("monteCarlo.correlation.matrix")}</h3>
+          <table data-testid="mc-correlation-matrix" className="mt-2 w-full table-fixed border border-[var(--line)] bg-[var(--surface-raised)]">
+            <colgroup>
+              <col className="w-6" />
+            </colgroup>
+            <thead>
+              <tr className="bg-[var(--surface)]">
+                <th scope="col" className="p-1" />
+                {correlationInput.assets.map((asset) => (
+                  <th key={`matrix-head-${asset.name}`} scope="col" className="p-1 text-center type-label text-[var(--ink)]">
+                    {asset.name.replace("Asset ", "")}
+                  </th>
                 ))}
-              </tbody>
-            </table>
+              </tr>
+            </thead>
+            <tbody>
+              {correlationInput.assets.map((assetY, rowIndex) => (
+                <tr key={`matrix-row-${assetY.name}`} className="border-t border-[var(--line)]">
+                  <th scope="row" className="bg-[var(--surface)] p-1 text-center type-label text-[var(--ink)]">{assetY.name.replace("Asset ", "")}</th>
+                  {correlationInput.assets.map((assetX, columnIndex) => {
+                    const value = correlationInput.correlationMatrix[rowIndex][columnIndex];
+                    const key = `matrix-cell-${assetY.name}-${assetX.name}`;
+                    if (rowIndex === columnIndex) {
+                      return <td key={key} className="bg-[var(--surface)] p-1 text-center type-mono text-[var(--ink)]">1.00</td>;
+                    }
+                    if (rowIndex < columnIndex) {
+                      return (
+                        <td key={key} className="p-1">
+                          <input
+                            type="number"
+                            min={-1}
+                            max={1}
+                            step={0.05}
+                            value={value}
+                            aria-label={t("monteCarlo.correlation.cell", { row: assetY.name, column: assetX.name })}
+                            onChange={(event) => updateCorrelationCell(rowIndex, columnIndex, Number(event.target.value))}
+                            className={matrixInputClass}
+                          />
+                        </td>
+                      );
+                    }
+                    return <td key={key} className="bg-[var(--surface)] p-1 text-center type-mono text-[var(--ink)]">{formatNumber(value, "ratio", { locale })}</td>;
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
 
-            <div className="mt-6">
-              <h3 className="type-label text-[var(--ink)]">Correlation Matrix rho</h3>
-              <div className="mt-3 overflow-hidden border border-[var(--line)]">
-                <table className="w-full table-fixed">
-                  <thead>
-                    <tr className="bg-[var(--surface)] text-center">
-                      <th className="p-3" />
-                      {correlationInput.assets.map((asset) => (
-                        <th key={`matrix-head-${asset.name}`} className="p-3 type-label text-[var(--ink)]">
-                          {asset.name.replace("Asset ", "")}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {correlationInput.assets.map((assetY, rowIndex) => (
-                      <tr key={`matrix-row-${assetY.name}`} className="border-t border-[var(--line)]">
-                        <td className="p-3 text-center type-label text-[var(--ink)]">{assetY.name.replace("Asset ", "")}</td>
-                        {correlationInput.assets.map((assetX, columnIndex) => {
-                          const value = correlationInput.correlationMatrix[rowIndex][columnIndex];
-                          if (rowIndex === columnIndex) {
-                            return <td key={`matrix-cell-${assetY.name}-${assetX.name}`} className="bg-[var(--surface)] p-3 text-center type-mono text-[var(--ink)]">1.00</td>;
-                          }
-                          if (rowIndex < columnIndex) {
-                            return (
-                              <td key={`matrix-cell-${assetY.name}-${assetX.name}`} className="p-2">
-                                <input
-                                  type="number"
-                                  min={-1}
-                                  max={1}
-                                  step={0.05}
-                                  value={value}
-                                  onChange={(event) => updateCorrelationCell(rowIndex, columnIndex, Number(event.target.value))}
-                                  className={fieldInputClass}
-                                />
-                              </td>
-                            );
-                          }
-                          return <td key={`matrix-cell-${assetY.name}-${assetX.name}`} className="bg-[var(--surface)] p-3 text-center type-mono text-[var(--ink)]">{formatNumber(value, "ratio", { locale })}</td>;
-                        })}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+        <div className="space-y-2">
+          <div className="flex items-center justify-between type-label text-[var(--ink)]">
+            <span>{t("monteCarlo.correlation.simulations")}</span>
+            <span className="type-mono">{formatNumber(correlationInput.simulationCount, "integer", { locale })}</span>
+          </div>
+          <input
+            type="range"
+            min={500}
+            max={5000}
+            step={100}
+            value={correlationInput.simulationCount}
+            aria-label={t("monteCarlo.correlation.simulations")}
+            onChange={(event) => updateCorrelation("simulationCount", Number(event.target.value))}
+            className="w-full accent-[var(--brand)]"
+          />
+        </div>
+      </SimulationRail>
+
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-auto lg:overflow-visible">
+        <ResultHeader
+          status={runStatusView(correlationStatus, correlationProgress, correlationResult !== null)}
+          figures={figures}
+          exports={correlationResult ? [
+            { key: "frontier", label: t("monteCarlo.correlation.exports.frontier"), onSelect: exportCorrelationFrontierCsv },
+            { key: "sensitivity", label: t("monteCarlo.correlation.exports.sensitivity"), onSelect: exportCorrelationSensitivityCsv },
+            { key: "heatmap", label: t("monteCarlo.correlation.exports.heatmap"), onSelect: exportCorrelationHeatmapCsv },
+          ] : []}
+        />
+
+        {correlationStatus === "error" ? <RunNotice tone="error">{t("monteCarlo.correlation.runFailed")}</RunNotice> : null}
+        <WarningBanner title={t("monteCarlo.correlation.warningsTitle")} warnings={warnings} />
+
+        <section className="grid min-h-0 flex-1 grid-cols-1 gap-3 lg:grid-cols-3">
+          <div className="flex min-h-0 min-w-0 flex-col lg:col-span-2">
+            <ChartGuard
+              title={t("monteCarlo.correlation.frontier.title")}
+              description={t("monteCarlo.correlation.frontier.description")}
+              state={!correlationResult ? "empty" : frontier.length > 0 ? "ready" : "invalid"}
+              emptyTitle={t("monteCarlo.correlation.frontier.empty")}
+              emptyDescription={t("monteCarlo.correlation.frontier.emptyHint")}
+              invalidTitle={t("monteCarlo.correlation.frontier.invalid")}
+              invalidDescription={t("monteCarlo.correlation.frontier.invalidHint")}
+              chartHeight="fill"
+            >
+              <ScatterChart margin={CHART_MARGIN}>
+                <CartesianGrid {...GRID_STYLE} />
+                <XAxis dataKey="risk" name="Risk sigma" tickFormatter={fmtPctTick} tick={AXIS_TICK_STYLE} axisLine={AXIS_LINE_STYLE} tickLine={false} />
+                <YAxis dataKey="return" name="Return mu" tickFormatter={fmtPctTick} tick={AXIS_TICK_STYLE} axisLine={AXIS_LINE_STYLE} tickLine={false} />
+                <ZAxis dataKey="sharpe" range={[30, 180]} />
+                <Tooltip
+                  {...DEFAULT_TOOLTIP_PROPS}
+                  formatter={(value, name) => {
+                    if (name === "risk" || name === "return") return formatNumber(Number(value) / 100, "percent", { digits: 2, locale });
+                    return formatNumber(Number(value), "ratio", { digits: 4, locale });
+                  }}
+                  labelFormatter={() => "Portfolio"}
+                />
+                <Scatter data={frontier.filter((point) => !point.is_optimal)} fill={CHART_COLORS.tertiary} />
+                <Scatter data={frontier.filter((point) => point.is_optimal)} fill={CHART_COLORS.positive} />
+              </ScatterChart>
+            </ChartGuard>
+          </div>
+
+          <div className="flex min-h-0 min-w-0 flex-col gap-3">
+            <div>
+              <ToggleGroup
+                ariaLabel={t("monteCarlo.correlation.view.aria")}
+                size="sm"
+                value={view}
+                onChange={(next) => setView(next === "heatmap" ? "heatmap" : "sensitivity")}
+                options={[
+                  { value: "sensitivity", label: t("monteCarlo.correlation.view.sensitivity") },
+                  { value: "heatmap", label: t("monteCarlo.correlation.view.heatmap") },
+                ]}
+              />
             </div>
-
-            <div className="mt-6 space-y-4">
-              <div className="flex items-center justify-between type-label text-[var(--ink)]">
-                <span>Number of Simulations</span>
-                <span className="type-mono">{formatNumber(correlationInput.simulationCount, "integer", { locale })}</span>
-              </div>
-              <input type="range" min={500} max={5000} step={100} value={correlationInput.simulationCount} onChange={(event) => updateCorrelation("simulationCount", Number(event.target.value))} className="w-full accent-[var(--brand)]" />
-              <button type="button" onClick={runCorrelationSimulation} disabled={correlationStatus === "loading"} className="inline-flex w-full items-center justify-center gap-2 rounded-[var(--radius-1)] bg-[var(--brand)] px-5 py-3 type-label text-[var(--on-brand)] disabled:opacity-60">
-                {correlationStatus === "loading" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-                Run Correlation Analysis
-              </button>
-            </div>
-          </section>
-        </aside>
-
-        <div className="space-y-6">
-          {!correlationResult ? (
-            <div className="border border-dashed border-[var(--line)] bg-[var(--surface-raised)] p-10 text-center type-body text-[var(--ink-muted)]">
-              Run the portfolio correlation engine to generate efficient frontier, correlation matrix, and sensitivity diagnostics.
-            </div>
-          ) : (
-            <>
-              <WarningNotice warnings={warnings} title="Correlation-output normalization warnings" />
-
-              {/* Middle panel: efficient frontier */}
-              <ChartGuard
-                title="Efficient Frontier"
-                description="Scatter plot of 400 random portfolios. The highest-Sharpe portfolio is drawn apart from the sampled set."
-                state={correlationResult.efficient_frontier.length > 0 ? "ready" : "invalid"}
-                emptyTitle="No efficient-frontier data yet"
-                emptyDescription="Run the correlation engine to generate efficient-frontier portfolios."
-                invalidTitle="Efficient-frontier data is invalid"
-                invalidDescription="The worker result did not contain chart-safe efficient-frontier rows, so the panel was withheld instead of rendering blank."
-                chartHeight={320}
-              >
-                    <ScatterChart margin={CHART_MARGIN}>
-                      <CartesianGrid {...GRID_STYLE} />
-                      <XAxis dataKey="risk" name="Risk sigma" tickFormatter={fmtPctTick} tick={AXIS_TICK_STYLE} axisLine={AXIS_LINE_STYLE} tickLine={false} />
-                      <YAxis dataKey="return" name="Return mu" tickFormatter={fmtPctTick} tick={AXIS_TICK_STYLE} axisLine={AXIS_LINE_STYLE} tickLine={false} />
-                      <ZAxis dataKey="sharpe" range={[30, 180]} />
-                      <Tooltip
-                        {...DEFAULT_TOOLTIP_PROPS}
-                        formatter={(value, name) => {
-                          if (name === "risk" || name === "return") return formatNumber(Number(value) / 100, "percent", { digits: 2, locale });
-                          return formatNumber(Number(value), "ratio", { digits: 4, locale });
-                        }}
-                        labelFormatter={() => "Portfolio"}
-                      />
-                      <Scatter data={correlationResult.efficient_frontier.filter((point) => !point.is_optimal)} fill={CHART_COLORS.tertiary} />
-                      <Scatter data={correlationResult.efficient_frontier.filter((point) => point.is_optimal)} fill={CHART_COLORS.positive} />
-                    </ScatterChart>
-              </ChartGuard>
-
-              {/* Middle panel: sensitivity analysis and full heatmap */}
-              <section className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+            <div className="flex min-h-0 flex-1 flex-col">
+              {view === "sensitivity" ? (
                 <ChartGuard
-                  title="Spearman rho Sensitivity"
-                  description="Rank correlation between each asset return and the portfolio return. Positive exposures are drawn in red and negative exposures in blue, fading with strength."
-                  state={correlationResult.spearman_sensitivity.length > 0 ? "ready" : "invalid"}
-                  emptyTitle="No sensitivity data yet"
-                  emptyDescription="Run the correlation engine to generate Spearman sensitivity rows."
-                  invalidTitle="Spearman sensitivity data is invalid"
-                  invalidDescription="The worker result did not contain chart-safe sensitivity rows, so the panel was withheld instead of rendering blank."
-                  chartHeight={320}
+                  title={t("monteCarlo.correlation.sensitivity.title")}
+                  description={t("monteCarlo.correlation.sensitivity.description")}
+                  state={!correlationResult ? "empty" : sensitivity.length > 0 ? "ready" : "invalid"}
+                  emptyTitle={t("monteCarlo.correlation.sensitivity.empty")}
+                  emptyDescription={t("monteCarlo.correlation.sensitivity.emptyHint")}
+                  invalidTitle={t("monteCarlo.correlation.sensitivity.invalid")}
+                  invalidDescription={t("monteCarlo.correlation.sensitivity.invalidHint")}
+                  chartHeight="fill"
                 >
-                  <BarChart data={correlationResult.spearman_sensitivity} layout="vertical">
+                  <BarChart data={sensitivity} layout="vertical">
                     <CartesianGrid {...GRID_STYLE} />
                     <XAxis type="number" domain={[-1, 1]} tick={AXIS_TICK_STYLE} axisLine={AXIS_LINE_STYLE} tickLine={false} />
                     <YAxis type="category" dataKey="asset" width={70} tick={AXIS_TICK_STYLE} axisLine={AXIS_LINE_STYLE} tickLine={false} />
                     <Tooltip {...withTooltipProps()} />
                     <Bar dataKey="spearman_rho_sensitivity">
-                      {correlationResult.spearman_sensitivity.map((row) => {
+                      {sensitivity.map((row) => {
                         const value = Number(row.spearman_rho_sensitivity);
                         const alpha = Math.min(Math.abs(value), 1);
                         const fill = value >= 0 ? CHART_COLORS.positive : CHART_COLORS.negative;
@@ -262,36 +270,24 @@ export function CorrelationModelSection({
                     </Bar>
                   </BarChart>
                 </ChartGuard>
-
+              ) : (
                 <HeatmapPanel
-                  title="Correlation Coefficient Heatmap"
-                  data={correlationResult.heatmap.map((d) => ({
+                  title={t("monteCarlo.correlation.heatmap.title")}
+                  data={heatmap.map((d) => ({
                     x: d.asset_x,
                     y: d.asset_y,
                     value: d.correlation,
                   }))}
-                  xLabels={correlationResult.assets}
-                  yLabels={correlationResult.assets}
-                  emptyTitle="Correlation heatmap data is invalid"
-                  emptyDescription="The worker result did not contain a complete heatmap matrix, so the panel was withheld instead of rendering blank."
+                  xLabels={assetNames}
+                  yLabels={assetNames}
+                  emptyTitle={heatmapState === "invalid" ? t("monteCarlo.correlation.heatmap.invalid") : t("monteCarlo.correlation.heatmap.empty")}
+                  emptyDescription={heatmapState === "invalid" ? t("monteCarlo.correlation.heatmap.invalidHint") : t("monteCarlo.correlation.heatmap.emptyHint")}
                 />
-              </section>
-            </>
-          )}
-        </div>
-
-        <aside className="space-y-6">
-          {!correlationResult ? null : (
-            /* Right panel: optimal portfolio outcome metrics */
-            <section className="grid grid-cols-1 gap-4">
-              <MetricCard label="Optimal Portfolio Mu" value={pct(correlationResult.optimal_summary.optimal_return, locale)} detail="Annual expected return of the highest-Sharpe portfolio" />
-              <MetricCard label="Portfolio Sigma" value={pct(correlationResult.optimal_summary.optimal_volatility, locale)} detail="Actual portfolio volatility after applying correlations" />
-              <MetricCard label="Diversification Effect" value={`${formatNumber(correlationResult.optimal_summary.diversification_effect, "ratio", { locale })}%pt`} detail="Reduction versus the simple average of individual asset volatilities" />
-              <MetricCard label="Optimal Sharpe" value={numberText(correlationResult.optimal_summary.optimal_sharpe, locale)} detail="Highest Sharpe ratio among 400 randomly generated portfolios" />
-            </section>
-          )}
-        </aside>
+              )}
+            </div>
+          </div>
+        </section>
       </div>
-    </MonteCarloRunPanel>
+    </div>
   );
 }
