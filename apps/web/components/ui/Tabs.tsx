@@ -128,7 +128,7 @@ export function Tabs({
         ref={indicatorRef}
         data-testid="tabs-indicator"
         aria-hidden
-        className="pointer-events-none absolute bottom-0 left-0 h-0.5 w-0 bg-[var(--brand)] opacity-0"
+        className="pointer-events-none absolute bottom-0 left-0 h-px w-0 bg-[var(--brand)] opacity-0"
       />
     </div>
   );

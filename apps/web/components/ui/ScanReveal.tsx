@@ -32,8 +32,8 @@ export function ScanReveal({ trigger, children, className }: ScanRevealProps) {
     line.current.animate(
       [
         { opacity: 1, transform: "translateY(0)" },
-        { opacity: 1, transform: `translateY(${h}px)`, offset: 0.9 },
-        { opacity: 0, transform: `translateY(${h}px)` },
+        { opacity: 1, transform: `translateY(${h - 1}px)`, offset: 0.9 },
+        { opacity: 0, transform: `translateY(${h - 1}px)` },
       ],
       options
     );

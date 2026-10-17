@@ -195,6 +195,39 @@ test.describe("tabs indicator and scan reveal, motion on", () => {
   });
 });
 
+test.describe("scan line overflow", () => {
+  test.use({ contextOptions: { reducedMotion: "no-preference" } });
+
+  // scrollHeight does not register the 1px overshoot in Chromium (it stayed equal to clientHeight even
+  // with the line 1px past the panel), so the test measures the line against the panel's box, which is
+  // what would add scrollable overflow.
+  test("while the scan runs the line never extends below the panel", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.goto("/");
+    await expect(page.getByTestId("market-page-tabs")).toBeVisible();
+    // A panel that just fits: the scan host fills it, so the line's end is the panel's end.
+    await page.addStyleTag({ content: '[data-testid="market-page-tabs"] [role="tabpanel"] > div { height: 100%; }' });
+    await page.waitForTimeout(300);
+    await page.evaluate(() => {
+      const panel = document.querySelector('[data-testid="market-page-tabs"] [role="tabpanel"]')!;
+      const w = window as unknown as { __below: number[] };
+      w.__below = [];
+      const start = performance.now();
+      const tick = () => {
+        const line = document.querySelector('[data-testid="scan-line"]')!.getBoundingClientRect();
+        w.__below.push(line.bottom - panel.getBoundingClientRect().bottom);
+        if (performance.now() - start < 1500) requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    });
+    await page.locator(`#${TAB_IDS[1]}`).click();
+    await page.waitForTimeout(1600);
+    const below = await page.evaluate(() => (window as unknown as { __below: number[] }).__below);
+    expect(below.length).toBeGreaterThan(20);
+    expect(Math.max(...below)).toBeLessThanOrEqual(0.01);
+  });
+});
+
 test.describe("tabs indicator and scan reveal, reduced motion", () => {
   test.use({ contextOptions: { reducedMotion: "reduce" } });
 
