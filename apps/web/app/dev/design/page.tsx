@@ -66,6 +66,7 @@ export default function DesignGalleryPage() {
         </div>
         <div className="type-mono flex gap-6">
           <RollingNumber testId="motion-roll-price" value={missing ? null : priceNow} format={price} />
+          <RollingNumber testId="motion-roll-enter" value={BENCH_PRICE[0]} format={price} enter />
           <RollingNumber testId="motion-roll-pct" value={missing ? null : BENCH_PCT[step % BENCH_PCT.length]} format={pct} />
           <span data-testid="motion-delta"><DeltaBadge animate value={missing ? null : BENCH_PCT[step % BENCH_PCT.length]} /></span>
           <span data-testid="motion-before-after"><BeforeAfter previous={previousPrice} current={price(priceNow)} /></span>

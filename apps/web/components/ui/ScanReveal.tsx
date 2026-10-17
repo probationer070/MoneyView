@@ -49,7 +49,7 @@ export function ScanReveal({ trigger, children, className }: ScanRevealProps) {
         ref={line}
         data-testid="scan-line"
         aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 z-10 h-px bg-[var(--brand)] opacity-0"
+        className="pointer-events-none absolute inset-x-0 top-0 z-10 h-[var(--hairline)] bg-[var(--brand)] opacity-0"
       />
       <div ref={body}>{children}</div>
     </div>

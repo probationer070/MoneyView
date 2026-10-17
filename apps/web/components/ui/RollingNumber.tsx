@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { MISSING } from "@/lib/format";
 import { odometerPlan, usePrefersReducedMotion, type OdometerCell } from "@/lib/motion";
 import { tokens } from "@/lib/tokens.generated";
@@ -27,9 +27,10 @@ const STAGGER = ms(tokens.duration["digit-stagger"]);
 const EASING = tokens.easing.emphasized;
 const NBSP = " ";
 
-// A number whose changed characters roll like an odometer. The server and the first client render
-// are the final text (usePrefersReducedMotion starts true), so hydration matches; a roll only starts
-// from an effect, when motion is allowed. Mid-roll the cells are aria-hidden and the final text is exposed once in an
+// A number whose changed characters roll like an odometer. The server render is the final text
+// (usePrefersReducedMotion's server snapshot is true), so hydration matches; a roll starts from a layout
+// effect, when motion is allowed, so an `enter` figure never paints its final text before rolling from zeros.
+// A changed value (not an enter) also washes the figure's background in up-soft or down-soft, fading over duration.flash. Mid-roll the cells are aria-hidden and the final text is exposed once in an
 // sr-only span, so the intermediate digits are never announced. A roll ends as plain text, with the tint fading over duration.flash.
 export function RollingNumber({ value, format, direction = "auto", enter = false, className, testId }: RollingNumberProps) {
   const reduced = usePrefersReducedMotion();
@@ -46,7 +47,7 @@ export function RollingNumber({ value, format, direction = "auto", enter = false
     ref.current?.getAnimations({ subtree: true }).forEach((a) => a.cancel());
   };
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const last = shown.current;
     shown.current = { text, value };
     if (reduced || value === null) {
@@ -55,8 +56,8 @@ export function RollingNumber({ value, format, direction = "auto", enter = false
       return;
     }
     // Missing before, or an enter roll still owed: roll in from zeros.
-    const fromZeros = pendingEnter.current || last === null || last.value === null;
-    if (!fromZeros && last.text === text) return;
+    const fromZeros = pendingEnter.current || (last !== null && last.value === null);
+    if (!fromZeros && (last === null || last.text === text)) return;
     pendingEnter.current = false;
     cancel();
     const rising = direction === "auto" ? fromZeros || value >= (last?.value ?? value) : direction === "up";
@@ -87,6 +88,10 @@ export function RollingNumber({ value, format, direction = "auto", enter = false
         { duration, delay, easing: EASING, fill: "both" },
       );
     });
+    if (roll.settle) {
+      const wash = roll.rising ? "var(--up-soft)" : "var(--down-soft)";
+      el.animate([{ backgroundColor: wash }, { backgroundColor: "transparent" }], { duration: FLASH, easing: EASING });
+    }
     timer.current = setTimeout(() => {
       flash.current = roll.settle ? roll.tint : null;
       setRoll(null);
@@ -100,7 +105,7 @@ export function RollingNumber({ value, format, direction = "auto", enter = false
     if (roll || !el || flash.current === null) return;
     const from = flash.current;
     flash.current = null;
-    el.animate([{ color: from }, { color: getComputedStyle(el).color }], { duration: FLASH, easing: "ease-out" });
+    el.animate([{ color: from }, { color: getComputedStyle(el).color }], { duration: FLASH, easing: EASING });
   }, [roll]);
 
   return (

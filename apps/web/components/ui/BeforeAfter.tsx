@@ -13,12 +13,12 @@ export function BeforeAfter({ previous, current }: BeforeAfterProps) {
   if (previous === null) return <>{current}</>;
   return (
     <span className="inline-flex items-baseline gap-1 whitespace-nowrap">
-      <span key={previous} data-part="previous" className="mv-ba-old">
+      <del key={previous} data-part="previous" className="mv-ba-old no-underline">
         {previous}
         <span data-part="strike" aria-hidden="true" className="mv-ba-strike" />
-      </span>
+      </del>
       <span aria-hidden="true">→</span>
-      <span data-part="current">{current}</span>
+      <ins data-part="current" className="no-underline">{current}</ins>
     </span>
   );
 }

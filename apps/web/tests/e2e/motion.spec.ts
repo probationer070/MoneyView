@@ -103,9 +103,13 @@ test.describe("motion on", () => {
     await open(page);
     const price = page.getByTestId("motion-roll-price");
     await page.getByTestId("motion-next").click();
-    await page.waitForTimeout(100);
+    await page.waitForTimeout(700);
     await page.getByTestId("motion-next").click();
-    await page.waitForTimeout(1500);
+    // The first roll (600ms + 7 digit staggers of 45ms) ends ~915ms after the first click and the second ~1615ms:
+    // at 1150ms a stale timer from the first roll would already have ended the second one.
+    await page.waitForTimeout(450);
+    await expect(price).toHaveAttribute("data-rolling", "true");
+    await page.waitForTimeout(950);
     await expect(price.locator(".mv-dg")).toHaveCount(0);
     await expect(price).toHaveText(PRICE[2]);
     await expect(price).toHaveAttribute("aria-label", PRICE[2]);
@@ -134,6 +138,17 @@ test.describe("motion on", () => {
     await expect(ba.locator('[data-part="strike"]')).toHaveCount(1);
   });
 
+  test("before/after marks the old value as a deletion and the new one as an insertion", async ({ page }) => {
+    await open(page);
+    const ba = page.getByTestId("motion-before-after");
+    await page.getByTestId("motion-next").click();
+    await expect(ba.locator("del")).toHaveText(PRICE[0]);
+    await expect(ba.locator("ins")).toContainText(PRICE[1]);
+    const snapshot = await ba.ariaSnapshot();
+    expect(snapshot).toMatch(/deletion/);
+    expect(snapshot).toMatch(/insertion/);
+  });
+
   test("the bench DeltaBadge rolls on Next value and ends at the formatted percent", async ({ page }) => {
     await open(page);
     const value = page.getByTestId("motion-delta").locator('[data-part="value"]');
@@ -142,6 +157,41 @@ test.describe("motion on", () => {
     await page.waitForTimeout(1500);
     await expect(value.locator(".mv-dg")).toHaveCount(0);
     await expect(value).toHaveText(formatNumber(BENCH_PCT[1] / 100, "percent", { signed: true }));
+  });
+
+  test("a changed value washes its background up-soft or down-soft, then fades it out", async ({ page }) => {
+    await open(page);
+    const price = page.getByTestId("motion-roll-price");
+    await page.waitForTimeout(1000);
+    const bg = () => price.evaluate((el) => getComputedStyle(el).backgroundColor);
+    expect(await bg()).toBe("rgba(0, 0, 0, 0)");
+    await page.getByTestId("motion-next").click();
+    await page.waitForTimeout(100);
+    expect(await bg()).not.toBe("rgba(0, 0, 0, 0)");
+    await page.waitForTimeout(1100);
+    expect(await bg()).toBe("rgba(0, 0, 0, 0)");
+  });
+
+  test("an enter figure's first painted text is the zeros form, never the final text", async ({ page }) => {
+    await page.addInitScript(() => {
+      const seen = { texts: [] as string[], rolling: [] as string[] };
+      (window as unknown as { __mv: typeof seen }).__mv = seen;
+      const read = () => {
+        const el = document.querySelector('[data-testid="motion-roll-enter"]');
+        if (!el) return;
+        const t = el.textContent ?? "";
+        if (seen.texts[seen.texts.length - 1] !== t) seen.texts.push(t);
+        const r = el.getAttribute("data-rolling") ?? "";
+        if (seen.rolling[seen.rolling.length - 1] !== r) seen.rolling.push(r);
+      };
+      new MutationObserver(read).observe(document, { subtree: true, childList: true, attributes: true, characterData: true });
+    });
+    await open(page);
+    await page.waitForTimeout(1200);
+    const { texts, rolling } = await seen(page);
+    expect(rolling[0]).toBe("true");
+    expect(texts[0]).not.toBe(PRICE[0]);
+    expect(texts[texts.length - 1]).toBe(PRICE[0]);
   });
 
   test("the Sparkline draw line runs its draw on mount", async ({ page }) => {
@@ -169,6 +219,16 @@ test.describe("reduced motion", () => {
       await page.waitForTimeout(50);
     }
     await expect(price).toHaveAttribute("data-rolling", "false");
+  });
+
+  test("a changed value never washes its background", async ({ page }) => {
+    await open(page);
+    const price = page.getByTestId("motion-roll-price");
+    await page.getByTestId("motion-next").click();
+    for (let i = 0; i < 5; i++) {
+      expect(await price.evaluate((el) => getComputedStyle(el).backgroundColor)).toBe("rgba(0, 0, 0, 0)");
+      await page.waitForTimeout(30);
+    }
   });
 
   test("the Sparkline draw line never draws and the bench DeltaBadge never rolls", async ({ page }) => {

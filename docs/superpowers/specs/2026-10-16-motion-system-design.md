@@ -60,7 +60,7 @@ Oct 16, 2026 · 근거 코드는 `renewal` b833b21이다. 경로는 따로 적�
 | 3 | 탭 표시 미끄러짐 | 선택 밑줄이 다음 탭의 위치와 폭으로 미끄러진다. | 공용 `Tabs`(모든 페이지) |
 | 4 | 선으로 훑으며 드러내기 | 1px brand 선이 패널 위에서 아래로 지나간다. 그동안 패널 내용이 위에서부터 드러난다(clip). | 탭 전환 |
 | 5 | 그려지기와 순차 등장 | 형제 요소가 8px 아래에서 올라오며 나타난다(순서당 지연). 스파크라인은 왼쪽에서 그려지고, 막대는 0에서 자란다. | 카드 14개, 스파크라인, 스프레드 막대 |
-| 6 | 마우스 반응 | 카드 테두리가 진해지고 "상세 →"가 4px 밀려 나온다. 버튼의 `→`가 4px 움직인다. | 카드, `ActionButton` |
+| 6 | 마우스 반응 | 카드 테두리가 진해지고 "상세 →"가 4px 밀려 나온다. 화살표 글리프가 있는 곳에서는 그 `→`가 4px 움직인다(지금은 카드뿐이고, `ActionButton`에는 화살표가 없다). | 카드 |
 
 **값 갱신 강조(#1에 딸림):** 값이 바뀌면 그 칸의 바탕이 `up-soft`나 `down-soft`로 잠깐 물들었다가 0.6초에 걸쳐 사라진다.
 
@@ -91,9 +91,9 @@ Oct 16, 2026 · 근거 코드는 `renewal` b833b21이다. 경로는 따로 적�
 | `components/ui/ScanReveal.tsx` | props `{ trigger: string; children: ReactNode }`. `trigger`가 바뀌면 #4를 실행한다. |
 | CSS 유틸리티 `mv-enter` | `--mv-i` 변수로 순서를 받는다. 쉬는 상태는 보이는 상태이고, 애니메이션은 거기서 출발만 한다(#5). |
 | `Sparkline` | prop `draw?: boolean`. 마운트 때 선을 그린다. |
-| `ActionButton`, 카드 | #6. CSS만 쓴다. |
+| 카드 | #6. CSS만 쓴다. 넛지는 화살표 글리프가 있는 곳에만 적용한다(`ActionButton`에는 아직 화살표가 없다). |
 
-**recharts:** 움직임 줄이기일 때 `isAnimationActive={false}`를 공용 설정(`lib/chartConfig.ts`)으로 넘긴다. 공유 표면이므로 전체 스위트를 돌린다.
+**recharts:** `Sparkline`만 `usePrefersReducedMotion()`으로 `isAnimationActive`를 끈다. recharts 3.8의 `"auto"`는 움직임 줄이기에서도 첫 렌더에 `stroke-dasharray: 0px 0px`(선이 보이지 않는 한 프레임)을 거치므로 쓰지 않는다. 공용 `chartConfig`는 바꾸지 않는다.
 
 ## 5. 테스트
 

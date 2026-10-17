@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 
 export type OdometerCell = { from: string; to: string; delayIndex: number };
 
@@ -24,15 +24,13 @@ export function odometerPlan(from: string | null, to: string): OdometerCell[] {
   }));
 }
 
-/** True on the server and on the first client render, so animation never starts before the preference is known. */
+function subscribe(onChange: () => void): () => void {
+  const media = window.matchMedia(REDUCED_MOTION_QUERY);
+  media.addEventListener("change", onChange);
+  return () => media.removeEventListener("change", onChange);
+}
+
+/** The reduced-motion preference. True on the server, so server HTML is the final text and nothing animates before the preference is known. */
 export function usePrefersReducedMotion(): boolean {
-  const [reduced, setReduced] = useState(true);
-  useEffect(() => {
-    const media = window.matchMedia(REDUCED_MOTION_QUERY);
-    const sync = () => setReduced(media.matches);
-    sync();
-    media.addEventListener("change", sync);
-    return () => media.removeEventListener("change", sync);
-  }, []);
-  return reduced;
+  return useSyncExternalStore(subscribe, () => window.matchMedia(REDUCED_MOTION_QUERY).matches, () => true);
 }
