@@ -1,7 +1,10 @@
 import { expect, test, type Page } from "@playwright/test";
+import { formatNumber } from "../../lib/format";
 
 // Bench values (app/dev/design/page.tsx): price 71,200.50 -> 72,350.75 -> 69,980.25 -> 105,000.00.
 const PRICE = ["71,200.50", "72,350.75", "69,980.25", "105,000.00"];
+// Bench percent steps for the DeltaBadge animate (motion-delta): 1.24 -> -0.87 -> 12.5 -> -3.4.
+const BENCH_PCT = [1.24, -0.87, 12.5, -3.4];
 
 // The page mounts on the client (the shell gates it on port discovery), so the server HTML holds no
 // bench. What matters is what the first client paint shows: record every text and every rolling flag
@@ -24,6 +27,22 @@ async function record(page: Page) {
 
 const seen = (page: Page) =>
   page.evaluate(() => (window as unknown as { __mv: { texts: string[]; rolling: string[] } }).__mv);
+
+// Sparkline draw (motion-spark-draw): recharts 3 draws the line in JS, setting stroke-dasharray on
+// the curve every frame, so record every distinct dash value the curve gets from the first node on.
+async function recordDraw(page: Page) {
+  await page.addInitScript(() => {
+    const dashes: string[] = [];
+    (window as unknown as { __dash: string[] }).__dash = dashes;
+    const read = () => {
+      const v = document.querySelector('[data-testid="motion-spark-draw"] .recharts-line-curve')?.getAttribute("stroke-dasharray");
+      if (v && dashes[dashes.length - 1] !== v) dashes.push(v);
+    };
+    new MutationObserver(read).observe(document, { subtree: true, childList: true, attributes: true });
+  });
+}
+
+const drawn = (page: Page) => page.evaluate(() => (window as unknown as { __dash: string[] }).__dash);
 
 async function open(page: Page) {
   await page.goto("/dev/design");
@@ -114,6 +133,27 @@ test.describe("motion on", () => {
     await expect(ba).toContainText(PRICE[1]);
     await expect(ba.locator('[data-part="strike"]')).toHaveCount(1);
   });
+
+  test("the bench DeltaBadge rolls on Next value and ends at the formatted percent", async ({ page }) => {
+    await open(page);
+    const value = page.getByTestId("motion-delta").locator('[data-part="value"]');
+    await page.getByTestId("motion-next").click();
+    await expect(value.locator(".mv-dg").first()).toBeVisible({ timeout: 200 });
+    await page.waitForTimeout(1500);
+    await expect(value.locator(".mv-dg")).toHaveCount(0);
+    await expect(value).toHaveText(formatNumber(BENCH_PCT[1] / 100, "percent", { signed: true }));
+  });
+
+  test("the Sparkline draw line runs its draw on mount", async ({ page }) => {
+    await recordDraw(page);
+    await page.goto("/dev/design");
+    await expect(page.getByTestId("motion-spark-draw").locator(".recharts-line-curve")).toBeAttached();
+    await page.waitForTimeout(900);
+    const dashes = await drawn(page);
+    // A draw passes through intermediate lengths: more than a start and an end value.
+    expect(dashes.length).toBeGreaterThanOrEqual(3);
+    expect(dashes[0]).not.toEqual(dashes[dashes.length - 1]);
+  });
 });
 
 test.describe("reduced motion", () => {
@@ -129,6 +169,15 @@ test.describe("reduced motion", () => {
       await page.waitForTimeout(50);
     }
     await expect(price).toHaveAttribute("data-rolling", "false");
+  });
+
+  test("the Sparkline draw line never draws and the bench DeltaBadge never rolls", async ({ page }) => {
+    await recordDraw(page);
+    await open(page);
+    await page.getByTestId("motion-next").click();
+    await page.waitForTimeout(900);
+    expect(await drawn(page)).toEqual([]);
+    await expect(page.getByTestId("motion-delta").locator(".mv-dg")).toHaveCount(0);
   });
 });
 

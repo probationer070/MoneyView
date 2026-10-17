@@ -3,10 +3,13 @@
 import clsx from "clsx";
 import { formatNumber, MISSING } from "@/lib/format";
 import { useLocale, useT } from "@/lib/i18n/locale";
+import { RollingNumber } from "@/components/ui/RollingNumber";
 
 interface DeltaBadgeProps {
   /** A change in percent units: 1.24 means +1.24%. */
   value: number | null | undefined;
+  /** Opt-in: the percent text rolls like an odometer on change. "enter" also rolls in from zeros on first mount. */
+  animate?: boolean | "enter";
   className?: string;
 }
 
@@ -20,7 +23,7 @@ const TONE = {
 // The redesign's delta chip: glyph, sign and colour together, never colour alone. A screen
 // reader hears the direction word instead of the glyph. A span, not a div, so it can sit
 // inside a <button> (StockTile).
-export function DeltaBadge({ value, className }: DeltaBadgeProps) {
+export function DeltaBadge({ value, animate, className }: DeltaBadgeProps) {
   const { locale } = useLocale();
   const t = useT();
   const numeric = typeof value === "number" && Number.isFinite(value) ? value : null;
@@ -37,7 +40,13 @@ export function DeltaBadge({ value, className }: DeltaBadgeProps) {
     >
       <span className="sr-only">{t(`delta.${dir}`)}</span>
       <span aria-hidden="true" className="text-[length:var(--component-delta-glyph)]">{GLYPH[dir]}</span>
-      <span data-part="value">{text}</span>
+      {animate ? (
+        <span data-part="value">
+          <RollingNumber value={numeric} format={(n) => formatNumber(n / 100, "percent", { signed: true, locale })} enter={animate === "enter"} />
+        </span>
+      ) : (
+        <span data-part="value">{text}</span>
+      )}
     </span>
   );
 }
