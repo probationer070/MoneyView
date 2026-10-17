@@ -142,3 +142,70 @@ test("loading the gallery logs no console hydration error (the shell renders pag
   await expect(page.getByTestId("motion-roll-price")).toBeVisible();
   expect(errors.filter((e) => /hydrat/i.test(e))).toEqual([]);
 });
+
+// Tabs indicator and ScanReveal, on the market page tabs ("/").
+const TAB_IDS = ["market-tab-instruments", "market-tab-spreads"];
+
+async function expectIndicatorUnderSelected(page: Page) {
+  const selected = await page.locator('[role="tab"][aria-selected="true"]').first().boundingBox();
+  const indicator = await page.getByTestId("tabs-indicator").first().boundingBox();
+  expect(selected).not.toBeNull();
+  expect(indicator).not.toBeNull();
+  expect(Math.abs(indicator!.x - selected!.x)).toBeLessThanOrEqual(1);
+  expect(Math.abs(indicator!.width - selected!.width)).toBeLessThanOrEqual(1);
+}
+
+const runningScan = (page: Page) =>
+  page.evaluate(
+    () => document.querySelector('[data-testid="scan-line"]')?.getAnimations().some((a) => a.playState === "running") ?? false
+  );
+
+test.describe("tabs indicator and scan reveal, motion on", () => {
+  test.use({ contextOptions: { reducedMotion: "no-preference" } });
+
+  test("the indicator sits under each tab after it is clicked", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.getByTestId("market-page-tabs")).toBeVisible();
+    for (const id of [...TAB_IDS, TAB_IDS[0]]) {
+      await page.locator(`#${id}`).click();
+      await page.waitForTimeout(600);
+      await expectIndicatorUnderSelected(page);
+    }
+  });
+
+  test("at 390px the indicator follows the selected tab after a resize from 1280", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.goto("/");
+    // Real tab geometry does not depend on the viewport, so make it depend on it: only a recompute on resize can follow.
+    await page.addStyleTag({ content: '[role="tab"]{ width: 20vw; justify-content: center; }' });
+    await page.locator(`#${TAB_IDS[1]}`).click();
+    await page.waitForTimeout(600);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.waitForTimeout(600);
+    await expectIndicatorUnderSelected(page);
+  });
+
+  test("a tab switch runs the scan line", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.getByTestId("market-page-tabs")).toBeVisible();
+    await page.waitForTimeout(300);
+    expect(await runningScan(page)).toBe(false);
+    await page.locator(`#${TAB_IDS[1]}`).click();
+    await expect.poll(() => runningScan(page), { timeout: 100, intervals: [10] }).toBe(true);
+  });
+});
+
+test.describe("tabs indicator and scan reveal, reduced motion", () => {
+  test.use({ contextOptions: { reducedMotion: "reduce" } });
+
+  test("the indicator still sits under the tab and the scan line never animates", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.getByTestId("market-page-tabs")).toBeVisible();
+    await page.locator(`#${TAB_IDS[1]}`).click();
+    for (let i = 0; i < 8; i++) {
+      expect(await runningScan(page)).toBe(false);
+      await page.waitForTimeout(50);
+    }
+    await expectIndicatorUnderSelected(page);
+  });
+});
