@@ -221,6 +221,29 @@ Oct 16, 2026 · 근거 코드는 `renewal` b833b21이다. 경로는 따로 적�
 
 ## 7. 다른 작업과의 관계
 
-- **PR #70(시장 개요 확장):** 겹치는 파일이 없다. 단, 둘 다 `ONE_SCREEN_ROUTES`와 `guideline/sop/todo.md`를 고칠 수 있으므로, 나중에 병합되는 쪽이 충돌을 정리한다.
+- **PR #70(시장 개요 확장):** 2026-10-17에 병합됐다(adbbd44).
+- **PR #71(모션 시스템, `docs/superpowers/specs/2026-10-16-motion-system-design.md`, DESIGN.md "Motion"):**
+  - 이 작업은 #71 위에서 진행한다(브랜치가 그 위에 쌓여 있다).
+  - 화면의 움직임은 #71의 공용 부품만 쓴다. 직접 애니메이션을 만들지 않는다.
+  - 테스트는 Playwright 기본값(움직임 줄이기)으로 돌린다. 움직임을 확인하는 테스트만 `test.use({ contextOptions: { reducedMotion: "no-preference" } })`를 쓴다.
+
+## 8. 모션(#71 부품 사용)
+
+| 자리 | 부품 | 언제 움직이나 |
+|---|---|---|
+| 탭 바 | 공용 `Tabs`. 밑줄이 저절로 미끄러진다. | 탭 전환 |
+| 탭 패널 | `ScanReveal trigger={activeTab}` | 탭 전환 |
+| 수치 줄의 값 | `RollingNumber enter`. 금액은 §3 포매터를 `format`으로 넘긴다. | 첫 마운트, 값 변화 |
+| 재실행 뒤 수치 줄 | `BeforeAfter previous={직전 실행 값}` 안에 `RollingNumber` | 같은 탭에서 다시 실행해 값이 바뀌었을 때만. 다른 탭으로 가면 지운다. |
+| 실행 완료 | 결과 영역의 `ScanReveal`. `trigger`는 실행 id다. | 실행이 끝날 때 |
+| 실행 버튼 | `→` 화살표 칸이 마우스를 올리면 밀린다(#6). DESIGN.md의 hover nudge를 따른다. | hover, focus-visible |
+| 차트 | recharts 기본값(`isAnimationActive` "auto")이 움직임 줄이기를 따른다. 지금의 그리기 애니메이션은 그대로 둔다. | 마운트 |
+
+**테스트(추가)**
+
+| 확인 내용 | 그 테스트를 실패시켜야 하는 변이 |
+|---|---|
+| 움직임을 켠 상태에서 경로 탭 실행 뒤 같은 입력을 바꿔 다시 실행하면, 수치 줄에 옛 값(`del`)과 새 값이 나란히 보인다. | `previous`를 넘기지 않는다. |
+| 탭을 전환하면 `BeforeAfter`의 옛 값이 사라진다. | 탭 전환 때 초기화하지 않는다. |
 - **todo.md Track D D12 후속(M6 Monte Carlo 영어 문구):** 이 작업이 흡수한다.
 - **`DESIGN_SCREENS`에 Monte Carlo가 없다(D12 후속):** 이 작업에서 추가한다.
