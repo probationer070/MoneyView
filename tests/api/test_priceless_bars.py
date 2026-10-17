@@ -205,3 +205,59 @@ def test_a_priced_newest_bar_still_counts_as_fresh(monkeypatch):
     monkeypatch.setattr(service, "_previous_trading_day", lambda today=None: date(2026, 9, 8))
 
     assert service._rows_are_fresh([_row("2026-09-08", 321.40), _row("2026-09-04", 319.97)])
+
+
+# --- the live path: an unsettled newest bar must not reach quotes or detail --
+
+
+def _unsettled_history():
+    """60 settled business days, then a newest bar with NaN OHLC and a real volume."""
+    import pandas as pd
+
+    days = pd.bdate_range(end="2026-10-16", periods=61)
+    closes = [100.0 + i for i in range(60)] + [math.nan]
+    return pd.DataFrame(
+        {
+            "Open": closes, "High": closes, "Low": closes, "Close": closes,
+            "Volume": [1_000] * 60 + [35_028_027],
+            "Dividends": 0.0, "Stock Splits": 0.0,
+        },
+        index=pd.DatetimeIndex(days, name="Date"),
+    )
+
+
+def _patch_yfinance(monkeypatch) -> None:
+    import yfinance
+
+    class _FakeTicker:
+        def __init__(self, *_a, **_k) -> None:
+            pass
+
+        def history(self, *_a, **_k):
+            return _unsettled_history()
+
+    monkeypatch.setattr(yfinance, "Ticker", _FakeTicker)
+
+
+def test_live_fetch_returns_only_priced_bars(monkeypatch):
+    _patch_yfinance(monkeypatch)
+
+    bars = MarketDataService()._fetch_live_ohlcv("SOXX")
+
+    assert len(bars) == 60
+    assert all(math.isfinite(bar.close) for bar in bars)
+    assert bars[-1].close == 159.0
+
+
+def test_quote_survives_an_unsettled_live_bar(monkeypatch):
+    """SOXX/SKYY/BOTZ showed "—": NaN last_close became null at the JSON boundary."""
+    _patch_yfinance(monkeypatch)
+
+    quotes = MarketDataService().get_all_indices()
+
+    assert quotes
+    for quote in quotes:
+        assert quote.last_close == 159.0, quote.ticker
+        assert math.isfinite(quote.delta.delta_pct), quote.ticker
+        assert quote.month_delta is not None, quote.ticker
+        assert math.isfinite(quote.month_delta.delta_pct), quote.ticker

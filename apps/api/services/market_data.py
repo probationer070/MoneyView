@@ -1247,6 +1247,7 @@ class MarketDataService:
                             stock_splits=float(row.get("Stock Splits", 0) or 0),
                         )
                         for _, row in df.iterrows()
+                        if self._is_priced(row.get("Close"))
                     ]
                     self._save_ohlcv_rows(ticker, rows)
                     logger.info("Fetched and cached %d bars for %s", len(rows), ticker)
