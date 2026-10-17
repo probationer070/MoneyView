@@ -424,12 +424,30 @@ export default function MonteCarloPage() {
     }));
   };
 
+  // A new run replaces the one in flight. The superseded tab leaves its loading state: path and valuation show
+  // "Run canceled"; correlation has no cancel status, so it returns to idle.
+  const supersedeActiveRun = () => {
+    if (!activeRequestIdRef.current || !activeRequestKindRef.current) return;
+    workerRef.current?.postMessage({ type: "cancel", requestId: activeRequestIdRef.current });
+    completeWorkerEvent("canceled", "Superseded by a new simulation request.");
+    const kind = activeRequestKindRef.current;
+    activeRequestIdRef.current = null;
+    activeRequestKindRef.current = null;
+    if (kind === "path") {
+      setStatus("cancelled");
+      setProgress(0);
+    } else if (kind === "valuation") {
+      setValuationStatus("cancelled");
+      setValuationProgress(0);
+    } else {
+      setCorrelationStatus("idle");
+      setCorrelationProgress(0);
+    }
+  };
+
   const runPathSimulation = async () => {
     if (!workerRef.current) return;
-    if (activeRequestIdRef.current) {
-      workerRef.current.postMessage({ type: "cancel", requestId: activeRequestIdRef.current });
-      completeWorkerEvent("canceled", "Superseded by a new path simulation request.");
-    }
+    supersedeActiveRun();
     const requestId = crypto.randomUUID();
     activeRequestIdRef.current = requestId;
     activeRequestKindRef.current = "path";
@@ -449,10 +467,7 @@ export default function MonteCarloPage() {
 
   const runValuationSimulation = () => {
     if (!workerRef.current) return;
-    if (activeRequestIdRef.current) {
-      workerRef.current.postMessage({ type: "cancel", requestId: activeRequestIdRef.current });
-      completeWorkerEvent("canceled", "Superseded by a new valuation simulation request.");
-    }
+    supersedeActiveRun();
     const requestId = crypto.randomUUID();
     activeRequestIdRef.current = requestId;
     activeRequestKindRef.current = "valuation";
@@ -471,10 +486,7 @@ export default function MonteCarloPage() {
 
   const runCorrelationSimulation = () => {
     if (!workerRef.current) return;
-    if (activeRequestIdRef.current) {
-      workerRef.current.postMessage({ type: "cancel", requestId: activeRequestIdRef.current });
-      completeWorkerEvent("canceled", "Superseded by a new correlation simulation request.");
-    }
+    supersedeActiveRun();
     const requestId = crypto.randomUUID();
     activeRequestIdRef.current = requestId;
     activeRequestKindRef.current = "correlation";

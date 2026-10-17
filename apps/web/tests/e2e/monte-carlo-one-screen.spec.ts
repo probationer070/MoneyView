@@ -55,3 +55,56 @@ test.describe("KRW amounts after a path run", () => {
     });
   });
 });
+
+test.describe("superseded run", () => {
+  test("a path run superseded by a valuation run leaves the path tab canceled, not running", async ({ page }) => {
+    await installMonteCarloWorker(page, { hold: true });
+    await page.goto("/monte-carlo", { waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("heading", { name: /Simulation Lab/i })).toBeVisible({ timeout: 60_000 });
+    await page.getByRole("button", { name: "Run Path Simulation" }).click();
+    await expect(page.getByText("Worker progress")).toBeVisible();
+
+    await page.getByRole("tab", { name: /Corporate Valuation/i }).click();
+    await page.getByRole("button", { name: "Run Valuation" }).click();
+    await page.getByRole("tab", { name: /Path Simulation/i }).click();
+
+    await expect(page.getByText("Run canceled").first()).toBeVisible();
+    await expect(page.getByText("Worker progress")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Run Path Simulation" })).toBeEnabled();
+  });
+
+  test("a valuation run superseded by a correlation run leaves the valuation tab canceled, not running", async ({ page }) => {
+    await installMonteCarloWorker(page, { hold: true });
+    await page.goto("/monte-carlo", { waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("heading", { name: /Simulation Lab/i })).toBeVisible({ timeout: 60_000 });
+    await page.getByRole("tab", { name: /Corporate Valuation/i }).click();
+    await page.getByRole("button", { name: "Run Valuation" }).click();
+    await expect(page.getByText("Worker progress")).toBeVisible();
+
+    await page.getByRole("tab", { name: /Correlation Model/i }).click();
+    await page.getByRole("button", { name: "Run Correlation Analysis" }).click();
+    await page.getByRole("tab", { name: /Corporate Valuation/i }).click();
+
+    await expect(page.getByText("Run canceled").first()).toBeVisible();
+    await expect(page.getByText("Worker progress")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Run Valuation" })).toBeEnabled();
+  });
+
+  test("a correlation run superseded by a path run goes back to idle, never Run canceled", async ({ page }) => {
+    await installMonteCarloWorker(page, { hold: true });
+    await page.goto("/monte-carlo", { waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("heading", { name: /Simulation Lab/i })).toBeVisible({ timeout: 60_000 });
+    await page.getByRole("tab", { name: /Correlation Model/i }).click();
+    await page.getByRole("button", { name: "Run Correlation Analysis" }).click();
+    await expect(page.getByText("Worker progress")).toBeVisible();
+
+    await page.getByRole("tab", { name: /Path Simulation/i }).click();
+    await page.getByRole("button", { name: "Run Path Simulation" }).click();
+    await page.getByRole("tab", { name: /Correlation Model/i }).click();
+
+    await expect(page.getByText("No analysis run yet").first()).toBeVisible();
+    await expect(page.getByText("Run canceled")).toHaveCount(0);
+    await expect(page.getByText("Worker progress")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Run Correlation Analysis" })).toBeEnabled();
+  });
+});
