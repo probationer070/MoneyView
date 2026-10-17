@@ -727,14 +727,22 @@ export default function MonteCarloPage() {
         <RiskAnalysisSection
           sharedSimulation={sharedSimulation}
           initialInvestment={input.initialInvestment}
+          status={status}
+          progress={progress}
+          errorMessage={errorMessage}
           warnings={pathRunState.warnings}
+          onOpenPath={() => setStored("path")}
           exportRiskSummaryCsv={exportRiskSummaryCsv}
           exportRiskHistogramCsv={exportRiskHistogramCsv}
         />
       ) : activeTab === "distribution" ? (
         <ReturnDistributionSection
           sharedSimulation={sharedSimulation}
+          status={status}
+          progress={progress}
+          errorMessage={errorMessage}
           warnings={pathRunState.warnings}
+          onOpenPath={() => setStored("path")}
           exportReturnHistogramCsv={exportReturnHistogramCsv}
           exportReturnCdfCsv={exportReturnCdfCsv}
         />

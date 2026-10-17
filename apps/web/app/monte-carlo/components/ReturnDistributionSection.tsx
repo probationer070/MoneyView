@@ -1,110 +1,100 @@
 "use client";
 
 import type { SharedSimulationResult } from "../lib/types";
-import { Download } from "lucide-react";
 import { CartesianGrid, Line, LineChart, Tooltip, XAxis, YAxis } from "recharts";
-import { ActionButton } from "@/components/ui/ActionButton";
-import { MonteCarloTabSummary } from "./MonteCarloTabSummary";
 import { ChartGuard } from "./ChartGuard";
 import { CHART_COLORS, GRID_STYLE, fmtPctTick, withAxisProps, withTooltipProps } from "@/lib/chartConfig";
-import { formatNumber } from "@/lib/format";
-import { useLocale } from "@/lib/i18n/locale";
-import { MetricCard, WarningNotice, numberText, pct } from "./shared";
+import { useLocale, useT } from "@/lib/i18n/locale";
 import { HistogramPanel, type HistogramBin } from "@/components/charts/HistogramPanel";
+import { ResultHeader, type ResultFigure } from "./ResultHeader";
+import { RunNotice } from "./RunNotice";
+import { WarningBanner } from "./WarningBanner";
+import { numberText, pct } from "./shared";
+import { runStatusView, type RunStatus } from "../lib/resultModel";
 
 type Props = {
   sharedSimulation: SharedSimulationResult | null;
+  status: RunStatus;
+  progress: number;
+  errorMessage: string | null;
   warnings: string[];
+  onOpenPath: () => void;
   exportReturnHistogramCsv: () => void;
   exportReturnCdfCsv: () => void;
 };
 
-export function ReturnDistributionSection({ sharedSimulation, warnings, exportReturnHistogramCsv, exportReturnCdfCsv }: Props) {
+// No rail: the distribution comes from the path run. Histogram and CDF sit side by side and fill the chart area.
+export function ReturnDistributionSection({
+  sharedSimulation,
+  status,
+  progress,
+  errorMessage,
+  warnings,
+  onOpenPath,
+  exportReturnHistogramCsv,
+  exportReturnCdfCsv,
+}: Props) {
   const { locale } = useLocale();
+  const t = useT();
+  const risk = sharedSimulation?.raw.risk_metrics;
 
-  if (!sharedSimulation) {
-    return (
-      <div className="space-y-6">
-        <MonteCarloTabSummary
-          title="Return Distribution Summary"
-          description="Return Distribution is fed by the shared path run. It does not trigger a separate simulation."
-          status="idle"
-          statusLabel="Waiting for path results"
-          items={[
-            { label: "Source tab", value: "Path Simulation" },
-            { label: "Dependency", value: "Shared histogram + CDF" },
-            { label: "Run state", value: "No analysis run yet" },
-            { label: "Exports", value: "Unavailable until path run" },
-          ]}
-        />
-        <div className="border border-dashed border-[var(--line)] bg-[var(--surface-raised)] p-10 text-center type-body text-[var(--ink-muted)]">
-          Run the shared simulation first. Return Distribution uses the same terminal distribution and moments as the Path and Risk tabs.
-        </div>
-      </div>
-    );
-  }
+  const figures: ResultFigure[] = [
+    { key: "mean", label: t("monteCarlo.distribution.figures.mean"), value: risk?.mean_return ?? null, format: (n) => pct(n, locale), hint: t("monteCarlo.distribution.hints.mean") },
+    { key: "std", label: t("monteCarlo.distribution.figures.std"), value: risk?.volatility ?? null, format: (n) => pct(n, locale), hint: t("monteCarlo.distribution.hints.std") },
+    { key: "kurtosis", label: t("monteCarlo.distribution.figures.kurtosis"), value: risk?.kurtosis ?? null, format: (n) => numberText(n, locale), hint: t("monteCarlo.distribution.hints.kurtosis") },
+    { key: "max", label: t("monteCarlo.distribution.figures.max"), value: risk?.max_return ?? null, format: (n) => pct(n, locale), hint: t("monteCarlo.distribution.hints.max") },
+    { key: "min", label: t("monteCarlo.distribution.figures.min"), value: risk?.min_return ?? null, format: (n) => pct(n, locale), hint: t("monteCarlo.distribution.hints.min") },
+  ];
+
+  const cdf = sharedSimulation?.raw.cdf_comparison ?? [];
+  const cdfState = !sharedSimulation ? "empty" : cdf.length > 0 ? "ready" : "invalid";
 
   return (
-    <div className="space-y-6">
-      <WarningNotice warnings={warnings} title="Return-distribution normalization warnings" />
-
-      <MonteCarloTabSummary
-        title="Return Distribution Summary"
-        description="This tab reuses the shared path output and keeps its histogram and CDF exports at the same summary boundary before the charts."
-        status="live"
-        statusLabel="Using shared path results"
-        items={[
-          { label: "Mean return", value: pct(sharedSimulation.raw.risk_metrics.mean_return, locale) },
-          { label: "Volatility", value: pct(sharedSimulation.raw.risk_metrics.volatility, locale) },
-          { label: "Kurtosis", value: numberText(sharedSimulation.raw.risk_metrics.kurtosis, locale) },
-          { label: "Samples", value: formatNumber(sharedSimulation.raw.histogram.length, "integer", { locale }) },
-        ]}
-        actions={(
-          <>
-            <ActionButton label="Export Histogram CSV" size="sm" onClick={exportReturnHistogramCsv} icon={<Download className="h-4 w-4" />} />
-            <ActionButton label="Export CDF CSV" size="sm" onClick={exportReturnCdfCsv} icon={<Download className="h-4 w-4" />} />
-          </>
-        )}
+    <div data-testid="mc-distribution" className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto lg:overflow-visible">
+      <ResultHeader
+        status={runStatusView(status, progress, sharedSimulation !== null)}
+        figures={figures}
+        exports={sharedSimulation ? [
+          { key: "return-histogram", label: t("monteCarlo.distribution.exports.histogram"), onSelect: exportReturnHistogramCsv },
+          { key: "return-cdf", label: t("monteCarlo.distribution.exports.cdf"), onSelect: exportReturnCdfCsv },
+        ] : []}
+        source={sharedSimulation ? { label: t("monteCarlo.shared.basedOnPath"), openLabel: t("monteCarlo.shared.openPath"), onOpen: onOpenPath } : undefined}
+        prompt={!sharedSimulation && status !== "loading" ? { text: t("monteCarlo.shared.runFirst"), actionLabel: t("monteCarlo.shared.openPath"), onAction: onOpenPath } : undefined}
       />
 
-      {/* Distribution moment summary */}
-      <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
-        <MetricCard label="Mean return" value={pct(sharedSimulation.raw.risk_metrics.mean_return, locale)} detail="Average terminal return across all simulations" />
-        <MetricCard label="Std. deviation" value={pct(sharedSimulation.raw.risk_metrics.volatility, locale)} detail="Dispersion of terminal returns" />
-        <MetricCard label="Kurtosis" value={numberText(sharedSimulation.raw.risk_metrics.kurtosis, locale)} detail="Fourth-moment tail heaviness of the terminal return distribution" />
-        <MetricCard label="Maximum return" value={pct(sharedSimulation.raw.risk_metrics.max_return, locale)} detail="Best simulated terminal return" />
-        <MetricCard label="Minimum return" value={pct(sharedSimulation.raw.risk_metrics.min_return, locale)} detail="Worst simulated terminal return" />
+      {status === "error" ? <RunNotice tone="error">{errorMessage ?? t("monteCarlo.path.runFailed")}</RunNotice> : null}
+      <WarningBanner title={t("monteCarlo.path.warningsTitle")} warnings={warnings} />
+
+      <section className="grid min-h-0 flex-1 grid-cols-1 gap-3 lg:grid-cols-2 lg:grid-rows-[minmax(0,1fr)]">
+        <HistogramPanel
+          height="fill"
+          title={t("monteCarlo.distribution.histogram.title")}
+          description={t("monteCarlo.distribution.histogram.description")}
+          data={(sharedSimulation?.returnDistributionChartData ?? []) as unknown as HistogramBin[]}
+          emptyTitle={sharedSimulation ? t("monteCarlo.distribution.histogram.invalid") : t("monteCarlo.distribution.empty.title")}
+          emptyDescription={sharedSimulation ? t("monteCarlo.distribution.histogram.invalidHint") : t("monteCarlo.distribution.empty.hint")}
+        />
+
+        <ChartGuard
+          title={t("monteCarlo.distribution.cdf.title")}
+          description={t("monteCarlo.distribution.cdf.description")}
+          state={cdfState}
+          emptyTitle={t("monteCarlo.distribution.cdf.empty")}
+          emptyDescription={t("monteCarlo.distribution.cdf.emptyHint")}
+          invalidTitle={t("monteCarlo.distribution.cdf.invalid")}
+          invalidDescription={t("monteCarlo.distribution.cdf.invalidHint")}
+          chartHeight="fill"
+        >
+          <LineChart data={cdf}>
+            <CartesianGrid {...GRID_STYLE} />
+            <XAxis dataKey="return" {...withAxisProps({ tickFormatter: (value: number | string) => fmtPctTick(Number(value), 0) })} />
+            <YAxis domain={[0, 1]} {...withAxisProps()} />
+            <Tooltip {...withTooltipProps()} />
+            <Line type="monotone" dataKey="simulated_cdf" stroke={CHART_COLORS.primary} strokeWidth={2} dot={false} />
+            <Line type="monotone" dataKey="normal_cdf" stroke={CHART_COLORS.ink} strokeDasharray="6 4" dot={false} />
+          </LineChart>
+        </ChartGuard>
       </section>
-
-      {/* Histogram plus fitted normal overlay */}
-      <HistogramPanel
-        title="Return Histogram with Fitted Normal Curve"
-        description="Simulated terminal return histogram with the fitted normal distribution overlaid for tail-shape comparison."
-        data={sharedSimulation.returnDistributionChartData as unknown as HistogramBin[]}
-        emptyTitle="Return histogram data is invalid"
-        emptyDescription="The shared simulation result did not contain a chart-safe return histogram, so the panel was withheld instead of rendering blank."
-      />
-
-      {/* Simulated versus fitted cumulative distribution comparison */}
-      <ChartGuard
-        title="CDF Comparison"
-        description="Simulated cumulative distribution versus fitted normal cumulative distribution."
-        state={sharedSimulation.raw.cdf_comparison.length > 0 ? "ready" : "invalid"}
-        emptyTitle="No CDF comparison data yet"
-        emptyDescription="Run the shared simulation to generate the CDF comparison."
-        invalidTitle="CDF comparison data is invalid"
-        invalidDescription="The worker result did not contain a chart-safe CDF comparison, so the panel was withheld instead of rendering blank."
-        chartHeight={320}
-      >
-        <LineChart data={sharedSimulation.raw.cdf_comparison}>
-          <CartesianGrid {...GRID_STYLE} />
-          <XAxis dataKey="return" {...withAxisProps({ tickFormatter: (value: number | string) => fmtPctTick(Number(value), 0) })} />
-          <YAxis domain={[0, 1]} {...withAxisProps()} />
-          <Tooltip {...withTooltipProps()} />
-          <Line type="monotone" dataKey="simulated_cdf" stroke={CHART_COLORS.primary} strokeWidth={2} dot={false} />
-          <Line type="monotone" dataKey="normal_cdf" stroke={CHART_COLORS.ink} strokeDasharray="6 4" dot={false} />
-        </LineChart>
-      </ChartGuard>
     </div>
   );
 }

@@ -92,6 +92,7 @@ test("simulation lab surfaces invalid-data states and preserved warnings for deg
 
   await page.getByRole("tab", { name: /Risk Analysis/i }).click();
   await expect(page.getByRole("heading", { name: "VaR / CVaR Risk Distribution" })).toBeVisible();
+  await page.getByRole("group", { name: "Risk chart" }).getByRole("button", { name: "Percentiles" }).click();
   await expect(page.getByRole("heading", { name: "Terminal Value Percentiles" })).toBeVisible();
 
   await page.getByRole("tab", { name: /Return Distribution/i }).click();

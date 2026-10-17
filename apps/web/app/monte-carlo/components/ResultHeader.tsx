@@ -60,7 +60,7 @@ export function ResultHeader({ status, figures, exports, source, prompt }: Props
           </button>
         </div>
       ) : figures.length > 0 ? (
-        <div className="grid grid-cols-2 gap-x-4 gap-y-2 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-x-4 gap-y-2 lg:grid-flow-col lg:auto-cols-fr lg:grid-cols-none">
           {figures.map((figure) => (
             <div key={figure.key} data-testid={`mc-figure-${figure.key}`} title={figure.hint} className="min-w-0">
               <div className="truncate type-small text-[var(--ink-muted)]">{figure.label}</div>

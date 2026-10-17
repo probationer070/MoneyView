@@ -19,12 +19,14 @@ test.describe("risk charts draw", () => {
     await page.getByRole("tab", { name: /Risk Analysis/i }).click();
 
     const var_ = panelOf(page, "VaR / CVaR Risk Distribution");
-    const percentiles = panelOf(page, "Terminal Value Percentiles");
     await expect(var_.locator(".recharts-bar-rectangle")).toHaveCount(6);
-    await expect(percentiles.locator(".recharts-bar-rectangle")).toHaveCount(7);
-
     // Every bar has a drawn height, not only a node.
     await expect.poll(async () => (await barHeights(var_)).filter((h) => h > 0).length).toBe(6);
+
+    // The percentile chart is the other view of the same area: switch to it.
+    await page.getByRole("group", { name: "Risk chart" }).getByRole("button", { name: "Percentiles" }).click();
+    const percentiles = panelOf(page, "Terminal Value Percentiles");
+    await expect(percentiles.locator(".recharts-bar-rectangle")).toHaveCount(7);
     await expect.poll(async () => (await barHeights(percentiles)).filter((h) => h > 0).length).toBe(7);
   });
 });
@@ -406,5 +408,151 @@ test.describe("ScanReveal body class", () => {
     await page.goto("/monte-carlo", { waitUntil: "domcontentloaded" });
     await expect(page.getByTestId("scan-line")).toBeAttached({ timeout: 60_000 });
     expect(await bodyClass(page)).toBe("flex min-h-0 flex-1 flex-col");
+  });
+});
+
+test.describe("risk and distribution", () => {
+  test.use({ viewport: { width: 1280, height: 720 } });
+
+  const PROMPT = "Run the path simulation on the Path tab first.";
+  const TABS = [
+    ["risk", /Risk Analysis/],
+    ["distribution", /Return Distribution/],
+  ] as const;
+
+  for (const [name, tab] of TABS) {
+    test(`${name}: before a path run the tab asks for one, and its button opens Path`, async ({ page }) => {
+      await openPath(page);
+      await page.getByRole("tab", { name: tab }).click();
+      await expect(page.getByTestId("mc-run-prompt")).toHaveText(PROMPT);
+      await expect(page.getByTestId("mc-status")).toHaveText("No analysis run yet");
+      await page.getByTestId("mc-run-prompt-open").click();
+      await expect(page.getByRole("tab", { name: /Path Simulation/ })).toHaveAttribute("aria-selected", "true");
+    });
+
+    test(`${name}: while a path run is in flight the tab shows its progress and no prompt`, async ({ page }) => {
+      await openPath(page, { hold: true });
+      await page.getByTestId("mc-run-path").click();
+      await page.getByRole("tab", { name: tab }).click();
+      await expect(page.getByTestId("mc-status")).toHaveAttribute("data-state", "running");
+      await expect(page.getByTestId("mc-status-progress")).toHaveText("50%");
+      await expect(page.getByTestId("mc-run-prompt")).toHaveCount(0);
+    });
+  }
+
+  test("risk: after a run the six risk figures are shown, and VaR 95 reads KRW 600,000", async ({ page }) => {
+    await openPath(page);
+    await page.getByTestId("mc-run-path").click();
+    await expect(page.getByTestId("mc-status")).toHaveAttribute("data-state", "ready");
+    await page.getByRole("tab", { name: /Risk Analysis/ }).click();
+    for (const key of ["var95", "var99", "cvar95", "maxDrawdown", "sortino", "skewness"]) {
+      await expect(page.getByTestId(`mc-figure-${key}-value`)).toBeVisible();
+    }
+    await expect(page.getByTestId("mc-figure-var95-value")).toHaveText("KRW 600,000");
+  });
+
+  test("distribution: after a run the five distribution figures are shown", async ({ page }) => {
+    await openPath(page);
+    await page.getByTestId("mc-run-path").click();
+    await expect(page.getByTestId("mc-status")).toHaveAttribute("data-state", "ready");
+    await page.getByRole("tab", { name: /Return Distribution/ }).click();
+    for (const key of ["mean", "std", "kurtosis", "max", "min"]) {
+      await expect(page.getByTestId(`mc-figure-${key}-value`)).toBeVisible();
+    }
+  });
+
+  test("risk: the view toggle switches between the VaR chart and the percentile chart, and the statistical summary stays", async ({ page }) => {
+    await openPath(page);
+    await page.getByTestId("mc-run-path").click();
+    await expect(page.getByTestId("mc-status")).toHaveAttribute("data-state", "ready");
+    await page.getByRole("tab", { name: /Risk Analysis/ }).click();
+    const group = page.getByRole("group", { name: "Risk chart" });
+    await expect(group.getByRole("button", { name: "VaR / CVaR" })).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByRole("heading", { name: "VaR / CVaR Risk Distribution" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Terminal Value Percentiles" })).toHaveCount(0);
+
+    await group.getByRole("button", { name: "Percentiles" }).click();
+    await expect(group.getByRole("button", { name: "Percentiles" })).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByRole("heading", { name: "Terminal Value Percentiles" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "VaR / CVaR Risk Distribution" })).toHaveCount(0);
+    await expect(panelOf(page, "Terminal Value Percentiles").getByText("KRW M", { exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Statistical Summary" })).toBeVisible();
+  });
+
+  test("risk: the two exports download risk_summary.csv and risk_histogram.csv", async ({ page }) => {
+    await openPath(page);
+    await page.getByTestId("mc-run-path").click();
+    await expect(page.getByTestId("mc-status")).toHaveAttribute("data-state", "ready");
+    await page.getByRole("tab", { name: /Risk Analysis/ }).click();
+    const files = { "risk-summary": "risk_summary.csv", "risk-histogram": "risk_histogram.csv" };
+    for (const [key, file] of Object.entries(files)) {
+      await page.getByTestId("mc-export").click();
+      const [download] = await Promise.all([page.waitForEvent("download"), page.getByTestId(`mc-export-${key}`).click()]);
+      expect(download.suggestedFilename()).toBe(file);
+    }
+  });
+
+  test("distribution: the two exports download return_histogram.csv and return_cdf.csv", async ({ page }) => {
+    await openPath(page);
+    await page.getByTestId("mc-run-path").click();
+    await expect(page.getByTestId("mc-status")).toHaveAttribute("data-state", "ready");
+    await page.getByRole("tab", { name: /Return Distribution/ }).click();
+    const files = { "return-histogram": "return_histogram.csv", "return-cdf": "return_cdf.csv" };
+    for (const [key, file] of Object.entries(files)) {
+      await page.getByTestId("mc-export").click();
+      const [download] = await Promise.all([page.waitForEvent("download"), page.getByTestId(`mc-export-${key}`).click()]);
+      expect(download.suggestedFilename()).toBe(file);
+    }
+  });
+
+  test("risk: at 1280x720 after a run, the header, both risk chart views and the statistical summary end inside the panel", async ({ page }) => {
+    await openPath(page);
+    // Until /monte-carlo joins ONE_SCREEN_ROUTES (Task 10) the shell keeps 5rem of bottom padding. Apply the one-screen padding.
+    await page.addStyleTag({ content: "main { --main-pad-bottom: 1.5rem !important; }" });
+    await page.getByTestId("mc-run-path").click();
+    await expect(page.getByTestId("mc-status")).toHaveAttribute("data-state", "ready");
+    await page.getByRole("tab", { name: /Risk Analysis/ }).click();
+
+    const panel = (await page.getByTestId("mc-panel").boundingBox())!;
+    const bottom = panel.y + panel.height + 1;
+    const header = (await page.getByTestId("mc-result-header").boundingBox())!;
+    expect(header.y + header.height, "result header ends inside the panel").toBeLessThanOrEqual(bottom);
+
+    const group = page.getByRole("group", { name: "Risk chart" });
+    const summary = (await page.getByRole("heading", { name: "Statistical Summary" }).locator("xpath=..").boundingBox())!;
+    expect(summary.y + summary.height, "statistical summary ends inside the panel").toBeLessThanOrEqual(bottom);
+
+    for (const [view, title] of [["VaR / CVaR", "VaR / CVaR Risk Distribution"], ["Percentiles", "Terminal Value Percentiles"]] as const) {
+      await group.getByRole("button", { name: view }).click();
+      const frame = (await panelOf(page, title).boundingBox())!;
+      expect(frame.y + frame.height, `${title} ends inside the panel`).toBeLessThanOrEqual(bottom);
+      const surface = (await panelOf(page, title).locator(".recharts-surface").first().boundingBox())!;
+      expect(surface.height, `${title} chart height`).toBeGreaterThanOrEqual(200);
+      expect(surface.y + surface.height, `${title} chart ends inside its frame`).toBeLessThanOrEqual(frame.y + frame.height + 1);
+    }
+  });
+
+  test("distribution: at 1280x720 after a run, the histogram and CDF sit side by side inside the panel, each at least 200px tall", async ({ page }) => {
+    await openPath(page);
+    await page.addStyleTag({ content: "main { --main-pad-bottom: 1.5rem !important; }" });
+    await page.getByTestId("mc-run-path").click();
+    await expect(page.getByTestId("mc-status")).toHaveAttribute("data-state", "ready");
+    await page.getByRole("tab", { name: /Return Distribution/ }).click();
+
+    const panel = (await page.getByTestId("mc-panel").boundingBox())!;
+    const bottom = panel.y + panel.height + 1;
+    const header = (await page.getByTestId("mc-result-header").boundingBox())!;
+    expect(header.y + header.height, "result header ends inside the panel").toBeLessThanOrEqual(bottom);
+
+    const histogramTitle = "Return Histogram with Fitted Normal Curve";
+    const histogram = (await panelOf(page, histogramTitle).boundingBox())!;
+    const cdf = (await panelOf(page, "CDF Comparison").boundingBox())!;
+    expect(Math.abs(histogram.y - cdf.y), "the two charts share a top edge").toBeLessThanOrEqual(1);
+    expect(histogram.x + histogram.width, "the histogram sits left of the CDF").toBeLessThanOrEqual(cdf.x + 1);
+    for (const [title, frame] of [[histogramTitle, histogram], ["CDF Comparison", cdf]] as const) {
+      expect(frame.y + frame.height, `${title} ends inside the panel`).toBeLessThanOrEqual(bottom);
+      const surface = (await panelOf(page, title).locator(".recharts-surface").first().boundingBox())!;
+      expect(surface.height, `${title} chart height`).toBeGreaterThanOrEqual(200);
+    }
   });
 });

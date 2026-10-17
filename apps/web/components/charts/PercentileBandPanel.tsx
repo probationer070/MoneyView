@@ -34,7 +34,8 @@ interface PercentileBandPanelProps {
   data: PercentileData[];
   title?: string;
   description?: string;
-  height?: number;
+  /** Pixels, or "fill" to take the height the parent gives (never below the chart minimum). */
+  height?: number | "fill";
   valueLabel?: string;
   valueFormatter?: (value: number) => string;
   /** Y tick labels; absent, the ticks keep the plain number format. */
@@ -65,6 +66,7 @@ export function PercentileBandPanel({
   emptyTitle = "No percentile data available",
   emptyDescription = "Run an analysis or refresh the data to generate percentile bands.",
 }: PercentileBandPanelProps) {
+  const fill = height === "fill";
   return (
     <ErrorBoundary>
       <ChartPanelFrame
@@ -79,7 +81,10 @@ export function PercentileBandPanel({
         emptyDescription={emptyDescription}
         className="h-full flex flex-col"
       >
-        <div className="mt-4 flex-grow" style={{ minHeight: height }}>
+        <div
+          className={fill ? "mt-4 min-h-[var(--component-chart-min-height)] flex-1" : "mt-4 flex-grow"}
+          style={fill ? undefined : { minHeight: height }}
+        >
           <ResponsiveChart className="h-full w-full" minWidth={1} minHeight={1}>
             <BarChart data={data} margin={CHART_MARGIN}>
               <CartesianGrid {...GRID_STYLE} vertical={false} />
