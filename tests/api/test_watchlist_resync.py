@@ -298,3 +298,42 @@ def test_portfolio_preferences_round_trip_total_investment_amount(tmp_path, monk
     round_trip = client.get("/api/v1/portfolio/preferences")
     assert round_trip.status_code == 200
     assert round_trip.json()["data"]["total_investment_amount"] == 27500.0
+
+
+def test_resync_keeps_the_theme_of_a_ticker_that_survives(tmp_path, monkeypatch):
+    """Catches the resync re-inserting rows without theme (theme is owner-curated, no JSON source).
+
+    Mutation: writing `""` instead of the snapshotted theme in resync_watchlist_from_json.
+    AAPL is absent from the JSON, so its row and theme must both be gone.
+    """
+    db_path = tmp_path / "moneyview.db"
+    json_path = tmp_path / "stock_targets.json"
+    _write_watchlist_json(
+        json_path,
+        {"growth": {"targets": [{"ticker": "NVDA", "name": "NVIDIA", "sector": "Semiconductors", "weight": 1.0}]}},
+    )
+
+    monkeypatch.setattr(db_service, "_DB_PATH", db_path)
+    db_service.init_db()
+
+    from apps.api.routes import portfolio as portfolio_route
+
+    monkeypatch.setattr(portfolio_route, "_WATCHLIST_JSON", json_path)
+    with db_service.get_db() as conn:
+        conn.execute(
+            """INSERT INTO watchlist (ticker, name, sector, group_name, weight, theme)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            ("NVDA", "NVIDIA", "Semiconductors", "growth", 0.5, "ai_semis"),
+        )
+        conn.execute(
+            """INSERT INTO watchlist (ticker, name, sector, group_name, weight, theme)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            ("AAPL", "Apple", "Technology", "manual", 0.5, "memory_storage"),
+        )
+
+    response = TestClient(app).post("/api/v1/portfolio/watchlist/resync")
+
+    assert response.status_code == 200
+    with db_service.get_db() as conn:
+        rows = {row["ticker"]: row["theme"] for row in conn.execute("SELECT ticker, theme FROM watchlist")}
+    assert rows == {"NVDA": "ai_semis"}
