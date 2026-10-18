@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { API_PREFIX, json } from "./helpers/mockUtils";
 import { mockPortfolioPageApi } from "./helpers/portfolioPageMock";
+import { portfolioPartialWeightsFixture } from "./fixtures/shared";
 import { openPortfolioPanel, portfolioModal } from "./helpers/portfolioPanels";
 
 async function gotoPortfolio(page: Page) {
@@ -166,6 +167,43 @@ test("clicking a holding opens the stock detail modal", async ({ page }) => {
   await expect(page.getByTestId("portfolio-side-panel")).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(portfolioModal(page)).toHaveCount(0);
+});
+
+test("the stock modal saves a theme without touching the sector", async ({ page }) => {
+  // Catches a theme save that goes through the full-row upsert (which rewrites sector and
+  // weight) or that posts a body other than {"theme": id}.
+  await mockPortfolioPageApi(page, undefined, {
+    watchlist: portfolioPartialWeightsFixture.map((row) => (
+      row.ticker === "AAPL" ? { ...row, theme: "ai_semis" } : row
+    )),
+  });
+  const fullRowPosts: string[] = [];
+  const themePostBodies: string[] = [];
+  page.on("request", (request) => {
+    if (request.method() !== "POST") return;
+    const { pathname } = new URL(request.url());
+    if (pathname === `${API_PREFIX}/portfolio/watchlist`) fullRowPosts.push(request.url());
+    if (pathname === `${API_PREFIX}/portfolio/watchlist/AAPL/theme`) themePostBodies.push(request.postData() ?? "");
+  });
+
+  await gotoPortfolio(page);
+  await openPortfolioPanel(page, "holdings");
+  await page.locator('[role="button"]').filter({ hasText: "Apple" }).first().click();
+
+  const stockDetailDialog = portfolioModal(page);
+  await expect(stockDetailDialog).toBeVisible();
+  const themeSelect = stockDetailDialog.getByLabel("Stock theme");
+  await expect(themeSelect).toHaveValue("ai_semis");
+  await expect(themeSelect.locator("option:checked")).toHaveText("AI semiconductors");
+
+  await themeSelect.selectOption({ label: "Memory & storage" });
+  await stockDetailDialog.getByRole("button", { name: "Save Theme" }).click();
+
+  await expect(stockDetailDialog.getByText("Saved theme for AAPL.")).toBeVisible();
+  expect(fullRowPosts).toEqual([]);
+  expect(themePostBodies).toEqual(['{"theme":"memory_storage"}']);
+  await expect(themeSelect.locator("option:checked")).toHaveText("Memory & storage");
+  await expect(stockDetailDialog.getByLabel("Stock sector")).toHaveValue("Technology");
 });
 
 test("stock detail modal shows explicit error states when detail and news requests fail", async ({ page }) => {

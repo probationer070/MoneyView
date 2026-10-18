@@ -11,6 +11,8 @@ export type PortfolioStockFixture = {
   // no-weights fallback sorts by it, so a fixture row without one makes that sort compare
   // NaN and silently order by nothing.
   id: number;
+  // Mirrors PortfolioStock.theme on the API: a stable theme id, "" when unset.
+  theme: string;
 };
 
 export const marketOverviewFixture = [
@@ -480,6 +482,7 @@ export const portfolioPartialWeightsFixture: PortfolioStockFixture[] = [
     delta: { delta_pct: 1.2 },
     sparkline: [200, 202, 204, 208, 210.4],
     id: 1,
+    theme: "",
   },
   {
     ticker: "MSFT",
@@ -491,6 +494,7 @@ export const portfolioPartialWeightsFixture: PortfolioStockFixture[] = [
     delta: { delta_pct: 0.7 },
     sparkline: [406, 408, 410, 412, 415.3],
     id: 2,
+    theme: "",
   },
   {
     ticker: "NVDA",
@@ -502,6 +506,7 @@ export const portfolioPartialWeightsFixture: PortfolioStockFixture[] = [
     delta: { delta_pct: 2.4 },
     sparkline: [111, 113, 116, 118, 119.2],
     id: 3,
+    theme: "",
   },
   {
     ticker: "GOOGL",
@@ -513,6 +518,7 @@ export const portfolioPartialWeightsFixture: PortfolioStockFixture[] = [
     delta: { delta_pct: -0.3 },
     sparkline: [170, 171, 173, 172.5, 172.1],
     id: 4,
+    theme: "",
   },
   {
     ticker: "AMZN",
@@ -524,6 +530,7 @@ export const portfolioPartialWeightsFixture: PortfolioStockFixture[] = [
     delta: { delta_pct: 0.5 },
     sparkline: [184, 186, 187, 188, 189.6],
     id: 5,
+    theme: "",
   },
 ];
 
