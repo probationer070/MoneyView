@@ -126,3 +126,40 @@ def test_stamp_row_and_record_removal_use_this_pc():
         state = store.read_local_state(conn)
     assert state.rows["AAPL"].updated_by == "PC-ME-00ff" and state.rows["AAPL"].updated_at > BASELINE_TS
     assert state.removed["MSFT"].removed_by == "PC-ME-00ff"
+
+
+def test_apply_state_writes_theme_and_read_returns_it():
+    """Mutation: dropping theme from the INSERT / ON CONFLICT DO UPDATE in apply_state -> the stored
+    theme stays "" and this round trip fails. The insert path and the update path are both covered."""
+    _insert("AAPL")
+    merged = SyncState(rows={
+        "AAPL": SyncRow("AAPL", "AAPL", "", "custom", 0.1, "2026-09-18T10:00:00.000Z", "PC-B-0002", theme="ai_semis"),
+        "NVDA": SyncRow("NVDA", "NVDA", "", "custom", 0.1, "2026-09-18T10:00:00.000Z", "PC-B-0002", theme="crypto"),
+    })
+    with get_db() as conn:
+        store.apply_state(conn, merged)
+        state = store.read_local_state(conn)
+
+    assert state.rows["AAPL"].theme == "ai_semis"
+    assert state.rows["NVDA"].theme == "crypto"
+    assert state == merged
+
+
+def test_an_older_themeless_peer_row_does_not_erase_a_newer_local_theme():
+    """Uses the service's own path: merge_states over local and peer state, then apply_state.
+    Mutation: dropping theme from order_key means the same-author rows tie on everything but
+    content, so the themeless peer row can win and the theme is erased."""
+    _insert("AAPL")
+    with get_db() as conn:
+        conn.execute("UPDATE watchlist SET theme = 'ai_semis', updated_at = '2026-09-18T12:00:00.000Z', "
+                     "updated_by = 'PC-ME-00ff' WHERE ticker = 'AAPL'")
+        local = store.read_local_state(conn)
+    peer = SyncState(rows={"AAPL": SyncRow("AAPL", "AAPL", "", "custom", 0.1,
+                                           "2026-09-18T10:00:00.000Z", "PC-B-0002")})
+
+    from apps.api.services.peer_sync.model import merge_states
+    with get_db() as conn:
+        store.apply_state(conn, merge_states([local, peer]))
+        theme = conn.execute("SELECT theme FROM watchlist WHERE ticker = 'AAPL'").fetchone()["theme"]
+
+    assert theme == "ai_semis"

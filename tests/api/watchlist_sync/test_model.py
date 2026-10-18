@@ -134,3 +134,15 @@ def test_a_real_change_beats_a_baseline_row():
     base = state([row(ts=BASELINE_TS, by="PC-Z-ffff", group="old")])
     real = state([row(ts="2026-01-01T00:00:00.000Z", by="PC-A-0001", group="new")])
     assert merge_states([base, real]).rows["AAPL"].group_name == "new"
+
+
+def test_theme_breaks_an_exact_tie_deterministically():
+    """Review Focus 3: two rows with the same (updated_at, updated_by) that differ only in theme
+    merge to the same winner in either order. Mutation: dropping theme from order_key -> the winner
+    depends on read order and the permutations disagree."""
+    versions = [row(by="PC-A-0001", ts="2026-09-18T10:00:00.000Z", name="Apple", group="custom"),
+                SyncRow("AAPL", "Apple", "Technology", "custom", 0.1, "2026-09-18T10:00:00.000Z", "PC-A-0001",
+                        theme="ai_semis")]
+    winners = {merge_states(state([v]) for v in order).rows["AAPL"].theme
+               for order in itertools.permutations(versions)}
+    assert winners == {"ai_semis"}

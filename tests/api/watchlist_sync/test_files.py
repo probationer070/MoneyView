@@ -279,3 +279,56 @@ def test_the_seed_stamp_is_still_accepted(tmp_path):
     [peer], skipped = read_peer_files(tmp_path, own_pc_id=ME)
 
     assert skipped == [] and peer.state.rows["AAPL"].updated_at == SEED_TS
+
+
+def _peer_payload(pc_id, rows):
+    return {
+        "format_version": 1, "pc_id": pc_id, "written_at": "2026-09-18T10:00:01.000Z",
+        "watchlist": rows, "removed": [],
+    }
+
+
+def _peer_row(**extra):
+    row = {"ticker": "AAPL", "name": "Apple", "sector": "Technology", "group_name": "custom",
+           "weight": 0.1, "updated_at": "2026-09-18T10:00:00.000Z", "updated_by": A}
+    row.update(extra)
+    return row
+
+
+def test_a_peer_row_without_theme_reads_as_empty_theme(tmp_path):
+    """Review Focus 2: a file from a PC that has not updated has no "theme" key. It must be read,
+    not skipped, with theme "". Mutation: raw["theme"] instead of raw.get("theme", "") -> KeyError,
+    the file is skipped and this test fails."""
+    folder = _folder(tmp_path)
+    (folder / f"watchlist.{A}.json").write_text(json.dumps(_peer_payload(A, [_peer_row()])), encoding="utf-8")
+
+    [peer], skipped = read_peer_files(tmp_path, own_pc_id=ME)
+
+    assert skipped == []
+    assert peer.state.rows["AAPL"].theme == ""
+
+
+def test_theme_round_trips(tmp_path):
+    """Mutation: dropping theme from write_own_file's payload -> the read-back theme is "" and fails."""
+    _folder(tmp_path)
+    state = SyncState(rows={"AAPL": SyncRow("AAPL", "Apple", "Technology", "custom", 0.1,
+                                            "2026-09-18T10:00:00.000Z", A, theme="gold_silver")})
+    write_own_file(tmp_path, B, state, "2026-09-18T10:00:01.000Z")
+
+    [peer], skipped = read_peer_files(tmp_path, own_pc_id=ME)
+
+    assert skipped == []
+    assert peer.state.rows["AAPL"].theme == "gold_silver"
+
+
+def test_a_non_text_theme_is_skipped_beside_a_good_peer(tmp_path):
+    """Mutation: dropping the isinstance(theme, str) check -> the bad file is read and this fails."""
+    folder = _folder(tmp_path)
+    (folder / f"watchlist.{A}.json").write_text(
+        json.dumps(_peer_payload(A, [_peer_row(theme=3)])), encoding="utf-8")
+    write_own_file(tmp_path, B, _state(by=B), "2026-09-18T10:00:01.000Z")
+
+    peers, skipped = read_peer_files(tmp_path, own_pc_id=ME)
+
+    assert [p.pc_id for p in peers] == [B]
+    assert [s.name for s in skipped] == [f"watchlist.{A}.json"]

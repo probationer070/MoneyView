@@ -74,13 +74,15 @@ class SyncRow:
     weight: float
     updated_at: str
     updated_by: str
+    # Optional on the wire: a peer file from a PC that has not updated has no theme, and reads as "".
+    theme: str = ""
 
     def add_key(self) -> tuple[str, str]:
         return (self.updated_at, self.updated_by)
 
     def order_key(self) -> tuple:
         # Content breaks an exact (timestamp, author) tie, so the choice never depends on read order.
-        return (self.updated_at, self.updated_by, self.name, self.sector, self.group_name, self.weight)
+        return (self.updated_at, self.updated_by, self.name, self.sector, self.group_name, self.weight, self.theme)
 
 
 @dataclass(frozen=True)

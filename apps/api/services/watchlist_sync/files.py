@@ -83,11 +83,16 @@ def _parse(payload: dict) -> PeerFile:
         for text in ("name", "sector", "group_name"):
             if not isinstance(raw[text], str):
                 raise ValueError(f"{ticker}: {text} is not text")
+        # Optional field (no FORMAT_VERSION bump): a row without "theme" reads as "".
+        theme = raw.get("theme", "")
+        if not isinstance(theme, str):
+            raise ValueError(f"{ticker}: theme is not text")
         rows[ticker] = SyncRow(
             ticker=ticker, name=raw["name"], sector=raw["sector"], group_name=raw["group_name"],
             weight=float(weight),
             updated_at=_ts(raw["updated_at"], f"{ticker} updated_at"),
             updated_by=_pc(raw["updated_by"], f"{ticker} updated_by"),
+            theme=theme,
         )
     removed: dict[str, Tombstone] = {}
     for raw in payload["removed"]:
@@ -140,7 +145,7 @@ def write_own_file(root: Path, pc_id: str, state: SyncState, written_at: str) ->
         "written_at": written_at,
         "watchlist": [
             {"ticker": r.ticker, "name": r.name, "sector": r.sector, "group_name": r.group_name,
-             "weight": r.weight, "updated_at": r.updated_at, "updated_by": r.updated_by}
+             "weight": r.weight, "updated_at": r.updated_at, "updated_by": r.updated_by, "theme": r.theme}
             for r in sorted(state.rows.values(), key=lambda r: r.ticker)
         ],
         "removed": [
