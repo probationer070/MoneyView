@@ -31,6 +31,7 @@ function bulkWatchlist(count: number, weight: number): PortfolioStockFixture[] {
     delta: { delta_pct: 0.5 },
     sparkline: [95, 97, 99, 100 + index],
     id: index + 1,
+    theme: "",
   }));
 }
 

@@ -5,6 +5,7 @@ import React, { useRef, useState, useMemo, useEffect } from "react";
 import { useQuery, useInfiniteQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { fetchApi } from "@/lib/api";
+import { useLocale } from "@/lib/i18n/locale";
 import { 
   transformToTVCandles, 
   transformToTVVolume, 
@@ -27,6 +28,7 @@ import type { CorporateMetricAudit } from "../../../../../packages/shared-types"
 
 import { 
   type PortfolioStock, 
+  type WatchlistTheme,
   type CorporateComparisonSnapshotMeta, 
   type PortfolioComparisonUniverse,
   type CorporateComparisonStockHistoryResponse,
@@ -62,6 +64,8 @@ export interface StockDetailModalProps {
   activeSnapshotVersion: string;
   onAddToPortfolio: (stock: PortfolioStock) => void;
   onUpdateSector: (stock: PortfolioStock, nextSector: string) => Promise<void>;
+  themes: WatchlistTheme[];
+  onUpdateTheme: (stock: PortfolioStock, themeId: string) => Promise<void>;
   onRemoveFromWatchlist: (stock: PortfolioStock) => void;
   onClose: () => void;
 }
@@ -79,6 +83,8 @@ export function StockDetailModal({
   activeSnapshotVersion,
   onAddToPortfolio,
   onUpdateSector,
+  themes,
+  onUpdateTheme,
   onRemoveFromWatchlist,
   onClose,
 }: StockDetailModalProps) {
@@ -88,6 +94,10 @@ export function StockDetailModal({
   const [sectorDraft, setSectorDraft] = useState(stock.sector);
   const [savingSector, setSavingSector] = useState(false);
   const [sectorMessage, setSectorMessage] = useState<string | null>(null);
+  const { locale } = useLocale();
+  const [themeDraft, setThemeDraft] = useState(stock.theme);
+  const [savingTheme, setSavingTheme] = useState(false);
+  const [themeMessage, setThemeMessage] = useState<string | null>(null);
   
   const effectiveComparisonUniverse = snapshotMeta?.comparison_universe ?? comparisonUniverse;
   const effectiveComparisonBenchmarkTicker = snapshotMeta?.benchmark_ticker ?? comparisonBenchmarkTicker;
@@ -344,10 +354,12 @@ export function StockDetailModal({
     const tickerChanged = previousTickerRef.current !== stock.ticker;
     previousTickerRef.current = stock.ticker;
     setSectorDraft(stock.sector);
+    setThemeDraft(stock.theme);
     if (tickerChanged) {
       setSectorMessage(null);
+      setThemeMessage(null);
     }
-  }, [stock.sector, stock.ticker]);
+  }, [stock.sector, stock.theme, stock.ticker]);
 
   const handleSaveSector = async () => {
     const normalizedSector = sectorDraft.trim();
@@ -366,6 +378,26 @@ export function StockDetailModal({
       setSavingSector(false);
     }
   };
+
+  const handleSaveTheme = async () => {
+    if (themeDraft === stock.theme) {
+      setThemeMessage("Theme is already up to date.");
+      return;
+    }
+    setSavingTheme(true);
+    setThemeMessage(null);
+    try {
+      await onUpdateTheme(stock, themeDraft);
+      setThemeMessage(`Saved theme for ${stock.ticker}.`);
+    } catch (error) {
+      setThemeMessage(error instanceof Error ? error.message : "Failed to save theme.");
+    } finally {
+      setSavingTheme(false);
+    }
+  };
+
+  // A stored id the list does not know (a newer PC may have added it) stays visible as "Other".
+  const storedThemeUnknown = stock.theme !== "" && !themes.some((theme) => theme.id === stock.theme);
 
   const headerRight = (
     <>
@@ -425,6 +457,43 @@ export function StockDetailModal({
         </div>
         {sectorMessage && <p className="mt-2 type-small text-[var(--ink-muted)]">{sectorMessage}</p>}
       </div>
+
+      {stock.id > 0 && (
+        <div className="flex flex-col mb-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-[var(--radius-2)] border border-[var(--line)] bg-[var(--surface)] px-3 py-1 type-small text-[var(--ink-muted)]">
+              Theme
+            </span>
+            <select
+              value={themeDraft}
+              onChange={(event) => setThemeDraft(event.target.value)}
+              aria-label="Stock theme"
+              className="rounded-[var(--radius-1)] border border-[var(--line)] bg-[var(--surface-raised)] px-3 py-2 type-body text-[var(--ink)]"
+            >
+              <option value="">{locale === "ko" ? "테마 없음" : "No theme"}</option>
+              {themes.map((theme) => (
+                <option key={theme.id} value={theme.id}>
+                  {locale === "ko" ? theme.ko : theme.en}
+                </option>
+              ))}
+              {storedThemeUnknown && (
+                <option value={stock.theme} disabled>
+                  {locale === "ko" ? "기타" : "Other"}
+                </option>
+              )}
+            </select>
+            <button
+              type="button"
+              onClick={() => void handleSaveTheme()}
+              disabled={savingTheme}
+              className="inline-flex items-center justify-center rounded-[var(--radius-1)] border border-[var(--line)] px-3 py-2 type-small text-[var(--ink-muted)] hover:text-[var(--ink)] disabled:opacity-50"
+            >
+              {savingTheme ? "Saving theme..." : "Save Theme"}
+            </button>
+          </div>
+          {themeMessage && <p className="mt-2 type-small text-[var(--ink-muted)]">{themeMessage}</p>}
+        </div>
+      )}
 
       <section className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4 mb-4">
         <div className="border border-[var(--line)] bg-[var(--surface)] p-4">

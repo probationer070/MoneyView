@@ -40,6 +40,34 @@ export type PortfolioPageMockOptions = {
   acquireReturnsNoResults?: boolean;
 };
 
+// Mirrors GET /portfolio/watchlist/themes: the 24 ids in display order.
+const WATCHLIST_THEMES: Array<{ id: string; ko: string; en: string }> = [
+  { id: "ai_semis", ko: "AI 반도체", en: "AI semiconductors" },
+  { id: "optical_connectivity", ko: "광통신·연결 칩", en: "Optical & connectivity chips" },
+  { id: "memory_storage", ko: "메모리·스토리지", en: "Memory & storage" },
+  { id: "chip_equipment_design", ko: "반도체 장비·설계", en: "Chip equipment & design" },
+  { id: "analog_power_chips", ko: "아날로그·전력 반도체", en: "Analog & power chips" },
+  { id: "ai_servers_network", ko: "AI 서버·네트워크", en: "AI servers & networking" },
+  { id: "ai_cloud_datacenter", ko: "AI 클라우드·데이터센터", en: "AI cloud & data centers" },
+  { id: "big_tech", ko: "빅테크", en: "Big tech" },
+  { id: "software_internet", ko: "소프트웨어·인터넷", en: "Software & internet" },
+  { id: "cybersecurity", ko: "사이버보안", en: "Cybersecurity" },
+  { id: "power_equipment", ko: "전력 장비·저장", en: "Power equipment & storage" },
+  { id: "nuclear_uranium", ko: "원전·우라늄", en: "Nuclear & uranium" },
+  { id: "power_producers", ko: "발전사", en: "Power producers" },
+  { id: "regulated_utilities", ko: "규제 유틸리티", en: "Regulated utilities" },
+  { id: "oil_gas", ko: "석유·가스", en: "Oil & gas" },
+  { id: "gold_silver", ko: "금·은", en: "Gold & silver" },
+  { id: "copper_metals", ko: "구리·산업금속", en: "Copper & industrial metals" },
+  { id: "battery_rare_earth", ko: "배터리·희토류 소재", en: "Battery & rare-earth materials" },
+  { id: "quantum", ko: "양자컴퓨팅", en: "Quantum computing" },
+  { id: "crypto", ko: "크립토", en: "Crypto" },
+  { id: "defense_aerospace", ko: "방산·항공", en: "Defense & aerospace" },
+  { id: "space_comms", ko: "우주·통신", en: "Space & communications" },
+  { id: "financials_payments", ko: "금융·결제", en: "Financials & payments" },
+  { id: "defensives_other", ko: "경기방어·기타", en: "Defensives & other" },
+];
+
 // Per-ticker news shape. AAPL has articles, MSFT is checked-but-empty, GOOGL has never
 // been checked: the three states a tile has to tell apart. Every other ticker is
 // never-checked, which is what an unseeded watchlist row really looks like.
@@ -395,6 +423,10 @@ export async function mockPortfolioPageApi(page: Page, stats?: PortfolioPageMock
       return json(route, watchlist);
     }
 
+    if (pathname === `${API_PREFIX}/portfolio/watchlist/themes` && method === "GET") {
+      return json(route, WATCHLIST_THEMES);
+    }
+
     if (pathname === `${API_PREFIX}/portfolio/watchlist/sync-status` && method === "GET") {
       return json(route, { status: "ok", data: syncStatus });
     }
@@ -597,6 +629,32 @@ export async function mockPortfolioPageApi(page: Page, stats?: PortfolioPageMock
       return json(route, metricAudit(ticker));
     }
 
+    // Theme has its own endpoint so a theme save never rewrites the full row. Mirrors the API:
+    // an unknown id is a 422 and an unknown ticker a 404.
+    if (/\/portfolio\/watchlist\/[^/]+\/theme$/.test(pathname) && method === "POST") {
+      const ticker = decodeURIComponent(pathname.split("/").slice(-2)[0]).toUpperCase();
+      const payload = JSON.parse(route.request().postData() ?? "{}");
+      const themeId = String(payload.theme ?? "");
+      if (themeId !== "" && !WATCHLIST_THEMES.some((theme) => theme.id === themeId)) {
+        return route.fulfill({
+          status: 422,
+          contentType: "application/json",
+          body: JSON.stringify({ detail: `unknown_theme: ${themeId}` }),
+        });
+      }
+      const existingRow = watchlist.find((item) => item.ticker === ticker);
+      if (!existingRow) {
+        return route.fulfill({
+          status: 404,
+          contentType: "application/json",
+          body: JSON.stringify({ detail: `unknown_ticker: ${ticker} is not on the watchlist` }),
+        });
+      }
+      const nextRow: PortfolioStock = { ...existingRow, theme: themeId };
+      watchlist = watchlist.map((item) => (item.ticker === ticker ? nextRow : item));
+      return json(route, nextRow);
+    }
+
     // Group membership has its own endpoint precisely because the upsert above would
     // reset weight, name and sector to their defaults. Mirroring that here keeps the mock
     // honest: a test that follows a weighted stock must still see its weight afterwards.
@@ -631,6 +689,8 @@ export async function mockPortfolioPageApi(page: Page, stats?: PortfolioPageMock
         // An upsert keeps its row id; a genuinely new ticker takes the next one, the way
         // an autoincrement primary key behaves.
         id: existingRow?.id ?? watchlist.reduce((max, item) => Math.max(max, item.id), 0) + 1,
+        // A full-row upsert that omits theme keeps the stored one, as the API does.
+        theme: existingRow?.theme ?? "",
       };
       watchlist = [...watchlist.filter((item) => item.ticker !== payload.ticker), nextRow];
       companyRegistry = [
@@ -703,6 +763,7 @@ export async function mockPortfolioPageApi(page: Page, stats?: PortfolioPageMock
           delta: { delta_pct: 2.4 },
           sparkline: [111, 113, 116, 118, 119.2],
           id: 1,
+          theme: "",
         },
       ];
       syncStatus = {

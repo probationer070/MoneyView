@@ -159,7 +159,7 @@ def test_watchlist_reports_no_price_rather_than_zero_when_every_bar_is_priceless
         def fetchall():
             return [{
                 "ticker": "AAPL", "name": "Apple", "sector": "Tech",
-                "group_name": "core", "weight": 0.0, "id": 1,
+                "group_name": "core", "weight": 0.0, "theme": "", "id": 1,
             }]
 
     class _Rows:

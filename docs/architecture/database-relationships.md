@@ -10,6 +10,10 @@ repeat, the prose in [`storage-model.md`](storage-model.md) (ownership and file 
 [`cache-ownership-invalidation.md`](cache-ownership-invalidation.md) (frontend/read-model caches).
 Start at [`../INDEX.md`](../INDEX.md) for the full documentation map.
 
+Last verified: 2026-10-18 against `apps/api/services/db.py` at 693adea (watchlist theme column) on branch
+`feat/risk-signal`: 31 tables, 5 declared foreign keys, 27 logical references. Risk signal sub-project 1
+(watchlist themes) is built; sub-projects 2-4 are only planned (§3.3).
+
 Sources of truth used here:
 
 - Schema: `_CREATE_SCHEMA_SQL` (which ends with `_SIGNAL_SCHEMA_SQL`) and `_ensure_schema_compatibility()`
@@ -18,7 +22,7 @@ Sources of truth used here:
 - Live schema cross-check: `data/processed/moneyview.db`, read through `sqlite_master` and `PRAGMA`
   only (no row data). The path default is `db.py:30`.
 - There is **no** schema version number. `PRAGMA user_version` is 0 in the live DB and is never set in
-  code. Migration is "create if absent, then add missing columns" (`db.py:716-733`, `db.py:735-1065`).
+  code. Migration is "create if absent, then add missing columns" (`db.py:717-733`, `db.py:736-1068`).
 - Connections apply `PRAGMA foreign_keys=ON` (`db.py:190`), but only through `get_db()`/`init_db()`;
   SQLite defaults to OFF for any other connection.
 - Dev-monitor has **no tables**: it writes JSONL files under `data/cache/logs/performance`
@@ -40,9 +44,18 @@ when `MONEYVIEW_SYNC_DIR` is set (`records_sync/service.py:28-34`).
 
 | Table | Purpose | PK / unique keys | Class | Rebuildable? | Synced? | Owning module |
 | --- | --- | --- | --- | --- | --- | --- |
-| `watchlist` (:333) | Holdings, group, saved weight | `id` PK; `ticker` UNIQUE | record | no (seed JSON only gives starter tickers) | yes, watchlist-sync (`updated_at`/`updated_by` merge key) | `routes/portfolio.py`, `services/watchlist_seed.py`, `services/watchlist_sync/store.py` |
-| `watchlist_removed` (:345) | Tombstone so an older peer copy cannot revive a removal | `ticker` PK | book | no | yes, watchlist-sync (tombstones travel with the file) | `services/watchlist_sync/store.py:93,116` |
-| `portfolio_preferences` (:386) | Singleton: total investment, fee rate | `singleton_id` PK, `CHECK (singleton_id = 1)` | record | no | yes, records-sync (`singleton_uid`, `kinds.py:160-169`) | `routes/portfolio.py:133-152`; seeded `db.py:1017` |
+| `watchlist` (:333) | Holdings, group, saved weight, optional theme id (`theme`, `''` = none; ids from `apps/api/services/watchlist_themes.yaml`, L27) | `id` PK; `ticker` UNIQUE | record | no (seed JSON only gives starter tickers) | yes, watchlist-sync (`updated_at`/`updated_by` merge key; `theme` rides as an optional field, a peer file without it reads as `''`, `peer_sync/model.py:77-85`, `watchlist_sync/files.py:86-95`) | `routes/portfolio.py`, `services/watchlist_seed.py`, `services/watchlist_sync/store.py` |
+| `watchlist_removed` (:346) | Tombstone so an older peer copy cannot revive a removal | `ticker` PK | book | no | yes, watchlist-sync (tombstones travel with the file) | `services/watchlist_sync/store.py:100,124` |
+| `portfolio_preferences` (:387) | Singleton: total investment, fee rate | `singleton_id` PK, `CHECK (singleton_id = 1)` | record | no | yes, records-sync (`singleton_uid`, `kinds.py:160-169`) | `routes/portfolio.py:137-152`; seeded `db.py:1020` |
+
+`watchlist.theme` holds a stable theme id (`''` = none) from `apps/api/services/watchlist_themes.yaml`;
+the list is read through `GET /portfolio/watchlist/themes`. The column is written only by
+`POST /portfolio/watchlist/{ticker}/theme` (`routes/portfolio.py:290`, which rejects ids not in the
+file and unknown tickers). The full-row upsert and the group route keep the stored value
+(`routes/portfolio.py:180,244`), the destructive JSON resync snapshots it before the DELETE and writes it
+back (`watchlist_seed.py:153-158`), and watchlist peer sync carries it as an optional field with no format
+version bump (`peer_sync/model.py:77-85`, `watchlist_sync/files.py:86-95`, `watchlist_sync/store.py:75-104`).
+The migration is `db.py:1005-1006`. An id missing from the yaml is kept in the DB, not erased (spec §1.1).
 
 ### 2.2 Market / News (4)
 
@@ -57,38 +70,38 @@ when `MONEYVIEW_SYNC_DIR` is set (`records_sync/service.py:28-34`).
 
 | Table | Purpose | PK / unique keys | Class | Rebuildable? | Synced? | Owning module |
 | --- | --- | --- | --- | --- | --- | --- |
-| `acquisition_state` (:495) | Freshness and coverage per `(data_class, subject)` | PK `(data_class, subject)` | book | yes (a missing row just means "never acquired") | no | `services/acquisition/state.py:86-150` |
-| `corporate_statements` (:510) | One row per ticker/statement/frequency/period/line item | PK `(ticker, statement_type, frequency, period_end, line_item)` | cache | yes, Yahoo | no | `services/acquisition/store.py:41` |
-| `corporate_quote_facts` (:528) | Market cap, shares, beta, sector, industry, instrument type | `ticker` PK | cache | yes, Yahoo | no | `services/acquisition/store.py:56` |
-| `industry_benchmark` (:645) | Damodaran industry averages per publication vintage | PK `(vintage, industry_name)` | cache | yes, from Damodaran's workbook, but loaded by hand (`industry_benchmark_store.py:9`) | no | `services/industry_benchmark_store.py:83-98` |
+| `acquisition_state` (:496) | Freshness and coverage per `(data_class, subject)` | PK `(data_class, subject)` | book | yes (a missing row just means "never acquired") | no | `services/acquisition/state.py:86-150` |
+| `corporate_statements` (:511) | One row per ticker/statement/frequency/period/line item | PK `(ticker, statement_type, frequency, period_end, line_item)` | cache | yes, Yahoo | no | `services/acquisition/store.py:41` |
+| `corporate_quote_facts` (:529) | Market cap, shares, beta, sector, industry, instrument type | `ticker` PK | cache | yes, Yahoo | no | `services/acquisition/store.py:56` |
+| `industry_benchmark` (:646) | Damodaran industry averages per publication vintage | PK `(vintage, industry_name)` | cache | yes, from Damodaran's workbook, but loaded by hand (`industry_benchmark_store.py:9`) | no | `services/industry_benchmark_store.py:83-98` |
 
 ### 2.4 Corporate / Metrics / Comparison (5)
 
 | Table | Purpose | PK / unique keys | Class | Rebuildable? | Synced? | Owning module |
 | --- | --- | --- | --- | --- | --- | --- |
-| `corporate_metrics` (:361) | Saved metric overrides per ticker | `ticker` PK | record | no | yes, records-sync (`uid_column=ticker`, never deleted; `kinds.py:175-184`) | `services/corporate_metrics_service.py:373,452` |
-| `corporate_companies` (:378) | Manually added companies | `ticker` PK | record | no | yes, records-sync (`uid_column=ticker`, never deleted; `kinds.py:186-192`) | `services/corporate_metrics_service.py:366` |
-| `corporate_comparison_snapshots` (:393, v1) | Legacy snapshots | PK `(snapshot_date, ticker)` | derived (dead) | no (inputs have moved) | no | none after migration (Gap G4) |
-| `corporate_comparison_snapshots_v2` (:420) | Legacy snapshots | see `db.py:420-447` | derived (dead) | no | no | read once by migration `db.py:949-985` |
-| `corporate_comparison_snapshots_v3` (:451) | Live snapshot history, one row per version and ticker | PK `(snapshot_version, ticker)` | derived | not reproducibly: `scripts/reset_snapshots.py:7-8` says rows "cannot be regenerated, because their inputs have moved" | no (`storage-model.md` §10) | `services/corporate_comparison.py:202,252,258,845` |
+| `corporate_metrics` (:362) | Saved metric overrides per ticker | `ticker` PK | record | no | yes, records-sync (`uid_column=ticker`, never deleted; `kinds.py:175-184`) | `services/corporate_metrics_service.py:373,452` |
+| `corporate_companies` (:379) | Manually added companies | `ticker` PK | record | no | yes, records-sync (`uid_column=ticker`, never deleted; `kinds.py:186-192`) | `services/corporate_metrics_service.py:366` |
+| `corporate_comparison_snapshots` (:394, v1) | Legacy snapshots | PK `(snapshot_date, ticker)` | derived (dead) | no (inputs have moved) | no | none after migration (Gap G4) |
+| `corporate_comparison_snapshots_v2` (:421) | Legacy snapshots | see `db.py:421-448` | derived (dead) | no | no | read once by migration `db.py:950-986` |
+| `corporate_comparison_snapshots_v3` (:452) | Live snapshot history, one row per version and ticker | PK `(snapshot_version, ticker)` | derived | not reproducibly: `scripts/reset_snapshots.py:7-8` says rows "cannot be regenerated, because their inputs have moved" | no (`storage-model.md` §10) | `services/corporate_comparison.py:202,252,258,845` |
 
 ### 2.5 DCF / Valuation / Cases (4)
 
 | Table | Purpose | PK / unique keys | Class | Rebuildable? | Synced? | Owning module |
 | --- | --- | --- | --- | --- | --- | --- |
-| `valuation_case` (:550) | Hand-authored segment build-up case | `id` PK; `case_name` UNIQUE; `sync_uid` UNIQUE index (`db.py:1014-1015`) | record | no | yes, records-sync (`natural_key=case_name`, lineage via `parent_case_id`) | `services/valuation_case.py:199` |
-| `segment` (:604) | Revenue segment of a case | `id` PK; UNIQUE `(case_id, name)` | record | no | yes, as child of `valuation_case` | `services/valuation_case.py:222` |
-| `segment_narrative` (:623) | Claim behind a segment input | PK `(segment_id, input_field)` | record | no | yes, child of `segment` | `services/valuation_case.py:234` |
-| `case_narrative` (:635) | Claim behind a case-level input | PK `(case_id, input_field)` | record | no | yes, optional child (`kinds.py:83-92`) | `services/valuation_case.py:255` |
+| `valuation_case` (:551) | Hand-authored segment build-up case | `id` PK; `case_name` UNIQUE; `sync_uid` UNIQUE index (`db.py:1017-1018`) | record | no | yes, records-sync (`natural_key=case_name`, lineage via `parent_case_id`) | `services/valuation_case.py:199` |
+| `segment` (:605) | Revenue segment of a case | `id` PK; UNIQUE `(case_id, name)` | record | no | yes, as child of `valuation_case` | `services/valuation_case.py:222` |
+| `segment_narrative` (:624) | Claim behind a segment input | PK `(segment_id, input_field)` | record | no | yes, child of `segment` | `services/valuation_case.py:234` |
+| `case_narrative` (:636) | Claim behind a case-level input | PK `(case_id, input_field)` | record | no | yes, optional child (`kinds.py:83-92`) | `services/valuation_case.py:255` |
 
 ### 2.6 Decisions / Events (4)
 
 | Table | Purpose | PK / unique keys | Class | Rebuildable? | Synced? | Owning module |
 | --- | --- | --- | --- | --- | --- | --- |
-| `investment_decision` (:575) | Buy/sell/watch/pass memo with copied figures | `id` PK; `sync_uid` UNIQUE index | record | no, and deliberately without retention (`db.py:602`) | yes, records-sync | `services/investment_decision.py:206` |
-| `user_event` (:670) | User's chart events | `id` PK AUTOINCREMENT; `sync_uid` UNIQUE index | record | no | yes, records-sync | `services/events/store.py:58-83` |
-| `event_category` (:682) | Built-in override or user category | `id` TEXT PK | record | no | yes, records-sync | `services/events/store.py:102-131` |
-| `event_category_visibility` (:690) | Global chart filter per category | `category_id` PK | record | no | yes, records-sync | `services/events/store.py:96,143` |
+| `investment_decision` (:576) | Buy/sell/watch/pass memo with copied figures | `id` PK; `sync_uid` UNIQUE index | record | no, and deliberately without retention (`db.py:603`) | yes, records-sync | `services/investment_decision.py:206` |
+| `user_event` (:671) | User's chart events | `id` PK AUTOINCREMENT; `sync_uid` UNIQUE index | record | no | yes, records-sync | `services/events/store.py:58-83` |
+| `event_category` (:683) | Built-in override or user category | `id` TEXT PK | record | no | yes, records-sync | `services/events/store.py:102-131` |
+| `event_category_visibility` (:691) | Global chart filter per category | `category_id` PK | record | no | yes, records-sync | `services/events/store.py:96,143` |
 
 Built-in events and categories are not in SQLite: they are read from committed JSON in
 `apps/api/services/events/` (`categories.json`, `fomc.json`, `geopolitical.json`, `rules.json`).
@@ -97,8 +110,8 @@ Built-in events and categories are not in SQLite: they are read from committed J
 
 | Table | Purpose | PK / unique keys | Class | Rebuildable? | Synced? | Owning module |
 | --- | --- | --- | --- | --- | --- | --- |
-| `record_sync` (:697) | Per-record causal stamp and tombstone for every records-sync kind | PK `(kind, uid)` | book | stamps no (a lost tombstone can revive a deletion); `ensure_first_sync` re-baselines live records only | local table; its stamps and tombstones are published in this PC's peer file | `services/records_sync/store.py:96,261,273` |
-| `dataset_metadata` (:355) | Key/value: watchlist state markers, `pc_id`, sync-enabled marker | `dataset_name` PK | book | yes, except the `pc_id` row, which is generated once per data directory (`watchlist_sync/store.py:18-31`) | no | `services/watchlist_seed.py:12-13,337,349`; `services/watchlist_sync/store.py:11-12` |
+| `record_sync` (:698) | Per-record causal stamp and tombstone for every records-sync kind | PK `(kind, uid)` | book | stamps no (a lost tombstone can revive a deletion); `ensure_first_sync` re-baselines live records only | local table; its stamps and tombstones are published in this PC's peer file | `services/records_sync/store.py:96,261,273` |
+| `dataset_metadata` (:356) | Key/value: watchlist state markers, `pc_id`, sync-enabled marker | `dataset_name` PK | book | yes, except the `pc_id` row, which is generated once per data directory (`watchlist_sync/store.py:18-31`) | no | `services/watchlist_seed.py:12-13,337,349`; `services/watchlist_sync/store.py:11-12` |
 
 ### 2.8 Other Domains
 
@@ -109,7 +122,7 @@ Dev-monitor: none (JSONL files). Market events reference `indices` read-only
 
 | Table | Purpose | PK / unique keys | Class | Rebuildable? | Synced? | Owning module |
 | --- | --- | --- | --- | --- | --- | --- |
-| `cleanup_pending` (:709) | A ticker that left the watchlist, and when; its cached rows are deleted `CLEANUP_GRACE_DAYS` (30) later if nothing refers to it | `ticker` PK | book | yes (a missing row is recorded as "now" by the next run) | no (each PC cleans on its own) | `services/watchlist_cleanup.py` (`record_pending` :82, `clear_pending` :92, `run_cleanup` :149) |
+| `cleanup_pending` (:710) | A ticker that left the watchlist, and when; its cached rows are deleted `CLEANUP_GRACE_DAYS` (30) later if nothing refers to it | `ticker` PK | book | yes (a missing row is recorded as "now" by the next run) | no (each PC cleans on its own) | `services/watchlist_cleanup.py` (`record_pending` :82, `clear_pending` :92, `run_cleanup` :149) |
 
 Details: [`watchlist-cleanup-and-corporate-sync.md`](watchlist-cleanup-and-corporate-sync.md).
 
@@ -166,25 +179,26 @@ erDiagram
     cleanup_pending }o..o{ stocks : "L25 ticker deferred delete"
     signal_snapshots ||--o{ signal_results : "FK snapshot_id CASCADE"
     signal_manual_inputs }o..o| signal_snapshots : "L26 iso_week"
+    watchlist }o..o| watchlist_themes_yaml : "L27 theme id"
 ```
 
 Not drawn because they are not references: `corporate_comparison_snapshots_v2 -> _v3` is a one-time
-row copy (`db.py:949-985`); `investment_decision` copies figures out of the model at record time and
-deliberately holds no reference to a snapshot (`db.py:583-588`). `corporate_comparison_snapshots_v3.snapshot_version`
+row copy (`db.py:950-986`); `investment_decision` copies figures out of the model at record time and
+deliberately holds no reference to a snapshot (`db.py:584-589`). `corporate_comparison_snapshots_v3.snapshot_version`
 is a derived string (L9 below), not a key into another table.
 
 ### 3.2 Reference Table
 
-Declared foreign keys: **5**. Logical references: **26** (L1-L26).
+Declared foreign keys: **5**. Logical references: **27** (L1-L27).
 
 | ID | From.column -> To.column | Kind | On delete | Enforced at |
 | --- | --- | --- | --- | --- |
-| F1 | `segment.case_id` -> `valuation_case.id` | declared FK | CASCADE | `db.py:606`; needs `foreign_keys=ON` (`db.py:190`) |
-| F2 | `segment_narrative.segment_id` -> `segment.id` | declared FK | CASCADE | `db.py:624` |
-| F3 | `case_narrative.case_id` -> `valuation_case.id` | declared FK | CASCADE | `db.py:636` |
-| F4 | `valuation_case.parent_case_id` -> `valuation_case.id` | declared FK (self) | none (NO ACTION: deleting a parent that has forks is refused) | `db.py:571`; records-sync nulls it first at `records_sync/store.py:319-326` |
+| F1 | `segment.case_id` -> `valuation_case.id` | declared FK | CASCADE | `db.py:607`; needs `foreign_keys=ON` (`db.py:190`) |
+| F2 | `segment_narrative.segment_id` -> `segment.id` | declared FK | CASCADE | `db.py:625` |
+| F3 | `case_narrative.case_id` -> `valuation_case.id` | declared FK | CASCADE | `db.py:637` |
+| F4 | `valuation_case.parent_case_id` -> `valuation_case.id` | declared FK (self) | none (NO ACTION: deleting a parent that has forks is refused) | `db.py:572`; records-sync nulls it first at `records_sync/store.py:319-326` |
 | F5 | `signal_results.snapshot_id` -> `signal_snapshots.id` | declared FK | CASCADE | `db.py:227`; `save_snapshot` also deletes a week's results before rewriting them (`signals/store.py:71`) |
-| L1 | `stocks.ticker` -> `watchlist.ticker` | logical | none; bars survive a watchlist delete | not enforced; `portfolio.py:321` deletes only `watchlist` |
+| L1 | `stocks.ticker` -> `watchlist.ticker` | logical | none; bars survive a watchlist delete | not enforced; `portfolio.py:378` deletes only `watchlist` |
 | L2 | `corporate_comparison_snapshots_v3.benchmark_ticker` -> `indices.ticker` | logical | none | normalised at `corporate_comparison.py:1110` |
 | L3 | `corporate_metrics.ticker` -> `watchlist.ticker` / `corporate_companies.ticker` | logical | none | not enforced; `corporate_metrics_service.py:95-99` looks the sector up in both |
 | L4 | `corporate_companies.ticker` -> `corporate_metrics.ticker` | logical (paired insert) | none | `add_company` writes both, `corporate_metrics_service.py:366-373` |
@@ -193,7 +207,7 @@ Declared foreign keys: **5**. Logical references: **26** (L1-L26).
 | L7 | `news.ticker` -> `watchlist.ticker` | logical | none | not enforced |
 | L8 | `corporate_comparison_snapshots_v3.ticker` -> `watchlist` / `corporate_companies` / `indices` | logical | none; snapshot rows outlive the ticker (365 days) | built at `corporate_comparison.py:947-1016` |
 | L9 | `snapshot_version` string -> `snapshot_date`, `universe_key`, rf, erp, schema columns | logical (derived key) | none | `corporate_comparison.py:1136-1166` |
-| L10 | `valuation_case.ticker` -> ticker universe (NULL allowed) | logical | none | not enforced; private companies are first-class (`db.py:545-546`) |
+| L10 | `valuation_case.ticker` -> ticker universe (NULL allowed) | logical | none | not enforced; private companies are first-class (`db.py:546-547`) |
 | L11 | `investment_decision.ticker` -> ticker universe | logical | none | not enforced; NOT NULL only |
 | L12 | `user_event.category` -> `event_category.id` or built-in id in `categories.json` | logical | app-enforced RESTRICT: category delete refused while events use it | create check `events/service.py:40`; delete check `events/service.py:138-140` |
 | L13 | `event_category_visibility.category_id` -> `event_category.id` / built-in id | logical | app-enforced: deleted with its user category | `events/store.py:132` |
@@ -203,13 +217,65 @@ Declared foreign keys: **5**. Logical references: **26** (L1-L26).
 | L17 | `record_sync(kind='event_category', uid)` -> `event_category.id` | logical | same | `kinds.py:144-151` |
 | L18 | `record_sync(kind='event_category_visibility', uid)` -> `.category_id` | logical | same | `kinds.py:152-159` |
 | L19 | `record_sync(kind='portfolio_preferences', uid)` -> singleton row | logical | n/a (row is never deleted) | `kinds.py:160-169` |
-| L20 | `watchlist_removed.ticker` -> `watchlist.ticker` | logical (tombstone) | tombstone beats an older row; a newer re-add wins | `watchlist_sync/store.py:93-116`; `peer_sync/model.py:1-9` |
+| L20 | `watchlist_removed.ticker` -> `watchlist.ticker` | logical (tombstone) | tombstone beats an older row; a newer re-add wins | `watchlist_sync/store.py:100-124`; `peer_sync/model.py:1-9` |
 | L21 | `corporate_quote_facts.industry` -> `industry_benchmark.industry_name` | logical via a Yahoo-to-Damodaran map | none | `industry_benchmark_store.py:134-141`; `industry_maps.py` |
 | L22 | `dataset_metadata[watchlist_sync_pc_id].source` -> `watchlist.updated_by`, `record_sync.updated_by/removed_by` | logical (author id) | none | `watchlist_sync/store.py:18-31`; `records_sync/service.py:53` |
 | L23 | `record_sync(kind='corporate_metrics', uid)` -> `corporate_metrics.ticker` | logical | no tombstones: the kind never deletes | `records_sync/kinds.py:175-184` |
 | L24 | `record_sync(kind='corporate_companies', uid)` -> `corporate_companies.ticker` | logical | same | `records_sync/kinds.py:186-192` |
 | L25 | `cleanup_pending.ticker` -> that ticker's rows in `stocks`, `news`, `corporate_quote_facts`, `acquisition_state` | logical (deferred deletion) | rows deleted 30 days after `removed_at` unless a reference names the ticker | `watchlist_cleanup.py:39` (`CLEANUP_TABLES`), `:149` |
 | L26 | `signal_manual_inputs.iso_week` -> `signal_snapshots.iso_week`; `rule_id` -> a manual rule in `signals/rules.yaml` | logical | none; an input saved for a week with no snapshot applies at that week's next run | `signals/engine.py:89` |
+| L27 | `watchlist.theme` -> `id` in `apps/api/services/watchlist_themes.yaml` | logical (file, not a table) | none; an id no longer in the file stays in the DB and displays as other | `routes/portfolio.py:290-320` validates on write; `watchlist_themes.py` `theme_ids`; peer sync does not validate |
+
+### 3.3 Planned (risk signal sub-project 2, not built)
+
+Nothing in this subsection exists in `db.py`. It restates spec `docs/superpowers/specs/2026-10-18-risk-signal-design.md`
+(§2.1, §2.3a, §2.7) so the shape can be reviewed before the sub-project 2 spec fixes it. Table and column
+names are **provisional**; every field list marked "fields to be fixed by the sub-project 2 spec" is
+deliberately empty. Alerts are computed per PC and are not synced (spec R-B7). Dotted lines are
+logical references, the same convention as §3.1.
+
+```mermaid
+erDiagram
+    risk_alert {
+        int id
+        string start_date
+        string end_date
+        string status
+        string rules_version
+        int backtested
+    }
+    risk_alert_item {
+        string fields_tbd "fields to be fixed by the sub-project 2 spec"
+    }
+    risk_alert_news {
+        string fields_tbd "fields to be fixed by the sub-project 2 spec"
+    }
+    topic_news {
+        string fields_tbd "fields to be fixed by the sub-project 2 spec"
+    }
+
+    risk_alert ||--o{ risk_alert_item : "crashed or candidate ticker"
+    risk_alert ||--o{ risk_alert_news : "news linked to the alert"
+    risk_alert_item }o..o| watchlist : "P1 ticker logical"
+    risk_alert_news }o..o| news : "P2 ticker news"
+    risk_alert_news }o..o| topic_news : "P3 topic news"
+```
+
+- `risk_alert`: one row per alert. Spec §2.1 lists id, start date, status (active or cleared), the
+  indicators that triggered it with their values, the crashed and candidate tickers, and the linked news.
+  `end_date` is NULL while active. `rules_version` records which threshold-file version produced it
+  (§2.3a). `backtested` marks alerts computed from 2016-2026 history, as opposed to alerts the app raised
+  live. Where the triggering indicator values are stored (a column, or a child table) is open.
+- `risk_alert_item`: one row per crashed or candidate ticker of an alert. It must tell the two decks apart,
+  so it carries a kind; the rest, including the 5, 10 and 20 trading-day outcomes the spec wants kept
+  (§2.3a), is fields to be fixed by the sub-project 2 spec. `ticker` refers to `watchlist.ticker` logically,
+  like every other ticker link (§3.2); the spec's history must survive a later watchlist removal, so no FK.
+- `risk_alert_news`: links an alert to its 10 or more news items, macro first and then industry (§2.7).
+- `topic_news`: macro topic news (CPI, PCE, FOMC, jobs, yields, credit, oil) in English and Korean. The
+  existing `news` table is keyed by ticker and holds only English Google News RSS today, so whether topic
+  items get their own table or reuse `news` is not decided; the diagram assumes a separate table.
+- Not tables: the threshold values live in a checked-in rules file (spec §2.6), and the new FRED series
+  (`THREEFYTP10`, `CPIAUCSL`, `PCEPI`, `PCEPILFE`) go into the existing `fred_cache`.
 
 ## 4. Dependencies (Write / Refresh Order)
 
@@ -219,9 +285,9 @@ acquisition stored, so a snapshot is reproducible (`market_data.py:890-897`,
 
 ```mermaid
 flowchart TD
-    A[init_db<br/>db.py:716] --> B[watchlist<br/>bootstrap or peer sync<br/>watchlist_seed.py:44]
-    A --> PP[portfolio_preferences seed<br/>db.py:1017]
-    B -->|add ticker| C[schedule_acquisition equity_bars<br/>portfolio.py:221]
+    A[init_db<br/>db.py:717] --> B[watchlist<br/>bootstrap or peer sync<br/>watchlist_seed.py:44]
+    A --> PP[portfolio_preferences seed<br/>db.py:1020]
+    B -->|add ticker| C[schedule_acquisition equity_bars<br/>portfolio.py:237]
     C --> D[stocks / indices<br/>market_data.py:1046-1110]
     E[POST /corporate/comparison/snapshot<br/>routes/corporate.py:183] --> F[acquire_comparison_datasets<br/>corporate_comparison.py:1169]
     F --> G[corporate_statements<br/>acquisition/store.py:41]
@@ -248,9 +314,9 @@ flowchart TD
 Ordering rules and where they live:
 
 1. **Schema and singleton first.** `init_db()` runs from the app lifespan and seeds
-   `portfolio_preferences` (`db.py:1017`). Records sync runs once at startup (`main.py:113`).
+   `portfolio_preferences` (`db.py:1020`). Records sync runs once at startup (`main.py:113`).
 2. **Watchlist before bars.** Adding a ticker schedules `equity_bars` acquisition on a daemon thread
-   (`routes/portfolio.py:221`, `acquisition/runner.py:170-186`). Bars are also written by the lazy
+   (`routes/portfolio.py:237`, `acquisition/runner.py:170-186`). Bars are also written by the lazy
    refresh inside `MarketDataService.get_stock_ohlcv` (`market_data.py:1212`, saves at `:1165`, `:1199`).
 3. **Quote facts before peer sets.** `peer_set.resolve_peers` reads `corporate_quote_facts.industry`
    for the ticker and its peers (`peer_set.py:25-35`); an empty industry yields a refusal reason, not a
@@ -262,7 +328,7 @@ Ordering rules and where they live:
    statements and quote facts first (`routes/corporate.py:197-206`, `corporate_comparison.py:1169-1211`;
    freshness boundaries: statements weekly, market cap daily, `acquisition/registry.py:56-72`), then
    computes and writes `corporate_comparison_snapshots_v3` (`corporate_comparison.py:200-262`).
-6. **Cases are independent of acquisition** (`db.py:545-546`), but pricing a case reads
+6. **Cases are independent of acquisition** (`db.py:546-547`), but pricing a case reads
    `corporate_quote_facts.industry` and `industry_benchmark` (`case_pricing.py:15`,
    `industry_benchmark_store.py:134-141`).
 7. **Decisions copy figures at write time** from the model and refuse to store fabricated ones
@@ -272,8 +338,8 @@ Writers by table:
 
 | Table | Writers (job / endpoint) |
 | --- | --- |
-| `watchlist` | `POST/DELETE /portfolio/watchlist*` (`routes/portfolio.py:199,259,321`); bootstrap/import `watchlist_seed.py:77,111,147-150`; peer sync `watchlist_sync/store.py:77-109` |
-| `portfolio_preferences` | `PUT /portfolio/preferences` (`portfolio.py:139`); records-sync apply |
+| `watchlist` | `POST /portfolio/watchlist` (`routes/portfolio.py:180`, keeps the stored theme), `POST /portfolio/watchlist/{ticker}/group` (`:244`), `POST /portfolio/watchlist/{ticker}/theme` (`:290`, the only route that writes `theme`), `DELETE /portfolio/watchlist/{ticker}` (`:378`); bootstrap/import `watchlist_seed.py:83,120,153-158` (resync snapshots `theme` before its DELETE and writes it back); peer sync `watchlist_sync/store.py:75-104` (carries `theme`) |
+| `portfolio_preferences` | `PUT /portfolio/preferences` (`portfolio.py:137`); records-sync apply |
 | `stocks`, `indices` | acquisition `equity_bars`/`index_bars` (`acquisition/runner.py:44-47`); lazy refresh in `market_data.py`; legacy `scripts/migrate_data.py`; e2e seed `scripts/seed_e2e_market_cache.py`; `stocks` (not `indices`) deleted by the watchlist cleanup |
 | `news` | `POST /news/acquire`, `/news/crawl*` (`routes/news.py:67,77,145`); `news_service.save_article`; `scripts/rekey_news.py`; ticker rows deleted by the watchlist cleanup |
 | `acquisition_state` | every `acquire`/`acquire_point_in_time`/`retire_subject` call; deleted by the watchlist cleanup, except `statements` |
@@ -285,8 +351,8 @@ Writers by table:
 | `investment_decision` | `POST /decisions` (`routes/decisions.py:20`) |
 | `user_event`, `event_category*` | `routes/market.py:96-149` through `events/store.py` |
 | `record_sync` | `records_sync/store.py` (stamp, tombstone, apply) |
-| `dataset_metadata` | `watchlist_seed.py:337,349`; `watchlist_sync/store.py:28,48` |
-| `cleanup_pending` | `record_pending` from the watchlist delete (`routes/portfolio.py:325`), the import (`watchlist_seed.py:161`) and watchlist-sync apply (`watchlist_sync/store.py:80`); `clear_pending` from every add path; the cleanup run (startup and daily) |
+| `dataset_metadata` | `watchlist_seed.py:349,361`; `watchlist_sync/store.py:28,48` |
+| `cleanup_pending` | `record_pending` from the watchlist delete (`routes/portfolio.py:392`), the import (`watchlist_seed.py:165`) and watchlist-sync apply (`watchlist_sync/store.py:81`); `clear_pending` from every add path; the cleanup run (startup and daily) |
 | `signal_snapshots`, `signal_results` | `POST /signals/run` and the hourly catch-up `signal_cycle` through `signals/engine.py:104` |
 | `signal_manual_inputs` | `PUT /signals/manual/{rule_id}` (`routes/signals.py:70`) |
 | `fred_cache` | the signal run's FRED fetch (`signals/fetch.py:56`) |
@@ -296,7 +362,7 @@ Writers by table:
 **Deletion paths.**
 
 - *Watchlist delete* removes only the `watchlist` row, writes a `watchlist_removed` tombstone when sync
-  is on, then marks `acquisition_state` as retired (`routes/portfolio.py:309-330`,
+  is on, then marks `acquisition_state` as retired (`routes/portfolio.py:378-399`,
   `acquisition/state.py:109-127`), and records the ticker in `cleanup_pending`. 30 days later, if no
   reference names it, the cleanup deletes its rows in `stocks`, `news`, `corporate_quote_facts` and
   `acquisition_state` (L25). `corporate_statements`, `corporate_metrics`, `corporate_companies` and
@@ -335,23 +401,23 @@ them self-heals because every saver is idempotent (`runner.py:146-155`).
 
 | Column(s) | Convention | Source |
 | --- | --- | --- |
-| `watchlist.updated_at`, `record_sync.*_at`, `watchlist_removed.removed_at` | UTC, `YYYY-MM-DDTHH:MM:SS.mmmZ`; `SEED_TS` year 0000 below `BASELINE_TS` 1970 | `db.py:339`; `peer_sync/model.py:17-22` |
+| `watchlist.updated_at`, `record_sync.*_at`, `watchlist_removed.removed_at` | UTC, `YYYY-MM-DDTHH:MM:SS.mmmZ`; `SEED_TS` year 0000 below `BASELINE_TS` 1970 | `db.py:340`; `peer_sync/model.py:17-22` |
 | `snapshot_date` | KST business date (`Asia/Seoul`), cadence `daily_kst_0000`, retention 365 days | `corporate_comparison.py:42-44,931-940` |
 | `snapshot_taken_at` | UTC ISO-8601 | `corporate_comparison.py:184` |
 | acquisition freshness boundaries | UTC (daily at 00:00 UTC, weekly Monday 00:00 UTC, hourly) | `acquisition/registry.py:30-36,79` |
 | `acquisition_state.last_*_at` | `now.isoformat()` of an aware UTC datetime | `state.py:99-105`; `runner.py:182` |
 | `corporate_statements.fetched_at`, `corporate_quote_facts.fetched_at`, `corporate_metrics.updated_at`, `corporate_companies.updated_at`, `investment_decision.decided_at` | UTC ISO-8601 | `acquisition/store.py:38,62`; `corporate_metrics_service.py:363,471`; `investment_decision.py:213` |
-| `user_event.created_at`, `event_category.created_at` | UTC via `strftime('%Y-%m-%dT%H:%M:%fZ','now')` | `db.py:676,687` |
-| `portfolio_preferences.updated_at` | SQLite `CURRENT_TIMESTAMP`, UTC `YYYY-MM-DD HH:MM:SS`; `''` for the seeded default | `routes/portfolio.py:141`; `records_sync/store.py:70-75` |
-| `industry_benchmark.vintage` | Publication date, not fetch date | `db.py:646`; `industry_benchmark_store.py:3-8` |
+| `user_event.created_at`, `event_category.created_at` | UTC via `strftime('%Y-%m-%dT%H:%M:%fZ','now')` | `db.py:677,688` |
+| `portfolio_preferences.updated_at` | SQLite `CURRENT_TIMESTAMP`, UTC `YYYY-MM-DD HH:MM:SS`; `''` for the seeded default | `routes/portfolio.py:143`; `records_sync/store.py:70-75` |
+| `industry_benchmark.vintage` | Publication date, not fetch date | `db.py:647`; `industry_benchmark_store.py:3-8` |
 | `news.published_date` | Provider text, may be `''` | `db.py:322`; `acquisition/store.py:77-80` |
 
 ## 6. Gaps And Risks Found
 
 Reported only; no code was changed.
 
-- **G1 (resolved 2026-10-15, PR #68). Ticker links have no FK; deleting a watchlist row orphans everything else.** Only four FKs
-  exist (§3.2). `routes/portfolio.py:321` deletes `watchlist` only, and retire keeps all rows
+- **G1 (resolved 2026-10-15, PR #68). Ticker links have no FK; deleting a watchlist row orphans everything else.** Only five FKs
+  exist (§3.2). `routes/portfolio.py:378` deletes `watchlist` only, and retire keeps all rows
   (`runner.py:189-192`). `corporate_metrics` and snapshot rows for removed tickers therefore remain
   and can still appear in `corporate_comparison.py:947-1016`'s registry (it unions `watchlist`,
   `corporate_companies` and `indices`).
@@ -369,9 +435,9 @@ Reported only; no code was changed.
   intended to return with the signal engine is unknown. (The signal engine stores FRED series in its own
   `fred_cache`, §2.10, and does not write `indicators`.)
 - **G4. Dead legacy snapshot tables.** `corporate_comparison_snapshots` (v1) is never read; `_v2` is read
-  once, only when v3 is empty (`db.py:949-985`). Both still get indexes (`db.py:417,448`) and exist in
+  once, only when v3 is empty (`db.py:950-986`). Both still get indexes (`db.py:418,449`) and exist in
   the live DB. Only `scripts/reset_snapshots.py:25-29` touches them afterwards. v3 also carries
-  `expected_return_spread`, kept "so history survives" but unread (`db.py:927-934` comment;
+  `expected_return_spread`, kept "so history survives" but unread (`db.py:928-935` comment;
   `corporate_comparison.py:56-57`: "the old column is retired, not read").
 - **G5. `industry_benchmark` is populated by a function nobody calls.** `store_vintage` has no caller
   (`industry_benchmark_store.py:83`). Conservative cases and verdicts depend on it
@@ -399,17 +465,26 @@ Reported only; no code was changed.
   `storage-model.md` §5.4, not re-verified here).
 - **G10. Documentation gaps.** `storage-model.md` never mentions `acquisition_state`,
   `corporate_statements`, `corporate_quote_facts` or `industry_benchmark`.
+- **G12. The watchlist cleanup does not count market-overview proxy tickers kept in `stocks`.**
+  `_REFERENCE_QUERIES` (`services/watchlist_cleanup.py:59-71`) names `watchlist`, `corporate_companies`,
+  `corporate_metrics`, `indices`, `valuation_case`, `investment_decision` and the snapshot tables, but not
+  the proxies the market overview stores in `stocks` (BOTZ, SKYY, XLE, ITA, CIBR, ICLN, TSL, 143860.KS,
+  ^KS11). Such a ticker is a cache candidate (`_CANDIDATE_QUERIES`, `:50`) with no reference, so it enters
+  `cleanup_pending`, its `stocks`, `news`, `corporate_quote_facts` and `acquisition_state` rows are deleted
+  after `CLEANUP_GRACE_DAYS` (30), and the next overview request refetches them. Open. The fix is planned
+  in risk signal sub-project 2.
 
 **Drift between live DB and code.** Comparing `data/processed/moneyview.db` with a database freshly built
 by `init_db()` (via `DB_PATH` pointed at a scratch file):
 
-- Same 26 tables, same columns, same indexes (15 non-internal indexes live). No table exists on only
+- Re-checked 2026-10-18 from a schema-only dump of the live DB (no row data): 31 tables, matching the 31 in §2; columns and foreign keys match `db.py` (including `watchlist.theme`). Indexes were not re-compared in that pass; the 15-index figure below dates from the earlier 26-table check.
+- Earlier check (26 tables): same tables, columns and indexes (15 non-internal indexes live). No table existed on only
   one side.
 - Column **order** differs in two tables, because `ALTER TABLE ADD COLUMN` appends: `valuation_case`
   (`effective_tax_rate` and `sync_uid` come last in the live file) and `corporate_quote_facts`
   (`sector`, `industry`, `instrument_type` follow `fetched_at`). Harmless as long as code names columns,
   which it does; a `SELECT *` consumer such as `valuation_case.py:283` indexes by name.
-- The live DB has no foreign-key difference: the four declared FKs match.
+- The live DB has no foreign-key difference: the five declared FKs match (F1-F5).
 - `data/moneyview.db` is a **0-byte file** dated 2026-09-09, git-ignored (`.gitignore:39`). It is not the
   default path (`db.py:30` is `data/processed/moneyview.db`), so anything that opens it creates an empty
   database. The task brief's path `data/moneyview.db` is this stray file, not the live database.

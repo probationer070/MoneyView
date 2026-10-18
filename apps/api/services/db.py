@@ -338,7 +338,8 @@ CREATE TABLE IF NOT EXISTS watchlist (
     group_name TEXT DEFAULT 'custom',
     weight     REAL DEFAULT 0.0,
     updated_at TEXT,   -- logical change time for peer sync (UTC ms, Z); NULL until first stamped
-    updated_by TEXT    -- pc_id that authored that change
+    updated_by TEXT,   -- pc_id that authored that change
+    theme      TEXT DEFAULT ''  -- stable theme id from watchlist_themes.yaml; '' = none
 );
 
 -- Peer-sync tombstones: a removal remembered so an older copy on another PC cannot revive it.
@@ -1001,6 +1002,8 @@ def _ensure_schema_compatibility(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE watchlist ADD COLUMN updated_at TEXT")
     if "updated_by" not in watchlist_columns:
         conn.execute("ALTER TABLE watchlist ADD COLUMN updated_by TEXT")
+    if "theme" not in watchlist_columns:
+        conn.execute("ALTER TABLE watchlist ADD COLUMN theme TEXT DEFAULT ''")
     # Nullable and additive: existing rows keep every value and get a uid on the first records sync
     # (records_sync.store.backfill_uids).
     for table in ("valuation_case", "investment_decision", "user_event"):

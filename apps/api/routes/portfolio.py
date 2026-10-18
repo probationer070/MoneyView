@@ -20,6 +20,8 @@ from apps.api.models.schemas import (
     WatchlistResyncResult,
     WatchlistSyncStatus,
     WatchlistSyncResult,
+    WatchlistTheme,
+    WatchlistThemeUpdate,
 )
 from apps.api.compute.client import get_compute_client
 from apps.api.compute.errors import ComputeError
@@ -43,6 +45,7 @@ from apps.api.services.watchlist_seed import (
 )
 from apps.api.services.watchlist_sync import service as watchlist_sync
 from apps.api.services.watchlist_sync import store as watchlist_sync_store
+from apps.api.services.watchlist_themes import load_themes, theme_ids
 
 _API_ROOT = Path(__file__).resolve().parents[1]
 _WATCHLIST_JSON = _API_ROOT / "services" / "webscrap" / "stock_targets.json"
@@ -105,6 +108,7 @@ def get_watchlist():
                     else None
                 ),
                 sparkline=sparkline,
+                theme=row["theme"] or "",
                 id=int(row["id"]),
             )
         )
@@ -186,7 +190,7 @@ def upsert_watchlist_item(item: WatchlistItem = Body(...)):
 
     with get_db() as conn:
         existing = conn.execute(
-            "SELECT name, sector, group_name, weight, updated_at, updated_by FROM watchlist WHERE ticker = ?",
+            "SELECT name, sector, group_name, weight, updated_at, updated_by, theme FROM watchlist WHERE ticker = ?",
             (normalized.ticker,),
         ).fetchone()
         changed = existing is None or (
@@ -195,12 +199,22 @@ def upsert_watchlist_item(item: WatchlistItem = Body(...)):
         pc_id = watchlist_sync.local_pc_id(conn)
         stamp = watchlist_sync_store.causal_stamp(conn, normalized.ticker) if changed else existing["updated_at"]
         author = pc_id if changed else existing["updated_by"]
+        # Upsert in place, not INSERT OR REPLACE: REPLACE deletes the row, which resets its id
+        # and clears theme. theme is deliberately absent from both the SET and the VALUES.
         conn.execute(
-            """INSERT OR REPLACE INTO watchlist (ticker, name, sector, group_name, weight, updated_at, updated_by)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            """INSERT INTO watchlist (ticker, name, sector, group_name, weight, updated_at, updated_by)
+               VALUES (?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(ticker) DO UPDATE SET
+                   name = excluded.name,
+                   sector = excluded.sector,
+                   group_name = excluded.group_name,
+                   weight = excluded.weight,
+                   updated_at = excluded.updated_at,
+                   updated_by = excluded.updated_by""",
             (normalized.ticker, normalized.name, normalized.sector, normalized.group_name,
              normalized.weight, stamp, author),
         )
+        stored_theme = (existing["theme"] or "") if existing is not None else ""
         # On the watchlist again: its caches are no longer heading for cleanup (spec 2026-10-15 §2.3).
         watchlist_cleanup.clear_pending(conn, normalized.ticker)
     mark_watchlist_state("user_mutation")
@@ -224,7 +238,7 @@ def upsert_watchlist_item(item: WatchlistItem = Body(...)):
         except Exception as error:  # noqa: BLE001 - best-effort, never fails the write
             logger.warning("watchlist.schedule_acquisition_failed ticker=%s error=%s",
                            normalized.ticker, error)
-    return normalized
+    return normalized.model_copy(update={"theme": stored_theme})
 
 
 @router.post("/watchlist/{ticker}/group", response_model=WatchlistItem)
@@ -248,7 +262,7 @@ def set_watchlist_group(ticker: str, payload: WatchlistGroupUpdate = Body(...)):
 
     with get_db() as conn:
         row = conn.execute(
-            "SELECT ticker, name, sector, weight, group_name FROM watchlist WHERE ticker = ?",
+            "SELECT ticker, name, sector, weight, group_name, theme FROM watchlist WHERE ticker = ?",
             (normalized_ticker,),
         ).fetchone()
         if row is None:
@@ -269,6 +283,52 @@ def set_watchlist_group(ticker: str, payload: WatchlistGroupUpdate = Body(...)):
         sector=row["sector"] or "",
         group_name=group_name,
         weight=float(row["weight"] or 0.0),
+        theme=row["theme"] or "",
+    )
+
+
+@router.post("/watchlist/{ticker}/theme", response_model=WatchlistItem)
+def set_watchlist_theme(ticker: str, payload: WatchlistThemeUpdate = Body(...)):
+    """Set one ticker's theme, touching nothing else. "" clears it.
+
+    Its own endpoint for the same reason as the group route: a full-row upsert with no theme
+    must not erase one, and a theme write must not zero weight or flatten name and sector.
+    """
+    normalized_ticker = ticker.upper().strip()
+    theme = payload.theme
+    if theme and theme not in theme_ids():
+        raise HTTPException(
+            status_code=422,
+            detail=f"unknown_theme: {theme!r} is not a watchlist theme id; "
+                   "use one of the ids from GET /watchlist/themes",
+        )
+
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT ticker, name, sector, weight, group_name, theme FROM watchlist WHERE ticker = ?",
+            (normalized_ticker,),
+        ).fetchone()
+        if row is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"unknown_ticker: {normalized_ticker} is not on the watchlist; "
+                       "add it before setting its theme",
+            )
+        changed = (row["theme"] or "") != theme
+        if changed:
+            conn.execute("UPDATE watchlist SET theme = ? WHERE ticker = ?", (theme, normalized_ticker))
+            watchlist_sync_store.stamp_row(conn, normalized_ticker, watchlist_sync.local_pc_id(conn))
+
+    if changed:
+        mark_watchlist_state("user_mutation")
+        watchlist_sync.run_sync("mutation")
+    return WatchlistItem(
+        ticker=normalized_ticker,
+        name=row["name"] or normalized_ticker,
+        sector=row["sector"] or "",
+        group_name=row["group_name"] or "custom",
+        weight=float(row["weight"] or 0.0),
+        theme=theme,
     )
 
 
@@ -306,6 +366,13 @@ def get_watchlist_sync_metadata():
 def get_watchlist_peer_sync():
     """Last recorded peer-sync attempt. Read-only: it never triggers a sync (spec §2)."""
     return APIResponse(data=watchlist_sync.current_status())
+
+
+# Declared before the `/watchlist/{ticker}` routes so "themes" is not read as a ticker.
+@router.get("/watchlist/themes", response_model=List[WatchlistTheme])
+def get_watchlist_themes():
+    """The checked-in theme list, in display order. Labels are ko/en; the id is the stored key."""
+    return load_themes()
 
 
 @router.delete("/watchlist/{ticker}")

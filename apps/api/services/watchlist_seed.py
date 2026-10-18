@@ -148,13 +148,17 @@ def resync_watchlist_from_json(json_path: Path) -> WatchlistResyncResult:
     synced_at = datetime.now(timezone.utc).isoformat()
     with get_db() as conn:
         pc_id = sync_store.get_or_create_pc_id(conn)
-        before = {row["ticker"] for row in conn.execute("SELECT ticker FROM watchlist")}
+        # theme is owner-curated and has no JSON source, so it is snapshotted before the DELETE and
+        # written back for every ticker that survives. A ticker absent from the JSON loses its row.
+        existing = {row["ticker"]: row["theme"] or "" for row in conn.execute("SELECT ticker, theme FROM watchlist")}
+        before = set(existing)
         conn.execute("DELETE FROM watchlist")
         for item in normalized_items:
             conn.execute(
-                """INSERT INTO watchlist (ticker, name, sector, group_name, weight, updated_at, updated_by)
-                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                (item.ticker, item.name, item.sector, item.group_name, item.weight, BASELINE_TS, pc_id),
+                """INSERT INTO watchlist (ticker, name, sector, group_name, weight, updated_at, updated_by, theme)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (item.ticker, item.name, item.sector, item.group_name, item.weight, BASELINE_TS, pc_id,
+                 existing.get(item.ticker, "")),
             )
             watchlist_cleanup.clear_pending(conn, item.ticker)
         for ticker in before - {item.ticker for item in normalized_items}:

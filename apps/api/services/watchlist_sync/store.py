@@ -61,8 +61,9 @@ def read_local_state(conn: sqlite3.Connection) -> SyncState:
             ticker=r["ticker"], name=r["name"] or "", sector=r["sector"] or "",
             group_name=r["group_name"] or "custom", weight=float(r["weight"] or 0.0),
             updated_at=r["updated_at"] or BASELINE_TS, updated_by=r["updated_by"] or "",
+            theme=r["theme"] or "",
         )
-        for r in conn.execute("SELECT ticker, name, sector, group_name, weight, updated_at, updated_by FROM watchlist")
+        for r in conn.execute("SELECT ticker, name, sector, group_name, weight, updated_at, updated_by, theme FROM watchlist")
     }
     removed = {
         r["ticker"]: Tombstone(ticker=r["ticker"], removed_at=r["removed_at"], removed_by=r["removed_by"])
@@ -84,12 +85,13 @@ def apply_state(conn: sqlite3.Connection, state: SyncState) -> None:
         if row.ticker not in current.rows:
             watchlist_cleanup.clear_pending(conn, row.ticker)
         conn.execute(
-            """INSERT INTO watchlist (ticker, name, sector, group_name, weight, updated_at, updated_by)
-               VALUES (?, ?, ?, ?, ?, ?, ?)
+            """INSERT INTO watchlist (ticker, name, sector, group_name, weight, updated_at, updated_by, theme)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT(ticker) DO UPDATE SET name = excluded.name, sector = excluded.sector,
                    group_name = excluded.group_name, weight = excluded.weight,
-                   updated_at = excluded.updated_at, updated_by = excluded.updated_by""",
-            (row.ticker, row.name, row.sector, row.group_name, row.weight, row.updated_at, row.updated_by),
+                   updated_at = excluded.updated_at, updated_by = excluded.updated_by,
+                   theme = excluded.theme""",
+            (row.ticker, row.name, row.sector, row.group_name, row.weight, row.updated_at, row.updated_by, row.theme),
         )
     for tomb in state.removed.values():
         if current.removed.get(tomb.ticker) == tomb:

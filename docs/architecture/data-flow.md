@@ -76,7 +76,7 @@ The Portfolio page needs holdings, weights, attribution results, and risk metric
 
 1. The frontend sends `POST /api/v1/portfolio/watchlist` with `WatchlistItem`.
 2. The route normalizes ticker, name, sector, group, and weight.
-3. SQLite `watchlist` is updated through an upsert.
+3. SQLite `watchlist` is updated through an upsert. The upsert never writes `theme`: it reads the stored value and returns it, so a client that sends no theme cannot erase one.
 4. `mark_watchlist_state("user_mutation")` records that watchlist state is now user-managed.
 5. The frontend invalidates watchlist and attribution queries and re-renders from the updated DB-backed state.
 
@@ -95,6 +95,20 @@ Persistence impact:
 Persistence impact:
 - deletes from `watchlist`
 - writes `dataset_metadata`
+
+## 4.2a Watchlist Theme Write
+
+A theme is a stable id from `apps/api/services/watchlist_themes.yaml` stored in `watchlist.theme` (`''` = none). Built (risk signal sub-project 1).
+
+1. The frontend loads the choices through `GET /api/v1/portfolio/watchlist/themes`, which reads the yaml.
+2. The frontend sends `POST /api/v1/portfolio/watchlist/{ticker}/theme` with the id (or `""` to clear).
+3. The route rejects an id that is not in the yaml and a ticker that is not on the watchlist, then updates only the `theme` column (name, sector, group and weight are untouched) and stamps the row for peer sync when the theme changed.
+4. The other write paths keep the stored theme rather than set it: the upsert and the group route read it back, the destructive JSON resync (4.5) snapshots it before the DELETE and restores it for surviving tickers, and `stock_targets.json` has no theme field, so Safe Sync (4.4) neither writes nor reads it.
+5. With peer sync on, `theme` travels in the watchlist file as an optional field. A file from a PC that has not updated has no theme and reads as `''`; an applied peer row writes its theme (`watchlist_sync/store.py`).
+
+Persistence impact:
+- writes `watchlist.theme` (and `updated_at`/`updated_by`)
+- reads `watchlist_themes.yaml`
 
 ## 4.3 Watchlist Bootstrap
 
@@ -117,7 +131,7 @@ Persistence impact:
 1. The frontend sends `POST /api/v1/portfolio/watchlist/sync`.
 2. The backend reads the current SQLite `watchlist`.
 3. The backend groups rows by `group_name` and writes `stock_targets.json`.
-4. The backend records `watchlist_db_sync` metadata in `dataset_metadata`.
+4. The backend records `watchlist_db_sync` metadata in `dataset_metadata`. `theme` is not part of `stock_targets.json`.
 5. The frontend refreshes watchlist and sync-status UI.
 
 Persistence impact:
@@ -131,7 +145,7 @@ Persistence impact:
 2. The frontend sends `POST /api/v1/portfolio/watchlist/resync`.
 3. The backend parses `stock_targets.json`.
 4. Existing SQLite `watchlist` rows are deleted.
-5. JSON rows are inserted into SQLite `watchlist`.
+5. JSON rows are inserted into SQLite `watchlist`. Each surviving ticker gets its previously stored `theme` back; a ticker absent from the JSON loses its row.
 6. The backend records `manual_json_resync` state and sync metadata in `dataset_metadata`.
 7. The frontend refreshes from the newly replaced DB-backed state.
 
@@ -476,3 +490,45 @@ These quality signals are part of the calculate process and should not be treate
   frontend-owned worker execution and state transitions, backend only involved for optional stock-price lookup
 - Report export:
   backend-owned canonical payload and export rendering, frontend-owned file delivery
+
+## 12. Risk Signal (Planned)
+
+Source: `docs/superpowers/specs/2026-10-18-risk-signal-design.md`. Built so far: only the watchlist theme pieces (sub-project 1: `watchlist.theme`, the yaml, the theme route, theme in peer sync; see 4.2a). Everything else below is planned: the evaluator, news collection and the `/risk` API are sub-project 2, the banner and overlay panel are sub-project 3, and the one-screen detail page is sub-project 4. Names are provisional until each sub-project spec fixes them. Tables: `database-relationships.md` section 3.3.
+
+```mermaid
+flowchart TD
+    FRED["FRED series<br/>existing fetcher plus new series<br/>PLANNED"]
+    BARS["Daily bars in stocks<br/>watchlist, theme leaders, SOX, RSP, SPY<br/>BUILT for watchlist, rest PLANNED"]
+    THEME["watchlist.theme and watchlist_themes.yaml<br/>BUILT"]
+    EVAL["Daily risk evaluator<br/>after US close, catches up missed days<br/>PLANNED"]
+    WARN["Warning indicators<br/>on, near, off<br/>PLANNED"]
+    CONF["Confirmation rule<br/>indicators on and a theme price breaking<br/>PLANNED"]
+    ALERT[("Alert record<br/>PLANNED")]
+    NEWS["News collection<br/>topic EN and KO, ticker EN and KO<br/>refresh when a new alert opens<br/>PLANNED"]
+    API["GET /api/v1/risk/latest and /risk/history<br/>PLANNED"]
+    BANNER["Banner on the root page<br/>PLANNED"]
+    PANEL["Overlay panel<br/>card decks: crashed, risk candidates<br/>news list<br/>PLANNED"]
+    DETAIL["/detail/ticker<br/>PLANNED, sub-project 4"]
+
+    FRED --> EVAL
+    BARS --> EVAL
+    THEME --> EVAL
+    EVAL --> WARN
+    WARN --> CONF
+    CONF --> ALERT
+    ALERT -->|new alert| NEWS
+    NEWS --> ALERT
+    ALERT --> API
+    API --> BANNER
+    BANNER -->|click or first sight| PANEL
+    PANEL -->|card click| DETAIL
+```
+
+Flow notes:
+
+1. **Inputs.** FRED series come from the existing fetcher used by the scenario engine (`apps/api/services/signals/fetch.py`), which also needs `THREEFYTP10`, `CPIAUCSL`, `PCEPI` and `PCEPILFE` added. Daily bars come from the existing `equity_bars` acquisition path; `^SOX`, `RSP` and `SPY` are not in `stocks` today and must be acquired.
+2. **Evaluation.** One run per US trading day, scheduled like `signal_cycle` (periodic check while the app runs, catch-up on start, missed days evaluated in date order). Thresholds live in one checked-in rules file, not in code. This evaluator is separate from the weekly A/B/C scenario engine, whose rules and probabilities are not changed.
+3. **Confirmation and alert record.** Warning indicators alone never raise the banner. An alert opens when enough indicators are on and a theme index (market-cap weighted) starts to break. At most one alert is active at a time; a later breaking theme joins it. A cleared alert is kept, and a new trigger gets a new id. Alerts are computed per PC and not peer-synced.
+4. **News.** Topic news (macro first) and ticker news are collected in English and Korean on a schedule, and again for the relevant topics and tickers when a new alert opens. Duplicates are merged by URL or normalized title. If a feed fails, the alert still shows and the news area reports the failure.
+5. **Read path.** `GET /api/v1/risk/latest` returns the active alert (or null) with indicator states, crashed list, candidate list, news and data date; `GET /api/v1/risk/history` lists past alerts including backtested ones. Contracts are fixed by the sub-project 2 spec.
+6. **UI.** The market overview shows a one-line banner when an alert is active. The overlay panel opens automatically once per alert id (seen ids are kept in the browser's local storage) and reopens from the banner. A card opens `/detail/[ticker]`.

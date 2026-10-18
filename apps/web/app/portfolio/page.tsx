@@ -104,6 +104,14 @@ export interface PortfolioStock {
   // Watchlist insertion order. The only recency signal the row carries, and the
   // tile grid's no-weights fallback orders by it. 0 means "not a watchlist row".
   id: number;
+  // Stable theme id from GET /portfolio/watchlist/themes; "" means no theme.
+  theme: string;
+}
+
+export interface WatchlistTheme {
+  id: string;
+  ko: string;
+  en: string;
 }
 
 interface WatchlistItemPayload {
@@ -338,6 +346,7 @@ function readStoredPortfolioDateFilters() {
 }
 
 const EMPTY_WATCHLIST: PortfolioStock[] = [];
+const EMPTY_THEMES: WatchlistTheme[] = [];
 /**
  * The group the tile grid's follow control adds to and removes from.
  *
@@ -470,6 +479,7 @@ function buildBrowserPortfolioStock(company: CorporateCompany, existingStock?: P
     delta: { delta_pct: 0 },
     sparkline: [],
     id: 0,
+    theme: "",
   };
 }
 
@@ -1049,6 +1059,11 @@ export default function PortfolioPage() {
       },
     }),
     staleTime: 1000 * 60,
+  });
+  const watchlistThemesQuery = useQuery<WatchlistTheme[]>({
+    queryKey: ["watchlist-themes"],
+    queryFn: () => fetchApi<WatchlistTheme[]>("/portfolio/watchlist/themes"),
+    staleTime: Infinity,
   });
   const companiesQuery = useQuery<CorporateCompany[]>({
     queryKey: ["portfolio-browser-companies"],
@@ -1879,6 +1894,14 @@ export default function PortfolioPage() {
         : current
     ));
     setMutationMessage(`Updated sector for ${stock.ticker}.`);
+  };
+
+  const handleUpdateStockTheme = async (stock: PortfolioStock, themeId: string) => {
+    await fetchApi<PortfolioStock>(`/portfolio/watchlist/${encodeURIComponent(stock.ticker)}/theme`, {
+      method: "POST",
+      body: JSON.stringify({ theme: themeId }),
+    });
+    await queryClient.refetchQueries({ queryKey: ["portfolio-watchlist"] });
   };
 
   const handleAllocationDraftChange = (stock: PortfolioStock, nextValue: string) => {
@@ -2992,6 +3015,8 @@ export default function PortfolioPage() {
           activeSnapshotVersion={activeSnapshotMeta?.snapshot_version ?? ""}
           onAddToPortfolio={handleFocusAllocationForStock}
           onUpdateSector={(stock, nextSector) => handleUpdateStockSector(stock, nextSector)}
+          themes={watchlistThemesQuery.data ?? EMPTY_THEMES}
+          onUpdateTheme={(stock, themeId) => handleUpdateStockTheme(stock, themeId)}
           onRemoveFromWatchlist={(stock) => void handleDeleteHolding(stock)}
           onClose={() => setSelectedStockContext(null)}
         />

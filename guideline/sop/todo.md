@@ -151,6 +151,27 @@ Spec: `docs/superpowers/specs/2026-10-15-watchlist-cleanup-and-corporate-sync-de
       both are updated, use only the updated PC (a record changed on both keeps the later change).
       Nothing is deleted for 30 days. See `docs/architecture/watchlist-cleanup-and-corporate-sync.md`.
 
+### Track R: Risk signal (급락 경보)
+Spec: `docs/superpowers/specs/2026-10-18-risk-signal-design.md`. Plan (watchlist themes, sub-project ①):
+`docs/superpowers/plans/2026-10-18-watchlist-themes.md`. Evidence: `docs/superpowers/specs/2026-10-18-risk-signal-evidence/`.
+- [x] R-① watchlist themes: theme column and endpoint, optional theme sync field (`FORMAT_VERSION` unchanged), stock-modal picker
+- [x] R-① **Theme apply:** `python scripts/apply_watchlist_themes.py --dry-run`, then the real run after the owner's OK.
+      2026-10-18 applied on this PC: 250/250 rows themed (24 distinct themes), 5 names fixed (NRG, SCCO, MSTR, IAUM, SLV);
+      sector/group/weight unchanged. The first run hit the API RateLimiter (429); the re-run was idempotent.
+- [ ] R-① **Rollout:** the other PC needs updating the same day and needs the theme apply too. Sync is off on this PC,
+      so themes reach the other PC only through its own run of `python scripts/apply_watchlist_themes.py` after it updates.
+      Until BOTH PCs run this branch, make no watchlist edits on the un-updated PC (weight auto-save, "normalize allocations",
+      sector edit, group toggle). Each re-stamps that row without a theme and, once sync is on, the updated PC takes the newer
+      row and silently drops its theme.
+- [ ] R-① **Open:** PSTG has no Yahoo quote ("Quote not found"). Its status (renamed, delisted or still listed) is unknown.
+      The draft places it in `메모리·스토리지` pending that check.
+- [ ] R-① **Open (pre-existing defect, found 2026-10-18):** `apps/api/services/watchlist_cleanup.py` `_REFERENCE_QUERIES`
+      does not count market-overview proxy tickers stored in `stocks` (BOTZ, SKYY, XLE, ITA, CIBR, ICLN, TSL, 143860.KS, ^KS11).
+      They were enrolled in `cleanup_pending` on 2026-10-18 08:05Z, so their caches would be deleted after 30 days and then
+      refetched, repeatedly. Fix in sub-project ② together with the benchmark tickers (^SOX, RSP, SPY), which hit the same path.
+      Not changed in the watchlist-themes wave.
+- Deferred minor findings are listed in the plan ledger (`.superpowers/sdd/2026-10-18-watchlist-themes/progress.md`) and are triaged at the final review.
+
 ## Known limits, accepted deliberately
 
 Recorded so nobody rediscovers them as bugs.

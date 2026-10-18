@@ -110,6 +110,8 @@ from .schema_parts.watchlist import (
     WatchlistSkippedFile,
     WatchlistSyncResult,
     WatchlistSyncStatus,
+    WatchlistTheme,
+    WatchlistThemeUpdate,
 )
 from .schema_parts.sync import RecordsSyncStatus, SyncStatus
 
@@ -212,6 +214,8 @@ __all__ = [
     "WatchlistSkippedFile",
     "WatchlistSyncResult",
     "WatchlistSyncStatus",
+    "WatchlistTheme",
+    "WatchlistThemeUpdate",
     "RecordsSyncStatus",
     "SyncStatus",
     "SegmentInput",
