@@ -15,6 +15,15 @@ class WatchlistItem(BaseModel):
     sector: str = ""
     group_name: str = "custom"
     weight: float = Field(default=0.0, ge=0.0, le=1.0)
+    # Response-only: the upsert never writes an incoming theme. Changing it goes through
+    # POST /watchlist/{ticker}/theme.
+    theme: Optional[str] = None
+
+
+class WatchlistThemeUpdate(BaseModel):
+    """Body for setting one ticker's theme. `""` clears it; anything else must be a theme id."""
+
+    theme: str
 
 
 class WatchlistTheme(BaseModel):
@@ -108,6 +117,7 @@ class PortfolioStock(BaseModel):
     last_close: Optional[float] = None
     delta: Optional[DeltaBadge] = None
     sparkline: List[float] = Field(default_factory=list)
+    theme: str = ""
     # Insertion order. watchlist has no created_at, so this is the only recency signal,
     # and the portfolio grid's no-weights fallback needs it.
     id: int = 0
