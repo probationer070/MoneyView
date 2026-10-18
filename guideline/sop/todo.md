@@ -145,6 +145,18 @@ Spec: `docs/superpowers/specs/2026-10-15-watchlist-cleanup-and-corporate-sync-de
       both are updated, use only the updated PC (a record changed on both keeps the later change).
       Nothing is deleted for 30 days. See `docs/architecture/watchlist-cleanup-and-corporate-sync.md`.
 
+### Track R: Risk signal (급락 경보)
+Spec: `docs/superpowers/specs/2026-10-18-risk-signal-design.md`. Plan (watchlist themes, sub-project ①):
+`docs/superpowers/plans/2026-10-18-watchlist-themes.md`. Evidence: `docs/superpowers/specs/2026-10-18-risk-signal-evidence/`.
+- [x] R-① watchlist themes: theme column and endpoint, optional theme sync field (`FORMAT_VERSION` unchanged), stock-modal picker
+- [ ] R-① **Theme apply:** `python scripts/apply_watchlist_themes.py --dry-run`, then the real run after the owner's OK
+      (the script is written and tested; the run against the real DB is pending).
+- [ ] R-① **Rollout:** the other PC needs updating the same day and needs the theme apply too. Sync is off on this PC,
+      so the apply runs here as a one-off. Until the other PC is updated, its rows carry no theme and its peer file reads as `theme=""`.
+- [ ] R-① **Open:** PSTG has no Yahoo quote ("Quote not found"). Its status (renamed, delisted or still listed) is unknown.
+      The draft places it in `메모리·스토리지` pending that check.
+- Deferred minor findings are listed in the plan ledger (`.superpowers/sdd/2026-10-18-watchlist-themes/progress.md`) and are triaged at the final review.
+
 ## Known limits, accepted deliberately
 
 Recorded so nobody rediscovers them as bugs.
