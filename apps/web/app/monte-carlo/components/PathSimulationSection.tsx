@@ -122,7 +122,7 @@ export function PathSimulationSection({
       </SimulationRail>
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-auto lg:overflow-visible">
-        <ScanReveal trigger={String(runId)} className="flex min-h-0 flex-1 flex-col" bodyClassName="flex min-h-0 flex-1 flex-col gap-3">
+        <ScanReveal trigger={String(runId)} className="flex flex-col lg:min-h-0 lg:flex-1" bodyClassName="flex flex-col gap-3 lg:min-h-0 lg:flex-1">
         <ResultHeader
           status={runStatusView(status, progress, sharedSimulation !== null)}
           figures={[
@@ -144,7 +144,7 @@ export function PathSimulationSection({
         <WarningBanner title={t("monteCarlo.path.warningsTitle")} warnings={warnings} />
 
         {/* Primary visual outputs: sampled paths and percentile cone, filling the rest of the panel. */}
-        <section className="grid min-h-0 flex-1 grid-cols-1 gap-3 lg:grid-cols-2 lg:grid-rows-[minmax(0,1fr)]">
+        <section className="grid grid-cols-1 lg:min-h-0 lg:flex-1 gap-3 lg:grid-cols-2 lg:grid-rows-[minmax(0,1fr)]">
           <ChartGuard
             title={t("monteCarlo.path.paths.title")}
             description={t("monteCarlo.path.paths.description")}

@@ -191,7 +191,7 @@ export function CorrelationModelSection({
       </SimulationRail>
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-auto lg:overflow-visible">
-        <ScanReveal trigger={String(runId)} className="flex min-h-0 flex-1 flex-col" bodyClassName="flex min-h-0 flex-1 flex-col gap-3">
+        <ScanReveal trigger={String(runId)} className="flex flex-col lg:min-h-0 lg:flex-1" bodyClassName="flex flex-col gap-3 lg:min-h-0 lg:flex-1">
         <ResultHeader
           status={runStatusView(correlationStatus, correlationProgress, correlationResult !== null)}
           figures={figures}
@@ -205,7 +205,7 @@ export function CorrelationModelSection({
         {correlationStatus === "error" ? <RunNotice tone="error">{t("monteCarlo.correlation.runFailed")}</RunNotice> : null}
         <WarningBanner title={t("monteCarlo.correlation.warningsTitle")} warnings={warnings} />
 
-        <section className="grid min-h-0 flex-1 grid-cols-1 gap-3 lg:grid-cols-3">
+        <section className="grid grid-cols-1 lg:min-h-0 lg:flex-1 gap-3 lg:grid-cols-3">
           <div className="flex min-h-0 min-w-0 flex-col lg:col-span-2">
             <ChartGuard
               title={t("monteCarlo.correlation.frontier.title")}
@@ -219,13 +219,13 @@ export function CorrelationModelSection({
             >
               <ScatterChart margin={CHART_MARGIN}>
                 <CartesianGrid {...GRID_STYLE} />
-                <XAxis dataKey="risk" name={t("monteCarlo.correlation.frontier.axisRisk")} tickFormatter={fmtPctTick} tick={AXIS_TICK_STYLE} axisLine={AXIS_LINE_STYLE} tickLine={false} />
-                <YAxis dataKey="return" name={t("monteCarlo.correlation.frontier.axisReturn")} tickFormatter={fmtPctTick} tick={AXIS_TICK_STYLE} axisLine={AXIS_LINE_STYLE} tickLine={false} />
+                <XAxis dataKey="risk" name={t("monteCarlo.correlation.frontier.axisRisk")} tickFormatter={(v) => fmtPctTick(Number(v), 1)} tick={AXIS_TICK_STYLE} axisLine={AXIS_LINE_STYLE} tickLine={false} />
+                <YAxis dataKey="return" name={t("monteCarlo.correlation.frontier.axisReturn")} tickFormatter={(v) => fmtPctTick(Number(v), 1)} tick={AXIS_TICK_STYLE} axisLine={AXIS_LINE_STYLE} tickLine={false} />
                 <ZAxis dataKey="sharpe" name={t("monteCarlo.correlation.frontier.axisSharpe")} range={[30, 180]} />
                 <Tooltip
                   {...DEFAULT_TOOLTIP_PROPS}
-                  formatter={(value, name) => {
-                    if (name === "risk" || name === "return") return formatNumber(Number(value) / 100, "percent", { digits: 2, locale });
+                  formatter={(value, _name, item) => {
+                    if (item?.dataKey === "risk" || item?.dataKey === "return") return formatNumber(Number(value) / 100, "percent", { digits: 2, locale });
                     return formatNumber(Number(value), "ratio", { digits: 4, locale });
                   }}
                   labelFormatter={() => t("monteCarlo.correlation.frontier.tooltipPortfolio")}

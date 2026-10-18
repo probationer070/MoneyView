@@ -133,7 +133,7 @@ export function CorporateValuationSection({
       </SimulationRail>
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-auto lg:overflow-visible">
-        <ScanReveal trigger={String(runId)} className="flex min-h-0 flex-1 flex-col" bodyClassName="flex min-h-0 flex-1 flex-col gap-3">
+        <ScanReveal trigger={String(runId)} className="flex flex-col lg:min-h-0 lg:flex-1" bodyClassName="flex flex-col gap-3 lg:min-h-0 lg:flex-1">
         <ResultHeader
           status={runStatusView(valuationStatus, valuationProgress, valuationResult !== null)}
           figures={figures}
@@ -147,7 +147,7 @@ export function CorporateValuationSection({
         {valuationStatus === "cancelled" ? <RunNotice tone="warning">{t("monteCarlo.valuation.cancelledNote")}</RunNotice> : null}
         <WarningBanner title={t("monteCarlo.valuation.warningsTitle")} warnings={warnings} />
 
-        <section className="grid min-h-0 flex-1 grid-cols-1 gap-3 lg:grid-cols-3">
+        <section className="grid grid-cols-1 lg:min-h-0 lg:flex-1 gap-3 lg:grid-cols-3">
           <div className="flex min-h-0 min-w-0 flex-col lg:col-span-2">
             <ChartGuard
               title={t("monteCarlo.valuation.distribution.title")}

@@ -58,7 +58,7 @@ test.describe("KRW amounts after a path run", () => {
       await expect(page.getByRole("heading", { name: "시뮬레이션 랩", exact: true })).toBeVisible({ timeout: 60_000 });
       await page.getByRole("button", { name: "경로 시뮬레이션 실행" }).click();
 
-      await expect(page.getByText("964만원").first()).toBeVisible();
+      await expect(page.getByTestId("mc-figure-median-value")).toHaveText("964만원");
       await expect(panelOf(page, "GBM + 점프 확산 시뮬레이션 경로").getByText("만원", { exact: true })).toBeVisible();
     });
   });
@@ -791,6 +791,40 @@ test.describe("correlation", () => {
     expect(heatmap.y + heatmap.height, "the heatmap ends inside the panel").toBeLessThanOrEqual(panel.y + panel.height + 1);
   });
 
+  test("the frontier axes label every tick with one decimal format, never a growing number of decimals", async ({ page }) => {
+    await openCorrelation(page);
+    await page.getByTestId("mc-run-correlation").click();
+    await expect(page.getByTestId("mc-status")).toHaveAttribute("data-state", "ready");
+    const frame = panelOf(page, "Efficient Frontier");
+    for (const axis of ["xAxis", "yAxis"]) {
+      const ticks = frame.locator(`.recharts-${axis}-tick-labels .recharts-cartesian-axis-tick-label text`);
+      // recharts animates for ~400ms: wait until the tick labels stop changing.
+      let previous = "";
+      await expect.poll(async () => {
+        const current = (await ticks.allTextContents()).join("|");
+        const stable = current === previous && current !== "";
+        previous = current;
+        return stable;
+      }, { message: `${axis} ticks settle` }).toBe(true);
+      const labels = await ticks.allTextContents();
+      expect(labels.length, `${axis} tick count`).toBeGreaterThan(1);
+      for (const label of labels) expect(label, `${axis} tick "${label}"`).toMatch(/^-?\d+\.\d%$/);
+    }
+  });
+
+  test("the frontier tooltip prints risk and return as percentages and the Sharpe ratio as a plain number", async ({ page }) => {
+    await openCorrelation(page);
+    await page.getByTestId("mc-run-correlation").click();
+    await expect(page.getByTestId("mc-status")).toHaveAttribute("data-state", "ready");
+    const point = panelOf(page, "Efficient Frontier").locator(".recharts-scatter-symbol").first();
+    await expect(point).toBeVisible();
+    await point.hover();
+    const tooltip = page.locator(".recharts-tooltip-wrapper").first();
+    await expect(tooltip).toContainText(/Risk.*?:\s*\d+(\.\d+)?%/);
+    await expect(tooltip).toContainText(/Return.*?:\s*-?\d+(\.\d+)?%/);
+    await expect(tooltip).not.toContainText(/Sharpe[^:]*:\s*-?[\d.]+%/);
+  });
+
   test("Run Correlation Analysis stays where it is while the rail scrolls", async ({ page }) => {
     await openCorrelation(page);
     const inputs = page.getByTestId("mc-rail-inputs");
@@ -863,13 +897,20 @@ test.describe("no page scroll, all tabs", () => {
           const panel = (await page.getByTestId("mc-panel").boundingBox())!;
           const header = (await page.getByTestId("mc-result-header").boundingBox())!;
           const frame = (await panelOf(page, c.frame).boundingBox())!;
-          const size = await page.evaluate(() => ({ scroll: document.scrollingElement!.scrollHeight, inner: window.innerHeight }));
-          console.log(`HEIGHTS ${JSON.stringify({ tab: c.key, stage, width: viewport.width, scroll: size.scroll, inner: size.inner, panelBottom: Math.round(panel.y + panel.height), headerBottom: Math.round(header.y + header.height), frameBottom: Math.round(frame.y + frame.height) })}`);
           if (viewport.width === 1280) {
             // ONE_SCREEN_ROUTES gives the shell a 24px bottom pad (5rem otherwise), so the panel reaches 24px above the edge.
             expect(Math.round(panel.y + panel.height), "the panel ends 24px above the viewport bottom").toBe(viewport.height - 24);
             expect(header.y + header.height, "result header ends inside the panel").toBeLessThanOrEqual(panel.y + panel.height + 1);
             expect(frame.y + frame.height, "the first chart frame ends inside the panel").toBeLessThanOrEqual(panel.y + panel.height + 1);
+          }
+          if (viewport.width === 390 && stage === "after") {
+            // Below lg the result column scrolls, so every chart keeps its content height and stays inside its frame.
+            const section = panelOf(page, c.frame);
+            await expect.poll(async () => {
+              const f = await section.boundingBox();
+              const sv = await section.locator(".recharts-surface").first().boundingBox();
+              return sv && f ? Math.round(sv.y + sv.height - (f.y + f.height)) : null;
+            }, { message: `${c.key} chart surface bottom vs its frame bottom` }).toBeLessThanOrEqual(1);
           }
           if (process.env.DESIGN_CAPTURE) {
             await page.screenshot({

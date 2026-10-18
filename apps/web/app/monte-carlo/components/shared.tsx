@@ -105,7 +105,7 @@ export function SummaryRow({ label, value }: { label: string; value: string }) {
   return (
     <tr className="border-t border-[var(--line)]">
       <td className="p-3 type-small text-[var(--ink)]">{label}</td>
-      <td className="p-3 text-right type-mono text-[var(--ink)]">{value}</td>
+      <td className="whitespace-nowrap p-3 text-right type-mono text-[var(--ink)]">{value}</td>
     </tr>
   );
 }

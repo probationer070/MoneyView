@@ -65,7 +65,7 @@ export function ReturnDistributionSection({
       {status === "error" ? <RunNotice tone="error">{errorMessage ?? t("monteCarlo.path.runFailed")}</RunNotice> : null}
       <WarningBanner title={t("monteCarlo.path.warningsTitle")} warnings={warnings} />
 
-      <section className="grid min-h-0 flex-1 grid-cols-1 gap-3 lg:grid-cols-2 lg:grid-rows-[minmax(0,1fr)]">
+      <section className="grid grid-cols-1 lg:min-h-0 lg:flex-1 gap-3 lg:grid-cols-2 lg:grid-rows-[minmax(0,1fr)]">
         <HistogramPanel
           height="fill"
           title={t("monteCarlo.distribution.histogram.title")}
