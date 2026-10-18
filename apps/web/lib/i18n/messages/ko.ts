@@ -56,6 +56,7 @@ export const ko: Messages = {
     subtitle: "경로·위험·분포·가치평가·상관 시뮬레이션",
     units: {
       krwAxis: "만원",
+      krw: "원",
       terminalValue: "만기 가치",
     },
     tabs: {
@@ -292,6 +293,10 @@ export const ko: Messages = {
         description: "무작위 포트폴리오 400개의 산점도입니다. 샤프 비율이 가장 높은 포트폴리오는 표본과 구분해 그립니다.",
         empty: "아직 효율적 프런티어 데이터가 없습니다",
         emptyHint: "상관 엔진을 실행하면 효율적 프런티어, 상관행렬, 민감도 진단이 생성됩니다.",
+        axisRisk: "위험 σ",
+        axisReturn: "수익률 μ",
+        tooltipPortfolio: "포트폴리오",
+        axisSharpe: "샤프 비율",
         invalid: "효율적 프런티어 데이터가 올바르지 않습니다",
         invalidHint: "워커 결과에 차트에 쓸 수 있는 프런티어 행이 없어, 빈 패널 대신 표시하지 않았습니다.",
       },

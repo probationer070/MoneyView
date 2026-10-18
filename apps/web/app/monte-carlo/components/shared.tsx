@@ -3,11 +3,8 @@
 import { fieldInputClass } from "@/components/ui/InlineField";
 import { formatNumber, type FormatLocale } from "@/lib/format";
 import clsx from "clsx";
-import { formatKrwCompact } from "../lib/krwFormat";
 
-// Shared chart constants and formatter helpers used across all Monte Carlo sections.
-export const CHART_INITIAL_DIMENSION = { width: 720, height: 320 };
-
+// Shared formatter helpers used across all Monte Carlo sections.
 // Percent arguments are in percent units (8.5 means 8.5%), so they are divided by 100 for formatNumber.
 export function pct(value: number, locale: FormatLocale) {
   return formatNumber(value / 100, "percent", { digits: 2, locale });
@@ -15,10 +12,6 @@ export function pct(value: number, locale: FormatLocale) {
 
 export function numberText(value: number, locale: FormatLocale) {
   return formatNumber(value, "ratio", { locale });
-}
-
-export function krwLossFromPercent(principal: number, lossPercent: number, locale: FormatLocale) {
-  return formatKrwCompact(principal * (lossPercent / 100), locale);
 }
 
 // Shared form primitives keep styling consistent after the file split.

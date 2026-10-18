@@ -109,13 +109,13 @@ export function CorporateValuationSection({
               onChange={(event) => updateValuation("currentPrice", Number(event.target.value))}
               className="type-mono w-full bg-transparent text-[var(--ink)] outline-none"
             />
-            <span className="type-small text-[var(--ink-muted)]">KRW</span>
+            <span className="type-small text-[var(--ink-muted)]">{t("monteCarlo.units.krw")}</span>
             {valuationPriceLookupStatus === "loading" || valuationPriceLookupStatus === "fetching" ? (
               <Loader2 className="h-4 w-4 animate-spin text-[var(--ink-muted)]" />
             ) : null}
           </div>
         </label>
-        <NumericField label={t("monteCarlo.valuation.fields.baseEps")} value={valuationInput.baseEps} onChange={(value) => updateValuation("baseEps", value)} step={50} min={100} suffix="KRW" />
+        <NumericField label={t("monteCarlo.valuation.fields.baseEps")} value={valuationInput.baseEps} onChange={(value) => updateValuation("baseEps", value)} step={50} min={100} suffix={t("monteCarlo.units.krw")} />
         <NumericField label={t("monteCarlo.valuation.fields.averageGrowthRate")} value={valuationInput.averageGrowthRate} onChange={(value) => updateValuation("averageGrowthRate", value)} step={0.5} suffix="%" />
         <NumericField label={t("monteCarlo.valuation.fields.growthUncertainty")} value={valuationInput.growthUncertainty} onChange={(value) => updateValuation("growthUncertainty", value)} step={0.25} suffix="%" />
         <NumericField label={t("monteCarlo.valuation.fields.discountRate")} value={valuationInput.discountRate} onChange={(value) => updateValuation("discountRate", value)} step={0.25} suffix="%" />

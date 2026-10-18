@@ -94,7 +94,7 @@ export function PathSimulationSection({
           </>
         )}
       >
-        <NumericField label={t("monteCarlo.path.fields.initialInvestment")} value={input.initialInvestment} onChange={(value) => update("initialInvestment", value)} suffix="KRW" min={1_000_000} step={100_000} />
+        <NumericField label={t("monteCarlo.path.fields.initialInvestment")} value={input.initialInvestment} onChange={(value) => update("initialInvestment", value)} suffix={t("monteCarlo.units.krw")} min={1_000_000} step={100_000} />
         <NumericField label={t("monteCarlo.path.fields.expectedReturn")} value={input.expectedAnnualReturn} onChange={(value) => update("expectedAnnualReturn", value)} suffix="%" step={0.5} />
         <NumericField label={t("monteCarlo.path.fields.volatility")} value={input.annualVolatility} onChange={(value) => update("annualVolatility", value)} suffix="%" step={0.5} />
         <NumericField label={t("monteCarlo.path.fields.horizon")} value={input.investmentHorizonYears} onChange={(value) => update("investmentHorizonYears", value)} suffix={t("monteCarlo.path.units.years")} min={1} step={1} />

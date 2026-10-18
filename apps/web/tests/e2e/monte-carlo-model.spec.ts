@@ -161,6 +161,24 @@ test.describe("krw and formatKrwRange", () => {
     expect(formatKrwRange(41_200, 58_900, "ko").includes("KRW")).toBe(false);
   });
 
+  test("krw: the sign goes first, rounds half away from zero, and a value that rounds to zero has no sign", () => {
+    expect(krw(-5_000, "en")).toBe("-KRW 5,000");
+    expect(krw(-5_000, "ko")).toBe("-5,000원");
+    expect(krw(-2.5, "en")).toBe("-KRW 3");
+    expect(krw(-0.4, "en")).toBe("KRW 0");
+    expect(krw(-0.4, "ko")).toBe("0원");
+    expect(krw(-0, "en")).toBe("KRW 0");
+    expect(krw(-0, "ko")).toBe("0원");
+  });
+
+  test("formatKrwRange: each end carries its own sign, rounds half away from zero, and never prints -0", () => {
+    expect(formatKrwRange(-5_000, -3_000, "en")).toBe("KRW -5,000–-3,000");
+    expect(formatKrwRange(-5_000, 3_000, "ko")).toBe("-5,000–3,000원");
+    expect(formatKrwRange(-2.5, 2.5, "en")).toBe("KRW -3–3");
+    expect(formatKrwRange(-0.4, 0, "en")).toBe("KRW 0–0");
+    expect(formatKrwRange(-0, -0.4, "ko")).toBe("0–0원");
+  });
+
   test("formatKrwRange: either side not finite reads a dash", () => {
     for (const locale of ["en", "ko"] as const) {
       expect(formatKrwRange(null, 58_900, locale)).toBe("—");

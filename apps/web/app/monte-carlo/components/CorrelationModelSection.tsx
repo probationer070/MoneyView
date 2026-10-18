@@ -213,16 +213,16 @@ export function CorrelationModelSection({
             >
               <ScatterChart margin={CHART_MARGIN}>
                 <CartesianGrid {...GRID_STYLE} />
-                <XAxis dataKey="risk" name="Risk sigma" tickFormatter={fmtPctTick} tick={AXIS_TICK_STYLE} axisLine={AXIS_LINE_STYLE} tickLine={false} />
-                <YAxis dataKey="return" name="Return mu" tickFormatter={fmtPctTick} tick={AXIS_TICK_STYLE} axisLine={AXIS_LINE_STYLE} tickLine={false} />
-                <ZAxis dataKey="sharpe" range={[30, 180]} />
+                <XAxis dataKey="risk" name={t("monteCarlo.correlation.frontier.axisRisk")} tickFormatter={fmtPctTick} tick={AXIS_TICK_STYLE} axisLine={AXIS_LINE_STYLE} tickLine={false} />
+                <YAxis dataKey="return" name={t("monteCarlo.correlation.frontier.axisReturn")} tickFormatter={fmtPctTick} tick={AXIS_TICK_STYLE} axisLine={AXIS_LINE_STYLE} tickLine={false} />
+                <ZAxis dataKey="sharpe" name={t("monteCarlo.correlation.frontier.axisSharpe")} range={[30, 180]} />
                 <Tooltip
                   {...DEFAULT_TOOLTIP_PROPS}
                   formatter={(value, name) => {
                     if (name === "risk" || name === "return") return formatNumber(Number(value) / 100, "percent", { digits: 2, locale });
                     return formatNumber(Number(value), "ratio", { digits: 4, locale });
                   }}
-                  labelFormatter={() => "Portfolio"}
+                  labelFormatter={() => t("monteCarlo.correlation.frontier.tooltipPortfolio")}
                 />
                 <Scatter data={frontier.filter((point) => !point.is_optimal)} fill={CHART_COLORS.tertiary} />
                 <Scatter data={frontier.filter((point) => point.is_optimal)} fill={CHART_COLORS.positive} />

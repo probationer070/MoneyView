@@ -53,6 +53,7 @@ export const en = {
     subtitle: "Path, risk, distribution, valuation and correlation simulations",
     units: {
       krwAxis: "KRW M",
+      krw: "KRW",
       terminalValue: "Terminal value",
     },
     tabs: {
@@ -289,6 +290,10 @@ export const en = {
         description: "Scatter plot of 400 random portfolios. The highest-Sharpe portfolio is drawn apart from the sampled set.",
         empty: "No efficient-frontier data yet",
         emptyHint: "Run the portfolio correlation engine to generate efficient frontier, correlation matrix, and sensitivity diagnostics.",
+        axisRisk: "Risk sigma",
+        axisReturn: "Return mu",
+        tooltipPortfolio: "Portfolio",
+        axisSharpe: "Sharpe",
         invalid: "Efficient-frontier data is invalid",
         invalidHint: "The worker result did not contain chart-safe efficient-frontier rows, so the panel was withheld instead of rendering blank.",
       },

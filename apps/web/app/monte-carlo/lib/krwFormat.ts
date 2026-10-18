@@ -49,17 +49,27 @@ export function krwAxis(locale: FormatLocale): KrwAxis {
   };
 }
 
+// Whole won, half away from zero, same rule as formatKrwCompact. A value that rounds to zero is 0, never -0.
+function wholeWon(value: number): number {
+  const won = Math.round(Math.abs(value));
+  return value < 0 && won > 0 ? -won : won;
+}
+
 // Per-share price (whole won). en: KRW 50,000; ko: 50,000원 (owner decision D8).
+// The sign goes first, like formatKrwCompact: -KRW 5,000 / -5,000원; a value that rounds to zero has no sign.
 export function krw(value: number, locale: FormatLocale): string {
   if (!Number.isFinite(value)) return MISSING;
-  const amount = formatNumber(Math.round(value), "integer", { locale });
-  return locale === "en" ? `KRW ${amount}` : `${amount}원`;
+  const won = wholeWon(value);
+  const sign = won < 0 ? "-" : "";
+  const amount = formatNumber(Math.abs(won), "integer", { locale });
+  return locale === "en" ? `${sign}KRW ${amount}` : `${sign}${amount}원`;
 }
 
 // A won interval: one prefix (en) or one suffix (ko), joined by an en dash. Either side not finite reads a dash.
+// Each end carries its own sign (KRW -5,000–-3,000); an end that rounds to zero reads 0, never -0.
 export function formatKrwRange(lo: number | null, hi: number | null, locale: FormatLocale): string {
   if (lo === null || hi === null || !Number.isFinite(lo) || !Number.isFinite(hi)) return MISSING;
-  const from = formatNumber(Math.round(lo), "integer", { locale });
-  const to = formatNumber(Math.round(hi), "integer", { locale });
+  const from = formatNumber(wholeWon(lo), "integer", { locale });
+  const to = formatNumber(wholeWon(hi), "integer", { locale });
   return locale === "en" ? `KRW ${from}–${to}` : `${from}–${to}원`;
 }

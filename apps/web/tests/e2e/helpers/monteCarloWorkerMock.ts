@@ -122,7 +122,13 @@ export const CORRELATION_FIXTURE = {
   optimal_summary: { optimal_return: 9.2, optimal_volatility: 12.5, diversification_effect: 3.1, optimal_sharpe: 0.74 },
 };
 
+/** A path entry that answers its run with a worker error instead of a result. */
+export function pathError(message: string): PathFixture {
+  return { __mcError: message };
+}
+
 export type MonteCarloWorkerOptions = {
+  /** One entry per path run, in order (the last repeats). Use pathError() for a run that fails. */
   path?: PathFixture[];
   valuation?: unknown;
   correlation?: unknown;
@@ -170,7 +176,8 @@ export async function installMonteCarloWorker(page: Page, options: MonteCarloWor
         if (message.type === "run-path") {
           const index = Math.min(pathCalls, cfg.path.length - 1);
           pathCalls += 1;
-          reply = { type: "result", result: cfg.path[index] };
+          const entry = cfg.path[index] as Record<string, unknown>;
+          reply = typeof entry.__mcError === "string" ? { type: "error", error: entry.__mcError } : { type: "result", result: entry };
         } else if (message.type === "run-valuation") {
           reply = { type: "valuation-result", result: cfg.valuation };
         } else if (message.type === "run-correlation") {

@@ -1,5 +1,11 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { installMonteCarloWorker } from "./helpers/monteCarloWorkerMock";
+import { installMonteCarloWorker, PATH_FIXTURE, pathError } from "./helpers/monteCarloWorkerMock";
+import { en } from "../../lib/i18n/messages/en";
+import { ko } from "../../lib/i18n/messages/ko";
+import { tokens } from "../../lib/tokens.generated";
+
+// The chart minimum height, from the token the layout reads (component.chart.min-height).
+const CHART_MIN = Number.parseFloat(tokens.component.chart["min-height"]);
 
 // The panel (ChartPanelFrame section) that owns a heading. It stays the same element whether or not the chart drew.
 function panelOf(page: Page, heading: string): Locator {
@@ -227,9 +233,6 @@ test.describe("path", () => {
 
   test("the header and both charts end inside the panel after a run, and each chart is at least 200px tall", async ({ page }) => {
     await openPath(page);
-    // Until /monte-carlo joins ONE_SCREEN_ROUTES (Task 10) the shell keeps 5rem of bottom padding, 54px less than the
-    // 503px panel budget. Apply the one-screen padding here so the test measures the budget this layout is built for.
-    await page.addStyleTag({ content: "main { --main-pad-bottom: 1.5rem !important; }" });
     const panelBefore = (await page.getByTestId("mc-panel").boundingBox())!;
     for (const title of ["GBM + Jump-Diffusion Simulated Paths", "Percentile Cone"]) {
       const frame = (await panelOf(page, title).boundingBox())!;
@@ -504,8 +507,6 @@ test.describe("risk and distribution", () => {
 
   test("risk: at 1280x720 after a run, the header, both risk chart views and the statistical summary end inside the panel", async ({ page }) => {
     await openPath(page);
-    // Until /monte-carlo joins ONE_SCREEN_ROUTES (Task 10) the shell keeps 5rem of bottom padding. Apply the one-screen padding.
-    await page.addStyleTag({ content: "main { --main-pad-bottom: 1.5rem !important; }" });
     await page.getByTestId("mc-run-path").click();
     await expect(page.getByTestId("mc-status")).toHaveAttribute("data-state", "ready");
     await page.getByRole("tab", { name: /Risk Analysis/ }).click();
@@ -531,7 +532,6 @@ test.describe("risk and distribution", () => {
 
   test("distribution: at 1280x720 after a run, the histogram and CDF sit side by side inside the panel, each at least 200px tall", async ({ page }) => {
     await openPath(page);
-    await page.addStyleTag({ content: "main { --main-pad-bottom: 1.5rem !important; }" });
     await page.getByTestId("mc-run-path").click();
     await expect(page.getByTestId("mc-status")).toHaveAttribute("data-state", "ready");
     await page.getByRole("tab", { name: /Return Distribution/ }).click();
@@ -549,7 +549,11 @@ test.describe("risk and distribution", () => {
     for (const [title, frame] of [[histogramTitle, histogram], ["CDF Comparison", cdf]] as const) {
       expect(frame.y + frame.height, `${title} ends inside the panel`).toBeLessThanOrEqual(bottom);
       const surface = (await panelOf(page, title).locator(".recharts-surface").first().boundingBox())!;
-      expect(surface.height, `${title} chart height`).toBeGreaterThanOrEqual(200);
+      expect(surface.height, `${title} chart height`).toBeGreaterThanOrEqual(CHART_MIN);
+      // The chart fills its frame (same bound as the valuation chart): a fixed-height chart stops short of the frame bottom.
+      const gap = frame.y + frame.height - (surface.y + surface.height);
+      expect(gap, `${title} chart bottom is inside its frame`).toBeGreaterThanOrEqual(-1);
+      expect(gap, `${title} chart fills its frame`).toBeLessThanOrEqual(40);
     }
   });
 });
@@ -637,8 +641,6 @@ test.describe("valuation", () => {
 
   test("at 1280x720 after a run, the header, the distribution chart and the statistics table end inside the panel", async ({ page }) => {
     await openValuation(page, /Simulation Lab/, /Corporate Valuation/);
-    // Until /monte-carlo joins ONE_SCREEN_ROUTES (Task 10) the shell keeps 5rem of bottom padding. Apply the one-screen padding.
-    await page.addStyleTag({ content: "main { --main-pad-bottom: 1.5rem !important; }" });
     await page.getByTestId("mc-run-valuation").click();
     await expect(page.getByTestId("mc-status")).toHaveAttribute("data-state", "ready");
 
@@ -689,6 +691,8 @@ test.describe("correlation", () => {
   test("the matrix fits the 320px rail: no value is clipped by its input or cell", async ({ page }) => {
     await openCorrelation(page);
     const matrix = page.getByTestId("mc-correlation-matrix");
+    // The widest value a cell takes (sign and two decimals) goes into every editable cell, so a cell that would clip it shows.
+    for (const input of await matrix.locator("input").all()) await input.fill("-0.95");
     // Upper triangle of a 4x4 matrix: six editable cells. Each value is measured as text against its own padding box.
     const inputs = await matrix.locator("input").evaluateAll((nodes) => nodes.map((node) => {
       const input = node as HTMLInputElement;
@@ -767,8 +771,6 @@ test.describe("correlation", () => {
 
   test("at 1280x720 after a run, the header and both chart frames end inside the panel, and the frontier is at least 200px tall", async ({ page }) => {
     await openCorrelation(page);
-    // Same one-screen padding as the path fit test, until /monte-carlo joins ONE_SCREEN_ROUTES (Task 10).
-    await page.addStyleTag({ content: "main { --main-pad-bottom: 1.5rem !important; }" });
     await page.getByRole("button", { name: "Run Correlation Analysis" }).click();
     await expect(page.getByTestId("mc-status")).toHaveAttribute("data-state", "ready");
 
@@ -800,5 +802,234 @@ test.describe("correlation", () => {
     expect(await inputs.evaluate((node) => node.scrollTop)).toBeGreaterThan(0);
     expect(await run.boundingBox()).toEqual(before);
     expect(before!.y + before!.height).toBeLessThanOrEqual(720);
+  });
+});
+
+test.describe("failed after a result", () => {
+  test.use({ viewport: { width: 1280, height: 720 } });
+
+  const CASES = [
+    ["risk", /Risk Analysis/, "VaR / CVaR Risk Distribution"],
+    ["distribution", /Return Distribution/, "Return Histogram with Fitted Normal Curve"],
+  ] as const;
+
+  for (const [name, tab, title] of CASES) {
+    test(`${name}: a second path run that fails keeps the first result's charts under the error notice and the failed status`, async ({ page }) => {
+      await openPath(page, { path: [PATH_FIXTURE, pathError("Mock worker failure")] });
+      await page.getByTestId("mc-run-path").click();
+      await expect(page.getByTestId("mc-status")).toHaveAttribute("data-state", "ready");
+      await page.getByTestId("mc-run-path").click();
+      await expect(page.getByTestId("mc-status")).toHaveAttribute("data-state", "failed");
+
+      await page.getByRole("tab", { name: tab }).click();
+      await expect(page.getByTestId("mc-status")).toHaveAttribute("data-state", "failed");
+      await expect(page.getByTestId("mc-status")).toHaveText("Run failed");
+      await expect(page.getByText("Mock worker failure")).toBeVisible();
+      await expect(page.getByTestId("mc-run-prompt")).toHaveCount(0);
+      // The older result is still drawn: the chart has bars, and the export menu is still enabled.
+      await expect.poll(async () => (await barHeights(panelOf(page, title))).filter((h) => h > 0).length).toBeGreaterThan(0);
+      await expect(page.getByTestId("mc-export")).toBeEnabled();
+    });
+  }
+});
+
+type TabCase = { key: string; tab: RegExp; run: string; frame: string; ownsRun: boolean };
+const TAB_CASES: TabCase[] = [
+  { key: "path", tab: /Path Simulation/, run: "mc-run-path", frame: "GBM + Jump-Diffusion Simulated Paths", ownsRun: true },
+  { key: "risk", tab: /Risk Analysis/, run: "mc-run-path", frame: "VaR / CVaR Risk Distribution", ownsRun: false },
+  { key: "distribution", tab: /Return Distribution/, run: "mc-run-path", frame: "Return Histogram with Fitted Normal Curve", ownsRun: false },
+  { key: "valuation", tab: /Corporate Valuation/, run: "mc-run-valuation", frame: "Fair Value Distribution", ownsRun: true },
+  { key: "correlation", tab: /Correlation Model/, run: "mc-run-correlation", frame: "Efficient Frontier", ownsRun: true },
+];
+
+test.describe("no page scroll, all tabs", () => {
+  for (const viewport of [{ width: 1280, height: 720 }, { width: 390, height: 844 }]) {
+    for (const stage of ["before", "after"] as const) {
+      for (const c of TAB_CASES) {
+        test(`${c.key} ${stage} a run at ${viewport.width}x${viewport.height} does not scroll the page`, async ({ page }) => {
+          await page.setViewportSize(viewport);
+          await openPath(page);
+          if (stage === "after") {
+            // Risk and distribution show the path run; the other tabs run on their own tab.
+            if (c.key !== "path" && c.ownsRun) await page.getByRole("tab", { name: c.tab }).click();
+            await page.getByTestId(c.run).click();
+            await expect(page.getByTestId("mc-status")).toHaveAttribute("data-state", "ready");
+          }
+          await page.getByRole("tab", { name: c.tab }).click();
+          await expect(page.getByRole("tab", { name: c.tab })).toHaveAttribute("aria-selected", "true");
+          await page.evaluate(() => document.fonts.ready);
+          await expectNoPageScroll(page);
+
+          const panel = (await page.getByTestId("mc-panel").boundingBox())!;
+          const header = (await page.getByTestId("mc-result-header").boundingBox())!;
+          const frame = (await panelOf(page, c.frame).boundingBox())!;
+          const size = await page.evaluate(() => ({ scroll: document.scrollingElement!.scrollHeight, inner: window.innerHeight }));
+          console.log(`HEIGHTS ${JSON.stringify({ tab: c.key, stage, width: viewport.width, scroll: size.scroll, inner: size.inner, panelBottom: Math.round(panel.y + panel.height), headerBottom: Math.round(header.y + header.height), frameBottom: Math.round(frame.y + frame.height) })}`);
+          if (viewport.width === 1280) {
+            // ONE_SCREEN_ROUTES gives the shell a 24px bottom pad (5rem otherwise), so the panel reaches 24px above the edge.
+            expect(Math.round(panel.y + panel.height), "the panel ends 24px above the viewport bottom").toBe(viewport.height - 24);
+            expect(header.y + header.height, "result header ends inside the panel").toBeLessThanOrEqual(panel.y + panel.height + 1);
+            expect(frame.y + frame.height, "the first chart frame ends inside the panel").toBeLessThanOrEqual(panel.y + panel.height + 1);
+          }
+          if (process.env.DESIGN_CAPTURE) {
+            await page.screenshot({
+              path: `design-capture/${process.env.DESIGN_CAPTURE}/monte-carlo-${c.key}-${stage}-${viewport.width}.png`,
+              animations: "disabled",
+            });
+          }
+        });
+      }
+    }
+  }
+});
+
+function catalogText(messages: unknown, key: string): string {
+  let node = messages as Record<string, unknown>;
+  for (const part of key.split(".")) node = node[part] as Record<string, unknown>;
+  return node as unknown as string;
+}
+
+test.describe("Korean", () => {
+  test.use({ locale: "ko-KR", viewport: { width: 1280, height: 720 } });
+
+  // Per tab: the rail field labels, the run button and the chart titles (and the other fixed copy the tab renders).
+  const KEYS: Record<string, string[]> = {
+    path: [
+      "monteCarlo.path.run", "monteCarlo.path.fields.initialInvestment", "monteCarlo.path.fields.expectedReturn",
+      "monteCarlo.path.fields.volatility", "monteCarlo.path.fields.horizon", "monteCarlo.path.paths.title", "monteCarlo.path.cone.title",
+    ],
+    risk: [
+      "monteCarlo.risk.view.percentiles", "monteCarlo.risk.figures.sortino",
+      "monteCarlo.risk.figures.skewness", "monteCarlo.risk.var.title", "monteCarlo.risk.summary.title", "monteCarlo.shared.basedOnPath",
+    ],
+    distribution: [
+      "monteCarlo.distribution.figures.mean", "monteCarlo.distribution.figures.std", "monteCarlo.distribution.figures.kurtosis",
+      "monteCarlo.distribution.figures.max", "monteCarlo.distribution.figures.min", "monteCarlo.distribution.histogram.title",
+      "monteCarlo.distribution.cdf.title", "monteCarlo.shared.basedOnPath",
+    ],
+    valuation: [
+      "monteCarlo.valuation.run", "monteCarlo.valuation.fields.ticker", "monteCarlo.valuation.fields.currentPrice", "monteCarlo.valuation.fields.baseEps",
+      "monteCarlo.valuation.fields.discountRate", "monteCarlo.valuation.fields.forecastPeriod", "monteCarlo.valuation.distribution.title",
+      "monteCarlo.valuation.statistics.title",
+    ],
+    correlation: [
+      "monteCarlo.correlation.run", "monteCarlo.correlation.matrix", "monteCarlo.correlation.simulations", "monteCarlo.correlation.figures.optimalMu",
+      "monteCarlo.correlation.figures.portfolioSigma", "monteCarlo.correlation.figures.diversification", "monteCarlo.correlation.figures.optimalSharpe",
+      "monteCarlo.correlation.view.sensitivity", "monteCarlo.correlation.view.heatmap", "monteCarlo.correlation.frontier.title",
+    ],
+  };
+
+  for (const c of TAB_CASES) {
+    test(`${c.key}: the rail labels, run button and chart titles render the Korean catalog text`, async ({ page }) => {
+      await installMonteCarloWorker(page);
+      await page.goto("/monte-carlo", { waitUntil: "domcontentloaded" });
+      await expect(page.getByRole("heading", { name: "시뮬레이션 랩", exact: true })).toBeVisible({ timeout: 60_000 });
+      // Risk and distribution have their figures only after the path run.
+      if (!c.ownsRun) {
+        await page.getByRole("button", { name: ko.monteCarlo.path.run }).click();
+        await expect(page.getByTestId("mc-status")).toHaveAttribute("data-state", "ready");
+      }
+      await page.getByRole("tab", { name: new RegExp(catalogText(ko, `monteCarlo.tabs.${c.key}`)) }).click();
+
+      for (const key of KEYS[c.key]) {
+        const korean = catalogText(ko, key);
+        expect(korean, `${key} is Korean`).toMatch(/[가-힣]/);
+        expect(korean, `${key} differs from the English text`).not.toBe(catalogText(en, key));
+        await expect(page.getByTestId("mc-panel").getByText(korean).first(), key).toBeVisible();
+      }
+      for (const english of [en.monteCarlo.path.run, en.monteCarlo.valuation.run, en.monteCarlo.correlation.run]) {
+        await expect(page.getByRole("button", { name: english, exact: true })).toHaveCount(0);
+      }
+    });
+  }
+
+  test("path: the named strings read 초기 투자금, 경로 시뮬레이션 실행 and 시뮬레이션 경로", async ({ page }) => {
+    await installMonteCarloWorker(page);
+    await page.goto("/monte-carlo", { waitUntil: "domcontentloaded" });
+    await expect(page.getByLabel("초기 투자금")).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByRole("button", { name: "경로 시뮬레이션 실행" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /시뮬레이션 경로/ })).toBeVisible();
+  });
+
+  test("the input suffixes read 원, not KRW, on the path and valuation rails", async ({ page }) => {
+    await installMonteCarloWorker(page);
+    await page.goto("/monte-carlo", { waitUntil: "domcontentloaded" });
+    await expect(page.getByLabel("초기 투자금")).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByTestId("mc-rail-inputs")).not.toContainText("KRW");
+    await expect(page.getByTestId("mc-rail-inputs")).toContainText("원");
+    await page.getByRole("tab", { name: /기업가치 평가/ }).click();
+    await expect(page.getByLabel(ko.monteCarlo.valuation.fields.baseEps)).toBeVisible();
+    await expect(page.getByTestId("mc-rail-inputs")).not.toContainText("KRW");
+    await expect(page.getByTestId("mc-rail-inputs")).toContainText("원");
+  });
+
+  test("the efficient frontier tooltip reads Korean: axis names carry no English", async ({ page }) => {
+    await installMonteCarloWorker(page);
+    await page.goto("/monte-carlo", { waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("heading", { name: "시뮬레이션 랩", exact: true })).toBeVisible({ timeout: 60_000 });
+    await page.getByRole("tab", { name: /상관관계 모형/ }).click();
+    await page.getByRole("button", { name: ko.monteCarlo.correlation.run }).click();
+    await expect(page.getByTestId("mc-status")).toHaveAttribute("data-state", "ready");
+    const point = panelOf(page, ko.monteCarlo.correlation.frontier.title).locator(".recharts-scatter-symbol").first();
+    await expect(point).toBeVisible();
+    await point.hover();
+    const tooltip = page.locator(".recharts-tooltip-wrapper").first();
+    await expect(tooltip).toContainText(ko.monteCarlo.correlation.frontier.axisRisk);
+    await expect(tooltip).toContainText(ko.monteCarlo.correlation.frontier.axisReturn);
+    await expect(tooltip).toContainText(ko.monteCarlo.correlation.frontier.axisSharpe);
+    await expect(tooltip).not.toContainText(/[A-Za-z]/);
+  });
+});
+
+test.describe("correlation inputs", () => {
+  test.use({ viewport: { width: 1280, height: 720 } });
+
+  async function openCorrelationTab(page: Page): Promise<void> {
+    await installMonteCarloWorker(page);
+    await page.goto("/monte-carlo", { waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("heading", { name: /Simulation Lab/i })).toBeVisible({ timeout: 60_000 });
+    await page.getByRole("tab", { name: /Correlation Model/i }).click();
+    await expect(page.getByTestId("mc-correlation-matrix")).toBeVisible();
+  }
+
+  test("editing an upper cell updates its mirror in the lower triangle", async ({ page }) => {
+    await openCorrelationTab(page);
+    const matrix = page.getByTestId("mc-correlation-matrix");
+    const upper = matrix.locator("input").first();
+    await upper.fill("0.35");
+    await expect(upper).toHaveValue("0.35");
+    // Row 2, column 1 mirrors row 1, column 2 (the first upper cell); it is read-only.
+    await expect(matrix.locator("tbody tr").nth(1).locator("td").first()).toHaveText("0.35");
+  });
+
+  test("a correlation outside [-1, 1] clamps to the bound, in the cell and in its mirror", async ({ page }) => {
+    await openCorrelationTab(page);
+    const matrix = page.getByTestId("mc-correlation-matrix");
+    const upper = matrix.locator("input").first();
+    const mirror = matrix.locator("tbody tr").nth(1).locator("td").first();
+    await upper.fill("5");
+    await expect(upper).toHaveValue("1");
+    await expect(mirror).toHaveText("1.00");
+    await upper.fill("-3");
+    await expect(upper).toHaveValue("-1");
+    await expect(mirror).toHaveText("-1.00");
+  });
+
+  test("the number of simulations stays within 500 and 5,000", async ({ page }) => {
+    await openCorrelationTab(page);
+    const slider = page.getByRole("slider", { name: "Number of Simulations" });
+    const readout = page.getByTestId("mc-rail-inputs").getByText("Number of Simulations").locator("xpath=..").locator("span").last();
+    // fill() rejects values outside the range input's bounds, so set the raw value the way a script or autofill would.
+    const setSlider = (value: string) => slider.evaluate((node, next) => {
+      const input = node as HTMLInputElement;
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, next);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    }, value);
+    await setSlider("2000");
+    await expect(readout).toHaveText("2,000");
+    await setSlider("999999");
+    await expect(readout).toHaveText("5,000");
+    await setSlider("1");
+    await expect(readout).toHaveText("500");
   });
 });
