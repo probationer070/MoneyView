@@ -24,6 +24,7 @@ import argparse
 import csv
 import os
 import sys
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -37,6 +38,11 @@ from apps.api.services.db import get_db, init_db  # noqa: E402
 from apps.api.services.watchlist_themes import load_themes  # noqa: E402
 
 DEFAULT_CSV = ROOT / "docs" / "superpowers" / "specs" / "2026-10-18-risk-signal-evidence" / "themes-draft.csv"
+
+# The API RateLimiter (apps/api/core/middleware.py, rate=10/s, capacity=50) answers 429 to a burst.
+# A short gap between writes keeps the run under it; one retry after a longer wait clears a 429.
+WRITE_GAP_SECONDS = 0.12
+RETRY_WAIT_SECONDS = 1.0
 
 NAME_FIXES = {
     "NRG": "NRG Energy",
@@ -91,13 +97,24 @@ def _read_current() -> dict[str, dict]:
     return {row["ticker"]: {key: row[key] for key in row.keys()} for row in rows}
 
 
+def _post_with_retry(client: TestClient, path: str, body: dict):
+    """POST once; on HTTP 429 wait RETRY_WAIT_SECONDS and POST once more. The retry's answer stands."""
+    response = client.post(path, json=body)
+    if response.status_code == 429:
+        time.sleep(RETRY_WAIT_SECONDS)
+        response = client.post(path, json=body)
+    return response
+
+
 def _apply(client: TestClient, ticker: str, action: str, value: str, now: dict) -> None:
+    time.sleep(WRITE_GAP_SECONDS)
     if action == "theme":
-        response = client.post(f"/api/v1/portfolio/watchlist/{ticker}/theme", json={"theme": value})
+        response = _post_with_retry(client, f"/api/v1/portfolio/watchlist/{ticker}/theme", {"theme": value})
     else:
-        response = client.post(
+        response = _post_with_retry(
+            client,
             "/api/v1/portfolio/watchlist",
-            json={
+            {
                 "ticker": ticker,
                 "name": value,
                 "sector": now["sector"] or "",

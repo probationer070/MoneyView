@@ -103,3 +103,52 @@ def test_dry_run_never_opens_the_app(tmp_path, monkeypatch, capsys):
     assert out[-1] == "set=1 unchanged=5 missing=1"
     with get_db() as conn:
         assert conn.execute("SELECT theme FROM watchlist WHERE ticker = 'ARIS'").fetchone()[0] == ""
+
+
+class _FakeResponse:
+    def __init__(self, status_code: int, text: str = ""):
+        self.status_code = status_code
+        self.text = text
+
+
+class _FakeClient:
+    """Answers each POST with the next status in `statuses`."""
+
+    def __init__(self, statuses: list[int]):
+        self._statuses = list(statuses)
+        self.calls = 0
+
+    def post(self, path, json=None):
+        self.calls += 1
+        return _FakeResponse(self._statuses.pop(0))
+
+
+@pytest.fixture
+def sleeps(monkeypatch):
+    recorded: list[float] = []
+    monkeypatch.setattr(script.time, "sleep", recorded.append)
+    return recorded
+
+
+def test_a_429_then_200_retries_once_and_the_write_succeeds(sleeps):
+    """A write that gets 429 once is retried after RETRY_WAIT_SECONDS and then succeeds.
+    Catches a run that aborts on the first 429. Mutation: remove the retry in `_post_with_retry`
+    (return the first response unchanged) -> `_apply` raises RuntimeError on the 429 and this fails.
+    """
+    client = _FakeClient([429, 200])
+    script._apply(client, "ARIS", "theme", "gold_silver", _cur())
+    assert client.calls == 2
+    assert script.RETRY_WAIT_SECONDS in sleeps
+    assert script.WRITE_GAP_SECONDS in sleeps
+
+
+def test_a_429_twice_still_raises(sleeps):
+    """A second 429 after the single retry is a real failure and must still raise.
+    Catches a retry loop that swallows the error. Mutation: change the single retry to a
+    `while` loop on 429 -> a third POST pops from the empty status list, raising IndexError
+    instead of RuntimeError, so this test fails.
+    """
+    client = _FakeClient([429, 429])
+    with pytest.raises(RuntimeError, match="HTTP 429"):
+        script._apply(client, "ARIS", "theme", "gold_silver", _cur())
+    assert client.calls == 2
