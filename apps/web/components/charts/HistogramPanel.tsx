@@ -35,7 +35,8 @@ interface HistogramPanelProps {
   data: HistogramBin[];
   title?: string;
   description?: string;
-  height?: number;
+  /** Pixels, or "fill" to take the height the parent gives (never below the chart minimum). */
+  height?: number | "fill";
   xAxisLabel?: string;
   legend?: React.ReactNode;
   children?: React.ReactNode;
@@ -62,6 +63,7 @@ export function HistogramPanel({
   emptyTitle = "No histogram data available",
   emptyDescription = "Run an analysis or refresh the data to populate this distribution.",
 }: HistogramPanelProps) {
+  const fill = height === "fill";
   return (
     <ErrorBoundary>
       <ChartPanelFrame
@@ -74,9 +76,13 @@ export function HistogramPanel({
         empty={!data || data.length === 0}
         emptyTitle={emptyTitle}
         emptyDescription={emptyDescription}
+        className={fill ? "flex h-full min-h-0 flex-col" : undefined}
       >
         {legend && <div className="mt-3">{legend}</div>}
-        <div className="mt-4" style={{ height }}>
+        <div
+          className={fill ? "mt-4 min-h-[var(--component-chart-min-height)] flex-1" : "mt-4"}
+          style={fill ? undefined : { height }}
+        >
           <ResponsiveChart className="h-full w-full" minWidth={1} minHeight={1}>
             <ComposedChart data={data} margin={CHART_MARGIN}>
               <CartesianGrid {...GRID_STYLE} vertical={false} />

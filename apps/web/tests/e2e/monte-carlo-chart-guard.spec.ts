@@ -84,6 +84,7 @@ test("simulation lab surfaces invalid-data states and preserved warnings for deg
   await page.getByRole("button", { name: "Run Path Simulation" }).click();
 
   await expect(page.getByText("Path output normalization warnings")).toBeVisible();
+  await page.getByTestId("mc-warnings-toggle").click();
   await expect(page.getByText(/Dropped invalid percentile-cone row 1\./)).toBeVisible();
   await expect(page.getByText(/Dropped invalid histogram row 2\./)).toBeVisible();
   await expect(page.getByText("Path chart data is invalid")).toBeVisible();
@@ -91,6 +92,7 @@ test("simulation lab surfaces invalid-data states and preserved warnings for deg
 
   await page.getByRole("tab", { name: /Risk Analysis/i }).click();
   await expect(page.getByRole("heading", { name: "VaR / CVaR Risk Distribution" })).toBeVisible();
+  await page.getByRole("group", { name: "Risk chart" }).getByRole("button", { name: "Percentiles" }).click();
   await expect(page.getByRole("heading", { name: "Terminal Value Percentiles" })).toBeVisible();
 
   await page.getByRole("tab", { name: /Return Distribution/i }).click();
@@ -104,8 +106,9 @@ test.describe("the simulation lab in Korean", () => {
   test("the title and a bilingual header render in Korean; a figure renders", async ({ page }) => {
     await page.goto("/monte-carlo", { waitUntil: "domcontentloaded" });
     await expect(page.getByRole("heading", { name: "시뮬레이션 랩", exact: true })).toBeVisible({ timeout: 60_000 });
-    // Default principal 10,000,000 KRW is shown in 10,000 KRW units.
-    await expect(page.getByText("1,000 M KRW").first()).toBeVisible();
+    // No figure exists before a run, so a real run (default inputs, seed 42) shows the median in the ko compact forms.
+    await page.getByRole("button", { name: "경로 시뮬레이션 실행" }).click();
+    await expect(page.getByTestId("mc-figure-median-value")).toHaveText(/^-?(\d{1,3}(,\d{3})*억( \d{1,3}(,\d{3})*만원|원)|\d{1,3}(,\d{3})*(만원|원))$/);
     await page.getByRole("tab", { name: /상관관계 모형/ }).click();
     await expect(page.getByRole("columnheader", { name: "자산", exact: true })).toBeVisible();
   });

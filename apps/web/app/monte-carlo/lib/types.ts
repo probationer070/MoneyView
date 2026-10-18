@@ -1,3 +1,8 @@
+import type { MessageKey } from "@/lib/i18n/translate";
+
+// The Ticker's price-lookup message: a catalogued key (with vars) or raw API / thrown text (D2).
+export type LookupMessage = { key: MessageKey; vars?: Record<string, string> } | { raw: string } | null;
+
 export type PathSimulationInput = {
   initialInvestment: number;
   expectedAnnualReturn: number;

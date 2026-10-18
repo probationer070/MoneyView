@@ -26,6 +26,26 @@ reveal that; only checking the code did.
 
 An entry states what was true when it was written. Nothing updates it on its own.
 
+## 2026-10-18: Monte Carlo charts overflow their frames at 390 on every tab (feat/monte-carlo-one-screen)
+
+Date: 2026-10-18 (final-review capture of the Monte Carlo one-screen branch). Introduced on this branch, fixed in 3585d30.
+Command: `DESIGN_CAPTURE=monte-carlo-one-screen npx playwright test design-capture monte-carlo-one-screen`, viewing `monte-carlo-*-after-390.png`.
+Failure: at 390x844 after a run, each chart drew past its frame over the next card on all five tabs. The "no page scroll" test passed because the page itself did not scroll.
+Root cause: below lg the result column is the scroll container, but the ScanReveal host and body and the chart sections stayed `min-h-0 flex-1`, so they shrank to the leftover height while each chart kept its `min-height`.
+Fix: 3585d30 makes the shrink lg-only (`lg:min-h-0 lg:flex-1`) so each card takes its content height below lg. The 1280x720 layout is unchanged.
+Files changed: `apps/web/app/monte-carlo/components/{PathSimulation,Risk,ReturnDistribution,CorporateValuation,CorrelationModel}Section.tsx`, `apps/web/tests/e2e/monte-carlo-one-screen.spec.ts`.
+Prevention: the 390 "after a run" case now asserts each chart surface's bottom is inside its frame; it failed on all five tabs before the fix and on the path tab when the path classes were reverted.
+
+## 2026-10-18: efficient frontier axes and tooltip mis-format (CorrelationModelSection, pre-existing on renewal)
+
+Date: 2026-10-18 (final review of the Monte Carlo one-screen branch). Pre-existing on renewal, fixed in 3585d30.
+Command: not recorded (found by reading the capture and the code).
+Failure: the frontier ticks read "6%, 7.5%, 9.00%, 10.500%" (decimals growing along the axis), and the tooltip showed risk and return as raw numbers such as `5.0000` with no percent sign. No error was raised.
+Root cause: `tickFormatter={fmtPctTick}` received recharts' `(value, index)`, so the tick index became `decimals`. The tooltip compared `name === "risk" || name === "return"`, but the axes carry translated names, so that branch never ran.
+Fix: 3585d30 uses `(v) => fmtPctTick(Number(v), 1)` and branches on `item.dataKey`.
+Files changed: `apps/web/app/monte-carlo/components/CorrelationModelSection.tsx`, `apps/web/tests/e2e/monte-carlo-one-screen.spec.ts`.
+Prevention: two tests pin one decimal format on both axes and a percent sign for risk and return in the tooltip; each failed when its old code was restored.
+
 ## 2026-10-15: dev performance headers and the saved label read data keys in English (i18n-model, f1ce93e)
 
 Date: 2026-10-15 (final review of the design-system branch, M9). The defect is in f1ce93e; d35a1f4 fixed it.
@@ -3445,3 +3465,23 @@ Root cause: `_fetch_live_ohlcv` built rows with `float(row.get("Close", 0) or 0)
 Fix: `_fetch_live_ohlcv` drops rows whose Close fails `_is_priced` before saving and returning. The Yahoo chart fallback already skips null closes (JSON has no NaN), so it was left alone.
 Files changed: `apps/api/services/market_data.py`, `tests/api/test_priceless_bars.py`, `ERROR-LOG.md`.
 Prevention: `test_live_fetch_returns_only_priced_bars` and `test_quote_survives_an_unsettled_live_bar` feed a NaN-OHLC newest bar through the live path; both fail with the filter removed (61 bars instead of 60; last_close NaN). A guard on one side of a round trip does not cover a path that returns the unfiltered value directly.
+
+## 2026-10-17: Monte Carlo amounts read "964 M KRW" for 9,640,000 won (100x too large)
+
+Date: 2026-10-17
+Command: `/monte-carlo`, Path Simulation run with default inputs (en and ko). Read the median terminal value card, the Principal line, and the Risk Analysis terminal percentile chart.
+Failure: 9,640,000 won showed as "964 M KRW", which reads as 964 million won, 100x the real amount. The risk percentile chart's tooltip and the path chart's Y ticks had the same wrong unit: 만원 numbers under an "M KRW" label.
+Root cause: `krwTenThousands` divided by 10,000 (the 만원 unit) but appended "M KRW", a million-won unit. `RiskAnalysisSection` also hard-coded `valueLabel="M KRW"` on values it had already divided by 10,000. The path chart YAxis and tooltips called the same helper.
+Fix: amounts now go through `formatKrwCompact` (`apps/web/app/monte-carlo/lib/krwFormat.ts`): en `KRW 9.64M`, ko `964만원`, and `1억 2,345만원` above 1억. Chart Y axes take `krwAxis` ticks with a unit title (en "KRW M", ko "만원"). The risk percentile chart keeps won values and formats tooltips with `formatKrwCompact`. `krwTenThousands` and `TEN_THOUSAND_KRW` are removed. Committed as `fix(web): Monte Carlo KRW amounts read as 9.64M / 964만원, not 964 M KRW`; SHA `02f2225`.
+Files changed: `apps/web/app/monte-carlo/lib/krwFormat.ts` (new), `apps/web/app/monte-carlo/components/shared.tsx`, `apps/web/app/monte-carlo/components/PathSimulationSection.tsx`, `apps/web/app/monte-carlo/components/RiskAnalysisSection.tsx`, `apps/web/components/charts/PercentileBandPanel.tsx`, `apps/web/lib/i18n/messages/en.ts`, `apps/web/lib/i18n/messages/ko.ts`, `apps/web/tests/e2e/monte-carlo-model.spec.ts` (new), `apps/web/tests/e2e/monte-carlo-one-screen.spec.ts`, `apps/web/tests/e2e/monte-carlo-chart-guard.spec.ts` (A3 stage 1), `ERROR-LOG.md`.
+Prevention: `monte-carlo-model.spec.ts` pins the en and ko strings, including the unit edges (ko 9,999.6 → 1만원; ko 99,995,000 → 1억원; en 999,999.6 → KRW 1.00M). `monte-carlo-one-screen.spec.ts` checks `KRW 9.64M` / `964만원` and the axis unit title after a real run. The old helper's `964 M KRW` fails both.
+
+## 2026-10-17: a superseded Monte Carlo run left its tab "Running" forever (superseded-run status, D3)
+
+Date: 2026-10-17 (Task 3 of the Monte Carlo one-screen plan; owner decision D3).
+Command: `cd apps/web && npx playwright test tests/e2e/monte-carlo-one-screen.spec.ts -g "superseded run" --workers=1` (at HEAD: all 3 new tests fail; after the fix: 3 pass. Mutations: dropping the path status write fails test 1; setting the valuation status to idle fails test 2; setting the correlation status to "cancelled" fails test 3).
+Failure: Run Path Simulation, then Run Valuation on another tab. The path tab stayed on "Running path simulation" with its progress bar, its Run button stayed disabled, and its Cancel cancelled the valuation job. Correlation had the same stuck state after a path run.
+Root cause: each of the three run functions cancelled the in-flight job with an inline block that posted the cancel and emitted the performance event, but never reset the superseded tab's status or progress. The status stayed "loading" with no job behind it.
+Fix: `supersedeActiveRun()` in `apps/web/app/monte-carlo/page.tsx` cancels the in-flight job and sets its tab's status: path and valuation go to "cancelled" (shown as "Run canceled") with progress 0; correlation, which has no cancel status, goes to "idle". The three run functions call it in place of their inline blocks.
+Files changed: `apps/web/app/monte-carlo/page.tsx`, `apps/web/tests/e2e/monte-carlo-one-screen.spec.ts` (new describe "superseded run" only), `ERROR-LOG.md`. Commit `e80e3b7`.
+Prevention: the three "superseded run" tests pin the three cross-tab pairs (path superseded by valuation, valuation by correlation, correlation by path) and check the status text, the absence of the progress bar and the enabled Run button. A new run kind must be added to `supersedeActiveRun()`.

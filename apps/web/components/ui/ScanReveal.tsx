@@ -13,10 +13,12 @@ interface ScanRevealProps {
   trigger: string;
   children: ReactNode;
   className?: string;
+  /** Class for the inner body div, so a revealed panel can fill height. Absent: the body has no class. */
+  bodyClassName?: string;
 }
 
 /** A 1px brand line sweeps down the panel while the children are revealed behind it. Reduced motion: nothing runs. */
-export function ScanReveal({ trigger, children, className }: ScanRevealProps) {
+export function ScanReveal({ trigger, children, className, bodyClassName }: ScanRevealProps) {
   const reduced = usePrefersReducedMotion();
   const host = useRef<HTMLDivElement>(null);
   const body = useRef<HTMLDivElement>(null);
@@ -51,7 +53,7 @@ export function ScanReveal({ trigger, children, className }: ScanRevealProps) {
         aria-hidden
         className="pointer-events-none absolute inset-x-0 top-0 z-10 h-[var(--hairline)] bg-[var(--brand)] opacity-0"
       />
-      <div ref={body}>{children}</div>
+      <div ref={body} className={bodyClassName}>{children}</div>
     </div>
   );
 }

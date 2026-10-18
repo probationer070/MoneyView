@@ -18,6 +18,7 @@ export const DESIGN_SCREENS: [string, (page: Page) => Promise<unknown>][] = [
   ["/cases", (p) => mockCasesApi(p)],
   ["/events", async (p) => { await mockMarketPageApi(p); await mockEventsApi(p); }],
   ["/signals", (p) => mockSignalsApi(p)],
+  ["/monte-carlo", async () => {}],
   ["/dev/design", async () => {}],
 ];
 

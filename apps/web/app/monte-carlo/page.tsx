@@ -3,6 +3,7 @@
 import type {
   CorrelationInput,
   CorrelationResult,
+  LookupMessage,
   MonteCarloResult,
   PathSimulationInput,
   SharedSimulationResult,
@@ -18,25 +19,18 @@ import {
   PathSimulationSection,
   ReturnDistributionSection,
   RiskAnalysisSection,
-  TabButton,
 } from "./components";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { emitClientPerformanceEvent, getApiBaseUrl } from "@/lib/api";
 import { useDevMonitorPageLoad } from "@/hooks/useDevMonitorPageLoad";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { ScanReveal } from "@/components/ui/ScanReveal";
+import { Tabs } from "@/components/ui/Tabs";
 import { useT } from "@/lib/i18n/locale";
-import type { MessageKey } from "@/lib/i18n/translate";
+import { useTabState } from "@/lib/tabState";
+import { isMonteCarloTab, MONTE_CARLO_TAB_KEY, MONTE_CARLO_TABS, type MonteCarloTab } from "./lib/tabs";
 import { normalizeCorrelationResult, normalizeMonteCarloResult, normalizeValuationResult } from "./lib/resultNormalization";
-
-type SimulationTab = "path" | "risk" | "distribution" | "valuation" | "correlation";
-
-const tabs: Array<{ key: SimulationTab; label: MessageKey; description: MessageKey }> = [
-  { key: "path", label: "monteCarlo.tabs.path", description: "monteCarlo.tabs.pathDescription" },
-  { key: "risk", label: "monteCarlo.tabs.risk", description: "monteCarlo.tabs.riskDescription" },
-  { key: "distribution", label: "monteCarlo.tabs.distribution", description: "monteCarlo.tabs.distributionDescription" },
-  { key: "valuation", label: "monteCarlo.tabs.valuation", description: "monteCarlo.tabs.valuationDescription" },
-  { key: "correlation", label: "monteCarlo.tabs.correlation", description: "monteCarlo.tabs.correlationDescription" },
-];
+import { correlationFigureValues, pathFigureValues, valuationFigureValues, type FigureSnapshot } from "./lib/resultModel";
 
 const defaultInput: PathSimulationInput = {
   initialInvestment: 10_000_000,
@@ -139,7 +133,8 @@ export default function MonteCarloPage() {
   const t = useT();
   useDevMonitorPageLoad({ component: "monte_carlo" });
   // Page-level state owns worker lifecycle, tab selection, and all simulation inputs/results.
-  const [activeTab, setActiveTab] = useState<SimulationTab>("path");
+  const [stored, setStored] = useTabState<string>(MONTE_CARLO_TAB_KEY, "path");
+  const activeTab = isMonteCarloTab(stored) ? stored : "path";
   const [input, setInput] = useState<PathSimulationInput>(defaultInput);
   const [valuationInput, setValuationInput] = useState<ValuationInput>(defaultValuationInput);
   const [correlationInput, setCorrelationInput] = useState<CorrelationInput>(defaultCorrelationInput);
@@ -150,7 +145,7 @@ export default function MonteCarloPage() {
   const [valuationStatus, setValuationStatus] = useState<"idle" | "loading" | "error" | "cancelled">("idle");
   const [correlationStatus, setCorrelationStatus] = useState<"idle" | "loading" | "error" | "cancelled">("idle");
   const [valuationPriceLookupStatus, setValuationPriceLookupStatus] = useState<"idle" | "loading" | "fetching" | "success" | "not_found" | "error">("idle");
-  const [valuationPriceLookupMessage, setValuationPriceLookupMessage] = useState<string | null>(null);
+  const [valuationPriceLookupMessage, setValuationPriceLookupMessage] = useState<LookupMessage>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
   const [valuationProgress, setValuationProgress] = useState(0);
@@ -169,10 +164,35 @@ export default function MonteCarloPage() {
   const priceLookupTickerRef = useRef(defaultValuationInput.ticker);
   const priceLookupAbortRef = useRef<AbortController | null>(null);
   const priceLookupManualEditSeqRef = useRef(0);
+  // Each run kind's id moves when its result arrives; the result area scans on that change.
+  const [runIds, setRunIds] = useState({ path: 0, valuation: 0, correlation: 0 });
+  // The figure values a finished run replaced, shown struck through on the tab that started the run.
+  const [before, setBefore] = useState<FigureSnapshot | null>(null);
+  // The figure values the running run will replace, set when it starts. The worker handler is subscribed once,
+  // so the pending snapshot and the active tab are read through refs that the effects keep current.
+  const [pending, setPending] = useState<FigureSnapshot | null>(null);
+  const pendingBeforeRef = useRef<FigureSnapshot | null>(null);
+  const activeTabRef = useRef<MonteCarloTab>(activeTab);
 
   useEffect(() => {
     latestInitialInvestmentRef.current = input.initialInvestment;
   }, [input.initialInvestment]);
+
+  useEffect(() => {
+    activeTabRef.current = activeTab;
+  }, [activeTab]);
+
+  useEffect(() => {
+    pendingBeforeRef.current = pending;
+  }, [pending]);
+
+  // A tab change drops the before values: a figure only compares with a run that started on its own tab.
+  const changeTab = (tab: MonteCarloTab) => {
+    if (tab === activeTab) return;
+    setStored(tab);
+    setBefore(null);
+    setPending(null);
+  };
 
   const beginWorkerEvent = (
     operation: string,
@@ -224,6 +244,12 @@ export default function MonteCarloPage() {
   useEffect(() => {
     const worker = new Worker(new URL("./workers/simulation.worker.ts", import.meta.url));
     workerRef.current = worker;
+    // A result shows its before values only on the tab that started the run; every result moves that kind's scan id.
+    const showResult = (kind: "path" | "valuation" | "correlation") => {
+      const snapshot = pendingBeforeRef.current;
+      setBefore(snapshot?.tab === kind && activeTabRef.current === kind ? snapshot : null);
+      setRunIds((ids) => ({ ...ids, [kind]: ids[kind] + 1 }));
+    };
     worker.onmessage = (event: MessageEvent<SimulationWorkerResponse>) => {
       const message = event.data;
       if (message.requestId !== activeRequestIdRef.current) return;
@@ -239,6 +265,7 @@ export default function MonteCarloPage() {
         setProgress(100);
         setErrorMessage(null);
         setStatus("idle");
+        showResult("path");
         completeWorkerEvent("success");
         activeRequestIdRef.current = null;
         activeRequestKindRef.current = null;
@@ -249,6 +276,7 @@ export default function MonteCarloPage() {
         setValuationRunState({ result: normalized.result, warnings: normalized.warnings });
         setValuationProgress(100);
         setValuationStatus("idle");
+        showResult("valuation");
         completeWorkerEvent("success");
         activeRequestIdRef.current = null;
         activeRequestKindRef.current = null;
@@ -259,6 +287,7 @@ export default function MonteCarloPage() {
         setCorrelationRunState({ result: normalized.result, warnings: normalized.warnings });
         setCorrelationProgress(100);
         setCorrelationStatus("idle");
+        showResult("correlation");
         completeWorkerEvent("success");
         activeRequestIdRef.current = null;
         activeRequestKindRef.current = null;
@@ -296,7 +325,7 @@ export default function MonteCarloPage() {
     if (key === "currentPrice") {
       priceLookupManualEditSeqRef.current += 1;
       if (valuationPriceLookupStatus === "success") {
-        setValuationPriceLookupMessage("Price can still be manually overridden after auto-fill.");
+        setValuationPriceLookupMessage({ key: "monteCarlo.lookup.manualOverride" });
       }
     }
     setValuationInput((current) => ({ ...current, [key]: value }));
@@ -322,7 +351,7 @@ export default function MonteCarloPage() {
     const lookupTicker = ticker;
     const lookupManualEditSeq = priceLookupManualEditSeqRef.current;
     setValuationPriceLookupStatus("loading");
-    setValuationPriceLookupMessage(`Looking up ${lookupTicker} price from the cache-first API...`);
+    setValuationPriceLookupMessage({ key: "monteCarlo.lookup.loading", vars: { ticker: lookupTicker } });
 
     for (let attempt = 1; attempt <= STOCK_PRICE_LOOKUP_MAX_ATTEMPTS; attempt += 1) {
       try {
@@ -335,7 +364,9 @@ export default function MonteCarloPage() {
 
         if (statusCode === 202 || data.status === "fetching") {
           setValuationPriceLookupStatus("fetching");
-          setValuationPriceLookupMessage(data.detail_note || `${lookupTicker} is being fetched. Waiting for cache hydration...`);
+          setValuationPriceLookupMessage(data.detail_note
+            ? { raw: data.detail_note }
+            : { key: "monteCarlo.lookup.fetching", vars: { ticker: lookupTicker } });
           const retryAfterMs = Math.max(1, data.retry_after_seconds ?? 2) * 1000;
           await new Promise<void>((resolve, reject) => {
             const timer = window.setTimeout(resolve, retryAfterMs);
@@ -350,11 +381,10 @@ export default function MonteCarloPage() {
 
         if (data.status === "ok" && data.price !== null) {
           setValuationPriceLookupStatus("success");
-          setValuationPriceLookupMessage(
-            data.source === "cache_fallback"
-              ? `${lookupTicker} price loaded from stale cache while background refresh continues.`
-              : `${lookupTicker} price loaded from cache.`,
-          );
+          setValuationPriceLookupMessage({
+            key: data.source === "cache_fallback" ? "monteCarlo.lookup.loadedStale" : "monteCarlo.lookup.loaded",
+            vars: { ticker: lookupTicker },
+          });
           if (lookupManualEditSeq === priceLookupManualEditSeqRef.current) {
             setValuationInput((current) => (current.ticker.trim().toUpperCase() === lookupTicker
               ? { ...current, currentPrice: Math.round(data.price ?? current.currentPrice) }
@@ -365,12 +395,12 @@ export default function MonteCarloPage() {
 
         if (statusCode === 404 || data.status === "not_found") {
           setValuationPriceLookupStatus("not_found");
-          setValuationPriceLookupMessage("Ticker not found.");
+          setValuationPriceLookupMessage({ key: "monteCarlo.lookup.notFound" });
           return;
         }
 
         setValuationPriceLookupStatus("error");
-        setValuationPriceLookupMessage(data.detail_note || "Stock price lookup failed.");
+        setValuationPriceLookupMessage(data.detail_note ? { raw: data.detail_note } : { key: "monteCarlo.lookup.failed" });
         return;
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") {
@@ -380,14 +410,14 @@ export default function MonteCarloPage() {
           return;
         }
         setValuationPriceLookupStatus("error");
-        setValuationPriceLookupMessage(error instanceof Error ? error.message : "Stock price lookup failed.");
+        setValuationPriceLookupMessage(error instanceof Error ? { raw: error.message } : { key: "monteCarlo.lookup.failed" });
         return;
       }
     }
 
     if (requestSeq === priceLookupRequestSeqRef.current && lookupTicker === priceLookupTickerRef.current) {
       setValuationPriceLookupStatus("error");
-      setValuationPriceLookupMessage(`Price lookup for ${lookupTicker} timed out while waiting for cache hydration.`);
+      setValuationPriceLookupMessage({ key: "monteCarlo.lookup.timedOut", vars: { ticker: lookupTicker } });
     }
   };
 
@@ -424,12 +454,35 @@ export default function MonteCarloPage() {
     }));
   };
 
+  // A new run replaces the one in flight. The superseded tab leaves its loading state: path and valuation show
+  // "Run canceled"; correlation has no cancel status, so it returns to idle.
+  const supersedeActiveRun = () => {
+    if (!activeRequestIdRef.current || !activeRequestKindRef.current) return;
+    workerRef.current?.postMessage({ type: "cancel", requestId: activeRequestIdRef.current });
+    completeWorkerEvent("canceled", "Superseded by a new simulation request.");
+    const kind = activeRequestKindRef.current;
+    activeRequestIdRef.current = null;
+    activeRequestKindRef.current = null;
+    if (kind === "path") {
+      setStatus("cancelled");
+      setProgress(0);
+    } else if (kind === "valuation") {
+      setValuationStatus("cancelled");
+      setValuationProgress(0);
+    } else {
+      setCorrelationStatus("idle");
+      setCorrelationProgress(0);
+    }
+  };
+
+  // A run snapshots its tab's figures only when a result exists to replace.
+  const snapshotBefore = (tab: MonteCarloTab, values: Record<string, number | null> | null): FigureSnapshot | null =>
+    values ? { tab, values } : null;
+
   const runPathSimulation = async () => {
     if (!workerRef.current) return;
-    if (activeRequestIdRef.current) {
-      workerRef.current.postMessage({ type: "cancel", requestId: activeRequestIdRef.current });
-      completeWorkerEvent("canceled", "Superseded by a new path simulation request.");
-    }
+    supersedeActiveRun();
+    setPending(snapshotBefore("path", pathFigures));
     const requestId = crypto.randomUUID();
     activeRequestIdRef.current = requestId;
     activeRequestKindRef.current = "path";
@@ -449,10 +502,8 @@ export default function MonteCarloPage() {
 
   const runValuationSimulation = () => {
     if (!workerRef.current) return;
-    if (activeRequestIdRef.current) {
-      workerRef.current.postMessage({ type: "cancel", requestId: activeRequestIdRef.current });
-      completeWorkerEvent("canceled", "Superseded by a new valuation simulation request.");
-    }
+    supersedeActiveRun();
+    setPending(snapshotBefore("valuation", valuationResult ? valuationFigureValues(valuationResult) : null));
     const requestId = crypto.randomUUID();
     activeRequestIdRef.current = requestId;
     activeRequestKindRef.current = "valuation";
@@ -471,10 +522,8 @@ export default function MonteCarloPage() {
 
   const runCorrelationSimulation = () => {
     if (!workerRef.current) return;
-    if (activeRequestIdRef.current) {
-      workerRef.current.postMessage({ type: "cancel", requestId: activeRequestIdRef.current });
-      completeWorkerEvent("canceled", "Superseded by a new correlation simulation request.");
-    }
+    supersedeActiveRun();
+    setPending(snapshotBefore("correlation", correlationResult ? correlationFigureValues(correlationResult) : null));
     const requestId = crypto.randomUUID();
     activeRequestIdRef.current = requestId;
     activeRequestKindRef.current = "correlation";
@@ -580,6 +629,9 @@ export default function MonteCarloPage() {
     };
   }, [input.initialInvestment, result]);
 
+  // A run snapshots these. Derived outside the sharedSimulation memo: passing the memo's output into state trips the React Compiler.
+  const pathFigures = sharedSimulation ? pathFigureValues(sharedSimulation) : null;
+
   const exportSummaryCsv = () => {
     if (!sharedSimulation) return;
     downloadCsv("summary.csv", [
@@ -675,37 +727,38 @@ export default function MonteCarloPage() {
   };
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto px-4 py-6">
+    <div className="mx-auto flex h-[calc(100dvh_-_var(--main-pad-top,0px)_-_var(--main-pad-bottom,0px))] max-w-7xl flex-col">
       <PageHeader
-        eyebrow={{ label: "monteCarlo" }}
         title={t("monteCarlo.title")}
-        subtitle={t("monteCarlo.subtitle")}
+        subtitle={<span className="block truncate">{t("monteCarlo.subtitle")}</span>}
       />
 
-      <section className="grid grid-cols-1 gap-3 lg:grid-cols-5" role="tablist" aria-label="Simulation workflows">
-        {tabs.map((tab) => (
-          <TabButton
-            key={tab.key}
-            id={`simulation-tab-${tab.key}`}
-            controls={`simulation-panel-${tab.key}`}
-            active={activeTab === tab.key}
-            label={t(tab.label)}
-            description={t(tab.description)}
-            onClick={() => setActiveTab(tab.key)}
-          />
-        ))}
-      </section>
+      <Tabs
+        ariaLabel={t("monteCarlo.tabs.aria")}
+        idPrefix="simulation-"
+        className="shrink-0 [contain:inline-size]"
+        items={MONTE_CARLO_TABS.map((key) => ({ key, label: t(`monteCarlo.tabs.${key}`) }))}
+        activeKey={activeTab}
+        onChange={(key) => {
+          if (isMonteCarloTab(key)) changeTab(key);
+        }}
+      />
 
       {/* Each tab renders through a dedicated section component. */}
       <section
         id={`simulation-panel-${activeTab}`}
         role="tabpanel"
         aria-labelledby={`simulation-tab-${activeTab}`}
+        data-testid="mc-panel"
+        className="flex min-h-0 flex-1 flex-col"
       >
+      <ScanReveal trigger={activeTab} className="flex min-h-0 flex-1 flex-col" bodyClassName="flex min-h-0 flex-1 flex-col">
       {activeTab === "path" ? (
         <PathSimulationSection
           input={input}
           sharedSimulation={sharedSimulation}
+          before={before}
+          runId={runIds.path}
           status={status}
           progress={progress}
           errorMessage={errorMessage}
@@ -723,14 +776,22 @@ export default function MonteCarloPage() {
         <RiskAnalysisSection
           sharedSimulation={sharedSimulation}
           initialInvestment={input.initialInvestment}
+          status={status}
+          progress={progress}
+          errorMessage={errorMessage}
           warnings={pathRunState.warnings}
+          onOpenPath={() => changeTab("path")}
           exportRiskSummaryCsv={exportRiskSummaryCsv}
           exportRiskHistogramCsv={exportRiskHistogramCsv}
         />
       ) : activeTab === "distribution" ? (
         <ReturnDistributionSection
           sharedSimulation={sharedSimulation}
+          status={status}
+          progress={progress}
+          errorMessage={errorMessage}
           warnings={pathRunState.warnings}
+          onOpenPath={() => changeTab("path")}
           exportReturnHistogramCsv={exportReturnHistogramCsv}
           exportReturnCdfCsv={exportReturnCdfCsv}
         />
@@ -738,6 +799,8 @@ export default function MonteCarloPage() {
         <CorporateValuationSection
           valuationInput={valuationInput}
           valuationResult={valuationResult}
+          before={before}
+          runId={runIds.valuation}
           valuationStatus={valuationStatus}
           valuationProgress={valuationProgress}
           warnings={valuationRunState.warnings}
@@ -754,6 +817,8 @@ export default function MonteCarloPage() {
         <CorrelationModelSection
           correlationInput={correlationInput}
           correlationResult={correlationResult}
+          before={before}
+          runId={runIds.correlation}
           correlationStatus={correlationStatus}
           correlationProgress={correlationProgress}
           warnings={correlationRunState.warnings}
@@ -766,6 +831,7 @@ export default function MonteCarloPage() {
           exportCorrelationSensitivityCsv={exportCorrelationSensitivityCsv}
         />
       )}
+      </ScanReveal>
       </section>
     </div>
   );

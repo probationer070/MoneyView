@@ -279,7 +279,9 @@ components/
 
 | Component | Purpose | Status |
 |---|---|---|
-| `MonteCarloRunPanel` | Shared input form with run/cancel/progress controls | Existing |
+| `SimulationRail` | 320px input rail per tab: scrolling inputs, run/cancel pinned at the bottom; collapsed behind a toggle below `lg` | Existing |
+| `ResultHeader` | Status, progress, key figures and the export menu above each tab's charts (a prompt replaces the figures before a run) | Existing |
+| `RunButton`, `CancelButton`, `ExportMenu`, `RunNotice`, `WarningBanner` | Run and cancel actions, keyboard export menu, failed/cancelled notice, collapsible normalization warnings | Existing |
 | `RiskAnalysisSection` | Risk metrics and distribution panels | Existing |
 | `ReturnDistributionSection` | Histogram and CDF panels | Existing |
 | `PathSimulationSection` | Sample path and percentile cone panels | Existing |
@@ -358,7 +360,7 @@ For Monte Carlo and other normalization-sensitive panels:
 ### Phase 3 - Page-specific composites
 1. `PortfolioSnapshotSummary`
 2. `CorporateAssumptionsPanel`
-3. `MonteCarloRunPanel`
+3. `SimulationRail` and `ResultHeader` (Monte Carlo)
 4. `NewsFeedList`
 5. Remaining page-specific components
 

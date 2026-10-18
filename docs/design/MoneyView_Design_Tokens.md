@@ -101,6 +101,8 @@ The values in this file are the paper theme of the 2026-10 redesign. They are ge
 | `component.input.height` | `--component-input-height` | `44px` |  |
 | `component.tick.size` | `--component-tick-size` | `8px` | Panel corner ticks. |
 | `component.delta.glyph` | `--component-delta-glyph` | `9px` | ▲▼■ inside a delta. |
+| `component.rail.width` | `--component-rail-width` | `320px` | Monte Carlo input rail (left column of each tab, lg and up). |
+| `component.chart.min-height` | `--component-chart-min-height` | `200px` | Smallest a Monte Carlo chart area may shrink. |
 | `font.family.sans` | `--font-family-sans` | `var(--font-host-grotesk), var(--font-pretendard), system-ui, "Malgun Gothic", sans-serif` |  |
 | `font.family.mono` | `--font-family-mono` | `var(--font-geist-mono), var(--font-pretendard), ui-monospace, monospace` |  |
 | `type.display` | `--type-display` | `62px` |  |

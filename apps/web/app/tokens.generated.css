@@ -83,6 +83,8 @@
   --component-input-height: 44px;
   --component-tick-size: 8px;
   --component-delta-glyph: 9px;
+  --component-rail-width: 320px;
+  --component-chart-min-height: 200px;
   --font-family-sans: var(--font-host-grotesk), var(--font-pretendard), system-ui, "Malgun Gothic", sans-serif;
   --font-family-mono: var(--font-geist-mono), var(--font-pretendard), ui-monospace, monospace;
   --type-display: 62px;

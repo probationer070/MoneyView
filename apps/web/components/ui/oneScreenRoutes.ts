@@ -1,6 +1,6 @@
 // Pages that must not scroll (spec §2A, D10; market one-screen spec §2.1). Each keeps a 24px bottom pad
 // at lg and up, so the tab panel reaches the viewport edge. A later one-screen page joins by adding its route here.
-export const ONE_SCREEN_ROUTES = ["/corporate", "/"];
+export const ONE_SCREEN_ROUTES = ["/corporate", "/", "/monte-carlo"];
 
 /**
  * True for a listed route and the paths under it. "/corporate-x" is a different page, so it is false.

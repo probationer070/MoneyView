@@ -34,9 +34,14 @@ interface PercentileBandPanelProps {
   data: PercentileData[];
   title?: string;
   description?: string;
-  height?: number;
+  /** Pixels, or "fill" to take the height the parent gives (never below the chart minimum). */
+  height?: number | "fill";
   valueLabel?: string;
   valueFormatter?: (value: number) => string;
+  /** Y tick labels; absent, the ticks keep the plain number format. */
+  yTickFormatter?: (value: number) => string;
+  /** Unit title on the Y axis; absent, the axis has no title. */
+  yAxisLabel?: string;
   loading?: boolean;
   errorMessage?: string | null;
   staleLabel?: string;
@@ -52,6 +57,8 @@ export function PercentileBandPanel({
   height = 320,
   valueLabel = "Value",
   valueFormatter = (val) => fmtNum(val, 2),
+  yTickFormatter,
+  yAxisLabel,
   loading = false,
   errorMessage,
   staleLabel,
@@ -59,6 +66,7 @@ export function PercentileBandPanel({
   emptyTitle = "No percentile data available",
   emptyDescription = "Run an analysis or refresh the data to generate percentile bands.",
 }: PercentileBandPanelProps) {
+  const fill = height === "fill";
   return (
     <ErrorBoundary>
       <ChartPanelFrame
@@ -73,7 +81,10 @@ export function PercentileBandPanel({
         emptyDescription={emptyDescription}
         className="h-full flex flex-col"
       >
-        <div className="mt-4 flex-grow" style={{ minHeight: height }}>
+        <div
+          className={fill ? "mt-4 min-h-[var(--component-chart-min-height)] flex-1" : "mt-4 flex-grow"}
+          style={fill ? undefined : { minHeight: height }}
+        >
           <ResponsiveChart className="h-full w-full" minWidth={1} minHeight={1}>
             <BarChart data={data} margin={CHART_MARGIN}>
               <CartesianGrid {...GRID_STYLE} vertical={false} />
@@ -84,7 +95,8 @@ export function PercentileBandPanel({
                 tickLine={false}
               />
               <YAxis
-                tickFormatter={(val) => fmtPlain(Number(val))}
+                tickFormatter={yTickFormatter ?? ((val) => fmtPlain(Number(val)))}
+                label={yAxisLabel ? { value: yAxisLabel, angle: -90, position: "insideLeft", style: AXIS_TICK_STYLE } : undefined}
                 tick={AXIS_TICK_STYLE}
                 axisLine={AXIS_LINE_STYLE}
                 tickLine={false}

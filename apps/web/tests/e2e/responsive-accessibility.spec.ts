@@ -99,6 +99,7 @@ test("corporate and simulation lab remain usable on narrower widths", async ({ p
   await expect(page.getByRole("tablist", { name: "Simulation workflows" })).toBeVisible();
   await expect(page.getByRole("tab", { name: /Path Simulation/i })).toHaveAttribute("aria-selected", "true");
   await expect(page.getByRole("tabpanel")).toBeVisible();
+  await page.getByTestId("mc-rail-toggle").click();
   await expect(page.getByLabel("Initial investment")).toBeVisible();
   await expectNoHorizontalOverflow(page);
 });

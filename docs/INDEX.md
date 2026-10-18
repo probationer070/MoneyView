@@ -115,6 +115,8 @@ sub-project and feeding an implementation plan.
 | `plans/2026-10-12-design-system-formalization.md` | Task-by-task plan for the design-system formalization: tokens, paper migration, lint rules and the lock-down |
 | `2026-10-16-market-one-screen-design.md` | Market Overview on one screen: Instruments and Spreads page tabs, a spread-figure row and a regime line (new `GET /api/market/regime`) on the first screen, and market's paper and en/ko pass |
 | `plans/2026-10-16-market-one-screen.md` | Task-by-task plan for the market one-screen page: owner gate for 25 existing-test rows, `GET /api/market/regime` with an in-memory mutation harness, pure market models, page tabs and the regime line, the five-column Instruments tab with spread figures, and the paper/en-ko pass that takes the market warning cap from 295 to 0 |
+| `2026-10-16-monte-carlo-one-screen-design.md` | Monte Carlo one-screen page: five tab layouts at 1280x720, the compact KRW formatter (9.64M / 964만원), run status per tab, and the motion pieces from the motion system |
+| `plans/2026-10-17-monte-carlo-one-screen.md` | Task-by-task plan for the Monte Carlo one-screen page: height budget and tabs, `formatKrwCompact`, superseded-run status, pinned rail actions, per-tab content, one-screen lock and before/after motion |
 | `2026-10-10-macro-signal-engine-spec.md` | Macro signal engine: FRED rule verdicts and bounded heuristic A/B/C scenario probabilities, with the implementation-plan corrections C1–C11 in its appendix (the Macro Signals tab) |
 | `plans/2026-10-12-macro-signal-engine.md` | Task-by-task plan for the macro signal engine: pure rules, scenario maths, FRED fetch, rules.yaml, store, engine and API, hourly schedule, the /signals page and the docs |
 
