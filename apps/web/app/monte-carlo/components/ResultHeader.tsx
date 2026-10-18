@@ -4,7 +4,7 @@ import { BeforeAfter } from "@/components/ui/BeforeAfter";
 import { RollingNumber } from "@/components/ui/RollingNumber";
 import { formatNumber } from "@/lib/format";
 import { useLocale, useT } from "@/lib/i18n/locale";
-import type { RunStatusView } from "../lib/resultModel";
+import { beforeText, type RunStatusView } from "../lib/resultModel";
 import { ExportMenu, type ExportItem } from "./ExportMenu";
 
 export type ResultFigure = {
@@ -13,7 +13,10 @@ export type ResultFigure = {
   value: number | null;
   format: (n: number) => string;
   hint?: string;
-  previous?: string | null;
+  /** The value before the run. Formatted with this figure's format; null or absent shows no before value. */
+  previousValue?: number | null;
+  /** Explicit before text, for a figure that is a range. When set it replaces previousValue. */
+  previousText?: string | null;
 };
 
 type Props = {
@@ -66,7 +69,7 @@ export function ResultHeader({ status, figures, exports, source, prompt }: Props
               <div className="truncate type-small text-[var(--ink-muted)]">{figure.label}</div>
               <div className="truncate type-mono-link text-[var(--ink)]">
                 <BeforeAfter
-                  previous={figure.previous ?? null}
+                  previous={figure.previousText !== undefined ? figure.previousText : beforeText(figure.previousValue ?? null, figure.value, figure.format)}
                   current={<RollingNumber testId={`mc-figure-${figure.key}-value`} value={figure.value} format={figure.format} enter />}
                 />
               </div>

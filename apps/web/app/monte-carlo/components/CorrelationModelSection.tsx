@@ -20,7 +20,7 @@ import {
 import { formatNumber } from "@/lib/format";
 import { useLocale, useT } from "@/lib/i18n/locale";
 import { ScanReveal } from "@/components/ui/ScanReveal";
-import { correlationFigureValues, previousFigure, runStatusView, type FigureSnapshot } from "../lib/resultModel";
+import { correlationFigureValues, priorValue, runStatusView, type FigureSnapshot } from "../lib/resultModel";
 import { ChartGuard } from "./ChartGuard";
 import { ResultHeader, type ResultFigure } from "./ResultHeader";
 import { RunButton } from "./RunButton";
@@ -79,10 +79,10 @@ export function CorrelationModelSection({
   const assetNames = correlationResult?.assets ?? [];
 
   const figures: ResultFigure[] = [
-    { key: "optimalMu", label: t("monteCarlo.correlation.figures.optimalMu"), value: values.optimalMu, format: (n) => pct(n, locale), hint: t("monteCarlo.correlation.hints.optimalMu"), previous: previousFigure(before, "correlation", "optimalMu", values.optimalMu, (n) => pct(n, locale)) },
-    { key: "portfolioSigma", label: t("monteCarlo.correlation.figures.portfolioSigma"), value: values.portfolioSigma, format: (n) => pct(n, locale), hint: t("monteCarlo.correlation.hints.portfolioSigma"), previous: previousFigure(before, "correlation", "portfolioSigma", values.portfolioSigma, (n) => pct(n, locale)) },
-    { key: "diversification", label: t("monteCarlo.correlation.figures.diversification"), value: values.diversification, format: (n) => t("monteCarlo.correlation.pctPoint", { value: formatNumber(n, "ratio", { locale }) }), hint: t("monteCarlo.correlation.hints.diversification"), previous: previousFigure(before, "correlation", "diversification", values.diversification, (n) => t("monteCarlo.correlation.pctPoint", { value: formatNumber(n, "ratio", { locale }) })) },
-    { key: "optimalSharpe", label: t("monteCarlo.correlation.figures.optimalSharpe"), value: values.optimalSharpe, format: (n) => numberText(n, locale), hint: t("monteCarlo.correlation.hints.optimalSharpe"), previous: previousFigure(before, "correlation", "optimalSharpe", values.optimalSharpe, (n) => numberText(n, locale)) },
+    { key: "optimalMu", label: t("monteCarlo.correlation.figures.optimalMu"), value: values.optimalMu, format: (n) => pct(n, locale), hint: t("monteCarlo.correlation.hints.optimalMu"), previousValue: priorValue(before, "correlation", "optimalMu") },
+    { key: "portfolioSigma", label: t("monteCarlo.correlation.figures.portfolioSigma"), value: values.portfolioSigma, format: (n) => pct(n, locale), hint: t("monteCarlo.correlation.hints.portfolioSigma"), previousValue: priorValue(before, "correlation", "portfolioSigma") },
+    { key: "diversification", label: t("monteCarlo.correlation.figures.diversification"), value: values.diversification, format: (n) => t("monteCarlo.correlation.pctPoint", { value: formatNumber(n, "ratio", { locale }) }), hint: t("monteCarlo.correlation.hints.diversification"), previousValue: priorValue(before, "correlation", "diversification") },
+    { key: "optimalSharpe", label: t("monteCarlo.correlation.figures.optimalSharpe"), value: values.optimalSharpe, format: (n) => numberText(n, locale), hint: t("monteCarlo.correlation.hints.optimalSharpe"), previousValue: priorValue(before, "correlation", "optimalSharpe") },
   ];
 
   const heatmapState = !correlationResult ? "empty" : heatmap.length > 0 ? "ready" : "invalid";

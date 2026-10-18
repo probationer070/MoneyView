@@ -24,7 +24,7 @@ import { RunNotice } from "./RunNotice";
 import { SimulationRail } from "./SimulationRail";
 import { WarningBanner } from "./WarningBanner";
 import { formatKrwCompact, krwAxis } from "../lib/krwFormat";
-import { pathFigureValues, previousFigure, runStatusView, type FigureSnapshot } from "../lib/resultModel";
+import { pathFigureValues, priorValue, runStatusView, type FigureSnapshot } from "../lib/resultModel";
 import { LegendItem, NumericField, SelectField, numberText, pct } from "./shared";
 
 type Props = {
@@ -126,10 +126,10 @@ export function PathSimulationSection({
         <ResultHeader
           status={runStatusView(status, progress, sharedSimulation !== null)}
           figures={[
-            { key: "median", label: t("monteCarlo.path.figures.median"), value: values.median, format: (n) => formatKrwCompact(n, locale), hint: t("monteCarlo.path.hints.median"), previous: previousFigure(before, "path", "median", values.median, (n) => formatKrwCompact(n, locale)) },
-            { key: "expectedReturn", label: t("monteCarlo.path.figures.expectedReturn"), value: values.expectedReturn, format: (n) => pct(n, locale), hint: t("monteCarlo.path.hints.expectedReturn"), previous: previousFigure(before, "path", "expectedReturn", values.expectedReturn, (n) => pct(n, locale)) },
-            { key: "lossProbability", label: t("monteCarlo.path.figures.lossProbability"), value: values.lossProbability, format: (n) => pct(n, locale), hint: t("monteCarlo.path.hints.lossProbability"), previous: previousFigure(before, "path", "lossProbability", values.lossProbability, (n) => pct(n, locale)) },
-            { key: "sharpe", label: t("monteCarlo.path.figures.sharpe"), value: values.sharpe, format: (n) => numberText(n, locale), hint: t("monteCarlo.path.hints.sharpe", { rate: pct(input.riskFreeRate, locale) }), previous: previousFigure(before, "path", "sharpe", values.sharpe, (n) => numberText(n, locale)) },
+            { key: "median", label: t("monteCarlo.path.figures.median"), value: values.median, format: (n) => formatKrwCompact(n, locale), hint: t("monteCarlo.path.hints.median"), previousValue: priorValue(before, "path", "median") },
+            { key: "expectedReturn", label: t("monteCarlo.path.figures.expectedReturn"), value: values.expectedReturn, format: (n) => pct(n, locale), hint: t("monteCarlo.path.hints.expectedReturn"), previousValue: priorValue(before, "path", "expectedReturn") },
+            { key: "lossProbability", label: t("monteCarlo.path.figures.lossProbability"), value: values.lossProbability, format: (n) => pct(n, locale), hint: t("monteCarlo.path.hints.lossProbability"), previousValue: priorValue(before, "path", "lossProbability") },
+            { key: "sharpe", label: t("monteCarlo.path.figures.sharpe"), value: values.sharpe, format: (n) => numberText(n, locale), hint: t("monteCarlo.path.hints.sharpe", { rate: pct(input.riskFreeRate, locale) }), previousValue: priorValue(before, "path", "sharpe") },
           ]}
           exports={sharedSimulation ? [
             { key: "summary", label: t("monteCarlo.path.exports.summary"), onSelect: exportSummaryCsv },

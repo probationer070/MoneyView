@@ -18,7 +18,7 @@ import { SimulationRail } from "./SimulationRail";
 import { WarningBanner } from "./WarningBanner";
 import { NumericField, SummaryRow, numberText, pct } from "./shared";
 import { formatKrwRange, krw } from "../lib/krwFormat";
-import { previousFigure, runStatusView, valuationFigureValues, type FigureSnapshot } from "../lib/resultModel";
+import { previousRangeText, priorValue, runStatusView, valuationFigureValues, type FigureSnapshot } from "../lib/resultModel";
 
 type Props = {
   valuationInput: ValuationInput;
@@ -68,10 +68,10 @@ export function CorporateValuationSection({
 
   const values = valuationFigureValues(valuationResult);
   const figures: ResultFigure[] = [
-    { key: "median", label: t("monteCarlo.valuation.figures.median"), value: values.median, format: (n) => krw(n, locale), hint: t("monteCarlo.valuation.hints.median"), previous: previousFigure(before, "valuation", "median", values.median, (n) => krw(n, locale)) },
-    { key: "undervaluation", label: t("monteCarlo.valuation.figures.undervaluation"), value: values.undervaluation, format: (n) => pct(n, locale), hint: t("monteCarlo.valuation.hints.undervaluation"), previous: previousFigure(before, "valuation", "undervaluation", values.undervaluation, (n) => pct(n, locale)) },
-    { key: "upside", label: t("monteCarlo.valuation.figures.upside"), value: values.upside, format: (n) => pct(n, locale), hint: t("monteCarlo.valuation.hints.upside"), previous: previousFigure(before, "valuation", "upside", values.upside, (n) => pct(n, locale)) },
-    { key: "interval80", label: t("monteCarlo.valuation.figures.interval80"), value: values.interval80, format: (lo) => formatKrwRange(lo, summary?.fair_value_p90 ?? null, locale), hint: t("monteCarlo.valuation.hints.interval80"), previous: previousFigure(before, "valuation", "interval80", values.interval80, (lo) => formatKrwRange(lo, summary?.fair_value_p90 ?? null, locale)) },
+    { key: "median", label: t("monteCarlo.valuation.figures.median"), value: values.median, format: (n) => krw(n, locale), hint: t("monteCarlo.valuation.hints.median"), previousValue: priorValue(before, "valuation", "median") },
+    { key: "undervaluation", label: t("monteCarlo.valuation.figures.undervaluation"), value: values.undervaluation, format: (n) => pct(n, locale), hint: t("monteCarlo.valuation.hints.undervaluation"), previousValue: priorValue(before, "valuation", "undervaluation") },
+    { key: "upside", label: t("monteCarlo.valuation.figures.upside"), value: values.upside, format: (n) => pct(n, locale), hint: t("monteCarlo.valuation.hints.upside"), previousValue: priorValue(before, "valuation", "upside") },
+    { key: "interval80", label: t("monteCarlo.valuation.figures.interval80"), value: values.interval80, format: (lo) => formatKrwRange(lo, values.interval80High, locale), hint: t("monteCarlo.valuation.hints.interval80"), previousText: previousRangeText(before, "valuation", "interval80", "interval80High", values.interval80, values.interval80High, (lo, hi) => formatKrwRange(lo, hi, locale)) },
   ];
 
   return (

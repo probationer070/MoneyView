@@ -130,7 +130,8 @@ export function pathError(message: string): PathFixture {
 export type MonteCarloWorkerOptions = {
   /** One entry per path run, in order (the last repeats). Use pathError() for a run that fails. */
   path?: PathFixture[];
-  valuation?: unknown;
+  /** One valuation result per run, in order (the last repeats). A single fixture answers every run. */
+  valuation?: unknown | unknown[];
   correlation?: unknown;
   /** Withhold each run's result until the page calls window.__mcRelease(); every call releases the oldest held run. */
   hold?: boolean;
@@ -142,7 +143,7 @@ export type MonteCarloWorkerOptions = {
 export async function installMonteCarloWorker(page: Page, options: MonteCarloWorkerOptions = {}): Promise<void> {
   const config = {
     path: options.path && options.path.length > 0 ? options.path : [PATH_FIXTURE],
-    valuation: options.valuation ?? VALUATION_FIXTURE,
+    valuation: options.valuation === undefined ? [VALUATION_FIXTURE] : [options.valuation].flat(),
     correlation: options.correlation ?? CORRELATION_FIXTURE,
     hold: options.hold ?? false,
     progress: options.progress ?? 50,
@@ -156,6 +157,7 @@ export async function installMonteCarloWorker(page: Page, options: MonteCarloWor
     };
     w.__mcCancelled = [];
     let pathCalls = 0;
+    let valuationCalls = 0;
     // Held runs queue up; each __mcRelease() call releases the oldest pending run only.
     const pending: Array<() => void> = [];
     w.__mcRelease = () => pending.shift()?.();
@@ -179,7 +181,9 @@ export async function installMonteCarloWorker(page: Page, options: MonteCarloWor
           const entry = cfg.path[index] as Record<string, unknown>;
           reply = typeof entry.__mcError === "string" ? { type: "error", error: entry.__mcError } : { type: "result", result: entry };
         } else if (message.type === "run-valuation") {
-          reply = { type: "valuation-result", result: cfg.valuation };
+          const result = cfg.valuation[Math.min(valuationCalls, cfg.valuation.length - 1)];
+          valuationCalls += 1;
+          reply = { type: "valuation-result", result };
         } else if (message.type === "run-correlation") {
           reply = { type: "correlation-result", result: cfg.correlation };
         } else {

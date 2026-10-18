@@ -41,15 +41,27 @@ export function beforeText(
 // The figure values a run's tab showed when that run started, keyed by figure key.
 export type FigureSnapshot = { tab: MonteCarloTab; values: Record<string, number | null> };
 
-// A figure's previous text: only the tab that started the before run shows one.
-export function previousFigure(
+// A figure's value before the run: only the tab that started the run has one.
+export function priorValue(before: FigureSnapshot | null, tab: MonteCarloTab, key: string): number | null | undefined {
+  return before?.tab === tab ? before.values[key] : undefined;
+}
+
+// A low-high range's before text, formatted from the old pair. Null when there is no before pair or the range reads the same.
+export function previousRangeText(
   before: FigureSnapshot | null,
   tab: MonteCarloTab,
-  key: string,
-  current: number | null,
-  format: (n: number) => string,
+  lowKey: string,
+  highKey: string,
+  low: number | null,
+  high: number | null,
+  format: (low: number, high: number) => string,
 ): string | null {
-  return before?.tab === tab ? beforeText(before.values[key], current, format) : null;
+  if (before?.tab !== tab || low === null || high === null) return null;
+  const oldLow = before.values[lowKey];
+  const oldHigh = before.values[highKey];
+  if (oldLow == null || oldHigh == null || !Number.isFinite(oldLow) || !Number.isFinite(oldHigh)) return null;
+  const previous = format(oldLow, oldHigh);
+  return previous === format(low, high) ? null : previous;
 }
 
 // Each tab's figure values, keyed as its ResultHeader figures are. The sections render them and a run snapshots them.
@@ -69,6 +81,8 @@ export function valuationFigureValues(result: ValuationResult | null) {
     undervaluation: summary?.undervaluation_probability ?? null,
     upside: summary?.upside_potential ?? null,
     interval80: summary?.fair_value_p10 ?? null,
+    // The 80% interval is a pair: its high end is snapshotted with its low end so the before range is never mixed.
+    interval80High: summary?.fair_value_p90 ?? null,
   };
 }
 
