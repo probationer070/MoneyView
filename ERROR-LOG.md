@@ -26,6 +26,26 @@ reveal that; only checking the code did.
 
 An entry states what was true when it was written. Nothing updates it on its own.
 
+## 2026-10-18: Monte Carlo charts overflow their frames at 390 on every tab (feat/monte-carlo-one-screen)
+
+Date: 2026-10-18 (final-review capture of the Monte Carlo one-screen branch). Introduced on this branch, fixed in 3585d30.
+Command: `DESIGN_CAPTURE=monte-carlo-one-screen npx playwright test design-capture monte-carlo-one-screen`, viewing `monte-carlo-*-after-390.png`.
+Failure: at 390x844 after a run, each chart drew past its frame over the next card on all five tabs. The "no page scroll" test passed because the page itself did not scroll.
+Root cause: below lg the result column is the scroll container, but the ScanReveal host and body and the chart sections stayed `min-h-0 flex-1`, so they shrank to the leftover height while each chart kept its `min-height`.
+Fix: 3585d30 makes the shrink lg-only (`lg:min-h-0 lg:flex-1`) so each card takes its content height below lg. The 1280x720 layout is unchanged.
+Files changed: `apps/web/app/monte-carlo/components/{PathSimulation,Risk,ReturnDistribution,CorporateValuation,CorrelationModel}Section.tsx`, `apps/web/tests/e2e/monte-carlo-one-screen.spec.ts`.
+Prevention: the 390 "after a run" case now asserts each chart surface's bottom is inside its frame; it failed on all five tabs before the fix and on the path tab when the path classes were reverted.
+
+## 2026-10-18: efficient frontier axes and tooltip mis-format (CorrelationModelSection, pre-existing on renewal)
+
+Date: 2026-10-18 (final review of the Monte Carlo one-screen branch). Pre-existing on renewal, fixed in 3585d30.
+Command: not recorded (found by reading the capture and the code).
+Failure: the frontier ticks read "6%, 7.5%, 9.00%, 10.500%" (decimals growing along the axis), and the tooltip showed risk and return as raw numbers such as `5.0000` with no percent sign. No error was raised.
+Root cause: `tickFormatter={fmtPctTick}` received recharts' `(value, index)`, so the tick index became `decimals`. The tooltip compared `name === "risk" || name === "return"`, but the axes carry translated names, so that branch never ran.
+Fix: 3585d30 uses `(v) => fmtPctTick(Number(v), 1)` and branches on `item.dataKey`.
+Files changed: `apps/web/app/monte-carlo/components/CorrelationModelSection.tsx`, `apps/web/tests/e2e/monte-carlo-one-screen.spec.ts`.
+Prevention: two tests pin one decimal format on both axes and a percent sign for risk and return in the tooltip; each failed when its old code was restored.
+
 ## 2026-10-15: dev performance headers and the saved label read data keys in English (i18n-model, f1ce93e)
 
 Date: 2026-10-15 (final review of the design-system branch, M9). The defect is in f1ce93e; d35a1f4 fixed it.
