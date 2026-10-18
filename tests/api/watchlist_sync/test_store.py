@@ -147,8 +147,8 @@ def test_apply_state_writes_theme_and_read_returns_it():
 
 def test_an_older_themeless_peer_row_does_not_erase_a_newer_local_theme():
     """Uses the service's own path: merge_states over local and peer state, then apply_state.
-    Mutation: dropping theme from order_key means the same-author rows tie on everything but
-    content, so the themeless peer row can win and the theme is erased."""
+    Mutation: flipping the merge comparison in merge_states (`>` to `<`) so the older row wins.
+    The older themeless peer row then replaces the newer local row and the theme is erased."""
     _insert("AAPL")
     with get_db() as conn:
         conn.execute("UPDATE watchlist SET theme = 'ai_semis', updated_at = '2026-09-18T12:00:00.000Z', "
