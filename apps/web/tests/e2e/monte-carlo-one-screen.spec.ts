@@ -394,8 +394,8 @@ test.describe("path at 390x844", () => {
 });
 
 test.describe("ScanReveal body class", () => {
-  // The body is the scan line's next sibling.
-  const bodyClass = (page: Page) => page.getByTestId("scan-line").evaluate((line) => line.nextElementSibling!.getAttribute("class"));
+  // The body is the scan line's next sibling. On /monte-carlo the result area has its own scan line; the panel's comes first.
+  const bodyClass = (page: Page) => page.getByTestId("scan-line").first().evaluate((line) => line.nextElementSibling!.getAttribute("class"));
 
   test("a caller without bodyClassName gets a body with no class attribute", async ({ page }) => {
     await page.goto("/", { waitUntil: "domcontentloaded" });
@@ -406,7 +406,7 @@ test.describe("ScanReveal body class", () => {
   test("a caller with bodyClassName gets that class on the body", async ({ page }) => {
     await installMonteCarloWorker(page);
     await page.goto("/monte-carlo", { waitUntil: "domcontentloaded" });
-    await expect(page.getByTestId("scan-line")).toBeAttached({ timeout: 60_000 });
+    await expect(page.getByTestId("scan-line").first()).toBeAttached({ timeout: 60_000 });
     expect(await bodyClass(page)).toBe("flex min-h-0 flex-1 flex-col");
   });
 });

@@ -28,8 +28,9 @@ import { ScanReveal } from "@/components/ui/ScanReveal";
 import { Tabs } from "@/components/ui/Tabs";
 import { useT } from "@/lib/i18n/locale";
 import { useTabState } from "@/lib/tabState";
-import { isMonteCarloTab, MONTE_CARLO_TAB_KEY, MONTE_CARLO_TABS } from "./lib/tabs";
+import { isMonteCarloTab, MONTE_CARLO_TAB_KEY, MONTE_CARLO_TABS, type MonteCarloTab } from "./lib/tabs";
 import { normalizeCorrelationResult, normalizeMonteCarloResult, normalizeValuationResult } from "./lib/resultNormalization";
+import { correlationFigureValues, pathFigureValues, valuationFigureValues, type FigureSnapshot } from "./lib/resultModel";
 
 const defaultInput: PathSimulationInput = {
   initialInvestment: 10_000_000,
@@ -163,10 +164,35 @@ export default function MonteCarloPage() {
   const priceLookupTickerRef = useRef(defaultValuationInput.ticker);
   const priceLookupAbortRef = useRef<AbortController | null>(null);
   const priceLookupManualEditSeqRef = useRef(0);
+  // Each run kind's id moves when its result arrives; the result area scans on that change.
+  const [runIds, setRunIds] = useState({ path: 0, valuation: 0, correlation: 0 });
+  // The figure values a finished run replaced, shown struck through on the tab that started the run.
+  const [before, setBefore] = useState<FigureSnapshot | null>(null);
+  // The figure values the running run will replace, set when it starts. The worker handler is subscribed once,
+  // so the pending snapshot and the active tab are read through refs that the effects keep current.
+  const [pending, setPending] = useState<FigureSnapshot | null>(null);
+  const pendingBeforeRef = useRef<FigureSnapshot | null>(null);
+  const activeTabRef = useRef<MonteCarloTab>(activeTab);
 
   useEffect(() => {
     latestInitialInvestmentRef.current = input.initialInvestment;
   }, [input.initialInvestment]);
+
+  useEffect(() => {
+    activeTabRef.current = activeTab;
+  }, [activeTab]);
+
+  useEffect(() => {
+    pendingBeforeRef.current = pending;
+  }, [pending]);
+
+  // A tab change drops the before values: a figure only compares with a run that started on its own tab.
+  const changeTab = (tab: MonteCarloTab) => {
+    if (tab === activeTab) return;
+    setStored(tab);
+    setBefore(null);
+    setPending(null);
+  };
 
   const beginWorkerEvent = (
     operation: string,
@@ -218,6 +244,12 @@ export default function MonteCarloPage() {
   useEffect(() => {
     const worker = new Worker(new URL("./workers/simulation.worker.ts", import.meta.url));
     workerRef.current = worker;
+    // A result shows its before values only on the tab that started the run; every result moves that kind's scan id.
+    const showResult = (kind: "path" | "valuation" | "correlation") => {
+      const snapshot = pendingBeforeRef.current;
+      setBefore(snapshot?.tab === kind && activeTabRef.current === kind ? snapshot : null);
+      setRunIds((ids) => ({ ...ids, [kind]: ids[kind] + 1 }));
+    };
     worker.onmessage = (event: MessageEvent<SimulationWorkerResponse>) => {
       const message = event.data;
       if (message.requestId !== activeRequestIdRef.current) return;
@@ -233,6 +265,7 @@ export default function MonteCarloPage() {
         setProgress(100);
         setErrorMessage(null);
         setStatus("idle");
+        showResult("path");
         completeWorkerEvent("success");
         activeRequestIdRef.current = null;
         activeRequestKindRef.current = null;
@@ -243,6 +276,7 @@ export default function MonteCarloPage() {
         setValuationRunState({ result: normalized.result, warnings: normalized.warnings });
         setValuationProgress(100);
         setValuationStatus("idle");
+        showResult("valuation");
         completeWorkerEvent("success");
         activeRequestIdRef.current = null;
         activeRequestKindRef.current = null;
@@ -253,6 +287,7 @@ export default function MonteCarloPage() {
         setCorrelationRunState({ result: normalized.result, warnings: normalized.warnings });
         setCorrelationProgress(100);
         setCorrelationStatus("idle");
+        showResult("correlation");
         completeWorkerEvent("success");
         activeRequestIdRef.current = null;
         activeRequestKindRef.current = null;
@@ -440,9 +475,14 @@ export default function MonteCarloPage() {
     }
   };
 
+  // A run snapshots its tab's figures only when a result exists to replace.
+  const snapshotBefore = (tab: MonteCarloTab, values: Record<string, number | null> | null): FigureSnapshot | null =>
+    values ? { tab, values } : null;
+
   const runPathSimulation = async () => {
     if (!workerRef.current) return;
     supersedeActiveRun();
+    setPending(snapshotBefore("path", pathFigures));
     const requestId = crypto.randomUUID();
     activeRequestIdRef.current = requestId;
     activeRequestKindRef.current = "path";
@@ -463,6 +503,7 @@ export default function MonteCarloPage() {
   const runValuationSimulation = () => {
     if (!workerRef.current) return;
     supersedeActiveRun();
+    setPending(snapshotBefore("valuation", valuationResult ? valuationFigureValues(valuationResult) : null));
     const requestId = crypto.randomUUID();
     activeRequestIdRef.current = requestId;
     activeRequestKindRef.current = "valuation";
@@ -482,6 +523,7 @@ export default function MonteCarloPage() {
   const runCorrelationSimulation = () => {
     if (!workerRef.current) return;
     supersedeActiveRun();
+    setPending(snapshotBefore("correlation", correlationResult ? correlationFigureValues(correlationResult) : null));
     const requestId = crypto.randomUUID();
     activeRequestIdRef.current = requestId;
     activeRequestKindRef.current = "correlation";
@@ -586,6 +628,9 @@ export default function MonteCarloPage() {
       returnDistributionChartData,
     };
   }, [input.initialInvestment, result]);
+
+  // A run snapshots these. Derived outside the sharedSimulation memo: passing the memo's output into state trips the React Compiler.
+  const pathFigures = sharedSimulation ? pathFigureValues(sharedSimulation) : null;
 
   const exportSummaryCsv = () => {
     if (!sharedSimulation) return;
@@ -695,7 +740,7 @@ export default function MonteCarloPage() {
         items={MONTE_CARLO_TABS.map((key) => ({ key, label: t(`monteCarlo.tabs.${key}`) }))}
         activeKey={activeTab}
         onChange={(key) => {
-          if (isMonteCarloTab(key)) setStored(key);
+          if (isMonteCarloTab(key)) changeTab(key);
         }}
       />
 
@@ -712,6 +757,8 @@ export default function MonteCarloPage() {
         <PathSimulationSection
           input={input}
           sharedSimulation={sharedSimulation}
+          before={before}
+          runId={runIds.path}
           status={status}
           progress={progress}
           errorMessage={errorMessage}
@@ -733,7 +780,7 @@ export default function MonteCarloPage() {
           progress={progress}
           errorMessage={errorMessage}
           warnings={pathRunState.warnings}
-          onOpenPath={() => setStored("path")}
+          onOpenPath={() => changeTab("path")}
           exportRiskSummaryCsv={exportRiskSummaryCsv}
           exportRiskHistogramCsv={exportRiskHistogramCsv}
         />
@@ -744,7 +791,7 @@ export default function MonteCarloPage() {
           progress={progress}
           errorMessage={errorMessage}
           warnings={pathRunState.warnings}
-          onOpenPath={() => setStored("path")}
+          onOpenPath={() => changeTab("path")}
           exportReturnHistogramCsv={exportReturnHistogramCsv}
           exportReturnCdfCsv={exportReturnCdfCsv}
         />
@@ -752,6 +799,8 @@ export default function MonteCarloPage() {
         <CorporateValuationSection
           valuationInput={valuationInput}
           valuationResult={valuationResult}
+          before={before}
+          runId={runIds.valuation}
           valuationStatus={valuationStatus}
           valuationProgress={valuationProgress}
           warnings={valuationRunState.warnings}
@@ -768,6 +817,8 @@ export default function MonteCarloPage() {
         <CorrelationModelSection
           correlationInput={correlationInput}
           correlationResult={correlationResult}
+          before={before}
+          runId={runIds.correlation}
           correlationStatus={correlationStatus}
           correlationProgress={correlationProgress}
           warnings={correlationRunState.warnings}

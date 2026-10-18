@@ -19,7 +19,8 @@ import {
 } from "@/lib/chartConfig";
 import { formatNumber } from "@/lib/format";
 import { useLocale, useT } from "@/lib/i18n/locale";
-import { runStatusView } from "../lib/resultModel";
+import { ScanReveal } from "@/components/ui/ScanReveal";
+import { correlationFigureValues, previousFigure, runStatusView, type FigureSnapshot } from "../lib/resultModel";
 import { ChartGuard } from "./ChartGuard";
 import { ResultHeader, type ResultFigure } from "./ResultHeader";
 import { RunButton } from "./RunButton";
@@ -31,6 +32,8 @@ import { numberText, pct } from "./shared";
 type Props = {
   correlationInput: CorrelationInput;
   correlationResult: CorrelationResult | null;
+  before: FigureSnapshot | null;
+  runId: number;
   correlationStatus: "idle" | "loading" | "error" | "cancelled";
   correlationProgress: number;
   warnings: string[];
@@ -51,6 +54,8 @@ const matrixInputClass = "type-mono h-[var(--component-input-height)] w-full min
 export function CorrelationModelSection({
   correlationInput,
   correlationResult,
+  before,
+  runId,
   correlationStatus,
   correlationProgress,
   warnings,
@@ -67,17 +72,17 @@ export function CorrelationModelSection({
   const [view, setView] = useState<DetailView>("sensitivity");
   // Correlation has a run action and no cancel: a superseding run returns this tab to idle, never "canceled".
   const running = correlationStatus === "loading";
-  const summary = correlationResult?.optimal_summary;
+  const values = correlationFigureValues(correlationResult);
   const frontier = correlationResult?.efficient_frontier ?? [];
   const sensitivity = correlationResult?.spearman_sensitivity ?? [];
   const heatmap = correlationResult?.heatmap ?? [];
   const assetNames = correlationResult?.assets ?? [];
 
   const figures: ResultFigure[] = [
-    { key: "optimalMu", label: t("monteCarlo.correlation.figures.optimalMu"), value: summary?.optimal_return ?? null, format: (n) => pct(n, locale), hint: t("monteCarlo.correlation.hints.optimalMu") },
-    { key: "portfolioSigma", label: t("monteCarlo.correlation.figures.portfolioSigma"), value: summary?.optimal_volatility ?? null, format: (n) => pct(n, locale), hint: t("monteCarlo.correlation.hints.portfolioSigma") },
-    { key: "diversification", label: t("monteCarlo.correlation.figures.diversification"), value: summary?.diversification_effect ?? null, format: (n) => t("monteCarlo.correlation.pctPoint", { value: formatNumber(n, "ratio", { locale }) }), hint: t("monteCarlo.correlation.hints.diversification") },
-    { key: "optimalSharpe", label: t("monteCarlo.correlation.figures.optimalSharpe"), value: summary?.optimal_sharpe ?? null, format: (n) => numberText(n, locale), hint: t("monteCarlo.correlation.hints.optimalSharpe") },
+    { key: "optimalMu", label: t("monteCarlo.correlation.figures.optimalMu"), value: values.optimalMu, format: (n) => pct(n, locale), hint: t("monteCarlo.correlation.hints.optimalMu"), previous: previousFigure(before, "correlation", "optimalMu", values.optimalMu, (n) => pct(n, locale)) },
+    { key: "portfolioSigma", label: t("monteCarlo.correlation.figures.portfolioSigma"), value: values.portfolioSigma, format: (n) => pct(n, locale), hint: t("monteCarlo.correlation.hints.portfolioSigma"), previous: previousFigure(before, "correlation", "portfolioSigma", values.portfolioSigma, (n) => pct(n, locale)) },
+    { key: "diversification", label: t("monteCarlo.correlation.figures.diversification"), value: values.diversification, format: (n) => t("monteCarlo.correlation.pctPoint", { value: formatNumber(n, "ratio", { locale }) }), hint: t("monteCarlo.correlation.hints.diversification"), previous: previousFigure(before, "correlation", "diversification", values.diversification, (n) => t("monteCarlo.correlation.pctPoint", { value: formatNumber(n, "ratio", { locale }) })) },
+    { key: "optimalSharpe", label: t("monteCarlo.correlation.figures.optimalSharpe"), value: values.optimalSharpe, format: (n) => numberText(n, locale), hint: t("monteCarlo.correlation.hints.optimalSharpe"), previous: previousFigure(before, "correlation", "optimalSharpe", values.optimalSharpe, (n) => numberText(n, locale)) },
   ];
 
   const heatmapState = !correlationResult ? "empty" : heatmap.length > 0 ? "ready" : "invalid";
@@ -186,6 +191,7 @@ export function CorrelationModelSection({
       </SimulationRail>
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-auto lg:overflow-visible">
+        <ScanReveal trigger={String(runId)} className="flex min-h-0 flex-1 flex-col" bodyClassName="flex min-h-0 flex-1 flex-col gap-3">
         <ResultHeader
           status={runStatusView(correlationStatus, correlationProgress, correlationResult !== null)}
           figures={figures}
@@ -287,6 +293,7 @@ export function CorrelationModelSection({
             </div>
           </div>
         </section>
+        </ScanReveal>
       </div>
     </div>
   );

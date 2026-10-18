@@ -8,6 +8,7 @@ import { fieldInputClass } from "@/components/ui/InlineField";
 import { CHART_COLORS, GRID_STYLE, fmtCompactThousands, withAxisProps, withTooltipProps } from "@/lib/chartConfig";
 import { formatNumber } from "@/lib/format";
 import { useLocale, useT } from "@/lib/i18n/locale";
+import { ScanReveal } from "@/components/ui/ScanReveal";
 import { CancelButton } from "./CancelButton";
 import { ChartGuard } from "./ChartGuard";
 import { ResultHeader, type ResultFigure } from "./ResultHeader";
@@ -17,11 +18,13 @@ import { SimulationRail } from "./SimulationRail";
 import { WarningBanner } from "./WarningBanner";
 import { NumericField, SummaryRow, numberText, pct } from "./shared";
 import { formatKrwRange, krw } from "../lib/krwFormat";
-import { runStatusView } from "../lib/resultModel";
+import { previousFigure, runStatusView, valuationFigureValues, type FigureSnapshot } from "../lib/resultModel";
 
 type Props = {
   valuationInput: ValuationInput;
   valuationResult: ValuationResult | null;
+  before: FigureSnapshot | null;
+  runId: number;
   valuationStatus: "idle" | "loading" | "error" | "cancelled";
   valuationProgress: number;
   warnings: string[];
@@ -38,6 +41,8 @@ type Props = {
 export function CorporateValuationSection({
   valuationInput,
   valuationResult,
+  before,
+  runId,
   valuationStatus,
   valuationProgress,
   warnings,
@@ -61,11 +66,12 @@ export function CorporateValuationSection({
       : t(valuationPriceLookupMessage.key, valuationPriceLookupMessage.vars);
   const lookupFailed = valuationPriceLookupStatus === "not_found" || valuationPriceLookupStatus === "error";
 
+  const values = valuationFigureValues(valuationResult);
   const figures: ResultFigure[] = [
-    { key: "median", label: t("monteCarlo.valuation.figures.median"), value: summary?.fair_value_median ?? null, format: (n) => krw(n, locale), hint: t("monteCarlo.valuation.hints.median") },
-    { key: "undervaluation", label: t("monteCarlo.valuation.figures.undervaluation"), value: summary?.undervaluation_probability ?? null, format: (n) => pct(n, locale), hint: t("monteCarlo.valuation.hints.undervaluation") },
-    { key: "upside", label: t("monteCarlo.valuation.figures.upside"), value: summary?.upside_potential ?? null, format: (n) => pct(n, locale), hint: t("monteCarlo.valuation.hints.upside") },
-    { key: "interval80", label: t("monteCarlo.valuation.figures.interval80"), value: summary?.fair_value_p10 ?? null, format: (lo) => formatKrwRange(lo, summary?.fair_value_p90 ?? null, locale), hint: t("monteCarlo.valuation.hints.interval80") },
+    { key: "median", label: t("monteCarlo.valuation.figures.median"), value: values.median, format: (n) => krw(n, locale), hint: t("monteCarlo.valuation.hints.median"), previous: previousFigure(before, "valuation", "median", values.median, (n) => krw(n, locale)) },
+    { key: "undervaluation", label: t("monteCarlo.valuation.figures.undervaluation"), value: values.undervaluation, format: (n) => pct(n, locale), hint: t("monteCarlo.valuation.hints.undervaluation"), previous: previousFigure(before, "valuation", "undervaluation", values.undervaluation, (n) => pct(n, locale)) },
+    { key: "upside", label: t("monteCarlo.valuation.figures.upside"), value: values.upside, format: (n) => pct(n, locale), hint: t("monteCarlo.valuation.hints.upside"), previous: previousFigure(before, "valuation", "upside", values.upside, (n) => pct(n, locale)) },
+    { key: "interval80", label: t("monteCarlo.valuation.figures.interval80"), value: values.interval80, format: (lo) => formatKrwRange(lo, summary?.fair_value_p90 ?? null, locale), hint: t("monteCarlo.valuation.hints.interval80"), previous: previousFigure(before, "valuation", "interval80", values.interval80, (lo) => formatKrwRange(lo, summary?.fair_value_p90 ?? null, locale)) },
   ];
 
   return (
@@ -127,6 +133,7 @@ export function CorporateValuationSection({
       </SimulationRail>
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-auto lg:overflow-visible">
+        <ScanReveal trigger={String(runId)} className="flex min-h-0 flex-1 flex-col" bodyClassName="flex min-h-0 flex-1 flex-col gap-3">
         <ResultHeader
           status={runStatusView(valuationStatus, valuationProgress, valuationResult !== null)}
           figures={figures}
@@ -187,6 +194,7 @@ export function CorporateValuationSection({
             </div>
           </div>
         </section>
+        </ScanReveal>
       </div>
     </div>
   );

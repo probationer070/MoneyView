@@ -14,6 +14,7 @@ import {
   fmtYearsTick,
 } from "@/lib/chartConfig";
 import { useLocale, useT } from "@/lib/i18n/locale";
+import { ScanReveal } from "@/components/ui/ScanReveal";
 import { tokens } from "@/lib/tokens.generated";
 import { CancelButton } from "./CancelButton";
 import { ChartGuard } from "./ChartGuard";
@@ -23,12 +24,14 @@ import { RunNotice } from "./RunNotice";
 import { SimulationRail } from "./SimulationRail";
 import { WarningBanner } from "./WarningBanner";
 import { formatKrwCompact, krwAxis } from "../lib/krwFormat";
-import { runStatusView } from "../lib/resultModel";
+import { pathFigureValues, previousFigure, runStatusView, type FigureSnapshot } from "../lib/resultModel";
 import { LegendItem, NumericField, SelectField, numberText, pct } from "./shared";
 
 type Props = {
   input: PathSimulationInput;
   sharedSimulation: SharedSimulationResult | null;
+  before: FigureSnapshot | null;
+  runId: number;
   status: "idle" | "loading" | "error" | "cancelled";
   progress: number;
   errorMessage: string | null;
@@ -46,6 +49,8 @@ type Props = {
 export function PathSimulationSection({
   input,
   sharedSimulation,
+  before,
+  runId,
   status,
   progress,
   errorMessage,
@@ -83,6 +88,7 @@ export function PathSimulationSection({
   const range = (label: string, low: number | undefined, high: number | undefined) =>
     `${label} · ${formatKrwCompact(low, locale)}–${formatKrwCompact(high, locale)}`;
   const terminal = sharedSimulation;
+  const values = pathFigureValues(sharedSimulation);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3 lg:flex-row">
@@ -116,13 +122,14 @@ export function PathSimulationSection({
       </SimulationRail>
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-auto lg:overflow-visible">
+        <ScanReveal trigger={String(runId)} className="flex min-h-0 flex-1 flex-col" bodyClassName="flex min-h-0 flex-1 flex-col gap-3">
         <ResultHeader
           status={runStatusView(status, progress, sharedSimulation !== null)}
           figures={[
-            { key: "median", label: t("monteCarlo.path.figures.median"), value: sharedSimulation?.terminalMedian ?? null, format: (n) => formatKrwCompact(n, locale), hint: t("monteCarlo.path.hints.median") },
-            { key: "expectedReturn", label: t("monteCarlo.path.figures.expectedReturn"), value: sharedSimulation?.medianExpectedReturn ?? null, format: (n) => pct(n, locale), hint: t("monteCarlo.path.hints.expectedReturn") },
-            { key: "lossProbability", label: t("monteCarlo.path.figures.lossProbability"), value: sharedSimulation?.raw.risk_metrics.loss_probability ?? null, format: (n) => pct(n, locale), hint: t("monteCarlo.path.hints.lossProbability") },
-            { key: "sharpe", label: t("monteCarlo.path.figures.sharpe"), value: sharedSimulation?.raw.risk_metrics.sharpe_ratio ?? null, format: (n) => numberText(n, locale), hint: t("monteCarlo.path.hints.sharpe", { rate: pct(input.riskFreeRate, locale) }) },
+            { key: "median", label: t("monteCarlo.path.figures.median"), value: values.median, format: (n) => formatKrwCompact(n, locale), hint: t("monteCarlo.path.hints.median"), previous: previousFigure(before, "path", "median", values.median, (n) => formatKrwCompact(n, locale)) },
+            { key: "expectedReturn", label: t("monteCarlo.path.figures.expectedReturn"), value: values.expectedReturn, format: (n) => pct(n, locale), hint: t("monteCarlo.path.hints.expectedReturn"), previous: previousFigure(before, "path", "expectedReturn", values.expectedReturn, (n) => pct(n, locale)) },
+            { key: "lossProbability", label: t("monteCarlo.path.figures.lossProbability"), value: values.lossProbability, format: (n) => pct(n, locale), hint: t("monteCarlo.path.hints.lossProbability"), previous: previousFigure(before, "path", "lossProbability", values.lossProbability, (n) => pct(n, locale)) },
+            { key: "sharpe", label: t("monteCarlo.path.figures.sharpe"), value: values.sharpe, format: (n) => numberText(n, locale), hint: t("monteCarlo.path.hints.sharpe", { rate: pct(input.riskFreeRate, locale) }), previous: previousFigure(before, "path", "sharpe", values.sharpe, (n) => numberText(n, locale)) },
           ]}
           exports={sharedSimulation ? [
             { key: "summary", label: t("monteCarlo.path.exports.summary"), onSelect: exportSummaryCsv },
@@ -210,6 +217,7 @@ export function PathSimulationSection({
             </AreaChart>
           </ChartGuard>
         </section>
+        </ScanReveal>
       </div>
     </div>
   );
