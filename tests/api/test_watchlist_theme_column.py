@@ -152,3 +152,47 @@ def test_theme_change_restamps_the_row(_seeded):
     client.post("/api/v1/portfolio/watchlist/AAPL/theme", json={"theme": "memory_storage"})
 
     assert _row()["updated_at"] == stamp_after_change
+
+
+@pytest.mark.virgin_db
+def test_init_db_adds_theme_column_to_an_old_watchlist_and_keeps_its_rows(tmp_path, monkeypatch):
+    """The path the other PC's existing database takes: a watchlist table with no theme column.
+    Mutation: removing the `theme` ALTER from _ensure_schema_compatibility in db.py -> init_db
+    leaves the column missing and the SELECT below fails. Restoring it makes this test pass."""
+    import sqlite3
+
+    from apps.api.services import db as db_service
+
+    db_path = tmp_path / "moneyview.db"
+    monkeypatch.setattr(db_service, "_DB_PATH", db_path)
+    with sqlite3.connect(str(db_path)) as conn:
+        conn.executescript(
+            """
+            CREATE TABLE watchlist (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                ticker     TEXT NOT NULL UNIQUE,
+                name       TEXT DEFAULT '',
+                sector     TEXT DEFAULT '',
+                group_name TEXT DEFAULT 'custom',
+                weight     REAL DEFAULT 0.0,
+                updated_at TEXT,
+                updated_by TEXT
+            );
+            """
+        )
+        conn.execute(
+            "INSERT INTO watchlist (ticker, name, sector, group_name, weight, updated_at, updated_by) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            ("AAPL", "Apple", "Technology", "total", 0.25, SEED_STAMP, "PC-B-0002"),
+        )
+
+    db_service.init_db()
+
+    with sqlite3.connect(str(db_path)) as conn:
+        conn.row_factory = sqlite3.Row
+        columns = {row["name"] for row in conn.execute("PRAGMA table_info(watchlist)")}
+        row = conn.execute("SELECT * FROM watchlist WHERE ticker = 'AAPL'").fetchone()
+
+    assert "theme" in columns
+    assert row["theme"] == ""
+    assert (row["name"], row["sector"], row["group_name"], row["weight"]) == ("Apple", "Technology", "total", 0.25)
