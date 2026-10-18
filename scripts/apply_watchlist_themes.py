@@ -12,11 +12,17 @@ created. A second run plans nothing. The endpoints are called in-process through
 `TestClient(app)` so the startup migrations run first.
 
     python scripts/apply_watchlist_themes.py [--csv PATH] [--dry-run]
+
+`--dry-run` never builds the app: it runs `init_db()` (so the theme column exists), reads
+the watchlist with a SELECT, and prints the plan. The real run builds the app with
+`MONEYVIEW_DISABLE_STARTUP_JOBS=1`, so the lifespan does not start the live-fetch cycles or
+`watchlist_cleanup_cycle(run_at_start=True)`, then writes through the endpoints.
 """
 from __future__ import annotations
 
 import argparse
 import csv
+import os
 import sys
 from pathlib import Path
 
@@ -26,9 +32,8 @@ if str(ROOT) not in sys.path:
 
 from fastapi.testclient import TestClient  # noqa: E402
 
-from apps.api.main import app  # noqa: E402
 from apps.api.models.schema_parts.watchlist import WatchlistTheme  # noqa: E402
-from apps.api.services.db import get_db  # noqa: E402
+from apps.api.services.db import get_db, init_db  # noqa: E402
 from apps.api.services.watchlist_themes import load_themes  # noqa: E402
 
 DEFAULT_CSV = ROOT / "docs" / "superpowers" / "specs" / "2026-10-18-risk-signal-evidence" / "themes-draft.csv"
@@ -104,6 +109,33 @@ def _apply(client: TestClient, ticker: str, action: str, value: str, now: dict) 
         raise RuntimeError(f"{ticker} {action} failed: HTTP {response.status_code} {response.text}")
 
 
+def _report(rows: list[dict], current: dict[str, dict], themes: list[WatchlistTheme], client) -> int:
+    """Print the plan and, when `client` is given, apply it. `client=None` writes nothing."""
+    changes = plan_changes(rows, current, themes)
+    by_ticker: dict[str, list[tuple[str, str]]] = {}
+    for ticker, action, value in changes:
+        by_ticker.setdefault(ticker, []).append((action, value))
+
+    counts = {"set": 0, "unchanged": 0, "not-on-watchlist": 0}
+    for ticker in _target_tickers(rows):
+        planned = by_ticker.get(ticker, [])
+        if any(action == "missing" for action, _ in planned):
+            status = "not-on-watchlist"
+        elif planned:
+            status = "set"
+            if client is not None:
+                for action, value in planned:
+                    _apply(client, ticker, action, value, current[ticker])
+        else:
+            status = "unchanged"
+        counts[status] += 1
+        detail = ", ".join(f"{action}={value}" for action, value in planned if action != "missing")
+        print(f"{ticker}	{status}	{detail}".rstrip())
+
+    print(f"set={counts['set']} unchanged={counts['unchanged']} missing={counts['not-on-watchlist']}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Apply the approved watchlist theme draft and name fixes.")
     parser.add_argument("--csv", type=Path, default=DEFAULT_CSV, help="draft CSV (default: the evidence draft)")
@@ -114,31 +146,17 @@ def main(argv: list[str] | None = None) -> int:
         rows = list(csv.DictReader(handle))
     themes = load_themes()
 
+    if args.dry_run:
+        # No app, no lifespan, no TestClient: migrations via init_db, then a read-only SELECT.
+        init_db()
+        return _report(rows, _read_current(), themes, client=None)
+
+    # Must be set before the app module is imported: the lifespan reads it when it starts.
+    os.environ.setdefault("MONEYVIEW_DISABLE_STARTUP_JOBS", "1")
+    from apps.api.main import app
+
     with TestClient(app) as client:
-        current = _read_current()
-        changes = plan_changes(rows, current, themes)
-        by_ticker: dict[str, list[tuple[str, str]]] = {}
-        for ticker, action, value in changes:
-            by_ticker.setdefault(ticker, []).append((action, value))
-
-        counts = {"set": 0, "unchanged": 0, "not-on-watchlist": 0}
-        for ticker in _target_tickers(rows):
-            planned = by_ticker.get(ticker, [])
-            if any(action == "missing" for action, _ in planned):
-                status = "not-on-watchlist"
-            elif planned:
-                status = "set"
-                if not args.dry_run:
-                    for action, value in planned:
-                        _apply(client, ticker, action, value, current[ticker])
-            else:
-                status = "unchanged"
-            counts[status] += 1
-            detail = ", ".join(f"{action}={value}" for action, value in planned if action != "missing")
-            print(f"{ticker}\t{status}\t{detail}".rstrip())
-
-    print(f"set={counts['set']} unchanged={counts['unchanged']} missing={counts['not-on-watchlist']}")
-    return 0
+        return _report(rows, _read_current(), themes, client)
 
 
 if __name__ == "__main__":

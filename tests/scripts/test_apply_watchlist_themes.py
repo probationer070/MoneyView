@@ -7,7 +7,9 @@ from __future__ import annotations
 
 import pytest
 
+from apps.api.services.db import get_db, init_db
 from apps.api.services.watchlist_themes import load_themes
+from scripts import apply_watchlist_themes as script
 from scripts.apply_watchlist_themes import NAME_FIXES, plan_changes
 
 THEMES = load_themes()
@@ -69,3 +71,35 @@ def test_name_fixes_only_when_different():
     current = _all_names_correct()
     current["SCCO"] = _cur(name="suddun Copper")
     assert plan_changes([], current, THEMES) == [("SCCO", "name", "Southern Copper")]
+
+
+def test_dry_run_never_opens_the_app(tmp_path, monkeypatch, capsys):
+    """Catches a dry run that builds the app or writes. Its startup lifespan runs live-fetch
+    cycles and cleanup on the real DB, so `--dry-run` must not construct a TestClient at all.
+    Mutation: add `TestClient(None)` to the dry-run branch of `main`. Then the monkeypatched
+    TestClient raises and the test fails with that error, not with the summary assertion.
+    The seeded ARIS row must stay unthemed afterwards, and the summary must be correct.
+    """
+    init_db()
+    with get_db() as conn:
+        conn.execute("INSERT INTO watchlist (ticker, name, sector, group_name, weight, theme) "
+                     "VALUES ('ARIS', 'ARIS', '', 'custom', 0.0, '')")
+        for ticker, name in NAME_FIXES.items():
+            conn.execute("INSERT INTO watchlist (ticker, name, sector, group_name, weight, theme) "
+                         "VALUES (?, ?, '', 'custom', 0.0, '')", (ticker, name))
+
+    def _boom(*args, **kwargs):
+        raise RuntimeError("dry-run must not construct a TestClient")
+
+    monkeypatch.setattr(script, "TestClient", _boom)
+    csv_path = tmp_path / "draft.csv"
+    csv_path.write_text("ticker,name,proposed_theme\nARIS,Aris,금·은\nNUAG,Nuag,금·은\n", encoding="utf-8")
+
+    assert script.main(["--dry-run", "--csv", str(csv_path)]) == 0
+
+    out = capsys.readouterr().out.splitlines()
+    assert "ARIS	set	theme=gold_silver" in out
+    assert "NUAG	not-on-watchlist" in out
+    assert out[-1] == "set=1 unchanged=5 missing=1"
+    with get_db() as conn:
+        assert conn.execute("SELECT theme FROM watchlist WHERE ticker = 'ARIS'").fetchone()[0] == ""
