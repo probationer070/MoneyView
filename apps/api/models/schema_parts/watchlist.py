@@ -17,6 +17,14 @@ class WatchlistItem(BaseModel):
     weight: float = Field(default=0.0, ge=0.0, le=1.0)
 
 
+class WatchlistTheme(BaseModel):
+    """One entry in the checked-in theme list. `id` is the stored key; `ko`/`en` are labels."""
+
+    id: str
+    ko: str
+    en: str
+
+
 class WatchlistGroupUpdate(BaseModel):
     """Body for moving one watchlist row between groups.
 

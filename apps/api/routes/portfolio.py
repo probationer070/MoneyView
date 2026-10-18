@@ -20,6 +20,7 @@ from apps.api.models.schemas import (
     WatchlistResyncResult,
     WatchlistSyncStatus,
     WatchlistSyncResult,
+    WatchlistTheme,
 )
 from apps.api.compute.client import get_compute_client
 from apps.api.compute.errors import ComputeError
@@ -43,6 +44,7 @@ from apps.api.services.watchlist_seed import (
 )
 from apps.api.services.watchlist_sync import service as watchlist_sync
 from apps.api.services.watchlist_sync import store as watchlist_sync_store
+from apps.api.services.watchlist_themes import load_themes
 
 _API_ROOT = Path(__file__).resolve().parents[1]
 _WATCHLIST_JSON = _API_ROOT / "services" / "webscrap" / "stock_targets.json"
@@ -306,6 +308,13 @@ def get_watchlist_sync_metadata():
 def get_watchlist_peer_sync():
     """Last recorded peer-sync attempt. Read-only: it never triggers a sync (spec §2)."""
     return APIResponse(data=watchlist_sync.current_status())
+
+
+# Declared before the `/watchlist/{ticker}` routes so "themes" is not read as a ticker.
+@router.get("/watchlist/themes", response_model=List[WatchlistTheme])
+def get_watchlist_themes():
+    """The checked-in theme list, in display order. Labels are ko/en; the id is the stored key."""
+    return load_themes()
 
 
 @router.delete("/watchlist/{ticker}")
