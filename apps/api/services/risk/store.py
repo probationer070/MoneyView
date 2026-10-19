@@ -13,15 +13,44 @@ Storage choices the spec leaves open:
 from __future__ import annotations
 
 import json
+import threading
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
-from typing import Mapping, Sequence
+from typing import Iterator, Mapping, Sequence
 
 from apps.api.services.db import get_db
 from packages.core_finance.risk_signals.alerts import ThemeStint
 from packages.core_finance.risk_signals.decks import CandidateCard, CrashCard
 from packages.core_finance.risk_signals.evaluate import DayResult
 
+
+# get_db() opens a new connection per call, so it does not nest; a transaction shares one.
+_tx = threading.local()
+
+
+@contextmanager
+def _db() -> Iterator:
+    conn = getattr(_tx, "conn", None)
+    if conn is not None:
+        yield conn
+        return
+    with get_db() as own:
+        yield own
+
+
+@contextmanager
+def transaction() -> Iterator[None]:
+    """Every store call inside (this thread) commits together or not at all. Nested calls join it."""
+    if getattr(_tx, "conn", None) is not None:
+        yield
+        return
+    with get_db() as conn:  # commits on success, rolls back on an exception
+        _tx.conn = conn
+        try:
+            yield
+        finally:
+            _tx.conn = None
 
 @dataclass(frozen=True)
 class StoredStint:
@@ -101,7 +130,7 @@ def save_day(result: DayResult, version: str, origin: str, coverage: float, eval
         for wid, (state, value, observed) in result.warnings.items()
     }
     blob = {"warnings": warnings, "on_count": result.on_count, "w1_proxy": result.w1_proxy}
-    with get_db() as conn:
+    with _db() as conn:
         conn.execute(
             """INSERT OR REPLACE INTO risk_daily
                (date, rules_version, origin, warnings_json, confirming_json, sox_confirming,
@@ -114,14 +143,14 @@ def save_day(result: DayResult, version: str, origin: str, coverage: float, eval
 
 
 def last_evaluated(version: str) -> date | None:
-    with get_db() as conn:
+    with _db() as conn:
         row = conn.execute("SELECT MAX(date) FROM risk_daily WHERE rules_version = ?", (version,)).fetchone()
     return _date(row[0])
 
 
 def insert_alert(start: date, trigger: Sequence[str], version: str, origin: str,
                  primary_theme: str, w1_proxy: bool) -> int:
-    with get_db() as conn:
+    with _db() as conn:
         cur = conn.execute(
             """INSERT INTO risk_alerts
                (origin, rules_version, status, start_date, primary_theme, w1_proxy, trigger_json, created_at)
@@ -133,7 +162,7 @@ def insert_alert(start: date, trigger: Sequence[str], version: str, origin: str,
 
 
 def close_alert(alert_id: int, release: date, reason: str) -> None:
-    with get_db() as conn:
+    with _db() as conn:
         conn.execute(
             "UPDATE risk_alerts SET status = 'released', release_date = ?, release_reason = ? WHERE id = ?",
             (release.isoformat(), reason, alert_id),
@@ -142,7 +171,7 @@ def close_alert(alert_id: int, release: date, reason: str) -> None:
 
 def upsert_stint(alert_id: int, stint: ThemeStint, dd_at_join: float | None,
                  outcome: Mapping[str, float | None]) -> None:
-    with get_db() as conn:
+    with _db() as conn:
         conn.execute(
             """INSERT INTO risk_alert_themes
                (alert_id, theme, via, joined_date, left_date, dd20_at_join, fwd5, fwd10, fwd20, max_dd10,
@@ -160,7 +189,7 @@ def upsert_stint(alert_id: int, stint: ThemeStint, dd_at_join: float | None,
 
 def replace_cards(alert_id: int, snapshot: str, deck: str,
                   cards: Sequence[CrashCard | CandidateCard], as_of: date) -> None:
-    with get_db() as conn:
+    with _db() as conn:
         conn.execute(
             "DELETE FROM risk_alert_cards WHERE alert_id = ? AND snapshot = ? AND deck = ?",
             (alert_id, snapshot, deck),
@@ -184,7 +213,7 @@ def replace_cards(alert_id: int, snapshot: str, deck: str,
 def update_card_outcomes(alert_id: int, snapshot: str, deck: str, ticker: str,
                          outcome: Mapping[str, float | None]) -> None:
     """Write fwd5/fwd10/fwd20 of one card; keys absent from `outcome` are written as NULL."""
-    with get_db() as conn:
+    with _db() as conn:
         conn.execute(
             """UPDATE risk_alert_cards SET fwd5 = ?, fwd10 = ?, fwd20 = ?
                WHERE alert_id = ? AND snapshot = ? AND deck = ? AND ticker = ?""",
@@ -215,7 +244,7 @@ def _hydrate(conn, row) -> StoredAlert:
 
 
 def open_alert(version: str) -> StoredAlert | None:
-    with get_db() as conn:
+    with _db() as conn:
         row = conn.execute(
             "SELECT * FROM risk_alerts WHERE rules_version = ? AND status = 'open' "
             "ORDER BY start_date DESC, id DESC LIMIT 1", (version,)).fetchone()
@@ -229,18 +258,18 @@ def list_alerts(version: str | None, origin: str, limit: int) -> list[StoredAler
         params.append(version)
     sql += " ORDER BY start_date DESC, id DESC LIMIT ?"
     params.append(limit)
-    with get_db() as conn:
+    with _db() as conn:
         return [_hydrate(conn, row) for row in conn.execute(sql, params).fetchall()]
 
 
 def get_alert(alert_id: int) -> StoredAlert | None:
-    with get_db() as conn:
+    with _db() as conn:
         row = conn.execute("SELECT * FROM risk_alerts WHERE id = ?", (alert_id,)).fetchone()
         return _hydrate(conn, row) if row else None
 
 
 def latest_day(version: str) -> StoredDay | None:
-    with get_db() as conn:
+    with _db() as conn:
         row = conn.execute(
             "SELECT * FROM risk_daily WHERE rules_version = ? ORDER BY date DESC LIMIT 1", (version,)).fetchone()
     if row is None:
@@ -254,19 +283,19 @@ def latest_day(version: str) -> StoredDay | None:
 
 
 def get_state(key: str) -> str | None:
-    with get_db() as conn:
+    with _db() as conn:
         row = conn.execute("SELECT value FROM risk_state WHERE key = ?", (key,)).fetchone()
     return row["value"] if row else None
 
 
 def set_state(key: str, value: str) -> None:
-    with get_db() as conn:
+    with _db() as conn:
         conn.execute("INSERT OR REPLACE INTO risk_state (key, value) VALUES (?, ?)", (key, value))
 
 
 def versions() -> set[str]:
     """Every rules version with an alert or a risk_daily row."""
-    with get_db() as conn:
+    with _db() as conn:
         rows = conn.execute(
             "SELECT rules_version FROM risk_alerts UNION SELECT rules_version FROM risk_daily").fetchall()
     return {r[0] for r in rows}
@@ -274,7 +303,7 @@ def versions() -> set[str]:
 
 def purge_version(version: str, *, include_live: bool = False) -> None:
     """Delete a version's backfill alerts (themes and cards cascade) and its risk_daily rows."""
-    with get_db() as conn:
+    with _db() as conn:
         if include_live:
             conn.execute("DELETE FROM risk_alerts WHERE rules_version = ?", (version,))
         else:

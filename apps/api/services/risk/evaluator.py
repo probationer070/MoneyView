@@ -232,7 +232,7 @@ def run_backfill(now: datetime, *, inputs: RiskInputs | None = None, loaded: Loa
         store.set_state(key, "done")
         logger.info("risk.backfill_done version=%s days=%s alerts=%s", version, len(res.days),
                     len(res.closed) + (res.open is not None))
-    except AssertionError:
+    except AssertionError:  # the test network guard raises it; recording "failed" would hide that
         raise
     except Exception:  # noqa: BLE001 - a failed backfill is recorded and retried, never raised
         logger.exception("risk.backfill_failed version=%s", version)
@@ -263,19 +263,23 @@ def evaluate_pending(now: datetime, *, inputs: RiskInputs | None = None,
         stored = store.open_alert(version)
         res = _evaluate(day_inputs, rules, day, day, _rebuild(stored) if stored is not None else None)
         result = res.days[0]
-        store.save_day(result, version, "live", coverage(inputs.closes, inputs.themes, day, rules), now.isoformat())
-        if stored is None and res.open is not None:
-            alert_id = _open_new(res.open, result, version, "live", res.levels, day_inputs, rules)
+        # One transaction per day, risk_daily last: a failure leaves the day pending with no partial alert.
+        with store.transaction():
+            alert_id = None
+            if stored is None and res.open is not None:
+                alert_id = _open_new(res.open, result, version, "live", res.levels, day_inputs, rules)
+            elif stored is not None:
+                alert_id = stored.id
+            if alert_id is not None:
+                alert = res.closed[0] if res.closed else res.open
+                _write_stints(alert_id, alert.stints, res.levels, rules)
+                _write_cards(alert_id, "latest", day_inputs, day, rules)
+                if res.closed:
+                    store.close_alert(alert_id, res.closed[0].release, res.closed[0].reason)
+            store.save_day(result, version, "live", coverage(inputs.closes, inputs.themes, day, rules),
+                           now.isoformat())
+        if stored is None and alert_id is not None:
             opened.append(alert_id)
-        elif stored is not None:
-            alert_id = stored.id
-        else:
-            continue
-        alert = res.closed[0] if res.closed else res.open
-        _write_stints(alert_id, alert.stints, res.levels, rules)
-        _write_cards(alert_id, "latest", day_inputs, day, rules)
-        if res.closed:
-            store.close_alert(alert_id, day, res.closed[0].reason)
     if res is not None:
         _fill_outcomes(version, res.levels, _on_calendar(day_inputs))
     return opened

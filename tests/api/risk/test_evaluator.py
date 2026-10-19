@@ -101,6 +101,7 @@ def test_backfill_then_live_continue_open_alert(sweeps):
 
     assert store.list_alerts("test0001", "live", 10) == []
     after = store.get_alert(alert.id)
+    assert after is not None
     assert (after.origin, after.status) == ("backfill", "open")
     origins = _daily_origin("test0001")
     assert {d: o for d, o in origins.items() if d >= date(2026, 10, 12)} == {
@@ -219,6 +220,7 @@ def test_rules_change_closes_old_live_and_rebackfills(sweeps):
     evaluator.run_backfill(NOW + timedelta(days=1), inputs=inp, loaded=new)
 
     kept = store.get_alert(live.id)
+    assert kept is not None, "the old version's live alert was purged"
     assert (kept.status, kept.release_date, kept.release_reason) == ("released", LAST_DAY, "rules_changed")
     assert store.list_alerts("old00000", "backfill", 10) == []
     assert store.last_evaluated("old00000") is None
@@ -258,3 +260,36 @@ def test_outcomes_filled_later(sweeps):
         want = (col[pd.Timestamp("2026-10-15")] / col[pd.Timestamp(OPEN_DAY)] - 1) * 100
         assert c.fwd5 == pytest.approx(want), c.ticker
         assert c.fwd10 is None
+
+
+def test_failed_live_day_is_retried_whole(sweeps, monkeypatch):
+    """Catches a live day whose risk_daily row is written before (or outside one transaction with) its
+    alert writes: a failure on the open day would mark the day evaluated with the alert missing or left
+    without its start cards, and the retry would not redo it."""
+    L = _loaded("test0001")
+    inp = _inputs(L)
+    store.set_state("live_start:test0001", OPEN_DAY.isoformat())
+    evaluator.run_backfill(NOW, inputs=inp, loaded=L)
+    backfilled = store.last_evaluated("test0001")
+    real, failed = store.replace_cards, []
+
+    def flaky(alert_id, snapshot, deck, cards, as_of):
+        if snapshot == "start" and not failed:
+            failed.append(as_of)
+            raise RuntimeError("disk full")
+        real(alert_id, snapshot, deck, cards, as_of)
+
+    monkeypatch.setattr(store, "replace_cards", flaky)
+    with pytest.raises(RuntimeError):
+        evaluator.evaluate_pending(NOW, inputs=inp, loaded=L)
+    assert failed == [OPEN_DAY]
+    assert store.last_evaluated("test0001") == backfilled
+    assert store.list_alerts("test0001", "live", 10) == []
+
+    opened = evaluator.evaluate_pending(NOW, inputs=inp, loaded=L)
+
+    [alert] = store.list_alerts("test0001", "live", 10)
+    assert opened == [alert.id] and alert.start_date == OPEN_DAY
+    assert alert.cards[("start", "crash")] and alert.cards[("start", "crash")][0].as_of == OPEN_DAY
+    assert store.last_evaluated("test0001") == LAST_DAY
+    assert set(_daily_origin("test0001").values()) == {"backfill", "live"}
