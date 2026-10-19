@@ -227,7 +227,7 @@ def select_alert_news(alert: StoredAlert, today: date, rules: RiskRules) -> Aler
             "SELECT MIN(substr(published_date, 1, 10)) FROM news WHERE topic != '' AND published_date != ''"
         ).fetchone()[0]
 
-    items: list[NewsItem] = []
+    unique: list[NewsItem] = []
     seen_urls: set[str] = set()
     seen_titles: set[str] = set()
     for item in candidates:
@@ -237,9 +237,14 @@ def select_alert_news(alert: StoredAlert, today: date, rules: RiskRules) -> Aler
         if item.url:
             seen_urls.add(item.url)
         seen_titles.add(title_key)
-        items.append(item)
-        if len(items) == news.max_items:
-            break
+        unique.append(item)
+
+    # Both kinds appear: macro takes at most half the slots, industry the rest; a side that
+    # runs short hands its unused slots to the other. Macro is listed first.
+    macro = [i for i in unique if i.kind == "macro"]
+    industry = [i for i in unique if i.kind == "industry"]
+    macro_take = min(len(macro), max(news.max_items // 2, news.max_items - len(industry)))
+    items = macro[:macro_take] + industry[: news.max_items - macro_take]
 
     note = None
     if earliest is not None and end < earliest:
@@ -269,14 +274,12 @@ _MONTHLY_TOPICS = {"cpi", "pce", "jobs"}
 
 
 def macro_figures(
-    alert: StoredAlert,
     fred: Mapping[str, pd.Series],
     as_of: date,
     *,
     loaded: LoadedRules | None = None,
 ) -> list[MacroFigure]:
-    """`alert` is accepted for the caller's symmetry with select_alert_news; the figures depend
-    only on `as_of`. A series with fewer than two known values is left out."""
+    """A series with fewer than two known values is left out."""
     cpi_day = (loaded or get_rules()).rules.w5.cpi_known_day
     cutoff = pd.Timestamp(as_of)
     figures: list[MacroFigure] = []

@@ -141,23 +141,36 @@ def test_select_order_macro_first_and_dedupe():
     assert (got.items[0].topic, got.items[3].theme, got.items[4].ticker) == ("cpi", "ai_semis", "NVDA")
 
 
-def test_select_window_and_cap():
-    """Catches a wrong window (start - days_before .. release) and a missing max_items cap."""
-    for i in range(35):
-        _save(f"CPI {i}", f"https://x/{i}", "2026-10-10", topic="macro:cpi")
+def test_select_window():
+    """Catches a wrong window (start - days_before .. release or today)."""
     _save("too early", "https://x/e", "2026-09-30", topic="macro:cpi")
-    _save("after release", "https://x/l", "2026-10-15", topic="macro:cpi")
     _save("edge start", "https://x/s", "2026-10-01", topic="macro:oil")  # start 10-08 minus 7 = 10-01
+    _save("in window", "https://x/w", "2026-10-12", topic="macro:cpi")
+    _save("after release", "https://x/l", "2026-10-15", topic="macro:cpi")
     got = news.select_alert_news(_alert(release=date(2026, 10, 12)), date(2026, 10, 19), RULES)
-    assert len(got.items) == RULES.news.max_items == 30
-    assert got.shortfall == 0
-    titles = {i.title for i in got.items}
-    assert "after release" not in titles
-    only = news.select_alert_news(_alert(release=date(2026, 10, 12), themes=("ai_semis",)), date(2026, 10, 19),
-                                  RULES.model_copy(update={"news": RULES.news.model_copy(update={"max_items": 100})}))
-    only_titles = {i.title for i in only.items}
-    assert "edge start" in only_titles
-    assert not {"too early", "after release"} & only_titles
+    assert {i.title for i in got.items} == {"edge start", "in window"}
+
+
+def _fill(n_macro, n_industry):
+    for i in range(n_macro):
+        _save(f"CPI {i}", f"https://x/m{i}", "2026-10-10", topic="macro:cpi")
+    for i in range(n_industry):
+        _save(f"Theme {i}", f"https://x/i{i}", "2026-10-10", topic="theme:ai_semis")
+    got = news.select_alert_news(_alert(), date(2026, 10, 19), RULES)
+    kinds = [i.kind for i in got.items]
+    return kinds.count("macro"), kinds.count("industry"), kinds
+
+
+@pytest.mark.parametrize("n_macro, n_industry, expect", [
+    (35, 5, (25, 5)),     # industry short: its unused slots go to macro
+    (35, 30, (15, 15)),   # both plentiful: macro capped at half
+    (3, 40, (3, 27)),     # macro short: its unused slots go to industry
+])
+def test_select_mixes_macro_and_industry(n_macro, n_industry, expect):
+    """Catches no half cap on macro (industry starved), no backfill to macro, no backfill to industry."""
+    macro, industry, kinds = _fill(n_macro, n_industry)
+    assert (macro, industry) == expect
+    assert kinds == ["macro"] * macro + ["industry"] * industry
 
 
 def test_shortfall_when_under_ten():
@@ -196,20 +209,20 @@ def test_macro_figure_respects_release_day():
     cpi = _levels(("2026-04-01", 100), ("2026-05-01", 101), ("2026-06-01", 102.01), ("2026-07-01", 103.0301))
     dgs = _levels(("2026-09-28", 4.0), ("2026-09-29", 4.1), ("2026-09-30", 4.3))
     fred = {"CPIAUCSL": cpi, "DGS10": dgs}
-    before = news.macro_figures(_alert(), fred, date(2026, 8, day - 1))  # Jul CPI is out on Aug `day`
+    before = news.macro_figures(fred, date(2026, 8, day - 1))  # Jul CPI is out on Aug `day`
     cpi_before = next(f for f in before if f.series == "CPIAUCSL")
     assert cpi_before.latest["period"] == "2026-06" and cpi_before.prior["period"] == "2026-05"
-    after = news.macro_figures(_alert(), fred, date(2026, 8, day))
+    after = news.macro_figures(fred, date(2026, 8, day))
     cpi_after = next(f for f in after if f.series == "CPIAUCSL")
     assert (cpi_after.kind, cpi_after.latest["period"], cpi_after.prior["period"]) == ("mm_pct", "2026-07", "2026-06")
     assert cpi_after.latest["value"] == pytest.approx(1.0) and cpi_after.topic == "cpi"
     assert cpi_after.label == {"ko": "CPI", "en": "CPI"}
-    dgs_fig = next(f for f in news.macro_figures(_alert(), fred, date(2026, 10, 1)) if f.series == "DGS10")
+    dgs_fig = next(f for f in news.macro_figures(fred, date(2026, 10, 1)) if f.series == "DGS10")
     assert (dgs_fig.kind, dgs_fig.latest, dgs_fig.prior) == (
         "level", {"period": "2026-09-30", "value": 4.3}, {"period": "2026-09-29", "value": 4.1})
-    same_day = news.macro_figures(_alert(), fred, date(2026, 9, 30))  # 09-30 value known from 10-01
+    same_day = news.macro_figures(fred, date(2026, 9, 30))  # 09-30 value known from 10-01
     assert next(f for f in same_day if f.series == "DGS10").latest["period"] == "2026-09-29"
-    assert not [f for f in news.macro_figures(_alert(), {}, date(2026, 10, 1))]
+    assert not [f for f in news.macro_figures({}, date(2026, 10, 1))]
 
 
 def test_crawler_ko_url(monkeypatch):
