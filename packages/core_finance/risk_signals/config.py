@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from pydantic import BaseModel, ConfigDict, PositiveFloat, PositiveInt, model_validator
+from pydantic import BaseModel, ConfigDict, Field, PositiveFloat, PositiveInt, model_validator
 
 
 class _Strict(BaseModel):
@@ -61,7 +61,7 @@ class W5(_Strict):
     cpi_series: str
     pce_series: str
     mm_pct: PositiveFloat
-    cpi_known_day: PositiveInt
+    cpi_known_day: int = Field(gt=0, le=28)
 
 
 class W7(_Strict):

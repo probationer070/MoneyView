@@ -36,13 +36,13 @@ labels:
   W2: {ko: 금리, en: Rates}
   W3: {ko: 유가, en: Oil}
   W4: {ko: 연준 인상, en: Fed hike}
-  W5: {ko: 물가 과열, en: Hot inflation}
-  W7: {ko: 시장 폭 축소, en: Narrowing breadth}
+  W5: {ko: 근원 물가의 전월 대비 상승률이 기준 이상입니다., en: Core inflation month-over-month reached or exceeded the threshold.}
+  W7: {ko: "반도체 지수(SOX)가 동일가중 S&P(RSP)보다 약해져 SOX/RSP 비율이 60일 고점보다 5% 넘게 낮은데, SOX 자체는 60일 고점의 5% 안에 있다.", en: "Semiconductors (SOX) are lagging the equal-weight S&P (RSP): the SOX/RSP ratio is more than 5% below its 60-day high while SOX itself is within 5% of its 60-day high."}
 
 rule_text:
   W1: {ko: 하이일드 스프레드가 급등했거나 높은 수준입니다., en: The high-yield spread jumped or sits at a high level.}
   W2: {ko: 10년 금리가 높은 수준이거나 빠르게 올랐습니다., en: The 10-year yield is high or rose quickly.}
   W3: {ko: 브렌트유가 짧은 기간에 크게 올랐습니다., en: Brent oil rose sharply over a short window.}
   W4: {ko: 연준이 최근 정책금리를 인상했습니다., en: The Fed raised its policy rate recently.}
-  W5: {ko: 근원 물가의 전월 대비 상승률이 기준을 넘었습니다., en: Core inflation month-over-month exceeded the threshold.}
-  W7: {ko: 동일가중 대비 시장 비율이 떨어지는 동안 반도체는 고점 부근입니다., en: The equal-weight ratio fell while semiconductors stay near their high.}
+  W5: {ko: 근원 물가의 전월 대비 상승률이 기준 이상입니다., en: Core inflation month-over-month reached or exceeded the threshold.}
+  W7: {ko: "반도체 지수(SOX)가 동일가중 S&P(RSP)보다 약해져 SOX/RSP 비율이 60일 고점보다 5% 넘게 낮은데, SOX 자체는 60일 고점의 5% 안에 있다.", en: "Semiconductors (SOX) are lagging the equal-weight S&P (RSP): the SOX/RSP ratio is more than 5% below its 60-day high while SOX itself is within 5% of its 60-day high."}

@@ -42,7 +42,7 @@ def load_rules(path: Path | None = None) -> LoadedRules:
     normalized = raw.replace(b"\r\n", b"\n")
     try:
         rules = RiskRules.model_validate(yaml.safe_load(normalized))
-    except ValidationError as exc:
+    except (ValidationError, yaml.YAMLError) as exc:
         raise ValueError(f"invalid risk rules: {exc}") from exc
     known_themes = theme_ids()
     for key in ("semis_themes", "excluded_themes"):

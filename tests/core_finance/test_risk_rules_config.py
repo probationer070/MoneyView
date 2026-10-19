@@ -60,3 +60,16 @@ def test_no_w6(tmp_path):
     path = _variant(tmp_path, "w7:", "w6: {x: 1}\nw7:")
     with pytest.raises(ValueError, match="w6"):
         load_rules(path)
+
+
+def test_malformed_yaml_raises_value_error(tmp_path):
+    path = tmp_path / "rules.yaml"
+    path.write_text("price: {drop_pct: 4.0\n", encoding="utf-8")
+    with pytest.raises(ValueError):
+        load_rules(path)
+
+
+def test_cpi_known_day_bounded(tmp_path):
+    path = _variant(tmp_path, "cpi_known_day: 15", "cpi_known_day: 29")
+    with pytest.raises(ValueError, match="cpi_known_day"):
+        load_rules(path)
