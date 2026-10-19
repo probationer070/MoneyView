@@ -20,12 +20,13 @@ Writers: `record_pending` from the watchlist delete route, the import, and watch
 
 ## What is cleaned, and what is kept
 
-`watchlist_cleanup.CLEANUP_TABLES` lists four tables. A ticker's rows in them are deleted:
+`watchlist_cleanup.CLEANUP_TABLES` lists four cache tables and one marker. A ticker's rows in them are deleted:
 
 - `stocks` (daily bars);
 - `news` rows attributed to the ticker (market-wide news with a NULL or empty ticker is never touched);
 - `corporate_quote_facts`;
-- `acquisition_state` rows for the ticker, for the per-ticker data classes except `statements`.
+- `acquisition_state` rows for the ticker, for the per-ticker data classes except `statements`;
+- the risk engine's `risk_state` key `deep_history:<TICKER>`, so a re-added ticker fetches its deep history again.
 
 Kept, never deleted:
 

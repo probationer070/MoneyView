@@ -41,6 +41,8 @@ CLEANUP_TABLES: tuple[tuple[str, str], ...] = (
     ("news", "ticker = ?"),
     ("corporate_quote_facts", "ticker = ?"),
     ("acquisition_state", f"subject = ? AND data_class IN ({_CLASS_LIST})"),
+    # The risk engine's "deep history fetched" marker: with the bars gone it must be fetched again.
+    ("risk_state", "key = 'deep_history:' || ?"),
 )
 
 # Tickers present in a cache table. A NULL or '' news ticker is market-wide news, not attributed

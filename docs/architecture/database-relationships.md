@@ -222,7 +222,7 @@ Declared foreign keys: **5**. Logical references: **27** (L1-L27).
 | L22 | `dataset_metadata[watchlist_sync_pc_id].source` -> `watchlist.updated_by`, `record_sync.updated_by/removed_by` | logical (author id) | none | `watchlist_sync/store.py:18-31`; `records_sync/service.py:53` |
 | L23 | `record_sync(kind='corporate_metrics', uid)` -> `corporate_metrics.ticker` | logical | no tombstones: the kind never deletes | `records_sync/kinds.py:175-184` |
 | L24 | `record_sync(kind='corporate_companies', uid)` -> `corporate_companies.ticker` | logical | same | `records_sync/kinds.py:186-192` |
-| L25 | `cleanup_pending.ticker` -> that ticker's rows in `stocks`, `news`, `corporate_quote_facts`, `acquisition_state` | logical (deferred deletion) | rows deleted 30 days after `removed_at` unless a reference names the ticker | `watchlist_cleanup.py:39` (`CLEANUP_TABLES`), `:149` |
+| L25 | `cleanup_pending.ticker` -> that ticker's rows in `stocks`, `news`, `corporate_quote_facts`, `acquisition_state`, and `risk_state` key `deep_history:<ticker>` | logical (deferred deletion) | rows deleted 30 days after `removed_at` unless a reference names the ticker | `watchlist_cleanup.py:39` (`CLEANUP_TABLES`), `:149` |
 | L26 | `signal_manual_inputs.iso_week` -> `signal_snapshots.iso_week`; `rule_id` -> a manual rule in `signals/rules.yaml` | logical | none; an input saved for a week with no snapshot applies at that week's next run | `signals/engine.py:89` |
 | L27 | `watchlist.theme` -> `id` in `apps/api/services/watchlist_themes.yaml` | logical (file, not a table) | none; an id no longer in the file stays in the DB and displays as other | `routes/portfolio.py:290-320` validates on write; `watchlist_themes.py` `theme_ids`; peer sync does not validate |
 
