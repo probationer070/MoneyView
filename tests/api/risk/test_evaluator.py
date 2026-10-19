@@ -367,3 +367,29 @@ def test_live_continuation_closes_like_one_pass(sweeps):
     assert sorted((s.theme, s.joined_date, s.left_date) for s in after.stints) == sorted(
         (s.theme, s.joined, s.left) for s in record.stints)
     assert all(a.start_date > record.release for a in store.list_alerts("test0001", "live", 10))
+
+
+def _waits() -> dict[str, str]:
+    with get_db() as conn:
+        rows = conn.execute("SELECT key, value FROM risk_state WHERE key LIKE 'coverage%'").fetchall()
+    return {r["key"]: r["value"] for r in rows}
+
+
+def test_coverage_wait_recorded_only_for_the_newest_day(sweeps):
+    """Catches a wait key written for every unevaluable day walked over (10-14 and 10-15 here), or a
+    stale wait for an older day left in risk_state."""
+    L = _loaded("test0001")
+    with get_db() as conn:
+        themed = [r["ticker"] for r in conn.execute(
+            "SELECT ticker FROM watchlist WHERE theme NOT IN ('', 'defensives_other') ORDER BY ticker")]
+        conn.executemany("DELETE FROM stocks WHERE ticker = ? AND date = ?",
+                         [(t, d) for t in themed[: len(themed) // 5] for d in ("2026-10-14", "2026-10-15", "2026-10-16")])
+    inp = _inputs(L)
+    store.set_state("live_start:test0001", "2026-10-12")
+    evaluator.run_backfill(NOW, inputs=inp, loaded=L)
+    store.set_state("coverage_wait:2026-10-01", "2026-10-01T01:00:00+00:00")
+
+    evaluator.evaluate_pending(NOW, inputs=inp, loaded=L)
+
+    assert store.last_evaluated("test0001") == date(2026, 10, 13)
+    assert _waits() == {"coverage_wait:2026-10-16": NOW.isoformat()}

@@ -6,7 +6,8 @@ State keys in risk_state, per rules version <v>:
   for "done", and the next run_backfill purges the version (live alerts too) and recomputes it, after
   which live days replay from the fixed live_start.
 - `live_start:<v>`: the first day evaluated live (YYYY-MM-DD). Backfill covers eval_start up to the day before.
-- `coverage_wait:<YYYY-MM-DD>`: UTC ISO timestamp when waiting for that day's bars began.
+- `coverage_wait:<YYYY-MM-DD>`: UTC ISO timestamp when waiting for that day's bars began. Kept only for
+  the newest candidate day; waits for older days are deleted.
 
 Backfill and live run the same pure `evaluate_range`. A live day runs it over the inputs truncated to
 that day with start = end = day and the open alert rebuilt from the store, so its windows match the
@@ -35,6 +36,7 @@ logger = setup_logger(__name__)
 RULES_CHANGED = "rules_changed"
 BACKFILL_COMPLETE = frozenset({"done", "degraded"})  # live evaluation runs; backfill alerts are visible
 _NO_LIMIT = -1  # SQLite LIMIT -1 = every row
+_WAIT = "coverage_wait:"
 _STINT_FIELDS = ("fwd5", "fwd10", "fwd20", "max_dd10")
 _CARD_FIELDS = ("fwd5", "fwd10", "fwd20")
 
@@ -42,26 +44,35 @@ _CARD_FIELDS = ("fwd5", "fwd10", "fwd20")
 # ---------------------------------------------------------------- evaluable day
 
 
-def evaluable_day(inputs: RiskInputs, day: date, now: datetime, rules: RiskRules) -> tuple[bool, float]:
+def evaluable_day(inputs: RiskInputs, day: date, now: datetime, rules: RiskRules, *,
+                  record_wait: bool = True) -> tuple[bool, float]:
     """(ok, coverage). ^SOX and RSP bars are always required; the coverage share is waived once
-    `coverage_wait:<day>` is more than wait_hours old. A day that is not ok records its wait start."""
+    `coverage_wait:<day>` is more than wait_hours old. A day that is not ok records its wait start
+    when `record_wait`."""
     share = coverage(inputs.closes, inputs.themes, day, rules)
     stamp = pd.Timestamp(day)
     has_bars = stamp in inputs.sox.index and stamp in inputs.rsp.index
     if has_bars and share >= rules.coverage.min_share:
         return True, share
-    key = f"coverage_wait:{day.isoformat()}"
+    key = f"{_WAIT}{day.isoformat()}"
     started = store.get_state(key)
     if started is None:
-        store.set_state(key, now.isoformat())
+        if record_wait:
+            store.set_state(key, now.isoformat())
         return False, share
     waited = now - datetime.fromisoformat(started)
     return has_bars and waited > timedelta(hours=rules.coverage.wait_hours), share
 
 
 def _latest_evaluable(inputs: RiskInputs, days: list[date], now: datetime, rules: RiskRules) -> date | None:
+    """Newest ok day of `days`. Only the newest candidate's wait is recorded, and waits for older days
+    are deleted: the newest day's waiver releases every pending day before it."""
+    if not days:
+        return None
+    newest = days[-1]
+    store.delete_states_below(_WAIT, newest.isoformat())
     for day in reversed(days):
-        if evaluable_day(inputs, day, now, rules)[0]:
+        if evaluable_day(inputs, day, now, rules, record_wait=day == newest)[0]:
             return day
     return None
 
