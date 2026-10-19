@@ -47,6 +47,11 @@ def _fred_series(observations) -> pd.Series:
     )
 
 
+def cached_fred() -> dict[str, pd.Series]:
+    """Every engine FRED series from the local cache only; never the network."""
+    return {sid: _fred_series(store.load_cache(sid, FRED_START)) for sid in RISK_FRED_SERIES}
+
+
 def load_inputs(
     *,
     through: date | None = None,

@@ -268,18 +268,36 @@ def get_alert(alert_id: int) -> StoredAlert | None:
         return _hydrate(conn, row) if row else None
 
 
-def latest_day(version: str) -> StoredDay | None:
-    with _db() as conn:
-        row = conn.execute(
-            "SELECT * FROM risk_daily WHERE rules_version = ? ORDER BY date DESC LIMIT 1", (version,)).fetchone()
-    if row is None:
-        return None
+def _stored_day(row) -> StoredDay:
     blob = json.loads(row["warnings_json"])
     return StoredDay(
         date=date.fromisoformat(row["date"]), rules_version=row["rules_version"], origin=row["origin"],
         warnings=blob["warnings"], on_count=blob["on_count"], w1_proxy=blob["w1_proxy"],
         confirming=json.loads(row["confirming_json"]), sox_confirming=bool(row["sox_confirming"]),
         cap_share=row["cap_share"], bars_coverage=row["bars_coverage"], evaluated_at=row["evaluated_at"])
+
+
+def latest_day(version: str) -> StoredDay | None:
+    with _db() as conn:
+        row = conn.execute(
+            "SELECT * FROM risk_daily WHERE rules_version = ? ORDER BY date DESC LIMIT 1", (version,)).fetchone()
+    return _stored_day(row) if row else None
+
+
+def get_day(version: str, day: date) -> StoredDay | None:
+    with _db() as conn:
+        row = conn.execute(
+            "SELECT * FROM risk_daily WHERE rules_version = ? AND date = ?", (version, day.isoformat())).fetchone()
+    return _stored_day(row) if row else None
+
+
+def count_days(version: str, first: date, last: date) -> int:
+    """Evaluated trading days of `version` from `first` to `last`, both included."""
+    with _db() as conn:
+        row = conn.execute(
+            "SELECT COUNT(*) FROM risk_daily WHERE rules_version = ? AND date BETWEEN ? AND ?",
+            (version, first.isoformat(), last.isoformat())).fetchone()
+    return int(row[0])
 
 
 def get_state(key: str) -> str | None:

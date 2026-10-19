@@ -45,6 +45,7 @@ from apps.api.routes import (
 from apps.api.services.db import get_db, init_db
 from apps.api.services.market_data import MarketDataService
 from apps.api.routes.signals import router as signals_router
+from apps.api.routes.risk import router as risk_router
 
 configure_logging()
 logger = setup_logger(__name__)
@@ -238,6 +239,7 @@ app.include_router(valuation_router, prefix="/api/v1/valuation", tags=["Valuatio
 app.include_router(decisions_router, prefix="/api/v1/decisions", tags=["Decisions"])
 app.include_router(sync_router, prefix="/api/v1/sync", tags=["Sync"])
 app.include_router(signals_router, prefix="/api/v1/signals", tags=["Signals"])
+app.include_router(risk_router, prefix="/api/v1/risk", tags=["Risk"])
 
 
 @app.get("/api/v1/health", tags=["Health"])
