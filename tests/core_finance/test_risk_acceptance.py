@@ -89,3 +89,31 @@ def test_day_by_day_equals_batch():
     assert state == batch.open
     assert confirming == {r.day: r.confirming for r in batch.days}
     assert any(confirming.values())  # the walk saw confirmations, so the equality is not vacuous
+
+
+CLOSE_START = date(2026, 3, 2)  # a full window that holds the 2026-03-27 alert's release on 2026-04-07
+
+
+def test_day_by_day_equals_batch_through_a_close():
+    """The walk above never closes an alert. This one does (2026-03-27 open, 2026-04-07 release), and
+    compares closed alerts (release, reason and stints), the open alert, and every day's warnings,
+    on_count and confirming. Catches a live continuation that loses stint state across days (e.g.
+    last_ref reset to joined), closes on a different day, or computes warnings from untruncated inputs."""
+    px, sox, rsp, shares, themes, fred = _inputs()
+    batch = evaluate_range(px, sox, rsp, shares, themes, fred, RULES, start=CLOSE_START, end=END)
+    closed, state, per_day = [], None, {}
+    for d in [r.day for r in batch.days]:
+        ts = pd.Timestamp(d)
+        res = evaluate_range(
+            px.loc[:ts], sox.loc[:ts], rsp.loc[:ts], shares, themes,
+            {k: v.loc[:ts] for k, v in fred.items()}, RULES, start=d, end=d, state=state,
+        )
+        [day] = res.days
+        per_day[d] = (day.warnings, day.on_count, day.confirming)
+        closed += res.closed
+        state = res.open
+    assert [(a.start, a.release) for a in batch.closed] == [(date(2026, 3, 27), date(2026, 4, 7))]
+    assert closed == batch.closed
+    assert state == batch.open
+    assert per_day == {r.day: (r.warnings, r.on_count, r.confirming) for r in batch.days}
+    assert any(v[1] for v in per_day.values())  # warnings were on somewhere, so on_count is compared

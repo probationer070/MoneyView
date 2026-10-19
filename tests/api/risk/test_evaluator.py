@@ -341,3 +341,29 @@ def test_sweep_failure_marks_backfill_degraded(sweeps, monkeypatch, which):
     store.set_state("live_start:test0001", "2026-10-12")
     evaluator.run_backfill(NOW, inputs=_inputs(L), loaded=L)
     assert store.get_state("backfill:test0001") == "degraded"
+
+
+def test_live_continuation_closes_like_one_pass(sweeps):
+    """The backfill leaves the 2026-03-27 alert open at live_start 2026-04-01; live days close it.
+    Catches _rebuild dropping the stored last_ref (the quiet-day count restarts at joined, so themes
+    leave and the alert releases earlier than the one-pass walk), or a live close that writes a
+    different release or stint left dates."""
+    L = _loaded("test0001", eval_start=date(2026, 3, 2))
+    inp = _inputs(L, through=date(2026, 4, 10))
+    store.set_state("live_start:test0001", "2026-04-01")
+    evaluator.run_backfill(NOW, inputs=inp, loaded=L)
+    [alert] = store.list_alerts("test0001", "backfill", 10)
+    assert (alert.start_date, alert.status) == (date(2026, 3, 27), "open")
+    assert any(s.last_ref not in (None, s.joined_date) for s in alert.stints)  # last_ref matters
+
+    evaluator.evaluate_pending(NOW, inputs=inp, loaded=L)
+
+    batch = evaluate_range(inp.closes, inp.sox, inp.rsp, inp.shares, inp.themes, inp.fred, L.rules,
+                           start=L.rules.eval_start, end=date(2026, 4, 10))
+    [record] = [r for r in batch.closed if r.start == date(2026, 3, 27)]
+    after = store.get_alert(alert.id)
+    assert (after.status, after.release_date, after.release_reason) == ("released", record.release, record.reason)
+    assert record.release == date(2026, 4, 7)
+    assert sorted((s.theme, s.joined_date, s.left_date) for s in after.stints) == sorted(
+        (s.theme, s.joined, s.left) for s in record.stints)
+    assert all(a.start_date > record.release for a in store.list_alerts("test0001", "live", 10))
