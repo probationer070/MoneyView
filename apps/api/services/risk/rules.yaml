@@ -46,3 +46,28 @@ rule_text:
   W4: {ko: 연준이 최근 정책금리를 인상했습니다., en: The Fed raised its policy rate recently.}
   W5: {ko: 근원 물가의 전월 대비 상승률이 기준 이상입니다., en: Core inflation month-over-month reached or exceeded the threshold.}
   W7: {ko: "반도체 지수(SOX)가 동일가중 S&P(RSP)보다 약해져 SOX/RSP 비율이 60일 고점보다 5% 넘게 낮은데, SOX 자체는 60일 고점의 5% 안에 있다.", en: "Semiconductors (SOX) are lagging the equal-weight S&P (RSP): the SOX/RSP ratio is more than 5% below its 60-day high while SOX itself is within 5% of its 60-day high."}
+
+surge:
+  ema: 10
+  accel_lag: 3
+  magnitude: {window: 5, std_window: 60, std_min: 40, z: 2.0}
+  accel: {quantile_window: 250, quantile_min: 120, rank: 0.95}
+  breadth: {window: 5, min_pct: 60.0}
+  rsi: {period: 14, cross: 60.0, within: 5, overheated: 80.0}
+  event: {gap: 10, stall: 10, high_window: 20}
+  gate: {cap_share_pct: 20.0, sox_opens: true}
+  live_window_rows: 400
+
+movers: {count: 5}
+
+surge_labels:
+  magnitude: {ko: 상승 크기, en: Move size}
+  accel: {ko: 기울기 급변, en: Slope acceleration}
+  breadth: {ko: 폭, en: Breadth}
+  rsi: {ko: RSI, en: RSI}
+
+surge_rule_text:
+  magnitude: {ko: 최근 5일 상승 폭이 평소 변동의 2배 넘게 큽니다., en: The 5-day rise is more than 2x the usual volatility.}
+  accel: {ko: 상승 기울기가 최근 1년 기준 상위 5% 안으로 급격히 가팔라졌습니다., en: The rising slope steepened into the top 5% of the past year.}
+  breadth: {ko: 최근 5일 동안 오른 종목이 60% 이상입니다., en: At least 60% of members rose over the last 5 days.}
+  rsi: {ko: RSI가 최근 5일 안에 60을 넘어섰고 80 아래입니다., en: RSI crossed above 60 within 5 days and is still below 80.}
