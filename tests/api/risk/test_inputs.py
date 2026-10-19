@@ -70,3 +70,19 @@ def test_coverage_counts_only_trigger_themes():
     assert inputs.coverage(closes.drop(columns="B"), themes, day, RULES) == 1.0
     assert inputs.coverage(closes, {"D": "defensives_other"}, day, RULES) == 0.0
     assert inputs.coverage(closes, themes, date(2026, 10, 17), RULES) == 0.0
+
+
+def test_fetched_fred_keeps_older_cached_rows(monkeypatch):
+    """Catches building the series from the fetch's rolling window (fetched.observations) instead of
+    the accumulated fred_cache: the 2015 HY row exists only in the cache."""
+    store.save_cache("BAMLH0A0HYM2", [Observation(date(2015, 3, 2), 5.1)], "2015-03-03T00:00:00")
+
+    def source(series_id, start):
+        return [Observation(date(2026, 10, 15), 3.0)] if series_id == "BAMLH0A0HYM2" else []
+
+    monkeypatch.setattr(inputs, "fred_source_from_env", lambda: source)
+    got = inputs.load_inputs(fetch_fred=True, now=datetime(2026, 10, 19, tzinfo=UTC))
+    assert got.fred_errors == []
+    hy = got.fred["BAMLH0A0HYM2"]
+    assert list(hy.index) == [pd.Timestamp("2015-03-02"), pd.Timestamp("2026-10-15")]
+    assert list(hy) == [5.1, 3.0]

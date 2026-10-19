@@ -74,7 +74,8 @@ def load_inputs(
                 "WHERE shares_outstanding IS NOT NULL")}
     tickers = [r["ticker"] for r in watch if r["ticker"] not in BENCHMARK_TICKERS]
     rows = [(b["ticker"], b["date"], b["close"]) for b in bars]
-    closes = _wide([r for r in rows if r[0] in set(tickers)], tickers)
+    tracked = set(tickers)
+    closes = _wide([r for r in rows if r[0] in tracked], tickers)
     benchmarks = _wide([r for r in rows if r[0] in ("^SOX", "RSP")], ["^SOX", "RSP"])
     benchmarks = benchmarks.reindex(columns=["^SOX", "RSP"])
 
@@ -84,14 +85,13 @@ def load_inputs(
         SeriesFetcher(fred_source_from_env(), now=lambda: now or datetime.now(UTC)) if fetch_fred else None
     )
     for series_id in RISK_FRED_SERIES:
-        if fetcher is None:
-            observations = store.load_cache(series_id, FRED_START)
-        else:
+        if fetcher is not None:
+            # A successful fetch has already written its rolling window into fred_cache; the engine
+            # reads the accumulated cache so rows older than that window stay in the series.
             fetched = fetcher.get_series(series_id, FRED_START)
-            observations = fetched.observations
             if fetched.error:
                 fred_errors.append(f"{series_id}: {fetched.error}")
-        fred[series_id] = _fred_series(observations)
+        fred[series_id] = _fred_series(store.load_cache(series_id, FRED_START))
 
     return RiskInputs(
         closes=closes,
