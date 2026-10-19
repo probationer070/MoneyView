@@ -108,6 +108,14 @@ def test_latest_open_alert_shape():
     assert alert["outcome"]["primary_theme"] == "ai_semis" and alert["outcome"]["fwd5"] == 0.2
 
 
+def test_latest_fred_errors_read_from_state():
+    """Catches /latest hard-coding fred_errors to [] instead of reading the cycle's stored value."""
+    store.set_state(f"backfill:{V}", "done")
+    store.save_day(_day(), V, "live", 0.98, "2026-10-09T01:12:40+00:00")
+    store.set_state("fred_errors", '["BAA10Y: timeout"]')
+    assert _data("/latest")["data"]["fred_errors"] == ["BAA10Y: timeout"]
+
+
 def test_latest_no_alert_has_last_alert():
     """Catches last_alert missing when nothing is open, or the open-alert fallback pointing at an open one."""
     store.set_state(f"backfill:{V}", "done")

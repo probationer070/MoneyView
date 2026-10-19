@@ -1,4 +1,5 @@
 """Risk engine read endpoints (spec 2026-10-19 section 6). Read-only: nothing here fetches from the network."""
+import json
 from datetime import UTC, date, datetime
 from typing import Literal
 
@@ -30,6 +31,11 @@ WARNING_UNITS = {"W1": "pct_level", "W2": "pct_level", "W3": "pct_change", "W4":
 
 def _backfill_state(version: str) -> str:
     return store.get_state(f"backfill:{version}") or "pending"
+
+
+def _fred_errors() -> list[str]:
+    raw = store.get_state("fred_errors")
+    return json.loads(raw) if raw else []
 
 
 def _visible_alerts(version: str, origin: str, limit: int) -> list[StoredAlert]:
@@ -192,7 +198,7 @@ def risk_latest():
     return APIResponse(data=RiskLatest(
         as_of=day.date.isoformat() if day else None, evaluated_at=day.evaluated_at if day else None,
         rules_version=version, backfill=backfill,
-        data=RiskData(bars_coverage=day.bars_coverage, fred_errors=[]) if day else None,
+        data=RiskData(bars_coverage=day.bars_coverage, fred_errors=_fred_errors()) if day else None,
         warnings=_warnings(day) if day else [], warnings_on=day.on_count if day else 0,
         warnings_total=len(WARNING_IDS),
         alert=_detail(open_alert) if open_alert else None, last_alert=last))
