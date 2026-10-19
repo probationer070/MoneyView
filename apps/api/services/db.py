@@ -251,6 +251,70 @@ CREATE TABLE IF NOT EXISTS fred_cache (
     fetched_at    TEXT NOT NULL,
     PRIMARY KEY (series_id, obs_date)
 );
+-- Risk-alert record (docs/superpowers/specs/2026-10-19-risk-engine-design.md section 7).
+-- warnings_json is {"warnings": {id: {state, value, observed_at}}, "on_count": n, "w1_proxy": bool}.
+-- trigger_json (risk_alerts) and payload_json (risk_alert_cards) hold fields section 7 has no column for.
+CREATE TABLE IF NOT EXISTS risk_daily (
+    date           TEXT NOT NULL,
+    rules_version  TEXT NOT NULL,
+    origin         TEXT NOT NULL CHECK (origin IN ('live','backfill')),
+    warnings_json  TEXT NOT NULL,
+    confirming_json TEXT NOT NULL,
+    sox_confirming INTEGER NOT NULL,
+    cap_share      REAL NOT NULL,
+    bars_coverage  REAL NOT NULL,
+    evaluated_at   TEXT NOT NULL,
+    PRIMARY KEY (date, rules_version)
+);
+CREATE TABLE IF NOT EXISTS risk_alerts (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    origin         TEXT NOT NULL CHECK (origin IN ('live','backfill')),
+    rules_version  TEXT NOT NULL,
+    status         TEXT NOT NULL CHECK (status IN ('open','released')),
+    start_date     TEXT NOT NULL,
+    release_date   TEXT,
+    release_reason TEXT CHECK (release_reason IN ('all_themes_out','rules_changed')),
+    primary_theme  TEXT NOT NULL,
+    w1_proxy       INTEGER NOT NULL,
+    trigger_json   TEXT NOT NULL,
+    created_at     TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_risk_alerts_version ON risk_alerts(rules_version, origin, start_date);
+CREATE TABLE IF NOT EXISTS risk_alert_themes (
+    alert_id       INTEGER NOT NULL REFERENCES risk_alerts(id) ON DELETE CASCADE,
+    theme          TEXT NOT NULL,
+    via            TEXT NOT NULL,
+    joined_date    TEXT NOT NULL,
+    left_date      TEXT,
+    dd20_at_join   REAL,
+    fwd5           REAL,
+    fwd10          REAL,
+    fwd20          REAL,
+    max_dd10       REAL,
+    PRIMARY KEY (alert_id, theme, joined_date)
+);
+CREATE TABLE IF NOT EXISTS risk_alert_cards (
+    alert_id       INTEGER NOT NULL REFERENCES risk_alerts(id) ON DELETE CASCADE,
+    snapshot       TEXT NOT NULL CHECK (snapshot IN ('start','latest')),
+    deck           TEXT NOT NULL CHECK (deck IN ('crash','candidate')),
+    rank           INTEGER NOT NULL,
+    ticker         TEXT NOT NULL,
+    as_of          TEXT NOT NULL,
+    drawdown_pct   REAL,
+    high_date      TEXT,
+    pct_from_high63 REAL,
+    corr           REAL,
+    corr_with      TEXT,
+    fwd5           REAL,
+    fwd10          REAL,
+    fwd20          REAL,
+    payload_json   TEXT,
+    PRIMARY KEY (alert_id, snapshot, deck, rank)
+);
+CREATE TABLE IF NOT EXISTS risk_state (
+    key            TEXT PRIMARY KEY,
+    value          TEXT NOT NULL
+);
 """
 
 _CREATE_SCHEMA_SQL = """
@@ -322,7 +386,9 @@ CREATE TABLE IF NOT EXISTS news (
     published_date TEXT DEFAULT '',
     sentiment      TEXT DEFAULT 'neutral',
     importance     INTEGER DEFAULT 1,
-    hash           TEXT UNIQUE
+    hash           TEXT UNIQUE,
+    lang           TEXT NOT NULL DEFAULT 'en',
+    topic          TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_news_ticker ON news(ticker);
 
@@ -1004,6 +1070,12 @@ def _ensure_schema_compatibility(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE watchlist ADD COLUMN updated_by TEXT")
     if "theme" not in watchlist_columns:
         conn.execute("ALTER TABLE watchlist ADD COLUMN theme TEXT DEFAULT ''")
+    # Risk engine news tagging: existing rows read as English with no topic.
+    news_columns = {row["name"] for row in conn.execute("PRAGMA table_info(news)")}
+    if news_columns and "lang" not in news_columns:
+        conn.execute("ALTER TABLE news ADD COLUMN lang TEXT NOT NULL DEFAULT 'en'")
+    if news_columns and "topic" not in news_columns:
+        conn.execute("ALTER TABLE news ADD COLUMN topic TEXT NOT NULL DEFAULT ''")
     # Nullable and additive: existing rows keep every value and get a uid on the first records sync
     # (records_sync.store.backfill_uids).
     for table in ("valuation_case", "investment_decision", "user_event"):
