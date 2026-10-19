@@ -24,11 +24,21 @@ class StockNewsCrawler:
         except Exception:
             return value[:10]
 
-    def crawl(self, ticker: str, company_name: str = "", limit: int = 10, offset: int = 0) -> List[RiskNews]:
-        query = f"{company_name} stock news" if company_name else f"{ticker} stock news"
+    def crawl(
+        self,
+        ticker: str,
+        company_name: str = "",
+        limit: int = 10,
+        offset: int = 0,
+        lang: str = "en",
+        query: Optional[str] = None,
+    ) -> List[RiskNews]:
+        if query is None:
+            query = f"{company_name} stock news" if company_name else f"{ticker} stock news"
 
         encoded_search = urllib.parse.quote(query)
-        url = f"https://news.google.com/rss/search?q={encoded_search}&hl=en-US&gl=US&ceid=US:en"
+        edition = "hl=ko&gl=KR&ceid=KR:ko" if lang == "ko" else "hl=en-US&gl=US&ceid=US:en"
+        url = f"https://news.google.com/rss/search?q={encoded_search}&{edition}"
         results: List[RiskNews] = []
 
         try:

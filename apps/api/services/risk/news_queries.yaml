@@ -1,0 +1,123 @@
+# Google News RSS queries for the risk engine (spec 2026-10-19 section 5.1).
+# Topic order is the order macro news is listed on an alert. Theme ids must match
+# watchlist_themes.yaml; series must be in constants.RISK_FRED_SERIES.
+topics:
+  - id: cpi
+    ko: CPI
+    en: CPI
+    queries:
+      en: ["US CPI inflation", "consumer price index report"]
+      ko: ["미국 소비자물가 CPI", "미국 물가 상승률"]
+    series: [CPIAUCSL, CPILFESL]
+  - id: pce
+    ko: PCE
+    en: PCE
+    queries:
+      en: ["US PCE inflation", "core PCE price index"]
+      ko: ["미국 PCE 물가지수", "근원 PCE"]
+    series: [PCEPI, PCEPILFE]
+  - id: fomc
+    ko: 연준·금리 결정·발언
+    en: Fed, rate decisions and remarks
+    queries:
+      en: ["Federal Reserve FOMC rate decision", "Fed chair Powell remarks"]
+      ko: ["연준 FOMC 금리", "연준 의장 발언"]
+    series: [DFEDTARU]
+  - id: jobs
+    ko: 고용
+    en: Jobs
+    queries:
+      en: ["US jobs report nonfarm payrolls", "US unemployment rate"]
+      ko: ["미국 고용지표 비농업 고용", "미국 실업률"]
+    series: [PAYEMS]
+  - id: treasury
+    ko: 국채 금리
+    en: Treasury yields
+    queries:
+      en: ["10-year Treasury yield", "bond market yields surge"]
+      ko: ["미국 국채 금리", "미국 10년물 국채 수익률"]
+    series: [DGS10]
+  - id: credit
+    ko: 하이일드·신용
+    en: High yield and credit
+    queries:
+      en: ["high yield bond spreads", "credit market stress"]
+      ko: ["하이일드 채권 스프레드", "신용 시장 경색"]
+    series: [BAMLH0A0HYM2]
+  - id: oil
+    ko: 유가
+    en: Oil prices
+    queries:
+      en: ["Brent crude oil price", "oil prices OPEC"]
+      ko: ["국제 유가 브렌트유", "국제 유가 급등"]
+    series: [DCOILBRENTEU]
+
+series_labels:
+  CPIAUCSL: {ko: CPI, en: CPI}
+  CPILFESL: {ko: 근원 CPI, en: Core CPI}
+  PCEPI: {ko: PCE, en: PCE}
+  PCEPILFE: {ko: 근원 PCE, en: Core PCE}
+  DFEDTARU: {ko: 연방기금금리 목표 상단, en: Fed funds target upper bound}
+  PAYEMS: {ko: 비농업 고용, en: Nonfarm payrolls}
+  DGS10: {ko: 미국 10년물 금리, en: 10-year Treasury yield}
+  BAMLH0A0HYM2: {ko: 하이일드 스프레드, en: High-yield spread}
+  DCOILBRENTEU: {ko: 브렌트유, en: Brent crude}
+
+themes:
+  ai_semis: {en: "AI chip stocks", ko: "AI 반도체 주가"}
+  optical_connectivity: {en: "optical networking chip stocks", ko: "광통신 반도체 주가"}
+  memory_storage: {en: "memory chip stocks", ko: "메모리 반도체 주가"}
+  chip_equipment_design: {en: "semiconductor equipment stocks", ko: "반도체 장비 주가"}
+  analog_power_chips: {en: "analog and power semiconductor stocks", ko: "아날로그 전력 반도체 주가"}
+  ai_servers_network: {en: "AI server and networking stocks", ko: "AI 서버 네트워크 주가"}
+  ai_cloud_datacenter: {en: "AI data center stocks", ko: "AI 데이터센터 주가"}
+  big_tech: {en: "big tech stocks", ko: "빅테크 주가"}
+  software_internet: {en: "software stocks", ko: "소프트웨어 인터넷 주가"}
+  cybersecurity: {en: "cybersecurity stocks", ko: "사이버보안 주가"}
+  power_equipment: {en: "power equipment and energy storage stocks", ko: "전력 설비 에너지저장 주가"}
+  nuclear_uranium: {en: "nuclear power and uranium stocks", ko: "원전 우라늄 주가"}
+  power_producers: {en: "independent power producer stocks", ko: "발전사 주가"}
+  regulated_utilities: {en: "utility stocks", ko: "유틸리티 주가"}
+  oil_gas: {en: "oil and gas stocks", ko: "석유 가스 주가"}
+  gold_silver: {en: "gold and silver miner stocks", ko: "금 은 광산 주가"}
+  copper_metals: {en: "copper and industrial metals stocks", ko: "구리 산업금속 주가"}
+  battery_rare_earth: {en: "battery and rare earth stocks", ko: "배터리 희토류 주가"}
+  quantum: {en: "quantum computing stocks", ko: "양자컴퓨팅 주가"}
+  crypto: {en: "crypto stocks bitcoin", ko: "크립토 비트코인 관련주"}
+  defense_aerospace: {en: "defense and aerospace stocks", ko: "방산 항공우주 주가"}
+  space_comms: {en: "space and satellite stocks", ko: "우주 위성통신 주가"}
+  financials_payments: {en: "bank and payments stocks", ko: "금융 결제 주가"}
+  defensives_other: {en: "defensive stocks consumer staples healthcare", ko: "경기방어주 주가"}
+
+# Quote "ON": bare ON parses as boolean true in YAML 1.1.
+ko_names:
+  NVDA: 엔비디아
+  TSM: TSMC
+  AVGO: 브로드컴
+  AMD: AMD
+  INTC: 인텔
+  MU: 마이크론
+  SNDK: 샌디스크
+  STX: 씨게이트
+  WDC: 웨스턴디지털
+  PSTG: 퓨어스토리지
+  ASML: ASML
+  AMAT: 어플라이드머티어리얼즈
+  LRCX: 램리서치
+  KLAC: KLA
+  CDNS: 케이던스
+  CIEN: 시에나
+  COHR: 코히런트
+  LITE: 루멘텀
+  ALAB: 아스테라랩스
+  CRDO: 크레도
+  TXN: 텍사스인스트루먼트
+  ADI: 아날로그디바이스
+  NXPI: NXP반도체
+  "ON": 온세미
+  MCHP: 마이크로칩
+  AAPL: 애플
+  GOOGL: 구글
+  MSFT: 마이크로소프트
+  AMZN: 아마존
+  META: 메타

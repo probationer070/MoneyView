@@ -42,13 +42,28 @@ def _align(values: pd.Series, obs: pd.Series, release: pd.DatetimeIndex, cal: pd
     return v.reindex(grid).ffill().reindex(cal), o.reindex(grid).ffill().reindex(cal)
 
 
+def daily_release(index: pd.DatetimeIndex) -> pd.DatetimeIndex:
+    """A daily FRED observation is known from the next business day."""
+    return index + pd.tseries.offsets.BDay(1)
+
+
+def cpi_release(month: pd.Timestamp, known_day: int) -> pd.Timestamp:
+    """A CPI-type monthly figure is known from `known_day` of the following month."""
+    return month + pd.DateOffset(months=1, days=known_day - 1)
+
+
+def pce_release(month: pd.Timestamp) -> pd.Timestamp:
+    """A PCE monthly figure is known from the last day of the following month."""
+    return month + pd.DateOffset(months=2) - pd.Timedelta(days=1)
+
+
 def _daily_known(series: pd.Series | None, cal: pd.DatetimeIndex):
     """Value known at trading day t = last observation dated <= t - 1 business day."""
     s = _clean(series)
     if s.empty:
         return pd.Series(np.nan, index=cal), pd.Series(pd.NaT, index=cal, dtype="datetime64[ns]")
     s.index = pd.DatetimeIndex(s.index)
-    release = s.index + pd.tseries.offsets.BDay(1)
+    release = daily_release(s.index)
     return _align(s, pd.Series(s.index, index=s.index), release, cal)
 
 
@@ -138,11 +153,9 @@ def market_warnings(
     w5 = rules.w5
     day = w5.cpi_known_day
     cpi, cpi_obs = _monthly_known(
-        fred.get(w5.cpi_series), cal, lambda d: d + pd.DateOffset(months=1, days=day - 1)
+        fred.get(w5.cpi_series), cal, lambda d: cpi_release(d, day)
     )
-    pce, pce_obs = _monthly_known(
-        fred.get(w5.pce_series), cal, lambda d: d + pd.DateOffset(months=2) - pd.Timedelta(days=1)
-    )
+    pce, pce_obs = _monthly_known(fred.get(w5.pce_series), cal, pce_release)
     th = w5.mm_pct / 100
     on = (cpi >= th - _MM_TOL) | (pce >= th - _MM_TOL)
     state["W5"] = _state(on, cpi.notna() | pce.notna())
