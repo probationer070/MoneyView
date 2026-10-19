@@ -122,11 +122,15 @@ def run_alerts(
                 cur.stints.append(stint)
                 active[t] = stint
         for t, stint in active.items():
-            if bool(theme_shapes[t].new_low.at[ts]):
+            if t in theme_shapes and bool(theme_shapes[t].new_low.at[ts]):
                 stint.last_ref = day
         pos = idx.get_loc(ts)
         for t, stint in list(active.items()):
             if t in firing:
+                continue
+            if t not in theme_shapes:  # the theme no longer has an index (e.g. fewer members): it leaves
+                stint.left = day
+                del active[t]
                 continue
             dd = theme_shapes[t].dd.at[ts]
             if dd > -recover or pos - idx.get_loc(pd.Timestamp(stint.last_ref)) >= quiet:

@@ -1,7 +1,7 @@
 import pandas as pd
 
 from apps.api.services.risk.rules import load_rules
-from packages.core_finance.risk_signals.alerts import Confirmations, confirmations, run_alerts
+from packages.core_finance.risk_signals.alerts import Confirmations, OpenAlert, ThemeStint, confirmations, run_alerts
 from packages.core_finance.risk_signals.indices import Shapes
 
 RULES = load_rules().rules
@@ -225,3 +225,18 @@ def test_own_index_invalid_day_does_not_confirm():
     s = _shapes(dd=BAD, down=p.down_days, valid={"default": True, 1: False})
     c = _full_conf(_shapes(), {OTHER: s}, 99)
     assert list(c.theme[OTHER].iloc[:2]) == [True, False]
+
+
+def test_active_theme_missing_from_shapes_leaves_that_day():
+    """A stint whose theme has no index any more (it fell below min_members) used to raise KeyError and
+    stop live evaluation for good. Catches the KeyError, the theme kept active, or it leaving on a
+    different day; the alert closes once the remaining theme leaves."""
+    start = IDX[4].date()
+    state = OpenAlert(start, ("gone", "b"), [ThemeStint("gone", "theme", start, None, start),
+                                             ThemeStint("b", "theme", start, None, start)])
+    shapes = {"a": _shapes(dd=-0.5), "b": _shapes(dd=-0.5)}
+    rec, cur = _run(_conf({"b": {5}}), _share(), shapes, 5, 5, state)
+    assert rec == [] and cur is not None
+    assert {s.theme: s.left for s in cur.stints} == {"gone": IDX[5].date(), "b": None}
+    rec, cur = _run(_conf({}), _share(), {"a": _shapes(dd=0.0), "b": _shapes(dd=0.0)}, 6, 6, cur)
+    assert cur is None and [(r.start, r.release) for r in rec] == [(start, IDX[6].date())]
