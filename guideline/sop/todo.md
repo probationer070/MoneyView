@@ -174,6 +174,9 @@ Spec: `docs/superpowers/specs/2026-10-18-risk-signal-design.md`. Plan (watchlist
 - [ ] R-② risk engine: built on feat/risk-engine; owner-gated real-DB backfill and reproduction pending.
       Plan: `docs/superpowers/plans/2026-10-19-risk-engine.md`. After the owner's OK: `python scripts/risk/reproduce_backfill.py`
       against the real DB and record the diff in spec §3.5.
+      Final-review fixes landed 2026-10-19: acquisition covers only priced, settled bars (ERROR-LOG); FRED series read from
+      the accumulated cache; backfill state "degraded" (R26) for an empty warning series or sweep failures, rerun next cycle
+      with live days replayed; one coverage_wait key; cleanup deletes `deep_history:<T>`; an all-failed news sweep is retried.
 - Deferred minor findings are listed in the plan ledger (`.superpowers/sdd/2026-10-18-watchlist-themes/progress.md`) and are triaged at the final review.
 
 ## Known limits, accepted deliberately
