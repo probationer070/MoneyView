@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import sys
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from types import SimpleNamespace
 
 import pandas as pd
@@ -92,13 +92,16 @@ def test_ko_only_for_ko_names():
 
 
 def test_feed_failure_is_skipped_and_flagged_only_when_all_fail():
-    """Catches a raise out of the sweep, a skipped feed ending the sweep, and a flag set on partial failure."""
+    """Catches a raise out of the sweep, a skipped feed ending the sweep, a flag set on partial failure,
+    and news_swept_at stamped by a sweep where every feed failed (the next sweep would wait 12 hours)."""
     partial = FakeCrawler(fail=lambda kw: kw["lang"] == "ko")
     report = news.sweep_news(NOW, crawler=partial, sleep=_no_sleep)
     assert 0 < len(report.failed) < report.attempted and report.fetched == report.attempted - len(report.failed)
     assert store.get_state("news_last_sweep_failed") == "0"
-    news.sweep_news(NOW, crawler=FakeCrawler(fail=lambda kw: True), sleep=_no_sleep)
+    assert store.get_state("news_swept_at") == NOW.isoformat()
+    news.sweep_news(NOW + timedelta(hours=13), crawler=FakeCrawler(fail=lambda kw: True), sleep=_no_sleep)
     assert store.get_state("news_last_sweep_failed") == "1"
+    assert store.get_state("news_swept_at") == NOW.isoformat()
 
 
 def test_network_guard_assertion_propagates():

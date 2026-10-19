@@ -163,8 +163,10 @@ def sweep_news(
                 lang=lang,
                 topic=topic,
             ))
-    store.set_state("news_swept_at", now.isoformat())
-    store.set_state("news_last_sweep_failed", "1" if attempted and len(failed) == attempted else "0")
+    all_failed = bool(attempted) and len(failed) == attempted
+    if not all_failed:  # a sweep where every feed failed is retried next cycle, not in 12 hours
+        store.set_state("news_swept_at", now.isoformat())
+    store.set_state("news_last_sweep_failed", "1" if all_failed else "0")
     return SweepReport(attempted, fetched, failed)
 
 
