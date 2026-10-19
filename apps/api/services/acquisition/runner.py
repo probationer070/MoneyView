@@ -87,9 +87,22 @@ def acquire(
         record_check(data_class_name, subject, now=now, status=AcquisitionStatus.FAILED, detail=str(error))
         return AcquisitionResult(data_class_name, subject, 0, fetch_range.reason, skipped=False)
 
+    # Keep only bars that are priced and settled. The provider reports the current day
+    # with NaN prices (the saver drops those), or with an intraday price that is not the
+    # close. A bar dated D settles at D+1 00:00 UTC -- the _DAILY_UTC rationale in the
+    # registry. Counting either kind toward coverage marks D as covered, and the delta
+    # never asks for D again, so the settled bar is never fetched.
+    from apps.api.services.market_data import MarketDataService
+
+    rows = [
+        row for row in rows
+        if MarketDataService._is_priced(row.close) and date.fromisoformat(row.date[:10]) < today
+    ]
+
     if not rows:
-        # Asked and found nothing: a holiday, a gap, or a delisting. Recording the ask
-        # is what stops it being retried on every request for the rest of the day.
+        # Asked and found nothing usable: a holiday, a gap, a delisting, or only today's
+        # unsettled bar. Recording the ask is what stops it being retried on every request
+        # for the rest of the day; coverage does not advance.
         record_check(data_class_name, subject, now=now, status=AcquisitionStatus.EMPTY)
         return AcquisitionResult(data_class_name, subject, 0, fetch_range.reason, skipped=False)
 
