@@ -11,8 +11,8 @@ repeat, the prose in [`storage-model.md`](storage-model.md) (ownership and file 
 Start at [`../INDEX.md`](../INDEX.md) for the full documentation map.
 
 Last verified: 2026-10-18 against `apps/api/services/db.py` at 693adea (watchlist theme column) on branch
-`feat/risk-signal`: 31 tables, 5 declared foreign keys, 27 logical references. Risk signal sub-project 1
-(watchlist themes) is built; sub-projects 2-4 are only planned (§3.3).
+`feat/risk-signal`: 31 tables, 5 declared foreign keys, 27 logical references. Risk signal sub-projects 1 (watchlist themes) and 2 (risk engine, §3.3) are built;
+sub-projects 3-4 are only planned. The five tables of §3.3 were added after this count.
 
 Sources of truth used here:
 
@@ -226,56 +226,97 @@ Declared foreign keys: **5**. Logical references: **27** (L1-L27).
 | L26 | `signal_manual_inputs.iso_week` -> `signal_snapshots.iso_week`; `rule_id` -> a manual rule in `signals/rules.yaml` | logical | none; an input saved for a week with no snapshot applies at that week's next run | `signals/engine.py:89` |
 | L27 | `watchlist.theme` -> `id` in `apps/api/services/watchlist_themes.yaml` | logical (file, not a table) | none; an id no longer in the file stays in the DB and displays as other | `routes/portfolio.py:290-320` validates on write; `watchlist_themes.py` `theme_ids`; peer sync does not validate |
 
-### 3.3 Planned (risk signal sub-project 2, not built)
+### 3.3 Risk engine (risk signal sub-project 2, built on `feat/risk-engine`)
 
-Nothing in this subsection exists in `db.py`. It restates spec `docs/superpowers/specs/2026-10-18-risk-signal-design.md`
-(§2.1, §2.3a, §2.7) so the shape can be reviewed before the sub-project 2 spec fixes it. Table and column
-names are **provisional**; every field list marked "fields to be fixed by the sub-project 2 spec" is
-deliberately empty. Alerts are computed per PC and are not synced (spec R-B7). Dotted lines are
-logical references, the same convention as §3.1.
+Five tables, created in `_SIGNAL_SCHEMA_SQL` in `apps/api/services/db.py` (they are not part of the 31
+tables inventoried in §2), plus two columns on `news`. Spec: `docs/superpowers/specs/2026-10-19-risk-engine-design.md`
+§7. Alerts are computed per PC and are not synced (spec R-B7). Dotted lines are logical references,
+the same convention as §3.1; `risk_alerts` to its two child tables are declared foreign keys with
+`ON DELETE CASCADE`.
 
 ```mermaid
 erDiagram
-    risk_alert {
-        int id
-        string start_date
-        string end_date
-        string status
+    risk_daily {
+        string date PK
+        string rules_version PK
+        string origin "live or backfill"
+        string warnings_json
+        string confirming_json
+        int sox_confirming
+        real cap_share
+        real bars_coverage
+        string evaluated_at
+    }
+    risk_alerts {
+        int id PK
+        string origin "live or backfill"
         string rules_version
-        int backtested
+        string status "open or released"
+        string start_date
+        string release_date
+        string release_reason "all_themes_out or rules_changed"
+        string primary_theme
+        int w1_proxy
+        string trigger_json
+        string created_at
     }
-    risk_alert_item {
-        string fields_tbd "fields to be fixed by the sub-project 2 spec"
+    risk_alert_themes {
+        int alert_id PK
+        string theme PK
+        string joined_date PK
+        string via
+        string left_date
+        real dd20_at_join
+        real fwd5
+        real fwd10
+        real fwd20
+        real max_dd10
+        string last_ref
     }
-    risk_alert_news {
-        string fields_tbd "fields to be fixed by the sub-project 2 spec"
+    risk_alert_cards {
+        int alert_id PK
+        string snapshot PK "start or latest"
+        string deck PK "crash or candidate"
+        int rank PK
+        string ticker
+        string as_of
+        real drawdown_pct
+        real fwd5
+        real fwd10
+        real fwd20
+        string payload_json
     }
-    topic_news {
-        string fields_tbd "fields to be fixed by the sub-project 2 spec"
+    risk_state {
+        string key PK
+        string value
     }
 
-    risk_alert ||--o{ risk_alert_item : "crashed or candidate ticker"
-    risk_alert ||--o{ risk_alert_news : "news linked to the alert"
-    risk_alert_item }o..o| watchlist : "P1 ticker logical"
-    risk_alert_news }o..o| news : "P2 ticker news"
-    risk_alert_news }o..o| topic_news : "P3 topic news"
+    risk_alerts ||--o{ risk_alert_themes : "one stint per join"
+    risk_alerts ||--o{ risk_alert_cards : "start and latest decks"
+    risk_alert_cards }o..o| watchlist : "ticker logical"
+    risk_daily }o..o| risk_alerts : "same rules_version logical"
 ```
 
-- `risk_alert`: one row per alert. Spec §2.1 lists id, start date, status (active or cleared), the
-  indicators that triggered it with their values, the crashed and candidate tickers, and the linked news.
-  `end_date` is NULL while active. `rules_version` records which threshold-file version produced it
-  (§2.3a). `backtested` marks alerts computed from 2016-2026 history, as opposed to alerts the app raised
-  live. Where the triggering indicator values are stored (a column, or a child table) is open.
-- `risk_alert_item`: one row per crashed or candidate ticker of an alert. It must tell the two decks apart,
-  so it carries a kind; the rest, including the 5, 10 and 20 trading-day outcomes the spec wants kept
-  (§2.3a), is fields to be fixed by the sub-project 2 spec. `ticker` refers to `watchlist.ticker` logically,
-  like every other ticker link (§3.2); the spec's history must survive a later watchlist removal, so no FK.
-- `risk_alert_news`: links an alert to its 10 or more news items, macro first and then industry (§2.7).
-- `topic_news`: macro topic news (CPI, PCE, FOMC, jobs, yields, credit, oil) in English and Korean. The
-  existing `news` table is keyed by ticker and holds only English Google News RSS today, so whether topic
-  items get their own table or reuse `news` is not decided; the diagram assumes a separate table.
-- Not tables: the threshold values live in a checked-in rules file (spec §2.6), and the new FRED series
-  (`THREEFYTP10`, `CPIAUCSL`, `PCEPI`, `PCEPILFE`) go into the existing `fred_cache`.
+- `risk_daily`: one row per evaluated trading day and rules version (key `date`, `rules_version`). It holds
+  the warning states (`warnings_json`), the confirming themes with their path (`confirming_json`), the SOX
+  confirmation, the summed cap share and the bar coverage of that day. A day without an alert still has a row,
+  so the indicator history comes from here. The writer puts `risk_daily` last in each day's transaction.
+- `risk_alerts`: one row per alert. `trigger_json` (extra to spec §7, ruling R14) holds the themes that
+  opened it. `release_reason` is `all_themes_out` or `rules_changed`. `rules_version` is the first 8 hex
+  characters of the sha256 of `rules.yaml`. Alerts are never deleted except by the recompute rule: a changed
+  rules file purges that old version's `backfill` alerts and `risk_daily` rows and keeps its `live` alerts.
+- `risk_alert_themes`: one row per theme stint (key `alert_id`, `theme`, `joined_date`; a theme that
+  re-enters gets a second row). `last_ref` (extra, ruling R16) is the stint's last 20-day-low date, so a live
+  day can resume the walk. `fwd5/10/20` and `max_dd10` stay NULL until enough trading days exist and are
+  filled later.
+- `risk_alert_cards`: the crash and candidate decks, as a `start` snapshot and a `latest` snapshot that is
+  overwritten daily. `payload_json` (extra, ruling R15) holds card fields spec §7 has no column for.
+- `risk_state`: key/value bookkeeping, for example `backfill:<version>` (`running`, `done`, `failed`),
+  `live_start:<version>`, `news_swept_at`, `fred_errors`.
+- `news` gains `lang` (`en` default) and `topic` (`''` default) by an additive migration in `db.py`; topic
+  news is stored in `news` with a topic id.
+- Not tables: the thresholds live in `apps/api/services/risk/rules.yaml`, the news topics in
+  `news_queries.yaml`, and the engine FRED series in the existing `fred_cache`.
 
 ## 4. Dependencies (Write / Refresh Order)
 
@@ -471,8 +512,8 @@ Reported only; no code was changed.
   the proxies the market overview stores in `stocks` (BOTZ, SKYY, XLE, ITA, CIBR, ICLN, TSL, 143860.KS,
   ^KS11). Such a ticker is a cache candidate (`_CANDIDATE_QUERIES`, `:50`) with no reference, so it enters
   `cleanup_pending`, its `stocks`, `news`, `corporate_quote_facts` and `acquisition_state` rows are deleted
-  after `CLEANUP_GRACE_DAYS` (30), and the next overview request refetches them. Open. The fix is planned
-  in risk signal sub-project 2.
+  after `CLEANUP_GRACE_DAYS` (30), and the next overview request refetches them. Fixed in risk-engine Task 1
+  (`watchlist_cleanup.py` now counts these tickers as referenced).
 
 **Drift between live DB and code.** Comparing `data/processed/moneyview.db` with a database freshly built
 by `init_db()` (via `DB_PATH` pointed at a scratch file):

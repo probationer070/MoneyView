@@ -171,6 +171,9 @@ Spec: `docs/superpowers/specs/2026-10-18-risk-signal-design.md`. Plan (watchlist
       refetched, repeatedly. Fixed in sub-project ② with the benchmark tickers (^SOX, RSP, SPY), which hit the same path.
       Not changed in the watchlist-themes wave. Covered now: SPREAD_PAIRS tickers and the benchmarks. Not covered: TSL, 143860.KS, ^KS11,
       which no code path references any more; their `stocks` rows (if still present) are cleaned after the grace period. Owner to confirm.
+- [ ] R-② risk engine: built on feat/risk-engine; owner-gated real-DB backfill and reproduction pending.
+      Plan: `docs/superpowers/plans/2026-10-19-risk-engine.md`. After the owner's OK: `python scripts/risk/reproduce_backfill.py`
+      against the real DB and record the diff in spec §3.5.
 - Deferred minor findings are listed in the plan ledger (`.superpowers/sdd/2026-10-18-watchlist-themes/progress.md`) and are triaged at the final review.
 
 ## Known limits, accepted deliberately

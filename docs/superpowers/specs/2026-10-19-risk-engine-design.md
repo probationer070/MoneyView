@@ -435,9 +435,9 @@ Oct 19, 2026 · 근거 코드는 `renewal`의 3ce22e6이다. 경로는 따로 �
 | 테이블 | 열 | 메모 |
 |---|---|---|
 | `risk_daily` | `date`, `rules_version`, `origin`, `warnings_json`, `confirming_json`(테마 → 경로), `sox_confirming`, `cap_share`, `bars_coverage`, `evaluated_at` | 키는 (`date`, `rules_version`)다. 경보가 없는 날의 지표 상태도 여기서 나온다. |
-| `risk_alerts` | `id`, `origin`, `rules_version`, `status`, `start_date`, `release_date`, `release_reason`(`all_themes_out`/`rules_changed`), `primary_theme`, `w1_proxy`, `created_at` | 지우지 않는다. 예외는 아래 재계산 규칙뿐이다. |
-| `risk_alert_themes` | `alert_id`, `theme`, `via`, `joined_date`, `left_date`, `dd20_at_join`, `fwd5`, `fwd10`, `fwd20`, `max_dd10` | 다시 들어오면 행이 하나 더 생긴다. 키는 (`alert_id`, `theme`, `joined_date`)다. |
-| `risk_alert_cards` | `alert_id`, `snapshot`(`start`/`latest`), `deck`(`crash`/`candidate`), `rank`, `ticker`, `as_of`, `drawdown_pct`, `high_date`, `pct_from_high63`, `corr`, `corr_with`, `fwd5`, `fwd10`, `fwd20` | `latest`는 날마다 덮어쓴다. |
+| `risk_alerts` | `id`, `origin`, `rules_version`, `status`, `start_date`, `release_date`, `release_reason`(`all_themes_out`/`rules_changed`), `primary_theme`, `w1_proxy`, `trigger_json`(처음 연 테마 목록, R14), `created_at` | 지우지 않는다. 예외는 아래 재계산 규칙뿐이다. |
+| `risk_alert_themes` | `alert_id`, `theme`, `via`, `joined_date`, `left_date`, `dd20_at_join`, `fwd5`, `fwd10`, `fwd20`, `max_dd10`, `last_ref`(구간의 마지막 20일 저점 날짜, 실시간 평가가 이어서 걷는 데 쓴다, R16) | 다시 들어오면 행이 하나 더 생긴다. 키는 (`alert_id`, `theme`, `joined_date`)다. |
+| `risk_alert_cards` | `alert_id`, `snapshot`(`start`/`latest`), `deck`(`crash`/`candidate`), `rank`, `ticker`, `as_of`, `drawdown_pct`, `high_date`, `pct_from_high63`, `corr`, `corr_with`, `fwd5`, `fwd10`, `fwd20`, `payload_json`(위 열에 없는 카드 필드, R15) | `latest`는 날마다 덮어쓴다. |
 | `risk_state` | `key`, `value` | 마지막 뉴스 수집 시각, 과거 계산 상태, 실시간 평가를 시작한 날 |
 | `news` | `lang`, `topic` 추가 | §5.2 |
 

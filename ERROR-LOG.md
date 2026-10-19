@@ -26,6 +26,16 @@ reveal that; only checking the code did.
 
 An entry states what was true when it was written. Nothing updates it on its own.
 
+## 2026-10-19: market proxy tickers enrolled for cache deletion by the watchlist cleanup
+
+Date: 2026-10-19 (risk-engine plan, Task 1). Found 2026-10-18; defect pre-existing on renewal, fixed in 6d09195.
+Command: not recorded (found by reading `cleanup_pending` and `_REFERENCE_QUERIES`, not from a failing command).
+Failure: the market-overview proxy tickers stored in `stocks` (BOTZ, SKYY, XLE, ITA, CIBR, ICLN and the spread pairs) were enrolled in `cleanup_pending` on 2026-10-18 08:05Z. Their `stocks`, `news`, `corporate_quote_facts` and `acquisition_state` rows would have been deleted 30 days later and refetched on the next overview request, repeatedly. The benchmarks the risk engine adds (^SOX, RSP, SPY) take the same path. No error was raised.
+Root cause: `watchlist_cleanup.py` `_REFERENCE_QUERIES` counted only watchlist, holdings, cases and the like as references. A ticker that only the market overview reads looked like an unreferenced cache entry.
+Fix: 6d09195 counts the SPREAD_PAIRS tickers and the risk benchmarks as referenced. TSL, 143860.KS and ^KS11 are not referenced by any code path and are still cleaned after the grace period (owner to confirm).
+Files changed: `apps/api/services/watchlist_cleanup.py`, `apps/api/services/risk/constants.py`, `tests/api/test_watchlist_cleanup_references.py`.
+Prevention: `tests/api/test_watchlist_cleanup_references.py` pins that these tickers are never enrolled. Any new ticker class stored in `stocks` that is not on the watchlist must be added to the reference queries.
+
 ## 2026-10-19: daily bars and news stall after the watchlist's last refresh (no scheduled sweep)
 
 Date: 2026-10-19 (risk-engine plan, Task 1).
@@ -33,7 +43,7 @@ Command: not recorded (found while planning the risk engine; the stall was visib
 Failure: daily bars for existing watchlist tickers and all news stopped at 2026-09-29 with no on-screen staleness signal.
 Root cause: no scheduled sweep exists. Bars refresh only when a screen reads the ticker, and news only on a detail click. `acquisition/runner.py` `schedule_acquisition` says the registry warmer "arrives with the later phases".
 Fix: open. This plan's Task 9 and Task 12 add the sweeps.
-Files changed: `apps/api/services/watchlist_cleanup.py`, `apps/api/services/risk/__init__.py`, `apps/api/services/risk/constants.py`, `tests/api/test_watchlist_cleanup_references.py`, `ERROR-LOG.md`, `guideline/sop/todo.md`.
+Files changed: recorded in Task 1; sweeps added in Tasks 9 and 12.
 Prevention: `risk_daily.bars_coverage` and `/latest.data` expose coverage.
 
 ## 2026-10-18: Monte Carlo charts overflow their frames at 390 on every tab (feat/monte-carlo-one-screen)
