@@ -311,7 +311,7 @@ erDiagram
   filled later.
 - `risk_alert_cards`: the crash and candidate decks, as a `start` snapshot and a `latest` snapshot that is
   overwritten daily. `payload_json` (extra, ruling R15) holds card fields spec §7 has no column for.
-- `risk_state`: key/value bookkeeping, for example `backfill:<version>` (`running`, `done`, `failed`),
+- `risk_state`: key/value bookkeeping, for example `backfill:<version>` (`running`, `done`, `degraded`, `failed`),
   `live_start:<version>`, `news_swept_at`, `fred_errors`.
 - `news` gains `lang` (`en` default) and `topic` (`''` default) by an additive migration in `db.py`; topic
   news is stored in `news` with a topic id.

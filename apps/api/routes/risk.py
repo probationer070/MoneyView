@@ -13,6 +13,7 @@ from apps.api.models.schema_parts.risk import (
 )
 from apps.api.services.db import get_db
 from apps.api.services.risk import news, store
+from apps.api.services.risk.evaluator import BACKFILL_COMPLETE
 from apps.api.services.risk.inputs import cached_fred
 from apps.api.services.risk.rules import get_rules
 from apps.api.services.risk.store import StoredAlert, StoredCard, StoredDay
@@ -39,9 +40,9 @@ def _fred_errors() -> list[str]:
 
 
 def _visible_alerts(version: str, origin: str, limit: int) -> list[StoredAlert]:
-    """Newest first. Backfill alerts count only once their version's backfill is done."""
+    """Newest first. Backfill alerts count only once their version's backfill is done or degraded."""
     origins = ["live", "backfill"] if origin == "all" else [origin]
-    if _backfill_state(version) != "done":
+    if _backfill_state(version) not in BACKFILL_COMPLETE:
         origins = [o for o in origins if o != "backfill"]
     found = [a for o in origins for a in store.list_alerts(version, o, limit)]
     found.sort(key=lambda a: (a.start_date, a.id), reverse=True)
@@ -186,10 +187,10 @@ def risk_latest():
     version = get_rules().version
     backfill = _backfill_state(version)
     day = store.latest_day(version)
-    if backfill != "done" and day is not None and day.origin == "backfill":
+    if backfill not in BACKFILL_COMPLETE and day is not None and day.origin == "backfill":
         day = None  # a backfill still being written is not a finished evaluation
     open_alert = store.open_alert(version)
-    if open_alert is not None and backfill != "done" and open_alert.origin == "backfill":
+    if open_alert is not None and backfill not in BACKFILL_COMPLETE and open_alert.origin == "backfill":
         open_alert = None
     last = None
     if open_alert is None:

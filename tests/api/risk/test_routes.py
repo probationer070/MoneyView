@@ -141,6 +141,21 @@ def test_latest_backfill_running(state):
     assert _data("/history") == []
 
 
+def test_latest_backfill_degraded_is_visible():
+    """Catches /latest not echoing "degraded" (the response model rejecting it is a 500), or a degraded
+    version's backfill day, open alert and released alerts hidden as if the backfill were unfinished."""
+    store.set_state(f"backfill:{V}", "degraded")
+    store.save_day(_day(date(2020, 3, 2)), V, "backfill", 1.0, "t")
+    released = _alert(origin="backfill", start=date(2019, 1, 2), release=date(2019, 1, 9))
+    data = _data("/latest")
+    assert data["backfill"] == "degraded"
+    assert data["as_of"] == "2020-03-02" and data["alert"] is None
+    assert data["last_alert"]["id"] == released
+    assert [a["id"] for a in _data("/history")] == [released]
+    opened = _alert(origin="backfill", start=date(2020, 3, 2))
+    assert _data("/latest")["alert"]["id"] == opened
+
+
 def test_latest_unknown_warning_value_null():
     """Catches an unknown warning leaking its stored number instead of null."""
     store.set_state(f"backfill:{V}", "done")

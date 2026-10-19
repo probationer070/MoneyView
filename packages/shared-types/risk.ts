@@ -51,6 +51,6 @@ export interface RiskAlertDetail {
 export interface RiskData { bars_coverage: number; fred_errors: string[] }
 export interface RiskLatest {
   as_of: string | null; evaluated_at: string | null; rules_version: string;
-  backfill: "pending" | "running" | "done" | "failed"; data: RiskData | null; warnings: RiskWarning[];
+  backfill: "pending" | "running" | "done" | "degraded" | "failed"; data: RiskData | null; warnings: RiskWarning[];
   warnings_on: number; warnings_total: number; alert: RiskAlertDetail | null; last_alert: RiskAlertSummary | null;
 }

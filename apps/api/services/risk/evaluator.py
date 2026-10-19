@@ -1,7 +1,10 @@
 """Backfill, live evaluation and rules-change handling for the risk engine (spec 2026-10-19 sections 4.4-4.6, 7).
 
 State keys in risk_state, per rules version <v>:
-- `backfill:<v>`: "running" | "done" | "failed".
+- `backfill:<v>`: "running" | "done" | "degraded" | "failed". "degraded" (ruling R26) is a finished
+  backfill that ran with an engine warning series empty or with sweep failures: live evaluation runs as
+  for "done", and the next run_backfill purges the version (live alerts too) and recomputes it, after
+  which live days replay from the fixed live_start.
 - `live_start:<v>`: the first day evaluated live (YYYY-MM-DD). Backfill covers eval_start up to the day before.
 - `coverage_wait:<YYYY-MM-DD>`: UTC ISO timestamp when waiting for that day's bars began.
 
@@ -18,6 +21,7 @@ import pandas as pd
 
 from apps.api.core.logger import setup_logger
 from apps.api.services.risk import store, sweep
+from apps.api.services.risk.constants import WARNING_FRED_SERIES
 from apps.api.services.risk.inputs import RiskInputs, coverage, load_inputs
 from apps.api.services.risk.rules import LoadedRules, get_rules
 from packages.core_finance.risk_signals.alerts import AlertRecord, OpenAlert, ThemeStint
@@ -29,6 +33,7 @@ from packages.core_finance.risk_signals.indices import price_shapes
 logger = setup_logger(__name__)
 
 RULES_CHANGED = "rules_changed"
+BACKFILL_COMPLETE = frozenset({"done", "degraded"})  # live evaluation runs; backfill alerts are visible
 _NO_LIMIT = -1  # SQLite LIMIT -1 = every row
 _STINT_FIELDS = ("fwd5", "fwd10", "fwd20", "max_dd10")
 _CARD_FIELDS = ("fwd5", "fwd10", "fwd20")
@@ -209,11 +214,12 @@ def run_backfill(now: datetime, *, inputs: RiskInputs | None = None, loaded: Loa
         if store.get_state(key) == "done":
             return
         store.set_state(key, "running")
-        store.purge_version(version)
+        # include_live: a "degraded" version has live alerts and days; they are replayed from live_start.
+        store.purge_version(version, include_live=True)
         # Both sweeps skip tickers they have finished, so a rerun only does what is left.
         tickers = sweep.watchlist_and_benchmarks()
-        sweep.ensure_deep_history(tickers, history_start=rules.history_start, today=now.date())
-        sweep.ensure_quote_facts(tickers, now)
+        deep = sweep.ensure_deep_history(tickers, history_start=rules.history_start, today=now.date())
+        facts = sweep.ensure_quote_facts(tickers, now)
         if inputs is None:  # loaded after the sweeps; inputs passed in are used as given
             inputs = load_inputs(now=now, loaded=loaded)
 
@@ -229,9 +235,12 @@ def run_backfill(now: datetime, *, inputs: RiskInputs | None = None, loaded: Loa
         last = res.days[-1].day if res.days else end
         _persist_backfill(res, inputs, version, last, rules, now)
         _fill_outcomes(version, res.levels, _on_calendar(inputs))
-        store.set_state(key, "done")
-        logger.info("risk.backfill_done version=%s days=%s alerts=%s", version, len(res.days),
-                    len(res.closed) + (res.open is not None))
+        missing = [s for s in WARNING_FRED_SERIES if s not in inputs.fred or inputs.fred[s].empty]
+        sweep_failed = [*deep.failed, *facts.failed]
+        state = "degraded" if missing or sweep_failed else "done"
+        store.set_state(key, state)
+        logger.info("risk.backfill_%s version=%s days=%s alerts=%s missing_fred=%s sweep_failed=%s", state,
+                    version, len(res.days), len(res.closed) + (res.open is not None), missing, sweep_failed)
     except AssertionError:  # the test network guard raises it; recording "failed" would hide that
         raise
     except Exception:  # noqa: BLE001 - a failed backfill is recorded and retried, never raised
@@ -247,7 +256,7 @@ def evaluate_pending(now: datetime, *, inputs: RiskInputs | None = None,
     """Evaluate every pending trading day in order with origin "live"; return ids of alerts opened."""
     loaded = loaded or get_rules()
     rules, version = loaded.rules, loaded.version
-    if store.get_state(f"backfill:{version}") != "done":
+    if store.get_state(f"backfill:{version}") not in BACKFILL_COMPLETE:
         return []
     if inputs is None:
         inputs = load_inputs(now=now, loaded=loaded)

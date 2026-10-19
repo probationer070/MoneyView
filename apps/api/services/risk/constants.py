@@ -17,3 +17,14 @@ RISK_FRED_SERIES: tuple[str, ...] = (
     "PCEPI",
     "PAYEMS",
 )
+
+# The RISK_FRED_SERIES the six warnings read. A backfill run with any of them empty is "degraded".
+WARNING_FRED_SERIES: tuple[str, ...] = (
+    "BAMLH0A0HYM2",
+    "BAA10Y",
+    "DGS10",
+    "DCOILBRENTEU",
+    "DFEDTARU",
+    "CPILFESL",
+    "PCEPILFE",
+)

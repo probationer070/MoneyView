@@ -2,6 +2,7 @@
 mutation its test catches. The DB is seeded from tests/fixtures/risk; nothing touches the network."""
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
@@ -54,8 +55,10 @@ def _seeded():
 @pytest.fixture
 def sweeps(monkeypatch):
     calls: list[str] = []
-    monkeypatch.setattr(sweep, "ensure_deep_history", lambda tickers, **kw: calls.append("deep"))
-    monkeypatch.setattr(sweep, "ensure_quote_facts", lambda tickers, now, **kw: calls.append("facts"))
+    monkeypatch.setattr(sweep, "ensure_deep_history",
+                        lambda tickers, **kw: calls.append("deep") or sweep.SweepReport())
+    monkeypatch.setattr(sweep, "ensure_quote_facts",
+                        lambda tickers, now, **kw: calls.append("facts") or sweep.SweepReport())
     return calls
 
 
@@ -293,3 +296,48 @@ def test_failed_live_day_is_retried_whole(sweeps, monkeypatch):
     assert alert.cards[("start", "crash")] and alert.cards[("start", "crash")][0].as_of == OPEN_DAY
     assert store.last_evaluated("test0001") == LAST_DAY
     assert set(_daily_origin("test0001").values()) == {"backfill", "live"}
+
+
+def test_degraded_backfill_runs_live_then_recomputes_to_done(sweeps, monkeypatch, tmp_path):
+    """Ruling R26. Catches: a backfill with an empty warning series frozen as "done"; evaluate_pending
+    skipping a degraded version (no live alert); a degraded rerun that returns early instead of purging,
+    sweeping and recomputing; live_start moved by the rerun; a rerun that keeps the degraded pass's live
+    alerts and days (duplicates, or rows that differ from a clean done run)."""
+    L = _loaded("test0001")
+    real_path = db_service._DB_PATH
+    monkeypatch.setattr(db_service, "_DB_PATH", tmp_path / "clean.db")
+    db_service.init_db()
+    _seed()
+    store.set_state("live_start:test0001", OPEN_DAY.isoformat())
+    evaluator.run_backfill(NOW, inputs=_inputs(L), loaded=L)
+    assert store.get_state("backfill:test0001") == "done"
+    evaluator.evaluate_pending(NOW, inputs=_inputs(L), loaded=L)
+    clean = _snapshot("test0001")
+    assert any(a[0] == "live" for a in clean[0])  # not vacuous: the live pass opens an alert
+
+    monkeypatch.setattr(db_service, "_DB_PATH", real_path)
+    full = _inputs(L)
+    no_dgs10 = replace(full, fred={**full.fred, "DGS10": pd.Series(dtype=float)})
+    store.set_state("live_start:test0001", OPEN_DAY.isoformat())
+    evaluator.run_backfill(NOW, inputs=no_dgs10, loaded=L)
+    assert store.get_state("backfill:test0001") == "degraded"
+    opened = evaluator.evaluate_pending(NOW, inputs=no_dgs10, loaded=L)
+    assert len(opened) == 1 and store.last_evaluated("test0001") == LAST_DAY
+
+    evaluator.run_backfill(NOW + timedelta(hours=1), inputs=full, loaded=L)
+    assert store.get_state("backfill:test0001") == "done"
+    assert store.get_state("live_start:test0001") == OPEN_DAY.isoformat()
+    assert sweeps == ["deep", "facts", "deep", "facts", "deep", "facts"]
+    evaluator.evaluate_pending(NOW + timedelta(hours=1), inputs=full, loaded=L)
+    assert _snapshot("test0001") == clean
+
+
+@pytest.mark.parametrize("which", ["ensure_deep_history", "ensure_quote_facts"])
+def test_sweep_failure_marks_backfill_degraded(sweeps, monkeypatch, which):
+    """Catches a backfill marked "done" although a sweep reported failed tickers, or one sweep's
+    report ignored."""
+    L = _loaded("test0001")
+    monkeypatch.setattr(sweep, which, lambda *a, **kw: sweep.SweepReport(1, 0, ["NVDA"]))
+    store.set_state("live_start:test0001", "2026-10-12")
+    evaluator.run_backfill(NOW, inputs=_inputs(L), loaded=L)
+    assert store.get_state("backfill:test0001") == "degraded"

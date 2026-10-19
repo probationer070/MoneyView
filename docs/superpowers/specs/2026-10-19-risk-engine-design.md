@@ -363,6 +363,7 @@ Oct 19, 2026 · 근거 코드는 `renewal`의 3ce22e6이다. 경로는 따로 �
 | 진행 중인 경보가 없음 | `alert: null`. 가장 최근 해제된 경보가 `last_alert`다. 위험 후보 탭이 이것을 쓴다(R-D8). |
 | 과거 계산이 도는 중 | `backfill: "running"`. `last_alert`는 계산이 끝난 부분까지만이다. |
 | 과거 계산 실패 | `backfill: "failed"`. |
+| 과거 계산이 불완전하게 끝남 | `backfill: "degraded"` (판정 R26). 경고에 쓰는 FRED 시계열이 비었거나 과거 수집이 실패한 경우다. 실시간 평가와 과거 경보 표시는 `"done"`과 같고, 다음 주기에 과거 계산을 다시 한다. |
 
 - `state`는 `"on"`, `"off"`, `"unknown"` 중 하나다. `"unknown"`이면 `value`가 `null`이다.
 - 상위 스펙 §2.2의 "근접"은 두지 않는다(§9).

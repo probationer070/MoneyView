@@ -171,7 +171,7 @@ class RiskLatest(BaseModel):
     as_of: str | None
     evaluated_at: str | None
     rules_version: str
-    backfill: Literal["pending", "running", "done", "failed"]
+    backfill: Literal["pending", "running", "done", "degraded", "failed"]
     data: RiskData | None
     warnings: list[RiskWarning]
     warnings_on: int
