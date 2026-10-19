@@ -73,3 +73,10 @@ def test_cpi_known_day_bounded(tmp_path):
     path = _variant(tmp_path, "cpi_known_day: 15", "cpi_known_day: 29")
     with pytest.raises(ValueError, match="cpi_known_day"):
         load_rules(path)
+
+
+def test_labels_are_short():
+    labels = load_rules().rules.labels
+    for warning_id, label in labels:
+        assert len(label.ko) <= 20, warning_id
+        assert len(label.en) <= 20, warning_id
