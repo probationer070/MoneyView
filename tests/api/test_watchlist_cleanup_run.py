@@ -185,8 +185,8 @@ def _row_counts_outside_the_cleanup_tables() -> dict[str, int]:
         return {t: conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0] for t in tables if t not in skip}
 
 
-def test_the_cleanup_tables_are_exactly_the_four_refetchable_caches():
-    # risk_state is not a fifth cache: only a ticker's deep_history marker is deleted (test below).
+def test_the_cleanup_tables_are_exactly_the_five_refetchable_caches():
+    # risk_state holds only one refetchable entry per ticker, its deep_history marker (test below).
     assert {table for table, _ in watchlist_cleanup.CLEANUP_TABLES} == {
         "stocks", "news", "corporate_quote_facts", "acquisition_state", "risk_state",
     }, "CLEANUP_TABLES must list only caches that are re-fetched on demand"

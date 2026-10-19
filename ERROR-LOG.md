@@ -32,7 +32,7 @@ Date: 2026-10-19 (risk-engine final whole-branch review). Defect pre-existing on
 Command: a read-only probe calling `acquire("equity_bars", ...)` at 2026-10-16 15:00Z with a fetcher returning a priced 2026-10-15 bar and a NaN 2026-10-16 bar, then `plan_range` for 2026-10-17.
 Failure: `covered_to` became 2026-10-16 although `stocks` held no row for that day. The next delta started at 2026-10-17, so the settled 2026-10-16 bar was never requested. A priced intraday bar for today was saved and counted the same way, freezing an intraday price as the close. No error was raised.
 Root cause: `acquisition/runner.py` `acquire` computed `covered_to = max(row.date for row in rows)` over every fetched row. `_save_ohlcv_rows` drops rows with a NaN close, and nothing dropped a bar dated D before D+1 00:00 UTC (the settle time behind `_DAILY_UTC` in the registry).
-Fix: `acquire` now keeps only priced bars dated before `now`'s date, before saving and before computing coverage. When none remain it records the check as EMPTY without advancing coverage, as the empty path already did.
+Fix: eed9360. `acquire` now keeps only priced bars dated before `now`'s date, before saving and before computing coverage. When none remain it records the check as EMPTY without advancing coverage, as the empty path already did.
 Files changed: `apps/api/services/acquisition/runner.py`, `tests/api/acquisition/test_runner.py`.
 Prevention: the runner tests pin that a NaN bar for today is re-asked by the next delta, that a priced bar for today is not saved before it settles, that a NaN bar for a settled day is not counted, and that a fetch with only today's bar leaves coverage where it was.
 
