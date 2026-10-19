@@ -3,11 +3,14 @@
 State keys in risk_state, per rules version <v>:
 - `backfill:<v>`: "running" | "done" | "degraded" | "failed". "degraded" (ruling R26) is a finished
   backfill that ran with an engine warning series empty or with sweep failures: live evaluation runs as
-  for "done", and the next run_backfill purges the version (live alerts too) and recomputes it, after
-  which live days replay from the fixed live_start.
+  for "done". Each later run_backfill sweeps and reloads; while the condition holds nothing is touched.
+  Once it clears, the version is purged (live alerts too) and recomputed once, and live days replay
+  from the fixed live_start (spec section 7 exception).
+- `replayed_through:<v>`: the last evaluated day before that one rebuild. Alerts the replay opens with a
+  start on or before it existed already and are not reported as opened.
 - `live_start:<v>`: the first day evaluated live (YYYY-MM-DD). Backfill covers eval_start up to the day before.
-- `coverage_wait:<YYYY-MM-DD>`: UTC ISO timestamp when waiting for that day's bars began. Kept only for
-  the newest candidate day; waits for older days are deleted.
+- `coverage_wait:<YYYY-MM-DD>`: UTC ISO timestamp when waiting for that day's bars began. Recorded only
+  for the newest candidate day; waits before the oldest pending day are deleted.
 
 Backfill and live run the same pure `evaluate_range`. A live day runs it over the inputs truncated to
 that day with start = end = day and the open alert rebuilt from the store, so its windows match the
@@ -65,12 +68,13 @@ def evaluable_day(inputs: RiskInputs, day: date, now: datetime, rules: RiskRules
 
 
 def _latest_evaluable(inputs: RiskInputs, days: list[date], now: datetime, rules: RiskRules) -> date | None:
-    """Newest ok day of `days`. Only the newest candidate's wait is recorded, and waits for older days
-    are deleted: the newest day's waiver releases every pending day before it."""
+    """Newest ok day of `days`. Only the newest candidate's wait is recorded. Waits for days before the
+    oldest pending day are stale and deleted; an older pending day keeps its own wait, so it is waived
+    on its own clock even after newer days appear."""
     if not days:
         return None
     newest = days[-1]
-    store.delete_states_below(_WAIT, newest.isoformat())
+    store.delete_states_below(_WAIT, days[0].isoformat())
     for day in reversed(days):
         if evaluable_day(inputs, day, now, rules, record_wait=day == newest)[0]:
             return day
@@ -220,19 +224,37 @@ def run_backfill(now: datetime, *, inputs: RiskInputs | None = None, loaded: Loa
     loaded = loaded or get_rules()
     rules, version = loaded.rules, loaded.version
     key = f"backfill:{version}"
+    prior = None
+    rebuilding = False
     try:
         apply_rules_change(now, loaded=loaded)
-        if store.get_state(key) == "done":
+        prior = store.get_state(key)
+        if prior == "done":
             return
-        store.set_state(key, "running")
-        # include_live: a "degraded" version has live alerts and days; they are replayed from live_start.
-        store.purge_version(version, include_live=True)
+        if prior != "degraded":
+            store.set_state(key, "running")
+            store.purge_version(version, include_live=True)  # no live rows unless a rebuild failed midway
         # Both sweeps skip tickers they have finished, so a rerun only does what is left.
         tickers = sweep.watchlist_and_benchmarks()
         deep = sweep.ensure_deep_history(tickers, history_start=rules.history_start, today=now.date())
         facts = sweep.ensure_quote_facts(tickers, now)
         if inputs is None:  # loaded after the sweeps; inputs passed in are used as given
             inputs = load_inputs(now=now, loaded=loaded)
+        missing = [s for s in WARNING_FRED_SERIES if s not in inputs.fred or inputs.fred[s].empty]
+        sweep_failed = [*deep.failed, *facts.failed]
+        state = "degraded" if missing or sweep_failed else "done"
+        if prior == "degraded":
+            if state == "degraded":  # still degraded: leave the alerts, days and state as they are
+                logger.info("risk.backfill_still_degraded version=%s missing_fred=%s sweep_failed=%s",
+                            version, missing, sweep_failed)
+                return
+            # Cleared: rebuild once. Live alerts and days are purged and replayed from live_start.
+            replayed = store.last_evaluated(version)
+            if replayed is not None:
+                store.set_state(f"replayed_through:{version}", replayed.isoformat())
+            rebuilding = True
+            store.set_state(key, "running")
+            store.purge_version(version, include_live=True)
 
         live_key = f"live_start:{version}"
         if store.get_state(live_key) is None:
@@ -246,9 +268,6 @@ def run_backfill(now: datetime, *, inputs: RiskInputs | None = None, loaded: Loa
         last = res.days[-1].day if res.days else end
         _persist_backfill(res, inputs, version, last, rules, now)
         _fill_outcomes(version, res.levels, _on_calendar(inputs))
-        missing = [s for s in WARNING_FRED_SERIES if s not in inputs.fred or inputs.fred[s].empty]
-        sweep_failed = [*deep.failed, *facts.failed]
-        state = "degraded" if missing or sweep_failed else "done"
         store.set_state(key, state)
         logger.info("risk.backfill_%s version=%s days=%s alerts=%s missing_fred=%s sweep_failed=%s", state,
                     version, len(res.days), len(res.closed) + (res.open is not None), missing, sweep_failed)
@@ -256,7 +275,8 @@ def run_backfill(now: datetime, *, inputs: RiskInputs | None = None, loaded: Loa
         raise
     except Exception:  # noqa: BLE001 - a failed backfill is recorded and retried, never raised
         logger.exception("risk.backfill_failed version=%s", version)
-        store.set_state(key, "failed")
+        # A degraded version that failed before its rebuild began still has its live alerts intact.
+        store.set_state(key, "degraded" if prior == "degraded" and not rebuilding else "failed")
 
 
 # ---------------------------------------------------------------- live
@@ -275,6 +295,9 @@ def evaluate_pending(now: datetime, *, inputs: RiskInputs | None = None,
     last = store.last_evaluated(version)
     pending = [d for d in _calendar(inputs) if d >= live_start and (last is None or d > last)]
     until = _latest_evaluable(inputs, pending, now, rules)
+    replay_key = f"replayed_through:{version}"
+    raw = store.get_state(replay_key)
+    replayed = date.fromisoformat(raw) if raw else None
     opened: list[int] = []
     res = None
     day_inputs = inputs
@@ -298,8 +321,10 @@ def evaluate_pending(now: datetime, *, inputs: RiskInputs | None = None,
                     store.close_alert(alert_id, res.closed[0].release, res.closed[0].reason)
             store.save_day(result, version, "live", coverage(inputs.closes, inputs.themes, day, rules),
                            now.isoformat())
-        if stored is None and alert_id is not None:
+        if stored is None and alert_id is not None and (replayed is None or res.open.start > replayed):
             opened.append(alert_id)
+    if replayed is not None and (store.last_evaluated(version) or date.min) >= replayed:
+        store.delete_state(replay_key)  # the replay has passed every day evaluated before the rebuild
     if res is not None:
         _fill_outcomes(version, res.levels, _on_calendar(day_inputs))
     return opened

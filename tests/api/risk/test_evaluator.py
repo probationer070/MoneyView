@@ -328,8 +328,80 @@ def test_degraded_backfill_runs_live_then_recomputes_to_done(sweeps, monkeypatch
     assert store.get_state("backfill:test0001") == "done"
     assert store.get_state("live_start:test0001") == OPEN_DAY.isoformat()
     assert sweeps == ["deep", "facts", "deep", "facts", "deep", "facts"]
-    evaluator.evaluate_pending(NOW + timedelta(hours=1), inputs=full, loaded=L)
+    # The one rebuild replays the live days; the alert it reopens existed before, so it is not "opened".
+    assert evaluator.evaluate_pending(NOW + timedelta(hours=1), inputs=full, loaded=L) == []
     assert _snapshot("test0001") == clean
+    assert store.get_state("replayed_through:test0001") is None
+    ids = [a.id for o in ("backfill", "live") for a in store.list_alerts("test0001", o, 10)]
+    evaluator.run_backfill(NOW + timedelta(hours=2), inputs=full, loaded=L)  # done: no second rebuild
+    assert [a.id for o in ("backfill", "live") for a in store.list_alerts("test0001", o, 10)] == ids
+
+
+def _ids(version: str) -> list[int]:
+    return [a.id for o in ("backfill", "live") for a in store.list_alerts(version, o, 100)]
+
+
+def test_still_degraded_rerun_touches_nothing(sweeps):
+    """Spec section 7. Catches a degraded rerun that purges and replays while the condition still holds
+    (alert ids change, live days are re-written), or one that skips the sweeps."""
+    L = _loaded("test0001")
+    full = _inputs(L)
+    no_dgs10 = replace(full, fred={**full.fred, "DGS10": pd.Series(dtype=float)})
+    store.set_state("live_start:test0001", OPEN_DAY.isoformat())
+    evaluator.run_backfill(NOW, inputs=no_dgs10, loaded=L)
+    evaluator.evaluate_pending(NOW, inputs=no_dgs10, loaded=L)
+    before, ids = _snapshot("test0001"), _ids("test0001")
+    assert any(a[0] == "live" for a in before[0])  # not vacuous: there is a live alert to lose
+
+    for hours in (1, 2):
+        evaluator.run_backfill(NOW + timedelta(hours=hours), inputs=no_dgs10, loaded=L)
+        assert store.get_state("backfill:test0001") == "degraded"
+        assert evaluator.evaluate_pending(NOW + timedelta(hours=hours), inputs=no_dgs10, loaded=L) == []
+        assert _ids("test0001") == ids and _snapshot("test0001") == before
+    assert sweeps == ["deep", "facts"] * 3
+
+
+def test_degraded_rerun_failing_before_rebuild_stays_degraded(sweeps, monkeypatch):
+    """Catches a degraded rerun whose failure (here a sweep raising) is recorded as "failed": the next
+    run would then purge and replay the live alerts although no rebuild happened."""
+    L = _loaded("test0001")
+    full = _inputs(L)
+    no_dgs10 = replace(full, fred={**full.fred, "DGS10": pd.Series(dtype=float)})
+    store.set_state("live_start:test0001", OPEN_DAY.isoformat())
+    evaluator.run_backfill(NOW, inputs=no_dgs10, loaded=L)
+    evaluator.evaluate_pending(NOW, inputs=no_dgs10, loaded=L)
+    ids = _ids("test0001")
+
+    def boom(*a, **kw):
+        raise RuntimeError("provider down")
+
+    monkeypatch.setattr(sweep, "ensure_quote_facts", boom)
+    evaluator.run_backfill(NOW + timedelta(hours=1), inputs=no_dgs10, loaded=L)
+    assert store.get_state("backfill:test0001") == "degraded"
+    assert _ids("test0001") == ids
+
+
+def test_older_pending_day_is_waived_on_its_own_clock(sweeps):
+    """Catches waits deleted below the newest pending day: D (10-15) waits from NOW, D+1 (10-16) from
+    NOW+12h; at NOW+25h D must be evaluated on its own 24-hour wait, not starve behind D+1's."""
+    L = _loaded("test0001")
+    with get_db() as conn:
+        themed = [r["ticker"] for r in conn.execute(
+            "SELECT ticker FROM watchlist WHERE theme NOT IN ('', 'defensives_other') ORDER BY ticker")]
+        conn.executemany("DELETE FROM stocks WHERE ticker = ? AND date = ?",
+                         [(t, d) for t in themed[: len(themed) // 5] for d in ("2026-10-15", "2026-10-16")])
+    store.set_state("live_start:test0001", "2026-10-12")
+    evaluator.run_backfill(NOW, inputs=_inputs(L), loaded=L)
+
+    evaluator.evaluate_pending(NOW, inputs=_inputs(L, through=date(2026, 10, 15)), loaded=L)
+    assert store.last_evaluated("test0001") == date(2026, 10, 14)
+    later = NOW + timedelta(hours=12)
+    evaluator.evaluate_pending(later, inputs=_inputs(L), loaded=L)
+    assert store.last_evaluated("test0001") == date(2026, 10, 14)
+    assert _waits() == {"coverage_wait:2026-10-15": NOW.isoformat(), "coverage_wait:2026-10-16": later.isoformat()}
+
+    evaluator.evaluate_pending(NOW + timedelta(hours=25), inputs=_inputs(L), loaded=L)
+    assert store.last_evaluated("test0001") == date(2026, 10, 15)
 
 
 @pytest.mark.parametrize("which", ["ensure_deep_history", "ensure_quote_facts"])

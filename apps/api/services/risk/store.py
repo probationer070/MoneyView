@@ -311,6 +311,11 @@ def set_state(key: str, value: str) -> None:
         conn.execute("INSERT OR REPLACE INTO risk_state (key, value) VALUES (?, ?)", (key, value))
 
 
+def delete_state(key: str) -> None:
+    with _db() as conn:
+        conn.execute("DELETE FROM risk_state WHERE key = ?", (key,))
+
+
 def delete_states_below(prefix: str, below: str) -> None:
     """Delete every risk_state key that starts with `prefix` and sorts before `prefix + below`."""
     with _db() as conn:
