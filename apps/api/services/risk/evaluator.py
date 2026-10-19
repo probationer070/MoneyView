@@ -208,17 +208,13 @@ def run_backfill(now: datetime, *, inputs: RiskInputs | None = None, loaded: Loa
         apply_rules_change(now, loaded=loaded)
         if store.get_state(key) == "done":
             return
-        fresh = not store.state_keys("backfill:")
         store.set_state(key, "running")
         store.purge_version(version)
-        if fresh:
-            tickers = sweep._watchlist_plus_benchmarks()
-            sweep.ensure_deep_history(tickers, history_start=rules.history_start, today=now.date())
-            sweep.ensure_quote_facts(tickers, now)
-            if inputs is not None:  # bars and shares changed; FRED did not
-                inputs = replace(load_inputs(fetch_fred=False, loaded=loaded),
-                                 fred=inputs.fred, fred_errors=inputs.fred_errors)
-        if inputs is None:
+        # Both sweeps skip tickers they have finished, so a rerun only does what is left.
+        tickers = sweep.watchlist_and_benchmarks()
+        sweep.ensure_deep_history(tickers, history_start=rules.history_start, today=now.date())
+        sweep.ensure_quote_facts(tickers, now)
+        if inputs is None:  # loaded after the sweeps; inputs passed in are used as given
             inputs = load_inputs(now=now, loaded=loaded)
 
         live_key = f"live_start:{version}"

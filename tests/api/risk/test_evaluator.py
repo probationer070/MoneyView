@@ -131,6 +131,7 @@ def test_backfill_idempotent(sweeps):
 
     assert _snapshot("test0001") == first
     assert [a.id for a in store.list_alerts("test0001", "backfill", 10)] == ids
+    assert sweeps == ["deep", "facts"]  # a done backfill does not sweep again
     assert first[0] and first[1]  # not vacuous
 
 
@@ -204,7 +205,7 @@ def test_coverage_wait_then_evaluate_after_24h(sweeps):
 def test_rules_change_closes_old_live_and_rebackfills(sweeps):
     """Catches: closing old alerts after the purge (release_date falls back to the start day); purging old
     live alerts; keeping old backfill alerts or risk_daily rows; the new version not re-backfilling the old
-    live days; sweeping again on a non-fresh install; evaluate_pending not returning opened ids."""
+    live days; a backfill that does not run the sweeps; evaluate_pending not returning opened ids."""
     old, new = _loaded("old00000", date(2026, 3, 2)), _loaded("new11111", date(2026, 3, 2))
     inp = _inputs(old)
     store.set_state("live_start:old00000", OPEN_DAY.isoformat())
@@ -225,7 +226,7 @@ def test_rules_change_closes_old_live_and_rebackfills(sweeps):
     redone = store.list_alerts("new11111", "backfill", 10)
     assert [(a.start_date, a.status) for a in redone] == [(OPEN_DAY, "open"), (date(2026, 3, 27), "released")]
     assert store.last_evaluated("new11111") == date(2026, 10, 15)
-    assert sweeps == ["deep", "facts"]
+    assert sweeps == ["deep", "facts", "deep", "facts"]  # every backfill not yet done sweeps
 
 
 def test_outcomes_filled_later(sweeps):
@@ -234,7 +235,6 @@ def test_outcomes_filled_later(sweeps):
     L = _loaded("test0001")
     early, full = _inputs(L, through=date(2026, 10, 14)), _inputs(L)
     store.set_state("live_start:test0001", "2026-10-12")
-    store.set_state("backfill:seen0000", "done")  # not a fresh install, so `early` is not reloaded in full
     evaluator.run_backfill(NOW, inputs=early, loaded=L)
     evaluator.evaluate_pending(NOW, inputs=early, loaded=L)
     [alert] = store.list_alerts("test0001", "backfill", 10)

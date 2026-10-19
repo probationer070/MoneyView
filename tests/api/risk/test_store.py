@@ -177,12 +177,8 @@ def test_stint_last_ref_roundtrip():
     assert store.get_alert(aid).stints[0].last_ref == date(2026, 10, 14)
 
 
-def test_state_keys_and_versions():
-    """Catches a prefix match that is a substring match, or versions() missing a table."""
-    store.set_state("backfill:aaaa1111", "done")
-    store.set_state("live_start:aaaa1111", "2026-10-12")
-    store.set_state("xbackfill:zz", "x")
-    assert store.state_keys("backfill:") == ["backfill:aaaa1111"]
+def test_versions_from_alerts_and_days():
+    """Catches versions() missing either table."""
     _alert(version="alrt0000")
     store.save_day(_day(), "days0000", "backfill", 1.0, "t")
     assert store.versions() == {"alrt0000", "days0000"}

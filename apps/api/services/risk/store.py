@@ -264,13 +264,6 @@ def set_state(key: str, value: str) -> None:
         conn.execute("INSERT OR REPLACE INTO risk_state (key, value) VALUES (?, ?)", (key, value))
 
 
-def state_keys(prefix: str) -> list[str]:
-    with get_db() as conn:
-        rows = conn.execute("SELECT key FROM risk_state WHERE substr(key, 1, ?) = ? ORDER BY key",
-                            (len(prefix), prefix)).fetchall()
-    return [r["key"] for r in rows]
-
-
 def versions() -> set[str]:
     """Every rules version with an alert or a risk_daily row."""
     with get_db() as conn:

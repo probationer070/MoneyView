@@ -97,21 +97,30 @@ def candidates(
     sox_ret = _upto(sox, day).reindex(upto.index)
     rets_sox = (sox_ret / sox_ret.shift(1) - 1).iloc[-cfg.corr_window :]
 
+    near_names = list(win.columns[near.to_numpy()])
+    partner_names = [SOX, *win.columns[crashed.to_numpy()]]
+    if not near_names:
+        return []
+    # One pairwise-complete correlation matrix: rows = near tickers, columns = partners in
+    # preference order (^SOX first, then crashed names in column order).
+    frame = pd.concat([rets[near_names], rets_sox.rename(SOX), rets[partner_names[1:]]], axis=1)
+    frame.columns = range(frame.shape[1])
+    full = frame.corr(min_periods=_MIN_CORR_PAIRS).to_numpy()
+    n = len(near_names)
+    mat = full[:n, n:]
+    column_of = {p: j for j, p in enumerate(partner_names)}
+    for i, ticker in enumerate(near_names):
+        if ticker in column_of:  # never its own partner
+            mat[i, column_of[ticker]] = np.nan
+
     out: list[CandidateCard] = []
-    for ticker in win.columns[near.to_numpy()]:
-        partners: list[tuple[str, pd.Series]] = [(SOX, rets_sox)]
-        partners += [(p, rets[p]) for p in win.columns[crashed.to_numpy()] if p != ticker]
-        best: tuple[float, str] | None = None
-        for name, series in partners:
-            pair = pd.concat([rets[ticker], series], axis=1).dropna()
-            if len(pair) < _MIN_CORR_PAIRS:
-                continue
-            corr = pair.iloc[:, 0].corr(pair.iloc[:, 1])
-            if np.isnan(corr):
-                continue
-            if best is None or corr > best[0]:
-                best = (float(corr), name)
-        if best is not None and best[0] >= cfg.corr_min:
+    for i, ticker in enumerate(near_names):
+        row = mat[i]
+        if np.isnan(row).all():
+            continue
+        j = int(np.nanargmax(row))  # first maximum, as the old strict-greater scan kept
+        best = (float(row[j]), partner_names[j])
+        if best[0] >= cfg.corr_min:
             out.append(
                 CandidateCard(
                     ticker=ticker,

@@ -227,3 +227,74 @@ def test_useful_needs_ten_days():
     # a NaN inside the 10-row window leaves only 9 usable rows: undecided
     levels.loc[idx[4], "calm"] = np.nan
     assert is_useful(["calm"], levels, idx[1].date()) is None
+
+
+# Output of the per-pair loop implementation (before vectorising) on tests/fixtures/risk as of 2026-10-08:
+# (ticker, corr_with, corr, pct_from_high63), in rank order.
+_LOOP_RESULT_1008 = [
+    ('LRCX', '^SOX', 0.8961946858752343, -7.741228424548541),
+    ('TSM', '^SOX', 0.8857008069576022, -5.724577656935937),
+    ('ENTG', '^SOX', 0.8835832649847192, -2.833690258462429),
+    ('FORM', '^SOX', 0.8518426652527669, -8.157519841229288),
+    ('LITE', 'AAOI', 0.8386488349007777, -7.481916975603065),
+    ('MU', '^SOX', 0.8367735395335473, -5.608759908878158),
+    ('MRVL', '^SOX', 0.8336562404136563, -4.3029920161145485),
+    ('ADI', '^SOX', 0.8330318912741709, -3.4763988922964173),
+    ('ASML', '^SOX', 0.8199986693057929, -6.018201513899535),
+    ('MTSI', '^SOX', 0.7996674812712877, -8.115898389618437),
+    ('VST', 'NRG', 0.7904707371442423, -7.585405179768456),
+    ('NVT', '^SOX', 0.7863041034359957, -7.863089587188233),
+    ('SMTC', '^SOX', 0.7734920871824257, -4.9239308343532295),
+    ('ETN', 'VRT', 0.7680519291602574, -7.707188092013729),
+    ('WCC', '^SOX', 0.7531235250794653, -7.33161600942519),
+    ('CIEN', '^SOX', 0.750444617015604, -4.698722472007855),
+    ('TXN', '^SOX', 0.7496678673520235, -5.013603288019031),
+    ('PWR', '^SOX', 0.7221678096955005, -5.103436770244441),
+    ('FIX', '^SOX', 0.7168268515795675, -9.29151033244785),
+    ('BE', 'CRWV', 0.706518349145969, -7.7625233449981295),
+    ('MPWR', '^SOX', 0.703424258219776, -7.439064033854259),
+    ('EME', 'CRWV', 0.6874271817224444, -9.773460166545945),
+    ('TECK', 'NEXA', 0.6831255128055362, -9.812177503018171),
+    ('TWIN', 'AAOI', 0.6817984151214324, -9.401110446180795),
+    ('PSIX', '^SOX', 0.6726526064509398, -6.062368784354344),
+    ('CLS', 'APLD', 0.6701434482662624, -8.16762627567944),
+    ('SMCI', '^SOX', 0.6603358636409776, -4.828656509249707),
+    ('JPM', 'GS', 0.6602178178901508, -8.791980996430947),
+    ('CEG', 'NRG', 0.6548921147575228, -5.1031913727495715),
+    ('ANET', '^SOX', 0.6447330369581484, -2.2517724918317272),
+    ('GEV', 'WULF', 0.6391302138232791, -7.397289993499334),
+    ('HUBB', 'VRT', 0.6284052717696235, -8.226556275519448),
+    ('DELL', '^SOX', 0.6058523217968721, -2.3538470507178944),
+]
+
+
+def test_candidates_match_loop_result_on_fixture():
+    """Pins the vectorised deck to the per-pair loop's output on real data. Catches a misaligned
+    correlation matrix (partner columns shifted or reversed). Self-pairs, the 40-pair rule and the
+    tie-break are pinned by the synthetic tests above; this fixture has no case of them."""
+    from datetime import date
+    from pathlib import Path
+
+    px = pd.read_csv(Path(__file__).resolve().parents[1] / "fixtures" / "risk" / "closes.csv",
+                     index_col="date", parse_dates=True)
+    sox = px.pop("^SOX")
+    px.pop("RSP")
+    got = candidates(px, sox, date(2026, 10, 8), RULES)
+    assert [(c.ticker, c.corr_with) for c in got] == [(t, w) for t, w, _, _ in _LOOP_RESULT_1008]
+    assert [c.corr for c in got] == pytest.approx([c for _, _, c, _ in _LOOP_RESULT_1008], abs=1e-12)
+    assert [c.pct_from_high63 for c in got] == [p for _, _, _, p in _LOOP_RESULT_1008]
+
+
+def test_candidate_tie_keeps_first_partner():
+    """Catches a tie-break that keeps the last best partner: two crashed names with identical returns tie
+    exactly, and the first in column order must win (the per-pair loop kept the first strict maximum)."""
+    rng = np.random.default_rng(7)
+    pattern = 100 * np.cumprod(1 + 0.01 * (-1.0) ** np.arange(90))
+    crashed = pattern.copy()
+    crashed[40:] *= 0.7  # inside the 63-row high window, before the 40-return corr window
+    closes = pd.DataFrame({"NEAR": pattern, "P1": crashed, "P2": crashed.copy()}, index=DAYS)
+    sox = pd.Series(100 + np.cumsum(rng.normal(0, 1, 90)), index=DAYS)
+    short = RULES.model_copy(update={"candidates": RULES.candidates.model_copy(update={"corr_window": 40})})
+    [card] = candidates(closes, sox, DAY, short)
+    assert (card.ticker, card.corr_with) == ("NEAR", "P1")
+    assert card.corr == pytest.approx(1.0)

@@ -42,7 +42,7 @@ class SweepReport:
     failed: list[str] = field(default_factory=list)
 
 
-def _watchlist_plus_benchmarks() -> list[str]:
+def watchlist_and_benchmarks() -> list[str]:
     with get_db() as conn:
         listed = [row["ticker"] for row in conn.execute("SELECT ticker FROM watchlist ORDER BY ticker")]
     return list(dict.fromkeys([*listed, *BENCHMARK_TICKERS]))
@@ -56,7 +56,7 @@ def sweep_bars(
     action_probe=latest_action_date,
     sleep=time.sleep,
 ) -> SweepReport:
-    targets = list(tickers) if tickers is not None else _watchlist_plus_benchmarks()
+    targets = list(tickers) if tickers is not None else watchlist_and_benchmarks()
     attempted = fetched = 0
     failed: list[str] = []
     reached_provider = False
