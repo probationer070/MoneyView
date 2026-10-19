@@ -10,9 +10,9 @@ repeat, the prose in [`storage-model.md`](storage-model.md) (ownership and file 
 [`cache-ownership-invalidation.md`](cache-ownership-invalidation.md) (frontend/read-model caches).
 Start at [`../INDEX.md`](../INDEX.md) for the full documentation map.
 
-Last verified: 2026-10-18 against `apps/api/services/db.py` at 693adea (watchlist theme column) on branch
-`feat/risk-signal`: 31 tables, 5 declared foreign keys, 27 logical references. Risk signal sub-projects 1 (watchlist themes) and 2 (risk engine, §3.3) are built;
-sub-projects 3-4 are only planned. The five tables of §3.3 were added after this count.
+Last verified: 2026-10-19 against `apps/api/services/db.py` at 0257700 on branch
+`feat/risk-engine`: 36 tables (including the five of §3.3), 7 declared foreign keys, 27 logical references. Risk signal sub-projects 1 (watchlist themes) and 2 (risk engine, §3.3) are built;
+sub-projects 3-4 are only planned.
 
 Sources of truth used here:
 
