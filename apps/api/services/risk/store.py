@@ -3,7 +3,9 @@
 Storage choices the spec leaves open:
 - `risk_daily.warnings_json` is {"warnings": {id: {state, value, observed_at}}, "on_count": n,
   "w1_proxy": bool}. `sox_confirming` has its own column, so it is not repeated there.
-- `risk_alerts.trigger_json` holds the warning ids that opened the alert.
+- `risk_alerts.trigger_json` holds the trigger (start) themes that opened the alert, in walk order.
+- `risk_alert_themes.last_ref` (not in section 7) keeps the stint's last 20-day-low date so a live
+  day can resume the alert walk from the store.
 - `risk_alert_cards.payload_json` holds the crash-card fields with no dedicated column
   (high_close, close, closes_30d). Candidate cards leave it NULL.
 - Dates are ISO strings, timestamps UTC ISO 8601.
@@ -32,6 +34,7 @@ class StoredStint:
     fwd10: float | None
     fwd20: float | None
     max_dd10: float | None
+    last_ref: date | None = None
 
 
 @dataclass(frozen=True)
@@ -142,14 +145,16 @@ def upsert_stint(alert_id: int, stint: ThemeStint, dd_at_join: float | None,
     with get_db() as conn:
         conn.execute(
             """INSERT INTO risk_alert_themes
-               (alert_id, theme, via, joined_date, left_date, dd20_at_join, fwd5, fwd10, fwd20, max_dd10)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               (alert_id, theme, via, joined_date, left_date, dd20_at_join, fwd5, fwd10, fwd20, max_dd10,
+                last_ref)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT(alert_id, theme, joined_date) DO UPDATE SET
                  via = excluded.via, left_date = excluded.left_date, dd20_at_join = excluded.dd20_at_join,
                  fwd5 = excluded.fwd5, fwd10 = excluded.fwd10, fwd20 = excluded.fwd20,
-                 max_dd10 = excluded.max_dd10""",
+                 max_dd10 = excluded.max_dd10, last_ref = excluded.last_ref""",
             (alert_id, stint.theme, stint.via, stint.joined.isoformat(), _iso(stint.left), dd_at_join,
-             outcome.get("fwd5"), outcome.get("fwd10"), outcome.get("fwd20"), outcome.get("max_dd10")),
+             outcome.get("fwd5"), outcome.get("fwd10"), outcome.get("fwd20"), outcome.get("max_dd10"),
+             _iso(stint.last_ref)),
         )
 
 
@@ -176,10 +181,21 @@ def replace_cards(alert_id: int, snapshot: str, deck: str,
             )
 
 
+def update_card_outcomes(alert_id: int, snapshot: str, deck: str, ticker: str,
+                         outcome: Mapping[str, float | None]) -> None:
+    """Write fwd5/fwd10/fwd20 of one card; keys absent from `outcome` are written as NULL."""
+    with get_db() as conn:
+        conn.execute(
+            """UPDATE risk_alert_cards SET fwd5 = ?, fwd10 = ?, fwd20 = ?
+               WHERE alert_id = ? AND snapshot = ? AND deck = ? AND ticker = ?""",
+            (outcome.get("fwd5"), outcome.get("fwd10"), outcome.get("fwd20"), alert_id, snapshot, deck, ticker),
+        )
+
+
 def _hydrate(conn, row) -> StoredAlert:
     stints = [
         StoredStint(r["theme"], r["via"], date.fromisoformat(r["joined_date"]), _date(r["left_date"]),
-                    r["dd20_at_join"], r["fwd5"], r["fwd10"], r["fwd20"], r["max_dd10"])
+                    r["dd20_at_join"], r["fwd5"], r["fwd10"], r["fwd20"], r["max_dd10"], _date(r["last_ref"]))
         for r in conn.execute(
             "SELECT * FROM risk_alert_themes WHERE alert_id = ? ORDER BY joined_date, theme", (row["id"],))
     ]
@@ -246,6 +262,21 @@ def get_state(key: str) -> str | None:
 def set_state(key: str, value: str) -> None:
     with get_db() as conn:
         conn.execute("INSERT OR REPLACE INTO risk_state (key, value) VALUES (?, ?)", (key, value))
+
+
+def state_keys(prefix: str) -> list[str]:
+    with get_db() as conn:
+        rows = conn.execute("SELECT key FROM risk_state WHERE substr(key, 1, ?) = ? ORDER BY key",
+                            (len(prefix), prefix)).fetchall()
+    return [r["key"] for r in rows]
+
+
+def versions() -> set[str]:
+    """Every rules version with an alert or a risk_daily row."""
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT rules_version FROM risk_alerts UNION SELECT rules_version FROM risk_daily").fetchall()
+    return {r[0] for r in rows}
 
 
 def purge_version(version: str, *, include_live: bool = False) -> None:

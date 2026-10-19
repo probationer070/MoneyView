@@ -144,3 +144,64 @@ def test_state_roundtrip():
     store.set_state("k", "1")
     store.set_state("k", "2")
     assert store.get_state("k") == "2"
+
+
+def test_update_card_outcomes_one_card_only():
+    """Catches an UPDATE that ignores snapshot, deck or ticker (other cards overwritten), or one that
+    does not write all three horizons."""
+    aid = _alert()
+    d = date(2026, 10, 8)
+    crash = lambda t: CrashCard(t, -12.0, date(2026, 9, 1), 100.0, 88.0, [88.0])
+    store.replace_cards(aid, "start", "crash", [crash("NVDA"), crash("AMD")], d)
+    store.replace_cards(aid, "latest", "crash", [crash("NVDA")], d)
+    store.replace_cards(aid, "start", "candidate", [CandidateCard("NVDA", -3.0, 0.8, "^SOX")], d)
+
+    store.update_card_outcomes(aid, "start", "crash", "NVDA", {"fwd5": 1.5, "fwd10": -2.5, "fwd20": 3.5})
+
+    cards = store.get_alert(aid).cards
+    nvda, amd = cards[("start", "crash")]
+    assert (nvda.fwd5, nvda.fwd10, nvda.fwd20) == (1.5, -2.5, 3.5)
+    assert (amd.fwd5, amd.fwd10, amd.fwd20) == (None, None, None)
+    assert cards[("latest", "crash")][0].fwd5 is None
+    assert cards[("start", "candidate")][0].fwd5 is None
+
+
+def test_stint_last_ref_roundtrip():
+    """Catches upsert_stint not writing last_ref, or not updating it on conflict, or _hydrate dropping it."""
+    aid = _alert()
+    stint = ThemeStint("ai_semis", "theme", date(2026, 10, 8), None, date(2026, 10, 8))
+    store.upsert_stint(aid, stint, -5.0, {})
+    assert store.get_alert(aid).stints[0].last_ref == date(2026, 10, 8)
+    stint.last_ref = date(2026, 10, 14)
+    store.upsert_stint(aid, stint, -5.0, {})
+    assert store.get_alert(aid).stints[0].last_ref == date(2026, 10, 14)
+
+
+def test_state_keys_and_versions():
+    """Catches a prefix match that is a substring match, or versions() missing a table."""
+    store.set_state("backfill:aaaa1111", "done")
+    store.set_state("live_start:aaaa1111", "2026-10-12")
+    store.set_state("xbackfill:zz", "x")
+    assert store.state_keys("backfill:") == ["backfill:aaaa1111"]
+    _alert(version="alrt0000")
+    store.save_day(_day(), "days0000", "backfill", 1.0, "t")
+    assert store.versions() == {"alrt0000", "days0000"}
+
+
+@pytest.mark.virgin_db
+def test_old_stint_table_migrates_last_ref(tmp_path, monkeypatch):
+    """Catches removing the last_ref ALTER: a stint table created before it keeps no last_ref column."""
+    db_path = tmp_path / "moneyview.db"
+    monkeypatch.setattr(db_service, "_DB_PATH", db_path)
+    with sqlite3.connect(str(db_path)) as conn:
+        conn.execute(
+            """CREATE TABLE risk_alert_themes (alert_id INTEGER NOT NULL, theme TEXT NOT NULL, via TEXT NOT NULL,
+               joined_date TEXT NOT NULL, left_date TEXT, dd20_at_join REAL, fwd5 REAL, fwd10 REAL, fwd20 REAL,
+               max_dd10 REAL, PRIMARY KEY (alert_id, theme, joined_date))""")
+
+    db_service.init_db()
+    db_service.init_db()  # idempotent
+
+    with sqlite3.connect(str(db_path)) as conn:
+        columns = {r[1] for r in conn.execute("PRAGMA table_info(risk_alert_themes)")}
+    assert "last_ref" in columns

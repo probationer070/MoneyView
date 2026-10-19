@@ -291,6 +291,7 @@ CREATE TABLE IF NOT EXISTS risk_alert_themes (
     fwd10          REAL,
     fwd20          REAL,
     max_dd10       REAL,
+    last_ref       TEXT,  -- the stint's last 20-day-low date, so a live day can resume the walk
     PRIMARY KEY (alert_id, theme, joined_date)
 );
 CREATE TABLE IF NOT EXISTS risk_alert_cards (
@@ -1076,6 +1077,10 @@ def _ensure_schema_compatibility(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE news ADD COLUMN lang TEXT NOT NULL DEFAULT 'en'")
     if news_columns and "topic" not in news_columns:
         conn.execute("ALTER TABLE news ADD COLUMN topic TEXT NOT NULL DEFAULT ''")
+    # Risk engine: nullable and additive; a NULL last_ref reads as the stint's joined date.
+    stint_columns = {row["name"] for row in conn.execute("PRAGMA table_info(risk_alert_themes)")}
+    if stint_columns and "last_ref" not in stint_columns:
+        conn.execute("ALTER TABLE risk_alert_themes ADD COLUMN last_ref TEXT")
     # Nullable and additive: existing rows keep every value and get a uid on the first records sync
     # (records_sync.store.backfill_uids).
     for table in ("valuation_case", "investment_decision", "user_event"):
