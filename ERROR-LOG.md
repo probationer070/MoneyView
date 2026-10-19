@@ -52,8 +52,8 @@ Date: 2026-10-19 (risk-engine plan, Task 1).
 Command: not recorded (found while planning the risk engine; the stall was visible in the data, not from a command).
 Failure: daily bars for existing watchlist tickers and all news stopped at 2026-09-29 with no on-screen staleness signal.
 Root cause: no scheduled sweep exists. Bars refresh only when a screen reads the ticker, and news only on a detail click. `acquisition/runner.py` `schedule_acquisition` says the registry warmer "arrives with the later phases".
-Fix: open. This plan's Task 9 and Task 12 add the sweeps.
-Files changed: recorded in Task 1; sweeps added in Tasks 9 and 12.
+Fix: 6e7c23f adds `sweep_bars` (with ad272a4 and 2a8f365 following up), 4a25d05 adds `sweep_news`, and 6e1b52a calls both from the hourly `risk_cycle` started in the app lifespan.
+Files changed: `apps/api/services/risk/sweep.py`, `apps/api/services/risk/news.py`, `apps/api/services/risk/schedule.py`, `apps/api/main.py`.
 Prevention: `risk_daily.bars_coverage` and `/latest.data` expose coverage.
 
 ## 2026-10-18: Monte Carlo charts overflow their frames at 390 on every tab (feat/monte-carlo-one-screen)
