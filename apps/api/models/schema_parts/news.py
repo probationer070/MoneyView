@@ -18,6 +18,8 @@ class NewsArticle(BaseModel):
     published_date: str = ""
     sentiment: SentimentEnum = SentimentEnum.neutral
     importance: int = 1
+    lang: str = "en"
+    topic: str = ""
 
 
 class NewsAcquireRequest(BaseModel):

@@ -18,9 +18,10 @@ GRACE = timedelta(days=watchlist_cleanup.CLEANUP_GRACE_DAYS)
 DAY = timedelta(days=1)
 CLASSES = watchlist_cleanup.PER_TICKER_DATA_CLASSES
 FULL = {"stocks": 2, "news": 1, "corporate_statements": 1, "corporate_quote_facts": 1,
-        "acquisition_state": len(CLASSES)}
+        "acquisition_state": len(CLASSES), "risk_state": 1}
 # What a cleanup leaves behind: corporate_statements is kept (owner decision, 2026-10-15).
-GONE = {"stocks": 0, "news": 0, "corporate_statements": 1, "corporate_quote_facts": 0, "acquisition_state": 0}
+GONE = {"stocks": 0, "news": 0, "corporate_statements": 1, "corporate_quote_facts": 0, "acquisition_state": 0,
+        "risk_state": 0}
 
 
 def seed_caches(ticker: str) -> None:
@@ -37,6 +38,7 @@ def seed_caches(ticker: str) -> None:
         for data_class in CLASSES:
             conn.execute("INSERT INTO acquisition_state (data_class, subject, status) VALUES (?, ?, 'ok')",
                          (data_class, ticker))
+        conn.execute("INSERT INTO risk_state (key, value) VALUES (?, '2026-09-01')", (f"deep_history:{ticker}",))
 
 
 def cache_counts(ticker: str) -> dict[str, int]:
@@ -51,6 +53,7 @@ def cache_counts(ticker: str) -> dict[str, int]:
             "corporate_quote_facts": count("SELECT COUNT(*) FROM corporate_quote_facts WHERE ticker = ?"),
             "acquisition_state": count(
                 f"SELECT COUNT(*) FROM acquisition_state WHERE subject = ? AND data_class IN ({marks})", *CLASSES),
+            "risk_state": count("SELECT COUNT(*) FROM risk_state WHERE key = 'deep_history:' || ?"),
         }
 
 
@@ -175,15 +178,17 @@ def _row_counts_outside_the_cleanup_tables() -> dict[str, int]:
     # The four pinned cache tables are written out, not read from CLEANUP_TABLES: deriving the skip set
     # from the module under test would let a mutation of that tuple hide the table it adds.
     # corporate_statements is NOT skipped: it is a protected table that a cleanup must never change.
-    skip = {"stocks", "news", "corporate_quote_facts", "acquisition_state", "cleanup_pending", "sqlite_sequence"}
+    skip = {"stocks", "news", "corporate_quote_facts", "acquisition_state", "risk_state", "cleanup_pending",
+            "sqlite_sequence"}
     with get_db() as conn:
         tables = [r["name"] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")]
         return {t: conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0] for t in tables if t not in skip}
 
 
-def test_the_cleanup_tables_are_exactly_the_four_refetchable_caches():
+def test_the_cleanup_tables_are_exactly_the_five_refetchable_caches():
+    # risk_state holds only one refetchable entry per ticker, its deep_history marker (test below).
     assert {table for table, _ in watchlist_cleanup.CLEANUP_TABLES} == {
-        "stocks", "news", "corporate_quote_facts", "acquisition_state",
+        "stocks", "news", "corporate_quote_facts", "acquisition_state", "risk_state",
     }, "CLEANUP_TABLES must list only caches that are re-fetched on demand"
     assert "statements" not in CLASSES, "the statements data class must never be cleaned"
 
@@ -373,3 +378,18 @@ def test_the_backfill_records_one_normalised_key_per_ticker():
     seed_caches("ZZA")
     watchlist_cleanup.run_cleanup(T0)
     assert pending() == {"ZZA": T0.isoformat()}, "the backfill recorded two pending rows for one ticker"
+
+
+def test_a_cleanup_deletes_only_the_tickers_deep_history_marker():
+    """Mutation caught: the risk_state entry dropped from CLEANUP_TABLES (a re-added ticker would never
+    refetch deep history after its bars were deleted), or a WHERE clause that deletes other risk_state keys."""
+    seed_caches("ZZA")
+    seed_caches("ZZB")
+    with get_db() as conn:
+        conn.execute("INSERT INTO risk_state (key, value) VALUES ('backfill:abcd1234', 'done')")
+        conn.execute("INSERT INTO risk_state (key, value) VALUES ('coverage_wait:2026-09-01', 'x')")
+    pend("ZZA", T0)
+    watchlist_cleanup.run_cleanup(T0 + GRACE + DAY)
+    with get_db() as conn:
+        keys = {r["key"] for r in conn.execute("SELECT key FROM risk_state")}
+    assert keys == {"deep_history:ZZB", "backfill:abcd1234", "coverage_wait:2026-09-01"}

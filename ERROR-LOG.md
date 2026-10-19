@@ -26,6 +26,36 @@ reveal that; only checking the code did.
 
 An entry states what was true when it was written. Nothing updates it on its own.
 
+## 2026-10-19: an unsettled bar for today marks today covered, so the settled bar is never fetched
+
+Date: 2026-10-19 (risk-engine final whole-branch review). Defect pre-existing on renewal; found by the final review, fixed on feat/risk-engine.
+Command: a read-only probe calling `acquire("equity_bars", ...)` at 2026-10-16 15:00Z with a fetcher returning a priced 2026-10-15 bar and a NaN 2026-10-16 bar, then `plan_range` for 2026-10-17.
+Failure: `covered_to` became 2026-10-16 although `stocks` held no row for that day. The next delta started at 2026-10-17, so the settled 2026-10-16 bar was never requested. A priced intraday bar for today was saved and counted the same way, freezing an intraday price as the close. No error was raised.
+Root cause: `acquisition/runner.py` `acquire` computed `covered_to = max(row.date for row in rows)` over every fetched row. `_save_ohlcv_rows` drops rows with a NaN close, and nothing dropped a bar dated D before D+1 00:00 UTC (the settle time behind `_DAILY_UTC` in the registry).
+Fix: eed9360. `acquire` now keeps only priced bars dated before `now`'s date, before saving and before computing coverage. When none remain it records the check as EMPTY without advancing coverage, as the empty path already did.
+Files changed: `apps/api/services/acquisition/runner.py`, `tests/api/acquisition/test_runner.py`.
+Prevention: the runner tests pin that a NaN bar for today is re-asked by the next delta, that a priced bar for today is not saved before it settles, that a NaN bar for a settled day is not counted, and that a fetch with only today's bar leaves coverage where it was.
+
+## 2026-10-19: market proxy tickers enrolled for cache deletion by the watchlist cleanup
+
+Date: 2026-10-19 (risk-engine plan, Task 1). Found 2026-10-18; defect pre-existing on renewal, fixed in 6d09195.
+Command: not recorded (found by reading `cleanup_pending` and `_REFERENCE_QUERIES`, not from a failing command).
+Failure: the market-overview proxy tickers stored in `stocks` (BOTZ, SKYY, XLE, ITA, CIBR, ICLN and the spread pairs) were enrolled in `cleanup_pending` on 2026-10-18 08:05Z. Their `stocks`, `news`, `corporate_quote_facts` and `acquisition_state` rows would have been deleted 30 days later and refetched on the next overview request, repeatedly. The benchmarks the risk engine adds (^SOX, RSP, SPY) take the same path. No error was raised.
+Root cause: `watchlist_cleanup.py` `_REFERENCE_QUERIES` counted only watchlist, holdings, cases and the like as references. A ticker that only the market overview reads looked like an unreferenced cache entry.
+Fix: 6d09195 counts the SPREAD_PAIRS tickers and the risk benchmarks as referenced. TSL, 143860.KS and ^KS11 are not referenced by any code path and are still cleaned after the grace period (owner to confirm).
+Files changed: `apps/api/services/watchlist_cleanup.py`, `apps/api/services/risk/constants.py`, `tests/api/test_watchlist_cleanup_references.py`.
+Prevention: `tests/api/test_watchlist_cleanup_references.py` pins that these tickers are never enrolled. Any new ticker class stored in `stocks` that is not on the watchlist must be added to the reference queries.
+
+## 2026-10-19: daily bars and news stall after the watchlist's last refresh (no scheduled sweep)
+
+Date: 2026-10-19 (risk-engine plan, Task 1).
+Command: not recorded (found while planning the risk engine; the stall was visible in the data, not from a command).
+Failure: daily bars for existing watchlist tickers and all news stopped at 2026-09-29 with no on-screen staleness signal.
+Root cause: no scheduled sweep exists. Bars refresh only when a screen reads the ticker, and news only on a detail click. `acquisition/runner.py` `schedule_acquisition` says the registry warmer "arrives with the later phases".
+Fix: 6e7c23f adds `sweep_bars` (with ad272a4 and 2a8f365 following up), 4a25d05 adds `sweep_news`, and 6e1b52a calls both from the hourly `risk_cycle` started in the app lifespan.
+Files changed: `apps/api/services/risk/sweep.py`, `apps/api/services/risk/news.py`, `apps/api/services/risk/schedule.py`, `apps/api/main.py`.
+Prevention: `risk_daily.bars_coverage` and `/latest.data` expose coverage.
+
 ## 2026-10-18: Monte Carlo charts overflow their frames at 390 on every tab (feat/monte-carlo-one-screen)
 
 Date: 2026-10-18 (final-review capture of the Monte Carlo one-screen branch). Introduced on this branch, fixed in 3585d30.

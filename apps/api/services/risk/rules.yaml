@@ -1,0 +1,48 @@
+# Every threshold of the risk evaluator lives here and only here.
+# Editing this file changes the rules version (first 8 hex of sha256).
+price: {drop_pct: 4.0, down_days: 2, window: 20}
+warnings_required: 3
+
+w1:
+  series: BAMLH0A0HYM2
+  rise_pp: 0.30
+  rise_window: 10
+  level: 3.50
+  hy_from: 2023-11-06
+  proxy: {series: BAA10Y, rise_pp: 0.10, level: 1.9095}
+w2: {series: DGS10, level: 5.00, rise_pp: 0.40, rise_window: 20}
+w3: {series: DCOILBRENTEU, rise_pct: 15.0, window: 20}
+w4: {series: DFEDTARU, days: 60}
+w5: {cpi_series: CPILFESL, pce_series: PCEPILFE, mm_pct: 0.30, cpi_known_day: 15}
+w7: {ratio_drop_pct: 5.0, sox_within_pct: 5.0, window: 60}
+
+open_gate: {cap_share_pct: 20.0, sox_opens: true}
+theme_exit: {recover_within_pct: 3.0, quiet_days: 5}
+
+semis_themes: [ai_semis, memory_storage, chip_equipment_design, optical_connectivity, analog_power_chips]
+excluded_themes: [defensives_other]
+min_members: 3
+
+eval_start: 2016-01-04
+history_start: 2015-06-01
+
+crash_deck: {drop_pct: 10.0, window: 20, api_cards: 10}
+candidates: {within_high_pct: 10.0, high_window: 63, corr_min: 0.6, corr_window: 63, crashed_drop_pct: 20.0, api_cards: 10}
+news: {min_items: 10, max_items: 30, days_before: 7}
+coverage: {min_share: 0.90, wait_hours: 24}
+
+labels:
+  W1: {ko: 하이일드 스프레드, en: High-yield spread}
+  W2: {ko: 금리, en: Rates}
+  W3: {ko: 유가, en: Oil}
+  W4: {ko: 연준 인상, en: Fed hike}
+  W5: {ko: 물가 과열, en: Hot inflation}
+  W7: {ko: 시장 폭 축소, en: Narrowing breadth}
+
+rule_text:
+  W1: {ko: 하이일드 스프레드가 급등했거나 높은 수준입니다., en: The high-yield spread jumped or sits at a high level.}
+  W2: {ko: 10년 금리가 높은 수준이거나 빠르게 올랐습니다., en: The 10-year yield is high or rose quickly.}
+  W3: {ko: 브렌트유가 짧은 기간에 크게 올랐습니다., en: Brent oil rose sharply over a short window.}
+  W4: {ko: 연준이 최근 정책금리를 인상했습니다., en: The Fed raised its policy rate recently.}
+  W5: {ko: 근원 물가의 전월 대비 상승률이 기준 이상입니다., en: Core inflation month-over-month reached or exceeded the threshold.}
+  W7: {ko: "반도체 지수(SOX)가 동일가중 S&P(RSP)보다 약해져 SOX/RSP 비율이 60일 고점보다 5% 넘게 낮은데, SOX 자체는 60일 고점의 5% 안에 있다.", en: "Semiconductors (SOX) are lagging the equal-weight S&P (RSP): the SOX/RSP ratio is more than 5% below its 60-day high while SOX itself is within 5% of its 60-day high."}

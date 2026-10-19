@@ -491,44 +491,40 @@ These quality signals are part of the calculate process and should not be treate
 - Report export:
   backend-owned canonical payload and export rendering, frontend-owned file delivery
 
-## 12. Risk Signal (Planned)
+## 12. Risk Signal
 
-Source: `docs/superpowers/specs/2026-10-18-risk-signal-design.md`. Built so far: only the watchlist theme pieces (sub-project 1: `watchlist.theme`, the yaml, the theme route, theme in peer sync; see 4.2a). Everything else below is planned: the evaluator, news collection and the `/risk` API are sub-project 2, the banner and overlay panel are sub-project 3, and the one-screen detail page is sub-project 4. Names are provisional until each sub-project spec fixes them. Tables: `database-relationships.md` section 3.3.
+Sources: `docs/superpowers/specs/2026-10-18-risk-signal-design.md` and `docs/superpowers/specs/2026-10-19-risk-engine-design.md`. Built: the watchlist theme pieces (sub-project 1, see 4.2a) and the risk engine (sub-project 2: rules, evaluator, backfill, sweeps, news, `/api/v1/risk`). Still planned: the banner and overlay panel (sub-project 3) and the one-screen detail page (sub-project 4). Tables: `database-relationships.md` section 3.3.
 
 ```mermaid
 flowchart TD
-    FRED["FRED series<br/>existing fetcher plus new series<br/>PLANNED"]
-    BARS["Daily bars in stocks<br/>watchlist, theme leaders, SOX, RSP, SPY<br/>BUILT for watchlist, rest PLANNED"]
-    THEME["watchlist.theme and watchlist_themes.yaml<br/>BUILT"]
-    EVAL["Daily risk evaluator<br/>after US close, catches up missed days<br/>PLANNED"]
-    WARN["Warning indicators<br/>on, near, off<br/>PLANNED"]
-    CONF["Confirmation rule<br/>indicators on and a theme price breaking<br/>PLANNED"]
-    ALERT[("Alert record<br/>PLANNED")]
-    NEWS["News collection<br/>topic EN and KO, ticker EN and KO<br/>refresh when a new alert opens<br/>PLANNED"]
-    API["GET /api/v1/risk/latest and /risk/history<br/>PLANNED"]
-    BANNER["Banner on the root page<br/>PLANNED"]
-    PANEL["Overlay panel<br/>card decks: crashed, risk candidates<br/>news list<br/>PLANNED"]
-    DETAIL["/detail/ticker<br/>PLANNED, sub-project 4"]
+    CYCLE["risk_cycle<br/>hourly in the app lifespan<br/>off with MONEYVIEW_DISABLE_STARTUP_JOBS"]
+    BARS["1 sweep_bars<br/>daily bars into stocks<br/>watchlist, ^SOX, RSP, SPY"]
+    BACK["2 run_backfill<br/>deep history, quote facts, past alerts<br/>once per rules version"]
+    PEND["3 evaluate_pending<br/>every pending trading day, origin live<br/>FRED fetched here"]
+    NEWS["4 sweep_news<br/>topic EN and KO, ticker news<br/>again for each new alert"]
+    RULES["rules.yaml<br/>every threshold, version = sha256 first 8 hex"]
+    ENGINE["core_finance risk_signals<br/>evaluate_range: indices, warnings,<br/>confirmations, alert walk"]
+    DB[("risk_daily, risk_alerts,<br/>risk_alert_themes, risk_alert_cards,<br/>risk_state, news")]
+    API["GET /api/v1/risk/latest<br/>/history, /alerts/id"]
+    UI["Banner and overlay panel<br/>PLANNED, sub-project 3"]
 
-    FRED --> EVAL
-    BARS --> EVAL
-    THEME --> EVAL
-    EVAL --> WARN
-    WARN --> CONF
-    CONF --> ALERT
-    ALERT -->|new alert| NEWS
-    NEWS --> ALERT
-    ALERT --> API
-    API --> BANNER
-    BANNER -->|click or first sight| PANEL
-    PANEL -->|card click| DETAIL
+    CYCLE --> BARS --> BACK --> PEND --> NEWS
+    RULES --> ENGINE
+    BACK --> ENGINE
+    PEND --> ENGINE
+    ENGINE --> DB
+    NEWS --> DB
+    DB --> API
+    API --> UI
 ```
 
 Flow notes:
 
-1. **Inputs.** FRED series come from the existing fetcher used by the scenario engine (`apps/api/services/signals/fetch.py`), which also needs `THREEFYTP10`, `CPIAUCSL`, `PCEPI` and `PCEPILFE` added. Daily bars come from the existing `equity_bars` acquisition path; `^SOX`, `RSP` and `SPY` are not in `stocks` today and must be acquired.
-2. **Evaluation.** One run per US trading day, scheduled like `signal_cycle` (periodic check while the app runs, catch-up on start, missed days evaluated in date order). Thresholds live in one checked-in rules file, not in code. This evaluator is separate from the weekly A/B/C scenario engine, whose rules and probabilities are not changed.
-3. **Confirmation and alert record.** Warning indicators alone never raise the banner. An alert opens when enough indicators are on and a theme index (market-cap weighted) starts to break. At most one alert is active at a time; a later breaking theme joins it. A cleared alert is kept, and a new trigger gets a new id. Alerts are computed per PC and not peer-synced.
-4. **News.** Topic news (macro first) and ticker news are collected in English and Korean on a schedule, and again for the relevant topics and tickers when a new alert opens. Duplicates are merged by URL or normalized title. If a feed fails, the alert still shows and the news area reports the failure.
-5. **Read path.** `GET /api/v1/risk/latest` returns the active alert (or null) with indicator states, crashed list, candidate list, news and data date; `GET /api/v1/risk/history` lists past alerts including backtested ones. Contracts are fixed by the sub-project 2 spec.
-6. **UI.** The market overview shows a one-line banner when an alert is active. The overlay panel opens automatically once per alert id (seen ids are kept in the browser's local storage) and reopens from the banner. A card opens `/detail/[ticker]`.
+1. **Cycle.** `risk_cycle` (`apps/api/services/risk/schedule.py`) runs `run_once` every hour. Each step logs and continues on failure, so one failed step never stops the next. Steps run in order: bar sweep, backfill, evaluate pending, news.
+2. **Bar sweep.** `sweep_bars` refreshes daily bars for the watchlist and the benchmarks `^SOX`, `RSP`, `SPY`, which are stored in `stocks` and never added to `MARKET_INDICES`. Calls are sequential, 0.5 s apart.
+3. **Backfill.** `run_backfill` runs once per rules version (state `backfill:<version>` in `risk_state`). It first applies a rules change, then ensures deep history from `history_start` and quote facts (shares outstanding) for each ticker, then evaluates `eval_start` up to the day before `live_start:<version>` and writes past alerts with origin `backfill`. A failure is recorded as `failed` and retried next cycle. A run with an engine warning FRED series empty, or with failed sweep tickers, is recorded as `degraded` (ruling R26): live evaluation runs as for `done`. Each later cycle sweeps and rechecks; while the condition holds nothing is touched. Once it clears, the version is purged (live alerts too) and recomputed once, and the live days replay from the unchanged `live_start`; alerts that existed before the rebuild are not reported as newly opened.
+4. **Evaluate pending.** `evaluate_pending` loads inputs with `fetch_fred=True` (the engine FRED series only; fetch errors are kept in `risk_state` as `fred_errors`) and evaluates each trading day from `live_start` that is not yet evaluated, in date order, as origin `live`. It resumes the open alert from the stored stints (`last_ref`) and returns the ids of alerts it opened. Only days with sufficient bar coverage are evaluated.
+5. **News.** `sweep_news` runs when the last sweep (`news_swept_at`) is older than the news interval. For each newly opened alert it runs again for that alert's crash-deck tickers. Alert news always mixes macro and industry items (`select_alert_news`). Feeds are paced by `NEWS_CRAWL_DELAY_SECONDS`; a failed feed is skipped.
+6. **Read path.** `GET /api/v1/risk/latest` returns the evaluation date, the six warnings (W1-W5, W7), the open alert with its stints, decks and news (or null), the last released alert, the backfill state and the data coverage. `GET /api/v1/risk/history?origin=&limit=&rules_version=` lists alert summaries. `GET /api/v1/risk/alerts/{id}` returns one alert in full, or 404 `unknown_alert:<id>`. Percent values are percent numbers, unrounded. A backfill still being written is hidden from `/latest`.
+7. **Reproduction.** `scripts/risk/reproduce_backfill.py` recomputes the past alerts from a temp copy of the local DB, read-only, and diffs them against the 11 alerts in the research report.
+8. **UI.** Not built yet. Sub-project 3 adds the root-page banner and overlay panel; the overlay opens once per alert id.

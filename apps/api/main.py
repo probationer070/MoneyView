@@ -45,6 +45,7 @@ from apps.api.routes import (
 from apps.api.services.db import get_db, init_db
 from apps.api.services.market_data import MarketDataService
 from apps.api.routes.signals import router as signals_router
+from apps.api.routes.risk import router as risk_router
 
 configure_logging()
 logger = setup_logger(__name__)
@@ -131,6 +132,10 @@ async def lifespan(app: FastAPI):
 
     reload_rules()
 
+    from apps.api.services.risk.rules import reload_rules as reload_risk_rules
+
+    reload_risk_rules()
+
     # Best-effort watchlist peer sync (spec §2): run_sync never raises, so an unavailable
     # folder only records last_error and startup continues.
     from apps.api.services.records_sync import service as records_sync
@@ -158,6 +163,9 @@ async def lifespan(app: FastAPI):
         from apps.api.services.signals.schedule import signal_cycle
 
         background.append(asyncio.create_task(signal_cycle()))
+        from apps.api.services.risk.schedule import risk_cycle
+
+        background.append(asyncio.create_task(risk_cycle()))
     # After the startup syncs above, so peer removals are already recorded as pending.
     background.append(asyncio.create_task(watchlist_cleanup_cycle(run_at_start=not startup_jobs_disabled)))
 
@@ -238,6 +246,7 @@ app.include_router(valuation_router, prefix="/api/v1/valuation", tags=["Valuatio
 app.include_router(decisions_router, prefix="/api/v1/decisions", tags=["Decisions"])
 app.include_router(sync_router, prefix="/api/v1/sync", tags=["Sync"])
 app.include_router(signals_router, prefix="/api/v1/signals", tags=["Signals"])
+app.include_router(risk_router, prefix="/api/v1/risk", tags=["Risk"])
 
 
 @app.get("/api/v1/health", tags=["Health"])

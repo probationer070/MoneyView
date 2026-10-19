@@ -120,6 +120,8 @@ sub-project and feeding an implementation plan.
 | `2026-10-10-macro-signal-engine-spec.md` | Macro signal engine: FRED rule verdicts and bounded heuristic A/B/C scenario probabilities, with the implementation-plan corrections C1–C11 in its appendix (the Macro Signals tab) |
 | `plans/2026-10-12-macro-signal-engine.md` | Task-by-task plan for the macro signal engine: pure rules, scenario maths, FRED fetch, rules.yaml, store, engine and API, hourly schedule, the /signals page and the docs |
 | `2026-10-18-risk-signal-design.md` | Risk signal (급락 경보): the watchlist theme layer (sub-project ①) and the drawdown warning built on it, with its decisions and the evidence under `2026-10-18-risk-signal-evidence/` |
+| `2026-10-19-risk-engine-design.md` | Risk signal sub-project ②: daily risk evaluator, alert record with backfilled past alerts, daily bar and news sweeps, topic and Korean news, `/api/v1/risk` contract; the approved thresholds and backtest scripts are under `2026-10-19-risk-engine-evidence/` |
+| `plans/2026-10-19-risk-engine.md` | Task-by-task plan for the risk engine (sub-project ②): rules, pure engine, store, sweeps, backfill, live cycle, news, `/api/v1/risk`, and the backfill reproduction script |
 | `plans/2026-10-18-watchlist-themes.md` | Task-by-task plan for watchlist themes: the theme list and loader, the `theme` column with its own endpoint, the optional sync field, the stock-modal picker, and the one-off apply script for the approved 250-row draft |
 
 ## Process SOPs (`guideline/sop/`)

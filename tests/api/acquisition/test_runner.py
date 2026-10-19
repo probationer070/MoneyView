@@ -366,3 +366,73 @@ def test_point_in_time_records_empty_when_the_provider_returns_nothing():
 
     assert result.skipped is False
     assert read_state("statements", "AAPL").status == AcquisitionStatus.EMPTY
+
+
+def test_an_unpriced_bar_for_today_does_not_mark_today_covered():
+    """The provider reports today with NaN prices; the saver drops that row. Counting it toward
+    coverage marked today as covered, so the next delta started tomorrow and the settled bar for
+    today was never fetched. Catches coverage taken from all fetched rows instead of priced ones."""
+    nan = float("nan")
+    now = datetime(2026, 10, 16, 15, 0, tzinfo=UTC)
+    rows = [_row("2026-10-15"), StockOHLCV(date="2026-10-16", open=nan, high=nan, low=nan, close=nan, volume=5)]
+    calls: list[FetchRange] = []
+
+    def fetcher(ticker, fetch_range, **_):
+        calls.append(fetch_range)
+        return rows
+
+    common = dict(fetcher=fetcher, action_probe=lambda ticker, **_: None)
+    acquire("equity_bars", "TEST_RUNNER_NAN", now=now, **common)
+    assert read_state("equity_bars", "TEST_RUNNER_NAN").covered_to == date(2026, 10, 15)
+
+    acquire("equity_bars", "TEST_RUNNER_NAN", now=datetime(2026, 10, 17, 9, 0, tzinfo=UTC), **common)
+    assert calls[1].reason == "delta"
+    assert calls[1].start == date(2026, 10, 16)  # today is asked again once it has settled
+
+
+def test_a_priced_intraday_bar_for_today_is_not_saved_before_it_settles():
+    """A bar dated D settles at D+1 00:00 UTC. Before then its price is intraday, not the close.
+    Catches saving it, or counting it toward coverage."""
+    now = datetime(2026, 10, 16, 15, 0, tzinfo=UTC)
+    saved: list[list[StockOHLCV]] = []
+    result = acquire(
+        "equity_bars", "TEST_RUNNER_INTRADAY", now=now,
+        fetcher=lambda ticker, fetch_range, **_: [_row("2026-10-15"), _row("2026-10-16")],
+        action_probe=lambda ticker, **_: None, saver=lambda t, r: saved.append(r),
+    )
+    assert saved == [[_row("2026-10-15")]]
+    assert result.fetched_rows == 1
+    assert read_state("equity_bars", "TEST_RUNNER_INTRADAY").covered_to == date(2026, 10, 15)
+
+
+def test_only_an_unsettled_bar_records_the_check_without_advancing_coverage():
+    """Catches advancing coverage, or saving, when nothing settled and priced came back."""
+    record_success(
+        "equity_bars", "TEST_RUNNER_ONLY_TODAY", now=datetime(2026, 10, 15, 9, 0, tzinfo=UTC),
+        covered_from=date(2016, 1, 1), covered_to=date(2026, 10, 15),
+    )
+    now = datetime(2026, 10, 16, 15, 0, tzinfo=UTC)
+    result = acquire(
+        "equity_bars", "TEST_RUNNER_ONLY_TODAY", now=now,
+        fetcher=lambda ticker, fetch_range, **_: [_row("2026-10-16")],
+        action_probe=lambda ticker, **_: None,
+        saver=lambda t, r: pytest.fail("nothing settled to save"),
+    )
+    assert result.fetched_rows == 0
+    state = read_state("equity_bars", "TEST_RUNNER_ONLY_TODAY")
+    assert state.covered_to == date(2026, 10, 15)
+    assert state.last_checked_at == now
+
+
+def test_an_unpriced_settled_day_is_not_counted_as_covered():
+    """Past the settle time the provider can still report yesterday with NaN prices. Catches
+    coverage taken from unpriced rows (the settle filter alone does not drop this one)."""
+    nan = float("nan")
+    result = acquire(
+        "equity_bars", "TEST_RUNNER_NAN_SETTLED", now=datetime(2026, 10, 17, 0, 30, tzinfo=UTC),
+        fetcher=lambda ticker, fetch_range, **_: [
+            _row("2026-10-15"), StockOHLCV(date="2026-10-16", open=nan, high=nan, low=nan, close=nan, volume=5)],
+        action_probe=lambda ticker, **_: None, saver=lambda t, r: None,
+    )
+    assert result.fetched_rows == 1
+    assert read_state("equity_bars", "TEST_RUNNER_NAN_SETTLED").covered_to == date(2026, 10, 15)

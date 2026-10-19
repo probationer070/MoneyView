@@ -165,11 +165,18 @@ Spec: `docs/superpowers/specs/2026-10-18-risk-signal-design.md`. Plan (watchlist
       row and silently drops its theme.
 - [ ] R-① **Open:** PSTG has no Yahoo quote ("Quote not found"). Its status (renamed, delisted or still listed) is unknown.
       The draft places it in `메모리·스토리지` pending that check.
-- [ ] R-① **Open (pre-existing defect, found 2026-10-18):** `apps/api/services/watchlist_cleanup.py` `_REFERENCE_QUERIES`
-      does not count market-overview proxy tickers stored in `stocks` (BOTZ, SKYY, XLE, ITA, CIBR, ICLN, TSL, 143860.KS, ^KS11).
+- [x] R-① **Fixed (pre-existing defect, found 2026-10-18; fixed in risk-engine Task 1):** `apps/api/services/watchlist_cleanup.py` `_REFERENCE_QUERIES`
+      did not count market-overview proxy tickers stored in `stocks` (BOTZ, SKYY, XLE, ITA, CIBR, ICLN, TSL, 143860.KS, ^KS11).
       They were enrolled in `cleanup_pending` on 2026-10-18 08:05Z, so their caches would be deleted after 30 days and then
-      refetched, repeatedly. Fix in sub-project ② together with the benchmark tickers (^SOX, RSP, SPY), which hit the same path.
-      Not changed in the watchlist-themes wave.
+      refetched, repeatedly. Fixed in sub-project ② with the benchmark tickers (^SOX, RSP, SPY), which hit the same path.
+      Not changed in the watchlist-themes wave. Covered now: SPREAD_PAIRS tickers and the benchmarks. Not covered: TSL, 143860.KS, ^KS11,
+      which no code path references any more; their `stocks` rows (if still present) are cleaned after the grace period. Owner to confirm.
+- [x] R-② risk engine: built on feat/risk-engine. Real-DB backfill run 2026-10-19 (owner OK, backup in scratchpad): 11/11 past alerts reproduced; one release date differs by a day (spec §3.5). Next: PR, then ③ banner and panel UI.
+      Plan: `docs/superpowers/plans/2026-10-19-risk-engine.md`. After the owner's OK: `python scripts/risk/reproduce_backfill.py`
+      against the real DB and record the diff in spec §3.5.
+      Final-review fixes landed 2026-10-19: acquisition covers only priced, settled bars (ERROR-LOG); FRED series read from
+      the accumulated cache; backfill state "degraded" (R26) for an empty warning series or sweep failures, rerun next cycle
+      with live days replayed; one coverage_wait key; cleanup deletes `deep_history:<T>`; an all-failed news sweep is retried.
 - Deferred minor findings are listed in the plan ledger (`.superpowers/sdd/2026-10-18-watchlist-themes/progress.md`) and are triaged at the final review.
 
 ## Known limits, accepted deliberately

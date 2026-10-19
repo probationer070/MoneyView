@@ -12,7 +12,7 @@ from apps.api.models.schemas import NewsArticle, SentimentEnum
 logger = logging.getLogger(__name__)
 
 
-def news_identity_hash(ticker: str, url: str) -> str:
+def news_identity_hash(ticker: str, url: str, topic: str = "") -> str:
     """The identity of a news article: its URL, under a ticker.
 
     Deliberately excludes the headline. Google News rewrites the publisher suffix
@@ -23,8 +23,10 @@ def news_identity_hash(ticker: str, url: str) -> str:
 
     The ticker is part of the identity because one article can name two companies and
     must be kept for each. Hashing the url alone would silently drop the second.
+
+    A topic or theme row has no ticker; its topic ('macro:cpi') takes the ticker's place.
     """
-    return hashlib.md5(f"{ticker.upper()}::{url}".encode()).hexdigest()
+    return hashlib.md5(f"{(ticker or topic).upper()}::{url}".encode()).hexdigest()
 
 
 class NewsService:
@@ -50,7 +52,7 @@ class NewsService:
             elif keyword:
                 rows = conn.execute(
                     """SELECT * FROM news
-                       WHERE headline LIKE ?
+                       WHERE headline LIKE ? AND topic = ''
                        ORDER BY published_date DESC
                        LIMIT ? OFFSET ?""",
                     (f"%{keyword}%", limit, offset),
@@ -58,6 +60,7 @@ class NewsService:
             else:
                 rows = conn.execute(
                     """SELECT * FROM news
+                       WHERE topic = ''
                        ORDER BY published_date DESC
                        LIMIT ? OFFSET ?""",
                     (limit, offset),
@@ -73,6 +76,8 @@ class NewsService:
                 published_date=r["published_date"] or "",
                 sentiment=SentimentEnum(r["sentiment"] or "neutral"),
                 importance=int(r["importance"] or 1),
+                lang=r["lang"],
+                topic=r["topic"],
             )
             for r in rows
         ]
@@ -176,17 +181,18 @@ class NewsService:
 
     def save_article(self, article: NewsArticle) -> bool:
         """Persist a single article; skip if duplicate (hash collision)."""
-        h = news_identity_hash(article.ticker, article.url)
+        h = news_identity_hash(article.ticker, article.url, article.topic)
         try:
             with get_db() as conn:
                 conn.execute(
                     """INSERT OR IGNORE INTO news
                        (ticker, headline, url, source, published_date,
-                        sentiment, importance, hash)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                        sentiment, importance, hash, lang, topic)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (article.ticker, article.headline, article.url,
                      article.source, article.published_date,
-                     article.sentiment.value, article.importance, h),
+                     article.sentiment.value, article.importance, h,
+                     article.lang, article.topic),
                 )
             return True
         except Exception as exc:
