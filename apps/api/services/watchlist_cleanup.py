@@ -96,9 +96,15 @@ def clear_pending(conn: sqlite3.Connection, ticker: str) -> None:
 
 def referenced_tickers(conn: sqlite3.Connection) -> set[str]:
     # Imported here: corporate_metrics_service imports watchlist_seed, which imports this module.
+    # market_spreads and risk.constants are imported here too, to keep this module light.
     from apps.api.services.corporate_metrics_service import DEFAULT_COMPANIES
+    from apps.api.services.market_spreads import SPREAD_PAIRS
+    from apps.api.services.risk.constants import BENCHMARK_TICKERS
 
     found = {_normalize(ticker) for ticker in DEFAULT_COMPANIES}
+    # Spread proxies and benchmarks are code constants, not rows: they are referenced by code alone.
+    found.update(_normalize(ticker) for pair in SPREAD_PAIRS for ticker in (pair.numerator, pair.denominator))
+    found.update(_normalize(ticker) for ticker in BENCHMARK_TICKERS)
     for sql in _REFERENCE_QUERIES:
         found.update(_normalize(row[0]) for row in conn.execute(sql) if row[0])
     return found

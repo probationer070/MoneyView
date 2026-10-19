@@ -26,6 +26,16 @@ reveal that; only checking the code did.
 
 An entry states what was true when it was written. Nothing updates it on its own.
 
+## 2026-10-19: daily bars and news stall after the watchlist's last refresh (no scheduled sweep)
+
+Date: 2026-10-19 (risk-engine plan, Task 1).
+Command: not recorded (found while planning the risk engine; the stall was visible in the data, not from a command).
+Failure: daily bars for existing watchlist tickers and all news stopped at 2026-09-29 with no on-screen staleness signal.
+Root cause: no scheduled sweep exists. Bars refresh only when a screen reads the ticker, and news only on a detail click. `acquisition/runner.py` `schedule_acquisition` says the registry warmer "arrives with the later phases".
+Fix: open. This plan's Task 9 and Task 12 add the sweeps.
+Files changed: `apps/api/services/watchlist_cleanup.py`, `apps/api/services/risk/__init__.py`, `apps/api/services/risk/constants.py`, `tests/api/test_watchlist_cleanup_references.py`, `ERROR-LOG.md`, `guideline/sop/todo.md`.
+Prevention: `risk_daily.bars_coverage` and `/latest.data` expose coverage.
+
 ## 2026-10-18: Monte Carlo charts overflow their frames at 390 on every tab (feat/monte-carlo-one-screen)
 
 Date: 2026-10-18 (final-review capture of the Monte Carlo one-screen branch). Introduced on this branch, fixed in 3585d30.

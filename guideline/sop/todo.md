@@ -165,11 +165,12 @@ Spec: `docs/superpowers/specs/2026-10-18-risk-signal-design.md`. Plan (watchlist
       row and silently drops its theme.
 - [ ] R-① **Open:** PSTG has no Yahoo quote ("Quote not found"). Its status (renamed, delisted or still listed) is unknown.
       The draft places it in `메모리·스토리지` pending that check.
-- [ ] R-① **Open (pre-existing defect, found 2026-10-18):** `apps/api/services/watchlist_cleanup.py` `_REFERENCE_QUERIES`
-      does not count market-overview proxy tickers stored in `stocks` (BOTZ, SKYY, XLE, ITA, CIBR, ICLN, TSL, 143860.KS, ^KS11).
+- [x] R-① **Fixed (pre-existing defect, found 2026-10-18; fixed in risk-engine Task 1):** `apps/api/services/watchlist_cleanup.py` `_REFERENCE_QUERIES`
+      did not count market-overview proxy tickers stored in `stocks` (BOTZ, SKYY, XLE, ITA, CIBR, ICLN, TSL, 143860.KS, ^KS11).
       They were enrolled in `cleanup_pending` on 2026-10-18 08:05Z, so their caches would be deleted after 30 days and then
-      refetched, repeatedly. Fix in sub-project ② together with the benchmark tickers (^SOX, RSP, SPY), which hit the same path.
-      Not changed in the watchlist-themes wave.
+      refetched, repeatedly. Fixed in sub-project ② with the benchmark tickers (^SOX, RSP, SPY), which hit the same path.
+      Not changed in the watchlist-themes wave. Covered now: SPREAD_PAIRS tickers and the benchmarks. Not covered: TSL, 143860.KS, ^KS11,
+      which no code path references any more; their `stocks` rows (if still present) are cleaned after the grace period. Owner to confirm.
 - Deferred minor findings are listed in the plan ledger (`.superpowers/sdd/2026-10-18-watchlist-themes/progress.md`) and are triaged at the final review.
 
 ## Known limits, accepted deliberately
