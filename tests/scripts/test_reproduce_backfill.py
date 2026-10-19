@@ -5,12 +5,13 @@ Each test's docstring names the mutation it was shown to catch (CLAUDE.md §8).
 from __future__ import annotations
 
 import hashlib
+import sqlite3
 from datetime import date
 from pathlib import Path
 
 from apps.api.services import db as db_service
 from scripts.risk import reproduce_backfill as rb
-from scripts.risk.reproduce_backfill import ExpectedAlert, diff_alerts, parse_report_alerts
+from scripts.risk.reproduce_backfill import ExpectedAlert, alert_matches, diff_alerts, parse_report_alerts
 
 REPORT = Path(__file__).resolve().parents[2] / "docs/superpowers/specs/2026-10-19-risk-engine-evidence/report3.md"
 
@@ -52,3 +53,39 @@ def test_script_is_read_only(monkeypatch):
     assert seen["path"] != src
     assert hashlib.sha256(src.read_bytes()).hexdigest() == before
     assert db_service.get_db_path() == src  # the override was restored
+
+
+def test_alert_matches_ignores_trigger_order():
+    """Mutation caught: triggers compared as ordered tuples (a reordered trigger reported as differing),
+    or the release or the theme set ignored."""
+    e = ExpectedAlert(date(2026, 3, 27), date(2026, 4, 7), ("ai_semis", "big_tech"))
+    same = ExpectedAlert(date(2026, 3, 27), date(2026, 4, 7), ("big_tech", "ai_semis"))
+    assert alert_matches(e, same)
+    assert not alert_matches(e, ExpectedAlert(e.start, date(2026, 4, 8), e.trigger))
+    assert not alert_matches(e, ExpectedAlert(e.start, e.release, ("ai_semis",)))
+
+
+def test_copy_db_is_one_snapshot_including_wal(tmp_path):
+    """Mutation caught: copying the file and its -wal/-shm sidecars (the copy is not one self-contained
+    snapshot), or a copy that drops rows committed only to the WAL."""
+    src = tmp_path / "src" / "live.db"
+    src.parent.mkdir()
+    writer = sqlite3.connect(src)
+    try:
+        writer.execute("PRAGMA journal_mode=WAL")
+        writer.execute("PRAGMA wal_autocheckpoint=0")
+        writer.execute("CREATE TABLE t (v INTEGER)")
+        writer.execute("INSERT INTO t VALUES (1)")
+        writer.commit()
+        assert Path(str(src) + "-wal").stat().st_size > 0  # the row lives in the WAL, not checkpointed
+        out = tmp_path / "out"
+        out.mkdir()
+        dest = rb._copy_db(src, out)
+    finally:
+        writer.close()
+    assert sorted(p.name for p in out.iterdir()) == ["moneyview.db"]
+    reader = sqlite3.connect(dest)
+    try:
+        assert reader.execute("SELECT v FROM t").fetchall() == [(1,)]
+    finally:
+        reader.close()

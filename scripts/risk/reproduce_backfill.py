@@ -1,9 +1,10 @@
 """Recompute past risk alerts from the local DB and diff them against the research report's alerts.
 
-Read-only. The app's get_db() sets WAL and may create files, so it cannot be opened with
-``mode=ro``. The script therefore copies the DB (and any -wal/-shm sidecars) to a temp
-directory, points the app's DB path at the copy, and evaluates in memory. The original file
-is never opened for writing. The FRED series come from the cache table; nothing is fetched.
+Read-only. The app's get_db() sets WAL and may create files, so it cannot be pointed at the
+real DB. The script opens the DB with ``mode=ro`` and takes a SQLite online backup into a temp
+directory (one consistent snapshot even while the app writes), points the app's DB path at the
+copy, and evaluates in memory. The original file is never opened for writing. The FRED series
+come from the cache table; nothing is fetched.
 
     python scripts/risk/reproduce_backfill.py [--db PATH] [--compare REPORT.md]
 """
@@ -11,7 +12,7 @@ from __future__ import annotations
 
 import argparse
 import re
-import shutil
+import sqlite3
 import sys
 import tempfile
 from dataclasses import dataclass
@@ -66,13 +67,22 @@ def diff_alerts(expected: list, actual: list) -> AlertDiff:
     )
 
 
+def alert_matches(expected: ExpectedAlert, actual) -> bool:
+    """Same release and the same trigger themes; trigger order is not significant."""
+    return expected.release == getattr(actual, "release", None) and set(expected.trigger) == set(actual.trigger)
+
+
 def _copy_db(src: Path, dest_dir: Path) -> Path:
     dest = dest_dir / "moneyview.db"
-    shutil.copy2(src, dest)
-    for suffix in ("-wal", "-shm"):
-        side = Path(str(src) + suffix)
-        if side.exists():
-            shutil.copy2(side, Path(str(dest) + suffix))
+    source = sqlite3.connect(f"{Path(src).resolve().as_uri()}?mode=ro", uri=True)
+    try:
+        target = sqlite3.connect(dest)
+        try:
+            source.backup(target)
+        finally:
+            target.close()
+    finally:
+        source.close()
     return dest
 
 
@@ -120,8 +130,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"\nreport alerts {len(expected)}, recomputed {len(alerts)}: "
           f"matched {len(diff.matched)}, missing {len(diff.missing)}, extra {len(diff.extra)}")
     for e, a in diff.matched:
-        rel = getattr(a, "release", None)
-        note = "" if (e.release == rel and e.trigger == tuple(a.trigger)) else "  (release/trigger differ)"
+        note = "" if alert_matches(e, a) else "  (release/trigger differ)"
         print(f"  matched  {e.start}{note}")
     for e in diff.missing:
         print(f"  missing  {e.start}")
