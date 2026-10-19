@@ -156,3 +156,12 @@ def test_quote_facts_failure_reported():
 
     report = sweep.ensure_quote_facts(["NONE"], NOW, fetcher=fetcher, sleep=lambda s: None)
     assert report.failed == ["NONE"] and report.fetched == 0
+
+
+def test_deep_history_sleeps_between_provider_calls_and_uppercases():
+    """Catches no pacing between deep-history fetches, or a lower-case ticker keying a different marker."""
+    rec, sleeps = Recorder(), []
+    sweep.ensure_deep_history(["nvda", "amd"], history_start=date(2015, 6, 1), today=date(2026, 10, 19),
+                              fetcher=rec, saver=lambda t, r: None, sleep=sleeps.append)
+    assert [c[0] for c in rec.calls] == ["NVDA", "AMD"] and sleeps == [0.5]
+    assert store.get_state("deep_history:NVDA") == "2026-10-19"

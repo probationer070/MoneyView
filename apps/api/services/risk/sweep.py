@@ -101,8 +101,9 @@ def ensure_deep_history(
     attempted = fetched = 0
     failed: list[str] = []
     reached_provider = False
-    for ticker in tickers:
-        key = f"deep_history:{ticker.upper()}"
+    for raw_ticker in tickers:
+        ticker = raw_ticker.upper()
+        key = f"deep_history:{ticker}"
         if store.get_state(key) is not None:
             continue
         attempted += 1
