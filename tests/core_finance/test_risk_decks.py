@@ -17,7 +17,7 @@ DAY = DAYS[-1].date()
 
 
 def flat_then(last_of_20, base=100.0, n=90):
-    """Flat at `base` with a 100 peak 5 rows back, ending at last_of_20."""
+    """Flat at `base` for n rows, except the last close, which is last_of_20."""
     v = np.full(n, base)
     v[-1] = last_of_20
     return v
@@ -68,7 +68,7 @@ def _cand_frame():
 
 
 def test_candidate_universe_and_partner_exclusion():
-    closes, sox, r, rng = _cand_frame()
+    closes, sox, _, rng = _cand_frame()
     # CRASHED is 25% below its high (not in the universe) and independent of SOX.
     g = rng.normal(0.004, 0.01, 90)
     g_down = g.copy()
@@ -89,7 +89,7 @@ def test_candidate_universe_and_partner_exclusion():
 
 
 def test_candidate_never_pairs_with_itself():
-    closes, sox, r, rng = _cand_frame()
+    closes, sox, _, rng = _cand_frame()
     # NEAR is its own SOX twin only when it IS the crashed set; here the lone near name is the sole
     # ticker, and with SOX uncorrelated it must not qualify through itself.
     closes["NEAR"] = 100 + np.cumsum(rng.normal(0, 1, 90))
@@ -132,7 +132,7 @@ def test_candidate_mid_drawdown_is_neither_universe_nor_partner():
 
 
 def test_candidate_not_its_own_partner_when_bands_overlap():
-    closes, sox, r, rng = _cand_frame()
+    closes, sox, _, rng = _cand_frame()
     closes = closes[[]].copy()
     walk = 100 + np.cumsum(rng.normal(0, 1, 90))
     walk[-1] = walk[-63:].max() * 0.95
@@ -143,9 +143,7 @@ def test_candidate_not_its_own_partner_when_bands_overlap():
 
 
 def test_candidate_needs_forty_pairs():
-    closes, sox, r, rng = _cand_frame()
-    sparse = closes["NEAR"].copy()
-    sparse.iloc[-63:-30] = np.nan  # 63-day high window needs full data, so gap the SOX side instead
+    closes, sox, _, _ = _cand_frame()
     sox_sparse = sox.copy()
     sox_sparse.iloc[-63:-20] = np.nan  # ~20 pairs left
     assert candidates(closes, sox_sparse, DAY, RULES) == []
@@ -163,10 +161,44 @@ def test_forward_returns_none_beyond_data():
     assert edge["fwd7"] == pytest.approx((95 / 100 - 1) * 100) and edge["fwd8"] is None
     assert res["max_dd10"] == pytest.approx((90 / 100 - 1) * 100)
     assert forward_returns(lvl, idx[-1].date()) == {"fwd5": None, "fwd10": None, "fwd20": None, "max_dd10": None}
-    # NaN rows are skipped: "h valid rows later"
+    # rows are calendar positions: a NaN before the target does not shift it...
     gap = lvl.copy()
     gap.iloc[1] = np.nan
-    assert forward_returns(gap, idx[0].date())["fwd5"] == pytest.approx((90 / 100 - 1) * 100)
+    g = forward_returns(gap, idx[0].date())
+    assert g["fwd5"] == pytest.approx(5.0) and g["max_dd10"] == pytest.approx(-10.0)
+    # ...and a NaN at the target row gives None
+    gap.iloc[5] = np.nan
+    assert forward_returns(gap, idx[0].date())["fwd5"] is None
+    assert forward_returns(gap, idx[0].date(), horizons=(7,))["fwd7"] == pytest.approx(-5.0)
+
+
+def test_max_dd10_window_is_next_ten_rows_not_ten_valid_rows():
+    idx = pd.bdate_range("2026-03-02", periods=14)
+    v = np.full(14, 100.0)
+    v[1] = np.nan
+    v[11] = 90.0  # row 11 is outside the next-10-rows window
+    lvl = pd.Series(v, index=idx)
+    assert forward_returns(lvl, idx[0].date())["max_dd10"] == 0.0
+    v[10] = 90.0
+    assert forward_returns(pd.Series(v, index=idx), idx[0].date())["max_dd10"] == pytest.approx(-10.0)
+
+
+def test_max_dd10_clamped_at_zero():
+    idx = pd.bdate_range("2026-03-02", periods=12)
+    rising = pd.Series(np.arange(100.0, 112.0), index=idx)
+    assert forward_returns(rising, idx[0].date())["max_dd10"] == 0.0
+
+
+def test_missing_or_nan_day_gives_none():
+    idx = pd.bdate_range("2026-03-02", periods=12)
+    lvl = pd.Series(np.full(12, 100.0), index=idx)
+    lvl.iloc[2] = np.nan
+    none = {"fwd5": None, "fwd10": None, "fwd20": None, "max_dd10": None}
+    assert forward_returns(lvl, idx[2].date()) == none
+    assert forward_returns(lvl, pd.Timestamp("2026-03-07").date()) == none  # Saturday: not in index
+    levels = pd.DataFrame({"a": lvl, "b": 100.0}, index=idx)
+    assert is_useful(["a"], levels, idx[2].date()) is None
+    assert is_useful(["b"], levels, pd.Timestamp("2026-03-07").date()) is None
 
 
 def test_primary_theme_deepest():
@@ -192,3 +224,6 @@ def test_useful_needs_ten_days():
     assert is_useful(["calm"], levels, idx[5].date()) is None
     assert is_useful(["calm"], levels, idx[2].date()) is None   # 9 rows after start
     assert is_useful(["calm"], levels, idx[1].date()) is False  # exactly 10 rows after start
+    # a NaN inside the 10-row window leaves only 9 usable rows: undecided
+    levels.loc[idx[4], "calm"] = np.nan
+    assert is_useful(["calm"], levels, idx[1].date()) is None

@@ -123,22 +123,39 @@ def candidates(
     return sorted(out, key=lambda c: (-c.corr, c.ticker))
 
 
+def _base_and_window(level: pd.Series, day: date) -> tuple[float, np.ndarray, int] | None:
+    """(day close, values array, position of day), or None if day is absent or NaN."""
+    ts = pd.Timestamp(day)
+    if ts not in level.index:
+        return None
+    pos = level.index.get_loc(ts)
+    v = level.to_numpy(dtype=float)
+    if np.isnan(v[pos]):
+        return None
+    return float(v[pos]), v, pos
+
+
 def forward_returns(
     level: pd.Series, day: date, horizons: Sequence[int] = (5, 10, 20)
 ) -> dict[str, float | None]:
-    """Percent change from day's close to h valid rows later, plus max_dd10.
+    """Percent change from day's close to the close h calendar rows later, plus max_dd10.
 
-    max_dd10 is the lowest close over the next 10 rows relative to day's close
-    (None if there is no row after day; uses fewer rows if fewer exist).
+    Rows are positions in the series after day. fwd<h> is None if that row is NaN
+    or beyond the data. max_dd10 is the lowest non-NaN close among the next 10 rows
+    relative to day's close, capped at 0 (None if there is none). All None if day
+    is absent from the index or its close is NaN.
     """
-    s = level.dropna()
-    pos = s.index.get_loc(pd.Timestamp(day))
-    base = float(s.iloc[pos])
+    found = _base_and_window(level, day)
+    if found is None:
+        return {**{f"fwd{h}": None for h in horizons}, "max_dd10": None}
+    base, v, pos = found
     res: dict[str, float | None] = {}
     for h in horizons:
-        res[f"fwd{h}"] = (float(s.iloc[pos + h]) - base) / base * 100 if pos + h < len(s) else None
-    nxt = s.iloc[pos + 1 : pos + 1 + 10]
-    res["max_dd10"] = (float(nxt.min()) - base) / base * 100 if len(nxt) else None
+        ok = pos + h < len(v) and not np.isnan(v[pos + h])
+        res[f"fwd{h}"] = (float(v[pos + h]) - base) / base * 100 if ok else None
+    win = v[pos + 1 : pos + 1 + 10]
+    win = win[~np.isnan(win)]
+    res["max_dd10"] = min((float(win.min()) - base) / base * 100, 0.0) if len(win) else None
     return res
 
 
@@ -151,11 +168,15 @@ def is_useful(trigger: Sequence[str], levels: pd.DataFrame, start: date) -> bool
     """True if any trigger theme fell 5% or more within 10 rows; None if still undecided."""
     undecided = False
     for theme in trigger:
-        s = levels[theme].dropna()
-        pos = s.index.get_loc(pd.Timestamp(start))
+        found = _base_and_window(levels[theme], start)
+        if found is None:
+            undecided = True
+            continue
+        _, v, pos = found
         dd = forward_returns(levels[theme], start)["max_dd10"]
         if dd is not None and dd <= _USEFUL_DD_PCT:
             return True
-        if len(s) - 1 - pos < _USEFUL_ROWS:
+        win = v[pos + 1 : pos + 1 + _USEFUL_ROWS]
+        if int((~np.isnan(win)).sum()) < _USEFUL_ROWS:
             undecided = True
     return None if undecided else False
