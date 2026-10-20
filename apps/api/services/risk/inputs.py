@@ -15,6 +15,9 @@ from apps.api.services.signals.fetch import SeriesFetcher, fred_source_from_env
 from packages.core_finance.risk_signals.config import RiskRules
 
 FRED_START = date(2014, 1, 1)
+# One index seek per ticker (idx_stocks_ticker_date), not a scan of the whole history.
+_HAS_BAR = ("SELECT EXISTS (SELECT 1 FROM stocks WHERE ticker = ? AND date >= ? AND date <= ? "
+            "AND close IS NOT NULL)")
 
 
 @dataclass(frozen=True)
@@ -71,9 +74,8 @@ def load_inputs(
         bars = conn.execute(
             "SELECT ticker, date, close FROM stocks WHERE date >= ? AND date <= ? AND close IS NOT NULL",
             (first, end)).fetchall()
-        present = None if since is None else {r["ticker"] for r in conn.execute(
-            "SELECT DISTINCT ticker FROM stocks WHERE date >= ? AND date <= ? AND close IS NOT NULL",
-            (start, end))}
+        present = None if since is None else {
+            r["ticker"] for r in watch if conn.execute(_HAS_BAR, (r["ticker"], start, end)).fetchone()[0]}
         shares = {
             r["ticker"]: float(r["shares_outstanding"])
             for r in conn.execute(

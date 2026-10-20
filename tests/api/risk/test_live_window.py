@@ -202,6 +202,33 @@ def test_load_inputs_since_trims_bars_not_fred():
     assert list(got.fred["DGS10"].index) == [pd.Timestamp("2026-01-05")]
 
 
+def test_load_inputs_since_columns_match_full_load_edge_cases():
+    """Minor 5. Catches the per-ticker presence check dropping a bound: a ticker whose only bar has a NULL
+    close, lies before history_start, or lies after `through` must be absent from both loads' columns."""
+    with get_db() as conn:
+        conn.executemany("INSERT INTO watchlist (ticker, name, theme) VALUES (?, ?, ?)",
+                         [("NVDA", "n", "ai_semis"), ("NUL", "u", "ai_semis"), ("EARLY", "e", "ai_semis"),
+                          ("LATE", "l", "ai_semis")])
+        conn.executemany("INSERT INTO stocks (ticker, date, close) VALUES (?, ?, ?)", [
+            ("NVDA", "2026-10-16", 2.0), ("NUL", "2026-01-05", None), ("EARLY", "2015-01-05", 1.0),
+            ("LATE", "2026-10-19", 1.0), ("^SOX", "2026-10-16", 6.0), ("RSP", "2026-10-16", 8.0)])
+    through = date(2026, 10, 16)
+    full = load_inputs(fetch_fred=False, through=through)
+    got = load_inputs(fetch_fred=False, through=through, since=date(2026, 6, 1))
+    assert list(got.closes.columns) == list(full.closes.columns) == ["NVDA"]
+
+
+def test_presence_query_seeks_the_index():
+    """Minor 5. Catches the presence check scanning the whole stocks history (a query without the ticker
+    equality, like the old SELECT DISTINCT ticker ... WHERE date >= history_start)."""
+    from apps.api.services.risk import inputs as inputs_mod
+
+    with get_db() as conn:
+        plan = " ".join(str(tuple(r)) for r in conn.execute(
+            "EXPLAIN QUERY PLAN " + inputs_mod._HAS_BAR, ("NVDA", "2015-06-01", "9999-12-31")))
+    assert "SEARCH stocks USING INDEX" in plan and "SCAN stocks" not in plan, plan
+
+
 def test_sox_leaders_are_semis_members():
     """Catches ^SOX leaders drawn from no members or from all tickers instead of the union of the semis
     themes' members (the backfill fixture has no ^SOX event). 2026-04-08 is a ^SOX start."""
