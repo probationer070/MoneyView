@@ -166,9 +166,8 @@ def _evaluate(db: Path):
     return res
 
 
-def compute_alerts(db: Path):
-    """Returns (alerts, warnings_by_start) for eval_start..last day, evaluated on a temp copy of `db`."""
-    res = _evaluate(db)
+def compute_alerts(res):
+    """Returns (alerts, warnings_by_start) of `_evaluate`'s result."""
     by_day = {d.day: d for d in res.days}
     alerts = list(res.closed) + ([res.open] if res.open is not None else [])
     on = {a.start: tuple(w for w, (state, _v, _o) in by_day[a.start].warnings.items() if state == "on")
@@ -176,9 +175,9 @@ def compute_alerts(db: Path):
     return alerts, on
 
 
-def compute_surge(db: Path):
-    """Returns (surge events closed or open, {(theme, start): banner shown on the start day})."""
-    res = _evaluate(db)
+def compute_surge(res):
+    """Returns (surge events closed or open, {(theme, start): banner shown on the start day}) of
+    `_evaluate`'s result."""
     events = list(res.surge_closed) + list(res.surge_state.open.values())
     shown = {(t, d.day): flag for d in res.days for t, flag in d.surge_shown.items()}
     return events, shown
@@ -191,7 +190,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--compare-surge", type=Path, default=DEFAULT_SURGE_REPORT)
     args = ap.parse_args(argv)
 
-    alerts, on = compute_alerts(args.db)
+    res = _evaluate(args.db)  # one copy and one full evaluation serve both diffs
+    alerts, on = compute_alerts(res)
     print("start        release      trigger                                   warnings on")
     for a in alerts:
         rel = getattr(a, "release", None)
@@ -209,7 +209,7 @@ def main(argv: list[str] | None = None) -> int:
     for a in diff.extra:
         print(f"  extra    {a.start}")
 
-    events, shown = compute_surge(args.db)
+    events, shown = compute_surge(res)
     exp_surge = parse_surge_events(args.compare_surge.read_text(encoding="utf-8"))
     sd = diff_surge(exp_surge, events, shown)
     print(f"\nreport surge events {len(exp_surge)}, recomputed {len(events)}: "

@@ -80,7 +80,7 @@ def test_diff_alerts_matched_missing_extra():
 
 
 def test_script_is_read_only(monkeypatch):
-    """Mutation caught: compute_alerts leaves _DB_PATH on the original file while loading inputs."""
+    """Mutation caught: _evaluate leaves _DB_PATH on the original file while loading inputs."""
     src = db_service.get_db_path()
     before = hashlib.sha256(src.read_bytes()).hexdigest()
     seen = {}
@@ -91,7 +91,7 @@ def test_script_is_read_only(monkeypatch):
 
     monkeypatch.setattr("apps.api.services.risk.inputs.load_inputs", fake_load)
     try:
-        rb.compute_alerts(src)
+        rb._evaluate(src)
     except RuntimeError:
         pass
     assert seen["path"] != src
@@ -133,3 +133,19 @@ def test_copy_db_is_one_snapshot_including_wal(tmp_path):
         assert reader.execute("SELECT v FROM t").fetchall() == [(1,)]
     finally:
         reader.close()
+
+
+def test_main_evaluates_once(monkeypatch, capsys):
+    """Minor 4. Mutation caught: compute_alerts and compute_surge each running _evaluate (two DB copies
+    and two full evaluations), or main not passing the shared result to both."""
+    from types import SimpleNamespace
+
+    from packages.core_finance.risk_signals.surge import SurgeState
+
+    res = SimpleNamespace(days=[], closed=[], open=None, surge_closed=[], surge_state=SurgeState({}, {}))
+    calls = []
+    monkeypatch.setattr(rb, "_evaluate", lambda db: calls.append(db) or res)
+    assert rb.main(["--db", "x.db"]) == 0
+    assert calls == [Path("x.db")]
+    out = capsys.readouterr().out
+    assert "recomputed 0:" in out
