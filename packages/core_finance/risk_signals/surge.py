@@ -1,4 +1,5 @@
-"""Surge components per theme and day (spec §3.1).
+"""Surge components per theme and day (spec §3.1), the per-theme event lifecycle (§3.2)
+and the market-wide banner (§3.3).
 
 Pure pandas: no DB, no network. Each indicator runs on its series' own non-NaN rows
 (so "5 rows", the 60/250 windows and the EMA count valid days only) and is reindexed
@@ -6,8 +7,10 @@ back to the input calendar. Matches docs/superpowers/specs/2026-10-19-surge-sign
 """
 from __future__ import annotations
 
+import copy
 from dataclasses import dataclass
-from typing import Mapping
+from datetime import date
+from typing import Mapping, Sequence
 
 import numpy as np
 import pandas as pd
@@ -17,6 +20,8 @@ from .indices import _members_by_theme
 
 SOX = "^SOX"
 _TOL = 1e-12
+BELOW_EMA = "below_ema"
+STALLED = "stalled"
 
 
 @dataclass(frozen=True)
@@ -143,3 +148,90 @@ def surge_components(
         for f in SurgeComponents.__dataclass_fields__
     }
     return SurgeComponents(**fields)
+
+
+@dataclass
+class SurgeEvent:
+    theme: str
+    start: date
+    end: date | None
+    end_reason: str | None  # BELOW_EMA | STALLED | None while open
+    last_high: date  # last new high_window high since the start; the start day itself counts
+    overheated_on: date | None  # first day in the event with RSI above rsi.overheated
+
+
+@dataclass
+class SurgeState:
+    open: dict[str, SurgeEvent]
+    last_confirm: dict[str, date]  # last day `on` held, inside or outside an event
+
+
+@dataclass(frozen=True)
+class SurgeDay:
+    banner: bool
+    cap_share: float  # fraction of watchlist cap held by themes in an event (^SOX not counted)
+    in_event: list[str]  # series in an event that day, including those ending or starting that day
+    started: list[str]  # series whose event started that day; shown = banner on that day
+
+
+def run_surge(
+    dates: Sequence[date],
+    comps: SurgeComponents,
+    levels: pd.DataFrame,
+    cap_share: pd.DataFrame,
+    rules: RiskRules,
+    state: SurgeState | None = None,
+) -> tuple[list[SurgeEvent], SurgeState, dict[date, SurgeDay]]:
+    """Advance every series in ``comps`` through ``dates`` and return the events closed in
+    the range, the state to carry to the next call, and each day's banner.
+
+    ``levels`` holds the close each series is checked against its EMA: the theme levels
+    plus a "^SOX" column. Row positions come from ``levels.index`` looked up by date, so a
+    one-day call with the carried state equals a batch call. Each day ends open events
+    first (close below EMA, or ``stall`` rows since the last new high), then starts events
+    (``on``, none open, more than ``gap`` rows since the last confirmation).
+    """
+    ev = rules.surge.event
+    gate = rules.surge.gate
+    cur = copy.deepcopy(state) if state is not None else SurgeState({}, {})
+    idx = levels.index
+    cols = list(comps.on.columns)
+    lv = levels[cols].to_numpy()
+    ema, on = comps.ema[cols].to_numpy(), comps.on[cols].to_numpy()
+    high, hot = comps.high_new[cols].to_numpy(), comps.overheated[cols].to_numpy()
+    share = cap_share.reindex(index=idx, columns=cols, fill_value=0.0).to_numpy()
+    closed: list[SurgeEvent] = []
+    days: dict[date, SurgeDay] = {}
+
+    def pos(d: date) -> int:
+        return idx.get_loc(pd.Timestamp(d))
+
+    for raw in dates:
+        day = pd.Timestamp(raw).date()
+        i = pos(day)
+        in_event, started = [], []
+        for j, name in enumerate(cols):
+            e = cur.open.get(name)
+            if e is not None:
+                in_event.append(name)
+                if high[i, j]:
+                    e.last_high = day
+                if hot[i, j] and e.overheated_on is None:
+                    e.overheated_on = day
+                reason = BELOW_EMA if lv[i, j] < ema[i, j] else STALLED if i - pos(e.last_high) >= ev.stall else None
+                if reason is not None:
+                    e.end, e.end_reason = day, reason
+                    closed.append(e)
+                    del cur.open[name]
+            if on[i, j]:
+                last = cur.last_confirm.get(name)
+                if name not in cur.open and (last is None or i - pos(last) > ev.gap):
+                    cur.open[name] = SurgeEvent(name, day, None, None, day, day if hot[i, j] else None)
+                    started.append(name)
+                    if name not in in_event:
+                        in_event.append(name)
+                cur.last_confirm[name] = day
+        total = float(sum(share[i, j] for j, name in enumerate(cols) if name in in_event and name != SOX))
+        banner = total >= gate.cap_share_pct / 100 - _TOL or (gate.sox_opens and SOX in in_event)
+        days[day] = SurgeDay(bool(banner), total, in_event, started)
+    return closed, cur, days
