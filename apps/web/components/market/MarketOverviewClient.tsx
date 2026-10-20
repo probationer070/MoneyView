@@ -733,7 +733,7 @@ export function MarketOverviewClient({
         data-testid="market-page"
         className="mx-auto flex h-[calc(100dvh_-_var(--main-pad-top,0px)_-_var(--main-pad-bottom,0px))] max-w-7xl flex-col"
       >
-        <div className="mb-2 shrink-0">
+        <div className="mb-1 shrink-0">
           <SignalStrip onOpen={() => setSignalsOpen(true)} expanded={signalsOpen} />
         </div>
         <MarketHeader />

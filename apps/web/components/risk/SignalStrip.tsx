@@ -111,7 +111,7 @@ export function SignalStrip({ onOpen, expanded = false }: { onOpen: () => void; 
       aria-expanded={expanded}
       onClick={onOpen}
       className={clsx(
-        "type-small flex h-7 w-full min-w-0 shrink-0 items-center gap-2 overflow-hidden whitespace-nowrap border px-3 text-left text-[var(--ink)]",
+        "type-small relative flex h-6 w-full min-w-0 shrink-0 items-center gap-2 overflow-hidden whitespace-nowrap border px-3 text-left text-[var(--ink)]",
         FAMILY_CLASS[state],
       )}
     >

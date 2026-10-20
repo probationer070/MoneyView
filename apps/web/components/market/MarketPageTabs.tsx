@@ -27,7 +27,7 @@ export function MarketPageTabs({ active, onChange, instruments, spreads }: Marke
   const t = useT();
   const panels: Record<MarketPageTab, ReactNode> = { instruments, spreads };
   return (
-    <section data-testid="market-page-tabs" className="flex min-h-0 flex-1 flex-col gap-2">
+    <section data-testid="market-page-tabs" className="flex min-h-0 flex-1 flex-col gap-1">
       <Tabs
         ariaLabel={t("market.tabs.aria")}
         activeKey={active}

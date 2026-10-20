@@ -43,7 +43,7 @@ export function InstrumentsPanel({ indices, fetchError, viewMode, onViewModeChan
   const halves = [indices.slice(0, 7), indices.slice(7)];
 
   return (
-    <div data-testid="market-instruments" className="flex flex-col gap-2">
+    <div data-testid="market-instruments" className="flex flex-col gap-1">
       <div data-testid="market-instruments-toolbar" className="flex items-center justify-between gap-3">
         <p className="type-small text-[var(--ink-secondary)]">
           <FigureText parts={withFigures(t("market.instruments.count"), { count: formatNumber(indices.length, "integer", { locale }) })} />

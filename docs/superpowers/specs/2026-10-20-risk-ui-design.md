@@ -185,6 +185,7 @@ Oct 20, 2026 · 근거 코드는 `renewal`의 6772459(②, ②-b 병합 뒤)다.
 - **데이터가 없을 때.**
   - `/latest`의 `as_of`가 null, `backfill`이 running/degraded/failed, `surge`·`movers`가 null인 경우를 모두 자연스럽게 보인다.
   - 오류는 기존 `ErrorState`로 보인다.
+  - **예외: 신호 줄.** 줄은 한 줄 높이라 `ErrorState`를 담을 수 없다. 그래서 줄은 오류를 한 줄 문장("신호를 불러오지 못했습니다.")으로 보이고, 패널 안에서는 `ErrorState`를 쓴다(2026-10-20, 계획 Task 2).
 
 ## 8. 테스트
 

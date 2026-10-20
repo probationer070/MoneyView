@@ -900,7 +900,6 @@ export const ko: Messages = {
   },
   risk: {
     strip: {
-      aria: "신호 패널 열기",
       riskTitle: "위험 신호가 잡혔습니다",
       surgeTitle: "강한 상승이 확인되었습니다",
       themes: "테마 {count}개: {name}",

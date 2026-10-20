@@ -897,7 +897,6 @@ export const en = {
   },
   risk: {
     strip: {
-      aria: "Open the signal panel",
       riskTitle: "Risk signal detected",
       surgeTitle: "Strong rise confirmed",
       themes: "{count} themes: {name}",

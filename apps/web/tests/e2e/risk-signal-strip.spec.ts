@@ -1,6 +1,7 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import { tokens } from "../../lib/tokens.generated";
 import { mockMarketPageApi } from "./helpers/marketPageMock";
+import { marketPanel } from "./helpers/marketTabs";
 import { expectNoPageScroll } from "./helpers/noPageScroll";
 import { mockRisk, type RiskScenario } from "./helpers/riskApiMock";
 
@@ -79,12 +80,13 @@ test.describe("strip truncates at 390", () => {
     await page.unrouteAll({ behavior: "ignoreErrors" });
     await gotoWith(page, "both");
     await expect(strip(page)).toContainText("위험 신호가 잡혔습니다");
+    // Height first: a strip that wraps must fail here, whatever its text styles say.
+    expect((await strip(page).boundingBox())!.height, "same height as a one-row strip").toBe(oneRow);
     const text = strip(page).locator('[data-part="text"]');
     await expect(text).toHaveCSS("text-overflow", "ellipsis");
     await expect(text).toHaveCSS("white-space", "nowrap");
     const overflow = await text.evaluate((el) => ({ scroll: el.scrollWidth, client: el.clientWidth }));
     expect(overflow.scroll, "the line is longer than the strip, so it is cut").toBeGreaterThan(overflow.client);
-    expect((await strip(page).boundingBox())!.height, "same height as a one-row strip").toBe(oneRow);
     await expect(strip(page).locator('[data-part="surge-chip"]')).toBeInViewport({ ratio: 1 });
     await expectNoPageScroll(page, "risk strip at 390");
   });
@@ -106,4 +108,70 @@ test("strip is a button and opens on Enter and Space", async ({ page }) => {
   await strip(page).focus();
   await page.keyboard.press("Space");
   await expect(strip(page)).toHaveAttribute("aria-expanded", "true");
+});
+
+// The strip takes height from the market overview; the market-one-screen fit check runs in English only.
+// This is the same check in Korean, with the strip in its risk state, so the ~4px headroom is covered there too.
+function spread(id: string, label: string, numerator: string, latest: number | null, refused_reason: string | null = null) {
+  const refused = refused_reason !== null;
+  return {
+    id, label, numerator, denominator: "^GSPC", requested_window_days: 90,
+    actual_window_start: refused ? null : "2026-06-15", actual_window_end: refused ? null : "2026-09-11",
+    actual_window_days: refused ? null : 88, observations: refused ? 0 : 62,
+    basis: `(${numerator}_t / ${numerator}_0) / (^GSPC_t / ^GSPC_0) x 100, indexed to 100 at 2026-06-15`,
+    series: refused ? [] : [{ date: "2026-06-15", value: 100 }, { date: "2026-09-11", value: latest }],
+    latest, refused_reason,
+  };
+}
+const SPREADS = [
+  spread("ai", "AI", "BOTZ", 103.4),
+  spread("cyber", "Cybersecurity", "CIBR", 98.1),
+  spread("defence", "Defence", "ITA", null, "insufficient overlapping history"),
+  spread("cloud", "Cloud", "SKYY", 101.2),
+  spread("energy_policy", "Energy policy", "ICLN", 96.7),
+];
+
+test.describe("in Korean at 1280x720, the market first screen still fits under the strip", () => {
+  test.use({ viewport: { width: 1280, height: 720 }, locale: "ko-KR" });
+
+  test("strip, header, tab bar, every card and the spread figures fit, in both views, without scrolling the panel", async ({ page }) => {
+    await mockMarketPageApi(page);
+    await mockRisk(page, "both");
+    await page.route("**/api/v1/market/spreads**", (route) =>
+      route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(SPREADS) }));
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("heading", { name: "시장 개요", exact: true })).toBeVisible({ timeout: 60_000 });
+    await expect(strip(page)).toHaveAttribute("data-state", "risk", { timeout: 30_000 });
+    await expect(page.getByTestId("spread-figures")).toHaveAttribute("data-state", "ready");
+    await page.evaluate(() => document.fonts.ready);
+    const cards = page.getByTestId("market-cards").locator("article");
+    expect(await cards.count(), "the e2e API served instrument cards").toBeGreaterThan(0);
+    const panel = (await marketPanel(page).boundingBox())!;
+    const panelBottom = panel.y + panel.height;
+    expect(panelBottom, "the panel ends inside the viewport").toBeLessThanOrEqual(720);
+    const endsBy = async (blocks: [string, Locator, number][]) => {
+      for (const [name, locator, bottom] of blocks) {
+        const box = await locator.boundingBox();
+        expect(box, `${name} is rendered`).not.toBeNull();
+        expect(box!.y + box!.height, `${name} ends by ${Math.round(bottom)}px`).toBeLessThanOrEqual(bottom);
+      }
+    };
+    await endsBy([
+      ["strip", strip(page), 720],
+      ["regime line", page.getByTestId("market-regime"), 720],
+      ["tab bar", page.getByRole("tablist", { name: "시장 화면 구분" }), 720],
+      ["last card", cards.last(), panelBottom],
+      ["spread figures", page.getByTestId("spread-figures"), panelBottom],
+    ]);
+    await expectNoPageScroll(page, "Korean, graph view");
+
+    await page.getByRole("button", { name: "Table" }).click();
+    const rows = page.getByTestId("market-table").locator("tbody tr");
+    await expect(rows.first()).toBeVisible();
+    await endsBy([
+      ["last table row", rows.last(), panelBottom],
+      ["spread figures", page.getByTestId("spread-figures"), panelBottom],
+    ]);
+    await expectNoPageScroll(page, "Korean, table view");
+  });
 });
