@@ -204,3 +204,13 @@ def test_long_fixture_events_match_evidence():
     want = sorted(r for r in _pick4_events() if r[1] >= CUT)
     assert len(want) == 58 and sum(r[4] for r in want) == 17
     assert got == want
+
+
+def test_banner_treats_missing_cap_share_as_zero():
+    idx, c, lv, cap = _case(5, ["a", "b"], caps={"a": 0.25, "b": 0.10})
+    c["on"].iloc[1, :] = True
+    c["high_new"].iloc[:, :] = True
+    cap.iloc[1, 1] = np.nan  # b has no cap share that day; a alone holds 25%
+    _, _, days = _go(idx, c, lv, cap)
+    d = days[_d(idx, 1)]
+    assert (d.banner, d.cap_share) == (True, pytest.approx(0.25))

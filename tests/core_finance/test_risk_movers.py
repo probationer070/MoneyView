@@ -3,7 +3,10 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from apps.api.services.risk.rules import load_rules
 from packages.core_finance.risk_signals.movers import Mover, top_movers
+
+RULES = load_rules().rules
 
 
 def _wilder(lv, period=14):
@@ -37,7 +40,7 @@ def _closes(n=30, seed=1):
 def test_movers_order_and_ties():
     px = _closes()
     day = px.index[-1].date()
-    got = top_movers(px, day, 5)
+    got = top_movers(px, day, RULES)
     assert [(m.rank, m.ticker) for m in got] == [(1, "CCC"), (2, "AAA"), (3, "BBB"), (4, "FFF"), (5, "EEE")]
     ccc = got[0]
     s = px["CCC"].dropna()
@@ -52,5 +55,21 @@ def test_movers_fewer_than_five():
     px = _closes()
     t = len(px) - 1
     px.iloc[t - 1, :5] = np.nan  # only FFF and GGG keep both closes (HHH lacks the day before)
-    got = top_movers(px, px.index[t].date(), 5)
+    got = top_movers(px, px.index[t].date(), RULES)
     assert [(m.rank, m.ticker) for m in got] == [(1, "FFF"), (2, "GGG")]
+
+
+def _rules(count, window, period):
+    sg = RULES.surge
+    surge = sg.model_copy(update={"magnitude": sg.magnitude.model_copy(update={"window": window}),
+                                  "rsi": sg.rsi.model_copy(update={"period": period})})
+    return RULES.model_copy(update={"movers": RULES.movers.model_copy(update={"count": count}), "surge": surge})
+
+
+def test_movers_read_count_and_windows_from_rules():
+    px = _closes()
+    got = top_movers(px, px.index[-1].date(), _rules(count=3, window=4, period=9))
+    assert [m.ticker for m in got] == ["CCC", "AAA", "BBB"]
+    s = px["CCC"].dropna()
+    assert got[0].return5_pct == pytest.approx((s.iloc[-1] / s.iloc[-5] - 1) * 100, rel=1e-12)
+    assert got[0].rsi == pytest.approx(_wilder(s.to_numpy(), 9), rel=1e-12)

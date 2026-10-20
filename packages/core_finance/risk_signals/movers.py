@@ -7,10 +7,8 @@ from datetime import date
 import numpy as np
 import pandas as pd
 
+from .config import RiskRules
 from .surge import _wilder_rsi
-
-RSI_PERIOD = 14  # spec §4 "RSI": Wilder 14, the same as the surge RSI
-RETURN_ROWS = 5  # spec §4 "5거래일 수익률", counted on the ticker's own valid rows
 
 
 @dataclass(frozen=True)
@@ -19,15 +17,16 @@ class Mover:
     ticker: str
     return_pct: float  # close(day) / close(previous calendar row) - 1, in percent
     close: float
-    return5_pct: float | None  # over RETURN_ROWS valid rows; None with fewer
+    return5_pct: float | None  # over surge.magnitude.window valid rows; None with fewer
     rsi: float | None  # Wilder RSI on the ticker's own closes up to the day; None before it exists
 
 
-def top_movers(closes: pd.DataFrame, day: date, count: int) -> list[Mover]:
-    """The ``count`` largest one-day returns on ``day`` among tickers with a close on that
+def top_movers(closes: pd.DataFrame, day: date, rules: RiskRules) -> list[Mover]:
+    """The ``movers.count`` largest one-day returns on ``day`` among tickers with a close on that
     day and on the previous row of ``closes``. Ties go to the alphabetically first ticker.
     ``closes`` is watchlist tickers only (no benchmarks); fewer qualifying tickers give a
     shorter list, never padding."""
+    count, rows, period = rules.movers.count, rules.surge.magnitude.window, rules.surge.rsi.period
     i = closes.index.get_loc(pd.Timestamp(day))
     if i == 0:
         return []
@@ -37,7 +36,7 @@ def top_movers(closes: pd.DataFrame, day: date, count: int) -> list[Mover]:
     out = []
     for rank, (ticker, ret) in enumerate(ranked, start=1):
         s = closes[ticker].iloc[: i + 1].dropna()
-        r5 = float(s.iloc[-1] / s.iloc[-1 - RETURN_ROWS] - 1) * 100 if len(s) > RETURN_ROWS else None
-        rsi = float(_wilder_rsi(s, RSI_PERIOD).iloc[-1])
+        r5 = float(s.iloc[-1] / s.iloc[-1 - rows] - 1) * 100 if len(s) > rows else None
+        rsi = float(_wilder_rsi(s, period).iloc[-1])
         out.append(Mover(rank, str(ticker), float(ret) * 100, float(now[ticker]), r5, None if np.isnan(rsi) else rsi))
     return out

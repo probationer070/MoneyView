@@ -199,7 +199,7 @@ def run_surge(
     lv = levels[cols].to_numpy()
     ema, on = comps.ema[cols].to_numpy(), comps.on[cols].to_numpy()
     high, hot = comps.high_new[cols].to_numpy(), comps.overheated[cols].to_numpy()
-    share = cap_share.reindex(index=idx, columns=cols, fill_value=0.0).to_numpy()
+    share = cap_share.reindex(index=idx, columns=cols, fill_value=0.0).fillna(0.0).to_numpy()
     closed: list[SurgeEvent] = []
     days: dict[date, SurgeDay] = {}
 
@@ -218,7 +218,8 @@ def run_surge(
                     e.last_high = day
                 if hot[i, j] and e.overheated_on is None:
                     e.overheated_on = day
-                reason = BELOW_EMA if lv[i, j] < ema[i, j] else STALLED if i - pos(e.last_high) >= ev.stall else None
+                stalled = i - pos(e.last_high) >= ev.stall
+                reason = BELOW_EMA if lv[i, j] < ema[i, j] else (STALLED if stalled else None)
                 if reason is not None:
                     e.end, e.end_reason = day, reason
                     closed.append(e)
