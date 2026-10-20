@@ -351,6 +351,21 @@ def evaluated_dates(version: str, first: date | None = None, last: date | None =
         return [date.fromisoformat(r["date"]) for r in conn.execute(sql + " ORDER BY date", params).fetchall()]
 
 
+def banner_run_start(version: str, origins: Sequence[str]) -> date | None:
+    """First day of the unbroken run of surge_banner = 1 that ends at the latest evaluated day of
+    `version` among `origins`; None when that latest day's banner is off (or was never computed)."""
+    start = None
+    with _db() as conn:
+        rows = conn.execute(
+            f"SELECT date, surge_banner FROM risk_daily WHERE rules_version = ? "
+            f"AND origin IN ({','.join('?' * len(origins))}) ORDER BY date DESC", (version, *origins))
+        for row in rows:
+            if row["surge_banner"] != 1:
+                break
+            start = date.fromisoformat(row["date"])
+    return start
+
+
 def count_days(version: str, first: date, last: date) -> int:
     """Evaluated trading days of `version` from `first` to `last`, both included."""
     with _db() as conn:

@@ -25,7 +25,8 @@ DETAIL_KEYS = {
     "macro_figures", "news_shortfall", "news_note"}
 SUMMARY_KEYS = {
     "id", "origin", "rules_version", "status", "start_date", "release_date", "days", "trigger_themes",
-    "theme_count", "warnings_at_start", "primary_theme", "fwd5", "fwd10", "fwd20", "useful", "w1_proxy"}
+    "theme_count", "warnings_at_start", "primary_theme", "fwd5", "fwd10", "fwd20", "useful", "w1_proxy",
+    "max_dd10", "trigger_labels"}
 
 
 def _day(d=START, warnings=None):
@@ -263,7 +264,8 @@ def test_latest_surge_and_movers_shape():
     data = _data("/latest")
     assert data["surge"]["banner"] is True and data["surge"]["cap_share"] == 0.23
     theme = data["surge"]["themes"][0]
-    assert set(theme) == {"theme", "label", "event_id", "start_date", "shown", "components", "overheated"}
+    assert set(theme) == {"theme", "label", "event_id", "start_date", "shown", "components", "overheated",
+                          "leaders"}
     assert theme["label"] == {"ko": "AI 반도체", "en": "AI semiconductors"}
     assert theme["start_date"] == "2026-10-06" and theme["shown"] is True and theme["overheated"] is False
     assert theme["components"] == {"magnitude_z": 2.4, "accel_pct": 0.31, "accel_rank": 0.97,
@@ -397,3 +399,130 @@ def test_never_evaluated_nulls():
     data = _data("/latest")
     assert data["surge"] is None and data["movers"] is None
     assert _data("/surge/history") == [] and _data("/movers") == []
+
+
+# ---- additions for the signal screens ----
+def test_alert_cards_all():
+    """Catches ?cards=all still capped at 10, the default no longer capped, a deck total that changes with
+    the option, and an unknown option value accepted."""
+    _seed_watchlist()
+    aid = _alert()
+    store.replace_cards(aid, "latest", "crash", [CrashCard(f"T{i}", -10.0 - i, date(2026, 9, 25), 2.0, 1.0, [1.0])
+                                                  for i in range(12)], START)
+    store.replace_cards(aid, "latest", "candidate", [CandidateCard(f"C{i}", -0.7, 0.85, "MU") for i in range(13)],
+                        START)
+    default = _data(f"/alerts/{aid}")
+    assert len(default["crash"]["cards"]) == 10 and len(default["candidates"]["cards"]) == 10
+    full = _data(f"/alerts/{aid}?cards=all")
+    assert len(full["crash"]["cards"]) == 12 and len(full["candidates"]["cards"]) == 13
+    assert full["crash"]["total"] == 12 and full["candidates"]["total"] == 13
+    assert _get(f"/alerts/{aid}?cards=some").status_code == 422
+
+
+def test_latest_surge_leaders_and_components_info():
+    """Catches leaders missing or unnamed on latest themes, components_info out of order or not taken from
+    the rules text, and components_info missing on the single-event endpoint (or leaking into history)."""
+    _seed_watchlist()
+    store.set_state(f"backfill:{V}", "done")
+    _surge_day()
+    event = _event()
+    surge = _data("/latest")["surge"]
+    assert surge["themes"][0]["leaders"] == [{"ticker": "MU", "name": "Micron", "return5_pct": 12.5}]
+    rules = get_rules().rules
+    info = surge["components_info"]
+    assert [i["id"] for i in info] == ["magnitude", "accel", "breadth", "rsi"]
+    assert info[0] == {"id": "magnitude", "label": rules.surge_labels.magnitude.model_dump(),
+                       "rule": rules.surge_rule_text.magnitude.model_dump()}
+    assert info[3]["rule"] == rules.surge_rule_text.rsi.model_dump()
+    assert _data(f"/surge/events/{event}")["components_info"] == info
+    assert "components_info" not in _data("/surge/history")[0]
+
+
+def test_banner_since_run_and_null():
+    """Catches banner_since taken as the first banner day ever (not the current run), a run that ignores a
+    gap day, hidden backfill days counted, another rules version counted, and non-null while the banner is off."""
+    store.set_state(f"backfill:{V}", "running")
+    d = [date(2026, 10, n) for n in (1, 2, 5, 6, 7)]
+    _surge_day(d[0], banner=True, origin="backfill")
+    _surge_day(d[1], banner=False)
+    _surge_day(d[2], banner=True, origin="backfill")
+    _surge_day(d[3], banner=True)
+    _surge_day(d[4], banner=True)
+    _event()
+    assert _data("/latest")["surge"]["banner_since"] == "2026-10-06"  # the hidden backfill day 5 does not count
+    store.set_state(f"backfill:{V}", "done")
+    assert _data("/latest")["surge"]["banner_since"] == "2026-10-05"  # day 2 broke the run
+    store.save_day(DayResult(date(2026, 10, 8), {}, False, 0, {}, False, 0.0, False, surge={}, surge_banner=False,
+                             surge_cap_share=0.0), "oldvers1", "live", 1.0, "t")
+    assert _data("/latest")["surge"]["banner_since"] == "2026-10-05"
+    _surge_day(date(2026, 10, 8), banner=False)
+    assert _data("/latest")["surge"]["banner_since"] is None
+
+
+def test_summary_max_dd10_and_labels():
+    """Catches max_dd10 taken from a non-primary stint, trigger_labels out of trigger order or unnamed,
+    and ^SOX losing its API name."""
+    store.set_state(f"backfill:{V}", "done")
+    aid = store.insert_alert(START, ["memory_storage", "^SOX"], V, "live", "^SOX", False)
+    for theme, dd in (("memory_storage", -7.5), ("^SOX", -2.0)):
+        store.upsert_stint(aid, ThemeStint(theme, "theme", START, None, START), -6.0,
+                           {"fwd5": None, "fwd10": None, "fwd20": None, "max_dd10": dd})
+    row = _data("/history")[0]
+    assert row["max_dd10"] == -2.0  # the primary (^SOX) stint, not the last-sorted one
+    assert row["trigger_labels"] == [
+        {"id": "memory_storage", "label": {"ko": "메모리·스토리지", "en": "Memory & storage"}},
+        {"id": "^SOX", "label": {"ko": "필라델피아 반도체(SOX)", "en": "Philadelphia Semiconductor (SOX)"}}]
+    other = _alert(start=date(2026, 10, 1), max_dd10=None)
+    assert [r for r in _data("/history") if r["id"] == other][0]["max_dd10"] is None
+
+
+def _seed_levels(days=10, sox=False):
+    """ai_semis = NVDA, A1, A2 with equal shares, each closing 1% above the day before."""
+    start = date(2025, 1, 1).toordinal()
+    members = {"NVDA": 100.0, "A1": 200.0, "A2": 300.0}
+    with get_db() as conn:
+        for t, base in members.items():
+            conn.execute("INSERT OR REPLACE INTO watchlist (ticker, name, theme) VALUES (?, ?, 'ai_semis')", (t, t))
+            conn.execute("INSERT OR REPLACE INTO corporate_quote_facts (ticker, shares_outstanding, fetched_at) "
+                         "VALUES (?, 10, 't')", (t,))
+            conn.execute("DELETE FROM stocks WHERE ticker = ?", (t,))
+            conn.executemany("INSERT INTO stocks (ticker, date, close) VALUES (?, ?, ?)",
+                             [(t, date.fromordinal(start + i).isoformat(), base * 1.01 ** i) for i in range(days)])
+        if sox:
+            conn.execute("INSERT OR REPLACE INTO watchlist (ticker, name, theme) VALUES ('^SOX', 'SOX', '')")
+            conn.executemany("INSERT INTO stocks (ticker, date, close) VALUES ('^SOX', ?, ?)",
+                             [(date.fromordinal(start + i).isoformat(), 5000.0 * 1.02 ** i) for i in range(days)])
+    return [date.fromordinal(start + i).isoformat() for i in range(days)]
+
+
+def test_theme_level_rebased_and_bounds():
+    """Catches a level not rebased to 100 at the first returned day, from/to ignored or off by one, a default
+    window other than 120 trading days, a missing 400-day cap (401 rejected, 400 served), and from>to."""
+    days = _seed_levels(130)
+    got = _data("/themes/ai_semis/level?from=" + days[3] + "&to=" + days[6])
+    assert [p["date"] for p in got] == days[3:7]
+    assert [round(p["level"], 6) for p in got] == [round(100 * 1.01 ** i, 6) for i in range(4)]
+    default = _data("/themes/ai_semis/level")
+    assert [p["date"] for p in default] == days[-120:] and default[0]["level"] == 100.0
+    assert round(default[-1]["level"], 6) == round(100 * 1.01 ** 119, 6)
+    assert _get("/themes/ai_semis/level?from=" + days[6] + "&to=" + days[3]).status_code == 422
+
+    long_days = _seed_levels(405)
+    assert len(_data("/themes/ai_semis/level?from=" + long_days[5])) == 400
+    response = _get("/themes/ai_semis/level?from=" + long_days[4])
+    assert response.status_code == 422 and response.json()["detail"] == "range_too_long"
+
+
+def test_theme_level_unknown_404():
+    """Catches an unknown theme returning 200/[] or a different detail string."""
+    _seed_levels(5)
+    response = _get("/themes/nope/level")
+    assert response.status_code == 404 and response.json()["detail"] == "unknown_theme:nope"
+
+
+def test_theme_level_sox():
+    """Catches ^SOX unknown (404), ^SOX served from a theme index instead of its own closes, or not rebased."""
+    days = _seed_levels(10, sox=True)
+    got = _data("/themes/%5ESOX/level?from=" + days[2])
+    assert [p["date"] for p in got] == days[2:]
+    assert [round(p["level"], 6) for p in got] == [round(100 * 1.02 ** i, 6) for i in range(8)]

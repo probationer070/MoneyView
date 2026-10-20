@@ -9,17 +9,19 @@ from apps.api.models.schemas import APIResponse
 from apps.api.models.schema_parts.risk import (
     CandidateCardOut, CrashCardOut, DeckOut, HeadlineOut, LabelOut, MacroFigureOut, MacroValueOut,
     MoverOut, MoversDayOut, MoversLatestOut, NewsItemOut, OutcomeOut, RiskAlertDetail, RiskAlertSummary,
-    RiskData, RiskLatest, RiskWarning, SnapshotCardOut, StartSnapshotOut, SurgeComponentsOut,
-    SurgeEventOut, SurgeLatestOut, SurgeLeaderOut, SurgeThemeOut, ThemeStintOut, WarningAtStart,
+    RiskData, RiskLatest, RiskWarning, SnapshotCardOut, StartSnapshotOut, SurgeComponentInfoOut,
+    SurgeComponentsOut, SurgeEventDetailOut, SurgeEventOut, SurgeLatestOut, SurgeLeaderOut, SurgeThemeOut,
+    ThemeLevelPoint, ThemeStintOut, TriggerLabelOut, WarningAtStart,
 )
 from apps.api.services.db import get_db
 from apps.api.services.risk import news, store
 from apps.api.services.risk.evaluator import BACKFILL_COMPLETE
-from apps.api.services.risk.inputs import cached_fred
+from apps.api.services.risk.inputs import cached_fred, load_inputs
 from apps.api.services.risk.rules import get_rules
 from apps.api.services.risk.store import StoredAlert, StoredCard, StoredDay, StoredMover, StoredSurge
 from apps.api.services.watchlist_themes import load_themes
 from packages.core_finance.risk_signals.decks import _USEFUL_DD_PCT
+from packages.core_finance.risk_signals.indices import theme_indices
 from packages.core_finance.risk_signals.warnings import WARNING_IDS
 
 router = APIRouter()
@@ -28,6 +30,9 @@ MOVERS_DEFAULT_DAYS = 20
 MOVERS_MAX_DAYS = 2600
 DECK_CARDS = 10
 HEADLINES = 2
+LEVEL_DEFAULT_DAYS = 120
+LEVEL_MAX_DAYS = 400
+LEVEL_LOAD_PAD_DAYS = 10  # calendar days loaded before `from`, so its first return exists
 # What each warning's `value` measures (a display hint; the thresholds live in rules.yaml).
 WARNING_UNITS = {"W1": "pct_level", "W2": "pct_level", "W3": "pct_change", "W4": "days",
                  "W5": "mm_pct", "W7": "pct_drop"}
@@ -76,6 +81,7 @@ def _summary(alert: StoredAlert) -> RiskAlertSummary:
     end = alert.release_date or (latest.date if latest else alert.start_date)
     start_day = store.get_day(alert.rules_version, alert.start_date)
     primary = _primary(alert)
+    labels = _theme_labels()
     return RiskAlertSummary(
         id=alert.id, origin=alert.origin, rules_version=alert.rules_version, status=alert.status,
         start_date=alert.start_date.isoformat(),
@@ -85,7 +91,9 @@ def _summary(alert: StoredAlert) -> RiskAlertSummary:
         warnings_at_start=[w for w in WARNING_IDS if start_day and start_day.warnings.get(w, {}).get("state") == "on"],
         primary_theme=alert.primary_theme,
         fwd5=primary.fwd5 if primary else None, fwd10=primary.fwd10 if primary else None,
-        fwd20=primary.fwd20 if primary else None, useful=_useful(alert), w1_proxy=alert.w1_proxy)
+        fwd20=primary.fwd20 if primary else None, useful=_useful(alert), w1_proxy=alert.w1_proxy,
+        max_dd10=primary.max_dd10 if primary else None,
+        trigger_labels=[TriggerLabelOut(id=t, label=_theme_label(t, labels)) for t in alert.trigger])
 
 
 def _watchlist() -> dict[str, tuple[str, str]]:
@@ -118,7 +126,7 @@ def _snapshot(cards: list[StoredCard]) -> list[SnapshotCardOut]:
     return [SnapshotCardOut(ticker=c.ticker, fwd5=c.fwd5, fwd10=c.fwd10, fwd20=c.fwd20) for c in cards]
 
 
-def _detail(alert: StoredAlert) -> RiskAlertDetail:
+def _detail(alert: StoredAlert, all_cards: bool = False) -> RiskAlertDetail:
     rules = get_rules().rules
     labels = {t.id: LabelOut(ko=t.ko, en=t.en) for t in load_themes()}
     watch = _watchlist()
@@ -126,7 +134,8 @@ def _detail(alert: StoredAlert) -> RiskAlertDetail:
 
     crash_all = alert.cards.get(("latest", "crash"), [])
     cand_all = alert.cards.get(("latest", "candidate"), [])
-    crash = crash_all[:DECK_CARDS]
+    shown = None if all_cards else DECK_CARDS
+    crash = crash_all[:shown]
     heads = _headlines(alert, [c.ticker for c in crash])
     crash_cards = [CrashCardOut(
         ticker=c.ticker, name=watch.get(c.ticker, ("", ""))[0], theme=watch.get(c.ticker, ("", ""))[1],
@@ -137,7 +146,7 @@ def _detail(alert: StoredAlert) -> RiskAlertDetail:
         ticker=c.ticker, name=watch.get(c.ticker, ("", ""))[0], theme=watch.get(c.ticker, ("", ""))[1],
         pct_from_high63=c.pct_from_high63, corr=c.corr, corr_with=c.corr_with,
         corr_with_name=(watch.get(c.corr_with, ("", ""))[0] or None) if c.corr_with else None)
-        for c in cand_all[:DECK_CARDS]]
+        for c in cand_all[:shown]]
 
     start_day = store.get_day(alert.rules_version, alert.start_date)
     start_warnings = [
@@ -196,6 +205,18 @@ def _mover_out(m: StoredMover, watch: dict[str, tuple[str, str]]) -> MoverOut:
                     return_pct=m.return_pct, close=m.close, return5_pct=m.return5_pct, rsi=m.rsi)
 
 
+def _leaders(e: StoredSurge, watch: dict[str, tuple[str, str]]) -> list[SurgeLeaderOut]:
+    return [SurgeLeaderOut(ticker=x["ticker"], name=watch.get(x["ticker"], ("", ""))[0],
+                           return5_pct=x.get("return5_pct")) for x in e.leaders]
+
+
+def _components_info() -> list[SurgeComponentInfoOut]:
+    rules = get_rules().rules
+    return [SurgeComponentInfoOut(id=i, label=LabelOut(**getattr(rules.surge_labels, i).model_dump()),
+                                  rule=LabelOut(**getattr(rules.surge_rule_text, i).model_dump()))
+            for i in ("magnitude", "accel", "breadth", "rsi")]
+
+
 def _surge_event(e: StoredSurge, labels: dict[str, LabelOut], watch: dict[str, tuple[str, str]]) -> SurgeEventOut:
     return SurgeEventOut(
         id=e.id, origin=e.origin, rules_version=e.rules_version, theme=e.theme,
@@ -204,14 +225,13 @@ def _surge_event(e: StoredSurge, labels: dict[str, LabelOut], watch: dict[str, t
         components=_components(e.components),
         overheated_on=e.overheated_on.isoformat() if e.overheated_on else None,
         fwd5=e.fwd5, fwd10=e.fwd10, fwd20=e.fwd20, max_runup10=e.max_runup10,
-        leaders=[SurgeLeaderOut(ticker=x["ticker"], name=watch.get(x["ticker"], ("", ""))[0],
-                                return5_pct=x.get("return5_pct")) for x in e.leaders])
+        leaders=_leaders(e, watch))
 
 
 def _surge_latest(day: StoredDay, version: str) -> SurgeLatestOut | None:
     if day.surge is None:
         return None
-    labels = _theme_labels()
+    labels, watch = _theme_labels(), _watchlist()
     hot = get_rules().rules.surge.rsi.overheated
     origins = _visible_origins(version)
     themes = []
@@ -225,8 +245,10 @@ def _surge_latest(day: StoredDay, version: str) -> SurgeLatestOut | None:
         themes.append(SurgeThemeOut(
             theme=e.theme, label=_theme_label(e.theme, labels), event_id=e.id,
             start_date=e.start_date.isoformat(), shown=e.shown, components=comps,
-            overheated=comps.rsi is not None and comps.rsi > hot))
-    return SurgeLatestOut(banner=bool(day.surge_banner), cap_share=day.surge_cap_share or 0.0, themes=themes)
+            overheated=comps.rsi is not None and comps.rsi > hot, leaders=_leaders(e, watch)))
+    since = store.banner_run_start(version, origins)
+    return SurgeLatestOut(banner=bool(day.surge_banner), cap_share=day.surge_cap_share or 0.0, themes=themes,
+                          components_info=_components_info(), banner_since=since.isoformat() if since else None)
 
 
 def _movers_latest(day: StoredDay, version: str) -> MoversLatestOut | None:
@@ -285,11 +307,11 @@ def risk_history(origin: Literal["all", "live", "backfill"] = "all",
 
 
 @router.get("/alerts/{alert_id}", response_model=APIResponse[RiskAlertDetail])
-def risk_alert(alert_id: int):
+def risk_alert(alert_id: int, cards: Literal["all"] | None = None):
     alert = store.get_alert(alert_id)
     if alert is None:
         raise HTTPException(status_code=404, detail=f"unknown_alert:{alert_id}")
-    return APIResponse(data=_detail(alert))
+    return APIResponse(data=_detail(alert, all_cards=cards == "all"))
 
 
 @router.get("/surge/history", response_model=APIResponse[list[SurgeEventOut]])
@@ -302,13 +324,14 @@ def surge_history(shown: Literal["all", "yes"] = "all", theme: str | None = None
     return APIResponse(data=[_surge_event(e, labels, watch) for e in events])
 
 
-@router.get("/surge/events/{event_id}", response_model=APIResponse[SurgeEventOut])
+@router.get("/surge/events/{event_id}", response_model=APIResponse[SurgeEventDetailOut])
 def surge_event(event_id: int):
     event = store.get_surge(event_id)
     if (event is None or event.rules_version != get_rules().version
             or event.origin not in _visible_origins(event.rules_version)):
         raise HTTPException(status_code=404, detail=f"unknown_surge:{event_id}")
-    return APIResponse(data=_surge_event(event, _theme_labels(), _watchlist()))
+    base = _surge_event(event, _theme_labels(), _watchlist())
+    return APIResponse(data=SurgeEventDetailOut(**base.model_dump(), components_info=_components_info()))
 
 
 @router.get("/movers", response_model=APIResponse[list[MoversDayOut]])
@@ -331,3 +354,34 @@ def movers(from_: date | None = Query(None, alias="from"), to: date | None = Non
         if m.date in wanted:
             by_day.setdefault(m.date, []).append(_mover_out(m, watch))
     return APIResponse(data=[MoversDayOut(date=d.isoformat(), items=by_day[d]) for d in days if d in by_day])
+
+
+@router.get("/themes/{theme}/level", response_model=APIResponse[list[ThemeLevelPoint]])
+def theme_level(theme: str, from_: date | None = Query(None, alias="from"), to: date | None = None):
+    """A theme's (or ^SOX's) level rebased to 100 at the first returned day. Default: the last 120 trading
+    days up to `to` (or the latest); at most 400 trading days."""
+    if theme != "^SOX" and theme not in {t.id for t in load_themes()}:
+        raise HTTPException(status_code=404, detail=f"unknown_theme:{theme}")
+    if from_ is not None and to is not None and from_ > to:
+        raise HTTPException(status_code=422, detail="from_after_to")
+    rules = get_rules().rules
+    since = date.fromordinal(from_.toordinal() - LEVEL_LOAD_PAD_DAYS) if from_ else None
+    inputs = load_inputs(since=since, through=to, fetch_fred=False)
+    if theme == "^SOX":
+        level = inputs.sox
+    else:
+        levels = theme_indices(inputs.closes, inputs.shares, inputs.themes, rules.min_members)
+        if theme not in levels:
+            return APIResponse(data=[])
+        level = levels[theme]
+    level = level.dropna()
+    if from_ is not None:
+        level = level[level.index >= str(from_)]
+        if len(level) > LEVEL_MAX_DAYS:
+            raise HTTPException(status_code=422, detail="range_too_long")
+    else:
+        level = level.iloc[-LEVEL_DEFAULT_DAYS:]
+    if level.empty:
+        return APIResponse(data=[])
+    level = level / level.iloc[0] * 100.0
+    return APIResponse(data=[ThemeLevelPoint(date=d.date().isoformat(), level=float(v)) for d, v in level.items()])
