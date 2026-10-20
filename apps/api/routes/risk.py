@@ -8,21 +8,24 @@ from fastapi import APIRouter, HTTPException, Query
 from apps.api.models.schemas import APIResponse
 from apps.api.models.schema_parts.risk import (
     CandidateCardOut, CrashCardOut, DeckOut, HeadlineOut, LabelOut, MacroFigureOut, MacroValueOut,
-    NewsItemOut, OutcomeOut, RiskAlertDetail, RiskAlertSummary, RiskData, RiskLatest, RiskWarning,
-    SnapshotCardOut, StartSnapshotOut, ThemeStintOut, WarningAtStart,
+    MoverOut, MoversDayOut, MoversLatestOut, NewsItemOut, OutcomeOut, RiskAlertDetail, RiskAlertSummary,
+    RiskData, RiskLatest, RiskWarning, SnapshotCardOut, StartSnapshotOut, SurgeComponentsOut,
+    SurgeEventOut, SurgeLatestOut, SurgeLeaderOut, SurgeThemeOut, ThemeStintOut, WarningAtStart,
 )
 from apps.api.services.db import get_db
 from apps.api.services.risk import news, store
 from apps.api.services.risk.evaluator import BACKFILL_COMPLETE
 from apps.api.services.risk.inputs import cached_fred
 from apps.api.services.risk.rules import get_rules
-from apps.api.services.risk.store import StoredAlert, StoredCard, StoredDay
+from apps.api.services.risk.store import StoredAlert, StoredCard, StoredDay, StoredMover, StoredSurge
 from apps.api.services.watchlist_themes import load_themes
 from packages.core_finance.risk_signals.decks import _USEFUL_DD_PCT
 from packages.core_finance.risk_signals.warnings import WARNING_IDS
 
 router = APIRouter()
 
+MOVERS_DEFAULT_DAYS = 20
+MOVERS_MAX_DAYS = 2600
 DECK_CARDS = 10
 HEADLINES = 2
 # What each warning's `value` measures (a display hint; the thresholds live in rules.yaml).
@@ -47,6 +50,11 @@ def _visible_alerts(version: str, origin: str, limit: int) -> list[StoredAlert]:
     found = [a for o in origins for a in store.list_alerts(version, o, limit)]
     found.sort(key=lambda a: (a.start_date, a.id), reverse=True)
     return found[:limit]
+
+
+def _visible_origins(version: str) -> list[str]:
+    """Backfill rows count only once their version's backfill is done or degraded; live rows always."""
+    return ["live", "backfill"] if _backfill_state(version) in BACKFILL_COMPLETE else ["live"]
 
 
 def _useful(alert: StoredAlert) -> bool | None:
@@ -167,6 +175,60 @@ def _detail(alert: StoredAlert) -> RiskAlertDetail:
         news_shortfall=selected.shortfall, news_note=selected.note)
 
 
+def _components(raw: dict | None) -> SurgeComponentsOut:
+    raw = raw or {}
+    return SurgeComponentsOut(**{k: raw.get(k) for k in SurgeComponentsOut.model_fields})
+
+
+def _theme_label(theme: str, labels: dict[str, LabelOut]) -> LabelOut:
+    return labels.get(theme, LabelOut(ko=theme, en=theme))
+
+
+def _mover_out(m: StoredMover, watch: dict[str, tuple[str, str]]) -> MoverOut:
+    return MoverOut(rank=m.rank, ticker=m.ticker, name=watch.get(m.ticker, ("", ""))[0], theme=m.theme,
+                    return_pct=m.return_pct, close=m.close, return5_pct=m.return5_pct, rsi=m.rsi)
+
+
+def _surge_event(e: StoredSurge) -> SurgeEventOut:
+    labels = {t.id: LabelOut(ko=t.ko, en=t.en) for t in load_themes()}
+    watch = _watchlist()
+    return SurgeEventOut(
+        id=e.id, origin=e.origin, rules_version=e.rules_version, theme=e.theme,
+        label=_theme_label(e.theme, labels), start_date=e.start_date.isoformat(),
+        end_date=e.end_date.isoformat() if e.end_date else None, end_reason=e.end_reason, shown=e.shown,
+        components=_components(e.components),
+        overheated_on=e.overheated_on.isoformat() if e.overheated_on else None,
+        fwd5=e.fwd5, fwd10=e.fwd10, fwd20=e.fwd20, max_runup10=e.max_runup10,
+        leaders=[SurgeLeaderOut(ticker=x["ticker"], name=watch.get(x["ticker"], ("", ""))[0],
+                                return5_pct=x.get("return5_pct")) for x in e.leaders])
+
+
+def _surge_latest(day: StoredDay, version: str) -> SurgeLatestOut | None:
+    if day.surge is None:
+        return None
+    labels = {t.id: LabelOut(ko=t.ko, en=t.en) for t in load_themes()}
+    hot = get_rules().rules.surge.rsi.overheated
+    origins = _visible_origins(version)
+    themes = []
+    for e in store.open_surge_events(version):
+        if e.origin not in origins:
+            continue
+        comps = _components(day.surge.get(e.theme, e.components))
+        themes.append(SurgeThemeOut(
+            theme=e.theme, label=_theme_label(e.theme, labels), event_id=e.id,
+            start_date=e.start_date.isoformat(), shown=e.shown, components=comps,
+            overheated=comps.rsi is not None and comps.rsi > hot))
+    return SurgeLatestOut(banner=bool(day.surge_banner), cap_share=day.surge_cap_share or 0.0, themes=themes)
+
+
+def _movers_latest(day: StoredDay, version: str) -> MoversLatestOut | None:
+    rows = store.list_movers(version, day.date, day.date)
+    if not rows:
+        return None
+    watch = _watchlist()
+    return MoversLatestOut(as_of=day.date.isoformat(), items=[_mover_out(m, watch) for m in rows])
+
+
 def _warnings(day: StoredDay) -> list[RiskWarning]:
     rules = get_rules().rules
     out = []
@@ -202,7 +264,9 @@ def risk_latest():
         data=RiskData(bars_coverage=day.bars_coverage, fred_errors=_fred_errors()) if day else None,
         warnings=_warnings(day) if day else [], warnings_on=day.on_count if day else 0,
         warnings_total=len(WARNING_IDS),
-        alert=_detail(open_alert) if open_alert else None, last_alert=last))
+        alert=_detail(open_alert) if open_alert else None, last_alert=last,
+        surge=_surge_latest(day, version) if day else None,
+        movers=_movers_latest(day, version) if day else None))
 
 
 @router.get("/history", response_model=APIResponse[list[RiskAlertSummary]])
@@ -218,3 +282,42 @@ def risk_alert(alert_id: int):
     if alert is None:
         raise HTTPException(status_code=404, detail=f"unknown_alert:{alert_id}")
     return APIResponse(data=_detail(alert))
+
+
+@router.get("/surge/history", response_model=APIResponse[list[SurgeEventOut]])
+def surge_history(shown: Literal["all", "yes"] = "all", theme: str | None = None,
+                  limit: int = Query(50, ge=1, le=500)):
+    version = get_rules().version
+    events = store.list_surge(version, True if shown == "yes" else None, theme, limit,
+                              origins=_visible_origins(version))
+    return APIResponse(data=[_surge_event(e) for e in events])
+
+
+@router.get("/surge/events/{event_id}", response_model=APIResponse[SurgeEventOut])
+def surge_event(event_id: int):
+    event = store.get_surge(event_id)
+    if event is None or event.origin not in _visible_origins(event.rules_version):
+        raise HTTPException(status_code=404, detail=f"unknown_surge:{event_id}")
+    return APIResponse(data=_surge_event(event))
+
+
+@router.get("/movers", response_model=APIResponse[list[MoversDayOut]])
+def movers(from_: date | None = Query(None, alias="from"), to: date | None = None):
+    """Per-day top movers, oldest first. No `from`: the latest 20 evaluated days up to `to` (or the latest)."""
+    if from_ is not None and to is not None and from_ > to:
+        raise HTTPException(status_code=422, detail="from_after_to")
+    version = get_rules().version
+    days = store.evaluated_dates(version, from_, to, live_only="backfill" not in _visible_origins(version))
+    if from_ is None:
+        days = days[-MOVERS_DEFAULT_DAYS:]
+    elif len(days) > MOVERS_MAX_DAYS:
+        raise HTTPException(status_code=422, detail="range_too_long")
+    if not days:
+        return APIResponse(data=[])
+    wanted = set(days)
+    watch = _watchlist()
+    by_day: dict[date, list[MoverOut]] = {}
+    for m in store.list_movers(version, days[0], days[-1]):
+        if m.date in wanted:
+            by_day.setdefault(m.date, []).append(_mover_out(m, watch))
+    return APIResponse(data=[MoversDayOut(date=d.isoformat(), items=by_day[d]) for d in days if d in by_day])

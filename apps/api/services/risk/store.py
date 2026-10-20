@@ -335,6 +335,22 @@ def get_day(version: str, day: date) -> StoredDay | None:
     return _stored_day(row) if row else None
 
 
+def evaluated_dates(version: str, first: date | None = None, last: date | None = None,
+                    live_only: bool = False) -> list[date]:
+    """Evaluated days of `version` within first..last (None = unbounded), oldest first."""
+    sql, params = "SELECT date FROM risk_daily WHERE rules_version = ?", [version]
+    if first is not None:
+        sql += " AND date >= ?"
+        params.append(first.isoformat())
+    if last is not None:
+        sql += " AND date <= ?"
+        params.append(last.isoformat())
+    if live_only:
+        sql += " AND origin = 'live'"
+    with _db() as conn:
+        return [date.fromisoformat(r["date"]) for r in conn.execute(sql + " ORDER BY date", params).fetchall()]
+
+
 def count_days(version: str, first: date, last: date) -> int:
     """Evaluated trading days of `version` from `first` to `last`, both included."""
     with _db() as conn:
@@ -446,9 +462,13 @@ def open_surge_events(version: str) -> list[StoredSurge]:
     return [_stored_surge(r) for r in rows]
 
 
-def list_surge(version: str, shown: bool | None, theme: str | None, limit: int) -> list[StoredSurge]:
-    """Newest start first. `shown` / `theme` of None do not filter."""
+def list_surge(version: str, shown: bool | None, theme: str | None, limit: int,
+               origins: Sequence[str] | None = None) -> list[StoredSurge]:
+    """Newest start first. `shown` / `theme` / `origins` of None do not filter."""
     sql, params = "SELECT * FROM surge_events WHERE rules_version = ?", [version]
+    if origins is not None:
+        sql += f" AND origin IN ({','.join('?' * len(origins))})"
+        params.extend(origins)
     if shown is not None:
         sql += " AND shown = ?"
         params.append(int(shown))

@@ -15,6 +15,7 @@ from apps.api.services.risk.rules import get_rules
 from packages.core_finance.risk_signals.alerts import ThemeStint
 from packages.core_finance.risk_signals.decks import CandidateCard, CrashCard
 from packages.core_finance.risk_signals.evaluate import DayResult
+from packages.core_finance.risk_signals.movers import Mover
 
 V = get_rules().version
 START = date(2026, 10, 8)
@@ -225,3 +226,169 @@ def test_alert_404():
     """Catches an unknown id returning 200/null or a different detail string."""
     response = _get("/alerts/999")
     assert response.status_code == 404 and response.json()["detail"] == "unknown_alert:999"
+
+
+# ---- surge and movers ----
+COMP = {"magnitude_z": 2.4, "accel_pct": 0.31, "accel_rank": 0.97, "breadth_pct": 72.0, "rsi": 66.1,
+        "magnitude_on": True, "on": True}
+SURGE_KEYS = {"id", "origin", "rules_version", "theme", "label", "start_date", "end_date", "end_reason", "shown",
+              "components", "overheated_on", "fwd5", "fwd10", "fwd20", "max_runup10", "leaders"}
+
+
+def _surge_day(d=START, surge=None, banner=True, share=0.23, origin="live"):
+    surge = {"ai_semis": dict(COMP)} if surge is None else surge
+    store.save_day(DayResult(d, {}, False, 0, {}, False, 0.0, False, surge=surge, surge_banner=banner,
+                             surge_cap_share=share), V, origin, 1.0, "t")
+
+
+def _event(theme="ai_semis", start=START, shown=True, origin="live", version=V, **kw):
+    return store.insert_surge_event(version, origin, theme, start, shown=shown, components=COMP,
+                                    leaders=[{"ticker": "MU", "return5_pct": 12.5}], last_high=start, **kw)
+
+
+def _movers(d=START, version=V, n=2):
+    store.save_movers(version, d, [Mover(i + 1, t, 6.4 - i, 171.2, 9.8, 71.0)
+                                   for i, t in enumerate(["MU", "AMAT", "NVDA"][:n])],
+                      {"MU": "memory_storage", "AMAT": "chip_equipment_design", "NVDA": "ai_semis"})
+
+
+def test_latest_surge_and_movers_shape():
+    """Catches a renamed/missing surge or movers field, names or labels not joined, event fields taken
+    from the wrong source, and a banner/cap_share swap."""
+    _seed_watchlist()
+    store.set_state(f"backfill:{V}", "done")
+    _surge_day()
+    _event(start=date(2026, 10, 6))
+    _movers()
+    data = _data("/latest")
+    assert data["surge"]["banner"] is True and data["surge"]["cap_share"] == 0.23
+    theme = data["surge"]["themes"][0]
+    assert set(theme) == {"theme", "label", "event_id", "start_date", "shown", "components", "overheated"}
+    assert theme["label"] == {"ko": "AI 반도체", "en": "AI semiconductors"}
+    assert theme["start_date"] == "2026-10-06" and theme["shown"] is True and theme["overheated"] is False
+    assert theme["components"] == {"magnitude_z": 2.4, "accel_pct": 0.31, "accel_rank": 0.97,
+                                   "breadth_pct": 72.0, "rsi": 66.1}
+    assert data["movers"]["as_of"] == "2026-10-08"
+    assert data["movers"]["items"][0] == {"rank": 1, "ticker": "MU", "name": "Micron", "theme": "memory_storage",
+                                          "return_pct": 6.4, "close": 171.2, "return5_pct": 9.8, "rsi": 71.0}
+    assert [m["ticker"] for m in data["movers"]["items"]] == ["MU", "AMAT"]
+
+
+def test_latest_surge_themes_when_banner_off():
+    """Catches themes emptied when the banner is off, closed events listed, components read from the
+    event instead of the latest day, and overheated judged at the wrong threshold (80 exactly is not hot)."""
+    store.set_state(f"backfill:{V}", "done")
+    _surge_day(surge={"ai_semis": {**COMP, "rsi": 80.5}, "memory_storage": {**COMP, "rsi": 80.0}},
+               banner=False, share=0.05)
+    _event(shown=False)
+    _event("memory_storage", shown=False)
+    _event("^SOX", end=date(2026, 10, 7), end_reason="below_ema")
+    surge = _data("/latest")["surge"]
+    assert surge["banner"] is False
+    by = {t["theme"]: t for t in surge["themes"]}
+    assert set(by) == {"ai_semis", "memory_storage"}
+    assert by["ai_semis"]["overheated"] is True and by["memory_storage"]["overheated"] is False
+    assert by["ai_semis"]["components"]["rsi"] == 80.5 and by["ai_semis"]["shown"] is False
+
+
+def test_both_banners_same_day():
+    """Catches the surge block being dropped, or the crash alert/surge banner overwriting each other,
+    when both are on the same day."""
+    _seed_watchlist()
+    store.set_state(f"backfill:{V}", "done")
+    _surge_day()
+    _event()
+    _alert()
+    data = _data("/latest")
+    assert data["alert"]["id"] and data["alert"]["status"] == "open"
+    assert data["surge"]["banner"] is True and len(data["surge"]["themes"]) == 1
+
+
+def test_surge_history_filters():
+    """Catches ignored shown/theme/limit filters, wrong order, other versions or hidden backfill leaking,
+    a rules_changed end reason rejected by the model, and an unbounded limit."""
+    _seed_watchlist()
+    store.set_state(f"backfill:{V}", "running")
+    a = _event(start=date(2026, 10, 1), shown=True, end=date(2026, 10, 5), end_reason="rules_changed")
+    b = _event("memory_storage", start=date(2026, 10, 6), shown=False)
+    _event(start=date(2020, 3, 2), origin="backfill")
+    _event(start=date(2026, 10, 7), version="oldvers1")
+    rows = _data("/surge/history")
+    assert [r["id"] for r in rows] == [b, a]
+    assert set(rows[0]) == SURGE_KEYS
+    assert rows[1]["end_reason"] == "rules_changed"
+    assert rows[1]["leaders"] == [{"ticker": "MU", "name": "Micron", "return5_pct": 12.5}]
+    assert [r["id"] for r in _data("/surge/history?shown=yes")] == [a]
+    assert [r["id"] for r in _data("/surge/history?theme=memory_storage")] == [b]
+    assert [r["id"] for r in _data("/surge/history?limit=1")] == [b]
+    assert _get("/surge/history?limit=0").status_code == 422
+    assert _get("/surge/history?limit=501").status_code == 422
+    assert _get("/surge/history?shown=no").status_code == 422
+    store.set_state(f"backfill:{V}", "degraded")
+    assert len(_data("/surge/history")) == 3
+
+
+def test_surge_404():
+    """Catches an unknown id returning 200/null, a different detail string, and a hidden backfill event
+    being served by id."""
+    _seed_watchlist()
+    store.set_state(f"backfill:{V}", "running")
+    hidden = _event(origin="backfill")
+    live = _event(start=date(2026, 10, 9))
+    response = _get("/surge/events/999")
+    assert response.status_code == 404 and response.json()["detail"] == "unknown_surge:999"
+    assert _get(f"/surge/events/{hidden}").status_code == 404
+    assert _data(f"/surge/events/{live}")["id"] == live
+    store.set_state(f"backfill:{V}", "done")
+    assert _data(f"/surge/events/{hidden}")["id"] == hidden
+
+
+def test_movers_range_and_default():
+    """Catches a default other than the latest 20 evaluated days, from/to bounds off by one, a missing 422
+    for from>to, hidden backfill days leaking, and an old version leaking."""
+    _seed_watchlist()
+    store.set_state(f"backfill:{V}", "done")
+    days = [date.fromordinal(date(2026, 8, 3).toordinal() + i) for i in range(25)]
+    for d in days:
+        _surge_day(d)
+        _movers(d)
+    _movers(date(2026, 8, 1), version="oldvers1")
+    got = _data("/movers")
+    assert [r["date"] for r in got] == [d.isoformat() for d in days[-20:]]
+    assert [m["ticker"] for m in got[0]["items"]] == ["MU", "AMAT"] and got[0]["items"][0]["name"] == "Micron"
+    got = _data("/movers?from=2026-08-05&to=2026-08-07")
+    assert [r["date"] for r in got] == ["2026-08-05", "2026-08-06", "2026-08-07"]
+    assert [r["date"] for r in _data("/movers?to=2026-08-04")] == ["2026-08-03", "2026-08-04"]
+    assert _get("/movers?from=2026-08-07&to=2026-08-05").status_code == 422
+    assert _get("/movers?from=notadate").status_code == 422
+    store.set_state(f"backfill:{V}", "running")
+    _surge_day(date(2026, 7, 1), origin="backfill")
+    _movers(date(2026, 7, 1))
+    assert _data("/movers?from=2026-07-01&to=2026-08-04")[0]["date"] == "2026-08-03"
+    store.set_state(f"backfill:{V}", "done")
+    assert _data("/movers?from=2026-07-01&to=2026-08-04")[0]["date"] == "2026-07-01"
+
+
+def test_movers_range_limit():
+    """Catches a missing 2600-day cap (2601 evaluated days is rejected, 2600 is served)."""
+    store.set_state(f"backfill:{V}", "done")
+    base = date(2000, 1, 1).toordinal()
+    with get_db() as conn:
+        conn.executemany(
+            "INSERT INTO risk_daily (date, rules_version, origin, warnings_json, confirming_json, sox_confirming,"
+            " cap_share, bars_coverage, evaluated_at) VALUES (?, ?, 'live', '{}', '{}', 0, 0, 1, 't')",
+            [(date.fromordinal(base + i).isoformat(), V) for i in range(2601)])
+    assert _get("/movers?from=2000-01-01").status_code == 422
+    assert _get("/movers?from=2000-01-02").status_code == 200
+
+
+def test_never_evaluated_nulls():
+    """Catches surge/movers invented (or an error) when nothing was evaluated, or for a day saved
+    before surge existed / without movers."""
+    data = _data("/latest")
+    assert data["surge"] is None and data["movers"] is None
+    store.set_state(f"backfill:{V}", "done")
+    store.save_day(_day(), V, "live", 1.0, "t")
+    data = _data("/latest")
+    assert data["surge"] is None and data["movers"] is None
+    assert _data("/surge/history") == [] and _data("/movers") == []
