@@ -102,6 +102,9 @@ def test_surge_values_load():
         assert len(label.ko) <= 20 and len(label.en) <= 20, component_id
     for component_id, text in rules.surge_rule_text:
         assert text.ko and text.en, component_id
+        # Minor 7: one polite sentence form; catches a text with no ending or a "~이다." ending.
+        assert text.ko.endswith("니다."), component_id
+    assert "80 이하" in rules.surge_rule_text.rsi.ko
 
 
 def test_surge_unknown_key_rejected(tmp_path):
