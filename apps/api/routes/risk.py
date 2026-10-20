@@ -180,6 +180,13 @@ def _components(raw: dict | None) -> SurgeComponentsOut:
     return SurgeComponentsOut(**{k: raw.get(k) for k in SurgeComponentsOut.model_fields})
 
 
+SOX_LABEL = LabelOut(ko="필라델피아 반도체(SOX)", en="Philadelphia Semiconductor (SOX)")
+
+
+def _theme_labels() -> dict[str, LabelOut]:
+    return {"^SOX": SOX_LABEL, **{t.id: LabelOut(ko=t.ko, en=t.en) for t in load_themes()}}
+
+
 def _theme_label(theme: str, labels: dict[str, LabelOut]) -> LabelOut:
     return labels.get(theme, LabelOut(ko=theme, en=theme))
 
@@ -189,9 +196,7 @@ def _mover_out(m: StoredMover, watch: dict[str, tuple[str, str]]) -> MoverOut:
                     return_pct=m.return_pct, close=m.close, return5_pct=m.return5_pct, rsi=m.rsi)
 
 
-def _surge_event(e: StoredSurge) -> SurgeEventOut:
-    labels = {t.id: LabelOut(ko=t.ko, en=t.en) for t in load_themes()}
-    watch = _watchlist()
+def _surge_event(e: StoredSurge, labels: dict[str, LabelOut], watch: dict[str, tuple[str, str]]) -> SurgeEventOut:
     return SurgeEventOut(
         id=e.id, origin=e.origin, rules_version=e.rules_version, theme=e.theme,
         label=_theme_label(e.theme, labels), start_date=e.start_date.isoformat(),
@@ -206,7 +211,7 @@ def _surge_event(e: StoredSurge) -> SurgeEventOut:
 def _surge_latest(day: StoredDay, version: str) -> SurgeLatestOut | None:
     if day.surge is None:
         return None
-    labels = {t.id: LabelOut(ko=t.ko, en=t.en) for t in load_themes()}
+    labels = _theme_labels()
     hot = get_rules().rules.surge.rsi.overheated
     origins = _visible_origins(version)
     themes = []
@@ -290,15 +295,17 @@ def surge_history(shown: Literal["all", "yes"] = "all", theme: str | None = None
     version = get_rules().version
     events = store.list_surge(version, True if shown == "yes" else None, theme, limit,
                               origins=_visible_origins(version))
-    return APIResponse(data=[_surge_event(e) for e in events])
+    labels, watch = _theme_labels(), _watchlist()
+    return APIResponse(data=[_surge_event(e, labels, watch) for e in events])
 
 
 @router.get("/surge/events/{event_id}", response_model=APIResponse[SurgeEventOut])
 def surge_event(event_id: int):
     event = store.get_surge(event_id)
-    if event is None or event.origin not in _visible_origins(event.rules_version):
+    if (event is None or event.rules_version != get_rules().version
+            or event.origin not in _visible_origins(event.rules_version)):
         raise HTTPException(status_code=404, detail=f"unknown_surge:{event_id}")
-    return APIResponse(data=_surge_event(event))
+    return APIResponse(data=_surge_event(event, _theme_labels(), _watchlist()))
 
 
 @router.get("/movers", response_model=APIResponse[list[MoversDayOut]])

@@ -339,6 +339,11 @@ def test_surge_404():
     assert response.status_code == 404 and response.json()["detail"] == "unknown_surge:999"
     assert _get(f"/surge/events/{hidden}").status_code == 404
     assert _data(f"/surge/events/{live}")["id"] == live
+    old = _event(version="oldvers1")
+    assert _get(f"/surge/events/{old}").status_code == 404
+    sox = _event("^SOX", start=date(2026, 10, 10))
+    assert _data(f"/surge/events/{sox}")["label"] == {"ko": "필라델피아 반도체(SOX)",
+                                                        "en": "Philadelphia Semiconductor (SOX)"}
     store.set_state(f"backfill:{V}", "done")
     assert _data(f"/surge/events/{hidden}")["id"] == hidden
 
