@@ -84,6 +84,10 @@ export const LABELS = {
   rate: ["비율", "rate"],
   avgMiss: ["평균 미스 비용", "avg miss"],
   saved: ["절감 추정", "Est. saved"],
+  warning: ["경계 지표", "Warning"],
+  observed: ["관측일", "Observed"],
+  rule: ["기준", "Rule"],
+  news: ["뉴스", "News"],
 } as const satisfies Record<string, readonly [string, string]>;
 
 export type LabelKey = keyof typeof LABELS;

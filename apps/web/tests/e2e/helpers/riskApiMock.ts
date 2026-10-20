@@ -1,6 +1,7 @@
 import type { Page } from "@playwright/test";
 import type {
-  RiskAlertDetail, RiskAlertSummary, RiskLatest, RiskWarning, SurgeLatestOut, SurgeThemeOut,
+  CandidateCardOut, CrashCardOut, DeckOut, MoverOut, RiskAlertDetail, RiskAlertSummary, RiskLatest, RiskWarning,
+  SurgeLatestOut, SurgeThemeOut,
 } from "../../../../../packages/shared-types";
 import { cloneFixture } from "./mockUtils";
 
@@ -60,8 +61,14 @@ export const LAST_ALERT: RiskAlertSummary = {
 
 const surgeTheme = (theme: string, en: string, ko: string, eventId: number, shown: boolean): SurgeThemeOut => ({
   theme, label: { ko, en }, event_id: eventId, start_date: "2026-10-16", shown,
-  components: { magnitude_z: 2.4, accel_pct: 1.8, accel_rank: 2, breadth_pct: 80, rsi: 68 }, overheated: false,
-  leaders: [{ ticker: "NVDA", name: "NVIDIA", return5_pct: 12.4 }],
+  components: { magnitude_z: 2.4, accel_pct: 0.31, accel_rank: 0.97, breadth_pct: 80, rsi: 68 }, overheated: false,
+  leaders: [
+    { ticker: "NVDA", name: "NVIDIA", return5_pct: 12.4 },
+    { ticker: "AMD", name: "Advanced Micro Devices", return5_pct: 9.1 },
+    { ticker: "AVGO", name: "Broadcom", return5_pct: 7.7 },
+    { ticker: "MU", name: "Micron Technology", return5_pct: 6.0 },
+    { ticker: "TSM", name: "TSMC", return5_pct: null },
+  ],
 });
 
 const COMPONENTS_INFO: SurgeLatestOut["components_info"] = (["magnitude", "accel", "breadth", "rsi"] as const).map((id) => ({
@@ -103,13 +110,74 @@ export const LATEST: Record<Exclude<RiskScenario, "error">, RiskLatest> = {
   },
 };
 
-/** Registers after any page mock, so it answers /api/v1/risk/latest first. "error" answers 500. */
-export async function mockRisk(page: Page, scenario: RiskScenario) {
+// Deck fixtures for the signal panel (plan Tasks 3-4). The API sends at most 10 cards and the full count in `total`.
+export function crashCard(n: number): CrashCardOut {
+  return {
+    ticker: `CR${n}`, name: `Crash Stock ${n}`, theme: n % 2 === 0 ? "^SOX" : "semis", drawdown_pct: -30 + n,
+    high_date: "2026-09-25", high_close: 210.4, close: 171.2, closes_30d: [210.4, 204.1, 196.3, 188.0, 171.2],
+    headlines: n === 1 ? [{ title: "Chip stocks slide on export curbs", url: "https://example.com/c1", published_date: "2026-10-18", lang: "en" }] : [],
+  };
+}
+
+export function candidateCard(n: number): CandidateCardOut {
+  return {
+    ticker: `CA${n}`, name: `Candidate Stock ${n}`, theme: "ai_infra", pct_from_high63: -0.7, corr: 0.85,
+    corr_with: "^SOX", corr_with_name: "SOX",
+  };
+}
+
+/** A deck as the API sends it: `total` cards exist, the first min(total, 10) are listed. */
+export function deck<Card>(total: number, card: (n: number) => Card): DeckOut<Card> {
+  return { as_of: "2026-10-19", total, cards: Array.from({ length: Math.min(total, 10) }, (_, i) => card(i + 1)) };
+}
+
+export const MOVERS: MoverOut[] = [1, 2, 3, 4, 5].map((rank) => ({
+  rank, ticker: `MV${rank}`, name: `Mover Stock ${rank}`, theme: "robotics", return_pct: 10 - rank, close: 100 + rank,
+  return5_pct: 12 - rank, rsi: 70 - rank,
+}));
+
+/** The released alert that `NEUTRAL.last_alert` points at, as GET /alerts/9 sends it. */
+export const LAST_ALERT_DETAIL: RiskAlertDetail = {
+  ...ALERT, id: 9, origin: "backfill", status: "released", start_date: "2026-03-02", release_date: "2026-03-20",
+  trigger_themes: ["semis"], themes: [ALERT.themes[0]],
+  crash: { as_of: "2026-03-02", total: 2, cards: [{ ...crashCard(1), ticker: "OLD1", name: "Old Crash 1" }, { ...crashCard(3), ticker: "OLD2", name: "Old Crash 2" }] },
+  candidates: { as_of: "2026-03-02", total: 1, cards: [{ ...candidateCard(1), ticker: "OLDC", name: "Old Candidate" }] },
+};
+
+const ALERT_DETAILS: Record<number, RiskAlertDetail> = { [ALERT.id]: ALERT, [LAST_ALERT_DETAIL.id]: LAST_ALERT_DETAIL };
+
+/** GET /portfolio/watchlist/themes, which the cards use to name theme ids. It has no ^SOX entry. */
+export const WATCHLIST_THEMES = [
+  { id: "semis", ko: "반도체", en: "Semiconductors" },
+  { id: "ai_infra", ko: "AI 인프라", en: "AI infrastructure" },
+  { id: "robotics", ko: "로봇", en: "Robotics" },
+];
+
+const ok = (data: unknown) => ({ status: 200, contentType: "application/json", body: JSON.stringify({ status: "ok", data, meta: {} }) });
+
+/**
+ * Registers after any page mock, so it answers /api/v1/risk/latest first. "error" answers 500. A RiskLatest
+ * object is served as is. Also answers GET /risk/alerts/{id} (404 for an unknown id) and the watchlist themes.
+ */
+export async function mockRisk(page: Page, scenario: RiskScenario | RiskLatest) {
+  await page.route("**/api/v1/portfolio/watchlist/themes", (route) => route.fulfill(ok(cloneFixture(WATCHLIST_THEMES))));
+  await page.route(/\/api\/v1\/risk\/alerts\/\d+(\?.*)?$/, (route) => {
+    const id = Number(new URL(route.request().url()).pathname.split("/").pop());
+    const detail = ALERT_DETAILS[id];
+    return detail
+      ? route.fulfill(ok(cloneFixture(detail)))
+      : route.fulfill({ status: 404, contentType: "application/json", body: JSON.stringify({ detail: `unknown alert ${id}` }) });
+  });
   await page.route("**/api/v1/risk/latest", (route) =>
     scenario === "error"
       ? route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ detail: "boom" }) })
-      : route.fulfill({
-        status: 200, contentType: "application/json",
-        body: JSON.stringify({ status: "ok", data: cloneFixture(LATEST[scenario]), meta: {} }),
-      }));
+      : route.fulfill(ok(cloneFixture(typeof scenario === "string" ? LATEST[scenario] : scenario))));
+}
+
+/** Marks the fixtures' alert and surge banner as already seen, so the signal panel does not open by itself. */
+export async function markSignalsSeen(page: Page) {
+  await page.addInitScript(([alertId, since]) => {
+    window.localStorage.setItem(`mv.risk.seen.alert:${alertId}`, "1");
+    window.localStorage.setItem(`mv.risk.seen.surge:${since}`, "1");
+  }, [String(ALERT.id), String(SURGE_BANNER.banner_since)]);
 }

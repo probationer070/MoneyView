@@ -3,7 +3,7 @@ import { tokens } from "../../lib/tokens.generated";
 import { mockMarketPageApi } from "./helpers/marketPageMock";
 import { marketPanel } from "./helpers/marketTabs";
 import { expectNoPageScroll } from "./helpers/noPageScroll";
-import { mockRisk, type RiskScenario } from "./helpers/riskApiMock";
+import { markSignalsSeen, mockRisk, type RiskScenario } from "./helpers/riskApiMock";
 
 // Risk UI spec §2 and plan Task 2: the always-on signal strip at the top of "/".
 const rgb = (hex: string) => `rgb(${[1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)).join(", ")})`;
@@ -12,6 +12,8 @@ const strip = (page: Page) => page.getByTestId("signal-strip");
 async function gotoWith(page: Page, scenario: RiskScenario) {
   await mockMarketPageApi(page);
   await mockRisk(page, scenario);
+  // The panel opens by itself on a new alert or surge banner (Task 4); these tests are about the strip alone.
+  await markSignalsSeen(page);
   await page.goto("/", { waitUntil: "domcontentloaded" });
   await expect(strip(page)).toBeVisible({ timeout: 60_000 });
   // The strip is client-fetched: leaving "loading" means the page has hydrated and the mock answered.
@@ -137,6 +139,7 @@ test.describe("in Korean at 1280x720, the market first screen still fits under t
   test("strip, header, tab bar, every card and the spread figures fit, in both views, without scrolling the panel", async ({ page }) => {
     await mockMarketPageApi(page);
     await mockRisk(page, "both");
+    await markSignalsSeen(page);
     await page.route("**/api/v1/market/spreads**", (route) =>
       route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(SPREADS) }));
     await page.goto("/", { waitUntil: "domcontentloaded" });

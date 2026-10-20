@@ -20,6 +20,7 @@ import { InstrumentsPanel } from "@/components/market/InstrumentsPanel";
 import { SpreadsSection } from "@/components/market/SpreadsSection";
 import { MarketHeader } from "@/components/market/MarketHeader";
 import { SignalStrip } from "@/components/risk/SignalStrip";
+import { SignalPanel, useSignalAutoOpen } from "@/components/risk/SignalPanel";
 import { MarketPageTabs, useMarketPageTab } from "@/components/market/MarketPageTabs";
 import { TONE_CLASS } from "@/components/market/MarketRegimeLine";
 import { FigureText } from "@/components/market/FigureText";
@@ -721,8 +722,10 @@ export function MarketOverviewClient({
   const [pageTab, setPageTab] = useMarketPageTab();
   const [viewMode, setViewMode] = useState<ViewMode>("chart");
   const [selectedIndex, setSelectedIndex] = useState<MarketIndexQuote | null>(null);
-  // Risk UI spec §2: the strip opens the signal panel (the panel itself arrives with plan Task 4).
+  // Risk UI spec §2-3: the strip opens the signal panel, an overlay that adds no height to the page.
+  // It also opens by itself once per new alert id or surge banner start.
   const [signalsOpen, setSignalsOpen] = useState(false);
+  useSignalAutoOpen(() => setSignalsOpen(true));
 
   // Spec §1: the page column is the viewport minus AppShell's pads. The header and the tab bar keep
   // their height; the tab panel takes the rest and scrolls inside itself. A failed or empty index
@@ -754,6 +757,7 @@ export function MarketOverviewClient({
         />
       </div>
 
+      {signalsOpen ? <SignalPanel onClose={() => setSignalsOpen(false)} /> : null}
       {selectedIndex ? <MarketDetailModal item={selectedIndex} onClose={() => setSelectedIndex(null)} /> : null}
     </>
   );
