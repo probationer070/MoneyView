@@ -15,10 +15,6 @@ NOW = datetime(2026, 10, 19, 12, 0, tzinfo=UTC)
 V = get_rules().version
 
 
-class _Inputs:
-    fred_errors = ["BAA10Y: timeout"]
-
-
 @pytest.fixture
 def calls(monkeypatch):
     log: list = []
@@ -27,29 +23,24 @@ def calls(monkeypatch):
     def backfill(now, **kw):
         log.append(("backfill", kw))
 
-    def load(**kw):
-        log.append("load")
-        return _Inputs()
-
     def evaluate(now, **kw):
         log.append(("evaluate", kw))
         return []
 
     monkeypatch.setattr(schedule, "run_backfill", backfill)
-    monkeypatch.setattr(schedule, "load_inputs", load)
     monkeypatch.setattr(schedule, "evaluate_pending", evaluate)
     monkeypatch.setattr(schedule, "sweep_news", lambda now, **kw: log.append(("news", kw)))
     return log
 
 
 def test_run_once_order(calls):
-    """Catches steps run out of order, backfill given pre-loaded inputs, or evaluate not given the loaded inputs."""
+    """Catches steps run out of order, or backfill or evaluate given pre-loaded inputs (a full-history
+    load that would bypass the live window's trimmed read)."""
     schedule.run_once(NOW)
 
-    assert [c if isinstance(c, str) else c[0] for c in calls] == ["sweep", "backfill", "load", "evaluate", "news"]
+    assert [c if isinstance(c, str) else c[0] for c in calls] == ["sweep", "backfill", "evaluate", "news"]
     assert "inputs" not in calls[1][1]
-    assert isinstance(calls[3][1]["inputs"], _Inputs)
-    assert store.get_state("fred_errors") == '["BAA10Y: timeout"]'
+    assert "inputs" not in calls[2][1]
 
 
 def test_news_skipped_within_12h(calls):
@@ -82,7 +73,7 @@ def test_step_exception_does_not_stop_later_steps(calls, monkeypatch):
     def boom(*a, **k):
         raise RuntimeError("x")
 
-    for name in ("sweep_bars", "run_backfill", "load_inputs"):
+    for name in ("sweep_bars", "run_backfill", "evaluate_pending"):
         monkeypatch.setattr(schedule, name, boom)
     schedule.run_once(NOW)
     assert calls == [("news", {})]

@@ -167,6 +167,76 @@ class RiskData(BaseModel):
     fred_errors: list[str] = Field(default_factory=list)
 
 
+class SurgeComponentsOut(BaseModel):
+    magnitude_z: float | None = None
+    accel_pct: float | None = None
+    accel_rank: float | None = None
+    breadth_pct: float | None = None
+    rsi: float | None = None
+
+
+class SurgeThemeOut(BaseModel):
+    theme: str
+    label: LabelOut
+    event_id: int
+    start_date: str
+    shown: bool
+    components: SurgeComponentsOut
+    overheated: bool
+
+
+class SurgeLatestOut(BaseModel):
+    banner: bool
+    cap_share: float
+    themes: list[SurgeThemeOut]
+
+
+class MoverOut(BaseModel):
+    rank: int
+    ticker: str
+    name: str
+    theme: str
+    return_pct: float
+    close: float
+    return5_pct: float | None
+    rsi: float | None
+
+
+class MoversLatestOut(BaseModel):
+    as_of: str
+    items: list[MoverOut]
+
+
+class MoversDayOut(BaseModel):
+    date: str
+    items: list[MoverOut]
+
+
+class SurgeLeaderOut(BaseModel):
+    ticker: str
+    name: str
+    return5_pct: float | None
+
+
+class SurgeEventOut(BaseModel):
+    id: int
+    origin: Literal["live", "backfill"]
+    rules_version: str
+    theme: str
+    label: LabelOut
+    start_date: str
+    end_date: str | None
+    end_reason: Literal["below_ema", "stalled", "rules_changed"] | None
+    shown: bool
+    components: SurgeComponentsOut
+    overheated_on: str | None
+    fwd5: float | None
+    fwd10: float | None
+    fwd20: float | None
+    max_runup10: float | None
+    leaders: list[SurgeLeaderOut]
+
+
 class RiskLatest(BaseModel):
     as_of: str | None
     evaluated_at: str | None
@@ -178,3 +248,5 @@ class RiskLatest(BaseModel):
     warnings_total: int
     alert: RiskAlertDetail | None
     last_alert: RiskAlertSummary | None
+    surge: SurgeLatestOut | None = None
+    movers: MoversLatestOut | None = None

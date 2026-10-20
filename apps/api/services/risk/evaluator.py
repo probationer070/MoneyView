@@ -13,14 +13,21 @@ State keys in risk_state, per rules version <v>:
   for the newest candidate day; waits before the oldest pending day are deleted.
 
 Backfill and live run the same pure `evaluate_range`. A live day runs it over the inputs truncated to
-that day with start = end = day and the open alert rebuilt from the store, so its windows match the
-backfill's exactly.
+that day with start = end = day and the open alert and surge state rebuilt from the store. Live days
+read only a trailing window of bars (`live_window_start`, surge spec section 5); every judgement is a
+ratio, so the window gives the full history's flags and dates, and its numbers to rel 1e-9.
+
+Surge (surge spec sections 3.2-3.4, 4, 7): every evaluated day stores its movers; events store `shown`
+(the banner on their start day, never recomputed), the start day's components and leaders, and get
+fwd5/10/20 and max_runup10 filled once known. `surge_state` keeps each series' last confirmation.
 """
 from __future__ import annotations
 
+import json
 from dataclasses import replace
 from datetime import date, datetime, timedelta
 
+import numpy as np
 import pandas as pd
 
 from apps.api.core.logger import setup_logger
@@ -30,9 +37,12 @@ from apps.api.services.risk.inputs import RiskInputs, coverage, load_inputs
 from apps.api.services.risk.rules import LoadedRules, get_rules
 from packages.core_finance.risk_signals.alerts import AlertRecord, OpenAlert, ThemeStint
 from packages.core_finance.risk_signals.config import RiskRules
-from packages.core_finance.risk_signals.decks import candidates, crash_deck, forward_returns, primary_theme
+from packages.core_finance.risk_signals.decks import (
+    _base_and_window, candidates, crash_deck, forward_returns, primary_theme,
+)
 from packages.core_finance.risk_signals.evaluate import DayResult, EvaluationResult, evaluate_range
-from packages.core_finance.risk_signals.indices import price_shapes
+from packages.core_finance.risk_signals.indices import _members_by_theme, price_shapes, theme_indices
+from packages.core_finance.risk_signals.surge import SOX, SurgeEvent, SurgeState
 
 logger = setup_logger(__name__)
 
@@ -42,6 +52,8 @@ _NO_LIMIT = -1  # SQLite LIMIT -1 = every row
 _WAIT = "coverage_wait:"
 _STINT_FIELDS = ("fwd5", "fwd10", "fwd20", "max_dd10")
 _CARD_FIELDS = ("fwd5", "fwd10", "fwd20")
+_SURGE_FIELDS = ("fwd5", "fwd10", "fwd20", "max_runup10")
+_COARSE_DAYS = 3 * 366  # a live load first reads about 3 years, enough to count the window's rows
 
 
 # ---------------------------------------------------------------- evaluable day
@@ -137,9 +149,9 @@ def _truncate(inputs: RiskInputs, day: date) -> RiskInputs:
 
 
 def _evaluate(inputs: RiskInputs, rules: RiskRules, start: date, end: date,
-              state: OpenAlert | None = None) -> EvaluationResult:
+              state: OpenAlert | None = None, surge_state: SurgeState | None = None) -> EvaluationResult:
     return evaluate_range(inputs.closes, inputs.sox, inputs.rsp, inputs.shares, inputs.themes, inputs.fred,
-                          rules, start=start, end=end, state=state)
+                          rules, start=start, end=end, state=state, surge_state=surge_state)
 
 
 def _rebuild(stored: store.StoredAlert) -> OpenAlert:
@@ -181,12 +193,153 @@ def _on_calendar(inputs: RiskInputs) -> pd.DataFrame:
     return inputs.closes.reindex(pd.DatetimeIndex(inputs.sox.dropna().index).sort_values())
 
 
+# ---------------------------------------------------------------- surge persistence
+
+
+def _surge_levels(res: EvaluationResult, inputs: RiskInputs) -> pd.DataFrame:
+    """The level each surge series is measured on: theme indices plus ^SOX, on the calendar."""
+    return res.levels.assign(**{SOX: inputs.sox.reindex(res.levels.index)})
+
+
+def _leaders(px: pd.DataFrame, members: dict[str, list[str]], series: str, day: date,
+             rules: RiskRules) -> list[dict]:
+    """The surge.leaders members of `series` with the highest return over breadth.window calendar rows
+    to `day` (the return breadth counts), ties to the first ticker. ^SOX members are the semis themes'
+    members. `px` is `_on_calendar(inputs)`, `members` is `_members_by_theme` of the inputs."""
+    names = (sorted({t for th in rules.semis_themes for t in members.get(th, [])}) if series == SOX
+             else members.get(series, []))
+    i, w = px.index.get_loc(pd.Timestamp(day)), rules.surge.breadth.window
+    if i < w or not names:
+        return []
+    r5 = (px.iloc[i][names] / px.iloc[i - w][names] - 1).dropna()
+    ranked = sorted(r5.items(), key=lambda kv: (-kv[1], kv[0]))[: rules.surge.leaders]
+    return [{"ticker": str(t), "return5_pct": float(v) * 100} for t, v in ranked]
+
+
+def _members(inputs: RiskInputs) -> dict[str, list[str]]:
+    return _members_by_theme(inputs.closes, inputs.shares, inputs.themes)
+
+
+def _insert_surge(event: SurgeEvent, start_day: DayResult, version: str, origin: str, px: pd.DataFrame,
+                  members: dict[str, list[str]], rules: RiskRules) -> int:
+    return store.insert_surge_event(
+        version, origin, event.theme, event.start, shown=start_day.surge_shown[event.theme],
+        components=start_day.surge[event.theme], leaders=_leaders(px, members, event.theme, event.start, rules),
+        last_high=event.last_high, end=event.end, end_reason=event.end_reason,
+        overheated_on=event.overheated_on)
+
+
+def _surge_outcome(level: pd.Series, day: date) -> dict[str, float | None]:
+    """fwd5/10/20 as forward_returns; max_runup10 = the highest close of the next 10 rows over the
+    start close, percent, only once its whole window has passed (fwd10 known), like max_dd10."""
+    out = forward_returns(level, day)
+    runup = None
+    found = _base_and_window(level, day)
+    if found is not None and out["fwd10"] is not None:
+        base, v, pos = found
+        win = v[pos + 1 : pos + 11]
+        win = win[~np.isnan(win)]
+        runup = (float(win.max()) - base) / base * 100 if len(win) else None
+    return {"fwd5": out["fwd5"], "fwd10": out["fwd10"], "fwd20": out["fwd20"], "max_runup10": runup}
+
+
+def _fill_surge_outcomes(version: str, levels: pd.DataFrame) -> None:
+    """Fill the None outcome fields of every surge event of `version` that are now known."""
+    for e in store.list_surge(version, None, None, _NO_LIMIT):
+        have = {k: getattr(e, k) for k in _SURGE_FIELDS}
+        if e.theme not in levels.columns or all(v is not None for v in have.values()):
+            continue
+        got = _surge_outcome(levels[e.theme], e.start_date)
+        merged = {k: have[k] if have[k] is not None else got[k] for k in _SURGE_FIELDS}
+        if merged != have:
+            store.fill_surge_outcome(e.id, merged)
+
+
+def _save_last_confirms(version: str, state: SurgeState) -> None:
+    for series, day in state.last_confirm.items():
+        store.set_last_confirm(version, series, day)
+
+
+def _stored_surge_state(version: str, first: date) -> tuple[SurgeState, dict[str, int]]:
+    """The open events and last confirmations from the store, and the open events' ids by series.
+    A confirmation before `first` (the window's first day) is more than live_window_rows > event.gap
+    rows back, so it cannot block a start; it is left out because run_surge looks rows up by date."""
+    stored = store.open_surge_events(version)
+    events = {s.theme: SurgeEvent(s.theme, s.start_date, None, None, s.last_high_date, s.overheated_on)
+              for s in stored}
+    confirms = {t: d for t, d in store.last_confirms(version).items() if d >= first}
+    return SurgeState(events, confirms), {s.theme: s.id for s in stored}
+
+
+def _persist_surge_live(res: EvaluationResult, result: DayResult, ids: dict[str, int], version: str,
+                        inputs: RiskInputs, rules: RiskRules) -> None:
+    for e in res.surge_closed:
+        store.update_surge_event(ids[e.theme], end=e.end, end_reason=e.end_reason, last_high=e.last_high,
+                                 overheated_on=e.overheated_on)
+    for series, e in res.surge_state.open.items():
+        if series in result.surge_started:
+            _insert_surge(e, result, version, "live", _on_calendar(inputs), _members(inputs), rules)
+        else:
+            store.update_surge_event(ids[series], end=None, end_reason=None, last_high=e.last_high,
+                                     overheated_on=e.overheated_on)
+    _save_last_confirms(version, res.surge_state)
+
+
+# ---------------------------------------------------------------- live window
+
+
+def _rows_back(cal: pd.DatetimeIndex, day: date, rows: int) -> date:
+    return cal[max(int(cal.searchsorted(pd.Timestamp(day))) - rows, 0)].date()
+
+
+def live_window_start(inputs: RiskInputs, rules: RiskRules, first_day: date,
+                      open_alert: store.StoredAlert | None, open_surges: list[store.StoredSurge]) -> date:
+    """First day of the trailing window a live run from `first_day` on needs (surge spec section 5).
+    The earliest of:
+    - per trigger theme with a level in the last live_window_rows calendar rows to `first_day`, its live_window_rows-th
+      valid index row back from `first_day` (a theme with a <min_members gap goes back that much more);
+    - the open alert's earliest stint last_ref, and its start minus price.window rows (its stints'
+      join-day drawdown is rewritten every live day);
+    - the open surge events' earliest start minus event.high_window rows.
+    Returns the inputs' first day, and logs the theme, when a theme has fewer valid rows than that in `inputs`.
+
+    Accepted gap: movers' RSI runs on each ticker's own closes inside the window, so a ticker with a
+    very gappy history can differ from a full run by more than rel 1e-9. It is a display value only."""
+    cal = pd.DatetimeIndex(inputs.sox.dropna().index).sort_values()
+    first = cal[0].date()
+    n = rules.surge.live_window_rows
+    levels = theme_indices(inputs.closes.reindex(cal), inputs.shares, inputs.themes, rules.min_members)
+    upto = levels.loc[: pd.Timestamp(first_day)]
+    bounds = []
+    for theme in levels.columns:
+        if theme in rules.excluded_themes or not upto[theme].iloc[-n:].notna().any():
+            continue
+        valid = upto[theme].dropna().index
+        if len(valid) < n:  # the caller then reads the whole history
+            logger.info("risk.live_window_young_theme theme=%s valid_rows=%s", theme, len(valid))
+            return first
+        bounds.append(valid[-n].date())
+    if open_alert is not None:
+        bounds.append(min(s.last_ref or s.joined_date for s in open_alert.stints))
+        bounds.append(_rows_back(cal, open_alert.start_date, rules.price.window))
+    if open_surges:
+        bounds.append(_rows_back(cal, min(s.start_date for s in open_surges), rules.surge.event.high_window))
+    return max(min(bounds, default=first), first)
+
+
+def _since(inputs: RiskInputs, day: date) -> RiskInputs:
+    """`load_inputs(since=day)` in memory: closes, ^SOX and RSP from `day`; FRED untouched."""
+    ts = pd.Timestamp(day)
+    return replace(inputs, closes=inputs.closes.loc[ts:], sox=inputs.sox.loc[ts:], rsp=inputs.rsp.loc[ts:])
+
+
 # ---------------------------------------------------------------- rules change
 
 
 def apply_rules_change(now: datetime, *, loaded: LoadedRules | None = None) -> None:
-    """Close open alerts of other versions (only before this version starts live), then purge their
-    backfill alerts and risk_daily rows. Live alerts of old versions are kept."""
+    """Close open alerts and surge events of other versions (only before this version starts live),
+    then purge their backfill rows. Live alerts and live surge events of old versions are kept, closed
+    with reason rules_changed on that version's last evaluated day."""
     version = (loaded or get_rules()).version
     others = sorted(store.versions() - {version})
     if store.get_state(f"live_start:{version}") is None:
@@ -197,6 +350,11 @@ def apply_rules_change(now: datetime, *, loaded: LoadedRules | None = None) -> N
                 store.close_alert(alert.id, release, RULES_CHANGED)
                 logger.info("risk.rules_changed_close alert=%s version=%s release=%s", alert.id, old, release)
                 alert = store.open_alert(old)
+            for event in store.open_surge_events(old):
+                end = store.last_evaluated(old) or event.start_date
+                store.update_surge_event(event.id, end=end, end_reason=RULES_CHANGED,
+                                         last_high=event.last_high_date, overheated_on=event.overheated_on)
+                logger.info("risk.rules_changed_close surge=%s version=%s end=%s", event.id, old, end)
     for old in others:
         store.purge_version(old)
 
@@ -215,9 +373,16 @@ def _persist_backfill(res: EvaluationResult, inputs: RiskInputs, version: str, e
         _write_cards(alert_id, "latest", inputs, release or end, rules)
         if release is not None:
             store.close_alert(alert_id, release, alert.reason)
+    px, members = _on_calendar(inputs), _members(inputs)
+    for event in [*res.surge_closed, *res.surge_state.open.values()]:
+        _insert_surge(event, by_day[event.start], version, "backfill", px, members, rules)
+    _save_last_confirms(version, res.surge_state)
     stamp = now.isoformat()
     for day in res.days:
-        store.save_day(day, version, "backfill", coverage(inputs.closes, inputs.themes, day.day, rules), stamp)
+        with store.transaction():
+            store.save_movers(version, day.day, day.movers, inputs.themes)
+            store.save_day(day, version, "backfill", coverage(inputs.closes, inputs.themes, day.day, rules),
+                           stamp)
 
 
 def run_backfill(now: datetime, *, inputs: RiskInputs | None = None, loaded: LoadedRules | None = None) -> None:
@@ -268,6 +433,7 @@ def run_backfill(now: datetime, *, inputs: RiskInputs | None = None, loaded: Loa
         last = res.days[-1].day if res.days else end
         _persist_backfill(res, inputs, version, last, rules, now)
         _fill_outcomes(version, res.levels, _on_calendar(inputs))
+        _fill_surge_outcomes(version, _surge_levels(res, inputs))
         store.set_state(key, state)
         logger.info("risk.backfill_%s version=%s days=%s alerts=%s missing_fred=%s sweep_failed=%s", state,
                     version, len(res.days), len(res.closed) + (res.open is not None), missing, sweep_failed)
@@ -282,19 +448,39 @@ def run_backfill(now: datetime, *, inputs: RiskInputs | None = None, loaded: Loa
 # ---------------------------------------------------------------- live
 
 
+def _load_live(now: datetime, loaded: LoadedRules, since: date | None) -> RiskInputs:
+    """A live load: fetch the engine FRED series and keep their errors in risk_state `fred_errors`
+    (read by /latest)."""
+    inputs = load_inputs(now=now, loaded=loaded, since=since, fetch_fred=True)
+    store.set_state("fred_errors", json.dumps(inputs.fred_errors))
+    return inputs
+
+
 def evaluate_pending(now: datetime, *, inputs: RiskInputs | None = None,
                      loaded: LoadedRules | None = None) -> list[int]:
-    """Evaluate every pending trading day in order with origin "live"; return ids of alerts opened."""
+    """Evaluate every pending trading day in order with origin "live"; return ids of alerts opened.
+    Without `inputs` it loads its own: first the last _COARSE_DAYS only, the whole history only when
+    that is too short to count the window's rows (both fetch FRED and store `fred_errors`)."""
     loaded = loaded or get_rules()
     rules, version = loaded.rules, loaded.version
     if store.get_state(f"backfill:{version}") not in BACKFILL_COMPLETE:
         return []
-    if inputs is None:
-        inputs = load_inputs(now=now, loaded=loaded)
     live_start = date.fromisoformat(store.get_state(f"live_start:{version}"))
     last = store.last_evaluated(version)
+    coarse = None
+    if inputs is None:
+        coarse = (last or live_start) - timedelta(days=_COARSE_DAYS)
+        inputs = _load_live(now, loaded, coarse)
     pending = [d for d in _calendar(inputs) if d >= live_start and (last is None or d > last)]
     until = _latest_evaluable(inputs, pending, now, rules)
+    if until is not None:
+        stored_alert, stored_surges = store.open_alert(version), store.open_surge_events(version)
+        start = live_window_start(inputs, rules, pending[0], stored_alert, stored_surges)
+        if coarse is not None and coarse > rules.history_start and start <= _calendar(inputs)[0]:
+            # the coarse load was too short to count the window's rows: read the whole history
+            inputs = _load_live(now, loaded, None)
+            start = live_window_start(inputs, rules, pending[0], stored_alert, stored_surges)
+        inputs = _since(inputs, start)
     replay_key = f"replayed_through:{version}"
     raw = store.get_state(replay_key)
     replayed = date.fromisoformat(raw) if raw else None
@@ -304,7 +490,9 @@ def evaluate_pending(now: datetime, *, inputs: RiskInputs | None = None,
     for day in (d for d in pending if until is not None and d <= until):
         day_inputs = _truncate(inputs, day)
         stored = store.open_alert(version)
-        res = _evaluate(day_inputs, rules, day, day, _rebuild(stored) if stored is not None else None)
+        surge_state, surge_ids = _stored_surge_state(version, _calendar(day_inputs)[0])
+        res = _evaluate(day_inputs, rules, day, day, _rebuild(stored) if stored is not None else None,
+                        surge_state)
         result = res.days[0]
         # One transaction per day, risk_daily last: a failure leaves the day pending with no partial alert.
         with store.transaction():
@@ -319,6 +507,8 @@ def evaluate_pending(now: datetime, *, inputs: RiskInputs | None = None,
                 _write_cards(alert_id, "latest", day_inputs, day, rules)
                 if res.closed:
                     store.close_alert(alert_id, res.closed[0].release, res.closed[0].reason)
+            _persist_surge_live(res, result, surge_ids, version, day_inputs, rules)
+            store.save_movers(version, day, result.movers, inputs.themes)
             store.save_day(result, version, "live", coverage(inputs.closes, inputs.themes, day, rules),
                            now.isoformat())
         if stored is None and alert_id is not None and (replayed is None or res.open.start > replayed):
@@ -327,4 +517,5 @@ def evaluate_pending(now: datetime, *, inputs: RiskInputs | None = None,
         store.delete_state(replay_key)  # the replay has passed every day evaluated before the rebuild
     if res is not None:
         _fill_outcomes(version, res.levels, _on_calendar(day_inputs))
+        _fill_surge_outcomes(version, _surge_levels(res, day_inputs))
     return opened

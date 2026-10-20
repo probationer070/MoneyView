@@ -210,6 +210,30 @@ def get_db() -> Generator[sqlite3.Connection, None, None]:
         conn.close()
 
 
+# Surge events DDL, shared by the schema and the end_reason CHECK migration.
+_SURGE_EVENTS_SQL = """
+CREATE TABLE IF NOT EXISTS surge_events (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    rules_version  TEXT NOT NULL,
+    origin         TEXT NOT NULL CHECK (origin IN ('live','backfill')),
+    theme          TEXT NOT NULL,
+    start_date     TEXT NOT NULL,
+    end_date       TEXT,
+    end_reason     TEXT CHECK (end_reason IN ('below_ema','stalled','rules_changed')),
+    shown          INTEGER NOT NULL,
+    components_json TEXT NOT NULL,
+    overheated_on  TEXT,
+    last_high_date TEXT NOT NULL,
+    fwd5           REAL,
+    fwd10          REAL,
+    fwd20          REAL,
+    max_runup10    REAL,
+    leaders_json   TEXT NOT NULL,
+    created_at     TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_surge_events_version ON surge_events(rules_version, origin, start_date);
+"""
+
 # Macro signal engine (docs/superpowers/plans/2026-10-12-macro-signal-engine.md).
 # One snapshot per ISO week, overwritten on re-run. contrib_* hold each signal's
 # contribution as computed at run time, so a later rules.yaml edit cannot rewrite history.
@@ -264,6 +288,9 @@ CREATE TABLE IF NOT EXISTS risk_daily (
     cap_share      REAL NOT NULL,
     bars_coverage  REAL NOT NULL,
     evaluated_at   TEXT NOT NULL,
+    surge_json     TEXT,  -- surge spec section 7: theme -> component values and flags, NULL = not evaluated
+    surge_banner   INTEGER,
+    surge_cap_share REAL,
     PRIMARY KEY (date, rules_version)
 );
 CREATE TABLE IF NOT EXISTS risk_alerts (
@@ -315,6 +342,27 @@ CREATE TABLE IF NOT EXISTS risk_alert_cards (
 CREATE TABLE IF NOT EXISTS risk_state (
     key            TEXT PRIMARY KEY,
     value          TEXT NOT NULL
+);
+-- Surge signal (docs/superpowers/specs/2026-10-19-surge-signal-design.md section 7).
+-- shown is stored at insert (banner on the start day) because it cannot be recomputed later.
+-- components_json holds the start-day values, leaders_json is a list of {ticker, return5_pct}.
+""" + _SURGE_EVENTS_SQL + """CREATE TABLE IF NOT EXISTS surge_state (
+    rules_version     TEXT NOT NULL,
+    theme             TEXT NOT NULL,
+    last_confirm_date TEXT NOT NULL,
+    PRIMARY KEY (rules_version, theme)
+);
+CREATE TABLE IF NOT EXISTS daily_movers (
+    date           TEXT NOT NULL,
+    rules_version  TEXT NOT NULL,
+    rank           INTEGER NOT NULL,
+    ticker         TEXT NOT NULL,
+    theme          TEXT NOT NULL,
+    return_pct     REAL NOT NULL,
+    close          REAL NOT NULL,
+    return5_pct    REAL,
+    rsi            REAL,
+    PRIMARY KEY (date, rules_version, rank)
 );
 """
 
@@ -802,6 +850,14 @@ def init_db() -> None:
 
 def _ensure_schema_compatibility(conn: sqlite3.Connection) -> None:
     """Apply additive migrations for older local SQLite files."""
+    surge = conn.execute("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'surge_events'").fetchone()
+    if surge is not None and "rules_changed" not in surge[0]:
+        # The end_reason CHECK gained 'rules_changed': SQLite cannot alter a CHECK, so rebuild the table.
+        conn.execute("ALTER TABLE surge_events RENAME TO surge_events_old")
+        conn.execute("DROP INDEX IF EXISTS idx_surge_events_version")
+        conn.executescript(_SURGE_EVENTS_SQL)
+        conn.execute("INSERT INTO surge_events SELECT * FROM surge_events_old")
+        conn.execute("DROP TABLE surge_events_old")
     segment_columns = {row["name"] for row in conn.execute("PRAGMA table_info(segment)")}
     if segment_columns and "initial_growth" not in segment_columns:
         # Nullable, so no default is needed and existing rows keep the decaying
@@ -1081,6 +1137,11 @@ def _ensure_schema_compatibility(conn: sqlite3.Connection) -> None:
     stint_columns = {row["name"] for row in conn.execute("PRAGMA table_info(risk_alert_themes)")}
     if stint_columns and "last_ref" not in stint_columns:
         conn.execute("ALTER TABLE risk_alert_themes ADD COLUMN last_ref TEXT")
+    # Surge signal: nullable and additive; NULL means the day was evaluated before surge existed.
+    daily_columns = {row["name"] for row in conn.execute("PRAGMA table_info(risk_daily)")}
+    for column, kind in (("surge_json", "TEXT"), ("surge_banner", "INTEGER"), ("surge_cap_share", "REAL")):
+        if daily_columns and column not in daily_columns:
+            conn.execute(f"ALTER TABLE risk_daily ADD COLUMN {column} {kind}")
     # Nullable and additive: existing rows keep every value and get a uid on the first records sync
     # (records_sync.store.backfill_uids).
     for table in ("valuation_case", "investment_decision", "user_event"):

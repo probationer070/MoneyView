@@ -106,6 +106,73 @@ class Coverage(_Strict):
     wait_hours: PositiveInt
 
 
+class SurgeMagnitude(_Strict):
+    window: PositiveInt
+    std_window: PositiveInt
+    std_min: PositiveInt
+    z: PositiveFloat
+
+
+class SurgeAccel(_Strict):
+    quantile_window: PositiveInt
+    quantile_min: PositiveInt
+    rank: float = Field(gt=0, lt=1)
+
+
+class SurgeBreadth(_Strict):
+    window: PositiveInt
+    min_pct: PositiveFloat
+
+
+class SurgeRsi(_Strict):
+    period: PositiveInt
+    cross: PositiveFloat
+    within: PositiveInt
+    overheated: PositiveFloat
+
+    @model_validator(mode="after")
+    def _ordered(self):
+        if self.cross >= self.overheated:
+            raise ValueError("rsi.cross must be below rsi.overheated")
+        return self
+
+
+class SurgeEvent(_Strict):
+    gap: PositiveInt
+    stall: PositiveInt
+    high_window: PositiveInt
+
+
+class Surge(_Strict):
+    ema: PositiveInt
+    accel_lag: PositiveInt
+    magnitude: SurgeMagnitude
+    accel: SurgeAccel
+    breadth: SurgeBreadth
+    rsi: SurgeRsi
+    event: SurgeEvent
+    gate: OpenGate
+    live_window_rows: PositiveInt
+    leaders: PositiveInt  # members listed per surge event, by 5-row return on its start day
+
+    @model_validator(mode="after")
+    def _window_covers_warmup(self):
+        if self.live_window_rows < self.accel.quantile_window + self.ema:
+            raise ValueError("surge.live_window_rows must be at least accel.quantile_window + ema")
+        return self
+
+
+class Movers(_Strict):
+    count: PositiveInt
+
+
+class SurgeLabels(_Strict):
+    magnitude: Label
+    accel: Label
+    breadth: Label
+    rsi: Label
+
+
 class WarningLabels(_Strict):
     W1: Label
     W2: Label
@@ -137,6 +204,10 @@ class RiskRules(_Strict):
     coverage: Coverage
     labels: WarningLabels
     rule_text: WarningLabels
+    surge: Surge
+    movers: Movers
+    surge_labels: SurgeLabels
+    surge_rule_text: SurgeLabels
 
     @model_validator(mode="after")
     def _consistent(self):

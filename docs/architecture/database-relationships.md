@@ -229,8 +229,9 @@ Declared foreign keys: **5**. Logical references: **27** (L1-L27).
 ### 3.3 Risk engine (risk signal sub-project 2, built on `feat/risk-engine`)
 
 Five tables, created in `_SIGNAL_SCHEMA_SQL` in `apps/api/services/db.py` (they are not part of the 31
-tables inventoried in §2), plus two columns on `news`. Spec: `docs/superpowers/specs/2026-10-19-risk-engine-design.md`
-§7. Alerts are computed per PC and are not synced (spec R-B7). Dotted lines are logical references,
+tables inventoried in §2), plus two columns on `news`. The surge signal (sub-project 2b, built on
+`feat/surge-signal`) adds three tables and three `risk_daily` columns, described at the end of this section.
+Spec: `docs/superpowers/specs/2026-10-19-risk-engine-design.md` §7. Alerts are computed per PC and are not synced (spec R-B7). Dotted lines are logical references,
 the same convention as §3.1; `risk_alerts` to its two child tables are declared foreign keys with
 `ON DELETE CASCADE`.
 
@@ -246,6 +247,9 @@ erDiagram
         real cap_share
         real bars_coverage
         string evaluated_at
+        string surge_json "NULL = not evaluated"
+        int surge_banner
+        real surge_cap_share
     }
     risk_alerts {
         int id PK
@@ -290,11 +294,49 @@ erDiagram
         string key PK
         string value
     }
+    surge_events {
+        int id PK
+        string rules_version
+        string origin "live or backfill"
+        string theme "^SOX for the semiconductor index"
+        string start_date
+        string end_date
+        string end_reason "below_ema, stalled or rules_changed"
+        int shown
+        string components_json
+        string overheated_on
+        string last_high_date
+        real fwd5
+        real fwd10
+        real fwd20
+        real max_runup10
+        string leaders_json
+        string created_at
+    }
+    surge_state {
+        string rules_version PK
+        string theme PK
+        string last_confirm_date
+    }
+    daily_movers {
+        string date PK
+        string rules_version PK
+        int rank PK
+        string ticker
+        string theme
+        real return_pct
+        real close
+        real return5_pct
+        real rsi
+    }
 
     risk_alerts ||--o{ risk_alert_themes : "one stint per join"
     risk_alerts ||--o{ risk_alert_cards : "start and latest decks"
     risk_alert_cards }o..o| watchlist : "ticker logical"
     risk_daily }o..o| risk_alerts : "same rules_version logical"
+    risk_daily }o..o| surge_events : "same rules_version logical"
+    risk_daily }o..o| daily_movers : "same date and rules_version logical"
+    surge_events }o..o| surge_state : "same rules_version and theme logical"
 ```
 
 - `risk_daily`: one row per evaluated trading day and rules version (key `date`, `rules_version`). It holds
@@ -315,6 +357,23 @@ erDiagram
   `live_start:<version>`, `news_swept_at`, `fred_errors`.
 - `news` gains `lang` (`en` default) and `topic` (`''` default) by an additive migration in `db.py`; topic
   news is stored in `news` with a topic id.
+- `surge_events` (surge spec §7): one row per theme surge event, `^SOX` stored as `theme = '^SOX'`. `end_date` and
+  `end_reason` are NULL while the event is open. `end_reason` is `below_ema` (close under EMA10), `stalled`
+  (10 trading days without a new 20-day high) or `rules_changed` (a live event of an old rules version, closed on that
+  version's last evaluated day when the rules file changes; ruling S8). `shown` is the cap-gated banner flag on the
+  start day, stored at insert because it cannot be recomputed later. `components_json` holds the start-day component
+  values, `leaders_json` the leader tickers as `{ticker, return5_pct}` (count = rules key `surge.leaders`, ruling S9),
+  `overheated_on` the first day in the event with RSI above 80. `fwd5/10/20` and `max_runup10` stay NULL until enough
+  trading days exist. The `end_reason` CHECK gained `rules_changed` after the first build, so
+  `_ensure_schema_compatibility` rebuilds an older `surge_events` table once (rename, create, copy, drop).
+- `surge_state`: key (`rules_version`, `theme`); the last day the four components all held for that theme, inside or
+  outside an event. The 10-day gap rule needs it when a live run reads only the trailing window (surge spec §3.2, §5).
+- `daily_movers`: the top gainers of each evaluated day (key `date`, `rules_version`, `rank`), with the 5-day return and
+  RSI of the ticker. Recomputed per rules version, like the other risk tables.
+- `risk_daily` gained `surge_json` (theme to component values and confirmation; NULL = the day was not evaluated for
+  surge), `surge_banner` and `surge_cap_share`, by `_SIGNAL_SCHEMA_SQL` and an additive column migration in `db.py`.
+- Purge and recompute follow the alert rule above: a rules change purges the old version's `backfill` surge events,
+  `surge_state` and movers rows and keeps its `live` events (closed with `rules_changed`). None of this is synced.
 - Not tables: the thresholds live in `apps/api/services/risk/rules.yaml`, the news topics in
   `news_queries.yaml`, and the engine FRED series in the existing `fred_cache`.
 
