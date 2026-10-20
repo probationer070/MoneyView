@@ -252,3 +252,40 @@ def test_live_window_start_bounds_exact():
     assert evaluator.live_window_start(inp, rules, day, _stub_alert(back(300), back(300), back(450)), []) == back(450)
     assert evaluator.live_window_start(inp, rules, day, _stub_alert(back(430), back(430), back(300)), []) == back(450)
     assert evaluator.live_window_start(inp, rules, day, None, [_stub_surge(back(420))]) == back(440)
+
+
+def _with_theme_only_last(theme: str, rows: int) -> tuple[evaluator.RiskInputs, pd.DatetimeIndex]:
+    """The long fixture with `theme`'s members priced only on the last `rows` calendar rows."""
+    px, sox, rsp, shares, themes, fred = load_long()
+    px = px.copy()
+    members = [t for t in px.columns if themes.get(t) == theme]
+    px.iloc[: len(px) - rows, [px.columns.get_loc(t) for t in members]] = float("nan")
+    return evaluator.RiskInputs(px, sox, rsp, shares, themes, {}, fred, []), sox.index
+
+
+def test_dead_theme_check_reads_rows_up_to_first_day():
+    """Minor 2. nuclear_uranium has a level only on the last 10 rows, all after first_day (20 rows back),
+    so up to first_day it is dead and must be skipped. Catches the check reading the newest loaded rows
+    (levels.iloc[-n:]) instead of the rows up to first_day: the theme then counts, has 0 valid rows,
+    and the whole history is returned."""
+    inp, cal = _with_theme_only_last("nuclear_uranium", 10)
+    rules = get_rules().rules
+    day = cal[-20].date()
+    without = evaluator.RiskInputs(inp.closes, inp.sox, inp.rsp, inp.shares,
+                                   {t: th for t, th in inp.themes.items() if th != "nuclear_uranium"},
+                                   {}, inp.fred, [])
+    got = evaluator.live_window_start(inp, rules, day, None, [])
+    assert got > cal[0].date()
+    assert got == evaluator.live_window_start(without, rules, day, None, [])
+
+
+def test_young_theme_logs_full_read(monkeypatch):
+    """Minor 3. nuclear_uranium has about 100 valid rows up to the last day, fewer than live_window_rows, so the
+    whole history is read. Catches that fallback happening silently (no info line naming the theme)."""
+    inp, cal = _with_theme_only_last("nuclear_uranium", 100)
+    lines: list[str] = []
+    monkeypatch.setattr(evaluator.logger, "info", lambda msg, *a: lines.append(msg % a))
+    assert evaluator.live_window_start(inp, get_rules().rules, cal[-1].date(), None, []) == cal[0].date()
+    [line] = lines
+    prefix = "risk.live_window_young_theme theme=nuclear_uranium valid_rows="
+    assert line.startswith(prefix) and int(line[len(prefix):]) < 400

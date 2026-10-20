@@ -296,12 +296,12 @@ def live_window_start(inputs: RiskInputs, rules: RiskRules, first_day: date,
                       open_alert: store.StoredAlert | None, open_surges: list[store.StoredSurge]) -> date:
     """First day of the trailing window a live run from `first_day` on needs (surge spec section 5).
     The earliest of:
-    - per trigger theme with a level in the last live_window_rows calendar rows, its live_window_rows-th
+    - per trigger theme with a level in the last live_window_rows calendar rows to `first_day`, its live_window_rows-th
       valid index row back from `first_day` (a theme with a <min_members gap goes back that much more);
     - the open alert's earliest stint last_ref, and its start minus price.window rows (its stints'
       join-day drawdown is rewritten every live day);
     - the open surge events' earliest start minus event.high_window rows.
-    Returns the inputs' first day when a theme has fewer valid rows than that in `inputs`.
+    Returns the inputs' first day, and logs the theme, when a theme has fewer valid rows than that in `inputs`.
 
     Accepted gap: movers' RSI runs on each ticker's own closes inside the window, so a ticker with a
     very gappy history can differ from a full run by more than rel 1e-9. It is a display value only."""
@@ -312,10 +312,11 @@ def live_window_start(inputs: RiskInputs, rules: RiskRules, first_day: date,
     upto = levels.loc[: pd.Timestamp(first_day)]
     bounds = []
     for theme in levels.columns:
-        if theme in rules.excluded_themes or not levels[theme].iloc[-n:].notna().any():
+        if theme in rules.excluded_themes or not upto[theme].iloc[-n:].notna().any():
             continue
         valid = upto[theme].dropna().index
-        if len(valid) < n:
+        if len(valid) < n:  # the caller then reads the whole history
+            logger.info("risk.live_window_young_theme theme=%s valid_rows=%s", theme, len(valid))
             return first
         bounds.append(valid[-n].date())
     if open_alert is not None:
