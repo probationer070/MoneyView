@@ -11,7 +11,11 @@ from pathlib import Path
 
 from apps.api.services import db as db_service
 from scripts.risk import reproduce_backfill as rb
-from scripts.risk.reproduce_backfill import ExpectedAlert, alert_matches, diff_alerts, parse_report_alerts
+from packages.core_finance.risk_signals.surge import SurgeEvent
+from scripts.risk.reproduce_backfill import (
+    ExpectedAlert, ExpectedSurge, alert_matches, diff_alerts, diff_surge, parse_report_alerts,
+    parse_surge_events,
+)
 
 REPORT = Path(__file__).resolve().parents[2] / "docs/superpowers/specs/2026-10-19-risk-engine-evidence/report3.md"
 
@@ -24,6 +28,46 @@ def test_parse_report_alerts_reads_eleven():
     assert alerts[0].trigger == ("ai_semis", "big_tech")
     assert alerts[-1].start == date(2026, 10, 8)
     assert alerts[-1].release is None
+
+SURGE_REPORT = (Path(__file__).resolve().parents[2]
+                / "docs/superpowers/specs/2026-10-19-surge-signal-evidence/report_surge_pick4.md")
+
+
+def test_parse_surge_events():
+    """Mutation caught: parsing the wrong table or column (end/end_reason/shown shifted), shown read as
+    anything but 'yes', or dropping the ^SOX row."""
+    ev = parse_surge_events(SURGE_REPORT.read_text(encoding="utf-8"))
+    assert len(ev) == 215
+    assert ev[0] == ExpectedSurge("gold_silver", date(2016, 1, 27), date(2016, 3, 1), "ema_break", False)
+    sox = next(e for e in ev if e.theme == "^SOX")
+    assert (sox.start, sox.shown) == (date(2016, 5, 24), True)
+    assert any(e.end_reason == "quiet10" for e in ev)
+    assert ev[-1].theme == "power_producers" and ev[-1].end == date(2026, 10, 14)
+
+
+def test_surge_diff():
+    """Mutation caught: matching by start only (two themes on one day collapse), not reporting an end,
+    end_reason or shown mismatch, or not mapping below_ema/stalled/None to the report's names."""
+    d = date
+    exp = [ExpectedSurge("a", d(2020, 1, 1), d(2020, 1, 9), "ema_break", True),
+           ExpectedSurge("b", d(2020, 1, 1), d(2020, 1, 9), "quiet10", False),
+           ExpectedSurge("c", d(2020, 2, 1), None, "open", False),
+           ExpectedSurge("gone", d(2020, 3, 1), d(2020, 3, 2), "ema_break", False)]
+
+    def ev(t, s, e, r):
+        return SurgeEvent(t, s, e, r, s, None)
+
+    act = [ev("a", d(2020, 1, 1), d(2020, 1, 9), "below_ema"),
+           ev("b", d(2020, 1, 1), d(2020, 1, 10), "below_ema"),
+           ev("c", d(2020, 2, 1), None, None),
+           ev("new", d(2020, 4, 1), None, None)]
+    out = diff_surge(exp, act, {("a", d(2020, 1, 1)): True, ("b", d(2020, 1, 1)): True})
+    assert [e.theme for e, _ in out.matched] == ["a", "b", "c"]
+    assert [e.theme for e in out.missing] == ["gone"]
+    assert [a.theme for a in out.extra] == ["new"]
+    assert out.mismatches == [("b", d(2020, 1, 1), "end", d(2020, 1, 9), d(2020, 1, 10)),
+                              ("b", d(2020, 1, 1), "end_reason", "quiet10", "ema_break"),
+                              ("b", d(2020, 1, 1), "shown", False, True)]
 
 
 def test_diff_alerts_matched_missing_extra():

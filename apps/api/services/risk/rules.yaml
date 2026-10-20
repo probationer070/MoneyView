@@ -71,4 +71,4 @@ surge_rule_text:
   magnitude: {ko: "5일 수익률이 60일 일간 변동성×√5의 2배 이상", en: "The 5-day return is at least 2 standard deviations (60-day daily volatility × √5)."}
   accel: {ko: 상승 기울기가 최근 1년 기준 상위 5% 안으로 급격히 가팔라졌습니다., en: The rising slope steepened into the top 5% of the past year.}
   breadth: {ko: 최근 5일 동안 오른 종목이 60% 이상입니다., en: At least 60% of members rose over the last 5 days.}
-  rsi: {ko: "RSI가 최근 5일 안에 60을 상향 돌파했고 현재 60 이상 80 미만이다.", en: "RSI crossed above 60 within the last 5 days and is now between 60 and 80."}
+  rsi: {ko: "RSI가 최근 5일 안에 60을 상향 돌파했고 현재 60 이상 80 이하이다.", en: "RSI crossed above 60 within the last 5 days and is now at least 60 and at most 80."}

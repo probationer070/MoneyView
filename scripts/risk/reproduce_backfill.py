@@ -24,7 +24,11 @@ sys.path.insert(0, str(ROOT))
 
 DEFAULT_REPORT = ROOT / "docs/superpowers/specs/2026-10-19-risk-engine-evidence/report3.md"
 DEFAULT_DB = ROOT / "data/processed/moneyview.db"
+DEFAULT_SURGE_REPORT = ROOT / "docs/superpowers/specs/2026-10-19-surge-signal-evidence/report_surge_pick4.md"
 _SECTION = "## Pick: every alert"
+_SURGE_SECTION = "## Events"
+# the engine's end reasons, named as the research report names them
+_REASON_NAMES = {"below_ema": "ema_break", "stalled": "quiet10", None: "open"}
 
 
 @dataclass(frozen=True)
@@ -72,6 +76,59 @@ def alert_matches(expected: ExpectedAlert, actual) -> bool:
     return expected.release == getattr(actual, "release", None) and set(expected.trigger) == set(actual.trigger)
 
 
+@dataclass(frozen=True)
+class ExpectedSurge:
+    theme: str
+    start: date
+    end: date | None
+    end_reason: str  # ema_break | quiet10 | open
+    shown: bool
+
+
+@dataclass(frozen=True)
+class SurgeDiff:
+    matched: list  # (expected, actual) pairs
+    missing: list
+    extra: list
+    mismatches: list  # (theme, start, field, expected, actual)
+
+
+def parse_surge_events(md: str) -> list[ExpectedSurge]:
+    """Rows of the table under '## Events': theme, start, end, end_reason, shown ('open' end becomes None)."""
+    section = md.split(_SURGE_SECTION, 1)[1]
+    section = re.split(r"\n## ", section, maxsplit=1)[0]
+    out: list[ExpectedSurge] = []
+    for line in section.splitlines():
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        if len(cells) < 5 or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", cells[1]):
+            continue
+        end = None if cells[2] == "open" else date.fromisoformat(cells[2])
+        out.append(ExpectedSurge(cells[0], date.fromisoformat(cells[1]), end, cells[3], cells[4] == "yes"))
+    return out
+
+
+def diff_surge(expected: list, actual: list, shown: dict) -> SurgeDiff:
+    """Match by (theme, start). ``actual`` are SurgeEvents; ``shown`` maps (theme, start) to the banner
+    flag on the start day. Matched pairs are also checked for end, end_reason and shown."""
+    by_key = {(a.theme, a.start): a for a in actual}
+    exp_keys = {(e.theme, e.start) for e in expected}
+    matched = [(e, by_key[(e.theme, e.start)]) for e in expected if (e.theme, e.start) in by_key]
+    mismatches = []
+    for e, a in matched:
+        got = {"end": a.end, "end_reason": _REASON_NAMES.get(a.end_reason, a.end_reason),
+               "shown": bool(shown.get((a.theme, a.start), False))}
+        for field in ("end", "end_reason", "shown"):
+            want = getattr(e, field)
+            if want != got[field]:
+                mismatches.append((e.theme, e.start, field, want, got[field]))
+    return SurgeDiff(
+        matched=matched,
+        missing=[e for e in expected if (e.theme, e.start) not in by_key],
+        extra=[a for a in actual if (a.theme, a.start) not in exp_keys],
+        mismatches=mismatches,
+    )
+
+
 def _copy_db(src: Path, dest_dir: Path) -> Path:
     dest = dest_dir / "moneyview.db"
     source = sqlite3.connect(f"{Path(src).resolve().as_uri()}?mode=ro", uri=True)
@@ -86,8 +143,8 @@ def _copy_db(src: Path, dest_dir: Path) -> Path:
     return dest
 
 
-def compute_alerts(db: Path):
-    """Evaluate eval_start..last day on a temp copy of `db`; returns (alerts, warnings_by_start)."""
+def _evaluate(db: Path):
+    """Evaluate eval_start..last day on a temp copy of `db`; returns the EvaluationResult."""
     from apps.api.services import db as db_service
     from apps.api.services.risk.inputs import load_inputs
     from apps.api.services.risk.rules import get_rules
@@ -106,6 +163,12 @@ def compute_alerts(db: Path):
     last = inputs.sox.index.max().date()
     res = evaluate_range(inputs.closes, inputs.sox, inputs.rsp, inputs.shares, inputs.themes,
                          inputs.fred, rules, start=rules.eval_start, end=last)
+    return res
+
+
+def compute_alerts(db: Path):
+    """Returns (alerts, warnings_by_start) for eval_start..last day, evaluated on a temp copy of `db`."""
+    res = _evaluate(db)
     by_day = {d.day: d for d in res.days}
     alerts = list(res.closed) + ([res.open] if res.open is not None else [])
     on = {a.start: tuple(w for w, (state, _v, _o) in by_day[a.start].warnings.items() if state == "on")
@@ -113,10 +176,19 @@ def compute_alerts(db: Path):
     return alerts, on
 
 
+def compute_surge(db: Path):
+    """Returns (surge events closed or open, {(theme, start): banner shown on the start day})."""
+    res = _evaluate(db)
+    events = list(res.surge_closed) + list(res.surge_state.open.values())
+    shown = {(t, d.day): flag for d in res.days for t, flag in d.surge_shown.items()}
+    return events, shown
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--db", type=Path, default=DEFAULT_DB)
     ap.add_argument("--compare", type=Path, default=DEFAULT_REPORT)
+    ap.add_argument("--compare-surge", type=Path, default=DEFAULT_SURGE_REPORT)
     args = ap.parse_args(argv)
 
     alerts, on = compute_alerts(args.db)
@@ -136,6 +208,19 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  missing  {e.start}")
     for a in diff.extra:
         print(f"  extra    {a.start}")
+
+    events, shown = compute_surge(args.db)
+    exp_surge = parse_surge_events(args.compare_surge.read_text(encoding="utf-8"))
+    sd = diff_surge(exp_surge, events, shown)
+    print(f"\nreport surge events {len(exp_surge)}, recomputed {len(events)}: "
+          f"matched {len(sd.matched)}, missing {len(sd.missing)}, extra {len(sd.extra)}, "
+          f"field mismatches {len(sd.mismatches)}")
+    for theme, start, field, want, got in sd.mismatches:
+        print(f"  differ   {theme} {start} {field}: report {want}, recomputed {got}")
+    for e in sd.missing:
+        print(f"  missing  {e.theme} {e.start}")
+    for a in sd.extra:
+        print(f"  extra    {a.theme} {a.start}")
     return 0
 
 
