@@ -365,3 +365,30 @@ def test_surge_writes_join_transaction():
             raise RuntimeError
     assert store.open_surge_events(V) == [] and store.last_confirms(V) == {}
     assert store.list_movers(V, date(2026, 1, 1), date(2026, 12, 31)) == []
+
+
+@pytest.mark.virgin_db
+def test_surge_end_reason_check_migrates(tmp_path, monkeypatch):
+    """S8. Catches an old surge_events table whose end_reason CHECK rejects 'rules_changed' left in place
+    (closing an old version's live event at a rules change would fail), or a rebuild that loses its rows
+    or its index."""
+    db_path = tmp_path / "moneyview.db"
+    monkeypatch.setattr(db_service, "_DB_PATH", db_path)
+    old_sql = db_service._SURGE_EVENTS_SQL.replace("'below_ema','stalled','rules_changed'", "'below_ema','stalled'")
+    assert old_sql != db_service._SURGE_EVENTS_SQL
+    with sqlite3.connect(str(db_path)) as conn:
+        conn.executescript(old_sql)
+        conn.execute("INSERT INTO surge_events (rules_version, origin, theme, start_date, shown, components_json, "
+                     "last_high_date, leaders_json, created_at) "
+                     "VALUES ('aaaa1111', 'live', 'ai_semis', '2026-10-08', 1, '{}', '2026-10-08', '[]', 't')")
+
+    db_service.init_db()
+    db_service.init_db()  # idempotent
+
+    [kept] = store.open_surge_events(V)
+    store.update_surge_event(kept.id, end=date(2026, 10, 9), end_reason="rules_changed",
+                             last_high=kept.last_high_date, overheated_on=None)
+    assert store.get_surge(kept.id).end_reason == "rules_changed"
+    with sqlite3.connect(str(db_path)) as conn:
+        indexes = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'index'")}
+    assert "idx_surge_events_version" in indexes

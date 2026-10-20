@@ -153,6 +153,7 @@ class Surge(_Strict):
     event: SurgeEvent
     gate: OpenGate
     live_window_rows: PositiveInt
+    leaders: PositiveInt  # members listed per surge event, by 5-row return on its start day
 
     @model_validator(mode="after")
     def _window_covers_warmup(self):

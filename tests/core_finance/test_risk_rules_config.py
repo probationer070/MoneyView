@@ -85,7 +85,7 @@ def test_labels_are_short():
 def test_surge_values_load():
     rules = load_rules().rules
     s = rules.surge
-    assert (s.ema, s.accel_lag, s.live_window_rows) == (10, 3, 400)
+    assert (s.ema, s.accel_lag, s.live_window_rows, s.leaders) == (10, 3, 400, 5)
     assert (s.magnitude.window, s.magnitude.std_window, s.magnitude.std_min, s.magnitude.z) == (5, 60, 40, 2.0)
     assert (s.accel.quantile_window, s.accel.quantile_min, s.accel.rank) == (250, 120, 0.95)
     assert (s.breadth.window, s.breadth.min_pct) == (5, 60.0)

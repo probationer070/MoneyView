@@ -14,6 +14,7 @@ from apps.api.services.risk import evaluator, store, sweep
 from apps.api.services.risk.inputs import load_inputs
 from apps.api.services.risk.rules import LoadedRules, get_rules
 from packages.core_finance.risk_signals.evaluate import evaluate_range
+from packages.core_finance.risk_signals.indices import theme_indices
 from tests.core_finance._fixture import load_long
 
 NOW = datetime(2026, 10, 19, 1, 0, tzinfo=UTC)
@@ -134,6 +135,12 @@ def test_live_window_equals_full_history(monkeypatch):
     days = _tail(20)
     inp, L, rows = _run(load_long()[0], days[0], monkeypatch)
     assert len(rows) == len(days) and max(rows) < len(inp.sox) - 400  # not vacuous: the window trims
+    cal = inp.sox.index
+    first = cal.get_loc(pd.Timestamp(days[0]))
+    # Every theme has a level on each of the 400 rows to days[0] except big_tech: 26 rows of it have fewer
+    # than min_members, so its 400th valid row (the binding bound) is 426 rows back, 2025-01-07.
+    assert evaluator.live_window_start(inp, L.rules, days[0], None, []) == cal[first - 426].date() == date(2025, 1, 7)
+    assert rows[0] == 427  # the first live day ran on exactly that window: 426 rows before it plus itself
     assert any(e.start_date >= days[0] for e in store.list_surge(V, None, None, 500))  # an event starts live
     _assert_equals_full(inp, L, days)
 
@@ -168,7 +175,9 @@ def test_live_window_with_member_gap_theme(monkeypatch):
     inp, L, rows = _run(px, days[0], monkeypatch)
     cal = inp.sox.index
     start = evaluator.live_window_start(inp, L.rules, days[0], None, [])
-    assert start < cal[-(400 + 5)].date()  # the gap theme pushes the window back
+    levels = theme_indices(inp.closes.reindex(cal), inp.shares, inp.themes, L.rules.min_members)
+    assert start == levels[theme].loc[: pd.Timestamp(days[0])].dropna().index[-400].date()
+    assert start < cal[-(400 + 5)].date()  # the gap theme is the binding one
     assert max(rows) < len(inp.sox)  # still trimmed
     _assert_equals_full(inp, L, days)
 
@@ -205,6 +214,41 @@ def test_sox_leaders_are_semis_members():
     semis = [t for t in px.columns if t in shares and themes.get(t) in set(rules.semis_themes)]
     r5 = (px.reindex(cal).iloc[i][semis] / px.reindex(cal).iloc[i - 5][semis] - 1).dropna()
     r5 = r5.sort_values(ascending=False)
-    got = evaluator._leaders(inp, "^SOX", day, rules)
+    px_cal, members = evaluator._on_calendar(inp), evaluator._members(inp)
+    got = evaluator._leaders(px_cal, members, "^SOX", day, rules)
     assert [x["ticker"] for x in got] == list(r5.index[:5])
     assert [x["return5_pct"] for x in got] == pytest.approx(list(r5.iloc[:5] * 100), rel=1e-12)
+    three = rules.model_copy(update={"surge": rules.surge.model_copy(update={"leaders": 3})})
+    assert [x["ticker"] for x in evaluator._leaders(px_cal, members, "^SOX", day, three)] == list(r5.index[:3])
+
+
+def _stub_alert(start: date, joined: date, last_ref: date | None) -> store.StoredAlert:
+    stint = store.StoredStint("ai_semis", "theme", joined, None, None, None, None, None, None, last_ref)
+    return store.StoredAlert(1, "live", V, "open", start, None, None, "ai_semis", False, ("ai_semis",), "t",
+                             [stint])
+
+
+def _stub_surge(start: date) -> store.StoredSurge:
+    return store.StoredSurge(1, V, "live", "ai_semis", start, None, None, True, {}, None, start, None, None,
+                             None, None, [], "t")
+
+
+def test_live_window_start_bounds_exact():
+    """S10 (iii): each bound of live_window_start in isolation, on the long fixture with the last day
+    pending. Catches dropping any one bounds.append: the theme rule (426 rows back: big_tech's 400th valid row), the
+    alert's earliest last_ref (450 rows back), the alert start - price.window (430 + 20), and the surge
+    start - high_window (420 + 20)."""
+    px, sox, rsp, shares, themes, fred = load_long()
+    inp = evaluator.RiskInputs(px, sox, rsp, shares, themes, {}, fred, [])
+    rules = get_rules().rules
+    cal = sox.index
+    day = cal[-1].date()
+
+    def back(n: int) -> date:
+        return cal[-1 - n].date()
+
+    # big_tech misses 26 rows in the window, so the theme bound alone is 426 rows back (see the 20-day test).
+    assert evaluator.live_window_start(inp, rules, day, None, []) == back(426) == date(2025, 2, 5)
+    assert evaluator.live_window_start(inp, rules, day, _stub_alert(back(300), back(300), back(450)), []) == back(450)
+    assert evaluator.live_window_start(inp, rules, day, _stub_alert(back(430), back(430), back(300)), []) == back(450)
+    assert evaluator.live_window_start(inp, rules, day, None, [_stub_surge(back(420))]) == back(440)

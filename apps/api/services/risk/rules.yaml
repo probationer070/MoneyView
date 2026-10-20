@@ -57,6 +57,7 @@ surge:
   event: {gap: 10, stall: 10, high_window: 20}
   gate: {cap_share_pct: 20.0, sox_opens: true}
   live_window_rows: 400
+  leaders: 5
 
 movers: {count: 5}
 

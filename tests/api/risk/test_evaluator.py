@@ -615,3 +615,24 @@ def test_live_load_reads_coarse_window_then_full_when_short(sweeps, monkeypatch)
 
     assert calls == [date(2026, 10, 9) - timedelta(days=evaluator._COARSE_DAYS), None]
     assert store.last_evaluated("test0001") == LAST_DAY
+
+
+def test_rules_change_closes_old_live_surge(sweeps):
+    """S8, mirrors test_rules_change_closes_old_live_and_rebackfills. Catches: an old version's open live
+    surge event left open (end NULL) after a rules change; closed on its start day instead of the old
+    version's last evaluated day, or with another reason; purged; old backfill surge rows kept."""
+    old, new = _loaded("old00000"), _loaded("new11111")
+    inp = _inputs(old, through=date(2026, 10, 9))
+    store.set_state("live_start:old00000", "2026-10-06")
+    evaluator.run_backfill(NOW, inputs=inp, loaded=old)
+    evaluator.evaluate_pending(NOW, inputs=inp, loaded=old)
+    [live] = [e for e in store.list_surge("old00000", None, None, 100) if e.origin == "live"]
+    assert (live.theme, live.start_date, live.end_date) == (POWER, date(2026, 10, 6), None)
+    assert any(e.origin == "backfill" for e in store.list_surge("old00000", None, None, 100))
+
+    evaluator.run_backfill(NOW + timedelta(days=1), inputs=inp, loaded=new)
+
+    kept = store.get_surge(live.id)
+    assert kept is not None, "the old version's live surge event was purged"
+    assert (kept.end_date, kept.end_reason) == (date(2026, 10, 9), "rules_changed")
+    assert [e.id for e in store.list_surge("old00000", None, None, 100)] == [live.id]

@@ -52,7 +52,6 @@ _WAIT = "coverage_wait:"
 _STINT_FIELDS = ("fwd5", "fwd10", "fwd20", "max_dd10")
 _CARD_FIELDS = ("fwd5", "fwd10", "fwd20")
 _SURGE_FIELDS = ("fwd5", "fwd10", "fwd20", "max_runup10")
-_LEADERS = 5  # spec 3.4: the start day's five members with the highest 5-row return
 _COARSE_DAYS = 3 * 366  # a live load first reads about 3 years, enough to count the window's rows
 
 
@@ -201,26 +200,30 @@ def _surge_levels(res: EvaluationResult, inputs: RiskInputs) -> pd.DataFrame:
     return res.levels.assign(**{SOX: inputs.sox.reindex(res.levels.index)})
 
 
-def _leaders(inputs: RiskInputs, series: str, day: date, rules: RiskRules) -> list[dict]:
-    """The series' members with the highest return over breadth.window calendar rows to `day` (the
-    return breadth counts), ties to the first ticker. ^SOX members are the semis themes' members."""
-    members = _members_by_theme(inputs.closes, inputs.shares, inputs.themes)
+def _leaders(px: pd.DataFrame, members: dict[str, list[str]], series: str, day: date,
+             rules: RiskRules) -> list[dict]:
+    """The surge.leaders members of `series` with the highest return over breadth.window calendar rows
+    to `day` (the return breadth counts), ties to the first ticker. ^SOX members are the semis themes'
+    members. `px` is `_on_calendar(inputs)`, `members` is `_members_by_theme` of the inputs."""
     names = (sorted({t for th in rules.semis_themes for t in members.get(th, [])}) if series == SOX
              else members.get(series, []))
-    px = _on_calendar(inputs)
     i, w = px.index.get_loc(pd.Timestamp(day)), rules.surge.breadth.window
     if i < w or not names:
         return []
     r5 = (px.iloc[i][names] / px.iloc[i - w][names] - 1).dropna()
-    ranked = sorted(r5.items(), key=lambda kv: (-kv[1], kv[0]))[:_LEADERS]
+    ranked = sorted(r5.items(), key=lambda kv: (-kv[1], kv[0]))[: rules.surge.leaders]
     return [{"ticker": str(t), "return5_pct": float(v) * 100} for t, v in ranked]
 
 
-def _insert_surge(event: SurgeEvent, start_day: DayResult, version: str, origin: str,
-                  inputs: RiskInputs, rules: RiskRules) -> int:
+def _members(inputs: RiskInputs) -> dict[str, list[str]]:
+    return _members_by_theme(inputs.closes, inputs.shares, inputs.themes)
+
+
+def _insert_surge(event: SurgeEvent, start_day: DayResult, version: str, origin: str, px: pd.DataFrame,
+                  members: dict[str, list[str]], rules: RiskRules) -> int:
     return store.insert_surge_event(
         version, origin, event.theme, event.start, shown=start_day.surge_shown[event.theme],
-        components=start_day.surge[event.theme], leaders=_leaders(inputs, event.theme, event.start, rules),
+        components=start_day.surge[event.theme], leaders=_leaders(px, members, event.theme, event.start, rules),
         last_high=event.last_high, end=event.end, end_reason=event.end_reason,
         overheated_on=event.overheated_on)
 
@@ -274,7 +277,7 @@ def _persist_surge_live(res: EvaluationResult, result: DayResult, ids: dict[str,
                                  overheated_on=e.overheated_on)
     for series, e in res.surge_state.open.items():
         if series in result.surge_started:
-            _insert_surge(e, result, version, "live", inputs, rules)
+            _insert_surge(e, result, version, "live", _on_calendar(inputs), _members(inputs), rules)
         else:
             store.update_surge_event(ids[series], end=None, end_reason=None, last_high=e.last_high,
                                      overheated_on=e.overheated_on)
@@ -297,7 +300,10 @@ def live_window_start(inputs: RiskInputs, rules: RiskRules, first_day: date,
     - the open alert's earliest stint last_ref, and its start minus price.window rows (its stints'
       join-day drawdown is rewritten every live day);
     - the open surge events' earliest start minus event.high_window rows.
-    Returns the inputs' first day when a theme has fewer valid rows than that in `inputs`."""
+    Returns the inputs' first day when a theme has fewer valid rows than that in `inputs`.
+
+    Accepted gap: movers' RSI runs on each ticker's own closes inside the window, so a ticker with a
+    very gappy history can differ from a full run by more than rel 1e-9. It is a display value only."""
     cal = pd.DatetimeIndex(inputs.sox.dropna().index).sort_values()
     first = cal[0].date()
     n = rules.surge.live_window_rows
@@ -329,8 +335,9 @@ def _since(inputs: RiskInputs, day: date) -> RiskInputs:
 
 
 def apply_rules_change(now: datetime, *, loaded: LoadedRules | None = None) -> None:
-    """Close open alerts of other versions (only before this version starts live), then purge their
-    backfill alerts and risk_daily rows. Live alerts of old versions are kept."""
+    """Close open alerts and surge events of other versions (only before this version starts live),
+    then purge their backfill rows. Live alerts and live surge events of old versions are kept, closed
+    with reason rules_changed on that version's last evaluated day."""
     version = (loaded or get_rules()).version
     others = sorted(store.versions() - {version})
     if store.get_state(f"live_start:{version}") is None:
@@ -341,6 +348,11 @@ def apply_rules_change(now: datetime, *, loaded: LoadedRules | None = None) -> N
                 store.close_alert(alert.id, release, RULES_CHANGED)
                 logger.info("risk.rules_changed_close alert=%s version=%s release=%s", alert.id, old, release)
                 alert = store.open_alert(old)
+            for event in store.open_surge_events(old):
+                end = store.last_evaluated(old) or event.start_date
+                store.update_surge_event(event.id, end=end, end_reason=RULES_CHANGED,
+                                         last_high=event.last_high_date, overheated_on=event.overheated_on)
+                logger.info("risk.rules_changed_close surge=%s version=%s end=%s", event.id, old, end)
     for old in others:
         store.purge_version(old)
 
@@ -359,8 +371,9 @@ def _persist_backfill(res: EvaluationResult, inputs: RiskInputs, version: str, e
         _write_cards(alert_id, "latest", inputs, release or end, rules)
         if release is not None:
             store.close_alert(alert_id, release, alert.reason)
+    px, members = _on_calendar(inputs), _members(inputs)
     for event in [*res.surge_closed, *res.surge_state.open.values()]:
-        _insert_surge(event, by_day[event.start], version, "backfill", inputs, rules)
+        _insert_surge(event, by_day[event.start], version, "backfill", px, members, rules)
     _save_last_confirms(version, res.surge_state)
     stamp = now.isoformat()
     for day in res.days:
