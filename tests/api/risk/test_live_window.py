@@ -1,0 +1,210 @@
+"""Trailing live window (surge spec section 5) and surge continuation from the store, on the long
+fixture seeded into the test DB. Each docstring names the mutation its test catches. A live run must
+equal one full-history evaluate_range: flags, dates and events exactly, numbers to rel 1e-9."""
+from __future__ import annotations
+
+import math
+from datetime import UTC, date, datetime
+
+import pandas as pd
+import pytest
+
+from apps.api.services.db import get_db
+from apps.api.services.risk import evaluator, store, sweep
+from apps.api.services.risk.inputs import load_inputs
+from apps.api.services.risk.rules import LoadedRules, get_rules
+from packages.core_finance.risk_signals.evaluate import evaluate_range
+from tests.core_finance._fixture import load_long
+
+NOW = datetime(2026, 10, 19, 1, 0, tzinfo=UTC)
+V = "long0001"
+EVAL_START = date(2026, 6, 1)
+REL = 1e-9
+
+
+@pytest.fixture(autouse=True)
+def _no_sweeps(monkeypatch):
+    monkeypatch.setattr(sweep, "ensure_deep_history", lambda tickers, **kw: sweep.SweepReport())
+    monkeypatch.setattr(sweep, "ensure_quote_facts", lambda tickers, now, **kw: sweep.SweepReport())
+
+
+def _seed(px: pd.DataFrame) -> None:
+    _, sox, rsp, shares, themes, fred = load_long()
+    wide = px.assign(**{"^SOX": sox, "RSP": rsp})
+    long = wide.stack().reset_index()
+    long.columns = ["date", "ticker", "close"]
+    bars = list(zip(long["ticker"], long["date"].dt.strftime("%Y-%m-%d"), long["close"].astype(float)))
+    with get_db() as conn:
+        conn.executemany("INSERT INTO stocks (ticker, date, close) VALUES (?, ?, ?)", bars)
+        conn.executemany(
+            "INSERT INTO corporate_quote_facts (ticker, shares_outstanding, fetched_at) VALUES (?, ?, 'fixture')",
+            [(t, float(v)) for t, v in shares.items()])
+        conn.executemany(
+            "INSERT INTO watchlist (ticker, name, theme, group_name, weight) VALUES (?, ?, ?, 'custom', 0.0)",
+            [(t, t, th) for t, th in themes.items()])
+        for sid, series in fred.items():
+            conn.executemany(
+                "INSERT INTO fred_cache (series_id, obs_date, value, fetched_at) VALUES (?, ?, ?, 'fixture')",
+                [(sid, d.strftime("%Y-%m-%d"), float(v)) for d, v in series.dropna().items()])
+
+
+def _loaded() -> LoadedRules:
+    return LoadedRules(get_rules().rules.model_copy(update={"eval_start": EVAL_START}), V)
+
+
+def _same(a, b, path="") -> None:
+    """Exact for flags, dates, strings and None; floats within rel 1e-9."""
+    if isinstance(a, float) or isinstance(b, float):
+        assert a is not None and b is not None and math.isclose(a, b, rel_tol=REL, abs_tol=0.0), (path, a, b)
+    elif isinstance(a, dict):
+        assert isinstance(b, dict) and a.keys() == b.keys(), (path, sorted(a), sorted(b))
+        for k in a:
+            _same(a[k], b[k], f"{path}.{k}")
+    elif isinstance(a, (list, tuple)):
+        assert len(a) == len(b), (path, a, b)
+        for i, (x, y) in enumerate(zip(a, b)):
+            _same(x, y, f"{path}[{i}]")
+    else:
+        assert a == b, (path, a, b)
+
+
+def _run(px: pd.DataFrame, live_start: date, monkeypatch) -> tuple:
+    """Backfill to live_start - 1, then live days to the end; return (inputs, rules, window lengths)."""
+    _seed(px)
+    L = _loaded()
+    inp = load_inputs(fetch_fred=False, loaded=L)
+    store.set_state(f"live_start:{V}", live_start.isoformat())
+    evaluator.run_backfill(NOW, inputs=inp, loaded=L)
+    assert store.get_state(f"backfill:{V}") == "done"
+    rows: list[int] = []
+    real = evaluator._evaluate
+
+    def spy(inputs, rules, start, end, state=None, surge_state=None):
+        rows.append(len(inputs.sox))
+        return real(inputs, rules, start, end, state, surge_state)
+
+    monkeypatch.setattr(evaluator, "_evaluate", spy)
+    evaluator.evaluate_pending(NOW, inputs=inp, loaded=L)
+    return inp, L, rows
+
+
+def _assert_equals_full(inp, L, live_days: list[date]) -> None:
+    batch = evaluate_range(inp.closes, inp.sox, inp.rsp, inp.shares, inp.themes, inp.fred, L.rules,
+                           start=EVAL_START, end=live_days[-1])
+    by_day = {d.day: d for d in batch.days}
+    for day in live_days:
+        want, got = by_day[day], store.get_day(V, day)
+        assert got.origin == "live"
+        _same(got.surge, want.surge, f"{day}.surge")
+        assert got.surge_banner == want.surge_banner, day
+        _same(got.surge_cap_share, want.surge_cap_share, f"{day}.surge_cap_share")
+        assert (got.confirming, got.sox_confirming, got.on_count) == (want.confirming, want.sox_confirm,
+                                                                      want.on_count), day
+        _same(got.cap_share, want.cap_share, f"{day}.cap_share")
+        _same({k: (s, v) for k, (s, v, _) in want.warnings.items()},
+              {k: (w["state"], w["value"]) for k, w in got.warnings.items()}, f"{day}.warnings")
+        movers = [(m.rank, m.ticker, m.return_pct, m.close, m.return5_pct, m.rsi)
+                  for m in store.list_movers(V, day, day)]
+        _same(movers, [(m.rank, m.ticker, m.return_pct, m.close, m.return5_pct, m.rsi) for m in want.movers],
+              f"{day}.movers")
+    events = [*batch.surge_closed, *batch.surge_state.open.values()]
+    want_events = sorted((e.theme, e.start, e.end, e.end_reason, e.last_high, e.overheated_on,
+                          by_day[e.start].surge_shown[e.theme]) for e in events)
+    stored = store.list_surge(V, None, None, 500)
+    assert sorted((e.theme, e.start_date, e.end_date, e.end_reason, e.last_high_date, e.overheated_on, e.shown)
+                  for e in stored) == want_events
+    for e in stored:
+        _same(e.components, by_day[e.start_date].surge[e.theme], f"{e.theme}@{e.start_date}.components")
+    assert store.last_confirms(V) == batch.surge_state.last_confirm
+    alerts = [*batch.closed, *([batch.open] if batch.open else [])]
+    assert sorted((a.start_date, a.release_date) for o in ("backfill", "live")
+                  for a in store.list_alerts(V, o, 100)) == sorted(
+        (a.start, getattr(a, "release", None)) for a in alerts)
+
+
+def _tail(n: int) -> list[date]:
+    return [ts.date() for ts in load_long()[1].index[-n:]]
+
+
+def test_live_window_equals_full_history(monkeypatch):
+    """The last 20 days evaluated live, each on a trailing window, equal one full-history pass.
+    Catches a window too short for a 250-value quantile plus warm-up (half of live_window_rows), no
+    trimming at all, open surge events not carried from the store, and live movers not stored.
+    (A window 19 rows short of the rule still agrees to 1e-9: the margin is the warm-up decay.)"""
+    days = _tail(20)
+    inp, L, rows = _run(load_long()[0], days[0], monkeypatch)
+    assert len(rows) == len(days) and max(rows) < len(inp.sox) - 400  # not vacuous: the window trims
+    assert any(e.start_date >= days[0] for e in store.list_surge(V, None, None, 500))  # an event starts live
+    _assert_equals_full(inp, L, days)
+
+
+def test_live_continues_open_surge_from_store(monkeypatch):
+    """Review Focus 2. power_producers' event starts 2026-10-06 in the backfill and ends 2026-10-14 live.
+    Catches live days that do not rebuild the open event from the store (it stays open forever or a
+    second event starts), or that restart it from its start instead of its stored last_high."""
+    live_start = date(2026, 10, 8)
+    inp, L, _ = _run(load_long()[0], live_start, monkeypatch)
+    [event] = [e for e in store.list_surge(V, None, None, 500) if e.theme == "power_producers"
+               and e.start_date == date(2026, 10, 6)]
+    assert (event.origin, event.end_date, event.end_reason) == ("backfill", date(2026, 10, 14), "below_ema")
+    assert not [e for e in store.list_surge(V, None, None, 500) if e.origin == "live" and
+                e.theme == "power_producers" and e.start_date <= date(2026, 10, 14)]
+    _assert_equals_full(inp, L, [d for d in _tail(10) if d >= live_start])
+
+
+def test_live_window_with_member_gap_theme(monkeypatch):
+    """Review Focus 1. One theme drops below min_members for 150 rows starting 300 rows back, so its
+    400 valid rows reach back past 400 calendar rows. Catches live_window_start counting calendar rows
+    (or rows of any theme) instead of each theme's own valid index rows: the gap theme's accel quantile
+    then runs on a window without its warm-up and the live day differs from the full pass."""
+    px, _, _, shares, themes, _ = load_long()
+    px = px.copy()
+    theme = "nuclear_uranium"
+    members = sorted(t for t in px.columns if themes.get(t) == theme and t in shares)
+    assert len(members) >= 4
+    n = len(px)
+    px.iloc[n - 300 : n - 150, [px.columns.get_loc(t) for t in members[2:]]] = float("nan")
+    days = _tail(5)
+    inp, L, rows = _run(px, days[0], monkeypatch)
+    cal = inp.sox.index
+    start = evaluator.live_window_start(inp, L.rules, days[0], None, [])
+    assert start < cal[-(400 + 5)].date()  # the gap theme pushes the window back
+    assert max(rows) < len(inp.sox)  # still trimmed
+    _assert_equals_full(inp, L, days)
+
+
+def test_load_inputs_since_trims_bars_not_fred():
+    """Catches `since` ignored, FRED trimmed, or a ticker with no bar since then dropped from the
+    columns (it would change the coverage denominator against a full load)."""
+    with get_db() as conn:
+        conn.executemany("INSERT INTO watchlist (ticker, name, theme) VALUES (?, ?, ?)",
+                         [("NVDA", "n", "ai_semis"), ("OLD", "o", "ai_semis")])
+        conn.executemany("INSERT INTO stocks (ticker, date, close) VALUES (?, ?, ?)", [
+            ("NVDA", "2026-01-05", 1.0), ("NVDA", "2026-10-16", 2.0), ("OLD", "2026-01-05", 3.0),
+            ("^SOX", "2026-01-05", 5.0), ("^SOX", "2026-10-16", 6.0), ("RSP", "2026-01-05", 7.0),
+            ("RSP", "2026-10-16", 8.0)])
+        conn.execute("INSERT INTO fred_cache (series_id, obs_date, value, fetched_at) "
+                     "VALUES ('DGS10', '2026-01-05', 4.0, 'x')")
+    full = load_inputs(fetch_fred=False)
+    got = load_inputs(fetch_fred=False, since=date(2026, 6, 1))
+    assert list(got.closes.columns) == list(full.closes.columns) == ["NVDA", "OLD"]
+    assert list(got.closes.index) == list(got.sox.index) == list(got.rsp.index) == [pd.Timestamp("2026-10-16")]
+    assert got.closes["OLD"].isna().all()
+    assert list(got.fred["DGS10"].index) == [pd.Timestamp("2026-01-05")]
+
+
+def test_sox_leaders_are_semis_members():
+    """Catches ^SOX leaders drawn from no members or from all tickers instead of the union of the semis
+    themes' members (the backfill fixture has no ^SOX event). 2026-04-08 is a ^SOX start."""
+    px, sox, rsp, shares, themes, fred = load_long()
+    inp = evaluator.RiskInputs(px, sox, rsp, shares, themes, {}, fred, [])
+    rules = get_rules().rules
+    day = date(2026, 4, 8)
+    cal = sox.index
+    i = cal.get_loc(pd.Timestamp(day))
+    semis = [t for t in px.columns if t in shares and themes.get(t) in set(rules.semis_themes)]
+    r5 = (px.reindex(cal).iloc[i][semis] / px.reindex(cal).iloc[i - 5][semis] - 1).dropna()
+    r5 = r5.sort_values(ascending=False)
+    got = evaluator._leaders(inp, "^SOX", day, rules)
+    assert [x["ticker"] for x in got] == list(r5.index[:5])
+    assert [x["return5_pct"] for x in got] == pytest.approx(list(r5.iloc[:5] * 100), rel=1e-12)

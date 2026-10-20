@@ -4,7 +4,7 @@ import pandas as pd
 import pytest
 
 from apps.api.services.risk.rules import load_rules
-from packages.core_finance.risk_signals.movers import Mover, top_movers
+from packages.core_finance.risk_signals.movers import Mover, movers_by_day, top_movers
 
 RULES = load_rules().rules
 
@@ -73,3 +73,20 @@ def test_movers_read_count_and_windows_from_rules():
     s = px["CCC"].dropna()
     assert got[0].return5_pct == pytest.approx((s.iloc[-1] / s.iloc[-5] - 1) * 100, rel=1e-12)
     assert got[0].rsi == pytest.approx(_wilder(s.to_numpy(), 9), rel=1e-12)
+
+
+def test_movers_by_day_equals_top_movers():
+    """S7: the vectorised helper must return exactly top_movers' lists. Catches a return5 or RSI over
+    calendar rows instead of each ticker's own closes (the CCC gap), the day return over the previous
+    valid close instead of the previous row (HHH), a tie order or count that differs, and a None
+    replaced by NaN. Long-fixture days cover real gaps and 250 tickers."""
+    from tests.core_finance._fixture import load_long
+
+    px = _closes()
+    rules = _rules(count=3, window=4, period=9)
+    days = [ts.date() for ts in px.index]
+    assert movers_by_day(px, days, rules) == {d: top_movers(px, d, rules) for d in days}
+    assert movers_by_day(px, days, RULES) == {d: top_movers(px, d, RULES) for d in days}
+    long = load_long()[0]
+    tail = [ts.date() for ts in long.index[-15:]] + [long.index[0].date(), long.index[10].date()]
+    assert movers_by_day(long, tail, RULES) == {d: top_movers(long, d, RULES) for d in tail}

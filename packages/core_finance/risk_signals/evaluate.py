@@ -14,7 +14,7 @@ import pandas as pd
 from packages.core_finance.risk_signals.alerts import AlertRecord, OpenAlert, confirmations, run_alerts
 from packages.core_finance.risk_signals.config import RiskRules
 from packages.core_finance.risk_signals.indices import price_shapes, theme_cap_share, theme_indices
-from packages.core_finance.risk_signals.movers import Mover, top_movers
+from packages.core_finance.risk_signals.movers import Mover, movers_by_day
 from packages.core_finance.risk_signals.surge import (
     SOX, SurgeComponents, SurgeEvent, SurgeState, run_surge, surge_components,
 )
@@ -108,6 +108,7 @@ def evaluate_range(
         dates, comps, levels.assign(**{SOX: sox_c}), cap, rules, surge_state
     )
     surge_maps = _surge_maps(comps, walk)
+    movers = movers_by_day(px, dates, rules)
 
     starts = {a.start for a in closed} | ({open_.start} if open_ is not None else set())
     if state is not None:
@@ -138,7 +139,7 @@ def evaluate_range(
                 surge_cap_share=sd.cap_share,
                 surge_started=list(sd.started),
                 surge_shown={t: sd.banner for t in sd.started},
-                movers=top_movers(px, ts.date(), rules),
+                movers=movers[ts.date()],
             )
         )
     return EvaluationResult(

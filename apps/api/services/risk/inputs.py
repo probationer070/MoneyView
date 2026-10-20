@@ -58,15 +58,22 @@ def load_inputs(
     fetch_fred: bool = True,
     now: datetime | None = None,
     loaded: LoadedRules | None = None,
+    since: date | None = None,
 ) -> RiskInputs:
+    """`since` trims closes, ^SOX and RSP to dates >= since (FRED is never trimmed). The closes keep
+    the columns of an untrimmed load, so a ticker with no bar since then stays as an empty column."""
     rules = (loaded or get_rules()).rules
     start = rules.history_start.isoformat()
+    first = max(since, rules.history_start).isoformat() if since is not None else start
     end = (through or date.max).isoformat()
     with get_db() as conn:
         watch = conn.execute("SELECT ticker, name, theme FROM watchlist ORDER BY ticker").fetchall()
         bars = conn.execute(
             "SELECT ticker, date, close FROM stocks WHERE date >= ? AND date <= ? AND close IS NOT NULL",
-            (start, end)).fetchall()
+            (first, end)).fetchall()
+        present = None if since is None else {r["ticker"] for r in conn.execute(
+            "SELECT DISTINCT ticker FROM stocks WHERE date >= ? AND date <= ? AND close IS NOT NULL",
+            (start, end))}
         shares = {
             r["ticker"]: float(r["shares_outstanding"])
             for r in conn.execute(
@@ -76,6 +83,8 @@ def load_inputs(
     rows = [(b["ticker"], b["date"], b["close"]) for b in bars]
     tracked = set(tickers)
     closes = _wide([r for r in rows if r[0] in tracked], tickers)
+    if present is not None:
+        closes = closes.reindex(columns=[t for t in tickers if t in present])
     benchmarks = _wide([r for r in rows if r[0] in ("^SOX", "RSP")], ["^SOX", "RSP"])
     benchmarks = benchmarks.reindex(columns=["^SOX", "RSP"])
 

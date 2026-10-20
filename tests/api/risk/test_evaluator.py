@@ -465,3 +465,153 @@ def test_coverage_wait_recorded_only_for_the_newest_day(sweeps):
 
     assert store.last_evaluated("test0001") == date(2026, 10, 13)
     assert _waits() == {"coverage_wait:2026-10-16": NOW.isoformat()}
+
+
+def test_backfill_persists_surge_and_movers(sweeps):
+    """Catches: surge events not stored, or with the wrong end/last_high/overheated_on; `shown` taken from
+    another day than the start; components not the start day's; leaders not the top 5 members by 5-row
+    return (wrong order, wrong window, ^SOX without the semis members); outcomes not filled, max_runup10
+    as a drawdown or filled from a partial window; last confirmations not stored; movers missing a day
+    or stored without their theme; risk_daily surge columns empty."""
+    L = _loaded("test0001")
+    inp = _inputs(L)
+    end = date(2026, 10, 9)
+    store.set_state("live_start:test0001", "2026-10-12")
+    evaluator.run_backfill(NOW, inputs=inp, loaded=L)
+
+    batch = evaluate_range(inp.closes, inp.sox, inp.rsp, inp.shares, inp.themes, inp.fred, L.rules,
+                           start=L.rules.eval_start, end=end)
+    by_day = {d.day: d for d in batch.days}
+    events = [*batch.surge_closed, *batch.surge_state.open.values()]
+    stored = {(e.theme, e.start_date): e for e in store.list_surge("test0001", None, None, 100)}
+    assert events and sorted(stored) == sorted((e.theme, e.start) for e in events)
+    cal = inp.sox.index
+    px = inp.closes.reindex(cal)
+    levels = batch.levels.assign(**{"^SOX": inp.sox})
+    semis = set(L.rules.semis_themes)
+    settled = 0
+    for e in events:
+        s = stored[(e.theme, e.start)]
+        assert (s.origin, s.end_date, s.end_reason, s.last_high_date, s.overheated_on) == (
+            "backfill", e.end, e.end_reason, e.last_high, e.overheated_on), e
+        assert s.shown == by_day[e.start].surge_shown[e.theme]
+        assert s.components == by_day[e.start].surge[e.theme]
+        members = [t for t in px.columns if t in inp.shares and (
+            inp.themes.get(t) in semis if e.theme == "^SOX" else inp.themes.get(t) == e.theme)]
+        i = cal.get_loc(pd.Timestamp(e.start))
+        r5 = (px.iloc[i][members] / px.iloc[i - 5][members] - 1).dropna().sort_values(ascending=False)
+        assert [x["ticker"] for x in s.leaders] == list(r5.index[:5])
+        assert [x["return5_pct"] for x in s.leaders] == pytest.approx(list(r5.iloc[:5] * 100), rel=1e-12)
+        v = levels[e.theme].to_numpy()
+        fwd = {h: (v[i + h] / v[i] - 1) * 100 if i + h < len(v) else None for h in (5, 10, 20)}
+        runup = (max(v[i + 1 : i + 11]) / v[i] - 1) * 100 if fwd[10] is not None else None
+        for h in (5, 10, 20):
+            assert getattr(s, f"fwd{h}") == (pytest.approx(fwd[h], rel=1e-12) if fwd[h] is not None else None)
+        assert s.max_runup10 == (pytest.approx(runup, rel=1e-12) if runup is not None else None)
+        settled += runup is not None and runup > max(fwd[10], 0.0)
+    assert settled  # not vacuous: a run-up above both the 10-row return and zero
+    assert any(stored[k].max_runup10 is None for k in stored)  # and one still inside its 10-row window
+    assert store.last_confirms("test0001") == batch.surge_state.last_confirm
+
+    got = [(m.date, m.rank, m.ticker, m.theme, m.return_pct, m.close, m.return5_pct, m.rsi)
+           for m in store.list_movers("test0001", L.rules.eval_start, end)]
+    want = [(d.day, m.rank, m.ticker, inp.themes.get(m.ticker, ""), m.return_pct, m.close, m.return5_pct, m.rsi)
+            for d in batch.days for m in d.movers]
+    assert got == want and len({g[0] for g in got}) == len(batch.days)
+    day = store.get_day("test0001", events[0].start)
+    assert (day.surge, day.surge_banner, day.surge_cap_share) == (
+        by_day[events[0].start].surge, by_day[events[0].start].surge_banner,
+        by_day[events[0].start].surge_cap_share)
+
+
+def test_rules_version_bump_recomputes_once(sweeps):
+    """Review Focus 4. A new rules version with the same values rebuilds the old version's alerts,
+    surge events and movers once. Catches: the new backfill not persisting surge events or movers;
+    surge state carried over from the old version; a second run_backfill recomputing (ids change);
+    the old version's backfill surge rows, surge_state or movers left behind."""
+    old, new = _loaded("old00000", date(2026, 3, 2)), _loaded("new11111", date(2026, 3, 2))
+    inp = _inputs(old)
+    store.set_state("live_start:old00000", OPEN_DAY.isoformat())
+    evaluator.run_backfill(NOW, inputs=inp, loaded=old)
+    evaluator.evaluate_pending(NOW, inputs=inp, loaded=old)
+
+    def alerts(v):
+        return sorted((a.start_date, a.release_date, a.release_reason, a.trigger)
+                      for o in ("backfill", "live") for a in store.list_alerts(v, o, 100))
+
+    def surges(v):
+        return sorted((e.theme, e.start_date, e.end_date, e.end_reason, e.shown, e.last_high_date, e.fwd5,
+                       e.fwd10, e.fwd20, e.max_runup10, e.leaders) for e in store.list_surge(v, None, None, 100))
+
+    def movers(v):
+        return [(m.date, m.rank, m.ticker) for m in store.list_movers(v, date(2026, 3, 2), LAST_DAY)]
+
+    before = (alerts("old00000"), surges("old00000"), movers("old00000"), store.last_confirms("old00000"))
+    assert before[0] and before[1] and before[3]  # not vacuous
+
+    evaluator.run_backfill(NOW + timedelta(days=1), inputs=inp, loaded=new)
+    evaluator.evaluate_pending(NOW + timedelta(days=1), inputs=inp, loaded=new)
+    after = (alerts("new11111"), surges("new11111"), movers("new11111"), store.last_confirms("new11111"))
+    assert after == before
+    assert {e.origin for e in store.list_surge("old00000", None, None, 100)} <= {"live"}
+    assert store.last_confirms("old00000") == {} and movers("old00000") == []
+
+    ids = (_ids("new11111"), [e.id for e in store.list_surge("new11111", None, None, 100)])
+    evaluator.run_backfill(NOW + timedelta(days=2), inputs=inp, loaded=new)
+    assert (_ids("new11111"), [e.id for e in store.list_surge("new11111", None, None, 100)]) == ids
+
+
+POWER = "power_producers"  # surge event 2026-10-06..2026-10-14 in this fixture, new high on 10-07
+
+
+def test_stored_last_confirm_blocks_a_live_start(sweeps):
+    """Catches live days that ignore the stored last confirmations: a confirmation 3 rows before
+    power_producers' 10-06 confirm is inside event.gap, so no event may start on 10-06 or 10-07."""
+    L = _loaded("test0001")
+    inp = _inputs(L)
+    store.set_state("live_start:test0001", "2026-10-06")
+    evaluator.run_backfill(NOW, inputs=inp, loaded=L)
+    assert not store.list_surge("test0001", None, POWER, 10)
+    store.set_last_confirm("test0001", POWER, date(2026, 10, 1))
+
+    evaluator.evaluate_pending(NOW, inputs=inp, loaded=L)
+
+    assert store.last_evaluated("test0001") == LAST_DAY
+    assert store.list_surge("test0001", None, POWER, 10) == []
+    assert store.last_confirms("test0001")[POWER] == date(2026, 10, 7)
+
+
+def test_live_updates_open_surge_event(sweeps):
+    """Catches a live day that does not write an open event's new last_high back to the store (the next
+    day would count the stall from the old high)."""
+    L = _loaded("test0001")
+    inp = _inputs(L, through=date(2026, 10, 9))
+    store.set_state("live_start:test0001", "2026-10-07")
+    evaluator.run_backfill(NOW, inputs=inp, loaded=L)
+    [event] = store.list_surge("test0001", None, POWER, 10)
+    assert (event.start_date, event.last_high_date, event.end_date) == (date(2026, 10, 6), date(2026, 10, 6), None)
+
+    evaluator.evaluate_pending(NOW, inputs=inp, loaded=L)
+
+    after = store.get_surge(event.id)
+    assert (after.last_high_date, after.end_date, after.origin) == (date(2026, 10, 7), None, "backfill")
+
+
+def test_live_load_reads_coarse_window_then_full_when_short(sweeps, monkeypatch):
+    """Catches a live load that reads the whole history every day (no `since`), or that keeps a coarse
+    load too short to count live_window_rows valid rows instead of reloading the full history (this
+    fixture has under 400 rows)."""
+    L = _loaded("test0001")
+    store.set_state("live_start:test0001", "2026-10-12")
+    evaluator.run_backfill(NOW, inputs=_inputs(L), loaded=L)
+    calls = []
+
+    def recording(**kw):
+        calls.append(kw.get("since"))
+        return load_inputs(**{**kw, "fetch_fred": False})
+
+    monkeypatch.setattr(evaluator, "load_inputs", recording)
+    evaluator.evaluate_pending(NOW, loaded=L)
+
+    assert calls == [date(2026, 10, 9) - timedelta(days=evaluator._COARSE_DAYS), None]
+    assert store.last_evaluated("test0001") == LAST_DAY
