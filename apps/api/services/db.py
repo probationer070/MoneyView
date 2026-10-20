@@ -264,6 +264,9 @@ CREATE TABLE IF NOT EXISTS risk_daily (
     cap_share      REAL NOT NULL,
     bars_coverage  REAL NOT NULL,
     evaluated_at   TEXT NOT NULL,
+    surge_json     TEXT,  -- surge spec section 7: theme -> component values and flags, NULL = not evaluated
+    surge_banner   INTEGER,
+    surge_cap_share REAL,
     PRIMARY KEY (date, rules_version)
 );
 CREATE TABLE IF NOT EXISTS risk_alerts (
@@ -315,6 +318,47 @@ CREATE TABLE IF NOT EXISTS risk_alert_cards (
 CREATE TABLE IF NOT EXISTS risk_state (
     key            TEXT PRIMARY KEY,
     value          TEXT NOT NULL
+);
+-- Surge signal (docs/superpowers/specs/2026-10-19-surge-signal-design.md section 7).
+-- shown is stored at insert (banner on the start day) because it cannot be recomputed later.
+-- components_json holds the start-day values, leaders_json is a list of {ticker, return5_pct}.
+CREATE TABLE IF NOT EXISTS surge_events (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    rules_version  TEXT NOT NULL,
+    origin         TEXT NOT NULL CHECK (origin IN ('live','backfill')),
+    theme          TEXT NOT NULL,
+    start_date     TEXT NOT NULL,
+    end_date       TEXT,
+    end_reason     TEXT CHECK (end_reason IN ('below_ema','stalled')),
+    shown          INTEGER NOT NULL,
+    components_json TEXT NOT NULL,
+    overheated_on  TEXT,
+    last_high_date TEXT NOT NULL,
+    fwd5           REAL,
+    fwd10          REAL,
+    fwd20          REAL,
+    max_runup10    REAL,
+    leaders_json   TEXT NOT NULL,
+    created_at     TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_surge_events_version ON surge_events(rules_version, origin, start_date);
+CREATE TABLE IF NOT EXISTS surge_state (
+    rules_version     TEXT NOT NULL,
+    theme             TEXT NOT NULL,
+    last_confirm_date TEXT NOT NULL,
+    PRIMARY KEY (rules_version, theme)
+);
+CREATE TABLE IF NOT EXISTS daily_movers (
+    date           TEXT NOT NULL,
+    rules_version  TEXT NOT NULL,
+    rank           INTEGER NOT NULL,
+    ticker         TEXT NOT NULL,
+    theme          TEXT NOT NULL,
+    return_pct     REAL NOT NULL,
+    close          REAL NOT NULL,
+    return5_pct    REAL,
+    rsi            REAL,
+    PRIMARY KEY (date, rules_version, rank)
 );
 """
 
@@ -1081,6 +1125,11 @@ def _ensure_schema_compatibility(conn: sqlite3.Connection) -> None:
     stint_columns = {row["name"] for row in conn.execute("PRAGMA table_info(risk_alert_themes)")}
     if stint_columns and "last_ref" not in stint_columns:
         conn.execute("ALTER TABLE risk_alert_themes ADD COLUMN last_ref TEXT")
+    # Surge signal: nullable and additive; NULL means the day was evaluated before surge existed.
+    daily_columns = {row["name"] for row in conn.execute("PRAGMA table_info(risk_daily)")}
+    for column, kind in (("surge_json", "TEXT"), ("surge_banner", "INTEGER"), ("surge_cap_share", "REAL")):
+        if daily_columns and column not in daily_columns:
+            conn.execute(f"ALTER TABLE risk_daily ADD COLUMN {column} {kind}")
     # Nullable and additive: existing rows keep every value and get a uid on the first records sync
     # (records_sync.store.backfill_uids).
     for table in ("valuation_case", "investment_decision", "user_event"):

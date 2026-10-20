@@ -14,6 +14,7 @@ from apps.api.services.risk import store
 from packages.core_finance.risk_signals.alerts import ThemeStint
 from packages.core_finance.risk_signals.decks import CandidateCard, CrashCard
 from packages.core_finance.risk_signals.evaluate import DayResult
+from packages.core_finance.risk_signals.movers import Mover
 
 V = "aaaa1111"
 OUTCOME = {"fwd5": -1.0, "fwd10": -2.0, "fwd20": -3.0, "max_dd10": -4.0}
@@ -201,3 +202,166 @@ def test_old_stint_table_migrates_last_ref(tmp_path, monkeypatch):
     with sqlite3.connect(str(db_path)) as conn:
         columns = {r[1] for r in conn.execute("PRAGMA table_info(risk_alert_themes)")}
     assert "last_ref" in columns
+
+
+# ---- surge and movers storage ----
+
+SURGE_COMPONENTS = {"magnitude_z": 2.5, "accel_pct": 1.2, "accel_rank": 0.9, "breadth_pct": 80.0, "rsi": 71.0}
+LEADERS = [{"ticker": "NVDA", "return5_pct": 12.5}, {"ticker": "AMD", "return5_pct": 9.0}]
+
+
+def _surge(version=V, origin="live", theme="ai_semis", start=date(2026, 10, 8), shown=True, **kw):
+    return store.insert_surge_event(version, origin, theme, start, shown=shown, components=SURGE_COMPONENTS,
+                                    leaders=LEADERS, last_high=start, **kw)
+
+
+def test_surge_tables_created():
+    """Catches a missing surge table or risk_daily column in the schema SQL, and an events table whose
+    CHECK lets an unknown origin or end_reason in."""
+    with TestClient(app):
+        pass
+    with get_db() as conn:
+        tables = {r["name"] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        daily = {r["name"] for r in conn.execute("PRAGMA table_info(risk_daily)")}
+    assert {"surge_events", "surge_state", "daily_movers"} <= tables
+    assert {"surge_json", "surge_banner", "surge_cap_share"} <= daily
+    with pytest.raises(sqlite3.IntegrityError):
+        _surge(origin="other")
+    with pytest.raises(sqlite3.IntegrityError):
+        _surge(end=date(2026, 10, 9), end_reason="bogus")
+
+
+@pytest.mark.virgin_db
+def test_old_risk_daily_migrates(tmp_path, monkeypatch):
+    """Catches removing the risk_daily surge ALTERs: an old table keeps no surge columns, and an old
+    row must read back with surge fields None and still save a new day."""
+    db_path = tmp_path / "moneyview.db"
+    monkeypatch.setattr(db_service, "_DB_PATH", db_path)
+    with sqlite3.connect(str(db_path)) as conn:
+        conn.execute(
+            """CREATE TABLE risk_daily (date TEXT NOT NULL, rules_version TEXT NOT NULL, origin TEXT NOT NULL,
+               warnings_json TEXT NOT NULL, confirming_json TEXT NOT NULL, sox_confirming INTEGER NOT NULL,
+               cap_share REAL NOT NULL, bars_coverage REAL NOT NULL, evaluated_at TEXT NOT NULL,
+               PRIMARY KEY (date, rules_version))""")
+        conn.execute(
+            """INSERT INTO risk_daily VALUES ('2026-10-07', 'aaaa1111', 'live',
+               '{"warnings": {}, "on_count": 0, "w1_proxy": false}', '{}', 0, 0.0, 1.0, 't')""")
+
+    db_service.init_db()
+    db_service.init_db()  # idempotent
+
+    with sqlite3.connect(str(db_path)) as conn:
+        columns = {r[1] for r in conn.execute("PRAGMA table_info(risk_daily)")}
+    assert {"surge_json", "surge_banner", "surge_cap_share"} <= columns
+    old = store.get_day(V, date(2026, 10, 7))
+    assert (old.surge, old.surge_banner, old.surge_cap_share) == (None, None, None)
+    store.save_day(DayResult(date(2026, 10, 8), {}, False, 0, {}, False, 0.0, False,
+                             surge={"ai_semis": {"on": True, "rsi": None}}, surge_banner=True,
+                             surge_cap_share=0.3), V, "live", 1.0, "t")
+    assert store.get_day(V, date(2026, 10, 8)).surge_cap_share == 0.3
+
+
+def test_day_surge_roundtrip():
+    """Catches save_day dropping a surge field, a banner stored inverted, None floats lost in the JSON,
+    and a day without surge reading back as a False banner / 0.0 share instead of None."""
+    d = date(2026, 10, 8)
+    surge = {"ai_semis": {"magnitude_z": 2.5, "rsi": None, "on": True, "overheated": False}}
+    store.save_day(DayResult(d, {}, False, 0, {}, False, 0.0, False, surge=surge, surge_banner=True,
+                             surge_cap_share=0.25), V, "live", 1.0, "t")
+    got = store.get_day(V, d)
+    assert (got.surge, got.surge_banner, got.surge_cap_share) == (surge, True, 0.25)
+    store.save_day(DayResult(d, {}, False, 0, {}, False, 0.0, False, surge={}), V, "live", 1.0, "t")
+    assert store.get_day(V, d).surge_banner is False
+    store.save_day(_day(d), V, "live", 1.0, "t")
+    got = store.get_day(V, d)
+    assert (got.surge, got.surge_banner, got.surge_cap_share) == (None, None, None)
+
+
+def test_surge_event_lifecycle():
+    """Catches shown not stored, leaders/components lost, update not closing the event, outcome keys
+    not written, and the filters in list_surge / open_surge_events."""
+    a = _surge(shown=True)
+    b = _surge(theme="^SOX", start=date(2026, 10, 9), shown=False)
+    c = _surge(version="bbbb2222")
+    assert {e.id for e in store.open_surge_events(V)} == {a, b}
+    got = store.get_surge(a)
+    assert (got.shown, got.components, got.leaders, got.end_date, got.fwd5) == (True, SURGE_COMPONENTS, LEADERS, None, None)
+
+    store.update_surge_event(a, end=date(2026, 10, 14), end_reason="below_ema",
+                             last_high=date(2026, 10, 12), overheated_on=date(2026, 10, 11))
+    store.fill_surge_outcome(a, {"fwd5": 1.0, "fwd10": 2.0, "fwd20": 3.0, "max_runup10": 4.0})
+    got = store.get_surge(a)
+    assert (got.end_date, got.end_reason, got.last_high_date, got.overheated_on) == (
+        date(2026, 10, 14), "below_ema", date(2026, 10, 12), date(2026, 10, 11))
+    assert (got.fwd5, got.fwd10, got.fwd20, got.max_runup10) == (1.0, 2.0, 3.0, 4.0)
+    assert [e.id for e in store.open_surge_events(V)] == [b]
+
+    assert [e.id for e in store.list_surge(V, None, None, 10)] == [b, a]  # newest start first
+    assert [e.id for e in store.list_surge(V, True, None, 10)] == [a]
+    assert [e.id for e in store.list_surge(V, False, None, 10)] == [b]
+    assert [e.id for e in store.list_surge(V, None, "^SOX", 10)] == [b]
+    assert len(store.list_surge(V, None, None, 1)) == 1
+    assert store.get_surge(c).rules_version == "bbbb2222" and store.get_surge(9999) is None
+
+
+def test_purge_keeps_live_surge():
+    """Catches a purge that deletes live surge events, leaves backfill events, last confirmations or
+    movers, or reaches into another version."""
+    live, back = _surge(origin="live"), _surge(origin="backfill", start=date(2020, 3, 2))
+    other = _surge(version="bbbb2222", origin="backfill")
+    for v in (V, "bbbb2222"):
+        store.set_last_confirm(v, "ai_semis", date(2026, 10, 8))
+        store.save_movers(v, date(2026, 10, 8), [Mover(1, "NVDA", 5.0, 100.0, 9.0, 60.0)])
+
+    store.purge_version(V)
+
+    assert store.get_surge(live) is not None and store.get_surge(back) is None
+    assert store.get_surge(other) is not None
+    assert store.last_confirms(V) == {} and store.last_confirms("bbbb2222") != {}
+    assert store.list_movers(V, date(2026, 1, 1), date(2026, 12, 31)) == []
+    assert len(store.list_movers("bbbb2222", date(2026, 1, 1), date(2026, 12, 31))) == 1
+
+    store.purge_version(V, include_live=True)
+    assert store.get_surge(live) is None and store.get_surge(other) is not None
+
+
+def test_movers_roundtrip():
+    """Catches a lost field, a wrong order (day then rank), a range that excludes an end day, a
+    re-save that appends instead of replacing, a missing theme and a None turned into a number."""
+    d1, d2, d3 = date(2026, 10, 7), date(2026, 10, 8), date(2026, 10, 9)
+    store.save_movers(V, d2, [Mover(1, "NVDA", 5.0, 100.0, 9.0, 60.0), Mover(2, "AMD", 4.0, 50.0, None, None)],
+                      {"NVDA": "ai_semis", "AMD": "ai_semis"})
+    store.save_movers(V, d1, [Mover(1, "MU", 3.0, 80.0, 1.0, 55.0), Mover(2, "TSM", 2.0, 90.0, 1.0, 55.0)],
+                      {"MU": "memory", "TSM": "ai_semis"})
+    store.save_movers(V, d3, [Mover(1, "XYZ", 2.0, 10.0, 1.0, 50.0)])
+    assert [(m.ticker, m.return5_pct, m.rsi) for m in store.list_movers(V, d2, d2)][1] == ("AMD", None, None)
+    store.save_movers(V, d2, [Mover(1, "NVDA", 6.0, 101.0, 9.5, 61.0), Mover(2, "AMD", 4.0, 50.0, None, None)],
+                      {"NVDA": "ai_semis", "AMD": "ai_semis"})  # replaces d2
+
+    got = store.list_movers(V, d1, d2)
+    assert [(m.date, m.rank, m.ticker, m.theme) for m in got] == [
+        (d1, 1, "MU", "memory"), (d1, 2, "TSM", "ai_semis"), (d2, 1, "NVDA", "ai_semis"), (d2, 2, "AMD", "ai_semis")]
+    assert (got[2].return_pct, got[2].close, got[2].return5_pct, got[2].rsi) == (6.0, 101.0, 9.5, 61.0)
+    assert store.list_movers(V, d3, d3)[0].theme == ""
+
+
+def test_last_confirm_roundtrip():
+    """Catches set_last_confirm appending instead of replacing, mixing versions, or returning strings."""
+    store.set_last_confirm(V, "ai_semis", date(2026, 10, 7))
+    store.set_last_confirm(V, "ai_semis", date(2026, 10, 8))
+    store.set_last_confirm(V, "^SOX", date(2026, 10, 5))
+    store.set_last_confirm("bbbb2222", "memory", date(2020, 1, 2))
+    assert store.last_confirms(V) == {"ai_semis": date(2026, 10, 8), "^SOX": date(2026, 10, 5)}
+    assert store.last_confirms("zzzz") == {}
+
+
+def test_surge_writes_join_transaction():
+    """Catches a surge write that opens its own connection: it would commit despite the rollback."""
+    with pytest.raises(RuntimeError):
+        with store.transaction():
+            _surge()
+            store.set_last_confirm(V, "ai_semis", date(2026, 10, 8))
+            store.save_movers(V, date(2026, 10, 8), [Mover(1, "NVDA", 5.0, 100.0, 9.0, 60.0)])
+            raise RuntimeError
+    assert store.open_surge_events(V) == [] and store.last_confirms(V) == {}
+    assert store.list_movers(V, date(2026, 1, 1), date(2026, 12, 31)) == []
