@@ -218,6 +218,9 @@ def _surge_latest(day: StoredDay, version: str) -> SurgeLatestOut | None:
     for e in store.open_surge_events(version):
         if e.origin not in origins:
             continue
+        # A theme with no level today (e.g. under min_members) has no entry in day.surge; it falls back to
+        # the event's start-day components. Their RSI met the start rule (<= rsi.overheated), so such a
+        # theme reads overheated false (surge spec section 8).
         comps = _components(day.surge.get(e.theme, e.components))
         themes.append(SurgeThemeOut(
             theme=e.theme, label=_theme_label(e.theme, labels), event_id=e.id,
