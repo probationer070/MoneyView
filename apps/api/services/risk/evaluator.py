@@ -23,6 +23,7 @@ fwd5/10/20 and max_runup10 filled once known. `surge_state` keeps each series' l
 """
 from __future__ import annotations
 
+import json
 from dataclasses import replace
 from datetime import date, datetime, timedelta
 
@@ -446,9 +447,19 @@ def run_backfill(now: datetime, *, inputs: RiskInputs | None = None, loaded: Loa
 # ---------------------------------------------------------------- live
 
 
+def _load_live(now: datetime, loaded: LoadedRules, since: date | None) -> RiskInputs:
+    """A live load: fetch the engine FRED series and keep their errors in risk_state `fred_errors`
+    (read by /latest)."""
+    inputs = load_inputs(now=now, loaded=loaded, since=since, fetch_fred=True)
+    store.set_state("fred_errors", json.dumps(inputs.fred_errors))
+    return inputs
+
+
 def evaluate_pending(now: datetime, *, inputs: RiskInputs | None = None,
                      loaded: LoadedRules | None = None) -> list[int]:
-    """Evaluate every pending trading day in order with origin "live"; return ids of alerts opened."""
+    """Evaluate every pending trading day in order with origin "live"; return ids of alerts opened.
+    Without `inputs` it loads its own: first the last _COARSE_DAYS only, the whole history only when
+    that is too short to count the window's rows (both fetch FRED and store `fred_errors`)."""
     loaded = loaded or get_rules()
     rules, version = loaded.rules, loaded.version
     if store.get_state(f"backfill:{version}") not in BACKFILL_COMPLETE:
@@ -458,7 +469,7 @@ def evaluate_pending(now: datetime, *, inputs: RiskInputs | None = None,
     coarse = None
     if inputs is None:
         coarse = (last or live_start) - timedelta(days=_COARSE_DAYS)
-        inputs = load_inputs(now=now, loaded=loaded, since=coarse)
+        inputs = _load_live(now, loaded, coarse)
     pending = [d for d in _calendar(inputs) if d >= live_start and (last is None or d > last)]
     until = _latest_evaluable(inputs, pending, now, rules)
     if until is not None:
@@ -466,7 +477,7 @@ def evaluate_pending(now: datetime, *, inputs: RiskInputs | None = None,
         start = live_window_start(inputs, rules, pending[0], stored_alert, stored_surges)
         if coarse is not None and coarse > rules.history_start and start <= _calendar(inputs)[0]:
             # the coarse load was too short to count the window's rows: read the whole history
-            inputs = load_inputs(now=now, loaded=loaded, fetch_fred=False)
+            inputs = _load_live(now, loaded, None)
             start = live_window_start(inputs, rules, pending[0], stored_alert, stored_surges)
         inputs = _since(inputs, start)
     replay_key = f"replayed_through:{version}"

@@ -2,13 +2,11 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 from datetime import UTC, datetime, timedelta
 
 from apps.api.services.risk import store
 from apps.api.services.risk.evaluator import evaluate_pending, run_backfill
-from apps.api.services.risk.inputs import load_inputs
 from apps.api.services.risk.news import sweep_news
 from apps.api.services.risk.sweep import sweep_bars
 
@@ -42,9 +40,7 @@ def run_once(now: datetime) -> list[int]:
     except Exception:  # noqa: BLE001
         logger.exception("risk.cycle run_backfill failed")
     try:
-        inputs = load_inputs(fetch_fred=True, now=now)
-        store.set_state("fred_errors", json.dumps(inputs.fred_errors))
-        new_ids = list(evaluate_pending(now, inputs=inputs))
+        new_ids = list(evaluate_pending(now))  # loads only the recent window; stores fred_errors
     except AssertionError:
         raise
     except Exception:  # noqa: BLE001

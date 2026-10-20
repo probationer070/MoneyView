@@ -2,6 +2,7 @@
 mutation its test catches. The DB is seeded from tests/fixtures/risk; nothing touches the network."""
 from __future__ import annotations
 
+import json
 from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
@@ -615,6 +616,44 @@ def test_live_load_reads_coarse_window_then_full_when_short(sweeps, monkeypatch)
 
     assert calls == [date(2026, 10, 9) - timedelta(days=evaluator._COARSE_DAYS), None]
     assert store.last_evaluated("test0001") == LAST_DAY
+
+
+def test_run_once_reads_trimmed_window_and_stores_fred_errors(monkeypatch):
+    """IMPORTANT 1 (surge spec section 5, S-D5). Drives schedule.run_once with stubbed sweeps and FRED.
+    Catches run_once preloading full inputs for evaluate_pending (the first load has since=None), a live
+    load that does not fetch FRED, and the fetch errors not stored in risk_state `fred_errors`."""
+    from apps.api.services.risk import inputs as inputs_mod
+    from apps.api.services.risk import schedule
+    from apps.api.services.signals.fetch import FredFetchError
+
+    version = get_rules().version
+    store.set_state(f"backfill:{version}", "done")
+    store.set_state(f"live_start:{version}", "2026-10-12")
+    store.set_state("news_swept_at", NOW.isoformat())
+    monkeypatch.setattr(schedule, "sweep_bars", lambda now: None)
+    monkeypatch.setattr(schedule, "run_backfill", lambda now, **kw: None)
+    monkeypatch.setattr(schedule, "sweep_news", lambda now, **kw: None)
+
+    def source(series_id, start):
+        if series_id == "BAA10Y":
+            raise FredFetchError("BAA10Y timeout")
+        return []
+
+    monkeypatch.setattr(inputs_mod, "fred_source_from_env", lambda: source)
+    calls = []
+
+    def recording(**kw):
+        calls.append((kw.get("since"), kw.get("fetch_fred")))
+        return load_inputs(**kw)
+
+    monkeypatch.setattr(evaluator, "load_inputs", recording)
+    schedule.run_once(NOW)
+
+    assert calls, "evaluate_pending was handed preloaded inputs and never read the window itself"
+    assert calls[0] == (date(2026, 10, 12) - timedelta(days=evaluator._COARSE_DAYS), True)
+    assert all(fetch for _, fetch in calls)
+    assert store.get_state("fred_errors") == json.dumps(["BAA10Y: BAA10Y timeout"])
+    assert store.last_evaluated(version) == LAST_DAY
 
 
 def test_rules_change_closes_old_live_surge(sweeps):
