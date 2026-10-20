@@ -898,4 +898,21 @@ export const ko: Messages = {
     savedNotApplied: "이번 주 값으로 저장했습니다. 다음 실행에 반영됩니다.",
     disclaimer: "이 확률은 주관적 우도비로 만든 휴리스틱이며 통계 모형의 추정치가 아니고, 투자 조언이 아닙니다.",
   },
+  risk: {
+    strip: {
+      aria: "신호 패널 열기",
+      riskTitle: "위험 신호가 잡혔습니다",
+      surgeTitle: "강한 상승이 확인되었습니다",
+      themes: "테마 {count}개: {name}",
+      since: "{date} 시작",
+      warnings: "경계 지표 {ratio}",
+      topMover: "어제 상승 1위 {name}",
+      surgeThemes: "급등 테마 {count}개",
+      surgeChip: "급등 {count}",
+      computing: "신호 계산 중",
+      preparing: "데이터 준비 중",
+      loading: "신호를 불러오는 중…",
+      error: "신호를 불러오지 못했습니다.",
+    },
+  },
 };

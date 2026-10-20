@@ -19,6 +19,7 @@ import { LoadingState } from "@/components/ui/LoadingState";
 import { InstrumentsPanel } from "@/components/market/InstrumentsPanel";
 import { SpreadsSection } from "@/components/market/SpreadsSection";
 import { MarketHeader } from "@/components/market/MarketHeader";
+import { SignalStrip } from "@/components/risk/SignalStrip";
 import { MarketPageTabs, useMarketPageTab } from "@/components/market/MarketPageTabs";
 import { TONE_CLASS } from "@/components/market/MarketRegimeLine";
 import { FigureText } from "@/components/market/FigureText";
@@ -720,6 +721,8 @@ export function MarketOverviewClient({
   const [pageTab, setPageTab] = useMarketPageTab();
   const [viewMode, setViewMode] = useState<ViewMode>("chart");
   const [selectedIndex, setSelectedIndex] = useState<MarketIndexQuote | null>(null);
+  // Risk UI spec §2: the strip opens the signal panel (the panel itself arrives with plan Task 4).
+  const [signalsOpen, setSignalsOpen] = useState(false);
 
   // Spec §1: the page column is the viewport minus AppShell's pads. The header and the tab bar keep
   // their height; the tab panel takes the rest and scrolls inside itself. A failed or empty index
@@ -730,6 +733,9 @@ export function MarketOverviewClient({
         data-testid="market-page"
         className="mx-auto flex h-[calc(100dvh_-_var(--main-pad-top,0px)_-_var(--main-pad-bottom,0px))] max-w-7xl flex-col"
       >
+        <div className="mb-2 shrink-0">
+          <SignalStrip onOpen={() => setSignalsOpen(true)} expanded={signalsOpen} />
+        </div>
         <MarketHeader />
         <MarketPageTabs
           active={pageTab}

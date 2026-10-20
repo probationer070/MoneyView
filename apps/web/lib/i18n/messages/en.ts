@@ -895,6 +895,23 @@ export const en = {
     savedNotApplied: "Saved for this week; it will apply at the next run.",
     disclaimer: "These probabilities are a heuristic built from subjective likelihood ratios, not a statistical model estimate, and are not investment advice.",
   },
+  risk: {
+    strip: {
+      aria: "Open the signal panel",
+      riskTitle: "Risk signal detected",
+      surgeTitle: "Strong rise confirmed",
+      themes: "{count} themes: {name}",
+      since: "since {date}",
+      warnings: "Warnings on {ratio}",
+      topMover: "Top gainer yesterday: {name}",
+      surgeThemes: "Surge themes {count}",
+      surgeChip: "Surge {count}",
+      computing: "Computing signals",
+      preparing: "Preparing data",
+      loading: "Loading signals…",
+      error: "Signals could not be loaded.",
+    },
+  },
 } as const;
 
 type Widen<T> = { [K in keyof T]: T[K] extends string ? string : Widen<T[K]> };

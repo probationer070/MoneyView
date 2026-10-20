@@ -9,5 +9,5 @@ import { MarketRegimeLine } from "./MarketRegimeLine";
 // way every other page sets its header. No eyebrow: the 1280x720 budget has no room for it (plan N2).
 export function MarketHeader() {
   const t = useT();
-  return <PageHeader title={t("market.title")} subtitle={t("market.subtitle")} actions={<MarketRegimeLine />} />;
+  return <PageHeader title={t("market.title")} subtitle={t("market.subtitle")} actions={<MarketRegimeLine />} tight />;
 }
