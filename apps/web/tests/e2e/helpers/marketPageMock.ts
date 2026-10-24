@@ -1,6 +1,7 @@
 import type { Page } from "@playwright/test";
 import { marketIndexDetailFixture, marketOverviewFixture } from "../fixtures/shared";
 import { API_PREFIX, cloneFixture, json } from "./mockUtils";
+import { mockRisk } from "./riskApiMock";
 
 export async function mockMarketPageApi(
   page: Page,
@@ -69,4 +70,7 @@ export async function mockMarketPageApi(
 
     return route.continue();
   });
+  // The signal strip at the top of "/" (risk UI plan Task 2). Registered after the catch-all so it answers
+  // first; a spec that needs another state calls mockRisk again after this helper, and its route wins.
+  await mockRisk(page, "neutral");
 }

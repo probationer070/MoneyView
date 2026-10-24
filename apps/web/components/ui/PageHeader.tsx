@@ -10,11 +10,13 @@ interface PageHeaderProps {
   subtitleTestId?: string;
   /** Beside the subtitle on wide screens, under it on narrow ones (the corporate verdict strip). */
   subtitleAside?: ReactNode;
+  /** A 12px gap under the header instead of 24px, for a one-screen page short of height (the market overview). */
+  tight?: boolean;
 }
 
-export function PageHeader({ title, subtitle, eyebrow, actions, subtitleTestId, subtitleAside }: PageHeaderProps) {
+export function PageHeader({ title, subtitle, eyebrow, actions, subtitleTestId, subtitleAside, tight = false }: PageHeaderProps) {
   return (
-    <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+    <div className={`${tight ? "mb-3" : "mb-6"} flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between`}>
       <div className="min-w-0">
         {eyebrow && <div className="mb-2"><Eyebrow label={eyebrow.label} suffix={eyebrow.suffix} /></div>}
         <h1 className="type-heading-5 text-[var(--ink)]">{title}</h1>

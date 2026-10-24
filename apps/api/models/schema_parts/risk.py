@@ -122,6 +122,11 @@ class MacroFigureOut(BaseModel):
     prior: MacroValueOut
 
 
+class TriggerLabelOut(BaseModel):
+    id: str
+    label: LabelOut
+
+
 class RiskAlertSummary(BaseModel):
     id: int
     origin: Literal["live", "backfill"]
@@ -139,6 +144,8 @@ class RiskAlertSummary(BaseModel):
     fwd20: float | None
     useful: bool | None
     w1_proxy: bool
+    max_dd10: float | None
+    trigger_labels: list[TriggerLabelOut]
 
 
 class RiskAlertDetail(BaseModel):
@@ -175,6 +182,18 @@ class SurgeComponentsOut(BaseModel):
     rsi: float | None = None
 
 
+class SurgeLeaderOut(BaseModel):
+    ticker: str
+    name: str
+    return5_pct: float | None
+
+
+class SurgeComponentInfoOut(BaseModel):
+    id: Literal["magnitude", "accel", "breadth", "rsi"]
+    label: LabelOut
+    rule: LabelOut
+
+
 class SurgeThemeOut(BaseModel):
     theme: str
     label: LabelOut
@@ -183,12 +202,15 @@ class SurgeThemeOut(BaseModel):
     shown: bool
     components: SurgeComponentsOut
     overheated: bool
+    leaders: list[SurgeLeaderOut]
 
 
 class SurgeLatestOut(BaseModel):
     banner: bool
     cap_share: float
     themes: list[SurgeThemeOut]
+    components_info: list[SurgeComponentInfoOut]
+    banner_since: str | None
 
 
 class MoverOut(BaseModel):
@@ -212,12 +234,6 @@ class MoversDayOut(BaseModel):
     items: list[MoverOut]
 
 
-class SurgeLeaderOut(BaseModel):
-    ticker: str
-    name: str
-    return5_pct: float | None
-
-
 class SurgeEventOut(BaseModel):
     id: int
     origin: Literal["live", "backfill"]
@@ -235,6 +251,15 @@ class SurgeEventOut(BaseModel):
     fwd20: float | None
     max_runup10: float | None
     leaders: list[SurgeLeaderOut]
+
+
+class SurgeEventDetailOut(SurgeEventOut):
+    components_info: list[SurgeComponentInfoOut]
+
+
+class ThemeLevelPoint(BaseModel):
+    date: str
+    level: float
 
 
 class RiskLatest(BaseModel):

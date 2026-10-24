@@ -43,7 +43,7 @@ export function InstrumentsPanel({ indices, fetchError, viewMode, onViewModeChan
   const halves = [indices.slice(0, 7), indices.slice(7)];
 
   return (
-    <div data-testid="market-instruments" className="flex flex-col gap-3">
+    <div data-testid="market-instruments" className="flex flex-col gap-1">
       <div data-testid="market-instruments-toolbar" className="flex items-center justify-between gap-3">
         <p className="type-small text-[var(--ink-secondary)]">
           <FigureText parts={withFigures(t("market.instruments.count"), { count: formatNumber(indices.length, "integer", { locale }) })} />
@@ -52,7 +52,7 @@ export function InstrumentsPanel({ indices, fetchError, viewMode, onViewModeChan
       </div>
 
       {viewMode === "chart" ? (
-        <div data-testid="market-cards" className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
+        <div data-testid="market-cards" className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
           {indices.map((quote, index) => (
             <SparklineCard
               key={quote.ticker}

@@ -5,6 +5,7 @@ import { mockDecisionsApi } from "./decisionsPageMock";
 import { mockEventsApi } from "./eventsApiMock";
 import { mockMarketPageApi } from "./marketPageMock";
 import { mockPortfolioPageApi } from "./portfolioPageMock";
+import { mockRiskRecords } from "./riskApiMock";
 import { mockSignalsApi } from "./signalsApiMock";
 import { mockValuationApi } from "./valuationPageMock";
 
@@ -19,6 +20,7 @@ export const DESIGN_SCREENS: [string, (page: Page) => Promise<unknown>][] = [
   ["/events", async (p) => { await mockMarketPageApi(p); await mockEventsApi(p); }],
   ["/signals", (p) => mockSignalsApi(p)],
   ["/monte-carlo", async () => {}],
+  ["/alerts", (p) => mockRiskRecords(p)],
   ["/dev/design", async () => {}],
 ];
 

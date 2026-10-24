@@ -24,12 +24,25 @@ function subscribe(callback: () => void) {
   };
 }
 
+/** Blocked site storage throws on access; the locale then falls back to the browser's language. */
+function readStored(): string | null {
+  try {
+    return window.localStorage.getItem(STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
 // The server renders English; the client switches after hydration without a mismatch.
-const getSnapshot = (): Locale => detectLocale(window.localStorage.getItem(STORAGE_KEY), window.navigator.language);
+const getSnapshot = (): Locale => detectLocale(readStored(), window.navigator.language);
 const getServerSnapshot = (): Locale => "en";
 
 function setLocale(next: Locale) {
-  window.localStorage.setItem(STORAGE_KEY, next);
+  try {
+    window.localStorage.setItem(STORAGE_KEY, next);
+  } catch {
+    // Blocked storage: the choice is not kept, but this session still switches.
+  }
   listeners.forEach((listener) => listener());
 }
 

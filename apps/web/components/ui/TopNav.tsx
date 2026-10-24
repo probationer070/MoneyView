@@ -134,7 +134,7 @@ export function TopNav() {
               );
             })}
           </nav>
-          <span data-testid="topnav-current" className="type-body text-[var(--ink)] md:hidden">
+          <span data-testid="topnav-current" className="type-body whitespace-nowrap text-[var(--ink)] md:hidden">
             {current ? t(current.shortKey) : ""}
           </span>
           <button

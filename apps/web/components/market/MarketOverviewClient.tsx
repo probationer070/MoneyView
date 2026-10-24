@@ -19,6 +19,8 @@ import { LoadingState } from "@/components/ui/LoadingState";
 import { InstrumentsPanel } from "@/components/market/InstrumentsPanel";
 import { SpreadsSection } from "@/components/market/SpreadsSection";
 import { MarketHeader } from "@/components/market/MarketHeader";
+import { SignalStrip } from "@/components/risk/SignalStrip";
+import { SignalPanel, useSignalAutoOpen } from "@/components/risk/SignalPanel";
 import { MarketPageTabs, useMarketPageTab } from "@/components/market/MarketPageTabs";
 import { TONE_CLASS } from "@/components/market/MarketRegimeLine";
 import { FigureText } from "@/components/market/FigureText";
@@ -720,6 +722,19 @@ export function MarketOverviewClient({
   const [pageTab, setPageTab] = useMarketPageTab();
   const [viewMode, setViewMode] = useState<ViewMode>("chart");
   const [selectedIndex, setSelectedIndex] = useState<MarketIndexQuote | null>(null);
+  // Risk UI spec §2-3: the strip opens the signal panel, an overlay that adds no height to the page.
+  // It also opens by itself once per new alert id or surge banner start.
+  // An auto-open that arrives while the index detail modal is open waits until it closes, so two dialogs never stack.
+  const [signalsOpen, setSignalsOpen] = useState(false);
+  const [autoOpenPending, setAutoOpenPending] = useState(false);
+  useSignalAutoOpen(() => (selectedIndex ? setAutoOpenPending(true) : setSignalsOpen(true)));
+  const closeDetail = () => {
+    setSelectedIndex(null);
+    if (autoOpenPending) {
+      setAutoOpenPending(false);
+      setSignalsOpen(true);
+    }
+  };
 
   // Spec §1: the page column is the viewport minus AppShell's pads. The header and the tab bar keep
   // their height; the tab panel takes the rest and scrolls inside itself. A failed or empty index
@@ -730,6 +745,9 @@ export function MarketOverviewClient({
         data-testid="market-page"
         className="mx-auto flex h-[calc(100dvh_-_var(--main-pad-top,0px)_-_var(--main-pad-bottom,0px))] max-w-7xl flex-col"
       >
+        <div className="mb-1 shrink-0">
+          <SignalStrip onOpen={() => setSignalsOpen(true)} expanded={signalsOpen} />
+        </div>
         <MarketHeader />
         <MarketPageTabs
           active={pageTab}
@@ -748,7 +766,8 @@ export function MarketOverviewClient({
         />
       </div>
 
-      {selectedIndex ? <MarketDetailModal item={selectedIndex} onClose={() => setSelectedIndex(null)} /> : null}
+      {signalsOpen ? <SignalPanel onClose={() => setSignalsOpen(false)} /> : null}
+      {selectedIndex ? <MarketDetailModal item={selectedIndex} onClose={closeDetail} /> : null}
     </>
   );
 }

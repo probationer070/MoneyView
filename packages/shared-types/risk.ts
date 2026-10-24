@@ -34,11 +34,13 @@ export interface MacroValueOut { period: string; value: number }
 export interface MacroFigureOut {
   topic: string; series: string; label: LabelOut; kind: "mm_pct" | "level"; latest: MacroValueOut; prior: MacroValueOut;
 }
+export interface TriggerLabelOut { id: string; label: LabelOut }
 export interface RiskAlertSummary {
   id: number; origin: "live" | "backfill"; rules_version: string; status: "open" | "released";
   start_date: string; release_date: string | null; days: number; trigger_themes: string[]; theme_count: number;
   warnings_at_start: string[]; primary_theme: string; fwd5: number | null; fwd10: number | null;
   fwd20: number | null; useful: boolean | null; w1_proxy: boolean;
+  max_dd10: number | null; trigger_labels: TriggerLabelOut[];
 }
 export interface RiskAlertDetail {
   id: number; origin: "live" | "backfill"; rules_version: string; status: "open" | "released";
@@ -52,18 +54,24 @@ export interface SurgeComponentsOut {
   magnitude_z: number | null; accel_pct: number | null; accel_rank: number | null;
   breadth_pct: number | null; rsi: number | null;
 }
+export interface SurgeLeaderOut { ticker: string; name: string; return5_pct: number | null }
+export interface SurgeComponentInfoOut {
+  id: "magnitude" | "accel" | "breadth" | "rsi"; label: LabelOut; rule: LabelOut;
+}
 export interface SurgeThemeOut {
   theme: string; label: LabelOut; event_id: number; start_date: string; shown: boolean;
-  components: SurgeComponentsOut; overheated: boolean;
+  components: SurgeComponentsOut; overheated: boolean; leaders: SurgeLeaderOut[];
 }
-export interface SurgeLatestOut { banner: boolean; cap_share: number; themes: SurgeThemeOut[] }
+export interface SurgeLatestOut {
+  banner: boolean; cap_share: number; themes: SurgeThemeOut[]; components_info: SurgeComponentInfoOut[];
+  banner_since: string | null;
+}
 export interface MoverOut {
   rank: number; ticker: string; name: string; theme: string; return_pct: number; close: number;
   return5_pct: number | null; rsi: number | null;
 }
 export interface MoversLatestOut { as_of: string; items: MoverOut[] }
 export interface MoversDayOut { date: string; items: MoverOut[] }
-export interface SurgeLeaderOut { ticker: string; name: string; return5_pct: number | null }
 export type SurgeEndReason = "below_ema" | "stalled" | "rules_changed";
 export interface SurgeEventOut {
   id: number; origin: "live" | "backfill"; rules_version: string; theme: string; label: LabelOut;
@@ -71,6 +79,8 @@ export interface SurgeEventOut {
   components: SurgeComponentsOut; overheated_on: string | null; fwd5: number | null; fwd10: number | null;
   fwd20: number | null; max_runup10: number | null; leaders: SurgeLeaderOut[];
 }
+export interface SurgeEventDetailOut extends SurgeEventOut { components_info: SurgeComponentInfoOut[] }
+export interface ThemeLevelPoint { date: string; level: number }
 export interface RiskData { bars_coverage: number; fred_errors: string[] }
 export interface RiskLatest {
   as_of: string | null; evaluated_at: string | null; rules_version: string;

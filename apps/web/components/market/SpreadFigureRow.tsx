@@ -20,7 +20,7 @@ export function SpreadFigureRow({ onOpenSpreads }: { onOpenSpreads: () => void }
   const state = isLoading ? "loading" : isError ? "error" : spreads.length === 0 ? "empty" : "ready";
 
   return (
-    <section data-testid="spread-figures" data-state={state} className="flex flex-col gap-1 border-t border-[var(--line)] pt-3">
+    <section data-testid="spread-figures" data-state={state} className="flex flex-col gap-1 border-t border-[var(--line)] pt-2">
       <p className="type-caption uppercase text-[var(--ink-muted)]">
         <FigureText parts={withFigures(t("market.spreads.figuresCaption"), { days: formatNumber(DEFAULT_SPREAD_WINDOW_DAYS, "integer", { locale }) })} />
       </p>
