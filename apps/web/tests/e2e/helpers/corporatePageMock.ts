@@ -131,7 +131,7 @@ const mockDcfAssumptions: DcfAssumptionSummary = {
   enterprise_value_index: 262.4,
 };
 
-const mockDcfSummaryResponse: DcfSummaryResponse = {
+export const mockDcfSummaryResponse: DcfSummaryResponse = {
   ...mockDcfSummary,
   wacc_used: mockDcfAssumptions.wacc_used,
   margin_used: mockDcfAssumptions.margin_used,

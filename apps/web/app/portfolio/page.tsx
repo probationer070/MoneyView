@@ -300,14 +300,22 @@ function readSessionCache<T>(key: string): T | null {
     if (!rawValue) return null;
     return JSON.parse(rawValue) as T;
   } catch {
-    window.sessionStorage.removeItem(key);
+    try {
+      window.sessionStorage.removeItem(key);
+    } catch {
+      // Blocked storage: there is nothing to clear.
+    }
     return null;
   }
 }
 
 function writeSessionCache<T>(key: string, value: T) {
   if (typeof window === "undefined") return;
-  window.sessionStorage.setItem(key, JSON.stringify(value));
+  try {
+    window.sessionStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // Session cache is an optional optimization layer.
+  }
 }
 
 function readStoredPortfolioDateFilters() {
@@ -337,7 +345,11 @@ function readStoredPortfolioDateFilters() {
         : attributionAsOfDate,
     };
   } catch {
-    window.localStorage.removeItem(PORTFOLIO_DATE_FILTERS_STORAGE_KEY);
+    try {
+      window.localStorage.removeItem(PORTFOLIO_DATE_FILTERS_STORAGE_KEY);
+    } catch {
+      // Blocked storage: there is nothing to clear.
+    }
     return {
       holdingStartDate: "",
       attributionAsOfDate: "",
@@ -1040,13 +1052,17 @@ export default function PortfolioPage() {
   }, []);
 
   useEffect(() => {
-    window.localStorage.setItem(
-      PORTFOLIO_DATE_FILTERS_STORAGE_KEY,
-      JSON.stringify({
-        holdingStartDate,
-        attributionAsOfDate,
-      }),
-    );
+    try {
+      window.localStorage.setItem(
+        PORTFOLIO_DATE_FILTERS_STORAGE_KEY,
+        JSON.stringify({
+          holdingStartDate,
+          attributionAsOfDate,
+        }),
+      );
+    } catch {
+      // Browser storage is optional; the filters still apply for this visit.
+    }
   }, [holdingStartDate, attributionAsOfDate]);
 
   // Watchlist query is the source for holdings, attribution inputs, and detail entry points.

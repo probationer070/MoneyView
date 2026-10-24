@@ -141,10 +141,14 @@ export default function AlertsPage({ params, searchParams }: { params: Promise<{
 
   // A report waits only for the list that holds its own row, so a slow or failed other list never blocks it.
   const ownSource = selection.state === "record" ? { risk: history, surge, movers }[selection.kind] : null;
-  const ownRows = selection.state !== "record" ? [] : recordRows(
-    selection.kind === "risk" ? history.data ?? [] : [],
-    selection.kind === "surge" ? surge.data ?? [] : [],
-    selection.kind === "movers" ? movers.data ?? [] : [],
+  const ownKind = selection.state === "record" ? selection.kind : null;
+  const ownRows = useMemo(
+    () => ownKind === null ? [] : recordRows(
+      ownKind === "risk" ? history.data ?? [] : [],
+      ownKind === "surge" ? surge.data ?? [] : [],
+      ownKind === "movers" ? movers.data ?? [] : [],
+    ),
+    [ownKind, history.data, surge.data, movers.data],
   );
   const selected = selection.state === "record" ? ownRows.find((row) => row.id === selection.id) ?? null : null;
   const notFound = selection.state === "notFound" || (ownSource?.data !== undefined && selected === null);
