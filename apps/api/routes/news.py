@@ -13,7 +13,15 @@ from typing import List, Optional
 from fastapi import APIRouter, HTTPException, Query
 
 from apps.api.models.schemas import APIResponse, NewsArticle
-from apps.api.models.schema_parts.news import BulkNewsResponse, NewsAcquireRequest, NewsAcquireResponse
+from apps.api.models.schema_parts.news import (
+    BulkNewsResponse,
+    NewsAcquireRequest,
+    NewsAcquireResponse,
+    NewsDailyStatus,
+    NewsHistoryRequest,
+    NewsHistoryResponse,
+    NewsStatusResponse,
+)
 from apps.api.services.acquisition.freshness import needs_acquisition
 from apps.api.services.acquisition.registry import get_data_class
 from apps.api.services.acquisition.runner import acquire_point_in_time
@@ -21,8 +29,11 @@ from apps.api.services.acquisition.sources.news import fetch_news
 from apps.api.services.acquisition.state import read_state
 from apps.api.services.acquisition.store import news_coverage, save_news
 from apps.api.services.db import get_db
-from apps.api.services.news_feed import NewsBlocked
+from apps.api.services.news_feed import NewsBlocked, get_pacer
+from apps.api.services.news_feed.daily import _done_key, _mark, session_day
+from apps.api.services.news_feed.history import search_history
 from apps.api.services.news_service import NewsService
+from apps.api.services.risk import store
 
 router = APIRouter()
 _svc   = NewsService()
@@ -43,9 +54,11 @@ def get_news_feed(
     q:       Optional[str] = Query(default=None, description="keyword search"),
     limit:   int           = Query(default=20, ge=1, le=100),
     offset:  int           = Query(default=0, ge=0),
+    from_:   Optional[str] = Query(default=None, alias="from", pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    to:      Optional[str] = Query(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
 ):
-    """Return news articles filtered by ticker or keyword."""
-    return _svc.get_news(ticker=ticker, limit=limit, keyword=q, offset=offset)
+    """Return news articles filtered by ticker or keyword; from/to bound the day when ticker is set."""
+    return _svc.get_news(ticker=ticker, limit=limit, keyword=q, offset=offset, from_date=from_, to_date=to)
 
 
 @router.get("/feed/bulk", response_model=APIResponse[BulkNewsResponse])
@@ -61,6 +74,37 @@ def get_news_feed_bulk(
         raise HTTPException(status_code=400,
                             detail=f"at most {MAX_ACQUIRE_TICKERS} tickers per request")
     return APIResponse(data=BulkNewsResponse(tickers=_svc.get_news_bulk(requested, per_ticker=per_ticker)))
+
+
+@router.post("/history", response_model=APIResponse[NewsHistoryResponse])
+def search_news_history(request: NewsHistoryRequest):
+    """Search Google News for the five days around a date. Synchronous: the pacer wait happens here."""
+    names = _watchlist_names()
+    ticker = request.ticker.upper().strip()
+    if ticker not in names:
+        raise HTTPException(status_code=404, detail=f"{ticker} is not in the watchlist")
+    return APIResponse(data=search_history(ticker, request.date, now=datetime.now(timezone.utc), names=names))
+
+
+@router.get("/status", response_model=APIResponse[NewsStatusResponse])
+def get_news_status():
+    """Google block state, today's request count and the daily sweep progress."""
+    pacer = get_pacer().status()
+    day = session_day(datetime.now(timezone.utc))
+    tickers = list(_watchlist_names())
+    done = sum(1 for t in tickers if store.get_state(_mark(day, t)) is not None)
+    return APIResponse(data=NewsStatusResponse(
+        blocked_until=pacer.blocked_until,
+        blocked_reason=pacer.blocked_reason,
+        requests_today=pacer.requests_today,
+        daily_cap=pacer.daily_cap,
+        daily=NewsDailyStatus(
+            session_day=day,
+            done=done,
+            remaining=len(tickers) - done,
+            complete=store.get_state(_done_key(day)) is not None,
+        ),
+    ))
 
 
 @router.post("/crawl", response_model=List[NewsArticle])

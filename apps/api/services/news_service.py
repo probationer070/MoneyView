@@ -39,16 +39,22 @@ class NewsService:
         limit:   int = 20,
         keyword: Optional[str] = None,
         offset:  int = 0,
+        from_date: Optional[str] = None,
+        to_date:   Optional[str] = None,
     ) -> List[NewsArticle]:
-        """Fetch news from SQLite, optionally filtered by ticker or keyword."""
+        """Fetch news from SQLite, optionally filtered by ticker or keyword.
+
+        from_date/to_date (YYYY-MM-DD, inclusive) apply with ticker only."""
         with get_db() as conn:
             if ticker:
                 rows = conn.execute(
                     """SELECT * FROM news
                        WHERE ticker = ?
-                       ORDER BY published_date DESC
+                         AND (? IS NULL OR substr(published_date, 1, 10) >= ?)
+                         AND (? IS NULL OR substr(published_date, 1, 10) <= ?)
+                       ORDER BY published_date DESC, published_at DESC NULLS LAST, id DESC
                        LIMIT ? OFFSET ?""",
-                    (ticker, limit, offset),
+                    (ticker, from_date, from_date, to_date, to_date, limit, offset),
                 ).fetchall()
             elif keyword:
                 rows = conn.execute(
@@ -79,6 +85,7 @@ class NewsService:
                 importance=int(r["importance"] or 1),
                 lang=r["lang"],
                 topic=r["topic"],
+                published_at=r["published_at"],
             )
             for r in rows
         ]

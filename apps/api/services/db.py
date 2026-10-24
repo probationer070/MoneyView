@@ -339,6 +339,16 @@ CREATE TABLE IF NOT EXISTS risk_alert_cards (
     payload_json   TEXT,
     PRIMARY KEY (alert_id, snapshot, deck, rank)
 );
+CREATE TABLE IF NOT EXISTS news_history_searches (
+    ticker      TEXT NOT NULL,
+    lang        TEXT NOT NULL,
+    start       TEXT NOT NULL,
+    end         TEXT NOT NULL,
+    searched_at TEXT NOT NULL,
+    found       INTEGER NOT NULL,
+    truncated   INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (ticker, lang, start, end)
+);
 CREATE TABLE IF NOT EXISTS risk_state (
     key            TEXT PRIMARY KEY,
     value          TEXT NOT NULL
