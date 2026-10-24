@@ -181,6 +181,8 @@ Spec: `docs/superpowers/specs/2026-10-18-risk-signal-design.md`. Plan (watchlist
       `docs/superpowers/specs/2026-10-19-surge-signal-design.md`. Plan: `docs/superpowers/plans/2026-10-19-surge-signal.md`.
       After the owner's OK and a DB backup: run one risk cycle (the rules version changes, so the backfill recomputes), then
       `python scripts/risk/reproduce_backfill.py` and record the surge diff in spec §2. Then PR, then ③ banner and panel UI.
+- [x] R-③ signal UI: done on feat/risk-ui, pending owner merge. Signal strip on "/", overlay panel (crash, candidates, surge, yesterday's gainers + news), `/alerts` records page with per-record reports and CSV, small `/api/v1/risk` additions. Spec: `docs/superpowers/specs/2026-10-20-risk-ui-design.md`. Plan: `docs/superpowers/plans/2026-10-20-risk-ui.md`.
+- [ ] R-④ stock detail one-screen page (next after ③ merges).
 - Deferred minor findings are listed in the plan ledger (`.superpowers/sdd/2026-10-18-watchlist-themes/progress.md`) and are triaged at the final review.
 
 ## Known limits, accepted deliberately
