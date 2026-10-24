@@ -26,6 +26,46 @@ reveal that; only checking the code did.
 
 An entry states what was true when it was written. Nothing updates it on its own.
 
+## 2026-10-25: the news publisher backfill flag broke an exact-key cleanup test, caught only by the full suite
+
+Date: 2026-10-25 (news history Task 6 full gate).
+Command: `python -m pytest -q`.
+Failure: `tests/api/test_watchlist_cleanup_run.py::test_a_cleanup_deletes_only_the_tickers_deep_history_marker` asserted the exact set of `risk_state` keys and got an extra `news_publisher_backfill_done`. It passes at the branch base.
+Root cause: d55c68a's `db.py` migration writes that flag on every fresh DB, and the test compared the whole key set instead of the keys it plants.
+Fix: the test discards that one key before comparing; the cleanup behaviour it checks is unchanged.
+Files changed: `tests/api/test_watchlist_cleanup_run.py`.
+Prevention: a test of "deletes only X" should compare the keys it planted, not the whole table; the per-task affected-test run missed it because no news file imports this test.
+
+## 2026-10-25: stock news stopped at 2026-09-29 (no scheduled stock sweep)
+
+Date: 2026-10-25 (news history spec, N-D1). Cause checked against the real DB (opened read-only) and the git history.
+Command: not a command; visible in the data. `acquisition_state` rows for data class `news`: 143, all `ok`, `last_success_at` between 2026-09-29T15:06 and 15:08 UTC (one grid-wide refresh, two minutes). `news` rows with a ticker end at `published_date` 2026-09-29. Newer rows (to 2026-10-20) are all topic or theme rows from the risk sweep.
+Failure: stock news stayed at 2026-09-29 with no on-screen sign.
+Root cause: stock news was refreshed only when the portfolio grid called `POST /news/acquire` (a person opening the grid), and nothing ever ran it on a schedule. The last grid refresh was 2026-09-29. The hourly `risk_cycle` (6e1b52a, 2026-10-19) swept topic, theme and Korean news and the tickers of new alerts, never the whole watchlist, so it did not restart stock news. This is the news half of the 2026-10-19 "no scheduled sweep" entry below; it was fixed for bars and for risk news but not for the per-stock feed. `routes/news.py` and `risk/schedule.py` have no commit that removed a stock sweep; none ever existed. Not confirmed: why the grid was not refreshed after 2026-09-29 (not opened, or opened and failed). The API log has no 429/503 from Google (its only news failures are test fakes), so a Google block is not the cause.
+Fix: f237506 adds `news_feed/loop.py` (started in the app lifespan), which sweeps the whole watchlist daily after 21:00 UTC through the pacer; the risk cycle now only queues alert tickers (`news_feed/daily.py`).
+Files changed: `apps/api/services/news_feed/loop.py`, `apps/api/services/news_feed/daily.py`, `apps/api/services/risk/schedule.py`, `apps/api/main.py`.
+Prevention: `GET /api/v1/news/status` reports the sweep progress (`daily.done`, `remaining`, `complete`). Check it, not the grid, when asking whether news is current.
+
+## 2026-10-25: the publish time was discarded and the publisher hidden behind source "Google News"
+
+Date: 2026-10-25 (news history spec, N-D3 and N-D4). Defect pre-existing on renewal; fixed on feat/news-history.
+Command: not a command; found reading `StockNewsCrawler` while designing past-date search.
+Failure: the stored article carried only a date, so a news window could not be ordered by time. Every Google row had `source = "Google News"` and the publisher stayed in the headline as a ` - Publisher` suffix, so the source shown was the aggregator, not the outlet.
+Root cause: `StockNewsCrawler._normalize_date` reduced `pubDate` to a date and dropped the time, and the crawler wrote the constant `Google News` as `source` without splitting the title suffix. It also kept 10 of the ~100 items each request returned.
+Fix: 4277589 keeps all items, stores `published_at` (NULL for the 07:00/08:00 GMT placeholder times) and the publisher in `source` with the suffix stripped, and routes every Google request through the pacer; d55c68a makes the one-time backfill skip empty parts. Existing rows were backfilled once (flag `news_publisher_backfill_done`).
+Files changed: `apps/api/services/news_feed/rss.py`, `apps/api/services/webscrap/Crawler/StockNewsCrawler.py`, `apps/api/services/db.py`, `apps/api/models/schema_parts/news.py`, `apps/api/services/acquisition/store.py`.
+Prevention: `tests/api/news_feed/test_rss.py` and `test_migration.py` assert the time, publisher and suffix handling. A field the feed supplies is kept, not reduced at the door.
+
+## 2026-10-25: a missing pubDate was saved as today's date
+
+Date: 2026-10-25 (news history spec, N-D3). Defect pre-existing on renewal; fixed on feat/news-history.
+Command: not a command; found reading `StockNewsCrawler._normalize_date`.
+Failure: an item whose feed entry had no `pubDate` was stored with today's date, so an undated article appeared as fresh news. Nothing raised.
+Root cause: `_normalize_date` filled the current date when the field was empty. `RegulationCrawler` had the same fallback (`entry.published_date or datetime.now()...`).
+Fix: 4277589 stores no date for a missing `pubDate` in the stock crawler; d55c68a makes Regulation keep no invented dates. An empty date is shown as undated.
+Files changed: `apps/api/services/news_feed/rss.py`, `apps/api/services/webscrap/Crawler/StockNewsCrawler.py`, `apps/api/services/webscrap/Crawler/RegulationCrawler.py`.
+Prevention: a parse failure leaves the field empty; it never substitutes a plausible value. `tests/api/test_regulation_crawler.py` and `tests/api/news_feed/test_rss.py` cover the missing-date case.
+
 ## 2026-10-25: the /alerts paper sweep read a colour halfway through a transition
 
 Date: 2026-10-25 (full Playwright gate for fix/blocked-storage-followups). It also fails on renewal 6c45855, although it passed in the #76 gate.

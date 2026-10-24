@@ -357,6 +357,13 @@ erDiagram
   `live_start:<version>`, `news_swept_at`, `fred_errors`.
 - `news` gains `lang` (`en` default) and `topic` (`''` default) by an additive migration in `db.py`; topic
   news is stored in `news` with a topic id.
+- News history (spec `docs/superpowers/specs/2026-10-25-news-history-design.md`): `news.published_at TEXT` (nullable,
+  added by an additive migration) holds the publish time; `news.source` now holds the publisher (it was the constant
+  `Google News`). A one-time backfill moves the title suffix ` - publisher` of old `Google News` rows into `source`
+  and cuts it from the headline; the `risk_state` flag `news_publisher_backfill_done` keeps it from running twice.
+  `news_history_searches` (PK `ticker, lang, start, end`; `searched_at`, `found`, `truncated`) records a finished
+  past-date search so the same five-day window is never sent to Google again; a block or failed fetch records nothing.
+  The Google pacer's block state, daily count and the daily sweep marks live in `risk_state`.
 - `surge_events` (surge spec §7): one row per theme surge event, `^SOX` stored as `theme = '^SOX'`. `end_date` and
   `end_reason` are NULL while the event is open. `end_reason` is `below_ema` (close under EMA10), `stalled`
   (10 trading days without a new 20-day high) or `rules_changed` (a live event of an old rules version, closed on that
@@ -511,6 +518,8 @@ them self-heals because every saver is idempotent (`runner.py:146-155`).
 | `portfolio_preferences.updated_at` | SQLite `CURRENT_TIMESTAMP`, UTC `YYYY-MM-DD HH:MM:SS`; `''` for the seeded default | `routes/portfolio.py:143`; `records_sync/store.py:70-75` |
 | `industry_benchmark.vintage` | Publication date, not fetch date | `db.py:647`; `industry_benchmark_store.py:3-8` |
 | `news.published_date` | Provider text, may be `''` | `db.py:322`; `acquisition/store.py:77-80` |
+| `news.published_at` | UTC ISO-8601 publish time; `NULL` when the feed gave none or a 07:00/08:00 GMT placeholder | `news_feed/rss.py` |
+| `news_history_searches.searched_at` | UTC ISO-8601 | `news_feed/history.py` |
 
 ## 6. Gaps And Risks Found
 

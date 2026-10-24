@@ -501,8 +501,9 @@ Base path: `/api/v1/news`
 
 - **Response:** `List[NewsArticle]`
 - **Purpose:** Return news articles filtered by ticker or keyword.
-- **Query parameters:** `ticker`, `q`, `limit`, `offset`
+- **Query parameters:** `ticker`, `q`, `limit`, `offset`, `from`, `to` (both `YYYY-MM-DD`, inclusive, filter on the article date)
 - **Persistence touched:** reads from local news persistence/cache
+- **Item shape:** `NewsArticle` now carries `published_at` (`Optional[str]`, UTC ISO-8601, `null` when the feed gave no real time)
 - **Classification:** light
 - **Consumers:** news feed and stock-news panels
 
@@ -523,6 +524,30 @@ Base path: `/api/v1/news`
 - **Persistence touched:** crawls and persists news results
 - **Classification:** medium, mutating
 - **Consumers:** stock-specific news refresh workflows
+
+### `POST /history`
+
+- **Request body:** `{ticker, date}` (`date` is `YYYY-MM-DD`; the ticker must be in the watchlist, else 404)
+- **Response:** `APIResponse[NewsHistoryResponse]`: `ticker`, `start`, `end` (date -2 to +2 days), `status` (`searched_now`, `cached`, `blocked`, `daily_limit`, `failed`), `retry_after`, `truncated`, `searched` (per language `lang`, `status`, `found`, `truncated`) and `articles`
+- **Purpose:** Search Google News once per language for the five days around a date. Synchronous: the pacer wait (3-8 s) happens inside the request. A finished search is cached in `news_history_searches`.
+- **Persistence touched:** writes `news` and `news_history_searches`; pacer state in `risk_state`
+- **Classification:** medium, mutating
+- **Consumers:** past-date news search (stock detail, sub-project 4-b)
+
+### `GET /status`
+
+- **Response:** `APIResponse[NewsStatusResponse]`: `blocked_until`, `blocked_reason`, `requests_today`, `daily_cap`, `daily` (`session_day`, `done`, `remaining`, `complete`)
+- **Purpose:** Google block state, today's request count against the daily cap, and the daily stock sweep progress.
+- **Persistence touched:** reads `risk_state`
+- **Classification:** light
+
+### `POST /acquire`
+
+- **Request body:** `{tickers}` (at most 100)
+- **Purpose:** Refresh stock news for a batch through the acquisition boundary. Each fetched ticker goes through the pacer, so it waits 3-8 s (interactive); tickers the hourly boundary answers as fresh send nothing. A block answers 503 for the blocked tickers.
+- **Persistence touched:** writes `news` and `acquisition_state`
+- **Classification:** medium, mutating
+- **Consumers:** portfolio tile grid news refresh
 
 ## 9. Diagnostic Routes
 
