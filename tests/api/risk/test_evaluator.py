@@ -629,10 +629,8 @@ def test_run_once_reads_trimmed_window_and_stores_fred_errors(monkeypatch):
     version = get_rules().version
     store.set_state(f"backfill:{version}", "done")
     store.set_state(f"live_start:{version}", "2026-10-12")
-    store.set_state("news_swept_at", NOW.isoformat())
     monkeypatch.setattr(schedule, "sweep_bars", lambda now: None)
     monkeypatch.setattr(schedule, "run_backfill", lambda now, **kw: None)
-    monkeypatch.setattr(schedule, "sweep_news", lambda now, **kw: None)
 
     def source(series_id, start):
         if series_id == "BAA10Y":

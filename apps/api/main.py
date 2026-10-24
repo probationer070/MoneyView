@@ -166,6 +166,9 @@ async def lifespan(app: FastAPI):
         from apps.api.services.risk.schedule import risk_cycle
 
         background.append(asyncio.create_task(risk_cycle()))
+        from apps.api.services.news_feed.loop import news_cycle
+
+        background.append(asyncio.create_task(news_cycle()))
     # After the startup syncs above, so peer removals are already recorded as pending.
     background.append(asyncio.create_task(watchlist_cleanup_cycle(run_at_start=not startup_jobs_disabled)))
 
