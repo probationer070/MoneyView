@@ -110,9 +110,11 @@ interface RecordsTableProps {
   selected: { kind: string; id: string } | null;
   hrefFor: (row: RecordRow) => string;
   onSelect: (row: RecordRow) => void;
+  /** Shown in place of rows when there are none. */
+  emptyText: string;
 }
 
-export function RecordsTable({ rows, kind, selected, hrefFor, onSelect }: RecordsTableProps) {
+export function RecordsTable({ rows, kind, selected, hrefFor, onSelect, emptyText }: RecordsTableProps) {
   const t = useT();
   const { locale } = useLocale();
   const ctx: Ctx = { t, locale };
@@ -135,7 +137,7 @@ export function RecordsTable({ rows, kind, selected, hrefFor, onSelect }: Record
       <tbody>
         {rows.length === 0 ? (
           <tr>
-            <td colSpan={columns.length} className="px-3 py-8 text-center text-[var(--ink-muted)]">{t("risk.records.empty")}</td>
+            <td colSpan={columns.length} className="px-3 py-8 text-center text-[var(--ink-muted)]">{emptyText}</td>
           </tr>
         ) : rows.map((row) => {
           const isSelected = selected?.kind === row.kind && selected.id === row.id;

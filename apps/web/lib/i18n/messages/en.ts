@@ -958,7 +958,8 @@ export const en = {
     records: {
       title: "Signal records",
       subtitle: "Past risk alerts, surges and yesterday's gainers.",
-      filters: "Filter records",
+      badRange: "The start date is after the end date.",
+      more: "Show {count} more",
       kindLabel: "Kind",
       from: "From",
       to: "To",

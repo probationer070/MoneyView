@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
 import { expectNoPageScroll } from "./helpers/noPageScroll";
-import { mockRiskRecords } from "./helpers/riskApiMock";
+import { MOVERS, mockRiskRecords } from "./helpers/riskApiMock";
 
 // Risk UI spec §4 and plan Task 5: the /alerts records page (filters, table, selection, CSV).
 const rowsOf = (page: Page) => page.getByTestId("records-row");
@@ -110,6 +110,67 @@ test("CSV download content", async ({ page }) => {
   const [second] = await Promise.all([page.waitForEvent("download"), page.getByRole("button", { name: "Download CSV" }).click()]);
   expect(second.suggestedFilename()).toBe("moneyview-signals-surge-2026-05-04_2026-10-16.csv");
   expect(fs.readFileSync((await second.path())!, "utf8").split("\r\n")).toHaveLength(5);
+});
+
+test("long lists mount 200 rows at a time; the CSV keeps every row", async ({ page }) => {
+  const days = Array.from({ length: 2600 }, (_, i) => ({
+    date: new Date(Date.UTC(2016, 0, 4) + i * 86_400_000).toISOString().slice(0, 10), items: MOVERS,
+  }));
+  await mockRiskRecords(page);
+  await page.route(/\/api\/v1\/risk\/movers(\?.*)?$/, (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ status: "ok", data: days, meta: {} }) }));
+  await page.goto("/alerts", { waitUntil: "domcontentloaded" });
+  await expect(page.getByTestId("records-table")).toBeVisible({ timeout: 60_000 });
+  const more = page.getByRole("button", { name: "Show 200 more" });
+
+  await expect(rowsOf(page)).toHaveCount(200);
+  await more.click();
+  await expect(rowsOf(page)).toHaveCount(400);
+  await kindButton(page, "Yesterday's gainers").click();
+  await expect(rowsOf(page), "a filter change starts over at 200").toHaveCount(200);
+  await expect(more).toBeVisible();
+
+  const [download] = await Promise.all([page.waitForEvent("download"), page.getByRole("button", { name: "Download CSV" }).click()]);
+  // Header, 2,600 days, and the empty string after the last CRLF.
+  expect(fs.readFileSync((await download.path())!, "utf8").split("\r\n")).toHaveLength(2602);
+});
+
+test("the filters follow back/forward and nav links", async ({ page }) => {
+  await open(page, "/alerts?kind=risk");
+  await expect(rowsOf(page)).toHaveCount(3);
+  await page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "Signal Records" }).click();
+  await expect(page).toHaveURL(/\/alerts$/);
+  await expect(kindButton(page, "All")).toHaveAttribute("aria-pressed", "true");
+  await expect(rowsOf(page)).toHaveCount(9);
+
+  await kindButton(page, "Risk").click();
+  await expect(page).toHaveURL(/\/alerts\?kind=risk$/);
+  await row(page, "risk", "12").click();
+  await expect(page).toHaveURL(/\/alerts\/risk\/12\?kind=risk$/);
+  await kindButton(page, "Surge").click();
+  await expect(page).toHaveURL(/\/alerts\/risk\/12\?kind=surge$/);
+  await page.goBack();
+  await expect(page).toHaveURL(/\/alerts\?kind=risk$/);
+  await expect(kindButton(page, "Risk")).toHaveAttribute("aria-pressed", "true");
+  await expect(rowsOf(page)).toHaveCount(3);
+  await page.goForward();
+  await expect(page).toHaveURL(/\/alerts\/risk\/12\?kind=surge$/);
+  await expect(kindButton(page, "Surge")).toHaveAttribute("aria-pressed", "true");
+  await expect(rowsOf(page)).toHaveCount(3);
+});
+
+test("calendar-invalid dates are ignored and a reversed range says so", async ({ page }) => {
+  await open(page, "/alerts?from=2026-99-99&to=2026-02-30");
+  await expect(page.getByLabel("From", { exact: true })).toHaveValue("");
+  await expect(page.getByLabel("To", { exact: true })).toHaveValue("");
+  await expect(rowsOf(page)).toHaveCount(9);
+
+  await page.goto("/alerts/movers/2026-02-30", { waitUntil: "domcontentloaded" });
+  await expect(report(page)).toContainText("Record not found.", { timeout: 30_000 });
+
+  await page.goto("/alerts?from=2026-10-01&to=2026-01-01", { waitUntil: "domcontentloaded" });
+  await expect(page.getByTestId("records-table")).toContainText("The start date is after the end date.", { timeout: 30_000 });
+  await expect(rowsOf(page)).toHaveCount(0);
 });
 
 for (const viewport of [{ width: 1280, height: 720 }, { width: 390, height: 844 }]) {

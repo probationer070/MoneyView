@@ -961,7 +961,8 @@ export const ko: Messages = {
     records: {
       title: "신호 기록",
       subtitle: "위험 경보, 급등, 어제 상승의 지난 기록입니다.",
-      filters: "기록 거르기",
+      badRange: "시작 날짜가 끝 날짜보다 늦습니다.",
+      more: "{count}개 더 보기",
       kindLabel: "종류",
       from: "시작",
       to: "끝",

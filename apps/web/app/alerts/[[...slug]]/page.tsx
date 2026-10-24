@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect, useMemo, useState } from "react";
+import { use, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { RecordsTable } from "@/components/risk/RecordsTable";
 import { FigureText } from "@/components/market/FigureText";
@@ -24,8 +24,19 @@ import { useMovers, useRiskHistory, useSurgeHistory } from "@/lib/useRisk";
 
 const KINDS: RecordFilterKind[] = ["all", "risk", "surge", "movers"];
 const MOVERS_FROM = "2016-01-04";
+const PAGE_SIZE = 200;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
-const ID_PATTERN: Record<RecordKind, RegExp> = { risk: /^\d+$/, surge: /^\d+$/, movers: DATE };
+
+/** YYYY-MM-DD naming a real calendar day: 2026-02-30 and 2026-99-99 are not. */
+function isCalendarDate(text: string): boolean {
+  if (!DATE.test(text)) return false;
+  const day = new Date(`${text}T00:00:00Z`);
+  return !Number.isNaN(day.getTime()) && day.toISOString().slice(0, 10) === text;
+}
+
+const ID_VALID: Record<RecordKind, (id: string) => boolean> = {
+  risk: (id) => /^\d+$/.test(id), surge: (id) => /^\d+$/.test(id), movers: isCalendarDate,
+};
 
 interface Filters { kind: RecordFilterKind; from: string; to: string; shown: boolean }
 type Selection = { state: "list" } | { state: "record"; kind: RecordKind; id: string } | { state: "notFound" };
@@ -35,7 +46,7 @@ type Query = Record<string, string | string[] | undefined>;
 function parseSlug(slug: string[]): Selection {
   if (slug.length === 0) return { state: "list" };
   const [kind, id] = slug;
-  if (slug.length === 2 && (kind === "risk" || kind === "surge" || kind === "movers") && ID_PATTERN[kind].test(id)) {
+  if (slug.length === 2 && (kind === "risk" || kind === "surge" || kind === "movers") && ID_VALID[kind](id)) {
     return { state: "record", kind, id };
   }
   return { state: "notFound" };
@@ -47,7 +58,7 @@ function parseFilters(query: Query): Filters {
     return typeof value === "string" ? value : "";
   };
   const kind = KINDS.find((k) => k === one("kind")) ?? "all";
-  const date = (key: string) => (DATE.test(one(key)) ? one(key) : "");
+  const date = (key: string) => (isCalendarDate(one(key)) ? one(key) : "");
   return { kind, from: date("from"), to: date("to"), shown: kind === "surge" && one("shown") === "1" };
 }
 
@@ -75,8 +86,11 @@ function downloadCsv(filename: string, csv: string) {
   const anchor = document.createElement("a");
   anchor.href = url;
   anchor.download = filename;
+  // Attached while clicked (some browsers ignore a detached anchor); the URL is freed after the click has started the save.
+  document.body.appendChild(anchor);
   anchor.click();
-  URL.revokeObjectURL(url);
+  anchor.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
 export default function AlertsPage({ params, searchParams }: { params: Promise<{ slug?: string[] }>; searchParams: Promise<Query> }) {
@@ -89,14 +103,26 @@ export default function AlertsPage({ params, searchParams }: { params: Promise<{
   const { slug = [] } = use(params);
   const query = use(searchParams);
   const selection = parseSlug(slug);
-  // The filters are state, read from the address once and written back to it. Building each change from the
+  // The filters are state, read from the address and written back to it. Building each change from the
   // address instead would lose a change made before the previous replace has landed (two quick edits).
   const [filters, setFilterState] = useState(() => parseFilters(query));
   const queryText = filterQuery(filters);
   const addressQuery = filterQuery(parseFilters(query));
-  useEffect(() => {
-    if (addressQuery !== queryText) router.replace(`${pathname}${queryText}`, { scroll: false });
-  }, [queryText]); // eslint-disable-line react-hooks/exhaustive-deps -- only a filter change writes the address
+  // Queries this page wrote that the address has not reached yet. An address that is none of them came from
+  // outside (back/forward, a nav link), and the filters follow it. Adjusted while rendering, as React advises
+  // for state derived from a changed input.
+  const [pending, setPending] = useState<string[]>([]);
+  const [seenAddress, setSeenAddress] = useState(addressQuery);
+  if (seenAddress !== addressQuery) {
+    setSeenAddress(addressQuery);
+    const at = pending.indexOf(addressQuery);
+    if (at >= 0) {
+      setPending(pending.slice(at + 1));
+    } else {
+      setPending([]);
+      if (addressQuery !== queryText) setFilterState(parseFilters(query));
+    }
+  }
 
   const history = useRiskHistory();
   const surge = useSurgeHistory();
@@ -109,15 +135,26 @@ export default function AlertsPage({ params, searchParams }: { params: Promise<{
     () => (history.data && surge.data && movers.data ? recordRows(history.data, surge.data, movers.data) : []),
     [history.data, surge.data, movers.data],
   );
-  const shownRows = rows.filter((row) => matches(row, filters));
+  const shownRows = useMemo(() => rows.filter((row) => matches(row, filters)), [rows, filters]);
+  const badRange = filters.from !== "" && filters.to !== "" && filters.from > filters.to;
+  // At most PAGE_SIZE rows are mounted until "more" is pressed; the count starts over when the filters change.
+  const [page, setPage] = useState({ key: queryText, limit: PAGE_SIZE });
+  const limit = page.key === queryText ? page.limit : PAGE_SIZE;
+  const visibleRows = useMemo(() => shownRows.slice(0, limit), [shownRows, limit]);
+  const moreCount = Math.min(PAGE_SIZE, shownRows.length - visibleRows.length);
 
   const selected = selection.state === "record" ? rows.find((row) => row.kind === selection.kind && row.id === selection.id) ?? null : null;
   const notFound = selection.state === "notFound" || (selection.state === "record" && ready && selected === null);
 
-  const setFilters = (next: Partial<Filters>) => setFilterState((prev) => {
-    const merged = { ...prev, ...next };
-    return { ...merged, shown: merged.kind === "surge" && merged.shown };
-  });
+  const setFilters = (next: Partial<Filters>) => {
+    const merged = { ...filters, ...next };
+    const updated = { ...merged, shown: merged.kind === "surge" && merged.shown };
+    const text = filterQuery(updated);
+    setFilterState(updated);
+    if (text === queryText) return;
+    setPending([...pending, text]);
+    router.replace(`${pathname}${text}`, { scroll: false });
+  };
   const hrefFor = (row: RecordRow) => `/alerts/${row.kind}/${encodeURIComponent(row.id)}${queryText}`;
 
   const download = () => {
@@ -133,7 +170,23 @@ export default function AlertsPage({ params, searchParams }: { params: Promise<{
   } else if (!ready) {
     table = <LoadingState variant="spinner" label={t("risk.records.loading")} />;
   } else {
-    table = <RecordsTable rows={shownRows} kind={filters.kind} selected={selected} hrefFor={hrefFor} onSelect={(row) => router.push(hrefFor(row), { scroll: false })} />;
+    table = (
+      <>
+        <RecordsTable
+          rows={visibleRows}
+          kind={filters.kind}
+          selected={selected}
+          hrefFor={hrefFor}
+          onSelect={(row) => router.push(hrefFor(row), { scroll: false })}
+          emptyText={badRange ? t("risk.records.badRange") : t("risk.records.empty")}
+        />
+        {moreCount > 0 && (
+          <div className="flex justify-center p-3">
+            <ActionButton size="sm" label={t("risk.records.more", { count: moreCount })} onClick={() => setPage({ key: queryText, limit: limit + PAGE_SIZE })} />
+          </div>
+        )}
+      </>
+    );
   }
 
   let report;
