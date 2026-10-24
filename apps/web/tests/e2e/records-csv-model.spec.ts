@@ -25,14 +25,14 @@ test("lines end in CRLF and a field holding a comma stays one field", () => {
 
 test("headers follow the UI language", () => {
   expect(lines(recordsCsv([], "risk", "en"))[0]).toBe(
-    "ID,Origin,Start date,Release date,Days,Theme count,Themes,Warnings on,Primary theme,5D after,10D after,20D after,Max further drop in 10D,vs −5%",
+    "ID,Origin,Start date,Release date,Days,Theme count,Themes,Warnings on,Primary theme,5D after,10D after,20D after,Max further drop in 10D,Past -5 pct",
   );
   expect(lines(recordsCsv([], "risk", "ko"))[0]).toBe(
     "번호,구분,시작일,해제일,일수,테마 수,테마,켜진 지표,주 테마,5일 뒤,10일 뒤,20일 뒤,10일 안 최대 추가 하락,기준 −5%",
   );
   expect(lines(recordsCsv([], "surge", "ko"))[0]).toBe("번호,구분,테마,시작일,끝난 날,끝난 이유,배너 표시,5일 뒤,10일 뒤,20일 뒤,10일 안 최대 추가 상승");
   expect(lines(recordsCsv([], "movers", "en"))[0]).toBe(
-    "Date,#1 Ticker,#1 Name,#1 Change,#2 Ticker,#2 Name,#2 Change,#3 Ticker,#3 Name,#3 Change,#4 Ticker,#4 Name,#4 Change,#5 Ticker,#5 Name,#5 Change",
+    "Date,No. 1 Ticker,No. 1 Name,No. 1 Change,No. 2 Ticker,No. 2 Name,No. 2 Change,No. 3 Ticker,No. 3 Name,No. 3 Change,No. 4 Ticker,No. 4 Name,No. 4 Change,No. 5 Ticker,No. 5 Name,No. 5 Change",
   );
   expect(lines(recordsCsv([], "all", "ko"))[0]).toBe("종류,번호,구분,시작일,끝난 날,대상");
 });

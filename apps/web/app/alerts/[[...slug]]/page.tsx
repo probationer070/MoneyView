@@ -16,6 +16,7 @@ import { useLocale, useT } from "@/lib/i18n/locale";
 import {
   recordRows, recordsCsv, recordsCsvName, type RecordFilterKind, type RecordKind, type RecordRow,
 } from "@/lib/recordsCsv";
+import { syncAddress } from "@/lib/recordsAddress";
 import { useMovers, useRiskHistory, useSurgeHistory } from "@/lib/useRisk";
 
 // The signal records page (risk UI spec §4, plan Task 5). Each list is loaded once and filtered here;
@@ -112,16 +113,10 @@ export default function AlertsPage({ params, searchParams }: { params: Promise<{
   // for state derived from a changed input.
   const [pending, setPending] = useState<string[]>([]);
   const [seenAddress, setSeenAddress] = useState(addressQuery);
-  if (seenAddress !== addressQuery) {
-    setSeenAddress(addressQuery);
-    const at = pending.indexOf(addressQuery);
-    if (at >= 0) {
-      setPending(pending.slice(at + 1));
-    } else {
-      setPending([]);
-      if (addressQuery !== queryText) setFilterState(parseFilters(query));
-    }
-  }
+  const sync = syncAddress({ pending, seen: seenAddress }, addressQuery, queryText);
+  if (sync.seen !== seenAddress) setSeenAddress(sync.seen);
+  if (sync.pending !== pending) setPending(sync.pending);
+  if (sync.follow) setFilterState(parseFilters(query));
 
   const history = useRiskHistory();
   const surge = useSurgeHistory();
@@ -137,13 +132,22 @@ export default function AlertsPage({ params, searchParams }: { params: Promise<{
   const shownRows = useMemo(() => rows.filter((row) => matches(row, filters)), [rows, filters]);
   const badRange = filters.from !== "" && filters.to !== "" && filters.from > filters.to;
   // At most PAGE_SIZE rows are mounted until "more" is pressed; the count starts over when the filters change.
+  // Reset on every change, so returning to an earlier filter (A→B→A) does not bring back its old count.
   const [page, setPage] = useState({ key: queryText, limit: PAGE_SIZE });
+  if (page.key !== queryText) setPage({ key: queryText, limit: PAGE_SIZE });
   const limit = page.key === queryText ? page.limit : PAGE_SIZE;
   const visibleRows = useMemo(() => shownRows.slice(0, limit), [shownRows, limit]);
   const moreCount = Math.min(PAGE_SIZE, shownRows.length - visibleRows.length);
 
-  const selected = selection.state === "record" ? rows.find((row) => row.kind === selection.kind && row.id === selection.id) ?? null : null;
-  const notFound = selection.state === "notFound" || (selection.state === "record" && ready && selected === null);
+  // A report waits only for the list that holds its own row, so a slow or failed other list never blocks it.
+  const ownSource = selection.state === "record" ? { risk: history, surge, movers }[selection.kind] : null;
+  const ownRows = selection.state !== "record" ? [] : recordRows(
+    selection.kind === "risk" ? history.data ?? [] : [],
+    selection.kind === "surge" ? surge.data ?? [] : [],
+    selection.kind === "movers" ? movers.data ?? [] : [],
+  );
+  const selected = selection.state === "record" ? ownRows.find((row) => row.id === selection.id) ?? null : null;
+  const notFound = selection.state === "notFound" || (ownSource?.data !== undefined && selected === null);
 
   const setFilters = (next: Partial<Filters>) => {
     const merged = { ...filters, ...next };
@@ -191,6 +195,10 @@ export default function AlertsPage({ params, searchParams }: { params: Promise<{
   let report;
   if (notFound) {
     report = <p className="type-body text-[var(--ink)]">{t("risk.records.notFound")}</p>;
+  } else if (ownSource?.isError) {
+    report = <ErrorState message={t("risk.report.loadError")} retryAction={() => void ownSource.refetch()} />;
+  } else if (ownSource && ownSource.data === undefined) {
+    report = <LoadingState variant="spinner" label={t("risk.report.loading")} />;
   } else if (selected) {
     report = <RecordReport key={`${selected.kind}:${selected.id}`} row={selected} />;
   } else {

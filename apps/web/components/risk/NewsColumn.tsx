@@ -67,8 +67,8 @@ export function NewsColumn({ alert, className }: { alert: RiskAlertDetail; class
               <li key={`${group.topic ?? "industry"}-${index}`} className="space-y-1">
                 {figure && <MacroFigure figure={figure} />}
                 <ul className="space-y-2">
-                  {group.items.map((item) => (
-                    <li key={item.url} lang={item.lang}>
+                  {group.items.map((item, itemIndex) => (
+                    <li key={`${itemIndex}-${item.url}`} lang={item.lang}>
                       <a
                         href={item.url}
                         target="_blank"

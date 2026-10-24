@@ -1,6 +1,9 @@
 import { expect, test, type Page } from "@playwright/test";
 import { expectNoPageScroll } from "./helpers/noPageScroll";
-import { mockRiskRecords } from "./helpers/riskApiMock";
+import type { SurgeEventOut } from "../../../../packages/shared-types";
+import {
+  candidateCard, crashCard, mockRiskRecords, REPORT_ALERT, SURGE_DETAILS, SURGE_HISTORY,
+} from "./helpers/riskApiMock";
 
 // Risk UI spec §4 and plan Task 6: the record reports on /alerts/[kind]/[id] and the theme level chart.
 const report = (page: Page) => page.getByTestId("records-report");
@@ -26,7 +29,7 @@ test("risk report sections and per-theme numbers", async ({ page }) => {
   await expect(section(page, "themes").locator("tbody tr")).toHaveCount(4);
 
   const order = await report(page).locator("[data-section]").evaluateAll((nodes) => nodes.map((n) => n.getAttribute("data-section")));
-  expect(order).toEqual(["header", "chart", "warnings", "themes", "summary", "snapshot", "news"]);
+  expect(order).toEqual(["header", "chart", "warnings", "themes", "summary", "current", "snapshot", "news"]);
 
   await expect(section(page, "header")).toContainText("Risk 5");
   await expect(section(page, "header")).toContainText("2025-06-10");
@@ -56,6 +59,57 @@ test("risk report sections and per-theme numbers", async ({ page }) => {
   await expect(section(page, "news")).toContainText("Fed holds rates");
   await expect(section(page, "news")).toContainText("AI capex slows");
   await expect(section(page, "news").getByTestId("macro-figure")).toContainText("Fed funds 2025-05 4.33");
+});
+
+test("current cards list every card of both decks, past the panel's ten", async ({ page }) => {
+  // ?cards=all sends every card; the panel shows ten and links here for the rest (final review I1).
+  const full = {
+    ...REPORT_ALERT,
+    crash: { as_of: "2025-06-10", total: 12, cards: Array.from({ length: 12 }, (_, i) => crashCard(i + 1)) },
+    candidates: { as_of: "2025-06-10", total: 11, cards: Array.from({ length: 11 }, (_, i) => candidateCard(i + 1)) },
+  };
+  await mockRiskRecords(page);
+  await page.route(/\/api\/v1\/risk\/alerts\/5(\?.*)?$/, (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ status: "ok", data: full, meta: {} }) }));
+  await page.goto("/alerts/risk/5", { waitUntil: "domcontentloaded" });
+  const current = section(page, "current");
+  await expect(current.locator("[data-deck=crash] tbody tr")).toHaveCount(12, { timeout: 60_000 });
+  await expect(current.locator("[data-deck=candidates] tbody tr")).toHaveCount(11);
+  await expect(current).toContainText("As of 2025-06-10");
+  const rows = await cells(page, "current");
+  // Deck, ticker, name, theme, from the high, then the high date (crash) or the correlation (at risk).
+  expect(rows[0]).toEqual(["Crash", "CR1", "Crash Stock 1", "Semiconductors", "-29.0%", "2026-09-25"]);
+  expect(rows[1][3], "^SOX is named from the alert's stint label").toBe("Philadelphia Semiconductor (SOX)");
+  expect(rows[11][1]).toBe("CR12");
+  expect(rows[12]).toEqual(["At risk", "CA1", "Candidate Stock 1", "AI infrastructure", "-0.7%", "SOX 0.85"]);
+  expect(rows[22][1]).toBe("CA11");
+});
+
+const okBody = (data: unknown) => ({ status: 200, contentType: "application/json", body: JSON.stringify({ status: "ok", data, meta: {} }) });
+
+test("a warning /latest does not know shows a dash, not a unitless number", async ({ page }) => {
+  await mockRiskRecords(page);
+  const detail = { ...REPORT_ALERT, warnings_at_start: [...REPORT_ALERT.warnings_at_start, { id: "W9", state: "on" as const, value: 2.75 }] };
+  await page.route(/\/api\/v1\/risk\/alerts\/5(\?.*)?$/, (route) => route.fulfill(okBody(detail)));
+  await page.goto("/alerts/risk/5", { waitUntil: "domcontentloaded" });
+  await expect(section(page, "warnings").locator("tbody tr")).toHaveCount(4, { timeout: 60_000 });
+  expect((await cells(page, "warnings"))[3]).toEqual(["W9", "On", "—"]);
+});
+
+test("surge report names the stalled and rules-changed end reasons", async ({ page }) => {
+  const ended = (id: number, end_reason: SurgeEventOut["end_reason"]): SurgeEventOut =>
+    ({ ...SURGE_HISTORY[2], id, end_reason });
+  const extra = [ended(31, "stalled"), ended(32, "rules_changed")];
+  await mockRiskRecords(page);
+  await page.route(/\/api\/v1\/risk\/surge\/history(\?.*)?$/, (route) => route.fulfill(okBody([...SURGE_HISTORY, ...extra])));
+  await page.route(/\/api\/v1\/risk\/surge\/events\/3[12](\?.*)?$/, (route) => {
+    const id = Number(new URL(route.request().url()).pathname.split("/").pop());
+    return route.fulfill(okBody({ ...SURGE_DETAILS[30], ...extra.find((event) => event.id === id) }));
+  });
+  for (const [id, label] of [[31, "Stalled"], [32, "Rules changed"]] as const) {
+    await page.goto(`/alerts/surge/${id}?kind=surge`, { waitUntil: "domcontentloaded" });
+    await expect(section(page, "end"), `event ${id}`).toHaveText(new RegExp(`${label}$`), { timeout: 60_000 });
+  }
 });
 
 test("summary sentence uses values, not 적중", async ({ page }) => {

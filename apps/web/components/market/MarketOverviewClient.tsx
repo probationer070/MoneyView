@@ -724,8 +724,17 @@ export function MarketOverviewClient({
   const [selectedIndex, setSelectedIndex] = useState<MarketIndexQuote | null>(null);
   // Risk UI spec §2-3: the strip opens the signal panel, an overlay that adds no height to the page.
   // It also opens by itself once per new alert id or surge banner start.
+  // An auto-open that arrives while the index detail modal is open waits until it closes, so two dialogs never stack.
   const [signalsOpen, setSignalsOpen] = useState(false);
-  useSignalAutoOpen(() => setSignalsOpen(true));
+  const [autoOpenPending, setAutoOpenPending] = useState(false);
+  useSignalAutoOpen(() => (selectedIndex ? setAutoOpenPending(true) : setSignalsOpen(true)));
+  const closeDetail = () => {
+    setSelectedIndex(null);
+    if (autoOpenPending) {
+      setAutoOpenPending(false);
+      setSignalsOpen(true);
+    }
+  };
 
   // Spec §1: the page column is the viewport minus AppShell's pads. The header and the tab bar keep
   // their height; the tab panel takes the rest and scrolls inside itself. A failed or empty index
@@ -758,7 +767,7 @@ export function MarketOverviewClient({
       </div>
 
       {signalsOpen ? <SignalPanel onClose={() => setSignalsOpen(false)} /> : null}
-      {selectedIndex ? <MarketDetailModal item={selectedIndex} onClose={() => setSelectedIndex(null)} /> : null}
+      {selectedIndex ? <MarketDetailModal item={selectedIndex} onClose={closeDetail} /> : null}
     </>
   );
 }

@@ -95,7 +95,7 @@ test("CSV download content", async ({ page }) => {
   const text = fs.readFileSync((await download.path())!, "utf8");
   expect(text.startsWith("﻿"), "a BOM so a spreadsheet reads the file as UTF-8").toBe(true);
   expect(text.slice(1).split("\r\n")).toEqual([
-    "ID,Origin,Start date,Release date,Days,Theme count,Themes,Warnings on,Primary theme,5D after,10D after,20D after,Max further drop in 10D,vs −5%",
+    "ID,Origin,Start date,Release date,Days,Theme count,Themes,Warnings on,Primary theme,5D after,10D after,20D after,Max further drop in 10D,Past -5 pct",
     "12,Live,2026-10-14,,4,3,\"Semiconductors, Philadelphia Semiconductor (SOX), AI infrastructure\",W1 W2 W3 W4,Semiconductors,,,,,Pending",
     "9,Computed from past data,2026-03-02,2026-03-20,14,1,Semiconductors,W1,Semiconductors,-3.1,-4.4,-2,-6.2,Beyond",
     "5,Live,2025-06-10,2025-06-30,14,2,\"AI infrastructure, Semiconductors\",W2 W5,AI infrastructure,-2.123456789,-7.4123456,1.5,-7.4123456,Beyond",
@@ -129,10 +129,24 @@ test("long lists mount 200 rows at a time; the CSV keeps every row", async ({ pa
   await kindButton(page, "Yesterday's gainers").click();
   await expect(rowsOf(page), "a filter change starts over at 200").toHaveCount(200);
   await expect(more).toBeVisible();
+  await kindButton(page, "All").click();
+  await expect(rowsOf(page), "returning to an earlier filter (A→B→A) starts over too").toHaveCount(200);
+  await kindButton(page, "Yesterday's gainers").click();
+  await expect(rowsOf(page)).toHaveCount(200);
 
   const [download] = await Promise.all([page.waitForEvent("download"), page.getByRole("button", { name: "Download CSV" }).click()]);
   // Header, 2,600 days, and the empty string after the last CRLF.
   expect(fs.readFileSync((await download.path())!, "utf8").split("\r\n")).toHaveLength(2602);
+});
+
+test("a report needs only its own list; another list failing does not block it", async ({ page }) => {
+  await mockRiskRecords(page);
+  await page.route(/\/api\/v1\/risk\/movers(\?.*)?$/, (route) =>
+    route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ detail: "boom" }) }));
+  await page.goto("/alerts/risk/5", { waitUntil: "domcontentloaded" });
+  await expect(report(page).locator('[data-section="header"]')).toContainText("Risk 5", { timeout: 60_000 });
+  await expect(report(page).locator('[data-section="themes"] tbody tr')).toHaveCount(4);
+  await expect(page.getByText("Records could not be loaded."), "the table still states its own failure").toBeVisible({ timeout: 30_000 });
 });
 
 test("the filters follow back/forward and nav links", async ({ page }) => {

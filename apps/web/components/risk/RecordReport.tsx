@@ -146,6 +146,8 @@ function RiskBody({ detail }: { detail: RiskAlertDetail }) {
   const name = useThemeLabels();
   const latest = useRiskLatest();
   const warning = (id: string) => latest.data?.warnings.find((w) => w.id === id);
+  // Card themes are named as the panel names them: the watchlist first, then the alert's own stint labels (^SOX).
+  const themeName = (id: string) => name(id, detail.themes.find((stint) => stint.theme === id)?.label);
   const cardName = (ticker: string) =>
     [...detail.crash.cards, ...detail.candidates.cards].find((card) => card.ticker === ticker)?.name ?? MISSING;
   const snapshot = [
@@ -163,7 +165,8 @@ function RiskBody({ detail }: { detail: RiskAlertDetail }) {
             return [
               known ? known.label[locale] : w.id,
               t(`risk.warnings.${w.state}`),
-              mono(known ? warningValue({ value: w.value, unit: known.unit }, locale) : formatNumber(w.value, "ratio", { locale })),
+              // Without /latest's unit the value cannot be read correctly, so it is not shown bare.
+              mono(known ? warningValue({ value: w.value, unit: known.unit }, locale) : MISSING),
             ];
           })}
         />
@@ -187,6 +190,42 @@ function RiskBody({ detail }: { detail: RiskAlertDetail }) {
       </Section>
       <Section name="summary">
         <SummarySentence themes={detail.themes} />
+      </Section>
+      <Section name="current" title={t("risk.report.currentCards")}>
+        <p className="type-small mb-2 text-[var(--ink-muted)]">
+          <FigureText parts={withFigures(t("risk.report.asOf"), { date: detail.crash.as_of ?? MISSING })} />
+        </p>
+        {detail.crash.cards.length + detail.candidates.cards.length === 0 ? (
+          <p className="type-small text-[var(--ink-muted)]">{t("risk.report.currentEmpty")}</p>
+        ) : (
+          <div className="space-y-3">
+            <div data-deck="crash">
+              <ReportTable
+                columns={["deck", "ticker", "name", "theme", "fromHigh20", "highDate"]}
+                figures={[4]}
+                rows={detail.crash.cards.map((card) => [
+                  t("risk.report.crash"), mono(card.ticker), card.name, themeName(card.theme), delta(card.drawdown_pct), mono(card.high_date ?? MISSING),
+                ])}
+              />
+            </div>
+            <div data-deck="candidates">
+              <ReportTable
+                columns={["deck", "ticker", "name", "theme", "fromHigh63", "corr"]}
+                figures={[4, 5]}
+                rows={detail.candidates.cards.map((card) => [
+                  t("risk.report.candidates"),
+                  mono(card.ticker),
+                  card.name,
+                  themeName(card.theme),
+                  delta(card.pct_from_high63),
+                  <span key="corr">
+                    {card.corr_with_name ?? card.corr_with ?? MISSING} {mono(formatNumber(card.corr, "ratio", { locale }))}
+                  </span>,
+                ])}
+              />
+            </div>
+          </div>
+        )}
       </Section>
       <Section name="snapshot" title={t("risk.report.snapshot")}>
         {snapshot.length === 0 ? (

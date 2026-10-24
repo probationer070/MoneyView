@@ -50,8 +50,8 @@ export function CrashCard({ card, theme }: { card: CrashCardOut; theme: string }
       </p>
       <Sparkline data={card.closes_30d} height={48} />
       <ul className="min-h-0 space-y-1">
-        {card.headlines.slice(0, 2).map((headline) => (
-          <li key={headline.url} lang={headline.lang} className="type-small truncate text-[var(--ink-secondary)]">{headline.title}</li>
+        {card.headlines.slice(0, 2).map((headline, index) => (
+          <li key={`${index}-${headline.url}`} lang={headline.lang} className="type-small truncate text-[var(--ink-secondary)]">{headline.title}</li>
         ))}
       </ul>
     </div>

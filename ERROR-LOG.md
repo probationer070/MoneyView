@@ -26,6 +26,26 @@ reveal that; only checking the code did.
 
 An entry states what was true when it was written. Nothing updates it on its own.
 
+## 2026-10-24: blocked site storage crashed every page through the locale hook
+
+Date: 2026-10-24 (risk UI final whole-branch review, I3). Defect pre-existing on renewal; fixed on feat/risk-ui.
+Command: a browser with site data blocked (Chrome or Firefox "block all site data", some private or embedded contexts), opening any page, "/" included.
+Failure: the `localStorage` accessor throws `SecurityError`. `useLocale`/`useT` read it during render, so every page threw and rendered nothing. `risk-panel.spec.ts` "auto-open every time when storage throws" passed anyway, because its storage stub let the locale key through ("Other keys (the locale) keep working"). The suite certified a guarantee that a real blocked-storage browser never got.
+Root cause: `apps/web/lib/i18n/locale.ts` called `window.localStorage.getItem` in `getSnapshot` and `setItem` in `setLocale` without try/catch.
+Fix: in this fix wave. The read falls back to null, so the locale comes from the browser language. A failed write is ignored and the listeners still fire, so the switch holds for the session. The panel spec's stub now throws for every key.
+Files changed: `apps/web/lib/i18n/locale.ts`, `apps/web/tests/e2e/risk-panel.spec.ts`.
+Prevention: the storage test throws for every key. A stub that exempts a key proves nothing about that key's readers.
+
+## 2026-10-24: a records column label broke the i18n model test, caught only by the full suite
+
+Date: 2026-10-24 (risk UI Task 7 full Playwright run; ruling U6). Introduced by 8fc1fcf on feat/risk-ui.
+Command: `npx playwright test` (full suite) in apps/web.
+Failure: `i18n-model.spec.ts:23` "every ko leaf and every label half is non-empty" failed on `pastMinus5 English half`. The run showed 796 passed and 1 failed.
+Root cause: 8fc1fcf added `LABELS.pastMinus5 = ["기준 −5%", "vs −5%"]`. The English half has U+2212 and `%`, and English label halves must match `/^[A-Za-z0-9 .&/-]+$/`. Task 5 ran only its own specs, so the model test did not run until the full suite did. The test stops at its first failing label, so the fix uncovered two more breaks behind it. `rank1`..`rank5` (8fc1fcf) had the English "#1".."#5", and `#` is not allowed. `rsi` (20954be) had the Korean half "RSI", with no Hangul.
+Fix: in this fix wave. `pastMinus5` English is now "Past -5 pct", `rank1`..`rank5` English is "No. 1".."No. 5", and `rsi` Korean is "RSI 지수". The regex is unchanged, since a test is never relaxed. The CSV header expectations in `records-csv-model.spec.ts` and `risk-records.spec.ts` follow these labels.
+Files changed: `apps/web/lib/i18n/labels.ts`, `apps/web/tests/e2e/records-csv-model.spec.ts`, `apps/web/tests/e2e/risk-records.spec.ts`.
+Prevention: a task that adds or edits a `LABELS` entry runs `i18n-model.spec.ts` with its own specs.
+
 ## 2026-10-19: an unsettled bar for today marks today covered, so the settled bar is never fetched
 
 Date: 2026-10-19 (risk-engine final whole-branch review). Defect pre-existing on renewal; found by the final review, fixed on feat/risk-engine.

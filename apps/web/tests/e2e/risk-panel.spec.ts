@@ -95,16 +95,13 @@ test("auto-open once per surge banner_since; yesterday's gainers never open it",
 test("auto-open every time when storage throws", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
-  // Private mode: the signal keys cannot be read or written. Other keys (the locale) keep working.
+  // Blocked site storage: no key can be read or written, the locale's included (final review I3).
   await page.addInitScript(() => {
-    const { getItem, setItem } = Storage.prototype;
-    Storage.prototype.getItem = function (key: string) {
-      if (key.startsWith("mv.risk.")) throw new DOMException("blocked", "SecurityError");
-      return getItem.call(this, key);
+    Storage.prototype.getItem = function () {
+      throw new DOMException("blocked", "SecurityError");
     };
-    Storage.prototype.setItem = function (key: string, value: string) {
-      if (key.startsWith("mv.risk.")) throw new DOMException("blocked", "SecurityError");
-      return setItem.call(this, key, value);
+    Storage.prototype.setItem = function () {
+      throw new DOMException("blocked", "SecurityError");
     };
   });
   await load(page, "risk", { seen: false });
@@ -186,6 +183,56 @@ test("news column shows figures, shortfall and note", async ({ page }) => {
   await expect(column.getByTestId("news-shortfall")).toHaveText("2 short");
   await expect(column.getByTestId("news-note")).toHaveText("Recent collection failed");
   await expect(panel(page).getByRole("link", { name: "View records ›" })).toHaveAttribute("href", `/alerts/risk/${ALERT.id}`);
+});
+
+test("an auto-open that lands while the index detail is open waits for it to close", async ({ page }) => {
+  // Final review M7: the 5-minute /latest refetch brought a new alert and stacked the panel over the index modal.
+  await page.clock.install();
+  await mockMarketPageApi(page);
+  await mockRisk(page, "neutral");
+  await markSignalsSeen(page);
+  let latest: RiskLatest = LATEST.neutral;
+  await page.route("**/api/v1/risk/latest", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ status: "ok", data: latest, meta: {} }) }));
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await expect(strip(page)).not.toHaveAttribute("data-state", "loading", { timeout: 60_000 });
+  await expectNoAutoOpen(page);
+
+  await page.getByRole("button", { name: "Open detail for S&P 500" }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(1, { timeout: 60_000 });
+  latest = { ...LATEST.risk, alert: { ...ALERT, id: 77 } };
+  await page.clock.fastForward("05:30");
+  await expect(strip(page)).toHaveAttribute("data-state", "risk", { timeout: 30_000 });
+  await page.waitForTimeout(750);
+  await expect(page.getByRole("dialog"), "the panel does not stack over the index detail").toHaveCount(1);
+  await expect(page.getByRole("dialog").getByRole("tablist")).toHaveCount(0);
+
+  await page.keyboard.press("Escape");
+  await expect(panel(page).getByRole("tablist")).toBeVisible();
+  await expect(page.getByRole("dialog")).toHaveCount(1);
+});
+
+test("headlines and news without a URL keep distinct keys", async ({ page }) => {
+  // The API sends url="" when it has none (final review M5); two such items once collided on the key "".
+  const keyErrors: string[] = [];
+  page.on("console", (message) => {
+    if (message.type() === "error" && message.text().includes("same key")) keyErrors.push(message.text());
+  });
+  const noUrl = (title: string): NewsItemOut => ({ ...news(title, "macro", "rates"), url: "" });
+  const card = {
+    ...crashCard(1),
+    headlines: [
+      { title: "First untitled wire", url: "", published_date: "2026-10-18", lang: "en" },
+      { title: "Second untitled wire", url: "", published_date: "2026-10-17", lang: "en" },
+    ],
+  };
+  await openPanel(page, {
+    ...LATEST.risk,
+    alert: { ...ALERT, crash: { as_of: "2026-10-19", total: 1, cards: [card] }, news: [noUrl("Rates note one"), noUrl("Rates note two")] },
+  });
+  await expect(front(page).locator("li")).toHaveText(["First untitled wire", "Second untitled wire"]);
+  await expect(panel(page).getByTestId("news-column").getByRole("link")).toHaveText(["Rates note one", "Rates note two"]);
+  expect(keyErrors).toEqual([]);
 });
 
 test("warnings table when no alert", async ({ page }) => {
