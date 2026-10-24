@@ -10,7 +10,6 @@ Like the other risk sweeps, a feed failure is logged and skipped, and an Asserti
 from __future__ import annotations
 
 import re
-import time
 from dataclasses import dataclass
 from datetime import date, datetime
 from functools import lru_cache
@@ -23,8 +22,8 @@ from pydantic import BaseModel, ConfigDict, ValidationError, model_validator
 
 from apps.api.core.logger import setup_logger
 from apps.api.models.schemas import NewsArticle, SentimentEnum
-from apps.api.routes.news import NEWS_CRAWL_DELAY_SECONDS
 from apps.api.services.db import get_db
+from apps.api.services.news_feed import NewsBlocked
 from apps.api.services.news_service import NewsService
 from apps.api.services.risk import store
 from apps.api.services.risk.constants import RISK_FRED_SERIES
@@ -38,7 +37,6 @@ from packages.core_finance.risk_signals.warnings import cpi_release, daily_relea
 logger = setup_logger(__name__)
 
 QUERIES_PATH = Path(__file__).with_name("news_queries.yaml")
-FEED_LIMIT = 10
 
 
 class _Strict(BaseModel):
@@ -104,16 +102,17 @@ def _queries() -> NewsQueries:
 # ---------------------------------------------------------------- sweep
 
 
-def _feed_jobs(tickers: Sequence[str]):
+def _feed_jobs(tickers: Sequence[str], include_topics: bool = True):
     """(label, lang, query, ticker, topic) for every feed, in sweep order."""
     q = _queries()
-    for topic in q.topics:
-        for lang in ("en", "ko"):
-            for query in getattr(topic.queries, lang):
-                yield f"macro:{topic.id}:{lang}", lang, query, "", f"macro:{topic.id}"
-    for theme, text in q.themes.items():
-        for lang in ("en", "ko"):
-            yield f"theme:{theme}:{lang}", lang, getattr(text, lang), "", f"theme:{theme}"
+    if include_topics:
+        for topic in q.topics:
+            for lang in ("en", "ko"):
+                for query in getattr(topic.queries, lang):
+                    yield f"macro:{topic.id}:{lang}", lang, query, "", f"macro:{topic.id}"
+        for theme, text in q.themes.items():
+            for lang in ("en", "ko"):
+                yield f"theme:{theme}:{lang}", lang, getattr(text, lang), "", f"theme:{theme}"
     for raw in tickers:
         ticker = raw.upper()
         yield f"{ticker}:en", "en", None, ticker, ""
@@ -125,11 +124,15 @@ def sweep_news(
     now: datetime,
     *,
     crawler=None,
-    sleep=time.sleep,
     tickers: Sequence[str] = (),
+    include_topics: bool = True,
 ) -> SweepReport:
     """Fetch and store every topic, theme and given-ticker feed. `attempted` counts feeds,
-    `fetched` the feeds that returned articles, `failed` the labels of feeds that raised."""
+    `fetched` the feeds that returned articles, `failed` the labels of feeds that raised.
+
+    Spacing is the pacer's job (bulk kind). A block or daily cap ends the sweep: the feed
+    that hit it and every later feed count as failed, and `news_swept_at` stays unset so the
+    next cycle retries."""
     if crawler is None:
         from apps.api.services.webscrap.Crawler.StockNewsCrawler import StockNewsCrawler
 
@@ -137,14 +140,19 @@ def sweep_news(
     service = NewsService()
     attempted = fetched = 0
     failed: list[str] = []
-    for label, lang, query, ticker, topic in _feed_jobs(tickers):
-        if attempted:
-            sleep(NEWS_CRAWL_DELAY_SECONDS)
+    jobs = list(_feed_jobs(tickers, include_topics))
+    for index, (label, lang, query, ticker, topic) in enumerate(jobs):
         attempted += 1
         try:
-            items = crawler.crawl(ticker=ticker, company_name="", limit=FEED_LIMIT, offset=0, lang=lang, query=query)
+            items = crawler.crawl(ticker=ticker, company_name="", lang=lang, query=query, kind="bulk")
         except AssertionError:
             raise
+        except NewsBlocked as error:
+            logger.warning("risk.sweep_news_blocked feed=%s error=%s", label, error)
+            remaining = [job[0] for job in jobs[index:]]
+            failed.extend(remaining)
+            attempted += len(remaining) - 1
+            return SweepReport(attempted, fetched, failed)
         except Exception as error:  # noqa: BLE001 - one feed must not stop the sweep
             logger.warning("risk.sweep_news_failed feed=%s error=%s", label, error)
             failed.append(label)
@@ -158,6 +166,7 @@ def sweep_news(
                 url=item.url or "",
                 source=item.source or "",
                 published_date=item.date or "",
+                published_at=getattr(item, "published_at", None),
                 sentiment=SentimentEnum.neutral,
                 importance=1,
                 lang=lang,

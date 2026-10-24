@@ -1,108 +1,88 @@
-"""Acquiring news for the whole watchlist, without looking like a bot.
+"""Acquiring news for the whole watchlist goes through the Google News pacer.
 
-Two separate defects meet here.
-
-`MAX_ACQUIRE_TICKERS = 100` is enforced on both `/news/feed/bulk` and `/news/acquire`,
-and the watchlist holds 139 rows. So switching the tile grid to All exceeded the cap and
-both endpoints returned 400 -- the read as well as the refresh, which is why the grid
-reported "Could not load news for the visible stocks" rather than a refresh failure. The
-client now sends the tickers in chunks, so the cap constrains one request rather than the
-feature.
-
-Pacing is the second. The batch was already sequential by decision, at a measured
-0.8-1.0s per crawl, but back-to-back requests to one provider across 139 tickers is the
-shape that gets a client classified as automated. A delay is inserted between crawls that
-actually reached the provider -- and deliberately not after the ones the hourly freshness
-boundary skipped, because a skip made no request and pausing after it would pay the whole
-cost of pacing while buying none of its protection.
+Spacing, the block stop and the daily cap live in the pacer (apps/api/services/news_feed),
+so the route no longer sleeps. What the route still owns: asking as an interactive caller,
+and, once the pacer reports a block, not asking again for the rest of the batch.
+Each docstring names the mutation its test catches.
 """
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import pytest
 
 from apps.api.routes import news as news_routes
+from apps.api.services import db as db_service
+from apps.api.services.news_feed import NewsBlocked
+from apps.api.services.news_feed.rss import FeedItem
+
+NOW = datetime(2026, 10, 25, 14, 30, tzinfo=timezone.utc)
 
 
-@pytest.fixture
-def _sleeps(monkeypatch):
-    recorded: list[float] = []
-    monkeypatch.setattr(news_routes.time, "sleep", lambda seconds: recorded.append(seconds))
-    monkeypatch.setattr(news_routes, "NEWS_CRAWL_DELAY_SECONDS", 0.25)
-    return recorded
+def _seed(names: dict[str, str]) -> None:
+    with db_service.get_db() as conn:
+        for ticker, name in names.items():
+            conn.execute(
+                "INSERT INTO watchlist (ticker, name, sector, group_name, weight)"
+                " VALUES (?, ?, '', 'core', 0.0)",
+                (ticker, name),
+            )
 
 
-@pytest.fixture
-def _watchlist(monkeypatch):
-    names = {"AAA": "Alpha", "BBB": "Beta", "CCC": "Gamma"}
-    monkeypatch.setattr(news_routes, "_watchlist_names", lambda: names)
-    return names
+def _feed_item(title: str) -> FeedItem:
+    return FeedItem(title=title, url=f"https://x/{title}", source="Reuters",
+                    published_date="2026-10-25", published_at="2026-10-25T10:00:00Z", guid=title)
 
 
-def _outcomes(monkeypatch, by_ticker: dict[str, str]):
-    """Drive acquire_point_in_time's verdict per ticker without touching a provider."""
+def test_acquire_uses_interactive_kind(monkeypatch):
+    """Catches a user-pressed refresh that queues as bulk behind a sweep (or a hard-coded kind)."""
+    kinds: list[str] = []
 
-    class _Outcome:
-        def __init__(self, reason: str) -> None:
-            self.reason = reason
-            self.fetched_rows = 1 if reason == "acquired" else 0
+    def fake_google_news(query, lang, kind, **_):
+        kinds.append(kind)
+        return [_feed_item("one")]
 
-    def fake_acquire(data_class, ticker, **_):
-        return _Outcome(by_ticker[ticker])
+    monkeypatch.setattr(
+        "apps.api.services.webscrap.Crawler.StockNewsCrawler.google_news", fake_google_news)
+    _seed({"AAA": "Alpha"})
 
-    monkeypatch.setattr(news_routes, "acquire_point_in_time", fake_acquire)
-    monkeypatch.setattr(news_routes, "read_state", lambda *a, **k: type("S", (), {"detail": None})())
+    results = news_routes.acquire_news_batch(["AAA"], now=NOW)
 
-
-def test_a_delay_separates_crawls_that_reached_the_provider(monkeypatch, _sleeps, _watchlist):
-    _outcomes(monkeypatch, {"AAA": "acquired", "BBB": "acquired", "CCC": "acquired"})
-
-    news_routes.acquire_news_batch(["AAA", "BBB", "CCC"], now=datetime.now(timezone.utc))
-
-    # Between crawls, not after the last one: three fetches need two gaps.
-    assert _sleeps == [0.25, 0.25]
+    assert kinds == ["interactive"]
+    assert results == [{"ticker": "AAA", "status": "acquired", "articles": 1, "detail": None}]
 
 
-def test_a_skipped_ticker_costs_no_delay(monkeypatch, _sleeps, _watchlist):
-    """The hourly boundary skips most tickers, and a skip made no request to pace."""
-    _outcomes(monkeypatch, {"AAA": "fresh", "BBB": "fresh", "CCC": "fresh"})
+def test_block_fails_the_rest_without_fetching():
+    """Catches a batch that keeps calling the fetcher after the pacer reported a block,
+    and one that reports the blocked ticker (or a later one) as anything but failed."""
+    _seed({"AAA": "Alpha", "BBB": "Beta", "CCC": "Gamma", "DDD": "Delta"})
+    retry_after = datetime(2026, 10, 26, 0, 0, tzinfo=timezone.utc)
+    calls: list[str] = []
 
-    news_routes.acquire_news_batch(["AAA", "BBB", "CCC"], now=datetime.now(timezone.utc))
+    def fetcher(ticker, company_name=""):
+        calls.append(ticker)
+        if ticker == "BBB":
+            raise NewsBlocked("blocked", retry_after)
+        return []
 
-    assert _sleeps == []
+    results = news_routes.acquire_news_batch(["AAA", "BBB", "CCC", "DDD"], now=NOW, fetcher=fetcher)
 
-
-def test_only_the_gaps_between_real_crawls_are_paced(monkeypatch, _sleeps, _watchlist):
-    _outcomes(monkeypatch, {"AAA": "acquired", "BBB": "fresh", "CCC": "acquired"})
-
-    news_routes.acquire_news_batch(["AAA", "BBB", "CCC"], now=datetime.now(timezone.utc))
-
-    assert _sleeps == [0.25]
-
-
-def test_a_failed_crawl_is_paced_like_a_successful_one(monkeypatch, _sleeps, _watchlist):
-    """A failure still reached the provider, so it still counts toward the request rate.
-
-    Two pauses, not one: the pause before CCC is paid before the call that reveals CCC is
-    fresh. Pacing cannot know the answer in advance without duplicating the boundary
-    logic, and paying one unnecessary pause is cheaper than that duplication -- so this
-    asserts what the code does rather than the tidier number.
-    """
-    _outcomes(monkeypatch, {"AAA": "failed", "BBB": "acquired", "CCC": "fresh"})
-
-    news_routes.acquire_news_batch(["AAA", "BBB", "CCC"], now=datetime.now(timezone.utc))
-
-    assert _sleeps == [0.25, 0.25]
+    assert calls == ["AAA", "BBB"]
+    detail = f"blocked until {retry_after.isoformat()}"
+    assert [(r["ticker"], r["status"], r["detail"]) for r in results] == [
+        ("AAA", "empty", None),
+        ("BBB", "failed", detail),
+        ("CCC", "failed", detail),
+        ("DDD", "failed", detail),
+    ]
 
 
-def test_one_ticker_is_never_paced(monkeypatch, _sleeps, _watchlist):
-    _outcomes(monkeypatch, {"AAA": "acquired"})
-
-    news_routes.acquire_news_batch(["AAA"], now=datetime.now(timezone.utc))
-
-    assert _sleeps == []
+def test_routes_news_has_no_sleep():
+    """Catches a sleep put back in the route: pacing belongs to the pacer alone."""
+    source = Path(news_routes.__file__).read_text(encoding="utf-8")
+    assert "time.sleep" not in source
 
 
 def test_the_cap_still_guards_a_single_request():

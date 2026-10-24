@@ -11,6 +11,7 @@ The crawler is injected so this is testable without a network.
 from __future__ import annotations
 
 from apps.api.models.schemas import NewsArticle, SentimentEnum
+from apps.api.services.news_feed.pacer import Kind
 
 
 def _default_crawler():
@@ -24,10 +25,11 @@ def fetch_news(
     company_name: str = "",
     *,
     crawler=None,
-    limit: int = 10,
+    limit: int | None = None,
+    kind: Kind = "interactive",
 ) -> list[NewsArticle]:
     handle = crawler if crawler is not None else _default_crawler()
-    raw = handle.crawl(ticker=ticker, company_name=company_name, limit=limit, offset=0)
+    raw = handle.crawl(ticker=ticker, company_name=company_name, limit=limit, offset=0, kind=kind)
 
     normalized_ticker = ticker.upper()
     articles: list[NewsArticle] = []
@@ -49,6 +51,7 @@ def fetch_news(
                 published_date=str(getattr(item, "date", "") or ""),
                 sentiment=SentimentEnum.neutral,
                 importance=1,
+                published_at=getattr(item, "published_at", None),
             )
         )
     return articles

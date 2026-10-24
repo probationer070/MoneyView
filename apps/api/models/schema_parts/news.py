@@ -20,6 +20,7 @@ class NewsArticle(BaseModel):
     importance: int = 1
     lang: str = "en"
     topic: str = ""
+    published_at: Optional[str] = None
 
 
 class NewsAcquireRequest(BaseModel):

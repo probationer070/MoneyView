@@ -1,6 +1,5 @@
 from typing import List, Optional, Dict
-import feedparser
-import urllib.parse
+from apps.api.services.news_feed import google_news
 from datetime import datetime
 from ..DAO.Economic import RiskNews
 import logging
@@ -73,30 +72,26 @@ class RegulationCrawler:
         
         for keyword in search_targets:
             try:
-                # 검색어를 URL 인코딩 (한글 검색 대응)
-                encoded_search = urllib.parse.quote(keyword)
-                # 구글 뉴스 RSS URL (hl=ko: 한국어, gl=KR: 한국 지역)
-                url = f"https://news.google.com/rss/search?q={encoded_search}&hl=ko&gl=KR&ceid=KR:ko"
-                
-                # RSS 피드 파싱
-                feed = feedparser.parse(url)
-                
+                # 구글 뉴스 RSS (한국어 판) - 모든 요청은 pacer를 거친다
+                items = google_news(keyword, "ko", "interactive")
+
                 # 키워드별 상위 limit개만 수집
-                for entry in feed.entries[:limit]:
+                for entry in items[:limit]:
                     title = entry.title
-                    link = entry.link
-                    pub_date = entry.published if hasattr(entry, 'published') else datetime.now().strftime('%Y-%m-%d')
+                    link = entry.url
+                    pub_date = entry.published_date or datetime.now().strftime('%Y-%m-%d')
 
                     # 이미 크롤링된 URL인지 확인
                     if link in crawled_urls:
                         continue
                     
                     news = RiskNews(
-                        source="Google News",
+                        source=entry.source or "Google News",
                         title=title,
                         url=link,
                         date=pub_date,
-                        matched_keywords=[keyword]
+                        matched_keywords=[keyword],
+                        published_at=entry.published_at,
                     )
                     results.append(news)
                     crawled_urls.add(link)  # Add URL to the set

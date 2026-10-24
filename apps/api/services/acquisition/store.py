@@ -88,8 +88,8 @@ def save_news(ticker: str, articles: list[NewsArticle]) -> None:
     with get_db() as conn:
         conn.executemany(
             """INSERT OR IGNORE INTO news
-                   (ticker, headline, url, source, published_date, sentiment, importance, hash)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                   (ticker, headline, url, source, published_date, sentiment, importance, hash, published_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             [
                 (
                     ticker,
@@ -103,6 +103,7 @@ def save_news(ticker: str, articles: list[NewsArticle]) -> None:
                     # news_service's hash, so the two could drift -- and both hashed the
                     # headline, which Google News rewrites between fetches.
                     news_identity_hash(ticker, article.url),
+                    article.published_at,
                 )
                 for article in articles
             ],

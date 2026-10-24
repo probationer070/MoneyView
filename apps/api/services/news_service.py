@@ -187,12 +187,12 @@ class NewsService:
                 conn.execute(
                     """INSERT OR IGNORE INTO news
                        (ticker, headline, url, source, published_date,
-                        sentiment, importance, hash, lang, topic)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                        sentiment, importance, hash, lang, topic, published_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (article.ticker, article.headline, article.url,
                      article.source, article.published_date,
                      article.sentiment.value, article.importance, h,
-                     article.lang, article.topic),
+                     article.lang, article.topic, article.published_at),
                 )
             return True
         except Exception as exc:
@@ -219,6 +219,7 @@ class NewsService:
                     url=getattr(r, "url", ""),
                     source=getattr(r, "source", "Web"),
                     published_date=getattr(r, "date", ""),
+                    published_at=getattr(r, "published_at", None),
                 )
                 self.save_article(art)
                 saved.append(art)
@@ -246,8 +247,9 @@ class NewsService:
                     ticker=ticker.upper(),
                     headline=getattr(item, "title", str(item)),
                     url=getattr(item, "url", ""),
-                    source=getattr(item, "source", "Google News"),
+                    source=getattr(item, "source", ""),
                     published_date=getattr(item, "date", ""),
+                    published_at=getattr(item, "published_at", None),
                     sentiment=SentimentEnum.neutral,
                     importance=1,
                 )
