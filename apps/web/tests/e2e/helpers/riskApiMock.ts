@@ -1,7 +1,7 @@
 import type { Page } from "@playwright/test";
 import type {
-  CandidateCardOut, CrashCardOut, DeckOut, MoverOut, RiskAlertDetail, RiskAlertSummary, RiskLatest, RiskWarning,
-  SurgeLatestOut, SurgeThemeOut,
+  CandidateCardOut, CrashCardOut, DeckOut, MoverOut, MoversDayOut, RiskAlertDetail, RiskAlertSummary, RiskLatest,
+  RiskWarning, SurgeEventOut, SurgeLatestOut, SurgeThemeOut,
 } from "../../../../../packages/shared-types";
 import { cloneFixture } from "./mockUtils";
 
@@ -180,4 +180,62 @@ export async function markSignalsSeen(page: Page) {
     window.localStorage.setItem(`mv.risk.seen.alert:${alertId}`, "1");
     window.localStorage.setItem(`mv.risk.seen.surge:${since}`, "1");
   }, [String(ALERT.id), String(SURGE_BANNER.banner_since)]);
+}
+
+// Records page fixtures (/alerts, plan Task 5). The API filters to the current rules version, so every row here is v3.
+const OPEN_ALERT_SUMMARY: RiskAlertSummary = {
+  id: ALERT.id, origin: "live", rules_version: "v3", status: "open", start_date: "2026-10-14", release_date: null,
+  days: 4, trigger_themes: ["semis", "^SOX", "ai_infra"], theme_count: 3, warnings_at_start: ["W1", "W2", "W3", "W4"],
+  primary_theme: "semis", fwd5: null, fwd10: null, fwd20: null, useful: null, w1_proxy: false, max_dd10: null,
+  trigger_labels: [
+    { id: "semis", label: { ko: "반도체", en: "Semiconductors" } },
+    { id: "^SOX", label: { ko: "필라델피아 반도체(SOX)", en: "Philadelphia Semiconductor (SOX)" } },
+    { id: "ai_infra", label: { ko: "AI 인프라", en: "AI infrastructure" } },
+  ],
+};
+
+/** An older live alert with long, unrounded figures, so the CSV can prove it does not round. */
+export const OLD_ALERT_SUMMARY: RiskAlertSummary = {
+  id: 5, origin: "live", rules_version: "v3", status: "released", start_date: "2025-06-10", release_date: "2025-06-30",
+  days: 14, trigger_themes: ["ai_infra", "semis"], theme_count: 2, warnings_at_start: ["W2", "W5"],
+  primary_theme: "ai_infra", fwd5: -2.123456789, fwd10: -7.4123456, fwd20: 1.5, useful: true, w1_proxy: false,
+  max_dd10: -7.4123456,
+  trigger_labels: [
+    { id: "ai_infra", label: { ko: "AI 인프라", en: "AI infrastructure" } },
+    { id: "semis", label: { ko: "반도체", en: "Semiconductors" } },
+  ],
+};
+
+/** GET /history, newest first as the API sends it. LAST_ALERT (id 9) is the backfill-origin row. */
+export const HISTORY: RiskAlertSummary[] = [OPEN_ALERT_SUMMARY, LAST_ALERT, OLD_ALERT_SUMMARY];
+
+const SURGE_COMPONENTS = { magnitude_z: 2.4, accel_pct: 0.31, accel_rank: 0.97, breadth_pct: 80, rsi: 68 };
+const surgeEvent = (id: number, theme: string, en: string, ko: string, rest: Partial<SurgeEventOut>): SurgeEventOut => ({
+  id, origin: "live", rules_version: "v3", theme, label: { ko, en }, start_date: "2026-10-16", end_date: null,
+  end_reason: null, shown: true, components: SURGE_COMPONENTS, overheated_on: null, fwd5: null, fwd10: null,
+  fwd20: null, max_runup10: null, leaders: [], ...rest,
+});
+
+/** GET /surge/history: two open events (one never on the banner) and an ended backfill event. */
+export const SURGE_HISTORY: SurgeEventOut[] = [
+  surgeEvent(42, "semis", "Semiconductors", "반도체", {}),
+  surgeEvent(41, "robotics", "Robotics", "로봇", { shown: false }),
+  surgeEvent(30, "ai_infra", "AI infrastructure", "AI 인프라", {
+    origin: "backfill", start_date: "2026-05-04", end_date: "2026-05-20", end_reason: "below_ema",
+    overheated_on: "2026-05-12", fwd5: 4.25, fwd10: 8.5, fwd20: -1.75, max_runup10: 9.3333333,
+  }),
+];
+
+/** GET /movers?from=2016-01-04: one row per day, oldest first as the API sends it. */
+export const MOVERS_DAYS: MoversDayOut[] = [
+  { date: "2026-03-03", items: MOVERS.map((m) => ({ ...m, ticker: `OM${m.rank}`, name: `Old Mover ${m.rank}`, return_pct: 20.125 - m.rank })) },
+  { date: "2026-10-16", items: MOVERS },
+  { date: "2026-10-19", items: MOVERS.map((m) => ({ ...m, ticker: `NM${m.rank}`, name: `New Mover ${m.rank}` })) },
+];
+
+/** Answers the three list calls the records page makes once each. */
+export async function mockRiskRecords(page: Page) {
+  await page.route(/\/api\/v1\/risk\/history(\?.*)?$/, (route) => route.fulfill(ok(cloneFixture(HISTORY))));
+  await page.route(/\/api\/v1\/risk\/surge\/history(\?.*)?$/, (route) => route.fulfill(ok(cloneFixture(SURGE_HISTORY))));
+  await page.route(/\/api\/v1\/risk\/movers(\?.*)?$/, (route) => route.fulfill(ok(cloneFixture(MOVERS_DAYS))));
 }
