@@ -36,14 +36,22 @@ function readSessionCache<T>(key: string): T | null {
     if (!rawValue) return null;
     return JSON.parse(rawValue) as T;
   } catch {
-    window.sessionStorage.removeItem(key);
+    try {
+      window.sessionStorage.removeItem(key);
+    } catch {
+      // Blocked storage: there is nothing to clear.
+    }
     return null;
   }
 }
 
 function writeSessionCache<T>(key: string, value: T) {
   if (typeof window === "undefined") return;
-  window.sessionStorage.setItem(key, JSON.stringify(value));
+  try {
+    window.sessionStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // Session cache is an optional optimization layer.
+  }
 }
 
 function formatDateTime(value: string | null) {

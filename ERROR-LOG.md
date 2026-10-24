@@ -26,6 +26,26 @@ reveal that; only checking the code did.
 
 An entry states what was true when it was written. Nothing updates it on its own.
 
+## 2026-10-25: the /alerts paper sweep read a colour halfway through a transition
+
+Date: 2026-10-25 (full Playwright gate for fix/blocked-storage-followups). It also fails on renewal 6c45855, although it passed in the #76 gate.
+Command: `npx playwright test tests/e2e/paper-sweep.spec.ts -g alerts`.
+Failure: the test reported `button.inline-flex... color: rgb(90, 90, 88)` and border colours that are not tokens. The values changed between runs (rgb(116, 116, 114) on another run).
+Root cause: the "Download CSV" button mounts disabled after `networkidle`, while the dev server is still compiling. It turns enabled once the mocked records load, and `transition-colors` (0.2 s) fades it from `--ink-disabled` to its enabled colours. Reduced motion does not stop `transition-colors`. The sweep sampled computed colours straight after `main` became visible and the fonts were ready, so it read a blended colour. Whether it lost that race depended on compile timing, not on the code.
+Fix: before sampling, the sweep now waits for every finite `document.getAnimations()` to settle; infinite animations are skipped. Mutation-checked: an inline `#123456` span on /alerts still fails the sweep.
+Files changed: `apps/web/tests/e2e/paper-sweep.spec.ts`.
+Prevention: a computed-style test must wait for transitions to finish before it reads colours. `networkidle` says nothing about CSS transitions.
+
+## 2026-10-25: blocked site storage still crashed /portfolio and the /detail workbenches
+
+Date: 2026-10-25 (risk UI ③ follow-up sweep of every storage call site). Defect pre-existing on renewal; fixed on fix/blocked-storage-followups.
+Command: a browser with site data blocked, opening `/portfolio` or `/detail/AAPL`.
+Failure: `/portfolio` threw an uncaught `SecurityError` and rendered nothing. On `/detail`, the DCF and diagnostics workbenches fell back to their error boundaries ("DCF Diagnostics Error", "Corporate Diagnostics Missing"). The 2026-10-24 locale fix covered only the locale hook, and only "/" had a blocked-storage test.
+Root cause: three files kept their own copies of the storage helpers: `app/portfolio/page.tsx`, `components/workbenches/DCFWorkbench.tsx` and `DiagnosticWorkbench.tsx`. Each read helper's catch block called `removeItem` without a guard, so a failed read threw a second time. Every write (`setItem`, including the portfolio date-filter persist effect) had no guard at all. The corporate page's own helpers in `corporateUtils.ts` were already guarded.
+Fix: every `removeItem` and `setItem` in those helpers is guarded, matching `corporateUtils.ts`. Added `tests/e2e/blocked-storage.spec.ts`, which throws for every key and every method. Its mutation matrix catches each unguarded read path and the portfolio persist effect, plus the DCF write after a refresh. The diagnostics write and the portfolio calculation cache writes are not driven by the test.
+Files changed: `apps/web/app/portfolio/page.tsx`, `apps/web/components/workbenches/DCFWorkbench.tsx`, `apps/web/components/workbenches/DiagnosticWorkbench.tsx`, `apps/web/tests/e2e/blocked-storage.spec.ts`, `apps/web/tests/e2e/helpers/corporatePageMock.ts`.
+Prevention: when a storage defect is fixed, grep every `localStorage`/`sessionStorage` call site in `apps/web`, not only the one that crashed. A copied helper carries the same defect wherever it was pasted.
+
 ## 2026-10-24: blocked site storage crashed every page through the locale hook
 
 Date: 2026-10-24 (risk UI final whole-branch review, I3). Defect pre-existing on renewal; fixed on feat/risk-ui.
