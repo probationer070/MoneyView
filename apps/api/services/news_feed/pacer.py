@@ -133,10 +133,17 @@ class Pacer:
     def status(self) -> PacerStatus:
         now = self._clock()
         until = self._blocked_until(now)
+        today = self._requests_today(now)
+        if until is not None:
+            reason: str | None = get_state(BLOCKED_REASON_KEY)
+        elif today >= DAILY_CAP:
+            until, reason = next_utc_midnight(now), "daily_limit"
+        else:
+            reason = None
         return PacerStatus(
             blocked_until=until.isoformat() if until else None,
-            blocked_reason=get_state(BLOCKED_REASON_KEY) if until else None,
-            requests_today=self._requests_today(now),
+            blocked_reason=reason,
+            requests_today=today,
             daily_cap=DAILY_CAP,
         )
 

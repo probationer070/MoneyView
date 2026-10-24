@@ -35,14 +35,16 @@ class FakeClock:
 
 @pytest.fixture
 def pacer_env():
-    def build(clock=None, responses=None, fetch=None, cap_already=0):
+    def build(clock=None, responses=None, fetch=None, cap_already=0, fetch_seconds=0.0):
         clock = clock or FakeClock(START)
-        calls = SimpleNamespace(times=[], urls=[], clock=clock)
+        calls = SimpleNamespace(times=[], urls=[], ends=[], clock=clock)
         queue = list(responses) if responses is not None else None
 
         def fake_fetch(url):
             calls.times.append(clock())
             calls.urls.append(url)
+            calls.ends.append(clock() + timedelta(seconds=fetch_seconds))
+            clock.advance(fetch_seconds)
             if fetch is not None:
                 return fetch(url)
             if queue:
@@ -126,6 +128,28 @@ def test_status_reports_no_block_and_count(pacer_env):
     )
 
 
+def test_gap_is_measured_from_end_of_previous_fetch(pacer_env):
+    p, calls = pacer_env(fetch_seconds=10.0)
+    for i in range(6):
+        p.request(f"u{i}", "bulk")
+    gaps = [(b - a).total_seconds() for a, b in zip(calls.ends, calls.times[1:])]
+    assert all(g >= 20 for g in gaps)
+
+
+def test_status_reports_daily_limit_as_block_until_midnight(pacer_env):
+    p, calls = pacer_env(cap_already=DAILY_CAP)
+    s = p.status()
+    assert s.blocked_until == next_utc_midnight(calls.clock()).isoformat()
+    assert s.blocked_reason == "daily_limit" and s.requests_today == DAILY_CAP
+
+
+def test_status_stored_block_wins_over_daily_limit(pacer_env):
+    p, calls = pacer_env(responses=[FeedResult("blocked", [], "429")], cap_already=DAILY_CAP - 1)
+    with pytest.raises(NewsBlocked):
+        p.request("a", "bulk")
+    assert p.status().blocked_reason == "blocked"
+
+
 def test_daily_cap_counts_all_kinds_and_refuses_at_500(pacer_env):
     p, calls = pacer_env(cap_already=499)
     p.request("a", "interactive")
@@ -153,7 +177,7 @@ def test_interactive_waiting_goes_before_bulk_waiting(pacer_env):
         return FeedResult("ok", [])
 
     p, calls = pacer_env(fetch=slow)
-    threads = [threading.Thread(target=p.request, args=("first", "bulk"))]
+    threads = [threading.Thread(target=p.request, args=("first", "bulk"), daemon=True)]
     threads[0].start()
     deadline = time.monotonic() + 5
     while not calls.urls and time.monotonic() < deadline:
@@ -161,10 +185,10 @@ def test_interactive_waiting_goes_before_bulk_waiting(pacer_env):
     # several bulk waiters queue first, so an interactive that only wins by luck is rare
     bulks = [f"bulk{i}" for i in range(8)]
     for name in bulks:
-        threads.append(threading.Thread(target=p.request, args=(name, "bulk")))
+        threads.append(threading.Thread(target=p.request, args=(name, "bulk"), daemon=True))
         threads[-1].start()
         time.sleep(0.02)
-    threads.append(threading.Thread(target=p.request, args=("interactive", "interactive")))
+    threads.append(threading.Thread(target=p.request, args=("interactive", "interactive"), daemon=True))
     threads[-1].start()
     while p._interactive_waiting < 1 and time.monotonic() < deadline:
         time.sleep(0.005)
@@ -189,7 +213,7 @@ def test_concurrent_requests_are_serialized(pacer_env):
         return FeedResult("ok", [])
 
     p, calls = pacer_env(fetch=tracked)
-    threads = [threading.Thread(target=p.request, args=(f"u{i}", "interactive")) for i in range(4)]
+    threads = [threading.Thread(target=p.request, args=(f"u{i}", "interactive"), daemon=True) for i in range(4)]
     for t in threads:
         t.start()
     for t in threads:
