@@ -25,6 +25,12 @@ for (const [route, mock] of DESIGN_SCREENS) {
     await page.goto(route, { waitUntil: "networkidle" });
     await expect(page.locator("main")).toBeVisible({ timeout: 60_000 });
     await page.evaluate(() => document.fonts.ready);
+    // A colour transition still running reads as an in-between colour that is no token (the /alerts
+    // CSV button fades from disabled once its records load). Reduced motion does not stop
+    // transition-colors, so wait for every finite animation to settle; infinite ones are skipped.
+    await page.evaluate(() => Promise.allSettled(
+      document.getAnimations().filter((a) => a.effect?.getTiming().iterations !== Infinity).map((a) => a.finished),
+    ));
     const allowed = [...allowedColours()];
     const violations = await page.evaluate((ok) => {
       const allowedSet = new Set(ok);

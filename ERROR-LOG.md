@@ -26,6 +26,16 @@ reveal that; only checking the code did.
 
 An entry states what was true when it was written. Nothing updates it on its own.
 
+## 2026-10-25: the /alerts paper sweep read a colour halfway through a transition
+
+Date: 2026-10-25 (full Playwright gate for fix/blocked-storage-followups). It also fails on renewal 6c45855, although it passed in the #76 gate.
+Command: `npx playwright test tests/e2e/paper-sweep.spec.ts -g alerts`.
+Failure: the test reported `button.inline-flex... color: rgb(90, 90, 88)` and border colours that are not tokens. The values changed between runs (rgb(116, 116, 114) on another run).
+Root cause: the "Download CSV" button mounts disabled after `networkidle`, while the dev server is still compiling. It turns enabled once the mocked records load, and `transition-colors` (0.2 s) fades it from `--ink-disabled` to its enabled colours. Reduced motion does not stop `transition-colors`. The sweep sampled computed colours straight after `main` became visible and the fonts were ready, so it read a blended colour. Whether it lost that race depended on compile timing, not on the code.
+Fix: before sampling, the sweep now waits for every finite `document.getAnimations()` to settle; infinite animations are skipped. Mutation-checked: an inline `#123456` span on /alerts still fails the sweep.
+Files changed: `apps/web/tests/e2e/paper-sweep.spec.ts`.
+Prevention: a computed-style test must wait for transitions to finish before it reads colours. `networkidle` says nothing about CSS transitions.
+
 ## 2026-10-25: blocked site storage still crashed /portfolio and the /detail workbenches
 
 Date: 2026-10-25 (risk UI ③ follow-up sweep of every storage call site). Defect pre-existing on renewal; fixed on fix/blocked-storage-followups.
