@@ -31,6 +31,7 @@ def rss_with_items(n: int) -> bytes:
 
 def test_real_time_is_kept_in_utc():
     assert normalize_pub_date("Fri, 23 Oct 2026 17:39:50 GMT") == ("2026-10-23", "2026-10-23T17:39:50Z")
+    assert normalize_pub_date("Fri, 23 Oct 2026 08:39:50 -0900") == ("2026-10-23", "2026-10-23T17:39:50Z")
 
 
 @pytest.mark.parametrize("raw,day", [("Fri, 16 Oct 2026 07:00:00 GMT", "2026-10-16"),
@@ -72,6 +73,8 @@ def test_blocked_responses(status, body):
 
 def test_other_http_error_is_failed():
     assert fetch_feed("u", opener=lambda url: (500, b"")).status == "failed"
+    valid_empty = b'<?xml version="1.0"?><rss><channel><title>x</title></channel></rss>'
+    assert fetch_feed("u", opener=lambda url: (500, valid_empty)).status == "failed"
 
 
 def test_ok_with_zero_items_is_ok():
