@@ -76,7 +76,7 @@ export function CandidateCard({ card, theme }: { card: CandidateCardOut; theme: 
 }
 
 /** The four surge components in spec order: size z, slope quantile, breadth %, RSI. */
-const COMPONENT_VALUE: Record<SurgeComponentInfoOut["id"], (c: SurgeComponentsOut, locale: "en" | "ko") => string> = {
+export const COMPONENT_VALUE: Record<SurgeComponentInfoOut["id"], (c: SurgeComponentsOut, locale: "en" | "ko") => string> = {
   magnitude: (c, locale) => formatNumber(c.magnitude_z, "ratio", { locale }),
   accel: (c, locale) => formatNumber(c.accel_rank, "ratio", { locale }),
   breadth: (c, locale) => formatNumber(c.breadth_pct === null ? null : c.breadth_pct / 100, "percent", { locale }),

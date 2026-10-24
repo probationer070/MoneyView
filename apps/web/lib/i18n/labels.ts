@@ -113,6 +113,15 @@ export const LABELS = {
   rank3: ["3위", "#3"],
   rank4: ["4위", "#4"],
   rank5: ["5위", "#5"],
+  via: ["경로", "Via"],
+  joinedDate: ["들어온 날", "Joined"],
+  leftDate: ["빠진 날", "Left"],
+  dd20AtJoin: ["들어온 날 20일 고점 대비", "From 20D high at join"],
+  rank: ["순위", "Rank"],
+  change5d: ["5일", "5D"],
+  rsi: ["RSI", "RSI"],
+  deck: ["구분", "Deck"],
+  factor: ["요소", "Component"],
 } as const satisfies Record<string, readonly [string, string]>;
 
 export type LabelKey = keyof typeof LABELS;

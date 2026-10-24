@@ -13,7 +13,7 @@ const COLUMNS: LabelKey[] = ["warning", "status", "value", "observed", "rule"];
 const STATE_KEY = { on: "risk.warnings.on", off: "risk.warnings.off", unknown: "risk.warnings.unknown" } as const;
 
 /** The value as the API sent it, in its unit: percent units print with %, days as a whole number. */
-function warningValue(warning: RiskWarning, locale: "en" | "ko"): string {
+export function warningValue(warning: Pick<RiskWarning, "value" | "unit">, locale: "en" | "ko"): string {
   if (warning.value === null) return MISSING;
   if (warning.unit === "days") return formatNumber(warning.value, "integer", { locale });
   const signed = warning.unit === "pct_change" || warning.unit === "mm_pct";

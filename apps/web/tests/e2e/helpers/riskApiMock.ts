@@ -1,7 +1,7 @@
 import type { Page } from "@playwright/test";
 import type {
   CandidateCardOut, CrashCardOut, DeckOut, MoverOut, MoversDayOut, RiskAlertDetail, RiskAlertSummary, RiskLatest,
-  RiskWarning, SurgeEventOut, SurgeLatestOut, SurgeThemeOut,
+  RiskWarning, SurgeEventDetailOut, SurgeEventOut, SurgeLatestOut, SurgeThemeOut, ThemeLevelPoint,
 } from "../../../../../packages/shared-types";
 import { cloneFixture } from "./mockUtils";
 
@@ -144,7 +144,63 @@ export const LAST_ALERT_DETAIL: RiskAlertDetail = {
   candidates: { as_of: "2026-03-02", total: 1, cards: [{ ...candidateCard(1), ticker: "OLDC", name: "Old Candidate" }] },
 };
 
-const ALERT_DETAILS: Record<number, RiskAlertDetail> = { [ALERT.id]: ALERT, [LAST_ALERT_DETAIL.id]: LAST_ALERT_DETAIL };
+/**
+ * GET /alerts/5?cards=all, the released alert behind OLD_ALERT_SUMMARY (record reports, plan Task 6). Three themes in
+ * four stints: max_dd10 of -7.41 and exactly -5 count as beyond -5% (the API's `<=` rule), semis' first stint (-3.2)
+ * does not, and its later -9 stint is not counted again. The deepest beyond is not the first one listed.
+ */
+export const REPORT_ALERT: RiskAlertDetail = {
+  ...ALERT, id: 5, status: "released", start_date: "2025-06-10", release_date: "2025-06-30", trigger_themes: ["ai_infra", "semis"],
+  themes: [
+    {
+      theme: "semis", label: { ko: "반도체", en: "Semiconductors" }, via: "theme", joined_date: "2025-06-11",
+      left_date: "2025-06-25", dd20_at_join: -10.4, fwd5: -1, fwd10: -2.5, fwd20: 0.8, max_dd10: -3.2,
+    },
+    {
+      theme: "^SOX", label: { ko: "필라델피아 반도체(SOX)", en: "Philadelphia Semiconductor (SOX)" }, via: "sox",
+      joined_date: "2025-06-12", left_date: null, dd20_at_join: -9.1, fwd5: -3, fwd10: -4, fwd20: -1, max_dd10: -5,
+    },
+    {
+      theme: "ai_infra", label: { ko: "AI 인프라", en: "AI infrastructure" }, via: "theme", joined_date: "2025-06-10",
+      left_date: "2025-06-30", dd20_at_join: -12.3, fwd5: -2.123456789, fwd10: -7.4123456, fwd20: 1.5, max_dd10: -7.4123456,
+    },
+    {
+      theme: "semis", label: { ko: "반도체", en: "Semiconductors" }, via: "theme", joined_date: "2025-06-27",
+      left_date: null, dd20_at_join: -8, fwd5: -6, fwd10: null, fwd20: null, max_dd10: -9,
+    },
+  ],
+  warnings_at_start: [{ id: "W1", state: "off", value: 1.1 }, { id: "W2", state: "on", value: 31.5 }, { id: "W5", state: "on", value: 4.2 }],
+  crash: { as_of: "2025-06-10", total: 1, cards: [{ ...crashCard(1), ticker: "OLD1", name: "Old Crash 1" }] },
+  candidates: { as_of: "2025-06-10", total: 1, cards: [{ ...candidateCard(1), ticker: "OLDC", name: "Old Candidate" }] },
+  start_snapshot: {
+    crash: [{ ticker: "OLD1", fwd5: -4.5, fwd10: -8.2, fwd20: 2 }],
+    candidates: [{ ticker: "OLDC", fwd5: 1.2, fwd10: null, fwd20: -0.4 }],
+  },
+  outcome: { primary_theme: "ai_infra", fwd5: -2.123456789, fwd10: -7.4123456, fwd20: 1.5, useful: true },
+  news: [
+    { title: "Fed holds rates", url: "https://example.com/n1", source: "Wire", published_date: "2025-06-09", lang: "en", kind: "macro", topic: "rates", theme: null, ticker: null },
+    { title: "AI capex slows", url: "https://example.com/n2", source: "Paper", published_date: "2025-06-08", lang: "en", kind: "industry", topic: null, theme: "ai_infra", ticker: null },
+  ],
+  macro_figures: [{
+    topic: "rates", series: "FEDFUNDS", label: { ko: "기준금리", en: "Fed funds" }, kind: "level",
+    latest: { period: "2025-05", value: 4.33 }, prior: { period: "2025-04", value: 4.33 },
+  }],
+};
+
+const ALERT_DETAILS: Record<number, RiskAlertDetail> = {
+  [ALERT.id]: ALERT, [LAST_ALERT_DETAIL.id]: LAST_ALERT_DETAIL, [REPORT_ALERT.id]: REPORT_ALERT,
+};
+
+/** GET /risk/alerts/{id}: the fixture detail, or 404 for an unknown id. */
+async function routeAlertDetails(page: Page) {
+  await page.route(/\/api\/v1\/risk\/alerts\/\d+(\?.*)?$/, (route) => {
+    const id = Number(new URL(route.request().url()).pathname.split("/").pop());
+    const detail = ALERT_DETAILS[id];
+    return detail
+      ? route.fulfill(ok(cloneFixture(detail)))
+      : route.fulfill({ status: 404, contentType: "application/json", body: JSON.stringify({ detail: `unknown alert ${id}` }) });
+  });
+}
 
 /** GET /portfolio/watchlist/themes, which the cards use to name theme ids. It has no ^SOX entry. */
 export const WATCHLIST_THEMES = [
@@ -161,13 +217,7 @@ const ok = (data: unknown) => ({ status: 200, contentType: "application/json", b
  */
 export async function mockRisk(page: Page, scenario: RiskScenario | RiskLatest) {
   await page.route("**/api/v1/portfolio/watchlist/themes", (route) => route.fulfill(ok(cloneFixture(WATCHLIST_THEMES))));
-  await page.route(/\/api\/v1\/risk\/alerts\/\d+(\?.*)?$/, (route) => {
-    const id = Number(new URL(route.request().url()).pathname.split("/").pop());
-    const detail = ALERT_DETAILS[id];
-    return detail
-      ? route.fulfill(ok(cloneFixture(detail)))
-      : route.fulfill({ status: 404, contentType: "application/json", body: JSON.stringify({ detail: `unknown alert ${id}` }) });
-  });
+  await routeAlertDetails(page);
   await page.route("**/api/v1/risk/latest", (route) =>
     scenario === "error"
       ? route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ detail: "boom" }) })
@@ -233,8 +283,50 @@ export const MOVERS_DAYS: MoversDayOut[] = [
   { date: "2026-10-19", items: MOVERS.map((m) => ({ ...m, ticker: `NM${m.rank}`, name: `New Mover ${m.rank}` })) },
 ];
 
-/** Answers the three list calls the records page makes once each. */
+const LEADERS = SURGE_BANNER.themes[0].leaders;
+
+/** GET /surge/events/{id}: each history event with its leaders and the four components' rule text. */
+export const SURGE_DETAILS: Record<number, SurgeEventDetailOut> = Object.fromEntries(
+  SURGE_HISTORY.map((event) => [event.id, { ...event, leaders: LEADERS, components_info: COMPONENTS_INFO }]),
+);
+
+/** GET /themes/{theme}/level: one point per calendar day from `from` to `to`, rebased to 100 at the first. */
+export function themeLevel(from: string, to: string): ThemeLevelPoint[] {
+  const points: ThemeLevelPoint[] = [];
+  for (let day = Date.parse(`${from}T00:00:00Z`), i = 0; day <= Date.parse(`${to}T00:00:00Z`); day += 86_400_000, i += 1) {
+    points.push({ date: new Date(day).toISOString().slice(0, 10), level: 100 + 5 * Math.sin(i / 6) });
+  }
+  return points;
+}
+
+/**
+ * The report calls: alert and surge event details, the theme level (404 unknown_theme for a theme not in
+ * WATCHLIST_THEMES or ^SOX), /latest for the warning names, and the watchlist theme names.
+ */
+export async function mockRiskReports(page: Page) {
+  await page.route("**/api/v1/portfolio/watchlist/themes", (route) => route.fulfill(ok(cloneFixture(WATCHLIST_THEMES))));
+  await page.route("**/api/v1/risk/latest", (route) => route.fulfill(ok(cloneFixture(NEUTRAL))));
+  await routeAlertDetails(page);
+  await page.route(/\/api\/v1\/risk\/surge\/events\/\d+(\?.*)?$/, (route) => {
+    const id = Number(new URL(route.request().url()).pathname.split("/").pop());
+    const detail = SURGE_DETAILS[id];
+    return detail
+      ? route.fulfill(ok(cloneFixture(detail)))
+      : route.fulfill({ status: 404, contentType: "application/json", body: JSON.stringify({ detail: `unknown surge event ${id}` }) });
+  });
+  await page.route(/\/api\/v1\/risk\/themes\/[^/]+\/level(\?.*)?$/, (route) => {
+    const url = new URL(route.request().url());
+    const theme = decodeURIComponent(url.pathname.split("/").at(-2) ?? "");
+    if (theme !== "^SOX" && !WATCHLIST_THEMES.some((t) => t.id === theme)) {
+      return route.fulfill({ status: 404, contentType: "application/json", body: JSON.stringify({ detail: `unknown_theme:${theme}` }) });
+    }
+    return route.fulfill(ok(themeLevel(url.searchParams.get("from") ?? "", url.searchParams.get("to") ?? "")));
+  });
+}
+
+/** Answers the three list calls the records page makes once each, and the report calls (mockRiskReports). */
 export async function mockRiskRecords(page: Page) {
+  await mockRiskReports(page);
   await page.route(/\/api\/v1\/risk\/history(\?.*)?$/, (route) => route.fulfill(ok(cloneFixture(HISTORY))));
   await page.route(/\/api\/v1\/risk\/surge\/history(\?.*)?$/, (route) => route.fulfill(ok(cloneFixture(SURGE_HISTORY))));
   await page.route(/\/api\/v1\/risk\/movers(\?.*)?$/, (route) => route.fulfill(ok(cloneFixture(MOVERS_DAYS))));

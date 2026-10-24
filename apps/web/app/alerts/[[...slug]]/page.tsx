@@ -2,9 +2,8 @@
 
 import { use, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import { RecordReport } from "@/components/risk/RecordReport";
 import { RecordsTable } from "@/components/risk/RecordsTable";
-import { FigureText } from "@/components/market/FigureText";
-import { withFigures } from "@/components/market/marketModel";
 import { ActionButton } from "@/components/ui/ActionButton";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { FilterBar } from "@/components/ui/FilterBar";
@@ -20,7 +19,7 @@ import {
 import { useMovers, useRiskHistory, useSurgeHistory } from "@/lib/useRisk";
 
 // The signal records page (risk UI spec §4, plan Task 5). Each list is loaded once and filtered here;
-// the filters live in the query string, so a reload keeps them. The report on the right is Task 6.
+// the filters live in the query string, so a reload keeps them. The report on the right is RecordReport.
 
 const KINDS: RecordFilterKind[] = ["all", "risk", "surge", "movers"];
 const MOVERS_FROM = "2016-01-04";
@@ -193,14 +192,7 @@ export default function AlertsPage({ params, searchParams }: { params: Promise<{
   if (notFound) {
     report = <p className="type-body text-[var(--ink)]">{t("risk.records.notFound")}</p>;
   } else if (selected) {
-    report = (
-      <>
-        <h2 className="type-panel-title text-[var(--ink)]">
-          <FigureText parts={withFigures(t("risk.records.selected", { kind: t(`risk.records.kind.${selected.kind}`) }), { id: selected.id })} />
-        </h2>
-        <p className="type-small mt-2 text-[var(--ink-muted)]">{t("risk.records.reportPending")}</p>
-      </>
-    );
+    report = <RecordReport key={`${selected.kind}:${selected.id}`} row={selected} />;
   } else {
     report = <p className="type-body text-[var(--ink-muted)]">{t("risk.records.pick")}</p>;
   }
