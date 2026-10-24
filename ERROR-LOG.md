@@ -26,6 +26,16 @@ reveal that; only checking the code did.
 
 An entry states what was true when it was written. Nothing updates it on its own.
 
+## 2026-10-25: blocked site storage still crashed /portfolio and the /detail workbenches
+
+Date: 2026-10-25 (risk UI ③ follow-up sweep of every storage call site). Defect pre-existing on renewal; fixed on fix/blocked-storage-followups.
+Command: a browser with site data blocked, opening `/portfolio` or `/detail/AAPL`.
+Failure: `/portfolio` threw an uncaught `SecurityError` and rendered nothing. On `/detail`, the DCF and diagnostics workbenches fell back to their error boundaries ("DCF Diagnostics Error", "Corporate Diagnostics Missing"). The 2026-10-24 locale fix covered only the locale hook, and only "/" had a blocked-storage test.
+Root cause: three files kept their own copies of the storage helpers: `app/portfolio/page.tsx`, `components/workbenches/DCFWorkbench.tsx` and `DiagnosticWorkbench.tsx`. Each read helper's catch block called `removeItem` without a guard, so a failed read threw a second time. Every write (`setItem`, including the portfolio date-filter persist effect) had no guard at all. The corporate page's own helpers in `corporateUtils.ts` were already guarded.
+Fix: every `removeItem` and `setItem` in those helpers is guarded, matching `corporateUtils.ts`. Added `tests/e2e/blocked-storage.spec.ts`, which throws for every key and every method. Its mutation matrix catches each unguarded read path and the portfolio persist effect, plus the DCF write after a refresh. The diagnostics write and the portfolio calculation cache writes are not driven by the test.
+Files changed: `apps/web/app/portfolio/page.tsx`, `apps/web/components/workbenches/DCFWorkbench.tsx`, `apps/web/components/workbenches/DiagnosticWorkbench.tsx`, `apps/web/tests/e2e/blocked-storage.spec.ts`, `apps/web/tests/e2e/helpers/corporatePageMock.ts`.
+Prevention: when a storage defect is fixed, grep every `localStorage`/`sessionStorage` call site in `apps/web`, not only the one that crashed. A copied helper carries the same defect wherever it was pasted.
+
 ## 2026-10-24: blocked site storage crashed every page through the locale hook
 
 Date: 2026-10-24 (risk UI final whole-branch review, I3). Defect pre-existing on renewal; fixed on feat/risk-ui.
