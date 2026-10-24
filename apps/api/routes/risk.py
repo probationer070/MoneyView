@@ -128,7 +128,7 @@ def _snapshot(cards: list[StoredCard]) -> list[SnapshotCardOut]:
 
 def _detail(alert: StoredAlert, all_cards: bool = False) -> RiskAlertDetail:
     rules = get_rules().rules
-    labels = {t.id: LabelOut(ko=t.ko, en=t.en) for t in load_themes()}
+    labels = _theme_labels()
     watch = _watchlist()
     today = datetime.now(UTC).date()
 
@@ -165,7 +165,7 @@ def _detail(alert: StoredAlert, all_cards: bool = False) -> RiskAlertDetail:
         release_date=alert.release_date.isoformat() if alert.release_date else None,
         w1_proxy=alert.w1_proxy, trigger_themes=list(alert.trigger),
         themes=[ThemeStintOut(
-            theme=s.theme, label=labels.get(s.theme, LabelOut(ko=s.theme, en=s.theme)), via=s.via,
+            theme=s.theme, label=_theme_label(s.theme, labels), via=s.via,
             joined_date=s.joined_date.isoformat(), left_date=s.left_date.isoformat() if s.left_date else None,
             dd20_at_join=s.dd20_at_join, fwd5=s.fwd5, fwd10=s.fwd10, fwd20=s.fwd20, max_dd10=s.max_dd10)
             for s in alert.stints],

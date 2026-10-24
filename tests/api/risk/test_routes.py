@@ -472,6 +472,10 @@ def test_summary_max_dd10_and_labels():
     assert row["trigger_labels"] == [
         {"id": "memory_storage", "label": {"ko": "메모리·스토리지", "en": "Memory & storage"}},
         {"id": "^SOX", "label": {"ko": "필라델피아 반도체(SOX)", "en": "Philadelphia Semiconductor (SOX)"}}]
+    # The alert detail names ^SOX the same way (final review I2), so strip, panel and report match the table.
+    stints = {s["theme"]: s["label"] for s in _data(f"/alerts/{aid}")["themes"]}
+    assert stints["^SOX"] == {"ko": "필라델피아 반도체(SOX)", "en": "Philadelphia Semiconductor (SOX)"}
+    assert stints["memory_storage"] == {"ko": "메모리·스토리지", "en": "Memory & storage"}
     other = _alert(start=date(2026, 10, 1), max_dd10=None)
     assert [r for r in _data("/history") if r["id"] == other][0]["max_dd10"] is None
 
