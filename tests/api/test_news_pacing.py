@@ -55,9 +55,13 @@ def test_acquire_uses_interactive_kind(monkeypatch):
 
 
 def test_block_fails_the_rest_without_fetching():
-    """Catches a batch that keeps calling the fetcher after the pacer reported a block,
-    and one that reports the blocked ticker (or a later one) as anything but failed."""
+    """Catches a batch that keeps calling the fetcher after the pacer reported a block, a
+    stale ticker after the block reported as anything but failed, and a ticker the boundary
+    already covers reported failed instead of fresh."""
+    from apps.api.services.acquisition.state import record_success
+
     _seed({"AAA": "Alpha", "BBB": "Beta", "CCC": "Gamma", "DDD": "Delta"})
+    record_success("news", "CCC", now=NOW, covered_from=NOW.date(), covered_to=NOW.date())  # fresh for this hour
     retry_after = datetime(2026, 10, 26, 0, 0, tzinfo=timezone.utc)
     calls: list[str] = []
 
@@ -74,9 +78,34 @@ def test_block_fails_the_rest_without_fetching():
     assert [(r["ticker"], r["status"], r["detail"]) for r in results] == [
         ("AAA", "empty", None),
         ("BBB", "failed", detail),
-        ("CCC", "failed", detail),
+        ("CCC", "fresh", None),
         ("DDD", "failed", detail),
     ]
+
+
+@pytest.mark.parametrize("path, params", [
+    ("/api/v1/news/crawl/stock", {"ticker": "AAA"}),
+    ("/api/v1/news/crawl", {"query": "x"}),
+])
+def test_crawl_routes_answer_503_when_blocked(monkeypatch, path, params):
+    """Catches a block swallowed into HTTP 200 with an empty list (service except-Exception)."""
+    from fastapi.testclient import TestClient
+
+    from apps.api.main import app
+
+    retry_after = datetime(2026, 10, 26, 0, 0, tzinfo=timezone.utc)
+
+    def blocked(*args, **kwargs):
+        raise NewsBlocked("daily_limit", retry_after)
+
+    monkeypatch.setattr("apps.api.services.webscrap.Crawler.StockNewsCrawler.google_news", blocked)
+    monkeypatch.setattr("apps.api.services.webscrap.Crawler.RegulationCrawler.google_news", blocked)
+
+    response = TestClient(app).post(path, params=params)
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == {
+        "code": "news_blocked", "reason": "daily_limit", "retry_after": retry_after.isoformat()}
 
 
 def test_routes_news_has_no_sleep():

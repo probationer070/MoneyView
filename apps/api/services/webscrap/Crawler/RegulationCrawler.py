@@ -1,5 +1,5 @@
 from typing import List, Optional, Dict
-from apps.api.services.news_feed import google_news
+from apps.api.services.news_feed import NewsBlocked, google_news
 from datetime import datetime
 from ..DAO.Economic import RiskNews
 import logging
@@ -79,7 +79,7 @@ class RegulationCrawler:
                 for entry in items[:limit]:
                     title = entry.title
                     link = entry.url
-                    pub_date = entry.published_date or datetime.now().strftime('%Y-%m-%d')
+                    pub_date = entry.published_date
 
                     # 이미 크롤링된 URL인지 확인
                     if link in crawled_urls:
@@ -98,6 +98,8 @@ class RegulationCrawler:
                     if save_log:
                         self._save_log(news, keyword, filepath)
                     
+            except NewsBlocked:
+                raise
             except Exception as e:
                 logger.error(f"RSS 크롤링 오류 ({keyword}): {e}")
         

@@ -7,6 +7,7 @@ import logging
 from typing import List, Optional
 
 from apps.api.services.db import get_db
+from apps.api.services.news_feed import NewsBlocked
 from apps.api.models.schemas import NewsArticle, SentimentEnum
 
 logger = logging.getLogger(__name__)
@@ -224,6 +225,8 @@ class NewsService:
                 self.save_article(art)
                 saved.append(art)
             return saved
+        except NewsBlocked:
+            raise
         except Exception as exc:
             logger.warning("Crawl failed for '%s': %s", query, exc)
             return []
@@ -256,6 +259,8 @@ class NewsService:
                 self.save_article(article)
                 saved.append(article)
             return saved
+        except NewsBlocked:
+            raise
         except Exception as exc:
             logger.warning("Stock crawl failed for '%s': %s", ticker, exc)
             return []

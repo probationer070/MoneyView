@@ -14,6 +14,8 @@ from fastapi import APIRouter, HTTPException, Query
 
 from apps.api.models.schemas import APIResponse, NewsArticle
 from apps.api.models.schema_parts.news import BulkNewsResponse, NewsAcquireRequest, NewsAcquireResponse
+from apps.api.services.acquisition.freshness import needs_acquisition
+from apps.api.services.acquisition.registry import get_data_class
 from apps.api.services.acquisition.runner import acquire_point_in_time
 from apps.api.services.acquisition.sources.news import fetch_news
 from apps.api.services.acquisition.state import read_state
@@ -26,6 +28,13 @@ router = APIRouter()
 _svc   = NewsService()
 
 MAX_ACQUIRE_TICKERS = 100
+
+
+def _blocked_http(error: NewsBlocked) -> HTTPException:
+    return HTTPException(
+        status_code=503,
+        detail={"code": "news_blocked", "reason": error.reason, "retry_after": error.retry_after.isoformat()},
+    )
 
 
 @router.get("/feed", response_model=List[NewsArticle])
@@ -61,7 +70,10 @@ def crawl_news(
     limit:  int           = Query(default=10),
 ):
     """Trigger a live crawl and persist results."""
-    return _svc.crawl_and_save(query=query, ticker=ticker, limit=limit)
+    try:
+        return _svc.crawl_and_save(query=query, ticker=ticker, limit=limit)
+    except NewsBlocked as error:
+        raise _blocked_http(error)
 
 
 @router.post("/crawl/stock", response_model=List[NewsArticle])
@@ -72,7 +84,10 @@ def crawl_stock_news(
     offset: int = Query(default=0, ge=0),
 ):
     """Trigger stock-specific news crawl and persist results."""
-    return _svc.crawl_stock_and_save(ticker=ticker, company_name=company_name, limit=limit, offset=offset)
+    try:
+        return _svc.crawl_stock_and_save(ticker=ticker, company_name=company_name, limit=limit, offset=offset)
+    except NewsBlocked as error:
+        raise _blocked_http(error)
 
 
 def _watchlist_names() -> dict[str, str]:
@@ -109,7 +124,11 @@ def acquire_news_batch(tickers, *, now, fetcher=fetch_news) -> list[dict]:
         seen.add(ticker)
         company_name = names[ticker]
         if blocked is not None:
-            results.append(_blocked_result(ticker, blocked))
+            # No request is possible, but a ticker the boundary already covers needs none.
+            if needs_acquisition(read_state("news", ticker), get_data_class("news").boundary, now):
+                results.append(_blocked_result(ticker, blocked))
+            else:
+                results.append({"ticker": ticker, "status": "fresh", "articles": 0, "detail": None})
             continue
 
         def fetch(subject: str, _company: str = company_name):

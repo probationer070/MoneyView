@@ -862,6 +862,8 @@ def _backfill_news_publisher(conn: sqlite3.Connection) -> None:
     ).fetchall()
     for row in rows:
         headline, _, publisher = row["headline"].rpartition(" - ")
+        if not headline.strip() or not publisher.strip():
+            continue
         conn.execute("UPDATE news SET headline = ?, source = ? WHERE id = ?", (headline, publisher, row["id"]))
     conn.execute("INSERT OR REPLACE INTO risk_state (key, value) VALUES ('news_publisher_backfill_done', '1')")
 

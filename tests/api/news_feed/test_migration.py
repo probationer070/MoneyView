@@ -72,6 +72,17 @@ def test_backfill_runs_once():
     assert (rows[1]["headline"], rows[1]["source"]) == ("Stocks - a real hyphenated headline - Wire", "Google News")
 
 
+def test_backfill_skips_rows_that_would_leave_an_empty_part():
+    """Catches a backfill that blanks the source (headline ending ' - ') or the headline (starting ' - ')."""
+    with db_service.get_db() as conn:
+        conn.execute("DELETE FROM risk_state WHERE key = 'news_publisher_backfill_done'")
+    insert_news(headline="Apple up - ", source="Google News", url="1")
+    insert_news(headline=" - Reuters", source="Google News", url="2")
+    run_migrations()
+    assert [(r["headline"], r["source"]) for r in read_all()] == [
+        ("Apple up - ", "Google News"), (" - Reuters", "Google News")]
+
+
 @pytest.mark.virgin_db
 def test_published_at_column_added_to_an_old_news_table():
     """Catches a migration that only edits the CREATE TABLE: an existing database would
