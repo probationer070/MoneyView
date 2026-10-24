@@ -27,6 +27,7 @@ file before adding or moving any architecture doc.
 | `documentation-roadmap.md` | Documentation structure, writing order, maintenance rules |
 | `app-blueprint.md`, `system-overview.md`, `local-first-runtime.md`, `dcf-streaming.md`, `dev-monitor-backend-foundation.md`, `schema-evolution.md`, `api-transport-observability.md`, `cache-ownership-invalidation.md` | Supporting design notes for specific subsystems and past planning tracks |
 | `watchlist-cleanup-and-corporate-sync.md` | Addendum: deferred cleanup of a removed ticker's caches (30-day grace; `corporate_statements` kept), corporate records-sync kinds, two-PC rollout and PR #67 merge conflicts |
+| `news-crawling-guide.md` | Reference note for news crawling: Google News RSS limits measured 2026-10-25 (100 items per request, dated search, placeholder times), field normalization, bot-detection findings, the no-disguise pacing rules, and alternative sources (GDELT, Finnhub) |
 
 ## Design (`docs/design/`)
 
