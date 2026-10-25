@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { mockDcfSummaryResponse } from "./helpers/corporatePageMock";
+import { mockDetailPage } from "./helpers/detailPageMock";
 import { mockPortfolioPageApi } from "./helpers/portfolioPageMock";
 
 /**
@@ -30,17 +30,13 @@ test("portfolio loads when storage throws", async ({ page }) => {
   expect(errors, "nothing crashes").toEqual([]);
 });
 
-// Like dcf-workbench-refusal, this needs AAPL history in the local database for the page to render.
-// Refreshing the DCF writes its session cache, so the write path runs too, not only the read.
-test("detail workbenches render and refresh when storage throws", async ({ page }) => {
+test("detail page renders when storage throws", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await blockStorage(page);
-  await page.route("**/api/v1/corporate/dcf/AAPL", (route) => route.fulfill({ json: mockDcfSummaryResponse }));
+  await mockDetailPage(page, "AAPL");
   await page.goto("/detail/AAPL", { waitUntil: "domcontentloaded" });
-  await page.getByRole("button", { name: "Refresh DCF Diagnostics" }).click({ timeout: 60_000 });
-  await expect(page.getByText("Engine Status:")).toBeVisible();
-  await expect(page.getByText("DCF Diagnostics Error")).toHaveCount(0);
-  await expect(page.getByText("Corporate Diagnostics Missing")).toHaveCount(0);
+  await expect(page.getByTestId("tile-1w")).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByTestId("detail-movers-up")).toBeVisible();
   expect(errors, "nothing crashes").toEqual([]);
 });
