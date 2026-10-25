@@ -13,7 +13,7 @@
 
 ## Contents
 
-[User Guide](./docs/USER-GUIDE.md) · [What it is](#what-it-is) · [Requirements](#requirements) · [First-time setup](#first-time-setup) · [Running](#running) · [Screens](#screens) · [Developer dashboards](#developer-dashboards) · [Watchlist](#watchlist) · [Testing](#testing) · [Shared types](#shared-schema-types) · [API](#key-api-endpoints) · [Layout](#repository-layout)
+[User Guide](./docs/USER-GUIDE.md) · [What it is](#what-it-is) · [Requirements](#requirements) · [First-time setup](#first-time-setup) · [Running](#running) · [Screens](#screens) · [Developer dashboards](#developer-dashboards) · [Watchlist](#watchlist) · [Two PCs](#using-two-pcs) · [Testing](#testing) · [Shared types](#shared-schema-types) · [API](#key-api-endpoints) · [Layout](#repository-layout)
 
 ---
 
@@ -211,6 +211,68 @@ bootstrap seeding will not overwrite them.
 The Portfolio page uses saved positive weights when they exist, and falls back to an
 equal-weight basket when none do. If saved weights total under `100%`, the remainder is
 treated as implied cash in the attribution flow.
+
+## Using two PCs
+
+Code travels through GitHub; data does not. Each PC keeps its own SQLite database
+(`data/processed/moneyview.db`, git-ignored), so a change made in one PC's database —
+adding or removing a holding, deleting caches — has to be repeated on the other unless
+sync is on (below).
+
+**Bring the other PC up to date**
+
+1. Close MoneyView on that PC.
+2. Pull the code:
+
+   ```powershell
+   cd C:\Learn\Economy\MoneyView
+   git fetch origin
+   git checkout renewal
+   git pull origin renewal
+   ```
+
+3. Start MoneyView (`run MoneyView`). Database schema changes are applied on start; nothing
+   needs to be run by hand. The first start after a long gap catches up on daily bars, the
+   market indices and news, so the first few minutes are slower.
+4. Make the watchlist match the first PC: add and remove the same holdings on the Portfolio
+   page. Then attach themes, checking the dry run first:
+
+   ```powershell
+   python scripts/apply_watchlist_themes.py --dry-run
+   python scripts/apply_watchlist_themes.py
+   ```
+
+5. Check that **Signal records** (the clock icon at the right end of the top bar) lists records,
+   and that a stock's detail page shows a current S&P 500 figure rather than "—".
+
+**When a ticker is renamed** (the company changed its symbol), remove the old ticker and add the
+new one on each PC. The theme draft
+(`docs/superpowers/specs/2026-10-18-risk-signal-evidence/themes-draft.csv`) and the news search
+terms (`apps/api/services/risk/news_queries.yaml`) are in git, so change the ticker there once and
+both PCs pick it up on their next pull.
+
+**Caches of removed holdings** are deleted automatically 30 days after the holding is removed.
+To delete them now, back up the database and run, with your own tickers:
+
+```powershell
+python -c "from apps.api.services.watchlist_cleanup import delete_ticker_caches as d; [print(t, d(t)) for t in ('TICKER1','TICKER2')]"
+```
+
+The function skips any ticker that is still referenced: on the watchlist or the corporate list,
+in a valuation case, decision or comparison snapshot, a stored index, or a benchmark or spread
+proxy in code.
+
+**Sync between PCs.** Set the same folder (for example a OneDrive folder) in `config/.env` on both
+PCs:
+
+```text
+MONEYVIEW_SYNC_DIR=C:\Users\<you>\OneDrive\MoneyView-sync
+```
+
+With it set, the watchlist and the records (cases, decisions, events, settings) are exchanged
+through that folder. Turn it on only after both watchlists match: otherwise the newer row from one
+PC overwrites the other's. Tests never read `config/.env`, so a test run cannot publish into this
+folder.
 
 ## Testing
 
