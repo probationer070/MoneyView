@@ -50,7 +50,7 @@ _CASE_COLUMNS = (
     "riskfree_rate", "wacc_initial", "wacc_stable", "wacc_converge_from",
     "marginal_tax_rate", "nol_balance", "roic_stable", "terminal_growth",
     "effective_tax_rate",
-    "cash", "debt", "ipo_proceeds", "shares_basic", "shares_new",
+    "cash", "debt", "ipo_proceeds", "shares_basic", "shares_new", "offering_price",
     "parent_case_id",
 )
 
@@ -331,6 +331,7 @@ def _to_specs(case: dict) -> tuple[CaseSpec, list[SegmentSpec]]:
         ipo_proceeds=case["ipo_proceeds"],
         shares_basic=case["shares_basic"],
         shares_new=case["shares_new"],
+        offering_price=case["offering_price"],
     )
     segments = [
         SegmentSpec(
@@ -415,6 +416,11 @@ def run_stored_case(case_id: int) -> dict:
         "equity_value": result.equity_value,
         "value_per_share_basic": result.value_per_share_basic,
         "value_per_share_diluted": result.value_per_share_diluted,
+        # The new shares the diluted value divides by (typed, priced or solved), and the offer.
+        "shares_new_effective": result.shares_new_effective,
+        "offering_price": spec.offering_price,
+        "offering_implied_value": result.offering_implied_value,
+        "offering_premium_pct": result.offering_premium_pct,
         "base_revenue_total": result.base_revenue_total,
         "base_ebit_total": result.base_ebit_total,
         "marginal_roic_target_year": result.marginal_roic_target_year,

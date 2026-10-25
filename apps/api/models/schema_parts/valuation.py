@@ -66,6 +66,9 @@ class ValuationCaseInput(BaseModel):
     debt: float = Field(ge=0)
     ipo_proceeds: float = Field(ge=0)
     shares_new: float = Field(ge=0)
+    # The IPO price per share. Sets the new shares as ipo_proceeds / price; leave shares_new at 0
+    # with it. With neither, a case with ipo_proceeds solves the new shares from its own value.
+    offering_price: float | None = Field(default=None, gt=0)
     parent_case_id: int | None = None
     # Claims behind case-level inputs (F4); see valuation_case.CASE_NARRATED_FIELDS.
     narratives: list[SegmentNarrativeInput] = Field(default_factory=list)

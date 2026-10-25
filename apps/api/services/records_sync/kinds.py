@@ -64,6 +64,10 @@ class Kind:
     # A LOCAL column pointing at another row of this same table (a fork's parent). It never
     # travels; its target's uid does, under PARENT_UID_KEY, and is resolved back to a local id.
     lineage_column: str | None = None
+    # Nullable columns added after peers already ran the old code, for the same reason as
+    # ChildSpec.optional: omitted from a payload when NULL and read as NULL when absent, so a peer
+    # on the old code still reads every record that leaves them empty.
+    optional_columns: tuple[str, ...] = ()
 
 
 def payload_columns(kind: Kind) -> tuple[str, ...]:
@@ -124,6 +128,7 @@ KINDS: dict[str, Kind] = {
                   "nol_balance", "roic_stable", "cash", "debt", "ipo_proceeds", "shares_basic",
                   "shares_new"),
         lineage_column="parent_case_id",
+        optional_columns=("offering_price",),
     ),
     KIND_DECISION: Kind(
         name=KIND_DECISION,

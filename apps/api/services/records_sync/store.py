@@ -162,9 +162,16 @@ def _lineage_uid(conn: sqlite3.Connection, kind: Kind, row: sqlite3.Row) -> str 
     return parent[0] if parent is not None else None
 
 
+def _row_values(kind: Kind, row: sqlite3.Row) -> dict:
+    """The payload columns of a local row; optional columns only when they hold a value."""
+    values = {c: row[c] for c in kind.columns}
+    values.update({c: row[c] for c in kind.optional_columns if row[c] is not None})
+    return values
+
+
 def _payload_of_row(conn: sqlite3.Connection, kind: Kind, row: sqlite3.Row) -> dict:
     if kind.children:
-        payload: dict = {"case": {c: row[c] for c in kind.columns}}
+        payload: dict = {"case": _row_values(kind, row)}
         if kind.lineage_column:
             payload["case"][PARENT_UID_KEY] = _lineage_uid(conn, kind, row)
         for child in kind.children:
@@ -172,7 +179,7 @@ def _payload_of_row(conn: sqlite3.Connection, kind: Kind, row: sqlite3.Row) -> d
             if rows or not child.optional:
                 payload[child.key] = rows
         return payload
-    return {c: row[c] for c in kind.columns}
+    return _row_values(kind, row)
 
 
 def read_local_state(conn: sqlite3.Connection) -> RecordState:
@@ -268,8 +275,8 @@ def _write_record(conn: sqlite3.Connection, kind: Kind, uid: str, payload: dict,
     """UPDATE an existing row in place, keeping its local id (a local fork's parent_case_id points
     at it), or INSERT a new one; then insert its children, which the caller has already cleared."""
     row = payload["case"] if kind.children else payload
-    columns = list(kind.columns)
-    values = [row[c] for c in columns]
+    columns = list(kind.columns) + list(kind.optional_columns)
+    values = [row[c] if c in kind.columns else row.get(c) for c in columns]
     if exists:
         where, params = _locator(kind, uid)
         conn.execute(

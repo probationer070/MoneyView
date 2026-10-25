@@ -55,7 +55,8 @@ def _pc(value, what: str) -> str:
 
 
 def _check_tree(node: dict, columns: tuple[str, ...], children: tuple[ChildSpec, ...], what: str,
-                not_null: tuple[str, ...] = (), domains: tuple[tuple[str, tuple], ...] = ()) -> None:
+                not_null: tuple[str, ...] = (), domains: tuple[tuple[str, tuple], ...] = (),
+                optional: tuple[str, ...] = ()) -> None:
     if not isinstance(node, dict):
         raise ValueError(f"{what} is not an object")
     expected = set(columns) | {child.key for child in children}
@@ -64,12 +65,12 @@ def _check_tree(node: dict, columns: tuple[str, ...], children: tuple[ChildSpec,
         raise ValueError(f"{what} is missing {sorted(expected - present)}")
     # A column this schema does not know means the peer runs a newer version. Applying the rest
     # would silently drop whatever the owner wrote in it.
-    if present - expected:
-        raise ValueError(f"{what} has unknown columns {sorted(present - expected)}")
+    if present - expected - set(optional):
+        raise ValueError(f"{what} has unknown columns {sorted(present - expected - set(optional))}")
     # JSON has no NaN/Infinity; a file only Python's lenient json module can parse defeats the
     # point of validating peers' files. A dict or list in a scalar column would only fail later,
     # at the SQLite bind, with a far less useful error.
-    for column in columns:
+    for column in tuple(columns) + tuple(c for c in optional if c in node):
         value = node[column]
         if not (value is None or isinstance(value, (bool, int, float, str))):
             raise ValueError(f"{what}.{column}={value!r} is not a scalar (got {type(value).__name__})")
@@ -98,7 +99,8 @@ def _check_payload(kind: Kind, uid: str, payload: dict) -> None:
         allowed = required | {c.key for c in kind.children if c.optional}
         if not isinstance(payload, dict) or not required <= set(payload) <= allowed:
             raise ValueError(f"{kind.name} payload must hold 'case' and {[c.key for c in kind.children]}")
-        _check_tree(payload["case"], payload_columns(kind), (), f"{kind.name}.case", kind.not_null, kind.domains)
+        _check_tree(payload["case"], payload_columns(kind), (), f"{kind.name}.case", kind.not_null, kind.domains,
+                    kind.optional_columns)
         if kind.lineage_column:
             parent_uid = payload["case"][PARENT_UID_KEY]
             if not (parent_uid is None or (isinstance(parent_uid, str) and parent_uid)):
@@ -111,7 +113,8 @@ def _check_payload(kind: Kind, uid: str, payload: dict) -> None:
                 _check_tree(row, child.columns, child.children, f"{kind.name}.{child.key}[{index}]",
                             child.not_null, child.domains)
         return
-    _check_tree(payload, kind.columns, (), f"{kind.name} payload", kind.not_null, kind.domains)
+    _check_tree(payload, kind.columns, (), f"{kind.name} payload", kind.not_null, kind.domains,
+                kind.optional_columns)
     # A natural-identity kind carries its identity in the payload too; the two must agree, or
     # apply would write the row under a key another record owns.
     if not kind.generates_uid and kind.singleton_uid is None and payload[kind.uid_column] != uid:

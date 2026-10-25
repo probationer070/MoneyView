@@ -28,6 +28,15 @@ Design intent
   conversion, and its inverse, goes through app/cases/caseFields.ts (toWire, fromWire,
   formatWire, fmtPercent) -- the only place a rate is multiplied or divided by 100.
 - Nothing here is called Monte Carlo: that is the unrelated /monte-carlo tab.
+- IPO shares and the offer check (Damodaran, "Revisiting the SpaceX Valuation", 2026-06-04). The
+  diluted value per share divides by the new shares an IPO adds: a typed `shares_new`, or
+  ipo_proceeds / `offering_price`, or -- with proceeds and neither -- the fair-price count
+  solved in closed form, new = proceeds x basic / (equity - proceeds), which reproduces his
+  sheet's circular `Valuation output!B43`. With an offering price the Valuation section adds
+  "Offering price", "Company value at the offer" (price x all shares), "Offer vs value per share"
+  (+ above, − below) and "New shares". This is separate from the corporate page's DCF.
+- Damodaran's two SpaceX cases (pre- and post-prospectus) are created on API start when missing,
+  after records sync, so a peer's copies arrive first.
 
 Layout structure
 - /cases: ticker filter (?ticker= presets it), table of cases with their parent.
