@@ -2188,7 +2188,10 @@ export default function PortfolioPage() {
       )}
       {hasHoldings && (
         <section className="border border-[var(--line)] bg-[var(--surface-raised)] p-4">
-          <div className="flex flex-col gap-4 min-[1450px]:flex-row lg:items-start lg:justify-between">
+          {/* Always stacked: the panel is a fixed 45rem, so a viewport breakpoint (it was
+              min-[1450px]:flex-row) squeezed this text into a narrow column and pushed the
+              buttons past the panel edge on wide windows. */}
+          <div className="flex flex-col gap-4">
             <div>
               {/* No heading here: SidePanel renders the panel title, and its tooltip
                   carries the description this block used to duplicate. */}
@@ -2197,7 +2200,7 @@ export default function PortfolioPage() {
               </p>
             </div>
             <div className="flex flex-col gap-2">
-              <div className="flex flex-col gap-2 sm:flex-row">
+              <div className="flex flex-wrap items-center gap-2">
                 <label className="flex items-center gap-2 type-small text-[var(--ink-muted)]">
                   <InfoTooltip
                     label="Universe"
@@ -2296,7 +2299,7 @@ export default function PortfolioPage() {
                   </span>
                 )}
               </div>
-              <div className="flex flex-col gap-2 sm:flex-row">
+              <div className="flex flex-wrap items-center gap-2">
                 <label className="flex items-center gap-2 type-small text-[var(--ink-muted)]">
                   <InfoTooltip
                     label="Source"
