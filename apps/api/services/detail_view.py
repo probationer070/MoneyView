@@ -57,9 +57,10 @@ def latest_movers(limit: int = 5) -> LatestMovers:
     """Top `limit` risers and fallers on the latest common day.
 
     Latest common day: the newest date on which at least COMMON_DAY_SHARE of the
-    watchlist tickers that have any bar have a bar. return_pct is that day's close over
-    the ticker's previous bar close, minus 1, in percent, 2 dp. Tickers lacking either
-    bar are skipped.
+    watchlist tickers that have any bar have a bar; the previous common day is the next
+    older such date. A mover must have a bar on both, and return_pct is the latest close
+    over the previous-common-day close, minus 1, in percent, 2 dp. Tickers lacking either
+    bar are skipped. `up` holds only returns above 0 and `down` only returns below 0.
     """
     with get_db() as conn:
         counts = conn.execute(
@@ -69,16 +70,16 @@ def latest_movers(limit: int = 5) -> LatestMovers:
         total = conn.execute(
             "SELECT COUNT(DISTINCT s.ticker) FROM stocks s JOIN watchlist w ON w.ticker = s.ticker"
         ).fetchone()[0]
-        day = next((r["date"] for r in counts if r["n"] >= COMMON_DAY_SHARE * total), None)
-        if day is None:
+        common = [r["date"] for r in counts if r["n"] >= COMMON_DAY_SHARE * total]
+        if len(common) < 2:
             return LatestMovers(date=None, up=[], down=[])
+        day, prev_day = common[0], common[1]
         rows = conn.execute(
-            """SELECT w.ticker AS ticker, w.name AS name, w.theme AS theme, s.close AS close,
-                      (SELECT p.close FROM stocks p WHERE p.ticker = s.ticker AND p.date < s.date
-                       ORDER BY p.date DESC LIMIT 1) AS prev
+            """SELECT w.ticker AS ticker, w.name AS name, w.theme AS theme, s.close AS close, p.close AS prev
                FROM stocks s JOIN watchlist w ON w.ticker = s.ticker
+               JOIN stocks p ON p.ticker = s.ticker AND p.date = ?
                WHERE s.date = ?""",
-            (day,),
+            (prev_day, day),
         ).fetchall()
     themes = {r["theme"]: _theme_ref(r["theme"]) for r in rows}
     movers = [
@@ -91,8 +92,8 @@ def latest_movers(limit: int = 5) -> LatestMovers:
         for r in rows
         if r["close"] is not None and r["prev"]
     ]
-    up = sorted(movers, key=lambda m: m.return_pct, reverse=True)[:limit]
-    down = sorted(movers, key=lambda m: m.return_pct)[:limit]
+    up = sorted((m for m in movers if m.return_pct > 0), key=lambda m: m.return_pct, reverse=True)[:limit]
+    down = sorted((m for m in movers if m.return_pct < 0), key=lambda m: m.return_pct)[:limit]
     return LatestMovers(date=day, up=up, down=down)
 
 

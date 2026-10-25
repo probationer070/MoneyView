@@ -87,10 +87,12 @@ def seed():
     add_bars("^GSPC", gspc, table="indices")
 
 
-def alert(start: date, release: date | None, theme: str = THEME, cards: tuple[str, ...] = ()) -> int:
+def alert(start: date, release: date | None, theme: str = THEME, cards: tuple[str, ...] = (),
+          joined: date | None = None, left: date | None = None, origin: str = "live") -> int:
     version = get_rules().version
-    alert_id = store.insert_alert(start, (theme,), version, "live", theme, False)
-    store.upsert_stint(alert_id, ThemeStint(theme=theme, via="trigger", joined=start, left=None, last_ref=start),
+    alert_id = store.insert_alert(start, (theme,), version, origin, theme, False)
+    joined = start if joined is None else joined
+    store.upsert_stint(alert_id, ThemeStint(theme=theme, via="trigger", joined=joined, left=left, last_ref=joined),
                        None, {})
     if cards:
         store.replace_cards(alert_id, "start", "candidate",
@@ -165,6 +167,54 @@ def test_alert_unrelated_theme_not_listed(seed):
     assert explain_move("UNREL", day).alerts == []
     assert [(a.id, a.role) for a in explain_move("CARDED", day).alerts] == [(aid, "ongoing")]
     assert [(a.id, a.role) for a in explain_move("AAA", day).alerts] == [(aid, "ongoing")]
+
+
+def test_alert_released_before_the_day_is_not_listed(seed):
+    # The stint stays open (left=None), so only the release date can keep the alert off later days.
+    aid = alert(D - timedelta(days=4), D - timedelta(days=2))
+    assert [(a.id, a.role) for a in explain_move("AAA", D - timedelta(days=2)).alerts] == [(aid, "end")]
+    assert explain_move("AAA", D - timedelta(days=1)).alerts == []
+    assert explain_move("AAA", D).alerts == []
+
+
+def test_alert_not_listed_after_the_theme_left(seed):
+    add_watch("UNCARDED", "Not in a card", THEME)
+    add_bars("UNCARDED", closes_for(10.0, 0.5))
+    aid = alert(D - timedelta(days=4), None, left=D - timedelta(days=2))  # open alert, theme left on D-2
+    assert [(a.id, a.role) for a in explain_move("UNCARDED", D - timedelta(days=2)).alerts] == [(aid, "ongoing")]
+    assert explain_move("UNCARDED", D - timedelta(days=1)).alerts == []
+
+
+def test_alert_not_listed_before_the_theme_joined(seed):
+    aid = alert(D - timedelta(days=3), None, joined=D - timedelta(days=1))  # theme joined a day after the alert began
+    assert explain_move("AAA", D - timedelta(days=2)).alerts == []
+    assert [(a.id, a.role) for a in explain_move("AAA", D - timedelta(days=1)).alerts] == [(aid, "ongoing")]
+
+
+def test_surge_ending_on_the_day_has_role_end(seed):
+    version = get_rules().version
+    sid = store.insert_surge_event(version, "live", THEME, D - timedelta(days=2), shown=True, components={},
+                                   leaders=[], last_high=D - timedelta(days=2), end=D, end_reason="stalled")
+    assert [(a.id, a.kind, a.role) for a in explain_move("AAA", D).alerts] == [(sid, "surge", "end")]
+    assert [a.role for a in explain_move("AAA", D - timedelta(days=1)).alerts] == ["ongoing"]
+
+
+def test_backfill_alert_hidden_until_backfill_done(seed):
+    version = get_rules().version
+    aid = alert(D - timedelta(days=2), None, origin="backfill")
+    day = D - timedelta(days=1)
+    store.set_state(f"backfill:{version}", "pending")
+    assert explain_move("AAA", day).alerts == []
+    store.set_state(f"backfill:{version}", "done")
+    assert [(a.id, a.role) for a in explain_move("AAA", day).alerts] == [(aid, "ongoing")]
+
+
+def test_volume_ratio_null_when_prior_volumes_are_all_zero(seed):
+    add_watch("ZERO", "Zero volume", "")
+    add_bars("ZERO", closes_for(10.0, 0.5), [0] * (N - 1) + [5000])
+    m = explain_move("ZERO", D)
+    assert m.volume_ratio is None
+    assert m.price_ratio is not None
 
 
 def test_surge_of_own_theme_listed(seed):

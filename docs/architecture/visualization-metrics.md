@@ -327,13 +327,13 @@ Expose local runtime-health and sensitivity context without requiring the user t
 - `GET /api/v1/diagnostic/logs/api-tail`
 - `GET /api/v1/corporate/diagnostic/{ticker}/radar`
 - `GET /api/v1/corporate/diagnostic/{ticker}/tornado`
-- DCF workbench refresh requests
+- `POST /api/v1/corporate/dcf/{ticker}`, sent by the Corporate DCF tab's sensitivity runs only when the user asks
 
 ### Outputs
 
 - local API log tail visibility
-- corporate radar and tornado diagnostics
-- DCF workbench summary cards
+- corporate radar and tornado datasets (backend routes only; the Corporate page no longer draws them)
+- DCF tab sensitivity results (value and upside at the stepped assumptions)
 - explicit stale-vs-fresh diagnostic refresh state
 
 ## 3. Market Overview Metrics And Charts
@@ -1020,20 +1020,18 @@ The important semantics are:
 
 ## 7.3 Diagnostics and log visibility
 
-### Corporate Diagnostics workbench
+### Corporate radar and tornado (backend only)
 
-- Meaning: on-demand radar and tornado views for the selected ticker.
+- Meaning: radar and tornado datasets for the selected ticker.
 - Source: `/api/v1/corporate/diagnostic/{ticker}/radar` and `/tornado`.
-- Ownership: backend owns diagnostic datasets; frontend manages idle state, refresh button, and session cache.
-- Filters/time windows: selected ticker only; data is considered slow-moving and uses long staleness windows.
-- Drill-down: none beyond the charts themselves.
+- Ownership: backend owns the datasets. The frontend no longer has the workbench that drew them; the Corporate page's Core Diagnostics tab shows hurdle-rate decomposition, beta and WACC curve, and the value-driver matrix instead.
 
-### DCF Diagnostics workbench
+### DCF sensitivity runs (Corporate DCF tab)
 
-- Meaning: explicit user-triggered DCF recomputation for a local assumption set.
-- Source: `/api/v1/corporate/dcf/{ticker}` with workbench request body.
-- Ownership: backend DCF engine; frontend owns stale-calculation warning and slider state.
-- Important note: this workbench is intentionally idle on first load and must be explicitly refreshed.
+- Meaning: user-triggered DCF runs at the local assumption set minus and plus a step.
+- Source: `POST /api/v1/corporate/dcf/{ticker}`.
+- Ownership: backend DCF engine; frontend owns run state and shows a refusal as the backend's reason.
+- Important note: the runs happen only on request, never on first load.
 
 ### API log tail
 

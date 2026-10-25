@@ -81,6 +81,47 @@ def test_movers_use_latest_common_day(seeded12):
     assert latest_movers().date == D2
 
 
+def test_movers_date_stays_when_one_of_twelve_lacks_the_newest_bar(seeded12):
+    for ticker in list(PCTS)[:-1]:  # 11 of 12 have 2026-10-26; B05 stops on D2
+        add_bar(ticker, "2026-10-26", 101.0)
+    m = latest_movers(limit=20)
+    assert m.date == "2026-10-26"
+    assert "B05" not in [r.ticker for r in m.up + m.down]
+
+
+def test_movers_date_rolls_back_when_two_of_twelve_lack_the_newest_bar(seeded12):
+    for ticker in list(PCTS)[:-2]:  # 10 of 12 have 2026-10-26
+        add_bar(ticker, "2026-10-26", 101.0)
+    assert latest_movers().date == D2
+
+
+def test_movers_return_is_between_the_two_common_days(seeded12):
+    add_watch("GAP", "Gap ticker")
+    add_bar("GAP", "2026-10-21", 50.0)  # no bar on D1, the previous common day
+    add_bar("GAP", D2, 100.0)  # +100% against its own previous bar
+    m = latest_movers(limit=20)
+    assert m.date == D2
+    assert "GAP" not in [r.ticker for r in m.up + m.down]
+
+
+def test_movers_lists_hold_only_their_own_sign(seeded12):
+    with get_db() as conn:
+        conn.execute("UPDATE stocks SET close = 100 WHERE ticker LIKE 'B%' AND date = ?", (D2,))  # flat
+        conn.execute("UPDATE stocks SET close = 102.5 WHERE ticker = 'B01' AND date = ?", (D2,))
+        conn.execute("UPDATE stocks SET close = 90 WHERE ticker = 'A01' AND date = ?", (D2,))
+    m = latest_movers()
+    assert [r.ticker for r in m.up] == ["A02", "A03", "B01", "A04", "A05"]
+    assert [r.ticker for r in m.down] == ["A01"]
+
+
+def test_movers_up_list_holds_no_decliners(seeded12):
+    with get_db() as conn:
+        conn.execute("UPDATE stocks SET close = 100 WHERE ticker LIKE 'A0%' AND ticker != 'A01' AND date = ?", (D2,))
+    m = latest_movers()
+    assert [r.ticker for r in m.up] == ["A01"]
+    assert [r.ticker for r in m.down] == ["B05", "B04", "B03", "B02", "B01"]
+
+
 def test_movers_skip_ticker_without_previous_bar(seeded12):
     add_watch("NEW", "Newcomer")
     add_bar("NEW", D2, 500.0)  # only one bar: no previous close

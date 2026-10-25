@@ -1,12 +1,12 @@
 """
 Detail popup routes — OHLCV, technical indicators, Monte Carlo.
 
-GET /api/detail/movers/latest
-GET /api/detail/{ticker}/profile
-GET /api/detail/{ticker}/move/{day}
-GET /api/detail/{ticker}/ohlcv
-GET /api/detail/{ticker}/technicals
-GET /api/detail/{ticker}/monte-carlo
+GET /api/v1/detail/movers/latest
+GET /api/v1/detail/{ticker}/profile
+GET /api/v1/detail/{ticker}/move/{day}
+GET /api/v1/detail/{ticker}/ohlcv
+GET /api/v1/detail/{ticker}/technicals
+GET /api/v1/detail/{ticker}/monte-carlo
 """
 
 from datetime import date
