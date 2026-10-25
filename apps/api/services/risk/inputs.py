@@ -71,9 +71,13 @@ def load_inputs(
     end = (through or date.max).isoformat()
     with get_db() as conn:
         watch = conn.execute("SELECT ticker, name, theme FROM watchlist ORDER BY ticker").fetchall()
+        # Only the tickers kept below, so the (ticker, date) index serves the read: a date-only
+        # filter scanned every row of stocks (~0.25 s for a 10-day window on the real DB).
+        wanted = list(dict.fromkeys([r["ticker"] for r in watch] + ["^SOX", "RSP"]))
         bars = conn.execute(
-            "SELECT ticker, date, close FROM stocks WHERE date >= ? AND date <= ? AND close IS NOT NULL",
-            (first, end)).fetchall()
+            f"SELECT ticker, date, close FROM stocks WHERE ticker IN ({','.join('?' * len(wanted))}) "
+            "AND date >= ? AND date <= ? AND close IS NOT NULL",
+            (*wanted, first, end)).fetchall()
         present = None if since is None else {
             r["ticker"] for r in watch if conn.execute(_HAS_BAR, (r["ticker"], start, end)).fetchone()[0]}
         shares = {
