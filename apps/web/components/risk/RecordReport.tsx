@@ -1,7 +1,8 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { createContext, type ReactNode, useContext, useState } from "react";
 import clsx from "clsx";
+import { Maximize2 } from "lucide-react";
 import { FigureText } from "@/components/market/FigureText";
 import { withFigures } from "@/components/market/marketModel";
 import { COMPONENT_VALUE } from "@/components/risk/cards";
@@ -12,6 +13,7 @@ import { BilingualLabel } from "@/components/ui/BilingualLabel";
 import { DeltaBadge } from "@/components/ui/DeltaBadge";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { LoadingState } from "@/components/ui/LoadingState";
+import { ModalShell } from "@/components/ui/ModalShell";
 import { formatNumber, MISSING } from "@/lib/format";
 import type { LabelKey } from "@/lib/i18n/labels";
 import { useLocale, useT } from "@/lib/i18n/locale";
@@ -30,50 +32,84 @@ const BEYOND_PCT = -5;
 const mono = (text: string) => <span className="type-mono">{text}</span>;
 const delta = (value: number | null) => <DeltaBadge value={value} />;
 
+/** The enclosing Section's title, so a wide table's modal is named after its section. */
+const SectionTitle = createContext<string | undefined>(undefined);
+
 function Section({ name, title, children }: { name: string; title?: string; children: ReactNode }) {
   return (
     <section data-section={name} aria-label={title}>
       {title && <h3 className="type-label mb-2 text-[var(--ink)]">{title}</h3>}
-      {children}
+      <SectionTitle.Provider value={title}>{children}</SectionTitle.Provider>
     </section>
   );
 }
 
+/** From this many columns a table no longer fits the report panel, so it offers a full-width modal. */
+const WIDE_TABLE_COLUMNS = 5;
+
 /** A small report table; `figures` marks the right-aligned number columns by index. */
 function ReportTable({ columns, rows, figures = [] }: { columns: LabelKey[]; rows: ReactNode[][]; figures?: number[] }) {
-  // relative: the cells' sr-only spans (DeltaBadge) are position:absolute. Without a positioned
-  // wrapper their containing block was the report panel, so this overflow did not clip them and a
-  // wide table made the whole panel scroll sideways, cutting off the left of every section.
+  const t = useT();
+  const title = useContext(SectionTitle);
+  const [expanded, setExpanded] = useState(false);
+  const table = <TableBody columns={columns} rows={rows} figures={figures} />;
+  if (columns.length < WIDE_TABLE_COLUMNS) return <div className="relative overflow-x-auto">{table}</div>;
   return (
-    <div className="relative overflow-x-auto">
-      <table className="type-small w-full border-collapse text-[var(--ink-secondary)]">
-        <thead>
-          <tr>
-            {columns.map((column, index) => (
-              <th
-                key={column}
-                scope="col"
-                className={clsx(
-                  "type-caption whitespace-nowrap border-b border-[var(--line)] px-2 py-1 uppercase text-[var(--ink-muted)]",
-                  figures.includes(index) ? "text-right" : "text-left",
-                )}
-              >
-                <BilingualLabel k={column} />
-              </th>
+    <>
+      <div className="mb-1 flex justify-end">
+        <button
+          type="button"
+          onClick={() => setExpanded(true)}
+          className="type-caption inline-flex items-center gap-1 text-[var(--ink-muted)] hover:text-[var(--ink)]"
+        >
+          <Maximize2 aria-hidden="true" className="h-3.5 w-3.5" />
+          {t("risk.report.expand")}
+        </button>
+      </div>
+      {/* relative: the cells' sr-only spans (DeltaBadge) are position:absolute. Without a positioned
+          wrapper their containing block was the report panel, so this overflow did not clip them and a
+          wide table made the whole panel scroll sideways, cutting off the left of every section. */}
+      <div className="relative overflow-x-auto">{table}</div>
+      <ModalShell open={expanded} onClose={() => setExpanded(false)} title={title ?? t("risk.report.expand")} size="full">
+        {/* Headers wrap here, so the long bilingual ones fit a 1280px window without scrolling. */}
+        <div className="relative overflow-x-auto"><TableBody columns={columns} rows={rows} figures={figures} wrapHeaders /></div>
+      </ModalShell>
+    </>
+  );
+}
+
+function TableBody({ columns, rows, figures, wrapHeaders = false }: {
+  columns: LabelKey[]; rows: ReactNode[][]; figures: number[]; wrapHeaders?: boolean;
+}) {
+  return (
+    <table className="type-small w-full border-collapse text-[var(--ink-secondary)]">
+      <thead>
+        <tr>
+          {columns.map((column, index) => (
+            <th
+              key={column}
+              scope="col"
+              className={clsx(
+                "type-caption border-b border-[var(--line)] px-2 py-1 align-bottom uppercase text-[var(--ink-muted)]",
+                wrapHeaders ? "whitespace-normal" : "whitespace-nowrap",
+                figures.includes(index) ? "text-right" : "text-left",
+              )}
+            >
+              <BilingualLabel k={column} />
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((cells, rowIndex) => (
+          <tr key={rowIndex} className="border-b border-[var(--grid)]">
+            {cells.map((cell, index) => (
+              <td key={index} className={clsx("whitespace-nowrap px-2 py-1", figures.includes(index) && "text-right")}>{cell}</td>
             ))}
           </tr>
-        </thead>
-        <tbody>
-          {rows.map((cells, rowIndex) => (
-            <tr key={rowIndex} className="border-b border-[var(--grid)]">
-              {cells.map((cell, index) => (
-                <td key={index} className={clsx("whitespace-nowrap px-2 py-1", figures.includes(index) && "text-right")}>{cell}</td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+        ))}
+      </tbody>
+    </table>
   );
 }
 

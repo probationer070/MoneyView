@@ -70,6 +70,19 @@ test("a wide report table scrolls inside itself, not the whole report panel", as
   expect(widths.scroll).toBeLessThanOrEqual(widths.client + 1);
 });
 
+test("a table with many columns opens full width in a modal", async ({ page }) => {
+  await open(page, "/alerts/risk/5");
+  const themes = section(page, "themes");
+  await expect(themes.locator("tbody tr")).toHaveCount(4);
+  await themes.getByRole("button", { name: "View larger" }).click();
+  const dialog = page.getByRole("dialog", { name: "Themes" });
+  await expect(dialog.locator("tbody tr")).toHaveCount(4);
+  const fit = await dialog.locator(".overflow-x-auto").first().evaluate((el) => ({ scroll: el.scrollWidth, client: el.clientWidth }));
+  expect(fit.scroll, "every column fits the modal without scrolling").toBeLessThanOrEqual(fit.client + 1);
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+});
+
 test("current cards list every card of both decks, past the panel's ten", async ({ page }) => {
   // ?cards=all sends every card; the panel shows ten and links here for the rest (final review I1).
   const full = {
