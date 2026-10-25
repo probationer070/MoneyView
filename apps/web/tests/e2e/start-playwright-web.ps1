@@ -81,6 +81,8 @@ Push-Location $webRoot
 try {
     try {
         $env:NEXT_PUBLIC_API_BASE_URL = "http://127.0.0.1:$ApiPort"
+        # SSR reads the shared port file unless this is set; the e2e API harness no longer writes it.
+        $env:API_BASE_URL_INTERNAL = "http://127.0.0.1:$ApiPort"
         npm.cmd exec -- next dev --hostname 127.0.0.1 --port $WebPort
     }
     catch {
