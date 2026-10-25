@@ -69,3 +69,32 @@ def test_daily_sweep_runs_only_when_due(steps):
     store.set_state("news_daily_done:2026-10-26", "1")
     loop.run_news_once(NOW)
     assert "daily" not in steps
+
+
+def test_stop_ends_the_pass_and_the_cycle(steps, monkeypatch):
+    """Catches a shutdown stop logged as a step failure: the later steps would still run, and the
+    cycle would sleep and start another pass instead of exiting."""
+    import asyncio
+
+    from apps.api.services.news_feed import pacer
+
+    news_stopped = getattr(pacer, "NewsStopped")
+
+    def stopped(now):
+        steps.append("queue")
+        raise news_stopped("stopping")
+
+    monkeypatch.setattr(loop, "drain_alert_queue", stopped)
+    with pytest.raises(news_stopped):
+        loop.run_news_once(NOW)
+    assert steps == ["macro", "queue"]
+
+    passes: list[int] = []
+
+    def once(now):
+        passes.append(1)
+        raise news_stopped("stopping")
+
+    monkeypatch.setattr(loop, "run_news_once", once)
+    asyncio.run(asyncio.wait_for(loop.news_cycle(interval_seconds=0.01), timeout=2))
+    assert passes == [1]

@@ -512,6 +512,7 @@ Base path: `/api/v1/news`
 - **Response:** `List[NewsArticle]`
 - **Purpose:** Trigger a live crawl by keyword and optionally associate it with a ticker.
 - **Query parameters:** `query`, `ticker`, `limit`
+- **Errors:** 503 with `{code: "news_blocked", reason, retry_after}` while the Google News pacer is blocked or at its daily cap
 - **Persistence touched:** crawls and persists news results
 - **Classification:** medium, mutating
 - **Consumers:** explicit news crawl workflows
@@ -521,6 +522,7 @@ Base path: `/api/v1/news`
 - **Response:** `List[NewsArticle]`
 - **Purpose:** Trigger a stock-specific crawl and persist the results.
 - **Query parameters:** `ticker`, `company_name`, `limit`, `offset`
+- **Errors:** 503 with `{code: "news_blocked", reason, retry_after}` while the Google News pacer is blocked or at its daily cap
 - **Persistence touched:** crawls and persists news results
 - **Classification:** medium, mutating
 - **Consumers:** stock-specific news refresh workflows
@@ -529,14 +531,15 @@ Base path: `/api/v1/news`
 
 - **Request body:** `{ticker, date}` (`date` is `YYYY-MM-DD`; the ticker must be in the watchlist, else 404)
 - **Response:** `APIResponse[NewsHistoryResponse]`: `ticker`, `start`, `end` (date -2 to +2 days), `status` (`searched_now`, `cached`, `blocked`, `daily_limit`, `failed`), `retry_after`, `truncated`, `searched` (per language `lang`, `status`, `found`, `truncated`) and `articles`
-- **Purpose:** Search Google News once per language for the five days around a date. Synchronous: the pacer wait (3-8 s) happens inside the request. A finished search is cached in `news_history_searches`.
+- **Overall `status`:** if any language ended `blocked`, `daily_limit` or `failed`, the first such one (en before ko); otherwise `cached` when every language was cached, else `searched_now`. A block always answers 200, never 503.
+- **Purpose:** Search Google News once per language for the five days around a date. Synchronous: the pacer wait happens inside the request: its own 3-8 s gap from the end of the previous Google request, plus, when a bulk request is already being fetched, the rest of that one fetch (an interactive request goes before any bulk request still waiting its gap). A finished search is cached in `news_history_searches`; two identical searches at once send one request per language, and the second answers `cached`.
 - **Persistence touched:** writes `news` and `news_history_searches`; pacer state in `risk_state`
 - **Classification:** medium, mutating
 - **Consumers:** past-date news search (stock detail, sub-project 4-b)
 
 ### `GET /status`
 
-- **Response:** `APIResponse[NewsStatusResponse]`: `blocked_until`, `blocked_reason`, `requests_today`, `daily_cap`, `daily` (`session_day`, `done`, `remaining`, `complete`)
+- **Response:** `APIResponse[NewsStatusResponse]`: `blocked_until`, `blocked_reason`, `requests_today`, `daily_cap`, `daily` (`session_day`, `done`, `remaining`, `complete`; `complete` is false while `remaining > 0`, e.g. a ticker added after the sweep finished)
 - **Purpose:** Google block state, today's request count against the daily cap, and the daily stock sweep progress.
 - **Persistence touched:** reads `risk_state`
 - **Classification:** light
@@ -544,7 +547,7 @@ Base path: `/api/v1/news`
 ### `POST /acquire`
 
 - **Request body:** `{tickers}` (at most 100)
-- **Purpose:** Refresh stock news for a batch through the acquisition boundary. Each fetched ticker goes through the pacer, so it waits 3-8 s (interactive); tickers the hourly boundary answers as fresh send nothing. A block answers 503 for the blocked tickers.
+- **Purpose:** Refresh stock news for a batch through the acquisition boundary. Each fetched ticker goes through the pacer, so it waits 3-8 s (interactive); tickers the hourly boundary answers as fresh send nothing. A block does not change the HTTP status: the route answers 200 and each ticker still needing a fetch gets `status: "failed"` with `detail: "blocked until <retry_after>"` (only `/crawl` and `/crawl/stock` answer 503). A refused ticker records no check in `acquisition_state`, so it is asked again once the block lifts.
 - **Persistence touched:** writes `news` and `acquisition_state`
 - **Classification:** medium, mutating
 - **Consumers:** portfolio tile grid news refresh

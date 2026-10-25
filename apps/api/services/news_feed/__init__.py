@@ -1,3 +1,3 @@
-from apps.api.services.news_feed.pacer import NewsBlocked, get_pacer, google_news
+from apps.api.services.news_feed.pacer import NewsBlocked, NewsStopped, get_pacer, google_news
 
-__all__ = ["NewsBlocked", "get_pacer", "google_news"]
+__all__ = ["NewsBlocked", "NewsStopped", "get_pacer", "google_news"]

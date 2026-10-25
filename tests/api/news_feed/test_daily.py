@@ -232,3 +232,100 @@ def test_alert_queue_drops_failed_tickers_when_not_blocked(monkeypatch):
     queue_alert_tickers(["AAA", "BBB"])
     drain_alert_queue(NOW)
     assert get_state("news_alert_queue") is None
+
+
+def test_ticker_queued_while_the_queue_drains_survives(monkeypatch):
+    """Catches the drain writing back its stale copy of the queue (or deleting the key), which
+    loses a ticker the risk cycle queued while the sweep ran."""
+    def sweep(now, **kw):
+        queue_alert_tickers(["NEW"])          # the risk cycle queues during the minutes-long sweep
+        return SimpleNamespace(failed=[])
+
+    monkeypatch.setattr(daily, "sweep_news", sweep)
+    monkeypatch.setattr(daily, "get_pacer",
+                        lambda: SimpleNamespace(status=lambda: SimpleNamespace(blocked_until=None)))
+    queue_alert_tickers(["AAA"])
+    drain_alert_queue(NOW)
+    assert daily._read_queue() == ["NEW"]
+
+
+def test_concurrent_enqueues_are_not_lost(monkeypatch):
+    """Catches an unguarded read-modify-write of the queue: two writers both read the old queue
+    and the second write drops the first one's ticker."""
+    import threading
+    import time
+
+    real_read = daily._read_queue
+
+    def slow_read():
+        value = real_read()
+        time.sleep(0.1)                       # widen the read-to-write window
+        return value
+
+    monkeypatch.setattr(daily, "_read_queue", slow_read)
+    start = threading.Barrier(2)
+
+    def enqueue(ticker):
+        start.wait(5)
+        queue_alert_tickers([ticker])
+
+    threads = [threading.Thread(target=enqueue, args=(t,), daemon=True) for t in ("AAA", "BBB")]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(5)
+    assert sorted(real_read()) == ["AAA", "BBB"]
+
+
+def test_blocked_ticker_leaves_acquisition_state_untouched(fake_google, watchlist3):
+    """Catches a refused fetch recorded as a FAILED check: the tile would read "no recent news,
+    last checked HH:MM" although nothing was asked."""
+    fake_google.block_on_call(2)
+    run_daily_sweep(NOW, watchlist=watchlist3)
+    with get_db() as conn:
+        row = conn.execute("SELECT * FROM acquisition_state WHERE data_class = 'news' AND subject = 'BBB'").fetchone()
+    assert row is None
+    assert read_state("news", "AAA").last_success_at is not None
+
+
+def test_korean_block_keeps_the_english_check(fake_google):
+    """Catches a Korean-feed block rewinding the English fetch's check time (the ticker would look
+    never asked although its English feed was just fetched)."""
+    fake_google.block_on_call(2)               # NVDA: English ok, then the Korean feed is blocked
+    report = run_daily_sweep(NOW, watchlist=lambda: [("NVDA", "NVIDIA")])
+    assert report.stopped == "blocked" and get_state(f"news_daily:{DAY}:NVDA") is None
+    state = read_state("news", "NVDA")
+    assert state.last_checked_at is not None and state.last_checked_at == state.last_success_at
+
+
+def test_each_ticker_is_stamped_with_its_own_fetch_time(fake_google, watchlist3):
+    """Catches every ticker stamped with the pass start time: a ticker swept three hours into the
+    pass would look three hours old and Refresh would not skip it for the hour after (N-D13)."""
+    times = iter([datetime(2026, 10, 26, 22, m, tzinfo=UTC) for m in (10, 20, 30)])
+    run_daily_sweep(NOW, watchlist=watchlist3, clock=lambda: next(times))
+    assert [read_state("news", t).last_checked_at.minute for t in ("AAA", "BBB", "CCC")] == [10, 20, 30]
+    assert get_state(f"news_daily_done:{DAY}") == "1"      # the session day still comes from `now`
+
+
+def test_stop_ends_the_sweep_without_marking_the_ticker(watchlist3, monkeypatch):
+    """Catches a shutdown stop counted as a plain failure (the ticker would be marked done and its
+    news never fetched today) or as a block, or recorded as a check."""
+    from apps.api.services.news_feed import pacer
+
+    news_stopped = getattr(pacer, "NewsStopped")
+    calls: list[str] = []
+
+    def fetch(ticker, company_name="", **kw):
+        calls.append(ticker)
+        if ticker == "BBB":
+            raise news_stopped("stopping")
+        return []
+
+    monkeypatch.setattr(daily, "fetch_news", fetch)
+    with pytest.raises(news_stopped):
+        run_daily_sweep(NOW, watchlist=watchlist3)
+    assert calls == ["AAA", "BBB"]
+    assert get_state(f"news_daily:{DAY}:AAA") == "1"
+    assert get_state(f"news_daily:{DAY}:BBB") is None
+    assert read_state("news", "BBB").last_checked_at is None
+    assert daily_due(NOW)

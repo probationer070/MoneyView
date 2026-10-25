@@ -192,3 +192,62 @@ def test_history_route_returns_200_with_blocked_status(client, fake_google):
     assert r.status_code == 200
     data = r.json()["data"]
     assert data["status"] == "blocked" and data["retry_after"].startswith("2026-10-26")
+
+
+@pytest.mark.parametrize("en, ko, expect", [
+    ("ok", "blocked", "blocked"),
+    ("ok", "failed", "failed"),
+    ("cached", "failed", "failed"),
+    ("failed", "blocked", "failed"),
+    ("cached", "ok", "searched_now"),
+])
+def test_overall_status_shows_a_problem_in_any_language(fake_google, en, ko, expect):
+    """Catches an overall status that hides a Korean block or failure behind an English success
+    (or behind an English cache hit), or that does not pick the first problem in en, ko order."""
+    retry = datetime(2026, 10, 26, tzinfo=UTC)
+    outcome = {"blocked": NewsBlocked("blocked", retry), "failed": RuntimeError("boom")}
+    start, end = history_window(D)
+    for lang, kind in (("en", en), ("ko", ko)):
+        if kind == "cached":
+            history._record("AAPL", lang, start, end, NOW, 0, False)
+        elif kind in outcome:
+            fake_google.errors[lang] = outcome[kind]
+    assert search_history("AAPL", D, now=NOW, names=NAMES).status == expect
+
+
+def test_concurrent_identical_searches_send_once(monkeypatch):
+    """Catches two identical searches both missing the cache and both asking Google."""
+    import threading
+    import time
+
+    calls: list[str] = []
+
+    def slow_google(query, lang, kind, *, after=None, before=None):
+        calls.append(lang)
+        time.sleep(0.2)
+        return [item(1, lang)]
+
+    monkeypatch.setattr(history, "google_news", slow_google)
+    monkeypatch.setattr(history, "_queries", lambda: SimpleNamespace(ko_names={"AAPL": KO}))
+    results: list = []
+    threads = [threading.Thread(target=lambda: results.append(search_history("AAPL", D, now=NOW, names=NAMES)),
+                                daemon=True) for _ in range(2)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(10)
+    assert sorted(calls) == ["en", "ko"]
+    assert sorted(r.status for r in results) == ["cached", "searched_now"]
+
+
+def test_status_not_complete_while_tickers_remain(client):
+    """Catches `complete` read from the done flag alone: a ticker added after the day was flagged
+    done would be left unswept while the status says the day is complete."""
+    day = daily.session_day(datetime.now(UTC))
+    with get_db() as conn:
+        conn.execute("INSERT INTO watchlist (ticker, name, sector, group_name, weight)"
+                     " VALUES ('MSFT', 'Microsoft', '', 'core', 0.0)")
+    store.set_state(f"news_daily:{day.isoformat()}:AAPL", "1")
+    store.set_state(f"news_daily_done:{day.isoformat()}", "1")      # MSFT added after the sweep
+    daily_status = client.get("/api/v1/news/status").json()["data"]["daily"]
+    assert (daily_status["remaining"], daily_status["complete"]) == (1, False)

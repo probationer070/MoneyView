@@ -96,6 +96,8 @@ try {
         # Keep this run away from the owner's real config/.env, so e2e never publishes into their real sync folder.
         $env:MONEYVIEW_SKIP_LOCAL_ENV = "1"
         Remove-Item Env:MONEYVIEW_SYNC_DIR -ErrorAction SilentlyContinue
+        # Startup jobs stay on, but the news loop would crawl real Google News on every run.
+        $env:MONEYVIEW_DISABLE_NEWS_LOOP = "1"
         & $python "scripts/seed_e2e_market_cache.py"
         if ($LASTEXITCODE -ne 0) {
             throw "Failed to seed E2E market cache."

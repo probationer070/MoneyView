@@ -296,3 +296,63 @@ def test_queries_file_validates_strictly(tmp_path):
     bad_series.write_text(text.replace("DGS10", "NOPE"), encoding="utf-8")
     with pytest.raises(ValueError):
         news.load_news_queries(bad_series)
+
+
+def test_ticker_only_sweep_leaves_macro_state_alone():
+    """Catches an alert-ticker sweep moving the macro 12 h timer (the macro sweep would be skipped)
+    or overwriting the macro failure flag (the alert card's feed_failed note would vanish)."""
+    store.set_state("news_swept_at", "2026-10-18T00:00:00+00:00")
+    store.set_state("news_last_sweep_failed", "1")
+    news.sweep_news(NOW, crawler=FakeCrawler(), tickers=["NVDA"], include_topics=False)
+    assert store.get_state("news_swept_at") == "2026-10-18T00:00:00+00:00"
+    assert store.get_state("news_last_sweep_failed") == "1"
+    store.set_state("news_last_sweep_failed", "0")
+    news.sweep_news(NOW, crawler=FakeCrawler(fail=lambda kw: True), tickers=["NVDA"], include_topics=False)
+    assert store.get_state("news_last_sweep_failed") == "0"
+
+
+def test_blocked_macro_sweep_sets_the_failure_flag():
+    """Catches a Google block leaving news_last_sweep_failed at "0" (the alert card would not say
+    the feed failed), or a blocked sweep stamping news_swept_at."""
+    store.set_state("news_last_sweep_failed", "0")
+
+    class Blocked(FakeCrawler):
+        def crawl(self, **kw):
+            raise NewsBlocked("blocked", NOW + timedelta(hours=12))
+
+    news.sweep_news(NOW, crawler=Blocked())
+    assert store.get_state("news_last_sweep_failed") == "1"
+    assert store.get_state("news_swept_at") is None
+
+
+def test_blocked_ticker_only_sweep_leaves_the_flag_alone():
+    """Catches the block branch writing the macro flag for an alert-ticker sweep."""
+    store.set_state("news_last_sweep_failed", "0")
+
+    class Blocked(FakeCrawler):
+        def crawl(self, **kw):
+            raise NewsBlocked("blocked", NOW + timedelta(hours=12))
+
+    news.sweep_news(NOW, crawler=Blocked(), tickers=["NVDA"], include_topics=False)
+    assert store.get_state("news_last_sweep_failed") == "0"
+
+
+def test_stop_propagates_without_touching_sweep_state():
+    """Catches a shutdown stop swallowed as a feed failure: the sweep would carry on through every
+    feed and could flag the feed as failed."""
+    from apps.api.services.news_feed import pacer
+
+    news_stopped = getattr(pacer, "NewsStopped")
+    store.set_state("news_last_sweep_failed", "0")
+
+    class Stopping(FakeCrawler):
+        def crawl(self, **kw):
+            self.calls.append(kw)
+            raise news_stopped("stopping")
+
+    crawler = Stopping()
+    with pytest.raises(news_stopped):
+        news.sweep_news(NOW, crawler=crawler)
+    assert len(crawler.calls) == 1
+    assert store.get_state("news_last_sweep_failed") == "0"
+    assert store.get_state("news_swept_at") is None

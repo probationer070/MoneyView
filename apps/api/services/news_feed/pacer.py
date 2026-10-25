@@ -3,18 +3,23 @@
 One pacer serializes sends, spaces them with a random gap, stops everything after a
 block until the next 00:00 UTC, and enforces a daily request cap. State lives in
 `risk_state`, so a restart keeps the block, the day count and the last send time.
+
+The send slot is held only for the fetch itself. A request waits for its gap on the condition,
+so an interactive request that arrives while a bulk request waits its gap goes first, and every
+gap is measured from the end of the previous fetch. `STOP` (set on app shutdown) ends any wait
+with `NewsStopped`.
 """
 
 from __future__ import annotations
 
 import random
 import threading
-import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from typing import Literal
 
+from apps.api.services.acquisition.errors import ProviderRefused
 from apps.api.services.news_feed.rss import FeedItem, FeedResult, fetch_feed, search_url
 from apps.api.services.risk.store import get_state, set_state
 
@@ -28,6 +33,10 @@ BLOCKED_UNTIL_KEY = "news_blocked_until"
 BLOCKED_REASON_KEY = "news_blocked_reason"
 LAST_REQUEST_KEY = "news_last_request_at"
 
+# Set by the app lifespan on shutdown. A waiting request notices it within _STOP_POLL seconds.
+STOP = threading.Event()
+_STOP_POLL = 0.5
+
 
 def _count_key(day: datetime) -> str:
     return f"news_requests:{day.strftime('%Y-%m-%d')}"
@@ -38,11 +47,15 @@ def next_utc_midnight(now: datetime) -> datetime:
     return start + timedelta(days=1)
 
 
-class NewsBlocked(RuntimeError):
+class NewsBlocked(ProviderRefused, RuntimeError):
     def __init__(self, reason: Literal["blocked", "daily_limit"], retry_after: datetime) -> None:
         super().__init__(f"Google News {reason}; retry after {retry_after.isoformat()}")
         self.reason = reason
         self.retry_after = retry_after
+
+
+class NewsStopped(ProviderRefused):
+    """The app is shutting down; the request was not sent. Neither a block nor a failure."""
 
 
 @dataclass(frozen=True)
@@ -59,7 +72,7 @@ class Pacer:
         *,
         fetch: Callable[[str], FeedResult] = fetch_feed,
         clock: Callable[[], datetime],
-        sleep: Callable[[float], None] = time.sleep,
+        sleep: Callable[[float], None] | None = None,
         rng: random.Random | None = None,
     ) -> None:
         self._fetch = fetch
@@ -88,35 +101,58 @@ class Pacer:
         if self._requests_today(now) >= DAILY_CAP:
             raise NewsBlocked("daily_limit", next_utc_midnight(now))
 
+    def _pause(self, seconds: float | None) -> None:
+        """Wait with the condition released; called holding it. `None` waits for a notify.
+
+        Without an injected sleep this is the condition wait, in slices so `STOP` is seen. An
+        injected sleep (a test's fake clock) is called with the lock released instead; the
+        caller's loop re-checks everything either way."""
+        if self._sleep is None or seconds is None:
+            self._cond.wait(_STOP_POLL if seconds is None else min(seconds, _STOP_POLL))
+            return
+        self._cond.release()
+        try:
+            self._sleep(max(seconds, 1e-6))   # a fake clock counts whole microseconds
+        finally:
+            self._cond.acquire()
+
+    def _gap_left(self, wanted: float) -> float:
+        last = get_state(LAST_REQUEST_KEY)
+        if not last:
+            return 0.0
+        return wanted - (self._clock() - datetime.fromisoformat(last)).total_seconds()
+
     def request(self, url: str, kind: Kind) -> FeedResult:
-        self._check_open()
         interactive = kind == "interactive"
+        wanted = self._rng.uniform(*(INTERACTIVE_GAP if interactive else BULK_GAP))
         with self._cond:
             if interactive:
                 self._interactive_waiting += 1
             try:
-                while self._busy or (not interactive and self._interactive_waiting > 0):
-                    self._cond.wait()
+                while True:
+                    if STOP.is_set():
+                        raise NewsStopped("news requests stopped for shutdown")
+                    self._check_open()
+                    if self._busy or (not interactive and self._interactive_waiting > 0):
+                        self._pause(None)   # a fetch is in flight, or a bulk request yields
+                        continue
+                    left = self._gap_left(wanted)
+                    if left > 0:
+                        self._pause(left)
+                        continue
+                    break
             finally:
                 if interactive:
                     self._interactive_waiting -= 1
             self._busy = True
         try:
-            return self._send(url, kind)
+            return self._send(url)
         finally:
             with self._cond:
                 self._busy = False
                 self._cond.notify_all()
 
-    def _send(self, url: str, kind: Kind) -> FeedResult:
-        self._check_open()
-        gap = INTERACTIVE_GAP if kind == "interactive" else BULK_GAP
-        wanted = self._rng.uniform(*gap)
-        last = get_state(LAST_REQUEST_KEY)
-        elapsed = (self._clock() - datetime.fromisoformat(last)).total_seconds() if last else wanted
-        self._sleep(max(0.0, wanted - elapsed))
-        self._check_open()
-
+    def _send(self, url: str) -> FeedResult:
         try:
             result = self._fetch(url)
         finally:

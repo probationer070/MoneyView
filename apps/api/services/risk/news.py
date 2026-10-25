@@ -23,7 +23,7 @@ from pydantic import BaseModel, ConfigDict, ValidationError, model_validator
 from apps.api.core.logger import setup_logger
 from apps.api.models.schemas import NewsArticle, SentimentEnum
 from apps.api.services.db import get_db
-from apps.api.services.news_feed import NewsBlocked
+from apps.api.services.news_feed import NewsBlocked, NewsStopped
 from apps.api.services.news_service import NewsService
 from apps.api.services.risk import store
 from apps.api.services.risk.constants import RISK_FRED_SERIES
@@ -132,7 +132,10 @@ def sweep_news(
 
     Spacing is the pacer's job (bulk kind). A block or daily cap ends the sweep: the feed
     that hit it and every later feed count as failed, and `news_swept_at` stays unset so the
-    next cycle retries."""
+    next cycle retries. A shutdown stop (`NewsStopped`) propagates and writes nothing.
+
+    `news_swept_at` and `news_last_sweep_failed` describe the macro/theme sweep, so only a
+    sweep with `include_topics` writes them; an alert-ticker sweep leaves both alone."""
     if crawler is None:
         from apps.api.services.webscrap.Crawler.StockNewsCrawler import StockNewsCrawler
 
@@ -145,13 +148,15 @@ def sweep_news(
         attempted += 1
         try:
             items = crawler.crawl(ticker=ticker, company_name="", lang=lang, query=query, kind="bulk")
-        except AssertionError:
+        except (AssertionError, NewsStopped):
             raise
         except NewsBlocked as error:
             logger.warning("risk.sweep_news_blocked feed=%s error=%s", label, error)
             remaining = [job[0] for job in jobs[index:]]
             failed.extend(remaining)
             attempted += len(remaining) - 1
+            if include_topics:
+                store.set_state("news_last_sweep_failed", "1")   # the alert card notes the failed feed
             return SweepReport(attempted, fetched, failed)
         except Exception as error:  # noqa: BLE001 - one feed must not stop the sweep
             logger.warning("risk.sweep_news_failed feed=%s error=%s", label, error)
@@ -172,10 +177,11 @@ def sweep_news(
                 lang=lang,
                 topic=topic,
             ))
-    all_failed = bool(attempted) and len(failed) == attempted
-    if not all_failed:  # a sweep where every feed failed is retried next cycle, not in 12 hours
-        store.set_state("news_swept_at", now.isoformat())
-    store.set_state("news_last_sweep_failed", "1" if all_failed else "0")
+    if include_topics:
+        all_failed = bool(attempted) and len(failed) == attempted
+        if not all_failed:  # a sweep where every feed failed is retried next cycle, not in 12 hours
+            store.set_state("news_swept_at", now.isoformat())
+        store.set_state("news_last_sweep_failed", "1" if all_failed else "0")
     return SweepReport(attempted, fetched, failed)
 
 

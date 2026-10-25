@@ -117,3 +117,26 @@ def test_routes_news_has_no_sleep():
 def test_the_cap_still_guards_a_single_request():
     """Chunking is the client's job; the endpoint keeps its own bound."""
     assert news_routes.MAX_ACQUIRE_TICKERS == 100
+
+
+def test_blocked_ticker_is_asked_again_once_the_block_lifts():
+    """Catches a refused fetch recorded as a check: the blocked ticker would then read "fresh"
+    for the next hour, and the tile "no recent news, last checked", although nothing was asked."""
+    from apps.api.services.acquisition.state import read_state
+
+    _seed({"AAA": "Alpha", "BBB": "Beta"})
+    retry_after = datetime(2026, 10, 26, 0, 0, tzinfo=timezone.utc)
+    blocked = {"on": True}
+
+    def fetcher(ticker, company_name=""):
+        if ticker == "BBB" and blocked["on"]:
+            raise NewsBlocked("blocked", retry_after)
+        return []
+
+    first = news_routes.acquire_news_batch(["AAA", "BBB"], now=NOW, fetcher=fetcher)
+    assert [(r["ticker"], r["status"]) for r in first] == [("AAA", "empty"), ("BBB", "failed")]
+    assert read_state("news", "BBB").last_checked_at is None
+
+    blocked["on"] = False
+    later = news_routes.acquire_news_batch(["AAA", "BBB"], now=NOW + timedelta(minutes=10), fetcher=fetcher)
+    assert [(r["ticker"], r["status"]) for r in later] == [("AAA", "fresh"), ("BBB", "empty")]

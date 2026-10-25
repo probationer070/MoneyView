@@ -93,6 +93,7 @@ def get_news_status():
     day = session_day(datetime.now(timezone.utc))
     tickers = list(_watchlist_names())
     done = sum(1 for t in tickers if store.get_state(_mark(day, t)) is not None)
+    remaining = len(tickers) - done
     return APIResponse(data=NewsStatusResponse(
         blocked_until=pacer.blocked_until,
         blocked_reason=pacer.blocked_reason,
@@ -101,8 +102,9 @@ def get_news_status():
         daily=NewsDailyStatus(
             session_day=day,
             done=done,
-            remaining=len(tickers) - done,
-            complete=store.get_state(_done_key(day)) is not None,
+            remaining=remaining,
+            # A ticker added after the day was flagged done is still to sweep.
+            complete=store.get_state(_done_key(day)) is not None and remaining == 0,
         ),
     ))
 
@@ -175,25 +177,18 @@ def acquire_news_batch(tickers, *, now, fetcher=fetch_news) -> list[dict]:
                 results.append({"ticker": ticker, "status": "fresh", "articles": 0, "detail": None})
             continue
 
-        def fetch(subject: str, _company: str = company_name):
-            # acquire_point_in_time records any fetch exception as FAILED and returns, so the
-            # block has to be noted here to stop the loop.
-            nonlocal blocked
-            try:
-                return fetcher(subject, company_name=_company)
-            except NewsBlocked as error:
-                blocked = error
-                raise
-
-        outcome = acquire_point_in_time(
-            "news",
-            ticker,
-            now=now,
-            fetcher=fetch,
-            saver=save_news,
-            coverage=news_coverage,
-        )
-        if blocked is not None:
+        try:
+            # A block reaches here without a recorded check: nothing was sent.
+            outcome = acquire_point_in_time(
+                "news",
+                ticker,
+                now=now,
+                fetcher=lambda subject, _company=company_name: fetcher(subject, company_name=_company),
+                saver=save_news,
+                coverage=news_coverage,
+            )
+        except NewsBlocked as error:
+            blocked = error
             results.append(_blocked_result(ticker, blocked))
             continue
         results.append({

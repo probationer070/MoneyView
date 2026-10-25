@@ -261,3 +261,62 @@ def test_google_news_returns_items_and_builds_dated_url(monkeypatch):
     assert google_news("kospi", "en", "bulk", after=date(2026, 10, 1)) == [item]
     assert "after%3A2026-10-01" in seen[0]
     assert get_state("news_requests:2026-10-25") == "1"
+
+
+def _stamp_last_request(at: datetime) -> None:
+    set_state(pacer_module.LAST_REQUEST_KEY, at.isoformat())
+
+
+def test_interactive_overtakes_a_bulk_request_waiting_its_gap(monkeypatch):
+    """Catches a bulk request that holds the send slot while it waits its 20-60 s gap: an
+    interactive request arriving mid-gap would then go after it and wait the rest of the bulk
+    gap. Real time with shrunk gaps, because the overtaking happens while the bulk waits."""
+    monkeypatch.setattr(pacer_module, "BULK_GAP", (2.0, 2.0))
+    monkeypatch.setattr(pacer_module, "INTERACTIVE_GAP", (0.5, 0.5))
+    sent: list[tuple[str, datetime]] = []
+
+    def fetch(url):
+        sent.append((url, datetime.now(UTC)))
+        return FeedResult("ok", [])
+
+    p = Pacer(fetch=fetch, clock=lambda: datetime.now(UTC))
+    last_end = datetime.now(UTC)
+    _stamp_last_request(last_end)            # a fetch has just ended
+    bulk = threading.Thread(target=p.request, args=("bulk", "bulk"), daemon=True)
+    bulk.start()
+    time.sleep(0.2)                          # the bulk request is now waiting its gap
+    click = threading.Thread(target=p.request, args=("click", "interactive"), daemon=True)
+    click.start()
+    click.join(5)
+    bulk.join(5)
+    assert [url for url, _ in sent] == ["click", "bulk"]
+    click_gap = (sent[0][1] - last_end).total_seconds()
+    assert 0.45 <= click_gap < 1.2           # its own gap from the last fetch end, not the bulk one
+    assert (sent[1][1] - sent[0][1]).total_seconds() >= 1.95   # the bulk gap restarts from that fetch
+
+
+def test_stop_flag_wakes_a_request_waiting_its_gap(monkeypatch):
+    """Catches a gap wait that ignores the stop flag (shutdown would wait out the gap), or a stop
+    reported as a block or a failure instead of NewsStopped."""
+    news_stopped = getattr(pacer_module, "NewsStopped")
+    monkeypatch.setattr(pacer_module, "BULK_GAP", (30.0, 30.0))
+    p = Pacer(fetch=lambda url: FeedResult("ok", []), clock=lambda: datetime.now(UTC))
+    _stamp_last_request(datetime.now(UTC))
+    errors: list[BaseException] = []
+
+    def run():
+        try:
+            p.request("u", "bulk")
+        except BaseException as error:  # noqa: BLE001 - recorded for the assertion
+            errors.append(error)
+
+    worker = threading.Thread(target=run, daemon=True)
+    worker.start()
+    time.sleep(0.2)
+    began = time.monotonic()
+    pacer_module.STOP.set()
+    worker.join(5)
+    assert not worker.is_alive() and time.monotonic() - began < 2
+    assert len(errors) == 1 and type(errors[0]) is news_stopped
+    assert not isinstance(errors[0], (NewsBlocked, RuntimeError))
+    assert get_state("news_requests:" + datetime.now(UTC).strftime("%Y-%m-%d")) is None
