@@ -60,6 +60,7 @@ export function MoveChart({ bars, selectedDate, onSelect }: MoveChartProps) {
       {...colours}
       timeframe={period}
       timeframeOptions={periodOptions}
+      timeframeLabel={t("detail.chartPeriod")}
       onTimeframeChange={(value) => setPeriod(value as Period)}
       eventToggle="single"
       markers={markers}

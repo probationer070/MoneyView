@@ -283,3 +283,16 @@ test("a zero volume threshold turns the volume test off, and from limits the rep
   expect(since.map((move) => move.date)).toEqual(all.map((move) => move.date).filter((date) => date >= "2026-01-01"));
   expect(since.length).toBeGreaterThan(0);
 });
+
+test("the period group is named in the page language", async ({ page }) => {
+  await open(page);
+  await expect(page.getByRole("group", { name: "Chart period", exact: true })).toBeVisible();
+});
+
+test.describe("Korean", () => {
+  test.use({ locale: "ko-KR" });
+  test("the period group is named in Korean under ko-KR", async ({ page }) => {
+    await open(page);
+    await expect(page.getByRole("group", { name: "차트 기간", exact: true })).toBeVisible();
+  });
+});

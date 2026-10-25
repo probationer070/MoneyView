@@ -28,6 +28,8 @@ interface OHLCVChartCardProps {
   /** Pass "month" when data holds monthly candles, so event lines land on the right candle. */
   eventGranularity?: EventGranularity;
   timeframeOptions?: Array<{ value: string; label: string }>;
+  /** Accessible name of the timeframe group; defaults to "<title> timeframe". */
+  timeframeLabel?: string;
   onTimeframeChange?: (value: string) => void;
   actions?: ReactNode;
   legend?: ReactNode;
@@ -62,6 +64,7 @@ export function OHLCVChartCard({
   timeframe,
   eventGranularity,
   timeframeOptions,
+  timeframeLabel,
   onTimeframeChange,
   actions,
   legend,
@@ -116,7 +119,7 @@ export function OHLCVChartCard({
         {hasToggle ? (
           <ToggleGroup
             size="sm"
-            ariaLabel={`${title} timeframe`}
+            ariaLabel={timeframeLabel ?? `${title} timeframe`}
             value={timeframe!}
             onChange={onTimeframeChange!}
             options={timeframeOptions!}
