@@ -1,6 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import { DetailHeader } from "@/components/detail/DetailHeader";
+import { MoveChart } from "@/components/detail/MoveChart";
 import { MoversColumn } from "@/components/detail/MoversColumn";
 import { TrendTiles } from "@/components/detail/TrendTiles";
 import { useT } from "@/lib/i18n/locale";
@@ -14,6 +16,9 @@ export function DetailView({ ticker }: { ticker: string }) {
   const bars = useDetailBars(ticker);
   const profile = useDetailProfile(ticker);
   const movers = useLatestMovers();
+  // The clicked day belongs to a ticker, so a navigation to another ticker starts with none selected.
+  const [selection, setSelection] = useState<{ ticker: string; date: string | null }>({ ticker, date: null });
+  const selectedDate = selection.ticker === ticker ? selection.date : null;
   const watched = profile.data?.in_watchlist === true;
   const hasBars = bars.data !== undefined && bars.data.length > 0;
   const columns = watched
@@ -27,8 +32,9 @@ export function DetailView({ ticker }: { ticker: string }) {
         <>
           <TrendTiles bars={bars.data!} />
           <div className={`grid min-h-0 flex-1 gap-3 ${columns}`}>
-            {/* Region for the chart (the next task fills it). */}
-            <section data-testid="detail-chart-slot" aria-label={t("detail.chartRegion")} className={PANEL} />
+            <section data-testid="detail-chart-slot" aria-label={t("detail.chartRegion")} className={PANEL}>
+              <MoveChart bars={bars.data!} selectedDate={selectedDate} onSelect={(date) => setSelection({ ticker, date })} />
+            </section>
             {/* Region for the news column; a ticker off the watchlist has none. The next task fills it. */}
             {watched && <section data-testid="detail-news-slot" aria-label={t("detail.newsRegion")} className={PANEL} />}
             <aside className={`${PANEL} p-3`}>

@@ -748,6 +748,13 @@ export const ko: Messages = {
     notWatchlist: "관심종목이 아니어서 테마와 뉴스가 없습니다.",
     chartRegion: "가격 차트",
     newsRegion: "뉴스",
+    chartPeriod: "차트 기간", period6m: "6개월", period1y: "1년", period5y: "5년",
+    eventsOn: "이벤트 켜짐", eventsOff: "이벤트 꺼짐", eventsUnavailable: "이벤트를 불러오지 못했습니다",
+    priceThreshold: "가격 배수", volumeThreshold: "거래량 배수",
+    thresholdHint: "그날의 등락이 평소 일간 등락의 가격 배수 이상이면 표시합니다. 거래량도 거래량 배수 이상이면 채워진 표시이고, 0이면 거래량 조건을 끕니다.",
+    bigMoveCount: "큰 움직임", bigMoveList: "표시된 날, 최근 순", bigMoveNone: "이 기간에는 큰 움직임이 없습니다.",
+    kindHollow: "가격만", kindFilled: "가격과 거래량",
+    bigMoveItem: "{date}, {kind}, {pct}",
     tile: {
       week: "1주", month: "1개월", sixMonth: "6개월", yesterday: "어제 장",
       aboveAvg: "{days}일 이동평균 위", belowAvg: "{days}일 이동평균 아래",

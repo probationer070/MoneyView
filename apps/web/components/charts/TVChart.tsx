@@ -8,7 +8,10 @@ import { resolveCssColor } from "@/lib/cssColor";
 import { candleUpColour } from "@/lib/candleColours";
 import { tokens } from "@/lib/tokens.generated";
 import { EventLinesPrimitive, eventsNearX, type EventGranularity, type EventHit, type EventLineSpec } from "@/components/charts/primitives/EventLinesPrimitive";
+import { MoveMarksPrimitive, type ChartMarker, type MarkExtents } from "@/components/charts/primitives/MoveMarksPrimitive";
 import { EventTooltip } from "@/components/charts/EventTooltip";
+
+export type { ChartMarker };
 
 // Event line appearance. Semi-transparent so the price is readable through it, and wide
 // enough to be prominent at any zoom.
@@ -35,6 +38,7 @@ export interface TVLineSeries {
  */
 export const NO_LINE_SERIES: TVLineSeries[] = [];
 const NO_EVENTS: EventLineSpec[] = [];
+const NO_MARKERS: ChartMarker[] = [];
 
 interface TVChartProps {
     data: TVCandle[];
@@ -50,6 +54,10 @@ interface TVChartProps {
     upColor?: string;
     downColor?: string;
     tickerName?: string;
+    /** Big-move marks on the candles. Drawn in their own effect, so a change never rebuilds the chart. */
+    markers?: ChartMarker[];
+    /** Called with the date of a mark the reader clicked. */
+    onMarkerClick?: (date: string) => void;
 }
 
 const TVChart: React.FC<TVChartProps> = ({
@@ -62,7 +70,9 @@ const TVChart: React.FC<TVChartProps> = ({
     colorAccent = "var(--up)",
     upColor,
     downColor = "var(--down)",
-    tickerName = "Overview"
+    tickerName = "Overview",
+    markers = NO_MARKERS,
+    onMarkerClick,
 }) => {
     // Canvas cannot resolve a CSS custom property, and silently ignores an invalid colour
     // -- which left every candle black. Resolve to a concrete value before the series is
@@ -80,6 +90,12 @@ const TVChart: React.FC<TVChartProps> = ({
     const volumeSeriesRef = useRef<ISeriesApi<"Histogram"> | null>(null);
     const eventLinesRef = useRef<EventLinesPrimitive | null>(null);
     const lineSeriesRefs = useRef<Array<ISeriesApi<"Line">>>([]);
+    const moveMarksRef = useRef<MoveMarksPrimitive | null>(null);
+    // Read by the click handler inside the setup effect, so the callback is never a dependency of it.
+    const onMarkerClickRef = useRef(onMarkerClick);
+    useEffect(() => {
+        onMarkerClickRef.current = onMarkerClick;
+    }, [onMarkerClick]);
     // What the pointer is over. Set from the crosshair handler inside the setup effect, so hovering
     // never becomes a dependency of that effect and cannot rebuild the chart.
     const [hover, setHover] = useState<EventHit | null>(null);
@@ -184,6 +200,17 @@ const TVChart: React.FC<TVChartProps> = ({
                 });
             };
             chart.subscribeCrosshairMove(handleCrosshairMove);
+
+            // Constructed empty; the markers effect below owns the marks, as with the event lines.
+            const moveMarks = new MoveMarksPrimitive(() => candleSeriesRef.current, resolvedUp, resolvedDown);
+            chart.panes()[0].attachPrimitive(moveMarks);
+            moveMarksRef.current = moveMarks;
+            const handleClick = (param: MouseEventParams<Time>) => {
+                if (!param.point) return;
+                const hit = moveMarksRef.current?.hit(param.point.x, param.point.y);
+                if (hit) onMarkerClickRef.current?.(hit.date);
+            };
+            chart.subscribeClick(handleClick);
             lineSeriesRefs.current = lineSeriesData.map((series) =>
                 chart.addSeries(LineSeries, {
                     color: series.color,
@@ -233,6 +260,8 @@ const TVChart: React.FC<TVChartProps> = ({
                 resizeObserver.disconnect();
                 cancelAnimationFrame(animationFrameId);
                 eventLinesRef.current = null;
+                moveMarksRef.current = null;
+                chart.unsubscribeClick(handleClick);
                 chart.unsubscribeCrosshairMove(handleCrosshairMove);
                 chart.remove();
             };
@@ -307,6 +336,14 @@ const TVChart: React.FC<TVChartProps> = ({
         });
     }, [events, data, eventGranularity]);
 
+    // Pushed into the live primitive, like the event lines, so a threshold change never rebuilds the chart.
+    useEffect(() => {
+        const extents: MarkExtents = {};
+        for (const bar of data) extents[bar.time] = { high: bar.high, low: bar.low };
+        moveMarksRef.current?.update(markers, extents);
+        // The setup effect's inputs too: when it rebuilds the chart, the new primitive starts empty.
+    }, [markers, data, resolvedAccent, resolvedDown, resolvedUp, height, lineSeriesData, pointCount, tickerName, volumePointCount]);
+
     return (
         <div
             data-testid="tv-chart"
@@ -330,5 +367,7 @@ export default React.memo(TVChart, (prevProps, nextProps) => {
         && prevProps.volumeData === nextProps.volumeData
         && prevProps.lineSeriesData === nextProps.lineSeriesData
         && prevProps.events === nextProps.events
-        && prevProps.eventGranularity === nextProps.eventGranularity;
+        && prevProps.eventGranularity === nextProps.eventGranularity
+        && prevProps.markers === nextProps.markers
+        && prevProps.onMarkerClick === nextProps.onMarkerClick;
 });

@@ -745,6 +745,13 @@ export const en = {
     notWatchlist: "Not on the watchlist, so there is no theme or news for it.",
     chartRegion: "Price chart",
     newsRegion: "News",
+    chartPeriod: "Chart period", period6m: "6M", period1y: "1Y", period5y: "5Y",
+    eventsOn: "Events on", eventsOff: "Events off", eventsUnavailable: "Events unavailable",
+    priceThreshold: "Price multiple", volumeThreshold: "Volume multiple",
+    thresholdHint: "A day is marked when its move is at least the price multiple of its usual daily move. Filled when volume also reaches the volume multiple; 0 turns the volume test off.",
+    bigMoveCount: "Big moves", bigMoveList: "Marked days, newest first", bigMoveNone: "No big moves in this period.",
+    kindHollow: "price only", kindFilled: "price and volume",
+    bigMoveItem: "{date}, {kind}, {pct}",
     tile: {
       week: "1 week", month: "1 month", sixMonth: "6 months", yesterday: "Last session",
       aboveAvg: "Above the {days}-day average", belowAvg: "Below the {days}-day average",
