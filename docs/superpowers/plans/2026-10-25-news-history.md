@@ -482,7 +482,7 @@ CREATE TABLE IF NOT EXISTS news_history_searches (
     - On success, save every item as a `NewsArticle` with `ticker=TICKER`, `lang`, `topic=""` and `published_at`. Insert the row with `found=len(items)` and `truncated = len(items) == 100`.
     - `NewsBlocked` gives that language `blocked` or `daily_limit` with no row inserted.
     - `RuntimeError` gives `failed` with no row inserted.
-    - Overall `status`: `searched_now` if any language searched now, `cached` if every language was cached, otherwise the English language's status.
+    - Overall `status` (amended by the final fix wave, 1f9a59c): `cached` when every language was cached; else the first language (English first) that ended `blocked`, `daily_limit` or `failed`; else `searched_now`.
     - `retry_after` comes from the `NewsBlocked`, else `None`. `truncated` is true if any language was truncated.
     - `articles` is `get_news(ticker=TICKER, from_date=start, to_date=end, limit=500)`.
 - Route `POST /api/v1/news/history`:
