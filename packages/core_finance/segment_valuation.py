@@ -657,6 +657,10 @@ class CaseSpec:
     # `marginal_tax_rate` on the same schedule as the WACC; when None every year
     # is taxed at the marginal rate. See `tax_rate_path`.
     effective_tax_rate: float | None = None
+    # The IPO price per share, when known. It sets the new share count as ipo_proceeds / price and
+    # adds the company value at that price to the result. Mutually exclusive with a typed
+    # shares_new; with neither, the count is solved from the valuation itself (see run_case).
+    offering_price: float | None = None
 
     def __post_init__(self) -> None:
         # Same guard as `SegmentSpec`, and the same reason: every comparison
@@ -728,6 +732,14 @@ class CaseSpec:
             raise EngineRefusal("negative_balance", f"ipo_proceeds must not be negative, got {self.ipo_proceeds}")
         if self.shares_new < 0:
             raise EngineRefusal("negative_balance", f"shares_new must not be negative, got {self.shares_new}")
+        if self.offering_price is not None:
+            if self.offering_price <= 0:
+                raise EngineRefusal("non_positive_rate", f"offering_price must be positive, got {self.offering_price}")
+            if self.shares_new > 0:
+                raise EngineRefusal("conflicting_share_inputs",
+                    f"give either shares_new ({self.shares_new}) or offering_price "
+                    f"({self.offering_price}), not both: the price already sets the new share count"
+                )
 
     @property
     def horizon(self) -> int:
@@ -777,6 +789,12 @@ class CaseResult:
     terminal_reinvestment_rate: float
     reinvestment_rate_target_year: float
     explicit_reinvestment_rate_at_stable_growth: float
+    # The new shares the diluted value divides by: typed, priced or solved (see new_share_count).
+    shares_new_effective: float = 0.0
+    # With an offering price only: price x (shares_basic + new shares), the company value the offer
+    # implies, and how far the price sits above (+) or below (-) value_per_share_diluted, in percent.
+    offering_implied_value: float | None = None
+    offering_premium_pct: float | None = None
 
 
 def marginal_roic(segments: list[SegmentSpec], marginal_tax_rate: float) -> float:
@@ -886,6 +904,34 @@ def terminal_value(
     return fcff_next / spread
 
 
+def new_share_count(case: CaseSpec, equity_value: float) -> float:
+    """The shares an IPO adds, in billions.
+
+    - A typed `shares_new` above zero is used as given.
+    - With `offering_price`: ipo_proceeds / offering_price.
+    - With proceeds and neither: the fair-price offering Damodaran's sheet solves circularly
+      (`Valuation output!B43`, new = proceeds / the post-money value per share being computed).
+      Writing v = equity / (basic + new) and new = proceeds / v gives the closed form
+      new = proceeds x basic / (equity - proceeds): the shares sold at the value of a share.
+    - No proceeds: none.
+
+    `equity_value` includes the proceeds. Equity at or below the proceeds leaves existing holders
+    with no positive value to sell shares against, so that case is refused rather than solved.
+    """
+    if case.shares_new > 0:
+        return case.shares_new
+    if case.ipo_proceeds == 0:
+        return 0.0
+    if case.offering_price is not None:
+        return case.ipo_proceeds / case.offering_price
+    if equity_value <= case.ipo_proceeds:
+        raise EngineRefusal("offering_not_solvable",
+            f"equity value {equity_value:.4f} does not exceed the IPO proceeds {case.ipo_proceeds:.4f}: "
+            f"existing holders have no positive value to sell new shares against"
+        )
+    return case.ipo_proceeds * case.shares_basic / (equity_value - case.ipo_proceeds)
+
+
 def run_case(case: CaseSpec, segments: list[SegmentSpec]) -> CaseResult:
     """Value one case end to end: segments in, value per share out."""
     if not segments:
@@ -974,6 +1020,13 @@ def run_case(case: CaseSpec, segments: list[SegmentSpec]) -> CaseResult:
         non_operating_assets=case.ipo_proceeds,
     )
 
+    shares_new = new_share_count(case, equity_value)
+    value_per_share_diluted = calculate_intrinsic_value_per_share(equity_value, case.shares_basic + shares_new)
+    offering_implied_value = offering_premium_pct = None
+    if case.offering_price is not None:
+        offering_implied_value = case.offering_price * (case.shares_basic + shares_new)
+        offering_premium_pct = (case.offering_price / value_per_share_diluted - 1) * 100
+
     return CaseResult(
         segments=segment_results,
         revenue=revenue,
@@ -1002,9 +1055,7 @@ def run_case(case: CaseSpec, segments: list[SegmentSpec]) -> CaseResult:
         ),
         # Diluted answers "what is a share worth post-money" -- proceeds AND the
         # new shares that raised them both in.
-        value_per_share_diluted=calculate_intrinsic_value_per_share(
-            equity_value, case.shares_basic + case.shares_new
-        ),
+        value_per_share_diluted=value_per_share_diluted,
         terminal_spread=case.wacc_stable - g_stable,
         terminal_value_share_pct=(
             pv_terminal / enterprise_value * 100 if enterprise_value else 0.0
@@ -1030,4 +1081,7 @@ def run_case(case: CaseSpec, segments: list[SegmentSpec]) -> CaseResult:
         explicit_reinvestment_rate_at_stable_growth=(
             g_stable / target_year_marginal_roic
         ),
+        shares_new_effective=shares_new,
+        offering_implied_value=offering_implied_value,
+        offering_premium_pct=offering_premium_pct,
     )
