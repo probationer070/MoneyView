@@ -992,6 +992,8 @@ export const en = {
       table: "Signal records table",
       loading: "Loading records…",
       loadError: "Records could not be loaded.",
+      partialError: "{kinds} could not be loaded. The other records are shown.",
+      retry: "Try again",
       empty: "No records match.",
       pick: "Pick a record in the table to see its report here.",
       selected: "{kind} {id}",
@@ -1004,6 +1006,7 @@ export const en = {
       endReason: { below_ema: "Fell below trend", stalled: "Stalled", rules_changed: "Rules changed", ongoing: "Ongoing" },
     },
     report: {
+      expand: "View larger",
       period: "{start} – {end}",
       ongoing: "ongoing",
       rules: "Rules {version}",

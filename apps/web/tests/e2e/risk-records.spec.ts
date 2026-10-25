@@ -146,7 +146,22 @@ test("a report needs only its own list; another list failing does not block it",
   await page.goto("/alerts/risk/5", { waitUntil: "domcontentloaded" });
   await expect(report(page).locator('[data-section="header"]')).toContainText("Risk 5", { timeout: 60_000 });
   await expect(report(page).locator('[data-section="themes"] tbody tr')).toHaveCount(4);
-  await expect(page.getByText("Records could not be loaded."), "the table still states its own failure").toBeVisible({ timeout: 30_000 });
+  // The failed list is named above the table; the risk and surge rows that loaded stay visible
+  // (one failed list used to blank the whole table: ERROR-LOG 2026-10-26, movers range cap).
+  await expect(page.getByTestId("records-partial-error")).toContainText("Yesterday's gainers could not be loaded.", { timeout: 30_000 });
+  await expect(row(page, "risk", "5")).toBeVisible();
+  await expect(page.locator('[data-testid="records-row"][data-kind="movers"]')).toHaveCount(0);
+  await expect(page.getByText("Records could not be loaded.")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Download CSV" }), "no CSV that silently lacks a kind").toBeDisabled();
+});
+
+test("all three lists failing shows the table error", async ({ page }) => {
+  await mockRiskRecords(page);
+  await page.route(/\/api\/v1\/risk\/(history|surge\/history|movers)(\?.*)?$/, (route) =>
+    route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ detail: "boom" }) }));
+  await page.goto("/alerts", { waitUntil: "domcontentloaded" });
+  await expect(page.getByText("Records could not be loaded.")).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByTestId("records-partial-error")).toHaveCount(0);
 });
 
 test("the filters follow back/forward and nav links", async ({ page }) => {
