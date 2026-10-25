@@ -61,7 +61,7 @@ Track 6 promotes several meanings that previously lived mainly in UI code:
 - Market Overview modal warnings distinguish stale-cache fallback from live-refresh recovery
 - Monte Carlo tabs share one path result across `Path Simulation`, `Risk Analysis`, and `Return Distribution`
 - Corporate `Target Stock Comparison` is live-only, while persisted snapshot review belongs to `Portfolio`
-- diagnostic workbenches and DCF workbenches stay idle on first load and refresh only on explicit user action
+- the stock detail page links to Corporate (`/corporate`) for DCF and diagnostics; those stay idle on first load there and refresh only on explicit user action
 
 ## 2. Module Specs
 
