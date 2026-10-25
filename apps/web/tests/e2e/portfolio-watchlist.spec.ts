@@ -121,6 +121,45 @@ test("added holdings persist and the portfolio table shows saved allocations", a
   await expect(page.getByRole("button", { name: "60.0%" }).first()).toBeVisible();
 });
 
+test.describe("wide window layout", () => {
+  test.use({ viewport: { width: 1600, height: 900 } });
+
+  test("stock detail modal: news sits beside the chart only, metrics run full width below", async ({ page }) => {
+    await mockPortfolioPageApi(page);
+    await clearAllHoldings(page);
+    await addHolding(page, "AAPL", "Apple Inc.", "Technology");
+    await openPortfolioPanel(page, "holdings");
+    await page.locator('[role="button"]').filter({ hasText: "Apple Inc." }).first().click();
+    const dialog = portfolioModal(page);
+    const roic = dialog.getByText("ROIC - WACC", { exact: true }).first();
+    await expect(roic).toBeVisible({ timeout: 60_000 });
+    const chart = await dialog.getByTestId("stock-detail-chart").boundingBox();
+    const news = await dialog.getByTestId("stock-detail-news").boundingBox();
+    const tile = await roic.boundingBox();
+    expect(chart && news && tile).toBeTruthy();
+    // The news column ends with the chart row instead of stretching down the whole modal.
+    expect(Math.abs(news!.height - chart!.height)).toBeLessThanOrEqual(2);
+    // The metric tiles start below that row, not beside the news.
+    expect(tile!.y).toBeGreaterThan(news!.y + news!.height);
+  });
+
+  test("snapshot panel: description spans the panel and the save button stays inside it", async ({ page }) => {
+    await mockPortfolioPageApi(page);
+    await clearAllHoldings(page);
+    await addHolding(page, "AAPL", "Apple Inc.", "Technology");
+    const panel = await openPortfolioPanel(page, "snapshot");
+    const save = panel.getByRole("button", { name: "Save Current As Snapshot" });
+    await expect(save).toBeVisible();
+    const panelBox = await panel.boundingBox();
+    const saveBox = await save.boundingBox();
+    const text = await panel.getByText(/^Snapshot mode is the default daily record/).boundingBox();
+    expect(panelBox && saveBox && text).toBeTruthy();
+    expect(saveBox!.x + saveBox!.width).toBeLessThanOrEqual(panelBox!.x + panelBox!.width);
+    // Stacked above the controls, the description takes most of the panel width (it was a ~70px column).
+    expect(text!.width).toBeGreaterThan(panelBox!.width * 0.6);
+  });
+});
+
 test("clicking a holding opens the stock detail modal", async ({ page }) => {
   await mockPortfolioPageApi(page);
   await clearAllHoldings(page);

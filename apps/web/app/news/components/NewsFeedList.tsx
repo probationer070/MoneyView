@@ -20,6 +20,8 @@ type Props = {
   isFetchingNextPage: boolean;
   hasNextPage: boolean | undefined;
   onFetchNextPage: () => void;
+  /** Fill the parent's height and scroll inside it, instead of capping at 70vh. */
+  fill?: boolean;
 };
 
 function isToday(dateText: string) {
@@ -32,16 +34,17 @@ export function NewsFeedList({
   isFetchingNextPage,
   hasNextPage,
   onFetchNextPage,
+  fill = false,
 }: Props) {
   const t = useT();
   const { locale } = useLocale();
   return (
     <section
-      className="space-y-4"
+      className={fill ? "flex h-full min-h-0 flex-col gap-4" : "space-y-4"}
       aria-label={t("news.resultsRegion")}
     >
     <div
-      className="max-h-[70vh] space-y-4 overflow-y-auto pr-2"
+      className={`${fill ? "min-h-0 flex-1" : "max-h-[70vh]"} space-y-4 overflow-y-auto pr-2`}
       aria-label={t("news.feedRegion")}
       role="feed"
       onScroll={(event) => {

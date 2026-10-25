@@ -519,7 +519,7 @@ export function StockDetailModal({
       </section>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(22rem,1fr)]">
-        <section className="lg:col-span-1 border border-[var(--line)] bg-[var(--surface-raised)] p-4">
+        <section data-testid="stock-detail-chart" className="lg:col-span-1 border border-[var(--line)] bg-[var(--surface-raised)] p-4">
           <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <h3 className="type-panel-title text-[var(--ink)]">
@@ -601,179 +601,14 @@ export function StockDetailModal({
               title="Stock Detail Unavailable"
               message={detailErrorMessage}
             />
-          ) : !detailQuery.isLoading && candles.length > 0 ? (
-            <>
-              <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-                <div className="border border-[var(--line)] bg-[var(--surface)] p-4">
-                  <div className="flex items-center justify-between gap-2 type-caption uppercase text-[var(--ink-muted)]">
-                    <span>ROIC - WACC</span>
-                    {metricAuditQuery.data ? <MetricQualityBadge quality={metricAuditQuery.data.spread.quality} /> : null}
-                  </div>
-                  <div className={`mt-2 type-figure-md tabular-nums ${metricToneClass(comparisonMetrics.roicMinusWacc)}`} title={metricDisplayTitle(comparisonMetrics.roicMinusWacc)}>
-                    {metricAuditQuery.data ? formatAuditMetricValue(metricAuditQuery.data.spread) : comparisonMetrics.roicMinusWacc.displayValue}
-                  </div>
-                  <p className="mt-2 type-small text-[var(--ink-muted)]">
-                    {metricAuditQuery.data ? metricAuditReason(metricAuditQuery.data.spread) : metricSubtitle(comparisonMetrics.roicMinusWacc) ?? "Positive values imply returns on invested capital are exceeding the current capital cost estimate."}
-                  </p>
-                </div>
-                <div className="border border-[var(--line)] bg-[var(--surface)] p-4">
-                  <div className="flex items-center justify-between gap-2 type-caption uppercase text-[var(--ink-muted)]">
-                    <span>DCF value vs price (one-off gap)</span>
-                    <MetricQualityBadge quality={comparisonMetrics.dcfUpside.quality} />
-                  </div>
-                  <div className={`mt-2 type-figure-md tabular-nums ${metricToneClass(comparisonMetrics.dcfUpside)}`} title={metricDisplayTitle(comparisonMetrics.dcfUpside)}>
-                    {comparisonMetrics.dcfUpside.displayValue}
-                  </div>
-                  <p className="mt-2 type-small text-[var(--ink-muted)]">
-                    {metricSubtitle(comparisonMetrics.dcfUpside) ?? "Snapshot-side upside or downside versus current price."}
-                  </p>
-                </div>
-                <div className="border border-[var(--line)] bg-[var(--surface)] p-4">
-                  <div className="flex items-center justify-between gap-2 type-caption uppercase text-[var(--ink-muted)]">
-                    <span>Implied return vs WACC (pts per year)</span>
-                    <MetricQualityBadge quality={comparisonMetrics.impliedVsWacc.quality} />
-                  </div>
-                  <div className={`mt-2 type-figure-md tabular-nums ${metricToneClass(comparisonMetrics.impliedVsWacc)}`} title={metricDisplayTitle(comparisonMetrics.impliedVsWacc)}>
-                    {comparisonMetrics.impliedVsWacc.displayValue}
-                  </div>
-                  <p className="mt-2 type-small text-[var(--ink-muted)]">
-                    {metricSubtitle(comparisonMetrics.impliedVsWacc) ?? "The annual return today's market price implies for the whole business, minus its WACC, from the saved comparison snapshot."}
-                  </p>
-                </div>
-                <div className="border border-[var(--line)] bg-[var(--surface)] p-4">
-                  <div className="flex items-center justify-between gap-2 type-caption uppercase text-[var(--ink-muted)]">
-                    <span>Volatility</span>
-                    <MetricQualityBadge quality={comparisonMetrics.volatility.quality} />
-                  </div>
-                  <div className={`mt-2 type-figure-md tabular-nums ${comparisonMetrics.volatility.quality === "missing" || comparisonMetrics.volatility.quality === "invalid" || comparisonMetrics.volatility.quality === "suspicious" ? "text-[var(--status-warning-ink)]" : "text-[var(--ink)]"}`} title={metricDisplayTitle(comparisonMetrics.volatility)}>
-                    {comparisonMetrics.volatility.displayValue}
-                  </div>
-                  <p className="mt-2 type-small text-[var(--ink-muted)]">
-                    {metricSubtitle(comparisonMetrics.volatility) ?? "Estimated from recent local price history for quick portfolio comparison."}
-                  </p>
-                </div>
-              </div>
-              <div className="mt-3 border border-[var(--line)] bg-[var(--surface-raised)] p-4">
-                <div className="flex flex-col gap-1">
-                  <h4 className="type-panel-title text-[var(--ink)]">Snapshot Context</h4>
-                  <p className="type-body text-[var(--ink-muted)]">
-                    {snapshotContextLabel}. This is the review frame for the stock-level comparison metrics shown in this modal.
-                  </p>
-                </div>
-                <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
-                  <div className="border border-[var(--line)] bg-[var(--surface)] p-3 type-small">
-                    <div className="text-[var(--ink-muted)]">As Of</div>
-                    <div className="type-mono mt-1 text-[var(--ink)]">
-                      {snapshotMeta ? formatDateLabel(snapshotMeta.as_of_date) : "Live"}
-                    </div>
-                  </div>
-                  <div className="border border-[var(--line)] bg-[var(--surface)] p-3 type-small">
-                    <div className="text-[var(--ink-muted)]">Source</div>
-                    <div className="type-mono mt-1 overflow-inline-ellipsis capitalize text-[var(--ink)]" title={snapshotMeta?.snapshot_source ?? snapshotMeta?.mode ?? "live"}>
-                      {snapshotMeta?.snapshot_source ?? snapshotMeta?.mode ?? "live"}
-                    </div>
-                  </div>
-                  <div className="border border-[var(--line)] bg-[var(--surface)] p-3 type-small">
-                    <div className="text-[var(--ink-muted)]">Universe</div>
-                    <div className="type-mono mt-1 overflow-inline-ellipsis text-[var(--ink)]" title={portfolioComparisonUniverseLabel(effectiveComparisonUniverse)}>
-                      {portfolioComparisonUniverseLabel(effectiveComparisonUniverse)}
-                    </div>
-                  </div>
-                  <div className="border border-[var(--line)] bg-[var(--surface)] p-3 type-small">
-                    <div className="text-[var(--ink-muted)]">Benchmark</div>
-                    <div className="type-mono mt-1 overflow-inline-ellipsis text-[var(--ink)]" title={effectiveComparisonBenchmarkTicker}>{effectiveComparisonBenchmarkTicker}</div>
-                  </div>
-                  <div className="border border-[var(--line)] bg-[var(--surface)] p-3 type-small">
-                    <div className="text-[var(--ink-muted)]">Version</div>
-                    <div className="mt-1 overflow-mono-block text-[var(--ink)]" title={activeSnapshotVersion || "Live"}>{activeSnapshotVersion || "Live"}</div>
-                  </div>
-                </div>
-                {sparklineTrendPct != null && (
-                  <p className="mt-3 type-body text-[var(--ink-muted)]">
-                    Recent price trend: {sparklineTrendPct >= 0 ? "+" : ""}{formatNumber(sparklineTrendPct / 100, "percent", { digits: 2 })}.
-                  </p>
-                )}
-              </div>
-              {flaggedComparisonMetricCount > 0 && (
-                <div className="mt-3 border border-[var(--status-warning-border)] bg-[var(--status-warning-surface)] p-3 type-body text-[var(--status-warning-ink)]">
-                  {flaggedComparisonMetricCount} stock metric value{flaggedComparisonMetricCount === 1 ? "" : "s"} for {stock.ticker} {flaggedComparisonMetricCount === 1 ? "is" : "are"} currently flagged as outlier data and rendered as {/* M2: inline emphasis inside a sentence; the weight separates the label from the text */}{/* M2: inline emphasis inside a sentence; the weight separates the label from the text */}<span className="font-semibold">N/A</span>. Treat the price chart and saved snapshot history as the primary review context until fresher fundamentals are available.
-                </div>
-              )}
-              <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-2">
-                {metricAuditQuery.isLoading ? (
-                  <div className="xl:col-span-2">
-                    <EmptyState title="Loading ROIC/WACC audit..." />
-                  </div>
-                ) : metricAuditQuery.isError ? (
-                  <div className="xl:col-span-2">
-                    <ErrorState title="Metric Audit Unavailable" message={`Could not load ROIC/WACC audit inputs for ${stock.ticker}.`} />
-                  </div>
-                ) : (
-                  <>
-                    <MetricAuditPanel audit={metricAuditQuery.data ?? null} metric="roic" title="ROIC Audit" />
-                    <MetricAuditPanel audit={metricAuditQuery.data ?? null} metric="wacc" title="WACC Audit" />
-                  </>
-                )}
-              </div>
-              <div className="mt-4 border border-[var(--line)] bg-[var(--surface-raised)] p-4">
-                <div className="flex flex-col gap-1">
-                  <h4 className="type-panel-title text-[var(--ink)]">Stock History Timeline</h4>
-                  <p className="type-small text-[var(--ink-muted)]">
-                    Review how saved comparison metrics changed across persisted snapshots for {stock.ticker}.
-                  </p>
-                  {snapshotMeta?.mode === "snapshot" && (
-                    <p className="type-small text-[var(--ink-muted)]">
-                      Review context: {formatDateLabel(snapshotMeta.as_of_date)} snapshot, {portfolioComparisonUniverseLabel(effectiveComparisonUniverse)}, benchmark {effectiveComparisonBenchmarkTicker}.
-                    </p>
-                  )}
-                </div>
-                {stockSnapshotHistoryQuery.isLoading ? (
-                  <div className="mt-3">
-                    <EmptyState title="Loading stock history timeline..." />
-                  </div>
-                ) : stockSnapshotHistoryQuery.isError ? (
-                  <div className="mt-3">
-                    <ErrorState title="Stock History Unavailable" message="Could not load saved snapshot trend data for this stock." />
-                  </div>
-                ) : timelineGroups.length === 0 ? (
-                  <div className="mt-3">
-                    <EmptyState title="No saved stock history yet" description="Saved comparison history will appear here once snapshot versions exist for this ticker." />
-                  </div>
-                ) : (
-                  <div className="mt-3 space-y-3">
-                    <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                      <div className="border border-[var(--line)] bg-[var(--surface)] p-3">
-                        <div className="type-caption uppercase text-[var(--ink-muted)]">Saved Snapshots</div>
-                        <div className="mt-1 type-panel-title text-[var(--ink)]">{snapshotTrendPoints.length}</div>
-                        <p className="mt-1 type-small text-[var(--ink-muted)]">Persisted comparison rows currently available for {stock.ticker}.</p>
-                      </div>
-                      <div className="border border-[var(--line)] bg-[var(--surface)] p-3">
-                        <div className="type-caption uppercase text-[var(--ink-muted)]">Implied return vs WACC trend</div>
-                        <div data-testid="implied-spread-trend-delta" className={`mt-1 type-panel-title ${expectedSpreadTrendDelta == null ? "text-[var(--ink-muted)]" : expectedSpreadTrendDelta > 0 ? "text-[var(--up)]" : "text-[var(--down)]"}`}>{formatMetricPercent(expectedSpreadTrendDelta)}</div>
-                        <p className="mt-1 type-small text-[var(--ink-muted)]">Latest versus oldest saved implied return vs WACC, only between snapshots that recorded it.</p>
-                      </div>
-                      <div className="border border-[var(--line)] bg-[var(--surface)] p-3">
-                        <div className="type-caption uppercase text-[var(--ink-muted)]">Recent Price Sparkline</div>
-                        <div className="mt-2 h-10">
-                          <Sparkline
-                            data={stock.sparkline}
-                            height={40}
-                          />
-                        </div>
-                        <p className="mt-1 type-small text-[var(--ink-muted)]">Recent price path alongside the saved comparison timeline.</p>
-                      </div>
-                    </div>
-                    <TimelineList groups={timelineGroups} />
-                  </div>
-                )}
-              </div>
-            </>
-          ) : !detailQuery.isLoading ? (
+          ) : !detailQuery.isLoading && candles.length === 0 ? (
             <StatusPanel title="No Price Data" message="No OHLC history is available for this ticker yet." tone="warning" />
           ) : null}
         </section>
 
-        <section className="flex min-h-[24rem] flex-col border border-[var(--line)] bg-[var(--surface-raised)] p-4">
+        {/* lg:h-0 + lg:min-h-full: the chart sets the row height and the news scrolls inside it,
+            instead of stretching to the full left column and leaving empty space below the list. */}
+        <section data-testid="stock-detail-news" className="flex min-h-[24rem] flex-col border border-[var(--line)] bg-[var(--surface-raised)] p-4 lg:h-0 lg:min-h-full">
           <h3 className="type-panel-title text-[var(--ink)]">
             <InfoTooltip
               label="Ticker News Feed (filtered)"
@@ -790,6 +625,7 @@ export function StockDetailModal({
               <EmptyState title="No stock-specific news found" description={`No filtered headlines are available for ${stock.ticker} yet.`} />
             ) : (
               <NewsFeedList
+                fill
                 items={stockNewsItems}
                 hasNextPage={newsQuery.hasNextPage}
                 isFetchingNextPage={newsQuery.isFetchingNextPage}
@@ -801,6 +637,174 @@ export function StockDetailModal({
           </div>
         </section>
       </div>
+      {!detailQuery.isError && !detailQuery.isLoading && candles.length > 0 && (
+        <div>
+          <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <div className="border border-[var(--line)] bg-[var(--surface)] p-4">
+              <div className="flex items-center justify-between gap-2 type-caption uppercase text-[var(--ink-muted)]">
+                <span>ROIC - WACC</span>
+                {metricAuditQuery.data ? <MetricQualityBadge quality={metricAuditQuery.data.spread.quality} /> : null}
+              </div>
+              <div className={`mt-2 type-figure-md tabular-nums ${metricToneClass(comparisonMetrics.roicMinusWacc)}`} title={metricDisplayTitle(comparisonMetrics.roicMinusWacc)}>
+                {metricAuditQuery.data ? formatAuditMetricValue(metricAuditQuery.data.spread) : comparisonMetrics.roicMinusWacc.displayValue}
+              </div>
+              <p className="mt-2 type-small text-[var(--ink-muted)]">
+                {metricAuditQuery.data ? metricAuditReason(metricAuditQuery.data.spread) : metricSubtitle(comparisonMetrics.roicMinusWacc) ?? "Positive values imply returns on invested capital are exceeding the current capital cost estimate."}
+              </p>
+            </div>
+            <div className="border border-[var(--line)] bg-[var(--surface)] p-4">
+              <div className="flex items-center justify-between gap-2 type-caption uppercase text-[var(--ink-muted)]">
+                <span>DCF value vs price (one-off gap)</span>
+                <MetricQualityBadge quality={comparisonMetrics.dcfUpside.quality} />
+              </div>
+              <div className={`mt-2 type-figure-md tabular-nums ${metricToneClass(comparisonMetrics.dcfUpside)}`} title={metricDisplayTitle(comparisonMetrics.dcfUpside)}>
+                {comparisonMetrics.dcfUpside.displayValue}
+              </div>
+              <p className="mt-2 type-small text-[var(--ink-muted)]">
+                {metricSubtitle(comparisonMetrics.dcfUpside) ?? "Snapshot-side upside or downside versus current price."}
+              </p>
+            </div>
+            <div className="border border-[var(--line)] bg-[var(--surface)] p-4">
+              <div className="flex items-center justify-between gap-2 type-caption uppercase text-[var(--ink-muted)]">
+                <span>Implied return vs WACC (pts per year)</span>
+                <MetricQualityBadge quality={comparisonMetrics.impliedVsWacc.quality} />
+              </div>
+              <div className={`mt-2 type-figure-md tabular-nums ${metricToneClass(comparisonMetrics.impliedVsWacc)}`} title={metricDisplayTitle(comparisonMetrics.impliedVsWacc)}>
+                {comparisonMetrics.impliedVsWacc.displayValue}
+              </div>
+              <p className="mt-2 type-small text-[var(--ink-muted)]">
+                {metricSubtitle(comparisonMetrics.impliedVsWacc) ?? "The annual return today's market price implies for the whole business, minus its WACC, from the saved comparison snapshot."}
+              </p>
+            </div>
+            <div className="border border-[var(--line)] bg-[var(--surface)] p-4">
+              <div className="flex items-center justify-between gap-2 type-caption uppercase text-[var(--ink-muted)]">
+                <span>Volatility</span>
+                <MetricQualityBadge quality={comparisonMetrics.volatility.quality} />
+              </div>
+              <div className={`mt-2 type-figure-md tabular-nums ${comparisonMetrics.volatility.quality === "missing" || comparisonMetrics.volatility.quality === "invalid" || comparisonMetrics.volatility.quality === "suspicious" ? "text-[var(--status-warning-ink)]" : "text-[var(--ink)]"}`} title={metricDisplayTitle(comparisonMetrics.volatility)}>
+                {comparisonMetrics.volatility.displayValue}
+              </div>
+              <p className="mt-2 type-small text-[var(--ink-muted)]">
+                {metricSubtitle(comparisonMetrics.volatility) ?? "Estimated from recent local price history for quick portfolio comparison."}
+              </p>
+            </div>
+          </div>
+          <div className="mt-3 border border-[var(--line)] bg-[var(--surface-raised)] p-4">
+            <div className="flex flex-col gap-1">
+              <h4 className="type-panel-title text-[var(--ink)]">Snapshot Context</h4>
+              <p className="type-body text-[var(--ink-muted)]">
+                {snapshotContextLabel}. This is the review frame for the stock-level comparison metrics shown in this modal.
+              </p>
+            </div>
+            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
+              <div className="border border-[var(--line)] bg-[var(--surface)] p-3 type-small">
+                <div className="text-[var(--ink-muted)]">As Of</div>
+                <div className="type-mono mt-1 text-[var(--ink)]">
+                  {snapshotMeta ? formatDateLabel(snapshotMeta.as_of_date) : "Live"}
+                </div>
+              </div>
+              <div className="border border-[var(--line)] bg-[var(--surface)] p-3 type-small">
+                <div className="text-[var(--ink-muted)]">Source</div>
+                <div className="type-mono mt-1 overflow-inline-ellipsis capitalize text-[var(--ink)]" title={snapshotMeta?.snapshot_source ?? snapshotMeta?.mode ?? "live"}>
+                  {snapshotMeta?.snapshot_source ?? snapshotMeta?.mode ?? "live"}
+                </div>
+              </div>
+              <div className="border border-[var(--line)] bg-[var(--surface)] p-3 type-small">
+                <div className="text-[var(--ink-muted)]">Universe</div>
+                <div className="type-mono mt-1 overflow-inline-ellipsis text-[var(--ink)]" title={portfolioComparisonUniverseLabel(effectiveComparisonUniverse)}>
+                  {portfolioComparisonUniverseLabel(effectiveComparisonUniverse)}
+                </div>
+              </div>
+              <div className="border border-[var(--line)] bg-[var(--surface)] p-3 type-small">
+                <div className="text-[var(--ink-muted)]">Benchmark</div>
+                <div className="type-mono mt-1 overflow-inline-ellipsis text-[var(--ink)]" title={effectiveComparisonBenchmarkTicker}>{effectiveComparisonBenchmarkTicker}</div>
+              </div>
+              <div className="border border-[var(--line)] bg-[var(--surface)] p-3 type-small">
+                <div className="text-[var(--ink-muted)]">Version</div>
+                <div className="mt-1 overflow-mono-block text-[var(--ink)]" title={activeSnapshotVersion || "Live"}>{activeSnapshotVersion || "Live"}</div>
+              </div>
+            </div>
+            {sparklineTrendPct != null && (
+              <p className="mt-3 type-body text-[var(--ink-muted)]">
+                Recent price trend: {sparklineTrendPct >= 0 ? "+" : ""}{formatNumber(sparklineTrendPct / 100, "percent", { digits: 2 })}.
+              </p>
+            )}
+          </div>
+          {flaggedComparisonMetricCount > 0 && (
+            <div className="mt-3 border border-[var(--status-warning-border)] bg-[var(--status-warning-surface)] p-3 type-body text-[var(--status-warning-ink)]">
+              {flaggedComparisonMetricCount} stock metric value{flaggedComparisonMetricCount === 1 ? "" : "s"} for {stock.ticker} {flaggedComparisonMetricCount === 1 ? "is" : "are"} currently flagged as outlier data and rendered as {/* M2: inline emphasis inside a sentence; the weight separates the label from the text */}{/* M2: inline emphasis inside a sentence; the weight separates the label from the text */}<span className="font-semibold">N/A</span>. Treat the price chart and saved snapshot history as the primary review context until fresher fundamentals are available.
+            </div>
+          )}
+          <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-2">
+            {metricAuditQuery.isLoading ? (
+              <div className="xl:col-span-2">
+                <EmptyState title="Loading ROIC/WACC audit..." />
+              </div>
+            ) : metricAuditQuery.isError ? (
+              <div className="xl:col-span-2">
+                <ErrorState title="Metric Audit Unavailable" message={`Could not load ROIC/WACC audit inputs for ${stock.ticker}.`} />
+              </div>
+            ) : (
+              <>
+                <MetricAuditPanel audit={metricAuditQuery.data ?? null} metric="roic" title="ROIC Audit" />
+                <MetricAuditPanel audit={metricAuditQuery.data ?? null} metric="wacc" title="WACC Audit" />
+              </>
+            )}
+          </div>
+          <div className="mt-4 border border-[var(--line)] bg-[var(--surface-raised)] p-4">
+            <div className="flex flex-col gap-1">
+              <h4 className="type-panel-title text-[var(--ink)]">Stock History Timeline</h4>
+              <p className="type-small text-[var(--ink-muted)]">
+                Review how saved comparison metrics changed across persisted snapshots for {stock.ticker}.
+              </p>
+              {snapshotMeta?.mode === "snapshot" && (
+                <p className="type-small text-[var(--ink-muted)]">
+                  Review context: {formatDateLabel(snapshotMeta.as_of_date)} snapshot, {portfolioComparisonUniverseLabel(effectiveComparisonUniverse)}, benchmark {effectiveComparisonBenchmarkTicker}.
+                </p>
+              )}
+            </div>
+            {stockSnapshotHistoryQuery.isLoading ? (
+              <div className="mt-3">
+                <EmptyState title="Loading stock history timeline..." />
+              </div>
+            ) : stockSnapshotHistoryQuery.isError ? (
+              <div className="mt-3">
+                <ErrorState title="Stock History Unavailable" message="Could not load saved snapshot trend data for this stock." />
+              </div>
+            ) : timelineGroups.length === 0 ? (
+              <div className="mt-3">
+                <EmptyState title="No saved stock history yet" description="Saved comparison history will appear here once snapshot versions exist for this ticker." />
+              </div>
+            ) : (
+              <div className="mt-3 space-y-3">
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                  <div className="border border-[var(--line)] bg-[var(--surface)] p-3">
+                    <div className="type-caption uppercase text-[var(--ink-muted)]">Saved Snapshots</div>
+                    <div className="mt-1 type-panel-title text-[var(--ink)]">{snapshotTrendPoints.length}</div>
+                    <p className="mt-1 type-small text-[var(--ink-muted)]">Persisted comparison rows currently available for {stock.ticker}.</p>
+                  </div>
+                  <div className="border border-[var(--line)] bg-[var(--surface)] p-3">
+                    <div className="type-caption uppercase text-[var(--ink-muted)]">Implied return vs WACC trend</div>
+                    <div data-testid="implied-spread-trend-delta" className={`mt-1 type-panel-title ${expectedSpreadTrendDelta == null ? "text-[var(--ink-muted)]" : expectedSpreadTrendDelta > 0 ? "text-[var(--up)]" : "text-[var(--down)]"}`}>{formatMetricPercent(expectedSpreadTrendDelta)}</div>
+                    <p className="mt-1 type-small text-[var(--ink-muted)]">Latest versus oldest saved implied return vs WACC, only between snapshots that recorded it.</p>
+                  </div>
+                  <div className="border border-[var(--line)] bg-[var(--surface)] p-3">
+                    <div className="type-caption uppercase text-[var(--ink-muted)]">Recent Price Sparkline</div>
+                    <div className="mt-2 h-10">
+                      <Sparkline
+                        data={stock.sparkline}
+                        height={40}
+                      />
+                    </div>
+                    <p className="mt-1 type-small text-[var(--ink-muted)]">Recent price path alongside the saved comparison timeline.</p>
+                  </div>
+                </div>
+                <TimelineList groups={timelineGroups} />
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </ModalShell>
   );
 }
