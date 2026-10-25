@@ -3,12 +3,15 @@ Detail popup routes — OHLCV, technical indicators, Monte Carlo.
 
 GET /api/detail/movers/latest
 GET /api/detail/{ticker}/profile
+GET /api/detail/{ticker}/move/{day}
 GET /api/detail/{ticker}/ohlcv
 GET /api/detail/{ticker}/technicals
 GET /api/detail/{ticker}/monte-carlo
 """
 
-from fastapi import APIRouter, Query
+from datetime import date
+
+from fastapi import APIRouter, HTTPException, Query
 from typing import List
 
 import numpy as np
@@ -16,7 +19,7 @@ import numpy as np
 from apps.api.models.schemas import (
     StockOHLCV, TechnicalIndicators, MonteCarloResult,
 )
-from apps.api.models.schema_parts.detail import DetailProfile, LatestMovers
+from apps.api.models.schema_parts.detail import DetailProfile, LatestMovers, MoveExplanation
 from apps.api.services import detail_view
 from apps.api.services.market_data import MarketDataService
 
@@ -36,6 +39,16 @@ def get_latest_movers():
 @router.get("/{ticker}/profile", response_model=DetailProfile)
 def get_profile(ticker: str):
     return detail_view.profile(ticker)
+
+
+@router.get("/{ticker}/move/{day}", response_model=MoveExplanation)
+def get_move(ticker: str, day: date):
+    try:
+        return detail_view.explain_move(ticker, day)
+    except detail_view.NoBars:
+        raise HTTPException(status_code=404, detail="no_bars")
+    except detail_view.NoBarOnDay:
+        raise HTTPException(status_code=422, detail="no_bar_on_day")
 
 
 # ---------------------------------------------------------------------------
