@@ -20,6 +20,7 @@ V = get_rules().version
 def calls(monkeypatch):
     log: list = []
     monkeypatch.setattr(schedule, "sweep_bars", lambda now: log.append("sweep"))
+    monkeypatch.setattr(schedule, "sweep_indices", lambda now: log.append("indices"))
 
     def backfill(now, **kw):
         log.append(("backfill", kw))
@@ -34,13 +35,13 @@ def calls(monkeypatch):
 
 
 def test_run_once_order(calls):
-    """Catches steps run out of order, or backfill or evaluate given pre-loaded inputs (a full-history
-    load that would bypass the live window's trimmed read)."""
+    """Catches steps run out of order, the market-index sweep dropped from the cycle, or backfill or
+    evaluate given pre-loaded inputs (a full-history load that would bypass the live window's trimmed read)."""
     schedule.run_once(NOW)
 
-    assert [c if isinstance(c, str) else c[0] for c in calls] == ["sweep", "backfill", "evaluate"]
-    assert "inputs" not in calls[1][1]
+    assert [c if isinstance(c, str) else c[0] for c in calls] == ["sweep", "indices", "backfill", "evaluate"]
     assert "inputs" not in calls[2][1]
+    assert "inputs" not in calls[3][1]
 
 
 def test_risk_cycle_sends_no_news_requests(calls, monkeypatch):
@@ -71,7 +72,7 @@ def test_step_exception_does_not_stop_later_steps(calls, monkeypatch):
     def boom(*a, **k):
         raise RuntimeError("x")
 
-    for name in ("sweep_bars", "run_backfill", "evaluate_pending"):
+    for name in ("sweep_bars", "sweep_indices", "run_backfill", "evaluate_pending"):
         monkeypatch.setattr(schedule, name, boom)
     schedule.run_once(NOW)
     assert calls == []

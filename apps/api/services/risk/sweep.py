@@ -55,6 +55,7 @@ def sweep_bars(
     fetcher=fetch_bars,
     action_probe=latest_action_date,
     sleep=time.sleep,
+    data_class: str = "equity_bars",
 ) -> SweepReport:
     targets = list(tickers) if tickers is not None else watchlist_and_benchmarks()
     attempted = fetched = 0
@@ -66,7 +67,7 @@ def sweep_bars(
         reached_provider = False
         attempted += 1
         try:
-            result = acquire("equity_bars", ticker, now=now, fetcher=fetcher, action_probe=action_probe)
+            result = acquire(data_class, ticker, now=now, fetcher=fetcher, action_probe=action_probe)
         except AssertionError:
             raise
         except Exception as error:  # noqa: BLE001 - one ticker must not stop the sweep
@@ -77,10 +78,18 @@ def sweep_bars(
         reached_provider = result.reason != "fresh"
         if result.fetched_rows > 0:
             fetched += 1
-        elif not result.skipped and read_state("equity_bars", ticker).status == AcquisitionStatus.FAILED:
+        elif not result.skipped and read_state(data_class, ticker).status == AcquisitionStatus.FAILED:
             # acquire() swallows fetch errors into a FAILED state row; surface it here.
             failed.append(ticker)
     return SweepReport(attempted, fetched, failed)
+
+
+def sweep_indices(now: datetime, **kwargs) -> SweepReport:
+    """The market-overview instruments, as index_bars. Without this they refreshed only when "/"
+    was opened, so ^GSPC and the rest went stale while the watchlist bars kept advancing."""
+    from apps.api.services.market_data import MARKET_INDICES
+
+    return sweep_bars(now, tickers=list(MARKET_INDICES.values()), data_class="index_bars", **kwargs)
 
 
 def _first_bar_date(ticker: str) -> date | None:
