@@ -72,7 +72,6 @@ function Wait-PortFree {
 }
 
 $dbPath = Join-Path $repoRoot ("data\processed\moneyview-e2e-{0}.db" -f $ApiPort)
-$portFile = Join-Path $repoRoot "data\cache\moneyview_port.json"
 $preferredPython = $env:MONEYVIEW_PYTHON
 if ([string]::IsNullOrWhiteSpace($preferredPython)) {
     $preferredPython = "C:\Users\eajwa\anaconda3\envs\moneyview\python.exe"
@@ -86,8 +85,9 @@ if (Test-Path -LiteralPath $dbPath) {
     Remove-Item -LiteralPath $dbPath -Force -ErrorAction SilentlyContinue
 }
 
-New-Item -ItemType Directory -Force -Path (Split-Path $portFile) | Out-Null
-Set-Content -LiteralPath $portFile -Value ('{{"port":{0}}}' -f $ApiPort) -Encoding UTF8
+# No write to data/cache/moneyview_port.json: that file belongs to the app the owner runs, and
+# writing the e2e port into it sent the running app to a dead :8110 (ERROR-LOG 2026-10-26).
+# The e2e web server gets this port from NEXT_PUBLIC_API_BASE_URL and API_BASE_URL_INTERNAL.
 
 Push-Location $repoRoot
 try {

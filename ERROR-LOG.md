@@ -26,15 +26,25 @@ reveal that; only checking the code did.
 
 An entry states what was true when it was written. Nothing updates it on its own.
 
-## 2026-10-26: the /alerts records page showed no records (movers range over the cap)
+## 2026-10-26: a Playwright run pointed the owner's running app at the dead e2e API port
 
-Date: 2026-10-26 (owner report: "현재 위험신호 기록이 보여지지 않는데?").
-Command: `curl "http://127.0.0.1:8000/api/v1/risk/movers?from=2016-01-04"` returned 422 `{"detail":"range_too_long"}`; the API log showed the page repeating that request.
-Failure: `/alerts` showed its load-error state instead of the records table. The page loads alerts, surge events and movers together and shows nothing if any of the three fails; movers always failed.
-Root cause: the page asks for every movers day since 2016-01-04, and `MOVERS_MAX_DAYS` was 2600. Spec 2026-10-20 §4 estimated the range as "at most 2,600 trading days", but it already held 2714 evaluated days (2016-01-04 to 2026-10-19). Before the backfill completed only live days were visible, so the request fit; once backfill rows became visible it was over the cap. Mocked e2e data never reached the cap.
-Fix: `MOVERS_MAX_DAYS = 5200` in `apps/api/routes/risk.py` (about 2016 to 2036). A running app needs a restart to pick it up.
-Files changed: `apps/api/routes/risk.py`, `tests/api/risk/test_routes.py`.
-Prevention: `test_movers_cap_covers_the_records_page_range_for_five_more_years` counts weekdays from 2016-01-04 to five years ahead and fails if the cap is below it (mutation: cap back to 2600 fails it); `test_movers_range_limit` now reads the constant. A size cap set from an estimate needs a test against the real range, not the estimate.
+Date: 2026-10-26 (found while inspecting /alerts in a fresh browser: "System Boot Failure").
+Command: `curl http://localhost:3000/api/runtime/backend-port` returned `{"port":8110}` while the real API was healthy on :8000.
+Failure: a Playwright run started while the owner's MoneyView was running (it then failed: "Another next dev server is already running") had already rewritten `data/cache/moneyview_port.json` to 8110. Any fresh page load of the running app looked for the API on :8110 and showed "System Boot Failure" after 30 s.
+Root cause: `tests/e2e/start-playwright-api.ps1` wrote the e2e port into the same port file the launcher writes for the real app, and never restored it.
+Fix: the harness no longer writes the file; `start-playwright-web.ps1` sets `API_BASE_URL_INTERNAL` (SSR) beside `NEXT_PUBLIC_API_BASE_URL` (client), so the e2e web server never consults it. The file was restored to 8000 by hand.
+Files changed: `apps/web/tests/e2e/start-playwright-api.ps1`, `apps/web/tests/e2e/start-playwright-web.ps1`.
+Prevention: test harnesses must not write files the running app reads. No automated test: the failure needs the owner's app and a Playwright run at once.
+
+## 2026-10-26: the /alerts report panel scrolled sideways and cut off the left of every section
+
+Date: 2026-10-26 (owner report with screenshot).
+Command: in the browser, `records-report` had scrollWidth 1317 against clientWidth 491 on `/alerts/risk/22`.
+Failure: the report panel could scroll horizontally by 826 px; once scrolled, the heading, chart and tables all lost their left part, with empty space on the right.
+Root cause: `ReportTable` wraps each table in `overflow-x-auto`, but the wrapper was not positioned. DeltaBadge's sr-only text is `position:absolute`, so its containing block was the `relative` report panel; the wrapper's overflow did not clip those spans, and their static positions across the 1432 px theme table widened the panel's scrollable area.
+Fix: the wrapper is `relative overflow-x-auto`. Measured live after the change: scrollWidth 491 = clientWidth.
+Files changed: `apps/web/components/risk/RecordReport.tsx`, `apps/web/tests/e2e/risk-reports.spec.ts`.
+Prevention: `a wide report table scrolls inside itself, not the whole report panel` asserts scrollWidth <= clientWidth. Any overflow wrapper that holds sr-only or other absolute children needs to be positioned.
 
 ## 2026-10-26: market indices stopped refreshing while the watchlist bars kept advancing
 

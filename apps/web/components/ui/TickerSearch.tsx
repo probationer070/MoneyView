@@ -46,6 +46,8 @@ interface TickerSearchProps {
   maxSuggestions?: number;
   /** Offered as the list's only entry when the typed text matches nothing ("not in the list → add"). */
   noMatchAction?: { label: string; onSelect: (query: string) => void };
+  /** Keep the label for screen readers only, where the placeholder already says what to type. */
+  hideLabel?: boolean;
 }
 
 /**
@@ -91,6 +93,7 @@ export function TickerSearch({
   className = "",
   maxSuggestions = 8,
   noMatchAction,
+  hideLabel = false,
 }: TickerSearchProps) {
   const t = useT();
   const generatedId = useId();
@@ -112,7 +115,7 @@ export function TickerSearch({
 
   return (
     <div className={`relative flex flex-col gap-1 ${className}`}>
-      <label htmlFor={inputId} className="type-small text-[var(--ink-secondary)]">
+      <label htmlFor={inputId} className={hideLabel ? "sr-only" : "type-small text-[var(--ink-secondary)]"}>
         {label}
       </label>
       <input
