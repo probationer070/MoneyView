@@ -4,6 +4,7 @@ import Link from "next/link";
 import { DeltaBadge } from "@/components/ui/DeltaBadge";
 import { formatNumber } from "@/lib/format";
 import { useLocale, useT } from "@/lib/i18n/locale";
+import { useAlertBadge } from "@/lib/detail/useDetail";
 import type { Bar, DetailProfile } from "@/lib/detail/types";
 
 interface DetailHeaderProps {
@@ -20,6 +21,7 @@ export function DetailHeader({ ticker, profile, bars }: DetailHeaderProps) {
   const previous = bars && bars.length > 1 ? bars[bars.length - 2] : null;
   const changePct = latest && previous && previous.close !== 0 ? (latest.close / previous.close - 1) * 100 : null;
   const watched = profile?.in_watchlist === true;
+  const badge = useAlertBadge(ticker);
 
   return (
     <header data-testid="detail-header" className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border border-[var(--line)] bg-[var(--surface-raised)] px-4 py-3">
@@ -27,6 +29,11 @@ export function DetailHeader({ ticker, profile, bars }: DetailHeaderProps) {
         <div className="flex flex-wrap items-baseline gap-x-3">
           <h1 className="type-heading-5 text-[var(--ink)]">{ticker}</h1>
           {watched && <span className="type-body text-[var(--ink)]">{profile.name}</span>}
+          {badge && (
+            <span data-testid="alert-badge" data-kind={badge} className="type-caption rounded-[var(--radius-2)] border border-[var(--status-error-border)] bg-[var(--status-error-surface)] px-2 py-0.5 text-[var(--status-error-ink)]">
+              {t(badge === "crash" ? "detail.badgeCrash" : "detail.badgeCandidate")}
+            </span>
+          )}
         </div>
         <p className="type-small mt-1 text-[var(--ink-muted)]">
           {watched ? (

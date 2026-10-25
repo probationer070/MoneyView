@@ -202,7 +202,7 @@ const TVChart: React.FC<TVChartProps> = ({
             chart.subscribeCrosshairMove(handleCrosshairMove);
 
             // Constructed empty; the markers effect below owns the marks, as with the event lines.
-            const moveMarks = new MoveMarksPrimitive(() => candleSeriesRef.current, resolvedUp, resolvedDown);
+            const moveMarks = new MoveMarksPrimitive(() => candleSeriesRef.current, resolvedUp, resolvedDown, resolveCssColor("var(--ink)", tokens.ink._));
             chart.panes()[0].attachPrimitive(moveMarks);
             moveMarksRef.current = moveMarks;
             const handleClick = (param: MouseEventParams<Time>) => {

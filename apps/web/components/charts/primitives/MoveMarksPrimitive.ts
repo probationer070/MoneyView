@@ -16,6 +16,8 @@ export interface ChartMarker {
   date: string;
   shape: "hollow" | "filled";
   up: boolean;
+  /** The mark whose day the card explains; drawn with an extra ring so it can be found among the others. */
+  selected?: boolean;
 }
 
 /** date -> the bar's high and low, which the marks sit outside of. */
@@ -26,10 +28,16 @@ interface PlacedMark { x: number; y: number; marker: ChartMarker }
 const RADIUS = 5;
 const OFFSET = 10;
 const STROKE = 2;
+const SELECTED_GAP = 4;
 const HIT_PX = 9;
 
 class MoveMarksRenderer implements IPrimitivePaneRenderer {
-  public constructor(private readonly marks: readonly PlacedMark[], private readonly upColour: string, private readonly downColour: string) {}
+  public constructor(
+    private readonly marks: readonly PlacedMark[],
+    private readonly upColour: string,
+    private readonly downColour: string,
+    private readonly ringColour: string,
+  ) {}
 
   public draw(target: RenderTarget): void {
     target.useBitmapCoordinateSpace((scope) => {
@@ -46,6 +54,12 @@ class MoveMarksRenderer implements IPrimitivePaneRenderer {
           ctx.fill();
         } else {
           ctx.strokeStyle = colour;
+          ctx.stroke();
+        }
+        if (marker.selected) {
+          ctx.beginPath();
+          ctx.arc(x * ratio, y * scope.verticalPixelRatio, (RADIUS + SELECTED_GAP) * ratio, 0, Math.PI * 2);
+          ctx.strokeStyle = this.ringColour;
           ctx.stroke();
         }
       }
@@ -82,6 +96,7 @@ export class MoveMarksPrimitive implements IPanePrimitive<Time> {
     private readonly series: () => ISeriesApi<"Candlestick"> | null,
     private readonly upColour: string,
     private readonly downColour: string,
+    private readonly ringColour: string,
   ) {
     this.views = [new MoveMarksPaneView(this)];
   }
@@ -134,6 +149,6 @@ export class MoveMarksPrimitive implements IPanePrimitive<Time> {
 
   public buildRenderer(): IPrimitivePaneRenderer | null {
     const marks = this.placed();
-    return marks.length === 0 ? null : new MoveMarksRenderer(marks, this.upColour, this.downColour);
+    return marks.length === 0 ? null : new MoveMarksRenderer(marks, this.upColour, this.downColour, this.ringColour);
   }
 }

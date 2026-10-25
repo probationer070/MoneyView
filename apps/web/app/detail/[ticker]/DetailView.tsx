@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { DetailHeader } from "@/components/detail/DetailHeader";
+import { DetailNews } from "@/components/detail/DetailNews";
+import { MoveCard } from "@/components/detail/MoveCard";
 import { MoveChart } from "@/components/detail/MoveChart";
 import { MoversColumn } from "@/components/detail/MoversColumn";
 import { TrendTiles } from "@/components/detail/TrendTiles";
@@ -10,7 +12,10 @@ import { useDetailBars, useDetailProfile, useLatestMovers } from "@/lib/detail/u
 
 const PANEL = "relative min-h-0 overflow-auto border border-[var(--line)] bg-[var(--surface-raised)]";
 
-/** The stock detail screen. It fits the viewport: the header and tiles take their height, the panels below share the rest and scroll inside. */
+/**
+ * The stock detail screen. It fits the viewport: the header and tiles take their height, the panels below share the rest.
+ * A clicked day's card takes the right-hand column in place of the movers (the chart panel has no room under the chart); closing it brings them back.
+ */
 export function DetailView({ ticker }: { ticker: string }) {
   const t = useT();
   const bars = useDetailBars(ticker);
@@ -19,6 +24,8 @@ export function DetailView({ ticker }: { ticker: string }) {
   // The clicked day belongs to a ticker, so a navigation to another ticker starts with none selected.
   const [selection, setSelection] = useState<{ ticker: string; date: string | null }>({ ticker, date: null });
   const selectedDate = selection.ticker === ticker ? selection.date : null;
+  const select = useCallback((date: string | null) => setSelection({ ticker, date }), [ticker]);
+  const closeCard = useCallback(() => select(null), [select]);
   const watched = profile.data?.in_watchlist === true;
   const hasBars = bars.data !== undefined && bars.data.length > 0;
   const columns = watched
@@ -32,13 +39,21 @@ export function DetailView({ ticker }: { ticker: string }) {
         <>
           <TrendTiles bars={bars.data!} />
           <div className={`grid min-h-0 flex-1 gap-3 ${columns}`}>
-            <section data-testid="detail-chart-slot" aria-label={t("detail.chartRegion")} className={PANEL}>
-              <MoveChart bars={bars.data!} selectedDate={selectedDate} onSelect={(date) => setSelection({ ticker, date })} />
+            <section data-testid="detail-chart-slot" aria-label={t("detail.chartRegion")} className={`${PANEL} p-3`}>
+              <MoveChart bars={bars.data!} selectedDate={selectedDate} onSelect={select} />
             </section>
-            {/* Region for the news column; a ticker off the watchlist has none. The next task fills it. */}
-            {watched && <section data-testid="detail-news-slot" aria-label={t("detail.newsRegion")} className={PANEL} />}
+            {/* A ticker off the watchlist has no news column (S-D12). */}
+            {watched && (
+              <section data-testid="detail-news-slot" aria-label={t("detail.newsRegion")} className={PANEL}>
+                <DetailNews ticker={ticker} themeId={profile.data?.theme?.id ?? null} date={selectedDate} />
+              </section>
+            )}
             <aside className={`${PANEL} p-3`}>
-              <MoversColumn movers={movers.data} loading={movers.isPending} failed={movers.isError} current={ticker} />
+              {selectedDate !== null ? (
+                <MoveCard key={selectedDate} ticker={ticker} date={selectedDate} onClose={closeCard} />
+              ) : (
+                <MoversColumn movers={movers.data} loading={movers.isPending} failed={movers.isError} current={ticker} />
+              )}
             </aside>
           </div>
         </>

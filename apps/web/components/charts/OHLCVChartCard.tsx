@@ -45,6 +45,8 @@ interface OHLCVChartCardProps {
   /** Big-move marks drawn on the candles, and the callback for a clicked mark. */
   markers?: ChartMarker[];
   onMarkerClick?: (date: string) => void;
+  /** Inside a panel that has its own frame: no second border, tighter gaps. */
+  bare?: boolean;
 }
 
 export function OHLCVChartCard({
@@ -78,6 +80,7 @@ export function OHLCVChartCard({
   eventToggle = "categories",
   markers,
   onMarkerClick,
+  bare = false,
 }: OHLCVChartCardProps) {
   const t = useT();
   const [eventsOn, setEventsOn] = useState(true);
@@ -111,6 +114,7 @@ export function OHLCVChartCard({
       errorMessage={errorMessage}
       staleLabel={staleLabel}
       lastUpdatedLabel={lastUpdatedLabel}
+      bare={bare}
       empty={data.length === 0}
       emptyTitle={emptyTitle}
       emptyDescription={emptyDescription}
@@ -162,7 +166,7 @@ export function OHLCVChartCard({
       ) : null}
       {legend ? <div className="mt-3 flex flex-wrap gap-2 type-small text-[var(--ink-muted)]">{legend}</div> : null}
 
-      <div className="mt-4 border border-[var(--grid)] bg-[var(--surface)] p-2">
+      <div className={`${bare ? "mt-2" : "mt-4"} border border-[var(--grid)] bg-[var(--surface)] p-2`}>
         <TVChart
           data={data}
           events={lines}
@@ -179,7 +183,7 @@ export function OHLCVChartCard({
         />
       </div>
 
-      {footer ? <div className="mt-4">{footer}</div> : null}
+      {footer ? <div className={bare ? "mt-2" : "mt-4"}>{footer}</div> : null}
     </ChartPanelFrame>
   );
 }

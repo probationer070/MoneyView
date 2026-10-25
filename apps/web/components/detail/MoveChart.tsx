@@ -35,8 +35,8 @@ export function MoveChart({ bars, selectedDate, onSelect }: MoveChartProps) {
   const volume = useMemo(() => transformToTVVolume(visible), [visible]);
   const moves = useMemo(() => detectBigMoves(bars, thresholds, visible[0]?.date), [bars, thresholds, visible]);
   const markers = useMemo<ChartMarker[]>(
-    () => moves.map((move) => ({ date: move.date, shape: move.strong ? "filled" : "hollow", up: move.up })),
-    [moves],
+    () => moves.map((move) => ({ date: move.date, shape: move.strong ? "filled" : "hollow", up: move.up, selected: move.date === selectedDate })),
+    [moves, selectedDate],
   );
 
   const last = bars[bars.length - 1];
@@ -65,13 +65,14 @@ export function MoveChart({ bars, selectedDate, onSelect }: MoveChartProps) {
       eventToggle="single"
       markers={markers}
       onMarkerClick={toggle}
+      bare
       actions={<ThresholdInputs value={thresholds} onChange={changeThresholds} />}
       footer={
-        <div className="flex flex-col gap-2">
-          <p className="type-label text-[var(--ink)]">
+        <div className="flex items-start gap-3">
+          <p className="type-label shrink-0 py-1 text-[var(--ink)]">
             {t("detail.bigMoveCount")} <span data-testid="big-move-count" className="type-mono">{formatNumber(moves.length, "integer", { locale })}</span>
           </p>
-          <ul data-testid="big-move-list" aria-label={t("detail.bigMoveList")} className="flex max-h-16 flex-wrap gap-2 overflow-auto">
+          <ul data-testid="big-move-list" aria-label={t("detail.bigMoveList")} className="flex max-h-16 min-w-0 flex-1 flex-wrap gap-2 overflow-auto">
             {moves.length === 0 ? <li className="type-small text-[var(--ink-muted)]">{t("detail.bigMoveNone")}</li> : null}
             {moves.map((move) => {
               const pct = formatNumber(move.returnPct / 100, "percent", { signed: true, locale });

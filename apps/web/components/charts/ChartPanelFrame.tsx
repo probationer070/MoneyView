@@ -18,6 +18,8 @@ interface ChartPanelFrameProps {
   staleLabel?: string;
   lastUpdatedLabel?: string | null;
   className?: string;
+  /** The frame sits inside a panel that already has the border and padding: draw neither. */
+  bare?: boolean;
   children: ReactNode;
 }
 
@@ -32,11 +34,12 @@ export function ChartPanelFrame({
   staleLabel,
   lastUpdatedLabel,
   className = "",
+  bare = false,
   children,
 }: ChartPanelFrameProps) {
   const t = useT();
   return (
-    <section className={`border border-[var(--line)] bg-[var(--surface-raised)] p-5 ${className}`}>
+    <section className={`${bare ? "" : "border border-[var(--line)] bg-[var(--surface-raised)] p-5"} ${className}`}>
       {title ? (
         <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
           <div>
