@@ -70,6 +70,13 @@ export interface RunResult {
   equity_value: number;
   value_per_share_basic: number;
   value_per_share_diluted: number;
+  /** The new shares the diluted value divides by: typed, offering_price-set, or solved from the value. */
+  shares_new_effective: number;
+  offering_price: number | null;
+  /** offering_price x (basic + new shares); null without an offering price. */
+  offering_implied_value: number | null;
+  /** How far the offering price sits above (+) or below (−) the diluted value, in percent. */
+  offering_premium_pct: number | null;
 }
 
 export interface DiffContribution {

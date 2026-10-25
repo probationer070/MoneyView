@@ -48,6 +48,14 @@ export const RUN_RESULT: RunResult = {
   fcff: series(146, 20), wacc: series(0.09, -0.0016),
   terminal_value_share_pct: 66.31, enterprise_value: 4946.3, equity_value: 4996.3,
   value_per_share_basic: 49.96, value_per_share_diluted: 49.96,
+  shares_new_effective: 0, offering_price: null, offering_implied_value: null, offering_premium_pct: null,
+};
+
+// An IPO case priced at an offer: 135 x (12.5353 + 0.5556) = 1767.27, and 135 / 99.41 - 1 = +35.8%.
+export const PRICED_RUN_RESULT: RunResult = {
+  ...RUN_RESULT,
+  value_per_share_diluted: 99.41,
+  shares_new_effective: 0.5556, offering_price: 135, offering_implied_value: 1767.27, offering_premium_pct: 35.81,
 };
 
 // The DCF EV is RUN_RESULT's, so the page's two figures agree with each other.
@@ -97,6 +105,7 @@ export interface CasesMockOptions {
   listStatus?: number;
   runStatus?: number;
   runDetail?: string;
+  runResult?: RunResult;
   diffStatus?: number;
   diffDetail?: string;
   diffResult?: DiffResult;
@@ -141,7 +150,7 @@ export async function mockCasesApi(page: Page, options: CasesMockOptions = {}): 
     }
     if (action === "run") {
       if (options.runStatus) return json(route, { detail: options.runDetail ?? "engine refused" }, options.runStatus);
-      return json(route, { status: "ok", data: { ...RUN_RESULT, case_id: id }, meta: {} });
+      return json(route, { status: "ok", data: { ...(options.runResult ?? RUN_RESULT), case_id: id }, meta: {} });
     }
     if (action === "pricing") {
       if (options.pricingStatus) return json(route, { detail: options.pricingDetail ?? "refused" }, options.pricingStatus);

@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { DIFF_RESULT, PRICING_RESULT, SIMULATE_RESULT, SIMULATE_SUPPRESSED, mockCasesApi } from "./helpers/casesApiMock";
+import { DIFF_RESULT, PRICED_RUN_RESULT, PRICING_RESULT, SIMULATE_RESULT, SIMULATE_SUPPRESSED, mockCasesApi } from "./helpers/casesApiMock";
 import { mockValuationApi } from "./helpers/valuationPageMock";
 
 async function gotoCases(page: Page, query = "") {
@@ -107,6 +107,23 @@ test.describe("one case", () => {
     await expect(row2026.getByRole("cell", { name: "9.00%" })).toBeVisible();
     const segmentTable = valuation.getByRole("table", { name: "Segments in the target year" });
     await expect(segmentTable.getByRole("cell", { name: "27.3%" })).toBeVisible();
+  });
+
+  test("an IPO case priced at an offer shows the offer against the value per share", async ({ page }) => {
+    await mockCasesApi(page, { runResult: PRICED_RUN_RESULT });
+    await gotoCase(page, 1);
+    const offer = page.getByTestId("case-offering");
+    await expect(offer.getByTestId("offering-price")).toHaveText("135.00");
+    await expect(offer.getByTestId("offering-implied-value")).toHaveText("1,767.3");
+    await expect(offer.getByTestId("offering-premium")).toHaveText("+35.8%");
+    await expect(offer.getByTestId("shares-new-effective")).toHaveText("0.5556");
+  });
+
+  test("a case without an offering price shows no offer block", async ({ page }) => {
+    await mockCasesApi(page);
+    await gotoCase(page, 1);
+    await expect(page.getByTestId("value-per-share-diluted")).toHaveText("49.96");
+    await expect(page.getByTestId("case-offering")).toHaveCount(0);
   });
 
   test("an engine refusal to run the case is content, not an error and not a zero", async ({ page }) => {
