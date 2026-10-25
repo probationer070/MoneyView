@@ -1,6 +1,8 @@
 """
 Detail popup routes — OHLCV, technical indicators, Monte Carlo.
 
+GET /api/detail/movers/latest
+GET /api/detail/{ticker}/profile
 GET /api/detail/{ticker}/ohlcv
 GET /api/detail/{ticker}/technicals
 GET /api/detail/{ticker}/monte-carlo
@@ -14,10 +16,26 @@ import numpy as np
 from apps.api.models.schemas import (
     StockOHLCV, TechnicalIndicators, MonteCarloResult,
 )
+from apps.api.models.schema_parts.detail import DetailProfile, LatestMovers
+from apps.api.services import detail_view
 from apps.api.services.market_data import MarketDataService
 
 router = APIRouter()
 _mkt   = MarketDataService()
+
+
+# ---------------------------------------------------------------------------
+# Movers and profile (movers is declared before the /{ticker} routes)
+# ---------------------------------------------------------------------------
+
+@router.get("/movers/latest", response_model=LatestMovers)
+def get_latest_movers():
+    return detail_view.latest_movers()
+
+
+@router.get("/{ticker}/profile", response_model=DetailProfile)
+def get_profile(ticker: str):
+    return detail_view.profile(ticker)
 
 
 # ---------------------------------------------------------------------------

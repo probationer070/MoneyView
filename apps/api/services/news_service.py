@@ -41,12 +41,25 @@ class NewsService:
         offset:  int = 0,
         from_date: Optional[str] = None,
         to_date:   Optional[str] = None,
+        topic:     Optional[str] = None,
     ) -> List[NewsArticle]:
         """Fetch news from SQLite, optionally filtered by ticker or keyword.
 
-        from_date/to_date (YYYY-MM-DD, inclusive) apply with ticker only."""
+        from_date/to_date (YYYY-MM-DD, inclusive) apply with ticker or topic.
+        topic (e.g. 'theme:ai') selects that topic's rows instead of the default topic = ''."""
         with get_db() as conn:
-            if ticker:
+            if topic:
+                rows = conn.execute(
+                    """SELECT * FROM news
+                       WHERE topic = ?
+                         AND (? IS NULL OR ticker = ?)
+                         AND (? IS NULL OR substr(published_date, 1, 10) >= ?)
+                         AND (? IS NULL OR substr(published_date, 1, 10) <= ?)
+                       ORDER BY published_date DESC, published_at DESC NULLS LAST, id DESC
+                       LIMIT ? OFFSET ?""",
+                    (topic, ticker, ticker, from_date, from_date, to_date, to_date, limit, offset),
+                ).fetchall()
+            elif ticker:
                 rows = conn.execute(
                     """SELECT * FROM news
                        WHERE ticker = ?
