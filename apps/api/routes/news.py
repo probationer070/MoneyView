@@ -7,35 +7,45 @@ POST /api/news/acquire
 """
 
 import asyncio
-import os
-import time
 from datetime import datetime, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException, Query
 
 from apps.api.models.schemas import APIResponse, NewsArticle
-from apps.api.models.schema_parts.news import BulkNewsResponse, NewsAcquireRequest, NewsAcquireResponse
+from apps.api.models.schema_parts.news import (
+    BulkNewsResponse,
+    NewsAcquireRequest,
+    NewsAcquireResponse,
+    NewsDailyStatus,
+    NewsHistoryRequest,
+    NewsHistoryResponse,
+    NewsStatusResponse,
+)
+from apps.api.services.acquisition.freshness import needs_acquisition
+from apps.api.services.acquisition.registry import get_data_class
 from apps.api.services.acquisition.runner import acquire_point_in_time
 from apps.api.services.acquisition.sources.news import fetch_news
 from apps.api.services.acquisition.state import read_state
 from apps.api.services.acquisition.store import news_coverage, save_news
 from apps.api.services.db import get_db
+from apps.api.services.news_feed import NewsBlocked, get_pacer
+from apps.api.services.news_feed.daily import _done_key, _mark, session_day
+from apps.api.services.news_feed.history import search_history
 from apps.api.services.news_service import NewsService
+from apps.api.services.risk import store
 
 router = APIRouter()
 _svc   = NewsService()
 
 MAX_ACQUIRE_TICKERS = 100
 
-# Pause between crawls that actually reached the provider. The batch was already
-# sequential at a measured 0.8-1.0s per crawl, but back-to-back requests to one provider
-# across the whole watchlist is the shape that gets a client classified as automated.
-#
-# Applied only between real fetches: the hourly freshness boundary skips most tickers
-# without making a request, and pausing after a skip would pay the whole cost of pacing
-# while buying none of its protection.
-NEWS_CRAWL_DELAY_SECONDS = float(os.getenv("MONEYVIEW_NEWS_CRAWL_DELAY_SECONDS", "0.4"))
+
+def _blocked_http(error: NewsBlocked) -> HTTPException:
+    return HTTPException(
+        status_code=503,
+        detail={"code": "news_blocked", "reason": error.reason, "retry_after": error.retry_after.isoformat()},
+    )
 
 
 @router.get("/feed", response_model=List[NewsArticle])
@@ -44,9 +54,11 @@ def get_news_feed(
     q:       Optional[str] = Query(default=None, description="keyword search"),
     limit:   int           = Query(default=20, ge=1, le=100),
     offset:  int           = Query(default=0, ge=0),
+    from_:   Optional[str] = Query(default=None, alias="from", pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    to:      Optional[str] = Query(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
 ):
-    """Return news articles filtered by ticker or keyword."""
-    return _svc.get_news(ticker=ticker, limit=limit, keyword=q, offset=offset)
+    """Return news articles filtered by ticker or keyword; from/to bound the day when ticker is set."""
+    return _svc.get_news(ticker=ticker, limit=limit, keyword=q, offset=offset, from_date=from_, to_date=to)
 
 
 @router.get("/feed/bulk", response_model=APIResponse[BulkNewsResponse])
@@ -64,6 +76,39 @@ def get_news_feed_bulk(
     return APIResponse(data=BulkNewsResponse(tickers=_svc.get_news_bulk(requested, per_ticker=per_ticker)))
 
 
+@router.post("/history", response_model=APIResponse[NewsHistoryResponse])
+def search_news_history(request: NewsHistoryRequest):
+    """Search Google News for the five days around a date. Synchronous: the pacer wait happens here."""
+    names = _watchlist_names()
+    ticker = request.ticker.upper().strip()
+    if ticker not in names:
+        raise HTTPException(status_code=404, detail=f"{ticker} is not in the watchlist")
+    return APIResponse(data=search_history(ticker, request.date, now=datetime.now(timezone.utc), names=names))
+
+
+@router.get("/status", response_model=APIResponse[NewsStatusResponse])
+def get_news_status():
+    """Google block state, today's request count and the daily sweep progress."""
+    pacer = get_pacer().status()
+    day = session_day(datetime.now(timezone.utc))
+    tickers = list(_watchlist_names())
+    done = sum(1 for t in tickers if store.get_state(_mark(day, t)) is not None)
+    remaining = len(tickers) - done
+    return APIResponse(data=NewsStatusResponse(
+        blocked_until=pacer.blocked_until,
+        blocked_reason=pacer.blocked_reason,
+        requests_today=pacer.requests_today,
+        daily_cap=pacer.daily_cap,
+        daily=NewsDailyStatus(
+            session_day=day,
+            done=done,
+            remaining=remaining,
+            # A ticker added after the day was flagged done is still to sweep.
+            complete=store.get_state(_done_key(day)) is not None and remaining == 0,
+        ),
+    ))
+
+
 @router.post("/crawl", response_model=List[NewsArticle])
 def crawl_news(
     query:  str           = Query(...),
@@ -71,7 +116,10 @@ def crawl_news(
     limit:  int           = Query(default=10),
 ):
     """Trigger a live crawl and persist results."""
-    return _svc.crawl_and_save(query=query, ticker=ticker, limit=limit)
+    try:
+        return _svc.crawl_and_save(query=query, ticker=ticker, limit=limit)
+    except NewsBlocked as error:
+        raise _blocked_http(error)
 
 
 @router.post("/crawl/stock", response_model=List[NewsArticle])
@@ -82,13 +130,21 @@ def crawl_stock_news(
     offset: int = Query(default=0, ge=0),
 ):
     """Trigger stock-specific news crawl and persist results."""
-    return _svc.crawl_stock_and_save(ticker=ticker, company_name=company_name, limit=limit, offset=offset)
+    try:
+        return _svc.crawl_stock_and_save(ticker=ticker, company_name=company_name, limit=limit, offset=offset)
+    except NewsBlocked as error:
+        raise _blocked_http(error)
 
 
 def _watchlist_names() -> dict[str, str]:
     with get_db() as conn:
         rows = conn.execute("SELECT ticker, name FROM watchlist").fetchall()
     return {str(row["ticker"]).upper(): str(row["name"] or "") for row in rows}
+
+
+def _blocked_result(ticker: str, error: NewsBlocked) -> dict:
+    return {"ticker": ticker, "status": "failed", "articles": 0,
+            "detail": f"blocked until {error.retry_after.isoformat()}"}
 
 
 def acquire_news_batch(tickers, *, now, fetcher=fetch_news) -> list[dict]:
@@ -103,12 +159,9 @@ def acquire_news_batch(tickers, *, now, fetcher=fetch_news) -> list[dict]:
     names = _watchlist_names()
     seen: set[str] = set()
     results: list[dict] = []
-    # Set when a crawl actually reached the provider, cleared by the pause that follows it.
-    # Freshness is only known after acquire_point_in_time returns, so a ticker that turns
-    # out fresh can still cost one pause -- the pause was already paid before the call
-    # that revealed it. Pacing that waited to learn the answer would have to duplicate the
-    # boundary logic to ask first.
-    pause_owed = False
+    # Set by the first NewsBlocked: the pacer refuses every request until its retry time,
+    # so the rest of the batch is reported failed without calling the fetcher.
+    blocked: NewsBlocked | None = None
 
     for raw in tickers:
         ticker = str(raw).upper().strip()
@@ -116,23 +169,28 @@ def acquire_news_batch(tickers, *, now, fetcher=fetch_news) -> list[dict]:
             continue
         seen.add(ticker)
         company_name = names[ticker]
-        # Before the crawl, never after the last one: N fetches need N-1 gaps, and a
-        # trailing sleep would only delay the response.
-        if pause_owed and NEWS_CRAWL_DELAY_SECONDS > 0:
-            time.sleep(NEWS_CRAWL_DELAY_SECONDS)
-            pause_owed = False
-        outcome = acquire_point_in_time(
-            "news",
-            ticker,
-            now=now,
-            fetcher=lambda subject: fetcher(subject, company_name=company_name),
-            saver=save_news,
-            coverage=news_coverage,
-        )
-        # "fresh" means the boundary answered without asking the provider, so it neither
-        # needs pacing nor counts toward the request rate. A failure did reach out.
-        if outcome.reason != "fresh":
-            pause_owed = True
+        if blocked is not None:
+            # No request is possible, but a ticker the boundary already covers needs none.
+            if needs_acquisition(read_state("news", ticker), get_data_class("news").boundary, now):
+                results.append(_blocked_result(ticker, blocked))
+            else:
+                results.append({"ticker": ticker, "status": "fresh", "articles": 0, "detail": None})
+            continue
+
+        try:
+            # A block reaches here without a recorded check: nothing was sent.
+            outcome = acquire_point_in_time(
+                "news",
+                ticker,
+                now=now,
+                fetcher=lambda subject, _company=company_name: fetcher(subject, company_name=_company),
+                saver=save_news,
+                coverage=news_coverage,
+            )
+        except NewsBlocked as error:
+            blocked = error
+            results.append(_blocked_result(ticker, blocked))
+            continue
         results.append({
             "ticker": ticker,
             "status": outcome.reason,

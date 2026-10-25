@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Dict, List, Optional
+from datetime import date, datetime
+from typing import Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -20,6 +21,48 @@ class NewsArticle(BaseModel):
     importance: int = 1
     lang: str = "en"
     topic: str = ""
+    published_at: Optional[str] = None
+
+
+HistoryStatus = Literal["searched_now", "cached", "blocked", "daily_limit", "failed"]
+
+
+class NewsHistoryRequest(BaseModel):
+    ticker: str
+    date: date
+
+
+class NewsHistoryLang(BaseModel):
+    lang: str
+    status: HistoryStatus
+    found: int
+    truncated: bool
+
+
+class NewsHistoryResponse(BaseModel):
+    ticker: str
+    start: date
+    end: date
+    status: HistoryStatus
+    retry_after: Optional[datetime] = None
+    truncated: bool
+    searched: List[NewsHistoryLang]
+    articles: List[NewsArticle]
+
+
+class NewsDailyStatus(BaseModel):
+    session_day: Optional[date] = None
+    done: int
+    remaining: int
+    complete: bool
+
+
+class NewsStatusResponse(BaseModel):
+    blocked_until: Optional[datetime] = None
+    blocked_reason: Optional[str] = None
+    requests_today: int
+    daily_cap: int
+    daily: NewsDailyStatus
 
 
 class NewsAcquireRequest(BaseModel):

@@ -9,7 +9,8 @@ A source protocol gets extracted when a third shape appears; with two, an abstra
 would be guessing.
 
 No acquisition failure ever propagates into a request. Precedent: the telemetry sink's
-failure policy in perf spec 03.8.
+failure policy in perf spec 03.8. A refusal is not a failure: `ProviderRefused` (the news
+pacer's block, cap or shutdown) records nothing and reaches the caller.
 """
 from __future__ import annotations
 
@@ -17,6 +18,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 
 from apps.api.core.logger import setup_logger
+from apps.api.services.acquisition.errors import ProviderRefused
 from apps.api.services.acquisition.freshness import needs_acquisition
 from apps.api.services.acquisition.ranges import plan_range
 from apps.api.services.acquisition.registry import get_data_class
@@ -153,6 +155,11 @@ def acquire_point_in_time(
         # test reach the network and still go green with a FAILED row nobody reads. This
         # preserves the same "an unexpected bug propagates" guarantee the sources get from
         # catching only (AttributeError, KeyError, TypeError, ValueError).
+        raise
+    except ProviderRefused:
+        # The gate refused before sending: nothing was asked, so no check is recorded (a FAILED
+        # check would read "last checked HH:MM" and skip the subject for the boundary). The
+        # caller stops its batch on it.
         raise
     except Exception as error:  # noqa: BLE001 - never propagate into a caller
         logger.warning("acquisition.fetch_failed data_class=%s subject=%s error=%s",

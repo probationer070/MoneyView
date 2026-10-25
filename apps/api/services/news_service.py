@@ -7,6 +7,7 @@ import logging
 from typing import List, Optional
 
 from apps.api.services.db import get_db
+from apps.api.services.news_feed import NewsBlocked
 from apps.api.models.schemas import NewsArticle, SentimentEnum
 
 logger = logging.getLogger(__name__)
@@ -38,16 +39,22 @@ class NewsService:
         limit:   int = 20,
         keyword: Optional[str] = None,
         offset:  int = 0,
+        from_date: Optional[str] = None,
+        to_date:   Optional[str] = None,
     ) -> List[NewsArticle]:
-        """Fetch news from SQLite, optionally filtered by ticker or keyword."""
+        """Fetch news from SQLite, optionally filtered by ticker or keyword.
+
+        from_date/to_date (YYYY-MM-DD, inclusive) apply with ticker only."""
         with get_db() as conn:
             if ticker:
                 rows = conn.execute(
                     """SELECT * FROM news
                        WHERE ticker = ?
-                       ORDER BY published_date DESC
+                         AND (? IS NULL OR substr(published_date, 1, 10) >= ?)
+                         AND (? IS NULL OR substr(published_date, 1, 10) <= ?)
+                       ORDER BY published_date DESC, published_at DESC NULLS LAST, id DESC
                        LIMIT ? OFFSET ?""",
-                    (ticker, limit, offset),
+                    (ticker, from_date, from_date, to_date, to_date, limit, offset),
                 ).fetchall()
             elif keyword:
                 rows = conn.execute(
@@ -78,6 +85,7 @@ class NewsService:
                 importance=int(r["importance"] or 1),
                 lang=r["lang"],
                 topic=r["topic"],
+                published_at=r["published_at"],
             )
             for r in rows
         ]
@@ -187,12 +195,12 @@ class NewsService:
                 conn.execute(
                     """INSERT OR IGNORE INTO news
                        (ticker, headline, url, source, published_date,
-                        sentiment, importance, hash, lang, topic)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                        sentiment, importance, hash, lang, topic, published_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (article.ticker, article.headline, article.url,
                      article.source, article.published_date,
                      article.sentiment.value, article.importance, h,
-                     article.lang, article.topic),
+                     article.lang, article.topic, article.published_at),
                 )
             return True
         except Exception as exc:
@@ -219,10 +227,13 @@ class NewsService:
                     url=getattr(r, "url", ""),
                     source=getattr(r, "source", "Web"),
                     published_date=getattr(r, "date", ""),
+                    published_at=getattr(r, "published_at", None),
                 )
                 self.save_article(art)
                 saved.append(art)
             return saved
+        except NewsBlocked:
+            raise
         except Exception as exc:
             logger.warning("Crawl failed for '%s': %s", query, exc)
             return []
@@ -246,14 +257,17 @@ class NewsService:
                     ticker=ticker.upper(),
                     headline=getattr(item, "title", str(item)),
                     url=getattr(item, "url", ""),
-                    source=getattr(item, "source", "Google News"),
+                    source=getattr(item, "source", ""),
                     published_date=getattr(item, "date", ""),
+                    published_at=getattr(item, "published_at", None),
                     sentiment=SentimentEnum.neutral,
                     importance=1,
                 )
                 self.save_article(article)
                 saved.append(article)
             return saved
+        except NewsBlocked:
+            raise
         except Exception as exc:
             logger.warning("Stock crawl failed for '%s': %s", ticker, exc)
             return []

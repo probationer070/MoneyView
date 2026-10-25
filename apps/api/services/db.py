@@ -339,6 +339,16 @@ CREATE TABLE IF NOT EXISTS risk_alert_cards (
     payload_json   TEXT,
     PRIMARY KEY (alert_id, snapshot, deck, rank)
 );
+CREATE TABLE IF NOT EXISTS news_history_searches (
+    ticker      TEXT NOT NULL,
+    lang        TEXT NOT NULL,
+    start       TEXT NOT NULL,
+    end         TEXT NOT NULL,
+    searched_at TEXT NOT NULL,
+    found       INTEGER NOT NULL,
+    truncated   INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (ticker, lang, start, end)
+);
 CREATE TABLE IF NOT EXISTS risk_state (
     key            TEXT PRIMARY KEY,
     value          TEXT NOT NULL
@@ -437,7 +447,8 @@ CREATE TABLE IF NOT EXISTS news (
     importance     INTEGER DEFAULT 1,
     hash           TEXT UNIQUE,
     lang           TEXT NOT NULL DEFAULT 'en',
-    topic          TEXT NOT NULL DEFAULT ''
+    topic          TEXT NOT NULL DEFAULT '',
+    published_at   TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_news_ticker ON news(ticker);
 
@@ -848,6 +859,25 @@ def init_db() -> None:
         conn.close()
 
 
+def _backfill_news_publisher(conn: sqlite3.Connection) -> None:
+    """Once: rows saved as source 'Google News' carry the publisher as a ' - publisher' title suffix.
+
+    Move the text after the last ' - ' into `source` and cut it from the headline. The
+    `risk_state` flag keeps a second run from cutting a real hyphenated headline again.
+    """
+    if conn.execute("SELECT 1 FROM risk_state WHERE key = 'news_publisher_backfill_done'").fetchone():
+        return
+    rows = conn.execute(
+        "SELECT id, headline FROM news WHERE source = 'Google News' AND headline LIKE '% - %'"
+    ).fetchall()
+    for row in rows:
+        headline, _, publisher = row["headline"].rpartition(" - ")
+        if not headline.strip() or not publisher.strip():
+            continue
+        conn.execute("UPDATE news SET headline = ?, source = ? WHERE id = ?", (headline, publisher, row["id"]))
+    conn.execute("INSERT OR REPLACE INTO risk_state (key, value) VALUES ('news_publisher_backfill_done', '1')")
+
+
 def _ensure_schema_compatibility(conn: sqlite3.Connection) -> None:
     """Apply additive migrations for older local SQLite files."""
     surge = conn.execute("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'surge_events'").fetchone()
@@ -1133,6 +1163,9 @@ def _ensure_schema_compatibility(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE news ADD COLUMN lang TEXT NOT NULL DEFAULT 'en'")
     if news_columns and "topic" not in news_columns:
         conn.execute("ALTER TABLE news ADD COLUMN topic TEXT NOT NULL DEFAULT ''")
+    if news_columns and "published_at" not in news_columns:
+        conn.execute("ALTER TABLE news ADD COLUMN published_at TEXT")
+    _backfill_news_publisher(conn)
     # Risk engine: nullable and additive; a NULL last_ref reads as the stint's joined date.
     stint_columns = {row["name"] for row in conn.execute("PRAGMA table_info(risk_alert_themes)")}
     if stint_columns and "last_ref" not in stint_columns:

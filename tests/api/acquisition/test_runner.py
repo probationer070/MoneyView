@@ -436,3 +436,36 @@ def test_an_unpriced_settled_day_is_not_counted_as_covered():
     )
     assert result.fetched_rows == 1
     assert read_state("equity_bars", "TEST_RUNNER_NAN_SETTLED").covered_to == date(2026, 10, 15)
+
+
+def _news_state_row(subject):
+    with db_service.get_db() as conn:
+        row = conn.execute(
+            "SELECT * FROM acquisition_state WHERE data_class = 'news' AND subject = ?", (subject,)
+        ).fetchone()
+    return dict(row) if row else None
+
+
+def test_a_refused_fetch_records_no_check_and_reaches_the_caller():
+    """Catches a pacer refusal (block, daily cap) recorded as a FAILED check: nothing was asked,
+    yet the ticker would read "last checked HH:MM" and be skipped for the hour. The refusal must
+    reach the caller, which stops its batch on it."""
+    from apps.api.services.news_feed import NewsBlocked
+
+    earlier = datetime(2026, 7, 30, 9, 0, tzinfo=timezone.utc)
+    now = datetime(2026, 7, 30, 12, 0, tzinfo=timezone.utc)
+    record_success("news", "AAA", now=earlier, covered_from=date(2026, 7, 30), covered_to=date(2026, 7, 30))
+    before = _news_state_row("AAA")
+
+    def refused(subject):
+        raise NewsBlocked("blocked", datetime(2026, 7, 31, tzinfo=timezone.utc))
+
+    for subject in ("AAA", "BBB"):
+        with pytest.raises(NewsBlocked):
+            acquire_point_in_time(
+                "news", subject, now=now, fetcher=refused,
+                saver=lambda s, rows: pytest.fail("saver must not run"),
+                coverage=lambda rows: (None, None),
+            )
+    assert _news_state_row("AAA") == before
+    assert _news_state_row("BBB") is None

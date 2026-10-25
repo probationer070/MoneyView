@@ -86,3 +86,62 @@ def test_shutdown_does_not_wait_for_the_uncancellable_prewarm_worker(monkeypatch
         f"shutdown took {shutdown_seconds:.2f}s while a to_thread worker was blocked "
         f"for 30s -- it is now waiting on the worker"
     )
+
+
+def _drive_with_live_cycles_stubbed(monkeypatch, news_flag):
+    """Run one lifespan with the startup gate open and every live cycle replaced by a recorder.
+    Returns the names of the cycles that started."""
+    from apps.api.services.news_feed import loop as news_loop
+    from apps.api.services.risk import schedule as risk_schedule
+    from apps.api.services.signals import schedule as signal_schedule
+
+    started: list[str] = []
+
+    def recorder(name):
+        async def cycle(*args, **kwargs):
+            started.append(name)
+        return cycle
+
+    monkeypatch.setattr(api_main, "stock_prewarm_cycle", recorder("stock_prewarm"))
+    monkeypatch.setattr(signal_schedule, "signal_cycle", recorder("signal"))
+    monkeypatch.setattr(risk_schedule, "risk_cycle", recorder("risk"))
+    monkeypatch.setattr(news_loop, "news_cycle", recorder("news"))
+    monkeypatch.delenv("MONEYVIEW_DISABLE_STARTUP_JOBS", raising=False)
+    if news_flag is None:
+        monkeypatch.delenv("MONEYVIEW_DISABLE_NEWS_LOOP", raising=False)
+    else:
+        monkeypatch.setenv("MONEYVIEW_DISABLE_NEWS_LOOP", news_flag)
+
+    async def drive():
+        async with api_main.lifespan(api_main.app):
+            await asyncio.sleep(0.05)
+
+    asyncio.run(drive())
+    return started
+
+
+def test_news_loop_flag_stops_only_the_news_loop(monkeypatch):
+    """Catches the e2e API starting a news loop against real Google (flag ignored), or the flag
+    also stopping the other startup cycles."""
+    assert "news" in _drive_with_live_cycles_stubbed(monkeypatch, None)
+    started = _drive_with_live_cycles_stubbed(monkeypatch, "1")
+    assert "news" not in started
+    assert {"stock_prewarm", "signal", "risk"} <= set(started)
+
+
+def test_shutdown_sets_the_news_stop_flag_and_startup_clears_it():
+    """Catches a shutdown that leaves a news worker sleeping between Google requests (flag never
+    set), or a restart in the same process whose news requests all refuse (flag never cleared)."""
+    from apps.api.services.news_feed import pacer
+
+    pacer.STOP.set()
+    seen: list[bool] = []
+
+    async def drive():
+        async with api_main.lifespan(api_main.app):
+            seen.append(pacer.STOP.is_set())
+
+    asyncio.run(drive())
+    assert seen == [False]
+    assert pacer.STOP.is_set()
+    pacer.STOP.clear()

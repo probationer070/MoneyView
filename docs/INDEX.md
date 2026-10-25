@@ -27,6 +27,7 @@ file before adding or moving any architecture doc.
 | `documentation-roadmap.md` | Documentation structure, writing order, maintenance rules |
 | `app-blueprint.md`, `system-overview.md`, `local-first-runtime.md`, `dcf-streaming.md`, `dev-monitor-backend-foundation.md`, `schema-evolution.md`, `api-transport-observability.md`, `cache-ownership-invalidation.md` | Supporting design notes for specific subsystems and past planning tracks |
 | `watchlist-cleanup-and-corporate-sync.md` | Addendum: deferred cleanup of a removed ticker's caches (30-day grace; `corporate_statements` kept), corporate records-sync kinds, two-PC rollout and PR #67 merge conflicts |
+| `news-crawling-guide.md` | Reference note for news crawling: Google News RSS limits measured 2026-10-25 (100 items per request, dated search, placeholder times), field normalization, bot-detection findings, the no-disguise pacing rules, and alternative sources (GDELT, Finnhub) |
 
 ## Design (`docs/design/`)
 
@@ -122,6 +123,8 @@ sub-project and feeding an implementation plan.
 | `2026-10-18-risk-signal-design.md` | Risk signal (급락 경보): the watchlist theme layer (sub-project ①) and the drawdown warning built on it, with its decisions and the evidence under `2026-10-18-risk-signal-evidence/` |
 | `2026-10-20-risk-ui-design.md` | Risk signal sub-project ③: always-on signal strip on "/", overlay panel (crash / candidates / surge / yesterday's gainers decks + news), `/alerts` records page with per-theme reports and CSV; small API additions |
 | `plans/2026-10-20-risk-ui.md` | Task-by-task plan for the risk signal UI (sub-project 3): API additions, hooks, signal strip, overlay panel and cards, `/alerts` records page with CSV, record reports and theme level chart, docs and gates |
+| `plans/2026-10-25-news-history.md` | Task-by-task plan for risk ④-a: RSS parsing and classification, the Google News pacer, publish time and publisher storage with every caller routed through the pacer, the news loop with the daily stock sweep, past-date search with range and status APIs, records |
+| `2026-10-25-news-history-design.md` | Risk signal sub-project ④-a: daily stock news sweep restored, past-date news search per ticker (auto-saved, cached), real publish times and publisher in `source`, one Google News pacer with bulk 20-60 s and interactive 3-8 s gaps, block stop and daily cap |
 | `2026-10-19-surge-signal-design.md` | Risk signal sub-project ②-b: theme surge signal (magnitude, EMA slope acceleration, breadth, RSI; cap-gated banner), daily top-5 gainers record, trailing-window live evaluation; backtest under `2026-10-19-surge-signal-evidence/` |
 | `plans/2026-10-19-surge-signal.md` | Task-by-task plan for the surge signal (sub-project 2b): rules, pure surge engine, storage, evaluator with the trailing live window, API, reproduction |
 | `2026-10-19-risk-engine-design.md` | Risk signal sub-project ②: daily risk evaluator, alert record with backfilled past alerts, daily bar and news sweeps, topic and Korean news, `/api/v1/risk` contract; the approved thresholds and backtest scripts are under `2026-10-19-risk-engine-evidence/` |

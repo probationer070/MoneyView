@@ -26,6 +26,86 @@ reveal that; only checking the code did.
 
 An entry states what was true when it was written. Nothing updates it on its own.
 
+## 2026-10-25: risk/news sweep state and acquisition_state misreported after a block
+
+Date: 2026-10-25 (news history final fix wave; found by the whole-branch review with scratch scripts).
+Command: `python -m pytest tests/api/risk/test_news.py tests/api/acquisition/test_runner.py tests/api/test_news_pacing.py tests/api/news_feed/test_daily.py -q`.
+Failure: three false states. (a) An alert-ticker sweep (`sweep_news(include_topics=False)`) wrote `news_swept_at` and `news_last_sweep_failed`, so it moved the macro 12 h timer and could clear the macro failure flag. (b) A Google block during a macro sweep left `news_last_sweep_failed` unchanged, so the alert card's `feed_failed` note missed the block. (c) `acquire_point_in_time` recorded a pacer refusal (block or daily cap, nothing sent) as a FAILED check with `last_checked_at=now`: the tile read "no recent news, last checked HH:MM" and the ticker was skipped as fresh for the hour. The daily sweep's `_forget_blocked_check` undid (c) by rewinding the check time, which also rewound an English success when only the Korean feed was blocked.
+Root cause: the sweep wrote macro-only state on every path, and its block branch returned before any state write; the runner treated every fetch exception as an ask.
+Fix: 1f9a59c. Only a topics sweep writes the two keys, and a blocked topics sweep sets the flag to "1". New `ProviderRefused` (`apps/api/services/acquisition/errors.py`), base of `NewsBlocked` and `NewsStopped`: the runner records nothing for it and re-raises; `acquire_news_batch` and the daily sweep catch the block around the call; `_forget_blocked_check` deleted.
+Files changed: `apps/api/services/risk/news.py`, `apps/api/services/acquisition/errors.py`, `apps/api/services/acquisition/runner.py`, `apps/api/services/news_feed/pacer.py`, `apps/api/services/news_feed/daily.py`, `apps/api/routes/news.py`, tests.
+Prevention: tests `test_ticker_only_sweep_leaves_macro_state_alone`, `test_blocked_macro_sweep_sets_the_failure_flag`, `test_a_refused_fetch_records_no_check_and_reaches_the_caller`, `test_blocked_ticker_is_asked_again_once_the_block_lifts`, `test_korean_block_keeps_the_english_check`, each mutation-checked. A state record means "asked"; a refusal before sending must not write one.
+
+## 2026-10-25: the daily news sweep stamped every ticker with the pass start time
+
+Date: 2026-10-25 (news history final fix wave; found by the whole-branch review).
+Command: `python -m pytest tests/api/news_feed/test_daily.py -q`.
+Failure: `run_daily_sweep(now)` passed the pass start `now` to every `acquire_point_in_time`, so a ticker fetched three hours into the pass got `last_checked_at` three hours early, and Refresh fetched it again right after the sweep (breaks N-D13, the hour of skipping after a sweep).
+Root cause: one timestamp used for two jobs: the session day (correctly fixed at pass start) and each ticker's check time.
+Fix: 1f9a59c. `run_daily_sweep(now, *, watchlist=None, clock=None)`; the session day stays `session_day(now)`, each ticker is acquired with `now=clock()` (default `datetime.now(UTC)`).
+Files changed: `apps/api/services/news_feed/daily.py`, `tests/api/news_feed/test_daily.py`.
+Prevention: `test_each_ticker_is_stamped_with_its_own_fetch_time` (mutation `now=clock()` -> `now=now` fails it). A loop that runs for hours needs a clock, not a captured `now`.
+
+## 2026-10-25: alert tickers queued while the queue drained were lost
+
+Date: 2026-10-25 (news history final fix wave; found by the whole-branch review with a scratch script).
+Command: `python -m pytest tests/api/news_feed/test_daily.py -q`.
+Failure: `drain_alert_queue` read the queue once, swept for minutes, then wrote back what was left of its stale copy (or deleted the key). A ticker the risk cycle queued during the sweep vanished, so its news was never fetched for the alert.
+Root cause: an unguarded read-modify-write spanning a long sweep, with a second writer (`queue_alert_tickers`) in another thread.
+Fix: 1f9a59c. The drain re-reads the queue at the end and removes only the tickers it attempted; both read-modify-writes run under one module `threading.Lock` (not held during the sweep).
+Files changed: `apps/api/services/news_feed/daily.py`, `tests/api/news_feed/test_daily.py`.
+Prevention: `test_ticker_queued_while_the_queue_drains_survives` and `test_concurrent_enqueues_are_not_lost`, both mutation-checked.
+
+## 2026-10-25: an interactive news request waited out a bulk request's 20-60 s gap
+
+Date: 2026-10-25 (news history final fix wave; found by the whole-branch review in a scaled timing run, where a 4-ticker refresh took about 8x longer).
+Command: `python -m pytest tests/api/news_feed/test_pacer.py -q`.
+Failure: `Pacer.request` took the send slot (`_busy=True`) before `_send`, and `_send` slept the whole bulk gap holding it. An interactive request arriving mid-gap waited the rest of the gap, and between two interactive requests of one batch a woken bulk thread took the slot and slept a full gap again. Spec 5.3 says an interactive request goes before waiting bulk requests and waits only its own 3-8 s gap.
+Root cause: the gap wait was inside the critical section, so priority was only decided before the wait, never during it.
+Fix: 1f9a59c. The slot is held only for the fetch. A request waits for its gap on the condition in a loop that re-checks STOP, the block/cap, the slot, interactive priority (a bulk request yields while an interactive one waits) and the gap from `news_last_request_at`. The same change adds `pacer.STOP`: the lifespan sets it on shutdown and any waiting request ends with `NewsStopped`, which the runner, sweeps and loop pass through without marking anything.
+Files changed: `apps/api/services/news_feed/pacer.py`, `apps/api/services/news_feed/loop.py`, `apps/api/main.py`, `tests/conftest.py`, tests.
+Prevention: `test_interactive_overtakes_a_bulk_request_waiting_its_gap` (real time, shrunk gaps) and `test_stop_flag_wakes_a_request_waiting_its_gap`, mutation-checked. Never sleep while holding a slot that a higher-priority waiter needs.
+
+## 2026-10-25: the news publisher backfill flag broke an exact-key cleanup test, caught only by the full suite
+
+Date: 2026-10-25 (news history Task 6 full gate).
+Command: `python -m pytest -q`.
+Failure: `tests/api/test_watchlist_cleanup_run.py::test_a_cleanup_deletes_only_the_tickers_deep_history_marker` asserted the exact set of `risk_state` keys and got an extra `news_publisher_backfill_done`. It passes at the branch base.
+Root cause: d55c68a's `db.py` migration writes that flag on every fresh DB, and the test compared the whole key set instead of the keys it plants.
+Fix: the test discards that one key before comparing; the cleanup behaviour it checks is unchanged.
+Files changed: `tests/api/test_watchlist_cleanup_run.py`.
+Prevention: a test of "deletes only X" should compare the keys it planted, not the whole table; the per-task affected-test run missed it because no news file imports this test.
+
+## 2026-10-25: stock news stopped at 2026-09-29 (no scheduled stock sweep)
+
+Date: 2026-10-25 (news history spec, N-D1). Cause checked against the real DB (opened read-only) and the git history.
+Command: not a command; visible in the data. `acquisition_state` rows for data class `news`: 143, all `ok`, `last_success_at` between 2026-09-29T15:06 and 15:08 UTC (one grid-wide refresh, two minutes). `news` rows with a ticker end at `published_date` 2026-09-29. Newer rows (to 2026-10-20) are all topic or theme rows from the risk sweep.
+Failure: stock news stayed at 2026-09-29 with no on-screen sign.
+Root cause: stock news was refreshed only when the portfolio grid called `POST /news/acquire` (a person opening the grid), and nothing ever ran it on a schedule. The last grid refresh was 2026-09-29. The hourly `risk_cycle` (6e1b52a, 2026-10-19) swept topic, theme and Korean news and the tickers of new alerts, never the whole watchlist, so it did not restart stock news. This is the news half of the 2026-10-19 "no scheduled sweep" entry below; it was fixed for bars and for risk news but not for the per-stock feed. `routes/news.py` and `risk/schedule.py` have no commit that removed a stock sweep; none ever existed. Not confirmed: why the grid was not refreshed after 2026-09-29 (not opened, or opened and failed). The API log has no 429/503 from Google (its only news failures are test fakes), so a Google block is not the cause.
+Fix: f237506 adds `news_feed/loop.py` (started in the app lifespan), which sweeps the whole watchlist daily after 21:00 UTC through the pacer; the risk cycle now only queues alert tickers (`news_feed/daily.py`).
+Files changed: `apps/api/services/news_feed/loop.py`, `apps/api/services/news_feed/daily.py`, `apps/api/services/risk/schedule.py`, `apps/api/main.py`.
+Prevention: `GET /api/v1/news/status` reports the sweep progress (`daily.done`, `remaining`, `complete`). Check it, not the grid, when asking whether news is current.
+
+## 2026-10-25: the publish time was discarded and the publisher hidden behind source "Google News"
+
+Date: 2026-10-25 (news history spec, N-D3 and N-D4). Defect pre-existing on renewal; fixed on feat/news-history.
+Command: not a command; found reading `StockNewsCrawler` while designing past-date search.
+Failure: the stored article carried only a date, so a news window could not be ordered by time. Every Google row had `source = "Google News"` and the publisher stayed in the headline as a ` - Publisher` suffix, so the source shown was the aggregator, not the outlet.
+Root cause: `StockNewsCrawler._normalize_date` reduced `pubDate` to a date and dropped the time, and the crawler wrote the constant `Google News` as `source` without splitting the title suffix. It also kept 10 of the ~100 items each request returned.
+Fix: 4277589 keeps all items, stores `published_at` (NULL for the 07:00/08:00 GMT placeholder times) and the publisher in `source` with the suffix stripped, and routes every Google request through the pacer; d55c68a makes the one-time backfill skip empty parts. Existing rows were backfilled once (flag `news_publisher_backfill_done`).
+Files changed: `apps/api/services/news_feed/rss.py`, `apps/api/services/webscrap/Crawler/StockNewsCrawler.py`, `apps/api/services/db.py`, `apps/api/models/schema_parts/news.py`, `apps/api/services/acquisition/store.py`.
+Prevention: `tests/api/news_feed/test_rss.py` and `test_migration.py` assert the time, publisher and suffix handling. A field the feed supplies is kept, not reduced at the door.
+
+## 2026-10-25: a missing pubDate was saved as today's date
+
+Date: 2026-10-25 (news history spec, N-D3). Defect pre-existing on renewal; fixed on feat/news-history.
+Command: not a command; found reading `StockNewsCrawler._normalize_date`.
+Failure: an item whose feed entry had no `pubDate` was stored with today's date, so an undated article appeared as fresh news. Nothing raised.
+Root cause: `_normalize_date` filled the current date when the field was empty. `RegulationCrawler` had the same fallback (`entry.published_date or datetime.now()...`).
+Fix: 4277589 stores no date for a missing `pubDate` in the stock crawler; d55c68a makes Regulation keep no invented dates. An empty date is shown as undated.
+Files changed: `apps/api/services/news_feed/rss.py`, `apps/api/services/webscrap/Crawler/StockNewsCrawler.py`, `apps/api/services/webscrap/Crawler/RegulationCrawler.py`.
+Prevention: a parse failure leaves the field empty; it never substitutes a plausible value. `tests/api/test_regulation_crawler.py` and `tests/api/news_feed/test_rss.py` cover the missing-date case.
+
 ## 2026-10-25: the /alerts paper sweep read a colour halfway through a transition
 
 Date: 2026-10-25 (full Playwright gate for fix/blocked-storage-followups). It also fails on renewal 6c45855, although it passed in the #76 gate.

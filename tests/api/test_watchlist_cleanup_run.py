@@ -392,4 +392,5 @@ def test_a_cleanup_deletes_only_the_tickers_deep_history_marker():
     watchlist_cleanup.run_cleanup(T0 + GRACE + DAY)
     with get_db() as conn:
         keys = {r["key"] for r in conn.execute("SELECT key FROM risk_state")}
+    keys.discard("news_publisher_backfill_done")  # written by the db.py migration on every fresh DB
     assert keys == {"deep_history:ZZB", "backfill:abcd1234", "coverage_wait:2026-09-01"}

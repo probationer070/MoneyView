@@ -51,6 +51,17 @@ def _reset_rate_limiter():
 
 
 @pytest.fixture(autouse=True)
+def _news_stop_cleared():
+    """Every app lifespan sets the news pacer's process-wide STOP flag on shutdown. Left set, every
+    later Google News request in the run (through any Pacer) would refuse with NewsStopped."""
+    from apps.api.services.news_feed.pacer import STOP
+
+    STOP.clear()
+    yield
+    STOP.clear()
+
+
+@pytest.fixture(autouse=True)
 def _isolated_db(request, tmp_path, monkeypatch):
     """Give every test its own SQLite file instead of the developer's real one.
 

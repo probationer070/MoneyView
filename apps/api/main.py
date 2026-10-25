@@ -146,6 +146,10 @@ async def lifespan(app: FastAPI):
 
     task_wal = asyncio.create_task(wal_flush_cycle())
 
+    from apps.api.services.news_feed import pacer as news_pacer
+
+    news_pacer.STOP.clear()   # a previous lifespan in this process set it on shutdown
+
     # Read at call time, not import time, so a test process that sets this in
     # conftest still takes effect on an already-imported module.
     #
@@ -166,11 +170,19 @@ async def lifespan(app: FastAPI):
         from apps.api.services.risk.schedule import risk_cycle
 
         background.append(asyncio.create_task(risk_cycle()))
+        # The e2e API sets this so a test run never starts a news loop against real Google.
+        if os.getenv("MONEYVIEW_DISABLE_NEWS_LOOP", "").lower() not in {"1", "true", "yes"}:
+            from apps.api.services.news_feed.loop import news_cycle
+
+            background.append(asyncio.create_task(news_cycle()))
     # After the startup syncs above, so peer removals are already recorded as pending.
     background.append(asyncio.create_task(watchlist_cleanup_cycle(run_at_start=not startup_jobs_disabled)))
 
     yield
 
+    # A news worker thread can be waiting minutes between Google requests, out of cancel()'s
+    # reach; the flag ends that wait with NewsStopped.
+    news_pacer.STOP.set()
     for task in background:
         task.cancel()
     # Await the cancellations so shutdown does not return while they are still

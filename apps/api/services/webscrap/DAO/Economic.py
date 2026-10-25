@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import List
+from typing import List, Optional
 
 @dataclass
 class EconomicIndicator:
@@ -27,3 +27,4 @@ class RiskNews:
     url: str               # 링크
     date: str              # 게시 일자
     matched_keywords: List[str] = field(default_factory=list) # 매칭된 키워드
+    published_at: Optional[str] = None  # UTC publish time, None when unknown
