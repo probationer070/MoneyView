@@ -177,7 +177,7 @@ Spec: `docs/superpowers/specs/2026-10-18-risk-signal-design.md`. Plan (watchlist
       Final-review fixes landed 2026-10-19: acquisition covers only priced, settled bars (ERROR-LOG); FRED series read from
       the accumulated cache; backfill state "degraded" (R26) for an empty warning series or sweep failures, rerun next cycle
       with live days replayed; one coverage_wait key; cleanup deletes `deep_history:<T>`; an all-failed news sweep is retried.
-- [ ] R-②-b surge signal: built on feat/surge-signal; real-DB rerun 2026-10-20 (alerts 11/11, surge 206/215 matched, spec §2). Spec:
+- [x] R-②-b surge signal (merged #75): built on feat/surge-signal; real-DB rerun 2026-10-20 (alerts 11/11, surge 206/215 matched, spec §2). Spec:
       `docs/superpowers/specs/2026-10-19-surge-signal-design.md`. Plan: `docs/superpowers/plans/2026-10-19-surge-signal.md`.
       After the owner's OK and a DB backup: run one risk cycle (the rules version changes, so the backfill recomputes), then
       `python scripts/risk/reproduce_backfill.py` and record the surge diff in spec §2. Then PR, then ③ banner and panel UI.
@@ -185,6 +185,7 @@ Spec: `docs/superpowers/specs/2026-10-18-risk-signal-design.md`. Plan (watchlist
 - [x] R-③ follow-ups (fix/blocked-storage-followups): portfolio and detail workbench storage helpers guarded (ERROR-LOG 2026-10-25); `/alerts` report rows memoised. Corporate page storage was already guarded.
 - [x] R-④-a news history (feat/news-history): pacer, full-feed storage with publish time and publisher, daily stock sweep, past-date search and status routes. Spec: `docs/superpowers/specs/2026-10-25-news-history-design.md`. Plan: `docs/superpowers/plans/2026-10-25-news-history.md`. Records: ERROR-LOG 2026-10-25 (three entries). Final fix wave 1f9a59c (pacer priority during bulk gaps, STOP on shutdown, no check recorded for a refused fetch, per-ticker sweep clock, alert-queue lock, history status/lock, `/status` complete, e2e news-loop flag); four more ERROR-LOG entries.
 - [x] R-④-b stock detail one-screen page (feat/stock-detail-screen): `/detail/[ticker]` with trend tiles, yesterday's movers column, adjustable big-move marks, why-it-moved card, dated news column; DCF and diagnostics link out to `/corporate`. New routes `/detail/movers/latest`, `/detail/{ticker}/profile`, `/detail/{ticker}/move/{day}` and `/news/feed?topic`. Spec: `docs/superpowers/specs/2026-10-25-stock-detail-screen-design.md`. Plan: `docs/superpowers/plans/2026-10-25-stock-detail-screen.md`.
+- [x] R-④-b follow-ups (fix/detail-followups): market indices now refresh in the hourly risk cycle (`sweep_indices`, `index_bars`); they had refreshed only when "/" was opened and stood at 2026-09-29 (ERROR-LOG 2026-10-26). Movers queries driven from the watchlist through the (ticker, date) index over the last 30 days (~0.6 s to milliseconds on the real DB).
 - Deferred minor findings are listed in the plan ledger (`.superpowers/sdd/2026-10-18-watchlist-themes/progress.md`) and are triaged at the final review.
 
 ## Known limits, accepted deliberately

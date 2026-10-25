@@ -49,6 +49,22 @@ def test_sweep_includes_benchmarks():
     assert sleeps == [0.5] * 4
 
 
+def test_index_sweep_refreshes_every_market_index_into_indices():
+    """Catches market indices left out of the schedule (refreshed only when "/" is opened), the
+    sweep recording them under equity_bars, or their bars landing outside the indices table."""
+    from apps.api.services.acquisition.state import read_state
+    from apps.api.services.market_data import MARKET_INDICES
+
+    rec = Recorder()
+    report = sweep.sweep_indices(NOW, fetcher=rec, action_probe=_no_probe, sleep=lambda s: None)
+    assert [c[0] for c in rec.calls] == list(MARKET_INDICES.values())
+    assert report.attempted == report.fetched == len(MARKET_INDICES)
+    assert read_state("index_bars", "^GSPC").covered_to == date(2026, 10, 16)
+    assert read_state("equity_bars", "^GSPC").covered_to is None
+    with get_db() as conn:
+        assert conn.execute("SELECT close FROM indices WHERE ticker = '^GSPC' AND date = '2026-10-16'").fetchone()
+
+
 def test_sweep_fresh_skips_and_no_sleep():
     """Catches treating a fresh result as a provider call (extra fetch or sleep on the second run)."""
     _watch("NVDA")

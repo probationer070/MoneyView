@@ -26,6 +26,16 @@ reveal that; only checking the code did.
 
 An entry states what was true when it was written. Nothing updates it on its own.
 
+## 2026-10-26: market indices stopped refreshing while the watchlist bars kept advancing
+
+Date: 2026-10-26 (detail follow-ups; found while checking why the why-it-moved card's S&P 500 read "—").
+Command: read-only query on `data/processed/moneyview.db`: `SELECT ticker, MAX(date) FROM indices GROUP BY ticker`.
+Failure: every row in `indices` (^GSPC, ^DJI, ^IXIC, ^KS200, ^VIX, GC=F, CL=F, NG=F, KRW=X, BTC-USD) ended on 2026-09-29, while `stocks` ran to 2026-10-19. ^TNX and SOXX, added to the overview on 2026-10-17, had never been stored. No error was raised anywhere: the detail card showed market "—" for every recent day, and the overview served three-week-old closes until someone opened "/".
+Root cause: indices were refreshed only on read (`MarketDataService.get_stock_ohlcv` when "/" loads). The `index_bars` data class was declared in `acquisition/registry.py` but nothing scheduled it; the hourly risk cycle swept `equity_bars` for the watchlist and benchmarks only. Same class as the 2026-09-29 news stall: a data class whose only trigger is a page visit.
+Fix: `sweep_indices` in `apps/api/services/risk/sweep.py` acquires every `MARKET_INDICES` ticker as `index_bars`, and `risk/schedule.run_once` runs it after the bar sweep in its own try. The first cycle on an existing DB backfills each index once (14 paced requests), then deltas.
+Files changed: `apps/api/services/risk/sweep.py`, `apps/api/services/risk/schedule.py`, `tests/api/risk/test_sweep.py`, `tests/api/risk/test_schedule.py`.
+Prevention: `test_index_sweep_refreshes_every_market_index_into_indices` (catches the sweep recording `equity_bars` or covering a subset) and `test_run_once_order` (catches the step dropped from the cycle), each mutation-checked. A data class declared in the registry needs a scheduled trigger, not only a page.
+
 ## 2026-10-25: risk/news sweep state and acquisition_state misreported after a block
 
 Date: 2026-10-25 (news history final fix wave; found by the whole-branch review with scratch scripts).

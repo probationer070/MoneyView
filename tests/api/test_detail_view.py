@@ -95,6 +95,15 @@ def test_movers_date_rolls_back_when_two_of_twelve_lack_the_newest_bar(seeded12)
     assert latest_movers().date == D2
 
 
+def test_movers_ignore_tickers_whose_bars_stopped_over_a_month_ago(seeded12):
+    """Catches the count window removed: two delisted names whose last bar is 2026-09-01 would
+    count toward the total (14), so 12 of 14 falls under the 90% share and no date is found."""
+    for ticker in ("Z01", "Z02"):
+        add_watch(ticker)
+        add_bar(ticker, "2026-09-01")
+    assert latest_movers().date == D2
+
+
 def test_movers_return_is_between_the_two_common_days(seeded12):
     add_watch("GAP", "Gap ticker")
     add_bar("GAP", "2026-10-21", 50.0)  # no bar on D1, the previous common day

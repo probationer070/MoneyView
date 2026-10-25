@@ -22,6 +22,9 @@ from packages.core_finance.risk_signals.indices import theme_indices
 # A date counts as "latest" once this share of the watchlist tickers that have bars
 # have a bar on it. A few tickers already on the next day must not decide it.
 COMMON_DAY_SHARE = 0.9
+# Only the last month is counted. Scanning all history took ~0.6 s on the real DB; driving
+# from the watchlist through the (ticker, date) index over a month takes milliseconds.
+MOVERS_WINDOW_DAYS = 30
 
 
 def _theme_ref(theme_id: str | None) -> ThemeRef | None:
@@ -57,18 +60,28 @@ def latest_movers(limit: int = 5) -> LatestMovers:
     """Top `limit` risers and fallers on the latest common day.
 
     Latest common day: the newest date on which at least COMMON_DAY_SHARE of the
-    watchlist tickers that have any bar have a bar; the previous common day is the next
-    older such date. A mover must have a bar on both, and return_pct is the latest close
+    watchlist tickers that have a bar in the last MOVERS_WINDOW_DAYS have a bar; the
+    previous common day is the next older such date. A mover must have a bar on both, and return_pct is the latest close
     over the previous-common-day close, minus 1, in percent, 2 dp. Tickers lacking either
     bar are skipped. `up` holds only returns above 0 and `down` only returns below 0.
     """
     with get_db() as conn:
+        newest = conn.execute(
+            "SELECT MAX((SELECT MAX(s.date) FROM stocks s WHERE s.ticker = w.ticker)) FROM watchlist w"
+        ).fetchone()[0]
+        if newest is None:
+            return LatestMovers(date=None, up=[], down=[])
+        since = (date.fromisoformat(newest[:10]) - timedelta(days=MOVERS_WINDOW_DAYS)).isoformat()
         counts = conn.execute(
-            """SELECT s.date AS date, COUNT(*) AS n FROM stocks s
-               JOIN watchlist w ON w.ticker = s.ticker GROUP BY s.date ORDER BY s.date DESC"""
+            """SELECT s.date AS date, COUNT(*) AS n FROM watchlist w
+               JOIN stocks s ON s.ticker = w.ticker AND s.date >= ?
+               GROUP BY s.date ORDER BY s.date DESC""",
+            (since,),
         ).fetchall()
         total = conn.execute(
-            "SELECT COUNT(DISTINCT s.ticker) FROM stocks s JOIN watchlist w ON w.ticker = s.ticker"
+            """SELECT COUNT(*) FROM watchlist w
+               WHERE EXISTS (SELECT 1 FROM stocks s WHERE s.ticker = w.ticker AND s.date >= ?)""",
+            (since,),
         ).fetchone()[0]
         common = [r["date"] for r in counts if r["n"] >= COMMON_DAY_SHARE * total]
         if len(common) < 2:
@@ -76,10 +89,10 @@ def latest_movers(limit: int = 5) -> LatestMovers:
         day, prev_day = common[0], common[1]
         rows = conn.execute(
             """SELECT w.ticker AS ticker, w.name AS name, w.theme AS theme, s.close AS close, p.close AS prev
-               FROM stocks s JOIN watchlist w ON w.ticker = s.ticker
-               JOIN stocks p ON p.ticker = s.ticker AND p.date = ?
-               WHERE s.date = ?""",
-            (prev_day, day),
+               FROM watchlist w
+               CROSS JOIN stocks s ON s.ticker = w.ticker AND s.date = ?
+               CROSS JOIN stocks p ON p.ticker = w.ticker AND p.date = ?""",
+            (day, prev_day),
         ).fetchall()
     themes = {r["theme"]: _theme_ref(r["theme"]) for r in rows}
     movers = [
