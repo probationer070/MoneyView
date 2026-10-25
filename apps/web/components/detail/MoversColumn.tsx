@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { DeltaBadge } from "@/components/ui/DeltaBadge";
-import { useT } from "@/lib/i18n/locale";
+import { useLocale, useT } from "@/lib/i18n/locale";
 import type { LatestMovers, MoverRow } from "@/lib/detail/types";
 
 function MoverList({ id, title, rows, current }: { id: string; title: string; rows: MoverRow[]; current: string }) {
+  const { locale } = useLocale();
   return (
     <section data-testid={id} className="flex flex-col gap-1">
       <h2 className="type-panel-title text-[var(--ink)]">{title}</h2>
@@ -21,7 +22,7 @@ function MoverList({ id, title, rows, current }: { id: string; title: string; ro
               >
                 <span className="min-w-0">
                   <span className="type-mono block text-[var(--ink)]">{row.ticker}</span>
-                  {row.theme && <span className="type-caption block truncate text-[var(--ink-muted)]">{row.theme}</span>}
+                  {row.theme && <span className="type-caption block truncate text-[var(--ink-muted)]">{row.theme.label[locale]}</span>}
                 </span>
                 <DeltaBadge value={row.return_pct} />
               </Link>

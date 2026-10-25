@@ -5,7 +5,7 @@ import { FigureText } from "@/components/market/FigureText";
 import { withFigures } from "@/components/market/marketModel";
 import { DeltaBadge } from "@/components/ui/DeltaBadge";
 import { Sparkline } from "@/components/ui/Sparkline";
-import { formatNumber } from "@/lib/format";
+import { formatNumber, MISSING } from "@/lib/format";
 import { useLocale, useT } from "@/lib/i18n/locale";
 import { pctFromHigh, rsi14, sma, trendReturn, volumeMultiple, yesterday } from "@/lib/detail/metrics";
 import type { Bar } from "@/lib/detail/types";
@@ -55,7 +55,7 @@ export function TrendTiles({ bars }: { bars: Bar[] }) {
   const average = (days: number) => {
     const value = sma(bars, days);
     const last = bars[bars.length - 1].close;
-    if (value === null) return null;
+    if (value === null) return MISSING;
     return <FigureText parts={withFigures(t(last > value ? "detail.tile.aboveAvg" : "detail.tile.belowAvg"), { days: String(days) })} />;
   };
   const fromHigh = pctFromHigh(bars, SIX_MONTHS);
@@ -67,7 +67,7 @@ export function TrendTiles({ bars }: { bars: Bar[] }) {
       <TrendTile id="tile-1m" title={t("detail.tile.month")} bars={bars} days={MONTH} note={average(50)} />
       <TrendTile
         id="tile-6m" title={t("detail.tile.sixMonth")} bars={bars} days={SIX_MONTHS}
-        note={fromHigh === null ? null : (
+        note={fromHigh === null ? MISSING : (
           <FigureText parts={withFigures(t("detail.tile.fromHigh"), { value: formatNumber(fromHigh / 100, "percent", { signed: true, locale }) })} />
         )}
       />

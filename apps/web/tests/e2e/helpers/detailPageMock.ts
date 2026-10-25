@@ -54,7 +54,8 @@ export function makeBars(n: number, opts: { seed?: number; start?: number; plant
   });
 }
 
-const mover = (ticker: string, return_pct: number) => ({ ticker, name: `${ticker} Corp`, theme: "ai", return_pct });
+export const MOVER_THEME = { id: "ai_semis", label: { en: "AI semiconductors", ko: "AI 반도체" } };
+const mover = (ticker: string, return_pct: number) => ({ ticker, name: `${ticker} Corp`, theme: MOVER_THEME, return_pct });
 
 export const MOVERS_LATEST: LatestMovers = {
   date: "2026-10-23",

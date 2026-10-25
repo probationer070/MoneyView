@@ -28,7 +28,7 @@ class DetailProfile(BaseModel):
 class MoverRow(BaseModel):
     ticker: str
     name: str
-    theme: Optional[str] = None
+    theme: Optional[ThemeRef] = None
     return_pct: float
 
 

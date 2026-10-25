@@ -25,7 +25,7 @@ export interface DetailProfile {
 export interface MoverRow {
   ticker: string;
   name: string;
-  theme: string | null;
+  theme: DetailTheme | null;
   return_pct: number;
 }
 

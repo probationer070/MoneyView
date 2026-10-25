@@ -24,6 +24,16 @@ from packages.core_finance.risk_signals.indices import theme_indices
 COMMON_DAY_SHARE = 0.9
 
 
+def _theme_ref(theme_id: str | None) -> ThemeRef | None:
+    """The labelled theme for a storage id; None for an empty or unknown id."""
+    if not theme_id:
+        return None
+    for item in load_themes():
+        if item.id == theme_id:
+            return ThemeRef(id=item.id, label=ThemeLabel(en=item.en, ko=item.ko))
+    return None
+
+
 def profile(ticker: str) -> DetailProfile:
     """Watchlist name/sector/theme for a ticker; unknown tickers give in_watchlist=False and nulls."""
     ticker = ticker.upper()
@@ -33,13 +43,7 @@ def profile(ticker: str) -> DetailProfile:
         ).fetchone()
     if row is None:
         return DetailProfile(ticker=ticker, in_watchlist=False)
-    theme = None
-    theme_id = row["theme"] or ""
-    if theme_id:
-        for item in load_themes():
-            if item.id == theme_id:
-                theme = ThemeRef(id=item.id, label=ThemeLabel(en=item.en, ko=item.ko))
-                break
+    theme = _theme_ref(row["theme"])
     return DetailProfile(
         ticker=ticker,
         in_watchlist=True,
@@ -76,11 +80,12 @@ def latest_movers(limit: int = 5) -> LatestMovers:
                WHERE s.date = ?""",
             (day,),
         ).fetchall()
+    themes = {r["theme"]: _theme_ref(r["theme"]) for r in rows}
     movers = [
         MoverRow(
             ticker=r["ticker"],
             name=r["name"] or r["ticker"],
-            theme=r["theme"] or None,
+            theme=themes[r["theme"]],
             return_pct=round((r["close"] / r["prev"] - 1) * 100, 2),
         )
         for r in rows

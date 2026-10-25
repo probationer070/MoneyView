@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import type { Bar } from "../../lib/detail/types";
 import { mockCorporatePageApi } from "./helpers/corporatePageMock";
-import { makeBars, mockDetailPage } from "./helpers/detailPageMock";
+import { makeBars, mockDetailPage, MOVER_THEME } from "./helpers/detailPageMock";
 import { expectNoPageScroll } from "./helpers/noPageScroll";
 
 test.use({ viewport: { width: 1280, height: 720 } });
@@ -25,8 +25,8 @@ function wilderRsi(bars: Bar[]): number {
 }
 const pct = (value: number) => `${value > 0 ? "+" : ""}${value.toFixed(1)}%`;
 
-async function open(page: import("@playwright/test").Page, ticker: string) {
-  await mockDetailPage(page, ticker, { bars: BARS });
+async function open(page: import("@playwright/test").Page, ticker: string, bars: Bar[] = BARS) {
+  await mockDetailPage(page, ticker, { bars });
   await page.goto(`/detail/${encodeURIComponent(ticker)}`, { waitUntil: "domcontentloaded" });
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible({ timeout: 60_000 });
 }
@@ -66,6 +66,46 @@ test("tiles show values computed from the bars", async ({ page }) => {
   await expect(yesterday.getByTestId("tile-range")).toContainText(last().low.toFixed(2));
 });
 
+/** The last `closes.length` bars get these closes (high and low hug the close); every volume is 1,000,000 except the last. */
+function withLastCloses(closes: number[], lastVolume: number): Bar[] {
+  const bars = makeBars(260);
+  const offset = bars.length - closes.length;
+  return bars.map((bar, i) => {
+    if (i < offset) return bar;
+    const close = closes[i - offset];
+    return { ...bar, open: close, high: close * 1.001, low: close * 0.999, close, volume: i === bars.length - 1 ? lastVolume : 1_000_000 };
+  });
+}
+
+test("the 1W and 1M notes use the 20 and 50 day averages, and volume excludes the last bar", async ({ page }) => {
+  // 30 closes at 80, 19 at 120, then 100: MA20 = 119 (close below), MA50 = 95.6 (close above); volume 3x the 20 before it.
+  await open(page, "AAPL", withLastCloses([...Array(30).fill(80), ...Array(19).fill(120), 100], 3_000_000));
+  await expect(page.getByTestId("tile-1w").getByTestId("tile-note")).toHaveText("Below the 20-day average");
+  await expect(page.getByTestId("tile-1m").getByTestId("tile-note")).toHaveText("Above the 50-day average");
+  await expect(page.getByTestId("tile-yesterday").getByTestId("tile-volume")).toContainText("3.0x");
+});
+
+test("too few bars show a dash, never 0 or NaN", async ({ page }) => {
+  await open(page, "AAPL", makeBars(10));
+  const tiles = page.getByTestId("tile-yesterday");
+  await expect(tiles.getByTestId("tile-rsi")).toContainText("—");
+  await expect(tiles.getByTestId("tile-volume")).toContainText("—");
+  await expect(page.getByTestId("tile-1m").getByTestId("tile-return")).toContainText("—");
+  await expect(page.getByTestId("tile-6m").getByTestId("tile-return")).toContainText("—");
+  await expect(page.getByTestId("tile-6m").getByTestId("tile-note")).toHaveText("—");
+  await expect(page.getByTestId("tile-1w").getByTestId("tile-note")).toHaveText("—");
+  await expect(page.getByTestId("tile-1m").getByTestId("tile-note")).toHaveText("—");
+  await expect(tiles.getByTestId("tile-rsi")).not.toContainText("0.0");
+  expect(await page.locator("body").innerText()).not.toContain("NaN");
+});
+
+test("mover rows show the theme label, not its id", async ({ page }) => {
+  await open(page, "AAPL");
+  const up = page.getByTestId("detail-movers-up");
+  await expect(up).toContainText(MOVER_THEME.label.en);
+  await expect(up).not.toContainText(MOVER_THEME.id);
+});
+
 test("movers list shows five up and five down and navigates", async ({ page }) => {
   await open(page, "AAPL");
   await expect(page.getByTestId("detail-movers-up").getByRole("link")).toHaveCount(5);
@@ -100,5 +140,7 @@ test.describe("Korean copy", () => {
     await expect(page.getByTestId("detail-movers-up")).toContainText("전일 급등");
     await expect(page.getByTestId("detail-movers-down")).toContainText("전일 급락");
     await expect(page.getByTestId("tile-1w")).not.toContainText("1 week");
+    await expect(page.getByTestId("detail-movers-up")).toContainText(MOVER_THEME.label.ko);
+    await expect(page.getByTestId("detail-movers-up")).not.toContainText(MOVER_THEME.id);
   });
 });

@@ -58,6 +58,12 @@ def test_profile_of_unknown_ticker_is_not_watchlist(seeded):
     assert (p.in_watchlist, p.name, p.theme) == (False, None, None)
 
 
+def test_mover_with_unknown_theme_id_has_null_theme(seeded12):
+    with get_db() as conn:
+        conn.execute("UPDATE watchlist SET theme = 'not_a_theme' WHERE ticker = 'A02'")
+    assert latest_movers().up[1].theme is None
+
+
 def test_movers_top_and_bottom_five_sorted(seeded12):
     m = latest_movers()
     assert m.date == D2
@@ -65,7 +71,8 @@ def test_movers_top_and_bottom_five_sorted(seeded12):
         ("A01", 5.0), ("A02", 4.0), ("A03", 3.0), ("A04", 2.0), ("A05", 1.0)]
     assert [(r.ticker, r.return_pct) for r in m.down] == [
         ("B05", -5.12), ("B04", -4.0), ("B03", -3.0), ("B02", -2.0), ("B01", -1.0)]
-    assert m.up[0].name == "Name A01" and m.up[0].theme == "ai_semis"
+    assert m.up[0].name == "Name A01" and m.up[0].theme.id == "ai_semis"
+    assert (m.up[0].theme.label.en, m.up[0].theme.label.ko) == ("AI semiconductors", "AI 반도체")
     assert m.up[1].theme is None
 
 
