@@ -43,8 +43,8 @@ Plan: `docs/superpowers/plans/2026-10-12-macro-signal-engine.md`. Spec + correct
 `docs/superpowers/specs/2026-10-10-macro-signal-engine-spec.md`. Baseline 1883 pytest passed.
 - [x] S2 pure rules  - [x] S3 scenario  - [x] S4 FRED fetch  - [x] S5 rules.yaml
 - [x] S6 store/fetcher  - [x] S7 engine+API  - [x] S8 schedule  - [x] S9 page  - [x] S10 docs
-  - S9: the page is verified against mocked API specs only; live FRED check pending owner
-    FRED_API_KEY in config/.env.
+  - S9: verified live 2026-10-26: FRED_API_KEY set; 10 series cached through 2026-10-16/19,
+    snapshot 2026-W42 evaluates all 8 rules with no failures.
   - Tests (2026-10-13): pytest 2032 passed, 0 failed (baseline 1883); Playwright 322 passed,
     0 failed; typecheck and lint clean.
 
@@ -163,14 +163,14 @@ Spec: `docs/superpowers/specs/2026-10-18-risk-signal-design.md`. Plan (watchlist
       Until BOTH PCs run this branch, make no watchlist edits on the un-updated PC (weight auto-save, "normalize allocations",
       sector edit, group toggle). Each re-stamps that row without a theme and, once sync is on, the updated PC takes the newer
       row and silently drops its theme.
-- [ ] R-① **Open:** PSTG has no Yahoo quote ("Quote not found"). Its status (renamed, delisted or still listed) is unknown.
-      The draft places it in `메모리·스토리지` pending that check.
+- [x] R-① **Resolved 2026-10-26:** PSTG was renamed: Pure Storage became Everpure, NYSE ticker P since 2026-04-17.
+      Watchlist row replaced by P (theme `메모리·스토리지`, 10-year bars fetched); PSTG queued for cleanup; news term and theme draft follow P.
 - [x] R-① **Fixed (pre-existing defect, found 2026-10-18; fixed in risk-engine Task 1):** `apps/api/services/watchlist_cleanup.py` `_REFERENCE_QUERIES`
       did not count market-overview proxy tickers stored in `stocks` (BOTZ, SKYY, XLE, ITA, CIBR, ICLN, TSL, 143860.KS, ^KS11).
       They were enrolled in `cleanup_pending` on 2026-10-18 08:05Z, so their caches would be deleted after 30 days and then
       refetched, repeatedly. Fixed in sub-project ② with the benchmark tickers (^SOX, RSP, SPY), which hit the same path.
       Not changed in the watchlist-themes wave. Covered now: SPREAD_PAIRS tickers and the benchmarks. Not covered: TSL, 143860.KS, ^KS11,
-      which no code path references any more; their `stocks` rows (if still present) are cleaned after the grace period. Owner to confirm.
+      which no code path references any more; their `stocks` rows were deleted on 2026-10-26 with the owner's OK (77 rows).
 - [x] R-② risk engine: built on feat/risk-engine. Real-DB backfill run 2026-10-19 (owner OK, backup in scratchpad): 11/11 past alerts reproduced; one release date differs by a day (spec §3.5). Next: PR, then ③ banner and panel UI.
       Plan: `docs/superpowers/plans/2026-10-19-risk-engine.md`. After the owner's OK: `python scripts/risk/reproduce_backfill.py`
       against the real DB and record the diff in spec §3.5.

@@ -164,6 +164,17 @@ test("corporate drops the address ticker once read, so a reload keeps the compan
   await expect(page.getByTestId("corporate-company-line")).toContainText("Apple", { timeout: 60_000 });
 });
 
+test("a link to the default ticker wins over another company held in the session", async ({ page }) => {
+  await mockCorporatePageApi(page);
+  await page.goto("/corporate", { waitUntil: "domcontentloaded" });
+  await page.evaluate(() => window.sessionStorage.setItem("moneyview:corporate-active-ticker:v1", JSON.stringify("MSFT")));
+  await page.goto("/corporate?ticker=AAPL", { waitUntil: "domcontentloaded" });
+  await expect(page.getByTestId("corporate-company-line")).toContainText("Apple", { timeout: 60_000 });
+  await expect(page).toHaveURL(/\/corporate$/);
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await expect(page.getByTestId("corporate-company-line")).toContainText("Apple", { timeout: 60_000 });
+});
+
 test.describe("Korean copy", () => {
   test.use({ locale: "ko-KR" });
   test("tile and column titles are Korean", async ({ page }) => {
