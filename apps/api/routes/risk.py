@@ -27,7 +27,10 @@ from packages.core_finance.risk_signals.warnings import WARNING_IDS
 router = APIRouter()
 
 MOVERS_DEFAULT_DAYS = 20
-MOVERS_MAX_DAYS = 2600
+# The /alerts records page asks for every day since 2016-01-04. 2600 was below that already
+# (2714 days on 2026-10-19), so once the backfill was visible the page got 422 and showed no
+# records at all (ERROR-LOG 2026-10-26). 5200 trading days covers 2016 to about 2036.
+MOVERS_MAX_DAYS = 5200
 DECK_CARDS = 10
 HEADLINES = 2
 LEVEL_DEFAULT_DAYS = 120

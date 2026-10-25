@@ -26,6 +26,16 @@ reveal that; only checking the code did.
 
 An entry states what was true when it was written. Nothing updates it on its own.
 
+## 2026-10-26: the /alerts records page showed no records (movers range over the cap)
+
+Date: 2026-10-26 (owner report: "현재 위험신호 기록이 보여지지 않는데?").
+Command: `curl "http://127.0.0.1:8000/api/v1/risk/movers?from=2016-01-04"` returned 422 `{"detail":"range_too_long"}`; the API log showed the page repeating that request.
+Failure: `/alerts` showed its load-error state instead of the records table. The page loads alerts, surge events and movers together and shows nothing if any of the three fails; movers always failed.
+Root cause: the page asks for every movers day since 2016-01-04, and `MOVERS_MAX_DAYS` was 2600. Spec 2026-10-20 §4 estimated the range as "at most 2,600 trading days", but it already held 2714 evaluated days (2016-01-04 to 2026-10-19). Before the backfill completed only live days were visible, so the request fit; once backfill rows became visible it was over the cap. Mocked e2e data never reached the cap.
+Fix: `MOVERS_MAX_DAYS = 5200` in `apps/api/routes/risk.py` (about 2016 to 2036). A running app needs a restart to pick it up.
+Files changed: `apps/api/routes/risk.py`, `tests/api/risk/test_routes.py`.
+Prevention: `test_movers_cap_covers_the_records_page_range_for_five_more_years` counts weekdays from 2016-01-04 to five years ahead and fails if the cap is below it (mutation: cap back to 2600 fails it); `test_movers_range_limit` now reads the constant. A size cap set from an estimate needs a test against the real range, not the estimate.
+
 ## 2026-10-26: market indices stopped refreshing while the watchlist bars kept advancing
 
 Date: 2026-10-26 (detail follow-ups; found while checking why the why-it-moved card's S&P 500 read "—").
