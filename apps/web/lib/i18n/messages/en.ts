@@ -779,7 +779,7 @@ export const en = {
     newsEmpty: "No articles", newsLoadError: "Could not load the news.",
     profileLoadError: "Could not load this stock's profile.",
     badgeCrash: "In the crash alert", badgeCandidate: "In the risk candidates",
-    movers: { up: "Yesterday's top gainers", down: "Yesterday's top decliners", empty: "No movers yet", loadError: "Could not load the movers." },
+    movers: { up: "Yesterday's top gainers", down: "Yesterday's top decliners", empty: "No movers yet", none: "None", loadError: "Could not load the movers." },
   },
   devMonitor: {
     title: "Dev Monitor",

@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import type { Bar } from "../../lib/detail/types";
 import { mockCorporatePageApi } from "./helpers/corporatePageMock";
-import { makeBars, mockDetailPage, MOVER_THEME } from "./helpers/detailPageMock";
+import { makeBars, mockDetailPage, MOVER_THEME, MOVERS_LATEST } from "./helpers/detailPageMock";
 import { expectNoPageScroll } from "./helpers/noPageScroll";
 
 test.use({ viewport: { width: 1280, height: 720 } });
@@ -121,6 +121,14 @@ test("the movers headings carry the movers date", async ({ page }) => {
   await open(page, "AAPL");
   await expect(page.getByTestId("detail-movers-up").getByTestId("movers-date")).toHaveText("· 2026-10-23");
   await expect(page.getByTestId("detail-movers-down").getByTestId("movers-date")).toHaveText("· 2026-10-23");
+});
+
+test("a movers side with no rows says none, the other side still lists", async ({ page }) => {
+  await mockDetailPage(page, "AAPL", { bars: BARS, movers: { ...MOVERS_LATEST, down: [] } });
+  await page.goto("/detail/AAPL", { waitUntil: "domcontentloaded" });
+  await expect(page.getByTestId("detail-movers-down").getByTestId("movers-none")).toHaveText("None", { timeout: 60_000 });
+  await expect(page.getByTestId("detail-movers-up").getByTestId("movers-none")).toHaveCount(0);
+  await expect(page.getByTestId("detail-movers-up").getByRole("link")).toHaveCount(5);
 });
 
 test("a failed profile request shows an error line", async ({ page }) => {

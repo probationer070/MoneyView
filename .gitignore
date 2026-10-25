@@ -51,3 +51,4 @@ docs/perf/*-baseline.json
 
 # Local virtualenvs (uv creates .venv; never part of the repo)
 .venv/
+apps/web/data/cache/

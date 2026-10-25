@@ -782,7 +782,7 @@ export const ko: Messages = {
     newsEmpty: "기사 없음", newsLoadError: "뉴스를 불러오지 못했습니다.",
     profileLoadError: "이 종목의 정보를 불러오지 못했습니다.",
     badgeCrash: "급락 경보 카드에 있음", badgeCandidate: "위험 후보 카드에 있음",
-    movers: { up: "전일 급등 종목", down: "전일 급락 종목", empty: "아직 종목이 없습니다", loadError: "급등락 종목을 불러오지 못했습니다." },
+    movers: { up: "전일 급등 종목", down: "전일 급락 종목", empty: "아직 종목이 없습니다", none: "해당 종목 없음", loadError: "급등락 종목을 불러오지 못했습니다." },
   },
   devMonitor: {
     title: "개발 모니터",

@@ -7,12 +7,14 @@ import type { LatestMovers, MoverRow } from "@/lib/detail/types";
 
 function MoverList({ id, title, date, rows, current }: { id: string; title: string; date: string | null; rows: MoverRow[]; current: string }) {
   const { locale } = useLocale();
+  const t = useT();
   return (
     <section data-testid={id} className="flex flex-col gap-1">
       <h2 className="type-panel-title text-[var(--ink)]">
         {title}
         {date && <span data-testid="movers-date" className="type-mono text-[var(--ink-muted)]">{` · ${date}`}</span>}
       </h2>
+      {rows.length === 0 && <p data-testid="movers-none" className="type-small px-2 text-[var(--ink-muted)]">{t("detail.movers.none")}</p>}
       <ul className="flex flex-col">
         {rows.map((row) => {
           const isCurrent = row.ticker === current;
