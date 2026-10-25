@@ -26,6 +26,46 @@ reveal that; only checking the code did.
 
 An entry states what was true when it was written. Nothing updates it on its own.
 
+## 2026-10-25: risk/news sweep state and acquisition_state misreported after a block
+
+Date: 2026-10-25 (news history final fix wave; found by the whole-branch review with scratch scripts).
+Command: `python -m pytest tests/api/risk/test_news.py tests/api/acquisition/test_runner.py tests/api/test_news_pacing.py tests/api/news_feed/test_daily.py -q`.
+Failure: three false states. (a) An alert-ticker sweep (`sweep_news(include_topics=False)`) wrote `news_swept_at` and `news_last_sweep_failed`, so it moved the macro 12 h timer and could clear the macro failure flag. (b) A Google block during a macro sweep left `news_last_sweep_failed` unchanged, so the alert card's `feed_failed` note missed the block. (c) `acquire_point_in_time` recorded a pacer refusal (block or daily cap, nothing sent) as a FAILED check with `last_checked_at=now`: the tile read "no recent news, last checked HH:MM" and the ticker was skipped as fresh for the hour. The daily sweep's `_forget_blocked_check` undid (c) by rewinding the check time, which also rewound an English success when only the Korean feed was blocked.
+Root cause: the sweep wrote macro-only state on every path, and its block branch returned before any state write; the runner treated every fetch exception as an ask.
+Fix: 1f9a59c. Only a topics sweep writes the two keys, and a blocked topics sweep sets the flag to "1". New `ProviderRefused` (`apps/api/services/acquisition/errors.py`), base of `NewsBlocked` and `NewsStopped`: the runner records nothing for it and re-raises; `acquire_news_batch` and the daily sweep catch the block around the call; `_forget_blocked_check` deleted.
+Files changed: `apps/api/services/risk/news.py`, `apps/api/services/acquisition/errors.py`, `apps/api/services/acquisition/runner.py`, `apps/api/services/news_feed/pacer.py`, `apps/api/services/news_feed/daily.py`, `apps/api/routes/news.py`, tests.
+Prevention: tests `test_ticker_only_sweep_leaves_macro_state_alone`, `test_blocked_macro_sweep_sets_the_failure_flag`, `test_a_refused_fetch_records_no_check_and_reaches_the_caller`, `test_blocked_ticker_is_asked_again_once_the_block_lifts`, `test_korean_block_keeps_the_english_check`, each mutation-checked. A state record means "asked"; a refusal before sending must not write one.
+
+## 2026-10-25: the daily news sweep stamped every ticker with the pass start time
+
+Date: 2026-10-25 (news history final fix wave; found by the whole-branch review).
+Command: `python -m pytest tests/api/news_feed/test_daily.py -q`.
+Failure: `run_daily_sweep(now)` passed the pass start `now` to every `acquire_point_in_time`, so a ticker fetched three hours into the pass got `last_checked_at` three hours early, and Refresh fetched it again right after the sweep (breaks N-D13, the hour of skipping after a sweep).
+Root cause: one timestamp used for two jobs: the session day (correctly fixed at pass start) and each ticker's check time.
+Fix: 1f9a59c. `run_daily_sweep(now, *, watchlist=None, clock=None)`; the session day stays `session_day(now)`, each ticker is acquired with `now=clock()` (default `datetime.now(UTC)`).
+Files changed: `apps/api/services/news_feed/daily.py`, `tests/api/news_feed/test_daily.py`.
+Prevention: `test_each_ticker_is_stamped_with_its_own_fetch_time` (mutation `now=clock()` -> `now=now` fails it). A loop that runs for hours needs a clock, not a captured `now`.
+
+## 2026-10-25: alert tickers queued while the queue drained were lost
+
+Date: 2026-10-25 (news history final fix wave; found by the whole-branch review with a scratch script).
+Command: `python -m pytest tests/api/news_feed/test_daily.py -q`.
+Failure: `drain_alert_queue` read the queue once, swept for minutes, then wrote back what was left of its stale copy (or deleted the key). A ticker the risk cycle queued during the sweep vanished, so its news was never fetched for the alert.
+Root cause: an unguarded read-modify-write spanning a long sweep, with a second writer (`queue_alert_tickers`) in another thread.
+Fix: 1f9a59c. The drain re-reads the queue at the end and removes only the tickers it attempted; both read-modify-writes run under one module `threading.Lock` (not held during the sweep).
+Files changed: `apps/api/services/news_feed/daily.py`, `tests/api/news_feed/test_daily.py`.
+Prevention: `test_ticker_queued_while_the_queue_drains_survives` and `test_concurrent_enqueues_are_not_lost`, both mutation-checked.
+
+## 2026-10-25: an interactive news request waited out a bulk request's 20-60 s gap
+
+Date: 2026-10-25 (news history final fix wave; found by the whole-branch review in a scaled timing run, where a 4-ticker refresh took about 8x longer).
+Command: `python -m pytest tests/api/news_feed/test_pacer.py -q`.
+Failure: `Pacer.request` took the send slot (`_busy=True`) before `_send`, and `_send` slept the whole bulk gap holding it. An interactive request arriving mid-gap waited the rest of the gap, and between two interactive requests of one batch a woken bulk thread took the slot and slept a full gap again. Spec 5.3 says an interactive request goes before waiting bulk requests and waits only its own 3-8 s gap.
+Root cause: the gap wait was inside the critical section, so priority was only decided before the wait, never during it.
+Fix: 1f9a59c. The slot is held only for the fetch. A request waits for its gap on the condition in a loop that re-checks STOP, the block/cap, the slot, interactive priority (a bulk request yields while an interactive one waits) and the gap from `news_last_request_at`. The same change adds `pacer.STOP`: the lifespan sets it on shutdown and any waiting request ends with `NewsStopped`, which the runner, sweeps and loop pass through without marking anything.
+Files changed: `apps/api/services/news_feed/pacer.py`, `apps/api/services/news_feed/loop.py`, `apps/api/main.py`, `tests/conftest.py`, tests.
+Prevention: `test_interactive_overtakes_a_bulk_request_waiting_its_gap` (real time, shrunk gaps) and `test_stop_flag_wakes_a_request_waiting_its_gap`, mutation-checked. Never sleep while holding a slot that a higher-priority waiter needs.
+
 ## 2026-10-25: the news publisher backfill flag broke an exact-key cleanup test, caught only by the full suite
 
 Date: 2026-10-25 (news history Task 6 full gate).
