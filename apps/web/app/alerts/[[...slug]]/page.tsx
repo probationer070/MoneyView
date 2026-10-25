@@ -122,12 +122,17 @@ export default function AlertsPage({ params, searchParams }: { params: Promise<{
   const surge = useSurgeHistory();
   const movers = useMovers({ from: MOVERS_FROM });
   const sources = [history, surge, movers];
-  const failed = sources.some((source) => source.isError);
+  // One failed list no longer blanks the table: the lists that loaded are shown, and the failed kinds
+  // are named above them with a retry. Only when all three fail is the whole table an error.
+  const failedKinds = (["risk", "surge", "movers"] as const).filter((_, index) => sources[index].isError);
+  const allFailed = failedKinds.length === sources.length;
+  const settled = sources.every((source) => source.data !== undefined || source.isError);
+  // The CSV is offered only with every list loaded, so a file never silently lacks a kind.
   const ready = history.data !== undefined && surge.data !== undefined && movers.data !== undefined;
 
   const rows = useMemo(
-    () => (history.data && surge.data && movers.data ? recordRows(history.data, surge.data, movers.data) : []),
-    [history.data, surge.data, movers.data],
+    () => (settled && !allFailed ? recordRows(history.data ?? [], surge.data ?? [], movers.data ?? []) : []),
+    [settled, allFailed, history.data, surge.data, movers.data],
   );
   const shownRows = useMemo(() => rows.filter((row) => matches(row, filters)), [rows, filters]);
   const badRange = filters.from !== "" && filters.to !== "" && filters.from > filters.to;
@@ -172,13 +177,20 @@ export default function AlertsPage({ params, searchParams }: { params: Promise<{
   };
 
   let table;
-  if (failed) {
-    table = <ErrorState message={t("risk.records.loadError")} retryAction={() => sources.forEach((source) => source.isError && source.refetch())} />;
-  } else if (!ready) {
+  const retryFailed = () => sources.forEach((source) => source.isError && source.refetch());
+  if (allFailed) {
+    table = <ErrorState message={t("risk.records.loadError")} retryAction={retryFailed} />;
+  } else if (!settled) {
     table = <LoadingState variant="spinner" label={t("risk.records.loading")} />;
   } else {
     table = (
       <>
+        {failedKinds.length > 0 && (
+          <p data-testid="records-partial-error" role="alert" className="type-small flex flex-wrap items-center gap-2 border-b border-[var(--status-warning-border)] bg-[var(--status-warning-surface)] px-3 py-2 text-[var(--status-warning-ink)]">
+            {t("risk.records.partialError", { kinds: failedKinds.map((kind) => t(`risk.records.kind.${kind}`)).join(", ") })}
+            <button type="button" onClick={retryFailed} className="underline">{t("risk.records.retry")}</button>
+          </p>
+        )}
         <RecordsTable
           rows={visibleRows}
           kind={filters.kind}

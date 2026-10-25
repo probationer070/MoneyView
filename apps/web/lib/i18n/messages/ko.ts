@@ -995,6 +995,8 @@ export const ko: Messages = {
       table: "신호 기록 표",
       loading: "기록을 불러오는 중…",
       loadError: "기록을 불러오지 못했습니다.",
+      partialError: "{kinds} 기록을 불러오지 못했습니다. 나머지 기록만 보여 줍니다.",
+      retry: "다시 시도",
       empty: "조건에 맞는 기록이 없습니다.",
       pick: "표에서 기록을 고르면 보고서가 여기에 나옵니다.",
       selected: "{kind} {id}",
@@ -1007,6 +1009,7 @@ export const ko: Messages = {
       endReason: { below_ema: "추세선 아래로", stalled: "상승 멈춤", rules_changed: "기준 변경", ongoing: "진행 중" },
     },
     report: {
+      expand: "크게 보기",
       period: "{start} – {end}",
       ongoing: "진행 중",
       rules: "기준 {version}",
