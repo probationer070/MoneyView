@@ -2,6 +2,7 @@ import type { Page } from "@playwright/test";
 import { mockCasesApi } from "./casesApiMock";
 import { mockCorporatePageApi } from "./corporatePageMock";
 import { mockDecisionsApi } from "./decisionsPageMock";
+import { mockDetailPage } from "./detailPageMock";
 import { mockEventsApi } from "./eventsApiMock";
 import { mockMarketPageApi } from "./marketPageMock";
 import { mockPortfolioPageApi } from "./portfolioPageMock";
@@ -21,6 +22,7 @@ export const DESIGN_SCREENS: [string, (page: Page) => Promise<unknown>][] = [
   ["/signals", (p) => mockSignalsApi(p)],
   ["/monte-carlo", async () => {}],
   ["/alerts", (p) => mockRiskRecords(p)],
+  ["/detail/AAPL", (p) => mockDetailPage(p, "AAPL")],
   ["/dev/design", async () => {}],
 ];
 

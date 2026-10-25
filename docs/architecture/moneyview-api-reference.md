@@ -65,6 +65,9 @@ Important exceptions:
 - `GET /api/v1/market/indices` returns `List[IndexQuote]`: 14 instruments in display order (`MARKET_INDICES`). Each carries `delta` (vs the previous bar) and `month_delta` (vs the latest bar on or before one calendar month earlier; `null` with less than a month of history). `instrument_type` is `index`, `sector` (SOXX, SKYY, BOTZ), `rate` (^TNX, a yield in percent), `commodity`, `fx` or `crypto`.
 - `GET /api/v1/market/index/{ticker}` returns `List[StockOHLCV]`
 - `GET /api/v1/market/regime` returns `MarketRegimeContext` (always 200; `regime_label` "unknown" when there is too little data)
+- `GET /api/v1/detail/movers/latest` returns `LatestMovers`
+- `GET /api/v1/detail/{ticker}/profile` returns `DetailProfile`
+- `GET /api/v1/detail/{ticker}/move/{day}` returns `MoveExplanation`
 - `GET /api/v1/detail/{ticker}/ohlcv` returns `List[StockOHLCV]`
 - `GET /api/v1/detail/{ticker}/technicals` returns `TechnicalIndicators`
 - `GET /api/v1/detail/{ticker}/monte-carlo` returns `MonteCarloResult`
@@ -428,6 +431,34 @@ Base path: `/api/v1/market`
 
 Base path: `/api/v1/detail`
 
+`/movers/latest` is declared before the `/{ticker}` routes so it is not read as a ticker.
+
+### `GET /movers/latest`
+
+- **Response:** `LatestMovers`: `date` (`null` when there is no common day), `up` and `down` (each up to 5 `MoverRow`: `ticker`, `name`, `theme`, `return_pct`)
+- **Purpose:** Top risers and fallers on the latest common day: the newest date on which at least `COMMON_DAY_SHARE` of the watchlist tickers that have any bar have a bar. `return_pct` is that day's close over the previous bar close, in percent, 2 dp. Tickers lacking either bar are skipped.
+- **Persistence touched:** reads `stocks` and the watchlist; does not persist
+- **Classification:** light
+- **Consumers:** stock detail movers column
+
+### `GET /{ticker}/profile`
+
+- **Response:** `DetailProfile`: `ticker`, `in_watchlist`, `name`, `sector`, `theme` (`{id, label: {en, ko}}`)
+- **Purpose:** Watchlist facts for one ticker. A ticker outside the watchlist answers 200 with `in_watchlist: false` and nulls.
+- **Persistence touched:** reads the watchlist; does not persist
+- **Classification:** light
+- **Consumers:** stock detail header
+
+### `GET /{ticker}/move/{day}`
+
+- **Path parameters:** `day` (`YYYY-MM-DD`)
+- **Response:** `MoveExplanation`: `ticker`, `date`, `return_pct`, `price_ratio`, `volume_ratio`, `market` (^GSPC day change), `theme` (`{id, label, return_pct}`), `peers`, `events`, `alerts` (`kind` `risk` or `surge`, `role` `start`, `ongoing` or `end`), `news` (`stored`, `searched`)
+- **Purpose:** Why one day's move happened. A value that cannot be computed is `null`, never 0. `market` is `null` when missing or when the ticker is ^GSPC itself. A ticker outside the watchlist gets `theme` null, `peers` `[]`, `news` null. Ratios and `return_pct` are rounded to 2 dp.
+- **Errors:** 404 `no_bars` when the ticker has no bars at all; 422 `no_bar_on_day` when it has none on `day` (or no earlier bar to compare with)
+- **Persistence touched:** reads bars, events, alerts and news; does not persist
+- **Classification:** light
+- **Consumers:** stock detail "why it moved" card
+
 ### `GET /{ticker}/ohlcv`
 
 - **Response:** `List[StockOHLCV]`
@@ -501,11 +532,11 @@ Base path: `/api/v1/news`
 
 - **Response:** `List[NewsArticle]`
 - **Purpose:** Return news articles filtered by ticker or keyword.
-- **Query parameters:** `ticker`, `q`, `limit`, `offset`, `from`, `to` (both `YYYY-MM-DD`, inclusive, filter on the article date)
+- **Query parameters:** `ticker`, `q`, `limit`, `offset`, `from`, `to` (both `YYYY-MM-DD`, inclusive, filter on the article date), `topic` (e.g. `theme:ai`: selects that topic's rows instead of the default `topic = ''` rows; `from`/`to` apply with `ticker` or `topic`)
 - **Persistence touched:** reads from local news persistence/cache
 - **Item shape:** `NewsArticle` now carries `published_at` (`Optional[str]`, UTC ISO-8601, `null` when the feed gave no real time)
 - **Classification:** light
-- **Consumers:** news feed and stock-news panels
+- **Consumers:** news feed, stock-news panels and the stock detail dated news column
 
 ### `POST /crawl`
 

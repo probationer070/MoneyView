@@ -56,9 +56,11 @@ def get_news_feed(
     offset:  int           = Query(default=0, ge=0),
     from_:   Optional[str] = Query(default=None, alias="from", pattern=r"^\d{4}-\d{2}-\d{2}$"),
     to:      Optional[str] = Query(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    topic:   Optional[str] = Query(default=None, description="theme rows, e.g. theme:ai"),
 ):
-    """Return news articles filtered by ticker or keyword; from/to bound the day when ticker is set."""
-    return _svc.get_news(ticker=ticker, limit=limit, keyword=q, offset=offset, from_date=from_, to_date=to)
+    """Return news articles filtered by ticker or keyword; from/to bound the day when ticker or topic is set."""
+    return _svc.get_news(ticker=ticker, limit=limit, keyword=q, offset=offset,
+                         from_date=from_, to_date=to, topic=topic)
 
 
 @router.get("/feed/bulk", response_model=APIResponse[BulkNewsResponse])

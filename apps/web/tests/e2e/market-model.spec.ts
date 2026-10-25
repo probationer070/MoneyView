@@ -117,7 +117,7 @@ test.describe("isOneScreenRoute with the overview listed", () => {
   test("'/' is one-screen, and listing it does not make every path one-screen", () => {
     expect(ONE_SCREEN_ROUTES).toContain("/");
     expect(isOneScreenRoute("/")).toBe(true);
-    for (const path of ["/portfolio", "/news", "/detail/AAPL", "/corporate-xyz", ""]) {
+    for (const path of ["/portfolio", "/news", "/detail-xyz", "/corporate-xyz", ""]) {
       expect(isOneScreenRoute(path), path).toBe(false);
     }
     expect(isOneScreenRoute("/corporate/x")).toBe(true);

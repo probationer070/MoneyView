@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
-import { GEOPOLITICAL, mockEventsApi, setAllEventCategories } from "./helpers/eventsApiMock";
+import { GEOPOLITICAL, mockEventsApi } from "./helpers/eventsApiMock";
+import { mockDetailPage } from "./helpers/detailPageMock";
 
 /**
  * The ticker detail page must not rebuild its chart when event lines arrive or the filter changes.
@@ -17,9 +18,10 @@ import { GEOPOLITICAL, mockEventsApi, setAllEventCategories } from "./helpers/ev
  * original canvases does not survive it. That measures "was it rebuilt", which is the defect,
  * rather than inferring it from zoom state the page does not expose.
  *
- * The detail page fetches its prices on the server from the harness API, which reads the local
- * database, so this needs AAPL history there -- the same live-data dependency as
- * market-overview.live.spec.ts. The events request is made in the browser and is mocked.
+ * The page loads its bars, profile and events in the browser, and all of them are mocked
+ * (mockDetailPage), so no local database is needed. The detail chart shows one on/off switch
+ * for events and big-move marks driven by two threshold inputs; changing either must repaint
+ * without a rebuild, which is what the last two steps measure.
  */
 
 const CHART = '[data-testid="tv-chart"]';
@@ -47,6 +49,9 @@ test("the detail page reads its ticker from the route", async ({ page }) => {
   // In Next.js 16 a page's `params` is a Promise. Reading `params.ticker` synchronously yields
   // undefined, so every ticker's page fetched /detail/UNDEFINED and rendered "No data available
   // for UNDEFINED" -- the whole page, for every symbol, with no error anywhere but the dev log.
+  // The profile mock names the ticker it was asked for ("<ticker> Inc"), so a page that read
+  // no ticker would ask for UNDEFINED and show that name instead.
+  await mockDetailPage(page, "AAPL");
   await page.goto("/detail/AAPL", { waitUntil: "domcontentloaded" });
 
   // Wait for the page to settle into one of its two outcomes before the absence check. Checked
@@ -55,16 +60,19 @@ test("the detail page reads its ticker from the route", async ({ page }) => {
   const noData = page.getByText(/No data available for/i);
   await expect(page.locator(CHART).or(noData).first()).toBeVisible({ timeout: 60_000 });
   await expect(page.getByText(/No data available for UNDEFINED/i), "the page read no ticker from its route").toHaveCount(0);
-  await expect(page.locator(CHART).first(), "the detail page needs AAPL history in the local database").toBeVisible();
+  await expect(page.locator(CHART).first()).toBeVisible();
+  await expect(page.getByTestId("detail-header")).toContainText("AAPL Inc");
 });
 
 test("the detail chart is not rebuilt when event lines arrive or the filter changes", async ({ page }) => {
+  await mockDetailPage(page, "AAPL");
   let releaseEvents: () => void = () => {};
   const eventsHeld = new Promise<void>((resolve) => {
     releaseEvents = resolve;
   });
 
   // Held until the canvases are marked, so the arrival of events is observed as its own step.
+  // Registered after the page mock, so it wins.
   await mockEventsApi(page, {
     categories: [GEOPOLITICAL],
     holdEvents: eventsHeld,
@@ -80,7 +88,7 @@ test("the detail chart is not rebuilt when event lines arrive or the filter chan
   await page.goto("/detail/AAPL", { waitUntil: "domcontentloaded" });
 
   const chart = page.locator(CHART).first();
-  await expect(chart, "the detail page needs AAPL history in the local database").toBeVisible({ timeout: 60_000 });
+  await expect(chart).toBeVisible({ timeout: 60_000 });
   await expect.poll(() => markCanvases(page), { timeout: 30_000 }).toBeGreaterThan(0);
 
   // Settle past mount before trusting the marker, then confirm it took.
@@ -90,18 +98,28 @@ test("the detail chart is not rebuilt when event lines arrive or the filter chan
 
   // 1. Events arrive. The card re-renders to show its filter; the chart must not be rebuilt.
   releaseEvents();
-  const filter = page.getByTestId("chart-events-filter");
-  await expect(filter).toHaveText(/Events · 1 of 1/, { timeout: 30_000 });
+  const toggle = page.getByTestId("chart-events-toggle");
+  await expect(toggle).toHaveAttribute("data-status", "ready", { timeout: 30_000 });
   await page.waitForTimeout(500);
   const afterEvents = await markedCanvases(page);
   // Guarded: with no canvases at all, `marked === total` would hold at 0 and prove nothing.
   expect(afterEvents.total, "the chart must still be on the page").toBeGreaterThan(0);
   expect(afterEvents.marked, `rebuilt when events arrived: ${JSON.stringify(afterEvents)}`).toBe(afterEvents.total);
 
-  // 2. The filter hides every category. Same requirement.
-  await setAllEventCategories(page, "chart-events-filter", false);
+  // 2. The events switch is turned off. Same requirement.
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-pressed", "false");
   await page.waitForTimeout(500);
   const afterFilter = await markedCanvases(page);
-  expect(afterFilter.marked, `rebuilt when the filter changed: ${JSON.stringify(afterFilter)}`).toBe(afterFilter.total);
+  expect(afterFilter.marked, `rebuilt when the events switch changed: ${JSON.stringify(afterFilter)}`).toBe(afterFilter.total);
   expect(afterFilter.total).toBeGreaterThan(0);
+
+  // 3. A threshold changes, so the big-move marks are redrawn. Same requirement: a markers
+  // effect that rebuilt the chart would throw away the zoom on every threshold edit.
+  await page.getByTestId("threshold-price").fill("10");
+  await expect(page.getByTestId("big-move-count")).toHaveText("0");
+  await page.waitForTimeout(500);
+  const afterThreshold = await markedCanvases(page);
+  expect(afterThreshold.marked, `rebuilt when a threshold changed: ${JSON.stringify(afterThreshold)}`).toBe(afterThreshold.total);
+  expect(afterThreshold.total).toBeGreaterThan(0);
 });

@@ -20,7 +20,7 @@ components/
   news/                  # News Feed page-specific
   charts/                # Chart adapters and rendering wrappers
   providers/             # Context providers
-  workbenches/           # Legacy workbench composites
+  detail/                # Stock detail page components (DCF and diagnostics live on Corporate)
 ```
 
 ### Existing vs New

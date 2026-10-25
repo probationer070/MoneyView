@@ -130,6 +130,11 @@ const CalculationDetailModal = dynamic(
   },
 );
 
+/** The ticker a link names (`/corporate?ticker=MSFT`), upper-cased; undefined when there is none. */
+function tickerFromAddress(): string | undefined {
+  return new URLSearchParams(window.location.search).get("ticker")?.trim().toUpperCase() || undefined;
+}
+
 export default function CorporateAnalysisPage() {
   useDevMonitorPageLoad({ component: "corporate" });
   // Local UI state: selected ticker assumptions, search input, add-company form, and active modal.
@@ -137,7 +142,7 @@ export default function CorporateAnalysisPage() {
   const router = useRouter();
   const restoredInitialTicker = useRef(initialAssumptions.ticker);
   if (typeof window !== "undefined" && restoredInitialTicker.current === initialAssumptions.ticker) {
-    const sessionTicker = readSessionCache<string>(ACTIVE_TICKER_SESSION_KEY)?.trim().toUpperCase();
+    const sessionTicker = tickerFromAddress() ?? readSessionCache<string>(ACTIVE_TICKER_SESSION_KEY)?.trim().toUpperCase();
     if (sessionTicker) {
       restoredInitialTicker.current = sessionTicker;
     }
@@ -147,7 +152,7 @@ export default function CorporateAnalysisPage() {
   const [assumptions, setAssumptions] = useState<CorporateAssumptions>(() => {
     if (typeof window === "undefined") return initialAssumptions;
     try {
-      const initialTicker = readSessionCache<string>(ACTIVE_TICKER_SESSION_KEY)?.trim().toUpperCase() || initialAssumptions.ticker;
+      const initialTicker = tickerFromAddress() ?? (readSessionCache<string>(ACTIVE_TICKER_SESSION_KEY)?.trim().toUpperCase() || initialAssumptions.ticker);
       const stored = window.localStorage.getItem(STORAGE_KEY);
       if (!stored) return defaultAssumptionsFor(initialTicker);
       const byTicker = JSON.parse(stored) as Record<string, CorporateAssumptions>;
@@ -358,6 +363,11 @@ export default function CorporateAnalysisPage() {
   useEffect(() => {
     writeSessionCache(ACTIVE_TICKER_SESSION_KEY, assumptions.ticker);
   }, [assumptions.ticker]);
+
+  // The address ticker is read once above; dropping it keeps a reload from jumping back to it after the user switches company.
+  useEffect(() => {
+    if (tickerFromAddress()) router.replace("/corporate");
+  }, [router]);
 
   useEffect(() => {
     if (hydratingTickerRef.current === debounced.ticker) return;

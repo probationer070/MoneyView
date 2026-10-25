@@ -1,13 +1,17 @@
 "use client";
 
-import { useMemo, type ReactNode } from "react";
-import TVChart, { NO_LINE_SERIES, type TVLineSeries } from "@/components/charts/TVChart";
+import { useMemo, useState, type ReactNode } from "react";
+import TVChart, { NO_LINE_SERIES, type ChartMarker, type TVLineSeries } from "@/components/charts/TVChart";
 import type { EventGranularity } from "@/components/charts/primitives/EventLinesPrimitive";
 import { ToggleGroup } from "@/components/ui/ToggleGroup";
 import type { TVCandle, TVVolume } from "@/lib/transformers";
 import { ChartPanelFrame } from "@/components/charts/ChartPanelFrame";
 import { useMarketEvents } from "@/lib/useMarketEvents";
 import { EventFilter } from "@/components/charts/EventFilter";
+import type { EventLineSpec } from "@/components/charts/primitives/EventLinesPrimitive";
+import { useT } from "@/lib/i18n/locale";
+
+const NO_LINES: EventLineSpec[] = [];
 
 interface OHLCVChartCardProps {
   title: string;
@@ -24,6 +28,8 @@ interface OHLCVChartCardProps {
   /** Pass "month" when data holds monthly candles, so event lines land on the right candle. */
   eventGranularity?: EventGranularity;
   timeframeOptions?: Array<{ value: string; label: string }>;
+  /** Accessible name of the timeframe group; defaults to "<title> timeframe". */
+  timeframeLabel?: string;
   onTimeframeChange?: (value: string) => void;
   actions?: ReactNode;
   legend?: ReactNode;
@@ -34,6 +40,13 @@ interface OHLCVChartCardProps {
   emptyTitle?: string;
   emptyDescription?: string;
   footer?: ReactNode;
+  /** "categories" (default) is the per-category filter; "single" is one on/off switch for all event lines. */
+  eventToggle?: "categories" | "single";
+  /** Big-move marks drawn on the candles, and the callback for a clicked mark. */
+  markers?: ChartMarker[];
+  onMarkerClick?: (date: string) => void;
+  /** Inside a panel that has its own frame: no second border, tighter gaps. */
+  bare?: boolean;
 }
 
 export function OHLCVChartCard({
@@ -53,6 +66,7 @@ export function OHLCVChartCard({
   timeframe,
   eventGranularity,
   timeframeOptions,
+  timeframeLabel,
   onTimeframeChange,
   actions,
   legend,
@@ -63,10 +77,19 @@ export function OHLCVChartCard({
   emptyTitle = "No OHLCV data available",
   emptyDescription = "No OHLCV history is available for the selected timeframe.",
   footer,
+  eventToggle = "categories",
+  markers,
+  onMarkerClick,
+  bare = false,
 }: OHLCVChartCardProps) {
+  const t = useT();
+  const [eventsOn, setEventsOn] = useState(true);
   const hasToggle = Boolean(timeframe && timeframeOptions && onTimeframeChange);
 
-  const { lines } = useMarketEvents();
+  const { lines: allLines, status: eventsStatus } = useMarketEvents();
+  const single = eventToggle === "single";
+  // The shared stable empty keeps TVChart's memo from seeing a new array when the switch is off.
+  const lines = single && !eventsOn ? NO_LINES : allLines;
 
   const categoryLegend = useMemo(() => {
     const byKey = new Map<string, { label: string; color: string; count: number }>();
@@ -91,6 +114,7 @@ export function OHLCVChartCard({
       errorMessage={errorMessage}
       staleLabel={staleLabel}
       lastUpdatedLabel={lastUpdatedLabel}
+      bare={bare}
       empty={data.length === 0}
       emptyTitle={emptyTitle}
       emptyDescription={emptyDescription}
@@ -99,19 +123,32 @@ export function OHLCVChartCard({
         {hasToggle ? (
           <ToggleGroup
             size="sm"
-            ariaLabel={`${title} timeframe`}
+            ariaLabel={timeframeLabel ?? `${title} timeframe`}
             value={timeframe!}
             onChange={onTimeframeChange!}
             options={timeframeOptions!}
           />
         ) : null}
-        <EventFilter testId="chart-events-filter" />
+        {single ? (
+          <button
+            type="button"
+            data-testid="chart-events-toggle"
+            data-status={eventsStatus}
+            aria-pressed={eventsOn}
+            onClick={() => setEventsOn((on) => !on)}
+            className="rounded-[var(--radius-1)] border border-[var(--line)] px-3 py-1 type-small text-[var(--ink)] hover:bg-[var(--surface)]"
+          >
+            {eventsStatus === "unavailable" ? t("detail.eventsUnavailable") : eventsOn ? t("detail.eventsOn") : t("detail.eventsOff")}
+          </button>
+        ) : (
+          <EventFilter testId="chart-events-filter" />
+        )}
         {actions}
       </div>
       {/* Canvas lines are invisible to assistive tech and unlabelled to a sighted reader; this list
           is their legend and the only textual record of what is drawn -- the tooltip gives each
           event's detail. */}
-      {categoryLegend.length > 0 ? (
+      {!single && categoryLegend.length > 0 ? (
         <div data-testid="chart-events-legend" className="mt-3 flex flex-wrap gap-2 type-small text-[var(--ink-muted)]">
           {categoryLegend.map((entry) => (
             <span
@@ -129,7 +166,7 @@ export function OHLCVChartCard({
       ) : null}
       {legend ? <div className="mt-3 flex flex-wrap gap-2 type-small text-[var(--ink-muted)]">{legend}</div> : null}
 
-      <div className="mt-4 border border-[var(--grid)] bg-[var(--surface)] p-2">
+      <div className={`${bare ? "mt-2" : "mt-4"} border border-[var(--grid)] bg-[var(--surface)] p-2`}>
         <TVChart
           data={data}
           events={lines}
@@ -141,10 +178,12 @@ export function OHLCVChartCard({
           colorAccent={colorAccent}
           upColor={upColor}
           downColor={downColor}
+          markers={markers}
+          onMarkerClick={onMarkerClick}
         />
       </div>
 
-      {footer ? <div className="mt-4">{footer}</div> : null}
+      {footer ? <div className={bare ? "mt-2" : "mt-4"}>{footer}</div> : null}
     </ChartPanelFrame>
   );
 }

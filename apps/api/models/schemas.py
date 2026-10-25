@@ -113,9 +113,15 @@ from .schema_parts.watchlist import (
     WatchlistTheme,
     WatchlistThemeUpdate,
 )
+from .schema_parts.detail import DetailProfile, LatestMovers, MoverRow, ThemeLabel, ThemeRef
 from .schema_parts.sync import RecordsSyncStatus, SyncStatus
 
 __all__ = [
+    "DetailProfile",
+    "LatestMovers",
+    "MoverRow",
+    "ThemeLabel",
+    "ThemeRef",
     "APIMeta",
     "APIResponse",
     "BridgeInputMeta",

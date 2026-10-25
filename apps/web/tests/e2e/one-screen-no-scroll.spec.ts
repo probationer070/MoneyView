@@ -8,10 +8,13 @@ import { expectNoPageScroll, pageScrollProblems } from "./helpers/noPageScroll";
 // the page instead of lengthening it. A later one-screen page joins by adding its route to the list;
 // its mock comes from DESIGN_SCREENS.
 const SCREENS = new Map(DESIGN_SCREENS);
+// A route that is only a prefix (/detail/[ticker] has no page of its own) is visited at a sample path.
+const SAMPLE_PATH: Record<string, string> = { "/detail": "/detail/AAPL" };
+const samplePath = (route: string) => SAMPLE_PATH[route] ?? route;
 const VIEWPORTS = [{ width: 1280, height: 720 }, { width: 390, height: 844 }] as const;
 
 test("every one-screen route has a mock in DESIGN_SCREENS", () => {
-  expect(ONE_SCREEN_ROUTES.filter((route) => !SCREENS.has(route))).toEqual([]);
+  expect(ONE_SCREEN_ROUTES.filter((route) => !SCREENS.has(samplePath(route)))).toEqual([]);
 });
 
 test.describe("pageScrollProblems", () => {
@@ -41,8 +44,8 @@ for (const viewport of VIEWPORTS) {
 
     for (const route of ONE_SCREEN_ROUTES) {
       test(`${route} does not scroll the page`, async ({ page }) => {
-        await SCREENS.get(route)!(page);
-        await page.goto(route, { waitUntil: "networkidle" });
+        await SCREENS.get(samplePath(route))!(page);
+        await page.goto(samplePath(route), { waitUntil: "networkidle" });
         await expect(page.getByRole("heading", { level: 1 })).toBeVisible({ timeout: 60_000 });
         await page.evaluate(() => document.fonts.ready);
         await expectNoPageScroll(page, route);

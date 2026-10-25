@@ -173,7 +173,7 @@ apps/web/
       ViewToggle.tsx
       ExportButton.tsx
       Sparkline.tsx
-    workbenches/
+    detail/
   lib/
     api.ts
     transformers.ts
