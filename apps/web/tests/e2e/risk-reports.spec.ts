@@ -61,6 +61,15 @@ test("risk report sections and per-theme numbers", async ({ page }) => {
   await expect(section(page, "news").getByTestId("macro-figure")).toContainText("Fed funds 2025-05 4.33");
 });
 
+test("a wide report table scrolls inside itself, not the whole report panel", async ({ page }) => {
+  await open(page, "/alerts/risk/5");
+  await expect(section(page, "themes").locator("tbody tr")).toHaveCount(4);
+  // The theme table is far wider than the panel. Its badges' sr-only text is position:absolute,
+  // and without a positioned table wrapper it widened the panel, which then scrolled sideways.
+  const widths = await report(page).evaluate((el) => ({ scroll: el.scrollWidth, client: el.clientWidth }));
+  expect(widths.scroll).toBeLessThanOrEqual(widths.client + 1);
+});
+
 test("current cards list every card of both decks, past the panel's ten", async ({ page }) => {
   // ?cards=all sends every card; the panel shows ten and links here for the rest (final review I1).
   const full = {

@@ -41,8 +41,11 @@ function Section({ name, title, children }: { name: string; title?: string; chil
 
 /** A small report table; `figures` marks the right-aligned number columns by index. */
 function ReportTable({ columns, rows, figures = [] }: { columns: LabelKey[]; rows: ReactNode[][]; figures?: number[] }) {
+  // relative: the cells' sr-only spans (DeltaBadge) are position:absolute. Without a positioned
+  // wrapper their containing block was the report panel, so this overflow did not clip them and a
+  // wide table made the whole panel scroll sideways, cutting off the left of every section.
   return (
-    <div className="overflow-x-auto">
+    <div className="relative overflow-x-auto">
       <table className="type-small w-full border-collapse text-[var(--ink-secondary)]">
         <thead>
           <tr>
