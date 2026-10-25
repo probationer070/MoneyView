@@ -103,6 +103,21 @@ test.describe("the verdict block", () => {
   });
 });
 
+test("search and Refresh DCF share one row; the DCF time sits under it, right-aligned", async ({ page }) => {
+  await mockCorporatePageApi(page);
+  await gotoCorporate(page);
+  const search = await page.locator("#company-search").boundingBox();
+  const refresh = await page.getByRole("button", { name: "Refresh DCF" }).boundingBox();
+  const updated = await page.getByTestId("dcf-updated").boundingBox();
+  expect(search && refresh && updated).toBeTruthy();
+  expect(Math.abs(search!.y - refresh!.y)).toBeLessThanOrEqual(1);
+  expect(Math.abs(search!.height - refresh!.height)).toBeLessThanOrEqual(1);
+  expect(updated!.y).toBeGreaterThanOrEqual(refresh!.y + refresh!.height);
+  expect(Math.abs(updated!.x + updated!.width - (refresh!.x + refresh!.width))).toBeLessThanOrEqual(1);
+  // The label stays for screen readers; the placeholder carries it on screen.
+  await expect(page.getByLabel("Company Search")).toBeVisible();
+});
+
 test("the four KPI tiles open their own details", async ({ page }) => {
   await mockCorporatePageApi(page);
   await gotoCorporate(page);

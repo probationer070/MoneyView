@@ -80,40 +80,41 @@ export function CorporateHeader({
       subtitleTestId="corporate-company-line"
       subtitleAside={verdictStrip}
       actions={
-        <div className="flex w-full flex-col gap-2 sm:w-auto sm:items-end">
-          <div className="flex w-full flex-wrap items-end gap-2 sm:justify-end">
-            <TickerSearch
-              id="company-search"
-              label={t("corporate.search.label")}
-              value={search}
-              onChange={setSearch}
-              onSelect={(ticker) => {
-                onSelectTicker(ticker);
-                setSearch("");
-                setDraft(null);
-              }}
-              items={companies}
-              selectedTicker={selectedTicker}
-              placeholder={t("corporate.search.placeholder")}
-              noMatchAction={{
-                label: t("corporate.search.notListed"),
-                onSelect: (query) => {
-                  setDraft({ name: "", symbol: query.toUpperCase() });
-                  setAddError(null);
-                },
-              }}
-              className="w-full sm:w-72"
-            />
-            <ActionButton
-              label={t("corporate.header.refreshDcf")}
-              size="sm"
-              variant="secondary"
-              icon={<RefreshCw aria-hidden="true" className={dcfStreaming ? "h-3.5 w-3.5 animate-spin" : "h-3.5 w-3.5"} />}
-              disabled={dcfStreaming}
-              onClick={onRefreshDcf}
-            />
-          </div>
-          <div className="type-small flex flex-wrap items-center gap-2 text-[var(--ink-muted)] sm:justify-end">
+        // One rectangle: search and Refresh DCF share a 44px row (input and md button tokens), and
+        // the DCF time and status sit right-aligned under it, the same width as that row.
+        <div className="grid w-full grid-cols-[minmax(0,1fr)_auto] gap-x-2 gap-y-1 sm:w-[28rem]">
+          <TickerSearch
+            id="company-search"
+            label={t("corporate.search.label")}
+            hideLabel
+            value={search}
+            onChange={setSearch}
+            onSelect={(ticker) => {
+              onSelectTicker(ticker);
+              setSearch("");
+              setDraft(null);
+            }}
+            items={companies}
+            selectedTicker={selectedTicker}
+            placeholder={t("corporate.search.placeholder")}
+            noMatchAction={{
+              label: t("corporate.search.notListed"),
+              onSelect: (query) => {
+                setDraft({ name: "", symbol: query.toUpperCase() });
+                setAddError(null);
+              },
+            }}
+            className="w-full"
+          />
+          <ActionButton
+            label={t("corporate.header.refreshDcf")}
+            size="md"
+            variant="secondary"
+            icon={<RefreshCw aria-hidden="true" className={dcfStreaming ? "h-3.5 w-3.5 animate-spin" : "h-3.5 w-3.5"} />}
+            disabled={dcfStreaming}
+            onClick={onRefreshDcf}
+          />
+          <div className="type-small col-span-2 flex flex-wrap items-center justify-end gap-2 text-[var(--ink-muted)]">
             <span data-testid="dcf-updated" className="type-mono">
               {dcfUpdatedText ? t("corporate.assumptions.updated", { time: dcfUpdatedText }) : t("corporate.header.notCalculated")}
             </span>
@@ -125,7 +126,7 @@ export function CorporateHeader({
             {dcfStreamError ? <span role="alert" className="text-[var(--status-error-ink)]">{dcfStreamError}</span> : null}
           </div>
           {draft ? (
-            <form data-testid="add-company-form" onSubmit={(event) => void submit(event)} className="flex w-full flex-wrap items-end gap-2 sm:justify-end">
+            <form data-testid="add-company-form" onSubmit={(event) => void submit(event)} className="col-span-2 flex w-full flex-wrap items-end justify-end gap-2">
               <div className="w-48">
                 <input
                   ref={nameInputRef}
