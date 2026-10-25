@@ -377,16 +377,30 @@ def test_movers_range_and_default():
 
 
 def test_movers_range_limit():
-    """Catches a missing 2600-day cap (2601 evaluated days is rejected, 2600 is served)."""
+    """Catches a missing cap (MOVERS_MAX_DAYS + 1 evaluated days is rejected, MOVERS_MAX_DAYS is served)."""
+    from apps.api.routes.risk import MOVERS_MAX_DAYS
+
     store.set_state(f"backfill:{V}", "done")
     base = date(2000, 1, 1).toordinal()
     with get_db() as conn:
         conn.executemany(
             "INSERT INTO risk_daily (date, rules_version, origin, warnings_json, confirming_json, sox_confirming,"
             " cap_share, bars_coverage, evaluated_at) VALUES (?, ?, 'live', '{}', '{}', 0, 0, 1, 't')",
-            [(date.fromordinal(base + i).isoformat(), V) for i in range(2601)])
+            [(date.fromordinal(base + i).isoformat(), V) for i in range(MOVERS_MAX_DAYS + 1)])
     assert _get("/movers?from=2000-01-01").status_code == 422
     assert _get("/movers?from=2000-01-02").status_code == 200
+
+
+def test_movers_cap_covers_the_records_page_range_for_five_more_years():
+    """Catches a cap below the /alerts records page's range: it asks for every day since 2016-01-04,
+    and the old 2600 cap was already under that (2714 days by 2026-10-19), so the page showed no
+    records. Fails five years before the cap would be reached, while there is time to change it."""
+    import numpy as np
+
+    from apps.api.routes.risk import MOVERS_MAX_DAYS
+
+    horizon = date.today().replace(year=date.today().year + 5)
+    assert MOVERS_MAX_DAYS >= np.busday_count("2016-01-04", horizon.isoformat())
 
 
 def test_never_evaluated_nulls():
