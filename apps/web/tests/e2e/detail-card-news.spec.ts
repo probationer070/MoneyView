@@ -99,16 +99,25 @@ test("the news column follows the clicked day and groups stock and theme", async
   await expect(page.getByTestId("news-heading")).toHaveText("Latest news");
 });
 
-test("a row without published_at shows the date, not a time", async ({ page }) => {
+test("a timed row shows its date and time, a row without published_at shows the date only", async ({ page }) => {
   await open(page, {
     feed: ({ ticker }) => (ticker ? [row("Timed headline", "2026-10-08T14:30:00Z"), row("Dateless headline", null, "2026-10-07")] : []),
   });
   const rows = page.getByTestId("news-group-stock").getByTestId("news-row");
   await expect(rows).toHaveCount(2);
-  await expect(rows.nth(0).getByTestId("news-when")).toHaveText("14:30");
+  await expect(rows.nth(0).getByTestId("news-when")).toHaveText("10-08 14:30");
   await expect(rows.nth(1).getByTestId("news-when")).toHaveText("2026-10-07");
   await expect(rows.nth(1)).not.toContainText(/\d\d:\d\d/);
   await expect(rows.nth(1)).toContainText("Wire");
+});
+
+test.describe("viewer in Seoul", () => {
+  test.use({ timezoneId: "Asia/Seoul" });
+  test("a timed row's date and time come from the same instant in the viewer's zone", async ({ page }) => {
+    // 20:30Z on Oct 8 is 05:30 on Oct 9 in Seoul, though the row's published_date says Oct 8.
+    await open(page, { feed: ({ ticker }) => (ticker ? [row("Late headline", "2026-10-08T20:30:00Z", "2026-10-08")] : []) });
+    await expect(page.getByTestId("news-group-stock").getByTestId("news-when")).toHaveText("10-09 05:30");
+  });
 });
 
 test("find-news: the button shows a pending state, then the card and column refresh", async ({ page }) => {
@@ -198,6 +207,82 @@ test("find-news: an HTTP error shows the failure message", async ({ page }) => {
   await expect(page.getByTestId("find-news-failed")).toBeVisible();
 });
 
+test("find-news: a blocked answer without a usable retry time says so without a time", async ({ page }) => {
+  await open(page, {
+    moves: { [DAY]: { news: { stored: 0, searched: false } } },
+    history: [{ status: "blocked", retry_after: null }, { status: "daily_limit", retry_after: "not a date" }],
+  });
+  await mark(page, DAY).click();
+  const button = page.getByRole("button", { name: "Find news for this date" });
+  await button.click();
+  await expect(page.getByTestId("find-news-blocked")).toHaveText("Search is not available right now. Try again later.");
+  await button.click();
+  await expect(page.getByTestId("find-news-blocked")).toHaveText("Search is not available right now. Try again later.");
+  await expect(page.locator("body")).not.toContainText("Invalid Date");
+  await expect(page.locator("body")).not.toContainText("after .");
+});
+
+test("find-news: a blocked answer after articles were saved still refreshes the card and the column", async ({ page }) => {
+  let saved = false;
+  await open(page, {
+    moves: { [DAY]: () => ({ news: saved ? { stored: 2, searched: true } : { stored: 0, searched: false } }) },
+    history: [{ status: "blocked", retry_after: "2026-10-25T09:15:00Z" }],
+    feed: ({ ticker, from }) => (saved && ticker && from ? [row("Saved before the block", "2026-10-07T09:00:00Z")] : []),
+  });
+  await page.route("**/api/v1/news/history", (route) => {
+    saved = true;
+    return route.fallback();
+  });
+  await mark(page, DAY).click();
+  await page.getByRole("button", { name: "Find news for this date" }).click();
+  await expect(page.getByTestId("card-news")).toContainText("2 stored articles");
+  await expect(page.getByTestId("news-group-stock")).toContainText("Saved before the block");
+});
+
+test("find-news: the button stays gone until the refetch ends, so a second click cannot send a second search", async ({ page }) => {
+  let searched = false;
+  let releaseMove: () => void = () => {};
+  const moveGate = new Promise<void>((resolve) => { releaseMove = resolve; });
+  const log = await open(page, {
+    moves: { [DAY]: () => ({ news: searched ? { stored: 2, searched: true } : { stored: 0, searched: false } }) },
+    history: [{ status: "searched_now" }],
+  });
+  await page.route("**/api/v1/news/history", (route) => {
+    searched = true;
+    return route.fallback();
+  });
+  await mark(page, DAY).click();
+  await expect(page.getByTestId("card-news")).toContainText("0 stored articles");
+  // Hold the card's refetch (the one after the search), so the POST has finished while the card is still stale.
+  await page.route(`**/api/v1/detail/AAPL/move/${DAY}`, async (route) => {
+    if (searched) await moveGate;
+    return route.fallback();
+  });
+  await page.getByRole("button", { name: "Find news for this date" }).click();
+  await expect.poll(() => log.history.length).toBe(1);
+  await expect(page.getByTestId("find-news-pending")).toBeVisible();
+  await page.waitForTimeout(500); // the POST is long done by now; only the held refetch is outstanding
+  await expect(page.getByTestId("find-news-pending")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Find news for this date" })).toHaveCount(0);
+  releaseMove();
+  await expect(page.getByTestId("card-news")).toContainText("2 stored articles");
+  await expect(page.getByTestId("find-news-pending")).toHaveCount(0);
+  expect(log.history).toHaveLength(1);
+});
+
+test("Esc inside a threshold input does not close the card", async ({ page }) => {
+  await open(page, { moves: { [DAY]: { news: { stored: 1, searched: true } } } });
+  await mark(page, DAY).click();
+  await expect(page.getByTestId("move-card")).toBeVisible();
+  const input = page.locator('input[type="number"]').first();
+  await input.focus();
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("move-card")).toBeVisible();
+  await input.blur();
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("move-card")).toHaveCount(0);
+});
+
 test("Esc closes the card, and so does a second click on the same mark", async ({ page }) => {
   await open(page, { moves: { [DAY]: { news: { stored: 1, searched: true } } } });
   await mark(page, DAY).click();
@@ -257,7 +342,7 @@ test("badge says candidate for a ticker only in the candidate deck", async ({ pa
   await expect(page.getByTestId("alert-badge")).toHaveText("In the risk candidates");
 });
 
-test("no badge without an open alert, and none for a ticker the open alert does not list", async ({ page }) => {
+test("no badge without an open alert", async ({ page }) => {
   await open(page);
   await expect(page.getByTestId("detail-header")).toBeVisible();
   await expect(page.getByTestId("alert-badge")).toHaveCount(0);

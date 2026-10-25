@@ -2,7 +2,7 @@
 
 import type { UseQueryResult } from "@tanstack/react-query";
 import { useLocale, useT } from "@/lib/i18n/locale";
-import { clockTime } from "@/lib/detail/clockTime";
+import { dayAndTime } from "@/lib/detail/clockTime";
 import { useDetailNews } from "@/lib/detail/useDetail";
 import type { NewsRow } from "@/lib/detail/types";
 
@@ -10,8 +10,8 @@ function Group({ id, title, query }: { id: string; title: string; query: UseQuer
   const t = useT();
   const { locale } = useLocale();
   const rows = query.data ?? [];
-  // The clock time only when the article carries one; a date-only row shows its date and nothing invented.
-  const when = (row: NewsRow) => (row.published_at === null ? row.published_date : clockTime(row.published_at, locale));
+  // Date and time come from the same instant in the viewer's zone; a row with no time shows its date and nothing invented.
+  const when = (row: NewsRow) => dayAndTime(row.published_at, locale) || row.published_date;
   return (
     <section data-testid={id} className="flex flex-col gap-1">
       <h3 className="type-panel-title text-[var(--ink)]">{title}</h3>

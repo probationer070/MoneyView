@@ -42,6 +42,8 @@ export function MoveCard({ ticker, date, onClose }: { ticker: string; date: stri
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      const target = event.target;
+      if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return;
       if (event.key === "Escape") onClose();
     };
     window.addEventListener("keydown", onKey);
@@ -53,6 +55,7 @@ export function MoveCard({ ticker, date, onClose }: { ticker: string; date: stri
   const noStored = data?.news?.stored === 0;
   const searchFailed = find.isError || find.data?.status === "failed";
   const blocked = find.data?.status === "blocked" || find.data?.status === "daily_limit";
+  const retryTime = clockTime(find.data?.retry_after ?? null, locale);
 
   return (
     <section data-testid="move-card" aria-label={t("detail.card.title")} className="flex flex-col gap-3">
@@ -105,7 +108,7 @@ export function MoveCard({ ticker, date, onClose }: { ticker: string; date: stri
                 <ActionButton size="sm" label={t("detail.findNews")} onClick={() => find.mutate(date)} />
               )}
               {searchFailed && <span data-testid="find-news-failed">{t("detail.findNewsFailed")}</span>}
-              {blocked && <span data-testid="find-news-blocked">{t("detail.findNewsBlocked", { time: clockTime(find.data?.retry_after ?? null, locale) })}</span>}
+              {blocked && <span data-testid="find-news-blocked">{retryTime === "" ? t("detail.findNewsBlockedNoTime") : t("detail.findNewsBlocked", { time: retryTime })}</span>}
             </div>
           )}
         </>

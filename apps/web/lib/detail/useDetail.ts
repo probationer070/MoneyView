@@ -88,17 +88,21 @@ export function useDetailNews(ticker: string, themeId: string | null, date: stri
   return { stock, theme };
 }
 
-/** Searches the news archive around a date. A search that ran (or was cached) refreshes the card and the news column. */
+/**
+ * Searches the news archive around a date. Every settled response refreshes the card and the news column, because
+ * a blocked, limited or failed status can still follow a first search that saved articles. The mutation stays
+ * pending until the refetch ends, so the button does not flash back with stale counts.
+ */
 export function useFindNews(ticker: string) {
   const client = useQueryClient();
   return useMutation({
     mutationFn: (date: string) =>
       fetchApi<NewsHistoryResult>("/news/history", { method: "POST", body: JSON.stringify({ ticker, date }) }),
-    onSuccess: (result) => {
-      if (result.status !== "searched_now" && result.status !== "cached") return;
-      void client.invalidateQueries({ queryKey: [MOVE_KEY, ticker] });
-      void client.invalidateQueries({ queryKey: [NEWS_KEY, ticker] });
-    },
+    onSuccess: () =>
+      Promise.all([
+        client.invalidateQueries({ queryKey: [MOVE_KEY, ticker] }),
+        client.invalidateQueries({ queryKey: [NEWS_KEY, ticker] }),
+      ]),
   });
 }
 

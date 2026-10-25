@@ -5,11 +5,14 @@ import { DeltaBadge } from "@/components/ui/DeltaBadge";
 import { useLocale, useT } from "@/lib/i18n/locale";
 import type { LatestMovers, MoverRow } from "@/lib/detail/types";
 
-function MoverList({ id, title, rows, current }: { id: string; title: string; rows: MoverRow[]; current: string }) {
+function MoverList({ id, title, date, rows, current }: { id: string; title: string; date: string | null; rows: MoverRow[]; current: string }) {
   const { locale } = useLocale();
   return (
     <section data-testid={id} className="flex flex-col gap-1">
-      <h2 className="type-panel-title text-[var(--ink)]">{title}</h2>
+      <h2 className="type-panel-title text-[var(--ink)]">
+        {title}
+        {date && <span data-testid="movers-date" className="type-mono text-[var(--ink-muted)]">{` · ${date}`}</span>}
+      </h2>
       <ul className="flex flex-col">
         {rows.map((row) => {
           const isCurrent = row.ticker === current;
@@ -42,8 +45,8 @@ export function MoversColumn({ movers, loading, failed, current }: { movers: Lat
   if (movers.up.length === 0 && movers.down.length === 0) return <p className="type-small text-[var(--ink-muted)]">{t("detail.movers.empty")}</p>;
   return (
     <div className="flex flex-col gap-3">
-      <MoverList id="detail-movers-up" title={t("detail.movers.up")} rows={movers.up} current={current} />
-      <MoverList id="detail-movers-down" title={t("detail.movers.down")} rows={movers.down} current={current} />
+      <MoverList id="detail-movers-up" title={t("detail.movers.up")} date={movers.date} rows={movers.up} current={current} />
+      <MoverList id="detail-movers-down" title={t("detail.movers.down")} date={movers.date} rows={movers.down} current={current} />
     </div>
   );
 }

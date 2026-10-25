@@ -117,6 +117,20 @@ test("movers list shows five up and five down and navigates", async ({ page }) =
   await expect(page.getByTestId("detail-header")).toContainText("INTC Inc");
 });
 
+test("the movers headings carry the movers date", async ({ page }) => {
+  await open(page, "AAPL");
+  await expect(page.getByTestId("detail-movers-up").getByTestId("movers-date")).toHaveText("· 2026-10-23");
+  await expect(page.getByTestId("detail-movers-down").getByTestId("movers-date")).toHaveText("· 2026-10-23");
+});
+
+test("a failed profile request shows an error line", async ({ page }) => {
+  await mockDetailPage(page, "AAPL", { bars: BARS });
+  await page.route("**/api/v1/detail/AAPL/profile", (route) => route.fulfill({ status: 500, contentType: "application/json", body: "{}" }));
+  await page.goto("/detail/AAPL", { waitUntil: "domcontentloaded" });
+  await expect(page.getByTestId("detail-profile-error")).toHaveText("Could not load this stock's profile.", { timeout: 60_000 });
+  await expectNoPageScroll(page, "/detail/AAPL with a failed profile");
+});
+
 test("a non-watchlist instrument hides theme and news", async ({ page }) => {
   await open(page, "^GSPC");
   await expect(page.getByText("Not on the watchlist")).toBeVisible();
@@ -131,6 +145,17 @@ test("corporate opens on the ticker from the link", async ({ page }) => {
   await expect.poll(() => page.evaluate(() => window.sessionStorage.getItem("moneyview:corporate-active-ticker:v1") ?? "")).toContain("MSFT");
 });
 
+test("corporate drops the address ticker once read, so a reload keeps the company the user switched to", async ({ page }) => {
+  await mockCorporatePageApi(page);
+  await page.goto("/corporate?ticker=MSFT", { waitUntil: "domcontentloaded" });
+  await expect(page.getByTestId("corporate-company-line")).toContainText("Microsoft", { timeout: 60_000 });
+  await expect(page).toHaveURL(/\/corporate$/);
+  // Switching company stores the new ticker for the session.
+  await page.evaluate(() => window.sessionStorage.setItem("moneyview:corporate-active-ticker:v1", JSON.stringify("AAPL")));
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await expect(page.getByTestId("corporate-company-line")).toContainText("Apple", { timeout: 60_000 });
+});
+
 test.describe("Korean copy", () => {
   test.use({ locale: "ko-KR" });
   test("tile and column titles are Korean", async ({ page }) => {
@@ -140,6 +165,7 @@ test.describe("Korean copy", () => {
     await expect(page.getByTestId("detail-movers-up")).toContainText("전일 급등");
     await expect(page.getByTestId("detail-movers-down")).toContainText("전일 급락");
     await expect(page.getByTestId("tile-1w")).not.toContainText("1 week");
+    await expect(page.getByTestId("detail-movers-up").getByTestId("movers-date")).toHaveText("· 2026-10-23");
     await expect(page.getByTestId("detail-movers-up")).toContainText(MOVER_THEME.label.ko);
     await expect(page.getByTestId("detail-movers-up")).not.toContainText(MOVER_THEME.id);
   });

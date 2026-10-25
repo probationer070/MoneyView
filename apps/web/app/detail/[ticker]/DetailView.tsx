@@ -35,6 +35,7 @@ export function DetailView({ ticker }: { ticker: string }) {
   return (
     <div className="mx-auto flex h-[calc(100dvh_-_var(--main-pad-top,0px)_-_var(--main-pad-bottom,0px))] max-w-7xl flex-col gap-3">
       <DetailHeader ticker={ticker} profile={profile.data} bars={bars.data} />
+      {profile.isError && <p data-testid="detail-profile-error" className="type-small text-[var(--status-error-ink)]">{t("detail.profileLoadError")}</p>}
       {hasBars ? (
         <>
           <TrendTiles bars={bars.data!} />

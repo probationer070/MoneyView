@@ -364,6 +364,11 @@ export default function CorporateAnalysisPage() {
     writeSessionCache(ACTIVE_TICKER_SESSION_KEY, assumptions.ticker);
   }, [assumptions.ticker]);
 
+  // The address ticker is read once above; dropping it keeps a reload from jumping back to it after the user switches company.
+  useEffect(() => {
+    if (tickerFromAddress()) router.replace("/corporate");
+  }, [router]);
+
   useEffect(() => {
     if (hydratingTickerRef.current === debounced.ticker) return;
     if (!pendingMetricsPersistRef.current) return;
