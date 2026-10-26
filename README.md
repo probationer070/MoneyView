@@ -1,12 +1,12 @@
 # MoneyView
 
 <p align="center">
-  <img src="./data/img/MoneyView-Page3.png" alt="MoneyView Dashboard" width="100%" />
+  <img src="./data/img/readme-market.png" alt="MoneyView market overview" width="100%" />
 </p>
 
 <p align="center">
   <strong>Local-first financial analytics workspace</strong><br/>
-  Market monitoring, portfolio attribution, corporate valuation, and Monte Carlo simulation in one dashboard.
+  Market monitoring, risk signals, portfolio attribution, DCF and Damodaran-style valuation, and Monte Carlo simulation in one dashboard.
 </p>
 
 ---
@@ -23,9 +23,12 @@ A FastAPI backend ([`apps/api`](./apps/api)), a Next.js frontend ([`apps/web`](.
 
 | Area | What it covers | Deep dive |
 |---|---|---|
-| **Market Overview** | Major indices, commodities, FX, crypto, and trend cards | [`docs/tabs/market-overview-tab.txt`](./docs/tabs/market-overview-tab.txt) |
-| **Portfolio** | Portfolio and benchmark return, active return, beta, attribution effects, holdings detail | [`docs/tabs/portfolio-tab.txt`](./docs/tabs/portfolio-tab.txt) |
-| **Corporate Analysis** | DCF valuation assumptions, hurdle-rate decomposition, WACC × terminal-growth sensitivity, value-driver views | [`docs/tabs/corporate-analysis-tab.txt`](./docs/tabs/corporate-analysis-tab.txt) |
+| **Market Overview** | 14 instruments (indices, sectors, rates, commodities, FX, crypto) with 1-day and 1-month moves, the risk-signal strip and panel | [`docs/tabs/market-overview-tab.txt`](./docs/tabs/market-overview-tab.txt) |
+| **Portfolio** | Holdings, saved snapshots, benchmark comparison, attribution, a per-stock modal with chart, metrics and news | [`docs/tabs/portfolio-tab.txt`](./docs/tabs/portfolio-tab.txt) |
+| **Corporate Analysis** | DCF assumptions and verdict, the Damodaran-style fair value beside it, hurdle-rate decomposition, sensitivity | [`docs/tabs/corporate-analysis-tab.txt`](./docs/tabs/corporate-analysis-tab.txt) |
+| **Stock detail** | One screen per ticker: trend tiles, adjustable big-move marks with a "why it moved" card, dated news, yesterday's movers | [spec](./docs/superpowers/specs/2026-10-25-stock-detail-screen-design.md) |
+| **Signal records** | Past risk alerts, surges and yesterday's gainers, each with a report | [spec](./docs/superpowers/specs/2026-10-20-risk-ui-design.md) |
+| **Valuation & Cases** | A Damodaran-style fair value for any stock, the growth today's price implies, segment build-up cases you can fork and simulate | [`docs/tabs/cases-tab.txt`](./docs/tabs/cases-tab.txt) |
 | **Simulation Lab** | Path simulation, risk analysis, return distribution, corporate valuation, correlation model | [`docs/tabs/monte-carlo-tab.txt`](./docs/tabs/monte-carlo-tab.txt) |
 
 Start at [`docs/INDEX.md`](./docs/INDEX.md) for a map of every document in the repo.
@@ -34,7 +37,7 @@ Start at [`docs/INDEX.md`](./docs/INDEX.md) for a map of every document in the r
 
 | Layer | Tools |
 |---|---|
-| Frontend | Next.js, React, TypeScript, Recharts |
+| Frontend | Next.js, React, TypeScript, Recharts, lightweight-charts |
 | Backend | FastAPI, Pydantic |
 | Data | SQLite, local cache, Yahoo/yfinance-based ingestion paths |
 | Python tooling | Conda, `uv`, `pytest` |
@@ -139,42 +142,121 @@ but never binds its port does not exit, and has reached 5 GB.
 
 ## Screens
 
-<details>
-<summary><strong>Market Overview</strong> — cards for indices, commodities, FX, and crypto</summary>
-<p align="center"><img src="./data/img/MoneyView-Page4.png" alt="Market Overview" width="100%" /></p>
-</details>
+Captured from fixture data with `README_CAPTURE=1 npx playwright test tests/e2e/readme-capture.spec.ts`
+(in `apps/web`), so they show sample tickers rather than anyone's watchlist. Every menu page and every
+tab inside it is here.
 
 <details>
-<summary><strong>Portfolio Command Center</strong> — holdings, weighted testing, snapshots, attribution, drill-down</summary>
+<summary><strong>Market Overview</strong> — 14 instruments with 1-day and 1-month moves, the risk-signal strip, theme spreads</summary>
+
 <table>
   <tr>
-    <td width="33%"><img src="./data/img/MoneyView-Page21.png" alt="Portfolio view 1" width="100%" /></td>
-    <td width="33%"><img src="./data/img/MoneyView-Page22.png" alt="Portfolio view 2" width="100%" /></td>
-    <td width="33%"><img src="./data/img/MoneyView-Page23.png" alt="Portfolio view 3" width="100%" /></td>
+    <td width="50%"><img src="./data/img/readme-market.png" alt="Instruments" width="100%" /><br/><sub>Instruments</sub></td>
+    <td width="50%"><img src="./data/img/readme-market-spreads.png" alt="Spreads" width="100%" /><br/><sub>Spreads</sub></td>
   </tr>
 </table>
 </details>
 
 <details>
-<summary><strong>Corporate Analysis</strong> — assumptions, hurdle-rate decomposition, valuation visuals</summary>
-<p align="center"><img src="./data/img/MoneyView-Page1.png" alt="Corporate Analysis" width="100%" /></p>
+<summary><strong>Portfolio</strong> — holdings, snapshot summary, attribution, allocation, the per-stock modal</summary>
+
+<table>
+  <tr>
+    <td width="50%"><img src="./data/img/readme-portfolio.png" alt="Holdings" width="100%" /><br/><sub>Holdings</sub></td>
+    <td width="50%"><img src="./data/img/readme-portfolio-snapshot.png" alt="Latest snapshot summary" width="100%" /><br/><sub>Latest snapshot summary</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="./data/img/readme-portfolio-attribution.png" alt="Attribution" width="100%" /><br/><sub>Attribution</sub></td>
+    <td width="50%"><img src="./data/img/readme-portfolio-allocation.png" alt="Allocation workspace" width="100%" /><br/><sub>Allocation workspace</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="./data/img/readme-portfolio-holdings.png" alt="Holdings table" width="100%" /><br/><sub>Holdings table</sub></td>
+    <td width="50%"><img src="./data/img/readme-portfolio-stock.png" alt="Stock modal" width="100%" /><br/><sub>Stock modal</sub></td>
+  </tr>
+</table>
 </details>
 
 <details>
-<summary><strong>Simulation Lab</strong> — path simulation, risk, valuation uncertainty, correlation structure</summary>
+<summary><strong>News</strong> — stock and topic headlines with publish time</summary>
+
+<p align="center"><img src="./data/img/readme-news.png" alt="News" width="100%" /></p>
+</details>
+
+<details>
+<summary><strong>Corporate Analysis</strong> — DCF intrinsic value and the Damodaran-style fair value side by side, in four tabs</summary>
+
 <table>
   <tr>
-    <td width="50%"><img src="./data/img/MoneyView-Page5.png" alt="Simulation Lab view 1" width="100%" /></td>
-    <td width="50%"><img src="./data/img/MoneyView-Page51.png" alt="Simulation Lab view 2" width="100%" /></td>
+    <td width="50%"><img src="./data/img/readme-corporate.png" alt="Summary" width="100%" /><br/><sub>Summary</sub></td>
+    <td width="50%"><img src="./data/img/readme-corporate-diagnostics.png" alt="Core diagnostics" width="100%" /><br/><sub>Core diagnostics</sub></td>
   </tr>
   <tr>
-    <td width="50%"><img src="./data/img/MoneyView-Page52.png" alt="Simulation Lab view 3" width="100%" /></td>
-    <td width="50%"><img src="./data/img/MoneyView-Page53.png" alt="Simulation Lab view 4" width="100%" /></td>
-  </tr>
-  <tr>
-    <td colspan="2"><img src="./data/img/MoneyView-Page54.png" alt="Simulation Lab view 5" width="100%" /></td>
+    <td width="50%"><img src="./data/img/readme-corporate-dcf.png" alt="DCF" width="100%" /><br/><sub>DCF</sub></td>
+    <td width="50%"><img src="./data/img/readme-corporate-comparison.png" alt="Target stock comparison" width="100%" /><br/><sub>Target stock comparison</sub></td>
   </tr>
 </table>
+</details>
+
+<details>
+<summary><strong>Stock detail</strong> — trend tiles, big-move marks and the "why it moved" card</summary>
+
+<p align="center"><img src="./data/img/readme-detail.png" alt="Stock detail" width="100%" /></p>
+</details>
+
+<details>
+<summary><strong>Simulation Lab</strong> — path simulation, risk, distributions, valuation uncertainty, correlation</summary>
+
+<table>
+  <tr>
+    <td width="50%"><img src="./data/img/readme-monte-carlo.png" alt="Path simulation" width="100%" /><br/><sub>Path simulation</sub></td>
+    <td width="50%"><img src="./data/img/readme-monte-carlo-risk.png" alt="Risk analysis" width="100%" /><br/><sub>Risk analysis</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="./data/img/readme-monte-carlo-distribution.png" alt="Return distribution" width="100%" /><br/><sub>Return distribution</sub></td>
+    <td width="50%"><img src="./data/img/readme-monte-carlo-valuation.png" alt="Corporate valuation" width="100%" /><br/><sub>Corporate valuation</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="./data/img/readme-monte-carlo-correlation.png" alt="Correlation model" width="100%" /><br/><sub>Correlation model</sub></td>
+  </tr>
+</table>
+</details>
+
+<details>
+<summary><strong>Decisions</strong> — the investment decision log</summary>
+
+<p align="center"><img src="./data/img/readme-decisions.png" alt="Decisions" width="100%" /></p>
+</details>
+
+<details>
+<summary><strong>Valuation and Cases</strong> — the fair value and the growth the price implies, segment build-up cases</summary>
+
+<table>
+  <tr>
+    <td width="50%"><img src="./data/img/readme-valuation.png" alt="Valuation" width="100%" /><br/><sub>Valuation</sub></td>
+    <td width="50%"><img src="./data/img/readme-cases-list.png" alt="Cases" width="100%" /><br/><sub>Cases</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="./data/img/readme-cases.png" alt="One case" width="100%" /><br/><sub>One case</sub></td>
+  </tr>
+</table>
+</details>
+
+<details>
+<summary><strong>Events</strong> — dated events drawn on every price chart</summary>
+
+<p align="center"><img src="./data/img/readme-events.png" alt="Events" width="100%" /></p>
+</details>
+
+<details>
+<summary><strong>Signals</strong> — the weekly macro scenario engine</summary>
+
+<p align="center"><img src="./data/img/readme-signals.png" alt="Signals" width="100%" /></p>
+</details>
+
+<details>
+<summary><strong>Signal records</strong> — past risk alerts, surges and gainers with their reports</summary>
+
+<p align="center"><img src="./data/img/readme-alerts.png" alt="Signal records" width="100%" /></p>
 </details>
 
 ## Developer dashboards
