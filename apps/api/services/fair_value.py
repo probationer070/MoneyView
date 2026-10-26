@@ -26,6 +26,8 @@ from apps.api.services.fair_value_case import (
     build_fair_value_case,
     company_revenue_cagr,
     fair_value_case_name,
+    growth_for_revenue_target,
+    implied_growth,
 )
 from apps.api.services.industry_benchmark_store import industry_row_for_ticker
 from apps.api.services.valuation_case import CaseNotFound, create_case, list_cases, load_case, run_stored_case
@@ -124,6 +126,10 @@ def fair_value_summary(ticker: str, case_id: int, *, created: bool, vintage: str
 
     case = load_case(case_id)
     segment = case["segments"][0]
+    # The model's own year 1-5 growth, and the one today's price implies on the same path with every
+    # other input held: the disagreement Damodaran argues about, stated as one number each.
+    growth = growth_for_revenue_target(segment["base_revenue"], segment["revenue_target"], case["riskfree_rate"])
+    implied, implied_note = (implied_growth(case, price) if price else (None, "no_price: no stored close"))
     assumptions = [
         {"field": n["input_field"], "value": case.get(n["input_field"]), "claim": n["claim"]}
         for n in case.get("narratives", [])
@@ -141,5 +147,8 @@ def fair_value_summary(ticker: str, case_id: int, *, created: bool, vintage: str
         "price_date": price_date,
         "gap_pct": gap,
         "floor_value_per_share": _value_per_share(find_conservative_case_id(ticker)),
+        "growth_1_5": growth,
+        "implied_growth_1_5": implied,
+        "implied_growth_note": implied_note,
         "assumptions": assumptions,
     }

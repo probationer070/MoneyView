@@ -35,7 +35,7 @@ name returns the stored case. New statements or a new vintage make a new case.
 | growth, years 1-5 `g` | `clamp((g_c + g_ind) / 2, -0.05, 0.25)` | `g_ind` = own industry `revenue_growth` |
 | growth, years 6-10 | linear from `g` to the riskfree rate in year 10 | Damodaran's default |
 | revenue target (year 10) | `base × (1+g)^5 × Π_{t=6..10} (1 + g_t)`, `g_t = g + (rf − g)(t−5)/5` | |
-| margin target (year 10) | `(base_margin + industry operating_margin) / 2` | |
+| margin target (year 10) | the company's margin when at or above the industry's (a leader keeps its advantage); otherwise halfway up: `(base_margin + industry operating_margin) / 2` (owner, 2026-10-26, after the watchlist run) | |
 | sales to capital, early and late | own industry `sales_to_capital` | |
 | WACC | starts at the company's measured WACC, converges from year 6 to own industry `cost_of_capital` | `metrics.wacc`; refuse when it is the fallback default |
 | effective tax rate | own industry `effective_tax_rate`, ramping to the marginal 25% | |
@@ -61,11 +61,16 @@ name returns the stored case. New statements or a new vintage make a new case.
  "value_per_share": 182.4, "price": 347.7, "price_date": "2026-10-23",
  "gap_pct": -47.5,
  "floor_value_per_share": 91.5,
+ "growth_1_5": 0.044, "implied_growth_1_5": 0.118, "implied_growth_note": null,
  "assumptions": [{"field": "growth_1_5", "value": 0.071, "claim": "..."}]}
 ```
 
 - `gap_pct` is `(value - price) / price x 100`. `floor_value_per_share` is the conservative case's,
   or null when there is none.
+- `growth_1_5` is the model's year 1-5 revenue growth; `implied_growth_1_5` the growth at which the
+  value per share equals the price on the same path with every other input held, searched over
+  [-20%, 60%]. Outside that band it is null and `implied_growth_note` says `above_range` or
+  `below_range`. Damodaran's argument with the market is about this one number.
 - 422 with the refusal reason; 409 `no_vintage` (same as the conservative route).
 - `price` from the latest stored close; null `price`/`gap_pct` when there are no bars.
 

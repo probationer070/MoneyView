@@ -114,6 +114,13 @@ def test_the_summary_compares_value_with_the_latest_close(seeded):
     assert summary["value_per_share"] == pytest.approx(value)
     assert (summary["price"], summary["price_date"]) == (150.0, "2026-10-23")
     assert summary["gap_pct"] == pytest.approx((value - 150.0) / 150.0 * 100)
+    from apps.api.services.industry_benchmark_store import industry_row_for_ticker
+    industry_growth = industry_row_for_ticker("FAIR")[0].values["revenue_growth"]
+    assert summary["growth_1_5"] == pytest.approx(((100 / 80) ** 0.5 - 1 + industry_growth) / 2, abs=1e-9)
+    case = load_case(case_id)
+    from apps.api.services.fair_value_case import implied_growth
+    assert summary["implied_growth_1_5"] == pytest.approx(implied_growth(case, 150.0)[0], abs=1e-9)
+    assert (summary["implied_growth_1_5"] > summary["growth_1_5"]) == (value < 150.0)
     fields = {a["field"] for a in summary["assumptions"]}
     assert {"revenue_target", "margin_target", "wacc_stable", "roic_stable"} <= fields
     assert all(a["claim"] for a in summary["assumptions"])

@@ -12,10 +12,14 @@ from apps.api.services.conservative_case import CompanyBaseline
 from apps.api.services.fair_value_case import (
     GROWTH_CAP,
     GROWTH_FLOOR,
+    IMPLIED_GROWTH_HIGH,
+    IMPLIED_GROWTH_LOW,
     FairValueRefused,
     build_fair_value_case,
     company_revenue_cagr,
     fair_value_case_name,
+    growth_for_revenue_target,
+    implied_growth,
 )
 from apps.api.services.valuation_case import _specs_from_payload
 from packages.core_finance.industry_benchmark import IndustryRow
@@ -86,7 +90,8 @@ def test_margin_capital_wacc_and_tax_follow_the_spec():
     used as the stable value, or the tax ramp aimed at the wrong rate."""
     payload = _build()
     segment = payload["segments"][0]
-    assert segment["margin_target"] == pytest.approx((0.32 + 0.224848747) / 2)
+    # The company's 32% is above the industry's 22.5%: a leader keeps its margin (spec §3).
+    assert segment["margin_target"] == pytest.approx(0.32)
     assert segment["sales_to_capital_early"] == segment["sales_to_capital_late"] == pytest.approx(3.6197887498)
     assert payload["wacc_initial"] == pytest.approx(0.10)
     assert payload["wacc_stable"] == pytest.approx(0.0970707313)
@@ -97,6 +102,44 @@ def test_margin_capital_wacc_and_tax_follow_the_spec():
     assert payload["terminal_growth"] is None
     assert (payload["cash"], payload["debt"], payload["shares_basic"]) == (60.0, 100.0, 15.0)
     assert payload["case_name"] == fair_value_case_name("AAPL", "2026-01-01", 2025) == "damodaran_AAPL_2026-01-01_FY2025"
+
+
+def test_a_margin_below_the_industry_moves_halfway_up_to_it():
+    """Catches a laggard handed the full industry margin, or held at its own."""
+    laggard = CompanyBaseline(**{**BASELINE.__dict__, "base_margin": 0.10})
+    payload = _build(baseline=laggard)
+    assert payload["segments"][0]["margin_target"] == pytest.approx((0.10 + 0.224848747) / 2)
+
+
+def test_the_model_growth_is_recovered_from_its_revenue_target():
+    """Catches the reported growth drifting from the one that built the revenue target."""
+    payload = _build(company_growth=0.05)
+    segment = payload["segments"][0]
+    g = (0.05 + 0.0671086957) / 2
+    assert growth_for_revenue_target(segment["base_revenue"], segment["revenue_target"], RF) == pytest.approx(g, abs=1e-9)
+
+
+def test_the_price_implied_growth_round_trips():
+    """Catches the solve aimed at the wrong value (basic, enterprise), a growth path that differs
+    from the model's (no fade), or a bisection that stops early."""
+    payload = _build(company_growth=0.05)
+    value = run_case(*_specs_from_payload(payload)).value_per_share_diluted
+    g = (0.05 + 0.0671086957) / 2
+    growth, note = implied_growth(payload, value)
+    assert note is None
+    assert growth == pytest.approx(g, abs=1e-6)
+    higher, _ = implied_growth(payload, value * 1.5)
+    assert higher > g
+
+
+def test_a_price_out_of_reach_says_so_instead_of_inventing_a_growth():
+    """Catches a bound returned as if it were the answer."""
+    payload = _build()
+    value = run_case(*_specs_from_payload(payload)).value_per_share_diluted
+    growth, note = implied_growth(payload, value * 1000)
+    assert growth is None and note.startswith("above_range:") and str(IMPLIED_GROWTH_HIGH) in note
+    growth, note = implied_growth(payload, value / 1000)
+    assert growth is None and note.startswith("below_range:") and str(IMPLIED_GROWTH_LOW) in note
 
 
 def test_an_industry_earning_at_or_below_its_cost_of_capital_grows_at_zero_in_perpetuity():

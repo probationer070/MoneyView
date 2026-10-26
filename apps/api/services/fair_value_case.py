@@ -28,6 +28,12 @@ GROWTH_FLOOR = -0.05
 GROWTH_CAP = 0.25
 # CAGR window: the last three fiscal years, i.e. four revenue points when they exist.
 CAGR_YEARS = 3
+# The price-implied growth is searched inside this band of year 1-5 growth rates. A price that
+# needs more than 60% a year for five years, or that holds even at -20%, is reported as out of
+# range rather than answered with a bound.
+IMPLIED_GROWTH_LOW = -0.20
+IMPLIED_GROWTH_HIGH = 0.60
+_BISECTION_STEPS = 80
 
 _INDUSTRY_COLUMNS = (
     "revenue_growth", "operating_margin", "after_tax_roc",
@@ -104,7 +110,10 @@ def build_fair_value_case(
     for rate in growth_path(g, riskfree_rate):
         revenue_target *= 1.0 + rate
 
-    margin_target = (baseline.base_margin + ind["operating_margin"]) / 2.0
+    # A leader keeps its margin; a laggard moves halfway up to its industry (spec §3). Damodaran
+    # treats a margin above the industry as a competitive advantage the story must argue away.
+    leads = baseline.base_margin >= ind["operating_margin"]
+    margin_target = baseline.base_margin if leads else (baseline.base_margin + ind["operating_margin"]) / 2.0
     wacc_stable = ind["cost_of_capital"]
     # The industry's ROC is a BOOK return on existing capital. The terminal block cannot earn more
     # on NEW capital than this case's own target margin and sales to capital imply, which the
@@ -140,8 +149,10 @@ def build_fair_value_case(
         _narrative("base_margin", f"FY{latest_year} operating income over revenue.", "stored_statements"),
         _narrative("revenue_target", f"{baseline.base_revenue:.4f} grown ten years. {growth_claim}", bench),
         _narrative("margin_target",
-                   f"Halfway from the company's {baseline.base_margin:.4f} to {where} operating margin "
-                   f"{ind['operating_margin']:.4f}.", bench),
+                   (f"The company's {baseline.base_margin:.4f} held: at or above {where} operating margin "
+                    f"{ind['operating_margin']:.4f}." if leads else
+                    f"Halfway from the company's {baseline.base_margin:.4f} up to {where} operating margin "
+                    f"{ind['operating_margin']:.4f}."), bench),
         _narrative("sales_to_capital_early", f"{where} sales to capital {ind['sales_to_capital']:.4f}.", bench),
         _narrative("sales_to_capital_late", f"{where} sales to capital {ind['sales_to_capital']:.4f}.", bench),
     ]
@@ -192,3 +203,60 @@ def build_fair_value_case(
             "narratives": segment_narratives,
         }],
     }
+
+
+def _revenue_target(base_revenue: float, g: float, riskfree_rate: float) -> float:
+    revenue = base_revenue
+    for rate in growth_path(g, riskfree_rate):
+        revenue *= 1.0 + rate
+    return revenue
+
+
+def growth_for_revenue_target(base_revenue: float, revenue_target: float, riskfree_rate: float) -> float:
+    """The year 1-5 growth whose `growth_path` turns `base_revenue` into `revenue_target`.
+
+    The revenue target is increasing in g, so bisection over a band wide enough for any stored case.
+    """
+    low, high = -0.99, 10.0
+    for _ in range(200):
+        mid = (low + high) / 2.0
+        if _revenue_target(base_revenue, mid, riskfree_rate) < revenue_target:
+            low = mid
+        else:
+            high = mid
+    return (low + high) / 2.0
+
+
+def implied_growth(case: dict, price: float) -> tuple[float | None, str | None]:
+    """The year 1-5 revenue growth at which this case's value per share equals `price`.
+
+    `case` is a create payload or a stored case (one segment). Only the revenue target moves, along
+    the same path the model uses (growth for five years, fading to riskfree by year ten); every other
+    input stays. Returns `(growth, None)`, or `(None, reason)` when the price lies outside what
+    growth between IMPLIED_GROWTH_LOW and IMPLIED_GROWTH_HIGH can produce.
+    """
+    # Imported here: valuation_case imports this module's neighbours, and the engine wrapper is
+    # only needed for this search.
+    from apps.api.services.valuation_case import _specs_from_payload
+    from packages.core_finance.segment_valuation import run_case
+
+    segment = case["segments"][0]
+    base, riskfree = segment["base_revenue"], case["riskfree_rate"]
+
+    def value_at(g: float) -> float:
+        trial = {**case, "segments": [{**segment, "revenue_target": _revenue_target(base, g, riskfree)}]}
+        return run_case(*_specs_from_payload(trial)).value_per_share_diluted - price
+
+    low, high = IMPLIED_GROWTH_LOW, IMPLIED_GROWTH_HIGH
+    at_low, at_high = value_at(low), value_at(high)
+    if at_low > 0:
+        return None, f"below_range: the price is reached even at {low} growth a year"
+    if at_high < 0:
+        return None, f"above_range: the price needs more than {high} growth a year"
+    for _ in range(_BISECTION_STEPS):
+        mid = (low + high) / 2.0
+        if value_at(mid) < 0:
+            low = mid
+        else:
+            high = mid
+    return (low + high) / 2.0, None
