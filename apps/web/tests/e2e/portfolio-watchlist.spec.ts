@@ -126,6 +126,12 @@ test.describe("wide window layout", () => {
 
   test("stock detail modal: news sits beside the chart only, metrics run full width below", async ({ page }) => {
     await mockPortfolioPageApi(page);
+    // Forty articles: far taller than the chart, so a news column not bound to the chart row
+    // would stretch the row (and push the metrics down) instead of scrolling inside it.
+    await page.route(/\/api\/v1\/news\/feed\?/, (route) => json(route, Array.from({ length: 40 }, (_, index) => ({
+      id: index + 1, ticker: "AAPL", headline: `AAPL news ${index + 1}`, url: `https://example.com/AAPL/${index + 1}`,
+      source: "Mock News", published_date: "2026-04-10", sentiment: "neutral", importance: 1,
+    }))));
     await clearAllHoldings(page);
     await addHolding(page, "AAPL", "Apple Inc.", "Technology");
     await openPortfolioPanel(page, "holdings");
@@ -141,6 +147,12 @@ test.describe("wide window layout", () => {
     expect(Math.abs(news!.height - chart!.height)).toBeLessThanOrEqual(2);
     // The metric tiles start below that row, not beside the news.
     expect(tile!.y).toBeGreaterThan(news!.y + news!.height);
+    // The row is as tall as the chart, not as tall as the news list: no empty band under the chart.
+    const slack = await dialog.getByTestId("stock-detail-chart").evaluate((section) => {
+      const last = section.lastElementChild as HTMLElement;
+      return section.getBoundingClientRect().bottom - last.getBoundingClientRect().bottom;
+    });
+    expect(slack).toBeLessThan(40);
   });
 
   test("snapshot panel: description spans the panel and the save button stays inside it", async ({ page }) => {
