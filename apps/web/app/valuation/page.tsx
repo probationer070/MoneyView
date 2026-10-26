@@ -9,6 +9,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { useDevMonitorPageLoad } from "@/hooks/useDevMonitorPageLoad";
 import { RecordsSyncStatus, useRecordsSyncStatus } from "@/app/components/RecordsSyncStatus";
 import { casesApi } from "@/app/cases/casesApi";
+import { FairValueBlock } from "./components/FairValueBlock";
 import { TickerPicker } from "./components/TickerPicker";
 import { VerdictPanelView } from "./components/VerdictPanel";
 import type { VerdictPanel, WatchlistItem } from "./verdictTypes";
@@ -80,6 +81,8 @@ export default function ValuationPage() {
           </Link>
         </p>
       )}
+
+      {ticker !== null && <FairValueBlock ticker={ticker} />}
 
       {/* The state contract. Loading and error render NO rows and no partial
           panel: either would state an answer the request never returned. */}

@@ -31,6 +31,7 @@ import { DcfTab } from "./components/DcfTab";
 import { AssumptionTable } from "./components/AssumptionTable";
 import { KpiRow } from "./components/KpiRow";
 import { VerdictBlock, VerdictStrip } from "./components/VerdictBlock";
+import { FairValueLine } from "@/components/valuation/FairValueLine";
 import { verdictView } from "./verdict";
 import { buildCalculationDetails } from "./buildCalculationDetails";
 import { substitutedFormula } from "./substitutedFormula";
@@ -923,7 +924,13 @@ export default function CorporateAnalysisPage() {
         dcfIsStale={dcfIsStale}
         dcfStreamError={dcfStreamError}
         onRefreshDcf={handleRefreshDcf}
-        verdictStrip={<VerdictStrip view={verdict} onOpenDetail={() => setActiveCalculation("backendDcf")} staleSource={staleSourceTickers.length > 0 ? { cached: staleSourceTickers.join(", "), ticker: sourceDataTicker } : null} />}
+        verdictStrip={(
+          // The DCF verdict, then the Damodaran-style fair value under it: two methods, side by side.
+          <span className="flex min-w-0 flex-col gap-1">
+            <VerdictStrip view={verdict} onOpenDetail={() => setActiveCalculation("backendDcf")} staleSource={staleSourceTickers.length > 0 ? { cached: staleSourceTickers.join(", "), ticker: sourceDataTicker } : null} />
+            <FairValueLine ticker={sourceDataTicker} />
+          </span>
+        )}
       />
 
       <CorporatePageTabs
