@@ -21,6 +21,33 @@ test.describe("the valuation tab", () => {
     await expect(page.getByText(/choose a ticker/i)).toBeVisible();
   });
 
+  test("a ticker shows its Damodaran-style fair value, the growth the price implies and a link to its case", async ({ page }) => {
+    await mockValuationApi(page);
+    await gotoValuation(page);
+    await page.getByLabel(/ticker/i).fill("AAPL");
+    await page.getByLabel(/ticker/i).press("Enter");
+    const block = page.getByTestId("fair-value-block");
+    await expect(block.getByTestId("fair-value")).toHaveText("145.50", { timeout: 30_000 });
+    await expect(block.getByTestId("fair-value-price")).toHaveText("347.70");
+    await expect(block.getByTestId("fair-value-floor")).toHaveText("91.50");
+    await expect(block.getByTestId("fair-value-gap")).toContainText("58.2%");
+    await expect(block.getByTestId("fair-value-implied")).toHaveText("Price implies 20.2% growth a year (model 4.3%)");
+    await block.getByText("Assumptions behind it").click();
+    await expect(block.getByTestId("fair-value-assumptions").getByRole("listitem")).toHaveCount(2);
+    await expect(block.getByRole("link", { name: /Open the case/ })).toHaveAttribute("href", "/cases/41");
+  });
+
+  test("a refused fair value shows the reason in words, not a number", async ({ page }) => {
+    await mockValuationApi(page, { fairValueStatus: 422, fairValueDetail: "currency_mismatch: TSM reports in TWD and trades in USD" });
+    await gotoValuation(page);
+    await page.getByLabel(/ticker/i).fill("TSM");
+    await page.getByLabel(/ticker/i).press("Enter");
+    const block = page.getByTestId("fair-value-block");
+    await expect(block.getByTestId("fair-value-refusal")).toHaveText("No fair value: currency_mismatch: TSM reports in TWD and trades in USD", { timeout: 30_000 });
+    await expect(block.getByTestId("fair-value")).toHaveCount(0);
+    await expect(block.getByRole("alert")).toHaveCount(0);
+  });
+
   test("a failed verdict request shows an error and no rows", async ({ page }) => {
     await mockValuationApi(page, { verdictStatus: 500 });
     await gotoValuation(page);

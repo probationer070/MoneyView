@@ -1,6 +1,8 @@
 import type { Page } from "@playwright/test";
 import { API_PREFIX, RECORDS_SYNC_OFF, json } from "./mockUtils";
 import type { VerdictPanel } from "../../../app/valuation/verdictTypes";
+import type { FairValueSummary } from "../../../lib/fairValue";
+import { fairValueFixture } from "./fairValueMock";
 import type { CaseSummary } from "../../../app/cases/caseTypes";
 
 // BOTH row states are present on purpose: two computed, two refused. A fixture
@@ -86,6 +88,10 @@ export interface ValuationMockOptions {
   /** Hold the watchlist response open, to prove the panel never waits on it. */
   stallWatchlist?: boolean;
   cases?: CaseSummary[];
+  /** POST /valuation/fair-value/{ticker}: the summary, or a refusal when `fairValueStatus` is a 4xx. */
+  fairValue?: FairValueSummary;
+  fairValueStatus?: number;
+  fairValueDetail?: string;
 }
 
 export interface ValuationMockStats {
@@ -119,6 +125,14 @@ export async function mockValuationApi(page: Page, options: ValuationMockOptions
   await page.route(`**${API_PREFIX}/valuation/cases`, async (route) => {
     casesRequestCount += 1;
     return json(route, { status: "ok", data: options.cases ?? [], meta: {} });
+  });
+
+  await page.route(`**${API_PREFIX}/valuation/fair-value/**`, async (route) => {
+    if (options.fairValueStatus && options.fairValueStatus !== 200) {
+      return json(route, { detail: options.fairValueDetail ?? "refused" }, options.fairValueStatus);
+    }
+    const ticker = decodeURIComponent(new URL(route.request().url()).pathname.split("/").pop() ?? "AAPL");
+    return json(route, { status: "ok", data: options.fairValue ?? fairValueFixture(ticker), meta: {} });
   });
 
   // Records sync status line (RecordsSyncStatus): off by default, overridden per test.

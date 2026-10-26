@@ -55,10 +55,10 @@ def save_quote_facts(ticker: str, facts: QuoteFacts) -> None:
         conn.execute(
             """INSERT OR REPLACE INTO corporate_quote_facts
                    (ticker, market_cap, shares_outstanding, currency, beta, sector, industry,
-                    instrument_type, fetched_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    instrument_type, financial_currency, fetched_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (ticker, facts.market_cap, facts.shares_outstanding, facts.currency, facts.beta,
-             facts.sector, facts.industry, facts.instrument_type,
+             facts.sector, facts.industry, facts.instrument_type, facts.financial_currency,
              datetime.now(timezone.utc).isoformat()),
         )
 
@@ -144,7 +144,8 @@ def load_statement_bundle(ticker: str) -> dict[str, object] | None:
             (ticker,),
         ).fetchall()
         facts = conn.execute(
-            "SELECT market_cap, shares_outstanding, currency, beta FROM corporate_quote_facts WHERE ticker = ?",
+            "SELECT market_cap, shares_outstanding, currency, beta, financial_currency"
+            " FROM corporate_quote_facts WHERE ticker = ?",
             (ticker,),
         ).fetchone()
 
@@ -159,6 +160,7 @@ def load_statement_bundle(ticker: str) -> dict[str, object] | None:
         "sharesOutstanding": facts["shares_outstanding"] if facts else None,
         "currency": facts["currency"] if facts else "",
         "beta": facts["beta"] if facts else None,
+        "financialCurrency": (facts["financial_currency"] or "") if facts else "",
     }
     # The newest write, not whatever row SQLite happened to return first: the query has
     # no ORDER BY, so rows[0] was arbitrary and the reported age could be any of them.

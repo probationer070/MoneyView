@@ -29,6 +29,9 @@ class QuoteFacts:
     # above come from, so classifying a ticker costs no extra provider call -- which
     # matters: concurrent live fetching has already earned this project a Yahoo rate limit.
     instrument_type: str = ""
+    # The currency the statements are reported in (yfinance `financialCurrency`), which an ADR
+    # does not share with its price: TSM reports in TWD and trades in USD. "" when not reported.
+    financial_currency: str = ""
 
 
 def normalize_instrument_type(raw: str | None) -> str:
@@ -83,4 +86,5 @@ def fetch_quote_facts(
         sector=str(info.get("sector") or ""),
         industry=str(info.get("industry") or ""),
         instrument_type=normalize_instrument_type(info.get("quoteType")),
+        financial_currency=str(info.get("financialCurrency") or ""),
     )

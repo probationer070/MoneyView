@@ -663,6 +663,8 @@ CREATE TABLE IF NOT EXISTS corporate_quote_facts (
     -- yfinance quoteType, normalised. '' means the provider was never asked, which is
     -- treated as "value it" rather than "skip it" -- see partition_valuable_tickers.
     instrument_type     TEXT DEFAULT '',
+    -- the statements' reporting currency (yfinance financialCurrency); '' when not reported
+    financial_currency  TEXT DEFAULT '',
     fetched_at          TEXT NOT NULL
 );
 
@@ -695,6 +697,7 @@ CREATE TABLE IF NOT EXISTS valuation_case (
     ipo_proceeds       REAL NOT NULL DEFAULT 0,
     shares_basic       REAL NOT NULL,
     shares_new         REAL NOT NULL DEFAULT 0,
+    offering_price     REAL,                      -- NULL means: no IPO price; shares_new typed or solved
     parent_case_id     INTEGER REFERENCES valuation_case(id),
     sync_uid           TEXT
 );
@@ -902,6 +905,9 @@ def _ensure_schema_compatibility(conn: sqlite3.Connection) -> None:
     if case_columns and "effective_tax_rate" not in case_columns:
         # Nullable: existing rows keep taxing every year at the marginal rate.
         conn.execute("ALTER TABLE valuation_case ADD COLUMN effective_tax_rate REAL")
+    if case_columns and "offering_price" not in case_columns:
+        # Nullable: existing rows have no IPO price and keep their typed shares_new.
+        conn.execute("ALTER TABLE valuation_case ADD COLUMN offering_price REAL")
     index_columns = {row["name"] for row in conn.execute("PRAGMA table_info(indices)")}
     if "dividends" not in index_columns:
         conn.execute("ALTER TABLE indices ADD COLUMN dividends REAL DEFAULT 0.0")
@@ -1100,6 +1106,9 @@ def _ensure_schema_compatibility(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE corporate_quote_facts ADD COLUMN sector TEXT DEFAULT ''")
     if "industry" not in quote_facts_columns:
         conn.execute("ALTER TABLE corporate_quote_facts ADD COLUMN industry TEXT DEFAULT ''")
+    if quote_facts_columns and "financial_currency" not in quote_facts_columns:
+        # '' for rows fetched before: unknown, refreshed with the next daily quote fetch.
+        conn.execute("ALTER TABLE corporate_quote_facts ADD COLUMN financial_currency TEXT DEFAULT ''")
     v3_row = conn.execute("SELECT 1 FROM corporate_comparison_snapshots_v3 LIMIT 1").fetchone()
     if v3_row is None:
         conn.execute(

@@ -87,7 +87,7 @@ def test_every_real_column_is_declared_or_explicitly_excluded():
 
     with get_db() as conn:
         for kind in KINDS.values():
-            _check(conn, kind.table, set(kind.columns))
+            _check(conn, kind.table, set(kind.columns) | set(kind.optional_columns))
             for child in kind.children:
                 _check_child(conn, child)
 

@@ -163,6 +163,15 @@ async def lifespan(app: FastAPI):
     }
     background = [task_wal]
     if not startup_jobs_disabled:
+        # Damodaran's two SpaceX reference cases, once per database. After records sync, so a case
+        # a peer already created arrives first instead of being created twice under one name.
+        # Best-effort: a failure here must not stop the API.
+        try:
+            from apps.api.services.valuation_seed import ensure_valuation_cases_seeded
+
+            ensure_valuation_cases_seeded()
+        except Exception:  # noqa: BLE001
+            logger.exception("valuation_seed.failed")
         background.append(asyncio.create_task(stock_prewarm_cycle()))
         from apps.api.services.signals.schedule import signal_cycle
 

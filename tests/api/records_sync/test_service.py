@@ -62,7 +62,7 @@ class PC:
 
     # -- valuation_case --------------------------------------------------
 
-    def add_case(self, case_name, ticker="AAPL", parent_name=None):
+    def add_case(self, case_name, ticker="AAPL", parent_name=None, offering_price=None):
         self.use()
         with get_db() as conn:
             pc_id = watchlist_store.get_or_create_pc_id(conn)
@@ -75,10 +75,10 @@ class PC:
                 "INSERT INTO valuation_case (case_name, ticker, as_of_date, base_year, target_year, "
                 "riskfree_rate, wacc_initial, wacc_stable, wacc_converge_from, marginal_tax_rate, "
                 "nol_balance, roic_stable, terminal_growth, effective_tax_rate, cash, debt, "
-                "ipo_proceeds, shares_basic, shares_new, parent_case_id) VALUES (?, ?, '2026-01-01', "
-                "2026, 2031, 0.03, 0.09, 0.08, 5, 0.21, 0.0, 0.12, 0.02, 0.18, 1.0, 0.0, 0.0, 10.0, "
-                "0.0, ?)",
-                (case_name, ticker, parent_id),
+                "ipo_proceeds, shares_basic, shares_new, offering_price, parent_case_id) VALUES (?, ?, "
+                "'2026-01-01', 2026, 2031, 0.03, 0.09, 0.08, 5, 0.21, 0.0, 0.12, 0.02, 0.18, 1.0, 0.0, "
+                "0.0, 10.0, 0.0, ?, ?)",
+                (case_name, ticker, offering_price, parent_id),
             )
             case_id = case_cursor.lastrowid
             segment_cursor = conn.execute(
@@ -232,6 +232,29 @@ def test_a_case_created_on_one_pc_appears_on_the_other_with_segments_and_narrati
             "SELECT * FROM segment_narrative WHERE segment_id = ?", (segments[0]["id"],)
         ).fetchall()
         assert len(narratives) == 1
+
+
+def test_an_offering_price_travels_and_an_unpriced_case_leaves_the_key_out(tmp_path, monkeypatch, cloud):
+    """Catches offering_price not syncing, or being written into every payload: a peer still on the
+    code before offering_price rejects any record with a key it does not know, so an unpriced case
+    must not carry the key at all."""
+    a, b = PC(tmp_path, "PC-A", monkeypatch), PC(tmp_path, "PC-B", monkeypatch)
+    a.sync(); b.sync()
+    a.add_case("Priced", offering_price=135.0)
+    a.add_case("Unpriced")
+    b.sync()
+
+    b.use()
+    with get_db() as conn:
+        prices = dict(conn.execute(
+            "SELECT case_name, offering_price FROM valuation_case WHERE case_name IN ('Priced', 'Unpriced')"
+        ).fetchall())
+    assert prices == {"Priced": 135.0, "Unpriced": None}
+    published = [json.loads(path.read_text(encoding="utf-8")) for path in cloud.rglob("records.*.json")]
+    cases = {r["payload"]["case"]["case_name"]: r["payload"]["case"]
+             for f in published for r in f["records"] if r["kind"] == "valuation_case"}
+    assert cases["Priced"]["offering_price"] == 135.0
+    assert "offering_price" not in cases["Unpriced"]
 
 
 def test_a_deletion_propagates(tmp_path, monkeypatch, cloud):

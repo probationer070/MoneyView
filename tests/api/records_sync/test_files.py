@@ -307,6 +307,19 @@ def test_a_case_carrying_case_narratives_is_accepted(tmp_path):
     assert peers[0].state.records[("valuation_case", "u1")].payload["narratives"] == [claim]
 
 
+def test_a_case_carrying_an_offering_price_is_accepted(tmp_path):
+    """Catches the optional column rejected as unknown (a priced case would never sync)."""
+    peers, skipped = _rewrite(tmp_path, lambda p: p["case"].update(offering_price=135.0))
+    assert skipped == []
+    assert peers[0].state.records[("valuation_case", "u1")].payload["case"]["offering_price"] == 135.0
+
+
+def test_an_offering_price_that_is_not_a_scalar_is_skipped(tmp_path):
+    """Catches the optional column escaping the scalar check every required column gets."""
+    peers, skipped = _rewrite(tmp_path, lambda p: p["case"].update(offering_price={"x": 1}))
+    assert peers == [] and "offering_price" in skipped[0].reason
+
+
 def test_an_unknown_payload_key_is_still_skipped(tmp_path):
     peers, skipped = _rewrite(tmp_path, lambda p: p.update(brand_new_child=[]))
     assert peers == [] and skipped

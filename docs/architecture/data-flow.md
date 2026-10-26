@@ -500,6 +500,7 @@ flowchart TD
     CYCLE["risk_cycle<br/>hourly in the app lifespan<br/>off with MONEYVIEW_DISABLE_STARTUP_JOBS"]
     BARS["1 sweep_bars<br/>daily bars into stocks<br/>watchlist, ^SOX, RSP, SPY"]
     IDX["1b sweep_indices<br/>index_bars into indices<br/>every MARKET_INDICES ticker"]
+    CO["1c sweep_company_data<br/>statements weekly, quote facts daily<br/>every watchlist company"]
     BACK["2 run_backfill<br/>deep history, quote facts, past alerts<br/>once per rules version"]
     PEND["3 evaluate_pending<br/>every pending trading day, origin live<br/>FRED fetched here"]
     NEWS["4 sweep_news<br/>topic EN and KO, ticker news<br/>again for each new alert"]
@@ -509,7 +510,7 @@ flowchart TD
     API["GET /api/v1/risk/latest<br/>/history, /alerts/id,<br/>/surge/history, /surge/events/id, /movers"]
     UI["SignalStrip, SignalPanel, /alerts records<br/>sub-project 3"]
 
-    CYCLE --> BARS --> IDX --> BACK --> PEND --> NEWS
+    CYCLE --> BARS --> IDX --> CO --> BACK --> PEND --> NEWS
     RULES --> ENGINE
     BACK --> ENGINE
     PEND --> ENGINE
@@ -521,8 +522,8 @@ flowchart TD
 
 Flow notes:
 
-1. **Cycle.** `risk_cycle` (`apps/api/services/risk/schedule.py`) runs `run_once` every hour. Each step logs and continues on failure, so one failed step never stops the next. Steps run in order: bar sweep, index sweep, backfill, evaluate pending, news.
-2. **Bar sweep.** `sweep_bars` refreshes daily bars for the watchlist and the benchmarks `^SOX`, `RSP`, `SPY`, which are stored in `stocks` and never added to `MARKET_INDICES`. Calls are sequential, 0.5 s apart. `sweep_indices` then acquires every `MARKET_INDICES` ticker as `index_bars` into `indices`, with the same pacing. Before it, indices refreshed only when "/" was opened (ERROR-LOG 2026-10-26).
+1. **Cycle.** `risk_cycle` (`apps/api/services/risk/schedule.py`) runs `run_once` every hour. Each step logs and continues on failure, so one failed step never stops the next. Steps run in order: bar sweep, index sweep, company data sweep, backfill, evaluate pending, news.
+2. **Bar sweep.** `sweep_bars` refreshes daily bars for the watchlist and the benchmarks `^SOX`, `RSP`, `SPY`, which are stored in `stocks` and never added to `MARKET_INDICES`. Calls are sequential, 0.5 s apart. `sweep_indices` then acquires every `MARKET_INDICES` ticker as `index_bars` into `indices`, with the same pacing. Before it, indices refreshed only when "/" was opened (ERROR-LOG 2026-10-26). `sweep_company_data` then acquires each watchlist company's statements (weekly boundary) and quote facts (daily, which carry the statement currency the fair value checks); before it, statements came only from the portfolio comparison refresh, and 112 of 250 watchlist names had none.
 3. **Backfill.** `run_backfill` runs once per rules version (state `backfill:<version>` in `risk_state`). It first applies a rules change, then ensures deep history from `history_start` and quote facts (shares outstanding) for each ticker, then evaluates `eval_start` up to the day before `live_start:<version>` and writes past alerts with origin `backfill`. A failure is recorded as `failed` and retried next cycle. A run with an engine warning FRED series empty, or with failed sweep tickers, is recorded as `degraded` (ruling R26): live evaluation runs as for `done`. Each later cycle sweeps and rechecks; while the condition holds nothing is touched. Once it clears, the version is purged (live alerts too) and recomputed once, and the live days replay from the unchanged `live_start`; alerts that existed before the rebuild are not reported as newly opened.
 4. **Evaluate pending.** `run_once` calls `evaluate_pending` without inputs, so it loads its own (the windowed read in note 8) with `fetch_fred=True` (the engine FRED series only; fetch errors are kept in `risk_state` as `fred_errors`) and evaluates each trading day from `live_start` that is not yet evaluated, in date order, as origin `live`. It resumes the open alert from the stored stints (`last_ref`) and returns the ids of alerts it opened. Only days with sufficient bar coverage are evaluated.
 5. **News.** `sweep_news` runs when the last sweep (`news_swept_at`) is older than the news interval. For each newly opened alert it runs again for that alert's crash-deck tickers. Alert news always mixes macro and industry items (`select_alert_news`). Feeds are paced by `NEWS_CRAWL_DELAY_SECONDS`; a failed feed is skipped.

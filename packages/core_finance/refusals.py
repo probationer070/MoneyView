@@ -41,6 +41,8 @@ ENGINE_REFUSAL_CODES: frozenset[str] = frozenset({
     "rate_schedule_length_mismatch",
     "wacc_not_above_growth",
     "non_positive_shares",
+    "conflicting_share_inputs",
+    "offering_not_solvable",
 })
 
 

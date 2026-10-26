@@ -30,6 +30,19 @@ export function ValuationSection({ query }: { query: UseQueryResult<RunResult, u
             <Figure label="Equity value" value={fmtMoney(run.equity_value)} testId="equity-value" />
             <Figure label="Terminal-value share" value={`${run.terminal_value_share_pct.toFixed(1)}%`} testId="terminal-share" />
           </div>
+          {run.offering_price !== null && run.offering_implied_value !== null && run.offering_premium_pct !== null && (
+            // Damodaran's offer check: the IPO price against the value per share, and the company value the price implies.
+            <div data-testid="case-offering" className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <Figure label="Offering price" value={fmtPerShare(run.offering_price, locale)} testId="offering-price" />
+              <Figure label="Company value at the offer" value={fmtMoney(run.offering_implied_value)} testId="offering-implied-value" />
+              <Figure
+                label="Offer vs value per share"
+                value={`${run.offering_premium_pct >= 0 ? "+" : "−"}${Math.abs(run.offering_premium_pct).toFixed(1)}%`}
+                testId="offering-premium"
+              />
+              <Figure label="New shares" value={run.shares_new_effective.toLocaleString("en-US", { maximumFractionDigits: 4 })} testId="shares-new-effective" />
+            </div>
+          )}
           <div className="mt-4 overflow-x-auto">
             <table className="w-full min-w-[36rem] text-right type-body tabular-nums" aria-label="Year by year">
               <thead className="type-caption uppercase text-[var(--ink-muted)]">

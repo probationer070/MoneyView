@@ -91,6 +91,40 @@ def test_create_rejects_negative_shares_new():
     assert response.status_code == 422
 
 
+def test_an_offering_price_is_stored_and_its_comparison_returned():
+    """Catches offering_price dropped between the API, the row and the engine, or the run result
+    missing the comparison."""
+    payload = _case_payload(case_name="priced_offer", shares_new=0.0, offering_price=135.0)
+    created = client.post("/api/v1/valuation/cases", json=payload)
+    assert created.status_code == 200, created.text
+    case_id = created.json()["data"]["id"]
+    data = client.post(f"/api/v1/valuation/cases/{case_id}/run").json()["data"]
+    assert data["offering_price"] == 135.0
+    assert data["shares_new_effective"] == pytest.approx(75.0 / 135.0)
+    assert data["offering_implied_value"] == pytest.approx(135.0 * (payload["shares_basic"] + 75.0 / 135.0))
+    assert data["offering_premium_pct"] == pytest.approx((135.0 / data["value_per_share_diluted"] - 1) * 100)
+
+
+def test_a_case_with_proceeds_and_no_new_shares_solves_them():
+    """Catches the solved count missing from the run (proceeds in equity, no shares behind them)."""
+    payload = _case_payload(case_name="solved_offer", shares_new=0.0)
+    case_id = client.post("/api/v1/valuation/cases", json=payload).json()["data"]["id"]
+    data = client.post(f"/api/v1/valuation/cases/{case_id}/run").json()["data"]
+    expected = 75.0 * payload["shares_basic"] / (data["equity_value"] - 75.0)
+    assert data["shares_new_effective"] == pytest.approx(expected)
+    assert data["offering_price"] is None and data["offering_premium_pct"] is None
+
+
+@pytest.mark.parametrize("changes, status", [
+    ({"offering_price": 0.0}, 422),
+    ({"offering_price": 135.0, "shares_new": 0.5}, 422),
+])
+def test_bad_offering_inputs_are_422(changes, status):
+    """Catches a zero price or a typed count beside a price reaching storage."""
+    response = client.post("/api/v1/valuation/cases", json=_case_payload(case_name="bad_offer", **changes))
+    assert response.status_code == status
+
+
 def test_create_rejects_initial_growth_at_or_below_negative_one():
     """Pydantic's Field(gt=-1) on SegmentInput.initial_growth is the bound a real
     client hits, separate from SegmentSpec's own <= -1 rejection in the engine.

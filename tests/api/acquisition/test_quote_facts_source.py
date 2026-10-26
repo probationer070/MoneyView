@@ -18,6 +18,23 @@ def test_reads_market_cap_shares_and_currency():
     assert facts == QuoteFacts("AAPL", 4_957_276_209_152.0, 14_687_356_000.0, "USD")
 
 
+def test_the_statement_currency_is_carried_beside_the_price_currency():
+    """Catches financialCurrency dropped: an ADR's statements (TSM: TWD) priced in USD would be
+    valued as if both were dollars, 30x off."""
+    facts = fetch_quote_facts(
+        "TSM",
+        ticker_factory=lambda _: _fake_ticker(
+            {"marketCap": 1.0e12, "sharesOutstanding": 5.0e9, "currency": "USD", "financialCurrency": "TWD"}
+        ),
+    )
+    assert (facts.currency, facts.financial_currency) == ("USD", "TWD")
+
+
+def test_an_unreported_statement_currency_stays_empty():
+    facts = fetch_quote_facts("AAPL", ticker_factory=lambda _: _fake_ticker({"marketCap": 1.0, "currency": "USD"}))
+    assert facts.financial_currency == ""
+
+
 def test_beta_is_carried_through():
     """WACC's levered beta reads info["beta"] and otherwise re-derives it from the
     fallback's unlevered beta. The provider dict already carries it, so dropping it here

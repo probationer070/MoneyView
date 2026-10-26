@@ -32,6 +32,7 @@ export const CASE_FIELDS: readonly FieldMeta[] = [
   meta("ipo_proceeds", "IPO proceeds", "money"),
   meta("shares_basic", "Shares, basic", "count"),
   meta("shares_new", "Shares, new", "count"),
+  meta("offering_price", "Offering price", "money"),
 ];
 
 /**

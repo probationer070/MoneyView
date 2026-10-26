@@ -1,4 +1,5 @@
 import { buildApiUrl } from "@/lib/api";
+import type { FairValueSummary } from "@/lib/fairValue";
 import type {
   CaseRecord, CaseSummary, DiffResult, ForkRequest, PricingResult, RunResult, SimulateRequest, SimulateResult,
 } from "./caseTypes";
@@ -59,6 +60,9 @@ export const casesApi = {
   fork: (id: number, body: ForkRequest) => request<{ id: number }>(`/valuation/cases/${id}/fork`, "POST", body),
   simulate: (id: number, body: SimulateRequest) =>
     request<SimulateResult>(`/valuation/cases/${id}/simulate`, "POST", body),
+  // POST and idempotent: stores the ticker's fair-value case once, then returns it.
+  fairValue: (ticker: string) =>
+    request<FairValueSummary>(`/valuation/fair-value/${encodeURIComponent(ticker)}`, "POST"),
 };
 
 /** React Query `retry`: a refusal will be refused again, so only retry real failures. */

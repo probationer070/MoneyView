@@ -103,6 +103,15 @@ test.describe("the verdict block", () => {
   });
 });
 
+test("the header shows the Damodaran-style fair value under the DCF verdict", async ({ page }) => {
+  await mockCorporatePageApi(page);
+  await gotoCorporate(page);
+  const line = page.getByTestId("fair-value-line");
+  await expect(line).toHaveAttribute("data-state", "valued", { timeout: 30_000 });
+  await expect(line.locator('[data-part="fair"]')).toHaveText("145.50");
+  await expect(line.locator('[data-part="implied"]')).toHaveText("Price implies 20.2% growth a year (model 4.3%)");
+});
+
 test("search and Refresh DCF share one row; the DCF time sits under it, right-aligned", async ({ page }) => {
   await mockCorporatePageApi(page);
   await gotoCorporate(page);
