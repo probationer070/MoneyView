@@ -27,6 +27,15 @@ def test_coverage_spans_earliest_to_latest_period():
     assert statement_coverage(_rows()) == (date(2024, 9, 30), date(2026, 6, 30))
 
 
+def test_the_bundle_reports_the_statement_currency():
+    """Catches financial_currency saved but not read back (the fair-value currency check would
+    never see a mismatch)."""
+    save_statements("TSM", [StatementRow("TSM", "income", "annual", "2025-12-31", "Total Revenue", 3.8e12)])
+    save_quote_facts("TSM", QuoteFacts("TSM", 1.0e12, 5.0e9, "USD", financial_currency="TWD"))
+    info = load_statement_bundle("TSM")["info"]
+    assert (info["currency"], info["financialCurrency"]) == ("USD", "TWD")
+
+
 def test_bundle_rebuilds_the_shape_metric_code_expects():
     save_statements("AAPL", _rows())
     save_quote_facts("AAPL", QuoteFacts("AAPL", 4_000.0, 100.0, "USD"))

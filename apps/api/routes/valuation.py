@@ -239,6 +239,24 @@ def create_conservative_case(ticker: str):
     raise HTTPException(status_code=422, detail=reason)
 
 
+@router.post("/fair-value/{ticker}", response_model=APIResponse[dict])
+def create_fair_value(ticker: str):
+    """A Damodaran-style fair value per share for `ticker` (spec 2026-10-26-damodaran-fair-value-design).
+
+    Idempotent like the conservative route: the case is stored once per ticker, vintage and statement
+    year, and a repeat request returns it with `created=false`. 409 for `no_vintage` (missing server
+    state), 422 for every other refusal, with its reason prefix.
+    """
+    from apps.api.services.fair_value import fair_value_summary, generate_fair_value_case_for_ticker
+
+    case_id, created, vintage, reason = generate_fair_value_case_for_ticker(ticker)
+    if case_id is None:
+        raise HTTPException(status_code=409 if reason.startswith("no_vintage") else 422, detail=reason)
+    if created:
+        records_sync.run_records_sync("mutation")
+    return APIResponse(data=fair_value_summary(ticker, case_id, created=created, vintage=vintage))
+
+
 @router.get("/verdict/{ticker}", response_model=APIResponse[VerdictPanel])
 def get_valuation_verdict(ticker: str):
     """Evidence about whether a computed gap between price and value is worth acting on.

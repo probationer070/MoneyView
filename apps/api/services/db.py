@@ -663,6 +663,8 @@ CREATE TABLE IF NOT EXISTS corporate_quote_facts (
     -- yfinance quoteType, normalised. '' means the provider was never asked, which is
     -- treated as "value it" rather than "skip it" -- see partition_valuable_tickers.
     instrument_type     TEXT DEFAULT '',
+    -- the statements' reporting currency (yfinance financialCurrency); '' when not reported
+    financial_currency  TEXT DEFAULT '',
     fetched_at          TEXT NOT NULL
 );
 
@@ -1104,6 +1106,9 @@ def _ensure_schema_compatibility(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE corporate_quote_facts ADD COLUMN sector TEXT DEFAULT ''")
     if "industry" not in quote_facts_columns:
         conn.execute("ALTER TABLE corporate_quote_facts ADD COLUMN industry TEXT DEFAULT ''")
+    if quote_facts_columns and "financial_currency" not in quote_facts_columns:
+        # '' for rows fetched before: unknown, refreshed with the next daily quote fetch.
+        conn.execute("ALTER TABLE corporate_quote_facts ADD COLUMN financial_currency TEXT DEFAULT ''")
     v3_row = conn.execute("SELECT 1 FROM corporate_comparison_snapshots_v3 LIMIT 1").fetchone()
     if v3_row is None:
         conn.execute(
