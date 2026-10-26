@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from apps.api.services.news_feed.daily import queue_alert_tickers
 from apps.api.services.risk import store
 from apps.api.services.risk.evaluator import evaluate_pending, run_backfill
-from apps.api.services.risk.sweep import sweep_bars, sweep_indices
+from apps.api.services.risk.sweep import sweep_bars, sweep_company_data, sweep_indices
 
 logger = logging.getLogger(__name__)
 DECK_TICKERS = 10
@@ -33,6 +33,12 @@ def run_once(now: datetime) -> list[int]:
         raise
     except Exception:  # noqa: BLE001
         logger.exception("risk.cycle sweep_indices failed")
+    try:
+        sweep_company_data(now)
+    except AssertionError:
+        raise
+    except Exception:  # noqa: BLE001
+        logger.exception("risk.cycle sweep_company_data failed")
     try:
         run_backfill(now)  # loads its own inputs: its sweeps add deep history
     except AssertionError:

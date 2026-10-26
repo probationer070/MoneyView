@@ -65,6 +65,62 @@ def test_index_sweep_refreshes_every_market_index_into_indices():
         assert conn.execute("SELECT close FROM indices WHERE ticker = '^GSPC' AND date = '2026-10-16'").fetchone()
 
 
+def _statements(ticker):
+    from apps.api.services.acquisition.sources.statements import StatementRow
+    return [StatementRow(ticker, "income", "annual", "2025-12-31", "Total Revenue", 100.0)]
+
+
+def _facts(ticker):
+    return QuoteFacts(ticker, 1.0e11, 1.0e9, "USD", financial_currency="USD")
+
+
+def test_company_sweep_stores_statements_and_quote_facts_for_the_watchlist():
+    """Catches statements left to the comparison refresh (112 of 250 watchlist names had none),
+    the benchmarks swept as companies, or the quote facts (statement currency) not refreshed."""
+    _watch("NVDA", "AMD")
+    asked: list = []
+
+    def statements(ticker):
+        asked.append(("statements", ticker))
+        return _statements(ticker)
+
+    def facts(ticker):
+        asked.append(("facts", ticker))
+        return _facts(ticker)
+
+    report = sweep.sweep_company_data(NOW, statements_fetcher=statements, quote_fetcher=facts, sleep=lambda s: None)
+    assert asked == [("statements", "AMD"), ("facts", "AMD"), ("statements", "NVDA"), ("facts", "NVDA")]
+    assert (report.attempted, report.failed) == (2, [])
+    with get_db() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM corporate_statements WHERE ticker = 'NVDA'").fetchone()[0] == 1
+        assert conn.execute("SELECT financial_currency FROM corporate_quote_facts WHERE ticker = 'NVDA'").fetchone()[0] == "USD"
+
+
+def test_company_sweep_asks_nothing_again_inside_the_boundaries():
+    """Catches a re-fetch on every hourly cycle (statements are weekly, quote facts daily)."""
+    _watch("NVDA")
+    sweep.sweep_company_data(NOW, statements_fetcher=_statements, quote_fetcher=_facts, sleep=lambda s: None)
+    asked, sleeps = [], []
+    sweep.sweep_company_data(NOW, statements_fetcher=lambda t: asked.append(t) or _statements(t),
+                             quote_fetcher=lambda t: asked.append(t) or _facts(t), sleep=sleeps.append)
+    assert asked == [] and sleeps == []
+
+
+def test_one_failing_company_does_not_stop_the_sweep():
+    """Catches an exception from one ticker aborting the rest."""
+    _watch("BAD", "NVDA")
+
+    def statements(ticker):
+        if ticker == "BAD":
+            raise RuntimeError("provider down")
+        return _statements(ticker)
+
+    report = sweep.sweep_company_data(NOW, statements_fetcher=statements, quote_fetcher=_facts, sleep=lambda s: None)
+    assert report.failed == ["BAD"]
+    with get_db() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM corporate_statements WHERE ticker = 'NVDA'").fetchone()[0] == 1
+
+
 def test_sweep_fresh_skips_and_no_sleep():
     """Catches treating a fresh result as a provider call (extra fetch or sleep on the second run)."""
     _watch("NVDA")

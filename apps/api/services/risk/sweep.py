@@ -20,7 +20,8 @@ from apps.api.services.acquisition.runner import acquire, acquire_point_in_time
 from apps.api.services.acquisition.sources.bars import fetch_bars, latest_action_date
 from apps.api.services.acquisition.sources.quote_facts import fetch_quote_facts
 from apps.api.services.acquisition.state import AcquisitionStatus, read_state
-from apps.api.services.acquisition.store import save_quote_facts
+from apps.api.services.acquisition.sources.statements import fetch_statements
+from apps.api.services.acquisition.store import save_quote_facts, save_statements, statement_coverage
 from apps.api.services.db import get_db
 from apps.api.services.risk import store
 from apps.api.services.risk.constants import BENCHMARK_TICKERS
@@ -90,6 +91,57 @@ def sweep_indices(now: datetime, **kwargs) -> SweepReport:
     from apps.api.services.market_data import MARKET_INDICES
 
     return sweep_bars(now, tickers=list(MARKET_INDICES.values()), data_class="index_bars", **kwargs)
+
+
+def sweep_company_data(
+    now: datetime,
+    *,
+    tickers: Sequence[str] | None = None,
+    statements_fetcher=fetch_statements,
+    quote_fetcher=fetch_quote_facts,
+    sleep=time.sleep,
+) -> SweepReport:
+    """Statements (weekly boundary) and quote facts (daily) for every watchlist company.
+
+    Before this, statements were acquired only when the portfolio comparison was refreshed, and
+    only for its universe: 112 of 250 watchlist names had none, so neither the conservative nor
+    the fair-value case could value them. The quote facts carry the statement currency the fair
+    value checks. Benchmarks are funds, not companies, and are left out.
+    """
+    if tickers is None:
+        with get_db() as conn:
+            tickers = [row["ticker"] for row in conn.execute("SELECT ticker FROM watchlist ORDER BY ticker")]
+    attempted = fetched = 0
+    failed: list[str] = []
+    reached_provider = False
+    for ticker in tickers:
+        attempted += 1
+        ok = True
+        for data_class, fetcher, saver, coverage in (
+            ("statements", statements_fetcher, save_statements, statement_coverage),
+            ("market_cap", quote_fetcher, save_quote_facts, lambda facts: (now.date(), now.date())),
+        ):
+            if reached_provider:
+                sleep(PACE_SECONDS)
+            reached_provider = False
+            try:
+                result = acquire_point_in_time(data_class, ticker, now=now, fetcher=fetcher,
+                                               saver=saver, coverage=coverage)
+            except AssertionError:
+                raise
+            except Exception as error:  # noqa: BLE001 - one ticker must not stop the run
+                logger.warning("risk.company_data_failed ticker=%s class=%s error=%s", ticker, data_class, error)
+                ok = False
+                reached_provider = True
+                continue
+            reached_provider = result.reason != "fresh"
+            if result.reason == "failed":
+                ok = False
+            elif result.fetched_rows > 0 and data_class == "statements":
+                fetched += 1
+        if not ok:
+            failed.append(ticker)
+    return SweepReport(attempted, fetched, failed)
 
 
 def _first_bar_date(ticker: str) -> date | None:
