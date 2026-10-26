@@ -143,52 +143,120 @@ but never binds its port does not exit, and has reached 5 GB.
 ## Screens
 
 Captured from fixture data with `README_CAPTURE=1 npx playwright test tests/e2e/readme-capture.spec.ts`
-(in `apps/web`), so they show sample tickers rather than anyone's watchlist.
+(in `apps/web`), so they show sample tickers rather than anyone's watchlist. Every menu page and every
+tab inside it is here.
 
 <details>
-<summary><strong>Market Overview</strong> — 14 instruments, 1-day and 1-month moves, the risk-signal strip</summary>
-<p align="center"><img src="./data/img/readme-market.png" alt="Market Overview" width="100%" /></p>
-</details>
+<summary><strong>Market Overview</strong> — 14 instruments with 1-day and 1-month moves, the risk-signal strip, theme spreads</summary>
 
-<details>
-<summary><strong>Portfolio</strong> — holdings, snapshot summary, per-stock modal</summary>
 <table>
   <tr>
-    <td width="33%"><img src="./data/img/readme-portfolio.png" alt="Portfolio holdings" width="100%" /></td>
-    <td width="33%"><img src="./data/img/readme-portfolio-snapshot.png" alt="Latest snapshot summary" width="100%" /></td>
-    <td width="33%"><img src="./data/img/readme-portfolio-stock.png" alt="Stock detail modal" width="100%" /></td>
+    <td width="50%"><img src="./data/img/readme-market.png" alt="Instruments" width="100%" /><br/><sub>Instruments</sub></td>
+    <td width="50%"><img src="./data/img/readme-market-spreads.png" alt="Spreads" width="100%" /><br/><sub>Spreads</sub></td>
   </tr>
 </table>
 </details>
 
 <details>
-<summary><strong>Corporate Analysis</strong> — DCF intrinsic value and the Damodaran-style fair value, side by side</summary>
-<p align="center"><img src="./data/img/readme-corporate.png" alt="Corporate Analysis" width="100%" /></p>
+<summary><strong>Portfolio</strong> — holdings, snapshot summary, attribution, allocation, the per-stock modal</summary>
+
+<table>
+  <tr>
+    <td width="50%"><img src="./data/img/readme-portfolio.png" alt="Holdings" width="100%" /><br/><sub>Holdings</sub></td>
+    <td width="50%"><img src="./data/img/readme-portfolio-snapshot.png" alt="Latest snapshot summary" width="100%" /><br/><sub>Latest snapshot summary</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="./data/img/readme-portfolio-attribution.png" alt="Attribution" width="100%" /><br/><sub>Attribution</sub></td>
+    <td width="50%"><img src="./data/img/readme-portfolio-allocation.png" alt="Allocation workspace" width="100%" /><br/><sub>Allocation workspace</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="./data/img/readme-portfolio-holdings.png" alt="Holdings table" width="100%" /><br/><sub>Holdings table</sub></td>
+    <td width="50%"><img src="./data/img/readme-portfolio-stock.png" alt="Stock modal" width="100%" /><br/><sub>Stock modal</sub></td>
+  </tr>
+</table>
+</details>
+
+<details>
+<summary><strong>News</strong> — stock and topic headlines with publish time</summary>
+
+<p align="center"><img src="./data/img/readme-news.png" alt="News" width="100%" /></p>
+</details>
+
+<details>
+<summary><strong>Corporate Analysis</strong> — DCF intrinsic value and the Damodaran-style fair value side by side, in four tabs</summary>
+
+<table>
+  <tr>
+    <td width="50%"><img src="./data/img/readme-corporate.png" alt="Summary" width="100%" /><br/><sub>Summary</sub></td>
+    <td width="50%"><img src="./data/img/readme-corporate-diagnostics.png" alt="Core diagnostics" width="100%" /><br/><sub>Core diagnostics</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="./data/img/readme-corporate-dcf.png" alt="DCF" width="100%" /><br/><sub>DCF</sub></td>
+    <td width="50%"><img src="./data/img/readme-corporate-comparison.png" alt="Target stock comparison" width="100%" /><br/><sub>Target stock comparison</sub></td>
+  </tr>
+</table>
 </details>
 
 <details>
 <summary><strong>Stock detail</strong> — trend tiles, big-move marks and the "why it moved" card</summary>
+
 <p align="center"><img src="./data/img/readme-detail.png" alt="Stock detail" width="100%" /></p>
 </details>
 
 <details>
-<summary><strong>Signal records</strong> — past risk alerts, surges and gainers with their reports</summary>
-<p align="center"><img src="./data/img/readme-alerts.png" alt="Signal records" width="100%" /></p>
-</details>
+<summary><strong>Simulation Lab</strong> — path simulation, risk, distributions, valuation uncertainty, correlation</summary>
 
-<details>
-<summary><strong>Valuation and cases</strong> — fair value, the growth the price implies, a segment build-up case</summary>
 <table>
   <tr>
-    <td width="50%"><img src="./data/img/readme-valuation.png" alt="Valuation" width="100%" /></td>
-    <td width="50%"><img src="./data/img/readme-cases.png" alt="Valuation case" width="100%" /></td>
+    <td width="50%"><img src="./data/img/readme-monte-carlo.png" alt="Path simulation" width="100%" /><br/><sub>Path simulation</sub></td>
+    <td width="50%"><img src="./data/img/readme-monte-carlo-risk.png" alt="Risk analysis" width="100%" /><br/><sub>Risk analysis</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="./data/img/readme-monte-carlo-distribution.png" alt="Return distribution" width="100%" /><br/><sub>Return distribution</sub></td>
+    <td width="50%"><img src="./data/img/readme-monte-carlo-valuation.png" alt="Corporate valuation" width="100%" /><br/><sub>Corporate valuation</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="./data/img/readme-monte-carlo-correlation.png" alt="Correlation model" width="100%" /><br/><sub>Correlation model</sub></td>
   </tr>
 </table>
 </details>
 
 <details>
-<summary><strong>Simulation Lab</strong> — path simulation, risk, distributions, valuation uncertainty, correlation</summary>
-<p align="center"><img src="./data/img/readme-monte-carlo.png" alt="Simulation Lab" width="100%" /></p>
+<summary><strong>Decisions</strong> — the investment decision log</summary>
+
+<p align="center"><img src="./data/img/readme-decisions.png" alt="Decisions" width="100%" /></p>
+</details>
+
+<details>
+<summary><strong>Valuation and Cases</strong> — the fair value and the growth the price implies, segment build-up cases</summary>
+
+<table>
+  <tr>
+    <td width="50%"><img src="./data/img/readme-valuation.png" alt="Valuation" width="100%" /><br/><sub>Valuation</sub></td>
+    <td width="50%"><img src="./data/img/readme-cases-list.png" alt="Cases" width="100%" /><br/><sub>Cases</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="./data/img/readme-cases.png" alt="One case" width="100%" /><br/><sub>One case</sub></td>
+  </tr>
+</table>
+</details>
+
+<details>
+<summary><strong>Events</strong> — dated events drawn on every price chart</summary>
+
+<p align="center"><img src="./data/img/readme-events.png" alt="Events" width="100%" /></p>
+</details>
+
+<details>
+<summary><strong>Signals</strong> — the weekly macro scenario engine</summary>
+
+<p align="center"><img src="./data/img/readme-signals.png" alt="Signals" width="100%" /></p>
+</details>
+
+<details>
+<summary><strong>Signal records</strong> — past risk alerts, surges and gainers with their reports</summary>
+
+<p align="center"><img src="./data/img/readme-alerts.png" alt="Signal records" width="100%" /></p>
 </details>
 
 ## Developer dashboards
