@@ -630,6 +630,10 @@ def test_run_once_reads_trimmed_window_and_stores_fred_errors(monkeypatch):
     store.set_state(f"backfill:{version}", "done")
     store.set_state(f"live_start:{version}", "2026-10-12")
     monkeypatch.setattr(schedule, "sweep_bars", lambda now: None)
+    # Every sweep is stubbed: run_once also sweeps the market indices and the companies' statements,
+    # which reach the provider (the network guard rightly fails the test when they do).
+    monkeypatch.setattr(schedule, "sweep_indices", lambda now: None)
+    monkeypatch.setattr(schedule, "sweep_company_data", lambda now: None)
     monkeypatch.setattr(schedule, "run_backfill", lambda now, **kw: None)
 
     def source(series_id, start):
