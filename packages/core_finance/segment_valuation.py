@@ -929,7 +929,9 @@ def new_share_count(case: CaseSpec, equity_value: float) -> float:
             f"equity value {equity_value:.4f} does not exceed the IPO proceeds {case.ipo_proceeds:.4f}: "
             f"existing holders have no positive value to sell new shares against"
         )
-    return case.ipo_proceeds * case.shares_basic / (equity_value - case.ipo_proceeds)
+    # Ratio first: proceeds x basic overflows to inf for proceeds near the float limit (the
+    # simulator's overflow tests), and inf shares silently value every share at 0.0.
+    return case.ipo_proceeds / (equity_value - case.ipo_proceeds) * case.shares_basic
 
 
 def run_case(case: CaseSpec, segments: list[SegmentSpec]) -> CaseResult:

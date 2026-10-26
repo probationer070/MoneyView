@@ -9,6 +9,7 @@ is computing at the same time. That fixed point has a closed form,
 so the engine reproduces `Valuation output!B43` instead of carrying it as a transcribed number.
 """
 
+import math
 from dataclasses import replace
 
 import pytest
@@ -63,6 +64,14 @@ def test_no_proceeds_means_no_new_shares_and_no_comparison():
     result = run_case(case, segments)
     assert result.shares_new_effective == 0.0
     assert result.offering_implied_value is None and result.offering_premium_pct is None
+
+
+def test_the_solve_does_not_overflow_near_the_float_limit():
+    """Catches proceeds x basic computed first: at 5e307 it overflows to inf shares and values
+    every share at 0.0 instead of a finite number."""
+    case, segments = post_prospectus()
+    result = run_case(replace(case, shares_new=0.0, cash=5e307, ipo_proceeds=5e307), segments)
+    assert math.isfinite(result.shares_new_effective) and result.value_per_share_diluted > 0
 
 
 def test_a_typed_count_and_an_offering_price_together_are_refused():
