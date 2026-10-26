@@ -28,11 +28,11 @@ const current = (key: string) => {
 };
 
 test.describe("case field metadata", () => {
-  test("the settable fields match the API: 16 case, 11 segment, 10 narrated", () => {
+  test("the settable fields match the API: 17 case, 11 segment, 10 narrated", () => {
     expect(CASE_FIELDS.map((m) => m.field).sort()).toEqual([
       "base_year", "cash", "debt", "effective_tax_rate", "ipo_proceeds", "marginal_tax_rate",
-      "nol_balance", "riskfree_rate", "roic_stable", "shares_basic", "shares_new", "target_year",
-      "terminal_growth", "wacc_converge_from", "wacc_initial", "wacc_stable",
+      "nol_balance", "offering_price", "riskfree_rate", "roic_stable", "shares_basic", "shares_new",
+      "target_year", "terminal_growth", "wacc_converge_from", "wacc_initial", "wacc_stable",
     ]);
     expect(SEGMENT_FIELDS.map((m) => m.field).sort()).toEqual([
       "base_margin", "base_revenue", "initial_growth", "margin_target", "market_share_target",
