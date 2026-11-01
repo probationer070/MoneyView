@@ -244,12 +244,16 @@ function Ensure-BackendDependencies {
         [switch]$AutoInstall
     )
 
+    # scripts/check_backend_deps.py: the Python version, the startup imports, and every package
+    # pyproject.toml declares -- a lazily imported one (exchange_calendars) used to go unchecked.
+    # Run from the repository root: the script path and pyproject.toml inside it are relative.
+    $backendCheck = "import os, runpy; os.chdir(r'$RepoRoot'); runpy.run_path('scripts/check_backend_deps.py', run_name='__main__')"
     $pythonVersion = Invoke-ExternalCapture -FilePath $Runtime.PythonFilePath -ArgumentList ($Runtime.PythonArgumentList + @("--version"))
     if (-not $pythonVersion.Success) {
         throw "Quick Start backend preflight failed. Unable to query Python from $($Runtime.Description).`n$($pythonVersion.Output)"
     }
 
-    $backendImport = Test-PythonImportCommand -PythonFilePath $Runtime.PythonFilePath -PythonArgumentList $Runtime.PythonArgumentList -ImportCommand "import sys; assert sys.version_info >= (3, 12), f'Python {sys.version.split()[0]} is too old'; import uvicorn, fastapi, httpx, pydantic; import apps.api.main"
+    $backendImport = Test-PythonImportCommand -PythonFilePath $Runtime.PythonFilePath -PythonArgumentList $Runtime.PythonArgumentList -ImportCommand $backendCheck
     if ($backendImport.Success) {
         return
     }
@@ -258,7 +262,7 @@ function Ensure-BackendDependencies {
         Write-Warning "Backend packages are incomplete in $($Runtime.Description). Attempting automatic install."
         Invoke-CheckedCommand -FilePath $Runtime.PythonFilePath -ArgumentList ($Runtime.PythonArgumentList + @("-m", "pip", "install", "-e", ".[dev]")) -WorkingDirectory $RepoRoot -FailureMessage "Automatic backend dependency install failed."
 
-        $backendImport = Test-PythonImportCommand -PythonFilePath $Runtime.PythonFilePath -PythonArgumentList $Runtime.PythonArgumentList -ImportCommand "import sys; assert sys.version_info >= (3, 12), f'Python {sys.version.split()[0]} is too old'; import uvicorn, fastapi, httpx, pydantic; import apps.api.main"
+        $backendImport = Test-PythonImportCommand -PythonFilePath $Runtime.PythonFilePath -PythonArgumentList $Runtime.PythonArgumentList -ImportCommand $backendCheck
         if ($backendImport.Success) {
             return
         }

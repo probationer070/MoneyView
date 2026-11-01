@@ -26,6 +26,16 @@ reveal that; only checking the code did.
 
 An entry states what was true when it was written. Nothing updates it on its own.
 
+## 2026-11-01: no events on any chart on the second PC (a lazily imported package was never installed)
+
+Date: 2026-11-01 (owner report: events such as rate decisions and the Iran strikes showed on one PC only, and turning the categories on did nothing).
+Command: an in-process `GET /api/v1/market/events` on a copy of the database: 200 with 104 events under the `moneyview` conda env, 500 under an env without `exchange_calendars`.
+Failure: the second PC's environment predated `exchange_calendars>=4.13` in pyproject.toml. The event rules import it lazily, so the API started and every `/market/events` request failed; no event drew on any chart, whatever the category toggles said. The launcher's preflight imported only uvicorn, fastapi, httpx, pydantic and `apps.api.main`, so it reported the environment complete and never ran its auto-install.
+Root cause: a dependency check that tested the startup imports, not the declared dependencies.
+Fix: `scripts/check_backend_deps.py` checks the Python version, imports the API, and verifies every package in `[project].dependencies` is installed, raising "No module named ..." (which the launcher's auto-install acts on). `start_local.ps1` runs it from the repository root for both its checks. Verified: passes in the `moneyview` env; a missing package yields the message the auto-install matches; `start_local.ps1 -CheckOnly` passes from another directory. The second PC needs `uv pip install -e ".[dev]"` (or the launcher's next start) once.
+Files changed: `scripts/check_backend_deps.py`, `scripts/start_local.ps1`.
+Prevention: the preflight follows pyproject.toml, so a newly declared dependency is checked without editing the launcher. Also found: the "18 environment failures" reported for months by full pytest runs (market events, event rules, regime, records-sync routes) were the same missing package in the base Python 3.11 used to run them; all 90 pass under the `moneyview` env.
+
 ## 2026-10-26: a Playwright run pointed the owner's running app at the dead e2e API port
 
 Date: 2026-10-26 (found while inspecting /alerts in a fresh browser: "System Boot Failure").
