@@ -188,6 +188,13 @@ Spec: `docs/superpowers/specs/2026-10-18-risk-signal-design.md`. Plan (watchlist
 - [x] R-④-b follow-ups (fix/detail-followups): market indices now refresh in the hourly risk cycle (`sweep_indices`, `index_bars`); they had refreshed only when "/" was opened and stood at 2026-09-29 (ERROR-LOG 2026-10-26). Movers queries driven from the watchlist through the (ticker, date) index over the last 30 days (~0.6 s to milliseconds on the real DB).
 - Deferred minor findings are listed in the plan ledger (`.superpowers/sdd/2026-10-18-watchlist-themes/progress.md`) and are triaged at the final review.
 
+### Track N: Owner requests of 2026-11-01 (N1-N3 approved 2026-11-02 and implemented, uncommitted; N4 awaiting decisions)
+
+- [x] N1 Macro Signals: scenario names (A 상승 / B 조정 / C 급락·약세장, owner 2026-11-01) and a collapsible "이 화면 읽는 법" guide (`PageGuide`). Phase 2 = the other ten tabs (not started). Tests: `signals-guide.spec.ts`. Spec: `docs/superpowers/specs/2026-11-01-signals-guide-design.md`.
+- [x] N2 Simulation Lab valuation tab in dollars; fixes the USD lookup price stored as rounded won and the won-era EPS floor of 1. Spec: `docs/superpowers/specs/2026-11-01-mc-valuation-usd-design.md`. ERROR-LOG 2026-11-02.
+- [x] N3 Decisions: edit action/memo with an `edited_at` mark, delete with a synced tombstone. Spec: `docs/superpowers/specs/2026-11-01-decision-edit-delete-design.md`.
+- [ ] N4 Fair value refused / outsized: roadmap (measure → explain → rule review → relative pricing → refusal fallback). Plan: `docs/superpowers/specs/2026-11-01-fair-value-refusal-outlier-plan.md`. Four owner decisions in its §8.
+
 ## Known limits, accepted deliberately
 
 Recorded so nobody rediscovers them as bugs.

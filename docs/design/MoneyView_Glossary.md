@@ -40,6 +40,8 @@ capitals: "종목 NAME". Both come from `apps/web/lib/i18n/labels.ts`; add the r
 | Contribution (pp) | 기여도 (%p) | signals table column |
 | Most likely | 가장 유력 | signals summary |
 | Manual signals | 수동 신호 | signals manual panel title |
+| Scenario A / B / C: Upside / Correction / Bear market | 상승 / 조정 / 급락·약세장 | signals scenario names (owner, 2026-11-01); the letter stays beside the name |
+| How to read this screen | 이 화면 읽는 법 | `PageGuide` summary on every tab that has one |
 | Menu | 메뉴 | top bar ☰ button |
 | Primary | 주 메뉴 | top bar icon-link landmark |
 | All pages | 전체 페이지 | top bar panel landmark |

@@ -49,11 +49,12 @@ The top bar switches between screens. Its icons are the screens: hover, focus or
 | **Portfolio** | `/portfolio` | Keep holdings and the watchlist, set weights, press **Refresh Analysis** for attribution, open a holding's detail and its **Snapshot History**. |
 | **News Feed** | `/news` | Read news for your tickers. |
 | **Corporate Analysis** | `/corporate` | Value one company (**Refresh DCF**) and compare your watchlist (**Refresh comparison**). |
-| **Monte Carlo** | `/monte-carlo` | The Simulation Lab: path simulations and risk analysis. |
-| **Decision Log** | `/decisions` | Record a buy, sell, watch or pass with your reason. The figures are frozen at that moment so you can later see how the decision played out. |
+| **Monte Carlo** | `/monte-carlo` | The Simulation Lab: path simulations and risk analysis. The path and risk amounts are in won; the Corporate Valuation tab is in dollars, with cents, because the price lookup returns a USD quote. |
+| **Decision Log** | `/decisions` | Record a buy, sell, watch or pass with your reason. The figures are frozen at that moment so you can later see how the decision played out. A wrong action or memo can be fixed with the pencil button (the card then shows "Edited · time"); a wrong ticker is fixed by deleting the entry (bin button, then confirm) and recording it again. |
 | **Valuation** | `/valuation` | A ticker's verdict panel: drawdown, volume, PE and DCF signals against its sector peers. |
 | **Cases** | `/cases` | Segment-built valuation cases. Fork a case with changed assumptions and see why the value moved and how uncertain it is. |
 | **Events** | `/events` | Add your own dated events and choose which event categories are drawn on charts. |
+| **Macro Signals** | `/signals` | This week's macro rule verdicts and the S&P 500 scenario probabilities: **A Upside**, **B Correction**, **C Bear market** (a credit-stress decline that runs deeper and longer than B). Open **How to read this screen** under the title for what every column, state and signal means. The probabilities are a heuristic, not a forecast. |
 
 **Corporate Analysis** is one screen with four tabs: **Summary**, **Core Diagnostics**, **DCF**
 and **Target Stock Comparison**, under a one-line verdict. The page never scrolls; a long tab
