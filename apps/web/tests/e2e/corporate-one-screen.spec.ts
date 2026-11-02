@@ -1,6 +1,7 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { mockCorporatePageApi, mockMetricAudit, type CorporatePageMockStats } from "./helpers/corporatePageMock";
 import { mockPortfolioPageApi } from "./helpers/portfolioPageMock";
+import { fairValueFixture } from "./helpers/fairValueMock";
 import { loadFullDcfReportInTab, lowerPanel, openDetailTab, openFullDcfReportInModal, openLowerTab, refreshDcf } from "./helpers/corporateDcf";
 
 // Spec 2026-10-14 §2 and §7 tests 1-5.
@@ -110,6 +111,15 @@ test("the header shows the Damodaran-style fair value under the DCF verdict", as
   await expect(line).toHaveAttribute("data-state", "valued", { timeout: 30_000 });
   await expect(line.locator('[data-part="fair"]')).toHaveText("145.50");
   await expect(line.locator('[data-part="implied"]')).toHaveText("Price implies 20.2% growth a year (model 4.3%)");
+});
+
+test("the header says 'Not computed' for a fair value at or below zero", async ({ page }) => {
+  const fairValue = { ...fairValueFixture("AAPL"), value_per_share: null, value_note: "non_positive_value: case #41 values a share at -3.00", gap_pct: null };
+  await mockCorporatePageApi(page, undefined, { fairValue });
+  await gotoCorporate(page);
+  const line = page.getByTestId("fair-value-line");
+  await expect(line.locator('[data-part="fair"]')).toHaveText("Not computed", { timeout: 30_000 });
+  await expect(line.locator('[data-part="fair"]')).toHaveAttribute("title", /does not cover net debt/);
 });
 
 test("search and Refresh DCF share one row; the DCF time sits under it, right-aligned", async ({ page }) => {

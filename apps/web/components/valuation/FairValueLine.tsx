@@ -32,9 +32,15 @@ export function FairValueLine({ ticker }: { ticker: string }) {
   return (
     <p data-testid="fair-value-line" data-state="valued" className={base}>
       <span>{t("valuation.fairValue.label")}</span>
-      <span data-part="fair" className="type-mono text-[var(--ink)]">
-        {summary.value_per_share === null ? MISSING : formatNumber(summary.value_per_share, "price", { locale })}
-      </span>
+      {summary.value_note ? (
+        <span data-part="fair" className="text-[var(--ink)]" title={t("valuation.fairValue.notPositiveWhy")}>
+          {t("valuation.fairValue.notPositive")}
+        </span>
+      ) : (
+        <span data-part="fair" className="type-mono text-[var(--ink)]">
+          {summary.value_per_share === null ? MISSING : formatNumber(summary.value_per_share, "price", { locale })}
+        </span>
+      )}
       {summary.gap_pct !== null && <DeltaBadge value={summary.gap_pct} />}
       <span data-part="implied">{impliedGrowthText(summary, t, locale)}</span>
     </p>

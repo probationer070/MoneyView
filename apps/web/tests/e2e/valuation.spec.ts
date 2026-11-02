@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { impliedReturnRefusalText, knownRefusalText } from "../../lib/impliedReturn";
 import { mockValuationApi, ALL_COMPUTED_FIXTURE } from "./helpers/valuationPageMock";
+import { fairValueFixture } from "./helpers/fairValueMock";
 
 async function gotoValuation(page: Page) {
   await page.goto("/valuation", { waitUntil: "domcontentloaded" });
@@ -46,6 +47,20 @@ test.describe("the valuation tab", () => {
     await expect(block.getByTestId("fair-value-refusal")).toHaveText("No fair value: currency_mismatch: TSM reports in TWD and trades in USD", { timeout: 30_000 });
     await expect(block.getByTestId("fair-value")).toHaveCount(0);
     await expect(block.getByRole("alert")).toHaveCount(0);
+  });
+
+  test("a fair value at or below zero shows 'Not computed' and why, not a negative price", async ({ page }) => {
+    const note = "non_positive_value: case #41 values a share at -12.35; the operating value after reinvestment does not cover net debt and other claims";
+    await mockValuationApi(page, { fairValue: { ...fairValueFixture("BA"), value_per_share: null, value_note: note, gap_pct: null } });
+    await gotoValuation(page);
+    await page.getByLabel(/ticker/i).fill("BA");
+    await page.getByLabel(/ticker/i).press("Enter");
+    const block = page.getByTestId("fair-value-block");
+    await expect(block.getByTestId("fair-value")).toHaveText("Not computed", { timeout: 30_000 });
+    await expect(block.getByTestId("fair-value-note")).toContainText("does not cover net debt");
+    await expect(block.getByTestId("fair-value-note")).toHaveAttribute("title", note);
+    await expect(block.getByTestId("fair-value-gap")).toHaveText("—");
+    await expect(block.getByTestId("fair-value-price")).toHaveText("347.70");
   });
 
   test("a failed verdict request shows an error and no rows", async ({ page }) => {

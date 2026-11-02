@@ -32,6 +32,8 @@ export const ko: Messages = {
       impliedBelow: "현재가는 연 −20% 성장에서도 유지됩니다 (모델 {model})",
       loading: "계산 중…",
       refused: "적정가 없음: {reason}",
+      notPositive: "산출 불가",
+      notPositiveWhy: "케이스의 주당 가치가 0 이하입니다. 재투자 후 영업가치가 순부채와 기타 청구권을 넘지 못합니다.",
       failed: "적정가를 불러오지 못했습니다.",
       assumptions: "계산에 쓴 가정",
       openCase: "케이스를 열어 가정 바꾸기 →",

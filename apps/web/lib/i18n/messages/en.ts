@@ -29,6 +29,8 @@ export const en = {
       impliedBelow: "Price holds even at −20% growth a year (model {model})",
       loading: "Valuing…",
       refused: "No fair value: {reason}",
+      notPositive: "Not computed",
+      notPositiveWhy: "The case values a share at zero or below: after reinvestment, the operating value does not cover net debt and other claims.",
       failed: "The fair value could not be loaded.",
       assumptions: "Assumptions behind it",
       openCase: "Open the case to change the story →",

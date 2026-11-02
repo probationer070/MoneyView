@@ -137,3 +137,24 @@ def test_the_route_returns_the_summary_or_the_refusal(seeded, monkeypatch):
     assert ok.json()["data"]["value_per_share"] > 0
     refused = client.post("/api/v1/valuation/fair-value/NOSUCH")
     assert refused.status_code == 422 and refused.json()["detail"].startswith("no_industry")
+
+
+def test_a_value_at_or_below_zero_is_not_shown_as_a_price(seeded, monkeypatch):
+    """Catches a negative value per share reaching the screen as a fair value, and a gap
+    measured against it (stage 0 of the 2026-11-01 plan: 11 watchlist tickers)."""
+    case_id, created, vintage, _ = _generate()
+    monkeypatch.setattr(fair_value, "run_stored_case", lambda _id: {"value_per_share_diluted": -12.345})
+    monkeypatch.setattr(fair_value, "find_conservative_case_id", lambda _t: case_id)
+    summary = fair_value_summary("FAIR", case_id, created=created, vintage=vintage)
+    assert summary["value_per_share"] is None and summary["gap_pct"] is None
+    assert summary["value_note"].startswith("non_positive_value:") and "-12.35" in summary["value_note"]
+    assert summary["floor_value_per_share"] is None
+    monkeypatch.setattr(fair_value, "run_stored_case", lambda _id: {"value_per_share_diluted": 0.0})
+    assert fair_value_summary("FAIR", case_id, created=created, vintage=vintage)["value_per_share"] is None
+
+
+def test_a_positive_value_has_no_note(seeded):
+    """Catches the note attached to every value, or a positive value hidden."""
+    case_id, created, vintage, _ = _generate()
+    summary = fair_value_summary("FAIR", case_id, created=created, vintage=vintage)
+    assert summary["value_per_share"] > 0 and summary["value_note"] is None

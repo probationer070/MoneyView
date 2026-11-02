@@ -8,6 +8,8 @@ export interface FairValueSummary {
   created: boolean;
   vintage: string;
   value_per_share: number | null;
+  /** "non_positive_value: …" when the case values a share at zero or below; value_per_share is then null. */
+  value_note: string | null;
   price: number | null;
   price_date: string | null;
   /** (value − price) / price × 100. */

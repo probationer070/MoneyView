@@ -36,7 +36,11 @@ export function FairValueBlock({ ticker }: { ticker: string }) {
     body = (
       <>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <Figure label={t("valuation.fairValue.label")} value={price(summary.value_per_share)} testId="fair-value" />
+          <Figure
+            label={t("valuation.fairValue.label")}
+            value={summary.value_note ? t("valuation.fairValue.notPositive") : price(summary.value_per_share)}
+            testId="fair-value"
+          />
           <Figure label={t("valuation.fairValue.price")} value={price(summary.price)} testId="fair-value-price" />
           <Figure label={t("valuation.fairValue.floor")} value={price(summary.floor_value_per_share)} testId="fair-value-floor" />
           <div className="border border-[var(--line)] px-3 py-2">
@@ -44,6 +48,11 @@ export function FairValueBlock({ ticker }: { ticker: string }) {
             <div data-testid="fair-value-gap">{summary.gap_pct === null ? MISSING : <DeltaBadge value={summary.gap_pct} />}</div>
           </div>
         </div>
+        {summary.value_note && (
+          <p data-testid="fair-value-note" title={summary.value_note} className="type-body text-[var(--ink-secondary)]">
+            {t("valuation.fairValue.notPositiveWhy")}
+          </p>
+        )}
         <p data-testid="fair-value-implied" className="type-body text-[var(--ink)]">{impliedGrowthText(summary, t, locale)}</p>
         {summary.price_date && <p className="type-small text-[var(--ink-muted)]">{t("valuation.fairValue.asOf", { date: summary.price_date })}</p>}
         <details>

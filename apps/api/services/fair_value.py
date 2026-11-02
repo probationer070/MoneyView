@@ -107,19 +107,30 @@ def generate_fair_value_case_for_ticker(
         return None, False, None, f"not_storable: {exc}"
 
 
-def _value_per_share(case_id: int | None) -> float | None:
+def _value_per_share(case_id: int | None) -> tuple[float | None, str | None]:
+    """`(value, None)`, or `(None, note)` when the case values a share at zero or below.
+
+    A negative value per share is the model saying the operating value, after reinvestment, does
+    not cover net debt and other claims. Shown as a price it reads as a target; it is a refusal.
+    """
     if case_id is None:
-        return None
+        return None, None
     try:
-        return run_stored_case(case_id)["value_per_share_diluted"]
+        value = run_stored_case(case_id)["value_per_share_diluted"]
     except (ValueError, CaseNotFound):
-        return None
+        return None, None
+    if value <= 0:
+        return None, (
+            f"non_positive_value: case #{case_id} values a share at {value:.2f}; the operating value "
+            f"after reinvestment does not cover net debt and other claims"
+        )
+    return value, None
 
 
 def fair_value_summary(ticker: str, case_id: int, *, created: bool, vintage: str) -> dict:
     """The spec §5 response for a stored fair-value case."""
     ticker = ticker.upper()
-    value = _value_per_share(case_id)
+    value, value_note = _value_per_share(case_id)
     bars = [bar for bar in load_price_bars(ticker, limit=5) if bar.get("close")]
     price, price_date = (float(bars[-1]["close"]), str(bars[-1]["date"])[:10]) if bars else (None, None)
     gap = (value - price) / price * 100 if value is not None and price else None
@@ -143,10 +154,11 @@ def fair_value_summary(ticker: str, case_id: int, *, created: bool, vintage: str
         "created": created,
         "vintage": vintage,
         "value_per_share": value,
+        "value_note": value_note,
         "price": price,
         "price_date": price_date,
         "gap_pct": gap,
-        "floor_value_per_share": _value_per_share(find_conservative_case_id(ticker)),
+        "floor_value_per_share": _value_per_share(find_conservative_case_id(ticker))[0],
         "growth_1_5": growth,
         "implied_growth_1_5": implied,
         "implied_growth_note": implied_note,

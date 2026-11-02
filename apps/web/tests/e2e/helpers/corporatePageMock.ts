@@ -11,6 +11,7 @@ import type {
   DcfSummaryResponse,
 } from "../../../../../packages/shared-types";
 import { API_PREFIX, json, nowIso } from "./mockUtils";
+import type { FairValueSummary } from "../../../lib/fairValue";
 import { fairValueFixture } from "./fairValueMock";
 
 // current_price for the "Technology" sector comparison rows (AAPL/MSFT/ESTM/MISS), shared
@@ -38,6 +39,8 @@ export type CorporatePageMockStats = {
 };
 
 export type CorporatePageMockOptions = {
+  /** The POST /valuation/fair-value summary, instead of fairValueFixture(ticker). */
+  fairValue?: FairValueSummary;
   failQuarterlyStatements?: boolean;
   failOhlcv?: boolean;
   failDcfFullReport?: boolean;
@@ -595,7 +598,7 @@ export async function mockCorporatePageApi(page: Page, stats?: CorporatePageMock
 
     // The header's Damodaran-style fair value line (FairValueLine).
     if (pathname.startsWith(`${API_PREFIX}/valuation/fair-value/`) && method === "POST") {
-      return json(route, { status: "ok", data: fairValueFixture(decodeURIComponent(pathname.split("/").pop() ?? "AAPL")), meta: {} });
+      return json(route, { status: "ok", data: options?.fairValue ?? fairValueFixture(decodeURIComponent(pathname.split("/").pop() ?? "AAPL")), meta: {} });
     }
 
     if (pathname === `${API_PREFIX}/corporate/companies` && method === "GET") {
