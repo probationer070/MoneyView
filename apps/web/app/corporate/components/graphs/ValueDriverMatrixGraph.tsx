@@ -6,7 +6,6 @@ import { useT } from "@/lib/i18n/locale";
 import { ResponsiveChart } from "@/components/ui/ResponsiveChart";
 import { GRID_STYLE, fmtPctTick, withAxisProps, withTooltipProps } from "@/lib/chartConfig";
 import { valueQuadrant, type ValueQuadrant } from "../../valueQuadrant";
-import { ExampleBadge } from "./ExampleBadge";
 import { type DetailKey, type ValueMatrixPoint, pct } from "./shared";
 
 // Each quadrant's name sits in its own corner. The axis domains always include both reference lines
@@ -50,7 +49,6 @@ export function ValueDriverMatrixGraph({
 }) {
   const t = useT();
   const company = valueMatrix.find((entry) => entry.name === companyName && !entry.illustrative) ?? null;
-  const hasExamples = valueMatrix.some((entry) => entry.illustrative);
   const xAxis = niceAxis(valueMatrix.map((entry) => entry.growth), growthReference);
   const yAxis = niceAxis(valueMatrix.map((entry) => entry.spread), 0);
   return (
@@ -68,7 +66,6 @@ export function ValueDriverMatrixGraph({
               description={t("corporate.charts.matrixHelp")}
             />
           </button>
-          {hasExamples ? <ExampleBadge testId="example-badge-peers" why={t("corporate.charts.examplePeers")} /> : null}
         </div>
       </div>
       <div className="relative h-56 min-h-56 min-w-0">

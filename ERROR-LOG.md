@@ -26,6 +26,26 @@ reveal that; only checking the code did.
 
 An entry states what was true when it was written. Nothing updates it on its own.
 
+## 2026-11-03: the DCF's WACC breakdown carried the country risk premium as 0.8 (shown as 80%)
+
+Date: 2026-11-03 (found while wiring P4 of `docs/superpowers/specs/2026-11-02-corporate-explainers-plan.md`).
+Command: reading `apps/api/routes/corporate.py`. All four DCF routes passed `KOREA_COUNTRY_RISK_PREMIUM` (0.8, a percent) as `country_risk_premium`, beside `equity_risk_premium=0.055` (a fraction). `tests/api/test_corporate_dcf_bridge.py` passes 0.008.
+Failure: the full report's `wacc_breakdown.country_risk_premium` was 0.8. The Raw data tab multiplies every breakdown rate by 100, so it printed the premium as 80.0%. The DCF value itself was unaffected: it uses `metrics.wacc`, not the breakdown.
+Root cause: a percent constant passed where the callee and its tests use fractions.
+Fix: the DCF builders resolve each ticker's own premium as `metrics.crp / 100` when the caller passes none, and the routes pass none. Test: `tests/api/test_country_risk_premium.py::test_the_dcf_breakdown_carries_the_tickers_own_premium_as_a_fraction`, which fails if the `/ 100` is dropped.
+Files changed: `apps/api/routes/corporate.py`, `apps/api/services/corporate_dcf.py`, `tests/api/test_country_risk_premium.py`.
+Prevention: a rate parameter names its unit, or takes a fraction like its neighbours. Percent constants (`*_PREMIUM = 0.8`) are converted where they are passed.
+
+## 2026-11-03: TSM's 5-year DCF compares a Taiwan-dollar value with a US-dollar price (not fixed)
+
+Date: 2026-11-03 (found in the P4 measurement, plan §6.5).
+Command: `p4_measure.py` against a copy of the database: TSM's DCF value was 4,500.14 against a price of 405.15.
+Failure: TSM reports in TWD (`corporate_quote_facts.financial_currency`) and trades as a USD ADR. The DCF's FCFF and per-share bridge appear to stay in TWD while the price is in USD, so the gap is roughly the exchange rate rather than a valuation.
+Root cause: not yet confirmed. The likely cause is that the statement values are not converted to the quote currency before the bridge, and that the ADR ratio may also apply.
+Fix: Not fixed. A separate task: check every non-USD reporter (10 CAD, 1 EUR, 1 KRW, 1 TWD).
+Files changed: none.
+Prevention: a per-share value is compared with a price only in the price's currency.
+
 ## 2026-11-02: the Corporate page never kept the metrics it loaded (latestLoadedMetrics stayed null)
 
 Date: 2026-11-02 (found while wiring P3 of `docs/superpowers/specs/2026-11-02-corporate-explainers-plan.md`).
@@ -57,7 +77,7 @@ Fix: Partly fixed (P1-P2, 2026-11-02).
 
 P3 (2026-11-02): the Ke card, the beta card and the hurdle chart's "Beta x ERP" now use the WACC's own beta and Ke, from new `/metrics` fields `levered_beta` and `cost_of_equity`. The implied ERP stays as a labelled reference.
 
-Still not fixed: P4 (real peer points, CRP by listing country, the U-curve), with owner decisions D1-D5 approved 2026-11-02.
+P4 (2026-11-03): the matrix's comparison points are up to four same-sector watchlist companies, from their own metrics. The country risk premium follows the reporting currency (USD, CAD, EUR 0%; otherwise 0.8%). The U-curve is removed, and the chart is renamed "Bottom-up Beta". What remains labelled "예시값": the regional hurdle bars and the Operating beta bar.
 Files changed: `app/corporate/page.tsx`, `buildCalculationDetails.ts`, `valueQuadrant.ts`, `components/{CorporateGuide,CorporatePageTabs,CorporateComparisonTable,CorporateDiagnosticsSection}.tsx`, `components/graphs/{ExampleBadge,HurdleRateDecompositionGraph,BetaWaccCurveGraph,ValueDriverMatrixGraph,shared}.ts(x)`, `lib/i18n/messages/{en,ko}.ts`, `tests/e2e/corporate-guide.spec.ts`.
 Prevention: a chart value that is not computed from the selected company carries `illustrative: true` and an example badge. Explanatory text is checked against the code, never the design doc.
 

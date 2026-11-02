@@ -77,11 +77,6 @@ interface BetaTreemapPoint {
   size: number;
 }
 
-interface WaccCurvePoint {
-  debt: number;
-  wacc: number;
-}
-
 interface BuildCalculationDetailsArgs {
   companyName: string;
   assumptions: CorporateAssumptionsSnapshot;
@@ -105,7 +100,6 @@ interface BuildCalculationDetailsArgs {
   hasSp500Data: boolean;
   regionalHurdle: RegionalHurdlePoint[];
   betaTreemapProxy: BetaTreemapPoint[];
-  waccCurve: WaccCurvePoint[];
   valueMatrix: ValueMatrixPoint[];
 }
 
@@ -131,7 +125,6 @@ export function buildCalculationDetails({
   hasSp500Data,
   regionalHurdle,
   betaTreemapProxy,
-  waccCurve,
   valueMatrix,
 }: BuildCalculationDetailsArgs): Record<CalculationDetailKey, CalculationDetail> {
   // Every fair-value and upside string below is one of these two, never the raw field. When
@@ -214,7 +207,7 @@ export function buildCalculationDetails({
         { label: "WACC", value: pct(assumptions.wacc), source: sourceLabel },
         { label: "Debt Ratio", value: pct(assumptions.debtRatio), source: sourceLabel },
         { label: "Unlevered Beta", value: numberText(assumptions.unleveredBeta), source: sourceLabel },
-        { label: "Country Risk Premium", value: pct(koreaCountryRiskPremium), source: "Fixed South Korea country risk premium" },
+        { label: "Country Risk Premium", value: pct(koreaCountryRiskPremium), source: "By reporting currency: USD, CAD, EUR 0%; otherwise 0.8%" },
         { label: "FCFF", value: `$${numberText(assumptions.fcff)}B`, source: sourceLabel },
       ],
       components: [
@@ -299,7 +292,7 @@ export function buildCalculationDetails({
         { label: "Debt ratio", value: pct(assumptions.debtRatio), source: "Yahoo annual statement average debt ratio from 2021 onward when available" },
         { label: "Tax rate", value: pct(taxRate * 100), source: "Corporate tax assumption" },
       ],
-      source: "Yahoo beta plus the latest available Yahoo annual statement debt/equity/tax/cost-of-debt inputs; South Korea CRP and base market rates are model inputs",
+      source: "Yahoo beta plus the latest available Yahoo annual statement debt/equity/tax/cost-of-debt inputs; the country risk premium (by reporting currency) and base market rates are model inputs",
       timeHorizon: "WACC uses the most recent available annual statement capital structure rather than a 5-year average.",
       formula: "WACC = E/V x Ke + D/V x Kd x (1 - tax)",
       auditMetric: "wacc",
@@ -385,13 +378,13 @@ export function buildCalculationDetails({
       value: pct(koreaCountryRiskPremium),
       unit: "Percent",
       rawInputs: [
-        { label: "South Korea CRP", value: pct(koreaCountryRiskPremium), source: "Fixed country-risk assumption" },
+        { label: "Country risk premium", value: pct(koreaCountryRiskPremium), source: "By reporting currency: USD, CAD, EUR 0%; otherwise 0.8%" },
       ],
       source: "Country risk fallback; Yahoo financial statements do not report country risk premium",
-      timeHorizon: "Fixed South Korea country-risk assumption. This metric cannot be fetched from Yahoo financial statements.",
-      formula: "CRP = fixed South Korea country risk premium",
+      timeHorizon: "Set by the company's reporting currency: US, Canadian and euro-area reporters carry 0%, others the 0.8% assumption. Not reported in Yahoo statements.",
+      formula: "CRP = 0% for USD, CAD or EUR reporting; otherwise 0.8%",
       simulation: [
-        { label: "1", value: `Use South Korea CRP ${pct(koreaCountryRiskPremium)}`, source: "Fixed country-risk assumption" },
+        { label: "1", value: `Use CRP ${pct(koreaCountryRiskPremium)}`, source: "By reporting currency: USD, CAD, EUR 0%; otherwise 0.8%" },
         { label: "2", value: `${pct(riskFreeRate)} + beta x ERP ${pct(equityRiskPremium)} + ${pct(koreaCountryRiskPremium)}`, source: "Feeds Bottom-up Ke" },
       ],
     }),
@@ -526,12 +519,12 @@ export function buildCalculationDetails({
     },
     bottomUpKe: {
       title: `${companyName} Bottom-up Ke`,
-      timeHorizon: "The Ke inside the WACC: fixed risk-free rate and ERP (model policy), fixed South Korea CRP, and the WACC's levered beta.",
+      timeHorizon: "The Ke inside the WACC: fixed risk-free rate and ERP (model policy), the country risk premium by reporting currency, and the WACC's levered beta.",
       summary: [
         { label: "Risk-free Rate", value: pct(riskFreeRate), source: "Manual macro assumption" },
         { label: "Levered Beta", value: numberText2(derived.leveredBeta), source: derived.keFromWacc ? "Yahoo beta, the one inside the WACC" : "Hamada formula (no WACC beta for these metrics)" },
         { label: "Equity Risk Premium", value: pct(equityRiskPremium), source: "Model policy input, the same ERP as the WACC" },
-        { label: "Country Risk Premium", value: pct(koreaCountryRiskPremium), source: "Fixed South Korea country risk premium" },
+        { label: "Country Risk Premium", value: pct(koreaCountryRiskPremium), source: "By reporting currency: USD, CAD, EUR 0%; otherwise 0.8%" },
         { label: "Bottom-up Ke", value: pct(derived.bottomUpKe), source: derived.keFromWacc ? "The Ke inside the WACC" : "Re-levered with the WACC's ERP" },
       ],
       components: [
@@ -545,7 +538,7 @@ export function buildCalculationDetails({
       sourcing: [
         { label: "Risk-free Rate", value: pct(riskFreeRate), source: "Manual macro assumption" },
         { label: "ERP", value: pct(equityRiskPremium), source: "Model policy input, the same ERP as the WACC" },
-        { label: "CRP", value: pct(koreaCountryRiskPremium), source: "Fixed South Korea country risk premium" },
+        { label: "CRP", value: pct(koreaCountryRiskPremium), source: "By reporting currency: USD, CAD, EUR 0%; otherwise 0.8%" },
         { label: "Debt Ratio", value: pct(assumptions.debtRatio), source: "Yahoo annual balance sheet debt ratios averaged from 2021 onward" },
         { label: "Unlevered Beta", value: numberText(assumptions.unleveredBeta), source: "Yahoo beta de-levered with averaged annual statement D/E and tax rate" },
       ],
@@ -613,13 +606,13 @@ export function buildCalculationDetails({
     },
     hurdleDecomposition: {
       title: `${companyName} Hurdle Rate Decomposition`,
-      timeHorizon: "Fixed model inputs: risk-free rate 4.2%, and an implied ERP solved from a fixed cash yield and growth path. The regional indicators are fixed examples, the same for every company. Korea's fixed CRP is applied to every company.",
+      timeHorizon: "Fixed model inputs: risk-free rate 4.2%, and an implied ERP solved from a fixed cash yield and growth path. The regional indicators are fixed examples, the same for every company. The company's own CRP is set by its reporting currency.",
       summary: [
         { label: "Risk-free Rate", value: pct(riskFreeRate), source: "FRED / macro assumption" },
         { label: "Expected Market Return (IRR)", value: pct(impliedMarketReturn), source: "Fixed model: first-year cash yield and a 5-year growth path, both constants. The cash flows scale with the index, so the index level cancels out and this does not move with the market" },
         { label: "Implied ERP (reference)", value: pct2(impliedErp), source: "Expected market return - risk-free rate; not used in Ke" },
         { label: "Beta x ERP", value: pct(derived.leveredBeta * equityRiskPremium), source: `Levered beta x ERP ${pct(equityRiskPremium)}, the WACC's ERP` },
-        { label: "CRP", value: pct(koreaCountryRiskPremium), source: "Fixed South Korea country risk premium" },
+        { label: "CRP", value: pct(koreaCountryRiskPremium), source: "By reporting currency: USD, CAD, EUR 0%; otherwise 0.8%" },
         { label: "Bottom-up Ke", value: pct(derived.bottomUpKe), source: "Realtime hurdle-rate model" },
       ],
       components: regionalHurdle.map((region) => ({
@@ -647,13 +640,13 @@ export function buildCalculationDetails({
       ],
     },
     betaWaccCurve: {
-      title: `${companyName} Bottom-up Beta + WACC U-Curve`,
-      timeHorizon: "5-year beta convention for business risk; WACC curve is a current scenario sweep from 0% to 90% debt.",
+      title: `${companyName} Bottom-up Beta`,
+      timeHorizon: "5-year beta convention for business risk, with the current capital structure.",
       summary: [
         { label: "Unlevered Beta", value: numberText(assumptions.unleveredBeta), source: sourceLabel },
         { label: "Debt / Equity", value: numberText(derived.debtToEquity), source: "Debt ratio conversion" },
-        { label: "Financial Beta", value: numberText2(derived.leveredBeta), source: "Hamada formula" },
-        { label: "Current Debt Ratio", value: pct(assumptions.debtRatio), source: "Reference line on WACC curve" },
+        { label: "Financial Beta", value: numberText2(derived.leveredBeta), source: derived.keFromWacc ? "The beta inside the WACC" : "Hamada formula" },
+        { label: "Current Debt Ratio", value: pct(assumptions.debtRatio), source: "Latest statement debt / (debt + equity)" },
       ],
       components: [
         ...betaTreemapProxy.map((item) => ({
@@ -663,15 +656,14 @@ export function buildCalculationDetails({
             ? `This company's own unlevered beta (its regression beta de-levered), not an industry average. ${betaInterpretation(item.beta)}`
             : item.name === "Operating"
               ? `Example only: 0.75 + reinvestment rate / 100, clamped to 0.6-1.8. Not an operating beta.`
-              : `The levered beta: unlevered beta re-levered for debt with the Hamada formula. ${betaInterpretation(item.beta)}`,
+              : `The levered beta, the one inside the WACC. ${betaInterpretation(item.beta)}`,
         })),
-        ...waccCurve.map((point) => ({ label: `${numberText(point.debt)}% debt`, value: pct(point.wacc), source: "Example curve point: the same shape for every company, lowest near 41% debt" })),
       ],
-      formula: "Levered Beta = betaU x [1 + (1 - tax) x D/E]; WACC curve = WACC - 2.4 x debt/45 + 3.2 x (debt/70)^2",
+      formula: "Levered Beta = betaU x [1 + (1 - tax) x D/E]",
       result: `${numberText2(derived.leveredBeta)} beta; current WACC ${pct(assumptions.wacc)}`,
       sourcing: [
         { label: "Industry bar (unlevered beta)", value: numberText(assumptions.unleveredBeta), source: "This company's Yahoo beta de-levered with averaged annual statement D/E and tax rate; not an industry average" },
-        { label: "Financial Beta", value: numberText2(derived.leveredBeta), source: "Additional leverage risk from Hamada formula after applying D/E and tax shield" },
+        { label: "Financial Beta", value: numberText2(derived.leveredBeta), source: "The levered beta inside the WACC: business risk plus the leverage risk of debt" },
         { label: "Beta convention", value: betaInterpretation(derived.leveredBeta), source: "Beta 1.0 = average market risk; beta above/below 1.0 means proportionally higher/lower volatility" },
         { label: "Debt Ratio", value: pct(assumptions.debtRatio), source: "Yahoo annual balance sheet debt / (debt + equity), averaged from 2021 onward" },
         { label: "Tax Rate", value: pct(taxRate * 100), source: "Corporate tax assumption" },
@@ -679,12 +671,11 @@ export function buildCalculationDetails({
       simulation: [
         { label: "1", value: `D/E = ${pct(assumptions.debtRatio)} / ${pct(100 - assumptions.debtRatio)}`, source: numberText(derived.debtToEquity) },
         { label: "2", value: `${numberText(assumptions.unleveredBeta)} x [1 + ${pct((1 - taxRate) * 100)} x ${numberText(derived.debtToEquity)}]`, source: numberText2(derived.leveredBeta) },
-        { label: "3", value: `Current curve marker at ${pct(assumptions.debtRatio)}`, source: pct(assumptions.wacc) },
       ],
     },
     valueDriverMatrix: {
       title: `${companyName} 4-Quadrant Value Driver Matrix`,
-      timeHorizon: "Current company assumptions. Peer A, B and C are fixed example points, the same for every company.",
+      timeHorizon: "Current company assumptions. The chart's grey points are up to four same-sector watchlist companies, from their own metrics.",
       summary: [
         { label: "Growth", value: pct(assumptions.growth), source: "X-axis" },
         { label: "ROIC - WACC", value: pct(derived.spread), source: "Y-axis" },
@@ -694,7 +685,7 @@ export function buildCalculationDetails({
       components: valueMatrix.map((item) => ({
         label: item.name,
         value: `growth ${pct(item.growth)}, spread ${pct(item.spread)}, FCFF ${numberText(item.fcff)}`,
-        source: item.name === companyName ? "Current company segment" : "Fixed example point, the same for every company",
+        source: item.name === companyName ? "Current company segment" : "Same-sector watchlist company",
       })),
       formula: "Matrix point = (growth, ROIC - WACC); bubble size = FCFF magnitude",
       result: `${pct(assumptions.growth)} growth, ${pct(derived.spread)} spread`,

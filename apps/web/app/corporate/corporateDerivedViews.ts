@@ -164,7 +164,6 @@ export function buildRawDatasetRows({
   regionalHurdle,
   hurdleBars,
   betaTreemapProxy,
-  waccCurve,
   valueMatrix,
 }: {
   assumptions: CorporateAssumptions;
@@ -176,7 +175,6 @@ export function buildRawDatasetRows({
   regionalHurdle: ChartRecord[];
   hurdleBars: ChartRecord[];
   betaTreemapProxy: ChartRecord[];
-  waccCurve: ChartRecord[];
   valueMatrix: ChartRecord[];
 }) {
   const rows: RawDatasetRow[] = [];
@@ -212,7 +210,6 @@ export function buildRawDatasetRows({
   pushSeries("hurdle_rate_decomposition", regionalHurdle, "Hurdle Rate Decomposition chart dataset");
   pushSeries("hurdle_bar_components", hurdleBars, "Bottom-up Ke component dataset");
   pushSeries("beta_wacc_curve_beta_components", betaTreemapProxy, "Bottom-up Beta chart dataset");
-  pushSeries("wacc_curve", waccCurve, "WACC U-Curve chart dataset");
   pushSeries("value_driver_matrix", valueMatrix, "4-Quadrant Value Driver Matrix dataset");
   return rows;
 }

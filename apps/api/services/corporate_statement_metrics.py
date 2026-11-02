@@ -32,6 +32,18 @@ EQUITY_LABELS = ("Stockholders Equity", "Total Equity Gross Minority Interest")
 DEFAULT_RISK_FREE_RATE = 0.042
 DEFAULT_EQUITY_RISK_PREMIUM = 0.055
 KOREA_COUNTRY_RISK_PREMIUM = 0.8
+# Country risk follows where the business reports, not the fixed Korea premium for every ticker
+# (plan 2026-11-02-corporate-explainers §6.5, D3, owner 2026-11-03). Every watchlist ticker is
+# US-listed, so listing country says nothing; the reporting currency separates the US, Canadian
+# and euro-area reporters (mature markets, Damodaran CRP 0) from KEP (KRW) and TSM (TWD), which
+# keep the 0.8% assumption. An unknown currency keeps it too, so missing data never lowers a WACC.
+MATURE_MARKET_REPORTING_CURRENCIES = frozenset({"USD", "CAD", "EUR"})
+
+
+def country_risk_premium_for(financial_currency: object) -> float:
+    """Percent: 0 for a mature-market reporting currency, else the 0.8% assumption."""
+    currency = str(financial_currency or "").strip().upper()
+    return 0.0 if currency in MATURE_MARKET_REPORTING_CURRENCIES else KOREA_COUNTRY_RISK_PREMIUM
 
 
 @dataclass(frozen=True)
@@ -830,7 +842,8 @@ def yahoo_statement_metrics(
     cost_of_debt = min(max((latest_interest / latest_debt) if _has_positive_debt_balance(latest_debt) else 0.045, 0.01), 0.15)
     debt_weight = (debt_ratio or fallback.debt_ratio) / 100
     equity_weight = 1 - debt_weight
-    cost_of_equity = DEFAULT_RISK_FREE_RATE + levered_beta * DEFAULT_EQUITY_RISK_PREMIUM + KOREA_COUNTRY_RISK_PREMIUM / 100
+    country_risk_premium = country_risk_premium_for(info.get("financialCurrency"))
+    cost_of_equity = DEFAULT_RISK_FREE_RATE + levered_beta * DEFAULT_EQUITY_RISK_PREMIUM + country_risk_premium / 100
     wacc = (equity_weight * cost_of_equity + debt_weight * cost_of_debt * (1 - tax_rate)) * 100
     logger.info(
         "corporate.statement_derived ticker=%s growth_basis=%s growth_year=%s roic_basis=%s roic_year=%s "
@@ -866,7 +879,7 @@ def yahoo_statement_metrics(
         tax_rate=round(tax_rate, 6),
         levered_beta=round(levered_beta, 4),
         cost_of_equity=round(cost_of_equity * 100, 4),
-        crp=KOREA_COUNTRY_RISK_PREMIUM,
+        crp=country_risk_premium,
         reinvestment=round(reinvestment if reinvestment is not None else fallback.reinvestment, 2),
         fcff=round(fcff_billions if fcff_billions is not None else fallback.fcff, 2),
         innovation=round(innovation if innovation is not None else fallback.innovation, 2),
@@ -1398,7 +1411,8 @@ def metric_audit_for_ticker(
             debt_to_equity = _statement_debt_to_equity(latest_debt=latest_debt, latest_equity=latest_equity, fallback=fallback)
             levered_beta = float(info.get("beta") or fallback.unlevered_beta * (1 + (1 - tax_rate) * debt_to_equity))
             cost_of_debt = min(max((latest_interest / latest_debt) if _has_positive_debt_balance(latest_debt) else 0.045, 0.01), 0.15)
-            cost_of_equity = DEFAULT_RISK_FREE_RATE + levered_beta * DEFAULT_EQUITY_RISK_PREMIUM + KOREA_COUNTRY_RISK_PREMIUM / 100
+            country_risk_premium = country_risk_premium_for(info.get("financialCurrency"))
+            cost_of_equity = DEFAULT_RISK_FREE_RATE + levered_beta * DEFAULT_EQUITY_RISK_PREMIUM + country_risk_premium / 100
             market_cap = float(info.get("marketCap") or 0.0) or None
             debt_weight, equity_weight = _capital_weights(
                 market_cap=market_cap,
@@ -1556,7 +1570,7 @@ def metric_audit_for_ticker(
                         _audit_input(field="risk_free_rate", label="Risk-free rate", value=round(DEFAULT_RISK_FREE_RATE, 6), display_value=_display_percent(DEFAULT_RISK_FREE_RATE * 100), source="Model policy input"),
                         _audit_input(field="beta", label="Beta", value=round(levered_beta, 6), display_value=_display_number(round(levered_beta, 6), precision=2), source=wacc_source),
                         _audit_input(field="equity_risk_premium", label="Equity risk premium", value=round(DEFAULT_EQUITY_RISK_PREMIUM, 6), display_value=_display_percent(DEFAULT_EQUITY_RISK_PREMIUM * 100), source="Model policy input"),
-                        _audit_input(field="country_risk_premium", label="Country risk premium", value=round(KOREA_COUNTRY_RISK_PREMIUM / 100, 6), display_value=_display_percent(KOREA_COUNTRY_RISK_PREMIUM), source="Model policy input"),
+                        _audit_input(field="country_risk_premium", label="Country risk premium", value=round(country_risk_premium / 100, 6), display_value=_display_percent(country_risk_premium), source="By reporting currency: USD, CAD, EUR 0%; otherwise 0.8%"),
                         _audit_input(field="cost_of_equity", label="Cost of equity", value=round(cost_of_equity, 6), display_value=_display_percent(cost_of_equity * 100), source="Risk-free rate + beta x ERP + CRP"),
                         _audit_input(field="total_debt", label="Total debt", value=latest_debt, display_value=_display_money(latest_debt), source=wacc_source),
                         _audit_input(field="market_cap", label="Market cap", value=market_cap, display_value=_display_money(market_cap), source="Yahoo Finance company profile"),
@@ -1661,7 +1675,7 @@ def yahoo_metric_history(ticker: str, bundle_loader=get_yahoo_statement_bundle) 
     return {
         "ticker": ticker,
         "start_year": YAHOO_STATEMENT_START_YEAR,
-        "country_risk_premium": KOREA_COUNTRY_RISK_PREMIUM,
+        "country_risk_premium": country_risk_premium_for(bundle["info"].get("financialCurrency")),
         "growth_calculation_version": "growth_v2_stable_cagr",
         "growth_cagr": growth_payload["growth_cagr"],
         "growth_recent_average": growth_payload["growth_recent_average"],

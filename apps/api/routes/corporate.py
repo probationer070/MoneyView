@@ -56,7 +56,9 @@ from apps.api.services.db import get_db
 from apps.api.services.corporate_statement_metrics import (
     DEFAULT_EQUITY_RISK_PREMIUM,
     DEFAULT_RISK_FREE_RATE,
-    KOREA_COUNTRY_RISK_PREMIUM,
+    # No longer passed to the DCF (each ticker's own premium is, plan 2026-11-02 §6.5); kept as
+    # the route's named constant, which tests/api/test_terminal_diagnostics.py reads.
+    KOREA_COUNTRY_RISK_PREMIUM,  # noqa: F401
     YAHOO_STATEMENT_START_YEAR,
     get_yahoo_statement_bundle,
     metric_audit_for_ticker,
@@ -320,7 +322,6 @@ def dynamic_dcf_model(ticker: str, params: ValuationAssumptions):
             metrics_loader=_metrics_for_ticker,
             risk_free_rate=DEFAULT_RISK_FREE_RATE,
             equity_risk_premium=DEFAULT_EQUITY_RISK_PREMIUM,
-            country_risk_premium=KOREA_COUNTRY_RISK_PREMIUM,
         )
     except EngineRefusal as exc:
         raise _refusal_422(exc) from exc
@@ -342,7 +343,6 @@ def get_dcf_full_report(ticker: str, params: ValuationAssumptions):
             metrics_loader=_metrics_for_ticker,
             risk_free_rate=DEFAULT_RISK_FREE_RATE,
             equity_risk_premium=DEFAULT_EQUITY_RISK_PREMIUM,
-            country_risk_premium=KOREA_COUNTRY_RISK_PREMIUM,
         )
     except EngineRefusal as exc:
         raise _refusal_422(exc) from exc
@@ -376,7 +376,6 @@ def get_bulk_dcf_reports(request: CorporateDcfBatchRequest):
         report_builder=build_dcf_full_report,
         risk_free_rate=DEFAULT_RISK_FREE_RATE,
         equity_risk_premium=DEFAULT_EQUITY_RISK_PREMIUM,
-        country_risk_premium=KOREA_COUNTRY_RISK_PREMIUM,
     )
     # `skipped` travels with the reports rather than being logged and dropped. A batch
     # that returned 134 reports for 139 tickers with nothing naming the other five would
@@ -402,7 +401,6 @@ async def stream_dcf_summary(request: Request, ticker: str, params: ValuationAss
             metrics_loader=_metrics_for_ticker,
             risk_free_rate=DEFAULT_RISK_FREE_RATE,
             equity_risk_premium=DEFAULT_EQUITY_RISK_PREMIUM,
-            country_risk_premium=KOREA_COUNTRY_RISK_PREMIUM,
         )
     except EngineRefusal as exc:
         raise _refusal_422(exc) from exc

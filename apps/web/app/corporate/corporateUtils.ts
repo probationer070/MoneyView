@@ -352,7 +352,8 @@ export function fromApiMetrics(metrics: CorporateMetricsApi): CorporateAssumptio
     wacc: metrics.wacc,
     debtRatio: metrics.debt_ratio,
     unleveredBeta: metrics.unlevered_beta,
-    crp: KOREA_COUNTRY_RISK_PREMIUM,
+    // The ticker's own premium, by reporting currency (plan 2026-11-02 §6.5).
+    crp: metrics.crp ?? KOREA_COUNTRY_RISK_PREMIUM,
     reinvestment: metrics.reinvestment,
     fcff: metrics.fcff,
     innovation: metrics.innovation,
@@ -370,7 +371,7 @@ export function toApiMetrics(assumptions: CorporateAssumptions): CorporateMetric
     wacc: assumptions.wacc,
     debt_ratio: assumptions.debtRatio,
     unlevered_beta: assumptions.unleveredBeta,
-    crp: KOREA_COUNTRY_RISK_PREMIUM,
+    crp: assumptions.crp,
     reinvestment: assumptions.reinvestment,
     fcff: assumptions.fcff,
     innovation: assumptions.innovation,

@@ -24,7 +24,7 @@ function GraphLoadingCard({
 export const BetaWaccCurveGraph = dynamic(
   () => import("./graphs/BetaWaccCurveGraph").then((mod) => mod.BetaWaccCurveGraph),
   {
-    loading: () => <GraphLoadingCard title="Bottom-up Beta + WACC U-Curve" />,
+    loading: () => <GraphLoadingCard title="Bottom-up Beta" />,
   },
 );
 

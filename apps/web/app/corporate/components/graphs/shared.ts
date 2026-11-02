@@ -37,11 +37,6 @@ export interface BetaPoint {
   illustrative?: boolean;
 }
 
-export interface WaccCurvePoint {
-  debt: number;
-  wacc: number;
-}
-
 export interface ValueMatrixPoint {
   name: string;
   growth: number;

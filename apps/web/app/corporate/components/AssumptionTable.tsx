@@ -11,7 +11,6 @@ import { fieldInputClass } from "@/components/ui/InlineField";
 import { MetricQualityBadge } from "@/components/ui/MetricQualityBadge";
 import { useT } from "@/lib/i18n/locale";
 import { ASSUMPTION_ROWS, formatAssumption, type AssumptionField, type AssumptionKey, type AssumptionRowDef } from "../assumptionRows";
-import { KOREA_COUNTRY_RISK_PREMIUM } from "../corporateConstants";
 import type { CorporateAssumptions, RoicBasis } from "../corporateTypes";
 import { dateTimeText, pct } from "../corporateUtils";
 import type { CalculationDetailKey } from "./calculationDetailTypes";
@@ -86,7 +85,7 @@ export function AssumptionTable(props: AssumptionTableProps) {
 
   // The value shown is the assumption the DCF uses; a weak audit is marked by the badge, never by N/A.
   const display = (row: AssumptionRowDef) => {
-    if (row.field === null) return pct(KOREA_COUNTRY_RISK_PREMIUM);
+    if (row.field === null) return pct(assumptions.crp);
     return formatAssumption(row, assumptions[row.field]);
   };
   const quality = (row: AssumptionRowDef): MetricQuality | null => {

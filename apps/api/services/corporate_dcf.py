@@ -46,7 +46,6 @@ from apps.api.services.corporate_statement_metrics import _pick_worst_quality
 from apps.api.services.equity_bridge import load_equity_bridge
 
 DEFAULT_EQUITY_RISK_PREMIUM = 0.055
-DEFAULT_COUNTRY_RISK_PREMIUM = 0.8
 
 
 def build_dcf_summary(
@@ -57,7 +56,7 @@ def build_dcf_summary(
     metrics_loader: Callable[[str], CorporateMetrics],
     risk_free_rate: float,
     equity_risk_premium: float = DEFAULT_EQUITY_RISK_PREMIUM,
-    country_risk_premium: float = DEFAULT_COUNTRY_RISK_PREMIUM,
+    country_risk_premium: float | None = None,
 ) -> tuple[DCFSummary, DCFAssumptionSummary]:
     """Compute the lightweight DCF phases used by the realtime transport."""
 
@@ -81,7 +80,7 @@ def build_dcf_full_report(
     metrics_loader: Callable[[str], CorporateMetrics],
     risk_free_rate: float,
     equity_risk_premium: float = DEFAULT_EQUITY_RISK_PREMIUM,
-    country_risk_premium: float = DEFAULT_COUNTRY_RISK_PREMIUM,
+    country_risk_premium: float | None = None,
 ) -> DCFFullReport:
     """Compute the full DCF report reserved for explicit retrieval."""
 
@@ -140,7 +139,7 @@ def build_bulk_dcf_reports(
     report_builder: Callable[..., DCFFullReport] = build_dcf_full_report,
     risk_free_rate: float,
     equity_risk_premium: float = DEFAULT_EQUITY_RISK_PREMIUM,
-    country_risk_premium: float = DEFAULT_COUNTRY_RISK_PREMIUM,
+    country_risk_premium: float | None = None,
 ) -> BulkDcfResult:
     """Build full DCF reports for a deduplicated ticker list.
 
@@ -173,7 +172,12 @@ def build_bulk_dcf_reports(
                 metrics_loader=metrics_loader,
                 risk_free_rate=risk_free_rate,
                 equity_risk_premium=equity_risk_premium,
-                country_risk_premium=country_risk_premium,
+                # Each ticker's own premium, as a fraction (plan 2026-11-02 §6.5). Metrics without
+                # one leave it to the report builder, which resolves None from the loader itself.
+                country_risk_premium=(
+                    country_risk_premium if country_risk_premium is not None
+                    else (crp / 100 if (crp := getattr(metrics, "crp", None)) is not None else None)
+                ),
             )
         except Exception as error:  # noqa: BLE001 - any per-ticker failure is a skip
             # Deliberately broad. The known cause is a pydantic ValidationError on a
@@ -194,7 +198,7 @@ def _build_dcf_outputs(
     metrics_loader: Callable[[str], CorporateMetrics],
     risk_free_rate: float,
     equity_risk_premium: float,
-    country_risk_premium: float,
+    country_risk_premium: float | None,
     bridge_loader=load_equity_bridge,
 ) -> tuple[DCFSummary, DCFAssumptionSummary, DCFFullReport]:
     ticker = ticker.upper()
@@ -411,7 +415,11 @@ def _build_dcf_outputs(
             debt_ratio=round(float(params.debt_ratio or (metrics.debt_ratio if metrics else 0.0)), 6),
             tax_rate=round(float(params.tax_rate), 6),
             equity_risk_premium=round(float(equity_risk_premium), 6),
-            country_risk_premium=round(float(country_risk_premium), 6),
+            # A fraction. None means the ticker's own premium (metrics.crp is a percent): the
+            # routes used to pass the fixed Korea 0.8 here, shown as 80% (plan 2026-11-02 §6.5).
+            country_risk_premium=round(
+                float(country_risk_premium if country_risk_premium is not None else (metrics or metrics_loader(ticker)).crp / 100), 6
+            ),
         ),
         terminal_cash_flow=round(float(terminal_cash_flow), 4),
         terminal_value=round(float(terminal_value), 4),

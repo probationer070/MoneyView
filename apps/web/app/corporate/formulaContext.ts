@@ -6,7 +6,7 @@ import type { FormulaContext } from "./substitutedFormula";
 
 /** The page's values that the summary formulas print (plan N2). Every field is read from the page's own state. */
 export interface FormulaInputs {
-  assumptions: Pick<CorporateAssumptions, "roic" | "wacc" | "reinvestment" | "unleveredBeta">;
+  assumptions: Pick<CorporateAssumptions, "roic" | "wacc" | "reinvestment" | "unleveredBeta"> & { crp?: number };
   derived: Pick<FormulaContext, "spread" | "bottomUpKe" | "leveredBeta" | "sustainableGrowth" | "debtToEquity" | "taxRate" | "keFromWacc">;
   impliedErp: number;
   impliedMarketReturn: number;
@@ -30,7 +30,7 @@ export function buildFormulaContext({ assumptions, derived, impliedErp, impliedM
     equityRiskPremium: EQUITY_RISK_PREMIUM,
     keFromWacc: derived.keFromWacc,
     impliedMarketReturn,
-    countryRiskPremium: KOREA_COUNTRY_RISK_PREMIUM,
+    countryRiskPremium: assumptions.crp ?? KOREA_COUNTRY_RISK_PREMIUM,
     taxRate: derived.taxRate,
     waccAudit,
     // Bridged values only: a suppressed intrinsic value or upside is null, so no formula prints it.

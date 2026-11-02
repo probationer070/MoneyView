@@ -66,8 +66,8 @@ test.describe("corporate tab guides, in Korean", () => {
     await openTab(page, "진단 차트");
     await page.getByTestId("corporate-guide-toggle").click();
     const guide = lowerPanel(page).getByTestId("corporate-guide-diagnostics");
-    await expect(guide).toContainText("Peer A, B, C는 모든 기업에 같은 고정 예시점입니다.");
-    await expect(guide).toContainText("이 기업의 최적 부채비율을 계산한 것이 아닙니다.");
+    // P4 replaced the fixed Peer A-C with same-sector watchlist companies (plan 2026-11-02 §6.5).
+    await expect(guide).toContainText("회색 점은 같은 섹터의 관심종목(최대 4개)이며, 각 종목의 실제 지표입니다.");
     await expect(guide).toContainText("Industry는 이 기업 자체의 비레버리지 베타입니다(업종 평균 아님).");
   });
 
@@ -88,7 +88,7 @@ test.describe("corporate tab guides, in Korean", () => {
     const trigger = lowerPanel(page).getByText("매트릭스 해석 상세 열기", { exact: true });
     await expect(trigger).toBeVisible({ timeout: 30_000 });
     await trigger.hover();
-    await expect(page.getByRole("tooltip")).toContainText("Peer A, B, C는 고정 예시점입니다.");
+    await expect(page.getByRole("tooltip")).toContainText("회색 점은 같은 섹터의 관심종목입니다.");
   });
 });
 
@@ -115,9 +115,9 @@ test.describe("example labels and the value matrix quadrants", () => {
     await openTab(page, "Core Diagnostics");
     const panel = lowerPanel(page);
     await expect(panel.getByTestId("example-badge-regions")).toHaveAttribute("title", /regional bars and line are fixed example indicators/);
-    await expect(panel.getByTestId("example-badge-beta")).toHaveAttribute("title", /Operating bar and the curve are examples/);
-    await expect(panel.getByTestId("example-badge-peers")).toHaveAttribute("title", /Peer A, B and C are fixed example points/);
-    await expect(panel.getByTestId("example-badge-peers")).toContainText("Example");
+    await expect(panel.getByTestId("example-badge-beta")).toHaveAttribute("title", /Operating bar is an example/);
+    // The matrix has no example points since P4: its comparison points are real companies.
+    await expect(panel.getByTestId("example-badge-peers")).toHaveCount(0);
   });
 
   const cases = [
@@ -212,5 +212,59 @@ test.describe("formulas when the beta is the WACC's", () => {
   test("re-levered metrics still print the Hamada identity with their own tax rate", () => {
     const ctx = buildFormulaContext({ ...inputs, derived: { ...inputs.derived, leveredBeta: 0.83, keFromWacc: false } });
     expect(substitutedFormula("leveredBeta", ctx)).toBe("βL = βU × [1 + (1 − t) × D/E] = 0.61 × [1 + (1 − 20.0%) × 0.45] = 0.83");
+  });
+});
+
+// Plan 2026-11-02 §6.5, P4 (D3, owner 2026-11-03): the premium is the ticker's own, and the U-curve is gone.
+test.describe("country risk premium by reporting currency, and no U-curve", () => {
+  test.use({ viewport: { width: 1280, height: 720 } });
+
+  async function goto(page: Page, patch?: Record<string, number>) {
+    await mockCorporatePageApi(page, undefined, patch ? { aaplMetricsPatch: patch } : undefined);
+    await page.goto("/corporate", { waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("heading", { name: /Corporate Analysis/i })).toBeVisible({ timeout: 60_000 });
+  }
+
+  test("a US reporter's premium of 0% reaches the table, Ke and the hurdle chart", async ({ page }) => {
+    await goto(page, { crp: 0 });
+    await expect(page.getByTestId("assumption-row-crp")).toContainText("0.0%");
+    // No WACC Ke in this mock, so Ke is re-levered: 4.2 + 1.23 x 5.5 + 0 = 11.0%.
+    await expect(page.getByTestId("corporate-kpis").locator(":scope > *").filter({ hasText: "Bottom-up Ke" })).toContainText("11.0%");
+    await openTab(page, "Core Diagnostics");
+    await expect(lowerPanel(page).getByRole("button", { name: "CRP: 0.0%" })).toBeVisible({ timeout: 30_000 });
+  });
+
+  test("a premium of 0.8% stays 0.8% end to end", async ({ page }) => {
+    await goto(page, { crp: 0.8 });
+    await expect(page.getByTestId("assumption-row-crp")).toContainText("0.8%");
+    await expect(page.getByTestId("corporate-kpis").locator(":scope > *").filter({ hasText: "Bottom-up Ke" })).toContainText("11.8%");
+  });
+
+  test("the beta chart has bars only: no WACC curve", async ({ page }) => {
+    await goto(page);
+    await openTab(page, "Core Diagnostics");
+    const beta = lowerPanel(page).locator("div.p-5", { has: page.getByText("Bottom-up Beta", { exact: true }) }).first();
+    await expect(beta.locator(".recharts-bar-rectangle").first()).toBeVisible({ timeout: 30_000 });
+    await expect(beta.locator(".recharts-line")).toHaveCount(0);
+    await expect(lowerPanel(page).getByText("U-Curve")).toHaveCount(0);
+  });
+});
+
+test.describe("the value matrix compares with real same-sector companies", () => {
+  test.use({ viewport: { width: 1280, height: 720 } });
+
+  test("Apple's matrix shows Microsoft (same sector, mocked metrics) and no fixed example points", async ({ page }) => {
+    let msftMetricsRequests = 0;
+    page.on("request", (request) => { if (new URL(request.url()).pathname.endsWith("/corporate/metrics/MSFT")) msftMetricsRequests += 1; });
+    await mockCorporatePageApi(page);
+    await page.goto("/corporate", { waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("heading", { name: /Corporate Analysis/i })).toBeVisible({ timeout: 60_000 });
+    // Not loaded until the matrix is on screen.
+    expect(msftMetricsRequests).toBe(0);
+    await openTab(page, "Core Diagnostics");
+    const matrix = lowerPanel(page).locator("div.p-5", { has: page.getByText("4-Quadrant Value Driver Matrix", { exact: true }) }).first();
+    await expect(matrix.locator(".recharts-scatter-symbol")).toHaveCount(2, { timeout: 30_000 });
+    expect(msftMetricsRequests).toBeGreaterThan(0);
+    await expect(lowerPanel(page).getByText("Peer A")).toHaveCount(0);
   });
 });

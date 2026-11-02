@@ -54,7 +54,6 @@ const SECTIONS: Record<PageTabKey, (t: T) => React.ReactNode> = {
       <GuideSection title={t("corporate.guide.diagnostics.betaTitle")}>
         <p>{t("corporate.guide.diagnostics.betaBody")}</p>
         <p>{t("corporate.guide.diagnostics.betaBars")}</p>
-        <p>{t("corporate.guide.diagnostics.curveBody")}</p>
       </GuideSection>
       <GuideSection title={t("corporate.guide.diagnostics.matrixTitle")}>
         <p>{t("corporate.guide.diagnostics.matrixAxes")}</p>

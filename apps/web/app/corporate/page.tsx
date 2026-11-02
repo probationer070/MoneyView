@@ -495,7 +495,7 @@ export default function CorporateAnalysisPage() {
       : assumptions.unleveredBeta * (1 + (1 - taxRate) * debtToEquity);
     const bottomUpKe = keFromWacc
       ? (loadedMetrics?.cost_of_equity as number)
-      : RISK_FREE_RATE + leveredBeta * EQUITY_RISK_PREMIUM + KOREA_COUNTRY_RISK_PREMIUM;
+      : RISK_FREE_RATE + leveredBeta * EQUITY_RISK_PREMIUM + assumptions.crp;
     const spread = assumptions.roic - assumptions.wacc;
     const sustainableGrowth = (assumptions.reinvestment / 100) * assumptions.roic;
 
@@ -816,7 +816,7 @@ export default function CorporateAnalysisPage() {
   const hurdleBars = [
     { name: "Risk-free", value: RISK_FREE_RATE, fill: "var(--chart-4)" },
     { name: "Beta x ERP", value: derived.leveredBeta * EQUITY_RISK_PREMIUM, fill: "var(--chart-1)" },
-    { name: "CRP", value: KOREA_COUNTRY_RISK_PREMIUM, fill: "var(--ink)" },
+    { name: "CRP", value: assumptions.crp, fill: "var(--ink)" },
   ];
 
   const regionalHurdle = [
@@ -833,12 +833,6 @@ export default function CorporateAnalysisPage() {
     { name: "Financial", beta: Number(derived.leveredBeta.toFixed(2)), size: 30 },
   ];
 
-  const waccCurve = Array.from({ length: 10 }, (_, idx) => {
-    const debt = idx * 10;
-    const curve = assumptions.wacc - 2.4 * (debt / 45) + 3.2 * Math.pow(debt / 70, 2);
-    return { debt, wacc: Number(curve.toFixed(1)) };
-  });
-
   const companyName = activeCompany.name;
 
   const valueMatrix = [
@@ -849,11 +843,16 @@ export default function CorporateAnalysisPage() {
       efficiency: clamp(assumptions.fcff / 1.6, 10, 100),
       fcff: assumptions.fcff,
     },
-    // Fixed example points, the same for every company: plan 2026-11-02 §3 V7 (labelled until P4).
-    { name: "Peer A", growth: 4.2, spread: 3.4, efficiency: 56, fcff: 70, illustrative: true },
-    { name: "Peer B", growth: 8.5, spread: -1.8, efficiency: 44, fcff: 42, illustrative: true },
-    { name: "Peer C", growth: 2.1, spread: 7.2, efficiency: 68, fcff: 60, illustrative: true },
   ];
+  // The matrix's comparison points are real: up to four watchlist companies in the same sector,
+  // loaded by the Diagnostics section when it opens (plan 2026-11-02 §6.5, D1(b); they replace the
+  // fixed Peer A-C examples).
+  const matrixPeerTickers = activeCompany.sector
+    ? companies
+      .filter((company) => company.sector === activeCompany.sector && company.ticker !== assumptions.ticker)
+      .slice(0, 4)
+      .map((company) => company.ticker)
+    : [];
 
   // Downloadable raw dataset mirrors the assumptions, derived metrics, and chart inputs.
   const rawDatasetRows: RawDatasetRow[] = buildRawDatasetRows({
@@ -866,7 +865,6 @@ export default function CorporateAnalysisPage() {
     regionalHurdle,
     hurdleBars,
     betaTreemapProxy,
-    waccCurve,
     valueMatrix,
   });
 
@@ -905,7 +903,7 @@ export default function CorporateAnalysisPage() {
     taxRate: derived.taxRate,
     equityRiskPremium: EQUITY_RISK_PREMIUM,
     riskFreeRate: RISK_FREE_RATE,
-    koreaCountryRiskPremium: KOREA_COUNTRY_RISK_PREMIUM,
+    koreaCountryRiskPremium: assumptions.crp,
     growthBasisLabel,
     roicBasisLabel,
     annualGrowthRates,
@@ -917,7 +915,6 @@ export default function CorporateAnalysisPage() {
     hasSp500Data: Boolean(sp500Query.data),
     regionalHurdle,
     betaTreemapProxy,
-    waccCurve,
     valueMatrix,
   });
 
@@ -1005,10 +1002,9 @@ export default function CorporateAnalysisPage() {
               companyName={companyName}
               hurdleBars={hurdleBars}
               regionalHurdle={regionalHurdle}
-              assumptionsDebtRatio={assumptions.debtRatio}
               betaTreemapProxy={betaTreemapProxy}
-              waccCurve={waccCurve}
               valueMatrix={valueMatrix}
+              matrixPeerTickers={matrixPeerTickers}
               growthReference={RISK_FREE_RATE}
               onOpenDetail={setActiveCalculation}
             />

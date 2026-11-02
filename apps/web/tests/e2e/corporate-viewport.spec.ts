@@ -31,7 +31,8 @@ test("corporate graphs stay visible across mobile and desktop viewports without 
   await expect(page.getByRole("heading", { name: /Corporate Analysis/i })).toBeVisible({ timeout: 60_000 });
   await openLowerTab(page, "Core Diagnostics");
   await expect(page.getByText("Hurdle Rate Decomposition").first()).toBeVisible({ timeout: 60_000 });
-  await expect(page.getByText("Bottom-up Beta + WACC U-Curve").first()).toBeVisible({ timeout: 60_000 });
+  // The U-curve was removed (plan 2026-11-02 §6.5, owner-approved title change 2026-11-03).
+  await expect(page.getByText("Bottom-up Beta", { exact: true }).first()).toBeVisible({ timeout: 60_000 });
   await expect(page.getByText("4-Quadrant Value Driver Matrix").first()).toBeVisible({ timeout: 60_000 });
   // Last chart in the diagnostics grid, so reaching it proves the whole grid laid out.
   await openLowerTab(page, "DCF");
