@@ -760,3 +760,41 @@ def test_settings_saved_on_both_pcs_before_sync_are_decided_by_save_time_not_pc_
             "SELECT updated_at FROM record_sync WHERE kind = 'portfolio_preferences'"
         ).fetchone()["updated_at"]
     assert stamp == "2026-06-01T09:00:00.000Z"
+
+
+def test_an_edited_decision_travels_with_its_edit_mark(tmp_path, monkeypatch, cloud):
+    from apps.api.services.investment_decision import update_decision
+
+    a, b = PC(tmp_path, "PC-A", monkeypatch), PC(tmp_path, "PC-B", monkeypatch)
+    a.sync(); b.sync()
+    a.add_decision("AAPL", action="buy", memo="first")
+    b.sync()
+    b.use()
+    local_id = next(iter(b.decisions().values()))["id"]
+    update_decision(local_id, action="sell", memo="corrected")
+    b.sync(); a.sync()
+    row = next(iter(a.decisions().values()))
+    assert (row["action"], row["memo"]) == ("sell", "corrected")
+    assert row["edited_at"] is not None
+
+
+def test_an_unedited_decision_leaves_the_edit_key_out_of_the_peer_file(tmp_path, monkeypatch, cloud):
+    """A peer still on the code before edited_at rejects a record with a key it does not know."""
+    a = PC(tmp_path, "PC-A", monkeypatch)
+    a.add_decision("AAPL")
+    published = [json.loads(path.read_text(encoding="utf-8")) for path in cloud.rglob("records.*.json")]
+    decisions = [r["payload"] for f in published for r in f["records"] if r["kind"] == "investment_decision"]
+    assert decisions and all("edited_at" not in payload for payload in decisions)
+
+
+def test_a_deleted_decision_is_removed_on_the_other_pc(tmp_path, monkeypatch, cloud):
+    from apps.api.services.investment_decision import delete_decision
+
+    a, b = PC(tmp_path, "PC-A", monkeypatch), PC(tmp_path, "PC-B", monkeypatch)
+    a.sync(); b.sync()
+    a.add_decision("AAPL")
+    b.sync()
+    b.use()
+    assert delete_decision(next(iter(b.decisions().values()))["id"]) is True
+    b.sync(); a.sync()
+    assert a.decisions() == {}

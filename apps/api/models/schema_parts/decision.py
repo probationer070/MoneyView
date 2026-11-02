@@ -26,6 +26,15 @@ class DecisionInput(BaseModel):
         return value
 
 
+class DecisionEdit(BaseModel):
+    """A correction of what the owner typed. Same extra="forbid" contract as DecisionInput: a figure or
+    a ticker in the body is a 422, because the figures belong to the ticker they were captured for."""
+    model_config = ConfigDict(extra="forbid")
+
+    action: str
+    memo: str
+
+
 class DecisionCreated(BaseModel):
     id: int
 
@@ -80,4 +89,6 @@ class DecisionRow(BaseModel):
     metric_schema_version: int | None = None
     figures_source: str
     figures_unavailable_reason: str | None = None
+    # When action or memo was last corrected (ISO-8601 UTC); None = never edited.
+    edited_at: str | None = None
     outcome: DecisionOutcome

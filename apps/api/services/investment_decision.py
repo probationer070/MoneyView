@@ -112,6 +112,14 @@ def _default_figures_loader(
     }
 
 
+def _check_action_and_memo(action: str, memo: str) -> None:
+    """The two fields the owner types. Shared by record and edit, so a correction obeys the same rules."""
+    if action not in ACTIONS:
+        raise ValueError(f"action must be one of {', '.join(ACTIONS)}, got {action!r}")
+    if not memo.strip():
+        raise ValueError("memo is required: a decision without a stated reason is a snapshot")
+
+
 def record_decision(
     *,
     ticker: str,
@@ -132,10 +140,7 @@ def record_decision(
     from apps.api.services.corporate_comparison import METRIC_SCHEMA_VERSION
 
     ticker = ticker.upper().strip()
-    if action not in ACTIONS:
-        raise ValueError(f"action must be one of {', '.join(ACTIONS)}, got {action!r}")
-    if not memo.strip():
-        raise ValueError("memo is required: a decision without a stated reason is a snapshot")
+    _check_action_and_memo(action, memo)
 
     if figures_loader is not None:
         loader = figures_loader
@@ -295,3 +300,46 @@ def list_decisions(*, bars_loader=load_price_bars) -> list[dict]:
             bars=bars_by_ticker[ticker],
         )
     return rows
+
+
+def update_decision(decision_id: int, *, action: str, memo: str, bars_loader=load_price_bars) -> dict | None:
+    """Correct what the owner typed: action and memo. None if there is no such id.
+
+    The captured figures, the ticker and decided_at are never touched: they record what the model said
+    at the time, and the ticker owns them. `edited_at` is set only when something actually changed, so
+    an unchanged save does not mark the row as corrected. Spec 2026-11-01 decision edit/delete.
+    """
+    _check_action_and_memo(action, memo)
+    memo = memo.strip()
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT action, memo, sync_uid FROM investment_decision WHERE id = ?", (decision_id,)
+        ).fetchone()
+        if row is None:
+            return None
+        if (row["action"], row["memo"]) != (action, memo):
+            conn.execute(
+                "UPDATE investment_decision SET action = ?, memo = ?, edited_at = ? WHERE id = ?",
+                (action, memo, datetime.now(timezone.utc).isoformat(), decision_id),
+            )
+            records_sync_store.stamp(conn, KIND_DECISION, row["sync_uid"], get_or_create_pc_id(conn))
+    return get_decision(decision_id, bars_loader=bars_loader)
+
+
+def delete_decision(decision_id: int) -> bool:
+    """Remove a decision. False if there is no such id.
+
+    With records sync on, the tombstone is written first, in the same transaction, so the other PC
+    removes it too instead of sending it back. With sync off there are no tombstones (records-sync
+    spec), the same rule `events.store.delete_user_event` follows.
+    """
+    from apps.api.services.records_sync.service import is_enabled as records_sync_enabled
+
+    with get_db() as conn:
+        row = conn.execute("SELECT sync_uid FROM investment_decision WHERE id = ?", (decision_id,)).fetchone()
+        if row is None:
+            return False
+        if records_sync_enabled() and row["sync_uid"]:
+            records_sync_store.record_removal(conn, KIND_DECISION, row["sync_uid"], get_or_create_pc_id(conn))
+        conn.execute("DELETE FROM investment_decision WHERE id = ?", (decision_id,))
+    return True

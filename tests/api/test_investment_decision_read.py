@@ -41,7 +41,7 @@ def test_the_gap_at_decision_is_returned_beside_the_move_but_never_combined():
         "id", "ticker", "decided_at", "action", "memo",
         "price_at_decision", "dcf_value", "dcf_implied_return", "roic", "wacc",
         "risk_free_rate", "equity_risk_premium", "metric_schema_version",
-        "figures_source", "figures_unavailable_reason",
+        "figures_source", "figures_unavailable_reason", "edited_at",
         "outcome",
     }
     assert set(row) == EXPECTED_KEYS, sorted(set(row) ^ EXPECTED_KEYS)

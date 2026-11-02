@@ -63,7 +63,11 @@ export const en = {
   },
   decisions: {
     title: "Decision Log",
-    subtitle: "What was believed about a ticker, when, and why. Figures are captured by the server at record time and never edited.",
+    subtitle: "What was believed about a ticker, when, and why. Figures are captured by the server at record time and never change; action and memo can be corrected, and a corrected entry shows when.",
+    edit: "Edit", delete: "Delete", save: "Save", cancel: "Cancel", action: "Action", memo: "Memo",
+    confirmDelete: "Delete this decision", deletePrompt: "Delete this decision? This cannot be undone.",
+    edited: "Edited · {time}",
+    saveFailed: "Could not save the change. Try again.", deleteFailed: "Could not delete the decision. Try again.",
   },
   monteCarlo: {
     title: "Simulation Lab",

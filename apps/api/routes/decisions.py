@@ -3,15 +3,22 @@
 The figures are captured by the server (see `record_decision`); this router
 never accepts them from the caller.
 """
-from fastapi import APIRouter, Body, HTTPException
+from fastapi import APIRouter, Body, HTTPException, Response
 
 from apps.api.models.schemas import APIResponse
 from apps.api.models.schema_parts.decision import (
     DecisionCreated,
+    DecisionEdit,
     DecisionInput,
     DecisionRow,
 )
-from apps.api.services.investment_decision import get_decision, list_decisions, record_decision
+from apps.api.services.investment_decision import (
+    delete_decision,
+    get_decision,
+    list_decisions,
+    record_decision,
+    update_decision,
+)
 from apps.api.services.records_sync import service as records_sync
 
 router = APIRouter()
@@ -53,3 +60,24 @@ def get_one_decision(decision_id: int):
     if decision is None:
         raise HTTPException(status_code=404, detail=f"no decision with id {decision_id}")
     return APIResponse(data=DecisionRow(**decision))
+
+
+@router.patch("/{decision_id}", response_model=APIResponse[DecisionRow])
+def edit_decision(decision_id: int, payload: DecisionEdit = Body(...)):
+    """Correct action and memo. The figures, ticker and decided_at stay as captured."""
+    try:
+        decision = update_decision(decision_id, action=payload.action, memo=payload.memo)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if decision is None:
+        raise HTTPException(status_code=404, detail=f"no decision with id {decision_id}")
+    records_sync.run_records_sync("mutation")
+    return APIResponse(data=DecisionRow(**decision))
+
+
+@router.delete("/{decision_id}", status_code=204)
+def remove_decision(decision_id: int):
+    if not delete_decision(decision_id):
+        raise HTTPException(status_code=404, detail=f"no decision with id {decision_id}")
+    records_sync.run_records_sync("mutation")
+    return Response(status_code=204)

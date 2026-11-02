@@ -66,7 +66,11 @@ export const ko: Messages = {
   },
   decisions: {
     title: "의사결정 기록",
-    subtitle: "종목에 대해 무엇을, 언제, 왜 믿었는지 기록합니다. 수치는 기록 시점에 서버가 캡처하며 수정되지 않습니다.",
+    subtitle: "종목에 대해 무엇을, 언제, 왜 믿었는지 기록합니다. 수치는 기록 시점에 서버가 캡처하며 바뀌지 않습니다. 행동과 메모는 고칠 수 있고, 고친 기록에는 수정 시각이 표시됩니다.",
+    edit: "수정", delete: "삭제", save: "저장", cancel: "취소", action: "행동", memo: "메모",
+    confirmDelete: "이 기록 삭제", deletePrompt: "이 기록을 삭제하시겠습니까? 되돌릴 수 없습니다.",
+    edited: "수정됨 · {time}",
+    saveFailed: "수정하지 못했습니다. 다시 시도하십시오.", deleteFailed: "삭제하지 못했습니다. 다시 시도하십시오.",
   },
   monteCarlo: {
     title: "시뮬레이션 랩",

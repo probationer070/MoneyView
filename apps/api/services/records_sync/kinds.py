@@ -139,6 +139,9 @@ KINDS: dict[str, Kind] = {
                  "metric_schema_version", "figures_source", "figures_unavailable_reason"),
         generates_uid=True,
         not_null=("ticker", "decided_at", "action", "memo", "figures_source"),
+        # Optional, like offering_price: an unedited decision leaves the key out, so a peer on the code
+        # before edited_at still reads it.
+        optional_columns=("edited_at",),
     ),
     KIND_USER_EVENT: Kind(
         name=KIND_USER_EVENT,

@@ -98,7 +98,7 @@ The migration is `db.py:1005-1006`. An id missing from the yaml is kept in the D
 
 | Table | Purpose | PK / unique keys | Class | Rebuildable? | Synced? | Owning module |
 | --- | --- | --- | --- | --- | --- | --- |
-| `investment_decision` (:576) | Buy/sell/watch/pass memo with copied figures | `id` PK; `sync_uid` UNIQUE index | record | no, and deliberately without retention (`db.py:603`) | yes, records-sync | `services/investment_decision.py:206` |
+| `investment_decision` (:576) | Buy/sell/watch/pass memo with copied figures; action and memo can be corrected (`edited_at`, nullable, synced as an optional column) and a row can be deleted (tombstone when sync is on) | `id` PK; `sync_uid` UNIQUE index | record | no, and deliberately without retention (`db.py:603`) | yes, records-sync | `services/investment_decision.py:206` |
 | `user_event` (:671) | User's chart events | `id` PK AUTOINCREMENT; `sync_uid` UNIQUE index | record | no | yes, records-sync | `services/events/store.py:58-83` |
 | `event_category` (:683) | Built-in override or user category | `id` TEXT PK | record | no | yes, records-sync | `services/events/store.py:102-131` |
 | `event_category_visibility` (:691) | Global chart filter per category | `category_id` PK | record | no | yes, records-sync | `services/events/store.py:96,143` |

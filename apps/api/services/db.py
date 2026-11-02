@@ -727,7 +727,9 @@ CREATE TABLE IF NOT EXISTS investment_decision (
     -- Exactly one side is ever set. A refusal is content, not an error -- the
     -- same rule valuation_verdict.py follows per signal.
     figures_unavailable_reason TEXT,
-    sync_uid                   TEXT
+    sync_uid                   TEXT,
+    -- When the owner last corrected action or memo (ISO-8601 UTC); NULL = never edited. Figures never change.
+    edited_at                  TEXT
 );
 -- No retention policy, deliberately. Snapshots expire; decisions do not.
 
@@ -908,6 +910,10 @@ def _ensure_schema_compatibility(conn: sqlite3.Connection) -> None:
     if case_columns and "offering_price" not in case_columns:
         # Nullable: existing rows have no IPO price and keep their typed shares_new.
         conn.execute("ALTER TABLE valuation_case ADD COLUMN offering_price REAL")
+    decision_columns = {row["name"] for row in conn.execute("PRAGMA table_info(investment_decision)")}
+    if decision_columns and "edited_at" not in decision_columns:
+        # Nullable: existing decisions were never edited.
+        conn.execute("ALTER TABLE investment_decision ADD COLUMN edited_at TEXT")
     index_columns = {row["name"] for row in conn.execute("PRAGMA table_info(indices)")}
     if "dividends" not in index_columns:
         conn.execute("ALTER TABLE indices ADD COLUMN dividends REAL DEFAULT 0.0")

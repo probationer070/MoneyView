@@ -247,3 +247,70 @@ test.describe("the decision log page", () => {
     await expect(page.getByTestId("decision-outcome-scatter")).toHaveCount(0);
   });
 });
+
+// Spec 2026-11-01 decision edit/delete: action and memo can be corrected (and say so), a decision can be deleted
+// after a second click, and nothing else is sent.
+test.describe("correcting a decision", () => {
+  test("an edit sends exactly action and memo, and the card then shows the change and an edited mark", async ({ page }) => {
+    const stats = await mockDecisionsApi(page);
+    await gotoDecisions(page);
+    const card = page.getByTestId("decision-card-1");
+    await expect(card.getByTestId("decision-edited")).toHaveCount(0);
+
+    await card.getByRole("button", { name: "Edit" }).click();
+    await card.getByLabel("Action").selectOption("sell");
+    await card.getByLabel("Memo").fill("thesis broke");
+    await card.getByRole("button", { name: "Save" }).click();
+
+    await expect(card.getByText("thesis broke")).toBeVisible();
+    await expect(card.getByTestId("decision-edited")).toContainText("Edited");
+    expect(stats.patches).toEqual([{ id: 1, body: { action: "sell", memo: "thesis broke" } }]);
+  });
+
+  test("cancel leaves the decision as it was and sends nothing", async ({ page }) => {
+    const stats = await mockDecisionsApi(page);
+    await gotoDecisions(page);
+    const card = page.getByTestId("decision-card-1");
+    await card.getByRole("button", { name: "Edit" }).click();
+    await card.getByLabel("Memo").fill("never saved");
+    await card.getByRole("button", { name: "Cancel" }).click();
+    await expect(card.getByText("cheap on FCF")).toBeVisible();
+    expect(stats.patches).toEqual([]);
+  });
+
+  test("a failed save keeps the form open and says so", async ({ page }) => {
+    await mockDecisionsApi(page, { patchStatus: 422 });
+    await gotoDecisions(page);
+    const card = page.getByTestId("decision-card-1");
+    await card.getByRole("button", { name: "Edit" }).click();
+    await card.getByRole("button", { name: "Save" }).click();
+    await expect(card.getByRole("alert")).toHaveText("Could not save the change. Try again.");
+    await expect(card.getByLabel("Memo")).toBeVisible();
+  });
+
+  test("delete needs a second click, then the card is gone", async ({ page }) => {
+    const stats = await mockDecisionsApi(page);
+    await gotoDecisions(page);
+    const card = page.getByTestId("decision-card-2");
+    await card.getByRole("button", { name: "Delete" }).click();
+    expect(stats.deletes).toEqual([]);
+    await card.getByRole("button", { name: "Delete this decision" }).click();
+    await expect(page.getByTestId("decision-card-2")).toHaveCount(0);
+    expect(stats.deletes).toEqual([2]);
+  });
+
+  test.describe("ko", () => {
+    test.use({ locale: "ko-KR" });
+
+    test("the edit mark and the buttons read in Korean", async ({ page }) => {
+      await mockDecisionsApi(page);
+      await page.goto("/decisions", { waitUntil: "domcontentloaded" });
+      const card = page.getByTestId("decision-card-1");
+      await card.getByRole("button", { name: "수정" }).click({ timeout: 60_000 });
+      await card.getByRole("button", { name: "저장" }).click();
+      await card.getByRole("button", { name: "수정" }).waitFor();
+      // The mock marks any PATCH as edited, even an unchanged one; the real API would not.
+      await expect(card.getByTestId("decision-edited")).toContainText("수정됨");
+    });
+  });
+});

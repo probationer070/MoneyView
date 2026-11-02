@@ -35,6 +35,8 @@ export interface DecisionRow {
   figures_source: string;
   /** Stored INSTEAD of the figures when the model could not value the ticker. */
   figures_unavailable_reason: string | null;
+  /** When action or memo was last corrected (ISO-8601 UTC); null = never edited. Figures never change. */
+  edited_at: string | null;
   outcome: DecisionOutcome;
 }
 
