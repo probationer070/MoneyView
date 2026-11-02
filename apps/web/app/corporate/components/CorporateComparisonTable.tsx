@@ -3,6 +3,9 @@
 import type { CalculationDetailKey } from "./calculationDetailTypes";
 import { bridgedDcfValue } from "../corporateDerivedViews";
 import { impliedReturnRefusalText } from "@/lib/impliedReturn";
+import { InfoTooltip } from "@/components/ui/InfoTooltip";
+import { useT } from "@/lib/i18n/locale";
+import { COLUMNS_WITH_HELP } from "./CorporateGuide";
 
 export interface ComparisonTableRow {
   ticker: string;
@@ -41,23 +44,21 @@ export function CorporateComparisonTable({
   formatPct2,
   formatMoney,
 }: CorporateComparisonTableProps) {
+  const t = useT();
   return (
     <div data-testid="comparison-table-scroll" className="max-h-80 overflow-auto [contain:inline-size]">
       <table className="type-small w-full">
         <thead className="sticky top-0 z-10 bg-[var(--surface)] text-left text-[var(--ink-muted)]">
           <tr>
-            <th className="type-caption px-4 py-3">Ticker</th>
-            <th className="type-caption px-4 py-3">Company</th>
-            <th className="type-caption px-4 py-3">Sector</th>
-            <th className="type-caption px-4 py-3 text-right">Weight</th>
-            <th className="type-caption px-4 py-3 text-right">ROIC - WACC</th>
-            <th className="type-caption px-4 py-3 text-right">DCF Value</th>
-            <th className="type-caption px-4 py-3 text-right">Current Price</th>
-            <th className="type-caption px-4 py-3 text-right">DCF value vs price (one-off gap)</th>
-            <th className="type-caption px-4 py-3 text-right">CAPM Return</th>
-            <th className="type-caption px-4 py-3 text-right">Market Return</th>
-            <th className="type-caption px-4 py-3 text-right">Market-implied return (per year)</th>
-            <th className="type-caption px-4 py-3 text-right">Implied return vs WACC (pts per year)</th>
+            <th className="type-caption px-4 py-3">{t("corporate.columns.ticker")}</th>
+            <th className="type-caption px-4 py-3">{t("corporate.columns.company")}</th>
+            <th className="type-caption px-4 py-3">{t("corporate.columns.sector")}</th>
+            {/* Each value column carries its definition (spec 2026-11-02-corporate-explainers-plan §3 V10). */}
+            {COLUMNS_WITH_HELP.map((key) => (
+              <th key={key} data-column={key} className="type-caption px-4 py-3 text-right">
+                <InfoTooltip label={t(`corporate.columns.${key}`)} description={t(`corporate.columns.${key}Help`)} />
+              </th>
+            ))}
           </tr>
         </thead>
         <tbody className="divide-y divide-[var(--grid)]">

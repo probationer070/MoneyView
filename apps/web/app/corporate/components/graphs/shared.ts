@@ -33,6 +33,8 @@ export interface BetaPoint {
   name: string;
   beta: number;
   size: number;
+  /** A fixed example, not this company's value (plan 2026-11-02 §3 V5). */
+  illustrative?: boolean;
 }
 
 export interface WaccCurvePoint {
@@ -46,6 +48,8 @@ export interface ValueMatrixPoint {
   spread: number;
   efficiency: number;
   fcff: number;
+  /** A fixed example point, the same for every company (plan 2026-11-02 §3 V7). */
+  illustrative?: boolean;
 }
 
 // A deliberately narrow view of `DcfSummary` in packages/shared-types/corporate.ts: the

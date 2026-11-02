@@ -2,6 +2,8 @@
 
 import { Bar, CartesianGrid, ComposedChart, Line, Tooltip, XAxis, YAxis, ZAxis } from "recharts";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
+import { useT } from "@/lib/i18n/locale";
+import { ExampleBadge } from "./ExampleBadge";
 import { ResponsiveChart } from "@/components/ui/ResponsiveChart";
 import { GRID_STYLE, fmtPctTick, withAxisProps, withCategoryAxisProps, withTooltipProps } from "@/lib/chartConfig";
 import { type DetailKey, type HurdleBarPoint, type RegionalHurdlePoint, pct, pct2 } from "./shared";
@@ -15,20 +17,24 @@ export function HurdleRateDecompositionGraph({
   regionalHurdle: RegionalHurdlePoint[];
   onOpenDetail: (key: DetailKey) => void;
 }) {
+  const t = useT();
   return (
     <div className="border border-[var(--line)] bg-[var(--surface-raised)] p-5">
       <div className="min-w-0">
         <h3 className="type-panel-title text-[var(--ink)]">Hurdle Rate Decomposition</h3>
-        <button
-          type="button"
-          onClick={() => onOpenDetail("hurdleDecomposition")}
-          className="type-small mt-1 text-left text-[var(--ink-muted)] underline decoration-dotted underline-offset-4 hover:text-[var(--brand-text)]"
-        >
-          <InfoTooltip
-            label="Open formula and regional breakdown details"
-            description="Cost of equity uses market-implied expected returns instead of historical ERP. Indicators are shown for the US, EU, Korea, and emerging markets."
-          />
-        </button>
+        <div className="mt-1 flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => onOpenDetail("hurdleDecomposition")}
+            className="type-small text-left text-[var(--ink-muted)] underline decoration-dotted underline-offset-4 hover:text-[var(--brand-text)]"
+          >
+            <InfoTooltip
+              label={t("corporate.charts.hurdleHelpLabel")}
+              description={t("corporate.charts.hurdleHelp")}
+            />
+          </button>
+          <ExampleBadge testId="example-badge-regions" why={t("corporate.charts.exampleRegions")} />
+        </div>
       </div>
       <div className="h-56 min-h-56 min-w-0">
         <ResponsiveChart className="h-full w-full" minWidth={1} minHeight={1}>

@@ -2,6 +2,8 @@
 
 import { Bar, BarChart, CartesianGrid, Cell, Line, LineChart, ReferenceLine, Tooltip, XAxis, YAxis } from "recharts";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
+import { useT } from "@/lib/i18n/locale";
+import { ExampleBadge } from "./ExampleBadge";
 import { ResponsiveChart } from "@/components/ui/ResponsiveChart";
 import { GRID_STYLE, fmtPctTick, fmtRatioTick, withAxisProps, withCategoryAxisProps, withTooltipProps } from "@/lib/chartConfig";
 import { type BetaPoint, type DetailKey, type WaccCurvePoint, pct } from "./shared";
@@ -17,18 +19,22 @@ export function BetaWaccCurveGraph({
   waccCurve: WaccCurvePoint[];
   onOpenDetail: (key: DetailKey) => void;
 }) {
+  const t = useT();
   return (
     <div className="border border-[var(--line)] bg-[var(--surface-raised)] p-5">
-      <button
-        type="button"
-        onClick={() => onOpenDetail("betaWaccCurve")}
-        className="type-panel-title text-left text-[var(--ink)] underline decoration-dotted underline-offset-4 hover:text-[var(--brand-text)]"
-      >
-        <InfoTooltip
-          label="Bottom-up Beta + WACC U-Curve"
-          description="Industry Beta is pure sector business risk. Operating Beta (Unlevered) is asset risk excluding financial structure. Financial Beta adds leverage risk from debt through the Hamada formula."
-        />
-      </button>
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => onOpenDetail("betaWaccCurve")}
+          className="type-panel-title text-left text-[var(--ink)] underline decoration-dotted underline-offset-4 hover:text-[var(--brand-text)]"
+        >
+          <InfoTooltip
+            label="Bottom-up Beta + WACC U-Curve"
+            description={t("corporate.charts.betaHelp")}
+          />
+        </button>
+        <ExampleBadge testId="example-badge-beta" why={t("corporate.charts.exampleBeta")} />
+      </div>
       <div className="grid h-56 min-h-56 min-w-0 grid-cols-1 gap-4 md:grid-cols-2">
         <ResponsiveChart minWidth={1} minHeight={1}>
           <BarChart data={betaTreemapProxy}>
@@ -38,7 +44,8 @@ export function BetaWaccCurveGraph({
             <Tooltip {...withTooltipProps()} />
             <Bar dataKey="beta" name="Beta">
               {betaTreemapProxy.map((entry) => (
-                <Cell key={entry.name} fill={entry.beta > 1.3 ? "var(--ink)" : "var(--chart-1)"} />
+                // An example bar is grey, like the matrix's example points: it is not this company's value.
+                <Cell key={entry.name} data-illustrative={entry.illustrative ? "true" : undefined} fill={entry.illustrative ? "var(--chart-4)" : entry.beta > 1.3 ? "var(--ink)" : "var(--chart-1)"} />
               ))}
             </Bar>
           </BarChart>

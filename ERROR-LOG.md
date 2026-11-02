@@ -26,6 +26,37 @@ reveal that; only checking the code did.
 
 An entry states what was true when it was written. Nothing updates it on its own.
 
+## 2026-11-02: Corporate diagnostics presented fixed example values as this company's analysis
+
+Date: 2026-11-02 (found while planning the tab explanations, `docs/superpowers/specs/2026-11-02-corporate-explainers-plan.md` §3).
+Command: code reading of `apps/web/app/corporate/page.tsx:797-836`, plus a Python re-implementation of `solveImpliedMarketReturn` at index levels 100 and 6800 (both give a market IRR of 8.264% and ERP 4.064%).
+Failure: four diagnostic elements were drawn as company analysis but are identical for every company:
+- the regional hurdle bars and their "revenue weight" (46/22/12/20);
+- the "Operating" beta bar (0.75 + reinvestment/100, about 0.75 everywhere);
+- the WACC U-curve (a fixed quadratic whose minimum sits at 40.8% debt for every company);
+- the matrix's Peer A/B/C points.
+
+The "Industry" beta bar is the company's own unlevered beta. The "market-implied ERP" does not move with the S&P 500, because the cash flows scale with the index level and it cancels out. No error was raised; the tooltips described all of these as real measurements.
+Root cause: placeholder chart data from an early design was kept, and its descriptive text was written for the intended model rather than the code.
+Fix: Partly fixed (P1-P2, 2026-11-02).
+- Each example element now carries an "예시값 / Example" badge saying what is fixed. The Operating bar is drawn grey.
+- The guide, chart help and calculation details say what each value really is.
+- The matrix gains the growth reference line and four named quadrants.
+
+Still not fixed: the values themselves. P3 (one Ke for card and WACC, D2) and P4 (real peer points, CRP by listing country, the U-curve) are pending, with owner decisions D1-D5 approved 2026-11-02.
+Files changed: `app/corporate/page.tsx`, `buildCalculationDetails.ts`, `valueQuadrant.ts`, `components/{CorporateGuide,CorporatePageTabs,CorporateComparisonTable,CorporateDiagnosticsSection}.tsx`, `components/graphs/{ExampleBadge,HurdleRateDecompositionGraph,BetaWaccCurveGraph,ValueDriverMatrixGraph,shared}.ts(x)`, `lib/i18n/messages/{en,ko}.ts`, `tests/e2e/corporate-guide.spec.ts`.
+Prevention: a chart value that is not computed from the selected company carries `illustrative: true` and an example badge. Explanatory text is checked against the code, never the design doc.
+
+## 2026-11-02: a negative Damodaran fair value was shown as a price (BA -0.51x, CRWV -0.82x)
+
+Date: 2026-11-02 (found by the stage 0 audit, `docs/reports/2026-11-fair-value-audit.md`).
+Command: `python -m pytest tests/api/test_fair_value.py -k "at_or_below_zero"` before the fix: `value_per_share` was -12.345 and `gap_pct` was computed against it.
+Failure: 11 watchlist tickers (BA, CRWV, DLR, EQIX, FLNC, FSLY, MSTR, MXL, SGML, TLN, U) value a share below zero in their fair-value case. `fair_value_summary` passed the number through, so the corporate header and the valuation tab printed a negative "fair value" and a gap of over -100% to the price, which reads as a target.
+Root cause: `_value_per_share` treated any number the case produced as a price. A value per share at or below zero says the operating value after reinvestment does not cover net debt and other claims; it is a refusal, not a price.
+Fix: `_value_per_share` returns `(None, "non_positive_value: …")` at or below zero; the summary carries it as `value_note`, `gap_pct` becomes null, and the floor (conservative case) gets the same rule. The header line and the valuation tab show "산출 불가" with the reason; the case itself stays open and unchanged in the Cases tab. Mutations shown to fail: no refusal, zero kept, the floor unfiltered, a note on every value; on the screen, the block or the line ignoring the note, and the block dropping the reason.
+Files changed: `apps/api/services/fair_value.py`, `apps/web/lib/fairValue.ts`, `apps/web/app/valuation/components/FairValueBlock.tsx`, `apps/web/components/valuation/FairValueLine.tsx`, `lib/i18n/messages/{en,ko}.ts`, `tests/api/test_fair_value.py`, `tests/e2e/{valuation,corporate-one-screen}.spec.ts`, `tests/e2e/helpers/{fairValueMock,corporatePageMock}.ts`. Plan: `docs/superpowers/specs/2026-11-01-fair-value-refusal-outlier-plan.md` §11.
+Prevention: a per-share value is only a price when it is positive. Any new surface that prints a model's value per share checks the sign first, as `corporate_dcf` already does with `non_positive_fcff`.
+
 ## 2026-11-02: Simulation Lab valuation showed a dollar quote as rounded won ($187.42 read "187원")
 
 Date: 2026-11-02 (owner report 2026-11-01: the valuation tab's current price "is in won and hard to calculate with").

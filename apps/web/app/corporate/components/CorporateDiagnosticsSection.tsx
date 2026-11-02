@@ -15,6 +15,7 @@ export function CorporateDiagnosticsSection({
   betaTreemapProxy,
   waccCurve,
   valueMatrix,
+  growthReference,
   onOpenDetail,
 }: {
   companyName: string;
@@ -24,6 +25,7 @@ export function CorporateDiagnosticsSection({
   betaTreemapProxy: BetaPoint[];
   waccCurve: WaccCurvePoint[];
   valueMatrix: ValueMatrixPoint[];
+  growthReference: number;
   onOpenDetail: (key: DetailKey) => void;
 }) {
   const t = useT();
@@ -35,7 +37,7 @@ export function CorporateDiagnosticsSection({
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
         <HurdleRateDecompositionGraph hurdleBars={hurdleBars} regionalHurdle={regionalHurdle} onOpenDetail={onOpenDetail} />
         <BetaWaccCurveGraph assumptionsDebtRatio={assumptionsDebtRatio} betaTreemapProxy={betaTreemapProxy} waccCurve={waccCurve} onOpenDetail={onOpenDetail} />
-        <ValueDriverMatrixGraph companyName={companyName} valueMatrix={valueMatrix} onOpenDetail={onOpenDetail} />
+        <ValueDriverMatrixGraph companyName={companyName} valueMatrix={valueMatrix} growthReference={growthReference} onOpenDetail={onOpenDetail} />
       </div>
     </div>
   );

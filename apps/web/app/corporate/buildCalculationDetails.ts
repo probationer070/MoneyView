@@ -1,7 +1,15 @@
 import type { DcfSummaryResponse as DCFResult } from "../../../../packages/shared-types";
 import type { CalculationDetail, CalculationDetailKey, CalculationRow } from "./components/calculationDetailTypes";
 import { bridgedEstimatedValue, bridgedUpsidePct, UNBRIDGED_PLACEHOLDER } from "@/lib/bridgeQuality";
+import { valueQuadrant, type ValueQuadrant } from "./valueQuadrant";
 import { betaInterpretation, clamp, moneyText, numberText, numberText2, pct, pct2 } from "./calculationDetailFormatters";
+
+const QUADRANT_TEXT: Record<ValueQuadrant, string> = {
+  growthCreates: "Growing and creating value: growth adds value",
+  returnCash: "Slow and creating value: return cash",
+  fixReturns: "Growing and destroying value: fix returns first",
+  restructure: "Slow and destroying value: restructure",
+};
 
 interface AnnualMetricPoint {
   year: number;
@@ -599,10 +607,10 @@ export function buildCalculationDetails({
     },
     hurdleDecomposition: {
       title: `${companyName} Hurdle Rate Decomposition`,
-      timeHorizon: "Current market snapshot for risk-free rate and market-implied ERP, shown across US, EU, Korea, and emerging-market hurdle-rate indicators. Korea uses the fixed Korea CRP assumption.",
+      timeHorizon: "Fixed model inputs: risk-free rate 4.2%, and an implied ERP solved from a fixed cash yield and growth path. The regional indicators are fixed examples, the same for every company. Korea's fixed CRP is applied to every company.",
       summary: [
         { label: "Risk-free Rate", value: pct(riskFreeRate), source: "FRED / macro assumption" },
-        { label: "Expected Market Return (IRR)", value: pct(impliedMarketReturn), source: "S&P 500 implied return from price and projected cash flows" },
+        { label: "Expected Market Return (IRR)", value: pct(impliedMarketReturn), source: "Fixed model: first-year cash yield and a 5-year growth path, both constants. The cash flows scale with the index, so the index level cancels out and this does not move with the market" },
         { label: "Implied ERP", value: pct2(impliedErp), source: "Expected market return - risk-free rate" },
         { label: "Beta x Implied ERP", value: pct(derived.leveredBeta * impliedErp), source: "Levered beta multiplied by implied ERP" },
         { label: "CRP", value: pct(koreaCountryRiskPremium), source: "Fixed South Korea country risk premium" },
@@ -610,13 +618,14 @@ export function buildCalculationDetails({
       ],
       components: regionalHurdle.map((region) => ({
         label: region.region,
-        value: `RF ${pct(region.rf)}, implied ERP ${pct2(region.erp)}, spread ${pct(region.defaultSpread)}, multiplier ${numberText(region.riskMultiplier)}, CRP ${pct(region.crp)}, revenue weight ${numberText(region.revenue)}`,
+        value: `RF ${pct(region.rf)}, implied ERP ${pct2(region.erp)}, spread ${pct(region.defaultSpread)}, multiplier ${numberText(region.riskMultiplier)}, CRP ${pct(region.crp)}, example weight ${numberText(region.revenue)}`,
         source: region.region === "US"
           ? "US indicator uses mature-market CRP of 0.0%; market risk is carried through implied ERP."
           : region.region === "Korea"
             ? "Korea indicator applies the fixed Korea country risk premium."
             : `${region.region} indicator applies the regional default spread and risk multiplier proxy.`,
-      })),
+        // Plan 2026-11-02 §3 V4: fixed adders and weights, not this company's regional revenue.
+      })).map((row) => ({ ...row, source: `Fixed example, the same for every company. ${row.source}` })),
       formula: "Bottom-up Ke = risk-free rate + levered beta x implied ERP + selected-region CRP; Implied ERP = market IRR - risk-free rate",
       result: pct(derived.bottomUpKe),
       sourcing: regionalHurdle.map((region) => ({
@@ -645,18 +654,17 @@ export function buildCalculationDetails({
           label: `${item.name} beta`,
           value: item.name === "Financial" ? numberText2(item.beta) : numberText(item.beta),
           source: item.name === "Industry"
-            ? `Segment size ${numberText(item.size)}. Industry Beta is the pure business risk of the sector before company-specific capital structure. ${betaInterpretation(item.beta)}`
+            ? `This company's own unlevered beta (its regression beta de-levered), not an industry average. ${betaInterpretation(item.beta)}`
             : item.name === "Operating"
-              ? `Segment size ${numberText(item.size)}. Operating Beta (Unlevered) is asset risk from the operating business excluding financial structure. ${betaInterpretation(item.beta)}`
-              : `Segment size ${numberText(item.size)}. Financial Beta is the additional equity risk incurred from financial leverage and debt. ${betaInterpretation(item.beta)}`,
+              ? `Example only: 0.75 + reinvestment rate / 100, clamped to 0.6-1.8. Not an operating beta.`
+              : `The levered beta: unlevered beta re-levered for debt with the Hamada formula. ${betaInterpretation(item.beta)}`,
         })),
-        ...waccCurve.map((point) => ({ label: `${numberText(point.debt)}% debt`, value: pct(point.wacc), source: "WACC U-curve scenario point" })),
+        ...waccCurve.map((point) => ({ label: `${numberText(point.debt)}% debt`, value: pct(point.wacc), source: "Example curve point: the same shape for every company, lowest near 41% debt" })),
       ],
       formula: "Levered Beta = betaU x [1 + (1 - tax) x D/E]; WACC curve = WACC - 2.4 x debt/45 + 3.2 x (debt/70)^2",
       result: `${numberText2(derived.leveredBeta)} beta; current WACC ${pct(assumptions.wacc)}`,
       sourcing: [
-        { label: "Industry Beta", value: numberText(assumptions.unleveredBeta), source: "Pure sector business risk before company capital structure adjustments" },
-        { label: "Operating Beta (Unlevered)", value: numberText(assumptions.unleveredBeta), source: "Asset risk excluding financial structure; Yahoo beta de-levered with averaged annual statement D/E and tax rate" },
+        { label: "Industry bar (unlevered beta)", value: numberText(assumptions.unleveredBeta), source: "This company's Yahoo beta de-levered with averaged annual statement D/E and tax rate; not an industry average" },
         { label: "Financial Beta", value: numberText2(derived.leveredBeta), source: "Additional leverage risk from Hamada formula after applying D/E and tax shield" },
         { label: "Beta convention", value: betaInterpretation(derived.leveredBeta), source: "Beta 1.0 = average market risk; beta above/below 1.0 means proportionally higher/lower volatility" },
         { label: "Debt Ratio", value: pct(assumptions.debtRatio), source: "Yahoo annual balance sheet debt / (debt + equity), averaged from 2021 onward" },
@@ -670,17 +678,17 @@ export function buildCalculationDetails({
     },
     valueDriverMatrix: {
       title: `${companyName} 4-Quadrant Value Driver Matrix`,
-      timeHorizon: "Current realtime company assumptions plus static peer scenario points used for quadrant context.",
+      timeHorizon: "Current company assumptions. Peer A, B and C are fixed example points, the same for every company.",
       summary: [
         { label: "Growth", value: pct(assumptions.growth), source: "X-axis" },
         { label: "ROIC - WACC", value: pct(derived.spread), source: "Y-axis" },
         { label: "FCFF", value: `${moneyText(assumptions.fcff)}B`, source: "Bubble size" },
-        { label: "Quadrant", value: derived.spread >= 0 && assumptions.growth >= 0 ? "Growth + value creation" : "Review required", source: "Quadrant rule" },
+        { label: "Quadrant", value: QUADRANT_TEXT[valueQuadrant(assumptions.growth, derived.spread, riskFreeRate)], source: `ROIC - WACC against 0; growth against the long-run reference, the risk-free rate ${pct(riskFreeRate)}` },
       ],
       components: valueMatrix.map((item) => ({
         label: item.name,
         value: `growth ${pct(item.growth)}, spread ${pct(item.spread)}, FCFF ${numberText(item.fcff)}`,
-        source: item.name === companyName ? "Current company segment" : "Static peer scenario segment",
+        source: item.name === companyName ? "Current company segment" : "Fixed example point, the same for every company",
       })),
       formula: "Matrix point = (growth, ROIC - WACC); bubble size = FCFF magnitude",
       result: `${pct(assumptions.growth)} growth, ${pct(derived.spread)} spread`,

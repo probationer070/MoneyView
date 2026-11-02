@@ -188,12 +188,13 @@ Spec: `docs/superpowers/specs/2026-10-18-risk-signal-design.md`. Plan (watchlist
 - [x] R-④-b follow-ups (fix/detail-followups): market indices now refresh in the hourly risk cycle (`sweep_indices`, `index_bars`); they had refreshed only when "/" was opened and stood at 2026-09-29 (ERROR-LOG 2026-10-26). Movers queries driven from the watchlist through the (ticker, date) index over the last 30 days (~0.6 s to milliseconds on the real DB).
 - Deferred minor findings are listed in the plan ledger (`.superpowers/sdd/2026-10-18-watchlist-themes/progress.md`) and are triaged at the final review.
 
-### Track N: Owner requests of 2026-11-01 (N1-N3 approved 2026-11-02 and implemented, uncommitted; N4 awaiting decisions)
+### Track N: Owner requests of 2026-11-01 (N1-N3 done and committed; N4 in progress)
 
 - [x] N1 Macro Signals: scenario names (A 상승 / B 조정 / C 급락·약세장, owner 2026-11-01) and a collapsible "이 화면 읽는 법" guide (`PageGuide`). Phase 2 = the other ten tabs (not started). Tests: `signals-guide.spec.ts`. Spec: `docs/superpowers/specs/2026-11-01-signals-guide-design.md`.
 - [x] N2 Simulation Lab valuation tab in dollars; fixes the USD lookup price stored as rounded won and the won-era EPS floor of 1. Spec: `docs/superpowers/specs/2026-11-01-mc-valuation-usd-design.md`. ERROR-LOG 2026-11-02.
 - [x] N3 Decisions: edit action/memo with an `edited_at` mark, delete with a synced tombstone. Spec: `docs/superpowers/specs/2026-11-01-decision-edit-delete-design.md`.
-- [ ] N4 Fair value refused / outsized: roadmap (measure → explain → rule review → relative pricing → refusal fallback). Plan: `docs/superpowers/specs/2026-11-01-fair-value-refusal-outlier-plan.md`. Four owner decisions in its §8.
+- [ ] N4 Fair value refused / outsized: roadmap (measure → explain → rule review → relative pricing → refusal fallback). Plan: `docs/superpowers/specs/2026-11-01-fair-value-refusal-outlier-plan.md`. Owner decisions in §9 (2026-11-02). Done: stage 0 audit (`scripts/audit_fair_value.py`, report `docs/reports/2026-11-fair-value-audit.md`); step ① negative fair value shown as "산출 불가" (§11). Next: ② 10-year case as the 5-year DCF's fallback (39 tickers), ③ relative pricing, ④/⑤ rule changes (owner decision each).
+- [ ] N5 Corporate Analysis explanations (owner 2026-11-02). Plan: `docs/superpowers/specs/2026-11-02-corporate-explainers-plan.md`; owner approved D1-D5 as recommended. Done: P1, a per-tab "이 화면 읽는 법" guide (toggle in the tab row, `CorporateGuide.tsx`), Korean comparison column names with a definition ⓘ per column, Korean chart help (tests: `corporate-guide.spec.ts`). Done: P2, "예시값" badges on the fixed example values (V4-V7), and a growth reference line (risk-free rate) plus four named quadrants on the value matrix (`valueQuadrant.ts`); ERROR-LOG 2026-11-02. Next: P3 one Ke for card and WACC (D2), P4 real peer points and CRP by listing country (D3), with a before/after watchlist table first.
 
 ## Known limits, accepted deliberately
 

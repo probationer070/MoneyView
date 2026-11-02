@@ -809,7 +809,8 @@ export default function CorporateAnalysisPage() {
 
   const betaTreemapProxy = [
     { name: "Industry", beta: Number(assumptions.unleveredBeta.toFixed(1)), size: 42 },
-    { name: "Operating", beta: Number(clamp(0.75 + assumptions.reinvestment / 100, 0.6, 1.8).toFixed(1)), size: 28 },
+    // An example, not an operating beta: plan 2026-11-02 §3 V5 (labelled until D4 replaces the bars).
+    { name: "Operating", beta: Number(clamp(0.75 + assumptions.reinvestment / 100, 0.6, 1.8).toFixed(1)), size: 28, illustrative: true },
     { name: "Financial", beta: Number(derived.leveredBeta.toFixed(2)), size: 30 },
   ];
 
@@ -829,9 +830,10 @@ export default function CorporateAnalysisPage() {
       efficiency: clamp(assumptions.fcff / 1.6, 10, 100),
       fcff: assumptions.fcff,
     },
-    { name: "Peer A", growth: 4.2, spread: 3.4, efficiency: 56, fcff: 70 },
-    { name: "Peer B", growth: 8.5, spread: -1.8, efficiency: 44, fcff: 42 },
-    { name: "Peer C", growth: 2.1, spread: 7.2, efficiency: 68, fcff: 60 },
+    // Fixed example points, the same for every company: plan 2026-11-02 §3 V7 (labelled until P4).
+    { name: "Peer A", growth: 4.2, spread: 3.4, efficiency: 56, fcff: 70, illustrative: true },
+    { name: "Peer B", growth: 8.5, spread: -1.8, efficiency: 44, fcff: 42, illustrative: true },
+    { name: "Peer C", growth: 2.1, spread: 7.2, efficiency: 68, fcff: 60, illustrative: true },
   ];
 
   // Downloadable raw dataset mirrors the assumptions, derived metrics, and chart inputs.
@@ -987,6 +989,7 @@ export default function CorporateAnalysisPage() {
               betaTreemapProxy={betaTreemapProxy}
               waccCurve={waccCurve}
               valueMatrix={valueMatrix}
+              growthReference={RISK_FREE_RATE}
               onOpenDetail={setActiveCalculation}
             />
           ),
