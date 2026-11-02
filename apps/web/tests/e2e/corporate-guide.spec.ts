@@ -1,6 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
 import { mockCorporatePageApi } from "./helpers/corporatePageMock";
 import { lowerPanel } from "./helpers/corporateDcf";
+import { buildFormulaContext } from "../../app/corporate/formulaContext";
+import { substitutedFormula } from "../../app/corporate/substitutedFormula";
 
 // Spec 2026-11-02-corporate-explainers-plan §4 and §6 P1: every corporate tab explains itself, and the
 // comparison columns carry their definitions.
@@ -154,5 +156,61 @@ test.describe("example labels and the value matrix quadrants", () => {
     await panel.getByRole("button", { name: /Open matrix interpretation details/ }).click();
     const dialog = page.getByRole("dialog");
     await expect(dialog).toContainText("Slow and creating value: return cash");
+  });
+});
+
+// Plan 2026-11-02 §6.3, P3 (D2): the Ke card is the Ke the WACC was built with.
+test.describe("the Ke card is the WACC's Ke", () => {
+  test.use({ viewport: { width: 1280, height: 720 } });
+
+  const tile = (page: Page, label: string) => page.getByTestId("corporate-kpis").locator(":scope > *").filter({ hasText: label });
+
+  async function gotoWithMetrics(page: Page, patch?: Record<string, number>) {
+    await mockCorporatePageApi(page, undefined, patch ? { aaplMetricsPatch: patch } : undefined);
+    await page.goto("/corporate", { waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("heading", { name: /Corporate Analysis/i })).toBeVisible({ timeout: 60_000 });
+  }
+
+  test("statement metrics: the card shows the backend's Ke and beta, not a re-levered one", async ({ page }) => {
+    await gotoWithMetrics(page, { levered_beta: 1.37, cost_of_equity: 12.34, tax_rate: 0.2 });
+    await expect(tile(page, "Bottom-up Ke")).toContainText("12.3%");
+    await expect(tile(page, "Levered Beta")).toContainText("1.37");
+    // Moving the unlevered beta changes the DCF inputs, not the WACC's Ke.
+    const table = page.getByTestId("assumption-table");
+    await table.getByRole("button", { name: "Edit Unlevered Beta" }).click();
+    await page.getByTestId("assumption-slider-unleveredBeta").getByRole("slider").fill("2");
+    await expect(tile(page, "Bottom-up Ke")).toContainText("12.3%");
+    await openTab(page, "Core Diagnostics");
+    // Beta x ERP: 1.37 x 5.5% = 7.5%.
+    await expect(lowerPanel(page).getByRole("button", { name: /Beta x ERP: 7\.5%/ })).toBeVisible({ timeout: 30_000 });
+  });
+
+  test("metrics without a WACC Ke: the card re-levers with the WACC's ERP 5.5% and tax 21%", async ({ page }) => {
+    await gotoWithMetrics(page);
+    // 1.05 x [1 + 0.79 x 18/82] = 1.23; 4.2 + 1.23 x 5.5 + 0.8 = 11.8%.
+    await expect(tile(page, "Levered Beta")).toContainText("1.23");
+    await expect(tile(page, "Bottom-up Ke")).toContainText("11.8%");
+  });
+});
+
+test.describe("formulas when the beta is the WACC's", () => {
+  const inputs = {
+    assumptions: { roic: 21.1, wacc: 7.3, reinvestment: 33.3, unleveredBeta: 0.61 },
+    derived: { spread: 13.8, bottomUpKe: 11.9, leveredBeta: 1.37, sustainableGrowth: 7.7, debtToEquity: 0.45, taxRate: 0.2, keFromWacc: true },
+    impliedErp: 4.6,
+    impliedMarketReturn: 8.8,
+    waccAudit: null,
+    dcfData: null,
+  };
+
+  test("the levered beta is named as the WACC's, not printed as an unequal Hamada identity", () => {
+    const ctx = buildFormulaContext(inputs);
+    expect(substitutedFormula("leveredBeta", ctx)).toBe("βL = the beta inside the WACC = 1.37");
+    expect(substitutedFormula("bottomUpKe", ctx)).toBe("Ke = rf + βL × ERP + CRP = 4.2% + 1.37 × 5.5% + 0.8% = 11.9%");
+  });
+
+  test("re-levered metrics still print the Hamada identity with their own tax rate", () => {
+    const ctx = buildFormulaContext({ ...inputs, derived: { ...inputs.derived, leveredBeta: 0.83, keFromWacc: false } });
+    expect(substitutedFormula("leveredBeta", ctx)).toBe("βL = βU × [1 + (1 − t) × D/E] = 0.61 × [1 + (1 − 20.0%) × 0.45] = 0.83");
   });
 });

@@ -355,7 +355,7 @@ export const ko: Messages = {
     kpi: {
       spread: "ROIC - WACC", ke: "상향식 Ke", wacc: "WACC", beta: "레버리지 베타",
       spreadUp: "가치 창출", spreadDown: "가치 훼손",
-      keCaption: "무위험수익률 + 베타 × 내재 ERP + CRP", waccCaption: "DCF 할인율", betaCaption: "하마다 조정",
+      keCaption: "WACC 안의 Ke: 무위험수익률 + 베타 × ERP + CRP", waccCaption: "DCF 할인율", betaCaption: "WACC에 쓴 베타",
     },
     assumptions: {
       detail: "가정 상세", menu: "가정 옵션", edit: "{label} 편집", info: "{label} 상세", actions: "동작",
@@ -387,9 +387,9 @@ export const ko: Messages = {
         verdictBody: "DCF 줄은 이 화면의 가정으로 만든 5년 FCFF DCF입니다. 그 아래 다모다란식 적정가는 별도의 10년 케이스 모델에서 나옵니다. 한쪽이 다른 쪽을 검증하는 관계가 아니라 나란히 놓은 두 방법이므로 값이 다를 수 있습니다.",
         kpiTitle: "카드 네 개",
         kpiSpread: "ROIC - WACC: 사업이 자본으로 버는 수익률에서 그 자본의 비용을 뺀 값입니다. 0보다 크면 가치를 만들고, 0보다 작으면 성장할수록 가치가 줄어듭니다.",
-        kpiKe: "상향식 Ke: 주주가 요구하는 최소 수익률로, 무위험수익률 + 레버리지 베타 × 주식위험프리미엄 + 국가위험프리미엄입니다. 이 카드는 프리미엄 4.06%(고정)를 쓰고 WACC 카드는 5.5%로 계산하므로, 이 Ke는 WACC 안의 Ke와 같지 않습니다.",
+        kpiKe: "상향식 Ke: 주주가 요구하는 최소 수익률로, 무위험수익률 + 레버리지 베타 × 주식위험프리미엄(5.5%) + 국가위험프리미엄입니다. WACC 카드를 만든 바로 그 Ke이므로 두 값을 함께 읽을 수 있습니다.",
         kpiWacc: "WACC: 자기자본비용과 세후 부채비용의 가중평균으로, DCF의 할인율입니다.",
-        kpiBeta: "레버리지 베타: 주가가 시장에 비해 얼마나 크게 움직이는지 나타냅니다. 1이면 시장과 같고, 1.5면 시장이 10% 움직일 때 약 15%, 0.5면 약 5% 움직입니다.",
+        kpiBeta: "레버리지 베타: 주가가 시장에 비해 얼마나 크게 움직이는지 나타내며, WACC에 쓴 베타입니다. 1이면 시장과 같고, 1.5면 시장이 10% 움직일 때 약 15%, 0.5면 약 5% 움직입니다.",
         hurdleTitle: "허들레이트는 무엇과 비교하나",
         hurdleRoic: "ROIC와 WACC: 사업이 자본비용보다 많이 버는지 봅니다.",
         hurdleImplied: "시장 암시 수익률과 WACC(종목 비교 탭): 지금 가격에 샀을 때 기대되는 수익률이 자본비용을 넘는지 봅니다.",

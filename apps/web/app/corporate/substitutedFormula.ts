@@ -14,6 +14,10 @@ export interface FormulaContext {
   debtToEquity: number;
   riskFreeRate: number;
   impliedErp: number;
+  /** Percent. The ERP inside Ke and the WACC (plan 2026-11-02 §6.3); impliedErp is a reference. */
+  equityRiskPremium: number;
+  /** True when leveredBeta and bottomUpKe are the backend WACC's own, not re-levered here. */
+  keFromWacc: boolean;
   impliedMarketReturn: number;
   countryRiskPremium: number;
   /** A fraction: 0.25. */
@@ -48,8 +52,10 @@ export function substitutedFormula(key: CalculationDetailKey, c: FormulaContext)
     case "spread":
       return `ROIC − WACC = ${p(c.roic)} − ${p(c.wacc)} = ${p(c.spread)}`;
     case "bottomUpKe":
-      return `Ke = rf + βL × ERP + CRP = ${p(c.riskFreeRate)} + ${n2(c.leveredBeta)} × ${p(c.impliedErp)} + ${p(c.countryRiskPremium)} = ${p(c.bottomUpKe)}`;
+      return `Ke = rf + βL × ERP + CRP = ${p(c.riskFreeRate)} + ${n2(c.leveredBeta)} × ${p(c.equityRiskPremium)} + ${p(c.countryRiskPremium)} = ${p(c.bottomUpKe)}`;
     case "leveredBeta":
+      // The WACC's beta is Yahoo's, not this re-levering: printing the Hamada identity would equate unequal numbers.
+      if (c.keFromWacc) return `βL = the beta inside the WACC = ${n2(c.leveredBeta)}`;
       return `βL = βU × [1 + (1 − t) × D/E] = ${n2(c.unleveredBeta)} × [1 + (1 − ${p(c.taxRate * 100)}) × ${n2(c.debtToEquity)}] = ${n2(c.leveredBeta)}`;
     case "sustainableGrowth":
       return `g = reinvestment × ROIC = ${p(c.reinvestment)} × ${p(c.roic)} = ${p(c.sustainableGrowth)}`;

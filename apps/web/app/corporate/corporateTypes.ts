@@ -65,6 +65,11 @@ export interface CorporateMetricsApi {
   wacc: number;
   debt_ratio: number;
   unlevered_beta: number;
+  /** The tax rate the beta was unlevered with; null for saved or default metrics. */
+  tax_rate?: number | null;
+  /** The levered beta and Ke (percent) inside `wacc`; null when `wacc` did not come from statements. */
+  levered_beta?: number | null;
+  cost_of_equity?: number | null;
   crp: number;
   reinvestment: number;
   fcff: number;

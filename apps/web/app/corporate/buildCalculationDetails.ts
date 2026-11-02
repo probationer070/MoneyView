@@ -37,6 +37,8 @@ interface DerivedSnapshot {
   bottomUpKe: number;
   spread: number;
   sustainableGrowth: number;
+  /** True when leveredBeta and bottomUpKe are the backend WACC's own (plan 2026-11-02 §6.3). */
+  keFromWacc?: boolean;
 }
 
 interface ImpliedErpInputsSnapshot {
@@ -88,6 +90,8 @@ interface BuildCalculationDetailsArgs {
   sourceLabel: string;
   storageKey: string;
   taxRate: number;
+  /** Percent. The ERP inside Ke and WACC; the implied ERP is a reference only. */
+  equityRiskPremium: number;
   riskFreeRate: number;
   koreaCountryRiskPremium: number;
   growthBasisLabel: string;
@@ -113,6 +117,7 @@ export function buildCalculationDetails({
   sourceLabel,
   storageKey,
   taxRate,
+  equityRiskPremium,
   riskFreeRate,
   koreaCountryRiskPremium,
   growthBasisLabel,
@@ -347,7 +352,7 @@ export function buildCalculationDetails({
       title: `${companyName} Levered Beta`,
       timeHorizon: "5-year beta convention for business risk, adjusted with the current debt ratio and tax-rate assumption.",
       summary: [
-        { label: "Levered Beta", value: numberText2(derived.leveredBeta), source: "Hamada formula" },
+        { label: "Levered Beta", value: numberText2(derived.leveredBeta), source: derived.keFromWacc ? "Yahoo beta, the one inside the WACC; the Hamada steps below re-lever the assumption table's inputs" : "Hamada formula" },
         { label: "Interpretation", value: betaInterpretation(derived.leveredBeta), source: "Market-risk convention" },
         { label: "Unlevered Beta", value: numberText(assumptions.unleveredBeta), source: sourceLabel },
         { label: "Debt / Equity", value: numberText(derived.debtToEquity), source: `Debt ratio ${pct(assumptions.debtRatio)} / equity ratio ${pct(100 - assumptions.debtRatio)}` },
@@ -387,7 +392,7 @@ export function buildCalculationDetails({
       formula: "CRP = fixed South Korea country risk premium",
       simulation: [
         { label: "1", value: `Use South Korea CRP ${pct(koreaCountryRiskPremium)}`, source: "Fixed country-risk assumption" },
-        { label: "2", value: `${pct(riskFreeRate)} + beta x implied ERP + ${pct(koreaCountryRiskPremium)}`, source: "Feeds Bottom-up Ke" },
+        { label: "2", value: `${pct(riskFreeRate)} + beta x ERP ${pct(equityRiskPremium)} + ${pct(koreaCountryRiskPremium)}`, source: "Feeds Bottom-up Ke" },
       ],
     }),
     erp: {
@@ -398,7 +403,8 @@ export function buildCalculationDetails({
         { label: "Expected Market Return (IRR)", value: pct(impliedMarketReturn), source: "Reverse-engineered from projected cash flows" },
         { label: "Implied ERP", value: pct(impliedErp), source: "Expected market return - risk-free rate" },
         { label: "Levered Beta", value: numberText2(derived.leveredBeta), source: "Hamada formula" },
-        { label: "Beta x Implied ERP", value: pct(derived.leveredBeta * impliedErp), source: "Equity risk premium contribution" },
+        { label: "ERP used in Ke and WACC", value: pct(equityRiskPremium), source: "Model policy input. The implied ERP above is a reference: Ke does not use it" },
+        { label: "Beta x ERP", value: pct(derived.leveredBeta * equityRiskPremium), source: "Equity risk premium contribution" },
         { label: "Bottom-up Ke", value: pct(derived.bottomUpKe), source: "Hurdle-rate model" },
       ],
       components: [
@@ -408,10 +414,10 @@ export function buildCalculationDetails({
         { label: "Stable Growth", value: pct(impliedErpInputs.stableGrowth), source: "Converges to risk-free rate after year 5" },
         { label: "Implied ERP", value: pct(impliedErp), source: "IRR - risk-free rate" },
         { label: "Company beta multiplier", value: numberText2(derived.leveredBeta), source: "Levered Beta" },
-        { label: "Contribution to Ke", value: pct(derived.leveredBeta * impliedErp), source: "Levered Beta x Implied ERP" },
+        { label: "Contribution to Ke", value: pct(derived.leveredBeta * equityRiskPremium), source: `Levered beta x ERP ${pct(equityRiskPremium)}, the WACC's ERP` },
       ],
-      formula: "Implied ERP = Expected Market Return (IRR) - Risk-Free Rate; Equity Risk Premium Contribution = Levered Beta x Implied ERP",
-      result: pct(derived.leveredBeta * impliedErp),
+      formula: "Implied ERP = Expected Market Return (IRR) - Risk-Free Rate (reference only); Equity Risk Premium Contribution = Levered Beta x ERP (model policy, as in WACC)",
+      result: pct(derived.leveredBeta * equityRiskPremium),
       sourcing: [
         { label: "S&P 500 Price", value: numberText(impliedErpInputs.indexLevel), source: "Market API /market/index/^GSPC | Period: current latest close or normalized fallback" },
         { label: "Cash Flow Yield", value: pct(impliedErpInputs.dividendYield + impliedErpInputs.buybackYield), source: "Dividend + share-buyback yield proxy | Replace with constituent aggregation when available" },
@@ -423,8 +429,8 @@ export function buildCalculationDetails({
       simulation: [
         { label: "1", value: `Solve IRR where S&P 500 price ${numberText(impliedErpInputs.indexLevel)} equals PV of dividends + buybacks and terminal value`, source: pct(impliedMarketReturn) },
         { label: "2", value: `${pct(impliedMarketReturn)} - ${pct(riskFreeRate)}`, source: pct(impliedErp) },
-        { label: "3", value: `${numberText2(derived.leveredBeta)} x ${pct(impliedErp)}`, source: pct(derived.leveredBeta * impliedErp) },
-        { label: "4", value: `${pct(riskFreeRate)} + ${pct(derived.leveredBeta * impliedErp)} + ${pct(koreaCountryRiskPremium)}`, source: pct(derived.bottomUpKe) },
+        { label: "3", value: `${numberText2(derived.leveredBeta)} x ${pct(equityRiskPremium)} (the WACC's ERP, not the implied ERP)`, source: pct(derived.leveredBeta * equityRiskPremium) },
+        { label: "4", value: `${pct(riskFreeRate)} + ${pct(derived.leveredBeta * equityRiskPremium)} + ${pct(koreaCountryRiskPremium)}`, source: pct(derived.bottomUpKe) },
       ],
     },
     reinvestment: assumptionDetail({
@@ -520,13 +526,13 @@ export function buildCalculationDetails({
     },
     bottomUpKe: {
       title: `${companyName} Bottom-up Ke`,
-      timeHorizon: "Current market snapshot for risk-free rate and implied ERP; fixed South Korea CRP; latest Yahoo statement capital structure for leverage.",
+      timeHorizon: "The Ke inside the WACC: fixed risk-free rate and ERP (model policy), fixed South Korea CRP, and the WACC's levered beta.",
       summary: [
         { label: "Risk-free Rate", value: pct(riskFreeRate), source: "Manual macro assumption" },
-        { label: "Levered Beta", value: numberText2(derived.leveredBeta), source: "Hamada formula" },
-        { label: "Implied Equity Risk Premium", value: pct(impliedErp), source: "S&P 500 implied ERP model" },
+        { label: "Levered Beta", value: numberText2(derived.leveredBeta), source: derived.keFromWacc ? "Yahoo beta, the one inside the WACC" : "Hamada formula (no WACC beta for these metrics)" },
+        { label: "Equity Risk Premium", value: pct(equityRiskPremium), source: "Model policy input, the same ERP as the WACC" },
         { label: "Country Risk Premium", value: pct(koreaCountryRiskPremium), source: "Fixed South Korea country risk premium" },
-        { label: "Bottom-up Ke", value: pct(derived.bottomUpKe), source: "Realtime calculation" },
+        { label: "Bottom-up Ke", value: pct(derived.bottomUpKe), source: derived.keFromWacc ? "The Ke inside the WACC" : "Re-levered with the WACC's ERP" },
       ],
       components: [
         { label: "Unlevered Beta", value: numberText(assumptions.unleveredBeta), source: "Ticker-specific corporate metric" },
@@ -534,18 +540,18 @@ export function buildCalculationDetails({
         { label: "Tax Shield", value: pct((1 - taxRate) * 100), source: `1 - tax rate ${pct(taxRate * 100)}` },
         { label: "Levered Beta", value: numberText2(derived.leveredBeta), source: "betaU x [1 + (1 - tax) x D/E]" },
       ],
-      formula: `Ke = ${pct(riskFreeRate)} + ${numberText2(derived.leveredBeta)} x ${pct(impliedErp)} + ${pct(koreaCountryRiskPremium)}`,
+      formula: `Ke = ${pct(riskFreeRate)} + ${numberText2(derived.leveredBeta)} x ${pct(equityRiskPremium)} + ${pct(koreaCountryRiskPremium)}`,
       result: pct(derived.bottomUpKe),
       sourcing: [
         { label: "Risk-free Rate", value: pct(riskFreeRate), source: "Manual macro assumption" },
-        { label: "Implied ERP", value: pct(impliedErp), source: "Expected market return IRR - risk-free rate" },
+        { label: "ERP", value: pct(equityRiskPremium), source: "Model policy input, the same ERP as the WACC" },
         { label: "CRP", value: pct(koreaCountryRiskPremium), source: "Fixed South Korea country risk premium" },
         { label: "Debt Ratio", value: pct(assumptions.debtRatio), source: "Yahoo annual balance sheet debt ratios averaged from 2021 onward" },
         { label: "Unlevered Beta", value: numberText(assumptions.unleveredBeta), source: "Yahoo beta de-levered with averaged annual statement D/E and tax rate" },
       ],
       simulation: [
         { label: "1", value: `${numberText(assumptions.unleveredBeta)} x [1 + ${pct((1 - taxRate) * 100)} x ${numberText(derived.debtToEquity)}]`, source: numberText2(derived.leveredBeta) },
-        { label: "2", value: `${pct(riskFreeRate)} + ${numberText2(derived.leveredBeta)} x ${pct(impliedErp)} + ${pct(koreaCountryRiskPremium)}`, source: pct(derived.bottomUpKe) },
+        { label: "2", value: `${pct(riskFreeRate)} + ${numberText2(derived.leveredBeta)} x ${pct(equityRiskPremium)} + ${pct(koreaCountryRiskPremium)}`, source: pct(derived.bottomUpKe) },
         { label: "3", value: pct(derived.bottomUpKe), source: "Final Bottom-up Ke" },
       ],
     },
@@ -611,8 +617,8 @@ export function buildCalculationDetails({
       summary: [
         { label: "Risk-free Rate", value: pct(riskFreeRate), source: "FRED / macro assumption" },
         { label: "Expected Market Return (IRR)", value: pct(impliedMarketReturn), source: "Fixed model: first-year cash yield and a 5-year growth path, both constants. The cash flows scale with the index, so the index level cancels out and this does not move with the market" },
-        { label: "Implied ERP", value: pct2(impliedErp), source: "Expected market return - risk-free rate" },
-        { label: "Beta x Implied ERP", value: pct(derived.leveredBeta * impliedErp), source: "Levered beta multiplied by implied ERP" },
+        { label: "Implied ERP (reference)", value: pct2(impliedErp), source: "Expected market return - risk-free rate; not used in Ke" },
+        { label: "Beta x ERP", value: pct(derived.leveredBeta * equityRiskPremium), source: `Levered beta x ERP ${pct(equityRiskPremium)}, the WACC's ERP` },
         { label: "CRP", value: pct(koreaCountryRiskPremium), source: "Fixed South Korea country risk premium" },
         { label: "Bottom-up Ke", value: pct(derived.bottomUpKe), source: "Realtime hurdle-rate model" },
       ],
@@ -626,7 +632,7 @@ export function buildCalculationDetails({
             : `${region.region} indicator applies the regional default spread and risk multiplier proxy.`,
         // Plan 2026-11-02 §3 V4: fixed adders and weights, not this company's regional revenue.
       })).map((row) => ({ ...row, source: `Fixed example, the same for every company. ${row.source}` })),
-      formula: "Bottom-up Ke = risk-free rate + levered beta x implied ERP + selected-region CRP; Implied ERP = market IRR - risk-free rate",
+      formula: "Bottom-up Ke = risk-free rate + levered beta x ERP (5.5%, as in WACC) + CRP. The implied ERP and the regional indicators are references, not inputs",
       result: pct(derived.bottomUpKe),
       sourcing: regionalHurdle.map((region) => ({
         label: region.region,
@@ -635,9 +641,9 @@ export function buildCalculationDetails({
       })),
       simulation: [
         { label: "1", value: "Show US, EU, Korea, and emerging-market indicators", source: "Regional hurdle-rate indicator set" },
-        { label: "2", value: `Implied ERP = market IRR ${pct(impliedMarketReturn)} - risk-free rate ${pct(riskFreeRate)}`, source: pct2(impliedErp) },
-        { label: "3", value: `Levered beta premium = ${numberText2(derived.leveredBeta)} x ${pct2(impliedErp)}`, source: pct(derived.leveredBeta * impliedErp) },
-        { label: "4", value: `${pct(riskFreeRate)} + ${pct(derived.leveredBeta * impliedErp)} + ${pct(koreaCountryRiskPremium)}`, source: pct(derived.bottomUpKe) },
+        { label: "2", value: `ERP = model policy ${pct(equityRiskPremium)} (implied ERP ${pct2(impliedErp)} shown for reference)`, source: pct(equityRiskPremium) },
+        { label: "3", value: `Levered beta premium = ${numberText2(derived.leveredBeta)} x ${pct(equityRiskPremium)}`, source: pct(derived.leveredBeta * equityRiskPremium) },
+        { label: "4", value: `${pct(riskFreeRate)} + ${pct(derived.leveredBeta * equityRiskPremium)} + ${pct(koreaCountryRiskPremium)}`, source: pct(derived.bottomUpKe) },
       ],
     },
     betaWaccCurve: {

@@ -112,6 +112,8 @@ const CTX: FormulaContext = {
   roic: 21.3, wacc: 9.4, reinvestment: 34, unleveredBeta: 1.05,
   spread: 11.9, bottomUpKe: 10.6, leveredBeta: 1.12, sustainableGrowth: 7.2, debtToEquity: 0.22,
   riskFreeRate: 4.2, impliedErp: 5.1, impliedMarketReturn: 9.3, countryRiskPremium: 0.8, taxRate: 0.25,
+  // Plan 2026-11-02 §6.3 (P3): Ke's ERP slot is equityRiskPremium; owner-approved fixture fields.
+  equityRiskPremium: 5.1, keFromWacc: false,
   waccAudit: null,
   dcf: { intrinsic: 240.5, price: 210.4, upside: 14.31 },
 };
@@ -191,7 +193,7 @@ test.describe("buildFormulaContext (plan N2: one module feeds the page)", () => 
   // Every input has its own sentinel, so two swapped fields print a different sentence.
   const INPUTS = {
     assumptions: { roic: 21.1, wacc: 7.3, reinvestment: 33.3, unleveredBeta: 0.61 },
-    derived: { spread: 13.8, bottomUpKe: 9.9, leveredBeta: 0.87, sustainableGrowth: 7.7, debtToEquity: 0.45 },
+    derived: { spread: 13.8, bottomUpKe: 9.9, leveredBeta: 0.87, sustainableGrowth: 7.7, debtToEquity: 0.45, taxRate: 0.25, keFromWacc: false },
     impliedErp: 4.6,
     impliedMarketReturn: 8.8,
     waccAudit: {
@@ -212,7 +214,8 @@ test.describe("buildFormulaContext (plan N2: one module feeds the page)", () => 
   test("every operand reaches its own slot, for all eight N2 keys", () => {
     const ctx = buildFormulaContext(INPUTS);
     expect(substitutedFormula("spread", ctx)).toBe("ROIC − WACC = 21.1% − 7.3% = 13.8%");
-    expect(substitutedFormula("bottomUpKe", ctx)).toBe("Ke = rf + βL × ERP + CRP = 4.2% + 0.87 × 4.6% + 0.8% = 9.9%");
+    // P3 (owner-approved 2026-11-02): Ke uses the WACC's ERP 5.5%, not the implied ERP 4.6% above.
+    expect(substitutedFormula("bottomUpKe", ctx)).toBe("Ke = rf + βL × ERP + CRP = 4.2% + 0.87 × 5.5% + 0.8% = 9.9%");
     expect(substitutedFormula("leveredBeta", ctx)).toBe("βL = βU × [1 + (1 − t) × D/E] = 0.61 × [1 + (1 − 25.0%) × 0.45] = 0.87");
     expect(substitutedFormula("sustainableGrowth", ctx)).toBe("g = reinvestment × ROIC = 33.3% × 21.1% = 7.7%");
     expect(substitutedFormula("erp", ctx)).toBe("ERP = IRR − rf = 8.8% − 4.2% = 4.6%");

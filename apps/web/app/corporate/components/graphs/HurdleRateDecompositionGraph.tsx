@@ -56,7 +56,7 @@ export function HurdleRateDecompositionGraph({
             type="button"
             onClick={() => {
               if (item.name === "CRP") onOpenDetail("crp");
-              else if (item.name === "Beta x Implied ERP") onOpenDetail("erp");
+              else if (item.name === "Beta x ERP") onOpenDetail("erp");
               else onOpenDetail("bottomUpKe");
             }}
             className="flex items-center gap-2 text-left transition hover:text-[var(--brand-text)]"

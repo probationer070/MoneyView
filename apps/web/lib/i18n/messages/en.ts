@@ -352,7 +352,7 @@ export const en = {
     kpi: {
       spread: "ROIC - WACC", ke: "Bottom-up Ke", wacc: "WACC", beta: "Levered Beta",
       spreadUp: "Value creation", spreadDown: "Value destruction",
-      keCaption: "rf + beta x implied ERP + CRP", waccCaption: "Discount rate in the DCF", betaCaption: "Hamada adjusted",
+      keCaption: "The Ke inside the WACC: rf + beta x ERP + CRP", waccCaption: "Discount rate in the DCF", betaCaption: "The beta inside the WACC",
     },
     assumptions: {
       detail: "Assumptions detail", menu: "Assumption options", edit: "Edit {label}", info: "{label} detail", actions: "Actions",
@@ -386,9 +386,9 @@ export const en = {
         verdictBody: "The DCF line is the 5-year FCFF DCF built from the assumptions on this page. The Damodaran-style fair value under it comes from a separate 10-year case model. They are two methods side by side, not a number and its check, so they can differ.",
         kpiTitle: "The four tiles",
         kpiSpread: "ROIC - WACC: what the business earns on its capital minus what that capital costs. Above zero the business creates value; below zero, growth destroys value.",
-        kpiKe: "Bottom-up Ke: the minimum return shareholders require, risk-free rate + levered beta x equity risk premium + country risk premium. This tile uses a fixed 4.06% premium while the WACC tile is built with 5.5%, so this Ke is not the Ke inside the WACC.",
+        kpiKe: "Bottom-up Ke: the minimum return shareholders require, risk-free rate + levered beta x equity risk premium (5.5%) + country risk premium. It is the Ke the WACC tile was built with, so the two can be read together.",
         kpiWacc: "WACC: the weighted average of the cost of equity and the after-tax cost of debt. It is the DCF's discount rate.",
-        kpiBeta: "Levered beta: how much the stock moves against the market. At 1 it moves with the market; at 1.5 about 15% when the market moves 10%; at 0.5 about 5%.",
+        kpiBeta: "Levered beta: how much the stock moves against the market, the beta inside the WACC. At 1 it moves with the market; at 1.5 about 15% when the market moves 10%; at 0.5 about 5%.",
         hurdleTitle: "What to compare a hurdle rate with",
         hurdleRoic: "ROIC against WACC: does the business earn more than its capital costs?",
         hurdleImplied: "Market-implied return against WACC (comparison tab): does buying at today's price promise more than the cost of capital?",

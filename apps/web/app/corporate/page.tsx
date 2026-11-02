@@ -52,8 +52,9 @@ import {
   PRICE_HISTORY_CACHE_KEY,
   QUARTERLY_STATEMENTS_CACHE_KEY,
   RISK_FREE_RATE,
+  EQUITY_RISK_PREMIUM,
+  FALLBACK_TAX_RATE,
   STORAGE_KEY,
-  TAX_RATE,
   initialAssumptions,
 } from "./corporateConstants";
 import type {
@@ -335,8 +336,12 @@ export default function CorporateAnalysisPage() {
     hydratingTickerRef.current = ticker;
     fetchApi<CorporateMetricsApi>(`/corporate/metrics/${ticker}`, { params: selectedMetricParams })
       .then((metrics) => {
+        // Read the ref now, not inside the updater: React runs the updater at the next render, after
+        // `finally` below has cleared the ref, so the check always failed and the metrics never landed
+        // (ERROR-LOG 2026-11-02).
+        const stillHydrating = hydratingTickerRef.current === ticker;
         setLatestLoadedMetrics((current) => (
-          hydratingTickerRef.current === ticker || current?.ticker?.trim().toUpperCase() === ticker ? metrics : current
+          stillHydrating || current?.ticker?.trim().toUpperCase() === ticker ? metrics : current
         ));
         setAssumptions((current) => (current.ticker === ticker ? fromApiMetrics(metrics) : current));
       })
@@ -475,10 +480,22 @@ export default function CorporateAnalysisPage() {
   const impliedErp = Math.max(impliedMarketReturn - RISK_FREE_RATE, 0);
 
   // Derived metrics are the frontend valuation layer used by cards, charts, and detail modals.
+  const loadedMetrics = latestLoadedMetrics?.ticker?.trim().toUpperCase() === assumptions.ticker.trim().toUpperCase()
+    ? latestLoadedMetrics
+    : null;
   const derived = useMemo(() => {
     const debtToEquity = assumptions.debtRatio / Math.max(100 - assumptions.debtRatio, 1);
-    const leveredBeta = assumptions.unleveredBeta * (1 + (1 - TAX_RATE) * debtToEquity);
-    const bottomUpKe = RISK_FREE_RATE + leveredBeta * impliedErp + KOREA_COUNTRY_RISK_PREMIUM;
+    const taxRate = loadedMetrics?.tax_rate ?? FALLBACK_TAX_RATE;
+    // The Ke card shows the Ke the WACC was built with (plan 2026-11-02 §6.3). Re-levering here
+    // misses the backend's beta and debt-ratio bounds (BA: 24.0% against 12.3%), so the backend's
+    // own values win; only metrics without them (saved or default) are re-levered, with the same ERP.
+    const keFromWacc = loadedMetrics?.levered_beta != null && loadedMetrics?.cost_of_equity != null;
+    const leveredBeta = keFromWacc
+      ? (loadedMetrics?.levered_beta as number)
+      : assumptions.unleveredBeta * (1 + (1 - taxRate) * debtToEquity);
+    const bottomUpKe = keFromWacc
+      ? (loadedMetrics?.cost_of_equity as number)
+      : RISK_FREE_RATE + leveredBeta * EQUITY_RISK_PREMIUM + KOREA_COUNTRY_RISK_PREMIUM;
     const spread = assumptions.roic - assumptions.wacc;
     const sustainableGrowth = (assumptions.reinvestment / 100) * assumptions.roic;
 
@@ -488,8 +505,10 @@ export default function CorporateAnalysisPage() {
       bottomUpKe,
       spread,
       sustainableGrowth,
+      taxRate,
+      keFromWacc,
     };
-  }, [assumptions, impliedErp]);
+  }, [assumptions, loadedMetrics]);
 
   const comparisonQuery = useQuery<CorporateComparisonApi>({
     queryKey: [
@@ -796,7 +815,7 @@ export default function CorporateAnalysisPage() {
   // Chart datasets keep each visualization declarative and reuse the same derived model.
   const hurdleBars = [
     { name: "Risk-free", value: RISK_FREE_RATE, fill: "var(--chart-4)" },
-    { name: "Beta x Implied ERP", value: derived.leveredBeta * impliedErp, fill: "var(--chart-1)" },
+    { name: "Beta x ERP", value: derived.leveredBeta * EQUITY_RISK_PREMIUM, fill: "var(--chart-1)" },
     { name: "CRP", value: KOREA_COUNTRY_RISK_PREMIUM, fill: "var(--ink)" },
   ];
 
@@ -883,7 +902,8 @@ export default function CorporateAnalysisPage() {
     dcfData: dcfData ?? undefined,
     sourceLabel,
     storageKey: STORAGE_KEY,
-    taxRate: TAX_RATE,
+    taxRate: derived.taxRate,
+    equityRiskPremium: EQUITY_RISK_PREMIUM,
     riskFreeRate: RISK_FREE_RATE,
     koreaCountryRiskPremium: KOREA_COUNTRY_RISK_PREMIUM,
     growthBasisLabel,

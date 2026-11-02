@@ -238,6 +238,11 @@ class CorporateMetrics(BaseModel):
     # one. None when the beta did not come from statements (saved, manual or default
     # metrics); the relever then falls back to DEFAULT_TAX_RATE.
     tax_rate: float | None = None
+    # The levered beta and cost of equity (percent) inside `wacc`, so a screen that shows Ke shows
+    # the Ke the WACC was built with (plan 2026-11-02-corporate-explainers §6.3). None when `wacc`
+    # did not come from statements (saved, manual or default metrics).
+    levered_beta: float | None = None
+    cost_of_equity: float | None = None
     crp: float = 0.8
     reinvestment: float = 34.0
     fcff: float = 92.0

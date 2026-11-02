@@ -26,6 +26,18 @@ reveal that; only checking the code did.
 
 An entry states what was true when it was written. Nothing updates it on its own.
 
+## 2026-11-02: the Corporate page never kept the metrics it loaded (latestLoadedMetrics stayed null)
+
+Date: 2026-11-02 (found while wiring P3 of `docs/superpowers/specs/2026-11-02-corporate-explainers-plan.md`).
+Command: a Playwright probe logging `latestLoadedMetrics` on /corporate with a mocked `/corporate/metrics/AAPL`: the response arrived twice, and the state stayed `null` on every render.
+Failure: `setLatestLoadedMetrics` was given an updater that read `hydratingTickerRef.current`. React runs updaters at the next render, after the fetch's `finally` had already cleared the ref. With `current` still null, the updater returned null.
+
+So nothing read from `latestLoadedMetrics` ever worked on a first load: the growth/ROIC metric metadata, and now the WACC's own beta and Ke. The assumptions themselves were unaffected, because `setAssumptions` does not read the ref. No error was raised.
+Root cause: a ref read inside a state updater observes the ref's value at render time, not at the time of the call.
+Fix: `page.tsx` reads the ref into `stillHydrating` before calling `setLatestLoadedMetrics`. The test "statement metrics: the card shows the backend's Ke and beta" (`corporate-guide.spec.ts`) fails when the old updater is restored.
+Files changed: `apps/web/app/corporate/page.tsx`, `apps/web/tests/e2e/corporate-guide.spec.ts`.
+Prevention: never read a ref (or anything mutable) inside a `setState` updater to decide what to keep. Read it at the call site, then close over the value.
+
 ## 2026-11-02: Corporate diagnostics presented fixed example values as this company's analysis
 
 Date: 2026-11-02 (found while planning the tab explanations, `docs/superpowers/specs/2026-11-02-corporate-explainers-plan.md` §3).
@@ -43,7 +55,9 @@ Fix: Partly fixed (P1-P2, 2026-11-02).
 - The guide, chart help and calculation details say what each value really is.
 - The matrix gains the growth reference line and four named quadrants.
 
-Still not fixed: the values themselves. P3 (one Ke for card and WACC, D2) and P4 (real peer points, CRP by listing country, the U-curve) are pending, with owner decisions D1-D5 approved 2026-11-02.
+P3 (2026-11-02): the Ke card, the beta card and the hurdle chart's "Beta x ERP" now use the WACC's own beta and Ke, from new `/metrics` fields `levered_beta` and `cost_of_equity`. The implied ERP stays as a labelled reference.
+
+Still not fixed: P4 (real peer points, CRP by listing country, the U-curve), with owner decisions D1-D5 approved 2026-11-02.
 Files changed: `app/corporate/page.tsx`, `buildCalculationDetails.ts`, `valueQuadrant.ts`, `components/{CorporateGuide,CorporatePageTabs,CorporateComparisonTable,CorporateDiagnosticsSection}.tsx`, `components/graphs/{ExampleBadge,HurdleRateDecompositionGraph,BetaWaccCurveGraph,ValueDriverMatrixGraph,shared}.ts(x)`, `lib/i18n/messages/{en,ko}.ts`, `tests/e2e/corporate-guide.spec.ts`.
 Prevention: a chart value that is not computed from the selected company carries `illustrative: true` and an example badge. Explanatory text is checked against the code, never the design doc.
 
