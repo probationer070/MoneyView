@@ -71,6 +71,7 @@ export const en = {
     units: {
       krwAxis: "KRW M",
       krw: "KRW",
+      usd: "USD",
       terminalValue: "Terminal value",
     },
     tabs: {

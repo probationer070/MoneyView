@@ -3,7 +3,10 @@ import { runStatusView, beforeText } from "../../app/monte-carlo/lib/resultModel
 import { translate } from "../../lib/i18n/translate";
 import { en } from "../../lib/i18n/messages/en";
 import { tokens } from "../../lib/tokens.generated";
-import { formatKrwCompact, formatKrwRange, krw, krwAxis } from "../../app/monte-carlo/lib/krwFormat";
+import { formatKrwCompact, krwAxis } from "../../app/monte-carlo/lib/krwFormat";
+import { formatUsdRange, usd } from "../../app/monte-carlo/lib/usdFormat";
+import { runValuationMonteCarlo } from "../../app/monte-carlo/lib/valuation-core";
+import type { ValuationInput } from "../../app/monte-carlo/lib/types";
 import { isMonteCarloTab, MONTE_CARLO_TAB_KEY } from "../../app/monte-carlo/lib/tabs";
 
 // Pure model spec (no page): the KRW strings and the axis ticks are pinned here, in both locales.
@@ -146,44 +149,55 @@ test.describe("layout tokens", () => {
   });
 });
 
-// Per-share price and the valuation interval: en keeps the KRW prefix, ko uses the 원 suffix (owner decision D8).
-test.describe("krw and formatKrwRange", () => {
-  test("krw: en reads KRW 50,000 and ko reads 50,000원; NaN is a dash in both", () => {
-    expect(krw(50_000, "en")).toBe("KRW 50,000");
-    expect(krw(50_000, "ko")).toBe("50,000원");
-    expect(krw(Number.NaN, "en")).toBe("—");
-    expect(krw(Number.NaN, "ko")).toBe("—");
+// Per-share price and the valuation interval are dollars in both locales (owner, 2026-11-01; replaces D8 for this tab).
+test.describe("usd and formatUsdRange", () => {
+  test("usd: $ prefix and two decimals in both locales; NaN and Infinity are a dash", () => {
+    expect(usd(187.415, "en")).toBe("$187.42");
+    expect(usd(187.415, "ko")).toBe("$187.42");
+    expect(usd(50_000, "en")).toBe("$50,000.00");
+    expect(usd(Number.NaN, "ko")).toBe("—");
+    expect(usd(Number.POSITIVE_INFINITY, "en")).toBe("—");
   });
 
-  test("formatKrwRange: en keeps the prefix once; ko puts 원 once after the range, joined by an en dash", () => {
-    expect(formatKrwRange(41_200, 58_900, "en")).toBe("KRW 41,200–58,900");
-    expect(formatKrwRange(41_200, 58_900, "ko")).toBe("41,200–58,900원");
-    expect(formatKrwRange(41_200, 58_900, "ko").includes("KRW")).toBe(false);
+  test("usd: the sign goes before the $, and a value that rounds to zero has no sign", () => {
+    expect(usd(-5, "en")).toBe("-$5.00");
+    expect(usd(-0.004, "en")).toBe("$0.00");
+    expect(usd(-0, "ko")).toBe("$0.00");
   });
 
-  test("krw: the sign goes first, rounds half away from zero, and a value that rounds to zero has no sign", () => {
-    expect(krw(-5_000, "en")).toBe("-KRW 5,000");
-    expect(krw(-5_000, "ko")).toBe("-5,000원");
-    expect(krw(-2.5, "en")).toBe("-KRW 3");
-    expect(krw(-0.4, "en")).toBe("KRW 0");
-    expect(krw(-0.4, "ko")).toBe("0원");
-    expect(krw(-0, "en")).toBe("KRW 0");
-    expect(krw(-0, "ko")).toBe("0원");
+  test("formatUsdRange: each end is a full dollar figure, joined by an en dash", () => {
+    expect(formatUsdRange(41.2, 58.9, "en")).toBe("$41.20–$58.90");
+    expect(formatUsdRange(-5, 3, "ko")).toBe("-$5.00–$3.00");
+    expect(formatUsdRange(-0.004, 0, "en")).toBe("$0.00–$0.00");
   });
 
-  test("formatKrwRange: each end carries its own sign, rounds half away from zero, and never prints -0", () => {
-    expect(formatKrwRange(-5_000, -3_000, "en")).toBe("KRW -5,000–-3,000");
-    expect(formatKrwRange(-5_000, 3_000, "ko")).toBe("-5,000–3,000원");
-    expect(formatKrwRange(-2.5, 2.5, "en")).toBe("KRW -3–3");
-    expect(formatKrwRange(-0.4, 0, "en")).toBe("KRW 0–0");
-    expect(formatKrwRange(-0, -0.4, "ko")).toBe("0–0원");
-  });
-
-  test("formatKrwRange: either side not finite reads a dash", () => {
+  test("formatUsdRange: either side missing or not finite reads a dash", () => {
     for (const locale of ["en", "ko"] as const) {
-      expect(formatKrwRange(null, 58_900, locale)).toBe("—");
-      expect(formatKrwRange(41_200, Number.NaN, locale)).toBe("—");
-      expect(formatKrwRange(Number.POSITIVE_INFINITY, 58_900, locale)).toBe("—");
+      expect(formatUsdRange(null, 58.9, locale)).toBe("—");
+      expect(formatUsdRange(41.2, Number.NaN, locale)).toBe("—");
     }
+  });
+});
+
+// Deterministic inputs: no uncertainty, one forecast year, no growth, 10% discount rate.
+// Fair value = eps/1.1 + eps*PER/1.1, with PER = price/EPS.
+function certainInput(currentPrice: number, baseEps: number): ValuationInput {
+  return {
+    ticker: "TEST", currentPrice, baseEps, averageGrowthRate: 0, growthUncertainty: 0, discountRate: 10,
+    discountRateUncertainty: 0, terminalGrowthRate: 0, forecastPeriodYears: 1, targetPerUncertainty: 0,
+    simulationCount: 10, seed: 1,
+  };
+}
+
+test.describe("valuation engine in dollars", () => {
+  test("an EPS below $1 keeps its own P/E: price 10, EPS 0.50 gives P/E 20, fair value 9.55", () => {
+    // Under the won-era floor of 1 the P/E was 10/1 = 10 and the fair value 5.00.
+    const summary = runValuationMonteCarlo(certainInput(10, 0.5)).fair_value_summary;
+    expect(summary.fair_value_median).toBe(9.55);
+  });
+
+  test("the summary keeps cents: price 187.42 stays 187.42", () => {
+    const summary = runValuationMonteCarlo(certainInput(187.42, 9.37)).fair_value_summary;
+    expect(summary.current_price).toBe(187.42);
   });
 });

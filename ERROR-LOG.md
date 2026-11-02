@@ -26,6 +26,16 @@ reveal that; only checking the code did.
 
 An entry states what was true when it was written. Nothing updates it on its own.
 
+## 2026-11-02: Simulation Lab valuation showed a dollar quote as rounded won ($187.42 read "187원")
+
+Date: 2026-11-02 (owner report 2026-11-01: the valuation tab's current price "is in won and hard to calculate with").
+Command: `npx playwright test tests/e2e/monte-carlo-model.spec.ts -g "valuation engine"` before the fix: price 187.42 came back as `current_price` 187; price 10 with EPS 0.50 gave a fair value of 5 instead of 9.55.
+Failure: the price lookup (`/api/v1/stock/{ticker}/price`) returns the ticker's own quote, which is dollars for every ticker in the universe. `page.tsx` stored `Math.round(data.price)`, every summary figure was `toFixed(0)`, and the tab labelled all of it 원 / KRW. A $187.42 quote read "187원". Separately, `valuation-core.ts` floored EPS at 1, a guard sized for won (EPS 3,500): in dollars it rewrote the P/E of every stock with EPS under $1 (price 10, EPS 0.50 ran at P/E 10, not 20).
+Root cause: the tab was built for a won-denominated example (`KRW-STOCK`, 50,000 / 3,500) and kept won formatting and won-sized guards after the lookup started filling in USD quotes.
+Fix: the valuation tab is dollars (owner, 2026-11-01; supersedes D8 for this tab): `lib/usdFormat.ts` (`usd`, `formatUsdRange`, two decimals), cents kept in the lookup and in every summary and histogram figure, EPS floor 0.01, dollar defaults (SAMPLE, 50.00 / 3.50, same P/E 14.3), USD input suffix. `krw()` and `formatKrwRange()` had no other caller and were removed with their tests. Path, Distribution and Risk stay in won. Mutations shown to fail: lookup `Math.round(price)`, EPS floor 1, and the zero-sign check in `usd`.
+Files changed: `apps/web/app/monte-carlo/lib/usdFormat.ts` (new), `lib/valuation-core.ts`, `lib/krwFormat.ts`, `components/CorporateValuationSection.tsx`, `page.tsx`, `lib/i18n/messages/{en,ko}.ts`, `tests/e2e/monte-carlo-{model,one-screen,motion}.spec.ts`, `tests/e2e/simulation-lab-price-autofill.spec.ts` (default 50000 → 50). Spec: `docs/superpowers/specs/2026-11-01-mc-valuation-usd-design.md`.
+Prevention: a figure's unit is decided by where the number comes from, not by the example it was first built with. A guard constant (a floor, a min, a step) is sized for its unit; changing the unit means re-reading every constant in the path.
+
 ## 2026-11-01: no events on any chart on the second PC (a lazily imported package was never installed)
 
 Date: 2026-11-01 (owner report: events such as rate decisions and the Iran strikes showed on one PC only, and turning the categories on did nothing).

@@ -167,8 +167,8 @@ test.describe("valuation before value", () => {
     await runValuation(page);
 
     const interval = page.getByTestId("mc-figure-interval80");
-    await expect(interval.locator("del")).toHaveText("KRW 41,200–58,900");
-    await expect(interval.locator("ins")).toContainText("KRW 41,200–61,000");
+    await expect(interval.locator("del")).toHaveText("$41,200.00–$58,900.00");
+    await expect(interval.locator("ins")).toContainText("$41,200.00–$61,000.00");
   });
 
   test("a re-run that moves both ends shows the old range struck, formatted from the old pair", async ({ page }) => {
@@ -178,8 +178,8 @@ test.describe("valuation before value", () => {
     await runValuation(page);
 
     const interval = page.getByTestId("mc-figure-interval80");
-    await expect(interval.locator("del")).toHaveText("KRW 41,200–58,900");
-    await expect(interval.locator("ins")).toContainText("KRW 39,000–63,000");
+    await expect(interval.locator("del")).toHaveText("$41,200.00–$58,900.00");
+    await expect(interval.locator("ins")).toContainText("$39,000.00–$63,000.00");
   });
 });
 

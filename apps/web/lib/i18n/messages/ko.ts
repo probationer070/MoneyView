@@ -74,6 +74,7 @@ export const ko: Messages = {
     units: {
       krwAxis: "만원",
       krw: "원",
+      usd: "USD",
       terminalValue: "만기 가치",
     },
     tabs: {

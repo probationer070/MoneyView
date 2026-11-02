@@ -145,7 +145,7 @@ test("simulation lab shows fetching state and then fills the price after cache h
   await page.getByLabel("Ticker").press("Tab");
 
   await expect(page.getByText("No cached price was available, so a background fetch has been started.")).toBeVisible();
-  await expect(page.getByLabel("Current stock price")).toHaveValue("50000");
+  await expect(page.getByLabel("Current stock price")).toHaveValue("50");
   await expect(page.getByText("AAPL price loaded from cache.")).toBeVisible({ timeout: 5_000 });
   await expect(page.getByLabel("Current stock price")).toHaveValue("211400");
 });
@@ -176,7 +176,7 @@ test("simulation lab shows inline not-found feedback for invalid tickers", async
   await page.getByLabel("Ticker").press("Tab");
 
   await expect(page.getByText("Ticker not found.")).toBeVisible();
-  await expect(page.getByLabel("Current stock price")).toHaveValue("50000");
+  await expect(page.getByLabel("Current stock price")).toHaveValue("50");
 });
 
 test("simulation lab ignores stale lookup responses for an older ticker", async ({ page }) => {

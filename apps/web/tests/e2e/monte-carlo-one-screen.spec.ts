@@ -582,24 +582,24 @@ test.describe("valuation", () => {
     },
   });
 
-  test("after a run the 80% interval reads KRW 41,200–58,900 and the median reads KRW 50,000", async ({ page }) => {
+  test("after a run the 80% interval reads $41,200.00–$58,900.00 and the median reads $50,000.00", async ({ page }) => {
     await openValuation(page, /Simulation Lab/, /Corporate Valuation/);
     await expect(page.getByTestId("mc-figure-interval80-value")).toHaveText("—");
     await page.getByTestId("mc-run-valuation").click();
     await expect(page.getByTestId("mc-status")).toHaveAttribute("data-state", "ready");
-    await expect(page.getByTestId("mc-figure-interval80-value")).toHaveText("KRW 41,200–58,900");
-    await expect(page.getByTestId("mc-figure-median-value")).toHaveText("KRW 50,000");
+    await expect(page.getByTestId("mc-figure-interval80-value")).toHaveText("$41,200.00–$58,900.00");
+    await expect(page.getByTestId("mc-figure-median-value")).toHaveText("$50,000.00");
   });
 
   test.describe("ko", () => {
     test.use({ locale: "ko-KR" });
 
-    test("ko: the interval reads 41,200–58,900원 and the median reads 50,000원", async ({ page }) => {
+    test("ko: the valuation figures are dollars too: $41,200.00–$58,900.00 and $50,000.00", async ({ page }) => {
       await openValuation(page, /시뮬레이션 랩/, /기업가치 평가/);
       await page.getByTestId("mc-run-valuation").click();
       await expect(page.getByTestId("mc-status")).toHaveAttribute("data-state", "ready");
-      await expect(page.getByTestId("mc-figure-interval80-value")).toHaveText("41,200–58,900원");
-      await expect(page.getByTestId("mc-figure-median-value")).toHaveText("50,000원");
+      await expect(page.getByTestId("mc-figure-interval80-value")).toHaveText("$41,200.00–$58,900.00");
+      await expect(page.getByTestId("mc-figure-median-value")).toHaveText("$50,000.00");
     });
 
     test("ko: a loaded price lookup is announced in Korean under the ticker", async ({ page }) => {
@@ -609,6 +609,15 @@ test.describe("valuation", () => {
       await page.getByLabel("티커").press("Tab");
       await expect(page.getByTestId("mc-price-lookup")).toHaveText("AAPL 가격을 캐시에서 불러왔습니다.");
     });
+  });
+
+  test("a looked-up dollar price keeps its cents in the current price field", async ({ page }) => {
+    await page.route("**/api/v1/stock/AAPL/price", (route) => route.fulfill({ status: 200, contentType: "application/json", body: priceOk("AAPL", 187.4231) }));
+    await openValuation(page, /Simulation Lab/, /Corporate Valuation/);
+    await page.getByLabel("Ticker").fill("AAPL");
+    await page.getByLabel("Ticker").press("Tab");
+    await expect(page.getByTestId("mc-price-lookup")).toHaveText("AAPL price loaded from cache.");
+    await expect(page.getByRole("spinbutton", { name: /Current stock price/ })).toHaveValue("187.42");
   });
 
   test("the lookup message sits under the Ticker input and above the next field", async ({ page }) => {
@@ -992,7 +1001,7 @@ test.describe("Korean", () => {
     await expect(page.getByRole("heading", { name: /시뮬레이션 경로/ })).toBeVisible();
   });
 
-  test("the input suffixes read 원, not KRW, on the path and valuation rails", async ({ page }) => {
+  test("the path rail reads 원 and the valuation rail reads USD", async ({ page }) => {
     await installMonteCarloWorker(page);
     await page.goto("/monte-carlo", { waitUntil: "domcontentloaded" });
     await expect(page.getByLabel("초기 투자금")).toBeVisible({ timeout: 60_000 });
@@ -1000,8 +1009,8 @@ test.describe("Korean", () => {
     await expect(page.getByTestId("mc-rail-inputs")).toContainText("원");
     await page.getByRole("tab", { name: /기업가치 평가/ }).click();
     await expect(page.getByLabel(ko.monteCarlo.valuation.fields.baseEps)).toBeVisible();
-    await expect(page.getByTestId("mc-rail-inputs")).not.toContainText("KRW");
-    await expect(page.getByTestId("mc-rail-inputs")).toContainText("원");
+    await expect(page.getByTestId("mc-rail-inputs")).not.toContainText("원");
+    await expect(page.getByTestId("mc-rail-inputs")).toContainText("USD");
   });
 
   test("the efficient frontier tooltip reads Korean: axis names carry no English", async ({ page }) => {

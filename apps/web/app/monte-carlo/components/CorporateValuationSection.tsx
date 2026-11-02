@@ -17,7 +17,7 @@ import { RunNotice } from "./RunNotice";
 import { SimulationRail } from "./SimulationRail";
 import { WarningBanner } from "./WarningBanner";
 import { NumericField, SummaryRow, numberText, pct } from "./shared";
-import { formatKrwRange, krw } from "../lib/krwFormat";
+import { formatUsdRange, usd } from "../lib/usdFormat";
 import { previousRangeText, priorValue, runStatusView, valuationFigureValues, type FigureSnapshot } from "../lib/resultModel";
 
 type Props = {
@@ -68,10 +68,10 @@ export function CorporateValuationSection({
 
   const values = valuationFigureValues(valuationResult);
   const figures: ResultFigure[] = [
-    { key: "median", label: t("monteCarlo.valuation.figures.median"), value: values.median, format: (n) => krw(n, locale), hint: t("monteCarlo.valuation.hints.median"), previousValue: priorValue(before, "valuation", "median") },
+    { key: "median", label: t("monteCarlo.valuation.figures.median"), value: values.median, format: (n) => usd(n, locale), hint: t("monteCarlo.valuation.hints.median"), previousValue: priorValue(before, "valuation", "median") },
     { key: "undervaluation", label: t("monteCarlo.valuation.figures.undervaluation"), value: values.undervaluation, format: (n) => pct(n, locale), hint: t("monteCarlo.valuation.hints.undervaluation"), previousValue: priorValue(before, "valuation", "undervaluation") },
     { key: "upside", label: t("monteCarlo.valuation.figures.upside"), value: values.upside, format: (n) => pct(n, locale), hint: t("monteCarlo.valuation.hints.upside"), previousValue: priorValue(before, "valuation", "upside") },
-    { key: "interval80", label: t("monteCarlo.valuation.figures.interval80"), value: values.interval80, format: (lo) => formatKrwRange(lo, values.interval80High, locale), hint: t("monteCarlo.valuation.hints.interval80"), previousText: previousRangeText(before, "valuation", "interval80", "interval80High", values.interval80, values.interval80High, (lo, hi) => formatKrwRange(lo, hi, locale)) },
+    { key: "interval80", label: t("monteCarlo.valuation.figures.interval80"), value: values.interval80, format: (lo) => formatUsdRange(lo, values.interval80High, locale), hint: t("monteCarlo.valuation.hints.interval80"), previousText: previousRangeText(before, "valuation", "interval80", "interval80High", values.interval80, values.interval80High, (lo, hi) => formatUsdRange(lo, hi, locale)) },
   ];
 
   return (
@@ -110,18 +110,18 @@ export function CorporateValuationSection({
             <input
               type="number"
               value={valuationInput.currentPrice}
-              min={1000}
-              step={100}
+              min={0.01}
+              step={0.01}
               onChange={(event) => updateValuation("currentPrice", Number(event.target.value))}
               className="type-mono w-full bg-transparent text-[var(--ink)] outline-none"
             />
-            <span className="type-small text-[var(--ink-muted)]">{t("monteCarlo.units.krw")}</span>
+            <span className="type-small text-[var(--ink-muted)]">{t("monteCarlo.units.usd")}</span>
             {valuationPriceLookupStatus === "loading" || valuationPriceLookupStatus === "fetching" ? (
               <Loader2 className="h-4 w-4 animate-spin text-[var(--ink-muted)]" />
             ) : null}
           </div>
         </label>
-        <NumericField label={t("monteCarlo.valuation.fields.baseEps")} value={valuationInput.baseEps} onChange={(value) => updateValuation("baseEps", value)} step={50} min={100} suffix={t("monteCarlo.units.krw")} />
+        <NumericField label={t("monteCarlo.valuation.fields.baseEps")} value={valuationInput.baseEps} onChange={(value) => updateValuation("baseEps", value)} step={0.01} min={0.01} suffix={t("monteCarlo.units.usd")} />
         <NumericField label={t("monteCarlo.valuation.fields.averageGrowthRate")} value={valuationInput.averageGrowthRate} onChange={(value) => updateValuation("averageGrowthRate", value)} step={0.5} suffix="%" />
         <NumericField label={t("monteCarlo.valuation.fields.growthUncertainty")} value={valuationInput.growthUncertainty} onChange={(value) => updateValuation("growthUncertainty", value)} step={0.25} suffix="%" />
         <NumericField label={t("monteCarlo.valuation.fields.discountRate")} value={valuationInput.discountRate} onChange={(value) => updateValuation("discountRate", value)} step={0.25} suffix="%" />
@@ -163,7 +163,7 @@ export function CorporateValuationSection({
                 <CartesianGrid {...GRID_STYLE} />
                 <XAxis dataKey="fair_value" {...withAxisProps({ tickFormatter: (value: number | string) => fmtCompactThousands(Number(value)) })} />
                 <YAxis {...withAxisProps()} />
-                <Tooltip {...withTooltipProps()} formatter={(value) => formatNumber(Number(value), "percent", { digits: 2, locale })} labelFormatter={(label) => krw(Number(label), locale)} />
+                <Tooltip {...withTooltipProps()} formatter={(value) => formatNumber(Number(value), "percent", { digits: 2, locale })} labelFormatter={(label) => usd(Number(label), locale)} />
                 {summary ? <ReferenceLine x={summary.current_price} stroke={CHART_COLORS.ink} label={t("monteCarlo.valuation.distribution.currentPrice")} /> : null}
                 <Bar dataKey="frequency" fill={CHART_COLORS.primary} />
               </BarChart>
@@ -176,16 +176,16 @@ export function CorporateValuationSection({
               {summary ? (
                 <table className="w-full">
                   <tbody>
-                    <SummaryRow label={t("monteCarlo.valuation.statistics.currentPrice")} value={krw(summary.current_price, locale)} />
-                    <SummaryRow label={t("monteCarlo.valuation.statistics.mean")} value={krw(summary.fair_value_mean, locale)} />
-                    <SummaryRow label={t("monteCarlo.valuation.statistics.stdev")} value={krw(summary.fair_value_std, locale)} />
-                    <SummaryRow label={t("monteCarlo.valuation.statistics.p05")} value={krw(summary.fair_value_p05, locale)} />
-                    <SummaryRow label={t("monteCarlo.valuation.statistics.p10")} value={krw(summary.fair_value_p10, locale)} />
-                    <SummaryRow label={t("monteCarlo.valuation.statistics.p25")} value={krw(summary.fair_value_p25, locale)} />
-                    <SummaryRow label={t("monteCarlo.valuation.statistics.median")} value={krw(summary.fair_value_median, locale)} />
-                    <SummaryRow label={t("monteCarlo.valuation.statistics.p75")} value={krw(summary.fair_value_p75, locale)} />
-                    <SummaryRow label={t("monteCarlo.valuation.statistics.p90")} value={krw(summary.fair_value_p90, locale)} />
-                    <SummaryRow label={t("monteCarlo.valuation.statistics.p95")} value={krw(summary.fair_value_p95, locale)} />
+                    <SummaryRow label={t("monteCarlo.valuation.statistics.currentPrice")} value={usd(summary.current_price, locale)} />
+                    <SummaryRow label={t("monteCarlo.valuation.statistics.mean")} value={usd(summary.fair_value_mean, locale)} />
+                    <SummaryRow label={t("monteCarlo.valuation.statistics.stdev")} value={usd(summary.fair_value_std, locale)} />
+                    <SummaryRow label={t("monteCarlo.valuation.statistics.p05")} value={usd(summary.fair_value_p05, locale)} />
+                    <SummaryRow label={t("monteCarlo.valuation.statistics.p10")} value={usd(summary.fair_value_p10, locale)} />
+                    <SummaryRow label={t("monteCarlo.valuation.statistics.p25")} value={usd(summary.fair_value_p25, locale)} />
+                    <SummaryRow label={t("monteCarlo.valuation.statistics.median")} value={usd(summary.fair_value_median, locale)} />
+                    <SummaryRow label={t("monteCarlo.valuation.statistics.p75")} value={usd(summary.fair_value_p75, locale)} />
+                    <SummaryRow label={t("monteCarlo.valuation.statistics.p90")} value={usd(summary.fair_value_p90, locale)} />
+                    <SummaryRow label={t("monteCarlo.valuation.statistics.p95")} value={usd(summary.fair_value_p95, locale)} />
                     <SummaryRow label={t("monteCarlo.valuation.statistics.undervaluation")} value={pct(summary.undervaluation_probability, locale)} />
                     <SummaryRow label={t("monteCarlo.valuation.statistics.zScore")} value={numberText(summary.z_score, locale)} />
                   </tbody>

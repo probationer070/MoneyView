@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 
-// Fixtures answer the Monte Carlo worker's three jobs. All numbers are won (path) or won per share (valuation).
+// Fixtures answer the Monte Carlo worker's three jobs. All numbers are won (path) or dollars per share (valuation).
 export type PathFixture = Record<string, unknown>;
 
 const TIMES = [0, 1, 2, 3, 4, 5];

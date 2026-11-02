@@ -46,9 +46,10 @@ const defaultInput: PathSimulationInput = {
 };
 
 const defaultValuationInput: ValuationInput = {
-  ticker: "KRW-STOCK",
-  currentPrice: 50_000,
-  baseEps: 3_500,
+  // Dollars (spec 2026-11-01): the same P/E 14.3 as the old 50,000 / 3,500 won example.
+  ticker: "SAMPLE",
+  currentPrice: 50,
+  baseEps: 3.5,
   averageGrowthRate: 12,
   growthUncertainty: 5,
   discountRate: 9,
@@ -387,7 +388,7 @@ export default function MonteCarloPage() {
           });
           if (lookupManualEditSeq === priceLookupManualEditSeqRef.current) {
             setValuationInput((current) => (current.ticker.trim().toUpperCase() === lookupTicker
-              ? { ...current, currentPrice: Math.round(data.price ?? current.currentPrice) }
+              ? { ...current, currentPrice: data.price === null ? current.currentPrice : Math.round(data.price * 100) / 100 }
               : current));
           }
           return;

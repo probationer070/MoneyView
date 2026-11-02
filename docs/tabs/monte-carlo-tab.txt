@@ -142,6 +142,10 @@ Design Notes
 Purpose
 - Produce a distribution of fair values for one stock rather than a single point estimate.
 
+Units
+- Per-share amounts are US dollars with two decimals in both locales ($187.42, $41.20–$58.90): the price lookup returns
+  the ticker's own USD quote, and cents are kept (owner, 2026-11-01). The other tabs' amounts stay in won.
+
 Inputs
 - ticker
 - current stock price

@@ -45,7 +45,7 @@ function histogram(values: number[], bins = 32) {
     const right = left + width;
     const midpoint = (left + right) / 2;
     return {
-      fair_value: Number(midpoint.toFixed(0)),
+      fair_value: Number(midpoint.toFixed(2)),
       frequency: Number((count / Math.max(values.length, 1)).toFixed(6)),
       count,
       undervalued_bucket: midpoint > 0 ? 1 : 0,
@@ -60,7 +60,8 @@ export function runValuationMonteCarlo(
 ): ValuationResult {
   const random = mulberry32(input.seed);
   const fairValues = new Array<number>(input.simulationCount).fill(0);
-  const baseTargetPer = Math.max(input.currentPrice / Math.max(input.baseEps, 1), 1);
+  // A cent floor, not 1: in dollars a floor of 1 rewrote the P/E of every stock with EPS under $1 (spec 2026-11-01).
+  const baseTargetPer = Math.max(input.currentPrice / Math.max(input.baseEps, 0.01), 1);
   const forecastYears = Math.max(1, Math.round(input.forecastPeriodYears));
   onProgress?.(3);
 
@@ -110,16 +111,16 @@ export function runValuationMonteCarlo(
     model: "Worker-side EPS/PER Monte Carlo valuation engine",
     valuation_distribution: histogram(fairValues),
     fair_value_summary: {
-      current_price: Number(input.currentPrice.toFixed(0)),
-      fair_value_mean: Number(mean.toFixed(0)),
-      fair_value_median: Number(median.toFixed(0)),
-      fair_value_p05: Number(percentile(fairValues, 5).toFixed(0)),
-      fair_value_p10: Number(percentile(fairValues, 10).toFixed(0)),
-      fair_value_p25: Number(percentile(fairValues, 25).toFixed(0)),
-      fair_value_p75: Number(percentile(fairValues, 75).toFixed(0)),
-      fair_value_p90: Number(percentile(fairValues, 90).toFixed(0)),
-      fair_value_p95: Number(percentile(fairValues, 95).toFixed(0)),
-      fair_value_std: Number(std.toFixed(0)),
+      current_price: Number(input.currentPrice.toFixed(2)),
+      fair_value_mean: Number(mean.toFixed(2)),
+      fair_value_median: Number(median.toFixed(2)),
+      fair_value_p05: Number(percentile(fairValues, 5).toFixed(2)),
+      fair_value_p10: Number(percentile(fairValues, 10).toFixed(2)),
+      fair_value_p25: Number(percentile(fairValues, 25).toFixed(2)),
+      fair_value_p75: Number(percentile(fairValues, 75).toFixed(2)),
+      fair_value_p90: Number(percentile(fairValues, 90).toFixed(2)),
+      fair_value_p95: Number(percentile(fairValues, 95).toFixed(2)),
+      fair_value_std: Number(std.toFixed(2)),
       undervaluation_probability: Number((undervaluationProbability * 100).toFixed(4)),
       upside_potential: Number(upsidePotential.toFixed(4)),
       z_score: Number(zScore.toFixed(4)),
