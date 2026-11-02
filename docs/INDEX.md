@@ -19,6 +19,7 @@ file before adding or moving any architecture doc.
 | `moneyview-system-design.md` | Runtime architecture, component boundaries, reliability limits |
 | `moneyview-api-reference.md` | API contract, route families, request/response behavior |
 | `moneyview-quant-engine.md` | Canonical finance-engine specification and formulas |
+| `calculation-formulas.md` | Every formula the app runs today, traced input → calculation → API → screen (Korean, 2026-11-02), with 13 inconsistencies found while reading |
 | `data-flow.md` | End-to-end workflows and calculation pipelines |
 | `storage-model.md` | SQLite, file cache, seed artifacts, retention rules |
 | `database-relationships.md` | Table inventory, declared and logical references, write/refresh order, lifecycle, known gaps |
