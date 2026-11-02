@@ -5,6 +5,7 @@ import { useT } from "@/lib/i18n/locale";
 import { useSignals } from "@/lib/useSignals";
 import { ManualInputPanel } from "./components/ManualInputPanel";
 import { ProbabilityTrendChart } from "./components/ProbabilityTrendChart";
+import { SignalsGuide } from "./components/SignalsGuide";
 import { SignalTable } from "./components/SignalTable";
 import { SummaryBar } from "./components/SummaryBar";
 
@@ -14,6 +15,7 @@ export default function SignalsPage() {
   return (
     <div className="flex flex-col gap-6 p-6">
       <PageHeader title={t("signals.title")} subtitle={t("signals.subtitle")} />
+      <SignalsGuide />
       {status === "loading" ? <p className="type-body text-[var(--ink-muted)]">{t("signals.loading")}</p> : null}
       {status === "unavailable" ? <p role="alert" className="type-body text-[var(--ink)]">{t("signals.unavailable")}</p> : null}
       {status === "ready" ? (

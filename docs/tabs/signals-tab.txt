@@ -6,8 +6,9 @@ Tab identity
 
 Purpose
 - Show this week's FRED-based macro rule verdicts and the heuristic scenario probabilities they
-  feed: A (upside), B (correction), C (not yet named; the page shows "A/B/C" until the owner
-  names it).
+  feed: A 상승 (Upside), B 조정 (Correction), C 급락·약세장 (Bear market: a credit-stress decline that
+  runs deeper and longer than B). Names set by the owner, 2026-11-01; the letter always stays beside
+  the name (summary bar, most likely, trend legend).
 - Let the owner enter the three manual signals for the week, and re-run the engine on demand.
 
 Design intent
@@ -19,11 +20,15 @@ Design intent
 - A failed run or a failed manual save is an alert (role="alert"). The run's own failure list
   (FRED errors that fell back to cache or to stale) is shown in a status region, but only for the
   run just made; it is not kept across a reload.
-- Korean labels are not shown yet. The page strings sit in app/signals/copy.ts in English;
-  `label_ko` is already returned by the API for the design-system plan's i18n task.
+- The page is bilingual through the i18n catalogs (`signals.*` in lib/i18n/messages/{en,ko}.ts); rule
+  labels come from the API's `label_ko` / `label_en`.
 
 Layout structure
 - Header: title "Macro Signals" and the subtitle.
+- "How to read this screen" (`PageGuide`, data-testid="page-guide"), closed by default: what the screen
+  is, the three scenarios, how the probabilities are made (prior and bounds quoted), the table's columns
+  and states, one line per rule (no thresholds; the table shows them), the trend chart, manual signals,
+  and the schedule. Copy in `signals.guide.*`; signals-guide.spec.ts checks every rules.yaml id has a line.
 - Summary bar: the week's most likely scenario, the three probabilities, last run time, and the
   "Run now" button. Under the most likely scenario, "k of N signals judged, m stale" says how much
   evidence the probabilities rest on; when k is 0 a note says they equal the prior. Each probability's
@@ -57,7 +62,6 @@ Important behavior
   not counted as not_triggered.
 - Bounded probabilities are computed by bounded_normalize (C1): values pinned at the bound, the rest
   renormalised, repeated until every value is in bounds.
-- The page's copy is English only for now (C11).
 - previous_probs is the most recent earlier stored snapshot, which can be several weeks back if weeks
   were skipped. previous_iso_week names that week, and the page shows it next to each change.
 

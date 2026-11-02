@@ -923,6 +923,7 @@ export const en = {
     fullTable: "Full table",
     cacheEffectiveness: "Cache effectiveness",
   },
+  guide: { summary: "How to read this screen" },
   signals: {
     title: "Macro Signals",
     subtitle: "Weekly FRED rule verdicts and heuristic S&P 500 scenario probabilities.",
@@ -940,6 +941,58 @@ export const en = {
     manual: "Manual signals", note: "Note", save: "Save", notSet: "Not set this week", stateOf: "{label} state",
     savedNotApplied: "Saved for this week; it will apply at the next run.",
     disclaimer: "These probabilities are a heuristic built from subjective likelihood ratios, not a statistical model estimate, and are not investment advice.",
+    scenario: { a: "Upside", b: "Correction", c: "Bear market" },
+    guide: {
+      about: {
+        title: "What this screen is",
+        body: "Each week it judges 8 rules on US macro data (FRED) and 3 signals you enter yourself, and turns the result into probabilities for three S&P 500 scenarios. It is not a trading signal; it shows which way the macro picture is leaning.",
+      },
+      scenarios: {
+        title: "Scenarios A, B and C",
+        a: "A Upside: rates and oil settle, jobs hold up, and the S&P 500 rises.",
+        b: "B Correction: rate and inflation pressure pull the S&P 500 down for a while before it recovers.",
+        c: "C Bear market: credit stress (a widening high-yield spread) joins in, and the fall runs deeper and longer.",
+        sum: "The three probabilities add up to 100%.",
+      },
+      probability: {
+        title: "How the probabilities are made",
+        body: "Every week starts again from the prior A 35%, B 45%, C 20%; last week's result is not carried forward. A triggered signal scales each scenario by the ratio its rule sets (the likelihood ratio); a near signal counts at half strength (the square root of that ratio). No scenario goes below 5% or above 85%. A change in pp is measured against the previous stored week.",
+      },
+      table: {
+        title: "Reading the signal table",
+        direction: "Dir.: A supports the upside; B supports the downside, which is both the correction and the bear market.",
+        state: "State: Triggered (the rule is met, counted in full) · Near (close to it, counted at half strength) · Not triggered (no effect) · Data stale (no recent data, left out; the reason sits under the name).",
+        values: "Value and Threshold: the figure this week's verdict used, and the level that triggers the rule.",
+        observed: "Observed: the date of that figure. FRED posts some series a few days late.",
+        contribution: "Contribution (pp): how far A, B and C would move if this signal were left out of the week.",
+      },
+      rulesTitle: "What each signal watches",
+      rules: {
+        b_tnx_sticky: "10Y yield sticky: whether the US 10-year Treasury yield has stayed high for many days in a row. Sticky high yields raise the discount rate on stocks.",
+        b_core_cpi_hot: "Core CPI hot: whether core consumer prices (excluding food and energy) rose fast from the month before. Hot inflation pushes rate cuts further out.",
+        b_hy_wide: "High-yield spread wide: whether the extra yield on junk bonds over Treasuries has widened. It signals rising credit risk, so it moves C the most.",
+        b_brent_spike: "Oil price spike: whether the recent average Brent crude price is high. Expensive oil feeds inflation and squeezes margins.",
+        b_fed_hike: "Fed hikes again: whether the top of the Fed's target range went up recently. It has no near state.",
+        a_tnx_relief: "10Y yield relief: whether the 10-year yield has stayed low for several days in a row.",
+        a_brent_relief: "Oil price relief: whether the recent average Brent price has come down.",
+        a_labor_core: "Jobs rebound + core cooling: payrolls grew strongly and core inflation was mild in the same month. Both together trigger it; one alone is near.",
+        m_capex_reaction: "Capex raised, stock fell (manual): mark it when a big tech company raises its capital-spending outlook and its stock falls anyway. The market is worrying about the cost of the build-out.",
+        m_iran_strike: "Iran strikes resume (manual): mark it triggered when strikes involving Iran resume, near when reports of escalation keep coming.",
+        m_breadth: "Market breadth improving (manual): mark it when many stocks rise together rather than a handful of large caps.",
+      },
+      trend: {
+        title: "Trend chart",
+        body: "The last 26 weeks of A, B and C. A dashed line marks a week in which the rules file changed, so the weeks either side of it are not directly comparable.",
+      },
+      manual: {
+        title: "Manual signals",
+        body: "Three signals that data cannot judge, entered by you. A week with no input leaves the signal out of the probabilities; it is not read as not triggered. Saving rescores the current week; if this week has no snapshot yet, the input applies at the next run.",
+      },
+      schedule: {
+        title: "When it runs",
+        body: "Automatically once a week, after Saturday 08:51 KST, and whenever you press Run now.",
+      },
+    },
   },
   risk: {
     strip: {

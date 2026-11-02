@@ -29,7 +29,7 @@ export function ProbabilityTrendChart({ history }: { history: SignalHistoryPoint
             <YAxis domain={[0, 1]} tickFormatter={(v: number) => `${Math.round(v * 100)}%`} {...DEFAULT_AXIS_PROPS} />
             <Tooltip {...withTooltipProps()} formatter={(v) => `${(Number(v) * 100).toFixed(1)}%`} />
             <Legend />
-            {SERIES.map((s) => <Line key={s.key} dataKey={s.key} name={s.key.toUpperCase()} stroke={s.stroke} dot={false} isAnimationActive={false} />)}
+            {SERIES.map((s) => <Line key={s.key} dataKey={s.key} name={`${s.key.toUpperCase()} ${t(`signals.scenario.${s.key}`)}`} stroke={s.stroke} dot={false} isAnimationActive={false} />)}
             {breaks.map((w) => <ReferenceLine key={w} x={w} strokeDasharray="4 4" stroke={tokens.line.strong} label={t("signals.trendRulesChanged")} />)}
           </LineChart>
         </ResponsiveChart>
