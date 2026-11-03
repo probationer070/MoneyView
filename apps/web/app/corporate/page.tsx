@@ -30,6 +30,7 @@ import { CorporateHeader } from "./components/CorporateHeader";
 import { DcfTab } from "./components/DcfTab";
 import { AssumptionTable } from "./components/AssumptionTable";
 import { KpiRow } from "./components/KpiRow";
+import { RelativePricingCard } from "./components/RelativePricingCard";
 import { VerdictBlock, VerdictStrip } from "./components/VerdictBlock";
 import { FairValueLine } from "@/components/valuation/FairValueLine";
 import { verdictView } from "./verdict";
@@ -968,6 +969,7 @@ export default function CorporateAnalysisPage() {
                   leveredBeta={derived.leveredBeta}
                   onOpenDetail={setActiveCalculation}
                 />
+                <RelativePricingCard ticker={sourceDataTicker} />
               </div>
               <AssumptionTable
                 assumptions={assumptions}

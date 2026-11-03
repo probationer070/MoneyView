@@ -1,5 +1,6 @@
 import { buildApiUrl } from "@/lib/api";
 import type { FairValueSummary } from "@/lib/fairValue";
+import type { RelativePricing } from "@/lib/relativePricing";
 import type {
   CaseRecord, CaseSummary, DiffResult, ForkRequest, PricingResult, RunResult, SimulateRequest, SimulateResult,
 } from "./caseTypes";
@@ -63,6 +64,9 @@ export const casesApi = {
   // POST and idempotent: stores the ticker's fair-value case once, then returns it.
   fairValue: (ticker: string) =>
     request<FairValueSummary>(`/valuation/fair-value/${encodeURIComponent(ticker)}`, "POST"),
+  // GET and read-only: the industry-average multiples applied to the company (spec §12).
+  relativePricing: (ticker: string) =>
+    request<RelativePricing>(`/valuation/relative-pricing/${encodeURIComponent(ticker)}`, "GET"),
 };
 
 /** React Query `retry`: a refusal will be refused again, so only retry real failures. */

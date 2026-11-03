@@ -190,3 +190,37 @@ k=3이면 17개(9%)에 배지가 붙는다. 시장 가격도 업종의 3배를 �
 출처 문장("5년 DCF가 아니라 다모다란식 10년 케이스에서 나온 값입니다")을 보인다. 10년 케이스도 값이 없거나 0 이하이면
 아무것도 덧붙이지 않는다. DCF 수치는 바꾸지 않는다. `VerdictFallback.tsx`, e2e `corporate-guide.spec.ts`
 "a refused 5-year DCF shows the 10-year case value".
+
+## 12. ③ 상대가격 설계 (2026-11-03)
+
+오너 결정(2026-11-03): P/B는 금융업만, 표시는 요약 탭 카드. §9의 2·3(업종 평균만, 내재가치와 섞지 않음)을 따른다.
+
+**계산** (`packages/core_finance/relative_pricing.py`, 순수 함수, 단위 10억):
+- EV/Sales: (업종 EV/Sales × 최근 연간 매출 − 순부채) ÷ 희석 주식 수. 0 이하면 `non_positive_value`.
+- P/E: 업종 P/E × 최근 연간 희석 EPS. 최근 EPS가 0 이하면 `no_positive_earnings` (과거 흑자 연도로 거슬러 가지 않는다).
+- P/B: 업종 P/B × 최근 연간 자본 ÷ 희석 주식 수. 0 이하면 `no_positive_book`.
+- 범위: 값이 나온 배수의 최저·중앙값·최고. 하나도 없으면 범위 없음.
+
+**배수 선택**: Yahoo 섹터가 `Financial Services`면 P/E·P/B(EV/Sales 제외: 금융사의 부채는 영업 자산이다), 그 외는 EV/Sales·P/E.
+
+**업종 값**: `industry_row_for_ticker`(자기 업종 하나). 표본이 얇으면(`screen_row`) 전체 거절 `thin_industry`, 배수 값이 비었거나
+범위 밖이면(`screen_value`) 그 배수만 `no_multiple`.
+
+**전체 거절**: `currency_mismatch`(§11과 같은 규칙), `no_vintage`(409), `no_industry`, `unmapped_industry`, `thin_industry`, `no_price`.
+
+**API**: `GET /valuation/relative-pricing/{ticker}`, 읽기 전용(DB 쓰기 없음). 응답:
+`{ticker, vintage, industry, industry_firms, financial, price, price_date, rows:[{basis, industry_multiple, company_figure,
+value_per_share, gap_pct, refusal}], range:{low, mid, high}|null}`. 거절은 422 `detail: "<code>: <설명>"`.
+
+**화면**: 요약 탭 KPI 줄 아래 "상대가격 (업종 평균)" 카드. 범위 한 줄 + 배수별 표(업종 배수, 회사 실적, 주당 가치, 현재가 대비,
+빠진 배수는 이유). 내재가치 숫자와 같은 칸에 두지 않는다. 1280×720 한 화면 유지.
+
+**③ 완료 (2026-11-03).** 위 설계대로 구현했다. 단, P/E의 업종 배수는 `trailing_pe`가 아니라 `aggregate_pe`
+("Aggregate Mkt Cap/ Trailing Net Income (only money making firms)")를 쓴다. 다모다란 pedata의 설명 시트에 따르면
+`Trailing PE`는 기업별 P/E의 **단순 평균**이다. 그래서 합계 배수의 2–3배이고(Computers 81 대 34, Semiconductor 100 대 49),
+이 값으로는 AAPL의 P/E 기준 가치가 605(현재가 338)로 나왔다. `aggregate_pe`는 2026-01-07 저장본 `pedata.xls`
+(`data/raw/damodaran/pedata-2026-01.xlsx`로 변환, gitignore)를 `scripts/load_damodaran_column.py`로 기존 2026-01-01 판에
+이 열만 채운다(91/94; 원자료에 값이 없는 Chemical (Diversified), Electronics (Consumer & Office), Rubber& Tires는 NULL →
+그 업종의 P/E 행은 `no_multiple`). 교체 후 AAPL은 186–256, NVDA는 141–239.
+남은 것: 가치평가 탭 판정 패널(`valuation_verdict`)의 PER 비교도 단순 평균 `trailing_pe`를 쓴다(오너 결정 필요).
+EV/Sales·P/B 열이 합계 배수인지는 확인하지 않았다.

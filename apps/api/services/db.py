@@ -791,6 +791,7 @@ CREATE TABLE IF NOT EXISTS industry_benchmark (
     price_to_book      REAL,
     ev_sales           REAL,
     stdev_price        REAL,
+    aggregate_pe       REAL,
     PRIMARY KEY (vintage, industry_name)
 );
 
@@ -1228,6 +1229,7 @@ def _ensure_schema_compatibility(conn: sqlite3.Connection) -> None:
             price_to_book      REAL,
             ev_sales           REAL,
             stdev_price        REAL,
+            aggregate_pe       REAL,
             PRIMARY KEY (vintage, industry_name)
         )"""
     )
@@ -1235,7 +1237,7 @@ def _ensure_schema_compatibility(conn: sqlite3.Connection) -> None:
         row["name"]
         for row in conn.execute("PRAGMA table_info(industry_benchmark)").fetchall()
     }
-    for column in ("trailing_pe", "price_to_book", "ev_sales", "stdev_price"):
+    for column in ("trailing_pe", "price_to_book", "ev_sales", "stdev_price", "aggregate_pe"):
         if column not in benchmark_columns:
             conn.execute(f"ALTER TABLE industry_benchmark ADD COLUMN {column} REAL")
     # Additive, as for industry_benchmark above: covers a database whose create script stopped

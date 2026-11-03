@@ -28,6 +28,7 @@ from packages.core_finance.industry_benchmark import (
     BenchmarkUnavailable,
     IndustryRow,
     SectorBenchmark,
+    column_by_key,
     resolve_benchmark,
 )
 
@@ -78,6 +79,74 @@ def parse_workbook(
             },
         ))
     return rows
+
+
+def parse_pe_workbook(path: str, *, sheet: str = "Industry Averages") -> dict[str, float]:
+    """One numeric column of Damodaran's P/E workbook, keyed by industry name.
+
+    The header row is located by scanning for "Industry Name" (the sheet has title rows above
+    it), and the column by its header text, since the publication's column order is not a
+    contract. Only the aggregate multiple is read here, so the screen is `column_by_key`'s band.
+    """
+    worksheet = openpyxl.load_workbook(path, data_only=True)[sheet]
+    head = list(worksheet.iter_rows(min_row=1, max_row=20, values_only=True))
+    header_at = next(
+        (
+            position for position, cells in enumerate(head)
+            if any(isinstance(cell, str) and cell.strip() == "Industry Name" for cell in cells)
+        ),
+        None,
+    )
+    if header_at is None:
+        raise ValueError(f"{path} sheet {sheet!r}: no 'Industry Name' header in the first 20 rows")
+
+    index = {
+        str(name).strip(): position
+        for position, name in enumerate(head[header_at])
+        if name
+    }
+    source = column_by_key("aggregate_pe").source_header
+    missing = [name for name in ("Industry Name", source) if name not in index]
+    if missing:
+        raise ValueError(
+            f"{path} sheet {sheet!r} is missing required headers: {missing}. "
+            f"Found: {sorted(index)}"
+        )
+
+    values: dict[str, float] = {}
+    for raw in worksheet.iter_rows(min_row=header_at + 2, values_only=True):
+        name = raw[index["Industry Name"]]
+        number = raw[index[source]]
+        if not isinstance(name, str) or name.strip() in EXCLUDED_ROWS:
+            continue
+        if isinstance(number, (int, float)) and not isinstance(number, bool):
+            values[name.strip()] = float(number)
+    return values
+
+
+def store_column(vintage: str, key: str, values: dict[str, float]) -> tuple[int, list[str]]:
+    """Set one value column on rows that already exist for `vintage`.
+
+    Never inserts a row and never touches another column, so a later load cannot change a
+    vintage's other figures. Returns (rows updated, names with no stored row, sorted).
+    """
+    if key not in _VALUE_COLUMNS:
+        raise ValueError(f"unknown benchmark column {key!r}; known columns are {sorted(_VALUE_COLUMNS)}")
+    updated = 0
+    with get_db() as conn:
+        stored = {
+            row["industry_name"]
+            for row in conn.execute(
+                "SELECT industry_name FROM industry_benchmark WHERE vintage = ?", (vintage,)
+            ).fetchall()
+        }
+        for name, value in values.items():
+            cursor = conn.execute(
+                f"UPDATE industry_benchmark SET {key} = ? WHERE vintage = ? AND industry_name = ?",
+                (value, vintage, name),
+            )
+            updated += cursor.rowcount
+    return updated, sorted(name for name in values if name not in stored)
 
 
 def store_vintage(vintage: str, rows: list[IndustryRow]) -> int:

@@ -257,6 +257,22 @@ def create_fair_value(ticker: str):
     return APIResponse(data=fair_value_summary(ticker, case_id, created=created, vintage=vintage))
 
 
+@router.get("/relative-pricing/{ticker}", response_model=APIResponse[dict])
+def get_relative_pricing(ticker: str):
+    """The company's own figures at its industry's multiples, per share (spec 2026-11-01 §12).
+
+    Read-only: no records sync. 409 for `no_vintage` (missing server state), 422 for every other
+    refusal, with its reason prefix.
+    """
+    from apps.api.services.relative_pricing import RelativePricingRefused, relative_pricing
+
+    try:
+        return APIResponse(data=relative_pricing(ticker))
+    except RelativePricingRefused as exc:
+        status = 409 if str(exc).startswith("no_vintage") else 422
+        raise HTTPException(status_code=status, detail=str(exc)) from exc
+
+
 @router.get("/verdict/{ticker}", response_model=APIResponse[VerdictPanel])
 def get_valuation_verdict(ticker: str):
     """Evidence about whether a computed gap between price and value is worth acting on.

@@ -76,6 +76,13 @@ BENCHMARK_COLUMNS: tuple[BenchmarkColumn, ...] = (
     BenchmarkColumn(
         "stdev_price", "Std deviation in stock prices", "fraction", 0.0, 3.0, required=False
     ),
+    # Aggregate market cap over aggregate net income of money-making firms. `trailing_pe` is a
+    # simple average of firm PEs (Damodaran's FAQ), which runs 2-3x the aggregate multiple.
+    BenchmarkColumn(
+        "aggregate_pe",
+        "Aggregate Mkt Cap/ Trailing Net Income (only money making firms)",
+        "ratio", 0.0, 200.0, required=False,
+    ),
 )
 
 _COLUMNS_BY_KEY = {column.key: column for column in BENCHMARK_COLUMNS}

@@ -13,6 +13,8 @@ import type {
 import { API_PREFIX, json, nowIso } from "./mockUtils";
 import type { FairValueSummary } from "../../../lib/fairValue";
 import { fairValueFixture } from "./fairValueMock";
+import { relativePricingFixture } from "./relativePricingMock";
+import type { RelativePricing } from "../../../lib/relativePricing";
 
 // current_price for the "Technology" sector comparison rows (AAPL/MSFT/ESTM/MISS), shared
 // between the fixture below and any test that needs to identify a specific ticker's data
@@ -41,6 +43,8 @@ export type CorporatePageMockStats = {
 export type CorporatePageMockOptions = {
   /** The POST /valuation/fair-value summary, instead of fairValueFixture(ticker). */
   fairValue?: FairValueSummary;
+  /** The GET /valuation/relative-pricing response, or a refusal ({status, detail}), instead of relativePricingFixture(ticker). */
+  relativePricing?: RelativePricing | { status: number; detail: string };
   failQuarterlyStatements?: boolean;
   failOhlcv?: boolean;
   failDcfFullReport?: boolean;
@@ -599,6 +603,14 @@ export async function mockCorporatePageApi(page: Page, stats?: CorporatePageMock
     // The header's Damodaran-style fair value line (FairValueLine).
     if (pathname.startsWith(`${API_PREFIX}/valuation/fair-value/`) && method === "POST") {
       return json(route, { status: "ok", data: options?.fairValue ?? fairValueFixture(decodeURIComponent(pathname.split("/").pop() ?? "AAPL")), meta: {} });
+    }
+
+    // The summary card's industry-average relative pricing (RelativePricingCard); a refusal is a 4xx with detail.
+    if (pathname.startsWith(`${API_PREFIX}/valuation/relative-pricing/`) && method === "GET") {
+      const ticker = decodeURIComponent(pathname.split("/").pop() ?? "AAPL");
+      const pricing = options?.relativePricing ?? relativePricingFixture(ticker);
+      if ("status" in pricing) return json(route, { detail: pricing.detail }, pricing.status);
+      return json(route, { status: "ok", data: pricing, meta: {} });
     }
 
     if (pathname === `${API_PREFIX}/corporate/companies` && method === "GET") {

@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { mockCorporatePageApi } from "./helpers/corporatePageMock";
 import { fairValueFixture } from "./helpers/fairValueMock";
+import { relativePricingFixture } from "./helpers/relativePricingMock";
 import { lowerPanel } from "./helpers/corporateDcf";
 import { buildFormulaContext } from "../../app/corporate/formulaContext";
 import { substitutedFormula } from "../../app/corporate/substitutedFormula";
@@ -350,6 +351,95 @@ test.describe("a refused 5-year DCF shows the 10-year case value", () => {
       const verdict = page.getByTestId("corporate-verdict");
       await expect(verdict).toHaveAttribute("data-state", "valued", { timeout: 60_000 });
       await expect(verdict.getByTestId("verdict-fallback")).toHaveCount(0);
+    });
+  });
+});
+
+// The summary's industry-average relative pricing card (spec 2026-11-01 plan §12): a separate card, refusals in words.
+test.describe("relative pricing card on the summary", () => {
+  const LOCALES = [
+    ["en-US", /Corporate Analysis/i],
+    ["ko-KR", "기업 분석"],
+  ] as const;
+
+  for (const [locale, heading] of LOCALES) {
+    test.describe(locale, () => {
+      test.use({ locale });
+
+      test("the default fixture is valued: range, both rows and the note", async ({ page }) => {
+        await mockCorporatePageApi(page);
+        await page.goto("/corporate", { waitUntil: "domcontentloaded" });
+        await expect(page.getByRole("heading", { name: heading })).toBeVisible({ timeout: 60_000 });
+        const card = page.getByTestId("relative-pricing");
+        await expect(card).toHaveAttribute("data-state", "valued", { timeout: 60_000 });
+        const range = card.locator('[data-part="range"]');
+        await expect(range).toContainText("170.85");
+        await expect(range).toContainText("180.25");
+        await expect(card.locator('tr[data-basis="ev_sales"]')).toBeVisible();
+        await expect(card.locator('tr[data-basis="trailing_pe"]')).toBeVisible();
+        await expect(card.locator('[data-part="note"]')).toBeVisible();
+      });
+
+      test("a refused whole card shows the mapped reason", async ({ page }) => {
+        await mockCorporatePageApi(page, undefined, {
+          relativePricing: { status: 422, detail: "currency_mismatch: AAPL reports in TWD and trades in USD" },
+        });
+        await page.goto("/corporate", { waitUntil: "domcontentloaded" });
+        await expect(page.getByRole("heading", { name: heading })).toBeVisible({ timeout: 60_000 });
+        const card = page.getByTestId("relative-pricing");
+        await expect(card).toHaveAttribute("data-state", "refused", { timeout: 60_000 });
+        const reason = locale === "en-US"
+          ? "Relative pricing unavailable: the statements and the price are in different currencies"
+          : "상대가격 산출 불가: 재무제표와 주가의 통화가 다릅니다";
+        await expect(card.locator('[data-part="refusal"]')).toContainText(reason);
+      });
+    });
+  }
+
+  test.describe("en-US", () => {
+    test.use({ locale: "en-US" });
+
+    test("a refused row shows its sentence, not the code, and the other row keeps its value", async ({ page }) => {
+      const base = relativePricingFixture("AAPL");
+      const relativePricing = {
+        ...base,
+        range: { low: 180.25, mid: 180.25, high: 180.25 },
+        rows: [
+          base.rows[0],
+          { basis: "trailing_pe" as const, industry_multiple: 28.1, company_figure: -0.5, value_per_share: null, gap_pct: null, refusal: "no_positive_earnings: AAPL's latest diluted EPS is -0.50" },
+        ],
+      };
+      await mockCorporatePageApi(page, undefined, { relativePricing });
+      await page.goto("/corporate", { waitUntil: "domcontentloaded" });
+      await expect(page.getByRole("heading", { name: /Corporate Analysis/i })).toBeVisible({ timeout: 60_000 });
+      const card = page.getByTestId("relative-pricing");
+      await expect(card).toHaveAttribute("data-state", "valued", { timeout: 60_000 });
+      const peRow = card.locator('tr[data-basis="trailing_pe"]');
+      await expect(peRow.locator('[data-part="row-refusal"]')).toHaveText("The latest diluted EPS is zero or negative, so P/E gives no value.");
+      await expect(peRow).not.toContainText("no_positive_earnings");
+      await expect(peRow.locator('[data-part="row-refusal"]')).toHaveAttribute("title", "no_positive_earnings: AAPL's latest diluted EPS is -0.50");
+      await expect(card.locator('tr[data-basis="ev_sales"] [data-part="per-share"]')).toHaveText("180.25");
+    });
+
+    test("a financial company shows P/E and P/B and no EV/Sales row", async ({ page }) => {
+      const base = relativePricingFixture("AAPL");
+      const relativePricing = {
+        ...base,
+        financial: true,
+        range: { low: 150.2, mid: 157.8, high: 165.4 },
+        rows: [
+          { basis: "trailing_pe" as const, industry_multiple: 14.2, company_figure: 11.6, value_per_share: 165.4, gap_pct: -19.6, refusal: null },
+          { basis: "price_to_book" as const, industry_multiple: 1.9, company_figure: 79.0, value_per_share: 150.2, gap_pct: -27.0, refusal: null },
+        ],
+      };
+      await mockCorporatePageApi(page, undefined, { relativePricing });
+      await page.goto("/corporate", { waitUntil: "domcontentloaded" });
+      await expect(page.getByRole("heading", { name: /Corporate Analysis/i })).toBeVisible({ timeout: 60_000 });
+      const card = page.getByTestId("relative-pricing");
+      await expect(card).toHaveAttribute("data-state", "valued", { timeout: 60_000 });
+      await expect(card.locator('tr[data-basis="price_to_book"]')).toBeVisible();
+      await expect(card.locator('tr[data-basis="ev_sales"]')).toHaveCount(0);
+      await expect(card.locator("tbody tr")).toHaveCount(2);
     });
   });
 });
