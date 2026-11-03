@@ -10,6 +10,7 @@ import { MISSING } from "@/lib/format";
 import { useT } from "@/lib/i18n/locale";
 import { moneyText } from "../corporateUtils";
 import { verdictLabelKey, type VerdictView } from "../verdict";
+import { VerdictFallback } from "./VerdictFallback";
 
 /** The DCF status, translated only (spec D5); an unknown status is shown as sent. */
 export function VerdictStatusLabel({ status }: { status: string }) {
@@ -24,10 +25,11 @@ export function VerdictStatusLabel({ status }: { status: string }) {
 interface VerdictProps {
   view: VerdictView;
   onOpenDetail: () => void;
+  ticker?: string;
 }
 
 // Spec §2.2: intrinsic value vs price and the upside, under the backend's own status label.
-export function VerdictBlock({ view, onOpenDetail }: VerdictProps) {
+export function VerdictBlock({ view, onOpenDetail, ticker }: VerdictProps) {
   const t = useT();
   const { state, streaming, intrinsic, upside, enterpriseValue, currentPrice, status, refusalText } = view;
 
@@ -50,9 +52,12 @@ export function VerdictBlock({ view, onOpenDetail }: VerdictProps) {
           </button>
         </div>
         {state === "refused" ? (
-          <p data-testid="dcf-refusal" className="type-body text-[var(--ink-secondary)]">
-            {t("corporate.verdict.refused", { reason: refusalText ?? "" })}
-          </p>
+          <>
+            <p data-testid="dcf-refusal" className="type-body text-[var(--ink-secondary)]">
+              {t("corporate.verdict.refused", { reason: refusalText ?? "" })}
+            </p>
+            {ticker ? <VerdictFallback ticker={ticker} /> : null}
+          </>
         ) : state === "idle" ? (
           <p className="type-body text-[var(--ink-muted)]">{t("corporate.verdict.idle")}</p>
         ) : state === "streaming" ? (

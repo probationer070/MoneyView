@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { mockCorporatePageApi } from "./helpers/corporatePageMock";
+import { fairValueFixture } from "./helpers/fairValueMock";
 import { lowerPanel } from "./helpers/corporateDcf";
 import { buildFormulaContext } from "../../app/corporate/formulaContext";
 import { substitutedFormula } from "../../app/corporate/substitutedFormula";
@@ -292,4 +293,63 @@ test.describe("a mixed-currency DCF refusal reads as a sentence", () => {
       });
     });
   }
+});
+
+// A refused 5-year DCF still shows the Damodaran-style 10-year case value, labelled with its source (never mixed in).
+test.describe("a refused 5-year DCF shows the 10-year case value", () => {
+  const refuseDcf = (page: Page) => page.route("**/api/v1/corporate/dcf/AAPL/stream", (route) => route.fulfill({
+    status: 422, contentType: "application/json",
+    body: JSON.stringify({ detail: { code: "non_positive_fcff", message: "AAPL has a non-positive FCFF in year 1" } }),
+  }));
+
+  for (const [locale, heading, button, source, label] of [
+    ["en-US", /Corporate Analysis/i, "Refresh DCF", "10-year case", "10-year case value"],
+    ["ko-KR", "기업 분석", "DCF 새로고침", "10년 케이스", "10년 케이스 적정가"],
+  ] as const) {
+    test.describe(locale, () => {
+      test.use({ locale });
+      test("the refusal is followed by the labelled 10-year value", async ({ page }) => {
+        await mockCorporatePageApi(page);
+        await refuseDcf(page);
+        await page.goto("/corporate", { waitUntil: "domcontentloaded" });
+        await expect(page.getByRole("heading", { name: heading })).toBeVisible({ timeout: 60_000 });
+        await page.getByRole("button", { name: button }).click();
+        const verdict = page.getByTestId("corporate-verdict");
+        await expect(verdict).toHaveAttribute("data-state", "refused");
+        const fallback = verdict.getByTestId("verdict-fallback");
+        await expect(fallback).toBeVisible();
+        // The fixture's 145.50 per share, formatted for the locale: the integer part is enough to tell it apart.
+        await expect(fallback.locator("[data-part=fallback-value]")).toContainText("145");
+        await expect(fallback.getByText(label, { exact: true })).toBeVisible();
+        await expect(fallback.locator("[data-part=fallback-source]")).toContainText(source);
+      });
+    });
+  }
+
+  test.describe("en-US", () => {
+    test.use({ locale: "en-US" });
+
+    test("no positive value means no fallback, and the refusal still shows", async ({ page }) => {
+      const fairValue = { ...fairValueFixture("AAPL"), value_per_share: null, gap_pct: null, value_note: "non_positive_value: test" };
+      await mockCorporatePageApi(page, undefined, { fairValue });
+      await refuseDcf(page);
+      await page.goto("/corporate", { waitUntil: "domcontentloaded" });
+      await expect(page.getByRole("heading", { name: /Corporate Analysis/i })).toBeVisible({ timeout: 60_000 });
+      await page.getByRole("button", { name: "Refresh DCF" }).click();
+      const verdict = page.getByTestId("corporate-verdict");
+      await expect(verdict).toHaveAttribute("data-state", "refused");
+      await expect(verdict.getByTestId("dcf-refusal")).toBeVisible();
+      await expect(verdict.getByTestId("verdict-fallback")).toHaveCount(0);
+    });
+
+    test("a valued DCF shows no fallback", async ({ page }) => {
+      await mockCorporatePageApi(page);
+      await page.goto("/corporate", { waitUntil: "domcontentloaded" });
+      await expect(page.getByRole("heading", { name: /Corporate Analysis/i })).toBeVisible({ timeout: 60_000 });
+      await page.getByRole("button", { name: "Refresh DCF" }).click();
+      const verdict = page.getByTestId("corporate-verdict");
+      await expect(verdict).toHaveAttribute("data-state", "valued", { timeout: 60_000 });
+      await expect(verdict.getByTestId("verdict-fallback")).toHaveCount(0);
+    });
+  });
 });

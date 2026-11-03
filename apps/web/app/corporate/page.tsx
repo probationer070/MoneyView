@@ -960,7 +960,7 @@ export default function CorporateAnalysisPage() {
           summary: (
             <section className="grid grid-cols-1 gap-4 lg:grid-cols-3">
               <div className="flex min-w-0 flex-col gap-3 lg:col-span-2">
-                <VerdictBlock view={verdict} onOpenDetail={() => setActiveCalculation("backendDcf")} />
+                <VerdictBlock view={verdict} onOpenDetail={() => setActiveCalculation("backendDcf")} ticker={sourceDataTicker} />
                 <KpiRow
                   spread={derived.spread}
                   bottomUpKe={derived.bottomUpKe}

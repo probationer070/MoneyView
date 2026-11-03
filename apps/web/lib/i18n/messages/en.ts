@@ -348,6 +348,8 @@ export const en = {
       detail: "Verdict detail", intrinsic: "Intrinsic value", vs: "vs", current: "Current price",
       idle: "DCF not calculated · use Refresh DCF above", streaming: "Calculating…",
       refused: "Not valued: {reason}", ev: "EV {value}",
+      fallbackLabel: "10-year case value",
+      fallbackSource: "From the Damodaran-style 10-year case, not the 5-year DCF.",
     },
     verdictStrip: { idle: "DCF not calculated", refused: "Not valued", staleSource: "Stale source" },
     kpi: {

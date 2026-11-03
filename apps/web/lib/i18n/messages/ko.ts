@@ -351,6 +351,8 @@ export const ko: Messages = {
       detail: "판정 상세", intrinsic: "내재가치", vs: "대비", current: "현재가",
       idle: "DCF 미계산 · 위의 DCF 새로고침을 누르십시오", streaming: "계산 중…",
       refused: "평가하지 않음: {reason}", ev: "기업가치(EV) {value}",
+      fallbackLabel: "10년 케이스 적정가",
+      fallbackSource: "5년 DCF가 아니라 다모다란식 10년 케이스에서 나온 값입니다.",
     },
     verdictStrip: { idle: "DCF 미계산", refused: "평가하지 않음", staleSource: "원천 데이터 오래됨" },
     kpi: {
