@@ -9,6 +9,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { useT } from "@/lib/i18n/locale";
 import { NewsFeedList, type NewsArticle } from "./components/NewsFeedList";
+import { NewsGuide } from "./components/NewsGuide";
 
 export default function NewsPage() {
   useDevMonitorPageLoad({ component: "news" });
@@ -37,6 +38,7 @@ export default function NewsPage() {
         title={t("news.title")}
         subtitle={t("news.subtitle")}
       />
+      <NewsGuide />
 
       {newsQuery.isLoading ? (
         <LoadingState variant="skeleton" />

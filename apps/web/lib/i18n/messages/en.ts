@@ -16,7 +16,63 @@ export const en = {
     errorTitle: "Something went wrong", tryAgain: "Try again", noData: "No data available", noDataHint: "Run an analysis or refresh the data to see results here.", renderFailureTitle: "Component Render Failure", renderFailureBody: "An unexpected error broke the layout context for this graphic. Logs have been traced locally.", exportDisabled: "Export Disabled", exportJson: "Export JSON", exportCsv: "Export CSV", exportMarkdown: "Export Markdown", printPdf: "Print PDF", tickerPlaceholder: "Ticker or company name", other: "Other", chartUnavailable: "Chart unavailable",
   },
   delta: { up: "Up", down: "Down", flat: "Unchanged" },
-  portfolio: { title: "Portfolio" },
+  portfolio: {
+    title: "Portfolio",
+    guide: {
+      about: {
+        title: "What this screen is",
+        body: "A workspace for the stocks you follow. Track them as tiles, give some of them weights to form a test portfolio, and compare that portfolio with a benchmark. It is for review and testing, not advice.",
+      },
+      layout: {
+        title: "Where things are",
+        main: "The page itself holds the stock tiles. The icon bar on the right opens four panels: the latest snapshot summary, attribution, the allocation workspace and the holdings table. The last icon refreshes news for the stocks on screen.",
+        panel: "A panel slides over the tiles. Press Escape or the close button to leave it.",
+      },
+      tiles: {
+        title: "Reading a tile",
+        head: "A tile shows the ticker, the latest close in dollars, the change chip, a line of recent closes and the weight when it is above zero.",
+        change: "The change is the latest close against the close of the previous trading day. The holdings table shows the same figure under the price.",
+        colour: "Red with ▲ is a rise and blue with ▼ is a fall, following Korean market convention.",
+        news: "The box under the line lists up to three recent headlines with their age. Without headlines it says whether news was never checked, is not loaded yet, or none was found at the last check.",
+        follow: "The + or ✓ button in the corner moves a stock in or out of the followed group. The filter above the tiles switches between Followed, Not followed and All, and the count line shows how many tiles are on screen, how many exist and how many are followed.",
+      },
+      window: {
+        title: "Return dates",
+        body: "Holding Start Date and Return End Date set the window for return, attribution and beta. An empty start uses the default five-year range. An empty end uses the latest market date in the cache. Set the start to the date you actually held the stock, or a long-held winner will look better than your own result.",
+      },
+      attribution: {
+        title: "Attribution panel",
+        kpi: "Portfolio Return is each holding's return times its weight, added up. Benchmark Return is the same for the benchmark. Active Return is the first minus the second. Beta measures how strongly the portfolio moves with the benchmark: about 1 is market-like and higher is more sensitive.",
+        weights: "The weights are your saved allocations. If no weight is above zero, an equal-weight basket is used instead. If the saved weights add up to more than 100%, attribution pauses until you lower them.",
+        charts: "The donut shows allocation by sector. The waterfall splits active return into allocation, selection and interaction effects by sector (Brinson-Fachler).",
+        idle: "Attribution waits on first load. Press Refresh Analysis in the snapshot panel to calculate it.",
+      },
+      snapshot: {
+        title: "Snapshot panel",
+        source: "A snapshot is a saved daily comparison of your stocks and a benchmark. Persisted snapshot shows the latest saved record. Live calculation recomputes with the current controls and changes nothing that was saved. Saved history changes only when you press Save Current As Snapshot or opt in from the allocation panel.",
+        cards: "The cards give the as-of date, the source, the universe, the benchmark, how many stocks beat their WACC on implied return, how many have a positive ROIC minus WACC, and the stock with the highest implied return over WACC.",
+        table: "Portfolio-wide averages are left out on purpose, because one outlier distorts them. Compare stock by stock in the holdings table.",
+        history: "Opening a saved snapshot from the history locks the benchmark and universe to what was saved, and the table follows that snapshot until you clear it.",
+      },
+      table: {
+        title: "Holdings table columns",
+        roic: "ROIC minus WACC is the return on invested capital less the cost of capital. Positive means the business earns more than its capital costs.",
+        dcf: "DCF value vs price is a one-off gap between the DCF value and the price. It is not a yearly rate.",
+        implied: "Implied return vs WACC is in percentage points per year: the return the price implies, less WACC.",
+        volatility: "Volatility is estimated from the recent closes in the sparkline, not taken from the comparison service.",
+        quality: "A cell without a value gives the reason. Values from an old snapshot or from cache say so. A value outside the sanity range is flagged and left out of rankings.",
+      },
+      allocation: {
+        title: "Allocation panel",
+        summary: "Tracked names, allocated names, total investment, invested capital, implied cash and final profit. Implied cash is what the weights leave unallocated. Final profit uses the DCF value vs price gap and subtracts the transaction fee.",
+        edit: "Drag a slider for a quick change or double-click the value to type one. Changes save on their own. Normalize To 100% scales your saved weights so they add up to 100%.",
+      },
+      news: {
+        title: "News on the tiles",
+        body: "Headlines come from Google News search results for each stock, stored in the local database. The refresh icon collects them again for the stocks on screen. If the load fails, the page says the headlines are missing rather than absent.",
+      },
+    },
+  },
   valuation: {
     fairValue: {
       title: "Damodaran-style fair value",
@@ -658,6 +714,45 @@ export const en = {
     title: "Market Overview",
     subtitle: "Daily closes · indices, sectors, rates, commodities, FX, crypto",
     tabs: { aria: "Market sections", instruments: "Instruments", spreads: "Spreads" },
+    guide: {
+      about: {
+        title: "What this screen is",
+        body: "The first screen of MoneyView. It lists daily closes for the main stock indices, sector ETFs, the US 10-year yield, commodities, USD/KRW and bitcoin, so you can see what moved and pick what to open. It is a scan, not a trading signal.",
+      },
+      regime: {
+        title: "The market state line beside the title",
+        label: "The label is one of Risk-on, Mixed or Risk-off. It sums up the latest daily move across the indices and a few cross-asset prices.",
+        breadth: "\"Indices up\" counts the stock indices (S&P 500, Dow Jones, Nasdaq, KOSPI 200) whose latest close is above the close before it.",
+        signals: "\"Signals on / off\" counts five checks. S&P 500, Nasdaq and bitcoin count as on when they did not fall. Gold and USD/KRW count as on when they did not rise. Every other result counts as off.",
+        verdict: "Risk-on needs both: most indices up and clearly more signals on than off. Risk-off is the mirror image: most indices down and clearly more signals off than on. Anything else is Mixed. The backend does this count and the screen shows the result as sent.",
+        unknown: "When there is too little data, the line says the regime cannot be judged. That is not the same as Mixed.",
+        colour: "Risk-on is red, Risk-off is blue and Mixed uses the plain text colour. In Korean market convention red means up and blue means down.",
+      },
+      cards: {
+        title: "Reading a card",
+        head: "Each card shows the name, the ticker, the period label (Snapshot when none is sent), the latest close and a small line of recent closes.",
+        day: "1D compares the latest close with the close of the previous trading day.",
+        month: "1M compares the latest close with the close on the same date one month earlier, or the nearest earlier close. It shows a dash when less than a month of history is stored.",
+        colour: "A red chip with ▲ is a rise, a blue chip with ▼ is a fall, and grey is unchanged or missing. A change that prints as 0.0% counts as unchanged.",
+        rate: "The US 10-year yield is shown as a yield in percent, and its change is in basis points (bp). One bp is 0.01 percentage point, so 4.00% to 4.10% is +10bp.",
+        open: "Click a card to open its detail: a price chart, volume, indicators and data quality notes.",
+      },
+      table: {
+        title: "Table view",
+        body: "The Table toggle shows the same instruments as rows with price, 1D and 1M columns, split into two halves. Click a name to open its detail.",
+      },
+      spreads: {
+        title: "Theme spreads and the Spreads tab",
+        row: "The row under the cards and the Spreads tab show how a theme ETF did against a benchmark. Each figure names both tickers, because a theme name such as AI is only a stand-in.",
+        value: "The value is the ETF's growth divided by the benchmark's growth since the start of the window, scaled so the start is 100. Above 100 means the theme beat its benchmark. Below 100 means it lagged.",
+        refused: "A pair with no shared history in the window is shown as unavailable, with the reason. It is never drawn as a flat line at 100.",
+        events: "Vertical lines on the charts are recorded market events. The Events button turns each kind on or off.",
+      },
+      source: {
+        title: "Where the data comes from",
+        body: "Daily closes are read from the local database. When the stored closes are out of date, they are fetched again from the market data provider. Intraday prices are not shown.",
+      },
+    },
     names: {
       sp500: "S&P 500",
       dow: "Dow Jones",
@@ -897,6 +992,27 @@ export const en = {
     loadingMore: "Loading {count} more articles...",
     loadMore: "Load more articles",
     loading: "Loading...",
+    guide: {
+      about: {
+        title: "What this screen is",
+        body: "The newest stored market articles in one list. Use it to scan headlines and open the ones you want to read. It does not search or filter.",
+      },
+      card: {
+        title: "Reading a card",
+        body: "Each card shows the headline, the publish date, a ticker badge when the article is tied to a stock, and the source below. The whole card is a link and opens the article in a new tab.",
+        today: "A card with a brand-coloured left edge and a Today badge was published on today's date (UTC). A missing date or source reads as unknown.",
+      },
+      order: {
+        title: "Order and loading",
+        body: "Articles are sorted by publish date, newest first. Five load at first, and five more load when you reach the bottom of the list or press the load button.",
+      },
+      source: {
+        title: "Where the articles come from",
+        body: "Articles are collected from Google News search results for the stocks you follow and stored in the local database. This page only reads what is stored. It does not search by itself. To collect news for particular stocks, use the refresh icon on the Portfolio page.",
+        fallback: "When nothing is stored yet, the list shows recent updates of local macro indicators instead. Those are not articles and have no link.",
+        unused: "Sentiment and importance are stored with each article but this page does not use them.",
+      },
+    },
   },
   detail: {
     noData: "No data available for {ticker}.",

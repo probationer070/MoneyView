@@ -36,6 +36,7 @@ import { PortfolioSnapshotSummary } from "./components/PortfolioSnapshotSummary"
 import { PortfolioAttributionSummary } from "./components/PortfolioAttributionSummary";
 import { PortfolioAllocationEditor } from "./components/PortfolioAllocationEditor";
 import { PortfolioCommandCenter } from "./components/PortfolioCommandCenter";
+import { PortfolioGuide } from "./components/PortfolioGuide";
 import { PortfolioShell } from "./components/PortfolioShell";
 import { resolveGroupFilter, selectVisibleStocks, StockTileGrid, type GridFilter } from "./components/StockTileGrid";
 import { WatchlistPeerSyncStatus, type WatchlistPeerSyncStatusData } from "./components/WatchlistPeerSyncStatus";
@@ -2976,6 +2977,7 @@ export default function PortfolioPage() {
             </div>
           </header>
         </div>
+        <div className="px-4 pt-3"><PortfolioGuide /></div>
         {/* Mutation feedback lives in the shell, not in a panel: its writers are spread
             across the holdings panel (Sync, delete), the stock detail modal (sector edit,
             add to portfolio) and the allocation panel, and only one panel mounts at a time. */}
