@@ -1,8 +1,30 @@
 import { formatNumber, type FormatLocale } from "@/lib/format";
-import type { FairValueSummary } from "@/lib/fairValue";
+import type { FairValuePlausibility, FairValueSummary } from "@/lib/fairValue";
 import type { useT } from "@/lib/i18n/locale";
 
 type Translate = ReturnType<typeof useT>;
+
+/** The reason a flagged fair value may be high for its industry; null when it is not flagged. */
+export function plausibilityReasonText(plausibility: FairValuePlausibility | null | undefined, t: Translate, locale: FormatLocale): string | null {
+  if (!plausibility?.flagged) return null;
+  const multiple = (value: number) => formatNumber(value, "ratio", { digits: 1, locale });
+  const pct = (fraction: number) => formatNumber(fraction, "percent", { locale });
+  const lead = t("valuation.fairValue.plausibleLead", {
+    implied: multiple(plausibility.implied_ev_sales),
+    industry: plausibility.industry,
+    industryMultiple: multiple(plausibility.industry_ev_sales),
+    ratio: multiple(plausibility.ratio),
+  });
+  const causes = plausibility.causes.map((cause) =>
+    t("valuation.fairValue.plausibleCause", {
+      label: t(cause.field === "margin_target" ? "valuation.fairValue.plausibleMargin" : "valuation.fairValue.plausibleGrowth"),
+      company: pct(cause.company_value),
+      industryValue: pct(cause.industry_value),
+      share: pct(cause.share_of_value),
+    }),
+  );
+  return [lead, ...causes].join(" ");
+}
 
 /** "Price implies 20.2% growth a year (model 4.3%)", or the out-of-range wording. */
 export function impliedGrowthText(summary: FairValueSummary, t: Translate, locale: FormatLocale): string {

@@ -2,10 +2,11 @@
 
 import { CaseApiError } from "@/app/cases/casesApi";
 import { DeltaBadge } from "@/components/ui/DeltaBadge";
+import { StatusBadge } from "@/components/ui/StatusBadge";
 import { useFairValue } from "@/lib/fairValue";
 import { formatNumber, MISSING } from "@/lib/format";
 import { useLocale, useT } from "@/lib/i18n/locale";
-import { impliedGrowthText } from "./fairValueText";
+import { impliedGrowthText, plausibilityReasonText } from "./fairValueText";
 
 /**
  * The Damodaran-style fair value in one line under the corporate header's DCF verdict: value, its
@@ -29,6 +30,7 @@ export function FairValueLine({ ticker }: { ticker: string }) {
     return query.isError ? <p data-testid="fair-value-line" data-state="error" className={base}>{t("valuation.fairValue.failed")}</p> : null;
   }
   const summary = query.data;
+  const plausibilityReason = plausibilityReasonText(summary.plausibility, t, locale);
   return (
     <p data-testid="fair-value-line" data-state="valued" className={base}>
       <span>{t("valuation.fairValue.label")}</span>
@@ -42,6 +44,11 @@ export function FairValueLine({ ticker }: { ticker: string }) {
         </span>
       )}
       {summary.gap_pct !== null && <DeltaBadge value={summary.gap_pct} />}
+      {plausibilityReason && (
+        <span data-testid="fair-value-plausibility" title={plausibilityReason}>
+          <StatusBadge status="stale" label={t("valuation.fairValue.plausibleBadge")} />
+        </span>
+      )}
       <span data-part="implied">{impliedGrowthText(summary, t, locale)}</span>
     </p>
   );

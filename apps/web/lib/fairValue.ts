@@ -22,6 +22,24 @@ export interface FairValueSummary {
   /** "above_range: …" or "below_range: …" when no growth in the searched band reaches the price. */
   implied_growth_note: string | null;
   assumptions: { field: string; value: number | null; claim: string }[];
+  /** Null when the industry has no EV/Sales to compare against. Flagged: the value may be high for its industry. */
+  plausibility?: FairValuePlausibility | null;
+}
+
+/** Fair-value EV/Sales against its Damodaran industry's; `share_of_value` is a fraction of the value per share. */
+export interface FairValuePlausibility {
+  implied_ev_sales: number;
+  industry_ev_sales: number;
+  ratio: number;
+  k: number;
+  flagged: boolean;
+  causes: {
+    field: "margin_target" | "growth_1_5";
+    company_value: number;
+    industry_value: number;
+    share_of_value: number;
+  }[];
+  industry: string;
 }
 
 /** The ticker's Damodaran-style fair value; a 4xx is a refusal (CaseApiError.detail), not a failure. */

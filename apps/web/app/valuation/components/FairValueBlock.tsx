@@ -1,18 +1,21 @@
 "use client";
 
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { CaseApiError } from "@/app/cases/casesApi";
-import { impliedGrowthText } from "@/components/valuation/fairValueText";
+import { impliedGrowthText, plausibilityReasonText } from "@/components/valuation/fairValueText";
 import { DeltaBadge } from "@/components/ui/DeltaBadge";
+import { StatusBadge } from "@/components/ui/StatusBadge";
 import { useFairValue } from "@/lib/fairValue";
 import { formatNumber, MISSING } from "@/lib/format";
 import { useLocale, useT } from "@/lib/i18n/locale";
 
-function Figure({ label, value, testId }: { label: string; value: string; testId: string }) {
+function Figure({ label, value, testId, aside }: { label: string; value: string; testId: string; aside?: ReactNode }) {
   return (
     <div className="border border-[var(--line)] px-3 py-2">
       <p className="type-small text-[var(--ink-muted)]">{label}</p>
       <p data-testid={testId} className="type-mono text-[var(--ink)]">{value}</p>
+      {aside}
     </div>
   );
 }
@@ -33,6 +36,7 @@ export function FairValueBlock({ ticker }: { ticker: string }) {
     body = <p role="alert" className="type-body text-[var(--status-error-ink)]">{t("valuation.fairValue.failed")}</p>;
   } else {
     const summary = query.data;
+    const plausibilityReason = plausibilityReasonText(summary.plausibility, t, locale);
     body = (
       <>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -40,6 +44,11 @@ export function FairValueBlock({ ticker }: { ticker: string }) {
             label={t("valuation.fairValue.label")}
             value={summary.value_note ? t("valuation.fairValue.notPositive") : price(summary.value_per_share)}
             testId="fair-value"
+            aside={plausibilityReason && (
+              <div data-testid="fair-value-plausibility" className="mt-1">
+                <StatusBadge status="stale" label={t("valuation.fairValue.plausibleBadge")} />
+              </div>
+            )}
           />
           <Figure label={t("valuation.fairValue.price")} value={price(summary.price)} testId="fair-value-price" />
           <Figure label={t("valuation.fairValue.floor")} value={price(summary.floor_value_per_share)} testId="fair-value-floor" />
@@ -54,6 +63,7 @@ export function FairValueBlock({ ticker }: { ticker: string }) {
           </p>
         )}
         <p data-testid="fair-value-implied" className="type-body text-[var(--ink)]">{impliedGrowthText(summary, t, locale)}</p>
+        {plausibilityReason && <p data-testid="fair-value-plausibility-reason" className="type-body text-[var(--ink-secondary)]">{plausibilityReason}</p>}
         {summary.price_date && <p className="type-small text-[var(--ink-muted)]">{t("valuation.fairValue.asOf", { date: summary.price_date })}</p>}
         <details>
           <summary className="type-small cursor-pointer text-[var(--ink-secondary)]">{t("valuation.fairValue.assumptions")}</summary>
