@@ -514,20 +514,19 @@ function HoldingsTable({
       <div className="border-b border-[var(--line)] bg-[var(--surface)] px-4 py-2 type-small text-[var(--ink-muted)] sm:hidden">
         Mobile view keeps the core comparison columns visible first. Open a stock row for the full detail workflow.
       </div>
-      <table className="min-w-[760px] w-full type-body lg:min-w-[1120px]">
+      <table className="min-w-[760px] w-full type-body">
         <thead className="sticky top-0 z-10 bg-[var(--surface)] text-left text-[var(--ink-muted)]">
           <tr>
-            <th className="px-4 py-3 type-caption"><BilingualLabel k="ticker" /></th>
-            <th className="hidden px-4 py-3 lg:table-cell type-caption"><BilingualLabel k="sector" /></th>
-            <th className="px-4 py-3 text-right type-caption"><BilingualLabel k="currentPrice" /></th>
-            <th className="hidden px-4 py-3 text-right md:table-cell type-caption"><BilingualLabel k="trend" /></th>
-            <th className="px-4 py-3 text-right type-caption"><BilingualLabel k="roicWacc" /></th>
-            <th className="px-4 py-3 text-right type-caption">DCF value vs price (one-off gap)</th>
-            <th className="px-4 py-3 text-right type-caption">Implied return vs WACC (pts per year)</th>
-            <th className="hidden px-4 py-3 text-right md:table-cell type-caption"><BilingualLabel k="volatility" /></th>
-            <th className="hidden px-4 py-3 text-right lg:table-cell type-caption"><BilingualLabel k="weight" /></th>
-            <th className="hidden px-4 py-3 text-right xl:table-cell type-caption"><BilingualLabel k="change" /></th>
-            <th className="hidden px-4 py-3 text-right xl:table-cell type-caption"><BilingualLabel k="action" /></th>
+            <th className="px-2 py-3 type-caption"><BilingualLabel k="ticker" /></th>
+            <th className="hidden px-2 py-3 lg:table-cell type-caption"><BilingualLabel k="sector" /></th>
+            <th className="px-2 py-3 text-right type-caption"><BilingualLabel k="currentPrice" /></th>
+            <th className="hidden px-2 py-3 text-right md:table-cell type-caption"><BilingualLabel k="trend" /></th>
+            <th className="px-2 py-3 text-right type-caption"><BilingualLabel k="roicWacc" /></th>
+            <th className="px-2 py-3 text-right type-caption">DCF value vs price (one-off gap)</th>
+            <th className="px-2 py-3 text-right type-caption">Implied return vs WACC (pts per year)</th>
+            <th className="hidden px-2 py-3 text-right md:table-cell type-caption"><BilingualLabel k="volatility" /></th>
+            <th className="hidden px-2 py-3 text-right lg:table-cell type-caption"><BilingualLabel k="weight" /></th>
+            <th className="hidden px-2 py-3 text-right lg:table-cell type-caption"><BilingualLabel k="action" /></th>
           </tr>
         </thead>
         <tbody className="divide-y divide-[var(--grid)]">
@@ -540,14 +539,19 @@ function HoldingsTable({
                 className="cursor-pointer hover:bg-[var(--surface)]"
                 onClick={() => onSelect(stock)}
               >
-                <td className="px-4 py-3">
+                <td className="px-2 py-3">
                   <div className="type-mono  text-[var(--ink)]">{stock.ticker}</div>
                   <div className="type-small text-[var(--ink-muted)]">{stock.name || stock.ticker}</div>
                   <div className="mt-1 type-caption text-[var(--ink-muted)] lg:hidden">{sectorLabel(stock.sector)}</div>
                 </td>
-                <td className="hidden px-4 py-3 text-[var(--ink-muted)] lg:table-cell">{sectorLabel(stock.sector)}</td>
-                <td className="px-4 py-3 text-right tabular-nums">{formatCurrencyCompact(metrics.currentPrice ?? stock.last_close)}</td>
-                <td className="hidden px-4 py-3 md:table-cell">
+                <td className="hidden px-2 py-3 text-[var(--ink-muted)] lg:table-cell">{sectorLabel(stock.sector)}</td>
+                <td className="px-2 py-3 text-right tabular-nums">
+                  <div className="flex flex-col items-end gap-1">
+                    <span>{formatCurrencyCompact(metrics.currentPrice ?? stock.last_close)}</span>
+                    <DeltaBadge value={deltaPct} />
+                  </div>
+                </td>
+                <td className="hidden px-2 py-3 md:table-cell">
                   <div className="ml-auto w-24">
                     <Sparkline
                       data={stock.sparkline}
@@ -555,25 +559,22 @@ function HoldingsTable({
                     />
                   </div>
                 </td>
-                <td className="px-4 py-3 text-right align-top">
+                <td className="px-2 py-3 text-right align-top">
                   <MetricCell metric={metrics.roicMinusWacc} toneClass={portfolioMetricToneClass(metrics.roicMinusWacc)} />
                 </td>
-                <td className="px-4 py-3 text-right align-top">
+                <td className="px-2 py-3 text-right align-top">
                   <MetricCell metric={metrics.dcfUpside} toneClass={portfolioMetricToneClass(metrics.dcfUpside)} />
                 </td>
-                <td className="px-4 py-3 text-right align-top">
+                <td className="px-2 py-3 text-right align-top">
                   <MetricCell metric={metrics.impliedVsWacc} toneClass={portfolioMetricToneClass(metrics.impliedVsWacc)} />
                 </td>
-                <td className="hidden px-4 py-3 text-right align-top md:table-cell">
+                <td className="hidden px-2 py-3 text-right align-top md:table-cell">
                   <MetricCell metric={metrics.volatility} toneClass={portfolioVolatilityToneClass(metrics.volatility)} />
                 </td>
-                <td className="hidden px-4 py-3 text-right tabular-nums lg:table-cell">
+                <td className="hidden px-2 py-3 text-right tabular-nums lg:table-cell">
                   {formatWeightPercent(stock.weight)}
                 </td>
-                <td className="hidden px-4 py-3 text-right xl:table-cell">
-                  <DeltaBadge value={deltaPct} />
-                </td>
-                <td className="hidden px-4 py-3 text-right xl:table-cell">
+                <td className="hidden px-2 py-3 text-right lg:table-cell">
                   <button
                     type="button"
                     onClick={(event) => {
@@ -2924,7 +2925,7 @@ export default function PortfolioPage() {
             body: allocationPanelBody,
           },
           holdings: {
-            // The holdings table is min-w-[760px], lg:min-w-[1120px] (page.tsx:480).
+            // The holdings table is min-w-[760px] and fits this panel at lg without horizontal scroll.
             width: "widest",
             title: "Watchlist Holdings",
             description: "This section is the tracking watchlist: holdings, current close, day-over-day percentage change, and a recent price sparkline. Good/bad follows local convention: red indicates price gain, blue indicates price loss.",

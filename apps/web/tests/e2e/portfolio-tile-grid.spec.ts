@@ -672,3 +672,40 @@ test("the mutation message survives closing every panel and renders exactly once
 
   await expect(message).toBeVisible();
 });
+
+test("the holdings panel header stays on top and clickable while the card body scrolls under it", async ({ page }) => {
+  await mockPortfolioPageApi(page, undefined, { watchlist: bulkWatchlist(24, 0.04) });
+  await gotoGrid(page, "TST1");
+
+  await rail(page).getByRole("button", { name: RAIL_HOLDINGS }).click();
+  await expect(panel(page)).toBeVisible();
+
+  const close = panel(page).getByRole("button", { name: "Close panel" });
+  await panel(page).evaluate((element) => {
+    element.scrollTop += 600;
+  });
+  expect(await panel(page).evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+
+  // The header is sticky at the top of the panel. A tile's z-10 controls must not paint over it.
+  const box = await close.boundingBox();
+  expect(box).not.toBeNull();
+  const hitIsButton = await close.evaluate(
+    (node, point) => node.contains(document.elementFromPoint(point.x, point.y)),
+    { x: box!.x + box!.width / 2, y: box!.y + box!.height / 2 },
+  );
+  expect(hitIsButton, "the element at the Close button's centre must be the Close button").toBe(true);
+
+  // The Close button sits right of the last tile column, so tiles never pass under it; the title
+  // sits over the first column, where a scrolled tile (positioned, later in the DOM) painted over it.
+  const title = panel(page).getByRole("heading", { level: 2 });
+  const titleBox = await title.boundingBox();
+  expect(titleBox).not.toBeNull();
+  const hitIsTitle = await title.evaluate(
+    (node, point) => node.contains(document.elementFromPoint(point.x, point.y)),
+    { x: titleBox!.x + titleBox!.width / 2, y: titleBox!.y + titleBox!.height / 2 },
+  );
+  expect(hitIsTitle, "a scrolled tile must not paint over the panel title").toBe(true);
+
+  await close.click({ timeout: 5_000 });
+  await expect(panel(page)).toHaveCount(0);
+});

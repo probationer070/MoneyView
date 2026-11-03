@@ -133,7 +133,7 @@ export function SidePanel({ open, title, width = "wide", description, onClose, c
         "border-l border-[var(--line)] bg-[var(--surface-raised)]",
       )}
     >
-      <div className="sticky top-0 flex items-center justify-between gap-3 border-b border-[var(--line)] bg-[var(--surface-raised)] px-4 py-3">
+      <div className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-[var(--line)] bg-[var(--surface-raised)] px-4 py-3">
         <h2 className="type-panel-title text-[var(--ink)]">
           {description ? <InfoTooltip label={title} description={description} /> : title}
         </h2>

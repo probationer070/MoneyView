@@ -26,6 +26,16 @@ reveal that; only checking the code did.
 
 An entry states what was true when it was written. Nothing updates it on its own.
 
+## 2026-11-03: scrolled holdings tiles covered the side panel's title and Close button
+
+Date: 2026-11-03 (owner report, Portfolio > Watchlist Holdings panel, card view).
+Command: scrolling the holdings side panel.
+Failure: tiles scrolled up over the sticky panel header, so the title and, at narrower widths, the Close (X) button could not be clicked.
+Root cause: the sticky header had no z-index. Positioned elements with `z-index: auto` paint in DOM order, so every later positioned tile (and the tile grid's own `sticky z-10` group header and `z-10` Remove buttons) painted over it.
+Fix: the header is `z-20`, above every `z-10` inside the panel body and below the panel's own `z-30`. Test: `tests/e2e/portfolio-tile-grid.spec.ts` "the holdings panel header stays on top and clickable while the card body scrolls under it", which fails at the title hit-test when `z-20` is removed (the first version tested only the Close button, which sits right of the last tile column, and passed with the bug present).
+Files changed: `apps/web/app/portfolio/components/SidePanel.tsx`, `apps/web/tests/e2e/portfolio-tile-grid.spec.ts`.
+Prevention: a sticky bar over scrolling content gets an explicit z-index above anything positioned in that content. A hit-test checks a point the content actually passes under.
+
 ## 2026-11-03: the DCF's WACC breakdown carried the country risk premium as 0.8 (shown as 80%)
 
 Date: 2026-11-03 (found while wiring P4 of `docs/superpowers/specs/2026-11-02-corporate-explainers-plan.md`).

@@ -184,3 +184,25 @@ test.describe("ko portfolio", () => {
     await expect(panel(page).getByRole("columnheader", { name: "현재가", exact: true }).first()).toBeVisible();
   });
 });
+
+test("the holdings table fits the panel at 1280px with no horizontal scroll and shows change in the price cell", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await mockPortfolioPageApi(page);
+  await gotoGrid(page);
+
+  await rail(page).getByRole("button", { name: RAIL_HOLDINGS }).click();
+  await expect(panel(page)).toBeVisible();
+  await page.getByRole("button", { name: "Table", exact: true }).click();
+
+  const table = panel(page).locator("table").first();
+  await expect(table).toBeVisible();
+  // Column 3 is the current price (ticker, sector, price). The day change badge sits under the price.
+  const firstRowPriceCell = table.locator("tbody tr").first().locator("td").nth(2);
+  await expect(firstRowPriceCell.getByTestId("delta-badge")).toBeVisible();
+
+  const fits = await table.evaluate((node) => {
+    const container = node.parentElement as HTMLElement;
+    return { scrollWidth: container.scrollWidth, clientWidth: container.clientWidth };
+  });
+  expect(fits.scrollWidth, "table overflows its container horizontally").toBeLessThanOrEqual(fits.clientWidth + 1);
+});
