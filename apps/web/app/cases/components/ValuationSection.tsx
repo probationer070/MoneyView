@@ -1,6 +1,6 @@
 import type { UseQueryResult } from "@tanstack/react-query";
 import { BilingualLabel } from "@/components/ui/BilingualLabel";
-import { useLocale } from "@/lib/i18n/locale";
+import { useLocale, useT } from "@/lib/i18n/locale";
 import { fmtPercent } from "../caseFields";
 import type { RunResult } from "../caseTypes";
 import { fmtMoney, fmtPerShare } from "../format";
@@ -18,33 +18,34 @@ function Figure({ label, value, testId }: { label: string; value: string; testId
 export function ValuationSection({ query }: { query: UseQueryResult<RunResult, unknown> }) {
   const run = query.data;
   const { locale } = useLocale();
+  const t = useT();
   return (
-    <Section title="Valuation" testId="case-valuation">
-      <QueryStatus query={query} what="the valuation" testId="case-valuation" />
+    <Section title={t("cases.valuation.title")} testId="case-valuation">
+      <QueryStatus query={query} what={t("cases.status.whatValuation")} testId="case-valuation" />
       {run && (
         <>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-            <Figure label="Value per share (diluted)" value={fmtPerShare(run.value_per_share_diluted, locale)} testId="value-per-share-diluted" />
-            <Figure label="Value per share (basic)" value={fmtPerShare(run.value_per_share_basic, locale)} testId="value-per-share-basic" />
-            <Figure label="Enterprise value" value={fmtMoney(run.enterprise_value)} testId="enterprise-value" />
-            <Figure label="Equity value" value={fmtMoney(run.equity_value)} testId="equity-value" />
-            <Figure label="Terminal-value share" value={`${run.terminal_value_share_pct.toFixed(1)}%`} testId="terminal-share" />
+            <Figure label={t("cases.valuation.valuePerShareDiluted")} value={fmtPerShare(run.value_per_share_diluted, locale)} testId="value-per-share-diluted" />
+            <Figure label={t("cases.valuation.valuePerShareBasic")} value={fmtPerShare(run.value_per_share_basic, locale)} testId="value-per-share-basic" />
+            <Figure label={t("cases.valuation.enterpriseValue")} value={fmtMoney(run.enterprise_value)} testId="enterprise-value" />
+            <Figure label={t("cases.valuation.equityValue")} value={fmtMoney(run.equity_value)} testId="equity-value" />
+            <Figure label={t("cases.valuation.terminalShare")} value={`${run.terminal_value_share_pct.toFixed(1)}%`} testId="terminal-share" />
           </div>
           {run.offering_price !== null && run.offering_implied_value !== null && run.offering_premium_pct !== null && (
             // Damodaran's offer check: the IPO price against the value per share, and the company value the price implies.
             <div data-testid="case-offering" className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <Figure label="Offering price" value={fmtPerShare(run.offering_price, locale)} testId="offering-price" />
-              <Figure label="Company value at the offer" value={fmtMoney(run.offering_implied_value)} testId="offering-implied-value" />
+              <Figure label={t("cases.valuation.offeringPrice")} value={fmtPerShare(run.offering_price, locale)} testId="offering-price" />
+              <Figure label={t("cases.valuation.companyValueAtOffer")} value={fmtMoney(run.offering_implied_value)} testId="offering-implied-value" />
               <Figure
-                label="Offer vs value per share"
+                label={t("cases.valuation.offerVsValue")}
                 value={`${run.offering_premium_pct >= 0 ? "+" : "−"}${Math.abs(run.offering_premium_pct).toFixed(1)}%`}
                 testId="offering-premium"
               />
-              <Figure label="New shares" value={run.shares_new_effective.toLocaleString("en-US", { maximumFractionDigits: 4 })} testId="shares-new-effective" />
+              <Figure label={t("cases.valuation.newShares")} value={run.shares_new_effective.toLocaleString("en-US", { maximumFractionDigits: 4 })} testId="shares-new-effective" />
             </div>
           )}
           <div className="mt-4 overflow-x-auto">
-            <table className="w-full min-w-[36rem] text-right type-body tabular-nums" aria-label="Year by year">
+            <table className="w-full min-w-[36rem] text-right type-body tabular-nums" aria-label={t("cases.valuation.yearTable")}>
               <thead className="type-caption uppercase text-[var(--ink-muted)]">
                 <tr>
                   <th className="px-2 py-1 text-left"><BilingualLabel k="year" /></th>
@@ -71,7 +72,7 @@ export function ValuationSection({ query }: { query: UseQueryResult<RunResult, u
               </tbody>
             </table>
           </div>
-          <table className="mt-4 w-full text-right type-body tabular-nums" aria-label="Segments in the target year">
+          <table className="mt-4 w-full text-right type-body tabular-nums" aria-label={t("cases.valuation.segmentTable")}>
             <thead className="type-caption uppercase text-[var(--ink-muted)]">
               <tr>
                 <th className="px-2 py-1 text-left"><BilingualLabel k="segment" /> ({run.target_year})</th>

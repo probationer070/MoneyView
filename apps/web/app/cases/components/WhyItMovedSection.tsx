@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { CHART_COLORS } from "@/lib/chartConfig";
 import { formatWire, labelForInput, metaForInput } from "../caseFields";
 import { casesApi, retryUnlessRefused } from "../casesApi";
-import { useLocale } from "@/lib/i18n/locale";
+import { useLocale, useT } from "@/lib/i18n/locale";
 import { fmtPerShare, fmtSigned } from "../format";
 import { QueryStatus, Section } from "./Section";
 
@@ -12,6 +12,7 @@ const SUM_TOLERANCE = 0.005;
 
 export function WhyItMovedSection({ caseId }: { caseId: number }) {
   const { locale } = useLocale();
+  const t = useT();
   const query = useQuery({
     queryKey: ["case-diff", caseId],
     queryFn: () => casesApi.diff(caseId),
@@ -23,15 +24,19 @@ export function WhyItMovedSection({ caseId }: { caseId: number }) {
   const sum = diff ? diff.contributions.reduce((total, c) => total + c.contribution, 0) : 0;
 
   return (
-    <Section title="Why it moved" testId="case-why">
-      <QueryStatus query={query} what="the attribution" testId="case-why" />
+    <Section title={t("cases.why.title")} testId="case-why">
+      <QueryStatus query={query} what={t("cases.status.whatAttribution")} testId="case-why" />
       {diff && (
         <>
           <p data-testid="why-headline" className="type-body tabular-nums text-[var(--ink)]">
-            {fmtPerShare(diff.parent_value_per_share_diluted, locale)} → {fmtPerShare(diff.case_value_per_share_diluted, locale)} ({fmtSigned(diff.total_difference)} per share)
+            {t("cases.why.headline", {
+              before: fmtPerShare(diff.parent_value_per_share_diluted, locale),
+              after: fmtPerShare(diff.case_value_per_share_diluted, locale),
+              diff: fmtSigned(diff.total_difference),
+            })}
           </p>
           <p className="mt-1 type-small text-[var(--ink-muted)]">
-            Shapley attribution of value per share (diluted): exact, and independent of the order the changes are listed.
+            {t("cases.why.method")}
           </p>
           <ul className="mt-3 flex flex-col gap-2">
             {diff.contributions.map((c, i) => {
@@ -63,11 +68,11 @@ export function WhyItMovedSection({ caseId }: { caseId: number }) {
           </ul>
           {Math.abs(sum - diff.total_difference) <= SUM_TOLERANCE ? (
             <p data-testid="why-sum" className="mt-3 type-small text-[var(--ink-muted)]">
-              Contributions sum to {fmtSigned(sum)}, the whole difference.
+              {t("cases.why.sumOk", { sum: fmtSigned(sum) })}
             </p>
           ) : (
             <p role="alert" className="mt-3 type-small text-[var(--status-error-ink)]">
-              Contributions sum to {fmtSigned(sum)} and do not add up to the difference of {fmtSigned(diff.total_difference)}.
+              {t("cases.why.sumMismatch", { sum: fmtSigned(sum), total: fmtSigned(diff.total_difference) })}
             </p>
           )}
         </>

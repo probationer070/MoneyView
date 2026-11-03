@@ -59,7 +59,7 @@ export default function CasesPage({ searchParams }: { searchParams: Promise<{ ti
           className="rounded-[var(--radius-1)] border border-[var(--line)] bg-transparent px-2 py-1 text-[var(--ink)]"
         />
       </label>
-      <QueryStatus query={casesQuery} what="the cases" testId="cases-list" />
+      <QueryStatus query={casesQuery} what={t("cases.status.whatCases")} testId="cases-list" />
       {casesQuery.isSuccess && all.length === 0 && (
         <p className="type-body text-[var(--ink-secondary)]">{t("cases.none")}</p>
       )}

@@ -4,12 +4,14 @@ import { fieldTargets, formatWire, unitSuffix, wireValue } from "../caseFields";
 import { CaseApiError, casesApi } from "../casesApi";
 import { DEFAULT_RUNS, MAX_RUNS, MIN_RUNS, type CaseRecord, type Shape, type SimulateRequest, type SimulateResult } from "../caseTypes";
 import { EMPTY_NARRATIVE, SHAPE_PARAMS, buildSimulateRequest, type SimulateRow } from "../changeRows";
+import { useT } from "@/lib/i18n/locale";
 import { FieldPicker, controlClass } from "./FieldPicker";
 import { NarrativeInputs } from "./NarrativeInputs";
 import { Section } from "./Section";
 import { SimulateResults } from "./SimulateResults";
 
 export function SimulateSection({ record, pointValue }: { record: CaseRecord; pointValue: number | null }) {
+  const t = useT();
   const targets = useMemo(() => fieldTargets(record), [record]);
   const byKey = useMemo(() => new Map(targets.map((t) => [t.key, t])), [targets]);
   const [rows, setRows] = useState<SimulateRow[]>([]);
@@ -61,9 +63,9 @@ export function SimulateSection({ record, pointValue }: { record: CaseRecord; po
   };
 
   return (
-    <Section title="Uncertainty (simulate this case)" testId="case-simulate">
+    <Section title={t("cases.simulate.title")} testId="case-simulate">
       <p className="mb-3 type-small text-[var(--ink-muted)]">
-        State a range for a few inputs; each draw values the case once. Nothing is stored — the seed reproduces a result.
+        {t("cases.simulate.intro")}
       </p>
       <form onSubmit={(e) => { e.preventDefault(); send(built.request); }} className="flex flex-col gap-3">
         {rows.map((row, index) => {
@@ -75,9 +77,9 @@ export function SimulateSection({ record, pointValue }: { record: CaseRecord; po
             <div key={row.id} data-testid={`simulate-row-${index}`} className="flex flex-col gap-2 border border-[var(--line)] p-3">
               <div className="flex flex-wrap items-end gap-3">
                 <FieldPicker targets={targets} value={row.targetKey} onChange={(key) => update(row.id, { targetKey: key })} />
-                {target && <span className="pb-1 type-small text-[var(--ink-muted)]">Current: {formatWire(target.meta, wireValue(record, target))}</span>}
+                {target && <span className="pb-1 type-small text-[var(--ink-muted)]">{t("cases.simulate.current", { value: formatWire(target.meta, wireValue(record, target)) })}</span>}
                 <label className="flex flex-col gap-1 type-small text-[var(--ink-secondary)]">
-                  Shape
+                  {t("cases.simulate.shape")}
                   <select value={row.shape} onChange={(e) => update(row.id, { shape: e.target.value as Shape, params: {} })} className={controlClass}>
                     <option value="triangular">triangular</option>
                     <option value="normal">normal</option>
@@ -101,10 +103,10 @@ export function SimulateSection({ record, pointValue }: { record: CaseRecord; po
                 <button
                   type="button"
                   onClick={() => setRows((all) => all.filter((r) => r.id !== row.id))}
-                  aria-label={`Remove input ${index + 1}`}
+                  aria-label={t("cases.simulate.removeInput", { n: index + 1 })}
                   className="pb-1 type-small text-[var(--ink-muted)] underline"
                 >
-                  Remove
+                  {t("cases.simulate.remove")}
                 </button>
               </div>
               {target?.meta.narrated && (
@@ -123,10 +125,10 @@ export function SimulateSection({ record, pointValue }: { record: CaseRecord; po
             }}
             className="rounded-[var(--radius-1)] border border-[var(--line)] px-3 py-1.5 type-body"
           >
-            Add an input
+            {t("cases.simulate.addInput")}
           </button>
           <label className="flex flex-col gap-1 type-small text-[var(--ink-secondary)]">
-            Runs ({MIN_RUNS.toLocaleString("en-US")}–{MAX_RUNS.toLocaleString("en-US")})
+            {t("cases.simulate.runs", { min: MIN_RUNS.toLocaleString("en-US"), max: MAX_RUNS.toLocaleString("en-US") })}
             <input
               value={runs}
               onChange={(e) => setRuns(e.target.value)}
@@ -137,7 +139,7 @@ export function SimulateSection({ record, pointValue }: { record: CaseRecord; po
             />
           </label>
           <label className="flex flex-col gap-1 type-small text-[var(--ink-secondary)]">
-            Seed (optional)
+            {t("cases.simulate.seed")}
             <input
               value={seed}
               onChange={(e) => setSeed(e.target.value)}
@@ -148,10 +150,10 @@ export function SimulateSection({ record, pointValue }: { record: CaseRecord; po
             />
           </label>
           <button type="submit" disabled={mutation.isPending} aria-busy={mutation.isPending} className="rounded-[var(--radius-1)] border border-[var(--line)] px-3 py-1.5 type-body disabled:opacity-50">
-            {mutation.isPending ? "Simulating…" : "Simulate"}
+            {mutation.isPending ? t("cases.simulate.running") : t("cases.simulate.run")}
           </button>
         </div>
-        {submitted && rows.length === 0 && <p aria-live="polite" className="type-small text-[var(--ink-secondary)]">Add at least one input to simulate.</p>}
+        {submitted && rows.length === 0 && <p aria-live="polite" className="type-small text-[var(--ink-secondary)]">{t("cases.simulate.needInput")}</p>}
         {submitted && built.runsProblem && <p id="simulate-runs-problem" aria-live="polite" className="type-small text-[var(--ink-secondary)]">{built.runsProblem}</p>}
         {submitted && built.seedProblem && <p id="simulate-seed-problem" aria-live="polite" className="type-small text-[var(--ink-secondary)]">{built.seedProblem}</p>}
       </form>
@@ -162,7 +164,7 @@ export function SimulateSection({ record, pointValue }: { record: CaseRecord; po
       )}
       {failed && (
         <p role="alert" data-testid="simulate-error" className="mt-3 type-body text-[var(--status-error-ink)]">
-          Could not run the simulation.
+          {t("cases.simulate.failed")}
         </p>
       )}
       {result && (

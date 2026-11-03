@@ -1,12 +1,14 @@
 import { CASE_FIELDS, SEGMENT_FIELDS, formatWire } from "../caseFields";
 import type { CaseRecord } from "../caseTypes";
+import { useT } from "@/lib/i18n/locale";
 import { Section } from "./Section";
 
 const num = (value: unknown) => (typeof value === "number" ? value : null);
 
 export function InputsSection({ record }: { record: CaseRecord }) {
+  const t = useT();
   return (
-    <Section title="Inputs" testId="case-inputs">
+    <Section title={t("cases.inputs.title")} testId="case-inputs">
       <dl className="grid grid-cols-1 gap-x-6 gap-y-1 type-body sm:grid-cols-2">
         {CASE_FIELDS.map((m) => {
           const narrative = record.narratives.find((n) => n.input_field === m.field);
@@ -26,7 +28,7 @@ export function InputsSection({ record }: { record: CaseRecord }) {
       </dl>
       {record.segments.map((segment) => (
         <div key={segment.name} className="mt-5">
-          <h3 className="type-caption uppercase text-[var(--ink-muted)]">Segment: {segment.name}</h3>
+          <h3 className="type-caption uppercase text-[var(--ink-muted)]">{t("cases.inputs.segment", { name: segment.name })}</h3>
           <ul className="mt-2 flex flex-col type-body">
             {SEGMENT_FIELDS.map((m) => {
               const narrative = segment.narratives.find((n) => n.input_field === m.field);

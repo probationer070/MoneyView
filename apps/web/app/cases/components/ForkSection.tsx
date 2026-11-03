@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useT } from "@/lib/i18n/locale";
 import { fieldTargets, formatWire, unitSuffix, wireValue } from "../caseFields";
 import { CaseApiError, casesApi } from "../casesApi";
 import { SHAPLEY_INPUT_CAP, type CaseRecord, type ForkRequest } from "../caseTypes";
@@ -18,6 +19,7 @@ interface Refusal {
 export function ForkSection({ record }: { record: CaseRecord }) {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const t = useT();
   const targets = useMemo(() => fieldTargets(record), [record]);
   const byKey = useMemo(() => new Map(targets.map((t) => [t.key, t])), [targets]);
   const [caseName, setCaseName] = useState("");
@@ -67,10 +69,10 @@ export function ForkSection({ record }: { record: CaseRecord }) {
   const nameProblem = submitted && !caseName.trim();
 
   return (
-    <Section title="Fork this case" testId="case-fork">
+    <Section title={t("cases.fork.title")} testId="case-fork">
       <form onSubmit={submit} className="flex flex-col gap-3">
         <label className="flex max-w-sm flex-col gap-1 type-small text-[var(--ink-secondary)]">
-          New case name
+          {t("cases.fork.name")}
           <input
             value={caseName}
             onChange={(e) => setCaseName(e.target.value)}
@@ -80,13 +82,13 @@ export function ForkSection({ record }: { record: CaseRecord }) {
             className={`${controlClass} ${refusal?.name ? "border-[var(--status-error-border)]" : ""}`}
           />
         </label>
-        {nameProblem && <p id="fork-name-problem" className="type-small text-[var(--ink-secondary)]">A fork needs a name.</p>}
+        {nameProblem && <p id="fork-name-problem" className="type-small text-[var(--ink-secondary)]">{t("cases.fork.nameNeeded")}</p>}
         <p data-testid="fork-counter" className="type-small text-[var(--ink-secondary)]">
-          {built.changedCount} of {SHAPLEY_INPUT_CAP} changed inputs
+          {t("cases.fork.counter", { changed: built.changedCount, cap: SHAPLEY_INPUT_CAP })}
         </p>
         {built.changedCount > SHAPLEY_INPUT_CAP && (
           <p className="type-small text-[var(--ink-secondary)]">
-            More than {SHAPLEY_INPUT_CAP} changed inputs: the fork is still valid, but “Why it moved” will not be able to explain it.
+            {t("cases.fork.overCap", { cap: SHAPLEY_INPUT_CAP })}
           </p>
         )}
         {rows.map((row, index) => {
@@ -104,10 +106,10 @@ export function ForkSection({ record }: { record: CaseRecord }) {
               <div className="flex flex-wrap items-end gap-3">
                 <FieldPicker targets={targets} value={row.targetKey} onChange={(key) => update(row.id, { targetKey: key })} />
                 {target && (
-                  <span className="pb-1 type-small text-[var(--ink-muted)]">Current: {formatWire(target.meta, wireValue(record, target))}</span>
+                  <span className="pb-1 type-small text-[var(--ink-muted)]">{t("cases.fork.current", { value: formatWire(target.meta, wireValue(record, target)) })}</span>
                 )}
                 <label className="flex flex-col gap-1 type-small text-[var(--ink-secondary)]">
-                  New value{target && unitSuffix(target.meta) ? ` (${unitSuffix(target.meta)})` : ""}
+                  {t("cases.fork.newValue")}{target && unitSuffix(target.meta) ? ` (${unitSuffix(target.meta)})` : ""}
                   <input
                     value={row.value}
                     onChange={(e) => update(row.id, { value: e.target.value })}
@@ -120,16 +122,16 @@ export function ForkSection({ record }: { record: CaseRecord }) {
                 <button
                   type="button"
                   onClick={() => setRows((all) => all.filter((r) => r.id !== row.id))}
-                  aria-label={`Remove change ${index + 1}`}
+                  aria-label={t("cases.fork.removeChange", { n: index + 1 })}
                   className="pb-1 type-small text-[var(--ink-muted)] underline"
                 >
-                  Remove
+                  {t("cases.fork.remove")}
                 </button>
               </div>
               {target?.meta.narrated && (
                 <NarrativeInputs value={row.narrative} onChange={(narrative) => update(row.id, { narrative })} withEvidence />
               )}
-              {built.unchanged.includes(row.id) && <p className="type-small text-[var(--ink-muted)]">unchanged, will be ignored</p>}
+              {built.unchanged.includes(row.id) && <p className="type-small text-[var(--ink-muted)]">{t("cases.fork.unchanged")}</p>}
               {problem && <p id={problemId} data-testid="row-problem" aria-live="polite" className="type-small text-[var(--ink-secondary)]">{problem}</p>}
             </div>
           );
@@ -143,7 +145,7 @@ export function ForkSection({ record }: { record: CaseRecord }) {
             }}
             className="rounded-[var(--radius-1)] border border-[var(--line)] px-3 py-1.5 type-body"
           >
-            Add a change
+            {t("cases.fork.addChange")}
           </button>
           <button
             type="submit"
@@ -151,12 +153,12 @@ export function ForkSection({ record }: { record: CaseRecord }) {
             aria-busy={mutation.isPending}
             className="rounded-[var(--radius-1)] border border-[var(--line)] px-3 py-1.5 type-body disabled:opacity-50"
           >
-            {mutation.isPending ? "Creating…" : "Create fork"}
+            {mutation.isPending ? t("cases.fork.creating") : t("cases.fork.create")}
           </button>
         </div>
         {submitted && built.changedCount === 0 && !nameProblem && Object.keys(built.problems).length === 0 && (
           <p data-testid="fork-nothing-changed" aria-live="polite" className="type-small text-[var(--ink-secondary)]">
-            Change at least one value to fork.
+            {t("cases.fork.nothingChanged")}
           </p>
         )}
         {refusal && (
@@ -166,7 +168,7 @@ export function ForkSection({ record }: { record: CaseRecord }) {
         )}
         {failed && (
           <p role="alert" data-testid="fork-error" className="type-body text-[var(--status-error-ink)]">
-            Could not create the fork.
+            {t("cases.fork.failed")}
           </p>
         )}
       </form>

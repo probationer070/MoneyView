@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import type { UseQueryResult } from "@tanstack/react-query";
+import { useT } from "@/lib/i18n/locale";
 import { CaseApiError } from "../casesApi";
 
 export function Section({ title, testId, children }: { title: string; testId: string; children: ReactNode }) {
@@ -22,15 +23,16 @@ export function Section({ title, testId, children }: { title: string; testId: st
  * Returns null once the query has data, so the caller renders the result.
  */
 export function QueryStatus<T>({ query, what, testId }: { query: UseQueryResult<T, unknown>; what: string; testId: string }) {
+  const t = useT();
   if (query.isPending) {
-    return <p role="status" className="type-body text-[var(--ink-secondary)]">Loading {what}…</p>;
+    return <p role="status" className="type-body text-[var(--ink-secondary)]">{t("cases.status.loading", { what })}</p>;
   }
   if (query.isError) {
     const error = query.error;
     if (error instanceof CaseApiError && error.isRefusal) {
       return <p data-testid={`${testId}-refusal`} className="type-body text-[var(--ink-secondary)]">{error.detail}</p>;
     }
-    return <p role="alert" className="type-body text-[var(--status-error-ink)]">Could not load {what}.</p>;
+    return <p role="alert" className="type-body text-[var(--status-error-ink)]">{t("cases.status.failed", { what })}</p>;
   }
   return null;
 }

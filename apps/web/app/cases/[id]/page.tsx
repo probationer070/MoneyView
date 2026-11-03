@@ -5,6 +5,7 @@ import { use } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { useDevMonitorPageLoad } from "@/hooks/useDevMonitorPageLoad";
+import { useT } from "@/lib/i18n/locale";
 import { casesApi, retryUnlessRefused } from "../casesApi";
 import { CaseDetailGuide } from "../components/CaseDetailGuide";
 import { ForkSection } from "../components/ForkSection";
@@ -17,6 +18,7 @@ import { WhyItMovedSection } from "../components/WhyItMovedSection";
 
 export default function CaseDetailPage({ params }: { params: Promise<{ id: string }> }) {
   useDevMonitorPageLoad({ component: "case_detail_page" });
+  const t = useT();
   // A Promise in Next.js 16 -- read with use(). Reading `params.id` directly compiles against
   // a loose type and is undefined at runtime (ERROR-LOG 2026-09-13, the /detail UNDEFINED bug).
   const { id: rawId } = use(params);
@@ -39,7 +41,7 @@ export default function CaseDetailPage({ params }: { params: Promise<{ id: strin
   });
 
   if (!validId) {
-    return <p className="p-6 text-[var(--ink-secondary)]">Not a case id: {rawId}</p>;
+    return <p className="p-6 text-[var(--ink-secondary)]">{t("cases.page.notCaseId", { id: rawId })}</p>;
   }
   const record = caseQuery.data;
 
@@ -49,15 +51,20 @@ export default function CaseDetailPage({ params }: { params: Promise<{ id: strin
         <PageHeader
           eyebrow={{ label: "case", suffix: String(record.id) }}
           title={record.case_name}
-          subtitle={`${record.ticker ?? "No ticker"} · as of ${record.as_of_date} · ${record.base_year} → ${record.target_year}`}
+          subtitle={t("cases.page.subtitle", {
+            ticker: record.ticker ?? t("cases.page.noTicker"),
+            asOf: record.as_of_date,
+            base: record.base_year,
+            target: record.target_year,
+          })}
         />
       ) : (
-        <div className="mb-6"><QueryStatus query={caseQuery} what="the case" testId="case" /></div>
+        <div className="mb-6"><QueryStatus query={caseQuery} what={t("cases.status.whatCase")} testId="case" /></div>
       )}
       {record && <div className="mb-4"><CaseDetailGuide /></div>}
       {record && record.parent_case_id !== null && (
         <p className="mb-4 type-body text-[var(--ink-secondary)]">
-          Forked from <Link href={`/cases/${record.parent_case_id}`} className="underline underline-offset-2">case {record.parent_case_id}</Link>
+          {t("cases.page.forkedFrom")} <Link href={`/cases/${record.parent_case_id}`} className="underline underline-offset-2">{t("cases.page.caseLink", { id: record.parent_case_id })}</Link>
         </p>
       )}
       {record && (
