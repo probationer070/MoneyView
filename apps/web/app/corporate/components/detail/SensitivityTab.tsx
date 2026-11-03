@@ -17,7 +17,7 @@ import { TABLE, TD, TD_FIGURE, THEAD, TR } from "./detailParts";
 
 type Side =
   | { state: "done"; intrinsic: number | null; upside: number | null }
-  | { state: "refused"; message: string }
+  | { state: "refused"; refusal: DcfRefusalError }
   | { state: "error"; message: string };
 interface Runs {
   down: Side;
@@ -50,7 +50,7 @@ async function settle(ticker: string, body: DcfRequestBody): Promise<Side> {
     const summary = await postDcf<DcfSummaryResponse>(`/corporate/dcf/${ticker}`, body);
     return { state: "done", intrinsic: bridgedEstimatedValue(summary), upside: bridgedUpsidePct(summary) };
   } catch (error) {
-    if (error instanceof DcfRefusalError) return { state: "refused", message: error.readerText };
+    if (error instanceof DcfRefusalError) return { state: "refused", refusal: error };
     return { state: "error", message: error instanceof Error ? error.message : String(error) };
   }
 }
@@ -106,7 +106,7 @@ export function SensitivityTab({
       );
     }
     if (result.state === "refused") {
-      return <td colSpan={2} className="type-small px-3 py-2 text-right text-[var(--ink-secondary)]">{result.message}</td>;
+      return <td colSpan={2} className="type-small px-3 py-2 text-right text-[var(--ink-secondary)]">{result.refusal.readerTextIn(locale)}</td>;
     }
     return (
       <td colSpan={2} role="alert" className="type-small px-3 py-2 text-right text-[var(--status-error-ink)]">

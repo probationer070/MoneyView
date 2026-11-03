@@ -420,6 +420,33 @@ test("a refused run shows the refusal as content, not as a failure", async ({ pa
   await expect(dialog(page).getByTestId("sensitivity-row-down").getByRole("alert")).toHaveCount(0);
 });
 
+test.describe("a refused run in Korean", () => {
+  test.use({ locale: "ko-KR" });
+
+  test("the refusal reads in Korean and the English backend sentence is not shown", async ({ page }) => {
+    await mockCorporatePageApi(page);
+    await page.route((url) => isSingleDcf(url), async (route) => {
+      const body = route.request().postDataJSON() as { wacc: number };
+      if (body.wacc < 0.1) {
+        return route.fulfill({
+          status: 422,
+          contentType: "application/json",
+          body: JSON.stringify({ detail: { code: "non_positive_fcff", message: "Free cash flow is zero or negative over the forecast, so the model cannot value it." } }),
+        });
+      }
+      return route.fallback();
+    });
+    await page.goto("/corporate", { waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("heading", { name: "기업 분석" })).toBeVisible({ timeout: 60_000 });
+    await page.getByTestId("assumption-table").getByRole("button", { name: "WACC 상세" }).click();
+    await expect(dialog(page)).toBeVisible();
+    await dialog(page).getByRole("tab", { name: "민감도", exact: true }).click();
+    await dialog(page).getByRole("button", { name: "계산", exact: true }).click();
+    await expect(dialog(page).getByTestId("sensitivity-row-down")).toContainText("예측 기간 동안 잉여현금흐름이 0 이하여서", { timeout: 30_000 });
+    await expect(dialog(page).getByTestId("sensitivity-row-down")).not.toContainText("zero or negative over the forecast");
+  });
+});
+
 test("results stay until an assumption changes, and a step past the slider floor is clamped and flagged", async ({ page }) => {
   await mockCorporatePageApi(page);
   const bodies = recordSingleDcfBodies(page);
