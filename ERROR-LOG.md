@@ -26,6 +26,16 @@ reveal that; only checking the code did.
 
 An entry states what was true when it was written. Nothing updates it on its own.
 
+## 2026-11-03: risk candidates crashed on pandas 3 (read-only correlation matrix)
+
+Date: 2026-11-03
+Command: pytest tests/core_finance/test_risk_decks.py
+Failure: test_candidate_not_its_own_partner_when_bands_overlap raised "ValueError: assignment destination is read-only" in decks.candidates (any candidate whose ticker is also a partner hit it).
+Root cause: pandas 3.0.5 copy-on-write makes DataFrame.to_numpy() return a read-only view; candidates() then assigned NaN into a slice of it. Introduced with the vectorised correlations in 2a8f365.
+Fix: to_numpy(copy=True) so the matrix is writable. Confirmed the test fails without it and passes with it.
+Files changed: packages/core_finance/risk_signals/decks.py
+Prevention: never write into the result of to_numpy()/.values on pandas 3; copy first.
+
 ## 2026-11-03: scrolled holdings tiles covered the side panel's title and Close button
 
 Date: 2026-11-03 (owner report, Portfolio > Watchlist Holdings panel, card view).

@@ -105,7 +105,7 @@ def candidates(
     # preference order (^SOX first, then crashed names in column order).
     frame = pd.concat([rets[near_names], rets_sox.rename(SOX), rets[partner_names[1:]]], axis=1)
     frame.columns = range(frame.shape[1])
-    full = frame.corr(min_periods=_MIN_CORR_PAIRS).to_numpy()
+    full = frame.corr(min_periods=_MIN_CORR_PAIRS).to_numpy(copy=True)  # pandas 3 CoW: view is read-only
     n = len(near_names)
     mat = full[:n, n:]
     column_of = {p: j for j, p in enumerate(partner_names)}
