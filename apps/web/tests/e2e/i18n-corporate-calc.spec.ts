@@ -65,3 +65,24 @@ test("ko calculation details are Korean and en reproduces the original English",
   expect(ko$.crp.title).toBe("Acme 국가위험프리미엄");
   expect(ko$.innovation.summary[0].label).toBe("혁신지수");
 });
+
+test("ko chart detail titles and labels for part B entries are Korean, and en keeps the English", () => {
+  const ko$ = build(koT);
+  const en$ = build(enT);
+
+  // en is byte-identical to the English that was hard-coded before this change.
+  expect(en$.bottomUpKe.title).toBe("Acme Bottom-up Ke");
+  expect(en$.bottomUpKe.summary[0].label).toBe("Risk-free Rate");
+  expect(en$.terminalValueShare.title).toBe("Acme Terminal Value Share");
+  expect(en$.terminalValueShare.formula).toBe("Terminal Value Share = PV(terminal value) / enterprise value");
+  expect(en$.sustainableGrowth.title).toBe("Acme Sustainable Growth");
+  expect(en$.sustainableGrowth.summary[0].label).toBe("Sustainable Growth");
+
+  // ko: part B titles, row labels and formula text come from the Korean catalog.
+  expect(ko$.bottomUpKe.title).toBe("Acme 상향식 Ke");
+  expect(ko$.bottomUpKe.summary[0].label).toBe("무위험수익률");
+  expect(ko$.terminalValueShare.title).toBe("Acme 잔존가치 비중");
+  expect(ko$.terminalValueShare.formula).toBe("잔존가치 비중 = PV(잔존가치) / 기업가치");
+  expect(ko$.sustainableGrowth.title).toBe("Acme 지속가능 성장률");
+  expect(ko$.sustainableGrowth.summary[0].label).toBe("지속가능 성장률");
+});
