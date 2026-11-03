@@ -55,18 +55,4 @@ export interface DcfResult {
   bridge_quality?: string;
 }
 
-export function pct(value: number) {
-  return `${value.toFixed(1)}%`;
-}
-
-export function pct2(value: number) {
-  return `${value.toFixed(2)}%`;
-}
-
-export function numberText(value: number) {
-  return value.toFixed(1);
-}
-
-export function moneyText(value: number) {
-  return `$${value.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}`;
-}
+export { moneyText, numberText, pct, pct2 } from "../../corporateUtils";

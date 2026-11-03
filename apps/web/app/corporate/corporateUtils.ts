@@ -1,5 +1,6 @@
 import { getApiBaseUrl } from "@/lib/api";
 import { readDcfRefusal } from "@/lib/dcfRefusal";
+import { formatNumber, MISSING } from "@/lib/format";
 import type {
   DcfAssumptionSummary as DCFAssumptionSummary,
   DcfSummaryResponse as DCFResult,
@@ -194,24 +195,32 @@ export function defaultAssumptionsFor(ticker: string, companies: CorporateCompan
   };
 }
 
+// The corporate number helpers. Values here are percent points (12.3 -> "12.3%"), so they use
+// the "ratio" kind, not "percent" (which would multiply by 100). A missing value keeps the
+// formatter's marker with no "%" appended.
+function percentText(value: number, digits: number) {
+  const text = formatNumber(value, "ratio", { digits });
+  return text === MISSING ? text : `${text}%`;
+}
+
 export function pct(value: number) {
-  return `${value.toFixed(1)}%`;
+  return percentText(value, 1);
 }
 
 export function pct2(value: number) {
-  return `${value.toFixed(2)}%`;
+  return percentText(value, 2);
 }
 
 export function numberText(value: number) {
-  return value.toFixed(1);
+  return formatNumber(value, "ratio", { digits: 1 });
 }
 
 export function numberText2(value: number) {
-  return value.toFixed(2);
+  return formatNumber(value, "ratio", { digits: 2 });
 }
 
 export function moneyText(value: number) {
-  return `$${value.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}`;
+  return `$${formatNumber(value, "price", { digits: 1 })}`;
 }
 
 export function dateTimeText(value: string) {

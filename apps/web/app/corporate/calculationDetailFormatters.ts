@@ -1,28 +1,11 @@
 import { englishTr, type Tr } from "../cases/caseFields";
+import { numberText, numberText2 } from "./corporateUtils";
 
 export function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
 }
 
-export function pct(value: number) {
-  return `${value.toFixed(1)}%`;
-}
-
-export function pct2(value: number) {
-  return `${value.toFixed(2)}%`;
-}
-
-export function numberText(value: number) {
-  return value.toFixed(1);
-}
-
-export function numberText2(value: number) {
-  return value.toFixed(2);
-}
-
-export function moneyText(value: number) {
-  return `$${value.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}`;
-}
+export { moneyText, numberText, numberText2, pct, pct2 } from "./corporateUtils";
 
 export function betaInterpretation(beta: number, t: Tr = englishTr) {
   if (beta === 1) return t("corporate.calc.beta.one");
