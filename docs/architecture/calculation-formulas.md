@@ -269,6 +269,10 @@ g_∞         = 무위험률 4.2%;  단 ROIC_stable ≤ WACC_stable 이면 g_∞
 모델 성장률    = growth_for_revenue_target: R*에 이르는 g를 이분법(200회)
 암시 성장률    = 다른 입력을 고정하고 주당가치 = 현재가가 되는 g ∈ [−20%, 60%] (이분법 80회)
 하한선        = 보수적 케이스(§6)의 주당가치 (같은 ≤ 0 규칙)
+설명 가능성     = plausibility: 암시 EV/매출 = 케이스 기업가치 / 기준 매출 (segments[0].base_revenue);
+                 비율 = 암시 EV/매출 / 업종 EV/매출;  비율 > k(=3, 초안)이면 flagged (값은 자르지 않음).
+                 원인(최대 2개) = 마진목표·성장률(1–5년) 각각만 업종 값으로 바꿔 재실행한 뒤
+                 share_of_value = (적정가 − 바꾼 값) / 적정가 > 0 인 것, share 큰 순. 업종 EV/매출이 없으면 null.
 ```
 
 거절 코드와 비율은 `docs/reports/2026-11-fair-value-audit.md`(단계 0)에 있다.

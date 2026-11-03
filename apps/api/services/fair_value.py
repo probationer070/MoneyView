@@ -6,7 +6,11 @@ conservative case. Every loader takes `bundle_loader`, so the whole path is test
 
 from __future__ import annotations
 
+import math
 from datetime import date
+
+from packages.core_finance.industry_benchmark import IndustryRow
+from packages.core_finance.segment_valuation import run_case
 
 from apps.api.services.acquisition.store import load_price_bars
 from apps.api.services.company_baseline import (
@@ -23,7 +27,10 @@ from apps.api.services.corporate_statement_metrics import (
 from apps.api.services.equity_bridge import load_equity_bridge
 from apps.api.services.fair_value_case import (
     COMMODITY_INDUSTRIES,
+    GROWTH_CAP,
+    GROWTH_FLOOR,
     FairValueRefused,
+    _revenue_target,
     build_fair_value_case,
     company_revenue_cagr,
     fair_value_case_name,
@@ -34,6 +41,8 @@ from apps.api.services.industry_benchmark_store import industry_row_for_ticker
 from apps.api.services.valuation_case import CaseNotFound, create_case, list_cases, load_case, run_stored_case
 
 _ENDPOINT = "fair_value"
+# A fair-value EV/Sales above this multiple of the industry's is flagged (owner draft, 2026-11-01 plan §10).
+PLAUSIBILITY_K = 3.0
 
 
 def generate_fair_value_case_for_ticker(
@@ -128,6 +137,61 @@ def _value_per_share(case_id: int | None) -> tuple[float | None, str | None]:
     return value, None
 
 
+def plausibility(case: dict, value_per_share: float | None, industry: IndustryRow | None) -> dict | None:
+    """How far the case's EV/Sales sits above its industry's, and which two inputs drive it.
+
+    The value is never capped (shown value = used value); a ratio above `PLAUSIBILITY_K` is
+    flagged and explained. Each cause re-runs the case with ONLY that input at the industry's
+    figure; `share_of_value` is the part of the value per share that move removes.
+    """
+    from apps.api.services.valuation_case import _specs_from_payload
+
+    if value_per_share is None or industry is None:
+        return None
+    industry_ev_sales = industry.values.get("ev_sales")
+    segment = case["segments"][0]
+    base = segment["base_revenue"]
+    if industry_ev_sales is None or industry_ev_sales <= 0 or base <= 0:
+        return None
+
+    def run(trial_segment: dict):
+        return run_case(*_specs_from_payload({**case, "segments": [trial_segment]}))
+
+    implied = run(segment).enterprise_value / base
+    ratio = implied / industry_ev_sales
+    flagged = ratio > PLAUSIBILITY_K
+    causes: list[dict] = []
+    if flagged:
+        riskfree = case["riskfree_rate"]
+        industry_growth = riskfree if industry.name in COMMODITY_INDUSTRIES else industry.values.get("revenue_growth")
+        candidates = [("margin_target", segment["margin_target"], industry.values.get("operating_margin"), None)]
+        if industry_growth is not None:
+            industry_growth = min(max(industry_growth, GROWTH_FLOOR), GROWTH_CAP)
+            company_growth = growth_for_revenue_target(base, segment["revenue_target"], riskfree)
+            candidates.append(("growth_1_5", company_growth, industry_growth,
+                               _revenue_target(base, industry_growth, riskfree)))
+        for field, company_value, industry_value, revenue_target in candidates:
+            if industry_value is None or math.isclose(company_value, industry_value, abs_tol=1e-9):
+                continue
+            moved = {**segment, "revenue_target": revenue_target} if field == "growth_1_5" else \
+                {**segment, "margin_target": industry_value}
+            share = (value_per_share - run(moved).value_per_share_diluted) / value_per_share
+            if share > 0:
+                causes.append({"field": field, "company_value": company_value,
+                               "industry_value": industry_value, "share_of_value": share})
+        causes.sort(key=lambda c: c["share_of_value"], reverse=True)
+        causes = causes[:2]
+    return {
+        "implied_ev_sales": implied,
+        "industry_ev_sales": industry_ev_sales,
+        "ratio": ratio,
+        "k": PLAUSIBILITY_K,
+        "flagged": flagged,
+        "causes": causes,
+        "industry": industry.name,
+    }
+
+
 def fair_value_summary(ticker: str, case_id: int, *, created: bool, vintage: str) -> dict:
     """The spec §5 response for a stored fair-value case."""
     ticker = ticker.upper()
@@ -164,4 +228,5 @@ def fair_value_summary(ticker: str, case_id: int, *, created: bool, vintage: str
         "implied_growth_1_5": implied,
         "implied_growth_note": implied_note,
         "assumptions": assumptions,
+        "plausibility": plausibility(case, value, industry_row_for_ticker(ticker, as_of=None)[0]),
     }
